@@ -76,12 +76,14 @@
 
 (defn- boundary-name-dirs
   "Directories named exactly `boundary` (namespace roots) — NOT `.boundary`,
-   `boundary-cli`, etc. Moved to a sibling `wagoe`."
+   `boundary-cli`, etc. Moved to a sibling `wagoe`. Includes hidden parents
+   (e.g. .clj-kondo/hooks/boundary) but never descends into .git."
   []
-  (->> (fs/glob "." "**/boundary" {:hidden false})
+  (->> (fs/glob "." "**/boundary" {:hidden true})
        (filter fs/directory?)
        (map str)
-       (remove #(str/includes? % "/target/"))
+       (remove #(or (str/includes? % "/target/")
+                    (str/starts-with? % ".git/")))
        (remove #(excluded? (allow-prefixes) %))
        sort
        (map (fn [d] [d (str (subs d 0 (- (count d) (count "boundary"))) "wagoe")]))))
