@@ -32,8 +32,16 @@
   (:require [clojure.string :as str]
             [clojure.edn :as edn]
             [babashka.fs :as fs]
-            [babashka.process :as process]
-            [boundary.tools.ansi :as ansi]))
+            [babashka.process :as process]))
+
+;; ANSI inlined on purpose — the gate must NOT depend on the renamed libs/ tree
+;; (boundary.tools.ansi becomes wagoe.tools.ansi mid-rename, which would break
+;; this allowlisted, unmodified file). Zero renamed-tree deps = self-stable.
+(defn- esc [code s] (str "[" code "m" s "[0m"))
+(defn- ansi-bold   [s] (esc "1"  s))
+(defn- ansi-green  [s] (esc "32" s))
+(defn- ansi-red    [s] (esc "31" s))
+(defn- ansi-yellow [s] (esc "33" s))
 
 (def ^:private hard-groups [:ns :keys :coords :env :dirs :urls])
 
@@ -117,13 +125,13 @@
                      {:group g :hard? (:hard? def) :desc (:desc def)
                       :hits hits :files (files-of hits)}))
         hard-fail (->> results (filter :hard?) (mapcat :hits) count)]
-    (println (ansi/bold "Wagoe rename — residual boundary scan"))
+    (println (ansi-bold "Wagoe rename — residual boundary scan"))
     (println)
     (doseq [{:keys [group hard? desc hits files]} results]
       (let [n (count hits)
-            tag (cond (not hard?)     (ansi/yellow "report")
-                      (zero? n)       (ansi/green "clean ")
-                      :else           (ansi/red   "RESIDUAL"))]
+            tag (cond (not hard?)     (ansi-yellow "report")
+                      (zero? n)       (ansi-green "clean ")
+                      :else           (ansi-red   "RESIDUAL"))]
         (println (format "  %-8s %s  %4d hits / %d files  — %s"
                          (name group) tag n (count files) desc))
         (when (and hard? (pos? n))
@@ -132,9 +140,9 @@
             (println (str "      … +" (- (count files) 8) " more files"))))))
     (println)
     (if (pos? hard-fail)
-      (do (println (ansi/red (format "%d residual hard-token hit(s) remain." hard-fail)))
+      (do (println (ansi-red (format "%d residual hard-token hit(s) remain." hard-fail)))
           (System/exit 1))
-      (do (println (ansi/green "No residual hard boundary tokens."))
+      (do (println (ansi-green "No residual hard boundary tokens."))
           (System/exit 0)))))
 
 (when (= *file* (System/getProperty "babashka.file"))
