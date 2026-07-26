@@ -22,6 +22,7 @@
              [boundary.tools.check-ports :as check-ports]
              [boundary.tools.check-poms  :as check-poms]
              [boundary.tools.check-hygiene :as check-hygiene]
+             [boundary.tools.check-no-boundary :as check-no-boundary]
              [boundary.tools.doctor-env  :as doctor-env]
              [boundary.tools.db          :as db]
              [boundary.tools.check       :as check]
@@ -103,6 +104,8 @@
               :task (check-poms/-main)}
   check:hygiene {:doc "Reject tracked backup/cruft files (*.bak, *.backup, *.orig, *~) (bb check:hygiene)"
                  :task (check-hygiene/-main)}
+  check:no-boundary {:doc "Rename gate: scan for residual boundary tokens (ns/keys/coords/env/dirs/urls); args select groups (bb check:no-boundary)"
+                     :task (apply check-no-boundary/-main *command-line-args*)}
   test:tools {:doc "Run boundary-tools unit tests (bb test:tools)"
               :extra-paths ["libs/tools/test"]
               :task (do (require 'boundary.tools.doctor-test

@@ -1,0 +1,12 @@
+;; Allowlist for `bb check:no-boundary` (BOU-209 rename gate).
+;;
+;; Repo-relative path PREFIXES exempt from the residual-boundary scan. These
+;; legitimately keep "boundary" tokens: history, planning docs, and the rename
+;; tooling itself. Extend as genuine exceptions surface during the rename; do
+;; NOT add real source here to silence the gate.
+{:allow-paths
+ ["CHANGELOG.md"
+  "docs/superpowers/"
+  ".boundary/"
+  "scripts/rename_wagoe.clj"
+  "libs/tools/src/boundary/tools/check_no_boundary.clj"]}

@@ -1,0 +1,137 @@
+#!/usr/bin/env bb
+;; libs/tools/src/boundary/tools/check_no_boundary.clj
+;;
+;; Verification gate for the Boundary -> Wagoe rename (BOU-209).
+;;
+;; Scans tracked files for residual "boundary" identifiers and fails if any
+;; remain outside an allowlist. Run after each rename phase to prove that
+;; phase's token is gone; run with no args as the final gate (all hard tokens).
+;;
+;; Token groups (select as args, e.g. `bb check:no-boundary coords keys`):
+;;   ns     boundary.<seg>  namespaces / require aliases (code files only)
+;;   keys   :boundary/...   Integrant + config keywords
+;;   coords org.boundary-app Maven/Clojars group
+;;   env    BND_...         environment-variable prefix
+;;   dirs   boundary-cli / boundary-mcp  library directory names
+;;   urls   boundary-app.org / thijs-creemers/boundary  external references
+;;   prose  the word "boundary" (case-insensitive) in docs — REPORT ONLY,
+;;          never fails (it is also a real FC/IS / hexagonal architecture term)
+;;
+;; No args  -> all HARD groups (ns keys coords env dirs urls); prose excluded.
+;; `all`    -> hard groups + prose (prose still report-only).
+;;
+;; Allowlist: paths in .boundary/check-no-boundary.edn `:allow-paths` (prefix
+;; match) are exempt — CHANGELOG history, planning docs, the rename tooling
+;; itself, and (pre-rename) the boundary-pathed source tree of this checker.
+
+(ns boundary.tools.check-no-boundary
+  (:require [clojure.string :as str]
+            [clojure.edn :as edn]
+            [babashka.fs :as fs]
+            [babashka.process :as process]
+            [boundary.tools.ansi :as ansi]))
+
+(def ^:private hard-groups [:ns :keys :coords :env :dirs :urls])
+
+(def ^:private token-defs
+  "Each group: :desc human label, :grep git-grep args (before the pathspec),
+   :paths optional pathspec limiting the search, :hard? counts toward failure."
+  {:ns     {:desc  "boundary.<ns> namespaces"
+            :grep  ["-nIE" "boundary\\."]
+            :paths ["*.clj" "*.cljc" "*.cljs" "*.edn"]
+            :hard? true}
+   :keys   {:desc  ":boundary/ config + Integrant keys"
+            :grep  ["-nIF" ":boundary/"]
+            :hard? true}
+   :coords {:desc  "org.boundary-app Maven coords"
+            :grep  ["-nIF" "org.boundary-app"]
+            :hard? true}
+   :env    {:desc  "BND_ env prefix"
+            :grep  ["-nIE" "BND_[A-Z0-9_]+"]
+            :hard? true}
+   :dirs   {:desc  "boundary-cli / boundary-mcp dir names"
+            :grep  ["-nIE" "boundary-(cli|mcp)"]
+            :hard? true}
+   :urls   {:desc  "boundary-app.org / thijs-creemers/boundary refs"
+            :grep  ["-nIE" "boundary-app\\.org|thijs-creemers/boundary"]
+            :hard? true}
+   :prose  {:desc  "\"boundary\" word in prose (REPORT ONLY — also an arch term)"
+            :grep  ["-nIiE" "boundary"]
+            :paths ["*.md" "*.adoc"]
+            :hard? false}})
+
+(def ^:private default-allow-paths
+  "Baked-in exemptions (prefix match on the repo-relative path). The rename
+   tooling and its config legitimately contain the tokens; CHANGELOG + planning
+   docs preserve history; the checker's own boundary-pathed source is exempt
+   until Phase 1 moves it to wagoe/."
+  ["CHANGELOG.md"
+   "docs/superpowers/"
+   ".boundary/"
+   "scripts/rename_wagoe.clj"
+   "libs/tools/src/boundary/tools/check_no_boundary.clj"])
+
+(defn- load-allow-paths []
+  (let [f ".boundary/check-no-boundary.edn"]
+    (into default-allow-paths
+          (when (fs/exists? f)
+            (:allow-paths (edn/read-string (slurp f)))))))
+
+(defn- allowed? [allow path]
+  (some #(str/starts-with? path %) allow))
+
+(defn- grep-group
+  "Returns [path ...] of git-grep hit lines for a group, allowlist-filtered.
+   Each element is the raw `path:line:content` string."
+  [{:keys [grep paths]} allow]
+  (let [args (concat ["git" "grep" "--no-color"] grep
+                     (when (seq paths) (cons "--" paths)))
+        {:keys [exit out]} (apply process/shell
+                                  {:out :string :err :string :continue true} args)]
+    ;; git grep exits 1 when there are no matches — that is success here.
+    (if (#{0 1} exit)
+      (->> (str/split-lines out)
+           (remove str/blank?)
+           (remove (fn [line]
+                     (let [path (first (str/split line #":" 2))]
+                       (allowed? allow path)))))
+      (throw (ex-info "git grep failed" {:exit exit :args args})))))
+
+(defn- files-of [hits]
+  (->> hits (map #(first (str/split % #":" 2))) distinct sort))
+
+(defn -main [& args]
+  (let [selected (cond
+                   (some #{"all"} args) (conj hard-groups :prose)
+                   (seq args)           (map keyword args)
+                   :else                hard-groups)
+        allow    (load-allow-paths)
+        results  (for [g selected
+                       :let [def (token-defs g)]
+                       :when def]
+                   (let [hits (grep-group def allow)]
+                     {:group g :hard? (:hard? def) :desc (:desc def)
+                      :hits hits :files (files-of hits)}))
+        hard-fail (->> results (filter :hard?) (mapcat :hits) count)]
+    (println (ansi/bold "Wagoe rename — residual boundary scan"))
+    (println)
+    (doseq [{:keys [group hard? desc hits files]} results]
+      (let [n (count hits)
+            tag (cond (not hard?)     (ansi/yellow "report")
+                      (zero? n)       (ansi/green "clean ")
+                      :else           (ansi/red   "RESIDUAL"))]
+        (println (format "  %-8s %s  %4d hits / %d files  — %s"
+                         (name group) tag n (count files) desc))
+        (when (and hard? (pos? n))
+          (doseq [f (take 8 files)] (println (str "      " f)))
+          (when (> (count files) 8)
+            (println (str "      … +" (- (count files) 8) " more files"))))))
+    (println)
+    (if (pos? hard-fail)
+      (do (println (ansi/red (format "%d residual hard-token hit(s) remain." hard-fail)))
+          (System/exit 1))
+      (do (println (ansi/green "No residual hard boundary tokens."))
+          (System/exit 0)))))
+
+(when (= *file* (System/getProperty "babashka.file"))
+  (apply -main *command-line-args*))
