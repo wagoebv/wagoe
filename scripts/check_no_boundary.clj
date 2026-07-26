@@ -24,7 +24,11 @@
 ;; match) are exempt — CHANGELOG history, planning docs, the rename tooling
 ;; itself, and (pre-rename) the boundary-pathed source tree of this checker.
 
-(ns boundary.tools.check-no-boundary
+;; Lives under scripts/ (NOT libs/tools) on purpose: the rename phases rewrite
+;; the libs/ namespace tree, and this gate's own token literals (:boundary/,
+;; org.boundary-app, boundary.) must survive every phase. Keeping it outside the
+;; renamed tree — and allowlisted in the driver — makes it self-stable.
+(ns check-no-boundary
   (:require [clojure.string :as str]
             [clojure.edn :as edn]
             [babashka.fs :as fs]
@@ -69,7 +73,7 @@
    "docs/superpowers/"
    ".boundary/"
    "scripts/rename_wagoe.clj"
-   "libs/tools/src/boundary/tools/check_no_boundary.clj"])
+   "scripts/check_no_boundary.clj"])
 
 (defn- load-allow-paths []
   (let [f ".boundary/check-no-boundary.edn"]

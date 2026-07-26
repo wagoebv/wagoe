@@ -22,7 +22,7 @@
              [boundary.tools.check-ports :as check-ports]
              [boundary.tools.check-poms  :as check-poms]
              [boundary.tools.check-hygiene :as check-hygiene]
-             [boundary.tools.check-no-boundary :as check-no-boundary]
+             [check-no-boundary :as check-no-boundary]  ; scripts/check_no_boundary.clj — outside the renamed tree
              [boundary.tools.doctor-env  :as doctor-env]
              [boundary.tools.db          :as db]
              [boundary.tools.check       :as check]

@@ -31,6 +31,7 @@
 
 (ns rename-wagoe
   (:require [clojure.string :as str]
+            [clojure.edn :as edn]
             [babashka.fs :as fs]
             [babashka.process :as process]))
 
@@ -48,6 +49,25 @@
 
 (def code-globs ["*.clj" "*.cljc" "*.cljs" "*.edn"])
 
+;; Paths the driver must NEVER rewrite — the rename tooling itself (its literals
+;; ARE the tokens) plus history/planning docs. Mirrors the check:no-boundary
+;; allowlist so gate + driver agree.
+(def ^:private default-allow
+  ["scripts/rename_wagoe.clj"
+   "scripts/check_no_boundary.clj"
+   ".boundary/"
+   "CHANGELOG.md"
+   "docs/superpowers/"])
+
+(defn- allow-prefixes []
+  (let [f ".boundary/check-no-boundary.edn"]
+    (into default-allow
+          (when (fs/exists? f)
+            (:allow-paths (edn/read-string (slurp f)))))))
+
+(defn- excluded? [allow path]
+  (some #(str/starts-with? path %) allow))
+
 ;; --- phase definitions -----------------------------------------------------
 ;; :subs  — ordered [regex replacement] pairs; :globs limits the file set.
 ;; :moves — fn returning [[from to] ...] git mv pairs (computed lazily).
@@ -62,6 +82,7 @@
        (filter fs/directory?)
        (map str)
        (remove #(str/includes? % "/target/"))
+       (remove #(excluded? (allow-prefixes) %))
        sort
        (map (fn [d] [d (str (subs d 0 (- (count d) (count "boundary"))) "wagoe")]))))
 
@@ -99,7 +120,9 @@
   (reduce (fn [c [re rep]] (str/replace c re rep)) content subs))
 
 (defn- run-content [{:keys [globs subs flag]} apply?]
-  (let [files (apply tracked (or globs ["*"]))]
+  (let [allow (allow-prefixes)
+        files (->> (apply tracked (or globs ["*"]))
+                   (remove #(excluded? allow %)))]
     (reduce
      (fn [acc f]
        (if-not (fs/regular-file? f)
