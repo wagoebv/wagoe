@@ -89,7 +89,12 @@
 (def phases
   {"ns"     {:desc  "boundary.<ns> -> wagoe.<ns> (code+edn) + dir moves"
              :globs code-globs
-             :subs  [[#"boundary\." "wagoe."]]
+             :subs  [[#"boundary\." "wagoe."]
+                     ;; classpath resource paths point at the moved dirs, e.g.
+                     ;; (io/resource "boundary/devtools/error_catalog.edn").
+                     ;; Only strings starting with boundary/ — never URLs like
+                     ;; ".../thijs-creemers/boundary".
+                     [#"\"boundary/" "\"wagoe/"]]
              :moves boundary-name-dirs}
    "keys"   {:desc "keys :boundary/ -> :wagoe/"
              :subs [[#":boundary/" ":wagoe/"]]}
