@@ -11,14 +11,14 @@ Build the uberjar before any deployment:
 [source,bash]
 ----
 clojure -T:build clean && clojure -T:build uber
-# Produces target/boundary-*.jar
+# Produces target/wagoe-*.jar
 ----
 
 Run migrations before starting the server:
 
 [source,bash]
 ----
-java -jar target/boundary-*.jar migrate up
+java -jar target/wagoe-*.jar migrate up
 ----
 
 == Environment Variables
@@ -55,7 +55,7 @@ sudo useradd -r -s /usr/sbin/nologin boundary
 
 # 2. Deploy the jar
 sudo mkdir -p /opt/boundary/{logs,data}
-sudo cp target/boundary-*.jar /opt/boundary/boundary.jar
+sudo cp target/wagoe-*.jar /opt/boundary/boundary.jar
 sudo chown -R boundary:boundary /opt/boundary
 
 # 3. Configure secrets

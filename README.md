@@ -325,7 +325,7 @@ Build the uberjar and deploy to any platform:
 
 ```bash
 clojure -T:build clean && clojure -T:build uber
-WAG_ENV=prod java -jar target/boundary-*-standalone.jar
+WAG_ENV=prod java -jar target/wagoe-*-standalone.jar
 ```
 
 Reference configurations are provided under `resources/deploy/`:

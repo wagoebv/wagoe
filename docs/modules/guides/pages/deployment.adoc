@@ -8,7 +8,7 @@
 clojure -T:build clean && clojure -T:build uber
 ----
 
-This produces `target/boundary-*.jar`.
+This produces `target/wagoe-*.jar`.
 
 == Run the server
 
@@ -19,7 +19,7 @@ export WAG_ENV="production"
 export DB_URL="jdbc:postgresql://host:5432/myapp"
 export DB_PASSWORD="..."
 
-java -jar target/boundary-*.jar server
+java -jar target/wagoe-*.jar server
 ----
 
 == Environment variables

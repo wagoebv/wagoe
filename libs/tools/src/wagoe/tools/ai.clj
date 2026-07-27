@@ -1,5 +1,5 @@
 #!/usr/bin/env bb
-;; libs/tools/src/boundary/tools/ai.clj
+;; libs/tools/src/wagoe/tools/ai.clj
 ;;
 ;; Framework-aware AI tooling for the Boundary framework.
 ;;
@@ -55,7 +55,7 @@
        "Examples:\n"
        "  cat stacktrace.txt | bb ai explain\n"
        "  bb ai explain --file errors.txt\n"
-       "  bb ai gen-tests libs/user/src/boundary/user/core/validation.clj\n"
+       "  bb ai gen-tests libs/user/src/wagoe/user/core/validation.clj\n"
        "  bb ai sql \"find active users with orders in the last 7 days\"\n"
        "  bb ai docs --module libs/user --type agents\n"
        "  bb ai admin-entity \"products with name, price, status\"\n"

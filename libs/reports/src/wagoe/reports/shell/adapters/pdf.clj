@@ -3,7 +3,7 @@
 
    Three-step pipeline:
      1. Render Hiccup → HTML string (via hiccup.core/html)
-     2. Inject default CSS from resources/boundary/reports/default.css
+     2. Inject default CSS from resources/wagoe/reports/default.css
      3. Pass HTML to PdfRendererBuilder → ByteArrayOutputStream → bytes
 
    Usage:

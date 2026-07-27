@@ -34,7 +34,7 @@
   ;; boundary-devtools) can run `bb guide error BND-xxx` and don't crash on
   ;; namespace-load of wagoe.tools.help. Source of truth lives in
   ;; libs/devtools/resources; copied here at build time.
-  (b/copy-file {:src    "../devtools/resources/boundary/devtools/error_catalog.edn"
+  (b/copy-file {:src    "../devtools/resources/wagoe/devtools/error_catalog.edn"
                 :target (str class-dir "/boundary/devtools/error_catalog.edn")})
   (spit (str class-dir "/cljdoc.edn")
         (pr-str {:cljdoc/root "libs/tools"}))

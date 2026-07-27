@@ -12,7 +12,7 @@
   "Map of topic keywords to documentation entries."
   {:scaffold
    {:title    "Scaffolding"
-    :body     "Generate a full module skeleton with schema, persistence, HTTP handlers and tests.\n\n  bb scaffold generate          # Interactive wizard\n  bb scaffold generate product  # Non-interactive\n  bb scaffold ai \"product module with name, price, stock\"  # AI-powered\n\nPost-scaffold steps:\n  1. Review schema:  libs/{module}/src/boundary/{module}/schema.clj\n  2. Wire module:    bb scaffold integrate {module}\n  3. Add migration:  bb migrate create add-{module}-table\n  4. Run tests:      clojure -M:test :{module}\n\nREPL exploration after wiring:\n  (routes :module)    ; Show all routes for the scaffolded module"
+    :body     "Generate a full module skeleton with schema, persistence, HTTP handlers and tests.\n\n  bb scaffold generate          # Interactive wizard\n  bb scaffold generate product  # Non-interactive\n  bb scaffold ai \"product module with name, price, stock\"  # AI-powered\n\nPost-scaffold steps:\n  1. Review schema:  libs/{module}/src/wagoe/{module}/schema.clj\n  2. Wire module:    bb scaffold integrate {module}\n  3. Add migration:  bb migrate create add-{module}-table\n  4. Run tests:      clojure -M:test :{module}\n\nREPL exploration after wiring:\n  (routes :module)    ; Show all routes for the scaffolded module"
     :see-also [:fcis :testing :routes]}
 
    :interceptors

@@ -1246,10 +1246,10 @@ behaviour those protocols describe. The core never depends on the shell.
 
 ## Module Layout
 
-Every module under `src/boundary/{module}/` has the same shape:
+Every module under `src/wagoe/{module}/` has the same shape:
 
 ```
-src/boundary/{module}/
+src/wagoe/{module}/
 ├── core/        # Pure business logic — no I/O, no logging, no exceptions
 ├── shell/       # All side effects: persistence, services, HTTP handlers
 ├── ports.clj    # Protocol definitions (interfaces)  ← REQUIRED, not optional
@@ -1325,7 +1325,7 @@ conventions. Keep this file thin so the two cannot drift apart.
 
 ## The one rule that is easy to forget
 
-Every module under `src/boundary/{module}/` MUST have a **`ports.clj`** defining
+Every module under `src/wagoe/{module}/` MUST have a **`ports.clj`** defining
 its protocols. This layer is REQUIRED: `core/` + `shell/` without `ports.clj` is
 incomplete, because the shell would couple to concrete implementations instead
 of protocols.
@@ -1391,7 +1391,7 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s;
         field-name (keyword (:field-name-kebab field-ctx))
         malli-type (:malli-type field-ctx)
         required (:field-required field-ctx)]
-    (format ";; Add to src/boundary/%s/schema.clj in the %s schema:
+    (format ";; Add to src/wagoe/%s/schema.clj in the %s schema:
 ;;
 ;; %s
 ;;
@@ -1424,7 +1424,7 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s;
    Pure: true"
   [module-name path method handler-name]
   (let [method-str (name method)]
-    (format ";; Add to normalized-api-routes in src/boundary/%s/shell/http.clj:
+    (format ";; Add to normalized-api-routes in src/wagoe/%s/shell/http.clj:
 ;;
 ;; {:path \"%s\"
 ;;  :methods {:%s {:handler %s-handler

@@ -39,7 +39,7 @@
   "Generate all files for a module using scaffolder generators."
   [module-name ctx generators]
   (let [gen-set  (set generators)
-        src-dir  (str "libs/" module-name "/src/boundary/" module-name)
+        src-dir  (str "libs/" module-name "/src/wagoe/" module-name)
         files    (atom [])]
     (when (contains? gen-set :schema)
       (swap! files conj (write-file! (str src-dir "/schema.clj")
@@ -81,7 +81,7 @@
     (println "\nGenerated files:")
     (doseq [f files] (println (str "  " f)))
     (println "\nNext steps:")
-    (println (format "  1. Review schema:  libs/%s/src/boundary/%s/schema.clj" module-name module-name))
+    (println (format "  1. Review schema:  libs/%s/src/wagoe/%s/schema.clj" module-name module-name))
     (println (format "  2. Wire module:    bb scaffold integrate %s" module-name))
     (println (format "  3. Add migration:  bb migrate create add-%s-table" module-name))
     (println (format "  4. Run tests:      clojure -M:test:db/h2 :%s" module-name))

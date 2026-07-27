@@ -35,7 +35,7 @@
 (defn- yellow [s] (str "\033[33m" s "\033[0m"))
 (defn- dim   [s] (str "\033[2m"  s "\033[0m"))
 
-;; Must match libs/tools/src/boundary/tools/scaffold.clj scaffolder-version.
+;; Must match libs/tools/src/wagoe/tools/scaffold.clj scaffolder-version.
 ;; Update both together on each release.
 (def ^:private scaffolder-version "1.0.0-beta-1")
 

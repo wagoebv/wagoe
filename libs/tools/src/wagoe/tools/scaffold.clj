@@ -1,5 +1,5 @@
 #!/usr/bin/env bb
-;; libs/tools/src/boundary/tools/scaffold.clj
+;; libs/tools/src/wagoe/tools/scaffold.clj
 ;;
 ;; Interactive scaffolding wizard for Boundary modules.
 ;;

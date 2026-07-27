@@ -1,5 +1,5 @@
 #!/usr/bin/env bb
-;; libs/tools/src/boundary/tools/doctor.clj
+;; libs/tools/src/wagoe/tools/doctor.clj
 ;;
 ;; Config Doctor — rule-based validation of Boundary config files.
 ;;
@@ -202,7 +202,7 @@
   "Check that :test/reset-endpoint-enabled? is not true outside of :test or :dev profiles.
    This flag exposes a destructive `/test/reset` endpoint and must never be enabled in
    prod/acc. Backs the runtime assertion in
-   libs/platform/src/boundary/platform/shell/system/wiring.clj/build-test-reset-routes.
+   libs/platform/src/wagoe/platform/shell/system/wiring.clj/build-test-reset-routes.
 
    `parsed-config` is the full EDN config map (not just the :active section), since
    the flag lives at the top level of config.edn. `env-name` is the profile name
@@ -384,7 +384,7 @@
    its module-wiring requires, so wiring/upgrade checks must scan the app source
    — in a downstream project the monorepo wiring.clj path does not even exist."
   []
-  (let [platform-wiring (io/file (root-dir) "libs/platform/src/boundary/platform/shell/system/wiring.clj")
+  (let [platform-wiring (io/file (root-dir) "libs/platform/src/wagoe/platform/shell/system/wiring.clj")
         clj-files (fn [dir]
                     (let [d (io/file (root-dir) dir)]
                       (when (.exists d)

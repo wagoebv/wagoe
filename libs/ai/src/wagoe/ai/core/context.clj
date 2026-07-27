@@ -80,7 +80,7 @@
   "Determine the Kaocha test type for a source file path.
 
    Args:
-     file-path - string like 'libs/user/src/boundary/user/core/validation.clj'
+     file-path - string like 'libs/user/src/wagoe/user/core/validation.clj'
 
    Returns:
      :unit, :integration, or :contract keyword."
@@ -94,7 +94,7 @@
   "Derive the test namespace string from a source file path.
 
    Example:
-     'libs/user/src/boundary/user/core/validation.clj'
+     'libs/user/src/wagoe/user/core/validation.clj'
      => 'wagoe.user.core.validation-test'
 
    Args:

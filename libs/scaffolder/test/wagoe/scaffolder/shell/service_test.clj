@@ -348,7 +348,7 @@
   (let [svc (service/create-scaffolder-service)
         req {:module-name "product" :path "/p" :method :get
              :handler-name "h" :dry-run true}]
-    (testing "default base-ns -> src/boundary/<module>/"
+    (testing "default base-ns -> src/wagoe/<module>/"
       (let [p (:path (first (:files (ports/add-endpoint svc req))))]
         (is (= "src/wagoe/product/shell/http.clj" p))))
     (testing "custom base-ns -> src/<base-ns>/<module>/"

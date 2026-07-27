@@ -24,7 +24,7 @@ Script
 
 12:00–14:00 — Observability - Explain interceptor pattern: service/persistence operations wrap logging/metrics/error reporting. - Show a simple service call and a typed error propagating with an operation name. - Mention providers: dev no-op, Datadog, Sentry plug-ins; swap per env without code churn.
 
-14:00–15:00 — Build/deploy {plus} recap - Terminal: `clojure -T:build clean && clojure -T:build uber` then `java -jar target/boundary-++*++.jar server` - Optional Dockerfile snippet - Recap: "`Batteries included, boundaries enforced — FC/IS, SSR/HTMX, admin {plus} MFA, and observability ready from day one.`"
+14:00–15:00 — Build/deploy {plus} recap - Terminal: `clojure -T:build clean && clojure -T:build uber` then `java -jar target/wagoe-++*++.jar server` - Optional Dockerfile snippet - Recap: "`Batteries included, boundaries enforced — FC/IS, SSR/HTMX, admin {plus} MFA, and observability ready from day one.`"
 
 Recording tips - Keep terminal font large, dark theme. - Pre-seed a JWT token or mock for MFA. - Use two browser windows: app and admin. - Have migrations and scaffolder ready to avoid delays.
 

@@ -76,7 +76,7 @@
   (str "\u2713 Module '" module-name "' generated at libs/" module-name "/\n"
        "\n"
        "Next steps:\n"
-       "1. Review schema:  libs/" module-name "/src/boundary/" module-name "/schema.clj\n"
+       "1. Review schema:  libs/" module-name "/src/wagoe/" module-name "/schema.clj\n"
        "2. Wire module:    bb scaffold integrate " module-name "\n"
        "3. Add migration:  bb migrate create add-" module-name "-table\n"
        "4. Run tests:      clojure -M:test:db/h2 :" module-name))

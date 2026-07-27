@@ -1,5 +1,5 @@
 #!/usr/bin/env bb
-;; libs/tools/src/boundary/tools/deps.clj
+;; libs/tools/src/wagoe/tools/deps.clj
 ;;
 ;; Check and upgrade Maven dependencies across every deps.edn in the monorepo.
 ;;

@@ -74,10 +74,10 @@
           (clojure.edn/read-string (second m)))))))
 
 (defn- parse-all-libs
-  "all-libs from the canonical deploy registry — libs/tools/src/boundary/tools/
+  "all-libs from the canonical deploy registry — libs/tools/src/wagoe/tools/
   deploy.clj, the one `bb deploy` (wagoe.tools.deploy) actually publishes from."
   []
-  (parse-deploy-all-libs "libs/tools/src/boundary/tools/deploy.clj"))
+  (parse-deploy-all-libs "libs/tools/src/wagoe/tools/deploy.clj"))
 
 (deftest ^:integration deploy-lib-registry-drift-test
   (let [all-libs (parse-all-libs)]

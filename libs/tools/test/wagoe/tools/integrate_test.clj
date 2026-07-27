@@ -28,7 +28,7 @@
 ;; =============================================================================
 
 (deftest ^:unit discover-module-finds-module-under-src
-  (testing "default base-ns -> src/boundary/<module>/"
+  (testing "default base-ns -> src/wagoe/<module>/"
     (let [root (tmp-root)]
       (touch! root "src" "wagoe" "product" "schema.clj")
       (touch! root "src" "wagoe" "product" "shell" "http.clj")

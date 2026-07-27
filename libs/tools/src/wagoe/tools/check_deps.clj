@@ -1,5 +1,5 @@
 #!/usr/bin/env bb
-;; libs/tools/src/boundary/tools/check_deps.clj
+;; libs/tools/src/wagoe/tools/check_deps.clj
 ;;
 ;; Dependency direction linting: verifies that runtime (:require ...) matches
 ;; declared deps.edn dependencies and that no circular dependency exists

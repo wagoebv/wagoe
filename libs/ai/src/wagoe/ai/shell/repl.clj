@@ -116,7 +116,7 @@
   "Generate tests for a source file and print to stdout.
 
    Usage:
-     (ai/gen-tests \"libs/user/src/boundary/user/core/validation.clj\")
+     (ai/gen-tests \"libs/user/src/wagoe/user/core/validation.clj\")
 
    Args:
      source-path - path to the source file
@@ -142,7 +142,7 @@
 (defn review
   "AI code review of a source string or file path.
    (ai/review \"(ns my.ns)\\n(defn foo [] ...)\")
-   (ai/review \"libs/user/src/boundary/user/core/validation.clj\")"
+   (ai/review \"libs/user/src/wagoe/user/core/validation.clj\")"
   [source-or-path]
   (let [service (require-service)
         source  (if (and (string? source-or-path)
@@ -167,7 +167,7 @@
 (defn test-ideas
   "Suggest missing test cases for source code or file path.
    (ai/test-ideas \"(ns my.ns)\\n(defn foo [] ...)\")
-   (ai/test-ideas \"libs/user/src/boundary/user/core/validation.clj\")"
+   (ai/test-ideas \"libs/user/src/wagoe/user/core/validation.clj\")"
   [source-or-path]
   (let [service (require-service)
         source  (if (and (string? source-or-path)

@@ -1,5 +1,5 @@
 #!/usr/bin/env bb
-;; libs/tools/src/boundary/tools/check_poms.clj
+;; libs/tools/src/wagoe/tools/check_poms.clj
 ;;
 ;; POM dependency completeness: verifies that published library POMs will carry
 ;; their inter-Boundary dependencies.

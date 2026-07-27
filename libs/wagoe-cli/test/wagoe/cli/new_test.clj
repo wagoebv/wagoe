@@ -38,7 +38,7 @@
                    ".claude/skills/boundary/SKILL.md"
                    "resources/conf/dev/config.edn"
                    "resources/conf/test/config.edn"
-                   "src/boundary/config.clj"
+                   "src/wagoe/config.clj"
                    "dev/user.clj"
                    "src/test_proj/system.clj"
                    ".mcp.json"
@@ -137,7 +137,7 @@
         (is (some? template) "Missing claude-skill.md.tmpl resource")
         (when (and (.exists plugin-skill) template)
           (is (= (slurp template) (slurp plugin-skill))
-              "claude-plugin/skills/wagoe/SKILL.md and libs/wagoe-cli/resources/boundary/cli/templates/claude-skill.md.tmpl must stay byte-identical — copy the template over the plugin file")))
+              "claude-plugin/skills/wagoe/SKILL.md and libs/wagoe-cli/resources/wagoe/cli/templates/claude-skill.md.tmpl must stay byte-identical — copy the template over the plugin file")))
       ;; Outside the monorepo (e.g. testing the published library) there is no
       ;; plugin copy to compare against — record the skip as a passing assertion.
       (is (nil? (find-repo-root))

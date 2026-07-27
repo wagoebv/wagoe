@@ -37,7 +37,7 @@
 ;; Library registry (membership only — publish ORDER is derived, see below)
 ;; =============================================================================
 
-;; Keep the SET in sync with libs/tools/src/boundary/tools/deploy.clj all-libs
+;; Keep the SET in sync with libs/tools/src/wagoe/tools/deploy.clj all-libs
 ;; (the canonical registry `bb deploy` publishes from). The ORDER here is not
 ;; authoritative: `publish-order` topologically sorts it from each lib's deps.edn
 ;; (BOU-203), so both registries derive the same order and can't drift on it.
@@ -145,7 +145,7 @@
 ;; =============================================================================
 
 (def ^:private catalogue-path
-  "libs/wagoe-cli/resources/boundary/cli/modules-catalogue.edn")
+  "libs/wagoe-cli/resources/wagoe/cli/modules-catalogue.edn")
 
 (defn- patch-catalogue-version!
   "Update :version for lib-name in modules-catalogue.edn after a successful deploy."

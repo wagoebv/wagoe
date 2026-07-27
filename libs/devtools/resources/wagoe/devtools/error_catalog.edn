@@ -123,7 +123,7 @@
             :category    :tooling
             :title       "Module Not Wired"
             :description "A module is active in config.edn but has no require entry in wiring.clj, so Integrant cannot find its init-key methods."
-            :fix         "Add a require for the module in libs/platform/src/boundary/platform/shell/system/wiring.clj."}
+            :fix         "Add a require for the module in libs/platform/src/wagoe/platform/shell/system/wiring.clj."}
 
  ;; BND-8xx — MCP guardrails (wagoe-mcp)
  "BND-800" {:code        "BND-800"

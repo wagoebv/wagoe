@@ -27,7 +27,7 @@ This will:
 - Copy source files and resources
 - Compile the main namespace for faster startup
 - Package all dependencies including database drivers (SQLite, PostgreSQL, H2, MySQL)
-- Create `target/boundary-1.2.X-standalone.jar` (where X is the git commit count)
+- Create `target/wagoe-1.2.X-standalone.jar` (where X is the git commit count)
 
 The resulting jar file is approximately 60MB and includes:
 - All Clojure source code
@@ -43,13 +43,13 @@ The resulting jar file is approximately 60MB and includes:
 Start the HTTP server:
 
 ```bash
-java -jar target/boundary-1.2.X-standalone.jar
+java -jar target/wagoe-1.2.X-standalone.jar
 ```
 
 Or explicitly:
 
 ```bash
-java -jar target/boundary-1.2.X-standalone.jar server
+java -jar target/wagoe-1.2.X-standalone.jar server
 ```
 
 The server will:
@@ -64,8 +64,8 @@ The server will:
 Run CLI commands:
 
 ```bash
-java -jar target/boundary-1.2.X-standalone.jar cli user list
-java -jar target/boundary-1.2.X-standalone.jar cli user create --email test@example.com
+java -jar target/wagoe-1.2.X-standalone.jar cli user list
+java -jar target/wagoe-1.2.X-standalone.jar cli user create --email test@example.com
 ```
 
 ### Help
@@ -73,7 +73,7 @@ java -jar target/boundary-1.2.X-standalone.jar cli user create --email test@exam
 Show usage information:
 
 ```bash
-java -jar target/boundary-1.2.X-standalone.jar help
+java -jar target/wagoe-1.2.X-standalone.jar help
 ```
 
 ## Configuration
@@ -87,7 +87,7 @@ java -jar target/boundary-1.2.X-standalone.jar help
 ### Running in Production
 
 ```bash
-ENV=prod HTTP_PORT=8080 java -jar boundary-1.2.X-standalone.jar server
+ENV=prod HTTP_PORT=8080 java -jar wagoe-1.2.X-standalone.jar server
 ```
 
 ### Database Configuration
@@ -150,7 +150,7 @@ FROM eclipse-temurin:17-jre-alpine
 
 WORKDIR /app
 
-COPY target/boundary-1.2.X-standalone.jar boundary.jar
+COPY target/wagoe-1.2.X-standalone.jar boundary.jar
 COPY resources/conf/prod/config.edn /app/config/config.edn
 
 ENV ENV=prod
@@ -204,20 +204,20 @@ sudo systemctl status boundary
 ### Check Version
 
 ```bash
-jar xf boundary-1.2.X-standalone.jar META-INF/MANIFEST.MF
+jar xf wagoe-1.2.X-standalone.jar META-INF/MANIFEST.MF
 cat META-INF/MANIFEST.MF
 ```
 
 ### Verify Main Class
 
 ```bash
-jar tf boundary-1.2.X-standalone.jar | grep "boundary/main"
+jar tf wagoe-1.2.X-standalone.jar | grep "boundary/main"
 ```
 
 ### Test Database Drivers
 
 ```bash
-jar tf boundary-1.2.X-standalone.jar | grep -E "(sqlite|postgresql|h2|mysql)"
+jar tf wagoe-1.2.X-standalone.jar | grep -E "(sqlite|postgresql|h2|mysql)"
 ```
 
 ### Enable Debug Logging
@@ -253,7 +253,7 @@ jobs:
       - uses: actions/upload-artifact@v3
         with:
           name: boundary-uberjar
-          path: target/boundary-*-standalone.jar
+          path: target/wagoe-*-standalone.jar
 ```
 
 ## File Size Optimization

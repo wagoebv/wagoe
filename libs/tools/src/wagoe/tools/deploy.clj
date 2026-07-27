@@ -1,5 +1,5 @@
 #!/usr/bin/env bb
-;; libs/tools/src/boundary/tools/deploy.clj
+;; libs/tools/src/wagoe/tools/deploy.clj
 ;;
 ;; Deploy one or more Boundary libraries to Clojars.
 ;;

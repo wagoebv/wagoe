@@ -9,7 +9,7 @@
 # wide port range, hot-reload stage).
 
 # =============================================================================
-# Build stage — produce target/boundary-<version>-standalone.jar
+# Build stage — produce target/wagoe-<version>-standalone.jar
 # =============================================================================
 FROM clojure:temurin-17-tools-deps AS builder
 

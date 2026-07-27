@@ -1,5 +1,5 @@
 #!/usr/bin/env bb
-;; libs/tools/src/boundary/tools/quickstart.clj
+;; libs/tools/src/wagoe/tools/quickstart.clj
 ;;
 ;; Quickstart — one command from clone to running app.
 ;;

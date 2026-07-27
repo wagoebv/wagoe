@@ -1,5 +1,5 @@
 #!/usr/bin/env bb
-;; libs/tools/src/boundary/tools/check_tests.clj
+;; libs/tools/src/wagoe/tools/check_tests.clj
 ;;
 ;; Detects placeholder and tautological test assertions that pass green but
 ;; provide no real coverage: (is true), (is (= true true)), predicates on

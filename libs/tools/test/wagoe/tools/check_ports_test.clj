@@ -102,7 +102,7 @@
 
 (deftest ^:unit module-completeness-detects-missing-and-empty-ports
   (testing "monorepo libs (e.g. user) define a non-empty ports.clj"
-    (let [dir (io/file "libs/user/src/boundary/user")]
+    (let [dir (io/file "libs/user/src/wagoe/user")]
       (when (.exists dir)
         (is (nil? (ports/module-completeness-violation dir))
             "user module should have a ports.clj with a defprotocol")))))

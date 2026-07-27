@@ -1,5 +1,5 @@
 #!/usr/bin/env bb
-;; libs/tools/src/boundary/tools/check_no_boundary.clj
+;; scripts/check_no_boundary.clj
 ;;
 ;; Verification gate for the Boundary -> Wagoe rename (BOU-209).
 ;;
