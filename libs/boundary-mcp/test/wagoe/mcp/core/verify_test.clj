@@ -4,7 +4,7 @@
 
 (deftest ^:unit clean-run-passes
   (let [r (verify/build-report
-           {:generate {:success true :files [{:path "src/boundary/foo/core/foo.clj" :action :create}]}
+           {:generate {:success true :files [{:path "src/wagoe/foo/core/foo.clj" :action :create}]}
             :kondo    {:findings []}
             :fcis     {:violations []}
             :tests    {:status :passed :passed 7 :failed 0}})]
@@ -35,7 +35,7 @@
     (is (= :ok (get-in r [:steps :kondo])))))
 
 (deftest ^:unit fcis-violation-is-soft-and-overridable
-  (let [steps {:fcis {:violations [{:file "src/boundary/foo/core/foo.clj"
+  (let [steps {:fcis {:violations [{:file "src/wagoe/foo/core/foo.clj"
                                     :ns "wagoe.foo.core.foo" :req "wagoe.foo.shell.db"
                                     :kind :require}]}}
         r     (verify/build-report steps)
@@ -63,14 +63,14 @@
   (let [r (verify/build-report
            {:tests {:status :failed
                     :failures [{:ns "wagoe.foo.core.foo-test" :var "calc-test"
-                                :file "test/boundary/foo/core/foo_test.clj" :line 12
+                                :file "test/wagoe/foo/core/foo_test.clj" :line 12
                                 :message "calc wrong" :expected 10 :actual 7}]}})]
     (is (= :fail (:status r)))
     (let [issue (first (:issues r))]
       (is (= :tests (:step issue)))
       (is (= 10 (:expected issue)))
       (is (= 7 (:actual issue)))
-      (is (= "test/boundary/foo/core/foo_test.clj" (:file issue))))))
+      (is (= "test/wagoe/foo/core/foo_test.clj" (:file issue))))))
 
 (deftest ^:unit generation-error-fails
   (let [r (verify/build-report {:generate {:success false :errors ["Invalid request"]}})]

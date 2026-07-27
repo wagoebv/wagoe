@@ -7,10 +7,10 @@
 
 (def ^:dynamic *tmp* nil)
 
-;; Files live under src/boundary/tmp/core/ so clj-kondo's path→namespace
+;; Files live under src/wagoe/tmp/core/ so clj-kondo's path→namespace
 ;; inference matches the (ns wagoe.tmp.core.*) form (no spurious
 ;; namespace-name-mismatch error).
-(def ^:private core-dir-segments ["src" "boundary" "tmp" "core"])
+(def ^:private core-dir-segments ["src" "wagoe" "tmp" "core"])
 
 (use-fixtures :each
   (fn [t]

@@ -131,13 +131,13 @@
 (deftest ^:integration plugin-skill-in-sync-test
   (testing "claude-plugin SKILL.md is byte-identical to the project template"
     (if-let [root (find-repo-root)]
-      (let [plugin-skill (io/file root "claude-plugin/skills/boundary/SKILL.md")
+      (let [plugin-skill (io/file root "claude-plugin/skills/wagoe/SKILL.md")
             template     (io/resource "wagoe/cli/templates/claude-skill.md.tmpl")]
-        (is (.exists plugin-skill) "Missing claude-plugin/skills/boundary/SKILL.md")
+        (is (.exists plugin-skill) "Missing claude-plugin/skills/wagoe/SKILL.md")
         (is (some? template) "Missing claude-skill.md.tmpl resource")
         (when (and (.exists plugin-skill) template)
           (is (= (slurp template) (slurp plugin-skill))
-              "claude-plugin/skills/boundary/SKILL.md and libs/boundary-cli/resources/boundary/cli/templates/claude-skill.md.tmpl must stay byte-identical — copy the template over the plugin file")))
+              "claude-plugin/skills/wagoe/SKILL.md and libs/boundary-cli/resources/boundary/cli/templates/claude-skill.md.tmpl must stay byte-identical — copy the template over the plugin file")))
       ;; Outside the monorepo (e.g. testing the published library) there is no
       ;; plugin copy to compare against — record the skip as a passing assertion.
       (is (nil? (find-repo-root))

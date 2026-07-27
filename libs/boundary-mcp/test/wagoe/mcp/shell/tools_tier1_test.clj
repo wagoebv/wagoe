@@ -11,9 +11,9 @@
 
 (def ^:dynamic *tmp* nil)
 
-;; Source files live under src/boundary/tmp/core/ so clj-kondo's path→namespace
+;; Source files live under src/wagoe/tmp/core/ so clj-kondo's path→namespace
 ;; inference matches the (ns wagoe.tmp.core.thing) form.
-(def ^:private core-dir-segments ["src" "boundary" "tmp" "core"])
+(def ^:private core-dir-segments ["src" "wagoe" "tmp" "core"])
 
 (use-fixtures :each
   (fn [t]
@@ -103,7 +103,7 @@
     (is (some #(= (migration-path) (:path %)) (:files r)))))
 
 (deftest ^:unit gen-tests-without-provider-is-unavailable
-  (let [r (tools/run (deps (stub-scaffolder clean-core)) "gen-tests" {:source-path "src/boundary/tmp/core/thing.clj"})]
+  (let [r (tools/run (deps (stub-scaffolder clean-core)) "gen-tests" {:source-path "src/wagoe/tmp/core/thing.clj"})]
     (is (= :unavailable (:status r)))))
 
 (deftest ^:unit names-are-validated-against-path-traversal
