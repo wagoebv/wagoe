@@ -1,7 +1,7 @@
 #!/usr/bin/env bb
 ;; libs/tools/src/wagoe/tools/ansi.clj
 ;;
-;; Shared ANSI terminal colour helpers for boundary-tools CLI output.
+;; Shared ANSI terminal colour helpers for wagoe-tools CLI output.
 
 (ns wagoe.tools.ansi)
 

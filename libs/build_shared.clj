@@ -1,5 +1,5 @@
 (ns build-shared
-  "Shared build helpers for Boundary library build.clj files.
+  "Shared build helpers for Wagoe library build.clj files.
 
    Loaded via (load-file \"../build_shared.clj\") from each lib's build.clj,
    which runs with the lib directory as the working directory under

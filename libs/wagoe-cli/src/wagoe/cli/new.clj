@@ -6,9 +6,9 @@
             [wagoe.cli.templates :as templates]))
 
 ;; Keep in sync with libs/tools/build.clj version
-(def ^:private boundary-tools-version "1.0.0-beta-1")
+(def ^:private wagoe-tools-version "1.0.0-beta-1")
 
-;; Keep in sync with libs/wagoe-mcp/build.clj version (release-bumped with boundary-tools-version)
+;; Keep in sync with libs/wagoe-mcp/build.clj version (release-bumped with wagoe-tools-version)
 (def ^:private wagoe-mcp-version "1.0.0-beta-1")
 
 (defn validate-name [n]
@@ -50,7 +50,7 @@
         subs        {:project-name             project-name
                      :project-ns               project-ns
                      :jwt-secret               jwt-secret
-                     :boundary-tools-version   boundary-tools-version
+                     :wagoe-tools-version   wagoe-tools-version
                      :wagoe-mcp-version     wagoe-mcp-version
                      :core-version             (:version (cat/find-module "core"))
                      :observability-version (:version (cat/find-module "observability"))

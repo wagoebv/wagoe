@@ -289,7 +289,7 @@
 
 (deftest ^:unit generate-project-bb-edn-test
   (let [output (gen/generate-project-bb-edn "my-app")]
-    (testing "wires the boundary-tools dependency"
+    (testing "wires the wagoe-tools dependency"
       (is (str/includes? output "org.wagoe/wagoe-tools")))
 
     (testing "wires the quality-gate tasks the AGENTS.md template points at"

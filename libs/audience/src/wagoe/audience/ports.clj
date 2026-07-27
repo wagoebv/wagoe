@@ -1,5 +1,5 @@
 (ns wagoe.audience.ports
-  "Port definitions for the boundary-audience library.
+  "Port definitions for the wagoe-audience library.
 
    Four protocols cover the full lifecycle:
 

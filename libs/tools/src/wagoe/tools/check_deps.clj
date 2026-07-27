@@ -28,7 +28,7 @@
            (sort-by first)))))
 
 (defn- parse-deps-edn
-  "Parse a deps.edn and extract declared Boundary library dependencies.
+  "Parse a deps.edn and extract declared Wagoe library dependencies.
    Returns a set of library name strings (empty set if file is missing)."
   [deps-file]
   (if (.exists deps-file)
@@ -154,7 +154,7 @@
 ;; ---------------------------------------------------------------------------
 
 (defn- check-core-independence
-  "Verify that the 'core' library has zero boundary library dependencies."
+  "Verify that the 'core' library has zero wagoe library dependencies."
   [declared-graph actual-graph]
   (let [declared-deps (get declared-graph "core" #{})
         actual-deps   (get actual-graph "core" #{})]

@@ -121,7 +121,7 @@
 (defn run-clojure!
   "Shell out to the Clojure scaffolder CLI with given args. Streams output to terminal.
 
-   In generated projects (no libs/scaffolder directory), injects boundary-scaffolder
+   In generated projects (no libs/scaffolder directory), injects wagoe-scaffolder
    via -Sdeps so the namespace is resolvable. In the monorepo, libs/scaffolder/src is
    already on the classpath, so -Sdeps is skipped to avoid forcing Maven resolution of
    an artifact that may not yet be published."

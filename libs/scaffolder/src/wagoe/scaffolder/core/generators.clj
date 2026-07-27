@@ -6,9 +6,9 @@
   (:require [clojure.string :as str]
             [wagoe.scaffolder.core.template :as template]))
 
-;; When bumping the boundary-tools release, update this version and redeploy
+;; When bumping the wagoe-tools release, update this version and redeploy
 ;; libs/tools to Clojars before cutting a new boundary-starters release.
-(def boundary-tools-version "1.0.0-beta-1")
+(def wagoe-tools-version "1.0.0-beta-1")
 
 ;; =============================================================================
 ;; Schema File Generator
@@ -831,7 +831,7 @@ CREATE INDEX IF NOT EXISTS idx_%s_created_at ON %s(created_at);
 (defn generate-project-bb-edn
   "Generate bb.edn for a new project.
 
-   Wires boundary-tools so all bb tasks (scaffold, i18n, deploy, etc.)
+   Wires wagoe-tools so all bb tasks (scaffold, i18n, deploy, etc.)
    are available out of the box.
 
    Args:
@@ -843,8 +843,8 @@ CREATE INDEX IF NOT EXISTS idx_%s_created_at ON %s(created_at);
    Pure: true"
   [_name]
   (str ";; bb.edn — Babashka task runner for this Boundary project\n"
-       ";; All tasks are provided by boundary-tools; no local scripts needed.\n"
-       "{:deps {org.wagoe/wagoe-tools {:mvn/version \"" boundary-tools-version "\"}}\n"
+       ";; All tasks are provided by wagoe-tools; no local scripts needed.\n"
+       "{:deps {org.wagoe/wagoe-tools {:mvn/version \"" wagoe-tools-version "\"}}\n"
        "\n"
        " :tasks\n"
        " {:requires ([wagoe.tools.scaffold    :as scaffold]\n

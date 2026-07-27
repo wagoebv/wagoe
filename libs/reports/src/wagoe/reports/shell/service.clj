@@ -1,7 +1,7 @@
 (ns wagoe.reports.shell.service
   "Public convenience API for report generation.
 
-   Provides `generate` (sync) and `generate-async` (queued via boundary-jobs).
+   Provides `generate` (sync) and `generate-async` (queued via wagoe-jobs).
    These functions live in the shell layer — not core — because they
    instantiate adapter records and call :data-source, both of which are
    side effects (FC/IS: Core → Shell is forbidden).
@@ -62,11 +62,11 @@
     (ports/generate! generator report-def data opts)))
 
 ;; =============================================================================
-;; Asynchronous generation (requires boundary-jobs)
+;; Asynchronous generation (requires wagoe-jobs)
 ;; =============================================================================
 
 (defn generate-async
-  "Queue report generation as a background job (requires boundary-jobs).
+  "Queue report generation as a background job (requires wagoe-jobs).
 
    The job will call generate and optionally notify via email when done.
 
@@ -78,7 +78,7 @@
 
    Returns job-id (UUID string).
 
-   Throws ex-info with :type :missing-dependency if boundary-jobs is not available."
+   Throws ex-info with :type :missing-dependency if wagoe-jobs is not available."
   [report-def opts]
   (log/info "Queueing async report generation" {:id (:id report-def)})
   (jobs-integration/queue-report-job! report-def opts))

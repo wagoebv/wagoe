@@ -4,7 +4,7 @@
 ;; Individual libraries have their own deps.edn files in libs/*/deps.edn
 ;;
 ;; For production use, depend on individual published libraries:
-;;   {:deps {boundary/platform {:mvn/version "0.1.0"}}}
+;;   {:deps {wagoe/platform {:mvn/version "0.1.0"}}}
 
 {:paths []  ;; No paths at root - libraries define their own paths
 
