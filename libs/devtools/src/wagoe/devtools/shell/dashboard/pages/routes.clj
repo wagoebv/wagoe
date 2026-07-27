@@ -47,7 +47,7 @@
     (let [clean (-> handler-str
                     (str/replace #"@[a-f0-9]+" "")
                     (str/replace #"\$" "/"))]
-      (if-let [m (re-find #"boundary\.([^/]+\.[^/]+/[^\s]+)" clean)]
+      (if-let [m (re-find #"wagoe\.([^/]+\.[^/]+/[^\s]+)" clean)]
         (second m)
         (last (str/split clean #" "))))))
 
