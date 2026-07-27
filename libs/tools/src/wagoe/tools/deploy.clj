@@ -171,7 +171,7 @@
 ;; =============================================================================
 
 (def ^:private catalogue-path
-  "libs/wagoe-cli/resources/boundary/cli/modules-catalogue.edn")
+  "libs/wagoe-cli/resources/wagoe/cli/modules-catalogue.edn")
 
 (defn- patch-catalogue-version!
   "Update :version for lib-name in modules-catalogue.edn after a successful deploy."

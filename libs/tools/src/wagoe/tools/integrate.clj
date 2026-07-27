@@ -31,7 +31,7 @@
 (defn base-ns-path
   "Filesystem path segment for a base namespace: dots become slashes."
   [base-ns]
-  (str/replace (or base-ns "boundary") "." "/"))
+  (str/replace (or base-ns "wagoe") "." "/"))
 
 (defn discover-module
   "Discover a scaffolded module under `<root>/src/<base-ns-path>/<module>/` —
@@ -45,8 +45,8 @@
          test-dir (io/file root "test" bnp module-name)]
      (when (.exists src-dir)
        {:name        module-name
-        :base-ns     (or base-ns "boundary")
-        :module-ns   (str (or base-ns "boundary") "." module-name)
+        :base-ns     (or base-ns "wagoe")
+        :module-ns   (str (or base-ns "wagoe") "." module-name)
         :src-path    (str "src/" bnp "/" module-name)
         :test-path   (str "test/" bnp "/" module-name)
         :src-dir     (.getPath src-dir)

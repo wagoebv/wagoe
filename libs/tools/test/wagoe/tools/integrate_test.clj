@@ -18,7 +18,7 @@
 ;; =============================================================================
 
 (deftest ^:unit base-ns-path-test
-  (is (= "boundary" (integrate/base-ns-path nil)))
+  (is (= "wagoe" (integrate/base-ns-path nil)))
   (is (= "boundary" (integrate/base-ns-path "boundary")))
   (is (= "myapp" (integrate/base-ns-path "myapp")))
   (is (= "com/acme" (integrate/base-ns-path "com.acme"))))
@@ -30,12 +30,12 @@
 (deftest ^:unit discover-module-finds-module-under-src
   (testing "default base-ns -> src/boundary/<module>/"
     (let [root (tmp-root)]
-      (touch! root "src" "boundary" "product" "schema.clj")
-      (touch! root "src" "boundary" "product" "shell" "http.clj")
+      (touch! root "src" "wagoe" "product" "schema.clj")
+      (touch! root "src" "wagoe" "product" "shell" "http.clj")
       (let [m (integrate/discover-module "product" nil root)]
         (is (some? m))
         (is (= "wagoe.product" (:module-ns m)))
-        (is (= "src/boundary/product" (:src-path m)))
+        (is (= "src/wagoe/product" (:src-path m)))
         (is (true? (:has-routes? m)))          ; shell/http.clj present
         (is (false? (:has-wiring? m))))))       ; no module_wiring.clj
 
@@ -55,7 +55,7 @@
 
   (testing "module absent -> nil (and NOT found under the old libs/ location)"
     (let [root (tmp-root)]
-      (touch! root "libs" "product" "src" "boundary" "product" "schema.clj") ; old layout
+      (touch! root "libs" "product" "src" "wagoe" "product" "schema.clj") ; old layout
       (is (nil? (integrate/discover-module "product" nil root))))))
 
 ;; =============================================================================

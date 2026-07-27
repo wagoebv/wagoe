@@ -259,7 +259,7 @@
          ;; src/boundary/test_support/core.clj is the monorepo-level shared
          ;; test helper namespace. It is a single file (wagoe.test-support.core),
          ;; not a directory of core sources — include it explicitly.
-         test-support-file (io/file root "src" "boundary" "test_support" "core.clj")
+         test-support-file (io/file root "src" "wagoe" "test_support" "core.clj")
          test-support  (when (.exists test-support-file) [test-support-file])]
      (->> (concat libs-files app-files test-support)
           (distinct)))))
