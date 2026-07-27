@@ -26,14 +26,14 @@
 (deftest ^:unit resources-list-advertises-catalog
   (let [resp (dispatch/dispatch (deps) {:jsonrpc "2.0" :id 1 :method "resources/list"})]
     (is (= 7 (count (get-in resp [:result :resources]))))
-    (is (some #(= "boundary://conventions" (:uri %)) (get-in resp [:result :resources])))))
+    (is (some #(= "wagoe://conventions" (:uri %)) (get-in resp [:result :resources])))))
 
 (deftest ^:unit resources-read-returns-json-content
   (let [d    (deps)
         resp (dispatch/dispatch d {:jsonrpc "2.0" :id 2 :method "resources/read"
-                                   :params {:uri "boundary://conventions"}})
+                                   :params {:uri "wagoe://conventions"}})
         content (first (get-in resp [:result :contents]))]
-    (is (= "boundary://conventions" (:uri content)))
+    (is (= "wagoe://conventions" (:uri content)))
     (is (= "application/json" (:mimeType content)))
     ;; the content text is the JSON-encoded resource data (the conventions value)
     (is (= (:conventions snapshot) (codec/decode (:text content))))
@@ -42,13 +42,13 @@
 
 (deftest ^:unit resources-read-unknown-uri-is-invalid-params
   (let [resp (dispatch/dispatch (deps) {:jsonrpc "2.0" :id 3 :method "resources/read"
-                                        :params {:uri "boundary://nope"}})]
+                                        :params {:uri "wagoe://nope"}})]
     (is (= -32602 (get-in resp [:error :code])))))
 
 (deftest ^:unit resources-read-denied-in-disabled-context-yields-guardrail
   (let [d    (deps (security/resolve-context {"MCP_CAPABILITY_MODE" "disabled"}))
         resp (dispatch/dispatch d {:jsonrpc "2.0" :id 4 :method "resources/read"
-                                   :params {:uri "boundary://conventions"}})]
+                                   :params {:uri "wagoe://conventions"}})]
     (is (= -32001 (get-in resp [:error :code])))            ;; :forbidden
     (is (= "BND-801" (get-in resp [:error :data :code])))   ;; capabilities disabled
     (testing "the denial is audited"
