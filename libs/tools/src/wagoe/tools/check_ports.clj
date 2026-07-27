@@ -16,7 +16,7 @@
 ;; Escape hatches (for legitimate exceptions and gradual adoption downstream):
 ;;   - `^:wagoe/allow-direct` metadata on a namespace exempts it from
 ;;     rules 2 and 3.
-;;   - An optional .boundary/check-ports.edn at the repo root supplies
+;;   - An optional .wagoe/check-ports.edn at the repo root supplies
 ;;     :allow-missing-ports (module ns prefixes) and :allow-direct (namespace
 ;;     names) allowlists.
 ;;
@@ -240,10 +240,10 @@
   #{"wagoe.platform"})
 
 (defn read-config
-  "Read the optional .boundary/check-ports.edn allowlist. Returns a map with
+  "Read the optional .wagoe/check-ports.edn allowlist. Returns a map with
    :allow-missing-ports and :allow-direct sets (string members)."
   []
-  (let [f (io/file (System/getProperty "user.dir") ".boundary" "check-ports.edn")]
+  (let [f (io/file (System/getProperty "user.dir") ".wagoe" "check-ports.edn")]
     (if (.exists f)
       (try
         (let [m (edn/read-string (slurp f))]
@@ -299,7 +299,7 @@
                               " directly (go through a service port)")))))
         (println)
         (println (str (count violations) " violation(s) found across " modules " module(s)."))
-        (println (ansi/dim "Escape hatch: ^:wagoe/allow-direct ns metadata, or .boundary/check-ports.edn allowlist."))
+        (println (ansi/dim "Escape hatch: ^:wagoe/allow-direct ns metadata, or .wagoe/check-ports.edn allowlist."))
         (System/exit 1))
       (do
         (println (ansi/green "Ports check passed.")

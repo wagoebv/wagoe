@@ -177,7 +177,7 @@
 ;; Pyramid tag gate (BOU-166): every deftest carries exactly one of
 ;; ^:unit / ^:integration / ^:contract. Cross-cutting tags (^:security, ^:e2e,
 ;; …) may coexist. Not-yet-backfilled test files are exempted via
-;; .boundary/check-test-tags.edn until they are tagged.
+;; .wagoe/check-test-tags.edn until they are tagged.
 ;; ---------------------------------------------------------------------------
 
 (def ^:private pyramid-tags
@@ -198,11 +198,11 @@
   #"(?m)^\(deftest((?:\s+(?:\^:[a-zA-Z][\w?*!+<>='-]*|\^\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}))*)\s+([a-zA-Z][^\s()]*)")
 
 (defn read-tags-config
-  "Read the optional .boundary/check-test-tags.edn allowlist. Returns a set of
+  "Read the optional .wagoe/check-test-tags.edn allowlist. Returns a set of
    repo-relative path prefixes; any test file under one is exempt from the
    pyramid-tag requirement (gradual backfill)."
   []
-  (let [f (io/file (System/getProperty "user.dir") ".boundary" "check-test-tags.edn")]
+  (let [f (io/file (System/getProperty "user.dir") ".wagoe" "check-test-tags.edn")]
     (if (.exists f)
       (try (set (map str (:allow-untagged (edn/read-string (slurp f)))))
            (catch Exception _ #{}))
@@ -240,7 +240,7 @@
 
 (defn check-test-tags
   "Enforce exactly one pyramid tag (^:unit / ^:integration / ^:contract) per
-   deftest. Files listed in .boundary/check-test-tags.edn :allow-untagged are
+   deftest. Files listed in .wagoe/check-test-tags.edn :allow-untagged are
    skipped (gradual backfill, BOU-166)."
   [& _args]
   (let [allow    (read-tags-config)

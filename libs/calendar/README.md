@@ -1,4 +1,4 @@
-# boundary-calendar
+# wagoe-calendar
 
 [![Status](https://img.shields.io/badge/status-stable-brightgreen)]()
 [![Clojure](https://img.shields.io/badge/clojure-1.12+-blue)]()
@@ -15,7 +15,7 @@ Calendar and scheduling library for the [Wagoe](https://github.com/thijs-creemer
 - **iCal export** — RFC 5545 VCALENDAR strings ready for Google Calendar / Outlook / iOS subscription
 - **iCal import** — parse `.ics` files back to boundary EventData maps
 - **Hiccup UI components** — pure month-view, week-view, mini-calendar for admin interfaces
-- **`defevent` macro** — named event type registry (same pattern as `defreport` in boundary-reports)
+- **`defevent` macro** — named event type registry (same pattern as `defreport` in wagoe-reports)
 
 ## Installation
 

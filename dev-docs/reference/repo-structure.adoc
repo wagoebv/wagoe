@@ -294,7 +294,7 @@ scaffolder --> core
 * Domain libraries (`user`, `admin`, `tenant`, `cache`, `jobs`, `realtime`, etc.) depend on platform
 * `email` delegates raw SMTP transport to `external`; `external` sits at the platform level
 * `payments`, `i18n`, and `ui-style` are standalone — no internal Wagoe deps
-* `boundary-tools` is consumed via `{:local/root "libs/tools"}` in `bb.edn`, not as a library dependency
+* `wagoe-tools` is consumed via `{:local/root "libs/tools"}` in `bb.edn`, not as a library dependency
 
 [[configuration]]
 == Configuration Structure

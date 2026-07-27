@@ -7,9 +7,9 @@
 {:allow-paths
  ["CHANGELOG.md"
   "docs/superpowers/"
-  ".boundary/"
+  ".wagoe/"
   "scripts/rename_wagoe.clj"
-  "scripts/check_no_boundary.clj"
+  "scripts/check_no_wagoe.clj"
   ;; Doc-drift linter: its #"boundary\.<ns>" pattern matches ns references in
   ;; the (still boundary-era) docs it lints. Renames with the docs in Phase 4
   ;; (BOU-214); exempt until then. Two copies: scripts/ (bb) + dev/ (repl).

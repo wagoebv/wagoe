@@ -53,7 +53,7 @@ multi-tenant support.
 
 == Reliable delivery
 
-Delivery runs as jobs via a hard dependency on `boundary-jobs`, so sends
+Delivery runs as jobs via a hard dependency on `wagoe-jobs`, so sends
 are retried according to each notification's retry configuration. Error
 classification decides whether a failure is retried, dropped, or marks
 the token invalid.

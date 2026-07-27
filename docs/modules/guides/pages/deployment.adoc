@@ -101,4 +101,4 @@ The production config uses environment variables for all secrets:
 | PostgreSQL (recommended)
 |===
 
-PostgreSQL is required for multi-tenancy (`boundary-tenant`) and full-text search (`boundary-search`).
+PostgreSQL is required for multi-tenancy (`wagoe-tenant`) and full-text search (`wagoe-search`).

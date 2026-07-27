@@ -30,7 +30,7 @@ Each ADR describes the context, the decision, and its consequences.
 * link:adr/ADR-012 user module updates.adoc[ADR-012: User Module Admin Integration — Split-Table Architecture]
 * link:adr/ADR-013-intenationalisation.adoc[ADR-013: Internationalisation (i18n)]
 * link:adr/ADR-014-pluggable-auth.adoc[ADR-014: Pluggable User / Auth / Authorization]
-* link:adr/ADR-015-boundary-tools.adoc[ADR-015: boundary-tools — Developer Tooling Distribution]
+* link:adr/ADR-015-wagoe-tools.adoc[ADR-015: wagoe-tools — Developer Tooling Distribution]
 * link:adr/ADR-016-tenant-user-membership.adoc[ADR-016: Tenant User Membership]
 * link:adr/ADR-017-library-migration-discovery.adoc[ADR-017: Library Migration Discovery]
 * link:adr/ADR-018-admin-belongs-to-widget.adoc[ADR-018: Admin :belongs-to Widget]
@@ -69,7 +69,7 @@ Key tools:
 * `bb ai admin-entity <description>` — Generate admin entity EDN config via AI
 * `bb deploy` — Deploy libraries to Clojars
 * `bb create-admin` — Create first admin user
-* `bb test:tools` — Run boundary-tools unit tests
+* `bb test:tools` — Run wagoe-tools unit tests
 
 === Top-Level Internal Docs
 

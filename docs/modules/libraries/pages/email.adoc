@@ -23,16 +23,16 @@ Supports sync, async (future-based), and queued (jobs library) sending modes.
 | SMTP adapter — delegates to `wagoe.external` SMTP transport
 
 | `wagoe.email.shell.jobs-integration`
-| Optional integration with `boundary-jobs` for queued sending
+| Optional integration with `wagoe-jobs` for queued sending
 |===
 
 == Transport layer
 
-`boundary-email` delegates raw SMTP transport to `boundary-external`:
+`wagoe-email` delegates raw SMTP transport to `wagoe-external`:
 
 [source]
 ----
-boundary-email (application layer)  →  boundary-external (transport layer)
+wagoe-email (application layer)  →  wagoe-external (transport layer)
   Email {id, created-at, metadata}  →  OutboundEmail {to, from, subject, body}
   EmailSenderProtocol                →  ISmtpProvider (javax.mail)
 ----
@@ -76,7 +76,7 @@ boundary-email (application layer)  →  boundary-external (transport layer)
 | Async (`future`)
 | Non-critical emails where a short delay is acceptable
 
-| Queued (`boundary-jobs`)
+| Queued (`wagoe-jobs`)
 | High volume or when retry logic is needed
 |===
 

@@ -20,7 +20,7 @@
 ;; No args  -> all HARD groups (ns keys coords env dirs urls); prose excluded.
 ;; `all`    -> hard groups + prose (prose still report-only).
 ;;
-;; Allowlist: paths in .boundary/check-no-boundary.edn `:allow-paths` (prefix
+;; Allowlist: paths in .wagoe/check-no-boundary.edn `:allow-paths` (prefix
 ;; match) are exempt — CHANGELOG history, planning docs, the rename tooling
 ;; itself, and (pre-rename) the boundary-pathed source tree of this checker.
 
@@ -90,12 +90,12 @@
    until Phase 1 moves it to wagoe/."
   ["CHANGELOG.md"
    "docs/superpowers/"
-   ".boundary/"
+   ".wagoe/"
    "scripts/rename_wagoe.clj"
    "scripts/check_no_boundary.clj"])
 
 (defn- load-allow-paths []
-  (let [f ".boundary/check-no-boundary.edn"]
+  (let [f ".wagoe/check-no-boundary.edn"]
     (into default-allow-paths
           (when (fs/exists? f)
             (:allow-paths (edn/read-string (slurp f)))))))

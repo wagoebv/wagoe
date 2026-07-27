@@ -512,7 +512,7 @@ clojure -M:test:db/h2 --focus wagoe.tenant.shell.provisioning-test  # Provisioni
 
 ### Migration Steps
 
-1. **Install Module**: Add `boundary-tenant` dependency
+1. **Install Module**: Add `wagoe-tenant` dependency
 2. **Run Migration**: Create `tenants` table via migration 011
 3. **Create Tenants**: Insert existing tenants into `tenants` table
 4. **Provision Schemas**: Run provisioning for each existing tenant

@@ -316,7 +316,7 @@
            ;; Direct entrypoint into the user module CLI; used by bb create-admin so that
            ;; generated projects (which do not have wagoe.cli on the classpath) can still
            ;; run the user CLI via -M:user-cli. Uses -e to call run-cli! directly so this
-           ;; works with any published boundary-user without requiring a -main entrypoint.
+           ;; works with any published wagoe-user without requiring a -main entrypoint.
            ;; Must include all JDBC drivers because db-factory resolves the driver at runtime.
            :user-cli  {:extra-deps {org.xerial/sqlite-jdbc      {:mvn/version "3.53.2.0"}
                                     org.postgresql/postgresql   {:mvn/version "42.7.11"}

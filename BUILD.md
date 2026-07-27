@@ -252,7 +252,7 @@ jobs:
       - run: clojure -T:build uber
       - uses: actions/upload-artifact@v3
         with:
-          name: boundary-uberjar
+          name: wagoe-uberjar
           path: target/wagoe-*-standalone.jar
 ```
 

@@ -9,14 +9,14 @@ Accepted
 
 == Context
 
-The `boundary-user` library stores user data across two tables:
+The `wagoe-user` library stores user data across two tables:
 
 * `auth_users` — authentication fields: `id`, `email`, `active`, `mfa_enabled`, `mfa_secret`, `password_hash`, `created_at`, `updated_at`, `deleted_at`
 * `users` — profile fields: `id`, `name`, `role`, `tenant_id`, `avatar_url`, `theme`, `language`, `timezone`, `date_format`, `time_format`, `notifications_email`, `notifications_push`, `notifications_sms`, `login_count`, `last_login`
 
 Three compounding bugs were discovered during admin UI integration:
 
-=== Bug 1 — boundary-platform: silent exception swallowing
+=== Bug 1 — wagoe-platform: silent exception swallowing
 
 In `persistence-error-handling`, the `:error` handler added `:error-info` to the
 interceptor context but did NOT preserve the `:error` key.  `execute-persistence-operation`
@@ -25,13 +25,13 @@ exception (wrong column name, type mismatch, constraint violation) was silently 
 and `nil` returned.  Every `update-entity`, `create-entity`, and `delete-entity` call
 system-wide was affected.
 
-=== Bug 2 — boundary-admin: update handler discards result
+=== Bug 2 — wagoe-admin: update handler discards result
 
 `update-entity-handler` bound the `ports/update-entity` return value as `_updated-entity`
 (discarded), then immediately called `ports/get-entity` again for a fresh fetch.  This meant
 a failed (nil-returning) update would still render a success toast with stale data.
 
-=== Bug 3 — boundary-user config: missing split-table admin wiring
+=== Bug 3 — wagoe-user config: missing split-table admin wiring
 
 The admin entity config for users (`resources/conf/dev/admin/users.edn`) had no `:table-name`
 key, so the admin service issued `UPDATE nil SET …` — a SQL error silently swallowed by

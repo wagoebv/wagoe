@@ -73,7 +73,7 @@
                      "tests.edn"                           "tests.edn.tmpl"
                      "CLAUDE.md"                           "CLAUDE.md.tmpl"
                      "AGENTS.md"                           "AGENTS.md.tmpl"
-                     ".claude/skills/boundary/SKILL.md"    "claude-skill.md.tmpl"
+                     ".claude/skills/wagoe/SKILL.md"    "claude-skill.md.tmpl"
                      "resources/conf/dev/config.edn"       "dev-config.edn.tmpl"
                      "resources/conf/test/config.edn"      "test-config.edn.tmpl"
                      "src/wagoe/config.clj"             "config.clj.tmpl"

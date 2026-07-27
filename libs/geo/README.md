@@ -1,4 +1,4 @@
-# boundary-geo
+# wagoe-geo
 
 [![Status](https://img.shields.io/badge/status-stable-brightgreen)]()
 [![Clojure](https://img.shields.io/badge/clojure-1.12+-blue)]()
@@ -91,7 +91,7 @@ Add to `resources/conf/{env}/config.edn` and require `wagoe.geo.shell.module-wir
 
 ## DB Migration
 
-Run once before using DB-backed caching. When `boundary-geo` is on the
+Run once before using DB-backed caching. When `wagoe-geo` is on the
 classpath, `clojure -M:migrate up` now auto-discovers this migration:
 
 ```sql

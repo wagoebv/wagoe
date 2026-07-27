@@ -4,7 +4,7 @@
 
 ## Purpose
 
-Declarative state machine workflows for domain entities. Provides permission-based transitions, automatic audit trails, and optional side-effect dispatch via `boundary-jobs`.
+Declarative state machine workflows for domain entities. Provides permission-based transitions, automatic audit trails, and optional side-effect dispatch via `wagoe-jobs`.
 
 ## Key Namespaces
 
@@ -151,13 +151,13 @@ Transitions declared with `:auto? true` are candidate for system-initiated firin
 
 Auto-transitions use `[:system]` as the actor-roles vector, bypassing
 permission checks. Design them for always-valid, system-initiated events.
-Intended to be called from a scheduled job or `boundary-jobs` trigger.
+Intended to be called from a scheduled job or `wagoe-jobs` trigger.
 
 ---
 
 ## Side Effects
 
-Side effects are job-type keywords declared on a transition. When a `job-queue` is provided, `boundary-jobs` is used to enqueue a job for each key after a successful transition:
+Side effects are job-type keywords declared on a transition. When a `job-queue` is provided, `wagoe-jobs` is used to enqueue a job for each key after a successful transition:
 
 ```clojure
 ;; Transition declares: :side-effects [:notify-cancellation]
