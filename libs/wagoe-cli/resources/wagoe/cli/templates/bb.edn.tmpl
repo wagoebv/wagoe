@@ -1,4 +1,4 @@
-;; bb.edn — Babashka task runner for this Boundary project
+;; bb.edn — Babashka task runner for this Wagoe project
 ;; All tasks are provided by boundary-tools; no local scripts needed.
 {:deps {org.wagoe/wagoe-tools {:mvn/version "{{boundary-tools-version}}"}}
 
@@ -99,7 +99,7 @@
 
   ;; AGENTS.md maintenance — shells out to the globally installed `boundary`
   ;; CLI, which owns the AGENTS.md template this task syncs against.
-  agents:update     {:doc "Refresh framework sections of AGENTS.md after a Boundary upgrade (--check for CI)"
+  agents:update     {:doc "Refresh framework sections of AGENTS.md after a Wagoe upgrade (--check for CI)"
                      :requires ([babashka.fs :as fs])
                      :task (if (fs/which "boundary")
                              (apply shell "boundary" "agents" "update" *command-line-args*)

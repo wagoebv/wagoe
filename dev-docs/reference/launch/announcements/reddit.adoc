@@ -1,14 +1,14 @@
 ---
-title: "Boundary — Clojure framework with SSR/HTMX, MFA, and observability"
+title: "Wagoe — Clojure framework with SSR/HTMX, MFA, and observability"
 weight: 30
 description: "Reddit post draft."
 ---
 
-= Boundary — Clojure framework with SSR/HTMX, MFA, and observability
+= Wagoe — Clojure framework with SSR/HTMX, MFA, and observability
 
 Tagline: Batteries included, boundaries enforced
 
-Boundary is a batteries-included Clojure web framework designed for teams: - FC/IS architecture {plus} Integrant - Hiccup {plus} HTMX (no frontend build) - Admin UI and MFA included - Malli validation with snapshot testing - Interceptor-based logging/metrics/error reporting
+Wagoe is a batteries-included Clojure web framework designed for teams: - FC/IS architecture {plus} Integrant - Hiccup {plus} HTMX (no frontend build) - Admin UI and MFA included - Malli validation with snapshot testing - Interceptor-based logging/metrics/error reporting
 
 Why try it? - Ship faster with consistent patterns and fewer moving parts - Strong defaults for security and observability - Great fit for internal tools and back-office apps
 

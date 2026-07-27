@@ -2,14 +2,14 @@
 
 *Status:* Proposed +
 *Date:* 2026-02-04 +
-*Deciders:* Boundary Core Team +
+*Deciders:* Wagoe Core Team +
 *Context:* Real-time/WebSocket Module (Phase 5)
 
 '''''
 
 === Context and Problem Statement
 
-The Boundary framework currently supports HTTP-based request-response
+The Wagoe framework currently supports HTTP-based request-response
 patterns but lacks built-in support for real-time, bidirectional
 communication. Modern web applications often require real-time features
 such as:
@@ -20,12 +20,12 @@ such as:
 * Event streaming (e.g., order status updates, job progress)
 
 Users currently must implement WebSocket support from scratch, leading
-to inconsistent patterns and integration challenges with Boundary's
+to inconsistent patterns and integration challenges with Wagoe's
 existing authentication and module system.
 
 This ADR defines the architecture for a `libs/realtime/` module that
 provides WebSocket support with first-class integration into the
-Boundary framework's Functional Core / Imperative Shell paradigm.
+Wagoe framework's Functional Core / Imperative Shell paradigm.
 
 '''''
 
@@ -951,7 +951,7 @@ initial use cases)
 (inspiration for architecture)
 * *WebSocket RFC 6455*: https://datatracker.ietf.org/doc/html/rfc6455
 * *JWT Best Practices*: https://tools.ietf.org/html/rfc8725
-* *Boundary FC/IS Pattern*: `docs/ARCHITECTURE.md`
+* *Wagoe FC/IS Pattern*: `docs/ARCHITECTURE.md`
 
 '''''
 

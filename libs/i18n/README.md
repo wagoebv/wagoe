@@ -5,7 +5,7 @@
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
 [![Clojars Project](https://img.shields.io/clojars/v/org.wagoe/wagoe-i18n.svg)](https://clojars.org/org.wagoe/wagoe-i18n)
 
-Marker-based internationalisation for Boundary apps — translation keys live as `[:t :key]` data markers in Hiccup and are resolved to strings before HTML is emitted (ADR-013).
+Marker-based internationalisation for Wagoe apps — translation keys live as `[:t :key]` data markers in Hiccup and are resolved to strings before HTML is emitted (ADR-013).
 
 ## Installation
 

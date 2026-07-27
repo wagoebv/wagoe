@@ -5,7 +5,7 @@
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
 [![Clojars Project](https://img.shields.io/clojars/v/org.wagoe/wagoe-reports.svg)](https://clojars.org/org.wagoe/wagoe-reports)
 
-Report generation library for the Boundary Framework — produce PDF, Excel, and Word (DOCX) documents from a single declarative definition.
+Report generation library for the Wagoe Framework — produce PDF, Excel, and Word (DOCX) documents from a single declarative definition.
 
 ## Installation
 

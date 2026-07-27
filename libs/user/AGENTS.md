@@ -274,7 +274,7 @@ curl -X POST http://localhost:3000/api/auth/login \
 
 ## Project Setup — Creating the First Admin User
 
-Use `bb create-admin` to bootstrap an admin account after setting up a new project. It wraps the Boundary CLI in an interactive wizard.
+Use `bb create-admin` to bootstrap an admin account after setting up a new project. It wraps the Wagoe CLI in an interactive wizard.
 
 ```bash
 # Interactive wizard (prompts for email, name, and password)
@@ -297,7 +297,7 @@ clojure -M:migrate up
 bb create-admin
 ```
 
-The password is never passed on the command line. The wizard delegates to the Boundary CLI's `--password-prompt` option, which reads it via a hidden TTY prompt and validates it against the configured password policy.
+The password is never passed on the command line. The wizard delegates to the Wagoe CLI's `--password-prompt` option, which reads it via a hidden TTY prompt and validates it against the configured password policy.
 
 The wizard accepts `--env dev|test|acc|prod` to pick the Aero config profile and the correct database connection.
 

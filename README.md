@@ -1,17 +1,17 @@
-# Boundary Framework
+# Wagoe Framework
 
 [![CI](https://github.com/thijs-creemers/boundary/actions/workflows/ci.yml/badge.svg)](https://github.com/thijs-creemers/boundary/actions/workflows/ci.yml)
 [![Clojars Project](https://img.shields.io/clojars/v/org.wagoe/wagoe-core.svg)](https://clojars.org/org.wagoe/wagoe-core)
 [![cljdoc](https://cljdoc.org/badge/org.wagoe/wagoe-core)](https://cljdoc.org/d/org.wagoe/wagoe-core)
 [![License: EPL-2.0](https://img.shields.io/badge/License-EPL_2.0-blue.svg)](https://www.eclipse.org/legal/epl-2.0/)
 
-**Boundary** is a batteries-included Clojure web framework that enforces the **Functional Core / Imperative Shell (FC/IS)** pattern: pure business logic in `core/`, side effects in `shell/`, and clean interfaces through `ports.clj` protocols.
+**Wagoe** is a batteries-included Clojure web framework that enforces the **Functional Core / Imperative Shell (FC/IS)** pattern: pure business logic in `core/`, side effects in `shell/`, and clean interfaces through `ports.clj` protocols.
 
 ---
 
-## Why Boundary?
+## Why Wagoe?
 
-**For developers:** 23 independently-publishable libraries on Clojars — use just `boundary-core` for validation utilities, or go full-stack with JWT + MFA auth, auto-generated CRUD UIs, background jobs, multi-tenancy, real-time WebSockets, and more. Every library follows the same FC/IS structure, making any Boundary codebase instantly familiar.
+**For developers:** 23 independently-publishable libraries on Clojars — use just `boundary-core` for validation utilities, or go full-stack with JWT + MFA auth, auto-generated CRUD UIs, background jobs, multi-tenancy, real-time WebSockets, and more. Every library follows the same FC/IS structure, making any Wagoe codebase instantly familiar.
 
 **Ship faster:** The scaffolder generates fully structured modules (entity + routes + tests) in seconds. The admin UI auto-generates CRUD interfaces from your schema — no manual forms. Built-in observability, RFC 5988 pagination, and declarative interceptors mean you write business logic, not plumbing. AI tooling (`bb scaffold ai`, `bb ai gen-tests`, `bb ai sql`) handles the repetitive parts.
 
@@ -23,7 +23,7 @@
 
 ## Install
 
-Install the Boundary CLI — it handles all prerequisites (JVM, Clojure CLI, Babashka, bbin) automatically:
+Install the Wagoe CLI — it handles all prerequisites (JVM, Clojure CLI, Babashka, bbin) automatically:
 
 ```bash
 curl -fsSL https://get.boundary-app.org | bash
@@ -56,7 +56,7 @@ export JWT_SECRET="change-me-dev-secret-min-32-chars"
 clojure -M:repl
 ```
 
-Connect your editor (or the Boundary MCP server) to the nREPL port, then eval:
+Connect your editor (or the Wagoe MCP server) to the nREPL port, then eval:
 
 ```clojure
 (go)    ; start the system — http://localhost:3000
@@ -72,7 +72,7 @@ You get: H2 in-memory database (zero-config), HTTP server on port 3000, a comple
 
 Projects created with `boundary new` are agent-ready out of the box: they
 include a `CLAUDE.md`, an `AGENTS.md`, and a Claude Code skill at
-`.claude/skills/boundary/SKILL.md` that teaches the agent to use Boundary's
+`.claude/skills/boundary/SKILL.md` that teaches the agent to use Wagoe's
 scaffolder and AI tooling instead of hand-writing boilerplate. Open Claude
 Code in a fresh project and ask:
 
@@ -111,7 +111,7 @@ Each library also has its own `AGENTS.md` with library-specific documentation.
 
 ## Libraries
 
-Boundary is a monorepo of **23 independently publishable libraries** plus development tooling:
+Wagoe is a monorepo of **23 independently publishable libraries** plus development tooling:
 
 | Library | Description |
 |---------|-------------|
@@ -146,7 +146,7 @@ Boundary is a monorepo of **23 independently publishable libraries** plus develo
 
 ## Architecture
 
-Boundary enforces the **Functional Core / Imperative Shell** pattern throughout:
+Wagoe enforces the **Functional Core / Imperative Shell** pattern throughout:
 
 ```
 libs/{library}/src/wagoe/{library}/
@@ -166,7 +166,7 @@ This keeps business logic fast to test (no mocks needed), easy to reason about, 
 
 **Case conventions** — a frequent source of bugs:
 
-| Boundary | Convention |
+| Wagoe | Convention |
 |----------|------------|
 | Clojure code | `kebab-case` (`:password-hash`, `:created-at`) |
 | Database | `snake_case` |

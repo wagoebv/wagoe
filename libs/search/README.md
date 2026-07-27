@@ -5,7 +5,7 @@
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
 [![Clojars Project](https://img.shields.io/clojars/v/org.wagoe/wagoe-search.svg)](https://clojars.org/org.wagoe/wagoe-search)
 
-**Full-text search for the Boundary Framework**
+**Full-text search for the Wagoe Framework**
 
 Document indexing, full-text search (PostgreSQL FTS or LIKE fallback), trigram suggestions,
 and an admin UI — all wired in via a single Integrant key.
@@ -185,4 +185,4 @@ Test fixture pattern (reset the global registry between tests):
 
 ## License
 
-Part of Boundary Framework — see main LICENSE file.
+Part of Wagoe Framework — see main LICENSE file.

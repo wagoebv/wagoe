@@ -11,7 +11,7 @@ Accepted
 
 === Background
 
-Boundary's HTTP interceptor pipeline (ADR-010) transforms exceptions into
+Wagoe's HTTP interceptor pipeline (ADR-010) transforms exceptions into
 structured HTTP responses. The `http-error-handler` interceptor inspects
 `ex-data` to determine the response status code, while
 `wagoe.platform.core.http.problem-details` provides RFC 7807 mappings.

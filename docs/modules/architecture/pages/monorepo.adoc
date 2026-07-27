@@ -1,7 +1,7 @@
 = Monorepo Structure
-:description: How the Boundary repository is organized and how libraries relate.
+:description: How the Wagoe repository is organized and how libraries relate.
 
-Boundary is a monorepo of 23 independently publishable libraries under `libs/`.
+Wagoe is a monorepo of 23 independently publishable libraries under `libs/`.
 Each library can be published to Clojars as a standalone dependency.
 
 == Top-level layout

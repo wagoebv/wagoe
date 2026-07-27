@@ -5,7 +5,7 @@
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
 [![Clojars Project](https://img.shields.io/clojars/v/org.wagoe/wagoe-audience.svg)](https://clojars.org/org.wagoe/wagoe-audience)
 
-> Rule-based audience segmentation for the Boundary framework — define segments with `defaudience`, resolve them via a SQL + predicate hybrid pipeline, and compose them with AND/OR/NOT. Batteries included: DB-backed membership cache and an HTMX builder UI.
+> Rule-based audience segmentation for the Wagoe framework — define segments with `defaudience`, resolve them via a SQL + predicate hybrid pipeline, and compose them with AND/OR/NOT. Batteries included: DB-backed membership cache and an HTMX builder UI.
 
 ---
 

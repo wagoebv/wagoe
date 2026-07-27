@@ -2,11 +2,11 @@
 
 ## 1. Purpose
 
-`boundary-ai` provides framework-aware AI tooling for Boundary-based applications. Unlike a generic AI assistant, it knows Boundary's own conventions (FC/IS, ports, kebab↔snake naming, Malli schemas, HoneySQL syntax) and uses that knowledge to deliver higher-quality output.
+`boundary-ai` provides framework-aware AI tooling for Wagoe-based applications. Unlike a generic AI assistant, it knows Wagoe's own conventions (FC/IS, ports, kebab↔snake naming, Malli schemas, HoneySQL syntax) and uses that knowledge to deliver higher-quality output.
 
 **Features:**
 1. **NL Scaffolding** — parse a natural language description into a scaffolding spec (`bb scaffold ai "..."`)
-2. **Error Explainer** — explain a stack trace with Boundary-specific context (`bb ai explain`)
+2. **Error Explainer** — explain a stack trace with Wagoe-specific context (`bb ai explain`)
 3. **Test Generator** — generate a complete test namespace for a source file (`bb ai gen-tests <file>`)
 4. **SQL Copilot** — translate a description into HoneySQL format (`bb ai sql "..."`)
 5. **Documentation Wizard** — generate AGENTS.md, OpenAPI YAML, or README (`bb ai docs --module ...`)

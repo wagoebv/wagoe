@@ -1,7 +1,7 @@
 = admin
 :description: Auto-generated CRUD admin UI built with Hiccup and HTMX.
 
-Admin UI and CRUD management tooling for Boundary entities.
+Admin UI and CRUD management tooling for Wagoe entities.
 Generates admin interfaces automatically from entity configuration — no manual forms.
 
 == Technology stack

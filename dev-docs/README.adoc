@@ -2,7 +2,7 @@
 :toc: left
 :toclevels: 2
 
-This directory contains internal development artifacts for the Boundary Framework project.
+This directory contains internal development artifacts for the Wagoe Framework project.
 These documents are intended for contributors, maintainers, and team members — not end users.
 They are plain AsciiDoc files readable directly in GitHub or any AsciiDoc viewer.
 
@@ -17,7 +17,7 @@ Each ADR describes the context, the decision, and its consequences.
 
 * link:adr/README.adoc[ADR Index]
 * link:adr/ADR-001-library-split.adoc[ADR-001: Library Split]
-* link:adr/ADR-002-boundary-new-command.adoc[ADR-002: Boundary New Command]
+* link:adr/ADR-002-boundary-new-command.adoc[ADR-002: Wagoe New Command]
 * link:adr/ADR-003-websocket-architecture.adoc[ADR-003: WebSocket Architecture]
 * link:adr/ADR-004-multi-tenancy-architecture.adoc[ADR-004: Multi-Tenancy Architecture]
 * link:adr/ADR-005-validation-devex-foundations.adoc[ADR-005: Validation DevEx Foundations]

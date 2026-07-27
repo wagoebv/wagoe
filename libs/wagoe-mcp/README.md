@@ -1,8 +1,8 @@
 # wagoe-mcp
 
-**An MCP server that lets an AI coding agent work _inside_ a Boundary project — safely.**
+**An MCP server that lets an AI coding agent work _inside_ a Wagoe project — safely.**
 
-It turns the Boundary framework's knowledge and code-generation tools into a set
+It turns the Wagoe framework's knowledge and code-generation tools into a set
 of capabilities a model can call directly: analyse errors, lint, scaffold whole
 FC/IS modules, run tests, query the database. Every call is gated by what the
 current environment allows and — for code generation — runs through a closed
@@ -28,10 +28,10 @@ For the dense reference (every tool's inputs, every BND code, line refs), see
 
 ### The problem
 
-An AI agent helping you on a Boundary project is, by default, working blind. It
+An AI agent helping you on a Wagoe project is, by default, working blind. It
 reads files, greps, guesses at conventions, and writes code it _hopes_ compiles
 and respects the framework's rules. When it's wrong, you find out later. And the
-rules it has to respect aren't trivia — Boundary enforces a strict **Functional
+rules it has to respect aren't trivia — Wagoe enforces a strict **Functional
 Core / Imperative Shell** split that a generic model violates constantly (core
 importing shell, validation in the wrong layer, schema/DB drift).
 
@@ -51,12 +51,12 @@ wagoe-mcp is all three.
 
 It's a small server speaking the **Model Context Protocol** (MCP) — the open
 standard editor agents (Claude Code, Cursor, …) use to discover and call tools.
-You run it from a Boundary project root; your editor's agent connects to it and
-gains a menu of Boundary-aware capabilities.
+You run it from a Wagoe project root; your editor's agent connects to it and
+gains a menu of Wagoe-aware capabilities.
 
 ```
 ┌─────────────┐   MCP over stdio    ┌──────────────────┐   reflects / writes / runs
-│ Claude Code │ ◄─────────────────► │   wagoe-mcp   │ ◄──────────────────────────►  Your Boundary project
+│ Claude Code │ ◄─────────────────► │   wagoe-mcp   │ ◄──────────────────────────►  Your Wagoe project
 │  / Cursor   │   (JSON-RPC 2.0)    │  (this server)   │     (files, kondo, tests, DB)
 └─────────────┘                     └──────────────────┘
 ```
@@ -129,19 +129,19 @@ point of wagoe-mcp.
 > **The working directory matters.** The in-process adapter reflects **cwd** —
 > tool paths, the `lint` targets, and the reflective resources
 > (`boundary://conventions`, `boundary://module-graph`, …) all resolve against the
-> directory the server runs in. Run it from the **root of the Boundary project you
+> directory the server runs in. Run it from the **root of the Wagoe project you
 > want the agent to work on**, or those resources come back `:unavailable`.
 
-**From a project root** (the monorepo itself, or any app built on Boundary) — put
+**From a project root** (the monorepo itself, or any app built on Wagoe) — put
 the server on the classpath and launch its main, so cwd stays the project root:
 
 ```bash
-# from the Boundary project root
+# from the Wagoe project root
 WAG_ENV=dev clojure -Sdeps '{:deps {wagoe/mcp {:local/root "libs/wagoe-mcp"}}}' \
   -M -m wagoe.mcp.shell.server
 ```
 
-An app consuming Boundary as a dependency would instead add `boundary/mcp` to its
+An app consuming Wagoe as a dependency would instead add `boundary/mcp` to its
 own `deps.edn` and expose a one-line alias for that command.
 
 **Quick smoke / dev from the lib directory** — convenient, but cwd is then
@@ -209,7 +209,7 @@ Or by hand, in your MCP config (`.mcp.json` / client settings):
 
 > `cwd` is the **project root**, not `libs/wagoe-mcp` — the server reflects its
 > working directory, so pointing it at the lib dir would leave the reflective
-> resources `:unavailable`. An app that depends on Boundary would reference its own
+> resources `:unavailable`. An app that depends on Wagoe would reference its own
 > `boundary/mcp` coordinate instead of the `libs/wagoe-mcp` local root.
 
 Cursor and other MCP clients take the same shape: a `command`, `args`, `cwd`,

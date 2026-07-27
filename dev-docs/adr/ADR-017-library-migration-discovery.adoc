@@ -9,7 +9,7 @@ Proposed
 
 == Context
 
-Boundary applications can depend on framework libraries that introduce new
+Wagoe applications can depend on framework libraries that introduce new
 database migrations over time.
 
 Today the migration CLI only points Migratus at the application-local
@@ -22,13 +22,13 @@ consuming applications:
   files into their own project
 * copied migrations drift from the source library and create ownership confusion
 
-This is especially problematic for reusable Boundary libraries such as
+This is especially problematic for reusable Wagoe libraries such as
 `boundary-geo`, where the library owns a table contract but the consuming
 application must currently discover and copy that migration manually.
 
 == Decision
 
-Boundary will support automatic migration discovery for libraries.
+Wagoe will support automatic migration discovery for libraries.
 
 The migration system will keep using Migratus, but `:migration-dir` will become
 an aggregated set of directories:

@@ -1,7 +1,7 @@
 = REPL Workflow
-:description: Day-to-day development with the Boundary REPL.
+:description: Day-to-day development with the Wagoe REPL.
 
-Boundary is designed for REPL-driven development. The nREPL server runs on port 7888.
+Wagoe is designed for REPL-driven development. The nREPL server runs on port 7888.
 
 == Starting the system
 
@@ -13,7 +13,7 @@ clojure -M:repl
 ----
 
 This starts a headless nREPL server on port 7888. Connect your editor (or the
-Boundary MCP server) to it, then eval:
+Wagoe MCP server) to it, then eval:
 
 [source,clojure]
 ----

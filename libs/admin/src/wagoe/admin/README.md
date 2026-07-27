@@ -1,6 +1,6 @@
-# Boundary Admin Module
+# Wagoe Admin Module
 
-Auto-generated CRUD admin interface for the Boundary framework - a "Django Admin killer" that creates database administration UIs with zero configuration.
+Auto-generated CRUD admin interface for the Wagoe framework - a "Django Admin killer" that creates database administration UIs with zero configuration.
 
 ## Features
 
@@ -426,7 +426,7 @@ Week 2+ will add TTL-based caching:
 
 ## Contributing
 
-The admin module follows Boundary's FC/IS architecture:
+The admin module follows Wagoe's FC/IS architecture:
 
 1. **Pure functions** go in `core/`
 2. **Side effects** go in `shell/`
@@ -437,7 +437,7 @@ See `AGENTS.md` in project root for development guidelines.
 
 ## License
 
-Same as Boundary framework
+Same as Wagoe framework
 
 ## Support
 

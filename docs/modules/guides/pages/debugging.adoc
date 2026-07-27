@@ -1,5 +1,5 @@
 = Debugging
-:description: Systematic debugging strategies for Boundary applications.
+:description: Systematic debugging strategies for Wagoe applications.
 
 == General approach
 
@@ -13,7 +13,7 @@ Don't debug through the full stack when you can isolate the issue.
 tail -100 logs/app.log | grep -A 10 "ERROR"
 ----
 
-Errors are logged with stack traces. Look for the first non-Boundary frame in the trace.
+Errors are logged with stack traces. Look for the first non-Wagoe frame in the trace.
 
 == 2. Add temporary logging
 

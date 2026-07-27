@@ -5,7 +5,7 @@
 [[overview]]
 == Overview
 
-Boundary uses a **monorepo with modular libraries** architecture. After the library split (v2.2.0), all domain and infrastructure code lives in the `libs/` directory, with each library owning its complete functionality stack.
+Wagoe uses a **monorepo with modular libraries** architecture. After the library split (v2.2.0), all domain and infrastructure code lives in the `libs/` directory, with each library owning its complete functionality stack.
 
 This document is the **canonical reference** for repository structure and paths after the library split.
 
@@ -293,7 +293,7 @@ scaffolder --> core
 * `platform` provides infrastructure that other modules consume
 * Domain libraries (`user`, `admin`, `tenant`, `cache`, `jobs`, `realtime`, etc.) depend on platform
 * `email` delegates raw SMTP transport to `external`; `external` sits at the platform level
-* `payments`, `i18n`, and `ui-style` are standalone — no internal Boundary deps
+* `payments`, `i18n`, and `ui-style` are standalone — no internal Wagoe deps
 * `boundary-tools` is consumed via `{:local/root "libs/tools"}` in `bb.edn`, not as a library dependency
 
 [[configuration]]

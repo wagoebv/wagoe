@@ -5,7 +5,7 @@
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
 [![Clojars Project](https://img.shields.io/clojars/v/org.wagoe/wagoe-ai.svg)](https://clojars.org/org.wagoe/wagoe-ai)
 
-Framework-aware AI tooling for Boundary applications — offline-first via Ollama, with cloud fallback to Anthropic Claude or OpenAI.
+Framework-aware AI tooling for Wagoe applications — offline-first via Ollama, with cloud fallback to Anthropic Claude or OpenAI.
 
 ## Installation
 
@@ -24,7 +24,7 @@ Framework-aware AI tooling for Boundary applications — offline-first via Ollam
 | Feature | Description |
 |---------|-------------|
 | **NL Scaffolding** | Parse a natural language description into a scaffolding spec |
-| **Error Explainer** | Explain a stack trace with Boundary-specific context |
+| **Error Explainer** | Explain a stack trace with Wagoe-specific context |
 | **Test Generator** | Generate a complete test namespace for a source file |
 | **SQL Copilot** | Translate a description into HoneySQL format |
 | **Documentation Wizard** | Generate AGENTS.md, OpenAPI YAML, or README |
@@ -32,7 +32,7 @@ Framework-aware AI tooling for Boundary applications — offline-first via Ollam
 | **Setup Parser** | Parse a natural language project setup into a config spec |
 | **Multi-provider** | Ollama (local), Anthropic Claude, OpenAI, plus a no-op test stub |
 
-Unlike a generic assistant, `boundary/ai` knows Boundary's own conventions (FC/IS, ports, kebab↔snake naming, Malli schemas, HoneySQL syntax) and uses that knowledge to produce higher-quality output. The functional core is pure — all HTTP, file I/O, and env-var reads live in the shell.
+Unlike a generic assistant, `boundary/ai` knows Wagoe's own conventions (FC/IS, ports, kebab↔snake naming, Malli schemas, HoneySQL syntax) and uses that knowledge to produce higher-quality output. The functional core is pure — all HTTP, file I/O, and env-var reads live in the shell.
 
 ## Quick Start
 
@@ -64,7 +64,7 @@ Require the wiring namespace in your system config loader:
 ```clojure
 (require '[wagoe.ai.shell.service :as ai])
 
-;; Explain a stack trace with Boundary-specific context
+;; Explain a stack trace with Wagoe-specific context
 (ai/explain-error service stacktrace-string ".")
 ;; => {:text "Root cause: ..." :tokens 150 :provider :ollama :model "qwen2.5-coder:7b"}
 

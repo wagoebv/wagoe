@@ -5,7 +5,7 @@
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
 [![Clojars Project](https://img.shields.io/clojars/v/org.wagoe/wagoe-tenant.svg)](https://clojars.org/org.wagoe/wagoe-tenant)
 
-Multi-tenancy for the Boundary Framework — isolated PostgreSQL schemas, tenant-scoped caching, and automatic tenant context propagation across background jobs.
+Multi-tenancy for the Wagoe Framework — isolated PostgreSQL schemas, tenant-scoped caching, and automatic tenant context propagation across background jobs.
 
 ## Features
 
@@ -403,7 +403,7 @@ under `/api/v1/tenants` (JSON responses; standard 400/404/500 error handling):
   :db-context #ig/ref :wagoe/db-context}}
 ```
 
-Under the Boundary app wiring (`wagoe.config`), these keys are added
+Under the Wagoe app wiring (`wagoe.config`), these keys are added
 automatically and `:wagoe/tenant-http-middleware` is referenced by
 `:wagoe/http-handler`'s `:extra-middleware` — no manual middleware mounting
 is required.
@@ -589,7 +589,7 @@ The decision to keep PostgreSQL-only is documented in [ADR-020](../../dev-docs/a
 
 ## License
 
-Part of Boundary Framework - See main LICENSE file.
+Part of Wagoe Framework - See main LICENSE file.
 
 ---
 

@@ -1,7 +1,7 @@
 = Validation
-:description: Using Malli schemas and the Boundary validation framework.
+:description: Using Malli schemas and the Wagoe validation framework.
 
-Boundary uses Malli for validation. Schemas live in `schema.clj` at the root of each module.
+Wagoe uses Malli for validation. Schemas live in `schema.clj` at the root of each module.
 Validation always happens in the shell, never in core.
 
 == Defining schemas

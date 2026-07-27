@@ -1,5 +1,5 @@
 = ui-style
-:description: Shared UI styling contract and asset bundles for Boundary modules.
+:description: Shared UI styling contract and asset bundles for Wagoe modules.
 
 The `ui-style` library centralizes app-wide UI assets and conventions:
 

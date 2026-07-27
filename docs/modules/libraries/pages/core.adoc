@@ -1,7 +1,7 @@
 = core
 :description: Foundation library with validation, utilities, interceptor pipeline, and feature flags.
 
-Foundation library providing shared utilities used by all other Boundary libraries.
+Foundation library providing shared utilities used by all other Wagoe libraries.
 Contains *no shell layer* — everything is pure functions.
 
 == Key namespaces
@@ -99,7 +99,7 @@ The interceptor system supports enter/leave/error phases, used by both HTTP and 
 * *All functions must be pure* — no I/O, no logging, no side effects
 * This library has *no ports.clj or shell/* — it's entirely functional core
 * Only dependencies: `org.clojure/clojure` and `metosin/malli`
-* All other Boundary libraries depend on core
+* All other Wagoe libraries depend on core
 
 == Testing
 

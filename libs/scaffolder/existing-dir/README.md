@@ -1,6 +1,6 @@
 # existing-dir
 
-A new Boundary project.
+A new Wagoe project.
 
 ## Getting Started
 

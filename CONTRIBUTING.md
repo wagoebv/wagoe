@@ -1,6 +1,6 @@
-# Contributing to Boundary Framework
+# Contributing to Wagoe Framework
 
-Thank you for your interest in contributing to Boundary! This guide will help you understand our development process and how to make effective contributions.
+Thank you for your interest in contributing to Wagoe! This guide will help you understand our development process and how to make effective contributions.
 
 ## Quick Start for Contributors
 
@@ -44,7 +44,7 @@ Before proposing new features:
 
 #### Architecture Guidelines
 
-Boundary follows strict architectural principles:
+Wagoe follows strict architectural principles:
 
 **Functional Core Requirements:**
 - Pure functions only - no side effects
@@ -253,7 +253,7 @@ Contributors who make significant improvements will be recognized in:
 - Project documentation  
 - Contributor list
 
-Thank you for helping make Boundary better! 🚀
+Thank you for helping make Wagoe better! 🚀
 
 ---
 

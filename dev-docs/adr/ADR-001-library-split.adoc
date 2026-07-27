@@ -1,15 +1,15 @@
-== ADR-001: Split Boundary Monolith into Modular Libraries
+== ADR-001: Split Wagoe Monolith into Modular Libraries
 
 *Status:* Accepted +
 *Date:* 2026-01-18 +
-*Deciders:* Boundary Core Team +
+*Deciders:* Wagoe Core Team +
 *Context:* Planning Phase
 
 '''''
 
 === Context and Problem Statement
 
-The Boundary framework currently exists as a monolithic codebase where
+The Wagoe framework currently exists as a monolithic codebase where
 all components (user management, admin interface, platform
 infrastructure, utilities) are tightly bundled. While this simplifies
 initial development, it creates several problems for external adoption
@@ -19,7 +19,7 @@ and long-term maintainability:
 . *All-or-Nothing Dependency*: Users must include the entire framework
 even if they only need core utilities or database infrastructure
 . *Difficult to Extend*: Third-party developers cannot easily depend on
-specific Boundary components without pulling in unrelated code
+specific Wagoe components without pulling in unrelated code
 . *Publishing Challenges*: Cannot publish to Clojars as a single
 artifact without bloating user dependencies
 . *Maintenance Complexity*: Changes to core utilities require releasing
@@ -27,7 +27,7 @@ entire framework
 . *Limited Flexibility*: Users who want custom authentication cannot
 easily swap out the user module while keeping platform infrastructure
 
-The goal is to transform Boundary from an application into a *framework
+The goal is to transform Wagoe from an application into a *framework
 foundation* that others can build upon, while maintaining the cohesive
 "batteries-included" experience for users who want the full stack.
 
@@ -195,7 +195,7 @@ boundary/scaffolder      - Code generation tool
 
 *Chosen Option:* Medium-Grained Split (8 Libraries)
 
-We will split Boundary into 8 independently publishable Clojars
+We will split Wagoe into 8 independently publishable Clojars
 artifacts with the following dependency hierarchy:
 
 ....
@@ -474,7 +474,7 @@ vs Polyrepo Discussion]
 
 === Approval
 
-*Approved by:* Boundary Core Team +
+*Approved by:* Wagoe Core Team +
 *Date:* 2026-01-18 +
 *Implementation Owner:* ++[++TBD++]++ +
 *Expected Completion:* 6 weeks from approval

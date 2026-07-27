@@ -14,13 +14,13 @@ ADR-031 established *that* the MCP server denies dangerous operations
 communicated back to the agent* so the agent can self-correct — and where a
 denial may be deliberately bypassed.
 
-The guiding principle: Boundary's enforcement is a *guardrail*, not a
+The guiding principle: Wagoe's enforcement is a *guardrail*, not a
 *straitjacket*. A straitjacket says "no" with no recourse. A guardrail says
 "no, *because* of this principle, *here* is the fix — and if you really mean it,
 *here* is the audited override." An agent that receives the rule, the principle,
 and a concrete fix can re-plan; a bare error code makes it guess.
 
-Boundary already has a single source of truth for this kind of guidance: the
+Wagoe already has a single source of truth for this kind of guidance: the
 `devtools` *BND error catalog* (`BND-1xx`..`BND-7xx`), each entry carrying a
 `:title`, `:description` (the principle), and `:fix`. Reusing it keeps MCP
 errors consistent with REPL/HTTP errors and avoids a second catalog.

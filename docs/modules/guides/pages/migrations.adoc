@@ -1,8 +1,8 @@
 = Database Migration Best Practices
-:description: Conventions, safe patterns, and recipes for Boundary database migrations.
+:description: Conventions, safe patterns, and recipes for Wagoe database migrations.
 :toc:
 
-Boundary uses https://github.com/yogthos/migratus[Migratus] for SQL-based, versioned migrations. This guide covers the naming convention, safe patterns, and common recipes.
+Wagoe uses https://github.com/yogthos/migratus[Migratus] for SQL-based, versioned migrations. This guide covers the naming convention, safe patterns, and common recipes.
 
 == Quick Reference
 

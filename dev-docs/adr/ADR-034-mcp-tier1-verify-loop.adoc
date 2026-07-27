@@ -17,7 +17,7 @@ which a generic Clojure MCP + an editor agent can already do badly.
 The differentiator is not the generation; it is the *closed verify loop*. After
 writing, the tool runs the project's own gates and tests and returns a structured
 report so the agent self-corrects and re-invokes — converging to passing code
-without a human. Boundary's pure functional core makes the test step fast and
+without a human. Wagoe's pure functional core makes the test step fast and
 infra-free, which is what makes this loop practical as a per-call contract.
 
 Two forces shaped the design:

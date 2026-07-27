@@ -5,7 +5,7 @@
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
 [![Clojars Project](https://img.shields.io/clojars/v/org.wagoe/wagoe-devtools.svg)](https://clojars.org/org.wagoe/wagoe-devtools)
 
-Development-only tooling that gives x-ray vision into a running Boundary application: BND-coded error pipeline, REPL power tools, and a live dev dashboard.
+Development-only tooling that gives x-ray vision into a running Wagoe application: BND-coded error pipeline, REPL power tools, and a live dev dashboard.
 
 > **Dev-only library.** This is loaded exclusively via the `:dev` / `:repl-clj` aliases and adds **zero production overhead**. Never wire it into your production runtime.
 

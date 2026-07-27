@@ -5,7 +5,7 @@
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
 [![Clojars Project](https://img.shields.io/clojars/v/org.wagoe/wagoe-jobs.svg)](https://clojars.org/org.wagoe/wagoe-jobs)
 
-**Asynchronous job processing for Boundary Framework**
+**Asynchronous job processing for Wagoe Framework**
 
 Redis-backed background job processing with:
 
@@ -404,7 +404,7 @@ clojure -M:test:db/h2 --focus wagoe.jobs.shell.tenant-context-test
   [job-queue user]
   (let [job-input {:job-type :send-email
                    :args {:to (:email user)
-                          :subject "Welcome to Boundary!"
+                          :subject "Welcome to Wagoe!"
                           :body (str "Hi " (:name user) ", welcome!")
                           :template :welcome}
                    :priority :high
@@ -913,7 +913,7 @@ redis-cli ping
 
 ## License
 
-Part of Boundary Framework - See main LICENSE file.
+Part of Wagoe Framework - See main LICENSE file.
 
 ---
 

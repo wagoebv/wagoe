@@ -4,7 +4,7 @@
 
 ## Purpose
 
-Generates new Boundary modules with FC/IS structure, tests, and migrations. Produces correct, lint-clean, production-ready code in seconds.
+Generates new Wagoe modules with FC/IS structure, tests, and migrations. Produces correct, lint-clean, production-ready code in seconds.
 
 ## Key Namespaces
 

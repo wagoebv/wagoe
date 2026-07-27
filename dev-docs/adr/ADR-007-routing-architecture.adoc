@@ -10,7 +10,7 @@
 
 == Context
 
-The Boundary Framework supports three interaction modes: REST API, CLI, and Web Frontend. The HTTP routing infrastructure needed to properly support:
+The Wagoe Framework supports three interaction modes: REST API, CLI, and Web Frontend. The HTTP routing infrastructure needed to properly support:
 
 1. **REST API endpoints** under `/api/*` prefix for external integration
 2. **Web UI endpoints** under `/web/*` prefix for browser-based interaction
@@ -248,7 +248,7 @@ The `routes/create-router` function automatically groups routes:
 
 === Why Module-Provides-Routes Pattern
 
-This pattern aligns with Boundary's architectural principles:
+This pattern aligns with Wagoe's architectural principles:
 
 1. **Functional Core / Imperative Shell**
    - Routes are data (functional)

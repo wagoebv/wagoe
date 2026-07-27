@@ -10,7 +10,7 @@
 
 == Context
 
-The Boundary Framework supports three interaction modes as specified in the PRD: REST API, CLI, and Web Frontend. While REST API and CLI interfaces are well-established, the web frontend requires architectural decisions that align with the framework's core principles.
+The Wagoe Framework supports three interaction modes as specified in the PRD: REST API, CLI, and Web Frontend. While REST API and CLI interfaces are well-established, the web frontend requires architectural decisions that align with the framework's core principles.
 
 The framework emphasizes:
 1. **Functional Core / Imperative Shell (FC/IS)** - Strict separation between pure business logic and side effects
@@ -538,4 +538,4 @@ Consider Replicant for a page/module when ALL criteria apply:
 
 ---
 
-*This ADR establishes the technical foundation for module-integrated web UI development in the Boundary Framework. Phase 1 implementation is complete with shared components and integration foundation. Phase 2 will implement complete user management web interface.*
+*This ADR establishes the technical foundation for module-integrated web UI development in the Wagoe Framework. Phase 1 implementation is complete with shared components and integration foundation. Phase 2 will implement complete user management web interface.*

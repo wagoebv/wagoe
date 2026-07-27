@@ -1,4 +1,4 @@
-== Boundary Framework: Product Requirements Document
+== Wagoe Framework: Product Requirements Document
 
 [[toc]]
 [[toctitle]]
@@ -20,7 +20,7 @@ Table of Contents
 ** link:#glossary[2.5. Glossary]
 * link:#_architecture[3. Architecture]
 ** link:#high-level-architecture[3.1. High-Level Architecture]
-*** link:#_system_boundary[3.1.1. System Boundary]
+*** link:#_system_boundary[3.1.1. System Wagoe]
 *** link:#_container_architecture[3.1.2. Container Architecture]
 *** link:#_architectural_layers[3.1.3. Architectural Layers]
 *** link:#_dependency_flow[3.1.4. Dependency Flow]
@@ -185,7 +185,7 @@ This PRD is being restructured and expanded. See link:#content-gaps[Content Gap 
 
 ==== link:#background[]2.1. Background
 
-Boundary is a *module-centric software framework* that implements the "Functional Core / Imperative Shell" architectural paradigm with complete domain ownership. This approach creates highly composable, testable, and maintainable systems where each domain module owns its complete functionality stack.
+Wagoe is a *module-centric software framework* that implements the "Functional Core / Imperative Shell" architectural paradigm with complete domain ownership. This approach creates highly composable, testable, and maintainable systems where each domain module owns its complete functionality stack.
 
 The framework supports multiple interaction modes to serve different stakeholders:
 
@@ -193,7 +193,7 @@ The framework supports multiple interaction modes to serve different stakeholder
 * *CLI* for operational tasks, automation, and administrative functions
 * *Web Frontend* for human user interaction and visual management
 
-*Strategic Vision*: Boundary is designed as both a framework for building applications and a *foundation for creating reusable development toolchains*. The module-centric architecture enables:
+*Strategic Vision*: Wagoe is designed as both a framework for building applications and a *foundation for creating reusable development toolchains*. The module-centric architecture enables:
 
 * *Library Extraction*: Core infrastructure can/must be extracted into reusable libraries upon maturity
 * *Module Templates*: Standardized module templates for rapid domain module creation
@@ -254,7 +254,7 @@ Legacy Example Notice (2026-02-24): Some deeper technical examples in this PRD u
 [[_imperative_shell_principles]]
 ===== link:#_imperative_shell_principles[]2.3.2. Imperative Shell Principles
 
-. *Side Effect Boundary*: All I/O, networking, persistence, and system interactions
+. *Side Effect Wagoe*: All I/O, networking, persistence, and system interactions
 . *Adapter Implementation*: Concrete implementations of ports used by the core
 . *Validation Gateway*: Input validation and coercion before calling core functions
 . *Error Translation*: Convert core data responses to appropriate interface formats
@@ -336,12 +336,12 @@ Legacy Example Notice (2026-02-24): Some deeper technical examples in this PRD u
 
 Figure 1. System Context - C4 Container View
 
-The Boundary framework implements a layered architecture with strict dependency rules and clear separation of concerns:
+The Wagoe framework implements a layered architecture with strict dependency rules and clear separation of concerns:
 
 [[_system_boundary]]
-===== link:#_system_boundary[]3.1.1. System Boundary
+===== link:#_system_boundary[]3.1.1. System Wagoe
 
-Boundary serves three primary user types through distinct interfaces:
+Wagoe serves three primary user types through distinct interfaces:
 
 * *API Consumers*: External systems and developers using REST endpoints
 * *Operators*: System administrators using CLI for management and automation
@@ -427,7 +427,7 @@ The architecture enforces strict dependency rules:
 
 Figure 2. Framework Component Interaction
 
-This diagram illustrates how the major components of the Boundary framework interact:
+This diagram illustrates how the major components of the Wagoe framework interact:
 
 *Key Architectural Elements:*
 
@@ -500,7 +500,7 @@ The validation pipeline ensures data integrity at the shell boundary:
 
 Figure 6. Ports and Adapters Pattern
 
-Boundary implements the Ports and Adapters pattern (also known as Hexagonal Architecture) to achieve dependency inversion and enable the module-centric architecture.
+Wagoe implements the Ports and Adapters pattern (also known as Hexagonal Architecture) to achieve dependency inversion and enable the module-centric architecture.
 
 [[_port_definitions_abstract_interfaces]]
 ===== link:#_port_definitions_abstract_interfaces[]3.3.1. Port Definitions (Abstract Interfaces)
@@ -678,7 +678,7 @@ Adapters provide concrete implementations of ports using specific technologies:
   (send-welcome-email [_ user]
     (log/info "Sending welcome email" {:user-email (:email user)})
     (let [email-content {:to (:email user)
-                        :subject "Welcome to Boundary!"
+                        :subject "Welcome to Wagoe!"
                         :body (render-template :welcome-email user)}]
       (send-email smtp-config email-content)))
 
@@ -817,7 +817,7 @@ The module-centric architecture uses dependency injection to wire concrete adapt
 
 *Complete Domain Ownership*
 
-Boundary’s module-centric approach ensures each domain module owns its complete functionality stack:
+Wagoe’s module-centric approach ensures each domain module owns its complete functionality stack:
 
 [source,highlightjs,highlight]
 ----
@@ -896,7 +896,7 @@ See `docs/user-guide/modules/ROOT/pages/reference/scaffolder.adoc` for complete 
 * Never require another module’s `core`, `shell`, `schema`, `persistence`, `http`, `cli`, or test namespaces; use ports or events instead.
 * Keep each module independently bootable by providing no-op or stub implementations for optional dependencies and gating features with module-level feature flags.
 * Use `wagoe.core.++*++` and `wagoe.platform.++*++` only for generic, domain-agnostic utilities; do not move domain logic there.
-* Use `clj-kondo` with the Boundary boundary rules in CI to catch accidental module boundary violations early.
+* Use `clj-kondo` with the Wagoe boundary rules in CI to catch accidental module boundary violations early.
 
 [[_enforcement_clj_kondo_and_ci]]
 ===== link:#_enforcement_clj_kondo_and_ci[]3.4.4. Enforcement (clj-kondo and CI)
@@ -908,7 +908,7 @@ See `docs/user-guide/modules/ROOT/pages/reference/scaffolder.adoc` for complete 
 
 *Strategic Framework Vision*
 
-The module-centric architecture enables Boundary to evolve into a comprehensive development platform:
+The module-centric architecture enables Wagoe to evolve into a comprehensive development platform:
 
 . *Core Framework Library* (`boundary-core`)
 +
@@ -961,7 +961,7 @@ The module-centric architecture enables Boundary to evolve into a comprehensive 
 
 *Interceptor Pattern Implementation*
 
-Boundary implements a *multi-layer interceptor pattern* that eliminates observability boilerplate while maintaining clean separation of concerns:
+Wagoe implements a *multi-layer interceptor pattern* that eliminates observability boilerplate while maintaining clean separation of concerns:
 
 * *Service Layer Interceptors*: `execute-service-operation` wrapper for business service calls
 * *Persistence Layer Interceptors*: `execute-persistence-operation` wrapper for data access operations
@@ -1087,7 +1087,7 @@ The Imperative Shell serves as the boundary layer that isolates the pure functio
 
 ==== link:#core-responsibilities[]4.2. Core Responsibilities
 
-The Functional Core is the heart of the Boundary framework, containing ALL business logic while maintaining complete purity. Core functions are deterministic, testable, and free from side effects.
+The Functional Core is the heart of the Wagoe framework, containing ALL business logic while maintaining complete purity. Core functions are deterministic, testable, and free from side effects.
 
 [[_core_business_responsibilities]]
 ===== link:#_core_business_responsibilities[]4.2.1. Core Business Responsibilities
@@ -1318,7 +1318,7 @@ All core functions must follow this pattern:
 
 ==== link:#validation-and-schemas[]4.3. Validation and Schemas
 
-Boundary uses *Malli* for all data validation and schema management across the module-centric architecture. Each module defines its own schemas while sharing common validation patterns through the framework.
+Wagoe uses *Malli* for all data validation and schema management across the module-centric architecture. Each module defines its own schemas while sharing common validation patterns through the framework.
 
 [[_module_centric_schema_organization]]
 ===== link:#_module_centric_schema_organization[]4.3.1. Module-Centric Schema Organization
@@ -1666,7 +1666,7 @@ Schemas are organized by module to maintain domain ownership and prevent schema 
 [[_data_and_schema_boundaries]]
 ===== link:#_data_and_schema_boundaries[]4.3.4. Data and Schema Boundaries
 
-Boundary enforces strict data and schema ownership to keep modules independently deployable and resilient.
+Wagoe enforces strict data and schema ownership to keep modules independently deployable and resilient.
 
 * Each module owns its domain entities, Malli schemas, database tables, and migrations.
 * Other modules never import another module’s `schema` namespace or query its tables directly.
@@ -1814,7 +1814,7 @@ Instead, storage defines its own DTOs or projections and obtains user informatio
 [[configuration-secrets-environments]]
 ==== link:#configuration-secrets-environments[]4.4. Configuration, Secrets, and Environments
 
-Boundary uses *Aero* for configuration management with a module-centric approach that supports multiple environments, secure secret handling, and feature flag integration. Each module can define its own configuration requirements while sharing common infrastructure patterns.
+Wagoe uses *Aero* for configuration management with a module-centric approach that supports multiple environments, secure secret handling, and feature flag integration. Each module can define its own configuration requirements while sharing common infrastructure patterns.
 
 [[_configuration_architecture]]
 ===== link:#_configuration_architecture[]4.4.1. Configuration Architecture
@@ -2095,7 +2095,7 @@ config/
                                                             :staging "noreply@staging.wagoe.example.com"
                                                             :production "noreply@wagoe.example.com"
                                                             :test "test@wagoe.test"}
-                                     :templates {:welcome {:subject "Welcome to Boundary!"
+                                     :templates {:welcome {:subject "Welcome to Wagoe!"
                                                           :template-path "templates/email/welcome.html"}
                                                 :password-reset {:subject "Password Reset Request"
                                                                :template-path "templates/email/password-reset.html"
@@ -2698,7 +2698,7 @@ config/
 
 ==== link:#persistence-and-transactions[]4.5. Persistence and Transactions
 
-Boundary implements persistence through a *module-centric repository pattern* with clear transaction boundaries and comprehensive data access abstractions. Each module owns its data persistence concerns while sharing common infrastructure patterns through the framework.
+Wagoe implements persistence through a *module-centric repository pattern* with clear transaction boundaries and comprehensive data access abstractions. Each module owns its data persistence concerns while sharing common infrastructure patterns through the framework.
 
 [[_repository_pattern_architecture]]
 ===== link:#_repository_pattern_architecture[]4.5.1. Repository Pattern Architecture
@@ -3207,7 +3207,7 @@ The framework provides a comprehensive PostgreSQL implementation using next.jdbc
 
 *Module-Level Transaction Boundaries*
 
-Boundary enforces transaction boundaries at the module service level, ensuring business operations maintain data consistency:
+Wagoe enforces transaction boundaries at the module service level, ensuring business operations maintain data consistency:
 
 *User Service Transaction Management* (`wagoe.user.shell.service`):
 
@@ -3378,7 +3378,7 @@ Boundary enforces transaction boundaries at the module service level, ensuring b
 
 *Cross-Module Transaction Coordination*
 
-For operations spanning multiple modules, Boundary uses explicit transaction coordination:
+For operations spanning multiple modules, Wagoe uses explicit transaction coordination:
 
 *Order Processing with User and Billing* (`wagoe.orders.shell.service`):
 
@@ -3484,7 +3484,7 @@ For operations spanning multiple modules, Boundary uses explicit transaction coo
 
 *Migration Strategy*
 
-Boundary uses a module-centric migration approach where each module manages its own database schema:
+Wagoe uses a module-centric migration approach where each module manages its own database schema:
 
 *Migration Directory Structure*:
 
@@ -3865,7 +3865,7 @@ COMMENT ON COLUMN users.deleted_at IS 'Soft delete timestamp - NULL means active
 
 ==== link:#rest-endpoints[]5.1. REST Endpoints
 
-The Boundary REST API provides programmatic access to all framework functionality through a consistent JSON-based interface.
+The Wagoe REST API provides programmatic access to all framework functionality through a consistent JSON-based interface.
 
 [[_api_conventions]]
 ===== link:#_api_conventions[]5.1.1. API Conventions
@@ -4372,7 +4372,7 @@ Provides system health status for monitoring and load balancer health checks.
 [[error-model-status-codes]]
 ==== link:#error-model-status-codes[]5.10. Error Model and Status Codes
 
-Boundary follows RFC 7807 Problem Details for HTTP APIs to provide consistent, machine-readable error responses across all endpoints.
+Wagoe follows RFC 7807 Problem Details for HTTP APIs to provide consistent, machine-readable error responses across all endpoints.
 
 [[_standard_http_status_codes]]
 ===== link:#_standard_http_status_codes[]5.10.1. Standard HTTP Status Codes
@@ -4626,12 +4626,12 @@ All error responses use the RFC 7807 Problem Details format with `application/pr
 
 ==== link:#commands-and-options[]6.1. Commands and Options
 
-The Boundary CLI provides a consistent command-line interface that mirrors the functionality of the REST API while offering additional operational capabilities. The CLI shares the same core business logic as the REST API, ensuring consistent behavior across interfaces.
+The Wagoe CLI provides a consistent command-line interface that mirrors the functionality of the REST API while offering additional operational capabilities. The CLI shares the same core business logic as the REST API, ensuring consistent behavior across interfaces.
 
 [[_command_structure]]
 ===== link:#_command_structure[]6.1.1. Command Structure
 
-All Boundary commands follow this pattern:
+All Wagoe commands follow this pattern:
 
 [source,highlightjs,highlight]
 ----
@@ -5169,12 +5169,12 @@ Imported 42 users and 156 jobs successfully.
 [[exit-codes-output-conventions]]
 ==== link:#exit-codes-output-conventions[]6.2. Exit Codes and Output Conventions
 
-The Boundary CLI follows a consistent set of conventions for exit codes, output formatting, and error handling to ensure reliable scripting, automation, and a consistent user experience.
+The Wagoe CLI follows a consistent set of conventions for exit codes, output formatting, and error handling to ensure reliable scripting, automation, and a consistent user experience.
 
 [[_exit_codes]]
 ===== link:#_exit_codes[]6.2.1. Exit Codes
 
-Boundary CLI commands use standard Unix exit codes with specific meanings:
+Wagoe CLI commands use standard Unix exit codes with specific meanings:
 
 [width="100%",cols="25%,75%",options="header",]
 |===
@@ -5197,7 +5197,7 @@ Boundary CLI commands use standard Unix exit codes with specific meanings:
 [[_output_formats]]
 ===== link:#_output_formats[]6.2.2. Output Formats
 
-Boundary CLI supports multiple output formats controlled by the `--format` option:
+Wagoe CLI supports multiple output formats controlled by the `--format` option:
 
 *Table Format* (default)
 
@@ -5276,7 +5276,7 @@ Run 'boundary users create --help' to see all required and optional arguments.
 [[_progress_indicators]]
 ===== link:#_progress_indicators[]6.2.4. Progress Indicators
 
-For long-running operations, Boundary CLI provides progress feedback:
+For long-running operations, Wagoe CLI provides progress feedback:
 
 *Spinners for Active Operations*
 
@@ -5299,7 +5299,7 @@ For long-running operations, Boundary CLI provides progress feedback:
 [[_verbosity_levels]]
 ===== link:#_verbosity_levels[]6.2.5. Verbosity Levels
 
-Boundary CLI supports different verbosity levels:
+Wagoe CLI supports different verbosity levels:
 
 *Normal Mode (default)*
 
@@ -5401,7 +5401,7 @@ All commands include built-in help:
 [[_framework_evolution_strategy]]
 ==== link:#_framework_evolution_strategy[]11.1. Framework Evolution Strategy
 
-Boundary’s development follows a strategic path from application framework to comprehensive development platform:
+Wagoe’s development follows a strategic path from application framework to comprehensive development platform:
 
 *Phase 0: Module-Centric Foundation* (Current - Q4 2025)
 
@@ -5480,7 +5480,7 @@ Boundary’s development follows a strategic path from application framework to 
 
 *Phase 0-1: Foundation Metrics* ++*++ Module independence score (no cross-module dependencies) ++*++ Feature flag coverage (100% of modules controllable) ++*++ Documentation completeness (all architectural patterns documented)
 
-*Phase 2-3: Usage Metrics* ++*++ Library adoption rate ++*++ Community contributions to `boundary-core` ++*++ Number of applications built with Boundary
+*Phase 2-3: Usage Metrics* ++*++ Library adoption rate ++*++ Community contributions to `boundary-core` ++*++ Number of applications built with Wagoe
 
 *Phase 4-6: Platform Metrics* ++*++ Module template usage ++*++ Community-contributed modules ++*++ Time-to-production for new applications ++*++ Industry-specific framework adoption
 

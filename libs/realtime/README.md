@@ -5,7 +5,7 @@
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
 [![Clojars Project](https://img.shields.io/clojars/v/org.wagoe/wagoe-realtime.svg)](https://clojars.org/org.wagoe/wagoe-realtime)
 
-**WebSocket-based real-time communication for Boundary Framework**
+**WebSocket-based real-time communication for Wagoe Framework**
 
 JWT-authenticated WebSocket support with:
 
@@ -1021,7 +1021,7 @@ clojure -M:test
 
 ## License
 
-Part of Boundary Framework
+Part of Wagoe Framework
 
 Copyright © 2024-2026 Thijs Creemers
 

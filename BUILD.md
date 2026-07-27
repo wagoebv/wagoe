@@ -1,6 +1,6 @@
-# Building Boundary Uberjar
+# Building Wagoe Uberjar
 
-This document describes how to build and run the Boundary application as a standalone uberjar.
+This document describes how to build and run the Wagoe application as a standalone uberjar.
 
 ## Prerequisites
 
@@ -174,7 +174,7 @@ Create `/etc/systemd/system/wagoe.service`:
 
 ```ini
 [Unit]
-Description=Boundary HTTP Server
+Description=Wagoe HTTP Server
 After=network.target
 
 [Service]

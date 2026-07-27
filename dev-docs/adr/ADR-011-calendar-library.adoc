@@ -10,7 +10,7 @@
 
 == Context
 
-The Boundary Framework Roadmap (Phase 2, Q3 2026) identified recurring calendar logic as the
+The Wagoe Framework Roadmap (Phase 2, Q3 2026) identified recurring calendar logic as the
 fourth highest-value cross-cutting concern to extract into a reusable library.  Across
 client projects, the same logic is written from scratch each time:
 
@@ -49,12 +49,12 @@ Estimated savings per project: **€3.2k – €4k** by eliminating this boilerp
 ==== Alternative A: Wrap Google Calendar / Outlook APIs
 
 Rejected.  External API calls introduce network latency, authentication complexity,
-rate limits, and hard vendor lock-in.  Most Boundary applications need an internal
+rate limits, and hard vendor lock-in.  Most Wagoe applications need an internal
 calendar store with optional sync — not a read/write proxy to an external service.
 
 ==== Alternative B: clj-time / Joda-Time based RRULE expansion
 
-Rejected.  `clj-time` is a legacy wrapper around Joda-Time.  The Boundary codebase
+Rejected.  `clj-time` is a legacy wrapper around Joda-Time.  The Wagoe codebase
 already uses `java.time` throughout (as of JDK 17+).  Writing RRULE parsing from
 scratch against `java.time` would be hundreds of lines of error-prone edge-case code
 (BYDAY ordinals, UNTIL parsing, EXDATE handling, COUNT).
@@ -70,7 +70,7 @@ is the current stable release.
 
 Rejected.  CalDAV servers require separate infrastructure, docker containers, and
 WebDAV access patterns that are incompatible with the in-process, zero-ops philosophy
-of the Boundary Framework.
+of the Wagoe Framework.
 
 == Decision
 
@@ -379,7 +379,7 @@ must call it in an `:each` fixture.  Documented prominently in AGENTS.md.
 
 == Approval
 
-**Proposed By**: Boundary Framework Team +
+**Proposed By**: Wagoe Framework Team +
 **Date**: 2026-03-13 +
 **Status**: Accepted and Implemented +
 **Reviewers**: Architecture Team

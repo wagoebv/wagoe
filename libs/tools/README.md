@@ -4,11 +4,11 @@
 [![Clojure](https://img.shields.io/badge/clojure-1.12+-blue)]()
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
 
-Developer Babashka tooling for the Boundary framework — scaffolding, AI assistance,
+Developer Babashka tooling for the Wagoe framework — scaffolding, AI assistance,
 config management, i18n, deployment, and the CI quality gates.
 
 This library is **dev-only**: it is **not published to Clojars**. It ships as part of
-the Boundary monorepo and is consumed via a `:local/root` dependency in the root
+the Wagoe monorepo and is consumed via a `:local/root` dependency in the root
 `bb.edn`, so every `bb ...` task below is available out of the box:
 
 ```clojure
@@ -39,7 +39,7 @@ These CI checks live in `libs/tools` too (`check:fcis` + `check:ports` also run 
 | `bb check:fcis` | Core namespaces must not import shell/IO/logging/DB, throw, or hold mutable state |
 | `bb check:ports` | Every module defines `ports.clj`; shell/web must not bypass another module's protocols |
 | `bb check:deps` | Dependency direction + cycle detection between libraries |
-| `bb check:poms` | Published POMs carry their inter-Boundary deps |
+| `bb check:poms` | Published POMs carry their inter-Wagoe deps |
 | `bb check:placeholder-tests` | Detects `(is true)` placeholder assertions |
 
 ## Usage

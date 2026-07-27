@@ -1,7 +1,7 @@
 = Quickstart
-:description: Get a Boundary application running in minutes.
+:description: Get a Wagoe application running in minutes.
 
-== Install the Boundary CLI
+== Install the Wagoe CLI
 
 [source,bash]
 ----
@@ -56,7 +56,7 @@ clojure -M:repl
 NOTE: `boundary new` writes a `.env` (git-ignored) containing a generated `JWT_SECRET` — no need to export one by hand. `source .env` (or `direnv allow`) loads it into the shell.
 
 `clojure -M:repl` starts a headless nREPL server on port 7888. Connect your editor
-(or the Boundary MCP server) to it, then eval:
+(or the Wagoe MCP server) to it, then eval:
 
 [source,clojure]
 ----

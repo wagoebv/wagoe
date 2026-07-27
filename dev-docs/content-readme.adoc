@@ -1,8 +1,8 @@
-== Boundary Framework Documentation
+== Wagoe Framework Documentation
 
-Welcome to the Boundary Framework documentation. This documentation
+Welcome to the Wagoe Framework documentation. This documentation
 covers architecture, guides, API references, and implementation details
-for the Boundary Framework - a module-centric software framework built
+for the Wagoe Framework - a module-centric software framework built
 on Clojure that implements the "Functional Core / Imperative Shell"
 architectural paradigm.
 
@@ -46,7 +46,7 @@ utility modules
 [[mortar_board-guides]]
 ==== 🎓 link:guides/[Guides]
 
-Step-by-step tutorials and how-to guides for working with Boundary
+Step-by-step tutorials and how-to guides for working with Wagoe
 Framework.
 
 *Getting Started:*

@@ -1,9 +1,9 @@
 = Installation
-:description: Prerequisites and installation instructions for Boundary Framework.
+:description: Prerequisites and installation instructions for Wagoe Framework.
 
 == One-liner install (recommended)
 
-The Boundary installer handles all prerequisites automatically:
+The Wagoe installer handles all prerequisites automatically:
 
 [source,bash]
 ----
@@ -77,7 +77,7 @@ bb --version
 
 == Using individual libraries
 
-Boundary libraries are published to Clojars. Add only what you need:
+Wagoe libraries are published to Clojars. Add only what you need:
 
 [source,clojure]
 ----

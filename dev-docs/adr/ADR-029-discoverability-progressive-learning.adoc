@@ -11,7 +11,7 @@ Proposed
 
 === Background
 
-Boundary has extensive tooling: 25+ Babashka tasks, 7 AI-powered features,
+Wagoe has extensive tooling: 25+ Babashka tasks, 7 AI-powered features,
 comprehensive quality gates, and a rich REPL experience (expanded by ADR-026).
 However, developers must discover these features through documentation or
 word of mouth.
@@ -62,7 +62,7 @@ Analyzes project state and tells you what to do:
 [source,clojure]
 ----
 (doc :scaffold)          ; How to use scaffolding (with examples)
-(doc :interceptors)      ; How interceptors work in Boundary
+(doc :interceptors)      ; How interceptors work in Wagoe
 (doc :fcis)              ; Explain the FC/IS architecture
 (doc :testing)           ; Testing strategies and helpers
 ----

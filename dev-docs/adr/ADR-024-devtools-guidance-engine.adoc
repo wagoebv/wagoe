@@ -11,7 +11,7 @@ Proposed
 
 === Background
 
-Boundary has strong DX foundations: AI-powered scaffolding, config doctor,
+Wagoe has strong DX foundations: AI-powered scaffolding, config doctor,
 structured validation, REPL workflow with Integrant, and per-library AGENTS.md
 documentation. However, these features are passive -- developers must know they
 exist and actively seek them out.
@@ -107,7 +107,7 @@ nREPL port, active modules, and suggested next commands.
 
 == Related ADRs
 
-* ADR-015 -- Boundary Tools (CLI task infrastructure)
+* ADR-015 -- Wagoe Tools (CLI task infrastructure)
 * ADR-021 -- FC/IS Boundary Rules (architecture enforcement)
 * ADR-022 -- Error Handling Conventions (error type system)
 

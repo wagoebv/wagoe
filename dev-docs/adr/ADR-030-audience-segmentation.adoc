@@ -10,7 +10,7 @@
 
 == Context
 
-The Boundary Framework Roadmap (Phase 3 — Ecosystem Expansion) identified audience
+The Wagoe Framework Roadmap (Phase 3 — Ecosystem Expansion) identified audience
 segmentation as a cross-cutting concern needed by multiple consumer libraries
 (`boundary-push`, `boundary-email`, `boundary-forms`).
 
@@ -263,7 +263,7 @@ visualization require client-side state management.
 HTMX submits to server. Preview requests send filter state as EDN body, server
 evaluates and returns count + sample via HTMX swap.
 
-NOTE: This is the first ClojureScript dependency in the Boundary Framework.
+NOTE: This is the first ClojureScript dependency in the Wagoe Framework.
 
 **Build tooling**: shadow-cljs compiles Replicant widgets to a single JS artifact
 (`resources/public/js/audience/main.js`) included in the library JAR. Consumers
@@ -553,7 +553,7 @@ CLJS is progressive enhancement, not a hard dependency for core functionality.
 
 == Approval
 
-**Proposed By**: Boundary Framework Team +
+**Proposed By**: Wagoe Framework Team +
 **Date**: 2026-05-29 +
 **Status**: Proposed +
 **Reviewers**: Architecture Team

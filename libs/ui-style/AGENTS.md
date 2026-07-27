@@ -1,6 +1,6 @@
 # UI Style Library — Development Guide
 
-> Central app-wide styling contract for Boundary: named CSS/JS asset bundles,
+> Central app-wide styling contract for Wagoe: named CSS/JS asset bundles,
 > design tokens, and the shared static assets served to every page.
 >
 > For general conventions, testing commands, and FC/IS patterns, see the
@@ -64,7 +64,7 @@ Recommended bundle per page type:
 - **JS** (`js/`): `theme.js`, `components.js`, `admin-ux.js`, `forms.js`,
   `keyboard.js`, `init.js`, plus vendored `alpine.min.js` and `htmx.min.js`.
 - **Fonts** (`fonts/`): DM Sans + JetBrains Mono woff2.
-- **Assets** (`assets/`): Boundary light/dark logo + icon PNGs.
+- **Assets** (`assets/`): Wagoe light/dark logo + icon PNGs.
 - **Tailwind source** (`resources/tailwind/admin-pilot.css`): input compiled to
   `css/daisy-admin.css`.
 

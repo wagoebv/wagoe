@@ -1,7 +1,7 @@
 = Authentication & JWT
-:description: Setting up authentication, JWT tokens, sessions, and MFA in Boundary.
+:description: Setting up authentication, JWT tokens, sessions, and MFA in Wagoe.
 
-Boundary's `user` library handles the full authentication lifecycle:
+Wagoe's `user` library handles the full authentication lifecycle:
 user registration, login, JWT tokens, sessions, and multi-factor authentication.
 
 == Prerequisites

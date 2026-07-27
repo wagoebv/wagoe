@@ -5,7 +5,7 @@
 [[overview]]
 == Overview
 
-This is the **canonical reference** for all development commands in the Boundary Framework. All commands should be run from the repository root directory.
+This is the **canonical reference** for all development commands in the Wagoe Framework. All commands should be run from the repository root directory.
 
 [IMPORTANT]
 ====
@@ -15,7 +15,7 @@ This document is the source of truth for development commands. If you find discr
 [[assistant-tooling]]
 == AI Assistant Tooling
 
-Boundary documents two assistant-friendly Clojure CLI tools:
+Wagoe documents two assistant-friendly Clojure CLI tools:
 
 - `clj-nrepl-eval` for evaluating code in a running nREPL from the shell
 - `clj-paren-repair` for repairing delimiter errors in edited Clojure files
@@ -44,7 +44,7 @@ clj-paren-repair --help
 [[testing]]
 == Testing
 
-Boundary uses https://github.com/lambdaisland/kaocha[Kaocha] for testing with H2 in-memory database.
+Wagoe uses https://github.com/lambdaisland/kaocha[Kaocha] for testing with H2 in-memory database.
 
 [[test-all]]
 === Run All Tests

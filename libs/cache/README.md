@@ -5,7 +5,7 @@
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
 [![Clojars Project](https://img.shields.io/clojars/v/org.wagoe/wagoe-cache.svg)](https://clojars.org/org.wagoe/wagoe-cache)
 
-Distributed caching for the Boundary Framework — Redis and in-memory backends with TTL, atomic operations, and pattern matching.
+Distributed caching for the Wagoe Framework — Redis and in-memory backends with TTL, atomic operations, and pattern matching.
 
 ## Features
 
@@ -740,4 +740,4 @@ See protocol definitions in `wagoe.cache.ports` for complete API documentation.
 
 ## License
 
-Copyright © 2026 Boundary Framework
+Copyright © 2026 Wagoe Framework

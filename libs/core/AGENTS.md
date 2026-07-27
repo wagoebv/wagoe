@@ -4,10 +4,10 @@
 
 ## Purpose
 
-Foundation library shared by every other Boundary module: pure validation, case
+Foundation library shared by every other Wagoe module: pure validation, case
 conversion, type coercion, the interceptor pipeline engine, PII redaction, and
 feature flags. It sits at the bottom of the dependency graph — **it depends only
-on `org.clojure/clojure` and `metosin/malli`, and no Boundary library depends
+on `org.clojure/clojure` and `metosin/malli`, and no Wagoe library depends
 *downward* into anything else from here.** There is **no `shell/`, no
 `ports.clj`, no I/O**; everything is a pure function (the interceptor/generator
 engines are the only namespaces tagged `^:wagoe/allow-throw`, because
@@ -69,7 +69,7 @@ return `nil` for invalid input by design.
 
 ---
 
-## Case Conversion at the Persistence / API Boundary
+## Case Conversion at the Persistence / API Wagoe
 
 The single most-used pattern in the monorepo. Convert **only** at boundaries;
 keep everything internal kebab-case.

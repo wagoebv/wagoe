@@ -1,6 +1,6 @@
-# Boundary Framework — Developer Reference
+# Wagoe Framework — Developer Reference
 
-Essential commands, conventions, and patterns for working with the Boundary Framework.
+Essential commands, conventions, and patterns for working with the Wagoe Framework.
 
 ---
 
@@ -116,13 +116,13 @@ bb check:fcis                                      # FC/IS enforcement: core/ mu
 bb check:placeholder-tests                         # Detect (is true) placeholder assertions in tests
 bb check:deps                                      # Verify library dependency direction + cycle detection
 bb check:ports                                     # Hexagonal: modules must define ports.clj; shell/web must not bypass protocols
-bb check:poms                                      # Published POMs must carry inter-Boundary deps (build-shared rewrite + pom-basis)
+bb check:poms                                      # Published POMs must carry inter-Wagoe deps (build-shared rewrite + pom-basis)
 clojure -M:test:db/h2 --focus-meta :security             # Security-focused tests (error mapping, CSRF, XSS, SQL)
 ```
 
 ### AI Assistant Helpers
 
-Boundary assumes two Clojure assistant helpers are installed from
+Wagoe assumes two Clojure assistant helpers are installed from
 `https://github.com/bhauman/clojure-mcp-light`:
 
 - `clj-nrepl-eval` for shell-driven REPL evaluation
@@ -208,7 +208,7 @@ clj-paren-repair --help
 
 ## Scaffolder — Enforcing FC/IS Architecture
 
-The **Boundary Scaffolder** (`bb scaffold`) is the **primary tool for creating new modules and features** in Boundary. It automatically generates correct FC/IS structure and prevents the most common architectural violations.
+The **Wagoe Scaffolder** (`bb scaffold`) is the **primary tool for creating new modules and features** in Wagoe. It automatically generates correct FC/IS structure and prevents the most common architectural violations.
 
 ### Why the Scaffolder Matters
 
@@ -845,7 +845,7 @@ Seven automated safeguards run in CI (and `check:fcis` + `check:ports` in pre-co
 | **Placeholder tests** | `bb check:placeholder-tests` | `(is true)` / `(is (= true true))` masking missing coverage | Yes |
 | **Dependency direction** | `bb check:deps` | Core independence violations, circular deps between libraries | Yes (cycles/core); warn (undeclared) |
 | **Ports / hexagonal** | `bb check:ports` | Modules missing `ports.clj`; shell coupling to another module's `shell.persistence`/`shell.service`; web/HTTP requiring `shell.persistence` directly | Yes |
-| **POM dep completeness** | `bb check:poms` | Published POMs dropping inter-Boundary deps: `build_shared` losing the `:local/root`→mvn rewrite, a publishable `build.clj` bypassing `pom-basis`, or a referenced boundary dep that is not itself publishable | Yes |
+| **POM dep completeness** | `bb check:poms` | Published POMs dropping inter-Wagoe deps: `build_shared` losing the `:local/root`→mvn rewrite, a publishable `build.clj` bypassing `pom-basis`, or a referenced boundary dep that is not itself publishable | Yes |
 | **Security tests** | `clojure -M:test:db/h2 --focus-meta :security` | Error→HTTP mapping, CSRF routing, XSS escaping, SQL injection, sensitive field leaks | Yes (test failure) |
 | **clj-kondo lint** | `clojure -M:clj-kondo --lint ...` | Static analysis (existing gate) | Yes |
 | **Config doctor** | `bb doctor --env dev --ci` | Configuration errors (existing gate) | Yes |
@@ -909,7 +909,7 @@ Also add the lib's `:id` test suite to `tests.edn` and its source/test paths to 
 
 ## Ecommerce API Example
 
-A complete reference application demonstrating Boundary patterns with SQLite, Integrant, Reitit, and Swagger UI.
+A complete reference application demonstrating Wagoe patterns with SQLite, Integrant, Reitit, and Swagger UI.
 Source: https://github.com/thijs-creemers/boundary-examples/tree/main/ecommerce-api
 
 ```bash

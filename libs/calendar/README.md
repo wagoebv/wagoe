@@ -5,7 +5,7 @@
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
 [![Clojars Project](https://img.shields.io/clojars/v/org.wagoe/wagoe-calendar.svg)](https://clojars.org/org.wagoe/wagoe-calendar)
 
-Calendar and scheduling library for the [Boundary](https://github.com/thijs-creemers/boundary) framework.
+Calendar and scheduling library for the [Wagoe](https://github.com/thijs-creemers/boundary) framework.
 
 ## Features
 

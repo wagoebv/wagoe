@@ -1,10 +1,10 @@
-= Boundary Framework
+= Wagoe Framework
 :description: Batteries-included Clojure web framework enforcing the Functional Core / Imperative Shell pattern.
 
-**Boundary** is a batteries-included Clojure web framework that enforces the *Functional Core / Imperative Shell (FC/IS)* pattern:
+**Wagoe** is a batteries-included Clojure web framework that enforces the *Functional Core / Imperative Shell (FC/IS)* pattern:
 pure business logic in `core/`, side effects in `shell/`, and clean interfaces through `ports.clj` protocols.
 
-== What Boundary provides
+== What Wagoe provides
 
 * *23 independently publishable libraries* on Clojars — use only what you need (plus `wagoe-cli` and `boundary-devtools`)
 * *Scaffolder* that generates fully structured modules (entity + routes + tests) in seconds
@@ -19,11 +19,11 @@ pure business logic in `core/`, side effects in `shell/`, and clean interfaces t
 | I want to...
 | Go to
 
-| Try Boundary in minutes
+| Try Wagoe in minutes
 | xref:getting-started:index.adoc[Getting Started]
 
 | Understand the design philosophy
-| xref:getting-started:why-wagoe.adoc[Why Boundary?]
+| xref:getting-started:why-wagoe.adoc[Why Wagoe?]
 
 | Learn the core architecture
 | xref:architecture:fc-is.adoc[Functional Core / Imperative Shell]
@@ -39,7 +39,7 @@ pure business logic in `core/`, side effects in `shell/`, and clean interfaces t
 
 [source,bash]
 ----
-# Install Boundary (JVM, Clojure CLI, Babashka, bbin, boundary CLI)
+# Install Wagoe (JVM, Clojure CLI, Babashka, bbin, boundary CLI)
 curl -fsSL https://get.boundary-app.org | bash
 
 # Start a new project

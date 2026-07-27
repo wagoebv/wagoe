@@ -3,7 +3,7 @@
 :toclevels: 2
 :icons: font
 
-Production tuning recommendations for Boundary applications.
+Production tuning recommendations for Wagoe applications.
 
 == JVM Tuning
 
@@ -158,7 +158,7 @@ Set TTL based on staleness tolerance:
 
 === Thread Pool
 
-Jetty uses a default thread pool of 200 threads. For most Boundary apps this is sufficient. If you need to tune:
+Jetty uses a default thread pool of 200 threads. For most Wagoe apps this is sufficient. If you need to tune:
 
 [source,clojure]
 ----
@@ -183,7 +183,7 @@ The nginx reference config (`resources/deploy/nginx/boundary.conf`) sets 30-day 
 
 == Horizontal Scaling
 
-Boundary applications are stateless by design — scale horizontally by adding instances behind a load balancer.
+Wagoe applications are stateless by design — scale horizontally by adding instances behind a load balancer.
 
 === Requirements for Horizontal Scaling
 
@@ -198,7 +198,7 @@ Boundary applications are stateless by design — scale horizontally by adding i
 | All instances share the same Redis. This enables consistent cache across the cluster. Increase `max-total` per instance if needed.
 
 | Sessions
-| Store in database (default) or Redis — not in-memory. Boundary's session repository uses the DB, so sessions survive instance restarts.
+| Store in database (default) or Redis — not in-memory. Wagoe's session repository uses the DB, so sessions survive instance restarts.
 
 | File uploads
 | Use S3 or shared storage (`libs/storage`), not local disk.
@@ -220,7 +220,7 @@ Boundary applications are stateless by design — scale horizontally by adding i
               ┌────────────┼────────────┐
               ▼            ▼            ▼
         ┌─────────-─┐ ┌────────-──┐ ┌─────────-─┐
-        │ Boundary  │ │ Boundary  │ │ Boundary  │
+        │ Wagoe  │ │ Wagoe  │ │ Wagoe  │
         │ Instance 1│ │ Instance 2│ │ Instance 3│
         └─────┬───-─┘ └─────┬─-───┘ └────┬──--──┘
               │             │            │
@@ -248,11 +248,11 @@ The migration best practices guide covers index creation patterns: xref:migratio
 
 === Query Optimization
 
-Boundary uses HoneySQL, which generates parameterised queries. Performance tips:
+Wagoe uses HoneySQL, which generates parameterised queries. Performance tips:
 
 - **Use pagination** — never `SELECT *` without `LIMIT`. The pagination config (`default-limit`, `max-limit`) prevents unbounded queries.
 - **Batch inserts** — use `insert-batch!` for bulk operations instead of individual inserts.
-- **Window functions** — for count + data queries, use `COUNT(*) OVER()` (already used in Boundary's pagination layer).
+- **Window functions** — for count + data queries, use `COUNT(*) OVER()` (already used in Wagoe's pagination layer).
 - **Connection reuse** — HikariCP handles this. Avoid creating ad-hoc datasources.
 
 == Benchmarking

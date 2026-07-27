@@ -22,7 +22,7 @@ foundations are solid but developer-facing.
 * No error code system -- errors are identified by type keyword and message
   text, making them hard to look up in documentation.
 * Stack traces in development show full JVM frames, burying the relevant
-  Boundary namespace under framework and Java internals.
+  Wagoe namespace under framework and Java internals.
 * Common recoverable errors (missing migration, missing env var, unintegrated
   module) require developers to know the fix command.
 
@@ -30,7 +30,7 @@ foundations are solid but developer-facing.
 
 === Error code system: BND-xxx
 
-Every Boundary error gets a structured code:
+Every Wagoe error gets a structured code:
 
 [cols="1,3"]
 |===
@@ -99,7 +99,7 @@ A REPL function that analyzes the last exception and offers automatic fixes:
 === Stack trace filtering
 
 In dev mode, stack traces highlight user code and dim framework/JVM frames.
-The relevant Boundary namespace appears at the top.
+The relevant Wagoe namespace appears at the top.
 
 == Consequences
 

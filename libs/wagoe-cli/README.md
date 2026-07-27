@@ -5,7 +5,7 @@
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
 [![Clojars Project](https://img.shields.io/clojars/v/org.wagoe/wagoe-cli.svg)](https://clojars.org/org.wagoe/wagoe-cli)
 
-Standalone project bootstrapper and module installer for the Boundary framework. Creates new projects (`wagoe new`) and adds framework modules to an existing project (`wagoe add`).
+Standalone project bootstrapper and module installer for the Wagoe framework. Creates new projects (`wagoe new`) and adds framework modules to an existing project (`wagoe add`).
 
 ## Installation
 
@@ -21,7 +21,7 @@ Requires [Babashka](https://babashka.org) and [bbin](https://github.com/babashka
 
 | Command | Description |
 |---------|-------------|
-| `wagoe new <project-name>` | Create a new Boundary project (full FC/IS template: `src/wagoe/config.clj`, `src/<project>/system.clj`, `deps.edn`, `bb.edn`, `.env`, tests, git hooks) |
+| `wagoe new <project-name>` | Create a new Wagoe project (full FC/IS template: `src/wagoe/config.clj`, `src/<project>/system.clj`, `deps.edn`, `bb.edn`, `.env`, tests, git hooks) |
 | `wagoe add <module>` | Add a framework module (payments, tenant, admin, …) to the current project — patches `deps.edn`, config, and the AGENTS.md module table |
 | `wagoe list` | List the available modules from the module catalogue |
 | `boundary agents update [--check]` | Re-sync the project's `AGENTS.md` installed-modules table with what is actually installed (`--check` verifies without writing) |
@@ -43,7 +43,7 @@ clojure -M:repl
 ```
 
 Projects created with `wagoe new` are agent-ready out of the box: they ship a
-`CLAUDE.md`/`AGENTS.md`, a Boundary MCP-server wiring (`.mcp.json`), and a
+`CLAUDE.md`/`AGENTS.md`, a Wagoe MCP-server wiring (`.mcp.json`), and a
 `.claude/` skill that points coding agents at the scaffolder.
 
 ## How it works

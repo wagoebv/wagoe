@@ -5,7 +5,7 @@
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
 [![Clojars Project](https://img.shields.io/clojars/v/org.wagoe/wagoe-email.svg)](https://clojars.org/org.wagoe/wagoe-email)
 
-**Email sending for Boundary Framework**
+**Email sending for Wagoe Framework**
 
 Simple, robust email delivery with:
 
@@ -1171,7 +1171,7 @@ docker run -d -p 1025:1025 -p 8025:8025 mailhog/mailhog
 
 ## License
 
-Part of Boundary Framework - See main LICENSE file.
+Part of Wagoe Framework - See main LICENSE file.
 
 ---
 

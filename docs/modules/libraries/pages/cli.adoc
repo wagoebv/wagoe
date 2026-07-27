@@ -1,7 +1,7 @@
 = cli
-:description: Standalone project bootstrapper and module installer for Boundary. Install everything with one curl command and generate new projects with boundary new.
+:description: Standalone project bootstrapper and module installer for Wagoe. Install everything with one curl command and generate new projects with boundary new.
 
-Standalone CLI tool for bootstrapping new Boundary projects and adding optional modules. Installed via bbin — does not require the monorepo. Generated projects are fully self-contained.
+Standalone CLI tool for bootstrapping new Wagoe projects and adding optional modules. Installed via bbin — does not require the monorepo. Generated projects are fully self-contained.
 
 NOTE: Not published to Clojars. Installed via bbin from the GitHub repository.
 

@@ -8,14 +8,14 @@
 
 === Context and Problem Statement
 
-The Boundary framework currently provides a powerful scaffolder for
+The Wagoe framework currently provides a powerful scaffolder for
 adding modules to existing projects, but lacks a built-in mechanism for
 bootstrapping new projects. Users are currently expected to manually
 clone a starter repository or copy files.
 
 To improve the "Time to First Hello World" and ensure consistent project
 structure, we need a `boundary new` command that can generate a fresh
-project based on the standardized Boundary architecture (Functional Core
+project based on the standardized Wagoe architecture (Functional Core
 / Imperative Shell).
 
 Additionally, an audit of the current CLI reveals "documentation drift":
@@ -28,7 +28,7 @@ flags for the `generate` command, but these are not implemented in
 === Decision Drivers
 
 * *Ease of Adoption*: Minimize friction for new users starting their
-first Boundary project.
+first Wagoe project.
 * *Consistency*: Ensure all new projects follow the latest architectural
 patterns (FC/IS, Integrant wiring).
 * *Extensibility*: The CLI should be easy to extend without significant

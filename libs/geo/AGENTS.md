@@ -2,7 +2,7 @@
 
 ## 1. Purpose
 
-`boundary-geo` provides a multi-provider geocoding abstraction for any Boundary-based application that needs address-to-coordinate conversion or distance calculations. It eliminates ~50–100 lines of per-project boilerplate by offering:
+`boundary-geo` provides a multi-provider geocoding abstraction for any Wagoe-based application that needs address-to-coordinate conversion or distance calculations. It eliminates ~50–100 lines of per-project boilerplate by offering:
 
 - **Multi-provider geocoding**: OpenStreetMap (Nominatim), Google Maps, Mapbox
 - **Automatic fallback chain**: try providers in order; first non-nil result wins
@@ -122,7 +122,7 @@ Require the wiring namespace in your system config loader:
 
 Run before first use. When `boundary-geo` is on the classpath, `clojure -M:migrate up`
 now auto-discovers the library migration. Manual application is only needed if
-you are not using the standard Boundary migration CLI:
+you are not using the standard Wagoe migration CLI:
 
 ```sql
 -- libs/geo/resources/wagoe/geo/migrations/20260324010000-geo-cache.up.sql

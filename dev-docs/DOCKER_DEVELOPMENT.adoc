@@ -1,6 +1,6 @@
 == Docker Development Guide
 
-The Boundary Framework provides a comprehensive Docker-based development
+The Wagoe Framework provides a comprehensive Docker-based development
 environment with intelligent port management, service orchestration, and
 development tools integration.
 
@@ -56,7 +56,7 @@ development tools integration.
              │
              ▼
 ┌─────────────────────────┐
-│    Boundary App         │  Port: 3000-3010
+│    Wagoe App         │  Port: 3000-3010
 │  (Main Application)     │  Health: /health
 └─────────────────────────┘
              │

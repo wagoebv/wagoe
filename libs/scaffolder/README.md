@@ -5,7 +5,7 @@
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
 [![Clojars Project](https://img.shields.io/clojars/v/org.wagoe/wagoe-scaffolder.svg)](https://clojars.org/org.wagoe/wagoe-scaffolder)
 
-Code generation tool for creating new Boundary modules following the Functional Core / Imperative Shell architecture.
+Code generation tool for creating new Wagoe modules following the Functional Core / Imperative Shell architecture.
 
 ## Installation
 
@@ -19,7 +19,7 @@ Code generation tool for creating new Boundary modules following the Functional 
 
 | Feature | Description |
 |---------|-------------|
-| **Project Generation** | Create new Boundary starter projects |
+| **Project Generation** | Create new Wagoe starter projects |
 | **Module Generation** | Scaffold complete modules with FC/IS architecture |
 | **Entity Templates** | Generate entity CRUD with validation schemas |
 | **Migration Generation** | Create database migrations |
@@ -29,7 +29,7 @@ Code generation tool for creating new Boundary modules following the Functional 
 
 ## Creating a New Project
 
-> **Use `boundary new` for new projects.** The Boundary CLI (`boundary new <name>`,
+> **Use `boundary new` for new projects.** The Wagoe CLI (`boundary new <name>`,
 > from `wagoe-cli`) is the canonical, actively-maintained project generator — it
 > produces the current template (`src/wagoe/config.clj`, `src/<project>/system.clj`,
 > `.env`, `bb.edn`, tests, hooks). The scaffolder's own `new` command below is a

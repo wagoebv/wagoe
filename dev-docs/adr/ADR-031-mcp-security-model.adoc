@@ -11,7 +11,7 @@ Proposed
 
 === Background
 
-`wagoe-mcp` (ADR introduced by BOU-96) exposes Boundary's framework
+`wagoe-mcp` (ADR introduced by BOU-96) exposes Wagoe's framework
 knowledge — and, in later phases, *tools that read, generate, and execute
 code* — to editor agents (Claude Code, Cursor) over the Model Context Protocol.
 The roadmap layers tools in tiers:

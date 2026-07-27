@@ -10,7 +10,7 @@
 
 == Context
 
-The Boundary Framework successfully uses interceptor patterns at the service and persistence layers to eliminate observability boilerplate while maintaining clean business logic. This pattern achieved:
+The Wagoe Framework successfully uses interceptor patterns at the service and persistence layers to eliminate observability boilerplate while maintaining clean business logic. This pattern achieved:
 
 - **Service Layer**: 64% average code reduction across 10 methods
 - **Persistence Layer**: 48% average code reduction across 21 methods

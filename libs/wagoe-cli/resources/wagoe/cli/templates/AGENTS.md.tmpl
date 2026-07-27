@@ -1,6 +1,6 @@
 # {{project-name}} — Developer Reference
 
-Built with the Boundary Framework. Follows the Functional Core / Imperative Shell (FC/IS) pattern.
+Built with the Wagoe Framework. Follows the Functional Core / Imperative Shell (FC/IS) pattern.
 
 ---
 
@@ -17,7 +17,7 @@ bb test          # same as clojure -M:test
 bb migrate up    # same as clojure -M:migrate up
 
 # `clojure -M:repl` starts a headless nREPL server on port 7888. Connect your
-# editor (or the Boundary MCP server) to it, then eval the dev/user.clj aliases:
+# editor (or the Wagoe MCP server) to it, then eval the dev/user.clj aliases:
 (go)    # start the system — http://localhost:3000
 (reset) # reload changed namespaces and restart
 (halt)  # stop the system
@@ -43,7 +43,7 @@ bb scaffold integrate product  # wire module into deps.edn / tests.edn / wiring
 bb guide next                  # state-aware: what should happen next?
 
 # AI tooling (needs Ollama or ANTHROPIC_API_KEY / OPENAI_API_KEY)
-bb ai explain --file stacktrace.txt   # explain a Clojure/Boundary error
+bb ai explain --file stacktrace.txt   # explain a Clojure/Wagoe error
 bb ai gen-tests src/path/to/ns.clj    # generate a test namespace
 bb ai sql "find active users with orders in last 7 days"  # HoneySQL from NL
 bb setup ai "PostgreSQL with Stripe payments"             # AI-powered config setup
@@ -192,12 +192,12 @@ clj-paren-repair src/{{project-ns}}/core/product.clj
 
 ### Adding new functionality
 
-**Step -1 — check existing Boundary modules FIRST.** Before designing or writing
-anything, check whether a Boundary module already provides the functionality
+**Step -1 — check existing Wagoe modules FIRST.** Before designing or writing
+anything, check whether a Wagoe module already provides the functionality
 (auth, storage, jobs, email, cache, search, payments, realtime, workflow, …):
 
 ```bash
-wagoe list modules          # what exists (see “Boundary Modules” below)
+wagoe list modules          # what exists (see “Wagoe Modules” below)
 wagoe list modules --json   # machine-readable, for agents
 ```
 
@@ -303,8 +303,8 @@ clj-paren-repair src/my_ns/core.clj  # repair after edits
 
 ### MCP server
 
-This project ships a wired Boundary MCP server (`.mcp.json`). Open Claude Code or
-Cursor in the project root and the agent gains Boundary's tools (lint, scaffold,
+This project ships a wired Wagoe MCP server (`.mcp.json`). Open Claude Code or
+Cursor in the project root and the agent gains Wagoe's tools (lint, scaffold,
 run-tests, …) with no setup. The server is launched via the `:mcp` deps alias
 (`clojure -M:mcp`) and is absent from the app runtime classpath, so it never ships
 with your application.
@@ -416,7 +416,7 @@ with your application.
 
 ---
 
-## Boundary Modules
+## Wagoe Modules
 
 Core modules are pre-installed. Add optional modules with `wagoe add <module>`.
 

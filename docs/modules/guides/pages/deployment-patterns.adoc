@@ -1,5 +1,5 @@
 = Deployment Patterns
-:description: Reference configurations for deploying Boundary applications.
+:description: Reference configurations for deploying Wagoe applications.
 :toc:
 
 This guide covers deployment patterns beyond Docker. For the Docker path, see xref:deployment.adoc[] and `dev-docs/DOCKER_DEVELOPMENT.adoc`. Reference configs live in `resources/deploy/`.
