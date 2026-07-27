@@ -310,7 +310,7 @@
     (let [results (doctor/check-upgrade-wiring
                    "(:require [wagoe.platform.shell.interfaces.http.tenant-middleware :as mw])")]
       (is (= [:error] (map :level results)))
-      (is (re-find #"boundary\.tenant\.shell\.tenant-middleware" (:fix (first results))))))
+      (is (re-find #"wagoe\.tenant\.shell\.tenant-middleware" (:fix (first results))))))
 
   (testing "old membership-middleware ns is also flagged"
     (let [results (doctor/check-upgrade-wiring

@@ -15,9 +15,9 @@
     (is (= "boundary-core" (deploy/artifact-name "core"))))
 
   (testing "a lib dir already starting with boundary- is not double-prefixed"
-    ;; libs/boundary-cli publishes org.boundary-app/boundary-cli, NOT
-    ;; boundary-boundary-cli — the Clojars check must use the real coordinate.
-    (is (= "boundary-cli" (deploy/artifact-name "boundary-cli")))))
+    ;; libs/wagoe-cli publishes org.boundary-app/wagoe-cli, NOT
+    ;; boundary-wagoe-cli — the Clojars check must use the real coordinate.
+    (is (= "wagoe-cli" (deploy/artifact-name "wagoe-cli")))))
 
 (deftest ^:unit version-mismatches-test
   (testing "no mismatches when expected equals the suite's current build.clj version"

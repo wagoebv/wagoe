@@ -259,7 +259,7 @@
          ;; src/boundary/test_support/core.clj is the monorepo-level shared
          ;; test helper namespace. It is a single file (wagoe.test-support.core),
          ;; not a directory of core sources — include it explicitly.
-         test-support-file (io/file root "src" "boundary" "test_support" "core.clj")
+         test-support-file (io/file root "src" "wagoe" "test_support" "core.clj")
          test-support  (when (.exists test-support-file) [test-support-file])]
      (->> (concat libs-files app-files test-support)
           (distinct)))))
@@ -385,7 +385,7 @@
    fully-qualified forbidden calls, bare I/O calls, (throw ...) calls, and
    mutable state in the body.
    Returns a seq of violation maps {:file :ns :req :kind [:line]}, or empty seq
-   if clean. Public so callers (e.g. the boundary-mcp verify loop) can check an
+   if clean. Public so callers (e.g. the wagoe-mcp verify loop) can check an
    arbitrary core file outside the monorepo's `core-source-paths` discovery.
    The 1-arity reads the .boundary/check-fcis.edn allowlist itself."
   ([file] (check-file file (read-config)))

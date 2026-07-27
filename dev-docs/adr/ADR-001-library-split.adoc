@@ -96,7 +96,7 @@ releases
 ....
 boundary/boundary        - Everything (platform + modules + utils)
 boundary/boundary-dev    - Development tools only
-boundary/boundary-cli    - CLI tools only
+boundary/wagoe-cli    - CLI tools only
 ....
 
 *Pros:*

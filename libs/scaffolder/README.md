@@ -30,7 +30,7 @@ Code generation tool for creating new Boundary modules following the Functional 
 ## Creating a New Project
 
 > **Use `boundary new` for new projects.** The Boundary CLI (`boundary new <name>`,
-> from `boundary-cli`) is the canonical, actively-maintained project generator — it
+> from `wagoe-cli`) is the canonical, actively-maintained project generator — it
 > produces the current template (`src/boundary/config.clj`, `src/<project>/system.clj`,
 > `.env`, `bb.edn`, tests, hooks). The scaffolder's own `new` command below is a
 > lower-level/legacy generator kept for embedding; it emits a different, simpler

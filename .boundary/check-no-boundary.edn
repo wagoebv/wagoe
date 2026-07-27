@@ -9,4 +9,9 @@
   "docs/superpowers/"
   ".boundary/"
   "scripts/rename_wagoe.clj"
-  "scripts/check_no_boundary.clj"]}
+  "scripts/check_no_boundary.clj"
+  ;; Doc-drift linter: its #"boundary\.<ns>" pattern matches ns references in
+  ;; the (still boundary-era) docs it lints. Renames with the docs in Phase 4
+  ;; (BOU-214); exempt until then. Two copies: scripts/ (bb) + dev/ (repl).
+  "scripts/docs_lint.clj"
+  "dev/wagoe/tools/docs_lint.clj"]}

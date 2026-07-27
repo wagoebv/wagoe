@@ -49,7 +49,10 @@
   "Each group: :desc human label, :grep git-grep args (before the pathspec),
    :paths optional pathspec limiting the search, :hard? counts toward failure."
   {:ns     {:desc  "boundary.<ns> namespaces"
-            :grep  ["-nIE" "boundary\\."]
+            ;; `boundary\\?\.` also catches boundary. inside a REGEX LITERAL
+            ;; (#"boundary\.…"), which the Phase-1 sub couldn't rewrite — the
+            ;; backslash shields the match (BOU-210: doctor, devtools dashboard).
+            :grep  ["-nIE" "boundary\\\\?\\."]
             :paths ["*.clj" "*.cljc" "*.cljs" "*.edn"]
             :hard? true}
    :keys   {:desc  ":boundary/ config + Integrant keys"

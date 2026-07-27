@@ -68,9 +68,9 @@
    "ui-style"
    "shared-ui"
    "admin"
-   "boundary-cli"
+   "wagoe-cli"
    "devtools"
-   "boundary-mcp"])
+   "wagoe-mcp"])
 
 (def valid-libs (set all-libs))
 (def root-dir (System/getProperty "user.dir"))
@@ -114,7 +114,7 @@
   "Clojars artifact id for a lib, read from its build.clj coordinate
    `(def lib 'org.boundary-app/<artifact>)`. Reading the coordinate (rather than
    string-prefixing) avoids a double `boundary-` for libs whose dir already starts
-   with it (e.g. boundary-cli → boundary-cli, not boundary-boundary-cli). Falls
+   with it (e.g. wagoe-cli → wagoe-cli, not boundary-wagoe-cli). Falls
    back to `boundary-<lib>` when build.clj is unreadable."
   [lib]
   (let [build-file (io/file (lib-dir lib) "build.clj")]
@@ -145,7 +145,7 @@
 ;; =============================================================================
 
 (def ^:private catalogue-path
-  "libs/boundary-cli/resources/boundary/cli/modules-catalogue.edn")
+  "libs/wagoe-cli/resources/boundary/cli/modules-catalogue.edn")
 
 (defn- patch-catalogue-version!
   "Update :version for lib-name in modules-catalogue.edn after a successful deploy."

@@ -84,7 +84,7 @@ If you prefer to manage your own bbin installation:
 ----
 bbin install https://github.com/thijs-creemers/boundary \
   --tag v1.0.1-alpha-15 \
-  --git/root libs/boundary-cli \
+  --git/root libs/wagoe-cli \
   --main-opts '["-m" "boundary.cli.main"]' \
   --as boundary
 ----

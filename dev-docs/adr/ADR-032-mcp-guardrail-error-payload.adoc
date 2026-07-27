@@ -95,7 +95,7 @@ a trail — never silently.
 
 === Negative / trade-offs
 
-* `boundary-mcp` now depends on `boundary/devtools` (a heavy transitive
+* `wagoe-mcp` now depends on `boundary/devtools` (a heavy transitive
   footprint) to reach the catalog. Accepted because (a) the ticket mandates
   reusing the catalog as the single source of truth and (b) BOU-99/100
   introspection tooling will pull much of the framework anyway. Coupling is

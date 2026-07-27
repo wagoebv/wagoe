@@ -1,0 +1,50 @@
+{:paths ["src" "resources"]
+ :deps  {org.boundary-app/boundary-core         {:mvn/version "{{core-version}}"}
+         org.boundary-app/boundary-observability {:mvn/version "{{observability-version}}"}
+         org.boundary-app/boundary-platform      {:mvn/version "{{platform-version}}"}
+         org.boundary-app/boundary-user          {:mvn/version "{{user-version}}"}
+         ;; Required by boundary-platform's system wiring (unconditional module loads)
+         org.boundary-app/boundary-cache         {:mvn/version "{{cache-version}}"}
+         org.boundary-app/boundary-admin         {:mvn/version "{{admin-version}}"}
+         org.boundary-app/boundary-ui-style      {:mvn/version "{{ui-style-version}}"}
+         org.boundary-app/boundary-tenant        {:mvn/version "{{tenant-version}}"}
+         org.boundary-app/boundary-workflow      {:mvn/version "{{workflow-version}}"}
+         org.boundary-app/boundary-search        {:mvn/version "{{search-version}}"}
+         org.boundary-app/boundary-external      {:mvn/version "{{external-version}}"}
+         org.boundary-app/boundary-payments      {:mvn/version "{{payments-version}}"}
+         org.boundary-app/boundary-i18n          {:mvn/version "{{i18n-version}}"}
+         com.h2database/h2                       {:mvn/version "2.4.240"}}
+ :aliases
+ {:repl     {:extra-paths ["dev"]
+             :extra-deps {nrepl/nrepl {:mvn/version "1.3.0"}
+                          cider/cider-nrepl {:mvn/version "0.50.2"}}
+             :main-opts  ["-m" "nrepl.cmdline" "--middleware" "[cider.nrepl/cider-middleware]"
+                          "--port" "7888"]}
+  :test     {:extra-paths ["test"]
+             :extra-deps  {lambdaisland/kaocha {:mvn/version "1.91.1392"}}
+             :main-opts   ["-m" "kaocha.runner"]}
+  :migrate  {:main-opts ["-m" "boundary.platform.shell.database.cli-migrations"]}
+  ;; clj-kondo static analysis. Isolated via :replace-deps so it pulls only the
+  ;; linter, not the project's deps. Used by the .githooks/pre-commit gate.
+  :clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2026.04.15"}}
+              :main-opts    ["-m" "clj-kondo.main"]}
+  :user-cli {:extra-deps {org.xerial/sqlite-jdbc      {:mvn/version "3.53.0.0"}
+                          org.postgresql/postgresql   {:mvn/version "42.7.10"}
+                          com.h2database/h2           {:mvn/version "2.4.240"}
+                          com.mysql/mysql-connector-j {:mvn/version "9.6.0"}}
+             :main-opts  ["-e" "(require '[boundary.user.shell.cli-entry :as e]) (System/exit (e/run-cli! (vec *command-line-args*)))"]}
+  ;; Boundary MCP server for editor agents (Claude Code / Cursor). Kept in an
+  ;; alias — NOT in :deps — so the app runtime never pulls the MCP server.
+  ;; Launched by .mcp.json via `clojure -M:mcp`. wagoe-mcp's pom now declares
+  ;; its full boundary closure (ai, devtools, scaffolder, tools, jobs via
+  ;; devtools), so once alpha-43+ poms are published this can be reduced to just
+  ;; wagoe-mcp. The closure is enumerated explicitly for now so `-M:mcp` also
+  ;; resolves against the current published poms.
+  :mcp      {:extra-deps {org.boundary-app/wagoe-mcp        {:mvn/version "{{wagoe-mcp-version}}"}
+                          org.boundary-app/boundary-ai         {:mvn/version "{{wagoe-mcp-version}}"}
+                          org.boundary-app/boundary-devtools   {:mvn/version "{{wagoe-mcp-version}}"}
+                          org.boundary-app/boundary-scaffolder {:mvn/version "{{wagoe-mcp-version}}"}
+                          org.boundary-app/boundary-tools      {:mvn/version "{{wagoe-mcp-version}}"}
+                          org.boundary-app/boundary-jobs       {:mvn/version "{{wagoe-mcp-version}}"}}
+             :main-opts  ["-m" "boundary.mcp.shell.server"]}}}
+

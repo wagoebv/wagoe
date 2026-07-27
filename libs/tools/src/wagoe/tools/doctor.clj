@@ -318,7 +318,7 @@
                                                   %)))
                          set)
         ;; Extract module names from wiring.clj require entries
-        wired-modules (->> (re-seq #"boundary\.([a-z0-9-]+)\.shell\.module-wiring" wiring-text)
+        wired-modules (->> (re-seq #"wagoe\.([a-z0-9-]+)\.shell\.module-wiring" wiring-text)
                            (map second)
                            set)
         missing (set/difference module-keys wired-modules)]

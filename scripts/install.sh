@@ -152,7 +152,7 @@ fi
 mkdir -p "$BBIN_BIN"
 cat > "$BBIN_BIN/boundary" << EOF
 #!/usr/bin/env bash
-exec bb --classpath "$BOUNDARY_CACHE/libs/boundary-cli/src:$BOUNDARY_CACHE/libs/boundary-cli/resources" -m boundary.cli.main "\$@"
+exec bb --classpath "$BOUNDARY_CACHE/libs/wagoe-cli/src:$BOUNDARY_CACHE/libs/wagoe-cli/resources" -m boundary.cli.main "\$@"
 EOF
 chmod +x "$BBIN_BIN/boundary"
 

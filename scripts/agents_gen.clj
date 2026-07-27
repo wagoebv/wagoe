@@ -100,7 +100,7 @@
 
 (def knowledge-path "resources/agents/knowledge.edn")
 (def catalogue-resource "wagoe/cli/modules-catalogue.edn")
-(def tmpl-path "libs/boundary-cli/resources/boundary/cli/templates/AGENTS.md.tmpl")
+(def tmpl-path "libs/wagoe-cli/resources/boundary/cli/templates/AGENTS.md.tmpl")
 
 (defn load-knowledge [] (edn/read-string (slurp knowledge-path)))
 (defn load-modules []

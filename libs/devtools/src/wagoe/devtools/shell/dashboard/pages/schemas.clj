@@ -23,7 +23,7 @@
       ;; Fallback: scan already-loaded namespaces
       (->> (all-ns)
            (map ns-name)
-           (filter #(re-matches #"boundary\.[^.]+\.schema" (str %)))
+           (filter #(re-matches #"wagoe\.[^.]+\.schema" (str %)))
            (mapv symbol)))))
 
 (defn- malli-schema?
@@ -42,7 +42,7 @@
     (require ns-sym)
     (when-let [ns-obj (find-ns ns-sym)]
       (let [;; Extract module name from ns: wagoe.user.schema -> user
-            module (second (re-find #"boundary\.([^.]+)\.schema" (str ns-sym)))]
+            module (second (re-find #"wagoe\.([^.]+)\.schema" (str ns-sym)))]
         (into {}
               (for [[var-name var-ref] (ns-publics ns-obj)
                     :let [v (try (var-get var-ref) (catch Exception _ nil))]

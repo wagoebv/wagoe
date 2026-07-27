@@ -1,0 +1,16 @@
+(ns {{project-ns}}.system
+  (:require [integrant.core :as ig]))
+
+;; System configuration is loaded from resources/conf/{env}/config.edn
+;; via Aero. Add module configs with `wagoe add <module>`.
+
+(defmethod ig/init-key :boundary/settings [_ config] config)
+
+;; Config-only modules — no lifecycle component, init-key exposes config as an Integrant ref.
+;; Added by `wagoe add <module>`; ig-config wires them in automatically when present.
+(defmethod ig/init-key :boundary/storage        [_ cfg] cfg)
+(defmethod ig/init-key :boundary/jobs           [_ cfg] cfg)
+(defmethod ig/init-key :boundary/realtime       [_ cfg] cfg)
+(defmethod ig/init-key :boundary/reports        [_ cfg] cfg)
+(defmethod ig/init-key :boundary/calendar       [_ cfg] cfg)
+(defmethod ig/init-key :boundary/ui-style       [_ cfg] cfg)
