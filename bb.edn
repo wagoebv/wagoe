@@ -22,7 +22,7 @@
              [wagoe.tools.check-ports :as check-ports]
              [wagoe.tools.check-poms  :as check-poms]
              [wagoe.tools.check-hygiene :as check-hygiene]
-             [check-no-boundary :as check-no-boundary]  ; scripts/check_no_wagoe.clj — outside the renamed tree
+             [check-no-boundary :as check-no-boundary]  ; scripts/check_no_boundary.clj — outside the renamed tree
              [wagoe.tools.doctor-env  :as doctor-env]
              [wagoe.tools.db          :as db]
              [wagoe.tools.check       :as check]
