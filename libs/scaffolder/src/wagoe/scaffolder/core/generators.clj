@@ -1223,7 +1223,7 @@ Guidance for coding agents (Claude Code, etc.) working in this Boundary project.
 ## Architecture: Functional Core / Imperative Shell + Ports
 
 This project follows the **Functional Core / Imperative Shell** (FC/IS) pattern
-with a **Hexagonal (ports & adapters)** wagoe. Dependencies flow downward:
+with a **Hexagonal (ports & adapters)** boundary. Dependencies flow downward:
 the shell depends on protocols defined in `ports.clj`; the core implements the
 behaviour those protocols describe. The core never depends on the shell.
 
@@ -1333,7 +1333,7 @@ of protocols.
 - Shell services depend on the protocols in `ports.clj`, not on concrete records.
 - Web / HTTP layers never require `*.shell.persistence` directly — go through the service port.
 - Use `bb scaffold` to create modules; it generates `ports.clj` correctly.
-- Run `bb check:ports` to verify the wagoe.
+- Run `bb check:ports` to verify the boundary.
 "
           name))
 

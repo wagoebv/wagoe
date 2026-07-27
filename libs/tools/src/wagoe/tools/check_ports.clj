@@ -125,7 +125,7 @@
 (defn dir->ns-prefix
   "Convert a module directory File to its namespace prefix, e.g.
    .../src/wagoe/license/billing -> wagoe.license.billing.
-   Uses the path segment after the nearest `src/` wagoe."
+   Uses the path segment after the nearest `src/` boundary."
   [^java.io.File dir]
   (let [path  (.getPath dir)
         after (or (last (str/split path #"/src/")) path)]

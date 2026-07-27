@@ -49,10 +49,16 @@
   "Each group: :desc human label, :grep git-grep args (before the pathspec),
    :paths optional pathspec limiting the search, :hard? counts toward failure."
   {:ns     {:desc  "boundary.<ns> namespaces"
-            ;; `boundary\\?\.` also catches boundary. inside a REGEX LITERAL
-            ;; (#"boundary\.…"), which the Phase-1 sub couldn't rewrite — the
-            ;; backslash shields the match (BOU-210: doctor, devtools dashboard).
-            :grep  ["-nIE" "boundary\\\\?\\."]
+            ;; Two alternatives, because `boundary.` is ambiguous:
+            ;;   boundary\.        — inside a REGEX LITERAL (#"boundary\.…").
+            ;;                       The Phase-1 sub couldn't rewrite these; the
+            ;;                       backslash shields the match (BOU-210).
+            ;;   boundary\.[a-z]   — a real namespace segment (boundary.core).
+            ;; Requiring the lowercase letter is what keeps the ARCHITECTURAL
+            ;; term at a sentence end ("at the HTTP boundary.") from matching —
+            ;; Phase 1 had no such guard and corrupted 19 docstrings into
+            ;; "at the HTTP wagoe.".
+            :grep  ["-nIE" "boundary\\\\\\.|boundary\\.[a-z]"]
             :paths ["*.clj" "*.cljc" "*.cljs" "*.edn"]
             :hard? true}
    :keys   {:desc  ":boundary/ config + Integrant keys"
