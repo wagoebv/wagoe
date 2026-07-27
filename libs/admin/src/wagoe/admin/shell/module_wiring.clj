@@ -19,19 +19,19 @@
 ;; Admin Config Component (pass-through holder referenced by other components)
 ;; =============================================================================
 
-(defmethod ig/init-key :boundary/admin [_ config] config)
+(defmethod ig/init-key :wagoe/admin [_ config] config)
 
-(defmethod ig/halt-key! :boundary/admin [_ _] nil)
+(defmethod ig/halt-key! :wagoe/admin [_ _] nil)
 
 ;; =============================================================================
 ;; Schema Provider Component
 ;; =============================================================================
 
-(defmethod ig/init-key :boundary/admin-schema-provider
+(defmethod ig/init-key :wagoe/admin-schema-provider
   [_ {:keys [db-ctx config malli-schemas]}]
   (schema-repo/create-schema-repository db-ctx config malli-schemas))
 
-(defmethod ig/halt-key! :boundary/admin-schema-provider
+(defmethod ig/halt-key! :wagoe/admin-schema-provider
   [_ _schema-provider]
   ; No cleanup needed - stateless component
   nil)
@@ -40,11 +40,11 @@
 ;; Admin Service Component
 ;; =============================================================================
 
-(defmethod ig/init-key :boundary/admin-service
+(defmethod ig/init-key :wagoe/admin-service
   [_ {:keys [db-ctx schema-provider logger error-reporter config]}]
   (service/create-admin-service db-ctx schema-provider logger error-reporter config))
 
-(defmethod ig/halt-key! :boundary/admin-service
+(defmethod ig/halt-key! :wagoe/admin-service
   [_ _admin-service]
   ; No cleanup needed - stateless component
   nil)
@@ -53,12 +53,12 @@
 ;; Admin Routes Component
 ;; =============================================================================
 
-(defmethod ig/init-key :boundary/admin-routes
+(defmethod ig/init-key :wagoe/admin-routes
   [_ {:keys [admin-service schema-provider user-service config]}]
   ; Return normalized routes grouped by category
   (http/admin-routes-normalized admin-service schema-provider config user-service))
 
-(defmethod ig/halt-key! :boundary/admin-routes
+(defmethod ig/halt-key! :wagoe/admin-routes
   [_ _routes]
   ; No cleanup needed - routes are just data
   nil)
@@ -83,22 +83,22 @@
      (def system (ig/init config))"
   [base-config]
   (merge base-config
-         {:boundary/admin-schema-provider
-          {:db-ctx (ig/ref :boundary/database-context)
-           :config (ig/ref :boundary/admin)}
+         {:wagoe/admin-schema-provider
+          {:db-ctx (ig/ref :wagoe/database-context)
+           :config (ig/ref :wagoe/admin)}
 
-          :boundary/admin-service
-          {:db-ctx (ig/ref :boundary/database-context)
-           :schema-provider (ig/ref :boundary/admin-schema-provider)
-           :logger (ig/ref :boundary/logger)
-           :error-reporter (ig/ref :boundary/error-reporter)
-           :config (ig/ref :boundary/admin)}
+          :wagoe/admin-service
+          {:db-ctx (ig/ref :wagoe/database-context)
+           :schema-provider (ig/ref :wagoe/admin-schema-provider)
+           :logger (ig/ref :wagoe/logger)
+           :error-reporter (ig/ref :wagoe/error-reporter)
+           :config (ig/ref :wagoe/admin)}
 
-          :boundary/admin-routes
-          {:admin-service (ig/ref :boundary/admin-service)
-           :schema-provider (ig/ref :boundary/admin-schema-provider)
-           :user-service (ig/ref :boundary/user-service)
-           :config (ig/ref :boundary/admin)}}))
+          :wagoe/admin-routes
+          {:admin-service (ig/ref :wagoe/admin-service)
+           :schema-provider (ig/ref :wagoe/admin-schema-provider)
+           :user-service (ig/ref :wagoe/user-service)
+           :config (ig/ref :wagoe/admin)}}))
 
 (defn start-admin-only-system
   "Start a minimal system with only admin components for testing.
@@ -116,32 +116,32 @@
      (ig/halt! system)"
   [admin-config]
   (let [minimal-config
-        {:boundary/database
+        {:wagoe/database
          {:adapter :h2
           :memory true}
 
-         :boundary/database-context
-         {:database (ig/ref :boundary/database)}
+         :wagoe/database-context
+         {:database (ig/ref :wagoe/database)}
 
-         :boundary/admin
+         :wagoe/admin
          admin-config
 
-         :boundary/logger
+         :wagoe/logger
          {:provider :no-op}
 
-         :boundary/error-reporter
+         :wagoe/error-reporter
          {:provider :no-op}
 
-         :boundary/admin-schema-provider
-         {:db-ctx (ig/ref :boundary/database-context)
-          :config (ig/ref :boundary/admin)}
+         :wagoe/admin-schema-provider
+         {:db-ctx (ig/ref :wagoe/database-context)
+          :config (ig/ref :wagoe/admin)}
 
-         :boundary/admin-service
-         {:db-ctx (ig/ref :boundary/database-context)
-          :schema-provider (ig/ref :boundary/admin-schema-provider)
-          :logger (ig/ref :boundary/logger)
-          :error-reporter (ig/ref :boundary/error-reporter)
-          :config (ig/ref :boundary/admin)}}]
+         :wagoe/admin-service
+         {:db-ctx (ig/ref :wagoe/database-context)
+          :schema-provider (ig/ref :wagoe/admin-schema-provider)
+          :logger (ig/ref :wagoe/logger)
+          :error-reporter (ig/ref :wagoe/error-reporter)
+          :config (ig/ref :wagoe/admin)}}]
 
     (ig/init minimal-config)))
 
@@ -164,8 +164,8 @@
   (def system (start-admin-only-system test-config))
 
   ; 2. Access components
-  (def admin-service (:boundary/admin-service system))
-  (def schema-provider (:boundary/admin-schema-provider system))
+  (def admin-service (:wagoe/admin-service system))
+  (def schema-provider (:wagoe/admin-schema-provider system))
 
   ; 3. Test operations
   (require '[wagoe.admin.ports :as ports])

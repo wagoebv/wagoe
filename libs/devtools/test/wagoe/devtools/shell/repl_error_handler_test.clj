@@ -6,13 +6,13 @@
 (deftest ^:integration handle-repl-error-stores-exception-test
   (testing "handle-repl-error! stores exception in last-exception* atom"
     (reset! handler/last-exception* nil)
-    (let [ex (ex-info "test error" {:boundary/error-code "BND-201"})]
+    (let [ex (ex-info "test error" {:wagoe/error-code "BND-201"})]
       (with-out-str (handler/handle-repl-error! ex))
       (is (= ex @handler/last-exception*)))))
 
 (deftest ^:integration handle-repl-error-prints-output-test
   (testing "handle-repl-error! prints formatted output for classified error"
-    (let [ex (ex-info "validation failed" {:boundary/error-code "BND-201"})
+    (let [ex (ex-info "validation failed" {:wagoe/error-code "BND-201"})
           output (with-out-str (handler/handle-repl-error! ex))]
       (is (str/includes? output "BND-201"))))
 

@@ -235,9 +235,9 @@ After running `bb scaffold generate`, wire the new module into the system:
 
 ```clojure
 ;; In resources/conf/dev/config.edn
-{:boundary/product-service
- {:user-repository #ig/ref :boundary/user-repository
-  :db-context      #ig/ref :boundary/db-context}}
+{:wagoe/product-service
+ {:user-repository #ig/ref :wagoe/user-repository
+  :db-context      #ig/ref :wagoe/db-context}}
 ```
 
 ### 4. Add Routes

@@ -85,12 +85,12 @@ Every tool declares a **capability tier** — `:read` (Tier 0), `:generate`
 
 | Mode | Max tier | Set by |
 |------|----------|--------|
-| `:full`       | `:execute`  | local dev (`BND_ENV=dev`/`test`) |
-| `:no-execute` | `:generate` | `BND_ENV=prod` |
+| `:full`       | `:execute`  | local dev (`WAG_ENV=dev`/`test`) |
+| `:no-execute` | `:generate` | `WAG_ENV=prod` |
 | `:read-only`  | `:read`     | CI (`CI` truthy), or no env signal (fail-closed) |
 | `:disabled`   | none        | `MCP_CAPABILITY_MODE=disabled` |
 
-Resolution precedence: **`MCP_CAPABILITY_MODE` override > `CI` > `BND_ENV` >
+Resolution precedence: **`MCP_CAPABILITY_MODE` override > `CI` > `WAG_ENV` >
 fail-closed `:read-only`**. The decision is pure (`core/security/resolve-context`,
 `authorize`); the shell reads env (`shell/context`) and audits (`shell/audit`,
 stderr JSON — never stdout).

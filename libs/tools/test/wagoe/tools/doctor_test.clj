@@ -94,23 +94,23 @@
 
 (deftest ^:unit check-providers-test
   (testing "passes for known providers"
-    (let [result (doctor/check-providers {:boundary/logging {:provider :slf4j}})]
+    (let [result (doctor/check-providers {:wagoe/logging {:provider :slf4j}})]
       (is (= :pass (:level (first result))))))
 
   (testing "errors for unknown provider"
-    (let [result (doctor/check-providers {:boundary/logging {:provider :banana}})]
+    (let [result (doctor/check-providers {:wagoe/logging {:provider :banana}})]
       (is (= :error (:level (first result))))
       (is (re-find #"unknown provider" (:msg (first result))))))
 
   (testing "passes when no providers are configured"
-    (let [result (doctor/check-providers {:boundary/settings {:name "test"}})]
+    (let [result (doctor/check-providers {:wagoe/settings {:name "test"}})]
       (is (= :pass (:level (first result))))))
 
   (testing "checks multiple providers"
     (let [result (doctor/check-providers
-                  {:boundary/logging  {:provider :slf4j}
-                   :boundary/cache    {:provider :redis}
-                   :boundary/metrics  {:provider :prometheus}})]
+                  {:wagoe/logging  {:provider :slf4j}
+                   :wagoe/cache    {:provider :redis}
+                   :wagoe/metrics  {:provider :prometheus}})]
       (is (= 1 (count result)))
       (is (= :pass (:level (first result)))))))
 
@@ -120,18 +120,18 @@
 
 (deftest ^:unit check-jwt-secret-test
   (testing "passes when user module not active"
-    (let [result (doctor/check-jwt-secret {:boundary/settings {:name "test"}} {})]
+    (let [result (doctor/check-jwt-secret {:wagoe/settings {:name "test"}} {})]
       (is (= :pass (:level (first result))))))
 
   (testing "passes when user module active and JWT_SECRET set"
     (let [result (doctor/check-jwt-secret
-                  {:boundary/user-auth {:enabled? true}}
+                  {:wagoe/user-auth {:enabled? true}}
                   {"JWT_SECRET" "secret-key"})]
       (is (= :pass (:level (first result))))))
 
   (testing "errors when user module active but JWT_SECRET missing"
     (let [result (doctor/check-jwt-secret
-                  {:boundary/user-auth {:enabled? true}}
+                  {:wagoe/user-auth {:enabled? true}}
                   {})]
       (is (= :error (:level (first result)))))))
 
@@ -189,7 +189,7 @@
   (testing "errors when :test/reset-endpoint-enabled? is true in prod profile"
     (let [result (doctor/check-reset-endpoint-flag
                   {:test/reset-endpoint-enabled? true
-                   :active {:boundary/settings {:name "app"}}}
+                   :active {:wagoe/settings {:name "app"}}}
                   "prod")]
       (is (= :error (:level (first result))))
       (is (re-find #"reset-endpoint-enabled\?" (:msg (first result))))
@@ -218,7 +218,7 @@
 (deftest ^:unit reset-endpoint-flag-absent-in-prod-is-fine
   (testing "passes when flag is absent in prod"
     (let [result (doctor/check-reset-endpoint-flag
-                  {:active {:boundary/settings {:name "app"}}}
+                  {:active {:wagoe/settings {:name "app"}}}
                   "prod")]
       (is (= :pass (:level (first result))))))
 
@@ -235,23 +235,23 @@
 (deftest ^:unit check-wiring-requires-test
   (testing "passes when all modules are wired"
     (let [wiring "(ns ... (:require [wagoe.admin.shell.module-wiring]))"
-          config {:boundary/admin {:enabled? true}}
+          config {:wagoe/admin {:enabled? true}}
           result (doctor/check-wiring-requires wiring config)]
       (is (= :pass (:level (first result))))))
 
   (testing "warns on missing module-wiring"
     (let [wiring "(ns ... (:require [wagoe.admin.shell.module-wiring]))"
-          config {:boundary/admin   {:enabled? true}
-                  :boundary/search  {:enabled? true}}
+          config {:wagoe/admin   {:enabled? true}
+                  :wagoe/search  {:enabled? true}}
           result (doctor/check-wiring-requires wiring config)]
       (is (= :warn (:level (first result))))
       (is (re-find #"search" (:msg (first result))))))
 
   (testing "excludes infrastructure keys"
     (let [wiring "(ns ...)"
-          config {:boundary/postgresql {:host "localhost"}
-                  :boundary/settings   {:name "test"}
-                  :boundary/logging    {:provider :slf4j}}
+          config {:wagoe/postgresql {:host "localhost"}
+                  :wagoe/settings   {:name "test"}
+                  :wagoe/logging    {:provider :slf4j}}
           result (doctor/check-wiring-requires wiring config)]
       (is (= :pass (:level (first result)))))))
 
@@ -262,7 +262,7 @@
 (deftest ^:unit extract-active-section-test
   (testing "extracts only active section text"
     (let [config (str ":active\n"
-                      "{:boundary/settings {:name \"test\"}\n"
+                      "{:wagoe/settings {:name \"test\"}\n"
                       " :host #env ACTIVE_HOST}\n"
                       "\n"
                       ":inactive\n"
@@ -288,18 +288,18 @@
 (deftest ^:unit check-upgrade-wiring-flags-tenant-without-http-middleware
   (testing "BOU-200 silent case: tenant-service wired, tenant-http-middleware absent"
     (let [results (doctor/check-upgrade-wiring
-                   "(ig/ref :boundary/tenant-service) (ig/ref :boundary/membership-service)")]
+                   "(ig/ref :wagoe/tenant-service) (ig/ref :wagoe/membership-service)")]
       (is (= [:warn] (map :level results)))
       (is (re-find #"tenant-http-middleware" (:msg (first results))))))
 
   (testing "tenant-service + tenant-http-middleware both wired passes"
     (let [results (doctor/check-upgrade-wiring
-                   (str "(ig/ref :boundary/tenant-service)\n"
-                        ":boundary/tenant-http-middleware {:tenant-service (ig/ref :boundary/tenant-service)}"))]
+                   (str "(ig/ref :wagoe/tenant-service)\n"
+                        ":wagoe/tenant-http-middleware {:tenant-service (ig/ref :wagoe/tenant-service)}"))]
       (is (= [:pass] (map :level results)))))
 
   (testing "tenant signalled by :tenant-routes alone (no service key) still warns"
-    (let [results (doctor/check-upgrade-wiring "(ig/ref :boundary/tenant-routes)")]
+    (let [results (doctor/check-upgrade-wiring "(ig/ref :wagoe/tenant-routes)")]
       (is (= [:warn] (map :level results)))))
 
   (testing "no tenant module at all passes"
@@ -320,7 +320,7 @@
   (testing "stale ns AND missing middleware pair reports both"
     (let [results (doctor/check-upgrade-wiring
                    (str "(:require [wagoe.platform.shell.interfaces.http.tenant-middleware :as mw])\n"
-                        "(ig/ref :boundary/tenant-service)"))]
+                        "(ig/ref :wagoe/tenant-service)"))]
       (is (= #{:error :warn} (set (map :level results))))))
 
   (testing "new tenant-lib ns does not trip the relocated check"

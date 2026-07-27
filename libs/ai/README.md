@@ -40,13 +40,13 @@ Unlike a generic assistant, `boundary/ai` knows Boundary's own conventions (FC/I
 
 ```clojure
 ;; config.edn — offline-first (Ollama, no API key)
-:boundary/ai-service
+:wagoe/ai-service
 {:provider :ollama
  :model    "qwen2.5-coder:7b"
  :base-url "http://localhost:11434"}
 
 ;; Ollama primary + Anthropic fallback
-:boundary/ai-service
+:wagoe/ai-service
 {:provider :ollama
  :model    "qwen2.5-coder:7b"
  :fallback {:provider :anthropic
@@ -56,7 +56,7 @@ Unlike a generic assistant, `boundary/ai` knows Boundary's own conventions (FC/I
 
 Require the wiring namespace in your system config loader:
 ```clojure
-(require '[boundary.ai.shell.module-wiring])  ; registers :boundary/ai-service
+(require '[boundary.ai.shell.module-wiring])  ; registers :wagoe/ai-service
 ```
 
 ### Service API

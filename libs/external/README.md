@@ -29,7 +29,7 @@ Adapters for external services: Twilio SMS/WhatsApp, SMTP transport, and IMAP ma
   (:require [boundary.external.shell.adapters.smtp :as smtp]))
 
 ;; Create an SMTP provider via Integrant config:
-;; {:boundary/smtp-provider {:host "smtp.example.com"
+;; {:wagoe/smtp-provider {:host "smtp.example.com"
 ;;                           :port 587
 ;;                           :username "user"
 ;;                           :password "pass"}}

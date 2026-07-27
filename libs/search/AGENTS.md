@@ -23,7 +23,7 @@ libs/search/
 │       ├── persistence.clj  # SearchStore (next.jdbc, HoneySQL ON CONFLICT upsert)
 │       ├── service.clj      # SearchService (orchestration, pagination, reindex)
 │       ├── http.clj         # Ring routes: API + admin web UI
-│       └── module_wiring.clj # Integrant keys :boundary/search + :boundary/search-routes
+│       └── module_wiring.clj # Integrant keys :wagoe/search + :wagoe/search-routes
 └── test/boundary/search/
     ├── core/index_test.clj         # unit: registry (shell) + build-document*
     ├── core/query_test.clj         # unit: sanitize-query, SQL builders
@@ -105,7 +105,7 @@ Call `ports/index-document!` from your module's service layer or event handler:
 (require '[boundary.search.core.index :as search])
 
 ;; 1. Get search service from system
-(def search-svc (get integrant.repl.state/system :boundary/search))
+(def search-svc (get integrant.repl.state/system :wagoe/search))
 
 ;; 2. Index a document (with optional filter values)
 (search-ports/index-document!
@@ -271,12 +271,12 @@ This conversion is done by `filter-key->json-key` in `boundary.search.core.index
 Enable in `resources/conf/<env>/config.edn`:
 
 ```edn
-:boundary/search
+:wagoe/search
 {:enabled? true}
 ```
 
 No additional options are required — the search module auto-detects the database
-type from the shared `:boundary/db-context`.
+type from the shared `:wagoe/db-context`.
 
 ---
 

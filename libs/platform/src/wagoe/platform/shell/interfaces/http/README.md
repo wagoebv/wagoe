@@ -227,7 +227,7 @@ The module uses the standard application configuration structure:
 
 ```clojure
 {:active 
- {:boundary/settings 
+ {:wagoe/settings 
   {:name "my-service"
    :version "1.0.0"}}}
 ```

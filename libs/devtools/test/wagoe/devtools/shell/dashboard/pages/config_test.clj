@@ -5,8 +5,8 @@
 
 (deftest ^:unit renders-config-page
   (testing "renders config tree with real values (dev-only, editable)"
-    (let [html (config-page/render {:config {:boundary/http {:port 3000}
-                                             :boundary/db {:host "localhost"}}})]
+    (let [html (config-page/render {:config {:wagoe/http {:port 3000}
+                                             :wagoe/db {:host "localhost"}}})]
       (is (string? html))
       (is (str/includes? html "Config"))
       (is (str/includes? html "3000"))

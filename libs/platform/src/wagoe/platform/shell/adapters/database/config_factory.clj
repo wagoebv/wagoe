@@ -19,7 +19,7 @@
      (cf/create-active-contexts)
      
      ;; Create specific adapter context from config
-     (cf/create-config-context \"dev\" :boundary/sqlite)"
+     (cf/create-config-context \"dev\" :wagoe/sqlite)"
   (:require [wagoe.platform.shell.adapters.database.config :as db-config]
             [wagoe.platform.shell.adapters.database.common.core :as core]
             [wagoe.platform.shell.adapters.database.protocols :as protocols]
@@ -102,13 +102,13 @@
    
    Args:
      env: Environment string
-     config-key: Configuration key (e.g. :boundary/sqlite)
+     config-key: Configuration key (e.g. :wagoe/sqlite)
      
    Returns:
      Database context map {:adapter adapter :datasource datasource}
      
    Example:
-     (create-config-context \"dev\" :boundary/sqlite)"
+     (create-config-context \"dev\" :wagoe/sqlite)"
   [env config-key]
   (let [active-configs (db-config/get-active-db-configs env)]
     (if-let [db-config (get active-configs config-key)]
@@ -135,7 +135,7 @@
      
    Example:
      (create-active-contexts \"dev\")
-     ;; => {:boundary/sqlite {:adapter ... :datasource ...}}"
+     ;; => {:wagoe/sqlite {:adapter ... :datasource ...}}"
   ([]
    (create-active-contexts (db-config/detect-environment)))
   ([env]
@@ -264,7 +264,7 @@
    (let [contexts (create-active-contexts env)]
      (cond
        ;; Prefer SQLite if available
-       (:boundary/sqlite contexts) (:boundary/sqlite contexts)
+       (:wagoe/sqlite contexts) (:wagoe/sqlite contexts)
 
        ;; Otherwise use first available
        (seq contexts) (val (first contexts))
@@ -279,7 +279,7 @@
    
    Args:
      env: Environment string
-     config-key: Configuration key (e.g. :boundary/sqlite)
+     config-key: Configuration key (e.g. :wagoe/sqlite)
      f: Function that takes database context
      
    Returns:
@@ -316,7 +316,7 @@
 (defn list-available-adapters
   "List all available adapter types"
   []
-  [:boundary/sqlite :boundary/h2 :boundary/postgresql :boundary/mysql :boundary/settings :boundary/logging])
+  [:wagoe/sqlite :wagoe/h2 :wagoe/postgresql :wagoe/mysql :wagoe/settings :wagoe/logging])
 
 (defn adapter-supported?
   "Check if adapter type is supported"
@@ -330,17 +330,17 @@
     false)
 
   (case adapter-key
-    :boundary/sqlite
+    :wagoe/sqlite
     (and (contains? config :db)
          (string? (:db config)))
 
-    :boundary/h2
+    :wagoe/h2
     (or (and (contains? config :memory)
              (boolean? (:memory config)))
         (and (contains? config :db)
              (string? (:db config))))
 
-    :boundary/postgresql
+    :wagoe/postgresql
     (and (every? #(contains? config %) [:host :port :dbname :user :password])
          (string? (:host config))
          (integer? (:port config))
@@ -348,7 +348,7 @@
          (string? (:user config))
          (string? (:password config)))
 
-    :boundary/mysql
+    :wagoe/mysql
     (and (every? #(contains? config %) [:host :port :dbname :user :password])
          (string? (:host config))
          (integer? (:port config))
@@ -356,11 +356,11 @@
          (string? (:user config))
          (string? (:password config)))
 
-    :boundary/settings
+    :wagoe/settings
     ;; Settings adapter can be any valid map - very permissive for now
     true
 
-    :boundary/logging
+    :wagoe/logging
     ;; Logging adapter can be any valid map - very permissive for now  
     true
 
@@ -388,40 +388,40 @@
   (reify protocols/DBAdapter
     (dialect [_this]
       (case adapter-key
-        :boundary/sqlite :sqlite
-        :boundary/h2 :h2
-        :boundary/postgresql :postgresql
-        :boundary/mysql :mysql
-        :boundary/settings :sqlite ; Use SQLite as underlying implementation for settings
-        :boundary/logging :sqlite ; Use SQLite as underlying implementation for logging
+        :wagoe/sqlite :sqlite
+        :wagoe/h2 :h2
+        :wagoe/postgresql :postgresql
+        :wagoe/mysql :mysql
+        :wagoe/settings :sqlite ; Use SQLite as underlying implementation for settings
+        :wagoe/logging :sqlite ; Use SQLite as underlying implementation for logging
         :unknown))
 
     (jdbc-driver [_this]
       (case adapter-key
-        :boundary/sqlite "org.sqlite.JDBC"
-        :boundary/h2 "org.h2.Driver"
-        :boundary/postgresql "org.postgresql.Driver"
-        :boundary/mysql "com.mysql.cj.jdbc.Driver"
-        :boundary/settings "org.sqlite.JDBC" ; Use SQLite driver for settings
-        :boundary/logging "org.sqlite.JDBC" ; Use SQLite driver for logging
+        :wagoe/sqlite "org.sqlite.JDBC"
+        :wagoe/h2 "org.h2.Driver"
+        :wagoe/postgresql "org.postgresql.Driver"
+        :wagoe/mysql "com.mysql.cj.jdbc.Driver"
+        :wagoe/settings "org.sqlite.JDBC" ; Use SQLite driver for settings
+        :wagoe/logging "org.sqlite.JDBC" ; Use SQLite driver for logging
         "unknown"))
 
     (jdbc-url [_this db-config]
       (case adapter-key
-        :boundary/sqlite (str "jdbc:sqlite:" (or (:db config) (:database-path db-config)))
-        :boundary/h2 (if (or (:memory config) (and (:database-path db-config) (str/starts-with? (str (:database-path db-config)) "mem:")))
+        :wagoe/sqlite (str "jdbc:sqlite:" (or (:db config) (:database-path db-config)))
+        :wagoe/h2 (if (or (:memory config) (and (:database-path db-config) (str/starts-with? (str (:database-path db-config)) "mem:")))
                        (str "jdbc:h2:" (or (:database-path db-config) "mem:testdb"))
                        (str "jdbc:h2:file:" (or (:db config) (:database-path db-config))))
-        :boundary/postgresql (str "jdbc:postgresql://"
+        :wagoe/postgresql (str "jdbc:postgresql://"
                                   (or (:host config) (:host db-config "localhost")) ":"
                                   (or (:port config) (:port db-config 5432)) "/"
                                   (or (:dbname config) (:name db-config)))
-        :boundary/mysql (str "jdbc:mysql://"
+        :wagoe/mysql (str "jdbc:mysql://"
                              (or (:host config) (:host db-config "localhost")) ":"
                              (or (:port config) (:port db-config 3306)) "/"
                              (or (:dbname config) (:name db-config)))
-        :boundary/settings (str "jdbc:sqlite:" (or (:database-path config) (:db config) "settings.db"))
-        :boundary/logging (str "jdbc:sqlite:" (or (:database-path config) (:db config) "logging.db"))
+        :wagoe/settings (str "jdbc:sqlite:" (or (:database-path config) (:db config) "settings.db"))
+        :wagoe/logging (str "jdbc:sqlite:" (or (:database-path config) (:db config) "logging.db"))
         "jdbc:unknown"))
 
     (pool-defaults [_this]

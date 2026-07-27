@@ -185,7 +185,7 @@ clojure -M:test:db/h2 :core                                    # Single library
 clojure -M:test:db/h2 --focus-meta :unit                       # Unit tests only
 clojure -M:test:db/h2 --focus-meta :integration                # Integration tests only
 clojure -M:test:db/h2 --watch :core                            # Watch mode
-JWT_SECRET="dev-secret-32-chars-minimum" BND_ENV=test clojure -M:test:db/h2
+JWT_SECRET="dev-secret-32-chars-minimum" WAG_ENV=test clojure -M:test:db/h2
 
 # Linting
 clojure -M:clj-kondo --lint src test libs/*/src libs/*/test
@@ -228,13 +228,13 @@ The default `test` profile runs against in-memory H2. To run against PostgreSQL:
 
 1. Start a PostgreSQL instance matching the credentials in
    [`resources/conf/test/config.edn`](./resources/conf/test/config.edn).
-2. In `resources/conf/test/config.edn`, move `:boundary/postgresql` from `:inactive` to `:active`
-   and move `:boundary/h2` out of `:active`.
+2. In `resources/conf/test/config.edn`, move `:wagoe/postgresql` from `:inactive` to `:active`
+   and move `:wagoe/h2` out of `:active`.
 3. Run:
 
 ```bash
-BND_ENV=test JWT_SECRET="dev-secret-32-chars-minimum" clojure -M:migrate up
-BND_ENV=test JWT_SECRET="dev-secret-32-chars-minimum" clojure -M:test:db/h2
+WAG_ENV=test JWT_SECRET="dev-secret-32-chars-minimum" clojure -M:migrate up
+WAG_ENV=test JWT_SECRET="dev-secret-32-chars-minimum" clojure -M:test:db/h2
 ```
 
 4. Revert `resources/conf/test/config.edn` after the run.
@@ -325,7 +325,7 @@ Build the uberjar and deploy to any platform:
 
 ```bash
 clojure -T:build clean && clojure -T:build uber
-BND_ENV=prod java -jar target/boundary-*-standalone.jar
+WAG_ENV=prod java -jar target/boundary-*-standalone.jar
 ```
 
 Reference configurations are provided under `resources/deploy/`:

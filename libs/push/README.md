@@ -51,31 +51,31 @@ Add to `resources/conf/{env}/config.edn` and require `boundary.push.shell.module
 
 ```edn
 :boundary.push/fcm-provider  {:provider         :fcm
-                               :project-id       #env BND_PUSH_FCM_PROJECT_ID
-                               :credentials-path #env BND_PUSH_FCM_CREDENTIALS_PATH}
+                               :project-id       #env WAG_PUSH_FCM_PROJECT_ID
+                               :credentials-path #env WAG_PUSH_FCM_CREDENTIALS_PATH}
 
 :boundary.push/apns-provider {:provider  :apns
-                               :team-id   #env BND_PUSH_APNS_TEAM_ID
-                               :key-id    #env BND_PUSH_APNS_KEY_ID
-                               :key-path  #env BND_PUSH_APNS_KEY_PATH
-                               :bundle-id #env BND_PUSH_APNS_BUNDLE_ID
+                               :team-id   #env WAG_PUSH_APNS_TEAM_ID
+                               :key-id    #env WAG_PUSH_APNS_KEY_ID
+                               :key-path  #env WAG_PUSH_APNS_KEY_PATH
+                               :bundle-id #env WAG_PUSH_APNS_BUNDLE_ID
                                :sandbox?  false}
 
-:boundary.push/device-store    {:db #ig/ref :boundary/db}
-:boundary.push/analytics-store {:db #ig/ref :boundary/db}
+:boundary.push/device-store    {:db #ig/ref :wagoe/db}
+:boundary.push/analytics-store {:db #ig/ref :wagoe/db}
 
 :boundary.push/service {:device-store    #ig/ref :boundary.push/device-store
                         :analytics-store #ig/ref :boundary.push/analytics-store
                         :fcm-provider    #ig/ref :boundary.push/fcm-provider
                         :apns-provider   #ig/ref :boundary.push/apns-provider
-                        :job-queue       #ig/ref :boundary/jobs
-                        :callback-secret #env BND_PUSH_CALLBACK_SECRET}
+                        :job-queue       #ig/ref :wagoe/jobs
+                        :callback-secret #env WAG_PUSH_CALLBACK_SECRET}
 
 :boundary.push/job-handlers {:push-service #ig/ref :boundary.push/service}
 
 :boundary.push/routes {:device-store    #ig/ref :boundary.push/device-store
                        :analytics-store #ig/ref :boundary.push/analytics-store
-                       :callback-secret #env BND_PUSH_CALLBACK_SECRET}
+                       :callback-secret #env WAG_PUSH_CALLBACK_SECRET}
 ```
 
 Use `:provider :mock` for FCM and APNs in dev/test environments.
@@ -165,7 +165,7 @@ CREATE TABLE IF NOT EXISTS push_analytics_events (
 
 | Provider | Key `:channels` | Credentials | Notes |
 |----------|----------------|-------------|-------|
-| Firebase Cloud Messaging | `:fcm` | Service account JSON (`BND_PUSH_FCM_CREDENTIALS_JSON`) | Supports multicast, token validation |
+| Firebase Cloud Messaging | `:fcm` | Service account JSON (`WAG_PUSH_FCM_CREDENTIALS_JSON`) | Supports multicast, token validation |
 | Apple Push Notification service | `:apns` | Key ID + Team ID + P8 private key | Separate sandbox/production hosts; set `:sandbox?` per env |
 | Mock (dev/test) | `:mock` | None | In-memory; use `boundary.push.shell.adapters.mock` |
 

@@ -8,7 +8,7 @@ Application-layer email sending: an `Email` domain model, pure preparation and
 validation, and pluggable sender adapters. Raw SMTP transport is delegated to
 `libs/external`. Sending comes in several flavours — synchronous, async
 (`future`-based), in-process queued (`EmailQueueProtocol`), and distributed
-queued (via the optional `libs/jobs` module). A `:boundary/email` Integrant key
+queued (via the optional `libs/jobs` module). A `:wagoe/email` Integrant key
 builds the sender from config.
 
 ## Key Namespaces
@@ -22,7 +22,7 @@ builds the sender from config.
 | `boundary.email.shell.adapters.logging` | Dev/test sender — records + prints emails instead of delivering them |
 | `boundary.email.shell.adapters.queue` | `InMemoryEmailQueue` — in-process `EmailQueueProtocol` impl, bounded retry |
 | `boundary.email.shell.jobs-integration` | Optional distributed queued sending via `libs/jobs` (loaded through `requiring-resolve`) |
-| `boundary.email.shell.module-wiring` | `:boundary/email` + `:boundary/email-queue` Integrant keys |
+| `boundary.email.shell.module-wiring` | `:wagoe/email` + `:wagoe/email-queue` Integrant keys |
 
 ## Relationship to `libs/external`
 
@@ -43,8 +43,8 @@ libs/email (domain)                         libs/external (transport)
 (BOU-150). It then delegates to `external-ports/send-email!`.
 
 > `libs/user`'s web handlers send welcome emails through this library's
-> `EmailSenderProtocol` (the `:email-sender` injected into `:boundary/user-routes`
-> is the `:boundary/email` component), not against `libs/external` directly.
+> `EmailSenderProtocol` (the `:email-sender` injected into `:wagoe/user-routes`
+> is the `:wagoe/email` component), not against `libs/external` directly.
 
 ## Ports
 
@@ -59,7 +59,7 @@ Implemented by `SmtpEmailSender` (real SMTP) and `LoggingEmailSender` (dev sink)
 ### `EmailQueueProtocol`
 Defines `queue-email!`, `process-queue!`, `queue-size`, `peek-queue`. Implemented
 by `shell.adapters.queue/InMemoryEmailQueue` — a single-process queue with
-bounded retry (`:max-retries`), built via `:boundary/email-queue`. For
+bounded retry (`:max-retries`), built via `:wagoe/email-queue`. For
 **distributed** queuing across replicas use `shell.jobs-integration` (below); the
 in-memory queue is per-process and lost on restart.
 
@@ -101,16 +101,16 @@ in-memory queue is per-process and lost on restart.
 
 ## Wiring & configuration
 
-`boundary.email.shell.module-wiring` ships `:boundary/email` (builds a sender —
-`:provider :smtp` / `:logging`) and `:boundary/email-queue` (in-memory queue over
-a sender). The app refs `:boundary/email` and threads it into
-`:boundary/user-routes` as `:email-sender`:
+`boundary.email.shell.module-wiring` ships `:wagoe/email` (builds a sender —
+`:provider :smtp` / `:logging`) and `:wagoe/email-queue` (in-memory queue over
+a sender). The app refs `:wagoe/email` and threads it into
+`:wagoe/user-routes` as `:email-sender`:
 
 ```clojure
-:boundary/email       {:provider :smtp :host "smtp.example.com" :port 587
+:wagoe/email       {:provider :smtp :host "smtp.example.com" :port 587
                        :username "..." :password "..."}
 ;; or {:provider :logging} in dev
-:boundary/email-queue {:sender (ig/ref :boundary/email) :max-retries 3}
+:wagoe/email-queue {:sender (ig/ref :wagoe/email) :max-retries 3}
 ```
 
 You can also construct a sender directly (no Integrant) and pass it where needed:

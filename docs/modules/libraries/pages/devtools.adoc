@@ -71,7 +71,7 @@ Local web UI at `http://localhost:9999` providing live insight into the running 
 
 === Architecture
 
-* Integrant component (`:boundary/dashboard`) starts Jetty on port 9999
+* Integrant component (`:wagoe/dashboard`) starts Jetty on port 9999
 * Server-rendered Hiccup + HTMX polling for live updates
 * Request capture middleware wraps the main HTTP handler (port 3000)
 * Dark theme CSS in `resources/dashboard/assets/dashboard.css`

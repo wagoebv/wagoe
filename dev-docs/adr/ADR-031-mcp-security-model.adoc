@@ -79,8 +79,8 @@ Resolution precedence (`security/resolve-context`, pure over an env map):
 . *Explicit override* — `MCP_CAPABILITY_MODE` (`full` / `no-execute` /
   `read-only` / `disabled`). Deliberate, audited, beats everything.
 . *CI detection* — a truthy `CI` env var ⇒ `:read-only`, regardless of
-  `BND_ENV`.
-. *`BND_ENV`* — `dev`/`test` ⇒ `:full`; `prod` ⇒ `:no-execute`; `ci` ⇒
+  `WAG_ENV`.
+. *`WAG_ENV`* — `dev`/`test` ⇒ `:full`; `prod` ⇒ `:no-execute`; `ci` ⇒
   `:read-only`.
 . *Fail-closed default* — no signal ⇒ `:read-only` (never `:full`).
 
@@ -140,13 +140,13 @@ specified in BOU-98.
 
 * The dangerous surface is off by default and off where it matters; the
   decision is one pure, unit-tested function.
-* Fail-closed defaults mean a forgotten `BND_ENV` degrades to read-only, not to
+* Fail-closed defaults mean a forgotten `WAG_ENV` degrades to read-only, not to
   full execute.
 * Audit gives incident response a reconstructable trail.
 
 === Negative / trade-offs
 
-* Local dev with no `BND_ENV` is read-only until configured — a minor friction,
+* Local dev with no `WAG_ENV` is read-only until configured — a minor friction,
   chosen deliberately over an unsafe default.
 * `MCP_CAPABILITY_MODE=full` can re-enable execute anywhere (including CI). This
   is intentional (explicit, audited) but is a foot-gun; it is logged on every

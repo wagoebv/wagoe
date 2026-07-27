@@ -4,7 +4,7 @@
 
  :active
  {  ;; Core application settings (always active)
-  :boundary/settings
+  :wagoe/settings
   {:name              "boundary-acc"
    :secure-cookies? true  ;; HTTPS-only auth cookies
    :version           "0.1.0"
@@ -13,7 +13,7 @@
    :currency/iso-code "EUR"}
 
   ;; Database configuration (typically PostgreSQL in acceptance)
-  :boundary/postgresql
+  :wagoe/postgresql
   {:host          #env "POSTGRES_HOST"
    :port          #env "POSTGRES_PORT"
    :dbname        #env "POSTGRES_DB"
@@ -30,7 +30,7 @@
                    :leak-detection-threshold-ms 60000}}
 
   ;; Acceptance logging configuration
-  :boundary/logging
+  :wagoe/logging
   {:level     :info
    :console   false
    :appenders [{:appender       :rolling-file
@@ -44,13 +44,13 @@
   ;; Secret must come from the environment; no literal fallback. The wiring guard throws
   ;; at startup if enabled with a blank secret, so the app refuses to boot rather than
   ;; fail open (run unvalidated). Set JWT_SECRET in the environment.
-  :boundary/http
+  :wagoe/http
   {;; Graceful shutdown drain window (ms): stop accepting new connections, let
    ;; in-flight requests finish (up to this bound), then halt. Tune to exceed
    ;; the load balancer's deregistration delay for zero-downtime rollouts.
    :drain-timeout-ms #long #or [#env HTTP_DRAIN_TIMEOUT_MS 30000]
    ;; Per-client rate limiting (fixed window). Disabled by default: enable it only
-   ;; together with an active :boundary/cache (Redis) so the limit is shared across
+   ;; together with an active :wagoe/cache (Redis) so the limit is shared across
    ;; replicas. Without an active cache the limiter falls back to a bounded
    ;; per-process counter — each instance counts independently (effective limit =
    ;; limit x N), so do NOT rely on it as a global limit in a multi-replica
@@ -62,7 +62,7 @@
                      :secret   #or [#env CSRF_SECRET #env JWT_SECRET]}}}
 
   ;; Acceptance error reporting configuration (Sentry)
-  :boundary/error-reporting
+  :wagoe/error-reporting
   {:provider    :sentry
    :dsn         #env "SENTRY_DSN"
    :environment "acc"
@@ -70,9 +70,9 @@
    :sample-rate 1.0}}
 
  :inactive
- {;; Cache configuration — move :boundary/cache to :active to enable Redis caching.
+ {;; Cache configuration — move :wagoe/cache to :active to enable Redis caching.
   ;; Requires a Redis instance.
-  :boundary/cache
+  :wagoe/cache
   {:provider    :redis
    :host        #env "REDIS_HOST"
    :port        #or [#long #or [#env "REDIS_PORT" 6379] 6379]
@@ -85,13 +85,13 @@
    :min-idle    2}
 
   ;; Optional fallback database configurations
-  :boundary/sqlite
+  :wagoe/sqlite
   {:db "acc-fallback.db"
    :pool {:minimum-idle 1
           :maximum-pool-size 5
           :connection-timeout-ms 10000}}
 
-  :boundary/h2
+  :wagoe/h2
   {:memory false
    :db     "acc-h2-fallback"
    :pool   {:minimum-idle 1

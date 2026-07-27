@@ -25,7 +25,7 @@ All pure functions in `core/`, side effects in `shell/`.
 |------|---------|
 | `shell/repl_error_handler.clj` | `last-exception*` atom + `handle-repl-error!` — runs full pipeline |
 | `shell/auto_fix.clj` | Executes fix descriptors: migrations, env vars, JWT, module wiring. Multimethod dispatch on `:action` |
-| `shell/http_error_middleware.clj` | `wrap-dev-error-enrichment` — catches exceptions, attaches `:boundary/dev-info` to ex-data, re-throws |
+| `shell/http_error_middleware.clj` | `wrap-dev-error-enrichment` — catches exceptions, attaches `:wagoe/dev-info` to ex-data, re-throws |
 | `shell/fcis_checker.clj` | Post-reset namespace scan for BND-601 (core imports shell). Runs after `(go)` and `(reset)` |
 
 ### REPL Commands
@@ -70,7 +70,7 @@ Local web UI at `localhost:9999` providing x-ray vision into the running system.
 
 ### Architecture
 
-- Integrant component (`:boundary/dashboard`) starts Jetty on port 9999
+- Integrant component (`:wagoe/dashboard`) starts Jetty on port 9999
 - Server-rendered Hiccup + HTMX polling for live updates
 - Request capture middleware wraps main HTTP handler (port 3000)
 - Dark theme CSS in `resources/dashboard/assets/dashboard.css`
@@ -137,7 +137,7 @@ Monitors background job processing in real time.
 | Failed Jobs list | Job type, error message, retry count, queue — with **Retry** button (HTMX POST) |
 
 - HTMX polling every **5 seconds** keeps the failed-jobs container live
-- Page degrades gracefully when no `:boundary/jobs` component is configured
+- Page degrades gracefully when no `:wagoe/jobs` component is configured
 - Key files: `shell/dashboard/pages/jobs.clj`
 
 #### Config Editor — `/dashboard/config`

@@ -58,7 +58,7 @@ bb check                              # quality gates (FC/IS, deps, lint)
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `JWT_SECRET` | **Yes** | Minimum 32 characters. Required by the user/auth module at startup. |
-| `BND_ENV` | No | Defaults to `dev`. Other values: `test`, `prod`, `acc`. |
+| `WAG_ENV` | No | Defaults to `dev`. Other values: `test`, `prod`, `acc`. |
 | `HTTP_PORT` | No | Defaults to `3000`. Auto-increments to 3099 if busy. |
 
 ```bash
@@ -90,7 +90,7 @@ src/{{project-ns}}/
 Every module MUST define `ports.clj`.
 
 - core/ must not import shell/IO/logging/DB
-- core/ must not throw — return typed error values ({:error {:type ... :message ...}}); the shell translates them into HTTP responses (escape hatch: ^:boundary/allow-throw ns metadata or .boundary/check-fcis.edn)
+- core/ must not throw — return typed error values ({:error {:type ... :message ...}}); the shell translates them into HTTP responses (escape hatch: ^:wagoe/allow-throw ns metadata or .boundary/check-fcis.edn)
 - core/ must not hold mutable state (defonce/atom/swap!/reset!) — definition registries and process state live in the shell (boundary.<lib>.shell.registry)
 - cross-module calls go through service ports
 - web/HTTP layers never require *.shell.persistence directly
@@ -255,7 +255,7 @@ clojure -M:repl
 (go)    ; start system
 
 ;; Access a running component
-(def user-svc (get integrant.repl.state/system :boundary/user-service))
+(def user-svc (get integrant.repl.state/system :wagoe/user-service))
 
 ;; Test a service function directly (bypass HTTP)
 ;; (user-svc/list-users user-svc {:limit 10})
@@ -272,7 +272,7 @@ clojure -M:repl
 
 ```clojure
 (require '[next.jdbc :as jdbc])
-(def ds (get-in integrant.repl.state/system [:boundary/db-context :datasource]))
+(def ds (get-in integrant.repl.state/system [:wagoe/db-context :datasource]))
 (jdbc/execute! ds ["SELECT * FROM users LIMIT 5"])
 ```
 
@@ -400,7 +400,7 @@ with your application.
 ```clojure
 ;; WRONG — system-component is called before it is defined
 (defn dev-resend-invite! [...]
-  (let [svc (system-component :boundary/my-service)] ...))  ; used here
+  (let [svc (system-component :wagoe/my-service)] ...))  ; used here
 
 (defn- system-component [k]   ; defined here — too late!
   (get integrant.repl.state/system k))
@@ -410,7 +410,7 @@ with your application.
   (get integrant.repl.state/system k))
 
 (defn dev-resend-invite! [...]
-  (let [svc (system-component :boundary/my-service)] ...))
+  (let [svc (system-component :wagoe/my-service)] ...))
 ```
 <!-- /gen:pitfalls -->
 

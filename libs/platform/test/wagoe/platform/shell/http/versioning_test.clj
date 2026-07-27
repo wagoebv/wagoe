@@ -25,7 +25,7 @@
 
 (def sample-config
   "Sample versioning configuration."
-  {:active {:boundary/api-versioning
+  {:active {:wagoe/api-versioning
             {:default-version :v1
              :latest-stable :v1
              :deprecated-versions #{}
@@ -34,7 +34,7 @@
 
 (def deprecated-config
   "Configuration with deprecated version."
-  {:active {:boundary/api-versioning
+  {:active {:wagoe/api-versioning
             {:default-version :v1
              :latest-stable :v2
              :deprecated-versions #{:v1}
@@ -47,7 +47,7 @@
 
 (deftest ^:unit version-config-test
   (testing "Get version config with custom values"
-    (let [config {:active {:boundary/api-versioning
+    (let [config {:active {:wagoe/api-versioning
                            {:default-version :v2
                             :latest-stable :v2}}}
           result (versioning/version-config config)]
@@ -64,7 +64,7 @@
       (is (= #{:v1} (:supported-versions result)))))
 
   (testing "Partial config merges with defaults"
-    (let [config {:active {:boundary/api-versioning
+    (let [config {:active {:wagoe/api-versioning
                            {:default-version :v3}}}
           result (versioning/version-config config)]
       (is (= :v3 (:default-version result)))
@@ -306,7 +306,7 @@
 
   (testing "Apply versioning with different default version"
     (let [routes [{:path "/users" :methods {}}]
-          config {:active {:boundary/api-versioning
+          config {:active {:wagoe/api-versioning
                            {:default-version :v2
                             :latest-stable :v2
                             :supported-versions #{:v2}}}}
@@ -340,7 +340,7 @@
 
   (testing "Wrap handler uses config default version"
     (let [handler (fn [_] {:status 200 :headers {} :body "test"})
-          config {:active {:boundary/api-versioning
+          config {:active {:wagoe/api-versioning
                            {:default-version :v3
                             :latest-stable :v3}}}
           wrapped (versioning/wrap-handler-with-version-headers handler config)
@@ -426,7 +426,7 @@
 
 (deftest ^:unit edge-cases-test
   (testing "Version config with nil values"
-    (let [config {:active {:boundary/api-versioning nil}}
+    (let [config {:active {:wagoe/api-versioning nil}}
           result (versioning/version-config config)]
       ;; Should use defaults
       (is (= :v1 (:default-version result)))

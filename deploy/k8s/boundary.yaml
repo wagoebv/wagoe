@@ -23,7 +23,7 @@ kind: ConfigMap
 metadata:
   name: boundary-config
 data:
-  BND_ENV: "prod"
+  WAG_ENV: "prod"
   HTTP_PORT: "3000"
   # Rate limiting in :prod requires an active Redis cache (the app refuses to
   # boot with rate limiting enabled and no cache — see BOU-173). Point these at

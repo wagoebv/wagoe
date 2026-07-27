@@ -50,7 +50,7 @@ USER boundary
 
 # Container-aware heap sizing; override JAVA_OPTS to tune per deployment.
 ENV JAVA_OPTS="-XX:MaxRAMPercentage=75 -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError" \
-    BND_ENV=prod \
+    WAG_ENV=prod \
     HTTP_PORT=3000 \
     HTTP_HOST=0.0.0.0
 

@@ -100,7 +100,7 @@
     (dashboard/clear-config-overrides!)
     (let [result (ig-repl/reset)]
       (apply-taps-to-handler!)
-      (ai/set-service! (get state/system :boundary/ai-service))
+      (ai/set-service! (get state/system :wagoe/ai-service))
       (fcis/check-fcis-violations!)
       result)
     (catch Exception e
@@ -129,22 +129,22 @@
 (defn db-context
   "Get the database context from the running system."
   []
-  (get (system) :boundary/db-context))
+  (get (system) :wagoe/db-context))
 
 (defn user-service
   "Get the user service from the running system."
   []
-  (get (system) :boundary/user-service))
+  (get (system) :wagoe/user-service))
 
 (defn user-repository
   "Get the user repository from the running system."
   []
-  (get (system) :boundary/user-repository))
+  (get (system) :wagoe/user-repository))
 
 (defn session-repository
   "Get the session repository from the running system."
   []
-  (get (system) :boundary/session-repository))
+  (get (system) :wagoe/session-repository))
 
 ;; =============================================================================
 ;; Devtools REPL Helpers
@@ -174,14 +174,14 @@
    Falls back to configured port if server object isn't accessible."
   []
   (let [sys (system)
-        server (get sys :boundary/http-server)]
+        server (get sys :wagoe/http-server)]
     (if server
       (try
         (let [connector (first (.getConnectors server))]
           (.getLocalPort connector))
         (catch Exception _
-          (or (get-in (config) [:boundary/http :port]) 3000)))
-      (or (get-in (config) [:boundary/http :port]) 3000))))
+          (or (get-in (config) [:wagoe/http :port]) 3000)))
+      (or (get-in (config) [:wagoe/http :port]) 3000))))
 
 (defn status
   "Show system health overview."
@@ -192,8 +192,8 @@
       (println "System not running. Start with (go)")
       (let [cfg        (config)
             http-port  (actual-http-port)
-            http-host  (or (get-in cfg [:boundary/http :host]) "localhost")
-            admin-cfg  (get cfg :boundary/admin)
+            http-host  (or (get-in cfg [:wagoe/http :host]) "localhost")
+            admin-cfg  (get cfg :wagoe/admin)
             admin-path (or (:base-path admin-cfg) "/admin")
             base-url   (str "http://" (if (= http-host "0.0.0.0") "localhost" http-host)
                             ":" http-port)
@@ -286,7 +286,7 @@
   ([]
    (routes nil))
   ([filter-key]
-   (when-let [handler (get (system) :boundary/http-handler)]
+   (when-let [handler (get (system) :wagoe/http-handler)]
      (let [all-routes (devtools-repl/extract-routes-from-handler handler)
            filtered (if filter-key
                       (introspection/filter-routes all-routes filter-key)
@@ -310,7 +310,7 @@
    ;; routes, taps, and recording middleware.
    (with-error-handling
      (when-let [handler (or (wiring/current-handler)
-                            (get (system) :boundary/http-handler))]
+                            (get (system) :wagoe/http-handler))]
        (devtools-repl/simulate-request handler method path opts)))))
 
 ;; =============================================================================
@@ -442,7 +442,7 @@
 (defn- print-startup-dashboard []
   (when (= (guidance) :full)
     (status)
-    (when-let [dashboard (get state/system :boundary/dashboard)]
+    (when-let [dashboard (get state/system :wagoe/dashboard)]
       (let [port (or (:port dashboard) 9999)]
         (println (str "  Dashboard: http://localhost:" port "/dashboard"))))))
 
@@ -453,7 +453,7 @@
     (dashboard/clear-config-overrides!)
     (let [result (ig-repl/go)]
       (print-startup-dashboard)
-      (ai/set-service! (get state/system :boundary/ai-service))
+      (ai/set-service! (get state/system :wagoe/ai-service))
       (fcis/check-fcis-violations!)
       (maybe-show-tip :start)
       result)
@@ -584,7 +584,7 @@
 
 (defn restart-component
   "Hot-swap a single Integrant component without full system reset.
-   (restart-component :boundary/http-server)"
+   (restart-component :wagoe/http-server)"
   [component-key]
   (require 'wagoe.devtools.shell.repl)
   (let [restart-fn (resolve 'wagoe.devtools.shell.repl/restart-component)]
@@ -624,7 +624,7 @@
   (println (str "\n━━━ New Feature: " module-name " ━━━━━━━━━━━━━━━━━━━━━━━━━"))
   (println (str "Description: " description "\n"))
 
-  (let [ai-service (get (system) :boundary/ai-service)
+  (let [ai-service (get (system) :wagoe/ai-service)
         ai-spec (when ai-service
                   (println "Generating module spec from description...")
                   (let [result (ai-svc/scaffold-from-description

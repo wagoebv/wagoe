@@ -18,7 +18,7 @@ Declarative state machine workflows for domain entities. Provides permission-bas
 | `boundary.workflow.shell.registry` | `defworkflow` macro, in-process definition registry, `IWorkflowRegistry` adapter |
 | `boundary.workflow.shell.service` | Orchestration: load → validate → persist → side-effects |
 | `boundary.workflow.shell.persistence` | DB persistence (IWorkflowStore via next.jdbc + HoneySQL) |
-| `boundary.workflow.shell.module-wiring` | Integrant `:boundary/workflow` init/halt |
+| `boundary.workflow.shell.module-wiring` | Integrant `:wagoe/workflow` init/halt |
 | `boundary.workflow.shell.http` | REST API routes (start, transition, state, audit log) |
 
 ## Defining a Workflow
@@ -173,9 +173,9 @@ The `job-queue` dependency is optional. If nil, side effects are silently skippe
 
 ```edn
 ;; resources/conf/dev/config.edn
-{:boundary/workflow
- {:db-ctx    #ig/ref :boundary/database-context
-  :job-queue #ig/ref :boundary/job-queue}}  ; optional
+{:wagoe/workflow
+ {:db-ctx    #ig/ref :wagoe/database-context
+  :job-queue #ig/ref :wagoe/job-queue}}  ; optional
 ```
 
 The component map returned is:

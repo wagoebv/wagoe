@@ -17,7 +17,7 @@ No UI function signatures change — the translation function is injected via th
 - **Locale chain** — user locale → tenant locale → default locale → `:en` fallback → `(str key)`.
 - **Graceful degradation** — missing key returns `(str key)` (e.g. `"user/sign-in"`), never throws.
 - **EDN catalogues** — one file per locale: `boundary/i18n/translations/en.edn`, `nl.edn`, etc.
-- **Integrant component** — `:boundary/i18n` loads catalogues at startup; injected into `:boundary/http-handler`.
+- **Integrant component** — `:wagoe/i18n` loads catalogues at startup; injected into `:wagoe/http-handler`.
 
 ---
 
@@ -40,7 +40,7 @@ libs/i18n/
 │       ├── catalogue.clj   ← load-catalogue, MapCatalogue
 │       ├── middleware.clj  ← wrap-i18n Ring middleware
 │       ├── render.clj      ← resolve-markers, render
-│       └── module_wiring.clj  ← ig/init-key :boundary/i18n
+│       └── module_wiring.clj  ← ig/init-key :wagoe/i18n
 └── test/boundary/i18n/
     ├── core/translate_test.clj
     └── shell/
@@ -157,13 +157,13 @@ clojure -M:clj-kondo --lint libs/i18n/src libs/i18n/test
 
 ```edn
 ;; config.edn
-:boundary/i18n {:catalogue-path "boundary/i18n/translations"
+:wagoe/i18n {:catalogue-path "boundary/i18n/translations"
                 :default-locale :en
                 :dev?           true}   ; omit or false in production
 ```
 
 The component exposes `{:catalogue cat :default-locale :en :dev? bool}`.
-It is injected into `:boundary/http-handler` as `:i18n`.
+It is injected into `:wagoe/http-handler` as `:i18n`.
 
 ---
 

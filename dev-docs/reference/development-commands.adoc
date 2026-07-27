@@ -196,7 +196,7 @@ This starts an nREPL server on port 7888.
 [source,clojure]
 ----
 ;; Get a service
-(def user-svc (get integrant.repl.state/system :boundary/user-service))
+(def user-svc (get integrant.repl.state/system :wagoe/user-service))
 
 ;; Test service directly
 (require '[boundary.user.ports :as user-ports])
@@ -486,7 +486,7 @@ clj-nrepl-eval -p 7888 "(require '[integrant.repl :as ig-repl]) (ig-repl/reset)"
 |JWT signing secret (min 32 chars)
 |(required for auth)
 
-|`BND_ENV`
+|`WAG_ENV`
 |Environment name
 |`development`
 

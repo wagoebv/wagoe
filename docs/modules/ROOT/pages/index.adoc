@@ -52,7 +52,7 @@ boundary list modules
 
 # REPL-driven development (headless nREPL on port 7888 — connect your editor)
 export JWT_SECRET="change-me-dev-secret-min-32-chars"
-export BND_ENV="development"
+export WAG_ENV="development"
 clojure -M:repl
 
 # Scaffold a new module (interactive)

@@ -21,24 +21,24 @@
     (let [config (setup/build-config minimal-spec "dev")]
       (is (str/includes? config ":active"))
       (is (str/includes? config ":inactive"))
-      (is (str/includes? config ":boundary/settings"))
+      (is (str/includes? config ":wagoe/settings"))
       (is (str/includes? config "\"my-app-dev\""))))
 
   (testing "includes postgresql config for dev"
     (let [config (setup/build-config minimal-spec "dev")]
-      (is (str/includes? config ":boundary/postgresql"))
+      (is (str/includes? config ":wagoe/postgresql"))
       (is (str/includes? config "POSTGRES_HOST"))))
 
   (testing "includes HTTP and router for dev"
     (let [config (setup/build-config minimal-spec "dev")]
-      (is (str/includes? config ":boundary/http"))
-      (is (str/includes? config ":boundary/router"))))
+      (is (str/includes? config ":wagoe/http"))
+      (is (str/includes? config ":wagoe/router"))))
 
   (testing "excludes disabled providers"
     (let [config (setup/build-config minimal-spec "dev")]
-      (is (not (str/includes? config ":boundary/ai-service")))
-      (is (not (str/includes? config ":boundary/payment-provider")))
-      (is (not (str/includes? config ":boundary/cache"))))))
+      (is (not (str/includes? config ":wagoe/ai-service")))
+      (is (not (str/includes? config ":wagoe/payment-provider")))
+      (is (not (str/includes? config ":wagoe/cache"))))))
 
 ;; =============================================================================
 ;; build-config — test environment
@@ -47,13 +47,13 @@
 (deftest ^:unit build-config-test-env-test
   (testing "uses H2 for test regardless of database choice"
     (let [config (setup/build-config minimal-spec "test")]
-      (is (str/includes? config ":boundary/h2"))
-      (is (not (str/includes? config ":boundary/postgresql")))))
+      (is (str/includes? config ":wagoe/h2"))
+      (is (not (str/includes? config ":wagoe/postgresql")))))
 
   (testing "omits HTTP and router for test"
     (let [config (setup/build-config minimal-spec "test")]
-      (is (not (str/includes? config ":boundary/http")))
-      (is (not (str/includes? config ":boundary/router"))))))
+      (is (not (str/includes? config ":wagoe/http")))
+      (is (not (str/includes? config ":wagoe/router"))))))
 
 ;; =============================================================================
 ;; build-config — with all providers enabled
@@ -71,14 +71,14 @@
 (deftest ^:unit build-config-full-spec-test
   (testing "includes all enabled providers for dev"
     (let [config (setup/build-config full-spec "dev")]
-      (is (str/includes? config ":boundary/ai-service"))
+      (is (str/includes? config ":wagoe/ai-service"))
       (is (str/includes? config ":provider :ollama"))
-      (is (str/includes? config ":boundary/payment-provider"))
+      (is (str/includes? config ":wagoe/payment-provider"))
       (is (str/includes? config ":provider :stripe"))
-      (is (str/includes? config ":boundary/cache"))
+      (is (str/includes? config ":wagoe/cache"))
       (is (str/includes? config ":provider    :redis"))
       (is (str/includes? config ":wagoe.external/smtp"))
-      (is (str/includes? config ":boundary/admin"))))
+      (is (str/includes? config ":wagoe/admin"))))
 
   (testing "uses mocks and no-ops for test"
     (let [config (setup/build-config full-spec "test")]

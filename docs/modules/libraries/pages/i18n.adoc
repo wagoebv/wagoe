@@ -25,7 +25,7 @@ Internationalisation for Boundary apps: marker-based translation, locale chain r
 | `resolve-markers` and `render`: postwalk resolving `[:t :key]` in Hiccup
 
 | `boundary.i18n.shell.module-wiring`
-| Integrant `:boundary/i18n` component
+| Integrant `:wagoe/i18n` component
 |===
 
 == Marker syntax
@@ -72,12 +72,12 @@ Key namespacing conventions: `:common/*` for shared UI strings, `:user/*`, `:adm
 [source,edn]
 ----
 ;; config.edn
-:boundary/i18n {:catalogue-path "boundary/i18n/translations"
+:wagoe/i18n {:catalogue-path "boundary/i18n/translations"
                 :default-locale :en
                 :dev?           true}   ; omit or false in production
 ----
 
-The component is injected into `:boundary/http-handler` as `:i18n`. With `:dev? true`, resolved markers are wrapped in `[:span {:data-i18n "..."}]` for browser inspection.
+The component is injected into `:wagoe/http-handler` as `:i18n`. With `:dev? true`, resolved markers are wrapped in `[:span {:data-i18n "..."}]` for browser inspection.
 
 == Middleware
 

@@ -21,7 +21,7 @@
 
    Design Principles:
    - Forward compatibility: new keys can be added without breaking existing code
-   - Feature-flag gated: new functionality controlled by BND_DEVEX_VALIDATION
+   - Feature-flag gated: new functionality controlled by WAG_DEVEX_VALIDATION
    - I18n-ready: :code + :params enable future message translation
    - FC/IS compliant: pure data structures, no side effects"
   (:require [wagoe.core.config.feature-flags :as flags]))

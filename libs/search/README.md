@@ -38,7 +38,7 @@ The registry is mutable process state, so it lives in the shell
 (require '[boundary.search.ports :as search-ports])
 
 ;; Get the service from the system
-(def search-svc (get integrant.repl.state/system :boundary/search))
+(def search-svc (get integrant.repl.state/system :wagoe/search))
 
 (search-ports/index-document!
   search-svc
@@ -93,7 +93,7 @@ Higher-weight fields boost ranking:
 | PostgreSQL | `to_tsvector` / `plainto_tsquery` / `ts_rank` / `ts_headline` |
 | H2, SQLite | `LOWER(content_all) LIKE LOWER('%q%')` |
 
-The adapter is selected automatically from the shared `:boundary/db-context` dialect.
+The adapter is selected automatically from the shared `:wagoe/db-context` dialect.
 
 ### Empty Query Handling
 
@@ -106,7 +106,7 @@ returns an empty `SearchResponse` with `:total 0` without touching the database.
 
 ```edn
 ;; resources/conf/dev/config.edn
-{:boundary/search {:enabled? true}}
+{:wagoe/search {:enabled? true}}
 ```
 
 No additional options are needed — the module auto-detects the database type.

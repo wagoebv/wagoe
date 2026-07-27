@@ -105,7 +105,7 @@
   "Get a specific database adapter by key.
    
    Args:
-     adapter-key - Keyword identifying the adapter (e.g., :boundary/sqlite)
+     adapter-key - Keyword identifying the adapter (e.g., :wagoe/sqlite)
    
    Returns: {:adapter adapter-config :pool connection-pool} or nil"
   [adapter-key]

@@ -88,7 +88,7 @@ boundary/libs/payments/
 │       │   ├── mock.clj        ; MockPaymentProvider
 │       │   ├── mollie.clj      ; MolliePaymentProvider
 │       │   └── stripe.clj      ; StripePaymentProvider
-│       └── module_wiring.clj   ; Integrant :boundary/payment-provider
+│       └── module_wiring.clj   ; Integrant :wagoe/payment-provider
 ----
 
 === `IPaymentProvider` protocol
@@ -172,7 +172,7 @@ Use in all development environments and automated tests.
 [source,clojure]
 ----
 ;; config.edn
-:boundary/payment-provider
+:wagoe/payment-provider
 {:provider         :mock        ; :mock | :mollie | :stripe
  :api-key          #env PSP_API_KEY
  :webhook-secret   #env PSP_WEBHOOK_SECRET   ; Stripe only

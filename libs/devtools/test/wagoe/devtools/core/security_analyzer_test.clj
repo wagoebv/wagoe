@@ -25,23 +25,23 @@
 
 (deftest ^:unit analyze-auth-methods
   (testing "detects auth methods from Integrant keys in config"
-    (let [cfg {:boundary/settings {:features {:mfa {:enabled? true}}}
-               :boundary/auth-service {:some "config"}
-               :boundary/session-repository {:some "repo"}}
+    (let [cfg {:wagoe/settings {:features {:mfa {:enabled? true}}}
+               :wagoe/auth-service {:some "config"}
+               :wagoe/session-repository {:some "repo"}}
           result (sec/analyze-auth-methods cfg)]
       (is (contains? (set (:methods result)) :jwt))
       (is (contains? (set (:methods result)) :session))
       (is (contains? (set (:methods result)) :mfa))))
 
   (testing "returns empty methods when no auth keys are configured"
-    (let [cfg {:boundary/settings {}}
+    (let [cfg {:wagoe/settings {}}
           result (sec/analyze-auth-methods cfg)]
       (is (empty? (:methods result)))
       (is (false? (:mfa-enabled? result))))))
 
 (deftest ^:unit build-security-summary
   (testing "builds complete security summary with runtime data"
-    (let [cfg {:boundary/settings
+    (let [cfg {:wagoe/settings
                {:user-validation
                 {:password-policy {:min-length 12
                                    :require-uppercase? true
@@ -60,7 +60,7 @@
 
 (deftest ^:unit lockout-reads-flat-validation-keys
   (testing "reads :max-failed-attempts and :lockout-duration-minutes from validation config"
-    (let [cfg {:boundary/settings
+    (let [cfg {:wagoe/settings
                {:user-validation
                 {:max-failed-attempts 3
                  :lockout-duration-minutes 30}}}

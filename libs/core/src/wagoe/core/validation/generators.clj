@@ -1,7 +1,7 @@
-;; ^:boundary/allow-throw — property-based test-data generator tooling; the
+;; ^:wagoe/allow-throw — property-based test-data generator tooling; the
 ;; throws signal generation failure (after retries) or misuse of the generator
 ;; API, which is intentional developer tooling behaviour.
-(ns ^:boundary/allow-throw wagoe.core.validation.generators
+(ns ^:wagoe/allow-throw wagoe.core.validation.generators
   "Property-based test data generators for validation testing.
   
    This namespace provides pure functions for generating test data from Malli schemas,

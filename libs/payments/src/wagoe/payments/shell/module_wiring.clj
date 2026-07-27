@@ -1,5 +1,5 @@
 (ns wagoe.payments.shell.module-wiring
-  "Integrant wiring for the :boundary/payment-provider component."
+  "Integrant wiring for the :wagoe/payment-provider component."
   (:require [wagoe.payments.shell.adapters.mock :as mock]
             [wagoe.payments.shell.adapters.mollie :as mollie]
             [wagoe.payments.shell.adapters.stripe :as stripe]
@@ -7,7 +7,7 @@
             [clojure.tools.logging :as log]
             [integrant.core :as ig]))
 
-;; :boundary/payment-provider
+;; :wagoe/payment-provider
 ;; config: {:provider :mock|:mollie|:stripe
 ;;           :api-key "..."            ; mollie or stripe secret key
 ;;           :webhook-secret "..."     ; stripe only
@@ -36,7 +36,7 @@
                      :missing-keys (mapv first missing)
                      :env-vars     (mapv second missing)}))))
 
-(defmethod ig/init-key :boundary/payment-provider
+(defmethod ig/init-key :wagoe/payment-provider
   [_ {:keys [provider api-key webhook-secret webhook-base-url] :as config}]
   (log/infof "Initializing payment provider: %s" provider)
   (case (or provider :mock)
@@ -54,6 +54,6 @@
                      :provider provider
                      :valid    #{:mock :mollie :stripe}}))))
 
-(defmethod ig/halt-key! :boundary/payment-provider
+(defmethod ig/halt-key! :wagoe/payment-provider
   [_ _]
   (log/info "Payment provider halted"))

@@ -225,7 +225,7 @@ The catalogue is loaded once at system startup and shared across requests.
 
 [source,edn]
 ----
-:boundary/i18n {:catalogue-path "boundary/i18n/translations"
+:wagoe/i18n {:catalogue-path "boundary/i18n/translations"
                 :default-locale :en}
 ----
 

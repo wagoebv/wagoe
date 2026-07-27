@@ -56,7 +56,7 @@
    [:timeout   {:optional true} :int]])
 
 ;; =============================================================================
-;; AIConfig — top-level :boundary/ai Integrant config
+;; AIConfig — top-level :wagoe/ai Integrant config
 ;; =============================================================================
 
 (def AIConfig

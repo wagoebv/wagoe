@@ -17,8 +17,8 @@
    :clojars             org.boundary-app/boundary-observability
    :version             "1.0.0-beta-1"
    :category            :core
-   :config-snippet      "  :boundary/metrics\n  {:provider :no-op}\n\n  :boundary/error-reporting\n  {:provider :no-op}\n"
-   :test-config-snippet "  :boundary/metrics\n  {:provider :no-op}\n\n  :boundary/error-reporting\n  {:provider :no-op}\n"
+   :config-snippet      "  :wagoe/metrics\n  {:provider :no-op}\n\n  :wagoe/error-reporting\n  {:provider :no-op}\n"
+   :test-config-snippet "  :wagoe/metrics\n  {:provider :no-op}\n\n  :wagoe/error-reporting\n  {:provider :no-op}\n"
    :add-command         "wagoe add observability"
    :docs-url            "https://github.com/thijs-creemers/boundary/blob/main/libs/observability/AGENTS.md"}
 
@@ -27,7 +27,7 @@
    :clojars             org.boundary-app/boundary-platform
    :version             "1.0.0-beta-1"
    :category            :core
-   :config-snippet      "  :boundary/http\n  {:port #or [#env HTTP_PORT 3000] :host \"0.0.0.0\" :join? false}\n\n  :boundary/router\n  {:adapter :reitit :coercion :malli :middleware []}\n"
+   :config-snippet      "  :wagoe/http\n  {:port #or [#env HTTP_PORT 3000] :host \"0.0.0.0\" :join? false}\n\n  :wagoe/router\n  {:adapter :reitit :coercion :malli :middleware []}\n"
    :test-config-snippet ""
    :add-command         "wagoe add platform"
    :docs-url            "https://github.com/thijs-creemers/boundary/blob/main/libs/platform/AGENTS.md"}
@@ -48,8 +48,8 @@
    :clojars             org.boundary-app/boundary-payments
    :version             "1.0.0-beta-1"
    :category            :optional
-   :config-snippet      "  :boundary/payment-provider\n  {:provider :mock}\n"
-   :test-config-snippet "  :boundary/payment-provider\n  {:provider :mock}\n"
+   :config-snippet      "  :wagoe/payment-provider\n  {:provider :mock}\n"
+   :test-config-snippet "  :wagoe/payment-provider\n  {:provider :mock}\n"
    :add-command         "wagoe add payments"
    :docs-url            "https://github.com/thijs-creemers/boundary/blob/main/libs/payments/AGENTS.md"}
 
@@ -58,8 +58,8 @@
    :clojars             org.boundary-app/boundary-storage
    :version             "1.0.0-beta-1"
    :category            :optional
-   :config-snippet      "  :boundary/storage\n  {:provider :local :root \"uploads\"}\n"
-   :test-config-snippet "  :boundary/storage\n  {:provider :local :root \"/tmp/boundary-test-uploads\"}\n"
+   :config-snippet      "  :wagoe/storage\n  {:provider :local :root \"uploads\"}\n"
+   :test-config-snippet "  :wagoe/storage\n  {:provider :local :root \"/tmp/boundary-test-uploads\"}\n"
    :add-command         "wagoe add storage"
    :docs-url            "https://github.com/thijs-creemers/boundary/blob/main/libs/storage/AGENTS.md"}
 
@@ -68,8 +68,8 @@
    :clojars             org.boundary-app/boundary-jobs
    :version             "1.0.0-beta-1"
    :category            :optional
-   :config-snippet      "  :boundary/jobs\n  {:provider :in-memory}\n"
-   :test-config-snippet "  :boundary/jobs\n  {:provider :in-memory}\n"
+   :config-snippet      "  :wagoe/jobs\n  {:provider :in-memory}\n"
+   :test-config-snippet "  :wagoe/jobs\n  {:provider :in-memory}\n"
    :add-command         "wagoe add jobs"
    :docs-url            "https://github.com/thijs-creemers/boundary/blob/main/libs/jobs/AGENTS.md"}
 
@@ -88,8 +88,8 @@
    :clojars             org.boundary-app/boundary-cache
    :version             "1.0.0-beta-1"
    :category            :optional
-   :config-snippet      "  :boundary/cache\n  {:provider :in-memory :default-ttl 300}\n"
-   :test-config-snippet "  :boundary/cache\n  {:provider :in-memory :default-ttl 300}\n"
+   :config-snippet      "  :wagoe/cache\n  {:provider :in-memory :default-ttl 300}\n"
+   :test-config-snippet "  :wagoe/cache\n  {:provider :in-memory :default-ttl 300}\n"
    :add-command         "wagoe add cache"
    :docs-url            "https://github.com/thijs-creemers/boundary/blob/main/libs/cache/AGENTS.md"}
 
@@ -98,8 +98,8 @@
    :clojars             org.boundary-app/boundary-search
    :version             "1.0.0-beta-1"
    :category            :optional
-   :config-snippet      "  :boundary/search\n  {:provider :in-memory}\n"
-   :test-config-snippet "  :boundary/search\n  {:provider :in-memory}\n"
+   :config-snippet      "  :wagoe/search\n  {:provider :in-memory}\n"
+   :test-config-snippet "  :wagoe/search\n  {:provider :in-memory}\n"
    :add-command         "wagoe add search"
    :docs-url            "https://github.com/thijs-creemers/boundary/blob/main/libs/search/AGENTS.md"}
 
@@ -108,8 +108,8 @@
    :clojars             org.boundary-app/boundary-realtime
    :version             "1.0.0-beta-1"
    :category            :optional
-   :config-snippet      "  :boundary/realtime\n  {:provider :in-memory}\n"
-   :test-config-snippet "  :boundary/realtime\n  {:provider :in-memory}\n"
+   :config-snippet      "  :wagoe/realtime\n  {:provider :in-memory}\n"
+   :test-config-snippet "  :wagoe/realtime\n  {:provider :in-memory}\n"
    :add-command         "wagoe add realtime"
    :docs-url            "https://github.com/thijs-creemers/boundary/blob/main/libs/realtime/AGENTS.md"}
 
@@ -118,8 +118,8 @@
    :clojars             org.boundary-app/boundary-tenant
    :version             "1.0.0-beta-1"
    :category            :optional
-   :config-snippet      "  :boundary/tenant\n  {:strategy :schema-per-tenant}\n"
-   :test-config-snippet "  :boundary/tenant\n  {:strategy :schema-per-tenant}\n"
+   :config-snippet      "  :wagoe/tenant\n  {:strategy :schema-per-tenant}\n"
+   :test-config-snippet "  :wagoe/tenant\n  {:strategy :schema-per-tenant}\n"
    :add-command         "wagoe add tenant"
    :docs-url            "https://github.com/thijs-creemers/boundary/blob/main/libs/tenant/AGENTS.md"}
 
@@ -128,8 +128,8 @@
    :clojars             org.boundary-app/boundary-ai
    :version             "1.0.0-beta-1"
    :category            :optional
-   :config-snippet      "  :boundary/ai-service\n  {:provider :ollama :model #or [#env AI_MODEL \"qwen2.5-coder:7b\"] :base-url #or [#env OLLAMA_URL \"http://localhost:11434\"]}\n"
-   :test-config-snippet "  :boundary/ai-service\n  {:provider :no-op}\n"
+   :config-snippet      "  :wagoe/ai-service\n  {:provider :ollama :model #or [#env AI_MODEL \"qwen2.5-coder:7b\"] :base-url #or [#env OLLAMA_URL \"http://localhost:11434\"]}\n"
+   :test-config-snippet "  :wagoe/ai-service\n  {:provider :no-op}\n"
    :add-command         "wagoe add ai"
    :docs-url            "https://github.com/thijs-creemers/boundary/blob/main/libs/ai/AGENTS.md"}
 
@@ -148,8 +148,8 @@
    :clojars             org.boundary-app/boundary-workflow
    :version             "1.0.0-beta-1"
    :category            :optional
-   :config-snippet      "  :boundary/workflow\n  {:provider :in-memory}\n"
-   :test-config-snippet "  :boundary/workflow\n  {:provider :in-memory}\n"
+   :config-snippet      "  :wagoe/workflow\n  {:provider :in-memory}\n"
+   :test-config-snippet "  :wagoe/workflow\n  {:provider :in-memory}\n"
    :add-command         "wagoe add workflow"
    :docs-url            "https://github.com/thijs-creemers/boundary/blob/main/libs/workflow/AGENTS.md"}
 
@@ -158,8 +158,8 @@
    :clojars             org.boundary-app/boundary-reports
    :version             "1.0.0-beta-1"
    :category            :optional
-   :config-snippet      "  :boundary/reports\n  {:provider :in-memory}\n"
-   :test-config-snippet "  :boundary/reports\n  {:provider :in-memory}\n"
+   :config-snippet      "  :wagoe/reports\n  {:provider :in-memory}\n"
+   :test-config-snippet "  :wagoe/reports\n  {:provider :in-memory}\n"
    :add-command         "wagoe add reports"
    :docs-url            "https://github.com/thijs-creemers/boundary/blob/main/libs/reports/AGENTS.md"}
 
@@ -168,8 +168,8 @@
    :clojars             org.boundary-app/boundary-calendar
    :version             "1.0.0-beta-1"
    :category            :optional
-   :config-snippet      "  :boundary/calendar\n  {:provider :in-memory}\n"
-   :test-config-snippet "  :boundary/calendar\n  {:provider :in-memory}\n"
+   :config-snippet      "  :wagoe/calendar\n  {:provider :in-memory}\n"
+   :test-config-snippet "  :wagoe/calendar\n  {:provider :in-memory}\n"
    :add-command         "wagoe add calendar"
    :docs-url            "https://github.com/thijs-creemers/boundary/blob/main/libs/calendar/AGENTS.md"}
 
@@ -178,8 +178,8 @@
    :clojars             org.boundary-app/boundary-geo
    :version             "1.0.0-beta-1"
    :category            :optional
-   :config-snippet      "  :boundary/geo-service\n  {:provider :openstreetmap}\n"
-   :test-config-snippet "  :boundary/geo-service\n  {:provider :openstreetmap}\n"
+   :config-snippet      "  :wagoe/geo-service\n  {:provider :openstreetmap}\n"
+   :test-config-snippet "  :wagoe/geo-service\n  {:provider :openstreetmap}\n"
    :add-command         "wagoe add geo"
    :docs-url            "https://github.com/thijs-creemers/boundary/blob/main/libs/geo/AGENTS.md"}
 
@@ -188,8 +188,8 @@
    :clojars             org.boundary-app/boundary-i18n
    :version             "1.0.0-beta-1"
    :category            :optional
-   :config-snippet      "  :boundary/i18n\n  {:default-locale :en}\n"
-   :test-config-snippet "  :boundary/i18n\n  {:default-locale :en}\n"
+   :config-snippet      "  :wagoe/i18n\n  {:default-locale :en}\n"
+   :test-config-snippet "  :wagoe/i18n\n  {:default-locale :en}\n"
    :add-command         "wagoe add i18n"
    :docs-url            "https://github.com/thijs-creemers/boundary/blob/main/libs/i18n/AGENTS.md"}
 
@@ -198,8 +198,8 @@
    :clojars             org.boundary-app/boundary-push
    :version             "1.0.0-beta-1"
    :category            :optional
-   :config-snippet      "  :boundary/push\n  {:fcm-credentials #env BND_FCM_CREDENTIALS\n   :apns-credentials {:key-file #env BND_APNS_KEY_FILE\n                      :team-id #env BND_APNS_TEAM_ID\n                      :key-id #env BND_APNS_KEY_ID\n                      :bundle-id #env BND_APNS_BUNDLE_ID}}\n"
-   :test-config-snippet "  :boundary/push\n  {:provider :mock}\n"
+   :config-snippet      "  :wagoe/push\n  {:fcm-credentials #env WAG_FCM_CREDENTIALS\n   :apns-credentials {:key-file #env WAG_APNS_KEY_FILE\n                      :team-id #env WAG_APNS_TEAM_ID\n                      :key-id #env WAG_APNS_KEY_ID\n                      :bundle-id #env WAG_APNS_BUNDLE_ID}}\n"
+   :test-config-snippet "  :wagoe/push\n  {:provider :mock}\n"
    :add-command         "wagoe add push"
    :docs-url            "https://github.com/thijs-creemers/boundary/blob/main/libs/push/AGENTS.md"}
 
@@ -208,8 +208,8 @@
    :clojars             org.boundary-app/boundary-audience
    :version             "1.0.0-beta-1"
    :category            :optional
-   :config-snippet      "  :boundary/audience\n  {:db-ctx #ig/ref :boundary/db-context\n   :cache-service #ig/ref :boundary/cache\n   :user-data-source #ig/ref :boundary/user-data-source}\n"
-   :test-config-snippet "  :boundary/audience\n  {:db-ctx #ig/ref :boundary/db-context}\n"
+   :config-snippet      "  :wagoe/audience\n  {:db-ctx #ig/ref :wagoe/db-context\n   :cache-service #ig/ref :wagoe/cache\n   :user-data-source #ig/ref :wagoe/user-data-source}\n"
+   :test-config-snippet "  :wagoe/audience\n  {:db-ctx #ig/ref :wagoe/db-context}\n"
    :add-command         "wagoe add audience"
    :docs-url            "https://github.com/thijs-creemers/boundary/blob/main/libs/audience/AGENTS.md"}
 
@@ -218,8 +218,8 @@
    :clojars             org.boundary-app/boundary-admin
    :version             "1.0.0-beta-1"
    :category            :optional
-   :config-snippet      "  :boundary/admin\n  {:enabled? true :base-path \"/web/admin\" :require-role :admin}\n"
-   :test-config-snippet "  :boundary/admin\n  {:enabled? true :base-path \"/web/admin\" :require-role :admin}\n"
+   :config-snippet      "  :wagoe/admin\n  {:enabled? true :base-path \"/web/admin\" :require-role :admin}\n"
+   :test-config-snippet "  :wagoe/admin\n  {:enabled? true :base-path \"/web/admin\" :require-role :admin}\n"
    :add-command         "wagoe add admin"
    :docs-url            "https://github.com/thijs-creemers/boundary/blob/main/libs/admin/AGENTS.md"}
 
@@ -228,7 +228,7 @@
    :clojars             org.boundary-app/boundary-ui-style
    :version             "1.0.0-beta-1"
    :category            :optional
-   :config-snippet      "  :boundary/ui-style\n  {:bundle :base}\n"
+   :config-snippet      "  :wagoe/ui-style\n  {:bundle :base}\n"
    :test-config-snippet ""
    :add-command         "wagoe add ui-style"
    :docs-url            "https://github.com/thijs-creemers/boundary/blob/main/libs/ui-style/AGENTS.md"}]}

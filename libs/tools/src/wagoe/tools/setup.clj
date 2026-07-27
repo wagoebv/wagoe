@@ -63,7 +63,7 @@
 ;; =============================================================================
 
 (defn- settings-template [project-name env]
-  (str "  :boundary/settings\n"
+  (str "  :wagoe/settings\n"
        "  {:name              \"" project-name "-" env "\"\n"
        "   :version           \"0.1.0\"\n"
        "   :date-format       \"yyyy-MM-dd\"\n"
@@ -74,7 +74,7 @@
 (defn- postgresql-template [env]
   (if (= env "test")
     ""  ; test uses H2
-    (str "  :boundary/postgresql\n"
+    (str "  :wagoe/postgresql\n"
          "  {:host        #or [#env POSTGRES_HOST \"localhost\"]\n"
          "   :port        #or [#long #or [#env POSTGRES_PORT 5432] 5432]\n"
          "   :dbname      #or [#env POSTGRES_DB \"" "boundary_" env "\"]\n"
@@ -88,7 +88,7 @@
 (defn- sqlite-template [env]
   (if (= env "test")
     ""
-    (str "  :boundary/sqlite\n"
+    (str "  :wagoe/sqlite\n"
          "  {:db   \"" env "-database.db\"\n"
          "   :pool {:minimum-idle          1\n"
          "          :maximum-pool-size     3\n"
@@ -97,7 +97,7 @@
 (defn- mysql-template [env]
   (if (= env "test")
     ""
-    (str "  :boundary/mysql\n"
+    (str "  :wagoe/mysql\n"
          "  {:host     #or [#env MYSQL_HOST \"localhost\"]\n"
          "   :port     #or [#long #or [#env MYSQL_PORT 3306] 3306]\n"
          "   :dbname   #or [#env MYSQL_DB \"boundary_" env "\"]\n"
@@ -109,38 +109,38 @@
 
 (defn- h2-template [env]
   (if (= env "test")
-    (str "  :boundary/h2\n"
+    (str "  :wagoe/h2\n"
          "  {:memory true\n"
          "   :pool   {:minimum-idle 1\n"
          "            :maximum-pool-size 5\n"
          "            :connection-timeout-ms 5000}}\n")
-    (str "  :boundary/h2\n"
+    (str "  :wagoe/h2\n"
          "  {:memory true\n"
          "   :pool   {:minimum-idle      1\n"
          "            :maximum-pool-size 10}}\n")))
 
 (defn- http-template [_env]
-  (str "  :boundary/http\n"
+  (str "  :wagoe/http\n"
        "  {:port       #or [#env HTTP_PORT 3000]\n"
        "   :host       #or [#env HTTP_HOST \"0.0.0.0\"]\n"
        "   :join?      false\n"
        "   :port-range {:start 3000 :end 3099}}\n"))
 
 (defn- router-template [_env]
-  (str "  :boundary/router\n"
+  (str "  :wagoe/router\n"
        "  {:adapter    :reitit\n"
        "   :coercion   :malli\n"
        "   :middleware []}\n"))
 
 (defn- logging-template [env]
   (if (= env "test")
-    (str "  :boundary/logging\n"
+    (str "  :wagoe/logging\n"
          "  {:level     :debug\n"
          "   :console   true\n"
          "   :appenders [{:appender       :rolling-file\n"
          "                :file           \"logs/boundary-test.log\"\n"
          "                :rolling-policy {:type :time-based :max-history 3}}]}\n")
-    (str "  :boundary/logging\n"
+    (str "  :wagoe/logging\n"
          "  {:provider     :slf4j\n"
          "   :level        :debug\n"
          "   :logger-name  \"boundary\"\n"
@@ -148,10 +148,10 @@
          "                  :environment \"" (if (= env "prod") "production" "development") "\"}}\n")))
 
 (defn- observability-template [_env]
-  (str "  :boundary/metrics\n"
+  (str "  :wagoe/metrics\n"
        "  {:provider :no-op}\n"
        "\n"
-       "  :boundary/error-reporting\n"
+       "  :wagoe/error-reporting\n"
        "  {:provider :no-op}\n"))
 
 (defn- ai-template [provider env]
@@ -159,25 +159,25 @@
     :none ""
     :ollama
     (if (= env "test")
-      (str "  :boundary/ai-service\n"
+      (str "  :wagoe/ai-service\n"
            "  {:provider :no-op}\n")
-      (str "  :boundary/ai-service\n"
+      (str "  :wagoe/ai-service\n"
            "  {:provider :ollama\n"
            "   :model    #or [#env AI_MODEL \"qwen2.5-coder:7b\"]\n"
            "   :base-url #or [#env OLLAMA_URL \"http://localhost:11434\"]}\n"))
     :anthropic
     (if (= env "test")
-      (str "  :boundary/ai-service\n"
+      (str "  :wagoe/ai-service\n"
            "  {:provider :no-op}\n")
-      (str "  :boundary/ai-service\n"
+      (str "  :wagoe/ai-service\n"
            "  {:provider :anthropic\n"
            "   :model    #or [#env AI_MODEL \"claude-haiku-4-5-20251001\"]\n"
            "   :api-key  #env ANTHROPIC_API_KEY}\n"))
     :openai
     (if (= env "test")
-      (str "  :boundary/ai-service\n"
+      (str "  :wagoe/ai-service\n"
            "  {:provider :no-op}\n")
-      (str "  :boundary/ai-service\n"
+      (str "  :wagoe/ai-service\n"
            "  {:provider :openai\n"
            "   :model    #or [#env AI_MODEL \"gpt-4o-mini\"]\n"
            "   :api-key  #env OPENAI_API_KEY}\n"))))
@@ -186,21 +186,21 @@
   (case provider
     :none ""
     :mock
-    (str "  :boundary/payment-provider\n"
+    (str "  :wagoe/payment-provider\n"
          "  {:provider :mock}\n")
     :stripe
     (if (= env "test")
-      (str "  :boundary/payment-provider\n"
+      (str "  :wagoe/payment-provider\n"
            "  {:provider :mock}\n")
-      (str "  :boundary/payment-provider\n"
+      (str "  :wagoe/payment-provider\n"
            "  {:provider :stripe\n"
            "   :api-key  #env STRIPE_SECRET_KEY\n"
            "   :webhook-secret #env STRIPE_WEBHOOK_SECRET}\n"))
     :mollie
     (if (= env "test")
-      (str "  :boundary/payment-provider\n"
+      (str "  :wagoe/payment-provider\n"
            "  {:provider :mock}\n")
-      (str "  :boundary/payment-provider\n"
+      (str "  :wagoe/payment-provider\n"
            "  {:provider :mollie\n"
            "   :api-key  #env MOLLIE_API_KEY}\n"))))
 
@@ -208,15 +208,15 @@
   (case provider
     :none ""
     :in-memory
-    (str "  :boundary/cache\n"
+    (str "  :wagoe/cache\n"
          "  {:provider    :in-memory\n"
          "   :default-ttl 300}\n")
     :redis
     (if (= env "test")
-      (str "  :boundary/cache\n"
+      (str "  :wagoe/cache\n"
            "  {:provider    :in-memory\n"
            "   :default-ttl 300}\n")
-      (str "  :boundary/cache\n"
+      (str "  :wagoe/cache\n"
            "  {:provider    :redis\n"
            "   :host        #or [#env REDIS_HOST \"localhost\"]\n"
            "   :port        #or [#long #or [#env REDIS_PORT 6379] 6379]\n"
@@ -243,7 +243,7 @@
 (defn- admin-template [enabled? _env]
   (if-not enabled?
     ""
-    (str "  :boundary/admin\n"
+    (str "  :wagoe/admin\n"
          "  {:enabled?         true\n"
          "   :base-path        \"/web/admin\"\n"
          "   :require-role     :admin\n"

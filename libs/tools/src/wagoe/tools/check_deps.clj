@@ -69,9 +69,12 @@
    Maps wagoe.shared.* to 'shared-ui' (those namespaces live in libs/shared-ui/src/)."
   [ns-str]
   (let [parts (str/split ns-str #"\.")]
-    (when (and (>= (count parts) 2) (= "boundary" (first parts)))
-      (if (= "shared" (second parts))
-        "shared-ui"
+    (when (and (>= (count parts) 2) (= "wagoe" (first parts)))
+      (case (second parts)
+        ;; namespace segment differs from the lib dir name
+        "shared" "shared-ui"      ; wagoe.shared.* lives in libs/shared-ui/
+        "cli"    "wagoe-cli"      ; wagoe.cli.*  lives in libs/wagoe-cli/
+        "mcp"    "wagoe-mcp"      ; wagoe.mcp.*  lives in libs/wagoe-mcp/
         (second parts)))))
 
 ;; ---------------------------------------------------------------------------

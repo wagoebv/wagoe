@@ -57,7 +57,7 @@
 (defn strip-refs
   "Replace ig/ref values with a keyword placeholder for serialization.
    Encodes the full qualified key (namespace + name) so restore-refs can
-   round-trip refs with any namespace, not just :boundary/*."
+   round-trip refs with any namespace, not just :wagoe/*."
   [v]
   (cond
     (ig/ref? v) (let [k (ig/ref-key v)]

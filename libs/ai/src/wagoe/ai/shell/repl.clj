@@ -21,7 +21,7 @@
    Bind this in your REPL session or dev/user.clj:
 
      (alter-var-root #'wagoe.ai.shell.repl/*ai-service*
-                     (constantly (integrant.repl.state/system :boundary/ai-service)))"
+                     (constantly (integrant.repl.state/system :wagoe/ai-service)))"
   nil)
 
 (defn set-service!
@@ -39,7 +39,7 @@
 (defn- require-service []
   (or *ai-service*
       (throw (ex-info "No AI service bound. Call (ai/set-service! system-service) first."
-                      {:hint "Try: (ai/set-service! (integrant.repl.state/system :boundary/ai-service))"}))))
+                      {:hint "Try: (ai/set-service! (integrant.repl.state/system :wagoe/ai-service))"}))))
 
 ;; =============================================================================
 ;; Feature 2: Error Explainer REPL wrapper
@@ -246,7 +246,7 @@
 
 First, bind the service:
   (require '[wagoe.ai.shell.repl :as ai])
-  (ai/set-service! (integrant.repl.state/system :boundary/ai-service))
+  (ai/set-service! (integrant.repl.state/system :wagoe/ai-service))
 
 Commands:
   (ai/explain *e)                    \u2014 explain last exception

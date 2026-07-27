@@ -1,5 +1,5 @@
 (ns wagoe.realtime.shell.module-wiring-test
-  "Verifies the :boundary/realtime Integrant key is registered and boots a
+  "Verifies the :wagoe/realtime Integrant key is registered and boots a
    working service. Guards against the regression where the defmethod was never
    loaded by the platform bootstrap. Uses the :in-memory provider — no Redis."
   {:kaocha.testable/meta {:integration true :realtime true}}
@@ -11,10 +11,10 @@
             [wagoe.realtime.shell.module-wiring]))
 
 (deftest ^:unit init-key-registered-test
-  (testing ":boundary/realtime has registered Integrant init and halt methods"
-    (is (contains? (methods ig/init-key) :boundary/realtime)
+  (testing ":wagoe/realtime has registered Integrant init and halt methods"
+    (is (contains? (methods ig/init-key) :wagoe/realtime)
         "init-key defmethod must be registered (else system startup fails with 'no method for key')")
-    (is (contains? (methods ig/halt-key!) :boundary/realtime)
+    (is (contains? (methods ig/halt-key!) :wagoe/realtime)
         "halt-key! defmethod must be registered")))
 
 (deftest ^:integration in-memory-init-halt-roundtrip-test
@@ -24,7 +24,7 @@
                          :user-id (java.util.UUID/randomUUID)
                          :email "a@example.com"
                          :roles #{:user}})
-          component (ig/init-key :boundary/realtime
+          component (ig/init-key :wagoe/realtime
                                  {:provider :in-memory
                                   :jwt-verifier jwt-verifier})]
       (try
@@ -33,4 +33,4 @@
         (testing "broadcast with no connections returns 0 (synchronous in-memory)"
           (is (= 0 (ports/broadcast (:service component) {:type :x :payload {}}))))
         (finally
-          (ig/halt-key! :boundary/realtime component))))))
+          (ig/halt-key! :wagoe/realtime component))))))

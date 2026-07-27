@@ -1064,24 +1064,24 @@ Distributed under the Eclipse Public License version 2.0.
   "Generate initial config.edn for a new project."
   [name]
   (format ";; config.edn - Development configuration for %s
-{:boundary/app
+{:wagoe/app
  {:name \"%s\"
   :version \"0.1.0\"
   :env :development}
 
- :boundary/db-context
+ :wagoe/db-context
  {:datasource
   {:jdbcUrl \"jdbc:sqlite:dev-database.db\"
    :driverClassName \"org.sqlite.JDBC\"
    :maximumPoolSize 5
    :connectionTimeout 30000}}
 
- :boundary/http-server
+ :wagoe/http-server
  {:port 3000
   :host \"0.0.0.0\"
-  :handler #ig/ref :boundary/handler}
+  :handler #ig/ref :wagoe/handler}
 
- :boundary/handler
+ :wagoe/handler
  {:routes [[\"/health\" {:get {:handler (fn [_] {:status 200 :body {:status \"ok\"}})}}]
            [\"/\" {:get {:handler (fn [_] {:status 200 :body \"%s is running\"})}}]]}}
 "
@@ -1118,13 +1118,13 @@ Distributed under the Eclipse Public License version 2.0.
 ;; Integrant Component: Database Context
 ;; =============================================================================
 
-(defmethod ig/init-key :boundary/db-context
+(defmethod ig/init-key :wagoe/db-context
   [_ {:keys [datasource]}]
   (println \"Starting database connection pool...\")
   (let [ds (connection/->pool HikariDataSource datasource)]
     {:datasource ds}))
 
-(defmethod ig/halt-key! :boundary/db-context
+(defmethod ig/halt-key! :wagoe/db-context
   [_ {:keys [datasource]}]
   (println \"Stopping database connection pool...\")
   (.close ^HikariDataSource datasource))
@@ -1133,7 +1133,7 @@ Distributed under the Eclipse Public License version 2.0.
 ;; Integrant Component: HTTP Handler
 ;; =============================================================================
 
-(defmethod ig/init-key :boundary/handler
+(defmethod ig/init-key :wagoe/handler
   [_ {:keys [routes]}]
   (println \"Creating HTTP handler...\")
   (ring/ring-handler
@@ -1143,7 +1143,7 @@ Distributed under the Eclipse Public License version 2.0.
 ;; Integrant Component: HTTP Server
 ;; =============================================================================
 
-(defmethod ig/init-key :boundary/http-server
+(defmethod ig/init-key :wagoe/http-server
   [_ {:keys [port host handler]}]
   (println (str \"Starting HTTP server on \" host \":\" port \"...\"))
   (jetty/run-jetty handler
@@ -1151,7 +1151,7 @@ Distributed under the Eclipse Public License version 2.0.
                     :host host
                     :join? false}))
 
-(defmethod ig/halt-key! :boundary/http-server
+(defmethod ig/halt-key! :wagoe/http-server
   [_ server]
   (println \"Stopping HTTP server...\")
   (.stop server))
@@ -1188,7 +1188,7 @@ Distributed under the Eclipse Public License version 2.0.
   (ig-repl/halt)
   
   ;; Get database connection
-  (def db (get-in integrant.repl.state/system [:boundary/db-context :datasource]))
+  (def db (get-in integrant.repl.state/system [:wagoe/db-context :datasource]))
   
   ;; Test query
   (jdbc/execute! db [\"SELECT 1\"])

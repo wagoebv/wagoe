@@ -25,8 +25,8 @@
       (with-redefs [db-config/get-active-db-configs
                     (fn [env]
                       (is (= "test" env))
-                      {:boundary/sqlite {:adapter :sqlite :database-path "dev.db"}
-                       :boundary/h2 {:adapter :h2 :database-path "mem:test"}})
+                      {:wagoe/sqlite {:adapter :sqlite :database-path "dev.db"}
+                       :wagoe/h2 {:adapter :h2 :database-path "mem:test"}})
                     wagoe.platform.shell.adapters.database.config-factory/create-config-adapter
                     (fn [adapter-type env]
                       (is (= :sqlite adapter-type))
@@ -41,9 +41,9 @@
                       ::datasource)]
       (is (= {:adapter adapter
               :datasource ::datasource
-              :config-key :boundary/sqlite
+              :config-key :wagoe/sqlite
               :environment "test"}
-             (sut/create-config-context "test" :boundary/sqlite))))))
+             (sut/create-config-context "test" :wagoe/sqlite))))))
 
 (deftest ^:unit get-default-context-prefers-sqlite-when-available
   (let [sqlite-ctx {:adapter (adapter-stub :sqlite)
@@ -52,8 +52,8 @@
                 :datasource ::h2-ds}]
     (with-redefs [wagoe.platform.shell.adapters.database.config-factory/create-active-contexts
                   (fn [_]
-                    {:boundary/h2 h2-ctx
-                     :boundary/sqlite sqlite-ctx})]
+                    {:wagoe/h2 h2-ctx
+                     :wagoe/sqlite sqlite-ctx})]
       (is (= {:adapter (:adapter sqlite-ctx)
               :datasource ::sqlite-ds}
              (sut/get-default-context "test"))))))
@@ -62,26 +62,26 @@
   (testing "active contexts are created for every active config"
     (with-redefs [wagoe.platform.shell.adapters.database.config/get-active-db-configs
                   (fn [_]
-                    {:boundary/sqlite {:adapter :sqlite}
-                     :boundary/h2 {:adapter :h2}})
+                    {:wagoe/sqlite {:adapter :sqlite}
+                     :wagoe/h2 {:adapter :h2}})
                   wagoe.platform.shell.adapters.database.config-factory/create-config-context
                   (fn [env config-key]
                     {:environment env
                      :config-key config-key
                      :adapter (adapter-stub (case config-key
-                                              :boundary/sqlite :sqlite
+                                              :wagoe/sqlite :sqlite
                                               :h2))
                      :datasource config-key})]
-      (is (= #{:boundary/sqlite :boundary/h2}
+      (is (= #{:wagoe/sqlite :wagoe/h2}
              (set (keys (sut/create-active-contexts "test")))))))
 
   (testing "health-check records healthy and unhealthy adapters and closes pools"
     (let [closed (atom [])]
       (with-redefs [wagoe.platform.shell.adapters.database.config-factory/create-active-contexts
                     (fn [_]
-                      {:boundary/sqlite {:adapter (adapter-stub :sqlite)
+                      {:wagoe/sqlite {:adapter (adapter-stub :sqlite)
                                          :datasource ::sqlite-ds}
-                       :boundary/postgresql {:adapter (adapter-stub :postgresql)
+                       :wagoe/postgresql {:adapter (adapter-stub :postgresql)
                                              :datasource ::pg-ds}})
                     wagoe.platform.shell.adapters.database.common.core/execute-query!
                     (fn [ctx _]
@@ -92,9 +92,9 @@
                     (fn [datasource]
                       (swap! closed conj datasource))]
         (let [result (sut/health-check "test")]
-          (is (= :healthy (get-in result [:boundary/sqlite :status])))
-          (is (= :unhealthy (get-in result [:boundary/postgresql :status])))
-          (is (= "query boom" (get-in result [:boundary/postgresql :error])))
+          (is (= :healthy (get-in result [:wagoe/sqlite :status])))
+          (is (= :unhealthy (get-in result [:wagoe/postgresql :status])))
+          (is (= "query boom" (get-in result [:wagoe/postgresql :error])))
           (is (= [::sqlite-ds ::pg-ds] @closed))))))
 
   (testing "config validation delegates directly to db-config"
@@ -126,7 +126,7 @@
                     (fn [datasource]
                       (swap! closed conj datasource))]
         (is (= :config-ok
-               (sut/with-config-context "test" :boundary/sqlite (fn [_] :config-ok))))
+               (sut/with-config-context "test" :wagoe/sqlite (fn [_] :config-ok))))
         (is (= :default-ok
                (sut/with-default-context "test" (fn [_] :default-ok))))
         (is (= [::config-ds ::default-ds] @closed)))))
@@ -174,15 +174,15 @@
     (with-redefs [wagoe.platform.shell.adapters.database.config/detect-environment (constantly "detected")
                   wagoe.platform.shell.adapters.database.config-factory/create-active-contexts
                   (fn
-                    ([] {:boundary/sqlite {:datasource ::detected-ds}})
+                    ([] {:wagoe/sqlite {:datasource ::detected-ds}})
                     ([env]
                      (is (= "detected" env))
-                     {:boundary/sqlite {:datasource ::detected-ds}}))
+                     {:wagoe/sqlite {:datasource ::detected-ds}}))
                   wagoe.platform.shell.adapters.database.common.core/close-connection-pool!
                   (fn [_] nil)]
       (is (= {:datasource ::detected-ds}
              (sut/get-default-context)))
-      (is (= {:boundary/sqlite {:datasource ::detected-ds}}
+      (is (= {:wagoe/sqlite {:datasource ::detected-ds}}
              (sut/create-active-contexts)))
       (is (= :ok
              (sut/with-default-context (fn [_] :ok)))))))
@@ -191,16 +191,16 @@
   (testing "missing config keys produce a useful error message"
     (with-redefs [wagoe.platform.shell.adapters.database.config/get-active-db-configs
                   (fn [_]
-                    {:boundary/sqlite {:adapter :sqlite}
-                     :boundary/h2 {:adapter :h2}})]
+                    {:wagoe/sqlite {:adapter :sqlite}
+                     :wagoe/h2 {:adapter :h2}})]
       (is (thrown-with-msg? IllegalArgumentException
-                            #"Configuration key :boundary/postgresql not found in active configs"
-                            (sut/create-config-context "test" :boundary/postgresql)))))
+                            #"Configuration key :wagoe/postgresql not found in active configs"
+                            (sut/create-config-context "test" :wagoe/postgresql)))))
 
   (testing "create-active-contexts rethrows context creation failures"
     (with-redefs [wagoe.platform.shell.adapters.database.config/get-active-db-configs
                   (fn [_]
-                    {:boundary/sqlite {:adapter :sqlite}})
+                    {:wagoe/sqlite {:adapter :sqlite}})
                   wagoe.platform.shell.adapters.database.config-factory/create-config-context
                   (fn [_ _]
                     (throw (ex-info "context boom" {})))]
@@ -212,7 +212,7 @@
     (let [closed (atom [])]
       (with-redefs [wagoe.platform.shell.adapters.database.config-factory/create-active-contexts
                     (fn [_]
-                      {:boundary/sqlite {:adapter (adapter-stub :sqlite)
+                      {:wagoe/sqlite {:adapter (adapter-stub :sqlite)
                                          :datasource ::sqlite-ds}})
                     wagoe.platform.shell.adapters.database.common.core/execute-query!
                     (fn [_ _]
@@ -221,7 +221,7 @@
                     (fn [datasource]
                       (swap! closed conj datasource))]
         (let [result (sut/health-check "test")]
-          (is (= :unhealthy (get-in result [:boundary/sqlite :status])))
+          (is (= :unhealthy (get-in result [:wagoe/sqlite :status])))
           (is (= [::sqlite-ds] @closed))))))
 
   (testing "with-context helpers close datasources on exceptions"
@@ -235,7 +235,7 @@
                       (swap! closed conj datasource))]
         (is (thrown-with-msg? clojure.lang.ExceptionInfo
                               #"config path failure"
-                              (sut/with-config-context "test" :boundary/sqlite
+                              (sut/with-config-context "test" :wagoe/sqlite
                                 (fn [_] (throw (ex-info "config path failure" {}))))))
         (is (thrown-with-msg? clojure.lang.ExceptionInfo
                               #"default path failure"
@@ -245,37 +245,37 @@
 
 (deftest ^:unit compatibility-helper-functions
   (testing "supported adapter helpers expose the expected compatibility surface"
-    (is (true? (sut/adapter-supported? :boundary/sqlite)))
-    (is (false? (sut/adapter-supported? :boundary/unknown)))
-    (is (= [:boundary/sqlite :boundary/h2 :boundary/postgresql :boundary/mysql :boundary/settings :boundary/logging]
+    (is (true? (sut/adapter-supported? :wagoe/sqlite)))
+    (is (false? (sut/adapter-supported? :wagoe/unknown)))
+    (is (= [:wagoe/sqlite :wagoe/h2 :wagoe/postgresql :wagoe/mysql :wagoe/settings :wagoe/logging]
            (sut/list-available-adapters))))
 
   (testing "adapter config validation handles positive and negative cases"
-    (is (true? (sut/valid-adapter-config? :boundary/sqlite {:db "dev.db"})))
-    (is (true? (sut/valid-adapter-config? :boundary/h2 {:memory true})))
-    (is (true? (sut/valid-adapter-config? :boundary/postgresql
+    (is (true? (sut/valid-adapter-config? :wagoe/sqlite {:db "dev.db"})))
+    (is (true? (sut/valid-adapter-config? :wagoe/h2 {:memory true})))
+    (is (true? (sut/valid-adapter-config? :wagoe/postgresql
                                           {:host "localhost" :port 5432 :dbname "app" :user "u" :password "p"})))
-    (is (true? (sut/valid-adapter-config? :boundary/settings {:anything true})))
-    (is (false? (sut/valid-adapter-config? :boundary/sqlite {:db 42})))
-    (is (false? (sut/valid-adapter-config? :boundary/postgresql {:host "localhost"})))
-    (is (false? (sut/valid-adapter-config? :boundary/unknown {:db "x"}))))
+    (is (true? (sut/valid-adapter-config? :wagoe/settings {:anything true})))
+    (is (false? (sut/valid-adapter-config? :wagoe/sqlite {:db 42})))
+    (is (false? (sut/valid-adapter-config? :wagoe/postgresql {:host "localhost"})))
+    (is (false? (sut/valid-adapter-config? :wagoe/unknown {:db "x"}))))
 
   (testing "create-adapter and create-active-adapters validate inputs and produce compatible adapters"
     (is (thrown-with-msg? IllegalArgumentException
                           #"Configuration cannot be null"
-                          (sut/create-adapter :boundary/sqlite nil)))
+                          (sut/create-adapter :wagoe/sqlite nil)))
     (is (thrown-with-msg? IllegalArgumentException
                           #"Unsupported adapter type"
-                          (sut/create-adapter :boundary/unknown {})))
+                          (sut/create-adapter :wagoe/unknown {})))
     (is (thrown-with-msg? IllegalArgumentException
-                          #"Invalid configuration for adapter type: :boundary/sqlite"
-                          (sut/create-adapter :boundary/sqlite {:db 42})))
-    (let [sqlite-adapter (sut/create-adapter :boundary/sqlite {:db "dev.db"})
-          active (sut/create-active-adapters {:active {:boundary/sqlite {:db "dev.db"}}
-                                              :boundary/unknown {:db "ignored"}})]
+                          #"Invalid configuration for adapter type: :wagoe/sqlite"
+                          (sut/create-adapter :wagoe/sqlite {:db 42})))
+    (let [sqlite-adapter (sut/create-adapter :wagoe/sqlite {:db "dev.db"})
+          active (sut/create-active-adapters {:active {:wagoe/sqlite {:db "dev.db"}}
+                                              :wagoe/unknown {:db "ignored"}})]
       (is (= :sqlite (protocols/dialect sqlite-adapter)))
       (is (= "jdbc:sqlite:dev.db" (protocols/jdbc-url sqlite-adapter {})))
-      (is (= #{:boundary/sqlite} (set (keys active))))
+      (is (= #{:wagoe/sqlite} (set (keys active))))
       (is (thrown-with-msg? IllegalArgumentException
                             #"Configuration must contain an :active section"
                             (sut/create-active-adapters {})))

@@ -66,7 +66,7 @@ resources/conf/dev/
 [source,clojure]
 ----
 ;; config.edn — include all entity configs
-:boundary/admin
+:wagoe/admin
 {:enabled?   true
  :entities   #merge [#include "admin/users.edn"
                      #include "admin/products.edn"]

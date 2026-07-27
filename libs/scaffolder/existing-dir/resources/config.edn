@@ -1,11 +1,11 @@
-{:boundary/settings
-  {:env #env BND_ENV
+{:wagoe/settings
+  {:env #env WAG_ENV
    :modules []}
 
- :boundary/db
+ :wagoe/db
   {:adapter "sqlite"
    :dbname "dev-database.db"}
 
- :boundary/http
+ :wagoe/http
   {:port 3000}
 }

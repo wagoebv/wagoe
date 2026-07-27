@@ -45,26 +45,26 @@ Add to `resources/conf/{env}/config.edn` and require `boundary.geo.shell.module-
 
 ```edn
 ;; OpenStreetMap (free, no key)
-:boundary/geo-service
+:wagoe/geo-service
 {:provider   :openstreetmap
  :user-agent "MyApp/1.0 (contact@example.com)"
  :cache-ttl  86400
- :db         #ig/ref :boundary/db}
+ :db         #ig/ref :wagoe/db}
 
 ;; Google Maps
-:boundary/geo-service
+:wagoe/geo-service
 {:provider  :google
- :api-key   #env BND_GEO_API_KEY
+ :api-key   #env WAG_GEO_API_KEY
  :cache-ttl 86400
- :db        #ig/ref :boundary/db}
+ :db        #ig/ref :wagoe/db}
 
 ;; Fallback chain (try OSM first, then Google)
-:boundary/geo-service
+:wagoe/geo-service
 {:provider   [:openstreetmap :google]
- :api-key    #env BND_GEO_API_KEY
+ :api-key    #env WAG_GEO_API_KEY
  :cache-ttl  86400
  :rate-limit 1
- :db         #ig/ref :boundary/db}
+ :db         #ig/ref :wagoe/db}
 ```
 
 ---

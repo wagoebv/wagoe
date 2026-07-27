@@ -148,7 +148,7 @@
    sdk (hold it to flush/shutdown on halt)."
   ^OpenTelemetrySdk [{:keys [endpoint service-name timeout-ms headers]
                       :or   {endpoint     "http://localhost:4318"
-                             service-name "boundary"
+                             service-name "wagoe"
                              timeout-ms   10000}}]
   (let [eb        (-> (OtlpHttpSpanExporter/builder)
                       (.setEndpoint (traces-endpoint endpoint))

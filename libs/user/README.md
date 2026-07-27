@@ -55,7 +55,7 @@ Complete user management and authentication system with MFA support, session man
 
 ```clojure
 ;; config.edn
-{:boundary/user-service
+{:wagoe/user-service
  {:jwt-secret #env JWT_SECRET
   :jwt-expiration-hours 24
   :session-expiration-hours 168  ; 7 days
@@ -64,8 +64,8 @@ Complete user management and authentication system with MFA support, session man
   :lockout-duration-minutes 15
   :mfa-enabled? true}
  
- :boundary/user-repository
- {:db-context #ig/ref :boundary/db-context}}
+ :wagoe/user-repository
+ {:db-context #ig/ref :wagoe/db-context}}
 ```
 
 ### User Service API

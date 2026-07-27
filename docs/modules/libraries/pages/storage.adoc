@@ -83,10 +83,10 @@ Includes file validation, image processing, and signed URL generation.
 [source,clojure]
 ----
 ;; Local (development)
-:boundary/storage {:backend :local :base-path "/var/uploads" :base-url "http://localhost:3000/uploads"}
+:wagoe/storage {:backend :local :base-path "/var/uploads" :base-url "http://localhost:3000/uploads"}
 
 ;; S3 (production)
-:boundary/storage {:backend :s3 :bucket #env AWS_S3_BUCKET :region #env AWS_REGION
+:wagoe/storage {:backend :s3 :bucket #env AWS_S3_BUCKET :region #env AWS_REGION
                    :access-key #env AWS_ACCESS_KEY_ID :secret-key #env AWS_SECRET_ACCESS_KEY}
 ----
 

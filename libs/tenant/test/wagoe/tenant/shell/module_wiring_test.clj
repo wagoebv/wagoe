@@ -22,7 +22,7 @@
         tenant-service ::tenant-service
         membership-service ::membership-service
         db-context {:datasource ::db}
-        config {:active {:boundary/settings {:name "Boundary"}}}]
+        config {:active {:wagoe/settings {:name "Boundary"}}}]
     (with-redefs [wagoe.tenant.shell.persistence/initialize-tenant-schema! (fn [arg]
                                                                                 (is (= ctx arg))
                                                                                 :initialized)
@@ -71,42 +71,42 @@
                                                                                        {:api [{:path "/tenants/:tenant-id/memberships"}]})]
       (testing "schema, repositories, services, and routes initialize through their constructors"
         (is (= {:status :initialized}
-               (ig/init-key :boundary/tenant-db-schema {:ctx ctx})))
+               (ig/init-key :wagoe/tenant-db-schema {:ctx ctx})))
         (is (= tenant-repo
-               (ig/init-key :boundary/tenant-repository {:ctx ctx
+               (ig/init-key :wagoe/tenant-repository {:ctx ctx
                                                          :logger logger
                                                          :error-reporter error-reporter})))
         (is (= tenant-service
-               (ig/init-key :boundary/tenant-service {:tenant-repository tenant-repo
+               (ig/init-key :wagoe/tenant-service {:tenant-repository tenant-repo
                                                       :validation-config {:password-policy {:min-length 12}}
                                                       :logger logger
                                                       :metrics-emitter metrics
                                                       :error-reporter error-reporter})))
         (is (= membership-repo
-               (ig/init-key :boundary/membership-repository {:ctx ctx
+               (ig/init-key :wagoe/membership-repository {:ctx ctx
                                                              :logger logger
                                                              :error-reporter error-reporter})))
         (is (= membership-service
-               (ig/init-key :boundary/membership-service {:repository membership-repo
+               (ig/init-key :wagoe/membership-service {:repository membership-repo
                                                           :logger logger
                                                           :metrics-emitter metrics
                                                           :error-reporter error-reporter})))
         (is (= invite-repo
-               (ig/init-key :boundary/invite-repository {:ctx ctx
+               (ig/init-key :wagoe/invite-repository {:ctx ctx
                                                          :logger logger
                                                          :error-reporter error-reporter})))
         (is (= ::invite-service
-               (ig/init-key :boundary/invite-service {:repository invite-repo
+               (ig/init-key :wagoe/invite-service {:repository invite-repo
                                                       :membership-repository membership-repo
                                                       :logger logger
                                                       :metrics-emitter metrics
                                                       :error-reporter error-reporter})))
         (is (= {:api [{:path "/tenants"}]}
-               (ig/init-key :boundary/tenant-routes {:tenant-service tenant-service
+               (ig/init-key :wagoe/tenant-routes {:tenant-service tenant-service
                                                      :db-context db-context
                                                      :config config})))
         (is (= {:api [{:path "/tenants/:tenant-id/memberships"}]}
-               (ig/init-key :boundary/membership-routes {:service membership-service})))))))
+               (ig/init-key :wagoe/membership-routes {:service membership-service})))))))
 
 (deftest ^:unit tenant-http-middleware-builds-injectable-middleware-seq
   ;; BOU-200: platform's http-handler no longer requires the tenant lib; the
@@ -114,15 +114,15 @@
   ;; The entries are (fn [handler] ...) built lazily, so absent services simply
   ;; contribute nothing — building the seq must not invoke the wrap-* fns.
   (testing "both services present -> tenant then membership middleware (2 fns)"
-    (let [mw (ig/init-key :boundary/tenant-http-middleware
+    (let [mw (ig/init-key :wagoe/tenant-http-middleware
                           {:tenant-service ::ts :membership-service ::ms :db-context ::db})]
       (is (= 2 (count mw)))
       (is (every? fn? mw))))
   (testing "no services -> empty seq (platform pipeline gets no tenant middleware)"
-    (is (empty? (ig/init-key :boundary/tenant-http-middleware {}))))
+    (is (empty? (ig/init-key :wagoe/tenant-http-middleware {}))))
   (testing "tenant needs db-context; membership stands alone"
-    (is (empty? (ig/init-key :boundary/tenant-http-middleware {:tenant-service ::ts})))
-    (is (= 1 (count (ig/init-key :boundary/tenant-http-middleware
+    (is (empty? (ig/init-key :wagoe/tenant-http-middleware {:tenant-service ::ts})))
+    (is (= 1 (count (ig/init-key :wagoe/tenant-http-middleware
                                  {:tenant-service ::ts :db-context ::db}))))
-    (is (= 1 (count (ig/init-key :boundary/tenant-http-middleware
+    (is (= 1 (count (ig/init-key :wagoe/tenant-http-middleware
                                  {:membership-service ::ms}))))))

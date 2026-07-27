@@ -35,8 +35,8 @@
       (is (= 3 (count result))))))
 
 (def ^:private sample-config
-  {:boundary/http         {:port 3000 :host "localhost"}
-   :boundary/postgresql   {:jdbcUrl "jdbc:postgresql://localhost/app"
+  {:wagoe/http         {:port 3000 :host "localhost"}
+   :wagoe/postgresql   {:jdbcUrl "jdbc:postgresql://localhost/app"
                            :password "supersecret"
                            :username "app"}})
 
@@ -44,7 +44,7 @@
   (testing "formats full config showing port"
     (let [result (introspection/format-config-tree sample-config)]
       (is (str/includes? result "3000"))
-      (is (str/includes? result ":boundary/http"))))
+      (is (str/includes? result ":wagoe/http"))))
 
   (testing "redacts password in config"
     (let [result (introspection/format-config-tree sample-config)]
@@ -53,12 +53,12 @@
 
   (testing "drill-down with :database section shows postgresql config"
     (let [result (introspection/format-config-tree sample-config :database)]
-      (is (str/includes? result ":boundary/postgresql"))
-      (is (not (str/includes? result ":boundary/http")))))
+      (is (str/includes? result ":wagoe/postgresql"))
+      (is (not (str/includes? result ":wagoe/http")))))
 
   (testing "drill-down with :http section shows http config"
     (let [result (introspection/format-config-tree sample-config :http)]
-      (is (str/includes? result ":boundary/http"))
+      (is (str/includes? result ":wagoe/http"))
       (is (str/includes? result "3000"))))
 
   (testing "drill-down with unknown section returns message"
@@ -69,9 +69,9 @@
     (is (= "Empty configuration." (introspection/format-config-tree {}))))
 
   (testing "redacts compound secret keys like :auth-token and :webhook-secret"
-    (let [config {:boundary/webhooks {:webhook-secret "whsec_abc123"
+    (let [config {:wagoe/webhooks {:webhook-secret "whsec_abc123"
                                       :endpoint "https://example.com"}
-                  :boundary/auth    {:auth-token "tok_xyz"
+                  :wagoe/auth    {:auth-token "tok_xyz"
                                      :provider "jwt"}}
           result (introspection/format-config-tree config)]
       (is (not (str/includes? result "whsec_abc123")))
@@ -80,7 +80,7 @@
       (is (str/includes? result "example.com"))))
 
   (testing "redacts secrets in deeply nested maps"
-    (let [config {:boundary/ai-service {:provider :anthropic
+    (let [config {:wagoe/ai-service {:provider :anthropic
                                         :fallback {:api-key "sk-secret-123"
                                                    :model "claude"}}}
           result (introspection/format-config-tree config)]

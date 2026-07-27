@@ -4,7 +4,7 @@
             [wagoe.mcp.core.security :as sec]
             [clojure.test :refer [deftest is testing]]))
 
-(def ^:private prod (sec/resolve-context {"BND_ENV" "prod"}))
+(def ^:private prod (sec/resolve-context {"WAG_ENV" "prod"}))
 
 (deftest ^:unit from-denial-maps-violation-to-code
   (testing "tier-exceeded denial → BND-803, hard (not overridable)"

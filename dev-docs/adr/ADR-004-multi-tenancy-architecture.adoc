@@ -420,12 +420,12 @@ CREATE TABLE orders (
 
 [source,clojure]
 ----
-(defmethod ig/init-key :boundary/tenant-context
+(defmethod ig/init-key :wagoe/tenant-context
   [_ {:keys [db-context]}]
   {:datasource (:datasource db-context)
    :tenant-registry (atom {})})  ; Cached tenant lookup
 
-(defmethod ig/halt-key! :boundary/tenant-context
+(defmethod ig/halt-key! :wagoe/tenant-context
   [_ context]
   ;; Cleanup if needed
   nil)
@@ -1357,9 +1357,9 @@ database (PostgreSQL, MySQL, SQLite, H2, SQL Server, Oracle):
 [source,clojure]
 ----
 ;; Configuration
-{:boundary/tenant-strategy :row-level  ; vs :schema-per-tenant
- :boundary/tenant-column :tenant_id    ; Configurable column name
- :boundary/tenant-enforcement :strict} ; :strict, :lenient, or :disabled
+{:wagoe/tenant-strategy :row-level  ; vs :schema-per-tenant
+ :wagoe/tenant-column :tenant_id    ; Configurable column name
+ :wagoe/tenant-enforcement :strict} ; :strict, :lenient, or :disabled
 
 ;; Usage remains the same
 (tenant/with-tenant-context db-ctx tenant-id
@@ -1638,8 +1638,8 @@ and testing strategies.
 - ensure-tenant-context
 
 ;; Integrant components
-:boundary/tenant-registry
-:boundary/tenant-middleware
+:wagoe/tenant-registry
+:wagoe/tenant-middleware
 ----
 
 *Acceptance Criteria:*

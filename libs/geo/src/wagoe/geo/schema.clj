@@ -50,7 +50,7 @@
 ;; =============================================================================
 
 (def GeoConfig
-  "Configuration map for the :boundary/geo-service Integrant component."
+  "Configuration map for the :wagoe/geo-service Integrant component."
   [:map
    [:provider   [:or :keyword [:vector :keyword]]]  ; single or fallback chain
    [:cache-ttl  {:optional true} :int]              ; cache TTL in seconds

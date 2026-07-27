@@ -3,13 +3,13 @@
 
    Config keys:
 
-   :boundary/search
-     {:db-ctx (ig/ref :boundary/db-context)}
+   :wagoe/search
+     {:db-ctx (ig/ref :wagoe/db-context)}
 
      Returns {:store <ISearchStore> :engine <ISearchEngine>}
 
-   :boundary/search-routes
-     {:search-service (ig/ref :boundary/search)}
+   :wagoe/search-routes
+     {:search-service (ig/ref :wagoe/search)}
 
      Returns {:api [...] :web [...] :static []} for composition
      by the HTTP handler."
@@ -20,7 +20,7 @@
             [wagoe.search.shell.http :as search-http]
             [clojure.tools.logging :as log]))
 
-(defmethod ig/init-key :boundary/search
+(defmethod ig/init-key :wagoe/search
   [_ {:keys [db-ctx]}]
   (log/info "Initializing search component")
   (let [datasource (:datasource db-ctx)
@@ -33,7 +33,7 @@
     {:store  store
      :engine engine}))
 
-(defmethod ig/halt-key! :boundary/search
+(defmethod ig/halt-key! :wagoe/search
   [_ _component]
   (log/info "Halting search component")
   nil)
@@ -42,14 +42,14 @@
 ;; Search Routes Component
 ;; =============================================================================
 
-(defmethod ig/init-key :boundary/search-routes
+(defmethod ig/init-key :wagoe/search-routes
   [_ {:keys [search-service]}]
   (log/info "Initializing search routes")
   {:api    (search-http/search-routes (:engine search-service))
    :web    (search-http/search-web-routes (:engine search-service))
    :static []})
 
-(defmethod ig/halt-key! :boundary/search-routes
+(defmethod ig/halt-key! :wagoe/search-routes
   [_ _routes]
   ;; Routes are pure data — no cleanup needed
   nil)

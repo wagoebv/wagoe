@@ -127,7 +127,7 @@ paths (webhooks/callbacks).
 
 ```clojure
 ;; resources/conf/<env>/config.edn under :active
-:boundary/http
+:wagoe/http
 {:security
  {:csrf {:enabled?     true                                  ; OPT-IN: lib default is false
          :secret       #or [#env CSRF_SECRET #env JWT_SECRET] ; defaults to JWT_SECRET
@@ -174,7 +174,7 @@ form of the interceptor (same binding model, same opt-in/exempt/safe-method rule
 (require '[boundary.platform.shell.http.interceptors :as interceptors])
 
 ;; csrf-config is the same {:enabled? :secret :exempt-paths} map read from
-;; [:active :boundary/http :security :csrf]; thread it in from system config.
+;; [:active :wagoe/http :security :csrf]; thread it in from system config.
 (def app-web-handler
   (interceptors/wrap-csrf my-web-routes-handler csrf-config))
 ```
@@ -250,9 +250,9 @@ Disabled or secretless config makes it a pass-through.
 The platform library provides database context and connection pooling:
 
 ```clojure
-;; Integrant key: :boundary/db-context
+;; Integrant key: :wagoe/db-context
 ;; Config in resources/conf/{env}/config.edn
-{:boundary/db-context
+{:wagoe/db-context
  {:jdbc-url #env ["DATABASE_URL" "jdbc:h2:mem:dev;DB_CLOSE_DELAY=-1"]}}
 ```
 
@@ -311,17 +311,17 @@ Exceptions thrown with `:type` in `ex-data` are automatically converted:
 `http-rate-limit-protection` runs in the default interceptor stack for every
 route. It is **opt-in** — disabled unless configured, so a framework upgrade
 cannot start 429-ing existing consumers. Configure per env under
-`:boundary/http`:
+`:wagoe/http`:
 
 ```clojure
-:boundary/http
+:wagoe/http
 {:rate-limit {:enabled?  true
               :limit     300       ; max requests per window per client
               :window-ms 60000}}   ; window length
 ;; env overrides: HTTP_RATE_LIMIT, HTTP_RATE_LIMIT_WINDOW_MS
 ```
 
-The wiring injects the policy and the `:boundary/cache` into the interceptor
+The wiring injects the policy and the `:wagoe/cache` into the interceptor
 `system` map automatically. **With an active Redis cache the limit is shared
 across replicas** (fixed-window counter keyed in Redis). **With no cache it
 falls back to a per-process counter — correct on a single node only; across N

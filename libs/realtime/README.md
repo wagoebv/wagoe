@@ -632,15 +632,15 @@ client.connect()
 
 ```clojure
 ;; resources/conf/config.edn
-{:boundary/realtime-service
- {:connection-registry #ig/ref :boundary/connection-registry
-  :jwt-verifier #ig/ref :boundary/jwt-verifier
-  :logger #ig/ref :boundary/logger
-  :error-reporter #ig/ref :boundary/error-reporter}
+{:wagoe/realtime-service
+ {:connection-registry #ig/ref :wagoe/connection-registry
+  :jwt-verifier #ig/ref :wagoe/jwt-verifier
+  :logger #ig/ref :wagoe/logger
+  :error-reporter #ig/ref :wagoe/error-reporter}
  
- :boundary/connection-registry {}
+ :wagoe/connection-registry {}
  
- :boundary/jwt-verifier {}}
+ :wagoe/jwt-verifier {}}
 ```
 
 ### Environment Variables
@@ -747,7 +747,7 @@ All messages sent via WebSocket follow this JSON structure:
 ### Graceful Shutdown
 
 ```clojure
-(defmethod ig/halt-key! :boundary/realtime-service
+(defmethod ig/halt-key! :wagoe/realtime-service
   [_ {:keys [connection-registry]}]
   ;; Close all active connections gracefully
   (let [connections (ports/all-connections connection-registry)]

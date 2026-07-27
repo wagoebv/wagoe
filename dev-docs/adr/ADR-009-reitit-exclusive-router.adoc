@@ -232,12 +232,12 @@ Router is configured via Integrant:
 
 ```clojure
 ;; In config.edn (implicit, no configuration needed)
-:boundary/router
+:wagoe/router
 {:adapter :reitit  ;; Only option currently
  :config {...}}
 
 ;; Router adapter created in system wiring
-(defmethod ig/init-key :boundary/router [_ {:keys [config]}]
+(defmethod ig/init-key :wagoe/router [_ {:keys [config]}]
   (reitit-router/create-router config))
 ```
 

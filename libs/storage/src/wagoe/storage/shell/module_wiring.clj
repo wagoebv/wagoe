@@ -3,13 +3,13 @@
 
    Config key:
 
-   :boundary/storage
+   :wagoe/storage
      {:provider :local :root \"uploads\"}                ; local filesystem
      {:provider :s3  :bucket \"b\" :region \"eu-west-1\"}  ; AWS S3 / compatible
      {:provider :gcs :bucket \"b\" :project-id \"p\"}      ; Google Cloud Storage
 
      Returns {:provider <kw> :storage <IFileStorage> :service <IStorageService>}.
-     Consumers (e.g. :boundary/storage-routes) use :service.
+     Consumers (e.g. :wagoe/storage-routes) use :service.
 
    The `:local` provider accepts the catalogue's `:root` as an alias for the
    local adapter's `:base-path`."
@@ -36,7 +36,7 @@
     (throw (ex-info "Unknown storage provider"
                     {:type :validation-error :provider provider}))))
 
-(defmethod ig/init-key :boundary/storage
+(defmethod ig/init-key :wagoe/storage
   [_ {:keys [provider logger] :or {provider :local} :as config}]
   (log/info "Initializing storage component" {:provider provider})
   (let [file-storage (build-file-storage (assoc config :provider provider) logger)
@@ -46,7 +46,7 @@
     (log/info "Storage component initialized" {:provider provider})
     {:provider provider :storage file-storage :service svc}))
 
-(defmethod ig/halt-key! :boundary/storage
+(defmethod ig/halt-key! :wagoe/storage
   [_ {:keys [provider storage]}]
   (log/info "Halting storage component" {:provider provider})
   ;; Release cloud SDK clients; local has nothing to close.
@@ -60,14 +60,14 @@
 ;; Storage Routes Component
 ;; =============================================================================
 
-(defmethod ig/init-key :boundary/storage-routes
+(defmethod ig/init-key :wagoe/storage-routes
   [_ {:keys [storage]}]
   (log/info "Initializing storage routes")
   {:api    (http-handlers/storage-routes (:service storage))
    :web    []
    :static []})
 
-(defmethod ig/halt-key! :boundary/storage-routes
+(defmethod ig/halt-key! :wagoe/storage-routes
   [_ _routes]
   ;; Routes are pure data — no cleanup.
   nil)

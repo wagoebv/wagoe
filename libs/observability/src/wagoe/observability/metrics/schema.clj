@@ -239,7 +239,7 @@
   "Default in-memory metrics configuration."
   {:provider         :in-memory
    :enabled          true
-   :namespace        "boundary"
+   :namespace        "wagoe"
    :max-memory-mb    50
    :enable-gc        true
    :gc-threshold     0.8
@@ -248,7 +248,7 @@
                       :max-tags             20
                       :max-tag-key-length   50
                       :max-tag-value-length 200
-                      :default-tags         {:service "boundary"}
+                      :default-tags         {:service "wagoe"}
                       :sanitize-keys        true}
    :retention        {:enabled                  true
                       :max-age-seconds          3600
@@ -259,7 +259,7 @@
   "Default Prometheus metrics configuration."
   {:provider               :prometheus
    :enabled                true
-   :namespace              "boundary"
+   :namespace              "wagoe"
    :port                   9090
    :path                   "/metrics"
    :enable-default-metrics true
@@ -269,17 +269,17 @@
    :summary-max-age        600
    :tagging                {:enabled       true
                             :max-tags      15
-                            :default-tags  {:service "boundary"}
+                            :default-tags  {:service "wagoe"}
                             :sanitize-keys true}})
 
 (def default-otlp-config
   "Default OTLP metrics configuration (push to a local collector)."
   {:provider     :otlp
    :enabled      true
-   :namespace    "boundary"
+   :namespace    "wagoe"
    :endpoint     "http://localhost:4318"
    :protocol     :http/protobuf
-   :service-name "boundary"
+   :service-name "wagoe"
    :interval-ms  60000
    :timeout-ms   10000})
 
@@ -287,10 +287,10 @@
   "Default Datadog StatsD metrics configuration."
   {:provider         :datadog-statsd
    :enabled          true
-   :namespace        "boundary"
+   :namespace        "wagoe"
    :host             "localhost"
    :port             8125
-   :service          "boundary"
+   :service          "wagoe"
    :environment      "development"
    :origin-detection false
    :socket-timeout   5000
@@ -299,7 +299,7 @@
                       :max-tags             20
                       :max-tag-key-length   200
                       :max-tag-value-length 500
-                      :default-tags         {:service "boundary"}
+                      :default-tags         {:service "wagoe"}
                       :sanitize-keys        true
                       :allow-special-chars  false}})
 

@@ -5,7 +5,7 @@
              {:from :core  :to :shell :allowed false :reason "violates FC/IS"}
              {:from :core  :to :io    :allowed false :reason "even logging"}]
   :rules    ["core/ must not import shell/IO/logging/DB"
-             "core/ must not throw — return typed error values ({:error {:type ... :message ...}}); the shell translates them into HTTP responses (escape hatch: ^:boundary/allow-throw ns metadata or .boundary/check-fcis.edn)"
+             "core/ must not throw — return typed error values ({:error {:type ... :message ...}}); the shell translates them into HTTP responses (escape hatch: ^:wagoe/allow-throw ns metadata or .boundary/check-fcis.edn)"
              "core/ must not hold mutable state (defonce/atom/swap!/reset!) — definition registries and process state live in the shell (wagoe.<lib>.shell.registry)"
              "cross-module calls go through service ports"
              "web/HTTP layers never require *.shell.persistence directly"]
@@ -104,7 +104,7 @@
    :symptom "Unable to resolve symbol: my-helper in this context; Syntax error compiling."
    :cause   "Private helpers placed after the public functions that call them; Clojure compiles top-to-bottom."
    :fix     "Private helpers must always appear above the first function that calls them (in src/, dev/, and test/ alike)."
-   :example ";; WRONG — system-component is called before it is defined\n(defn dev-resend-invite! [...]\n  (let [svc (system-component :boundary/my-service)] ...))  ; used here\n\n(defn- system-component [k]   ; defined here — too late!\n  (get integrant.repl.state/system k))\n\n;; CORRECT — helper defined first\n(defn- system-component [k]\n  (get integrant.repl.state/system k))\n\n(defn dev-resend-invite! [...]\n  (let [svc (system-component :boundary/my-service)] ...))"}
+   :example ";; WRONG — system-component is called before it is defined\n(defn dev-resend-invite! [...]\n  (let [svc (system-component :wagoe/my-service)] ...))  ; used here\n\n(defn- system-component [k]   ; defined here — too late!\n  (get integrant.repl.state/system k))\n\n;; CORRECT — helper defined first\n(defn- system-component [k]\n  (get integrant.repl.state/system k))\n\n(defn dev-resend-invite! [...]\n  (let [svc (system-component :wagoe/my-service)] ...))"}
 
   {:id "P11"
    :title "Swagger/OpenAPI — parameters invisible without explicit declaration"

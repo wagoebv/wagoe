@@ -156,7 +156,7 @@
    :task (let [proc (process/process
                      ;; HTTP_PORT pinned here so a caller's shell env cannot
                      ;; silently reroute the e2e server to another port.
-                     {:extra-env {"BND_ENV"    "test"
+                     {:extra-env {"WAG_ENV"    "test"
                                   "HTTP_PORT"  "3100"
                                   "JWT_SECRET" "dev-secret-32-chars-minimum"}
                       :inherit   true
@@ -179,7 +179,7 @@
                                                         {:url url :waited-s n}))
                        :else (do (Thread/sleep 1000) (recur (inc n))))))]
            (let [server (process/process
-                         {:extra-env {"BND_ENV"    "test"
+                         {:extra-env {"WAG_ENV"    "test"
                                       "HTTP_PORT"  "3100"
                                       "JWT_SECRET" "dev-secret-32-chars-minimum"}
                           :inherit   true

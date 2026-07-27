@@ -102,7 +102,7 @@ All headers below are set by the `security-headers` interceptor. No application 
 |Status |Item
 
 |icon:hand-o-right[]
-|**CSRF tokens** — Custom HMAC synchronizer-token protection in `boundary.platform.core.csrf` (not Ring anti-forgery). Enforcement is opt-in (`:boundary/http :security :csrf :enabled?`, lib default off) — enable it per app, then emit tokens via `csrf/hidden-field` (forms) and `csrf/hx-headers` or the `<meta>` tag (HTMX).
+|**CSRF tokens** — Custom HMAC synchronizer-token protection in `boundary.platform.core.csrf` (not Ring anti-forgery). Enforcement is opt-in (`:wagoe/http :security :csrf :enabled?`, lib default off) — enable it per app, then emit tokens via `csrf/hidden-field` (forms) and `csrf/hx-headers` or the `<meta>` tag (HTMX).
 
 |icon:hand-o-right[]
 |**CORS** — Configure allowed origins in production config (`boundary/http :cors`). Never use `*` in production. Restrict to your actual frontend domains.

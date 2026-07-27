@@ -3,7 +3,7 @@
    Pure functions — catalog data loaded once at namespace init via wagoe.devtools.error-codes.
 
    Classification strategy (ordered, first match wins):
-   1. ex-data with :boundary/error-code — direct BND code
+   1. ex-data with :wagoe/error-code — direct BND code
    2. ex-data pattern matching — infer from :type, :schema, :malli/error
    3. Message pattern — regex on .getMessage()
    4. Exception type — SQLException, ConnectException, etc.
@@ -18,13 +18,13 @@
     ex))
 
 (defn- classify-explicit-code
-  "Check if exception has :boundary/error-code in ex-data."
+  "Check if exception has :wagoe/error-code in ex-data."
   [ex]
-  (when-let [code (get (ex-data ex) :boundary/error-code)]
+  (when-let [code (get (ex-data ex) :wagoe/error-code)]
     (when-let [error-def (codes/lookup code)]
       {:code     code
        :category (:category error-def)
-       :data     (dissoc (ex-data ex) :boundary/error-code)
+       :data     (dissoc (ex-data ex) :wagoe/error-code)
        :source   :ex-data})))
 
 (defn- classify-ex-data-pattern
@@ -91,7 +91,7 @@
 (defn classify
   "Classify an exception into a BND-xxx error code.
 
-   Walks the cause chain: if the outermost exception has :boundary/error-code
+   Walks the cause chain: if the outermost exception has :wagoe/error-code
    in ex-data (strategy 1), that takes precedence. Otherwise, classifies the
    root cause.
 

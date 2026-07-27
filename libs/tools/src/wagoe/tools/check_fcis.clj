@@ -165,8 +165,8 @@
 
 (defn- ns-meta-flag?
   "True when the namespace symbol in `ns-form` carries the metadata key `k`.
-   Recognises the `^:boundary/allow-throw` form on the ns symbol (as does
-   check-ports); the attr-map form `(ns foo {:boundary/allow-throw true} ...)`
+   Recognises the `^:wagoe/allow-throw` form on the ns symbol (as does
+   check-ports); the attr-map form `(ns foo {:wagoe/allow-throw true} ...)`
    is not supported — use the reader-metadata form or the .boundary allowlist."
   [ns-form k]
   (boolean (k (meta (second ns-form)))))
@@ -180,16 +180,16 @@
 
 (defn- scan-impurity
   "Scan stripped content for (throw ...) and mutable-state constructs.
-   A namespace is exempt from the throw ban via ^:boundary/allow-throw metadata
+   A namespace is exempt from the throw ban via ^:wagoe/allow-throw metadata
    or a .boundary/check-fcis.edn :allow-throw entry, and from the mutable-state
-   ban via ^:boundary/allow-mutable-state or an :allow-mutable-state entry.
+   ban via ^:wagoe/allow-mutable-state or an :allow-mutable-state entry.
    Returns a seq of {:file :ns :req :line :kind} maps."
   [file content ns-form ns-name {:keys [allow-throw allow-mutable-state]}]
   (let [cleaned   (parsing/strip-comments-and-strings content)
         lines     (str/split-lines cleaned)
-        throw-ok? (or (ns-meta-flag? ns-form :boundary/allow-throw)
+        throw-ok? (or (ns-meta-flag? ns-form :wagoe/allow-throw)
                       (contains? (or allow-throw #{}) ns-name))
-        mut-ok?   (or (ns-meta-flag? ns-form :boundary/allow-mutable-state)
+        mut-ok?   (or (ns-meta-flag? ns-form :wagoe/allow-mutable-state)
                       (contains? (or allow-mutable-state #{}) ns-name))]
     (->> lines
          (map-indexed
@@ -456,7 +456,7 @@
                 (println (str "    namespace " ns " requires " (ansi/red req))))))
         (println)
         (println (str (count violations) " violation(s) found. Core namespaces must not import shell, I/O, logging, or DB code, throw, or hold mutable state."))
-        (println (ansi/dim "Escape hatch: ^:boundary/allow-throw / ^:boundary/allow-mutable-state ns metadata, or .boundary/check-fcis.edn allowlist."))
+        (println (ansi/dim "Escape hatch: ^:wagoe/allow-throw / ^:wagoe/allow-mutable-state ns metadata, or .boundary/check-fcis.edn allowlist."))
         (System/exit 1))
       (do
         (println (ansi/green "FC/IS check passed.") (str (count files) " core file(s) scanned, 0 violations."))

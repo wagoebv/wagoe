@@ -44,7 +44,7 @@
 ;; =============================================================================
 
 (defn- make-service-from-env
-  "Fall-back when no :boundary/ai-service is present in active config.
+  "Fall-back when no :wagoe/ai-service is present in active config.
    Checks ANTHROPIC_API_KEY, OPENAI_BASE_URL, OPENAI_API_KEY, OLLAMA_URL in that order.
    OPENAI_BASE_URL covers OpenAI-compatible endpoints (oMLX, LM Studio, etc.) that may
    not require a real API key."
@@ -85,7 +85,7 @@
    Priority:
      1. Explicit provider env vars (ANTHROPIC_API_KEY, OPENAI_BASE_URL, OPENAI_API_KEY)
         — developer intent always wins over project config.
-     2. :boundary/ai-service from config, when present and not :no-op.
+     2. :wagoe/ai-service from config, when present and not :no-op.
      3. make-service-from-env fallback (config absent, resources missing, or :no-op).
 
    Errors from a present but broken config still surface immediately."
@@ -108,9 +108,9 @@
                                  (if (= (str (.getMessage e)) "Configuration file not found")
                                    nil
                                    (throw e))))
-              ai-cfg      (when config (get-in config [:active :boundary/ai-service]))]
+              ai-cfg      (when config (get-in config [:active :wagoe/ai-service]))]
           (if (and ai-cfg (not= (:provider ai-cfg) :no-op))
-            (ig/init-key :boundary/ai-service ai-cfg)
+            (ig/init-key :wagoe/ai-service ai-cfg)
             (make-service-from-env)))))))
 
 ;; =============================================================================

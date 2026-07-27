@@ -328,7 +328,7 @@
            ;; HTTP server entrypoint (invokes wagoe.main/-main in server mode).
            ;; Used by `bb run-e2e-server` for Playwright/spel e2e runs, and available
            ;; for any local run that needs to boot the Integrant system from deps.edn
-           ;; rather than the uberjar. Respects BND_ENV to select the active profile.
+           ;; rather than the uberjar. Respects WAG_ENV to select the active profile.
            ;; =============================================================================
 
            :run       {:extra-deps {org.xerial/sqlite-jdbc      {:mvn/version "3.53.2.0"}

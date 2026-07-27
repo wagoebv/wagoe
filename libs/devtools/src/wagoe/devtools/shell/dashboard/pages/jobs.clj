@@ -111,7 +111,7 @@
      (merge opts {:active-path "/dashboard/jobs"
                   :title       "Jobs & Queues"})
      [:div.empty-state
-      "No job service configured. Add :boundary/jobs to your system config to enable job monitoring."])))
+      "No job service configured. Add :wagoe/jobs to your system config to enable job monitoring."])))
 
 (defn render-fragment
   "Render the jobs content as an HTML fragment for HTMX polling."

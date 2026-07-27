@@ -302,8 +302,8 @@
 (deftest ^:unit generate-project-config-test
   (let [output (gen/generate-project-config "my-app")]
     (testing "contains expected Integrant keys"
-      (is (str/includes? output ":boundary/app"))
-      (is (str/includes? output ":boundary/http-server")))))
+      (is (str/includes? output ":wagoe/app"))
+      (is (str/includes? output ":wagoe/http-server")))))
 
 (deftest ^:unit generate-project-main-test
   (let [output (gen/generate-project-main "my-app")]

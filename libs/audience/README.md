@@ -47,18 +47,18 @@
 Add to `resources/conf/{env}/config.edn` and require `boundary.audience.shell.module-wiring` at system start:
 
 ```edn
-:boundary/audience
-{:db-ctx           #ig/ref :boundary/db-context
- :cache-service    #ig/ref :boundary/cache
- :user-data-source #ig/ref :boundary/user-data-source}
+:wagoe/audience
+{:db-ctx           #ig/ref :wagoe/db-context
+ :cache-service    #ig/ref :wagoe/cache
+ :user-data-source #ig/ref :wagoe/user-data-source}
 
-:boundary/audience-routes
-{:audience-service #ig/ref :boundary/audience}
+:wagoe/audience-routes
+{:audience-service #ig/ref :wagoe/audience}
 ```
 
-The `:boundary/audience` component returns `{:store <IAudienceRepository> :resolver <IAudienceResolver> :cache <IAudienceCache>}`.
+The `:wagoe/audience` component returns `{:store <IAudienceRepository> :resolver <IAudienceResolver> :cache <IAudienceCache>}`.
 
-`:boundary/audience-routes` returns `{:api [...] :web [...]}` for composition by the HTTP handler.
+`:wagoe/audience-routes` returns `{:api [...] :web [...]}` for composition by the HTTP handler.
 
 `:user-data-source` is required. Provide any implementation of `IUserDataSource`:
 

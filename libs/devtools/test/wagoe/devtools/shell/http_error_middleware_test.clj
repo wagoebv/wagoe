@@ -4,7 +4,7 @@
 
 (deftest ^:integration wrap-dev-error-enrichment-test
   (testing "exceptions are re-thrown with :dev-info in ex-data"
-    (let [handler (fn [_req] (throw (ex-info "bad input" {:boundary/error-code "BND-201"})))
+    (let [handler (fn [_req] (throw (ex-info "bad input" {:wagoe/error-code "BND-201"})))
           wrapped (middleware/wrap-dev-error-enrichment handler)
           thrown-ex (try (wrapped {:uri "/api/test" :request-method :post})
                          nil

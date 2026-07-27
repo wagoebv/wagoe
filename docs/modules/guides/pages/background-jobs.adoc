@@ -73,13 +73,13 @@ Priority levels: `:critical`, `:high`, `:default`, `:low`, `:bulk`.
 [source,clojure]
 ----
 ;; config.edn
-:boundary/job-queue {:backend :redis :redis-url #env REDIS_URL}
-:boundary/job-store {:backend :redis :redis-url #env REDIS_URL}
-:boundary/job-worker {:queue-name :default
+:wagoe/job-queue {:backend :redis :redis-url #env REDIS_URL}
+:wagoe/job-store {:backend :redis :redis-url #env REDIS_URL}
+:wagoe/job-worker {:queue-name :default
                       :worker-count 5
-                      :queue   #ig/ref :boundary/job-queue
-                      :store   #ig/ref :boundary/job-store
-                      :registry #ig/ref :boundary/job-registry}
+                      :queue   #ig/ref :wagoe/job-queue
+                      :store   #ig/ref :wagoe/job-store
+                      :registry #ig/ref :wagoe/job-registry}
 ----
 
 == Retry logic

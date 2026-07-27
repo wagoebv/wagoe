@@ -27,11 +27,11 @@
    rather than hardcoding, so projects without the user/auth stack show
    an accurate (possibly empty) list."
   [config]
-  (let [settings (get config :boundary/settings {})
+  (let [settings (get config :wagoe/settings {})
         features (get settings :features {})
         methods  (cond-> []
-                   (contains? config :boundary/auth-service)      (conj :jwt)
-                   (contains? config :boundary/session-repository) (conj :session)
+                   (contains? config :wagoe/auth-service)      (conj :jwt)
+                   (contains? config :wagoe/session-repository) (conj :session)
                    (get-in features [:mfa :enabled?])              (conj :mfa))]
     {:methods methods
      :mfa-enabled? (boolean (get-in features [:mfa :enabled?]))}))
@@ -39,14 +39,14 @@
 (defn analyze-role-config
   "Analyze role restriction configuration."
   [config]
-  (let [role-cfg (get-in config [:boundary/settings :user-validation :role-restrictions])]
+  (let [role-cfg (get-in config [:wagoe/settings :user-validation :role-restrictions])]
     {:allowed-roles  (or (:allowed-roles role-cfg) #{})
      :default-role   (or (:default-role role-cfg) :user)}))
 
 (defn analyze-csp-config
   "Analyze Content-Security-Policy header configuration."
   [config]
-  (let [http-cfg (get config :boundary/http {})
+  (let [http-cfg (get config :wagoe/http {})
         csp      (get-in http-cfg [:security :csp])]
     {:configured? (some? csp)
      :policy      csp}))
@@ -55,7 +55,7 @@
   "Build a complete security summary from system config and runtime data."
   ([config] (build-security-summary config {}))
   ([config {:keys [active-sessions recent-auth-failures rate-limiting?]}]
-   (let [settings   (get config :boundary/settings {})
+   (let [settings   (get config :wagoe/settings {})
          validation (get settings :user-validation {})]
      {:password-policy    (analyze-password-policy (:password-policy validation))
       :auth-methods       (analyze-auth-methods config)
@@ -63,7 +63,7 @@
       :csp                (analyze-csp-config config)
       :lockout            {:max-attempts  (get validation :max-failed-attempts 5)
                            :duration-mins (get validation :lockout-duration-minutes 15)}
-      :csrf-enabled?      (not (false? (get-in config [:boundary/http :security :csrf :enabled?])))
+      :csrf-enabled?      (not (false? (get-in config [:wagoe/http :security :csrf :enabled?])))
       :rate-limiting?     (boolean rate-limiting?)
       :active-sessions    (or active-sessions 0)
       :recent-failures    (or recent-auth-failures [])})))

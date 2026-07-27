@@ -29,7 +29,7 @@ All deployments need these variables. See `resources/deploy/systemd/boundary.env
 |===
 | Variable | Required | Description
 
-| `BND_ENV` | Yes | `production` (or `acc` for staging)
+| `WAG_ENV` | Yes | `production` (or `acc` for staging)
 | `JWT_SECRET` | Yes | 32+ character signing secret
 | `POSTGRES_HOST` | Yes | Database hostname
 | `POSTGRES_PORT` | Yes | Database port (default 5432)

@@ -81,7 +81,7 @@
                  (not (:create-redirect-url entity-config)))
         (throw (ex-info (str "Entity '" (name entity-name) "' uses split-table-update but has no "
                              ":create-redirect-url configured. Add :create-redirect-url to the "
-                             "entity config in :boundary/admin :entities.")
+                             "entity config in :wagoe/admin :entities.")
                         {:type :invalid-config
                          :entity-name entity-name})))
 

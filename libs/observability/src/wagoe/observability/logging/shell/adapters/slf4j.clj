@@ -364,7 +364,7 @@
    
    Pure: No (creates mutable state atoms and gets SLF4J logger)"
   [config]
-  (let [logger-name (or (:logger-name config) "boundary")
+  (let [logger-name (or (:logger-name config) "wagoe")
         slf4j-logger (LoggerFactory/getLogger logger-name)
         level-atom (atom (or (:level config) :info))
         config-atom (atom config)

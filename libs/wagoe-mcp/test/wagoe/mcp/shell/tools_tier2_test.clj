@@ -112,8 +112,8 @@
 
 ;; --- end-to-end capability gate (acceptance: refuse in prod, run in dev) -----
 
-(def ^:private dev  (security/resolve-context {"BND_ENV" "dev"}))
-(def ^:private prod (security/resolve-context {"BND_ENV" "prod"}))
+(def ^:private dev  (security/resolve-context {"WAG_ENV" "dev"}))
+(def ^:private prod (security/resolve-context {"WAG_ENV" "prod"}))
 
 (defn- call [ctx]
   (dispatch/dispatch

@@ -76,8 +76,8 @@ the agent to stay in its lane — the server _enforces_ the lane:
 
 | Environment signal | Mode | Max tier reachable |
 |--------------------|------|--------------------|
-| `BND_ENV=dev` / `test` | `:full` | Tier 2 — everything |
-| `BND_ENV=prod` | `:no-execute` | Tier 1 — can write, can't run |
+| `WAG_ENV=dev` / `test` | `:full` | Tier 2 — everything |
+| `WAG_ENV=prod` | `:no-execute` | Tier 1 — can write, can't run |
 | `CI` truthy, or **no signal at all** | `:read-only` | Tier 0 — analysis only |
 | `MCP_CAPABILITY_MODE=disabled` | `:disabled` | nothing |
 
@@ -137,7 +137,7 @@ the server on the classpath and launch its main, so cwd stays the project root:
 
 ```bash
 # from the Boundary project root
-BND_ENV=dev clojure -Sdeps '{:deps {boundary/mcp {:local/root "libs/wagoe-mcp"}}}' \
+WAG_ENV=dev clojure -Sdeps '{:deps {boundary/mcp {:local/root "libs/wagoe-mcp"}}}' \
   -M -m boundary.mcp.shell.server
 ```
 
@@ -155,11 +155,11 @@ clojure -M:run        # stdio MCP server — reads JSON-RPC from stdin, returns 
 
 It logs to **stderr only** — stdout is reserved for the protocol stream, so never
 `println` into it. The mode is resolved from the environment at startup (set
-`BND_ENV` / `CI` / `MCP_CAPABILITY_MODE` on either command):
+`WAG_ENV` / `CI` / `MCP_CAPABILITY_MODE` on either command):
 
 ```bash
-BND_ENV=dev    # :full       — Tier 2 available (local dev)
-BND_ENV=prod   # :no-execute — Tier 1 max
+WAG_ENV=dev    # :full       — Tier 2 available (local dev)
+WAG_ENV=prod   # :no-execute — Tier 1 max
 CI=true        # :read-only  — Tier 0 only
 MCP_CAPABILITY_MODE=read-only   # explicit override (wins over everything)
 ```
@@ -186,7 +186,7 @@ targets the project) and whose command puts the server on the classpath. With th
 Claude Code CLI, run this from the project root:
 
 ```bash
-claude mcp add boundary --env BND_ENV=dev -- \
+claude mcp add boundary --env WAG_ENV=dev -- \
   clojure -Sdeps '{:deps {boundary/mcp {:local/root "libs/wagoe-mcp"}}}' \
   -M -m boundary.mcp.shell.server
 ```
@@ -201,7 +201,7 @@ Or by hand, in your MCP config (`.mcp.json` / client settings):
       "args": ["-Sdeps", "{:deps {boundary/mcp {:local/root \"libs/wagoe-mcp\"}}}",
                "-M", "-m", "boundary.mcp.shell.server"],
       "cwd": "/absolute/path/to/your/boundary/project",
-      "env": { "BND_ENV": "dev" }
+      "env": { "WAG_ENV": "dev" }
     }
   }
 }
@@ -304,7 +304,7 @@ reviewing.
 // → {"status":"ok","module":"invoice","passed":7,"failed":0}
 ```
 
-Try that same `run-tests` call with `BND_ENV=prod` and it's denied at dispatch
+Try that same `run-tests` call with `WAG_ENV=prod` and it's denied at dispatch
 with a `BND-803` guardrail _before anything runs_ — the enclosure holding.
 
 ### A preview/dry-run safety valve

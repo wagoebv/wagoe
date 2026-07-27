@@ -13,7 +13,7 @@
   {:conventions {:fc-is {:rules ["core pure"]}}})
 
 (defn- deps
-  ([] (deps (security/resolve-context {"BND_ENV" "dev"})))
+  ([] (deps (security/resolve-context {"WAG_ENV" "dev"})))
   ([ctx]
    {:registry      (as-> registry/empty-registry r
                      (reduce registry/register-resource r resources/catalog)

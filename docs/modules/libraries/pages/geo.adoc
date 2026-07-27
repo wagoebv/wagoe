@@ -32,11 +32,11 @@ DB-backed caching, per-provider rate limiting, and Haversine distance calculatio
 
 | `boundary.geo.shell.adapters.google`
 | shell
-| Google Maps adapter (requires `BND_GEO_API_KEY`)
+| Google Maps adapter (requires `WAG_GEO_API_KEY`)
 
 | `boundary.geo.shell.adapters.mapbox`
 | shell
-| Mapbox adapter (requires `BND_GEO_API_KEY`)
+| Mapbox adapter (requires `WAG_GEO_API_KEY`)
 
 | `boundary.geo.shell.cache`
 | shell
@@ -52,19 +52,19 @@ DB-backed caching, per-provider rate limiting, and Haversine distance calculatio
 [source,clojure]
 ----
 ;; OpenStreetMap only (no API key)
-:boundary/geo-service
+:wagoe/geo-service
 {:provider   :openstreetmap
  :user-agent "MyApp/1.0 (contact@example.com)"
  :cache-ttl  86400   ; 24 hours
- :db         #ig/ref :boundary/db}
+ :db         #ig/ref :wagoe/db}
 
 ;; Fallback chain: OSM first, then Google
-:boundary/geo-service
+:wagoe/geo-service
 {:provider   :openstreetmap
- :fallback   {:provider :google :api-key #env BND_GEO_API_KEY}
+ :fallback   {:provider :google :api-key #env WAG_GEO_API_KEY}
  :user-agent "MyApp/1.0"
  :cache-ttl  86400
- :db         #ig/ref :boundary/db}
+ :db         #ig/ref :wagoe/db}
 ----
 
 == Usage

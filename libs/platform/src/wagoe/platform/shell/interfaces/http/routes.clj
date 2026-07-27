@@ -74,8 +74,8 @@
                                     [:version :string]
                                     [:timestamp :string]]}}
             :handler (http-common/health-check-handler
-                      (get-in config [:active :boundary/settings :name] "boundary")
-                      (get-in config [:active :boundary/settings :version] "unknown")
+                      (get-in config [:active :wagoe/settings :name] "wagoe")
+                      (get-in config [:active :wagoe/settings :version] "unknown")
                       (when (and additional-checks (fn? additional-checks))
                         additional-checks))}}]
 
@@ -108,9 +108,9 @@
   [config]
   [["/swagger.json"
     {:get {:no-doc true
-           :swagger {:info {:title (get-in config [:active :boundary/settings :name] "Boundary API")
+           :swagger {:info {:title (get-in config [:active :wagoe/settings :name] "Boundary API")
                             :description "RESTful API for Boundary Application. Most business endpoints require authentication. Use POST /api/v1/auth/login or POST /api/v1/sessions to obtain a token, then click the Authorize button in Swagger UI and provide either 'Bearer <JWT>' or 'X-Session-Token'."
-                            :version (get-in config [:active :boundary/settings :version] "1.0.0")
+                            :version (get-in config [:active :wagoe/settings :version] "1.0.0")
                             :contact {:name "Support"
                                       :email "support@wagoe.example.com"}}
                      :tags [{:name "health" :description "Health check endpoints"}
@@ -190,7 +190,7 @@
         ;; Reitit applies middleware last=outermost, so dev middleware goes before
         ;; wrap-exception-handling: it catches exceptions, enriches ex-data with
         ;; :dev-info, re-throws, then exception handler includes :dev-info in RFC 7807.
-        dev-error-middleware (when (= :dev (:boundary/profile config))
+        dev-error-middleware (when (= :dev (:wagoe/profile config))
                                (try
                                  (require 'wagoe.devtools.shell.http-error-middleware)
                                  (ns-resolve 'wagoe.devtools.shell.http-error-middleware

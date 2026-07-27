@@ -62,28 +62,28 @@
   "Create test configuration with specific port settings"
   [& {:keys [port host port-range]}]
   {:active
-   {:boundary/settings
+   {:wagoe/settings
     {:name "boundary-test"
      :version "0.1.0-test"}
 
-    :boundary/http
+    :wagoe/http
     (merge {:port (or port 59990)
             :host (or host "127.0.0.1")
             :join? false}
            (when port-range {:port-range port-range}))
 
-    :boundary/sqlite
+    :wagoe/sqlite
     {:db ":memory:"
      :pool {:minimum-idle 1
             :maximum-pool-size 3}}
 
-    :boundary/logging
+    :wagoe/logging
     {:provider :no-op}
 
-    :boundary/metrics
+    :wagoe/metrics
     {:provider :no-op}
 
-    :boundary/error-reporting
+    :wagoe/error-reporting
     {:provider :no-op}}})
 
 (defn- start-system-with-port
@@ -118,8 +118,8 @@
         (try
           (is (not (:error system)) "System should start without errors")
           (when (not (:error system))
-            (is (contains? system :boundary/http-server))
-            (let [server (:boundary/http-server system)]
+            (is (contains? system :wagoe/http-server))
+            (let [server (:wagoe/http-server system)]
               (is (some? server))
               ;; Verify server is actually running by checking if it's started
               (is (.isStarted server))))
@@ -139,8 +139,8 @@
                                                  :port-range port-range)]
               (try
                 (is (not (:error system)))
-                (is (contains? system :boundary/http-server))
-                (let [server (:boundary/http-server system)]
+                (is (contains? system :wagoe/http-server))
+                (let [server (:wagoe/http-server system)]
                   (is (some? server))
                   (is (.isStarted server))
                   ;; Server should be running on a different port than requested
@@ -159,7 +159,7 @@
     (let [test-config (create-test-config :port 59975
                                           :port-range {:start 59970 :end 59979})
           ig-config (config/ig-config test-config)
-          http-server-config (:boundary/http-server ig-config)]
+          http-server-config (:wagoe/http-server ig-config)]
 
       ;; Verify the HTTP server config includes all expected keys
       (is (= 59975 (:port http-server-config)))
@@ -187,7 +187,7 @@
                       (instance? RuntimeException (:error system))))
               ;; If system started, it should be on a different port (random fallback)
               (do
-                (is (some? (:boundary/http-server system)))
+                (is (some? (:wagoe/http-server system)))
                 (stop-system system))))
           (finally
             (doseq [socket sockets]
@@ -207,7 +207,7 @@
           (try
             (is (not (:error system)))
             ;; In Docker mode, should use the requested port directly
-            (let [server (:boundary/http-server system)
+            (let [server (:wagoe/http-server system)
                   actual-port (.getPort (first (.getConnectors server)))]
               (is (= requested-port actual-port)))
             (finally
@@ -259,7 +259,7 @@
             (is (pos? (count @systems)))
 
             ;; Verify systems are using different ports
-            (let [ports (map #(.getPort (first (.getConnectors (:boundary/http-server %)))) @systems)]
+            (let [ports (map #(.getPort (first (.getConnectors (:wagoe/http-server %)))) @systems)]
               (is (= (count ports) (count (distinct ports)))))
 
             (finally

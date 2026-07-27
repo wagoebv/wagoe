@@ -231,16 +231,16 @@ Three migrations under `libs/push/resources/boundary/push/migrations/`:
                                :sandbox? false}
 
 ;; Stores
-:boundary.push/device-store    {:db #ig/ref :boundary/db}
-:boundary.push/analytics-store {:db #ig/ref :boundary/db}
+:boundary.push/device-store    {:db #ig/ref :wagoe/db}
+:boundary.push/analytics-store {:db #ig/ref :wagoe/db}
 
 ;; Service
 :boundary.push/service {:device-store    #ig/ref :boundary.push/device-store
                         :analytics-store #ig/ref :boundary.push/analytics-store
                         :fcm-provider    #ig/ref :boundary.push/fcm-provider
                         :apns-provider   #ig/ref :boundary.push/apns-provider
-                        :job-queue       #ig/ref :boundary/jobs
-                        :callback-secret #env BND_PUSH_CALLBACK_SECRET}
+                        :job-queue       #ig/ref :wagoe/jobs
+                        :callback-secret #env WAG_PUSH_CALLBACK_SECRET}
 
 ;; Job handlers — register returned map with your job dispatcher
 :boundary.push/job-handlers {:push-service #ig/ref :boundary.push/service}
@@ -248,7 +248,7 @@ Three migrations under `libs/push/resources/boundary/push/migrations/`:
 ;; Routes — mount in your router
 :boundary.push/routes {:device-store    #ig/ref :boundary.push/device-store
                        :analytics-store #ig/ref :boundary.push/analytics-store
-                       :callback-secret #env BND_PUSH_CALLBACK_SECRET}
+                       :callback-secret #env WAG_PUSH_CALLBACK_SECRET}
 ```
 
 Require `boundary.push.shell.module-wiring` at system start to load the `defmethod` definitions.

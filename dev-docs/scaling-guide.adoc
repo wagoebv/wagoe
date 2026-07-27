@@ -86,7 +86,7 @@ Configure in `resources/conf/prod/config.edn`:
 
 [source,clojure]
 ----
-:boundary/postgresql
+:wagoe/postgresql
 {:pool {:minimum-idle 10
         :maximum-pool-size 25
         :connection-timeout-ms 30000   ;; Wait 30s for a connection
@@ -111,7 +111,7 @@ The `/health/ready` endpoint checks database connectivity — integrate with you
 
 [source,clojure]
 ----
-:boundary/cache
+:wagoe/cache
 {:provider :redis
  :max-total 20      ;; Max connections in pool
  :max-idle  10      ;; Max idle connections
@@ -163,7 +163,7 @@ Jetty uses a default thread pool of 200 threads. For most Boundary apps this is 
 [source,clojure]
 ----
 ;; In config.edn
-:boundary/http
+:wagoe/http
 {:port 3000
  :host "0.0.0.0"
  :min-threads 10      ;; Minimum threads

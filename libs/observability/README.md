@@ -118,17 +118,17 @@ Unified observability stack with pluggable adapters for logging, metrics, and er
 
 ```clojure
 ;; config.edn with Integrant
-{:boundary/logger
+{:wagoe/logger
  {:adapter :slf4j
   :level :info
   :context {:app "myapp" :env "production"}}
  
- :boundary/metrics
+ :wagoe/metrics
  {:adapter :datadog
   :prefix "myapp"
   :tags {:env "production"}}
  
- :boundary/error-reporter
+ :wagoe/error-reporter
  {:adapter :sentry
   :dsn #env SENTRY_DSN
   :environment "production"}}

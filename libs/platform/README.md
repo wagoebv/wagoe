@@ -65,7 +65,7 @@ Core infrastructure for web applications: database, HTTP routing, pagination, se
 (defn -main [& args]
   (let [cfg (config/load-config "production")
         system (wiring/start! cfg)]
-    (println "System started on port" (get-in system [:boundary/http :port]))
+    (println "System started on port" (get-in system [:wagoe/http :port]))
     system))
 ```
 
@@ -144,7 +144,7 @@ See [libs/tenant/README.md](../tenant/README.md).
 
 ```clojure
 ;; resources/conf/prod/config.edn
-{:boundary/db-context
+{:wagoe/db-context
  {:adapter :postgresql
   :host #env DB_HOST
   :port #env [DB_PORT :int 5432]
@@ -153,11 +153,11 @@ See [libs/tenant/README.md](../tenant/README.md).
   :password #env DB_PASSWORD
   :pool-size 10}
 
- :boundary/http
+ :wagoe/http
  {:port #env [PORT :int 3000]
   :host "0.0.0.0"}
 
- :boundary/modules
+ :wagoe/modules
  [:boundary.user.shell.module-wiring
   :boundary.admin.shell.module-wiring]}
 ```

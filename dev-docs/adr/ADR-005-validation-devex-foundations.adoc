@@ -27,7 +27,7 @@ We will implement a **layered validation infrastructure** that enhances develope
 
 - **Backward compatibility** - Existing code continues to work unchanged
 - **FC/IS architecture** - Pure functional core, imperative shell separation preserved
-- **Feature-flag gating** - New functionality controlled by `BND_DEVEX_VALIDATION` environment variable
+- **Feature-flag gating** - New functionality controlled by `WAG_DEVEX_VALIDATION` environment variable
 - **i18n readiness** - Error codes and message templates enable future internationalization
 
 === Core Components
@@ -83,7 +83,7 @@ Hierarchical error codes with consistent naming:
 
 ==== 4. Feature Flag System
 
-Environment variable `BND_DEVEX_VALIDATION=true` enables:
+Environment variable `WAG_DEVEX_VALIDATION=true` enables:
 
 - Enhanced error formatting
 - Message templating and suggestions
@@ -118,14 +118,14 @@ Environment variable `BND_DEVEX_VALIDATION=true` enables:
 
 === 2. Backward Compatibility Strategy
 
-**Existing code path (BND_DEVEX_VALIDATION=false or unset):**
+**Existing code path (WAG_DEVEX_VALIDATION=false or unset):**
 
 - Legacy result format: `{:valid? boolean :data map :errors malli-errors}`
 - No execution tracking
 - Original error messages
 - Zero overhead
 
-**Enhanced code path (BND_DEVEX_VALIDATION=true):**
+**Enhanced code path (WAG_DEVEX_VALIDATION=true):**
 
 - Structured result format with `:warnings` key
 - Execution tracking for coverage
@@ -231,7 +231,7 @@ All validation infrastructure maintains strict Functional Core / Imperative Shel
 
 **Feature Flag Integration:**
 
-Enhanced features controlled by `BND_DEVEX_VALIDATION` environment variable:
+Enhanced features controlled by `WAG_DEVEX_VALIDATION` environment variable:
 - Feature flag checked once per request in shell layer
 - Core functions accept optional `{:enhanced? boolean :context map}` parameter
 - Legacy behavior preserved when feature flag disabled (default)
@@ -791,7 +791,7 @@ Coverage (user): 100.0% (6/6 rules executed)
 
 **Environment Variables:**
 
-- `BND_DEVEX_VALIDATION` - Enable DevEx features (default: false)
+- `WAG_DEVEX_VALIDATION` - Enable DevEx features (default: false)
 
 ---
 

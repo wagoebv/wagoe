@@ -33,10 +33,10 @@
 
 (defn- embedded-pg-config
   "Minimal system config with PostgreSQL active, pointed at the embedded
-   instance. Mirrors the :boundary/postgresql shape of the real dev config."
+   instance. Mirrors the :wagoe/postgresql shape of the real dev config."
   [pg]
   {:active
-   {:boundary/postgresql
+   {:wagoe/postgresql
     {:host        "localhost"
      :port        (epg/port pg)
      :dbname      "postgres"
@@ -60,7 +60,7 @@
         (swap! db-config/*config-cache* assoc embedded-env (embedded-pg-config pg))
         (let [initialized-dbs (integration/initialize-databases! embedded-env)]
           (is (map? initialized-dbs) "Should return map of initialized databases")
-          (is (contains? initialized-dbs :boundary/postgresql)
+          (is (contains? initialized-dbs :wagoe/postgresql)
               "PostgreSQL context should be initialized")
 
           ;; Check application state is updated
@@ -76,7 +76,7 @@
               (is (contains? db-info :pool) "Should contain connection pool")))
 
           ;; The booted system serves a query against real PostgreSQL
-          (let [result (integration/execute-query :boundary/postgresql
+          (let [result (integration/execute-query :wagoe/postgresql
                                                   {:select [[1 :test]]})]
             (is (coll? result) "Query should return a collection")
             (is (= 1 (:test (first result)))
@@ -94,7 +94,7 @@
 
       ;; Test environment should typically use H2
       (let [active-dbs (integration/list-active-databases)]
-        (is (some #(= :boundary/h2 (first %)) active-dbs)
+        (is (some #(= :wagoe/h2 (first %)) active-dbs)
             "Test environment should typically have H2 active")))))
 
 (deftest ^:integration test-system-initialization-prod
@@ -109,7 +109,7 @@
 
         ;; Production environment should typically use PostgreSQL
         (let [active-dbs (integration/list-active-databases)]
-          (is (some #(= :boundary/postgresql (first %)) active-dbs)
+          (is (some #(= :wagoe/postgresql (first %)) active-dbs)
               "Production environment should typically have PostgreSQL active")))
       (catch Exception e
         ;; Expected failure when production environment variables are not set
@@ -146,7 +146,7 @@
         (is (map? primary-db) "Primary database should be a map")))
 
     (testing "Get non-existent database"
-      (let [non-existent-db (integration/get-database :boundary/nonexistent)]
+      (let [non-existent-db (integration/get-database :wagoe/nonexistent)]
         (is (nil? non-existent-db) "Non-existent database should return nil")))))
 
 (deftest ^:integration test-query-execution

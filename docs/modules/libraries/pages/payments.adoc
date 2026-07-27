@@ -17,27 +17,27 @@ boundary.payments.core.provider                 — Pure helpers: cents->euro, e
 boundary.payments.shell.adapters.stripe         — StripePaymentProvider (Checkout Sessions, HMAC webhooks)
 boundary.payments.shell.adapters.mollie         — MolliePaymentProvider (Mollie API v2, fetch-back verification)
 boundary.payments.shell.adapters.mock           — MockPaymentProvider (auto-approve, no external calls)
-boundary.payments.shell.module-wiring           — Integrant :boundary/payment-provider component
+boundary.payments.shell.module-wiring           — Integrant :wagoe/payment-provider component
 ----
 
 == Enabling a provider
 
-Configure `:boundary/payment-provider` in `config.edn`:
+Configure `:wagoe/payment-provider` in `config.edn`:
 
 [source,clojure]
 ----
 ;; Mock (development — default)
-:boundary/payment-provider
+:wagoe/payment-provider
 {:provider :mock}
 
 ;; Stripe
-:boundary/payment-provider
+:wagoe/payment-provider
 {:provider       :stripe
  :api-key        #env STRIPE_SECRET_KEY
  :webhook-secret #env STRIPE_WEBHOOK_SECRET}
 
 ;; Mollie
-:boundary/payment-provider
+:wagoe/payment-provider
 {:provider         :mollie
  :api-key          #env MOLLIE_API_KEY
  :webhook-base-url #env APP_BASE_URL}

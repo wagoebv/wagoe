@@ -218,7 +218,7 @@
        "\n"
        "Next steps:\n"
        "  1. Review the generated files\n"
-       "  2. Add module to config: [:active :boundary/settings :modules]\n"
+       "  2. Add module to config: [:active :wagoe/settings :modules]\n"
        "  3. Wire module into Integrant system configuration\n"
        "  4. Run tests: clojure -M:test:db/h2 --focus-meta :" (:module-name result)))
 

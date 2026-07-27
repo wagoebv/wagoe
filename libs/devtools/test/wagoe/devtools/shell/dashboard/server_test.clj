@@ -16,9 +16,9 @@
 (use-fixtures :once
   (fn [f]
     (let [port (free-port)
-          srv  (ig/init-key :boundary/dashboard {:port port})]
+          srv  (ig/init-key :wagoe/dashboard {:port port})]
       (binding [*server* srv *port* port]
-        (try (f) (finally (ig/halt-key! :boundary/dashboard srv)))))))
+        (try (f) (finally (ig/halt-key! :wagoe/dashboard srv)))))))
 
 (deftest ^:integration dashboard-pages-return-200
   (doseq [path ["/dashboard" "/dashboard/routes" "/dashboard/requests"

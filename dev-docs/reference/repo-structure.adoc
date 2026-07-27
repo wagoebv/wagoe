@@ -319,7 +319,7 @@ Admin entity configs are modular - each module owns its config in `admin/{module
 [source,clojure]
 ----
 ;; In config.edn
-:boundary/admin
+:wagoe/admin
 {:enabled? true
  :entities #merge [#include "admin/users.edn"]
  :pagination {...}}

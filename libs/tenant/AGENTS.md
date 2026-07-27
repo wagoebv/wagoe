@@ -244,7 +244,7 @@ fallback) so migratus keeps a per-tenant ledger. Consequences:
 - Migrations run once per tenant schema, so prefer idempotent DDL.
 
 Fan-out happens automatically: `provision-tenant!` runs the set into a new
-schema, and the `:boundary/tenant-db-schema` component runs pending tenant
+schema, and the `:wagoe/tenant-db-schema` component runs pending tenant
 migrations across all existing schemas on startup (so a deploy reaches every
 tenant). See `libs/tenant/src/boundary/tenant/shell/tenant_migrations.clj`.
 
@@ -306,15 +306,15 @@ The four tenant-aware HTTP interceptors live in `boundary.user.shell.http-interc
 
 | Key | Component |
 |-----|-----------|
-| `:boundary/tenant-db-schema` | Initialise tables (`tenants`, `tenant_memberships`, `tenant_member_invites`) |
-| `:boundary/tenant-repository` | `TenantRepository` record |
-| `:boundary/tenant-service` | `TenantService` record |
-| `:boundary/tenant-routes` | Normalized tenant API routes |
-| `:boundary/membership-repository` | `MembershipRepository` record |
-| `:boundary/membership-service` | `MembershipService` record |
-| `:boundary/membership-routes` | Normalized membership API routes |
-| `:boundary/invite-repository` | `InviteRepository` record |
-| `:boundary/invite-service` | `InviteService` + `InviteAcceptanceService` record |
+| `:wagoe/tenant-db-schema` | Initialise tables (`tenants`, `tenant_memberships`, `tenant_member_invites`) |
+| `:wagoe/tenant-repository` | `TenantRepository` record |
+| `:wagoe/tenant-service` | `TenantService` record |
+| `:wagoe/tenant-routes` | Normalized tenant API routes |
+| `:wagoe/membership-repository` | `MembershipRepository` record |
+| `:wagoe/membership-service` | `MembershipService` record |
+| `:wagoe/membership-routes` | Normalized membership API routes |
+| `:wagoe/invite-repository` | `InviteRepository` record |
+| `:wagoe/invite-service` | `InviteService` + `InviteAcceptanceService` record |
 
 ---
 

@@ -1,8 +1,8 @@
-;; ^:boundary/allow-throw — the pipeline engine re-propagates exceptions caught
+;; ^:wagoe/allow-throw — the pipeline engine re-propagates exceptions caught
 ;; during interceptor execution (preserving domain ex-info) and validates
 ;; pipeline/interceptor construction. Throwing is the engine's error model, not
 ;; impure business logic, so this namespace is intentionally exempt.
-(ns ^:boundary/allow-throw wagoe.core.interceptor
+(ns ^:wagoe/allow-throw wagoe.core.interceptor
   "Core interceptor pipeline execution engine.
    
    Provides a lightweight interceptor chain pattern for handling cross-cutting

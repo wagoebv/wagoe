@@ -378,7 +378,7 @@
                                 new-val (ig/init-key component-key resolved-config)]
                             ;; If we're restarting the HTTP handler, sync the live
                             ;; handler-atom so Jetty serves the new handler immediately.
-                            (when (= component-key :boundary/http-handler)
+                            (when (= component-key :wagoe/http-handler)
                               (try
                                 (require 'wagoe.platform.shell.system.wiring)
                                 (let [swap-fn (resolve 'wagoe.platform.shell.system.wiring/swap-handler!)]

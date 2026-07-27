@@ -5,7 +5,7 @@
   - :redis      — distributed Redis-backed cache (production)
   - :in-memory  — local atom-based cache (dev / tests without Redis)
 
-  Config key: :boundary/cache
+  Config key: :wagoe/cache
   Example (Redis):
     {:provider :redis
      :host \"localhost\" :port 6379
@@ -22,7 +22,7 @@
             [clojure.tools.logging :as log]
             [integrant.core :as ig]))
 
-(defmethod ig/init-key :boundary/cache
+(defmethod ig/init-key :wagoe/cache
   [_ {:keys [provider] :as config}]
   (log/info "Initializing cache component" {:provider provider})
   (let [cache (case provider
@@ -39,7 +39,7 @@
     (log/info "Cache component initialized" {:provider provider})
     cache))
 
-(defmethod ig/halt-key! :boundary/cache
+(defmethod ig/halt-key! :wagoe/cache
   [_ cache]
   (log/info "Halting cache component")
   (try

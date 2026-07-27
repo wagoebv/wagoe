@@ -1,7 +1,7 @@
 (ns wagoe.realtime.shell.module-wiring
   "Integrant wiring for the realtime module.
 
-   Config key: :boundary/realtime
+   Config key: :wagoe/realtime
      {:provider :in-memory | :redis
       ;; redis only:
       :host \"localhost\" :port 6379
@@ -18,7 +18,7 @@
    component opens two Jedis pools — one for topic subscriptions (pub/sub
    manager) and one inside the bus for publish — both closed on halt.
 
-   IMPORTANT: the web/WS server component MUST depend on :boundary/realtime so
+   IMPORTANT: the web/WS server component MUST depend on :wagoe/realtime so
    that start-subscriber! has completed (subscription live) before any WebSocket
    connection is accepted."
   (:require [wagoe.realtime.ports :as ports]
@@ -31,7 +31,7 @@
             [clojure.tools.logging :as log]
             [integrant.core :as ig]))
 
-(defmethod ig/init-key :boundary/realtime
+(defmethod ig/init-key :wagoe/realtime
   [_ {:keys [provider jwt-verifier] :as config}]
   (log/info "Initializing realtime component" {:provider provider})
   (let [conn-registry (registry/create-in-memory-registry)
@@ -57,7 +57,7 @@
     {:service svc :registry conn-registry :pubsub-manager pubsub-manager
      :bus bus :pool pool}))
 
-(defmethod ig/halt-key! :boundary/realtime
+(defmethod ig/halt-key! :wagoe/realtime
   [_ {:keys [bus pool]}]
   (log/info "Halting realtime component")
   ;; Closeable buses (RedisMessageBus) own an internal pool that .close releases

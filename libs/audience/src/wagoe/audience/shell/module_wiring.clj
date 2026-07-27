@@ -3,15 +3,15 @@
 
    Config keys:
 
-   :boundary/audience
-     {:db-ctx          (ig/ref :boundary/db-context)
-      :cache-service   (ig/ref :boundary/cache)
-      :user-data-source (ig/ref :boundary/user-data-source)}
+   :wagoe/audience
+     {:db-ctx          (ig/ref :wagoe/db-context)
+      :cache-service   (ig/ref :wagoe/cache)
+      :user-data-source (ig/ref :wagoe/user-data-source)}
 
      Returns {:store <IAudienceRepository> :resolver <IAudienceResolver> :cache <IAudienceCache>}
 
-   :boundary/audience-routes
-     {:audience-service (ig/ref :boundary/audience)}
+   :wagoe/audience-routes
+     {:audience-service (ig/ref :wagoe/audience)}
 
      Returns {:api [...] :web [...]} for composition
      by the HTTP handler."
@@ -22,7 +22,7 @@
             [wagoe.audience.shell.http :as audience-http]
             [clojure.tools.logging :as log]))
 
-(defmethod ig/init-key :boundary/audience
+(defmethod ig/init-key :wagoe/audience
   [_ {:keys [db-ctx cache-service user-data-source]}]
   (log/info "Initializing audience component")
   (let [datasource (:datasource db-ctx)
@@ -39,7 +39,7 @@
      :resolver resolver
      :cache    acache}))
 
-(defmethod ig/halt-key! :boundary/audience
+(defmethod ig/halt-key! :wagoe/audience
   [_ _component]
   (log/info "Halting audience component")
   nil)
@@ -48,13 +48,13 @@
 ;; Audience Routes Component
 ;; =============================================================================
 
-(defmethod ig/init-key :boundary/audience-routes
+(defmethod ig/init-key :wagoe/audience-routes
   [_ {:keys [audience-service]}]
   (log/info "Initializing audience routes")
   {:api (audience-http/audience-api-routes (:resolver audience-service) (:store audience-service))
    :web (audience-http/audience-web-routes (:resolver audience-service) (:store audience-service))})
 
-(defmethod ig/halt-key! :boundary/audience-routes
+(defmethod ig/halt-key! :wagoe/audience-routes
   [_ _routes]
   ;; Routes are pure data — no cleanup needed
   nil)

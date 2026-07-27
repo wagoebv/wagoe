@@ -380,32 +380,32 @@ under `/api/v1/tenants` (JSON responses; standard 400/404/500 error handling):
 
 ```clojure
 ;; config/dev.edn
-{:boundary/db-context {...}
+{:wagoe/db-context {...}
  
- :boundary/tenant-repository
- {:db-context #ig/ref :boundary/db-context}
+ :wagoe/tenant-repository
+ {:db-context #ig/ref :wagoe/db-context}
  
- :boundary/tenant-service
- {:repository #ig/ref :boundary/tenant-repository
-  :logger #ig/ref :boundary/logger
-  :error-reporter #ig/ref :boundary/error-reporter}
+ :wagoe/tenant-service
+ {:repository #ig/ref :wagoe/tenant-repository
+  :logger #ig/ref :wagoe/logger
+  :error-reporter #ig/ref :wagoe/error-reporter}
  
- :boundary/membership-service
- {:repository #ig/ref :boundary/membership-repository
-  :logger #ig/ref :boundary/logger}
+ :wagoe/membership-service
+ {:repository #ig/ref :wagoe/membership-repository
+  :logger #ig/ref :wagoe/logger}
 
  ;; Builds the tenant HTTP middleware seq (tenant resolution + membership).
  ;; The app injects it into platform's http-handler via :extra-middleware (BOU-200),
  ;; so platform never requires the tenant lib directly.
- :boundary/tenant-http-middleware
- {:tenant-service #ig/ref :boundary/tenant-service
-  :membership-service #ig/ref :boundary/membership-service
-  :db-context #ig/ref :boundary/db-context}}
+ :wagoe/tenant-http-middleware
+ {:tenant-service #ig/ref :wagoe/tenant-service
+  :membership-service #ig/ref :wagoe/membership-service
+  :db-context #ig/ref :wagoe/db-context}}
 ```
 
 Under the Boundary app wiring (`boundary.config`), these keys are added
-automatically and `:boundary/tenant-http-middleware` is referenced by
-`:boundary/http-handler`'s `:extra-middleware` — no manual middleware mounting
+automatically and `:wagoe/tenant-http-middleware` is referenced by
+`:wagoe/http-handler`'s `:extra-middleware` — no manual middleware mounting
 is required.
 
 ### Database Migrations

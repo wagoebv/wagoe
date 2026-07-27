@@ -133,11 +133,11 @@ clojure -M:test:db/h2 :admin
 == Configuration
 
 Aero-based configuration with environment profiles in `resources/conf/{env}/config.edn`.
-The active environment is controlled by the `BND_ENV` environment variable.
+The active environment is controlled by the `WAG_ENV` environment variable.
 
 [source,bash]
 ----
-export BND_ENV=development   # loads resources/conf/dev/config.edn
-export BND_ENV=test          # loads resources/conf/test/config.edn
-export BND_ENV=production    # loads resources/conf/prod/config.edn
+export WAG_ENV=development   # loads resources/conf/dev/config.edn
+export WAG_ENV=test          # loads resources/conf/test/config.edn
+export WAG_ENV=production    # loads resources/conf/prod/config.edn
 ----

@@ -17,16 +17,16 @@
   (with-redefs [wagoe.platform.shell.http.reitit-router/create-reitit-router
                 (fn [] ::reitit-router)]
     (is (= ::reitit-router
-           (ig/init-key :boundary/router {:adapter :unknown})))))
+           (ig/init-key :wagoe/router {:adapter :unknown})))))
 
 (deftest ^:unit http-handler-includes-membership-routes-and-optional-middleware
   (let [captured-routes (atom nil)
         captured-config (atom nil)
         compiled-handler (fn [request] {:status 200 :body request})
-        config {:active {:boundary/settings {:name "Boundary"
+        config {:active {:wagoe/settings {:name "Boundary"
                                              :version "1.2.3"}}}
         ;; Tenant/membership middleware now arrives via :extra-middleware, built
-        ;; by the tenant lib's :boundary/tenant-http-middleware component (BOU-200);
+        ;; by the tenant lib's :wagoe/tenant-http-middleware component (BOU-200);
         ;; platform's http-handler no longer constructs it. Two stand-in wrappers.
         extra-middleware [(fn [h] (fn [request] (h (assoc request :tenant true))))
                           (fn [h] (fn [request] (h (assoc request :membership true))))]
@@ -46,7 +46,7 @@
                               (fn [wrapped-handler _i18n]
                                 (fn [request]
                                   (wrapped-handler (assoc request :i18n true))))]
-                  (ig/init-key :boundary/http-handler
+                  (ig/init-key :wagoe/http-handler
                                {:user-routes {:api [{:path "/users" :methods {:get {:handler identity}}}]}
                                 :tenant-routes {:api [{:path "/tenants" :methods {:get {:handler identity}}}]}
                                 :membership-routes {:api [{:path "/tenants/:tenant-id/memberships"
@@ -98,7 +98,7 @@
                               (fn [routes _config] (vec routes))
                               wagoe.platform.shell.http.versioning/wrap-handler-with-version-headers
                               (fn [wrapped-handler _config] wrapped-handler)]
-                  (ig/init-key :boundary/http-handler
+                  (ig/init-key :wagoe/http-handler
                                {:user-routes {:web [{:path "/profile"
                                                      :meta {:middleware [:user-mw]}
                                                      :methods {:get {:handler identity}}}]}
@@ -116,7 +116,7 @@
                                 :metrics-emitter ::metrics
                                 :tracer ::tracer
                                 :error-reporter ::error-reporter
-                                :config {:active {:boundary/settings {:name "Boundary"
+                                :config {:active {:wagoe/settings {:name "Boundary"
                                                                       :version "1.2.3"}}}}))]
     (testing "web routes are prefixed and route meta is merged at the route root"
       (is (some #(and (= "/web/profile" (:path %))
@@ -168,12 +168,12 @@
     (is (thrown-with-msg?
          clojure.lang.ExceptionInfo
          #"CSRF protection is enabled but no secret is configured"
-         (ig/init-key :boundary/http-handler
+         (ig/init-key :wagoe/http-handler
                       {:router ::router
                        :logger ::logger
                        :metrics-emitter ::metrics
                        :error-reporter ::error-reporter
-                       :config {:active {:boundary/http {:security {:csrf {:enabled? true
+                       :config {:active {:wagoe/http {:security {:csrf {:enabled? true
                                                                            :secret ""}}}}}})))))
 
 (deftest ^:security ^:unit rate-limit-fails-loud-in-prod-without-cache
@@ -181,14 +181,14 @@
     (is (thrown-with-msg?
          clojure.lang.ExceptionInfo
          #"Rate limiting is enabled in the :prod profile but no"
-         (ig/init-key :boundary/http-handler
+         (ig/init-key :wagoe/http-handler
                       {:router ::router
                        :logger ::logger
                        :metrics-emitter ::metrics
                        :error-reporter ::error-reporter
                        ;; no :cache -> cache is nil
-                       :config {:boundary/profile :prod
-                                :active {:boundary/http {:rate-limit {:enabled? true}}}}})))))
+                       :config {:wagoe/profile :prod
+                                :active {:wagoe/http {:rate-limit {:enabled? true}}}}})))))
 
 (deftest ^:unit component-init-falls-back-to-no-op-providers-for-unknown-adapters
   (with-redefs [wagoe.observability.logging.shell.adapters.no-op/create-logging-component
@@ -198,11 +198,11 @@
                 wagoe.observability.errors.shell.adapters.no-op/create-error-reporting-component
                 (fn [config] [:errors-no-op config])]
     (is (= [:logging-no-op {:provider :mystery}]
-           (ig/init-key :boundary/logging {:provider :mystery})))
+           (ig/init-key :wagoe/logging {:provider :mystery})))
     (is (= [:metrics-no-op {:provider :mystery}]
-           (ig/init-key :boundary/metrics {:provider :mystery})))
+           (ig/init-key :wagoe/metrics {:provider :mystery})))
     (is (= [:errors-no-op {:provider :mystery}]
-           (ig/init-key :boundary/error-reporting {:provider :mystery})))))
+           (ig/init-key :wagoe/error-reporting {:provider :mystery})))))
 
 ;; =============================================================================
 ;; Prometheus metrics provider + /metrics endpoint (BOU-174)
@@ -210,7 +210,7 @@
 
 (deftest ^:unit metrics-component-selects-prometheus-provider
   (testing ":provider :prometheus wires the Prometheus adapter, and it exports"
-    (let [c (ig/init-key :boundary/metrics {:provider :prometheus})]
+    (let [c (ig/init-key :wagoe/metrics {:provider :prometheus})]
       (is (satisfies? metrics-ports/IMetricsExporter c))
       (let [h (metrics-ports/register-counter! c :requests_total "Total requests" {})]
         (metrics-ports/inc-counter! c h))
@@ -220,18 +220,18 @@
 
 (deftest ^:unit metrics-endpoint-serves-prometheus-text
   (testing "the /metrics route exports the active component's Prometheus text"
-    (let [metrics (ig/init-key :boundary/metrics {:provider :prometheus})
+    (let [metrics (ig/init-key :wagoe/metrics {:provider :prometheus})
           h       (metrics-ports/register-counter! metrics :http_requests_total "reqs" {})
           _       (metrics-ports/inc-counter! metrics h)
           captured-routes (atom nil)
-          config  {:active {:boundary/settings {:name "B" :version "1"}}}]
+          config  {:active {:wagoe/settings {:name "B" :version "1"}}}]
       (with-redefs [wagoe.platform.ports.http/compile-routes
                     (fn [_router routes _cfg] (reset! captured-routes routes) (fn [_] {:status 200}))
                     wagoe.platform.shell.interfaces.http.common/health-check-handler
                     (fn [_ _ _] (fn [_] {:status 200}))
                     wagoe.platform.shell.http.versioning/apply-versioning (fn [routes _] (vec routes))
                     wagoe.platform.shell.http.versioning/wrap-handler-with-version-headers (fn [hh _] hh)]
-        (ig/init-key :boundary/http-handler
+        (ig/init-key :wagoe/http-handler
                      {:user-routes {} :router ::r :logger ::l :metrics-emitter metrics
                       :error-reporter ::e :config config}))
       (let [metrics-route (first (filter #(= "/metrics" (:path %)) @captured-routes))
@@ -244,13 +244,13 @@
 
 (deftest ^:unit tracing-component-selects-provider
   (testing ":no-op, :logging, and an unknown provider (falls back to no-op) all satisfy ITracer"
-    (is (satisfies? tracing-ports/ITracer (ig/init-key :boundary/tracing {:provider :no-op})))
-    (is (satisfies? tracing-ports/ITracer (ig/init-key :boundary/tracing {:provider :logging})))
-    (is (satisfies? tracing-ports/ITracer (ig/init-key :boundary/tracing {:provider :mystery})))))
+    (is (satisfies? tracing-ports/ITracer (ig/init-key :wagoe/tracing {:provider :no-op})))
+    (is (satisfies? tracing-ports/ITracer (ig/init-key :wagoe/tracing {:provider :logging})))
+    (is (satisfies? tracing-ports/ITracer (ig/init-key :wagoe/tracing {:provider :mystery})))))
 
 (deftest ^:unit tracing-component-selects-otlp-provider
   (testing ":provider :otlp builds an OpenTelemetry tracer (no collector needed to construct)"
-    (let [tracer (ig/init-key :boundary/tracing
+    (let [tracer (ig/init-key :wagoe/tracing
                               {:provider :otlp :endpoint "http://localhost:4318"
                                :service-name "wiring-test"})]
       (is (satisfies? tracing-ports/ITracer tracer))
@@ -258,15 +258,15 @@
         (is (re-matches #"[0-9a-f]{32}" (:trace-id (tracing-ports/span-context tracer span))))
         (tracing-ports/end-span! tracer span))
       ;; halt flushes + shuts the SDK down (no dangling batch thread)
-      (ig/halt-key! :boundary/tracing tracer))))
+      (ig/halt-key! :wagoe/tracing tracer))))
 
 (deftest ^:unit metrics-component-selects-otlp-provider
   (testing ":provider :otlp builds an OTLP metrics component that emits without error"
-    (let [c (ig/init-key :boundary/metrics
+    (let [c (ig/init-key :wagoe/metrics
                          {:provider :otlp :endpoint "http://localhost:4318"
                           :service-name "wiring-test" :interval-ms 60000})]
       (is (satisfies? metrics-ports/IMetricsEmitter c))
       (let [h (metrics-ports/register-counter! c :requests_total "reqs" {})]
         (is (nil? (metrics-ports/inc-counter! c h))))
       (is (nil? (metrics-ports/flush! c)))
-      (ig/halt-key! :boundary/metrics c))))
+      (ig/halt-key! :wagoe/metrics c))))

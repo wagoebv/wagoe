@@ -722,7 +722,7 @@
       [:div.page-header.auth-header
        (when-let [logo-url (:logo-url opts)]
          [:img.auth-logo {:src logo-url :alt "" :style "height:48px; width:auto; display:block; margin:0 auto 12px;"}])
-       [:h1 [:t :boundary/app-name]]
+       [:h1 [:t :wagoe/app-name]]
        [:p [:t :user/login-subtitle]]]
       (login-form data-with-return errors)]
      opts)))
@@ -801,7 +801,7 @@
       [:div.page-header.auth-header
        (when-let [logo-url (:logo-url opts)]
          [:img.auth-logo {:src logo-url :alt "" :style "height:48px; width:auto; display:block; margin:0 auto 12px;"}])
-       [:h1 [:t :boundary/app-name]]
+       [:h1 [:t :wagoe/app-name]]
        [:p [:t :user/mfa-subtitle]]]
       (mfa-login-form data-with-return errors)]
      opts)))
