@@ -533,7 +533,7 @@ Consider Replicant for a page/module when ALL criteria apply:
 
 === Framework Documentation
 - link:https://github.com/thijs-creemers/boundary/blob/main/AGENTS.md[Developer Guide] - Project overview and development workflow
-- link:../wagoe.prd.adoc[Product Requirements Document] - Product vision and requirements
+- link:../reference/boundary-prd.adoc[Product Requirements Document] - Product vision and requirements
 - link:../architecture/overview.adoc[Architecture Overview] - Framework architectural principles
 
 ---

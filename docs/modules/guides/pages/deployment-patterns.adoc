@@ -23,7 +23,7 @@ java -jar target/wagoe-*.jar migrate up
 
 == Environment Variables
 
-All deployments need these variables. See `resources/deploy/systemd/wagoe.env.example` for a full template.
+All deployments need these variables. See `resources/deploy/systemd/boundary.env.example` for a full template.
 
 [cols="1,1,2",options="header"]
 |===
@@ -60,12 +60,12 @@ sudo chown -R boundary:boundary /opt/boundary
 
 # 3. Configure secrets
 sudo mkdir -p /etc/boundary
-sudo cp resources/deploy/systemd/wagoe.env.example /etc/boundary/wagoe.env
+sudo cp resources/deploy/systemd/boundary.env.example /etc/boundary/wagoe.env
 sudo chmod 600 /etc/boundary/wagoe.env
 # Edit /etc/boundary/wagoe.env with real values
 
 # 4. Install and start the service
-sudo cp resources/deploy/systemd/wagoe.service /etc/systemd/system/
+sudo cp resources/deploy/systemd/boundary.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now boundary
 ----
@@ -102,12 +102,12 @@ Environment=JAVA_OPTS="-Xms512m -Xmx2g -XX:+UseG1GC -XX:MaxGCPauseMillis=200"
 
 == nginx Reverse Proxy
 
-Reference file: `resources/deploy/nginx/wagoe.conf`
+Reference file: `resources/deploy/nginx/boundary.conf`
 
 [source,bash]
 ----
 # 1. Install
-sudo cp resources/deploy/nginx/wagoe.conf /etc/nginx/sites-available/boundary
+sudo cp resources/deploy/nginx/boundary.conf /etc/nginx/sites-available/boundary
 sudo ln -s /etc/nginx/sites-available/boundary /etc/nginx/sites-enabled/
 
 # 2. Replace your-domain.com with your actual domain

@@ -24,7 +24,7 @@ These files are referenced but not found in the new structure:
 `docs/reference/validation-patterns.adoc`
 * `docs/error-codes.adoc` - Already exists as
 `docs/reference/error-codes.adoc`
-* `docs/wagoe.prd.adoc` - Should be at root level as `PRD.adoc`
+* `docs/boundary.prd.adoc` - Should be at root level as `PRD.adoc`
 * `docs/multi-db-usage.adoc` - Missing
 * `docs/dynamic-driver-loading.adoc` - Missing
 
