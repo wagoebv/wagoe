@@ -29,7 +29,7 @@
       (is (seq files) "scaffold! returns at least one file")
 
       (let [file-set (set files)
-            src-dir  (str "libs/" test-module "/src/boundary/" test-module)]
+            src-dir  (str "libs/" test-module "/src/wagoe/" test-module)]
 
         (testing "schema.clj is generated"
           (let [path (str src-dir "/schema.clj")]
@@ -72,7 +72,7 @@
                  test-module
                  {:fields    [[:title :string]]
                   :endpoints []})
-          src-dir (str "libs/" test-module "/src/boundary/" test-module)
+          src-dir (str "libs/" test-module "/src/wagoe/" test-module)
           http-path (str src-dir "/shell/http.clj")]
       (is (not (contains? (set files) http-path))
           "shell/http.clj is not generated when no http endpoints requested")

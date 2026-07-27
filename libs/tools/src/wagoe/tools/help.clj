@@ -1,5 +1,5 @@
 #!/usr/bin/env bb
-;; libs/tools/src/boundary/tools/help.clj
+;; libs/tools/src/wagoe/tools/help.clj
 ;;
 ;; Contextual Help — state-aware guidance and reference for Boundary projects.
 ;;
@@ -95,7 +95,7 @@
   (println "  ^:security      Security-focused tests (error mapping, CSRF, XSS, SQL)")
   (println)
   (println (cyan "AI-assisted:"))
-  (println "  bb ai gen-tests libs/user/src/boundary/user/core/validation.clj")
+  (println "  bb ai gen-tests libs/user/src/wagoe/user/core/validation.clj")
   (println)
   (println (cyan "Quality gates:"))
   (println "  bb check:fcis                                         # FC/IS enforcement")
@@ -131,7 +131,7 @@
   (println "Every library in libs/ follows the FC/IS architecture pattern:")
   (println)
   (println (cyan "Structure:"))
-  (println "  libs/{library}/src/boundary/{library}/")
+  (println "  libs/{library}/src/wagoe/{library}/")
   (println "  +-- core/        Pure functions ONLY (no I/O, no logging, no exceptions)")
   (println "  +-- shell/       All side effects (persistence, services, HTTP handlers)")
   (println "  +-- ports.clj    Protocol definitions (interfaces)")

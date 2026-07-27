@@ -200,7 +200,7 @@
             components (count sys)
             modules    (->> (keys sys)
                             (filter #(and (keyword? %)
-                                          (= "boundary" (namespace %))
+                                          (= "wagoe" (namespace %))
                                           (not (contains? infra-keys (name %)))))
                             (map #(name %))
                             sort)]
@@ -219,7 +219,7 @@
   (when-let [sys (system)]
     (->> (keys sys)
          (filter #(and (keyword? %)
-                       (= "boundary" (namespace %))
+                       (= "wagoe" (namespace %))
                        (not (contains? infra-keys (name %)))))
          (map #(name %))
          sort

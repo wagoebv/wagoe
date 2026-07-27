@@ -79,7 +79,7 @@ Deploy
 
 ....
 clojure -T:build clean && clojure -T:build uber
-java -jar target/boundary-*.jar server
+java -jar target/wagoe-*.jar server
 ....
 
 MFA demo

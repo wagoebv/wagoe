@@ -59,7 +59,7 @@ Field spec format: `name:type[:required][:unique]` with types
 - Unbalanced parens: run `clj-paren-repair <file>` — never repair by hand.
 
 <!-- This file exists in two places and must stay byte-identical:
-     libs/wagoe-cli/resources/boundary/cli/templates/claude-skill.md.tmpl
+     libs/wagoe-cli/resources/wagoe/cli/templates/claude-skill.md.tmpl
        (copied into generated projects as .claude/skills/boundary/SKILL.md)
      claude-plugin/skills/boundary/SKILL.md
        (shipped as the Claude Code plugin for existing projects)

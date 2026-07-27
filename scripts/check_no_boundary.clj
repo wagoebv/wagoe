@@ -1,5 +1,5 @@
 #!/usr/bin/env bb
-;; libs/tools/src/boundary/tools/check_no_boundary.clj
+;; scripts/check_no_boundary.clj
 ;;
 ;; Verification gate for the Boundary -> Wagoe rename (BOU-209).
 ;;
@@ -58,8 +58,13 @@
    :keys   {:desc  ":boundary/ config + Integrant keys"
             :grep  ["-nIF" ":boundary/"]
             :hard? true}
-   :coords {:desc  "org.boundary-app Maven coords"
-            :grep  ["-nIF" "org.boundary-app"]
+   :coords {:desc  "org.boundary-app Maven coords (dot + path form)"
+            ;; `org[./]boundary-app` catches BOTH the coord form
+            ;; (org.boundary-app/x) and the repo PATH form used in Clojars/m2
+            ;; URLs (clojars.org/repo/org/boundary-app/...). Matching only the
+            ;; dot form left the deploy verification URL silently pointing at
+            ;; the old group after the coord rename (BOU-213).
+            :grep  ["-nIE" "org[./]boundary-app"]
             :hard? true}
    :env    {:desc  "BND_ env prefix"
             :grep  ["-nIE" "BND_[A-Z0-9_]+"]
@@ -67,8 +72,11 @@
    :dirs   {:desc  "boundary-cli / boundary-mcp dir names"
             :grep  ["-nIE" "boundary-(cli|mcp)"]
             :hard? true}
-   :urls   {:desc  "boundary-app.org / thijs-creemers/boundary refs"
-            :grep  ["-nIE" "boundary-app\\.org|thijs-creemers/boundary"]
+   :urls   {:desc  "boundary-app.org / <owner>/boundary repo refs"
+            ;; Match ANY owner, not just thijs-creemers: the repo URL also
+            ;; appears under the old org (tcbv/boundary, in the systemd unit).
+            ;; Pinning one owner would let Phase 5a miss the other variants.
+            :grep  ["-nIE" "boundary-app\\.org|github\\.com/[A-Za-z0-9_-]+/boundary"]
             :hard? true}
    :prose  {:desc  "\"boundary\" word in prose (REPORT ONLY — also an arch term)"
             :grep  ["-nIiE" "boundary"]

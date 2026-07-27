@@ -1,7 +1,7 @@
 (ns build
   (:require [clojure.tools.build.api :as b]))
 
-(def lib 'org.boundary-app/boundary-tools)
+(def lib 'org.wagoe/wagoe-tools)
 (def version "1.0.0-beta-1")
 (def class-dir "target/classes")
 (load-file "../build_shared.clj")
@@ -34,7 +34,7 @@
   ;; boundary-devtools) can run `bb guide error BND-xxx` and don't crash on
   ;; namespace-load of wagoe.tools.help. Source of truth lives in
   ;; libs/devtools/resources; copied here at build time.
-  (b/copy-file {:src    "../devtools/resources/boundary/devtools/error_catalog.edn"
+  (b/copy-file {:src    "../devtools/resources/wagoe/devtools/error_catalog.edn"
                 :target (str class-dir "/boundary/devtools/error_catalog.edn")})
   (spit (str class-dir "/cljdoc.edn")
         (pr-str {:cljdoc/root "libs/tools"}))

@@ -217,7 +217,7 @@ After running `bb scaffold generate`, wire the new module into the system:
 
 ```clojure
 ;; In root deps.edn, add to :paths or as a local lib:
-{:deps {boundary/product {:local/root "libs/product"}}}
+{:deps {wagoe/product {:local/root "libs/product"}}}
 ```
 
 ### 2. Add to `tests.edn`

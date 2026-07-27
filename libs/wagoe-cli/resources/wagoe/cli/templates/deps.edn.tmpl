@@ -1,18 +1,18 @@
 {:paths ["src" "resources"]
- :deps  {org.boundary-app/boundary-core         {:mvn/version "{{core-version}}"}
-         org.boundary-app/boundary-observability {:mvn/version "{{observability-version}}"}
-         org.boundary-app/boundary-platform      {:mvn/version "{{platform-version}}"}
-         org.boundary-app/boundary-user          {:mvn/version "{{user-version}}"}
+ :deps  {org.wagoe/wagoe-core         {:mvn/version "{{core-version}}"}
+         org.wagoe/wagoe-observability {:mvn/version "{{observability-version}}"}
+         org.wagoe/wagoe-platform      {:mvn/version "{{platform-version}}"}
+         org.wagoe/wagoe-user          {:mvn/version "{{user-version}}"}
          ;; Required by boundary-platform's system wiring (unconditional module loads)
-         org.boundary-app/boundary-cache         {:mvn/version "{{cache-version}}"}
-         org.boundary-app/boundary-admin         {:mvn/version "{{admin-version}}"}
-         org.boundary-app/boundary-ui-style      {:mvn/version "{{ui-style-version}}"}
-         org.boundary-app/boundary-tenant        {:mvn/version "{{tenant-version}}"}
-         org.boundary-app/boundary-workflow      {:mvn/version "{{workflow-version}}"}
-         org.boundary-app/boundary-search        {:mvn/version "{{search-version}}"}
-         org.boundary-app/boundary-external      {:mvn/version "{{external-version}}"}
-         org.boundary-app/boundary-payments      {:mvn/version "{{payments-version}}"}
-         org.boundary-app/boundary-i18n          {:mvn/version "{{i18n-version}}"}
+         org.wagoe/wagoe-cache         {:mvn/version "{{cache-version}}"}
+         org.wagoe/wagoe-admin         {:mvn/version "{{admin-version}}"}
+         org.wagoe/wagoe-ui-style      {:mvn/version "{{ui-style-version}}"}
+         org.wagoe/wagoe-tenant        {:mvn/version "{{tenant-version}}"}
+         org.wagoe/wagoe-workflow      {:mvn/version "{{workflow-version}}"}
+         org.wagoe/wagoe-search        {:mvn/version "{{search-version}}"}
+         org.wagoe/wagoe-external      {:mvn/version "{{external-version}}"}
+         org.wagoe/wagoe-payments      {:mvn/version "{{payments-version}}"}
+         org.wagoe/wagoe-i18n          {:mvn/version "{{i18n-version}}"}
          com.h2database/h2                       {:mvn/version "2.4.240"}}
  :aliases
  {:repl     {:extra-paths ["dev"]
@@ -40,11 +40,11 @@
   ;; devtools), so once alpha-43+ poms are published this can be reduced to just
   ;; wagoe-mcp. The closure is enumerated explicitly for now so `-M:mcp` also
   ;; resolves against the current published poms.
-  :mcp      {:extra-deps {org.boundary-app/wagoe-mcp        {:mvn/version "{{wagoe-mcp-version}}"}
-                          org.boundary-app/boundary-ai         {:mvn/version "{{wagoe-mcp-version}}"}
-                          org.boundary-app/boundary-devtools   {:mvn/version "{{wagoe-mcp-version}}"}
-                          org.boundary-app/boundary-scaffolder {:mvn/version "{{wagoe-mcp-version}}"}
-                          org.boundary-app/boundary-tools      {:mvn/version "{{wagoe-mcp-version}}"}
-                          org.boundary-app/boundary-jobs       {:mvn/version "{{wagoe-mcp-version}}"}}
+  :mcp      {:extra-deps {org.wagoe/wagoe-mcp        {:mvn/version "{{wagoe-mcp-version}}"}
+                          org.wagoe/wagoe-ai         {:mvn/version "{{wagoe-mcp-version}}"}
+                          org.wagoe/wagoe-devtools   {:mvn/version "{{wagoe-mcp-version}}"}
+                          org.wagoe/wagoe-scaffolder {:mvn/version "{{wagoe-mcp-version}}"}
+                          org.wagoe/wagoe-tools      {:mvn/version "{{wagoe-mcp-version}}"}
+                          org.wagoe/wagoe-jobs       {:mvn/version "{{wagoe-mcp-version}}"}}
              :main-opts  ["-m" "boundary.mcp.shell.server"]}}}
 

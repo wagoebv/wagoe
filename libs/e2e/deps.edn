@@ -20,8 +20,8 @@
          ;; Monorepo libraries the e2e suite depends on for helper data
          ;; and protocol access (e.g. generating admin tokens directly,
          ;; reading schema definitions for assertions).
-         boundary/user       {:local/root "../user"}
-         boundary/tenant     {:local/root "../tenant"}}
+         wagoe/user       {:local/root "../user"}
+         wagoe/tenant     {:local/root "../tenant"}}
 
  :aliases
  {:test {:extra-paths ["test"]

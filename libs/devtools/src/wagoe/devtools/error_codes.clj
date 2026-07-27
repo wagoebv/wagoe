@@ -23,7 +23,7 @@
 
 (def catalog
   "Map of error code string to error definition.
-   Loaded from resources/boundary/devtools/error_catalog.edn."
+   Loaded from resources/wagoe/devtools/error_catalog.edn."
   (let [r (io/resource "wagoe/devtools/error_catalog.edn")]
     (when-not r
       (throw (ex-info "error_catalog.edn not found on classpath" {})))

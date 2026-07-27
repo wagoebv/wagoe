@@ -12,7 +12,6 @@
      (hot/run-all)"
   (:require [criterium.core :as crit]
             [malli.core :as m]
-            [clojure.walk :as walk]
             [wagoe.core.utils.case-conversion :as cc]
             [wagoe.i18n.shell.render :as i18n-render]
             [wagoe.observability.logging.ports :as log-ports]))

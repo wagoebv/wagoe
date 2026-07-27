@@ -56,7 +56,7 @@ example runs against the source in this repository with no publish step. A real
 project would instead use the published coordinate:
 
 ```clojure
-org.boundary-app/boundary-core {:mvn/version "1.0.0-beta-1"}
+org.wagoe/wagoe-core {:mvn/version "1.0.0-beta-1"}
 ```
 
 ## Next

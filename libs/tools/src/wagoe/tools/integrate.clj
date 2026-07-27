@@ -1,5 +1,5 @@
 #!/usr/bin/env bb
-;; libs/tools/src/boundary/tools/integrate.clj
+;; libs/tools/src/wagoe/tools/integrate.clj
 ;;
 ;; Module Integration — wire a scaffolded module into the running system.
 ;;

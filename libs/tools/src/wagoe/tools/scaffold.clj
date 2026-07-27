@@ -1,5 +1,5 @@
 #!/usr/bin/env bb
-;; libs/tools/src/boundary/tools/scaffold.clj
+;; libs/tools/src/wagoe/tools/scaffold.clj
 ;;
 ;; Interactive scaffolding wizard for Boundary modules.
 ;;
@@ -135,7 +135,7 @@
                          ["clojure" "-M" "-m" "wagoe.scaffolder.shell.cli-entry"]
                          ["clojure"
                           "-Sdeps"
-                          (str "{:deps {org.boundary-app/boundary-scaffolder {:mvn/version \"" scaffolder-version "\"}}}")
+                          (str "{:deps {org.wagoe/wagoe-scaffolder {:mvn/version \"" scaffolder-version "\"}}}")
                           "-M" "-m" "wagoe.scaffolder.shell.cli-entry"])]
       (apply shell (concat base-cmd args)))
     (catch Exception e

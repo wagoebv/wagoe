@@ -1,5 +1,5 @@
 #!/usr/bin/env bb
-;; libs/tools/src/boundary/tools/check.clj
+;; libs/tools/src/wagoe/tools/check.clj
 ;;
 ;; Unified Quality Check — aggregates all quality checks into one command.
 ;;

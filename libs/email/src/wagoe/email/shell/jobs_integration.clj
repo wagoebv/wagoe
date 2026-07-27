@@ -4,7 +4,7 @@
    This namespace provides async email sending via the jobs module.
    The jobs module is an OPTIONAL dependency - add it to your deps.edn:
    
-     {:deps {org.boundary-app/boundary-jobs {:mvn/version \"0.1.0\"}}}
+     {:deps {org.wagoe/wagoe-jobs {:mvn/version \"0.1.0\"}}}
    
    If jobs module is not available, async functions will throw descriptive errors
    with :type :missing-dependency.
@@ -54,7 +54,7 @@
    
    Requires:
      Jobs module must be added to deps.edn:
-       {:deps {org.boundary-app/boundary-jobs {:mvn/version \\\"0.1.0\\\"}}}"
+       {:deps {org.wagoe/wagoe-jobs {:mvn/version \\\"0.1.0\\\"}}}"
   [job-queue email-sender email]
   (if-let [enqueue-fn (requiring-resolve 'wagoe.jobs.ports/enqueue-job!)]
     (let [;; Extract SMTP configuration from sender
@@ -82,7 +82,7 @@
       ;; Enqueue job to :emails queue
       (enqueue-fn job-queue :emails job))
     
-    (throw (ex-info "Jobs module not available. Add org.boundary-app/boundary-jobs to deps.edn"
+    (throw (ex-info "Jobs module not available. Add org.wagoe/wagoe-jobs to deps.edn"
 
                     {:type :missing-dependency
                      :module "boundary-jobs"
@@ -210,7 +210,7 @@
    
    Requires:
      Jobs module must be added to deps.edn:
-       {:deps {org.boundary-app/boundary-jobs {:mvn/version \\\"0.1.0\\\"}}}"
+       {:deps {org.wagoe/wagoe-jobs {:mvn/version \\\"0.1.0\\\"}}}"
   [job-registry]
   (if-let [register-fn (requiring-resolve 'wagoe.jobs.ports/register-handler!)]
     (do
@@ -219,7 +219,7 @@
       
       (register-fn job-registry :send-email process-email-job))
     
-    (throw (ex-info "Jobs module not available. Add org.boundary-app/boundary-jobs to deps.edn"
+    (throw (ex-info "Jobs module not available. Add org.wagoe/wagoe-jobs to deps.edn"
                     {:type :missing-dependency
                      :module "boundary-jobs"
                      :required-for "Email job handler registration"

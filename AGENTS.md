@@ -81,8 +81,8 @@ clj-paren-repair <file>                            # Fix parentheses
 
 # Build
 clojure -T:build clean && clojure -T:build uber    # Build uberjar
-java -jar target/boundary-*.jar server             # Run standalone jar (HTTP server)
-java -jar target/boundary-*.jar worker             # Run as a background worker (no HTTP listener)
+java -jar target/wagoe-*.jar server             # Run standalone jar (HTTP server)
+java -jar target/wagoe-*.jar worker             # Run as a background worker (no HTTP listener)
 
 # Deploy (see deploy/README.md)
 docker build -t boundary:latest .                  # Prod image (root Dockerfile; server + worker modes)
@@ -328,7 +328,7 @@ Every module MUST define `ports.clj`.
 
 - core/ must not import shell/IO/logging/DB
 - core/ must not throw — return typed error values ({:error {:type ... :message ...}}); the shell translates them into HTTP responses (escape hatch: ^:wagoe/allow-throw ns metadata or .boundary/check-fcis.edn)
-- core/ must not hold mutable state (defonce/atom/swap!/reset!) — definition registries and process state live in the shell (boundary.<lib>.shell.registry)
+- core/ must not hold mutable state (defonce/atom/swap!/reset!) — definition registries and process state live in the shell (wagoe.<lib>.shell.registry)
 - cross-module calls go through service ports
 - web/HTTP layers never require *.shell.persistence directly
 
@@ -867,7 +867,6 @@ Seven automated safeguards run in CI (and `check:fcis` + `check:ports` in pre-co
 | [admin](https://github.com/thijs-creemers/boundary/blob/main/libs/admin/AGENTS.md)                 | Admin UI with entity config, HTMX forms                                           |
 | [ai](https://github.com/thijs-creemers/boundary/blob/main/libs/ai/AGENTS.md)                       | Multi-provider AI — Ollama, Anthropic Claude, OpenAI                              |
 | [audience](https://github.com/thijs-creemers/boundary/blob/main/libs/audience/AGENTS.md)           | Rule-based audience segmentation with SQL + predicate pipeline                    |
-| [wagoe-mcp](https://github.com/thijs-creemers/boundary/blob/main/libs/wagoe-mcp/AGENTS.md)   | MCP server (stdio): tool/resource registry + JSON-RPC transport for editor agents |
 | [cache](https://github.com/thijs-creemers/boundary/blob/main/libs/cache/AGENTS.md)                 | Distributed caching — Redis or in-memory, TTL, atomic ops                         |
 | [calendar](https://github.com/thijs-creemers/boundary/blob/main/libs/calendar/AGENTS.md)           | iCal, RRULE recurrence, conflict detection, Hiccup UI                             |
 | [core](https://github.com/thijs-creemers/boundary/blob/main/libs/core/AGENTS.md)                   | Pure validation, case conversion, interceptor pipeline, feature flags             |
@@ -890,6 +889,7 @@ Seven automated safeguards run in CI (and `check:fcis` + `check:ports` in pre-co
 | [tools](https://github.com/thijs-creemers/boundary/blob/main/libs/tools/AGENTS.md)                 | Developer CLI: scaffolding, AI, config, i18n, deployment                          |
 | [ui-style](https://github.com/thijs-creemers/boundary/blob/main/libs/ui-style/AGENTS.md)           | Shared CSS/JS style bundles — :base, :pilot, :admin-pilot                         |
 | [user](https://github.com/thijs-creemers/boundary/blob/main/libs/user/AGENTS.md)                   | Authentication, JWT, MFA, user management                                         |
+| [wagoe-mcp](https://github.com/thijs-creemers/boundary/blob/main/libs/wagoe-mcp/AGENTS.md)         | MCP server (stdio): tool/resource registry + JSON-RPC transport for editor agents |
 | [workflow](https://github.com/thijs-creemers/boundary/blob/main/libs/workflow/AGENTS.md)           | Workflow orchestration with state machines                                        |
 <!-- /gen:modules -->
 
@@ -938,7 +938,7 @@ Clojure's `{:or {limit 20 offset 0}}` destructuring only fires for **absent** ke
 
 ```clojure
 ;; bb.edn (monorepo)
-{:deps {org.boundary-app/boundary-tools {:local/root "libs/tools"}}}
+{:deps {org.wagoe/wagoe-tools {:local/root "libs/tools"}}}
 ```
 
 > **Note:** `libs/tools` is not published to Clojars. It is a dev-only dependency and is not included in `bb deploy --all`.

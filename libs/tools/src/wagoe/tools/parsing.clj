@@ -1,5 +1,5 @@
 #!/usr/bin/env bb
-;; libs/tools/src/boundary/tools/parsing.clj
+;; libs/tools/src/wagoe/tools/parsing.clj
 ;;
 ;; Shared Clojure source-file parsing utilities used by the quality-gate
 ;; checkers (check_fcis, check_deps, check_tests).

@@ -232,14 +232,14 @@ clj-nrepl-eval -p 7888 "(require '[integrant.repl :as ig-repl]) (ig-repl/reset)"
 clojure -T:build clean && clojure -T:build uber
 ----
 
-Output: `target/boundary-*.jar`
+Output: `target/wagoe-*.jar`
 
 [[build-run]]
 === Run Standalone Jar
 
 [source,bash]
 ----
-java -jar target/boundary-*.jar server
+java -jar target/wagoe-*.jar server
 ----
 
 [[database]]

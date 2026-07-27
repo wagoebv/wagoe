@@ -3,7 +3,7 @@
 [![Status](https://img.shields.io/badge/status-stable-brightgreen)]()
 [![Clojure](https://img.shields.io/badge/clojure-1.12+-blue)]()
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
-[![Clojars Project](https://img.shields.io/clojars/v/org.boundary-app/boundary-observability.svg)](https://clojars.org/org.boundary-app/boundary-observability)
+[![Clojars Project](https://img.shields.io/clojars/v/org.wagoe/wagoe-observability.svg)](https://clojars.org/org.wagoe/wagoe-observability)
 
 Unified observability stack with pluggable adapters for logging, metrics, and error reporting.
 
@@ -11,12 +11,12 @@ Unified observability stack with pluggable adapters for logging, metrics, and er
 
 **deps.edn** (recommended):
 ```clojure
-{:deps {org.boundary-app/boundary-observability {:mvn/version "1.0.0-beta-1"}}}
+{:deps {org.wagoe/wagoe-observability {:mvn/version "1.0.0-beta-1"}}}
 ```
 
 **Leiningen**:
 ```clojure
-[org.boundary-app/boundary-observability "1.0.0-beta-1"]
+[org.wagoe/wagoe-observability "1.0.0-beta-1"]
 ```
 
 ## Features

@@ -290,7 +290,7 @@
 (deftest ^:unit generate-project-bb-edn-test
   (let [output (gen/generate-project-bb-edn "my-app")]
     (testing "wires the boundary-tools dependency"
-      (is (str/includes? output "org.boundary-app/boundary-tools")))
+      (is (str/includes? output "org.wagoe/wagoe-tools")))
 
     (testing "wires the quality-gate tasks the AGENTS.md template points at"
       ;; check:ports is required so the generated project can run the gate the

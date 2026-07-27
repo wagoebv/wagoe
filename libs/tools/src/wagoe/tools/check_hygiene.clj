@@ -1,5 +1,5 @@
 #!/usr/bin/env bb
-;; libs/tools/src/boundary/tools/check_hygiene.clj
+;; libs/tools/src/wagoe/tools/check_hygiene.clj
 ;;
 ;; Rejects version-controlled editor/backup cruft. Backup files committed under
 ;; src/ or test/ shadow real namespaces, leak into target/classes, and inflate

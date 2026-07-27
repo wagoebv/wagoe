@@ -1,5 +1,5 @@
 #!/usr/bin/env bb
-;; libs/tools/src/boundary/tools/db.clj
+;; libs/tools/src/wagoe/tools/db.clj
 ;;
 ;; Database workflow commands for Boundary projects.
 ;;

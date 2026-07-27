@@ -1,5 +1,5 @@
 #!/usr/bin/env bb
-;; libs/tools/src/boundary/tools/dev.clj
+;; libs/tools/src/wagoe/tools/dev.clj
 ;;
 ;; Development utilities for Boundary projects:
 ;;   - check-links    Validate local markdown links in AGENTS documentation

@@ -3,7 +3,7 @@
 [![Status](https://img.shields.io/badge/status-stable-brightgreen)]()
 [![Clojure](https://img.shields.io/badge/clojure-1.12+-blue)]()
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
-[![Clojars Project](https://img.shields.io/clojars/v/org.boundary-app/boundary-jobs.svg)](https://clojars.org/org.boundary-app/boundary-jobs)
+[![Clojars Project](https://img.shields.io/clojars/v/org.wagoe/wagoe-jobs.svg)](https://clojars.org/org.wagoe/wagoe-jobs)
 
 **Asynchronous job processing for Boundary Framework**
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bb
-;; libs/tools/src/boundary/tools/i18n.clj
+;; libs/tools/src/wagoe/tools/i18n.clj
 ;;
 ;; i18n tooling for the Boundary framework.
 ;;
@@ -23,13 +23,13 @@
 
 (defn- detect-boundary-root []
   (cond
-    (fs/exists? "libs/i18n/resources/boundary/i18n/translations") "."
-    (fs/exists? "../boundary/libs/i18n/resources/boundary/i18n/translations") "../boundary"
+    (fs/exists? "libs/i18n/resources/wagoe/i18n/translations") "."
+    (fs/exists? "../boundary/libs/i18n/resources/wagoe/i18n/translations") "../boundary"
     :else nil))
 
 (defn- translations-dir []
   (when-let [boundary-root (detect-boundary-root)]
-    (str boundary-root "/libs/i18n/resources/boundary/i18n/translations")))
+    (str boundary-root "/libs/i18n/resources/wagoe/i18n/translations")))
 
 (defn- ui-src-dirs []
   (let [boundary-root (detect-boundary-root)
@@ -71,8 +71,8 @@
   (let [en (load-locale :en)]
     (when-not en
       (println "No Boundary i18n catalogue found. Expected either:")
-      (println "  libs/i18n/resources/boundary/i18n/translations")
-      (println "  ../boundary/libs/i18n/resources/boundary/i18n/translations")
+      (println "  libs/i18n/resources/wagoe/i18n/translations")
+      (println "  ../boundary/libs/i18n/resources/wagoe/i18n/translations")
       (System/exit 1))
     (println (str "=== Catalogue entries matching: " query " ==="))
     (doseq [[k v] (sort-by first en)

@@ -10,14 +10,26 @@
             [wagoe.tools.deploy :as deploy]))
 
 (deftest ^:unit artifact-name-test
-  (testing "normal libs get the boundary- prefix"
-    (is (= "boundary-platform" (deploy/artifact-name "platform")))
-    (is (= "boundary-core" (deploy/artifact-name "core"))))
+  (testing "normal libs get the wagoe- prefix"
+    (is (= "wagoe-platform" (deploy/artifact-name "platform")))
+    (is (= "wagoe-core" (deploy/artifact-name "core"))))
 
-  (testing "a lib dir already starting with boundary- is not double-prefixed"
-    ;; libs/wagoe-cli publishes org.boundary-app/wagoe-cli, NOT
-    ;; boundary-wagoe-cli — the Clojars check must use the real coordinate.
+  (testing "a lib dir already starting with wagoe- is not double-prefixed"
+    ;; libs/wagoe-cli publishes org.wagoe/wagoe-cli, NOT wagoe-wagoe-cli —
+    ;; artifact-name reads the real coordinate from build.clj rather than
+    ;; string-prefixing the dir name.
     (is (= "wagoe-cli" (deploy/artifact-name "wagoe-cli")))))
+
+(deftest ^:unit pom-url-test
+  (testing "the Clojars verify URL uses the CURRENT group in path form"
+    ;; The group appears here as org/wagoe (path), not org.wagoe (coord). A
+    ;; rename that only rewrites the coord form leaves this on the old group and
+    ;; every artifact silently reports unpublished (BOU-213 review finding).
+    (let [url (deploy/pom-url "core")]
+      (is (str/includes? url "clojars.org/repo/org/wagoe/"))
+      (is (not (str/includes? url "boundary-app")))
+      (is (str/includes? url "wagoe-core"))
+      (is (str/ends-with? url ".pom")))))
 
 (deftest ^:unit version-mismatches-test
   (testing "no mismatches when expected equals the suite's current build.clj version"
@@ -69,7 +81,7 @@
   (testing "every lib is published after all of its boundary deps (the BOU-203 invariant)"
     (let [idx (zipmap deploy/publish-order (range))]
       (doseq [lib deploy/publish-order
-              dep (deploy/boundary-dep-dirs lib)
+              dep (deploy/wagoe-dep-dirs lib)
               :when (idx dep)] ; only deps that are themselves published
         (is (< (idx dep) (idx lib))
             (str dep " must be published before " lib))))))

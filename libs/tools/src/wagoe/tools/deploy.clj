@@ -1,5 +1,5 @@
 #!/usr/bin/env bb
-;; libs/tools/src/boundary/tools/deploy.clj
+;; libs/tools/src/wagoe/tools/deploy.clj
 ;;
 ;; Deploy one or more Boundary libraries to Clojars.
 ;;
@@ -83,11 +83,11 @@
 ;; Publish order — topological sort of all-libs by deps.edn boundary deps
 ;; =============================================================================
 
-(defn boundary-dep-dirs
+(defn wagoe-dep-dirs
   "The directory names of the boundary libs `lib` depends on, per its deps.edn
    (via check-poms — the same :local/root parsing the check:poms gate uses)."
   [lib]
-  (map :dir (check-poms/boundary-local-deps (io/file (lib-dir lib)))))
+  (map :dir (check-poms/wagoe-local-deps (io/file (lib-dir lib)))))
 
 (defn topo-sort
   "Reorder `libs` so every lib follows all of its deps (per `dep-fn`). Stable:
@@ -109,11 +109,11 @@
 
 (def publish-order
   "all-libs in a valid publish order: each lib after its boundary deps."
-  (topo-sort all-libs boundary-dep-dirs))
+  (topo-sort all-libs wagoe-dep-dirs))
 
 (defn artifact-name
   "Clojars artifact id for a lib, read from its build.clj coordinate
-   `(def lib 'org.boundary-app/<artifact>)`. Reading the coordinate (rather than
+   `(def lib 'org.wagoe/<artifact>)`. Reading the coordinate (rather than
    string-prefixing) avoids a double `boundary-` for libs whose dir already starts
    with it (e.g. wagoe-cli → wagoe-cli, not boundary-wagoe-cli). Falls
    back to `boundary-<lib>` when build.clj is unreadable."
@@ -121,20 +121,27 @@
   (let [build-file (io/file (lib-dir lib) "build.clj")]
     (or (when (.exists build-file)
           (second (re-find #"\(def lib '[^/]+/([^\)\s]+)" (slurp build-file))))
-        (str "boundary-" lib))))
+        (str "wagoe-" lib))))
 
 (defn read-version [lib]
   (let [build-file (io/file (lib-dir lib) "build.clj")]
     (when (.exists build-file)
       (second (re-find #"\(def version \"([^\"]+)\"" (slurp build-file))))))
 
-(defn published? [lib]
+(defn pom-url
+  "Clojars repo URL of a lib's published pom. Note the group appears here in
+   PATH form (org/wagoe), not coord form (org.wagoe) — a rename that only
+   rewrites the coord form leaves this pointing at the old group, and every
+   artifact then reports as unpublished (BOU-213). Extracted so the group is
+   assertable without a network call."
+  [lib]
   (let [version  (read-version lib)
-        artifact (artifact-name lib)
-        url      (format "https://clojars.org/repo/org/boundary-app/%s/%s/%s-%s.pom"
-                         artifact version artifact version)
-        response (http/get url {:throw false})]
-    (= 200 (:status response))))
+        artifact (artifact-name lib)]
+    (format "https://clojars.org/repo/org/wagoe/%s/%s/%s-%s.pom"
+            artifact version artifact version)))
+
+(defn published? [lib]
+  (= 200 (:status (http/get (pom-url lib) {:throw false}))))
 
 (defn version-mismatches
   "Seq of {:lib :actual :expected} for libraries whose build.clj version differs

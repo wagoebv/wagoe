@@ -82,12 +82,12 @@ Boundary libraries are published to Clojars. Add only what you need:
 [source,clojure]
 ----
 ;; Validation utilities only
-{:deps {org.boundary-app/boundary-core {:mvn/version "1.0.1-alpha-42"}}}
+{:deps {org.wagoe/wagoe-core {:mvn/version "1.0.1-alpha-42"}}}
 
 ;; Full web application stack
-{:deps {org.boundary-app/boundary-platform {:mvn/version "1.0.1-alpha-42"}
-        org.boundary-app/boundary-user     {:mvn/version "1.0.1-alpha-42"}
-        org.boundary-app/boundary-admin    {:mvn/version "1.0.1-alpha-42"}}}
+{:deps {org.wagoe/wagoe-platform {:mvn/version "1.0.1-alpha-42"}
+        org.wagoe/wagoe-user     {:mvn/version "1.0.1-alpha-42"}
+        org.wagoe/wagoe-admin    {:mvn/version "1.0.1-alpha-42"}}}
 ----
 
 See xref:libraries:index.adoc[Library Overview] for the complete list of available libraries.

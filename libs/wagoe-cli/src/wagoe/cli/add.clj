@@ -7,11 +7,11 @@
 ;; ─── Project detection ────────────────────────────────────────────────────────
 
 (defn boundary-project?
-  "True if dir contains a deps.edn referencing org.boundary-app."
+  "True if dir contains a deps.edn referencing org.wagoe."
   [dir]
   (let [f (io/file dir "deps.edn")]
     (and (.exists f)
-         (str/includes? (slurp f) "org.boundary-app"))))
+         (str/includes? (slurp f) "org.wagoe"))))
 
 ;; ─── deps.edn patching ───────────────────────────────────────────────────────
 

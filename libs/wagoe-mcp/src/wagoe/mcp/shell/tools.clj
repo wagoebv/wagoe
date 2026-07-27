@@ -116,7 +116,7 @@
 ;; soft guardrails (FC/IS / convention); it is honored only when *every*
 ;; blocking issue is soft (see core/verify).
 
-;; Names become file paths in the scaffolder (`src/boundary/<module>/…`), which
+;; Names become file paths in the scaffolder (`src/wagoe/<module>/…`), which
 ;; does not sanitize them. Guard agent-supplied names here so a value like
 ;; "../../../etc/x" cannot write outside the project tree.
 (def ^:private module-name-re #"[a-z][a-z0-9-]*")

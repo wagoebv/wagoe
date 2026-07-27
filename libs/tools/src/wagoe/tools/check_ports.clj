@@ -1,5 +1,5 @@
 #!/usr/bin/env bb
-;; libs/tools/src/boundary/tools/check_ports.clj
+;; libs/tools/src/wagoe/tools/check_ports.clj
 ;;
 ;; Hexagonal boundary enforcement: the FC/IS counterpart to check_fcis.
 ;; Where check_fcis verifies core/ stays pure, this verifies that the
@@ -124,7 +124,7 @@
 
 (defn dir->ns-prefix
   "Convert a module directory File to its namespace prefix, e.g.
-   .../src/boundary/license/billing -> wagoe.license.billing.
+   .../src/wagoe/license/billing -> wagoe.license.billing.
    Uses the path segment after the nearest `src/` wagoe."
   [^java.io.File dir]
   (let [path  (.getPath dir)

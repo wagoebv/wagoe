@@ -3,7 +3,7 @@
 [![Status](https://img.shields.io/badge/status-stable-brightgreen)]()
 [![Clojure](https://img.shields.io/badge/clojure-1.12+-blue)]()
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
-[![Clojars Project](https://img.shields.io/clojars/v/org.boundary-app/boundary-calendar.svg)](https://clojars.org/org.boundary-app/boundary-calendar)
+[![Clojars Project](https://img.shields.io/clojars/v/org.wagoe/wagoe-calendar.svg)](https://clojars.org/org.wagoe/wagoe-calendar)
 
 Calendar and scheduling library for the [Boundary](https://github.com/thijs-creemers/boundary) framework.
 
@@ -22,7 +22,7 @@ Calendar and scheduling library for the [Boundary](https://github.com/thijs-cree
 Add to your `deps.edn`:
 
 ```clojure
-org.boundary-app/boundary-calendar {:mvn/version "1.0.0-beta-1"}
+org.wagoe/wagoe-calendar {:mvn/version "1.0.0-beta-1"}
 ```
 
 ## Quick Start

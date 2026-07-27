@@ -4,7 +4,7 @@
    This namespace provides async report generation via the jobs module.
    The jobs module is an OPTIONAL dependency — add it to your deps.edn:
 
-     {:deps {org.boundary-app/boundary-jobs {:mvn/version \"0.1.0\"}}}
+     {:deps {org.wagoe/wagoe-jobs {:mvn/version \"0.1.0\"}}}
 
    If the jobs module is not available, async functions will throw descriptive
    errors with :type :missing-dependency.
@@ -58,7 +58,7 @@
                 {:report-id   (:id report-def)
                  :report-type (:type report-def)})
       (enqueue-fn nil :reports job))
-    (throw (ex-info "Jobs module not available. Add org.boundary-app/boundary-jobs to deps.edn"
+    (throw (ex-info "Jobs module not available. Add org.wagoe/wagoe-jobs to deps.edn"
                     {:type          :missing-dependency
                      :module        "boundary-jobs"
                      :required-for  "Async report generation"
@@ -132,7 +132,7 @@
       (log/info "Registering report job handler with jobs module"
                 {:job-type :generate-report})
       (register-fn job-registry :generate-report process-report-job))
-    (throw (ex-info "Jobs module not available. Add org.boundary-app/boundary-jobs to deps.edn"
+    (throw (ex-info "Jobs module not available. Add org.wagoe/wagoe-jobs to deps.edn"
                     {:type          :missing-dependency
                      :module        "boundary-jobs"
                      :required-for  "Report job handler registration"

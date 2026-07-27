@@ -41,7 +41,7 @@
       (spit env-file content)
       (println (str "Written to .env: " var-name "=..."))
       (println "Restart the REPL to pick it up:")
-      (println (str "  source .env && clojure -M:repl-clj"))
+      (println "  source .env && clojure -M:repl-clj")
       true)
     (catch Exception e
       (println (str "Failed to write .env: " (.getMessage e)))

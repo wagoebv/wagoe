@@ -45,7 +45,7 @@
     (let [result (guidance/format-post-scaffold-guidance "invoice")]
       (is (clojure.string/includes? result "invoice"))
       (is (clojure.string/includes? result "bb scaffold integrate invoice"))
-      (is (clojure.string/includes? result "libs/invoice/src/boundary/invoice/schema.clj")))))
+      (is (clojure.string/includes? result "libs/invoice/src/wagoe/invoice/schema.clj")))))
 
 (deftest ^:unit pick-tip-test
   (testing "picks a tip for a known context"

@@ -1,5 +1,5 @@
 #!/usr/bin/env bb
-;; libs/tools/src/boundary/tools/check_fcis.clj
+;; libs/tools/src/wagoe/tools/check_fcis.clj
 ;;
 ;; FC/IS boundary enforcement: ensures core/ namespaces never import
 ;; shell code, I/O libraries, logging, or database drivers.
@@ -233,11 +233,11 @@
 (defn core-source-paths
   "Find all .clj files under any core/ directory that must be subject to
    FC/IS enforcement. Covers:
-   - libs/*/src/boundary/<lib>/core/ (monorepo lib layout, and non-standard libs
+   - libs/*/src/wagoe/<lib>/core/ (monorepo lib layout, and non-standard libs
      like boundary/shared/ui/core/)
    - src/**/core/ (the application layout — a project scaffolded with
-     `boundary new` puts modules at src/boundary/<module>/core/, with no libs/)
-   - src/boundary/test_support/core.clj (monorepo-level shared test helpers)
+     `boundary new` puts modules at src/wagoe/<module>/core/, with no libs/)
+   - src/wagoe/test_support/core.clj (monorepo-level shared test helpers)
 
    Public so it can be exercised from tests. The 1-arity takes an explicit
    project root (a File or path string) for testing against fixtures."
@@ -251,12 +251,12 @@
                               (mapcat (fn [lib-dir]
                                         (core-clj-files-under (io/file lib-dir "src"))))))
          ;; Application layout: a generated project has its modules under
-         ;; src/boundary/<module>/core/ and no libs/ tree. Scan the project's own
+         ;; src/wagoe/<module>/core/ and no libs/ tree. Scan the project's own
          ;; src/ so `bb check:fcis` (e.g. the generated pre-commit hook) actually
          ;; inspects scaffolded core namespaces. Harmless in the monorepo, whose
          ;; root src/ has no core/ directories.
          app-files     (core-clj-files-under (io/file root "src"))
-         ;; src/boundary/test_support/core.clj is the monorepo-level shared
+         ;; src/wagoe/test_support/core.clj is the monorepo-level shared
          ;; test helper namespace. It is a single file (wagoe.test-support.core),
          ;; not a directory of core sources — include it explicitly.
          test-support-file (io/file root "src" "wagoe" "test_support" "core.clj")

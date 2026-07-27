@@ -3,7 +3,7 @@
 [![Status](https://img.shields.io/badge/status-stable-brightgreen)]()
 [![Clojure](https://img.shields.io/badge/clojure-1.12+-blue)]()
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
-[![Clojars Project](https://img.shields.io/clojars/v/org.boundary-app/boundary-devtools.svg)](https://clojars.org/org.boundary-app/boundary-devtools)
+[![Clojars Project](https://img.shields.io/clojars/v/org.wagoe/wagoe-devtools.svg)](https://clojars.org/org.wagoe/wagoe-devtools)
 
 Development-only tooling that gives x-ray vision into a running Boundary application: BND-coded error pipeline, REPL power tools, and a live dev dashboard.
 
@@ -18,7 +18,7 @@ Add as a **`:dev` alias** extra-dep so it never reaches production:
 {:aliases
  {:dev
   {:extra-deps
-   {org.boundary-app/boundary-devtools {:mvn/version "1.0.0-beta-1"}}}}}
+   {org.wagoe/wagoe-devtools {:mvn/version "1.0.0-beta-1"}}}}}
 ```
 
 ## Features

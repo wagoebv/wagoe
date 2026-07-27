@@ -2,7 +2,7 @@
   "DB-backed geocoding cache implementing GeoCacheProtocol.
 
    Uses a `geo_cache` table with a SHA-256 address hash as primary key.
-   Run the migration in resources/boundary/geo/migrations/001-geo-cache.sql
+   Run the migration in resources/wagoe/geo/migrations/001-geo-cache.sql
    before using this component.
 
    TTL is enforced at lookup time by comparing `created_at` to `NOW() - cache-ttl`."

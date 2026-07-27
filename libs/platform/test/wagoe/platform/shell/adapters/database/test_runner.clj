@@ -95,14 +95,14 @@
   (println "Implementation Files Check")
   (println (str (repeat 80 "=")) "\n")
 
-  (let [impl-files ["src/boundary/shell/adapters/database/config.clj"
-                    "src/boundary/shell/adapters/database/config_factory.clj"
-                    "src/boundary/shell/adapters/database/protocols.clj"
-                    "src/boundary/shell/adapters/database/core.clj"
-                    "src/boundary/shell/adapters/database/sqlite.clj"
-                    "src/boundary/shell/adapters/database/h2.clj"
-                    "src/boundary/shell/adapters/database/postgresql.clj"
-                    "src/boundary/shell/adapters/database/mysql.clj"]
+  (let [impl-files ["src/wagoe/shell/adapters/database/config.clj"
+                    "src/wagoe/shell/adapters/database/config_factory.clj"
+                    "src/wagoe/shell/adapters/database/protocols.clj"
+                    "src/wagoe/shell/adapters/database/core.clj"
+                    "src/wagoe/shell/adapters/database/sqlite.clj"
+                    "src/wagoe/shell/adapters/database/h2.clj"
+                    "src/wagoe/shell/adapters/database/postgresql.clj"
+                    "src/wagoe/shell/adapters/database/mysql.clj"]
         results    (atom {:found 0 :missing 0})]
 
     (doseq [impl-file impl-files]

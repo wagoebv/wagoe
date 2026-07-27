@@ -1,5 +1,5 @@
 #!/usr/bin/env bb
-;; libs/tools/src/boundary/tools/doctor_env.clj
+;; libs/tools/src/wagoe/tools/doctor_env.clj
 ;;
 ;; Environment Doctor — checks that required development tools are installed.
 ;;

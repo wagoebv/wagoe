@@ -1,8 +1,8 @@
 {:paths ["src" "resources"]
 
  :deps  {org.clojure/clojure                        {:mvn/version "1.12.5"}
-         boundary/platform                          {:local/root "../platform"}
-         boundary/observability                     {:local/root "../observability"}
+         wagoe/platform                          {:local/root "../platform"}
+         wagoe/observability                     {:local/root "../observability"}
 
          ;; AWS SDK for S3
          software.amazon.awssdk/s3                  {:mvn/version "2.46.9"}

@@ -41,34 +41,34 @@ Add these to your shell profile (`~/.zshrc` or `~/.bashrc`) for convenience.
 
 == Library overview
 
-All 22 libraries are published to the `org.boundary-app` group on Clojars, in dependency order:
+All 22 libraries are published to the `org.wagoe` group on Clojars, in dependency order:
 
 [cols="1,2,2",options="header"]
 |===
 |Library |Artifact ID |Depends on
 
-|*core*         |`org.boundary-app/boundary-core`          |—
-|*observability*|`org.boundary-app/boundary-observability` |core
-|*platform*     |`org.boundary-app/boundary-platform`      |core, observability
-|*i18n*         |`org.boundary-app/boundary-i18n`          |—
-|*user*         |`org.boundary-app/boundary-user`          |platform
-|*storage*      |`org.boundary-app/boundary-storage`       |platform
-|*scaffolder*   |`org.boundary-app/boundary-scaffolder`    |core
-|*cache*        |`org.boundary-app/boundary-cache`         |platform
-|*jobs*         |`org.boundary-app/boundary-jobs`          |platform
-|*realtime*     |`org.boundary-app/boundary-realtime`      |platform
-|*email*        |`org.boundary-app/boundary-email`         |platform
-|*tenant*       |`org.boundary-app/boundary-tenant`        |platform, user
-|*workflow*     |`org.boundary-app/boundary-workflow`      |platform
-|*search*       |`org.boundary-app/boundary-search`        |platform
-|*external*     |`org.boundary-app/boundary-external`      |platform
-|*payments*     |`org.boundary-app/boundary-payments`      |—
-|*geo*          |`org.boundary-app/boundary-geo`           |platform
-|*reports*      |`org.boundary-app/boundary-reports`       |platform
-|*calendar*     |`org.boundary-app/boundary-calendar`      |platform
-|*ai*           |`org.boundary-app/boundary-ai`            |platform
-|*ui-style*     |`org.boundary-app/boundary-ui-style`      |—
-|*admin*        |`org.boundary-app/boundary-admin`         |platform, user, ui-style
+|*core*         |`org.wagoe/wagoe-core`          |—
+|*observability*|`org.wagoe/wagoe-observability` |core
+|*platform*     |`org.wagoe/wagoe-platform`      |core, observability
+|*i18n*         |`org.wagoe/wagoe-i18n`          |—
+|*user*         |`org.wagoe/wagoe-user`          |platform
+|*storage*      |`org.wagoe/wagoe-storage`       |platform
+|*scaffolder*   |`org.wagoe/wagoe-scaffolder`    |core
+|*cache*        |`org.wagoe/wagoe-cache`         |platform
+|*jobs*         |`org.wagoe/wagoe-jobs`          |platform
+|*realtime*     |`org.wagoe/wagoe-realtime`      |platform
+|*email*        |`org.wagoe/wagoe-email`         |platform
+|*tenant*       |`org.wagoe/wagoe-tenant`        |platform, user
+|*workflow*     |`org.wagoe/wagoe-workflow`      |platform
+|*search*       |`org.wagoe/wagoe-search`        |platform
+|*external*     |`org.wagoe/wagoe-external`      |platform
+|*payments*     |`org.wagoe/wagoe-payments`      |—
+|*geo*          |`org.wagoe/wagoe-geo`           |platform
+|*reports*      |`org.wagoe/wagoe-reports`       |platform
+|*calendar*     |`org.wagoe/wagoe-calendar`      |platform
+|*ai*           |`org.wagoe/wagoe-ai`            |platform
+|*ui-style*     |`org.wagoe/wagoe-ui-style`      |—
+|*admin*        |`org.wagoe/wagoe-admin`         |platform, user, ui-style
 |===
 
 ---
@@ -158,7 +158,7 @@ After deploying, check that the artifacts are visible on Clojars:
 bb deploy --missing   # libraries not yet published will be listed
 ----
 
-Or open in a browser: https://clojars.org/org.boundary-app/boundary-core
+Or open in a browser: https://clojars.org/org.wagoe/wagoe-core
 
 ---
 
@@ -263,10 +263,10 @@ The CI log masks any set value as `***` — even an empty string.
 Verify both secrets exist and are non-empty:
 *GitHub → Settings → Secrets and variables → Actions*
 
-==== 3. Group `org.boundary-app` not verified
+==== 3. Group `org.wagoe` not verified
 
 Clojars requires proof of domain ownership for groups outside `io.github.*` / `com.github.*`.
-For `org.boundary-app`, add a DNS TXT record for `boundary-app.org` as described at
+For `org.wagoe`, add a DNS TXT record for `boundary-app.org` as described at
 https://github.com/clojars/clojars-web/wiki/Verified-Group-Names[Clojars: Verified Group Names].
 
 === Version already exists
@@ -283,13 +283,13 @@ Deleting an existing version on Clojars is only possible within 24 hours of uplo
 
 [source]
 ----
-Could not find artifact org.boundary-app/boundary-core:jar:1.0.1-alpha-14
+Could not find artifact org.wagoe/wagoe-core:jar:1.0.1-alpha-14
 ----
 
-. Check that the library was actually published: open `https://clojars.org/org.boundary-app/boundary-core`
+. Check that the library was actually published: open `https://clojars.org/org.wagoe/wagoe-core`
 . Wait 1–2 minutes for Clojars to finish indexing
 . Clear your local Maven cache: +
-  `rm -rf ~/.m2/repository/org/boundary-app/`
+  `rm -rf ~/.m2/repository/org/wagoe/`
 
 === CSS not included in ui-style jar
 
@@ -310,7 +310,7 @@ In CI this is handled automatically by the workflow's *Build shared UI CSS bundl
 ----
 cd libs/core
 clojure -T:build clean && clojure -T:build jar
-cat target/classes/META-INF/maven/org.boundary-app/boundary-core/pom.xml
+cat target/classes/META-INF/maven/org.wagoe/wagoe-core/pom.xml
 ----
 
 ---

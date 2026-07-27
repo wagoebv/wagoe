@@ -3,7 +3,7 @@
 [![Status](https://img.shields.io/badge/status-alpha-orange)]()
 [![Clojure](https://img.shields.io/badge/clojure-1.12+-blue)]()
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
-[![Clojars Project](https://img.shields.io/clojars/v/org.boundary-app/boundary-audience.svg)](https://clojars.org/org.boundary-app/boundary-audience)
+[![Clojars Project](https://img.shields.io/clojars/v/org.wagoe/wagoe-audience.svg)](https://clojars.org/org.wagoe/wagoe-audience)
 
 > Rule-based audience segmentation for the Boundary framework — define segments with `defaudience`, resolve them via a SQL + predicate hybrid pipeline, and compose them with AND/OR/NOT. Batteries included: DB-backed membership cache and an HTMX builder UI.
 
@@ -13,7 +13,7 @@
 
 ```clojure
 ;; deps.edn
-{:deps {org.boundary-app/boundary-audience {:mvn/version "1.0.0-beta-1"}}}
+{:deps {org.wagoe/wagoe-audience {:mvn/version "1.0.0-beta-1"}}}
 ```
 
 ```clojure

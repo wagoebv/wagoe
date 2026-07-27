@@ -38,7 +38,7 @@
                    ".claude/skills/boundary/SKILL.md"
                    "resources/conf/dev/config.edn"
                    "resources/conf/test/config.edn"
-                   "src/boundary/config.clj"
+                   "src/wagoe/config.clj"
                    "dev/user.clj"
                    "src/test_proj/system.clj"
                    ".mcp.json"
@@ -97,7 +97,7 @@
       (testing "deps.edn has an :mcp alias with a resolved version"
         (let [content (slurp (io/file tmp "deps.edn"))]
           (is (str/includes? content ":mcp"))
-          (is (str/includes? content "org.boundary-app/wagoe-mcp"))
+          (is (str/includes? content "org.wagoe/wagoe-mcp"))
           (is (not (str/includes? content "{{wagoe-mcp-version}}")))))
 
       (testing ":mcp alias lists mcp's full boundary closure"
@@ -106,9 +106,9 @@
         ;; published poms (pre-alpha-43). If a closure lib silently disappears
         ;; from the template, -M:mcp would fail to resolve at runtime — guard it.
         (let [content (slurp (io/file tmp "deps.edn"))]
-          (doseq [lib ["boundary-ai" "boundary-devtools" "boundary-scaffolder"
-                       "boundary-tools" "boundary-jobs"]]
-            (is (str/includes? content (str "org.boundary-app/" lib))
+          (doseq [lib ["wagoe-ai" "wagoe-devtools" "wagoe-scaffolder"
+                       "wagoe-tools" "wagoe-jobs"]]
+            (is (str/includes? content (str "org.wagoe/" lib))
                 (str "Missing from :mcp closure: " lib)))))
 
       (testing "pre-commit hook is executable"
@@ -137,7 +137,7 @@
         (is (some? template) "Missing claude-skill.md.tmpl resource")
         (when (and (.exists plugin-skill) template)
           (is (= (slurp template) (slurp plugin-skill))
-              "claude-plugin/skills/wagoe/SKILL.md and libs/wagoe-cli/resources/boundary/cli/templates/claude-skill.md.tmpl must stay byte-identical — copy the template over the plugin file")))
+              "claude-plugin/skills/wagoe/SKILL.md and libs/wagoe-cli/resources/wagoe/cli/templates/claude-skill.md.tmpl must stay byte-identical — copy the template over the plugin file")))
       ;; Outside the monorepo (e.g. testing the published library) there is no
       ;; plugin copy to compare against — record the skip as a passing assertion.
       (is (nil? (find-repo-root))

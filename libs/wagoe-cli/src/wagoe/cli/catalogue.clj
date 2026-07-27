@@ -44,5 +44,5 @@
                         {:module (:name m) :field field}))))
     (doseq [m (:modules (load-catalogue))]
       (when-not (symbol? (:clojars m))
-        (throw (ex-info (str "Catalogue entry :clojars must be a symbol")
+        (throw (ex-info "Catalogue entry :clojars must be a symbol"
                         {:module (:name m) :clojars (:clojars m)}))))))

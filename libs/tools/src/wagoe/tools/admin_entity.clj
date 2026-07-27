@@ -1,5 +1,5 @@
 #!/usr/bin/env bb
-;; libs/tools/src/boundary/tools/admin_entity.clj
+;; libs/tools/src/wagoe/tools/admin_entity.clj
 ;;
 ;; Babashka wrapper for AI-powered admin entity EDN generation.
 ;; Delegates to the Clojure AI CLI: wagoe.ai.shell.cli-entry admin-entity

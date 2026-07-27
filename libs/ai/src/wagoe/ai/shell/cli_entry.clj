@@ -35,7 +35,7 @@
 (defn- yellow [s] (str "\033[33m" s "\033[0m"))
 (defn- dim   [s] (str "\033[2m"  s "\033[0m"))
 
-;; Must match libs/tools/src/boundary/tools/scaffold.clj scaffolder-version.
+;; Must match libs/tools/src/wagoe/tools/scaffold.clj scaffolder-version.
 ;; Update both together on each release.
 (def ^:private scaffolder-version "1.0.0-beta-1")
 
@@ -165,7 +165,7 @@
                                  ["clojure" "-M" "-m" "wagoe.scaffolder.shell.cli-entry"]
                                  ["clojure"
                                   "-Sdeps"
-                                  (str "{:deps {org.boundary-app/boundary-scaffolder "
+                                  (str "{:deps {org.wagoe/wagoe-scaffolder "
                                        "{:mvn/version \"" scaffolder-version "\"}}}")
                                   "-M" "-m" "wagoe.scaffolder.shell.cli-entry"])
                   {:keys [exit out err]} (apply sh/sh (concat base-cmd cli-args))]
