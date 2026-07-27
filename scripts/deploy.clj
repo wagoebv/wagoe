@@ -21,7 +21,7 @@
             [clojure.java.io :as io]
             [babashka.http-client :as http]
             [babashka.process :as p]
-            [boundary.tools.check-poms :as check-poms]))
+            [wagoe.tools.check-poms :as check-poms]))
 
 ;; =============================================================================
 ;; ANSI helpers
@@ -83,7 +83,7 @@
   (str (io/file root-dir "libs" lib)))
 
 ;; Publish order — topological sort of all-libs by deps.edn boundary deps.
-;; Mirrors boundary.tools.deploy (canonical); both derive the same order.
+;; Mirrors wagoe.tools.deploy (canonical); both derive the same order.
 (defn boundary-dep-dirs [lib]
   (map :dir (check-poms/boundary-local-deps (io/file (lib-dir lib)))))
 

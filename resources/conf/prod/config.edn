@@ -100,7 +100,7 @@
 
   ;; Internationalisation — marker-based i18n with EDN catalogues
   :boundary/i18n
-  {:catalogue-path "boundary/i18n/translations"
+  {:catalogue-path "wagoe/i18n/translations"
    :default-locale :en}}
 
  :inactive

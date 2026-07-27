@@ -37,7 +37,7 @@
   "Shell out to the Clojure AI CLI with given args. Streams output to terminal."
   [args]
   (try
-    (apply shell "clojure" "-M" "-m" "boundary.ai.shell.cli-entry" args)
+    (apply shell "clojure" "-M" "-m" "wagoe.ai.shell.cli-entry" args)
     (catch Exception e
       (println (red (str "AI CLI exited with error: " (.getMessage e))))
       (System/exit 1))))
@@ -76,7 +76,7 @@
        "  bb scaffold ai \"product module with name, price, stock\"\n"
        "\n"
        "The tool delegates to:\n"
-       "  clojure -M -m boundary.ai.shell.cli-entry <subcommand> [opts]"))
+       "  clojure -M -m wagoe.ai.shell.cli-entry <subcommand> [opts]"))
 
 ;; =============================================================================
 ;; Main entry point

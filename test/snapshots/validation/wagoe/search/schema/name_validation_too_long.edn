@@ -1,0 +1,7 @@
+{:meta
+ {:case-name nil,
+  :schema-version "1.0",
+  :seed 46,
+  :test-name name-validation-too-long,
+  :test-ns wagoe.search.schema},
+ :result {:errors "clojure.lang.LazySeq", :valid? false}}

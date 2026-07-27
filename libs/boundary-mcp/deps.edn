@@ -23,7 +23,7 @@
 
  :aliases
  {;; Launch the stdio MCP server (editor integration).
-  :run   {:main-opts ["-m" "boundary.mcp.shell.server"]}
+  :run   {:main-opts ["-m" "wagoe.mcp.shell.server"]}
 
   :test  {:extra-paths ["test"]
           :extra-deps  {lambdaisland/kaocha {:mvn/version "1.91.1392"}}

@@ -190,12 +190,12 @@
   ;; Migrations
   ;; =============================================================================
 
-  :migrate {:main-opts ["-m" "boundary.platform.shell.database.cli-migrations"]
+  :migrate {:main-opts ["-m" "wagoe.platform.shell.database.cli-migrations"]
             :jvm-opts ["-Denv=dev"]}
 
   ;; =============================================================================
   ;; CLI Interface
   ;; =============================================================================
 
-  :cli {:main-opts ["-m" "boundary.cli"]
+  :cli {:main-opts ["-m" "wagoe.cli"]
         :jvm-opts ["-Denv=dev"]}}}

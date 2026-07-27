@@ -2,7 +2,7 @@
  {:tests [{:id          :unit
            :test-paths  ["test"]
            :source-paths ["src"]
-           :ns-patterns ["boundary.mcp.*-test"]}]
+           :ns-patterns ["wagoe.mcp.*-test"]}]
   :plugins [:kaocha.plugin/filter]
   :kaocha.plugin.filter/focus-meta [:unit]
   :kaocha/fail-fast? false

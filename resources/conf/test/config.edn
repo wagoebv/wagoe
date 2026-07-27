@@ -39,7 +39,7 @@
    :drain-timeout-ms #long #or [#env HTTP_DRAIN_TIMEOUT_MS 1000]
    ;; CSRF disabled by default for the broad test suite (authenticated POST tests
    ;; do not carry tokens). CSRF-specific tests enable it explicitly via their own
-   ;; system/handler config. See boundary.platform.shell.security-test.
+   ;; system/handler config. See wagoe.platform.shell.security-test.
    :security   {:csrf {:enabled? false}}}
 
   ;; Test logging configuration

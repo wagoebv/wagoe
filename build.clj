@@ -44,7 +44,7 @@
   (b/compile-clj {:basis basis
                   :src-dirs all-src-dirs
                   :class-dir class-dir
-                  :ns-compile '[boundary.main]
+                  :ns-compile '[wagoe.main]
                   :java-opts ["-Dclojure.compiler.direct-linking=true"]})
 
   ;; Build uberjar
@@ -53,7 +53,7 @@
   (b/uber {:class-dir class-dir
            :uber-file uber-file
            :basis basis
-           :main 'boundary.main
+           :main 'wagoe.main
            :exclude ["^LICENSE(/.*)?$" "^NOTICE(/.*)?$"]})
 
   (println (str "✓ Uberjar built successfully: " uber-file))

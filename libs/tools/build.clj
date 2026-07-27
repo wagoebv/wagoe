@@ -18,8 +18,8 @@
                 :basis basis
                 :src-dirs ["src"]
                 :scm {:url "https://github.com/thijs-creemers/boundary"
-                      :connection "scm:git:git://github.com/thijs-creemers/boundary.git"
-                      :developerConnection "scm:git:ssh://git@github.com/thijs-creemers/boundary.git"
+                      :connection "scm:git:git://github.com/thijs-creemers/wagoe.git"
+                      :developerConnection "scm:git:ssh://git@github.com/thijs-creemers/wagoe.git"
                       :tag version}
                 :pom-data [[:description "Developer tooling for the Boundary framework: scaffolding, AI assistance, i18n management, deployment and development utilities"]
                            [:url "https://github.com/thijs-creemers/boundary"]
@@ -32,7 +32,7 @@
   ;; BOU-76: ship the shared error catalogue inside the boundary-tools jar so
   ;; consumer projects that depend on boundary-tools alone (without
   ;; boundary-devtools) can run `bb guide error BND-xxx` and don't crash on
-  ;; namespace-load of boundary.tools.help. Source of truth lives in
+  ;; namespace-load of wagoe.tools.help. Source of truth lives in
   ;; libs/devtools/resources; copied here at build time.
   (b/copy-file {:src    "../devtools/resources/boundary/devtools/error_catalog.edn"
                 :target (str class-dir "/boundary/devtools/error_catalog.edn")})

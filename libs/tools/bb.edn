@@ -1,11 +1,11 @@
 {:paths ["src"]
  :tasks
- {:requires ([boundary.tools.scaffold :as scaffold]
-             [boundary.tools.ai       :as ai]
-             [boundary.tools.i18n     :as i18n]
-             [boundary.tools.admin    :as admin]
-             [boundary.tools.deploy   :as deploy]
-             [boundary.tools.dev      :as dev])
+ {:requires ([wagoe.tools.scaffold :as scaffold]
+             [wagoe.tools.ai       :as ai]
+             [wagoe.tools.i18n     :as i18n]
+             [wagoe.tools.admin    :as admin]
+             [wagoe.tools.deploy   :as deploy]
+             [wagoe.tools.dev      :as dev])
 
   scaffold      {:doc "Interactive module scaffolding wizard"
                  :task (apply scaffold/-main *command-line-args*)}

@@ -18,8 +18,8 @@
                 :basis basis
                 :src-dirs ["src"]
                 :scm {:url "https://github.com/thijs-creemers/boundary"
-                      :connection "scm:git:git://github.com/thijs-creemers/boundary.git"
-                      :developerConnection "scm:git:ssh://git@github.com/thijs-creemers/boundary.git"
+                      :connection "scm:git:git://github.com/thijs-creemers/wagoe.git"
+                      :developerConnection "scm:git:ssh://git@github.com/thijs-creemers/wagoe.git"
                       :tag version}
                 :pom-data [[:description "Calendar and scheduling for Boundary framework: recurring events, conflict detection, iCal export/import, and Hiccup UI components"]
                            [:url "https://github.com/thijs-creemers/boundary"]

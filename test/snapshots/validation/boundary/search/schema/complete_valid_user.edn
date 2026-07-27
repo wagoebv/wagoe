@@ -1,7 +1,0 @@
-{:meta
- {:case-name nil,
-  :schema-version "1.0",
-  :seed 49,
-  :test-name complete-valid-user,
-  :test-ns boundary.search.schema},
- :result {:errors "clojure.lang.LazySeq", :valid? false}}

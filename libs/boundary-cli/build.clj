@@ -14,8 +14,8 @@
   (b/write-pom {:class-dir class-dir :lib lib :version version :basis basis
                 :src-dirs ["src"]
                 :scm {:url "https://github.com/thijs-creemers/boundary"
-                      :connection "scm:git:git://github.com/thijs-creemers/boundary.git"
-                      :developerConnection "scm:git:ssh://git@github.com/thijs-creemers/boundary.git"
+                      :connection "scm:git:git://github.com/thijs-creemers/wagoe.git"
+                      :developerConnection "scm:git:ssh://git@github.com/thijs-creemers/wagoe.git"
                       :tag version}
                 :pom-data [[:description "boundary CLI — project generator and module installer"]
                            [:url "https://github.com/thijs-creemers/boundary"]

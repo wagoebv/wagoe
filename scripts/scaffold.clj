@@ -133,7 +133,7 @@
   (println (bold "Running scaffolder..."))
   (println)
   (try
-    (apply shell "clojure" "-M" "-m" "boundary.scaffolder.shell.cli-entry" args)
+    (apply shell "clojure" "-M" "-m" "wagoe.scaffolder.shell.cli-entry" args)
     (catch Exception e
       (println (red (str "Scaffolder exited with error: " (.getMessage e))))
       (System/exit 1))))
@@ -214,7 +214,7 @@
                                    :fields fields :http http :web web})]
 
     (println)
-    (println (dim (str "Command: clojure -M -m boundary.scaffolder.shell.cli-entry "
+    (println (dim (str "Command: clojure -M -m wagoe.scaffolder.shell.cli-entry "
                        (str/join " " args))))
     (println)
     (if (confirm "Proceed?" true)
@@ -238,7 +238,7 @@
                      dry-run (conj "--dry-run"))]
 
     (println)
-    (println (dim (str "Command: clojure -M -m boundary.scaffolder.shell.cli-entry "
+    (println (dim (str "Command: clojure -M -m wagoe.scaffolder.shell.cli-entry "
                        (str/join " " args))))
     (println)
     (if (confirm "Proceed?" true)
@@ -283,7 +283,7 @@
                dry-run  (conj "--dry-run"))]
 
     (println)
-    (println (dim (str "Command: clojure -M -m boundary.scaffolder.shell.cli-entry "
+    (println (dim (str "Command: clojure -M -m wagoe.scaffolder.shell.cli-entry "
                        (str/join " " args))))
     (println)
     (if (confirm "Proceed?" true)
@@ -325,7 +325,7 @@
                dry-run (conj "--dry-run"))]
 
     (println)
-    (println (dim (str "Command: clojure -M -m boundary.scaffolder.shell.cli-entry "
+    (println (dim (str "Command: clojure -M -m wagoe.scaffolder.shell.cli-entry "
                        (str/join " " args))))
     (println)
     (if (confirm "Proceed?" true)
@@ -385,7 +385,7 @@
                                  (when dry-run ["--dry-run"])))]
 
     (println)
-    (println (dim (str "Command: clojure -M -m boundary.scaffolder.shell.cli-entry "
+    (println (dim (str "Command: clojure -M -m wagoe.scaffolder.shell.cli-entry "
                        (str/join " " args))))
     (println)
     (if (confirm "Proceed?" true)
@@ -409,8 +409,8 @@
   ;; Delegate to the AI CLI which previews, confirms, and runs scaffolder generation.
   (try
     (if yes?
-      (shell "clojure" "-M" "-m" "boundary.ai.shell.cli-entry" "scaffold-ai" "--yes" description)
-      (shell "clojure" "-M" "-m" "boundary.ai.shell.cli-entry" "scaffold-ai" description))
+      (shell "clojure" "-M" "-m" "wagoe.ai.shell.cli-entry" "scaffold-ai" "--yes" description)
+      (shell "clojure" "-M" "-m" "wagoe.ai.shell.cli-entry" "scaffold-ai" description))
     (catch Exception e
       (println (red (str "AI scaffolder exited with error: " (.getMessage e))))
       (System/exit 1))))
@@ -436,14 +436,14 @@
        "  bb scaffold field --module-name foo --entity Foo --name bar --type string\n"
        "\n"
        "The wizard delegates to:\n"
-       "  clojure -M -m boundary.scaffolder.shell.cli-entry <command> [opts]\n"
+       "  clojure -M -m wagoe.scaffolder.shell.cli-entry <command> [opts]\n"
        "\n"
        "For AI scaffolding, set one of:\n"
        "  ANTHROPIC_API_KEY, OPENAI_API_KEY, or start Ollama locally\n"
        "\n"
        "For full CLI documentation:\n"
-       "  clojure -M -m boundary.scaffolder.shell.cli-entry --help\n"
-       "  clojure -M -m boundary.scaffolder.shell.cli-entry generate --help"))
+       "  clojure -M -m wagoe.scaffolder.shell.cli-entry --help\n"
+       "  clojure -M -m wagoe.scaffolder.shell.cli-entry generate --help"))
 
 ;; =============================================================================
 ;; Main entry point

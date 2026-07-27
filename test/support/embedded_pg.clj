@@ -10,7 +10,7 @@
    Usage:
      (use-fixtures :once (with-embedded-pg #(reset! *ctx* %)))
    or manage the lifecycle directly with start!/db-context/stop!."
-  (:require [boundary.platform.shell.adapters.database.factory :as db-factory])
+  (:require [wagoe.platform.shell.adapters.database.factory :as db-factory])
   (:import [io.zonky.test.db.postgres.embedded EmbeddedPostgres]))
 
 (defn start!

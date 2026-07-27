@@ -1,12 +1,12 @@
 (ns todo.shell.persistence
   "Imperative shell: the H2-backed repository. This is the ONLY place snake_case
    (the database's convention) meets the kebab-case used everywhere else —
-   conversion happens here via boundary.core's case-conversion helpers, never
+   conversion happens here via wagoe.core's case-conversion helpers, never
    deeper in the code."
   (:require [clojure.set :as set]
             [next.jdbc :as jdbc]
             [next.jdbc.result-set :as rs]
-            [boundary.core.utils.case-conversion :as cc]
+            [wagoe.core.utils.case-conversion :as cc]
             [todo.ports :as ports]))
 
 (defn create-table!
