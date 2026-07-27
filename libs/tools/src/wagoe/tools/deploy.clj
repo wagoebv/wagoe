@@ -128,13 +128,20 @@
     (when (.exists build-file)
       (second (re-find #"\(def version \"([^\"]+)\"" (slurp build-file))))))
 
-(defn published? [lib]
+(defn pom-url
+  "Clojars repo URL of a lib's published pom. Note the group appears here in
+   PATH form (org/wagoe), not coord form (org.wagoe) — a rename that only
+   rewrites the coord form leaves this pointing at the old group, and every
+   artifact then reports as unpublished (BOU-213). Extracted so the group is
+   assertable without a network call."
+  [lib]
   (let [version  (read-version lib)
-        artifact (artifact-name lib)
-        url      (format "https://clojars.org/repo/org/boundary-app/%s/%s/%s-%s.pom"
-                         artifact version artifact version)
-        response (http/get url {:throw false})]
-    (= 200 (:status response))))
+        artifact (artifact-name lib)]
+    (format "https://clojars.org/repo/org/wagoe/%s/%s/%s-%s.pom"
+            artifact version artifact version)))
+
+(defn published? [lib]
+  (= 200 (:status (http/get (pom-url lib) {:throw false}))))
 
 (defn version-mismatches
   "Seq of {:lib :actual :expected} for libraries whose build.clj version differs

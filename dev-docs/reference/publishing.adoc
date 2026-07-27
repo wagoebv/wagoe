@@ -289,7 +289,7 @@ Could not find artifact org.wagoe/wagoe-core:jar:1.0.1-alpha-14
 . Check that the library was actually published: open `https://clojars.org/org.wagoe/wagoe-core`
 . Wait 1–2 minutes for Clojars to finish indexing
 . Clear your local Maven cache: +
-  `rm -rf ~/.m2/repository/org/boundary-app/`
+  `rm -rf ~/.m2/repository/org/wagoe/`
 
 === CSS not included in ui-style jar
 

@@ -125,7 +125,7 @@
 (defn published? [lib]
   (let [version  (read-version lib)
         artifact (artifact-name lib)
-        url      (format "https://clojars.org/repo/org/boundary-app/%s/%s/%s-%s.pom"
+        url      (format "https://clojars.org/repo/org/wagoe/%s/%s/%s-%s.pom"
                          artifact version artifact version)
         response (http/get url {:throw false})]
     (= 200 (:status response))))

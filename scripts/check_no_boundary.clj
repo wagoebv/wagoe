@@ -58,8 +58,13 @@
    :keys   {:desc  ":boundary/ config + Integrant keys"
             :grep  ["-nIF" ":boundary/"]
             :hard? true}
-   :coords {:desc  "org.boundary-app Maven coords"
-            :grep  ["-nIF" "org.boundary-app"]
+   :coords {:desc  "org.boundary-app Maven coords (dot + path form)"
+            ;; `org[./]boundary-app` catches BOTH the coord form
+            ;; (org.boundary-app/x) and the repo PATH form used in Clojars/m2
+            ;; URLs (clojars.org/repo/org/boundary-app/...). Matching only the
+            ;; dot form left the deploy verification URL silently pointing at
+            ;; the old group after the coord rename (BOU-213).
+            :grep  ["-nIE" "org[./]boundary-app"]
             :hard? true}
    :env    {:desc  "BND_ env prefix"
             :grep  ["-nIE" "BND_[A-Z0-9_]+"]
