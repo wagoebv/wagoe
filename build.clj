@@ -2,7 +2,7 @@
   (:require [clojure.string :as str]
             [clojure.tools.build.api :as b]))
 
-(def lib 'tcbv/wagoe)
+(def lib 'wagoe/wagoe)
 (def version (format "1.2.%s" (b/git-count-revs nil)))
 (def class-dir "target/classes")
 

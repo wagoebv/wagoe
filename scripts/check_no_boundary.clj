@@ -72,8 +72,11 @@
    :dirs   {:desc  "boundary-cli / boundary-mcp dir names"
             :grep  ["-nIE" "boundary-(cli|mcp)"]
             :hard? true}
-   :urls   {:desc  "boundary-app.org / thijs-creemers/boundary refs"
-            :grep  ["-nIE" "boundary-app\\.org|thijs-creemers/boundary"]
+   :urls   {:desc  "boundary-app.org / <owner>/boundary repo refs"
+            ;; Match ANY owner, not just thijs-creemers: the repo URL also
+            ;; appears under the old org (tcbv/boundary, in the systemd unit).
+            ;; Pinning one owner would let Phase 5a miss the other variants.
+            :grep  ["-nIE" "boundary-app\\.org|github\\.com/[A-Za-z0-9_-]+/boundary"]
             :hard? true}
    :prose  {:desc  "\"boundary\" word in prose (REPORT ONLY — also an arch term)"
             :grep  ["-nIiE" "boundary"]
