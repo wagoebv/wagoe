@@ -28,7 +28,7 @@
 
   :tests [{:id :e2e
            :test-paths ["libs/e2e/test"]
-           :ns-patterns ["boundary.e2e.*-test"]}]
+           :ns-patterns ["wagoe.e2e.*-test"]}]
 
   :plugins [:kaocha.plugin/randomize
             :kaocha.plugin/filter
@@ -36,7 +36,7 @@
 
   :kaocha.plugin.filter/focus-meta [:unit :integration :contract :e2e :user :billing :phase3]
   :kaocha.plugin.randomize/randomize? true
-  :kaocha/reporter [boundary.test.reporter/reporter]
+  :kaocha/reporter [wagoe.test.reporter/reporter]
   :kaocha/fail-fast? false
   :kaocha/color? true
   :kaocha/watch? false}

@@ -11,34 +11,34 @@
      (status)    ; System health overview
      (routes)    ; Show all HTTP routes
      (commands)  ; Show all available commands"
-  (:require [boundary.config :as config]
+  (:require [wagoe.config :as config]
             ;; platform Integrant init/halt methods load via the :as wiring
             ;; require below; feature modules load here (app layer, not platform —
             ;; BOU-171 / BOU-192).
-            [boundary.user.shell.module-wiring]
-            [boundary.admin.shell.module-wiring]
-            [boundary.workflow.shell.module-wiring]
-            [boundary.search.shell.module-wiring]
-            [boundary.tenant.shell.module-wiring]
-            [boundary.devtools.core.guidance :as guidance]
-            [boundary.devtools.core.introspection :as introspection]
-            [boundary.devtools.core.schema-tools :as schema-tools]
-            [boundary.devtools.core.documentation :as docs]
-            [boundary.devtools.core.state-analyzer :as state-analyzer]
-            [boundary.devtools.core.error-classifier :as classifier]
-            [boundary.devtools.core.auto-fix :as auto-fix]
-            [boundary.devtools.shell.dashboard.server :as dashboard]  ;; Load dashboard Integrant init/halt methods
-            [boundary.devtools.shell.repl :as devtools-repl]
-            [boundary.devtools.shell.repl-error-handler :as repl-errors]
-            [boundary.devtools.shell.fcis-checker :as fcis]
-            [boundary.devtools.shell.auto-fix :as auto-fix-shell]
-            [boundary.devtools.shell.recording :as rec]
-            [boundary.devtools.shell.router :as dev-router]
-            [boundary.devtools.shell.prototype :as prototype]
-            [boundary.platform.shell.adapters.database.common.core :as db]
-            [boundary.platform.shell.system.wiring :as wiring]
-            [boundary.ai.shell.repl :as ai]
-            [boundary.ai.shell.service :as ai-svc]
+            [wagoe.user.shell.module-wiring]
+            [wagoe.admin.shell.module-wiring]
+            [wagoe.workflow.shell.module-wiring]
+            [wagoe.search.shell.module-wiring]
+            [wagoe.tenant.shell.module-wiring]
+            [wagoe.devtools.core.guidance :as guidance]
+            [wagoe.devtools.core.introspection :as introspection]
+            [wagoe.devtools.core.schema-tools :as schema-tools]
+            [wagoe.devtools.core.documentation :as docs]
+            [wagoe.devtools.core.state-analyzer :as state-analyzer]
+            [wagoe.devtools.core.error-classifier :as classifier]
+            [wagoe.devtools.core.auto-fix :as auto-fix]
+            [wagoe.devtools.shell.dashboard.server :as dashboard]  ;; Load dashboard Integrant init/halt methods
+            [wagoe.devtools.shell.repl :as devtools-repl]
+            [wagoe.devtools.shell.repl-error-handler :as repl-errors]
+            [wagoe.devtools.shell.fcis-checker :as fcis]
+            [wagoe.devtools.shell.auto-fix :as auto-fix-shell]
+            [wagoe.devtools.shell.recording :as rec]
+            [wagoe.devtools.shell.router :as dev-router]
+            [wagoe.devtools.shell.prototype :as prototype]
+            [wagoe.platform.shell.adapters.database.common.core :as db]
+            [wagoe.platform.shell.system.wiring :as wiring]
+            [wagoe.ai.shell.repl :as ai]
+            [wagoe.ai.shell.service :as ai-svc]
             [clojure.java.shell :as shell]
             [clojure.string :as str]
             [integrant.repl :as ig-repl]
@@ -586,8 +586,8 @@
   "Hot-swap a single Integrant component without full system reset.
    (restart-component :boundary/http-server)"
   [component-key]
-  (require 'boundary.devtools.shell.repl)
-  (let [restart-fn (resolve 'boundary.devtools.shell.repl/restart-component)]
+  (require 'wagoe.devtools.shell.repl)
+  (let [restart-fn (resolve 'wagoe.devtools.shell.repl/restart-component)]
     (restart-fn #'integrant.repl.state/system
                 state/config
                 component-key)))

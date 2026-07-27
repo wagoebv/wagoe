@@ -56,115 +56,115 @@
                         "libs/devtools/test"
                         "libs/push/test"
                         "libs/audience/test"]
-           :ns-patterns ["boundary.*-test"]
+           :ns-patterns ["wagoe.*-test"]
            :randomize? true}
 
          ;; Per-library test suites
          ;; Usage: clojure -M:test :core
           {:id :core
            :test-paths ["libs/core/test"]
-           :ns-patterns ["boundary.core.*-test"]}
+           :ns-patterns ["wagoe.core.*-test"]}
 
           {:id :observability
            :test-paths ["libs/observability/test"]
-           :ns-patterns ["boundary.observability.*-test"]}
+           :ns-patterns ["wagoe.observability.*-test"]}
 
           {:id :platform
            :test-paths ["libs/platform/test"]
-           :ns-patterns ["boundary.platform.*-test"]}
+           :ns-patterns ["wagoe.platform.*-test"]}
 
           {:id :user
            :test-paths ["libs/user/test"]
-           :ns-patterns ["boundary.user.*-test"]}
+           :ns-patterns ["wagoe.user.*-test"]}
 
           {:id :admin
            :test-paths ["libs/admin/test"]
-           :ns-patterns ["boundary.admin.*-test"]}
+           :ns-patterns ["wagoe.admin.*-test"]}
 
           {:id :storage
            :test-paths ["libs/storage/test"]
-           :ns-patterns ["boundary.storage.*-test"]}
+           :ns-patterns ["wagoe.storage.*-test"]}
 
           {:id :scaffolder
            :test-paths ["libs/scaffolder/test"]
-           :ns-patterns ["boundary.scaffolder.*-test"]}
+           :ns-patterns ["wagoe.scaffolder.*-test"]}
 
           {:id :cache
            :test-paths ["libs/cache/test"]
-           :ns-patterns ["boundary.cache.*-test"]}
+           :ns-patterns ["wagoe.cache.*-test"]}
 
           {:id :jobs
            :test-paths ["libs/jobs/test"]
-           :ns-patterns ["boundary.jobs.*-test"]}
+           :ns-patterns ["wagoe.jobs.*-test"]}
 
           {:id :email
            :test-paths ["libs/email/test"]
-           :ns-patterns ["boundary.email.*-test"]}
+           :ns-patterns ["wagoe.email.*-test"]}
 
           {:id :tenant
            :test-paths ["libs/tenant/test"]
-           :ns-patterns ["boundary.tenant.*-test"]}
+           :ns-patterns ["wagoe.tenant.*-test"]}
 
           {:id :realtime
            :test-paths ["libs/realtime/test"]
-           :ns-patterns ["boundary.realtime.*-test"]}
+           :ns-patterns ["wagoe.realtime.*-test"]}
 
           {:id :payments
            :test-paths ["libs/payments/test"]
-           :ns-patterns ["boundary.payments.*-test"]}
+           :ns-patterns ["wagoe.payments.*-test"]}
 
           {:id :external
            :test-paths ["libs/external/test"]
-           :ns-patterns ["boundary.external.*-test"]}
+           :ns-patterns ["wagoe.external.*-test"]}
 
           {:id :workflow
            :test-paths ["libs/workflow/test"]
-           :ns-patterns ["boundary.workflow.*-test"]}
+           :ns-patterns ["wagoe.workflow.*-test"]}
 
           {:id :search
            :test-paths ["libs/search/test"]
-           :ns-patterns ["boundary.search.*-test"]}
+           :ns-patterns ["wagoe.search.*-test"]}
 
           {:id :reports
            :test-paths ["libs/reports/test"]
-           :ns-patterns ["boundary.reports.*-test"]}
+           :ns-patterns ["wagoe.reports.*-test"]}
 
           {:id :calendar
            :test-paths ["libs/calendar/test"]
-           :ns-patterns ["boundary.calendar.*-test"]}
+           :ns-patterns ["wagoe.calendar.*-test"]}
 
           {:id :geo
            :test-paths ["libs/geo/test"]
-           :ns-patterns ["boundary.geo.*-test"]}
+           :ns-patterns ["wagoe.geo.*-test"]}
 
           {:id :ai
            :test-paths ["libs/ai/test"]
-           :ns-patterns ["boundary.ai.*-test"]}
+           :ns-patterns ["wagoe.ai.*-test"]}
 
           {:id :ui-style
            :test-paths ["libs/ui-style/test"]
-           :ns-patterns ["boundary.ui-style.*-test"]}
+           :ns-patterns ["wagoe.ui-style.*-test"]}
 
           {:id :shared-ui
            :test-paths ["libs/shared-ui/test"]
-           :ns-patterns ["boundary.shared.*-test"]}
+           :ns-patterns ["wagoe.shared.*-test"]}
 
           {:id :i18n
            :test-paths ["libs/i18n/test"]
-           :ns-patterns ["boundary.i18n.*-test"]}
+           :ns-patterns ["wagoe.i18n.*-test"]}
 
           {:id :devtools
            :test-paths ["libs/devtools/test"]
-           :ns-patterns ["boundary.devtools.*-test"]}
+           :ns-patterns ["wagoe.devtools.*-test"]}
 
           {:id :push
            :test-paths ["libs/push/test"]
            :source-paths ["libs/push/src"]
-           :ns-patterns ["boundary.push.*-test"]}
+           :ns-patterns ["wagoe.push.*-test"]}
 
           {:id :audience
            :test-paths ["libs/audience/test"]
-           :ns-patterns ["boundary.audience.*-test"]}
+           :ns-patterns ["wagoe.audience.*-test"]}
 
          ;; End-to-end suite lives in tests.e2e.edn so default
          ;; clojure -M:test runs stay opt-in and do not require spel.
@@ -182,7 +182,7 @@
   :kaocha.plugin.filter/focus-meta [:unit :integration :contract :property :security :e2e :user :billing :phase3]
 
   :kaocha.plugin.randomize/randomize? true
-  :kaocha/reporter [boundary.test.reporter/reporter]
+  :kaocha/reporter [wagoe.test.reporter/reporter]
 
   :kaocha/fail-fast? false
   :kaocha/color? true

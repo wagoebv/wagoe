@@ -10,7 +10,7 @@
 ;;   bb scripts/docs_lint.clj --out-dir build/docs-lint
 ;;
 ;; Usage (Clojure CLI via wrapper):
-;;   clojure -M:dev -m boundary.tools.docs-lint
+;;   clojure -M:dev -m wagoe.tools.docs-lint
 ;;
 ;; Output:
 ;;   build/docs-lint/report.edn   - structured report
@@ -254,7 +254,7 @@
 ;; =============================================================================
 
 (defn extract-namespace-references [content]
-  ;; Look for boundary.* namespace-like tokens
+  ;; Look for wagoe.* namespace-like tokens
   (let [pattern #"boundary\.[a-zA-Z0-9._-]+"]
     (->> (re-seq pattern content)
          (distinct))))
@@ -268,10 +268,10 @@
                       (str/ends-with? % ".md")
                       (str/ends-with? % ".txt")
                       (str/ends-with? % ".")
-                      (str/starts-with? % "boundary.product.")
-                      (= % "boundary.test.fixtures")))
+                      (str/starts-with? % "wagoe.product.")
+                      (= % "wagoe.test.fixtures")))
          (remove #(contains? known-namespaces %))
-         ;; Also allow partial matches (e.g., boundary.user matches boundary.user.core.user)
+         ;; Also allow partial matches (e.g., wagoe.user matches wagoe.user.core.user)
          (remove (fn [ref]
                    (some #(str/starts-with? % ref) known-namespaces)))
          (map (fn [ns-ref]

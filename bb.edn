@@ -6,29 +6,29 @@
  :tasks
  {:requires ([babashka.http-client       :as http]
              [babashka.process          :as process]
-             [boundary.tools.scaffold    :as scaffold]
-             [boundary.tools.ai          :as ai]
-             [boundary.tools.deps        :as deps]
-             [boundary.tools.i18n        :as i18n]
-             [boundary.tools.admin       :as admin]
-             [boundary.tools.deploy      :as deploy]
-             [boundary.tools.dev         :as dev]
-             [boundary.tools.doctor      :as doctor]
-             [boundary.tools.setup       :as setup]
-             [boundary.tools.integrate   :as integrate]
-             [boundary.tools.check-fcis  :as check-fcis]
-             [boundary.tools.check-tests :as check-tests]
-             [boundary.tools.check-deps  :as check-deps]
-             [boundary.tools.check-ports :as check-ports]
-             [boundary.tools.check-poms  :as check-poms]
-             [boundary.tools.check-hygiene :as check-hygiene]
-             [check-no-boundary :as check-no-boundary]  ; scripts/check_no_boundary.clj — outside the renamed tree
-             [boundary.tools.doctor-env  :as doctor-env]
-             [boundary.tools.db          :as db]
-             [boundary.tools.check       :as check]
-             [boundary.tools.quickstart  :as quickstart]
+             [wagoe.tools.scaffold    :as scaffold]
+             [wagoe.tools.ai          :as ai]
+             [wagoe.tools.deps        :as deps]
+             [wagoe.tools.i18n        :as i18n]
+             [wagoe.tools.admin       :as admin]
+             [wagoe.tools.deploy      :as deploy]
+             [wagoe.tools.dev         :as dev]
+             [wagoe.tools.doctor      :as doctor]
+             [wagoe.tools.setup       :as setup]
+             [wagoe.tools.integrate   :as integrate]
+             [wagoe.tools.check-fcis  :as check-fcis]
+             [wagoe.tools.check-tests :as check-tests]
+             [wagoe.tools.check-deps  :as check-deps]
+             [wagoe.tools.check-ports :as check-ports]
+             [wagoe.tools.check-poms  :as check-poms]
+             [wagoe.tools.check-hygiene :as check-hygiene]
+             [check-no-boundary :as check-no-boundary]  ; scripts/check_no_wagoe.clj — outside the renamed tree
+             [wagoe.tools.doctor-env  :as doctor-env]
+             [wagoe.tools.db          :as db]
+             [wagoe.tools.check       :as check]
+             [wagoe.tools.quickstart  :as quickstart]
              [agents-gen                 :as agents-gen]
-             [boundary.tools.help        :as help])
+             [wagoe.tools.help        :as help])
 
   scaffold      {:doc "Interactive module scaffolding wizard (bb scaffold [generate|new|field|endpoint|adapter|ai])"
                  :task (apply scaffold/-main *command-line-args*)}
@@ -108,31 +108,31 @@
                      :task (apply check-no-boundary/-main *command-line-args*)}
   test:tools {:doc "Run boundary-tools unit tests (bb test:tools)"
               :extra-paths ["libs/tools/test"]
-              :task (do (require 'boundary.tools.doctor-test
-                                 'boundary.tools.doctor-env-test
-                                 'boundary.tools.integrate-test
-                                 'boundary.tools.setup-test
-                                 'boundary.tools.check-fcis-test
-                                 'boundary.tools.check-tests-test
-                                 'boundary.tools.check-ports-test
-                                 'boundary.tools.check-test
-                                 'boundary.tools.check-poms-test
-                                 'boundary.tools.quickstart-test
-                                 'boundary.tools.deploy-test
-                                 'boundary.tools.help-test)
+              :task (do (require 'wagoe.tools.doctor-test
+                                 'wagoe.tools.doctor-env-test
+                                 'wagoe.tools.integrate-test
+                                 'wagoe.tools.setup-test
+                                 'wagoe.tools.check-fcis-test
+                                 'wagoe.tools.check-tests-test
+                                 'wagoe.tools.check-ports-test
+                                 'wagoe.tools.check-test
+                                 'wagoe.tools.check-poms-test
+                                 'wagoe.tools.quickstart-test
+                                 'wagoe.tools.deploy-test
+                                 'wagoe.tools.help-test)
                         (let [summary (clojure.test/run-tests
-                                       'boundary.tools.doctor-test
-                                       'boundary.tools.doctor-env-test
-                                       'boundary.tools.integrate-test
-                                       'boundary.tools.setup-test
-                                       'boundary.tools.check-fcis-test
-                                       'boundary.tools.check-tests-test
-                                       'boundary.tools.check-ports-test
-                                       'boundary.tools.check-test
-                                       'boundary.tools.check-poms-test
-                                       'boundary.tools.quickstart-test
-                                       'boundary.tools.deploy-test
-                                       'boundary.tools.help-test)]
+                                       'wagoe.tools.doctor-test
+                                       'wagoe.tools.doctor-env-test
+                                       'wagoe.tools.integrate-test
+                                       'wagoe.tools.setup-test
+                                       'wagoe.tools.check-fcis-test
+                                       'wagoe.tools.check-tests-test
+                                       'wagoe.tools.check-ports-test
+                                       'wagoe.tools.check-test
+                                       'wagoe.tools.check-poms-test
+                                       'wagoe.tools.quickstart-test
+                                       'wagoe.tools.deploy-test
+                                       'wagoe.tools.help-test)]
                           (when (pos? (+ (:fail summary) (:error summary)))
                             (System/exit 1))))}
   test:boundary-cli
@@ -140,15 +140,15 @@
    :extra-paths ["libs/boundary-cli/src"
                  "libs/boundary-cli/resources"
                  "libs/boundary-cli/test"]
-   :task (do (require 'boundary.cli.catalogue-test
-                      'boundary.cli.list-modules-test
-                      'boundary.cli.new-test
-                      'boundary.cli.add-test)
+   :task (do (require 'wagoe.cli.catalogue-test
+                      'wagoe.cli.list-modules-test
+                      'wagoe.cli.new-test
+                      'wagoe.cli.add-test)
              (let [summary (clojure.test/run-tests
-                            'boundary.cli.catalogue-test
-                            'boundary.cli.list-modules-test
-                            'boundary.cli.new-test
-                            'boundary.cli.add-test)]
+                            'wagoe.cli.catalogue-test
+                            'wagoe.cli.list-modules-test
+                            'wagoe.cli.new-test
+                            'wagoe.cli.add-test)]
                (when (pos? (+ (:fail summary) (:error summary)))
                  (System/exit 1))))}
   run-e2e-server

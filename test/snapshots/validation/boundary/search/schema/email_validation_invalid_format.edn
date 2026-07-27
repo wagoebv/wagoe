@@ -1,7 +1,0 @@
-{:meta
- {:case-name nil,
-  :schema-version "1.0",
-  :seed 43,
-  :test-name email-validation-invalid-format,
-  :test-ns boundary.search.schema},
- :result {:errors "clojure.lang.LazySeq", :valid? false}}

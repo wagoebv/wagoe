@@ -18,8 +18,8 @@
                 :basis basis
                 :src-dirs ["src"]
                 :scm {:url "https://github.com/thijs-creemers/boundary"
-                      :connection "scm:git:git://github.com/thijs-creemers/boundary.git"
-                      :developerConnection "scm:git:ssh://git@github.com/thijs-creemers/boundary.git"
+                      :connection "scm:git:git://github.com/thijs-creemers/wagoe.git"
+                      :developerConnection "scm:git:ssh://git@github.com/thijs-creemers/wagoe.git"
                       :tag version}
                 :pom-data [[:description "Model Context Protocol server for the Boundary framework (stdio transport)"]
                            [:url "https://github.com/thijs-creemers/boundary"]

@@ -137,7 +137,7 @@
 
   ;; Internationalisation — marker-based i18n with EDN catalogues
   :boundary/i18n
-  {:catalogue-path "boundary/i18n/translations"
+  {:catalogue-path "wagoe/i18n/translations"
    :default-locale :en
    :dev?           true}
 
@@ -246,13 +246,13 @@
   ;; External service adapters — move to :active to enable.
   ;; All four are opt-in; none are enabled in dev by default.
 
-  :boundary.external/smtp
+  :wagoe.external/smtp
   {:host #or [#env SMTP_HOST "localhost"]
    :port #or [#long #or [#env SMTP_PORT 1025] 1025]
    :tls? false
    :from #or [#env SMTP_FROM "no-reply@example.com"]}
 
-  :boundary.external/imap
+  :wagoe.external/imap
   {:host     #or [#env IMAP_HOST "localhost"]
    :port     #or [#long #or [#env IMAP_PORT 993] 993]
    :username #or [#env IMAP_USERNAME "inbox@example.com"]
@@ -262,7 +262,7 @@
   ;; Stripe payments now handled by :boundary/payment-provider (libs/payments).
   ;; Configure with {:provider :stripe :api-key ... :webhook-secret ...} in :active.
 
-  :boundary.external/twilio
+  :wagoe.external/twilio
   {:account-sid  #env TWILIO_ACCOUNT_SID
    :auth-token   #env TWILIO_AUTH_TOKEN
    :from-number  #or [#env TWILIO_FROM_NUMBER "+15005550006"]}}}

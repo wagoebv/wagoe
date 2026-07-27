@@ -23,7 +23,7 @@
            "libs/ai/src" "libs/ai/test"                     ;; Phase 19: AI
            "libs/ui-style/src"                              ;; Shared UI style API
            "libs/ui-style/resources"                        ;; Shared UI assets (CSS/JS/Tailwind)
-           "libs/shared-ui/src" "libs/shared-ui/test"       ;; Shared Hiccup UI components (boundary.shared.ui.*)
+           "libs/shared-ui/src" "libs/shared-ui/test"       ;; Shared Hiccup UI components (wagoe.shared.ui.*)
            "libs/i18n/src" "libs/i18n/test"                 ;; Phase 20: Internationalisation
            "libs/i18n/resources"                            ;; i18n translation catalogues
            "libs/push/src" "libs/push/test"                 ;; Push notifications
@@ -171,7 +171,7 @@
            :cljfmt    {:extra-deps {lein-cljfmt/lein-cljfmt {:mvn/version "0.9.2"}}}
            :main-opts ["-m" "cljfmt.main"]
            :docs-lint {:extra-paths ["dev"]
-                       :main-opts   ["-m" "boundary.tools.docs-lint"]}
+                       :main-opts   ["-m" "wagoe.tools.docs-lint"]}
            :clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2026.05.25"}}
                        :main-opts    ["-m" "clj-kondo.main"]
                        :extra-paths  ["src"]}
@@ -201,14 +201,14 @@
                        :extra-deps {org.clojure/clojure           {:mvn/version "1.12.5"}
                                     io.github.clojure/tools.build {:git/tag "v0.10.14" :git/sha "1176afd3"}}
                        :ns-default build}
-           :migrate   {:main-opts  ["-m" "boundary.platform.shell.database.cli-migrations"]
+           :migrate   {:main-opts  ["-m" "wagoe.platform.shell.database.cli-migrations"]
                        :extra-deps {org.xerial/sqlite-jdbc      {:mvn/version "3.53.2.0"}
                                     org.postgresql/postgresql   {:mvn/version "42.7.11"}
                                     com.h2database/h2           {:mvn/version "2.4.240"}
                                     com.mysql/mysql-connector-j {:mvn/version "9.7.0"}}}
            :bench     {:extra-paths ["dev"]
                        :extra-deps  {criterium/criterium {:mvn/version "0.4.6"}}
-                       :main-opts   ["-m" "boundary.bench.core"]}
+                       :main-opts   ["-m" "wagoe.bench.core"]}
            :coverage  {:extra-deps  {cloverage/cloverage         {:mvn/version "1.2.4"}
                                      org.xerial/sqlite-jdbc      {:mvn/version "3.53.2.0"}
                                      org.postgresql/postgresql   {:mvn/version "42.7.11"}
@@ -310,11 +310,11 @@
                                     org.postgresql/postgresql   {:mvn/version "42.7.11"}
                                     com.h2database/h2           {:mvn/version "2.4.240"}
                                     com.mysql/mysql-connector-j {:mvn/version "9.7.0"}}
-                       :main-opts  ["-m" "boundary.cli"]
+                       :main-opts  ["-m" "wagoe.cli"]
                        :jvm-opts   ["-Denv=dev"]}
 
            ;; Direct entrypoint into the user module CLI; used by bb create-admin so that
-           ;; generated projects (which do not have boundary.cli on the classpath) can still
+           ;; generated projects (which do not have wagoe.cli on the classpath) can still
            ;; run the user CLI via -M:user-cli. Uses -e to call run-cli! directly so this
            ;; works with any published boundary-user without requiring a -main entrypoint.
            ;; Must include all JDBC drivers because db-factory resolves the driver at runtime.
@@ -322,10 +322,10 @@
                                     org.postgresql/postgresql   {:mvn/version "42.7.11"}
                                     com.h2database/h2           {:mvn/version "2.4.240"}
                                     com.mysql/mysql-connector-j {:mvn/version "9.7.0"}}
-                       :main-opts  ["-e" "(require '[boundary.user.shell.cli-entry :as e]) (System/exit (e/run-cli! (vec *command-line-args*)))"]}
+                       :main-opts  ["-e" "(require '[wagoe.user.shell.cli-entry :as e]) (System/exit (e/run-cli! (vec *command-line-args*)))"]}
 
            ;; =============================================================================
-           ;; HTTP server entrypoint (invokes boundary.main/-main in server mode).
+           ;; HTTP server entrypoint (invokes wagoe.main/-main in server mode).
            ;; Used by `bb run-e2e-server` for Playwright/spel e2e runs, and available
            ;; for any local run that needs to boot the Integrant system from deps.edn
            ;; rather than the uberjar. Respects BND_ENV to select the active profile.
@@ -335,7 +335,7 @@
                                     org.postgresql/postgresql   {:mvn/version "42.7.11"}
                                     com.h2database/h2           {:mvn/version "2.4.240"}
                                     com.mysql/mysql-connector-j {:mvn/version "9.7.0"}}
-                       :main-opts  ["-m" "boundary.main"]}
+                       :main-opts  ["-m" "wagoe.main"]}
 
            ;; =============================================================================
            ;; Documentation
