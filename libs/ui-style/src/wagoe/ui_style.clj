@@ -7,20 +7,20 @@
 (def base-css
   "Legacy-compatible base stack."
   ["/css/pico.min.css"
-   "/css/boundary-tokens.css"
+   "/css/wagoe-tokens.css"
    "/css/tokens-openprops.css"
    "/css/app.css"])
 
 (def pilot-css
   "General daisy pilot stack."
-  ["/css/boundary-tokens.css"
+  ["/css/wagoe-tokens.css"
    "/css/app.css"
    "/css/daisy-admin.css"])
 
 (def admin-pilot-css
   "Admin pilot stack with legacy admin rules plus daisy overrides."
   ["/css/fonts.css"
-   "/css/boundary-tokens.css"
+   "/css/wagoe-tokens.css"
    "/css/admin.css"
    "/css/app.css"
    "/css/daisy-admin.css"])

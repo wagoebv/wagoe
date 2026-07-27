@@ -17,7 +17,7 @@ Each ADR describes the context, the decision, and its consequences.
 
 * link:adr/README.adoc[ADR Index]
 * link:adr/ADR-001-library-split.adoc[ADR-001: Library Split]
-* link:adr/ADR-002-boundary-new-command.adoc[ADR-002: Wagoe New Command]
+* link:adr/ADR-002-wagoe-new-command.adoc[ADR-002: Wagoe New Command]
 * link:adr/ADR-003-websocket-architecture.adoc[ADR-003: WebSocket Architecture]
 * link:adr/ADR-004-multi-tenancy-architecture.adoc[ADR-004: Multi-Tenancy Architecture]
 * link:adr/ADR-005-validation-devex-foundations.adoc[ADR-005: Validation DevEx Foundations]
@@ -84,7 +84,7 @@ Key tools:
 
 Internal reference documents not intended for end users.
 
-* link:reference/boundary-prd.adoc[Product Requirements Document]
+* link:reference/wagoe-prd.adoc[Product Requirements Document]
 * link:reference/development-commands.adoc[Development Commands (Internal)]
 * link:reference/docs-maintenance-checklist.adoc[Docs Maintenance Checklist]
 * link:reference/historical-docs-triage.adoc[Historical Docs Triage]

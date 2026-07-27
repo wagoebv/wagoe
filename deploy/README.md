@@ -35,14 +35,14 @@ docker run \
 
 ## Kubernetes
 
-[`k8s/boundary.yaml`](k8s/boundary.yaml) is a complete example: a `server`
+[`k8s/wagoe.yaml`](k8s/wagoe.yaml) is a complete example: a `server`
 Deployment behind a Service (with liveness/readiness probes on the health
 endpoints and a preStop drain), plus a `worker` Deployment running the same
 image with `args: ["worker"]`.
 
 ```bash
 # Set REGISTRY/boundary:TAG and the Secret values first.
-kubectl apply -f deploy/k8s/boundary.yaml
+kubectl apply -f deploy/k8s/wagoe.yaml
 ```
 
 ## Production configuration notes

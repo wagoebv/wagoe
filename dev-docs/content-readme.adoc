@@ -88,7 +88,7 @@ issues and solutions
 
 Technical reference documentation for APIs, commands, and configuration.
 
-* link:reference/boundary-prd.adoc[Product Requirements Document] - Complete 
+* link:reference/wagoe-prd.adoc[Product Requirements Document] - Complete 
 PRD with architecture and specifications
 * link:reference/commands.adoc[Commands] - CLI command reference
 * link:reference/cli/user-cli.adoc[User CLI Reference] - User management 

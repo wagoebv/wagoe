@@ -30,9 +30,9 @@ Bundle vars — each a vector of `/`-rooted asset paths, in load order:
 
 | Var | Bundle | Contents (load order) |
 |-----|--------|-----------------------|
-| `base-css` | `:base` | pico → boundary-tokens → tokens-openprops → app |
-| `pilot-css` | `:pilot` | boundary-tokens → app → daisy-admin |
-| `admin-pilot-css` | `:admin-pilot` | fonts → boundary-tokens → admin → app → daisy-admin |
+| `base-css` | `:base` | pico → wagoe-tokens → tokens-openprops → app |
+| `pilot-css` | `:pilot` | wagoe-tokens → app → daisy-admin |
+| `admin-pilot-css` | `:admin-pilot` | fonts → wagoe-tokens → admin → app → daisy-admin |
 | `base-js` / `pilot-js` | `:base` / `:pilot` | theme → components → alpine → htmx (`pilot-js` aliases `base-js`) |
 | `admin-pilot-js` | `:admin-pilot` | theme → components → admin-ux → alpine → htmx → forms → keyboard |
 
@@ -41,7 +41,7 @@ Lookup functions:
 ```clojure
 (require '[wagoe.ui-style :as ui-style])
 
-(ui-style/bundle :pilot)          ;; => ["/css/boundary-tokens.css" "/css/app.css" "/css/daisy-admin.css"]
+(ui-style/bundle :pilot)          ;; => ["/css/wagoe-tokens.css" "/css/app.css" "/css/daisy-admin.css"]
 (ui-style/js-bundle :admin-pilot) ;; => ["/js/theme.js" "/js/components.js" ...]
 
 ;; Unknown keys fall back to the :base stack (never nil):
@@ -57,7 +57,7 @@ Recommended bundle per page type:
 
 ## Assets shipped (`resources/public/`)
 
-- **CSS** (`css/`): `pico.min.css` (vendored), `boundary-tokens.css` +
+- **CSS** (`css/`): `pico.min.css` (vendored), `wagoe-tokens.css` +
   `tokens-openprops.css` (design tokens), `app.css`, `admin.css`,
   `daisy-admin.css` (Tailwind/daisyUI compiled output), `fonts.css`, and
   `vendor/open-props/*`.
@@ -110,7 +110,7 @@ and `:paths ["src" "resources"]` so the assets travel with the jar.
    admin bundle) must load *before* `alpine.min.js` — they register Alpine
    components/stores on the `alpine:init` event. Preserve the vector order when
    editing.
-3. **Theme changes go in token files.** Adjust `boundary-tokens.css` /
+3. **Theme changes go in token files.** Adjust `wagoe-tokens.css` /
    `tokens-openprops.css`, not one-off colors in component CSS.
 4. **`daisy-admin.css` is generated.** Edit `resources/tailwind/admin-pilot.css`
    and recompile (`npm run build:css:admin` from the monorepo root); do not
