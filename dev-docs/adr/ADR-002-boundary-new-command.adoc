@@ -21,7 +21,7 @@ project based on the standardized Boundary architecture (Functional Core
 Additionally, an audit of the current CLI reveals "documentation drift":
 the `libs/scaffolder/README.md` documents `--output-dir` and `--force`
 flags for the `generate` command, but these are not implemented in
-`libs/scaffolder/src/boundary/scaffolder/cli.clj`.
+`libs/scaffolder/src/wagoe/scaffolder/cli.clj`.
 
 '''''
 
@@ -51,7 +51,7 @@ framework.
 [[option-2-extend-scaffolder-cli-white_check_mark-selected]]
 ==== Option 2: Extend Scaffolder CLI ✅ SELECTED
 
-Add a `new` command to the existing `boundary.scaffolder.cli`.
+Add a `new` command to the existing `wagoe.scaffolder.cli`.
 
 * *Pros*: Leverages existing CLI infrastructure, validation patterns,
 and service ports. Provides a unified tool for all scaffolding needs.
@@ -63,7 +63,7 @@ and service ports. Provides a unified tool for all scaffolding needs.
 
 *Chosen Option:* Option 2: Extend Scaffolder CLI
 
-We will extend the `boundary.scaffolder.cli` namespace to support a
+We will extend the `wagoe.scaffolder.cli` namespace to support a
 `new` command. This extension is feasible and clean due to the existing
 command dispatch pattern.
 
@@ -73,7 +73,7 @@ command dispatch pattern.
 ===== 1. Extension Point
 
 The command will be added to `dispatch-command` in
-`libs/scaffolder/src/boundary/scaffolder/cli.clj` (around line 424):
+`libs/scaffolder/src/wagoe/scaffolder/cli.clj` (around line 424):
 
 [source,clojure]
 ----
@@ -143,6 +143,6 @@ highly amenable to this extension.
 . *Implementation Verification*:
 * `lsp++_++diagnostics` must remain clean.
 * New tests in
-`libs/scaffolder/test/boundary/scaffolder/shell/cli++_++test.clj` should
+`libs/scaffolder/test/wagoe/scaffolder/shell/cli++_++test.clj` should
 verify the `new` command dispatch.
 * Manual verification of `--output-dir` and `--force` flags.

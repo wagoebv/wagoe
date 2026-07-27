@@ -9,22 +9,22 @@ Internationalisation for Boundary apps: marker-based translation, locale chain r
 |===
 | Namespace | Purpose
 
-| `boundary.i18n.core.translate`
+| `wagoe.i18n.core.translate`
 | Pure `t/3` function: locale chain lookup, interpolation, pluralisation
 
-| `boundary.i18n.ports`
+| `wagoe.i18n.ports`
 | `ICatalogue` protocol with `lookup` method
 
-| `boundary.i18n.shell.catalogue`
+| `wagoe.i18n.shell.catalogue`
 | `load-catalogue` from classpath EDN files; `MapCatalogue` implementation
 
-| `boundary.i18n.shell.middleware`
+| `wagoe.i18n.shell.middleware`
 | `wrap-i18n`: injects `:i18n/locale-chain` and `:i18n/t` into Ring request
 
-| `boundary.i18n.shell.render`
+| `wagoe.i18n.shell.render`
 | `resolve-markers` and `render`: postwalk resolving `[:t :key]` in Hiccup
 
-| `boundary.i18n.shell.module-wiring`
+| `wagoe.i18n.shell.module-wiring`
 | Integrant `:wagoe/i18n` component
 |===
 
@@ -42,7 +42,7 @@ Internationalisation for Boundary apps: marker-based translation, locale chain r
 [:t :user/items {:n 3} 3]
 ----
 
-Markers are resolved by `boundary.i18n.shell.render/resolve-markers` during `render`. They can appear anywhere in a Hiccup tree. Strings pass through unchanged.
+Markers are resolved by `wagoe.i18n.shell.render/resolve-markers` during `render`. They can appear anywhere in a Hiccup tree. Strings pass through unchanged.
 
 == Locale chain
 
@@ -81,7 +81,7 @@ The component is injected into `:wagoe/http-handler` as `:i18n`. With `:dev? tru
 
 == Middleware
 
-`boundary.i18n.shell.middleware/wrap-i18n` injects into every Ring request:
+`wagoe.i18n.shell.middleware/wrap-i18n` injects into every Ring request:
 
 [cols="1,3",options="header"]
 |===
@@ -105,7 +105,7 @@ The component is injected into `:wagoe/http-handler` as `:i18n`. With `:dev? tru
 
 == Adding a locale
 
-. Add `libs/i18n/resources/boundary/i18n/translations/fr.edn`.
+. Add `libs/i18n/resources/wagoe/i18n/translations/fr.edn`.
 . Update `load-catalogue` default locales or pass it explicitly from config.
 . Run `bb i18n:missing` to see which keys need translating.
 

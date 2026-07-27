@@ -43,13 +43,13 @@ editable field-groups without being listed as `:readonly-fields`, causing a seco
 
 === Fix 1 — Preserve `:error` key in `persistence-error-handling`
 
-`libs/platform/src/boundary/platform/shell/persistence_interceptors.clj`
+`libs/platform/src/wagoe/platform/shell/persistence_interceptors.clj`
 
 The `:error` handler now includes `:error exception` in the `assoc` call alongside
 `:error-info`, so `execute-persistence-operation` correctly rethrows instead of returning `nil`.
 
 Unit tests were added in
-`libs/platform/test/boundary/platform/shell/persistence_interceptors_test.clj` covering:
+`libs/platform/test/wagoe/platform/shell/persistence_interceptors_test.clj` covering:
 
 * `:error` handler sets the `:error` key (both `ExceptionInfo` and plain `Exception`)
 * `execute-persistence-operation` rethrows when `db-logic-fn` throws
@@ -57,7 +57,7 @@ Unit tests were added in
 
 === Fix 2 — Use `ports/update-entity` result directly
 
-`libs/admin/src/boundary/admin/shell/http.clj`
+`libs/admin/src/wagoe/admin/shell/http.clj`
 
 Removed the `_updated-entity` binding and the redundant `ports/get-entity` round-trip.
 `ports/update-entity` already fetches the updated record internally (join-aware SELECT) and
@@ -116,12 +116,12 @@ For entities without `:split-table-update` the code path is identical to before.
 
 ==== Files changed
 
-* `libs/admin/src/boundary/admin/shell/service.clj` — `split-update-data` private helper;
+* `libs/admin/src/wagoe/admin/shell/service.clj` — `split-update-data` private helper;
   `update-entity` branched on `:split-table-update`.
 * `resources/conf/dev/admin/users.edn` — `:email` and `:active` removed from
   `:readonly-fields`; `:split-table-update` added.  `:mfa-enabled` remains read-only
   (controlled by MFA enrollment flow, not the generic edit form).
-* `libs/admin/test/boundary/admin/shell/split_table_update_test.clj` — NEW integration
+* `libs/admin/test/wagoe/admin/shell/split_table_update_test.clj` — NEW integration
   tests covering both-tables update, primary-only, secondary-only, and single-table
   regression guard.
 

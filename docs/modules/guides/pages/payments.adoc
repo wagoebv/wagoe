@@ -53,7 +53,7 @@ Inject it wherever payment operations are needed:
 
 [source,clojure]
 ----
-(require '[boundary.payments.ports :as psp])
+(require '[wagoe.payments.ports :as psp])
 
 (defn initiate-payment! [payment-provider order]
   (let [{:keys [checkout-url provider-checkout-id]}
@@ -79,7 +79,7 @@ Inject it wherever payment operations are needed:
 
 [source,clojure]
 ----
-(require '[boundary.payments.ports :as psp])
+(require '[wagoe.payments.ports :as psp])
 
 (defn payment-webhook-handler [request payment-provider]
   ;; IMPORTANT: read raw body BEFORE any body-parsing middleware
@@ -149,7 +149,7 @@ GET /web/payment/mock-return?checkout-id=<uuid>
 [source,clojure]
 ----
 ;; In tests
-(require '[boundary.payments.shell.adapters.mock :as mock])
+(require '[wagoe.payments.shell.adapters.mock :as mock])
 (def test-provider (mock/->MockPaymentProvider))
 ----
 
@@ -187,7 +187,7 @@ Always use the mock provider in tests:
 
 [source,clojure]
 ----
-(require '[boundary.payments.shell.adapters.mock :as mock])
+(require '[wagoe.payments.shell.adapters.mock :as mock])
 
 (deftest checkout-test
   (let [provider (mock/->MockPaymentProvider)

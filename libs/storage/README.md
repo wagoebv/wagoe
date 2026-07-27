@@ -42,7 +42,7 @@ File storage abstraction with local filesystem and S3 backends, including upload
 
 ```clojure
 (ns myapp.storage
-  (:require [boundary.storage.shell.adapters.local :as local]))
+  (:require [wagoe.storage.shell.adapters.local :as local]))
 
 ;; Create local storage adapter
 (def store (local/create-adapter
@@ -69,7 +69,7 @@ File storage abstraction with local filesystem and S3 backends, including upload
 
 ```clojure
 (ns myapp.storage
-  (:require [boundary.storage.shell.adapters.s3 :as s3]))
+  (:require [wagoe.storage.shell.adapters.s3 :as s3]))
 
 ;; Create S3 storage adapter
 (def store (s3/create-adapter
@@ -107,7 +107,7 @@ File storage abstraction with local filesystem and S3 backends, including upload
 
 ```clojure
 (ns myapp.uploads
-  (:require [boundary.storage.core.validation :as v]))
+  (:require [wagoe.storage.core.validation :as v]))
 
 ;; Define allowed uploads
 (def image-rules
@@ -149,7 +149,7 @@ File storage abstraction with local filesystem and S3 backends, including upload
 
 ```clojure
 (ns myapp.images
-  (:require [boundary.storage.ports :as storage-ports]))
+  (:require [wagoe.storage.ports :as storage-ports]))
 
 ;; Resize image (via configured image processor)
 (storage-ports/resize-image image-processor file-bytes {:width 200 :height 200})
@@ -166,8 +166,8 @@ File storage abstraction with local filesystem and S3 backends, including upload
 
 ```clojure
 (ns myapp.handlers
-  (:require [boundary.storage.ports :as storage-ports]
-            [boundary.storage.core.validation :as v]))
+  (:require [wagoe.storage.ports :as storage-ports]
+            [wagoe.storage.core.validation :as v]))
 
 (defn upload-avatar [request]
   (let [file (get-in request [:multipart-params "file"])
@@ -187,7 +187,7 @@ File storage abstraction with local filesystem and S3 backends, including upload
 ## Module Structure
 
 ```
-libs/storage/src/boundary/storage/
+libs/storage/src/wagoe/storage/
 ├── core/
 │   ├── validation.clj       # Upload validation (pure)
 │   ├── path.clj             # Path generation (pure)

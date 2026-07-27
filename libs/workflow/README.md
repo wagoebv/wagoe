@@ -17,7 +17,7 @@ Optionally enqueue side-effect jobs via `boundary-jobs` after successful transit
 ### 1. Define a Workflow
 
 ```clojure
-(require '[boundary.workflow.shell.registry :refer [defworkflow]])
+(require '[wagoe.workflow.shell.registry :refer [defworkflow]])
 
 (defworkflow order-workflow
   {:id            :order-workflow
@@ -39,7 +39,7 @@ Optionally enqueue side-effect jobs via `boundary-jobs` after successful transit
 ### 2. Start an Instance
 
 ```clojure
-(require '[boundary.workflow.ports :as ports])
+(require '[wagoe.workflow.ports :as ports])
 
 (def instance
   (ports/start-workflow! engine

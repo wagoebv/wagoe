@@ -76,7 +76,7 @@ Boundary Framework monorepo.
 [source]
 ----
 boundary/libs/payments/
-├── src/boundary/payments/
+├── src/wagoe/payments/
 │   ├── ports.clj              ; IPaymentProvider protocol
 │   ├── schema.clj             ; Malli: CheckoutRequest, CheckoutResult,
 │   │                          ;        PaymentStatusResult, WebhookResult
@@ -93,7 +93,7 @@ boundary/libs/payments/
 
 === `IPaymentProvider` protocol
 
-The central protocol in `boundary.payments.ports`:
+The central protocol in `wagoe.payments.ports`:
 
 [source,clojure]
 ----

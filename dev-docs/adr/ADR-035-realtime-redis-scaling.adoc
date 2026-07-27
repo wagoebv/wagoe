@@ -83,7 +83,7 @@ path, so the in-memory test exercises the real relay callback.
 === 3. Provider selection
 
 `:provider :in-memory | :redis` on the `:wagoe/realtime` Integrant key, via a
-new `shell/module_wiring.clj` that mirrors `boundary.cache.shell.module-wiring`:
+new `shell/module_wiring.clj` that mirrors `wagoe.cache.shell.module-wiring`:
 
 [cols="1,2,2"]
 |===

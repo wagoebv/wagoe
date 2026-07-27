@@ -79,11 +79,11 @@ This is a frequent source of bugs. Boundary uses three different naming conventi
 | `passwordHash`, `createdAt`
 |===
 
-Always use `boundary.core.utils.case-conversion` for conversions. Never convert manually.
+Always use `wagoe.core.utils.case-conversion` for conversions. Never convert manually.
 
 [source,clojure]
 ----
-(require '[boundary.core.utils.case-conversion :as cc])
+(require '[wagoe.core.utils.case-conversion :as cc])
 
 ;; DB record → Clojure entity
 (cc/snake-case->kebab-case-map db-record)

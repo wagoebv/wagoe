@@ -171,7 +171,7 @@ Point-in-time security posture of the running application.
 
 ### AI REPL Commands
 
-Three new commands exposed via the `ai/` alias (namespace `boundary.ai.shell.repl`):
+Three new commands exposed via the `ai/` alias (namespace `wagoe.ai.shell.repl`):
 
 ```clojure
 (ai/review "path/to/file.clj")
@@ -183,7 +183,7 @@ Three new commands exposed via the `ai/` alias (namespace `boundary.ai.shell.rep
 ;; Suggest missing test cases — analyzes source + existing test file
 ;; (auto-resolved from namespace), prints a list of uncovered scenarios.
 
-(ai/refactor-fcis 'boundary.product.core.validation)
+(ai/refactor-fcis 'wagoe.product.core.validation)
 ;; FC/IS refactoring guide — locates the source file from the namespace symbol,
 ;; identifies violations, and prints a step-by-step migration plan.
 ;; Also surfaced by (fix!) when a BND-601 violation is detected.

@@ -12,7 +12,7 @@ Repository Structure
 
 ....
 boundary-starter/
-├── src/boundary/
+├── src/wagoe/
 │   ├── app.clj                # Entrypoint wiring (Integrant)
 │   ├── shared/
 │   │   ├── core/              # Utilities (case conversion, etc.)
@@ -59,7 +59,7 @@ clojure -M:repl-clj
 Add a module (scaffold)
 
 ....
-clojure -M -m boundary.scaffolder.shell.cli-entry generate \
+clojure -M -m wagoe.scaffolder.shell.cli-entry generate \
   --module-name product \
   --entity Product \
   --field name:string:required \

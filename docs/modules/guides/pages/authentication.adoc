@@ -117,7 +117,7 @@ How a token reaches the browser and back:
 * For HTMX requests, a global `htmx:configRequest` listener copies that token into the
   `X-CSRF-Token` header automatically — no per-form work.
 * Plain `<form method=post>` forms carry it in a hidden `__anti-forgery-token` field
-  (added via `(boundary.platform.core.csrf/hidden-field)`).
+  (added via `(wagoe.platform.core.csrf/hidden-field)`).
 
 Unauthenticated flows (login, register, MFA) have no session yet, so the token is bound
 to a `SameSite=Strict` `csrf-session` cookie minted on the page GET and validated on the

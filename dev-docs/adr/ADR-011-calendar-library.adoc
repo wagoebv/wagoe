@@ -162,7 +162,7 @@ It registers event type definitions in an in-process atom-backed registry.
 
 [source,clojure]
 ----
-;; Pattern from boundary-reports (libs/reports/src/boundary/reports/core/report.clj)
+;; Pattern from boundary-reports (libs/reports/src/wagoe/reports/core/report.clj)
 (defmacro defreport [sym definition-map]
   `(do (def ~sym ~definition-map)
        (register-report-type! ~sym)
@@ -175,12 +175,12 @@ It registers event type definitions in an in-process atom-backed registry.
        ~sym))
 ----
 
-For clj-kondo: add `boundary.calendar.core.event/defevent clojure.core/def` to the
+For clj-kondo: add `wagoe.calendar.core.event/defevent clojure.core/def` to the
 project's `.clj-kondo/config.edn` `:lint-as` map.
 
 === Decision 6: Shell service wraps adapter — callers never import ical4j
 
-`boundary.calendar.shell.service` creates an `ICalAdapter` internally:
+`wagoe.calendar.shell.service` creates an `ICalAdapter` internally:
 
 [source,clojure]
 ----
@@ -191,7 +191,7 @@ project's `.clj-kondo/config.edn` `:lint-as` map.
      (ports/export-ical adapter events (dissoc opts :adapter)))))
 ----
 
-Application code depends only on `boundary.calendar.shell.service`.  Swapping the
+Application code depends only on `wagoe.calendar.shell.service`.  Swapping the
 adapter (e.g. for a custom CalDAV-backed implementation) requires no changes to
 callers.
 
@@ -213,7 +213,7 @@ Components: `event-badge`, `day-cell`, `month-view`, `week-view`, `mini-calendar
 libs/calendar/
 ├── deps.edn                              ; ical4j 4.x, Malli, kaocha test alias
 ├── build.clj                             ; Maven publish: org.wagoe/wagoe-calendar
-├── src/boundary/calendar/
+├── src/wagoe/calendar/
 │   ├── schema.clj                        ; EventData, EventDef, OccurrenceResult, ConflictResult
 │   ├── ports.clj                         ; CalendarAdapterProtocol
 │   ├── core/
@@ -224,7 +224,7 @@ libs/calendar/
 │   └── shell/
 │       ├── service.clj                   ; Public API
 │       └── adapters/ical.clj             ; ICalAdapter (ical4j 4.x)
-└── test/boundary/calendar/
+└── test/wagoe/calendar/
     ├── core/
     │   ├── event_test.clj                ; ^:unit
     │   ├── recurrence_test.clj           ; ^:unit — DST edge cases

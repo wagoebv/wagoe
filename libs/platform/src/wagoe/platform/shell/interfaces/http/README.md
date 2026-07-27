@@ -1,6 +1,6 @@
 # HTTP Interface Module
 
-The `boundary.platform.shell.interfaces.http` module provides a comprehensive HTTP interface infrastructure for the Boundary application. It implements a clean, modular architecture following clean architecture principles and provides reusable components for building REST APIs.
+The `wagoe.platform.shell.interfaces.http` module provides a comprehensive HTTP interface infrastructure for the Boundary application. It implements a clean, modular architecture following clean architecture principles and provides reusable components for building REST APIs.
 
 ## Overview
 
@@ -18,7 +18,7 @@ This module contains the HTTP layer of the application, providing:
 The module follows a layered architecture with clear separation of concerns:
 
 ```
-boundary.platform.shell.interfaces.http/
+wagoe.platform.shell.interfaces.http/
 ├── routes.clj      # Common routing infrastructure & route composition
 ├── middleware.clj  # Reusable HTTP middleware 
 ├── common.clj      # Common utilities & RFC 7807 error handling
@@ -39,7 +39,7 @@ The routes namespace provides the foundational routing infrastructure:
 #### Module Composition
 
 ```clojure
-(require '[boundary.platform.shell.interfaces.http.routes :as routes])
+(require '[wagoe.platform.shell.interfaces.http.routes :as routes])
 
 ;; Create a router with common + module routes
 (def router 
@@ -71,7 +71,7 @@ Provides reusable middleware for common HTTP concerns:
 #### Usage
 
 ```clojure
-(require '[boundary.platform.shell.interfaces.http.middleware :as middleware])
+(require '[wagoe.platform.shell.interfaces.http.middleware :as middleware])
 
 ;; Apply individual middleware
 (-> handler
@@ -90,7 +90,7 @@ Provides shared HTTP utilities and standardized error handling:
 #### RFC 7807 Problem Details
 
 ```clojure
-(require '[boundary.platform.shell.interfaces.http.common :as http-common])
+(require '[wagoe.platform.shell.interfaces.http.common :as http-common])
 
 ;; Convert exceptions to standardized error responses
 (http-common/exception->problem 
@@ -98,7 +98,7 @@ Provides shared HTTP utilities and standardized error handling:
   correlation-id
   request-uri)
 ;; => {:status 404
-;;     :body {:type "https://boundary.example.com/problems/user-not-found"
+;;     :body {:type "https://wagoe.example.com/problems/user-not-found"
 ;;            :title "User Not Found"
 ;;            :status 404
 ;;            :detail "User not found"
@@ -124,7 +124,7 @@ Provides shared HTTP utilities and standardized error handling:
 
 ```clojure
 (ns my-module.http
-  (:require [boundary.platform.shell.interfaces.http.routes :as routes]))
+  (:require [wagoe.platform.shell.interfaces.http.routes :as routes]))
 
 (defn my-routes [service]
   [["/items" {:get {:handler (list-items-handler service)}}]
@@ -144,7 +144,7 @@ Provides shared HTTP utilities and standardized error handling:
 
 ```clojure
 (ns my-app.core
-  (:require [boundary.platform.shell.interfaces.http.routes :as routes]
+  (:require [wagoe.platform.shell.interfaces.http.routes :as routes]
             [my-module.http :as my-http]
             [another-module.http :as another-http]))
 
@@ -305,8 +305,8 @@ The default middleware stack (applied automatically) includes:
 The user module demonstrates proper integration:
 
 ```clojure
-(ns boundary.user.shell.http
-  (:require [boundary.platform.shell.interfaces.http.routes :as routes]))
+(ns wagoe.user.shell.http
+  (:require [wagoe.platform.shell.interfaces.http.routes :as routes]))
 
 (defn user-routes [user-service]
   [["/users" {:post {:handler (create-user-handler user-service)

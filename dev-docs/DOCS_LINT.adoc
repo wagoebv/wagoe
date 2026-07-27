@@ -12,7 +12,7 @@ The Boundary repository includes a documentation linter that detects drift betwe
 |Internal links (markdown/asciidoc) that point to non-existent files
 
 |`stale-path`
-|References to pre-library-split paths (e.g., `src/boundary/user/` instead of `libs/user/src/boundary/user/`)
+|References to pre-library-split paths (e.g., `src/wagoe/user/` instead of `libs/user/src/wagoe/user/`)
 
 |`unknown-namespace`
 |Namespace references that don't match known boundary module prefixes
@@ -78,12 +78,12 @@ Documentation references old paths from before the library split.
 
 **Example:**
 ----
-src/boundary/user/core/user.clj
+src/wagoe/user/core/user.clj
 ----
 
 **Should be:**
 ----
-libs/user/src/boundary/user/core/user.clj
+libs/user/src/wagoe/user/core/user.clj
 ----
 
 **Reference:** See link:reference/migrations/library-split.adoc[Library Split Migration Guide]
@@ -93,20 +93,20 @@ libs/user/src/boundary/user/core/user.clj
 A namespace reference doesn't match any known module prefix.
 
 **Valid prefixes:**
-* `boundary.core.*`
-* `boundary.shared.*`
-* `boundary.observability.*`
-* `boundary.platform.*`
-* `boundary.user.*`
-* `boundary.admin.*`
-* `boundary.storage.*`
-* `boundary.cache.*`
-* `boundary.jobs.*`
-* `boundary.email.*`
-* `boundary.realtime.*`
-* `boundary.tenant.*`
-* `boundary.external.*`
-* `boundary.scaffolder.*`
+* `wagoe.core.*`
+* `wagoe.shared.*`
+* `wagoe.observability.*`
+* `wagoe.platform.*`
+* `wagoe.user.*`
+* `wagoe.admin.*`
+* `wagoe.storage.*`
+* `wagoe.cache.*`
+* `wagoe.jobs.*`
+* `wagoe.email.*`
+* `wagoe.realtime.*`
+* `wagoe.tenant.*`
+* `wagoe.external.*`
+* `wagoe.scaffolder.*`
 
 === `stale-github-link`
 

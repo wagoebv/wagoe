@@ -10,17 +10,17 @@ WebSocket-based real-time communication with JWT authentication, message routing
 
 | Namespace | Purpose |
 |-----------|---------|
-| `boundary.realtime.core.connection` | Pure: connection records, authorization, filtering |
-| `boundary.realtime.core.message` | Pure: message creation, routing logic (4 types) |
-| `boundary.realtime.core.auth` | Pure: JWT extraction, claims validation, permission checks |
-| `boundary.realtime.core.pubsub` | Pure: topic subscription management |
-| `boundary.realtime.ports` | Protocols: IRealtimeService, IConnectionRegistry, IWebSocketConnection, IJWTVerifier, IPubSubManager |
-| `boundary.realtime.schema` | Malli schemas: Connection, Message, JWT Claims, Topic |
-| `boundary.realtime.shell.service` | Service orchestrating core + adapters |
-| `boundary.realtime.shell.connection-registry` | In-memory registry (atom-backed) |
-| `boundary.realtime.shell.pubsub-manager` | Atom-backed pub/sub state management |
-| `boundary.realtime.shell.adapters.websocket-adapter` | Ring/Jetty WebSocket adapter + TestWebSocketAdapter |
-| `boundary.realtime.shell.adapters.jwt-adapter` | JWT verifier delegating to boundary/user module + TestJWTAdapter |
+| `wagoe.realtime.core.connection` | Pure: connection records, authorization, filtering |
+| `wagoe.realtime.core.message` | Pure: message creation, routing logic (4 types) |
+| `wagoe.realtime.core.auth` | Pure: JWT extraction, claims validation, permission checks |
+| `wagoe.realtime.core.pubsub` | Pure: topic subscription management |
+| `wagoe.realtime.ports` | Protocols: IRealtimeService, IConnectionRegistry, IWebSocketConnection, IJWTVerifier, IPubSubManager |
+| `wagoe.realtime.schema` | Malli schemas: Connection, Message, JWT Claims, Topic |
+| `wagoe.realtime.shell.service` | Service orchestrating core + adapters |
+| `wagoe.realtime.shell.connection-registry` | In-memory registry (atom-backed) |
+| `wagoe.realtime.shell.pubsub-manager` | Atom-backed pub/sub state management |
+| `wagoe.realtime.shell.adapters.websocket-adapter` | Ring/Jetty WebSocket adapter + TestWebSocketAdapter |
+| `wagoe.realtime.shell.adapters.jwt-adapter` | JWT verifier delegating to boundary/user module + TestJWTAdapter |
 
 ## Message Routing Types
 
@@ -45,7 +45,7 @@ WebSocket-based real-time communication with JWT authentication, message routing
 The `websocket-handler` accepts keyword options:
 
 ```clojure
-(require '[boundary.realtime.shell.handlers.ring-websocket :as ws-handler])
+(require '[wagoe.realtime.shell.handlers.ring-websocket :as ws-handler])
 
 (ws-handler/websocket-handler realtime-service
   :token-param "token"        ;; query param name for JWT (default "token")

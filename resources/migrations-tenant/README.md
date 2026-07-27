@@ -15,6 +15,6 @@ Rules:
 - Because each migration runs once per tenant schema, prefer idempotent DDL
   (`IF NOT EXISTS` / `IF EXISTS`).
 
-The fan-out runner is `boundary.tenant.shell.tenant-migrations`
+The fan-out runner is `wagoe.tenant.shell.tenant-migrations`
 (`migrate-tenant!` / `migrate-all-tenants!`). Provisioning a new tenant runs
 this set into the fresh schema; deploys run it across all existing tenants.

@@ -36,7 +36,7 @@ Introduce explicit ports for identity, authentication, session/token, and author
 - Persistence: user/session-store as adapter (DB, LDAP, OIDC introspect, etc.).
 
 === Reference provider (optional)
-- `boundary.contrib.user-ref` (separate package): SQLite/H2 user store, bcrypt hashing, simple RBAC policy. Serves as demo/tests; not required in core.
+- `wagoe.contrib.user-ref` (separate package): SQLite/H2 user store, bcrypt hashing, simple RBAC policy. Serves as demo/tests; not required in core.
 
 === Configuration / providers
 - Factory/registry like DB/observability: `:auth {:provider :no-op|:local|:oidc|:saml|:delegate ...}`

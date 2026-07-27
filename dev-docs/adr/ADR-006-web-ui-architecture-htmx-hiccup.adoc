@@ -23,7 +23,7 @@ The framework emphasizes:
 
 - HTTP infrastructure: Robust server implementation per domain module
 - Module patterns: Established patterns from user, admin, and storage modules
-- Shared components: Complete UI component library in `boundary.shared.ui.core`
+- Shared components: Complete UI component library in `wagoe.shared.ui.core`
 - Integration foundation: Web handlers and UI functions created in user module
 
 === Requirements
@@ -47,7 +47,7 @@ We will implement the web UI using **HTMX + Hiccup** architecture with **module-
 
 === Architecture Pattern: Module-Integrated Web UI
 
-**Key Decision**: Web UI is integrated directly into existing domain modules (user, user, inventory) rather than creating a separate `boundary.web-ui` module. This approach:
+**Key Decision**: Web UI is integrated directly into existing domain modules (user, user, inventory) rather than creating a separate `wagoe.web-ui` module. This approach:
 
 - Leverages existing HTTP infrastructure in each module
 - Keeps web UI close to business logic  
@@ -56,24 +56,24 @@ We will implement the web UI using **HTMX + Hiccup** architecture with **module-
 
 **Current Implementation Structure (Phase 1 Complete)**:
 ```
-libs/shared-ui/src/boundary/shared/ui/core/
+libs/shared-ui/src/wagoe/shared/ui/core/
 ├── components.clj              ; ✅ 9 reusable UI components
 └── layout.clj                  ; ✅ Page layout and template functions
 
-libs/user/src/boundary/user/core/
+libs/user/src/wagoe/user/core/
 └── ui.clj                      ; ✅ User-specific UI generation functions
 
-libs/user/src/boundary/user/shell/
+libs/user/src/wagoe/user/shell/
 └── web_handlers.clj            ; ✅ User web route handlers
 
-test/boundary/shared/ui/core/
+test/wagoe/shared/ui/core/
 ├── components_test.clj         ; ✅ Component tests (17 tests, 84 assertions)
 └── layout_test.clj             ; ✅ Layout tests
 ```
 
 **Full Module Integration Pattern (Future)**:
 ```
-libs/user/src/boundary/user/
+libs/user/src/wagoe/user/
 ├── core/
 │   └── ui.clj                  ; Pure UI generation functions for user domain
 ├── shell/
@@ -81,7 +81,7 @@ libs/user/src/boundary/user/
 │   └── http.clj                ; Extended with web routes
 └── ...existing module structure...
 
-libs/storage/src/boundary/storage/
+libs/storage/src/wagoe/storage/
 ├── core/
 │   └── ui.clj                  ; Pure UI generation functions for inventory domain
 ├── shell/
@@ -93,7 +93,7 @@ libs/storage/src/boundary/storage/
 === Key Architectural Decisions
 
 1. **Shared Component Library (Implemented)**
-   - Reusable UI components in `boundary.shared.ui.core.components`
+   - Reusable UI components in `wagoe.shared.ui.core.components`
    - Pure functions with attribute passthrough pattern: `(merge base-attrs (dissoc opts :type))`
    - Full test coverage (17 tests, 84 assertions)
    - Components: text-input, password-input, email-input, textarea, checkbox, buttons, forms
@@ -191,7 +191,7 @@ libs/storage/src/boundary/storage/
 
 === ✅ Completed: Phase 1 - Shared Component Foundation
 
-**Shared UI Component Library** - `link:https://github.com/thijs-creemers/boundary/blob/main/libs/shared-ui/src/boundary/shared/ui/core/`
+**Shared UI Component Library** - `link:https://github.com/thijs-creemers/boundary/blob/main/libs/shared-ui/src/wagoe/shared/ui/core/`
 
 *Components (`components.clj`):*
 - `text-input` - Text input fields with full attribute passthrough
@@ -282,7 +282,7 @@ libs/storage/src/boundary/storage/
 == Implementation Strategy
 
 === Phase 1: Foundation ✅ (Completed)
-- [x] Create shared UI component library in `boundary.shared.ui.core`
+- [x] Create shared UI component library in `wagoe.shared.ui.core`
 - [x] Implement base HTML layout and component library (`components.clj`, `layout.clj`)
 - [x] Create reusable form components (text-input, checkbox, submit-button, etc.)
 - [x] Develop pure Hiccup generation functions with attribute passthrough
@@ -314,10 +314,10 @@ libs/storage/src/boundary/storage/
 
 **Example: User Module Web Integration**
 ```clojure
-;; libs/user/src/boundary/user/shell/web_handlers.clj
-(ns boundary.user.shell.web-handlers
-  (:require [boundary.user.core.ui :as user-ui]
-            [boundary.shared.ui.core.components :as ui]))
+;; libs/user/src/wagoe/user/shell/web_handlers.clj
+(ns wagoe.user.shell.web-handlers
+  (:require [wagoe.user.core.ui :as user-ui]
+            [wagoe.shared.ui.core.components :as ui]))
 
 (defn list-users-page [request]
   (let [users (user-port/fetch-all)]
@@ -325,10 +325,10 @@ libs/storage/src/boundary/storage/
      :headers {"content-type" "text/html"}
      :body (user-ui/users-list-page users)}))
 
-;; libs/user/src/boundary/user/core/ui.clj  
-(ns boundary.user.core.ui
-  (:require [boundary.shared.ui.core.components :as ui]
-            [boundary.shared.ui.core.layout :as layout]))
+;; libs/user/src/wagoe/user/core/ui.clj  
+(ns wagoe.user.core.ui
+  (:require [wagoe.shared.ui.core.components :as ui]
+            [wagoe.shared.ui.core.layout :as layout]))
 
 (defn users-list-page [users]
   (layout/base-page
@@ -338,7 +338,7 @@ libs/storage/src/boundary/storage/
      (for [user users]
        (ui/card [:p (:name user)]))]))
 
-;; libs/user/src/boundary/user/shell/http.clj (extend existing routes)
+;; libs/user/src/wagoe/user/shell/http.clj (extend existing routes)
 (defn routes []
   [["/api/users" {...existing API routes...}]
    ["/users"     {:get  web-handlers/list-users-page
@@ -533,7 +533,7 @@ Consider Replicant for a page/module when ALL criteria apply:
 
 === Framework Documentation
 - link:https://github.com/thijs-creemers/boundary/blob/main/AGENTS.md[Developer Guide] - Project overview and development workflow
-- link:../boundary.prd.adoc[Product Requirements Document] - Product vision and requirements
+- link:../wagoe.prd.adoc[Product Requirements Document] - Product vision and requirements
 - link:../architecture/overview.adoc[Architecture Overview] - Framework architectural principles
 
 ---

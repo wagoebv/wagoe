@@ -18,16 +18,16 @@
 
 | Namespace | Layer | Responsibility |
 |-----------|-------|----------------|
-| `boundary.geo.schema` | shared | Malli schemas: `GeoPoint`, `AddressQuery`, `GeoResult`, `GeoConfig` |
-| `boundary.geo.ports` | shared | `GeoProviderProtocol`, `GeoCacheProtocol` |
-| `boundary.geo.core.math` | core | `haversine-distance`, `bearing` |
-| `boundary.geo.core.address` | core | `normalize-query`, `query-hash` (SHA-256) |
-| `boundary.geo.shell.adapters.osm` | shell | Nominatim adapter (`NominatimAdapter`) |
-| `boundary.geo.shell.adapters.google` | shell | Google Maps adapter (`GoogleAdapter`) |
-| `boundary.geo.shell.adapters.mapbox` | shell | Mapbox adapter (`MapboxAdapter`) |
-| `boundary.geo.shell.cache` | shell | `DbGeoCache` — next.jdbc-backed cache |
-| `boundary.geo.shell.service` | shell | Public API: `geocode!`, `reverse-geocode!`, `distance` |
-| `boundary.geo.shell.module-wiring` | shell | Integrant `:wagoe/geo-service` |
+| `wagoe.geo.schema` | shared | Malli schemas: `GeoPoint`, `AddressQuery`, `GeoResult`, `GeoConfig` |
+| `wagoe.geo.ports` | shared | `GeoProviderProtocol`, `GeoCacheProtocol` |
+| `wagoe.geo.core.math` | core | `haversine-distance`, `bearing` |
+| `wagoe.geo.core.address` | core | `normalize-query`, `query-hash` (SHA-256) |
+| `wagoe.geo.shell.adapters.osm` | shell | Nominatim adapter (`NominatimAdapter`) |
+| `wagoe.geo.shell.adapters.google` | shell | Google Maps adapter (`GoogleAdapter`) |
+| `wagoe.geo.shell.adapters.mapbox` | shell | Mapbox adapter (`MapboxAdapter`) |
+| `wagoe.geo.shell.cache` | shell | `DbGeoCache` — next.jdbc-backed cache |
+| `wagoe.geo.shell.service` | shell | Public API: `geocode!`, `reverse-geocode!`, `distance` |
+| `wagoe.geo.shell.module-wiring` | shell | Integrant `:wagoe/geo-service` |
 
 ---
 
@@ -61,7 +61,7 @@ Add to your `resources/conf/{env}/config.edn`:
 
 Require the wiring namespace in your system config loader:
 ```clojure
-(require '[boundary.geo.shell.module-wiring])
+(require '[wagoe.geo.shell.module-wiring])
 ```
 
 ---
@@ -69,7 +69,7 @@ Require the wiring namespace in your system config loader:
 ## 4. Public API
 
 ```clojure
-(require '[boundary.geo.shell.service :as geo])
+(require '[wagoe.geo.shell.service :as geo])
 
 ;; Forward geocoding (cache-first)
 (geo/geocode! geo-service {:postcode "1012 JS" :city "Amsterdam"})
@@ -94,8 +94,8 @@ Require the wiring namespace in your system config loader:
 ## 5. Core Functions
 
 ```clojure
-(require '[boundary.geo.core.math :as math])
-(require '[boundary.geo.core.address :as addr])
+(require '[wagoe.geo.core.math :as math])
+(require '[wagoe.geo.core.address :as addr])
 
 ;; Haversine distance
 (math/haversine-distance {:lat 52.3676 :lng 4.9041}
@@ -125,7 +125,7 @@ now auto-discovers the library migration. Manual application is only needed if
 you are not using the standard Boundary migration CLI:
 
 ```sql
--- libs/geo/resources/boundary/geo/migrations/20260324010000-geo-cache.up.sql
+-- libs/geo/resources/wagoe/geo/migrations/20260324010000-geo-cache.up.sql
 CREATE TABLE geo_cache (
   address_hash      TEXT PRIMARY KEY,
   lat               NUMERIC(10, 7) NOT NULL,
@@ -175,7 +175,7 @@ Each adapter record holds a mutable `last-request-ms` atom. **Atoms are thread-s
 
 **Solutions for production multi-instance deployments**:
 - Use API keys with per-credential rate limits (Google Maps, Mapbox — provider enforces globally)
-- Add distributed rate limiting via Redis (future enhancement — see `boundary.platform.shell.http.interceptors` for pattern)
+- Add distributed rate limiting via Redis (future enhancement — see `wagoe.platform.shell.http.interceptors` for pattern)
 - Run geo service as singleton deployment (scale-to-1, use pod anti-affinity for HA)
 
 For single-instance deployments and development, the current atom-based approach is correct and efficient.
@@ -207,14 +207,14 @@ clojure -M:clj-kondo --lint libs/geo/src libs/geo/test
 
 ```clojure
 ;; Pure math — no system needed
-(require '[boundary.geo.core.math :as math])
+(require '[wagoe.geo.core.math :as math])
 (math/haversine-distance {:lat 52.3676 :lng 4.9041}
                           {:lat 51.5074 :lng -0.1278})
 ;; => ~357.4
 
 ;; Live OSM geocoding (no API key, rate-limited)
-(require '[boundary.geo.shell.adapters.osm :as osm])
-(require '[boundary.geo.shell.service :as geo])
+(require '[wagoe.geo.shell.adapters.osm :as osm])
+(require '[wagoe.geo.shell.service :as geo])
 
 (def adapter (osm/create-nominatim-adapter
                {:user-agent "boundary-dev/1.0 (dev@example.com)"}))

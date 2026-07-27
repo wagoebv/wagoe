@@ -91,30 +91,30 @@ bb install-hooks             # Configure git hooks path to .githooks
 |===
 | Namespace | Purpose
 
-| `boundary.tools.scaffold`
+| `wagoe.tools.scaffold`
 | Scaffolding wizards + AI passthrough + integrate dispatch
 
-| `boundary.tools.ai`
+| `wagoe.tools.ai`
 | AI CLI frontend (explain, gen-tests, sql, docs, admin-entity)
 
-| `boundary.tools.doctor`
+| `wagoe.tools.doctor`
 | Config Doctor — 6 rule-based config checks
 
-| `boundary.tools.setup`
+| `wagoe.tools.setup`
 | Config Setup Wizard — interactive + template-based
 
-| `boundary.tools.integrate`
+| `wagoe.tools.integrate`
 | Module Integration — wire into deps/tests/wiring
 
-| `boundary.tools.deploy`
+| `wagoe.tools.deploy`
 | Clojars deployment for all 24 published artifacts
 
-| `boundary.tools.i18n`
+| `wagoe.tools.i18n`
 | i18n catalogue management (find/scan/missing/unused)
 
-| `boundary.tools.admin`
+| `wagoe.tools.admin`
 | First admin user creation wizard
 
-| `boundary.tools.dev`
+| `wagoe.tools.dev`
 | migrate + check-links + smoke-check + install-hooks
 |===

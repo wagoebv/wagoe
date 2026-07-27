@@ -97,9 +97,9 @@ The comprehensive manual integration patterns documented below demonstrate the o
 [[_logging]]
 === link:#_logging[]Logging
 
-*Service namespace:* `boundary.user.shell.service`
+*Service namespace:* `wagoe.user.shell.service`
 
-All key operations log structured events using `boundary.logging.core`:
+All key operations log structured events using `wagoe.logging.core`:
 
 * `register-user` – registration attempts, duplicates, and success events
 * `authenticate-user` – session creation and login pathway
@@ -145,7 +145,7 @@ With the interceptor pattern, all metrics are automatically collected without ma
 [[_legacy_approach_manual_metrics_integration]]
 ==== link:#_legacy_approach_manual_metrics_integration[]Legacy Approach: Manual Metrics Integration
 
-The user service historically emitted metrics via `boundary.metrics.core` (using counters, histograms, and gauges).
+The user service historically emitted metrics via `wagoe.metrics.core` (using counters, histograms, and gauges).
 
 [[_user_lifecycle_counters]]
 ==== link:#_user_lifecycle_counters[]User Lifecycle Counters
@@ -211,7 +211,7 @@ With interceptors, error reporting is handled automatically with rich context:
 [[_legacy_approach_manual_error_reporting_integration]]
 ==== link:#_legacy_approach_manual_error_reporting_integration[]Legacy Approach: Manual Error Reporting Integration
 
-The user service historically used `boundary.error-reporting.core` to provide rich error context.
+The user service historically used `wagoe.error-reporting.core` to provide rich error context.
 
 [[_exception_reporting]]
 ==== link:#_exception_reporting[]Exception Reporting

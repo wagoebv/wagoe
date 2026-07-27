@@ -17,8 +17,8 @@
 ```
 
 ```clojure
-(require '[boundary.geo.shell.service :as geo])
-(require '[boundary.geo.shell.adapters.osm :as osm])
+(require '[wagoe.geo.shell.service :as geo])
+(require '[wagoe.geo.shell.adapters.osm :as osm])
 
 ;; Create an adapter (no API key needed for OpenStreetMap)
 (def adapter (osm/create-nominatim-adapter
@@ -41,7 +41,7 @@
 
 ## Integrant Configuration
 
-Add to `resources/conf/{env}/config.edn` and require `boundary.geo.shell.module-wiring` at system start:
+Add to `resources/conf/{env}/config.edn` and require `wagoe.geo.shell.module-wiring` at system start:
 
 ```edn
 ;; OpenStreetMap (free, no key)
@@ -72,7 +72,7 @@ Add to `resources/conf/{env}/config.edn` and require `boundary.geo.shell.module-
 ## API
 
 ```clojure
-(require '[boundary.geo.shell.service :as geo])
+(require '[wagoe.geo.shell.service :as geo])
 
 ;; Geocode an address → coordinates (cache-first)
 (geo/geocode! service {:address "Damrak 1" :city "Amsterdam"})
@@ -95,7 +95,7 @@ Run once before using DB-backed caching. When `boundary-geo` is on the
 classpath, `clojure -M:migrate up` now auto-discovers this migration:
 
 ```sql
--- libs/geo/resources/boundary/geo/migrations/20260324010000-geo-cache.up.sql
+-- libs/geo/resources/wagoe/geo/migrations/20260324010000-geo-cache.up.sql
 CREATE TABLE geo_cache (
   address_hash      TEXT PRIMARY KEY,
   lat               NUMERIC(10, 7) NOT NULL,

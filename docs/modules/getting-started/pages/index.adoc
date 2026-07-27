@@ -31,7 +31,7 @@ Boundary is opinionated on purpose. This guide takes you from installation to a 
 * xref:getting-started:quickstart.adoc[Quickstart]
 * xref:getting-started:your-first-module.adoc[Your First Module]
 * xref:getting-started:concepts.adoc[Key Concepts]
-* xref:getting-started:why-boundary.adoc[Why Boundary?]
+* xref:getting-started:why-wagoe.adoc[Why Boundary?]
 
 == What you'll have by the end
 

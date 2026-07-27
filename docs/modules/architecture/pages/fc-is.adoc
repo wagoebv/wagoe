@@ -8,7 +8,7 @@ It draws a hard boundary between *pure business logic* and *side effects*.
 
 [source]
 ----
-libs/{library}/src/boundary/{library}/
+libs/{library}/src/wagoe/{library}/
 ├── core/       ← FUNCTIONAL CORE: pure functions only
 ├── shell/      ← IMPERATIVE SHELL: all side effects
 ├── ports.clj   ← interfaces between the zones

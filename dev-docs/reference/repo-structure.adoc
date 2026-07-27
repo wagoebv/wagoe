@@ -141,11 +141,11 @@ libs/{library}/
 [[shared-namespace]]
 === Shared Namespace
 
-Cross-cutting utilities live under `boundary.shared` within the appropriate library:
+Cross-cutting utilities live under `wagoe.shared` within the appropriate library:
 
 [source]
 ----
-libs/core/src/boundary/shared/
+libs/core/src/wagoe/shared/
 ├── core/
 │   └── utils/
 │       ├── case_conversion.clj   # kebab-case <-> snake_case
@@ -218,8 +218,8 @@ boundary/
 │   ├── i18n/                    # Internationalisation
 │   └── ui-style/                # Shared UI style bundles
 │   └── tools/                   # Babashka developer tooling (bb tasks, not published to Clojars)
-│       ├── src/boundary/tools/  # scaffold, ai, doctor, setup, deploy, etc.
-│       └── test/boundary/tools/ # Unit tests (bb test:tools)
+│       ├── src/wagoe/tools/  # scaffold, ai, doctor, setup, deploy, etc.
+│       └── test/wagoe/tools/ # Unit tests (bb test:tools)
 ├── resources/
 │   ├── conf/                    # Environment-based Aero configuration
 │   │   ├── dev/
@@ -335,15 +335,15 @@ Tests are organized by category and library:
 |Category |Location |Purpose
 
 |Unit tests
-|`libs/{library}/test/boundary/{library}/core/`
+|`libs/{library}/test/wagoe/{library}/core/`
 |Pure function tests, no I/O
 
 |Integration tests
-|`libs/{library}/test/boundary/{library}/shell/`
+|`libs/{library}/test/wagoe/{library}/shell/`
 |Service tests with mocked dependencies
 
 |Contract tests
-|`libs/{library}/test/boundary/{library}/shell/`
+|`libs/{library}/test/wagoe/{library}/shell/`
 |Adapter tests with real database
 |===
 

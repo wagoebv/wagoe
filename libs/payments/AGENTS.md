@@ -19,13 +19,13 @@ communication channels (SMTP, IMAP, Twilio) but not payments.
 
 | Namespace | Purpose |
 |-----------|---------|
-| `boundary.payments.ports` | `IPaymentProvider` protocol definition |
-| `boundary.payments.schema` | Malli schemas: `CheckoutRequest`, `CheckoutResult`, `OffSessionPaymentRequest`, `OffSessionPaymentResult`, `PaymentStatusResult`, `ExpireCheckoutResult`, `WebhookResult` |
-| `boundary.payments.core.provider` | Pure helpers: `cents->euro`, `normalize-event-type`, status mappers |
-| `boundary.payments.shell.adapters.mock` | Mock adapter — auto-approves, no network calls |
-| `boundary.payments.shell.adapters.mollie` | Mollie PSP adapter (hato HTTP client) |
-| `boundary.payments.shell.adapters.stripe` | Stripe PSP adapter (hato + HMAC webhook verification) |
-| `boundary.payments.shell.module-wiring` | Integrant `init-key` / `halt-key!` |
+| `wagoe.payments.ports` | `IPaymentProvider` protocol definition |
+| `wagoe.payments.schema` | Malli schemas: `CheckoutRequest`, `CheckoutResult`, `OffSessionPaymentRequest`, `OffSessionPaymentResult`, `PaymentStatusResult`, `ExpireCheckoutResult`, `WebhookResult` |
+| `wagoe.payments.core.provider` | Pure helpers: `cents->euro`, `normalize-event-type`, status mappers |
+| `wagoe.payments.shell.adapters.mock` | Mock adapter — auto-approves, no network calls |
+| `wagoe.payments.shell.adapters.mollie` | Mollie PSP adapter (hato HTTP client) |
+| `wagoe.payments.shell.adapters.stripe` | Stripe PSP adapter (hato + HMAC webhook verification) |
+| `wagoe.payments.shell.module-wiring` | Integrant `init-key` / `halt-key!` |
 
 ---
 
@@ -224,7 +224,7 @@ set STRIPE_API_KEY, STRIPE_WEBHOOK_SECRET (see resources/conf/<env>/config.edn)
 
 ---
 
-## Pure Helpers (`boundary.payments.core.provider`)
+## Pure Helpers (`wagoe.payments.core.provider`)
 
 ```clojure
 (provider/cents->euro 11900)           ;=> "119.00"

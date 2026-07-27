@@ -20,15 +20,15 @@ the Boundary monorepo and is consumed via a `:local/root` dependency in the root
 
 | Namespace | `bb` command(s) | Purpose |
 |-----------|-----------------|---------|
-| `boundary.tools.scaffold` | `bb scaffold`, `bb scaffold ai`, `bb scaffold generate/field/endpoint/adapter` | Interactive scaffolding wizards + AI passthrough |
-| `boundary.tools.integrate` | `bb scaffold integrate`, `bb scaffold:integrate` | Wire a scaffolded module into deps/tests/wiring |
-| `boundary.tools.ai` | `bb ai explain/gen-tests/sql/docs/admin-entity` | Framework-aware AI CLI |
-| `boundary.tools.doctor` | `bb doctor` | Rule-based config validation (6 checks) |
-| `boundary.tools.setup` | `bb setup`, `bb setup ai` | Config setup wizard (interactive / flags / AI) |
-| `boundary.tools.admin` | `bb create-admin` | Create the first admin user |
-| `boundary.tools.deploy` | `bb deploy` | Publish the 22 Clojars artifacts (tools itself excluded) |
-| `boundary.tools.dev` | `bb migrate`, `bb check-links`, `bb smoke-check`, `bb install-hooks` | Dev utilities |
-| `boundary.tools.i18n` | `bb i18n:find/scan/missing/unused` | Translation catalogue management |
+| `wagoe.tools.scaffold` | `bb scaffold`, `bb scaffold ai`, `bb scaffold generate/field/endpoint/adapter` | Interactive scaffolding wizards + AI passthrough |
+| `wagoe.tools.integrate` | `bb scaffold integrate`, `bb scaffold:integrate` | Wire a scaffolded module into deps/tests/wiring |
+| `wagoe.tools.ai` | `bb ai explain/gen-tests/sql/docs/admin-entity` | Framework-aware AI CLI |
+| `wagoe.tools.doctor` | `bb doctor` | Rule-based config validation (6 checks) |
+| `wagoe.tools.setup` | `bb setup`, `bb setup ai` | Config setup wizard (interactive / flags / AI) |
+| `wagoe.tools.admin` | `bb create-admin` | Create the first admin user |
+| `wagoe.tools.deploy` | `bb deploy` | Publish the 22 Clojars artifacts (tools itself excluded) |
+| `wagoe.tools.dev` | `bb migrate`, `bb check-links`, `bb smoke-check`, `bb install-hooks` | Dev utilities |
+| `wagoe.tools.i18n` | `bb i18n:find/scan/missing/unused` | Translation catalogue management |
 
 ### Quality gates
 

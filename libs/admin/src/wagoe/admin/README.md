@@ -107,7 +107,7 @@ Override auto-detected defaults with manual configuration:
 The admin module follows strict architectural layering:
 
 ```
-src/boundary/admin/
+src/wagoe/admin/
 ├── core/                  # FUNCTIONAL CORE (Pure Functions)
 │   ├── schema_introspection.clj   # DB metadata → UI config
 │   ├── permissions.clj             # RBAC logic
@@ -280,7 +280,7 @@ clojure -M:test:db/h2 --focus-meta :integration --focus-meta :admin
 clojure -M:test:db/h2 --focus-meta :contract --focus-meta :admin
 
 # All admin tests
-clojure -M:test:db/h2 --focus boundary.admin
+clojure -M:test:db/h2 --focus wagoe.admin
 ```
 
 ### Test Coverage

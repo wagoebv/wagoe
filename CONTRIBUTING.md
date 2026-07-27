@@ -158,7 +158,7 @@ This generates the standard library structure under `libs/{module}/`:
 
 ```
 libs/new-module/
-└── src/boundary/new-module/
+└── src/wagoe/new-module/
     ├── core/           # Pure business logic
     ├── ports.clj       # Abstract interfaces
     ├── schema.clj      # Domain schemas

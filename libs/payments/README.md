@@ -47,7 +47,7 @@ PSP (Payment Service Provider) abstraction — a single `IPaymentProvider` proto
 
 ```clojure
 (ns myapp.checkout
-  (:require [boundary.payments.ports :as ports]))
+  (:require [wagoe.payments.ports :as ports]))
 
 (ports/create-checkout-session payment-provider
   {:amount-cents 11900          ; integer cents — 11900 = €119.00
@@ -97,7 +97,7 @@ resolving to nil) **fails the boot** with a `{:type :config-error}` error naming
 each missing key. In tests, build the Mock directly:
 
 ```clojure
-(require '[boundary.payments.shell.adapters.mock :as mock])
+(require '[wagoe.payments.shell.adapters.mock :as mock])
 (def test-provider (mock/make-mock-provider))
 ```
 

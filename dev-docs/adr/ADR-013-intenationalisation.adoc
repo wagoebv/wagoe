@@ -35,7 +35,7 @@ Requirements for a Boundary i18n solution:
 === Current state
 
 * `:language` field: present in `user-preferences-flat-fields` in
-  `libs/user/src/boundary/user/schema.clj`.
+  `libs/user/src/wagoe/user/schema.clj`.
 * No translation lookup, no middleware, no catalogue files.
 * All Hiccup UI functions receive raw strings directly.
 
@@ -66,7 +66,7 @@ A new, independently publishable library is created:
 
 ----
 libs/i18n/
-├── src/boundary/i18n/
+├── src/wagoe/i18n/
 │   ├── core/
 │   │   └── translate.clj      ; pure lookup, fallback, interpolation, plurals
 │   ├── shell/
@@ -75,13 +75,13 @@ libs/i18n/
 │   │   └── render.clj         ; marker resolution + Hiccup → HTML rendering
 │   ├── ports.clj              ; ICatalogue protocol
 │   └── schema.clj             ; Malli schemas for config + validation
-├── test/boundary/i18n/
+├── test/wagoe/i18n/
 │   ├── core/
 │   │   └── translate_test.clj
 │   └── shell/
 │       ├── catalogue_test.clj
 │       └── render_test.clj
-└── resources/boundary/i18n/
+└── resources/wagoe/i18n/
     └── translations/
         ├── en.edn             ; canonical English strings (always complete)
         └── nl.edn             ; Dutch strings (may be partial)
@@ -94,7 +94,7 @@ Modules own their own sub-tree under their library name.
 
 [source,edn]
 ----
-;; resources/boundary/i18n/translations/en.edn
+;; resources/wagoe/i18n/translations/en.edn
 {:user/login-page-title      "Sign in"
  :user/email-label           "Email address"
  :user/password-label        "Password"
@@ -111,7 +111,7 @@ Modules own their own sub-tree under their library name.
 
 [source,edn]
 ----
-;; resources/boundary/i18n/translations/nl.edn
+;; resources/wagoe/i18n/translations/nl.edn
 {:user/login-page-title      "Inloggen"
  :user/email-label           "E-mailadres"
  :user/password-label        "Wachtwoord"
@@ -128,11 +128,11 @@ Modules own their own sub-tree under their library name.
 
 === 3. Core — pure translation functions
 
-`libs/i18n/src/boundary/i18n/core/translate.clj`
+`libs/i18n/src/wagoe/i18n/core/translate.clj`
 
 [source,clojure]
 ----
-(ns boundary.i18n.core.translate)
+(ns wagoe.i18n.core.translate)
 
 (defn t
   "Looks up key in catalogue with locale fallback chain.
@@ -168,11 +168,11 @@ Locale resolution follows a priority chain represented as a vector:
 
 === 4. Shell — catalogue loading
 
-`libs/i18n/src/boundary/i18n/shell/catalogue.clj`
+`libs/i18n/src/wagoe/i18n/shell/catalogue.clj`
 
 [source,clojure]
 ----
-(ns boundary.i18n.shell.catalogue
+(ns wagoe.i18n.shell.catalogue
   (:require [clojure.edn :as edn]
             [clojure.java.io :as io]))
 
@@ -190,7 +190,7 @@ Locale resolution follows a priority chain represented as a vector:
 
 === 5. Shell — Ring middleware
 
-`libs/i18n/src/boundary/i18n/shell/middleware.clj`
+`libs/i18n/src/wagoe/i18n/shell/middleware.clj`
 
 Locale resolution per request, injected into `request` under `:i18n/locale-chain`
 and `:i18n/t` (a partially applied `translate/t`):
@@ -279,7 +279,7 @@ literals are replaced by `[:t :key]` markers; no other change is needed.
 
 [source,clojure]
 ----
-;; libs/user/src/boundary/user/core/ui.clj  — no t argument
+;; libs/user/src/wagoe/user/core/ui.clj  — no t argument
 (defn login-page []
   (layout/base-page
     {:title [:t :user/login-page-title]}
@@ -307,7 +307,7 @@ Testing a UI function requires no mock — the output is inspected as plain data
 
 ==== Shell — marker resolver and renderer
 
-`libs/i18n/src/boundary/i18n/shell/render.clj`
+`libs/i18n/src/wagoe/i18n/shell/render.clj`
 
 `resolve-markers` accepts an optional `:dev?` flag.  In development mode each
 resolved marker is wrapped in a `<span>` carrying the translation key as a
@@ -317,9 +317,9 @@ absent and only the plain string is emitted.
 
 [source,clojure]
 ----
-(ns boundary.i18n.shell.render
+(ns wagoe.i18n.shell.render
   (:require [clojure.walk :as walk]
-            [boundary.i18n.core.translate :as translate]
+            [wagoe.i18n.core.translate :as translate]
             [hiccup2.core :as h]))
 
 (defn resolve-markers
@@ -359,7 +359,7 @@ to `i18n/render` instead of the bare `render-html`.  UI function call sites are
 
 [source,clojure]
 ----
-;; libs/user/src/boundary/user/shell/web_handlers.clj
+;; libs/user/src/wagoe/user/shell/web_handlers.clj
 (defn login-page-handler [request]
   (let [t (:i18n/t request)]
     {:status 200
@@ -429,8 +429,8 @@ bb i18n find "Invalid email"
 # en:   "Invalid email or password."
 # nl:   "Ongeldig e-mailadres of wachtwoord."
 # used in:
-#   libs/user/src/boundary/user/core/ui.clj:45
-#   libs/user/src/boundary/user/core/ui.clj:89
+#   libs/user/src/wagoe/user/core/ui.clj:45
+#   libs/user/src/wagoe/user/core/ui.clj:89
 
 bb i18n find :user/error-invalid-creds   ; search by key instead of string
 ----
@@ -473,8 +473,8 @@ during UI design and performing the i18n pass once the UI is stable.
 ----
 bb i18n scan
 # 2 unexternalised strings found in core/ui.clj files:
-#   libs/user/src/boundary/user/core/ui.clj:112   "Forgot password?"
-#   libs/admin/src/boundary/admin/core/ui.clj:67   "No records found."
+#   libs/user/src/wagoe/user/core/ui.clj:112   "Forgot password?"
+#   libs/admin/src/wagoe/admin/core/ui.clj:67   "No records found."
 ----
 
 `bb i18n scan` exits non-zero when unexternalised strings are found, making it
@@ -532,7 +532,7 @@ so translators have one file to edit per language.
 - [ ] Implement `catalogue/load-catalogue` (classpath EDN loader)
 - [ ] Implement `middleware/wrap-i18n`
 - [ ] Implement `render/resolve-markers` and `render/render` (with `:dev?` flag)
-- [ ] Create `resources/boundary/i18n/translations/en.edn` with all existing
+- [ ] Create `resources/wagoe/i18n/translations/en.edn` with all existing
       strings from `libs/user/` and `libs/admin/`
 - [ ] Implement `bb i18n find`, `bb i18n missing`, `bb i18n unused`, `bb i18n scan` Babashka tasks
 - [ ] Unit tests: translate_test (fallback, interpolation, plurals, missing key)
@@ -541,7 +541,7 @@ so translators have one file to edit per language.
 - [ ] Contract test: catalogue_test (round-trip load + lookup)
 
 === Phase 2 — Dutch (nl) catalogue + user profile selector
-- [ ] Create `resources/boundary/i18n/translations/nl.edn` (full translation)
+- [ ] Create `resources/wagoe/i18n/translations/nl.edn` (full translation)
 - [ ] Add language `<select>` to user profile form (admin + web handlers)
 - [ ] Wire `wrap-i18n` into the Ring handler stack (Integrant config)
 - [ ] Integration test: profile language change → subsequent page renders in nl

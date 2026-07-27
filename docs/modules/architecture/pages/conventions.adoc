@@ -29,7 +29,7 @@ Three naming styles are used at three different system boundaries:
 
 [source,clojure]
 ----
-(require '[boundary.core.utils.case-conversion :as cc])
+(require '[wagoe.core.utils.case-conversion :as cc])
 
 ;; Persistence boundary: DB record → Clojure entity
 (cc/snake-case->kebab-case-map db-record)
@@ -159,5 +159,5 @@ Never fix unbalanced parentheses manually. Use the tool:
 
 [source,bash]
 ----
-clj-paren-repair libs/user/src/boundary/user/core/user.clj
+clj-paren-repair libs/user/src/wagoe/user/core/user.clj
 ----

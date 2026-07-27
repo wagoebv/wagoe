@@ -34,7 +34,7 @@ The module follows the same FC/IS shape every Boundary module uses:
 | `src/todo/schema.clj` | schema | Malli schemas (`Todo`, `TodoInput`) |
 | `src/todo/core/todo.clj` | **functional core** | Pure rules — validation, entity building, `remaining`. No I/O; `now`/`id` are passed in. |
 | `src/todo/ports.clj` | port | `ITodoRepository` protocol — the seam between shell and storage |
-| `src/todo/shell/persistence.clj` | **imperative shell** | H2 repository; the *only* place snake_case ↔ kebab-case conversion happens (via `boundary.core.utils.case-conversion`) |
+| `src/todo/shell/persistence.clj` | **imperative shell** | H2 repository; the *only* place snake_case ↔ kebab-case conversion happens (via `wagoe.core.utils.case-conversion`) |
 | `src/todo/shell/service.clj` | **imperative shell** | Orchestration — validates input, calls the core, persists |
 | `src/todo/main.clj` | entry point | Boots the DB and drives the workflow |
 
@@ -45,7 +45,7 @@ Key ideas on display:
   without mocks.
 - **Conversion lives at the boundary.** Everything internal is kebab-case;
   `snake_case` only appears in `todo.shell.persistence`, converted with the
-  shared `boundary.core` helpers.
+  shared `wagoe.core` helpers.
 - **Storage is behind a port.** Swap `H2TodoRepository` for another
   `ITodoRepository` and neither the core nor the service changes.
 

@@ -89,9 +89,9 @@ library-owned migrations without any manual copy step.
 For library authors:
 
 1. Store library migrations under a stable resource directory such as
-   `resources/boundary/<library>/migrations/`.
+   `resources/wagoe/<library>/migrations/`.
 2. Use standard Migratus up/down filenames.
-3. Publish `resources/boundary/migration-paths.edn` with the directory path.
+3. Publish `resources/wagoe/migration-paths.edn` with the directory path.
 
 For application authors:
 

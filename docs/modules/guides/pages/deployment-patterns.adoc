@@ -23,7 +23,7 @@ java -jar target/wagoe-*.jar migrate up
 
 == Environment Variables
 
-All deployments need these variables. See `resources/deploy/systemd/boundary.env.example` for a full template.
+All deployments need these variables. See `resources/deploy/systemd/wagoe.env.example` for a full template.
 
 [cols="1,1,2",options="header"]
 |===
@@ -55,17 +55,17 @@ sudo useradd -r -s /usr/sbin/nologin boundary
 
 # 2. Deploy the jar
 sudo mkdir -p /opt/boundary/{logs,data}
-sudo cp target/wagoe-*.jar /opt/boundary/boundary.jar
+sudo cp target/wagoe-*.jar /opt/boundary/wagoe.jar
 sudo chown -R boundary:boundary /opt/boundary
 
 # 3. Configure secrets
 sudo mkdir -p /etc/boundary
-sudo cp resources/deploy/systemd/boundary.env.example /etc/boundary/boundary.env
-sudo chmod 600 /etc/boundary/boundary.env
-# Edit /etc/boundary/boundary.env with real values
+sudo cp resources/deploy/systemd/wagoe.env.example /etc/boundary/wagoe.env
+sudo chmod 600 /etc/boundary/wagoe.env
+# Edit /etc/boundary/wagoe.env with real values
 
 # 4. Install and start the service
-sudo cp resources/deploy/systemd/boundary.service /etc/systemd/system/
+sudo cp resources/deploy/systemd/wagoe.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now boundary
 ----
@@ -87,7 +87,7 @@ The unit file sets default JVM options. Adjust for your server:
 
 [source,ini]
 ----
-# In boundary.service — set heap to ~70% of available RAM
+# In wagoe.service — set heap to ~70% of available RAM
 Environment=JAVA_OPTS="-Xms512m -Xmx2g -XX:+UseG1GC -XX:MaxGCPauseMillis=200"
 ----
 
@@ -102,12 +102,12 @@ Environment=JAVA_OPTS="-Xms512m -Xmx2g -XX:+UseG1GC -XX:MaxGCPauseMillis=200"
 
 == nginx Reverse Proxy
 
-Reference file: `resources/deploy/nginx/boundary.conf`
+Reference file: `resources/deploy/nginx/wagoe.conf`
 
 [source,bash]
 ----
 # 1. Install
-sudo cp resources/deploy/nginx/boundary.conf /etc/nginx/sites-available/boundary
+sudo cp resources/deploy/nginx/wagoe.conf /etc/nginx/sites-available/boundary
 sudo ln -s /etc/nginx/sites-available/boundary /etc/nginx/sites-enabled/
 
 # 2. Replace your-domain.com with your actual domain

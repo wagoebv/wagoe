@@ -16,7 +16,7 @@ All code lives under `test/` (a placeholder empty `src/` is kept only so
 monorepo tooling that assumes the standard library layout doesn't choke):
 
 ```
-libs/e2e/test/boundary/e2e/
+libs/e2e/test/wagoe/e2e/
 ├── fixtures.clj          # Shared setup (server handle, browser, auth helpers)
 ├── smoke_test.clj        # Minimal up-and-running check
 ├── html/                 # Browser (Playwright) flows

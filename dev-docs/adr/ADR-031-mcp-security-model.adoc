@@ -58,7 +58,7 @@ over-eager or prompt-injected agent:
 Every tool declares exactly one capability: `:read`, `:generate`, or
 `:execute` (ordered least → most dangerous). The active *context* grants a
 ceiling; a tool runs only if its capability is within the ceiling. Tiers and
-the decision live in the pure namespace `boundary.mcp.core.security`.
+the decision live in the pure namespace `wagoe.mcp.core.security`.
 
 === 2. Context derived from the environment, explicit override wins
 
@@ -107,7 +107,7 @@ mechanism for "this session may only run lint + describe".
 
 === 5. Audit logging
 
-`boundary.mcp.ports/AuditLog` records every security-relevant event —
+`wagoe.mcp.ports/AuditLog` records every security-relevant event —
 server start, authorization decision, override use, and (Tier 1/2) every
 mutation. The shell sink (`shell/audit`) emits structured JSON to *stderr* via
 `tools.logging`; *stdout is reserved for the protocol stream* and must never

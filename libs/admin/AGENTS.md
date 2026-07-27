@@ -10,9 +10,9 @@ Admin UI and CRUD management tooling for Boundary entities, including HTMX-drive
 
 | Namespace | Purpose |
 |-----------|---------|
-| `boundary.admin.core.ui` | Main admin UI rendering (tables, forms, layout composition) |
-| `boundary.shared.ui.core.icons` | Shared Lucide icon rendering used by admin and other modules |
-| `boundary.admin.shell.http` | Admin HTTP handlers and HTMX fragment endpoints |
+| `wagoe.admin.core.ui` | Main admin UI rendering (tables, forms, layout composition) |
+| `wagoe.shared.ui.core.icons` | Shared Lucide icon rendering used by admin and other modules |
+| `wagoe.admin.shell.http` | Admin HTTP handlers and HTMX fragment endpoints |
 
 ## Admin Entity Configuration
 
@@ -167,10 +167,10 @@ The service soft-deletes by running `UPDATE <table> SET deleted_at = ? WHERE id 
 
 | Technology | Purpose | Location |
 |------------|---------|----------|
-| **Hiccup** | HTML generation | `libs/{library}/src/boundary/{library}/core/ui.clj` |
+| **Hiccup** | HTML generation | `libs/{library}/src/wagoe/{library}/core/ui.clj` |
 | **HTMX** | Dynamic interactions | Inline attributes in Hiccup |
 | **Pico CSS** | Base framework | `libs/ui-style/resources/public/css/` |
-| **Lucide Icons** | Icon system | `libs/shared-ui/src/boundary/shared/ui/core/icons.clj` |
+| **Lucide Icons** | Icon system | `libs/shared-ui/src/wagoe/shared/ui/core/icons.clj` |
 
 ### UI Architecture Principles
 
@@ -178,7 +178,7 @@ The service soft-deletes by running `UPDATE <table> SET deleted_at = ? WHERE id 
 2. **Progressive enhancement**: HTMX for dynamic behavior
 3. **Design tokens**: Stable contract in `libs/ui-style/resources/public/css/boundary-tokens.css` with optional theme override in `libs/ui-style/resources/public/css/tokens-openprops.css`
 4. **Icon library**: Use Lucide icons, never emoji in UI (CLI emoji is OK)
-5. **Bundle contract**: Use `boundary.ui-style` bundles (via shared layout fns), never ad-hoc `:css [...]` lists in feature namespaces
+5. **Bundle contract**: Use `wagoe.ui-style` bundles (via shared layout fns), never ad-hoc `:css [...]` lists in feature namespaces
 
 ### Common UI Patterns
 
@@ -226,7 +226,7 @@ clj-nrepl-eval -p <port> "(require '[integrant.repl :as ig-repl]) (ig-repl/reset
  (icons/icon :trash {:size 18})
  " Delete"]
 
-;; Available in: libs/shared-ui/src/boundary/shared/ui/core/icons.clj
+;; Available in: libs/shared-ui/src/wagoe/shared/ui/core/icons.clj
 ```
 
 #### HTMX Loading States
@@ -246,7 +246,7 @@ State-changing requests are CSRF-protected (see platform AGENTS.md → CSRF Prot
 - **HTMX forms** (`hx-post`/`hx-put`/`hx-delete`) — nothing to do; the global
   `htmx:configRequest` listener attaches `X-CSRF-Token` from the page `<meta>` tag.
 - **Plain `[:form {:method "post"}]`** — splice `(csrf/hidden-field)` as the first
-  child (`require [boundary.platform.core.csrf :as csrf]`). It reads the token bound
+  child (`require [wagoe.platform.core.csrf :as csrf]`). It reads the token bound
   for the current request, so no threading is needed:
 
 ```clojure
@@ -258,7 +258,7 @@ State-changing requests are CSRF-protected (see platform AGENTS.md → CSRF Prot
 ### UI Component Hierarchy
 
 ```
-libs/admin/src/boundary/
+libs/admin/src/wagoe/
 ├── shared/ui/core/
 │   ├── layout.clj        # Page layouts, navigation
 │   ├── icons.clj         # Icon definitions (50+ Lucide icons)
@@ -266,7 +266,7 @@ libs/admin/src/boundary/
 ├── admin/core/
 │   └── ui.clj            # Admin interface (tables, forms)
 
-libs/{module}/src/boundary/{module}/core/
+libs/{module}/src/wagoe/{module}/core/
 └── ui.clj                # Module-specific UI components
 ```
 
@@ -298,7 +298,7 @@ tokens-openprops.css  ← Theme override (Cyberpunk Professionalism; load last t
 app.css               ← Component styles
 ```
 
-Use central bundle keys from `boundary.ui-style`:
+Use central bundle keys from `wagoe.ui-style`:
 - `:base` for legacy/base pages
 - `:pilot` for pilot user/profile/audit pages
 - `:admin-pilot` for admin CRUD pages

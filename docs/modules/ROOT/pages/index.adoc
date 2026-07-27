@@ -23,7 +23,7 @@ pure business logic in `core/`, side effects in `shell/`, and clean interfaces t
 | xref:getting-started:index.adoc[Getting Started]
 
 | Understand the design philosophy
-| xref:getting-started:why-boundary.adoc[Why Boundary?]
+| xref:getting-started:why-wagoe.adoc[Why Boundary?]
 
 | Learn the core architecture
 | xref:architecture:fc-is.adoc[Functional Core / Imperative Shell]

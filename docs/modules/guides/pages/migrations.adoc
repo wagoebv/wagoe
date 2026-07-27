@@ -15,7 +15,7 @@ clojure -M:migrate up
 clojure -M:migrate down
 
 # Check status (REPL)
-(require '[boundary.platform.shell.database.migrations :as mig])
+(require '[wagoe.platform.shell.database.migrations :as mig])
 (mig/print-status)
 ----
 
@@ -51,7 +51,7 @@ Rules:
 | `resources/migrations/`
 | Application-level migrations (main schema)
 
-| `libs/<library>/resources/boundary/<library>/migrations/`
+| `libs/<library>/resources/wagoe/<library>/migrations/`
 | Library-contributed migrations (auto-discovered)
 |===
 
@@ -59,11 +59,11 @@ Libraries contribute migrations by publishing a `boundary/migration-paths.edn` m
 
 [source,clojure]
 ----
-;; libs/geo/resources/boundary/migration-paths.edn
+;; libs/geo/resources/wagoe/migration-paths.edn
 {:paths ["boundary/geo/migrations/"]}
 ----
 
-The migration system (`boundary.platform.shell.database.migrations`) discovers the manifests and merges their directories at startup.
+The migration system (`wagoe.platform.shell.database.migrations`) discovers the manifests and merges their directories at startup.
 
 == Statement Separator
 

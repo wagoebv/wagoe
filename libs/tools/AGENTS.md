@@ -17,15 +17,15 @@ The root `bb.edn` wiring looks like this:
 ```clojure
 {:deps {boundary-tools {:local/root "libs/tools"}}
  :tasks
- {:requires ([boundary.tools.scaffold  :as scaffold]
-             [boundary.tools.ai        :as ai]
-             [boundary.tools.i18n      :as i18n]
-             [boundary.tools.admin     :as admin]
-             [boundary.tools.deploy    :as deploy]
-             [boundary.tools.dev       :as dev]
-             [boundary.tools.doctor    :as doctor]
-             [boundary.tools.setup     :as setup]
-             [boundary.tools.integrate :as integrate])
+ {:requires ([wagoe.tools.scaffold  :as scaffold]
+             [wagoe.tools.ai        :as ai]
+             [wagoe.tools.i18n      :as i18n]
+             [wagoe.tools.admin     :as admin]
+             [wagoe.tools.deploy    :as deploy]
+             [wagoe.tools.dev       :as dev]
+             [wagoe.tools.doctor    :as doctor]
+             [wagoe.tools.setup     :as setup]
+             [wagoe.tools.integrate :as integrate])
 
   scaffold     {:task (apply scaffold/-main *command-line-args*)}
   ai           {:task (apply ai/-main *command-line-args*)}
@@ -164,7 +164,7 @@ bb migrate up
 clojure -M:repl-clj
 ```
 
-**AI mode** delegates to `clojure -M -m boundary.ai.shell.cli-entry setup-parse` to parse the description, then renders templates from the parsed spec. Falls back to interactive mode if no AI provider is available.
+**AI mode** delegates to `clojure -M -m wagoe.ai.shell.cli-entry setup-parse` to parse the description, then renders templates from the parsed spec. Falls back to interactive mode if no AI provider is available.
 
 ---
 
@@ -219,9 +219,9 @@ bb scaffold:integrate product
 ```
 Boundary Module Integration — product
 
-Discovered: src/boundary/product
-  Namespace: boundary.product.*
-  Tests:     test/boundary/product
+Discovered: src/wagoe/product
+  Namespace: wagoe.product.*
+  Tests:     test/wagoe/product
   HTTP:      yes
   Wiring:    no
 
@@ -355,7 +355,7 @@ Required environment variables:
 - `CLOJARS_PASSWORD` — your Clojars deploy token
 
 Important release note:
-- `bb deploy --all` publishes every artifact listed in `boundary.tools.deploy/all-libs`. `boundary-tools` is excluded from this list.
+- `bb deploy --all` publishes every artifact listed in `wagoe.tools.deploy/all-libs`. `boundary-tools` is excluded from this list.
 - A Git tag only triggers the GitHub Actions workflow; actual artifact versions still come from each artifact's `build.clj`.
 - For a tagged full release, bump every included artifact to an unpublished version first, otherwise the workflow will fail on the first duplicate version.
 
@@ -404,7 +404,7 @@ bb i18n:missing             # Report keys in en.edn missing from other locales
 bb i18n:unused              # Report catalogue keys not referenced in source
 ```
 
-Translation files live in `libs/i18n/resources/boundary/i18n/translations/`.
+Translation files live in `libs/i18n/resources/wagoe/i18n/translations/`.
 
 ---
 
@@ -412,16 +412,16 @@ Translation files live in `libs/i18n/resources/boundary/i18n/translations/`.
 
 | Namespace | Purpose |
 |---|---|
-| `boundary.tools.scaffold` | Interactive scaffolding wizards + AI passthrough + integrate dispatch |
-| `boundary.tools.ai` | AI CLI frontend (explain, gen-tests, sql, docs, admin-entity) |
-| `boundary.tools.doctor` | Config Doctor — rule-based config validation (6 checks) |
-| `boundary.tools.setup` | Config Setup Wizard — interactive + template-based config generation |
-| `boundary.tools.integrate` | Module Integration — locate scaffolded modules under src/ and guide Integrant config + wiring |
-| `boundary.tools.admin_entity` | Admin Entity Generator — Babashka wrapper for AI admin entity generation |
-| `boundary.tools.i18n` | i18n catalogue management (find/scan/missing/unused) |
-| `boundary.tools.admin` | First admin user creation wizard |
-| `boundary.tools.deploy` | Clojars deployment for all 22 published Boundary artifacts |
-| `boundary.tools.dev` | migrate + check-links + smoke-check + install-hooks |
+| `wagoe.tools.scaffold` | Interactive scaffolding wizards + AI passthrough + integrate dispatch |
+| `wagoe.tools.ai` | AI CLI frontend (explain, gen-tests, sql, docs, admin-entity) |
+| `wagoe.tools.doctor` | Config Doctor — rule-based config validation (6 checks) |
+| `wagoe.tools.setup` | Config Setup Wizard — interactive + template-based config generation |
+| `wagoe.tools.integrate` | Module Integration — locate scaffolded modules under src/ and guide Integrant config + wiring |
+| `wagoe.tools.admin_entity` | Admin Entity Generator — Babashka wrapper for AI admin entity generation |
+| `wagoe.tools.i18n` | i18n catalogue management (find/scan/missing/unused) |
+| `wagoe.tools.admin` | First admin user creation wizard |
+| `wagoe.tools.deploy` | Clojars deployment for all 22 published Boundary artifacts |
+| `wagoe.tools.dev` | migrate + check-links + smoke-check + install-hooks |
 
 ---
 

@@ -10,39 +10,39 @@ DB-backed caching, per-provider rate limiting, and Haversine distance calculatio
 |===
 | Namespace | Layer | Responsibility
 
-| `boundary.geo.schema`
+| `wagoe.geo.schema`
 | shared
 | Malli schemas: `GeoPoint`, `AddressQuery`, `GeoResult`, `GeoConfig`
 
-| `boundary.geo.ports`
+| `wagoe.geo.ports`
 | shared
 | `GeoProviderProtocol`, `GeoCacheProtocol`
 
-| `boundary.geo.core.math`
+| `wagoe.geo.core.math`
 | core
 | `haversine-distance`, `bearing`
 
-| `boundary.geo.core.address`
+| `wagoe.geo.core.address`
 | core
 | `normalize-query`, `query-hash` (SHA-256)
 
-| `boundary.geo.shell.adapters.osm`
+| `wagoe.geo.shell.adapters.osm`
 | shell
 | Nominatim adapter (no API key required)
 
-| `boundary.geo.shell.adapters.google`
+| `wagoe.geo.shell.adapters.google`
 | shell
 | Google Maps adapter (requires `WAG_GEO_API_KEY`)
 
-| `boundary.geo.shell.adapters.mapbox`
+| `wagoe.geo.shell.adapters.mapbox`
 | shell
 | Mapbox adapter (requires `WAG_GEO_API_KEY`)
 
-| `boundary.geo.shell.cache`
+| `wagoe.geo.shell.cache`
 | shell
 | `DbGeoCache` — next.jdbc-backed, `geo_cache` table
 
-| `boundary.geo.shell.service`
+| `wagoe.geo.shell.service`
 | shell
 | Public API: `geocode!`, `reverse-geocode!`, `distance`
 |===
@@ -71,7 +71,7 @@ DB-backed caching, per-provider rate limiting, and Haversine distance calculatio
 
 [source,clojure]
 ----
-(require '[boundary.geo.shell.service :as geo])
+(require '[wagoe.geo.shell.service :as geo])
 
 ;; Geocode an address
 (geo/geocode! service {:address "Prinsengracht 263, Amsterdam"})
@@ -101,7 +101,7 @@ Apply the `geo_cache` table migration before first use:
 clojure -M:migrate up
 ----
 
-Migration file: `resources/boundary/geo/migrations/001-geo-cache.sql`
+Migration file: `resources/wagoe/geo/migrations/001-geo-cache.sql`
 
 == Testing
 

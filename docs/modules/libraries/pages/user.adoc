@@ -9,16 +9,16 @@ Authentication and authorization domain: user lifecycle, credentials, sessions/t
 |===
 | Namespace | Purpose
 
-| `boundary.user.core.user`
+| `wagoe.user.core.user`
 | Pure user-domain business logic
 
-| `boundary.user.core.mfa`
+| `wagoe.user.core.mfa`
 | Pure MFA setup/verification logic
 
-| `boundary.user.shell.service`
+| `wagoe.user.shell.service`
 | Service-layer orchestration and validation
 
-| `boundary.user.shell.http`
+| `wagoe.user.shell.http`
 | Auth/user HTTP handlers
 |===
 

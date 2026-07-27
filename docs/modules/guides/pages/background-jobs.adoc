@@ -25,8 +25,8 @@ Uses an in-memory backend for development/tests and Redis for production.
 
 [source,clojure]
 ----
-(require '[boundary.jobs.shell.worker :as worker]
-         '[boundary.jobs.ports :as ports])
+(require '[wagoe.jobs.shell.worker :as worker]
+         '[wagoe.jobs.ports :as ports])
 
 (def registry (worker/create-job-registry))
 (ports/register-handler! registry :send-welcome-email send-welcome-email)
@@ -37,7 +37,7 @@ Uses an in-memory backend for development/tests and Redis for production.
 
 [source,clojure]
 ----
-(require '[boundary.jobs.core.job :as job])
+(require '[wagoe.jobs.core.job :as job])
 
 (let [new-job (job/create-job {:job-type  :send-welcome-email
                                 :args      {:user-id  (random-uuid)

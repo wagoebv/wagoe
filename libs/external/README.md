@@ -26,7 +26,7 @@ Adapters for external services: Twilio SMS/WhatsApp, SMTP transport, and IMAP ma
 
 ```clojure
 (ns myapp.notifications
-  (:require [boundary.external.shell.adapters.smtp :as smtp]))
+  (:require [wagoe.external.shell.adapters.smtp :as smtp]))
 
 ;; Create an SMTP provider via Integrant config:
 ;; {:wagoe/smtp-provider {:host "smtp.example.com"

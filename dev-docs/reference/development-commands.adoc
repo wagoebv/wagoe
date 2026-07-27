@@ -103,8 +103,8 @@ clojure -M:test:db/h2 --focus-meta :contract     # Database contract tests
 
 [source,bash]
 ----
-clojure -M:test:db/h2 --focus boundary.user.core.user-test
-clojure -M:test:db/h2 --focus boundary.admin.core.entity-test
+clojure -M:test:db/h2 --focus wagoe.user.core.user-test
+clojure -M:test:db/h2 --focus wagoe.admin.core.entity-test
 ----
 
 [[test-watch]]
@@ -115,7 +115,7 @@ clojure -M:test:db/h2 --focus boundary.admin.core.entity-test
 clojure -M:test:db/h2 --watch                           # Watch all tests
 clojure -M:test:db/h2 --watch :core                     # Watch core library
 clojure -M:test:db/h2 --watch --focus-meta :unit        # Watch unit tests
-clojure -M:test:db/h2 --watch --focus boundary.user.core.user-test  # Watch specific namespace
+clojure -M:test:db/h2 --watch --focus wagoe.user.core.user-test  # Watch specific namespace
 ----
 
 [[test-snapshots]]
@@ -124,7 +124,7 @@ clojure -M:test:db/h2 --watch --focus boundary.user.core.user-test  # Watch spec
 [source,bash]
 ----
 UPDATE_SNAPSHOTS=true clojure -M:test:db/h2 \
-  --focus boundary.user.core.user-validation-snapshot-test
+  --focus wagoe.user.core.user-validation-snapshot-test
 ----
 
 [[linting]]
@@ -199,11 +199,11 @@ This starts an nREPL server on port 7888.
 (def user-svc (get integrant.repl.state/system :wagoe/user-service))
 
 ;; Test service directly
-(require '[boundary.user.ports :as user-ports])
+(require '[wagoe.user.ports :as user-ports])
 (user-ports/list-users user-svc {:limit 10})
 
 ;; Reload namespace with changes
-(require '[boundary.user.core.user :as user-core] :reload)
+(require '[wagoe.user.core.user :as user-core] :reload)
 ----
 
 [[repl-eval]]
@@ -286,7 +286,7 @@ bb scaffold ai "product module with name, price, stock" --yes    # Non-interacti
 
 [source,bash]
 ----
-clojure -M -m boundary.scaffolder.shell.cli-entry generate \
+clojure -M -m wagoe.scaffolder.shell.cli-entry generate \
   --module-name product \
   --entity Product \
   --field name:string:required \
@@ -420,7 +420,7 @@ bb coverage               # Run Cloverage coverage report
 
 [source,bash]
 ----
-clj-paren-repair libs/user/src/boundary/user/core/user.clj
+clj-paren-repair libs/user/src/wagoe/user/core/user.clj
 ----
 
 [CAUTION]
@@ -437,7 +437,7 @@ Always use `clj-paren-repair` to fix parenthesis issues. Never manually repair -
 [source,bash]
 ----
 # Start watch mode for your focus area
-clojure -M:test:db/h2 --watch --focus boundary.user.core.user-test
+clojure -M:test:db/h2 --watch --focus wagoe.user.core.user-test
 
 # Edit code, save, tests run automatically
 # Ctrl+C to exit

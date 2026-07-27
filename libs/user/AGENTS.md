@@ -10,19 +10,19 @@ Authentication and authorization domain: user lifecycle, credentials, sessions/t
 
 | Namespace | Purpose |
 |-----------|---------|
-| `boundary.user.core.user` | Pure user-domain business logic |
-| `boundary.user.core.mfa` | Pure MFA setup/verification logic |
-| `boundary.user.shell.service` | Service-layer orchestration, validation, and `*audit-context*` binding |
-| `boundary.user.shell.http` | Auth/user HTTP handlers |
-| `boundary.user.shell.http-interceptors` | Auth, authorization, and audit interceptors |
-| `boundary.user.ports` | `IUserRepository`, `IUserSessionRepository` protocols |
-| `boundary.user.schema` | Malli schemas for User, Session, and request/response types |
+| `wagoe.user.core.user` | Pure user-domain business logic |
+| `wagoe.user.core.mfa` | Pure MFA setup/verification logic |
+| `wagoe.user.shell.service` | Service-layer orchestration, validation, and `*audit-context*` binding |
+| `wagoe.user.shell.http` | Auth/user HTTP handlers |
+| `wagoe.user.shell.http-interceptors` | Auth, authorization, and audit interceptors |
+| `wagoe.user.ports` | `IUserRepository`, `IUserSessionRepository` protocols |
+| `wagoe.user.schema` | Malli schemas for User, Session, and request/response types |
 
 ---
 
 ## UI Contract
 
-User web pages must use shared layout functions that already apply the central bundle contract from `boundary.ui-style`.
+User web pages must use shared layout functions that already apply the central bundle contract from `wagoe.ui-style`.
 
 Rules:
 - Use `layout/pilot-page-layout` for user/profile/audit pages.
@@ -62,7 +62,7 @@ curl -X POST http://localhost:3000/api/v1/auth/logout \
 
 The module carries **two** token mechanisms; know which you are using:
 
-- **DB-backed session tokens** (`boundary.user.shell.middleware/validate-session`)
+- **DB-backed session tokens** (`wagoe.user.shell.middleware/validate-session`)
   are the **canonical, horizontally-safe** mechanism. They are stored, so they
   can be **revoked immediately** (logout, `invalidate-session`,
   `invalidate-all-user-sessions`) and any replica validates them against the DB.
@@ -131,7 +131,7 @@ The `*audit-context*` dynamic var carries per-request audit metadata (actor, IP,
 ### Binding from an HTTP handler
 
 ```clojure
-(require '[boundary.user.shell.service :as user-service])
+(require '[wagoe.user.shell.service :as user-service])
 
 ;; In your HTTP handler or interceptor :enter phase:
 (user-service/with-audit-context
@@ -164,7 +164,7 @@ If `*audit-context*` is `nil` (e.g., in CLI or background jobs), the service fal
 ### Pre-built Interceptor Stacks
 
 ```clojure
-(require '[boundary.user.shell.http-interceptors :as auth-interceptors])
+(require '[wagoe.user.shell.http-interceptors :as auth-interceptors])
 
 ;; Add to route :interceptors
 admin-endpoint-stack   ; [require-authenticated, require-admin, log-action]
@@ -327,7 +327,7 @@ clojure -M:test:db/h2 :user --focus-meta :unit
 
 # Update validation snapshots
 UPDATE_SNAPSHOTS=true clojure -M:test:db/h2 \
-  --focus boundary.user.core.user-validation-snapshot-test
+  --focus wagoe.user.core.user-validation-snapshot-test
 ```
 
 ---

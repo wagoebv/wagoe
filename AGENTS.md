@@ -92,7 +92,7 @@ clojure -M:migrate up                              # Run migrations
 
 # Scripting (Babashka)
 bb ai explain --file stacktrace.txt                # Explain error via AI
-bb ai gen-tests libs/user/src/boundary/user/core/validation.clj  # Generate test namespace
+bb ai gen-tests libs/user/src/wagoe/user/core/validation.clj  # Generate test namespace
 bb ai sql "find active users with orders in last 7 days"          # HoneySQL from NL
 bb ai docs --module libs/user --type agents                       # Generate AGENTS.md
 bb ai admin-entity "products with name, price, status"            # Generate admin entity EDN config
@@ -163,7 +163,7 @@ clj-paren-repair --help
 
 | **Module Structure:**
 | ```
-| libs/{library}/src/boundary/{library}/
+| libs/{library}/src/wagoe/{library}/
 | ├── core/          # Pure business logic
 | ├── shell/         # I/O, validation, adapters
 | ├── ports.clj      # Protocol definitions
@@ -172,9 +172,9 @@ clj-paren-repair --help
 | # Layout exceptions (the shape above is the norm; these libs deviate by design):
 | #   - cache/         has no core/ — thin adapter lib (shell + ports only)
 | #   - platform/ , observability/  split ports across several files, not one ports.clj
-| #   - wagoe-mcp/  sources live under boundary/mcp/ (ns boundary.mcp.*) —
+| #   - wagoe-mcp/  sources live under boundary/mcp/ (ns wagoe.mcp.*) —
 | #                    lib dir name and namespace segment differ on purpose
-| #   - shared-ui/     shared Hiccup UI primitives (boundary.shared.ui.*); no ports/schema
+| #   - shared-ui/     shared Hiccup UI primitives (wagoe.shared.ui.*); no ports/schema
 | 
 | # Library structure (monorepo)
 | libs/
@@ -287,7 +287,7 @@ clojure -M:test:db/h2 --watch :{module-name}  # Watch tests
 
 ```clojure
 ;; ✅ CORRECT - Convert ONLY at persistence boundary using shared utilities
-(require '[boundary.core.utils.case-conversion :as cc])
+(require '[wagoe.core.utils.case-conversion :as cc])
 
 ;; At persistence boundary - DB to Clojure
 (cc/snake-case->kebab-case-map db-record)
@@ -374,12 +374,12 @@ Use scaffolder's `--field` and `--endpoint` commands to add fields and HTTP hand
 
 If you cannot use the scaffolder (rare edge cases), follow this checklist:
 
-1. **Define schema** in `libs/{library}/src/boundary/{library}/schema.clj`
-2. **Write core logic** in `libs/{library}/src/boundary/{library}/core/{domain}.clj` (pure functions)
-3. **Write unit tests** in `libs/{library}/test/boundary/{library}/core/{domain}_test.clj`
-4. **Define port** in `libs/{library}/src/boundary/{library}/ports.clj` (protocol)
-5. **Implement in service** in `libs/{library}/src/boundary/{library}/shell/service.clj`
-6. **Add HTTP endpoint** in `libs/{library}/src/boundary/{library}/shell/http.clj`
+1. **Define schema** in `libs/{library}/src/wagoe/{library}/schema.clj`
+2. **Write core logic** in `libs/{library}/src/wagoe/{library}/core/{domain}.clj` (pure functions)
+3. **Write unit tests** in `libs/{library}/test/wagoe/{library}/core/{domain}_test.clj`
+4. **Define port** in `libs/{library}/src/wagoe/{library}/ports.clj` (protocol)
+5. **Implement in service** in `libs/{library}/src/wagoe/{library}/shell/service.clj`
+6. **Add HTTP endpoint** in `libs/{library}/src/wagoe/{library}/shell/http.clj`
 
 ⚠️ **After manual creation, run `bb check:fcis` to verify FC/IS boundaries are not violated.**
 
@@ -403,7 +403,7 @@ clojure -M:clj-kondo --lint src test libs/*/src libs/*/test
 
 The Kaocha reporter at `dev/boundary/test/reporter.clj` shows a green ✓ for
 passing tests and a red ✗ for failing tests. It is configured in `tests.edn` as
-`:kaocha/reporter [boundary.test.reporter/reporter]`. The `dev/` directory is on
+`:kaocha/reporter [wagoe.test.reporter/reporter]`. The `dev/` directory is on
 the `:test` classpath via `:extra-paths` in `deps.edn`.
 
 ### PostgreSQL Test Runs
@@ -437,7 +437,7 @@ WAG_ENV=test JWT_SECRET="dev-secret-32-chars-minimum" clojure -M:test:db/h2
 (ports/list-users user-svc {:limit 10})
 
 ;; Reload namespace with changes (use :reload)
-(require '[boundary.user.core.user :as user-core] :reload)
+(require '[wagoe.user.core.user :as user-core] :reload)
 
 ;; Full system reset
 (ig-repl/halt)
@@ -758,8 +758,8 @@ A shell-layer `postwalk` resolves them before HTML is emitted.
 
 ### Workflow: adding a new string
 
-1. **Add to `en.edn`** first — `libs/i18n/resources/boundary/i18n/translations/en.edn`
-2. **Add to `nl.edn`** — `libs/i18n/resources/boundary/i18n/translations/nl.edn`
+1. **Add to `en.edn`** first — `libs/i18n/resources/wagoe/i18n/translations/en.edn`
+2. **Add to `nl.edn`** — `libs/i18n/resources/wagoe/i18n/translations/nl.edn`
 3. **Use marker in Hiccup** — `[:t :user/my-key]` instead of `"Hardcoded string"`
 4. **Verify** — `bb i18n:scan` (exits 0 if no unexternalised literals remain)
 5. **Check parity** — `bb i18n:missing` reports gaps between locales
@@ -817,7 +817,7 @@ See `libs/i18n/AGENTS.md` for complete API reference, middleware wiring, and com
 
 FC/IS rules, naming conventions, pitfalls, and the module table in this file —
 and the FC/IS / naming / pitfalls sections of the downstream
-`libs/wagoe-cli/resources/boundary/cli/templates/AGENTS.md.tmpl` — are
+`libs/wagoe-cli/resources/wagoe/cli/templates/AGENTS.md.tmpl` — are
 generated from `resources/agents/knowledge.edn` (+ `modules-catalogue.edn` for the
 module table). The generator lives at `scripts/agents_gen.clj`.
 
@@ -852,8 +852,8 @@ Seven automated safeguards run in CI (and `check:fcis` + `check:ports` in pre-co
 
 **`check:ports` escape hatch (for legitimate exceptions / gradual adoption):** add `^:wagoe/allow-direct` metadata to a namespace to exempt it from the coupling rules, or list `:allow-missing-ports` (module ns prefixes) / `:allow-direct` (namespaces) in a `.boundary/check-ports.edn` at the repo root.
 
-**Scripts location:** `libs/tools/src/boundary/tools/check_{fcis,tests,deps,ports,poms}.clj`
-**Security tests:** `libs/platform/test/boundary/platform/shell/security_test.clj` (tagged `^:security ^:unit`)
+**Scripts location:** `libs/tools/src/wagoe/tools/check_{fcis,tests,deps,ports,poms}.clj`
+**Security tests:** `libs/platform/test/wagoe/platform/shell/security_test.clj` (tagged `^:security ^:unit`)
 **Handler test helpers:** `test/support/handler_test_helpers.clj` (Ring request builders, response assertions)
 **ADRs:** `dev-docs/adr/ADR-021-fcis-boundary-rules.adoc`, `ADR-022-error-handling-conventions.adoc`
 
@@ -947,21 +947,21 @@ Clojure's `{:or {limit 20 offset 0}}` destructuring only fires for **absent** ke
 
 | Namespace | Entry point |
 |---|---|
-| `boundary.tools.scaffold` | `bb scaffold` |
-| `boundary.tools.ai` | `bb ai` |
-| `boundary.tools.doctor` | `bb doctor` — config validation (6 rule-based checks) |
-| `boundary.tools.setup` | `bb setup` — config setup wizard (interactive / flags / AI) |
-| `boundary.tools.integrate` | `bb scaffold integrate` — guide module integration (Integrant config + wiring) |
-| `boundary.tools.i18n` | `bb i18n:find/scan/missing/unused` |
-| `boundary.tools.admin` | `bb create-admin` |
-| `boundary.tools.deploy` | `bb deploy` (handles all 24 libs) |
-| `boundary.tools.dev` | `bb migrate`, `bb check-links`, `bb smoke-check`, `bb install-hooks` |
-| `boundary.tools.check-fcis` | `bb check:fcis` — FC/IS boundary enforcement (ADR-021) |
-| `boundary.tools.check-tests` | `bb check:placeholder-tests` — placeholder assertion detection |
-| `boundary.tools.check-deps` | `bb check:deps` — dependency direction linting + cycle detection |
-| `boundary.tools.check-ports` | `bb check:ports` — hexagonal boundary enforcement (ports.clj presence + protocol usage) |
-| `boundary.tools.check-poms` | `bb check:poms` — published-POM dependency completeness (build-shared rewrite + pom-basis usage + publishable deps) |
-| `boundary.tools.parsing` | Shared source-parsing utilities for quality-gate checkers |
+| `wagoe.tools.scaffold` | `bb scaffold` |
+| `wagoe.tools.ai` | `bb ai` |
+| `wagoe.tools.doctor` | `bb doctor` — config validation (6 rule-based checks) |
+| `wagoe.tools.setup` | `bb setup` — config setup wizard (interactive / flags / AI) |
+| `wagoe.tools.integrate` | `bb scaffold integrate` — guide module integration (Integrant config + wiring) |
+| `wagoe.tools.i18n` | `bb i18n:find/scan/missing/unused` |
+| `wagoe.tools.admin` | `bb create-admin` |
+| `wagoe.tools.deploy` | `bb deploy` (handles all 24 libs) |
+| `wagoe.tools.dev` | `bb migrate`, `bb check-links`, `bb smoke-check`, `bb install-hooks` |
+| `wagoe.tools.check-fcis` | `bb check:fcis` — FC/IS boundary enforcement (ADR-021) |
+| `wagoe.tools.check-tests` | `bb check:placeholder-tests` — placeholder assertion detection |
+| `wagoe.tools.check-deps` | `bb check:deps` — dependency direction linting + cycle detection |
+| `wagoe.tools.check-ports` | `bb check:ports` — hexagonal boundary enforcement (ports.clj presence + protocol usage) |
+| `wagoe.tools.check-poms` | `bb check:poms` — published-POM dependency completeness (build-shared rewrite + pom-basis usage + publishable deps) |
+| `wagoe.tools.parsing` | Shared source-parsing utilities for quality-gate checkers |
 
 See `libs/tools/AGENTS.md` for the full command reference.
 
@@ -982,4 +982,4 @@ See `libs/tools/AGENTS.md` for the full command reference.
 ---
 
 **Last Updated**: 2026-04-20
-**Version**: 5.2.0 (quality gate improvements, i18n library documentation, boundary.tools.parsing extraction)
+**Version**: 5.2.0 (quality gate improvements, i18n library documentation, wagoe.tools.parsing extraction)

@@ -32,7 +32,7 @@ printf '%s\n' \
 ## Layout (FC/IS)
 
 ```
-src/boundary/mcp/
+src/wagoe/mcp/
 ├── core/
 │   ├── protocol.clj   # pure JSON-RPC 2.0 + MCP message builders, error codes,
 │   │                  #   supported spec versions + negotiation
@@ -73,7 +73,7 @@ never corrupts the message stream.
 - Notifications (no `:id`) get no reply; unknown **requests** return `-32601`
   (method not found); malformed JSON returns `-32700` (parse error) and the loop
   continues.
-- Adding a transport: implement `boundary.mcp.ports/Transport`; the `serve` loop
+- Adding a transport: implement `wagoe.mcp.ports/Transport`; the `serve` loop
   is transport-agnostic.
 
 ## Security — capability/context gating (ADR-031)
@@ -181,15 +181,15 @@ generate (scaffolder) → write → kondo → FC/IS → run affected tests → s
 |------|------|--------|
 | `scaffold-module` | scaffold a full FC/IS module from a structured spec | scaffolder `generate-module` |
 | `add-field` | migration + schema-update instructions for a new field | scaffolder `add-field` |
-| `gen-tests` | AI-generate a test ns for a source file (needs provider) | `boundary.ai` `generate-tests` |
+| `gen-tests` | AI-generate a test ns for a source file (needs provider) | `wagoe.ai` `generate-tests` |
 | `gen-migration` | SQL migration for an entity's table | scaffolder migration generator |
 
 - **In-process codegen.** `boundary/scaffolder` + `boundary/tools` are deps
   (dev tooling, like the server). The scaffolder writes app-layout files
-  (`src/boundary/<module>/…`); the server runs **inside the target project**.
+  (`src/wagoe/<module>/…`); the server runs **inside the target project**.
 - **Verify loop** (`shell/verify` → pure `core/verify`):
   - **kondo** — in-process over the written `.clj` files.
-  - **FC/IS** — `boundary.tools.check-fcis/check-file` per written `core/` file →
+  - **FC/IS** — `wagoe.tools.check-fcis/check-file` per written `core/` file →
     **BND-806**. (Per-file, not the monorepo's `core-source-paths`, so it works
     in any project layout.)
   - **Malli** — the scaffolder validates the request before writing; its errors

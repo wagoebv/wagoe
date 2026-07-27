@@ -17,7 +17,7 @@ and an admin UI — all wired in via a single Integrant key.
 ### 1. Define a Search Index
 
 ```clojure
-(require '[boundary.search.shell.registry :as registry])
+(require '[wagoe.search.shell.registry :as registry])
 
 (registry/defsearch product-search
   {:id          :product-search
@@ -30,12 +30,12 @@ and an admin UI — all wired in via a single Integrant key.
 
 `defsearch` binds the var and registers the definition in the in-process registry.
 The registry is mutable process state, so it lives in the shell
-(`boundary.search.shell.registry`); `boundary.search.core.index` stays pure.
+(`wagoe.search.shell.registry`); `wagoe.search.core.index` stays pure.
 
 ### 2. Index Documents
 
 ```clojure
-(require '[boundary.search.ports :as search-ports])
+(require '[wagoe.search.ports :as search-ports])
 
 ;; Get the service from the system
 (def search-svc (get integrant.repl.state/system :wagoe/search))
@@ -173,7 +173,7 @@ H2 integration tests create their own in-memory database — no external depende
 Test fixture pattern (reset the global registry between tests):
 
 ```clojure
-(require '[boundary.search.shell.registry :as registry])
+(require '[wagoe.search.shell.registry :as registry])
 
 (use-fixtures :each
   (fn [f]

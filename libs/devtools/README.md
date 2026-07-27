@@ -64,7 +64,7 @@ Require a configured AI provider; all degrade gracefully when none is set.
 ```clojure
 (ai/review "path/to/file.clj")           ; AI code review
 (ai/test-ideas "path/to/file.clj")       ; suggest missing test cases
-(ai/refactor-fcis 'boundary.product.core.validation)  ; FC/IS refactor guide
+(ai/refactor-fcis 'wagoe.product.core.validation)  ; FC/IS refactor guide
 ```
 
 ### Dev dashboard

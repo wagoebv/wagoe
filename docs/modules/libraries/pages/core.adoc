@@ -10,37 +10,37 @@ Contains *no shell layer* — everything is pure functions.
 |===
 | Namespace | Purpose
 
-| `boundary.core.validation`
+| `wagoe.core.validation`
 | Malli-based validation framework with error codes, messages, and "did you mean?" suggestions
 
-| `boundary.core.validation.registry`
+| `wagoe.core.validation.registry`
 | Central registry for validation rules across libraries
 
-| `boundary.core.validation.coverage`
+| `wagoe.core.validation.coverage`
 | Validation coverage reporting and analysis
 
-| `boundary.core.validation.snapshot`
+| `wagoe.core.validation.snapshot`
 | Snapshot-based validation testing
 
-| `boundary.core.utils.case-conversion`
+| `wagoe.core.utils.case-conversion`
 | kebab-case / snake_case / camelCase conversions
 
-| `boundary.core.utils.type-conversion`
+| `wagoe.core.utils.type-conversion`
 | UUID, Instant, BigDecimal string conversions
 
-| `boundary.core.utils.pii-redaction`
+| `wagoe.core.utils.pii-redaction`
 | PII filtering for logs and error reports
 
-| `boundary.core.utils.validation`
+| `wagoe.core.utils.validation`
 | Generic validation helpers
 
-| `boundary.core.interceptor`
+| `wagoe.core.interceptor`
 | Interceptor pipeline runner (enter/leave/error phases)
 
-| `boundary.core.interceptor-context`
+| `wagoe.core.interceptor-context`
 | Interceptor context creation and management
 
-| `boundary.core.config.feature-flags`
+| `wagoe.core.config.feature-flags`
 | Feature flag evaluation logic
 |===
 
@@ -50,7 +50,7 @@ The most commonly used utilities across the entire monorepo:
 
 [source,clojure]
 ----
-(require '[boundary.core.utils.case-conversion :as cc])
+(require '[wagoe.core.utils.case-conversion :as cc])
 
 ;; Persistence boundary — DB record → Clojure entity
 (cc/snake-case->kebab-case-map db-record)
@@ -69,7 +69,7 @@ The most commonly used utilities across the entire monorepo:
 
 [source,clojure]
 ----
-(require '[boundary.core.utils.validation :as validation])
+(require '[wagoe.core.utils.validation :as validation])
 
 ;; Generic validation with transformation
 (validation/validate-with-transform SomeSchema data mt/string-transformer)
@@ -86,7 +86,7 @@ The interceptor system supports enter/leave/error phases, used by both HTTP and 
 
 [source,clojure]
 ----
-(require '[boundary.core.interceptor :as ic])
+(require '[wagoe.core.interceptor :as ic])
 
 ;; Enter phases run forward, leave phases run in reverse
 (ic/run-pipeline initial-ctx [interceptor1 interceptor2 interceptor3])

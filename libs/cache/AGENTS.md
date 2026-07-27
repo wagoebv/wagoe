@@ -12,16 +12,16 @@ protocols, plus a tenant-scoped wrapper for multi-tenant isolation.
 
 | Namespace | Purpose |
 |-----------|---------|
-| `boundary.cache.ports` | Protocol definitions (the cache port) — see below |
-| `boundary.cache.schema` | Malli schemas: `CacheKey`, `CacheValue`, `TTL`, `CacheEntry`, `CacheConfig`, `RedisConfig`, `CacheStats` + `valid-*?` / `explain-*` validators |
-| `boundary.cache.shell.adapters.in-memory` | In-memory adapter (atoms, TTL, LRU eviction, stats) — `create-in-memory-cache` |
-| `boundary.cache.shell.adapters.redis` | Redis adapter (Jedis pool, Nippy serialization) — `create-redis-pool`, `create-redis-cache` |
-| `boundary.cache.shell.tenant-cache` | Tenant-scoped wrapper with automatic key prefixing — `create-tenant-cache`, `extract-tenant-cache` |
-| `boundary.cache.shell.module-wiring` | Integrant `:wagoe/cache` init/halt; selects adapter by `:provider` |
+| `wagoe.cache.ports` | Protocol definitions (the cache port) — see below |
+| `wagoe.cache.schema` | Malli schemas: `CacheKey`, `CacheValue`, `TTL`, `CacheEntry`, `CacheConfig`, `RedisConfig`, `CacheStats` + `valid-*?` / `explain-*` validators |
+| `wagoe.cache.shell.adapters.in-memory` | In-memory adapter (atoms, TTL, LRU eviction, stats) — `create-in-memory-cache` |
+| `wagoe.cache.shell.adapters.redis` | Redis adapter (Jedis pool, Nippy serialization) — `create-redis-pool`, `create-redis-cache` |
+| `wagoe.cache.shell.tenant-cache` | Tenant-scoped wrapper with automatic key prefixing — `create-tenant-cache`, `extract-tenant-cache` |
+| `wagoe.cache.shell.module-wiring` | Integrant `:wagoe/cache` init/halt; selects adapter by `:provider` |
 
 ## The Cache Port
 
-The port is **split across seven protocols** in `boundary.cache.ports`. Both
+The port is **split across seven protocols** in `wagoe.cache.ports`. Both
 adapters (and `TenantCache`) implement all of them, so any cache instance
 supports every method below.
 
@@ -101,8 +101,8 @@ rate-limiting and the user service session/user caches).
 ## Usage
 
 ```clojure
-(require '[boundary.cache.ports :as cache]
-         '[boundary.cache.shell.adapters.in-memory :as in-mem])
+(require '[wagoe.cache.ports :as cache]
+         '[wagoe.cache.shell.adapters.in-memory :as in-mem])
 
 (def c (in-mem/create-in-memory-cache {:max-size 1000 :track-stats? true}))
 
@@ -123,12 +123,12 @@ rate-limiting and the user service session/user caches).
 (cache/keys-matching c "user:*")
 
 ;; Redis
-(require '[boundary.cache.shell.adapters.redis :as redis])
+(require '[wagoe.cache.shell.adapters.redis :as redis])
 (def pool (redis/create-redis-pool {:host "localhost" :port 6379}))
 (def rc   (redis/create-redis-cache pool {:default-ttl 300 :prefix "app"}))
 
 ;; Tenant-scoped — keys become "tenant:<id>:<key>"
-(require '[boundary.cache.shell.tenant-cache :as tc])
+(require '[wagoe.cache.shell.tenant-cache :as tc])
 (def tenant-a (tc/create-tenant-cache c "acme"))
 (cache/set-value! tenant-a :user-123 data)   ; stored as "tenant:acme:user-123"
 ;; In a handler: (tc/extract-tenant-cache c request) reads :tenant/:tenant-id off the request

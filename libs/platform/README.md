@@ -59,8 +59,8 @@ Core infrastructure for web applications: database, HTTP routing, pagination, se
 
 ```clojure
 (ns myapp.main
-  (:require [boundary.platform.shell.system.wiring :as wiring]
-            [boundary.config :as config]))
+  (:require [wagoe.platform.shell.system.wiring :as wiring]
+            [wagoe.config :as config]))
 
 (defn -main [& args]
   (let [cfg (config/load-config "production")
@@ -73,7 +73,7 @@ Core infrastructure for web applications: database, HTTP routing, pagination, se
 
 ```clojure
 (ns myapp.routes
-  (:require [boundary.platform.ports.http :as http]))
+  (:require [wagoe.platform.ports.http :as http]))
 
 ;; Define normalized routes
 (def routes
@@ -93,7 +93,7 @@ Core infrastructure for web applications: database, HTTP routing, pagination, se
 
 ```clojure
 (ns myapp.persistence
-  (:require [boundary.platform.shell.adapters.database.common.execution :as db]))
+  (:require [wagoe.platform.shell.adapters.database.common.execution :as db]))
 
 ;; Query with connection pool
 (defn find-user-by-id [db-ctx user-id]
@@ -112,7 +112,7 @@ Core infrastructure for web applications: database, HTTP routing, pagination, se
 
 ```clojure
 (ns myapp.handlers
-  (:require [boundary.platform.core.pagination :as pagination]))
+  (:require [wagoe.platform.core.pagination :as pagination]))
 
 ;; Offset pagination
 (defn list-users [request]
@@ -130,13 +130,13 @@ Core infrastructure for web applications: database, HTTP routing, pagination, se
 ### Search
 
 Full-text search lives in the dedicated **`libs/search`** module
-(`boundary.search.*`), not in platform. See `libs/search/AGENTS.md`.
+(`wagoe.search.*`), not in platform. See `libs/search/AGENTS.md`.
 
 ### Multi-Tenancy
 
 Multi-tenant middleware, tenant resolution (subdomain/JWT/header), PostgreSQL
 schema switching, caching, and the tenant management REST API live in the
-**tenant** lib (`boundary.tenant.shell.tenant-middleware`). The app injects the
+**tenant** lib (`wagoe.tenant.shell.tenant-middleware`). The app injects the
 tenant middleware into platform's HTTP pipeline via `:extra-middleware` (BOU-200).
 See [libs/tenant/README.md](../tenant/README.md).
 
@@ -158,14 +158,14 @@ See [libs/tenant/README.md](../tenant/README.md).
   :host "0.0.0.0"}
 
  :wagoe/modules
- [:boundary.user.shell.module-wiring
-  :boundary.admin.shell.module-wiring]}
+ [:wagoe.user.shell.module-wiring
+  :wagoe.admin.shell.module-wiring]}
 ```
 
 ## Module Structure
 
 ```
-libs/platform/src/boundary/platform/
+libs/platform/src/wagoe/platform/
 ├── core/
 │   ├── pagination.clj       # Pagination utilities
 │   ├── search.clj           # Search utilities
