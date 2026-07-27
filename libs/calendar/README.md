@@ -28,8 +28,8 @@ org.wagoe/wagoe-calendar {:mvn/version "1.0.0-beta-1"}
 ## Quick Start
 
 ```clojure
-(require '[boundary.calendar.core.recurrence :as r])
-(require '[boundary.calendar.shell.service :as cal])
+(require '[wagoe.calendar.core.recurrence :as r])
+(require '[wagoe.calendar.shell.service :as cal])
 
 (def standup
   {:id        (random-uuid)

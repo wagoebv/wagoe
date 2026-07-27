@@ -17,8 +17,8 @@
 ```
 
 ```clojure
-(require '[boundary.audience.shell.registry :as audience])
-(require '[boundary.audience.ports :as ports])
+(require '[wagoe.audience.shell.registry :as audience])
+(require '[wagoe.audience.ports :as ports])
 
 ;; Define a segment
 (audience/defaudience active-free-users
@@ -44,7 +44,7 @@
 
 ## Integrant Configuration
 
-Add to `resources/conf/{env}/config.edn` and require `boundary.audience.shell.module-wiring` at system start:
+Add to `resources/conf/{env}/config.edn` and require `wagoe.audience.shell.module-wiring` at system start:
 
 ```edn
 :wagoe/audience
@@ -74,8 +74,8 @@ The `:wagoe/audience` component returns `{:store <IAudienceRepository> :resolver
 ## API
 
 ```clojure
-(require '[boundary.audience.shell.registry :as audience])
-(require '[boundary.audience.ports :as ports])
+(require '[wagoe.audience.shell.registry :as audience])
+(require '[wagoe.audience.ports :as ports])
 
 ;; Registry
 (audience/get-audience :active-free-users)   ;; => {:id :active-free-users ...}
@@ -116,7 +116,7 @@ Run once before using audience segmentation. When `boundary-audience` is on the
 classpath, `clojure -M:migrate up` auto-discovers these migrations:
 
 ```sql
--- libs/audience/resources/boundary/audience/migrations/...-audience-segments.up.sql
+-- libs/audience/resources/wagoe/audience/migrations/...-audience-segments.up.sql
 CREATE TABLE audience_segments (
   audience_id   TEXT PRIMARY KEY,
   label         TEXT NOT NULL,
@@ -128,7 +128,7 @@ CREATE TABLE audience_segments (
   updated_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- libs/audience/resources/boundary/audience/migrations/...-audience-memberships.up.sql
+-- libs/audience/resources/wagoe/audience/migrations/...-audience-memberships.up.sql
 CREATE TABLE audience_memberships (
   audience_id TEXT      NOT NULL,
   user_id     UUID      NOT NULL,

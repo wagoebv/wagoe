@@ -96,14 +96,14 @@ Route definitions are vectors of route entries using simple EDN:
 
 [source,clojure]
 ----
-{:handler 'boundary.user.shell.handlers/list-users  ; Qualified symbol (resolved at runtime)
+{:handler 'wagoe.user.shell.handlers/list-users  ; Qualified symbol (resolved at runtime)
  :middleware ['my.app.middleware/wrap-json       ; Optional middleware (symbols)
               'my.app.middleware/wrap-auth]
- :interceptors ['boundary.platform.http/logging     ; Optional HTTP interceptors (NEW in v1.1)
-                'boundary.platform.http/metrics]
- :coercion {:query boundary.user.schema/ListUsersQuery    ; Malli schemas
-            :response {:200 boundary.user.schema/UserList
-                       :400 boundary.platform.schema/ErrorResponse}}
+ :interceptors ['wagoe.platform.http/logging     ; Optional HTTP interceptors (NEW in v1.1)
+                'wagoe.platform.http/metrics]
+ :coercion {:query wagoe.user.schema/ListUsersQuery    ; Malli schemas
+            :response {:200 wagoe.user.schema/UserList
+                       :400 wagoe.platform.schema/ErrorResponse}}
  :summary "List all users"             ; OpenAPI documentation
  :tags ["users"]                       ; OpenAPI grouping
  :produces ["application/json"]        ; MIME types
@@ -152,42 +152,42 @@ Both can be used together. Interceptors are converted to middleware by the route
 
 [source,clojure]
 ----
-;; libs/user/src/boundary/user/shell/http.clj
-(ns boundary.user.shell.http
-  (:require [boundary.user.schema :as schema]
-            [boundary.platform.schema :as shared-schema]))
+;; libs/user/src/wagoe/user/shell/http.clj
+(ns wagoe.user.shell.http
+  (:require [wagoe.user.schema :as schema]
+            [wagoe.platform.schema :as shared-schema]))
 
 (defn routes
   "Return normalized route definitions for user module."
   []
   [{:path "/api/users"
-    :methods {:get  {:handler 'boundary.user.shell.handlers/list-users
+    :methods {:get  {:handler 'wagoe.user.shell.handlers/list-users
                      :summary "List users"
                      :tags ["users"]
                      :coercion {:query schema/ListUsersQuery
                                 :response {:200 schema/UserList
                                            :400 shared-schema/ErrorResponse}}}
-              :post {:handler 'boundary.user.shell.handlers/create-user
+              :post {:handler 'wagoe.user.shell.handlers/create-user
                      :summary "Create user"
                      :tags ["users"]
                      :coercion {:body schema/CreateUserRequest
                                 :response {:201 schema/UserEntity
                                            :400 shared-schema/ValidationError}}}}
     :children [{:path "/:id"
-                :methods {:get    {:handler 'boundary.user.shell.handlers/get-user
+                :methods {:get    {:handler 'wagoe.user.shell.handlers/get-user
                                    :summary "Get user by ID"
                                    :tags ["users"]
                                    :coercion {:path shared-schema/IdPath
                                               :response {:200 schema/UserEntity
                                                          :404 shared-schema/NotFound}}}
-                          :put    {:handler 'boundary.user.shell.handlers/update-user
+                          :put    {:handler 'wagoe.user.shell.handlers/update-user
                                    :summary "Update user"
                                    :tags ["users"]
                                    :coercion {:path shared-schema/IdPath
                                               :body schema/UpdateUserRequest
                                               :response {:200 schema/UserEntity
                                                          :404 shared-schema/NotFound}}}
-                          :delete {:handler 'boundary.user.shell.handlers/delete-user
+                          :delete {:handler 'wagoe.user.shell.handlers/delete-user
                                    :summary "Delete user"
                                    :tags ["users"]
                                    :coercion {:path shared-schema/IdPath
@@ -201,23 +201,23 @@ Both can be used together. Interceptors are converted to middleware by the route
 ----
 ;; Web routes with HTML responses
 [{:path "/web/users"
-  :methods {:get {:handler 'boundary.user.shell.web-handlers/users-page
+  :methods {:get {:handler 'wagoe.user.shell.web-handlers/users-page
                   :summary "Users management page"
                   :produces ["text/html"]
                   :tags ["web"]}}
   :children [{:path "/table"
-              :methods {:get {:handler 'boundary.user.shell.web-handlers/users-table-fragment
+              :methods {:get {:handler 'wagoe.user.shell.web-handlers/users-table-fragment
                               :summary "Users table partial (HTMX)"
                               :produces ["text/html"]
                               :tags ["web" "htmx"]}}}
              {:path "/new"
-              :methods {:get {:handler 'boundary.user.shell.web-handlers/new-user-form
+              :methods {:get {:handler 'wagoe.user.shell.web-handlers/new-user-form
                               :produces ["text/html"]}
-                        :post {:handler 'boundary.user.shell.web-handlers/create-user-htmx
+                        :post {:handler 'wagoe.user.shell.web-handlers/create-user-htmx
                                :consumes ["application/x-www-form-urlencoded"]
                                :produces ["text/html"]}}}
              {:path "/:id/edit"
-              :methods {:get {:handler 'boundary.user.shell.web-handlers/edit-user-form
+              :methods {:get {:handler 'wagoe.user.shell.web-handlers/edit-user-form
                               :produces ["text/html"]
                               :coercion {:path shared-schema/IdPath}}}}]}]
 ----
@@ -232,25 +232,25 @@ Both can be used together. Interceptors are converted to middleware by the route
   []
   [{:path "/api/admin"
     :meta {:description "Admin-only endpoints"}
-    :methods {:get {:handler 'boundary.admin.handlers/dashboard
-                    :interceptors ['boundary.auth.interceptors/require-admin
-                                   'boundary.audit.interceptors/log-admin-action
-                                   'boundary.metrics.interceptors/track-admin-access]
+    :methods {:get {:handler 'wagoe.admin.handlers/dashboard
+                    :interceptors ['wagoe.auth.interceptors/require-admin
+                                   'wagoe.audit.interceptors/log-admin-action
+                                   'wagoe.metrics.interceptors/track-admin-access]
                     :summary "Admin dashboard"}
-              :post {:handler 'boundary.admin.handlers/create-resource
-                     :interceptors ['boundary.auth.interceptors/require-admin
-                                    'boundary.rate-limit.interceptors/admin-rate-limit
-                                    'boundary.audit.interceptors/log-admin-action]
+              :post {:handler 'wagoe.admin.handlers/create-resource
+                     :interceptors ['wagoe.auth.interceptors/require-admin
+                                    'wagoe.rate-limit.interceptors/admin-rate-limit
+                                    'wagoe.audit.interceptors/log-admin-action]
                      :summary "Create admin resource"}}}
    
    {:path "/api/public"
-    :methods {:get {:handler 'boundary.public.handlers/list-items
-                    :interceptors ['boundary.rate-limit.interceptors/public-rate-limit]
+    :methods {:get {:handler 'wagoe.public.handlers/list-items
+                    :interceptors ['wagoe.rate-limit.interceptors/public-rate-limit]
                     :summary "Public listing (rate limited)"}}}])
 
 ;; Example interceptor definitions
-(ns boundary.auth.interceptors
-  (:require [boundary.platform.shell.http.interceptors :as http-interceptors]))
+(ns wagoe.auth.interceptors
+  (:require [wagoe.platform.shell.http.interceptors :as http-interceptors]))
 
 (def require-admin
   "Interceptor that verifies admin role in enter phase."
@@ -285,7 +285,7 @@ Both can be used together. Interceptors are converted to middleware by the route
 
 [source,clojure]
 ----
-(ns boundary.platform.ports.http)
+(ns wagoe.platform.ports.http)
 
 (defprotocol IRouter
   "Protocol for HTTP routing implementations."
@@ -331,8 +331,8 @@ Both can be used together. Interceptors are converted to middleware by the route
 
 [source,clojure]
 ----
-(ns boundary.platform.shell.http.reitit-router
-  (:require [boundary.platform.ports.http :as ports]
+(ns wagoe.platform.shell.http.reitit-router
+  (:require [wagoe.platform.ports.http :as ports]
             [reitit.ring :as ring]
             [reitit.coercion.malli :as malli-coercion]))
 
@@ -376,8 +376,8 @@ Both can be used together. Interceptors are converted to middleware by the route
 
 [source,clojure]
 ----
-(ns boundary.platform.shell.http.ring-jetty-server
-  (:require [boundary.platform.ports.http :as ports]
+(ns wagoe.platform.shell.http.ring-jetty-server
+  (:require [wagoe.platform.ports.http :as ports]
             [ring.adapter.jetty :as jetty]))
 
 (defrecord RingJettyServer []
@@ -405,7 +405,7 @@ Both can be used together. Interceptors are converted to middleware by the route
         :port 3000
         :host "0.0.0.0"
         :middleware ['my.app.middleware/wrap-json
-                     'boundary.platform.shell.interfaces.http.middleware/wrap-correlation-id]}}
+                     'wagoe.platform.shell.interfaces.http.middleware/wrap-correlation-id]}}
 
 ;; In system wiring
 (defmethod ig/init-key :wagoe/router
@@ -440,7 +440,7 @@ Both can be used together. Interceptors are converted to middleware by the route
 
 ==== Phase 1: Infrastructure (Week 1)
 
-1. Define HTTP ports (`boundary.platform.ports.http`)
+1. Define HTTP ports (`wagoe.platform.ports.http`)
 2. Implement Reitit router adapter
 3. Implement Ring+Jetty server adapter
 4. Add Integrant wiring for router/server selection
@@ -562,7 +562,7 @@ Both can be used together. Interceptors are converted to middleware by the route
 
 === Infrastructure
 
-- [ ] Define `boundary.platform.ports.http` protocols
+- [ ] Define `wagoe.platform.ports.http` protocols
 - [ ] Implement `ReititRouter` adapter
 - [ ] Implement `RingJettyServer` adapter
 - [ ] Add Integrant wiring for adapter selection

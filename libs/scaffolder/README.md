@@ -31,7 +31,7 @@ Code generation tool for creating new Boundary modules following the Functional 
 
 > **Use `boundary new` for new projects.** The Boundary CLI (`boundary new <name>`,
 > from `wagoe-cli`) is the canonical, actively-maintained project generator — it
-> produces the current template (`src/boundary/config.clj`, `src/<project>/system.clj`,
+> produces the current template (`src/wagoe/config.clj`, `src/<project>/system.clj`,
 > `.env`, `bb.edn`, tests, hooks). The scaffolder's own `new` command below is a
 > lower-level/legacy generator kept for embedding; it emits a different, simpler
 > layout (`src/<name>/app.clj`) and does **not** match a `boundary new` project.
@@ -39,7 +39,7 @@ Code generation tool for creating new Boundary modules following the Functional 
 To generate the legacy starter layout directly from the scaffolder:
 
 ```bash
-clojure -M:dev -m boundary.scaffolder.shell.cli-entry new --name myapp
+clojure -M:dev -m wagoe.scaffolder.shell.cli-entry new --name myapp
 ```
 
 Generated projects are self-contained and use SQLite by default, making them ready to run immediately.
@@ -78,14 +78,14 @@ myapp/
 ### 1. Create a New Project
 
 ```bash
-clojure -M:dev -m boundary.scaffolder.shell.cli-entry new --name myapp
+clojure -M:dev -m wagoe.scaffolder.shell.cli-entry new --name myapp
 cd myapp
 ```
 
 ### 2. Generate a Module
 
 ```bash
-clojure -M:dev -m boundary.scaffolder.shell.cli-entry generate \
+clojure -M:dev -m wagoe.scaffolder.shell.cli-entry generate \
   --module-name product \
   --entity Product \
   --field name:string:required \
@@ -98,7 +98,7 @@ clojure -M:dev -m boundary.scaffolder.shell.cli-entry generate \
 ### Generated Files
 
 ```
-libs/product/src/boundary/product/
+libs/product/src/wagoe/product/
 ├── core/
 │   └── product.clj           # Pure business logic
 ├── ports.clj                 # Service protocol
@@ -109,7 +109,7 @@ libs/product/src/boundary/product/
     ├── persistence.clj       # Database adapter
     └── module-wiring.clj     # Integrant configuration
 
-libs/product/test/boundary/product/
+libs/product/test/wagoe/product/
 ├── core/
 │   └── product_test.clj      # Unit tests
 └── shell/
@@ -136,13 +136,13 @@ Used to generate a new starter project.
 
 ```bash
 # Basic usage
-clojure -M:dev -m boundary.scaffolder.shell.cli-entry new --name myapp
+clojure -M:dev -m wagoe.scaffolder.shell.cli-entry new --name myapp
 
 # Custom output directory
-clojure -M:dev -m boundary.scaffolder.shell.cli-entry new --name myapp --output-dir ./projects
+clojure -M:dev -m wagoe.scaffolder.shell.cli-entry new --name myapp --output-dir ./projects
 
 # Dry run (preview only)
-clojure -M:dev -m boundary.scaffolder.shell.cli-entry new --name myapp --dry-run
+clojure -M:dev -m wagoe.scaffolder.shell.cli-entry new --name myapp --dry-run
 ```
 
 ### `generate` Command
@@ -185,14 +185,14 @@ Format: `name:type[:modifier...]`
 
 ```bash
 # Simple entity
-clojure -M:dev -m boundary.scaffolder.shell.cli-entry generate \
+clojure -M:dev -m wagoe.scaffolder.shell.cli-entry generate \
   --module-name category \
   --entity Category \
   --field name:string:required \
   --field description:string
 
 # Entity with all field types
-clojure -M:dev -m boundary.scaffolder.shell.cli-entry generate \
+clojure -M:dev -m wagoe.scaffolder.shell.cli-entry generate \
   --module-name order \
   --entity Order \
   --field order-number:string:required:unique \
@@ -203,7 +203,7 @@ clojure -M:dev -m boundary.scaffolder.shell.cli-entry generate \
   --field shipped-at:instant
 
 # Dry run to preview
-clojure -M:dev -m boundary.scaffolder.shell.cli-entry generate \
+clojure -M:dev -m wagoe.scaffolder.shell.cli-entry generate \
   --module-name test \
   --entity Test \
   --field name:string \
@@ -270,7 +270,7 @@ clojure -M:dev -m boundary.scaffolder.shell.cli-entry generate \
 (ns myapp.product.shell.service
   (:require [myapp.product.ports :as ports]
             [myapp.product.core.product :as product-core]
-            [boundary.core.validation :as validation]
+            [wagoe.core.validation :as validation]
             [myapp.product.schema :as schema]))
 
 (defrecord ProductService [repository logger]
@@ -295,7 +295,7 @@ clojure -M:dev -m boundary.scaffolder.shell.cli-entry generate \
 ## Module Structure
 
 ```
-libs/scaffolder/src/boundary/scaffolder/
+libs/scaffolder/src/wagoe/scaffolder/
 ├── core/
 │   ├── generators.clj        # Template generation (pure)
 │   ├── field-parser.clj      # Field definition parsing
@@ -309,7 +309,7 @@ libs/scaffolder/src/boundary/scaffolder/
 
 ```clojure
 (ns myapp.dev
-  (:require [boundary.scaffolder.core.generators :as gen]))
+  (:require [wagoe.scaffolder.core.generators :as gen]))
 
 ;; Generate module programmatically
 (gen/generate-module
@@ -373,7 +373,7 @@ clojure -M:test
 clojure -M:clj-kondo --lint src test
 
 # Test CLI
-clojure -M -m boundary.scaffolder.shell.cli-entry --help
+clojure -M -m wagoe.scaffolder.shell.cli-entry --help
 ```
 
 ## License

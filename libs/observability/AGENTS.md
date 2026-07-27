@@ -10,14 +10,14 @@ Cross-cutting observability for services and persistence layers: structured logg
 
 | Namespace | Purpose |
 |-----------|---------|
-| `boundary.observability.logging.ports` | `ILogger`, `IAuditLogger` protocols |
-| `boundary.observability.errors.ports` | `IErrorReporter`, `IErrorContext`, `IErrorFilter` protocols |
-| `boundary.observability.metrics.ports` | `IMetricsRegistry`, `IMetricsEmitter` protocols |
-| `boundary.observability.tracing.ports` | `ITracer` protocol (spans) |
-| `boundary.observability.tracing.core` | `with-span` macro |
-| `boundary.observability.shell.service-interceptors` | Service-layer operation wrappers |
-| `boundary.observability.shell.persistence-interceptors` | Persistence-layer query wrappers |
-| `boundary.observability.shell.adapters.*` | Provider implementations (no-op, Datadog, Sentry) |
+| `wagoe.observability.logging.ports` | `ILogger`, `IAuditLogger` protocols |
+| `wagoe.observability.errors.ports` | `IErrorReporter`, `IErrorContext`, `IErrorFilter` protocols |
+| `wagoe.observability.metrics.ports` | `IMetricsRegistry`, `IMetricsEmitter` protocols |
+| `wagoe.observability.tracing.ports` | `ITracer` protocol (spans) |
+| `wagoe.observability.tracing.core` | `with-span` macro |
+| `wagoe.observability.shell.service-interceptors` | Service-layer operation wrappers |
+| `wagoe.observability.shell.persistence-interceptors` | Persistence-layer query wrappers |
+| `wagoe.observability.shell.adapters.*` | Provider implementations (no-op, Datadog, Sentry) |
 
 ---
 
@@ -28,7 +28,7 @@ The recommended way to add observability is to wrap operations with interceptors
 ### Service Layer
 
 ```clojure
-(require '[boundary.observability.shell.service-interceptors :as service-interceptors])
+(require '[wagoe.observability.shell.service-interceptors :as service-interceptors])
 
 ;; Wrap each service method call
 (defn create-user [this user-data]
@@ -50,7 +50,7 @@ The interceptor automatically:
 ### Persistence Layer
 
 ```clojure
-(require '[boundary.observability.shell.persistence-interceptors :as persistence-interceptors])
+(require '[wagoe.observability.shell.persistence-interceptors :as persistence-interceptors])
 
 ;; Wrap each database call
 (defn find-user-by-email [this email]
@@ -70,7 +70,7 @@ The interceptor automatically:
 ### ILogger
 
 ```clojure
-;; In boundary.observability.logging.ports
+;; In wagoe.observability.logging.ports
 (defprotocol ILogger
   (log* [this level message context exception])
   (trace [this message] [this message context])
@@ -142,8 +142,8 @@ Backend-agnostic spans behind `ITracer`. Wrap work with `with-span`; the span is
 started, has exceptions recorded + rethrown, and is always ended:
 
 ```clojure
-(require '[boundary.observability.tracing.core :refer [with-span]]
-         '[boundary.observability.tracing.ports :as t])
+(require '[wagoe.observability.tracing.core :refer [with-span]]
+         '[wagoe.observability.tracing.ports :as t])
 
 (with-span tracer [sp "handle-order" {:order-id id}]
   (t/add-event! tracer sp "validated")
@@ -307,7 +307,7 @@ Implement the protocols for your observability provider:
 
 ```clojure
 (ns my-app.observability.adapters.my-logger
-  (:require [boundary.observability.logging.ports :as ports]))
+  (:require [wagoe.observability.logging.ports :as ports]))
 
 (defrecord MyLogger [config]
   ports/ILogger

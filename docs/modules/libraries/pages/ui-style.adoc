@@ -18,7 +18,7 @@ It prevents per-library style drift by making layout namespaces consume the same
 
 == API
 
-Namespace: `boundary.ui-style`
+Namespace: `wagoe.ui-style`
 
 * `base-css`, `pilot-css`, `admin-pilot-css`
 * `base-js`, `pilot-js`, `admin-pilot-js`

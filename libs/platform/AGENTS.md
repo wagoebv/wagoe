@@ -10,11 +10,11 @@ Infrastructure layer for HTTP routing/interceptors, database integration, CLI/ru
 
 | Namespace | Purpose |
 |-----------|---------|
-| `boundary.platform.shell.http.interceptors` | HTTP-specific interceptor pipeline execution |
-| `boundary.platform.shell.interceptors` | Universal cross-cutting interceptors (logging, metrics, error) |
-| `boundary.platform.shell.interfaces.http.routes` | Reitit router and Ring handler creation |
-| `boundary.platform.ports.http` | HTTP router and server protocols |
-| `boundary.platform.db.*` | Database context, connection pooling, shared persistence utilities |
+| `wagoe.platform.shell.http.interceptors` | HTTP-specific interceptor pipeline execution |
+| `wagoe.platform.shell.interceptors` | Universal cross-cutting interceptors (logging, metrics, error) |
+| `wagoe.platform.shell.interfaces.http.routes` | Reitit router and Ring handler creation |
+| `wagoe.platform.ports.http` | HTTP router and server protocols |
+| `wagoe.platform.db.*` | Database context, connection pooling, shared persistence utilities |
 
 ---
 
@@ -49,7 +49,7 @@ The context map threaded through all interceptors:
 
 ### Built-in HTTP Interceptors
 
-From `boundary.platform.shell.http.interceptors`:
+From `wagoe.platform.shell.http.interceptors`:
 
 | Interceptor | Phase | What it does |
 |-------------|-------|--------------|
@@ -65,7 +65,7 @@ From `boundary.platform.shell.http.interceptors`:
 
 ### Universal Cross-Cutting Interceptors
 
-From `boundary.platform.shell.interceptors`:
+From `wagoe.platform.shell.interceptors`:
 
 | Interceptor | Purpose |
 |-------------|---------|
@@ -100,7 +100,7 @@ cli-response-pipeline         ; error-handling + response-shape-cli
 
 `http-csrf-protection` (in the default interceptor stack) protects session-cookie
 authenticated, state-changing requests. Pure token functions live in
-`boundary.platform.core.csrf`; the interceptor (shell) does validation, issuance,
+`wagoe.platform.core.csrf`; the interceptor (shell) does validation, issuance,
 and pre-session cookie minting.
 
 ### Token model
@@ -171,7 +171,7 @@ For that case, wrap the bypassing handler with `interceptors/wrap-csrf`, the Rin
 form of the interceptor (same binding model, same opt-in/exempt/safe-method rules):
 
 ```clojure
-(require '[boundary.platform.shell.http.interceptors :as interceptors])
+(require '[wagoe.platform.shell.http.interceptors :as interceptors])
 
 ;; csrf-config is the same {:enabled? :secret :exempt-paths} map read from
 ;; [:active :wagoe/http :security :csrf]; thread it in from system config.
@@ -192,11 +192,11 @@ Disabled or secretless config makes it a pass-through.
 
 ```clojure
 {:path    "/api/users"
- :methods {:get  {:handler  'boundary.user.shell.http/list-users-handler
+ :methods {:get  {:handler  'wagoe.user.shell.http/list-users-handler
                   :summary  "List users"
                   :tags     ["users"]
                   :parameters {:query [:map [:limit {:optional true} :int]]}}
-           :post {:handler  'boundary.user.shell.http/create-user-handler
+           :post {:handler  'wagoe.user.shell.http/create-user-handler
                   :summary  "Create user"
                   :tags     ["users"]
                   :coercion {:body CreateUserRequest}}}}
@@ -205,7 +205,7 @@ Disabled or secretless config makes it a pass-through.
 ### Creating a Router
 
 ```clojure
-(require '[boundary.platform.shell.interfaces.http.routes :as routes])
+(require '[wagoe.platform.shell.interfaces.http.routes :as routes])
 
 ;; Creates complete Reitit router with health, api-docs, and your routes
 (def router

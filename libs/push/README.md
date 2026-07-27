@@ -17,7 +17,7 @@
 ```
 
 ```clojure
-(require '[boundary.push.shell.service :as push])
+(require '[wagoe.push.shell.service :as push])
 
 ;; Define a notification type
 (defpush order-shipped
@@ -47,34 +47,34 @@
 
 ## Integrant Configuration
 
-Add to `resources/conf/{env}/config.edn` and require `boundary.push.shell.module-wiring` at system start:
+Add to `resources/conf/{env}/config.edn` and require `wagoe.push.shell.module-wiring` at system start:
 
 ```edn
-:boundary.push/fcm-provider  {:provider         :fcm
+:wagoe.push/fcm-provider  {:provider         :fcm
                                :project-id       #env WAG_PUSH_FCM_PROJECT_ID
                                :credentials-path #env WAG_PUSH_FCM_CREDENTIALS_PATH}
 
-:boundary.push/apns-provider {:provider  :apns
+:wagoe.push/apns-provider {:provider  :apns
                                :team-id   #env WAG_PUSH_APNS_TEAM_ID
                                :key-id    #env WAG_PUSH_APNS_KEY_ID
                                :key-path  #env WAG_PUSH_APNS_KEY_PATH
                                :bundle-id #env WAG_PUSH_APNS_BUNDLE_ID
                                :sandbox?  false}
 
-:boundary.push/device-store    {:db #ig/ref :wagoe/db}
-:boundary.push/analytics-store {:db #ig/ref :wagoe/db}
+:wagoe.push/device-store    {:db #ig/ref :wagoe/db}
+:wagoe.push/analytics-store {:db #ig/ref :wagoe/db}
 
-:boundary.push/service {:device-store    #ig/ref :boundary.push/device-store
-                        :analytics-store #ig/ref :boundary.push/analytics-store
-                        :fcm-provider    #ig/ref :boundary.push/fcm-provider
-                        :apns-provider   #ig/ref :boundary.push/apns-provider
+:wagoe.push/service {:device-store    #ig/ref :wagoe.push/device-store
+                        :analytics-store #ig/ref :wagoe.push/analytics-store
+                        :fcm-provider    #ig/ref :wagoe.push/fcm-provider
+                        :apns-provider   #ig/ref :wagoe.push/apns-provider
                         :job-queue       #ig/ref :wagoe/jobs
                         :callback-secret #env WAG_PUSH_CALLBACK_SECRET}
 
-:boundary.push/job-handlers {:push-service #ig/ref :boundary.push/service}
+:wagoe.push/job-handlers {:push-service #ig/ref :wagoe.push/service}
 
-:boundary.push/routes {:device-store    #ig/ref :boundary.push/device-store
-                       :analytics-store #ig/ref :boundary.push/analytics-store
+:wagoe.push/routes {:device-store    #ig/ref :wagoe.push/device-store
+                       :analytics-store #ig/ref :wagoe.push/analytics-store
                        :callback-secret #env WAG_PUSH_CALLBACK_SECRET}
 ```
 
@@ -85,7 +85,7 @@ Use `:provider :mock` for FCM and APNs in dev/test environments.
 ## API
 
 ```clojure
-(require '[boundary.push.ports :as push-ports])
+(require '[wagoe.push.ports :as push-ports])
 
 ;; Send immediately via job queue
 (push-ports/send-push! service :notification-id template-vars {:user-id uuid :locale :en})
@@ -167,7 +167,7 @@ CREATE TABLE IF NOT EXISTS push_analytics_events (
 |----------|----------------|-------------|-------|
 | Firebase Cloud Messaging | `:fcm` | Service account JSON (`WAG_PUSH_FCM_CREDENTIALS_JSON`) | Supports multicast, token validation |
 | Apple Push Notification service | `:apns` | Key ID + Team ID + P8 private key | Separate sandbox/production hosts; set `:sandbox?` per env |
-| Mock (dev/test) | `:mock` | None | In-memory; use `boundary.push.shell.adapters.mock` |
+| Mock (dev/test) | `:mock` | None | In-memory; use `wagoe.push.shell.adapters.mock` |
 
 ---
 

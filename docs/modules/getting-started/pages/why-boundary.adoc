@@ -36,7 +36,7 @@ Boundary enforces a clean separation between pure code and code that touches the
 
 [source]
 ----
-libs/{library}/src/boundary/{library}/
+libs/{library}/src/wagoe/{library}/
 ├── core/       ← Pure functions only. No I/O, no logging, no exceptions.
 ├── shell/      ← I/O, validation, persistence, HTTP, services.
 ├── ports.clj   ← Protocol definitions (interfaces).

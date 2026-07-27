@@ -39,7 +39,7 @@ with JWT authentication, message routing, and topic-based pub/sub.
 
 [source,clojure]
 ----
-(require '[boundary.realtime.ports :as ports])
+(require '[wagoe.realtime.ports :as ports])
 
 ;; Broadcast to all
 (ports/send-to-all service {:type :announcement :text "System maintenance in 5 minutes"})

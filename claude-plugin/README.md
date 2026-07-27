@@ -28,7 +28,7 @@ A single `boundary` skill with:
 ## Keeping in sync
 
 `skills/boundary/SKILL.md` must stay byte-identical to
-`libs/wagoe-cli/resources/boundary/cli/templates/claude-skill.md.tmpl`.
+`libs/wagoe-cli/resources/wagoe/cli/templates/claude-skill.md.tmpl`.
 A test in `libs/wagoe-cli` enforces this.
 
 ## Versioning

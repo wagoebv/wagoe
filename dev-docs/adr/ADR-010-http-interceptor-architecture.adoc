@@ -244,7 +244,7 @@ The Reitit adapter automatically:
 
 ```clojure
 (ns my.metrics.interceptors
-  (:require [boundary.platform.shell.http.interceptors :as http-int]))
+  (:require [wagoe.platform.shell.http.interceptors :as http-int]))
 
 (def track-request
   "Track request timing and status metrics."
@@ -283,7 +283,7 @@ The Reitit adapter automatically:
 The framework provides default interceptors for common observability needs:
 
 ```clojure
-(ns boundary.platform.shell.http.interceptors)
+(ns wagoe.platform.shell.http.interceptors)
 
 (def http-request-logging
   "Logs HTTP requests at entry and completion."
@@ -319,7 +319,7 @@ The framework provides default interceptors for common observability needs:
 
 ==== Default Interceptors (Automatic)
 
-The framework applies `boundary.platform.shell.http.interceptors/default-http-interceptors` to every matched endpoint automatically.
+The framework applies `wagoe.platform.shell.http.interceptors/default-http-interceptors` to every matched endpoint automatically.
 
 To enable observability, pass concrete services via `:system` in the router config:
 

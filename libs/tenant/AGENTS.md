@@ -19,37 +19,37 @@ Multi-tenancy with schema-per-tenant isolation on PostgreSQL. Provides:
 
 | Namespace | Purpose |
 |-----------|---------|
-| `boundary.tenant.core.tenant` | Slug validation, schema name generation, `prepare-tenant`, lifecycle decisions |
-| `boundary.tenant.core.membership` | Membership lifecycle: prepare-invitation*, prepare-active-membership*, accept, suspend, revoke, role updates, `active-member?`, `has-role?` |
-| `boundary.tenant.core.invite` | Invite lifecycle: create, check expiry, accept, revoke; token hashing |
+| `wagoe.tenant.core.tenant` | Slug validation, schema name generation, `prepare-tenant`, lifecycle decisions |
+| `wagoe.tenant.core.membership` | Membership lifecycle: prepare-invitation*, prepare-active-membership*, accept, suspend, revoke, role updates, `active-member?`, `has-role?` |
+| `wagoe.tenant.core.invite` | Invite lifecycle: create, check expiry, accept, revoke; token hashing |
 
 ### Ports (protocols)
 
 | Namespace | Protocols |
 |-----------|-----------|
-| `boundary.tenant.ports` | `ITenantRepository`, `ITenantService`, `ITenantMembershipRepository`, `ITenantMembershipService`, `ITenantInviteRepository`, `ITenantInviteService`, `ITenantInviteAcceptanceService`, `ITenantSchemaProvider` |
+| `wagoe.tenant.ports` | `ITenantRepository`, `ITenantService`, `ITenantMembershipRepository`, `ITenantMembershipService`, `ITenantInviteRepository`, `ITenantInviteService`, `ITenantInviteAcceptanceService`, `ITenantSchemaProvider` |
 
 ### Shell (side-effecting)
 
 | Namespace | Purpose |
 |-----------|---------|
-| `boundary.tenant.shell.service` | `TenantService` — tenant CRUD with observability interceptors |
-| `boundary.tenant.shell.persistence` | `TenantRepository` — DB CRUD with case/type conversion |
-| `boundary.tenant.shell.provisioning` | PostgreSQL schema provisioning/deprovisioning |
-| `boundary.tenant.shell.http` | Tenant REST API handlers (CRUD + provision/suspend/activate) |
-| `boundary.tenant.shell.membership_service` | `MembershipService` — membership management |
-| `boundary.tenant.shell.membership_persistence` | `MembershipRepository` — DB CRUD for memberships |
-| `boundary.tenant.shell.membership_http` | Membership REST API handlers |
-| `boundary.tenant.shell.membership_middleware` | `wrap-tenant-membership` Ring middleware |
-| `boundary.tenant.shell.invite_service` | `InviteService` + `InviteAcceptanceService` — email invite flows |
-| `boundary.tenant.shell.invite_persistence` | `InviteRepository` — DB CRUD for invites |
-| `boundary.tenant.shell.module_wiring` | Integrant `init-key` / `halt-key!` definitions |
+| `wagoe.tenant.shell.service` | `TenantService` — tenant CRUD with observability interceptors |
+| `wagoe.tenant.shell.persistence` | `TenantRepository` — DB CRUD with case/type conversion |
+| `wagoe.tenant.shell.provisioning` | PostgreSQL schema provisioning/deprovisioning |
+| `wagoe.tenant.shell.http` | Tenant REST API handlers (CRUD + provision/suspend/activate) |
+| `wagoe.tenant.shell.membership_service` | `MembershipService` — membership management |
+| `wagoe.tenant.shell.membership_persistence` | `MembershipRepository` — DB CRUD for memberships |
+| `wagoe.tenant.shell.membership_http` | Membership REST API handlers |
+| `wagoe.tenant.shell.membership_middleware` | `wrap-tenant-membership` Ring middleware |
+| `wagoe.tenant.shell.invite_service` | `InviteService` + `InviteAcceptanceService` — email invite flows |
+| `wagoe.tenant.shell.invite_persistence` | `InviteRepository` — DB CRUD for invites |
+| `wagoe.tenant.shell.module_wiring` | Integrant `init-key` / `halt-key!` definitions |
 
 ### Schema
 
 | Namespace | Contents |
 |-----------|---------|
-| `boundary.tenant.schema` | `Tenant`, `TenantMembership`, `TenantInvite`, `TenantSettings`, input schemas, camelCase request/response transformers |
+| `wagoe.tenant.schema` | `Tenant`, `TenantMembership`, `TenantInvite`, `TenantSettings`, input schemas, camelCase request/response transformers |
 
 ---
 
@@ -108,7 +108,7 @@ Multi-tenancy with schema-per-tenant isolation on PostgreSQL. Provides:
 ### Core helpers
 
 ```clojure
-(require '[boundary.tenant.core.membership :as m])
+(require '[wagoe.tenant.core.membership :as m])
 
 ;; Prepare a new invitation (status :invited)
 (m/prepare-invitation* membership-id user-id tenant-id :admin now)
@@ -229,7 +229,7 @@ migration sets:
 | Public/shared | `migrations/` | once against `public` (the normal `bb migrate`) | `public.schema_migrations` |
 | Tenant-scoped | `migrations-tenant/` | inside **every** tenant schema | per-schema `schema_migrations` |
 
-`boundary.tenant.shell.tenant-migrations` drives the tenant set:
+`wagoe.tenant.shell.tenant-migrations` drives the tenant set:
 
 ```clojure
 (tenant-migrations/migrate-tenant! db-cfg "tenant_acme_corp")   ; one schema
@@ -246,7 +246,7 @@ fallback) so migratus keeps a per-tenant ledger. Consequences:
 Fan-out happens automatically: `provision-tenant!` runs the set into a new
 schema, and the `:wagoe/tenant-db-schema` component runs pending tenant
 migrations across all existing schemas on startup (so a deploy reaches every
-tenant). See `libs/tenant/src/boundary/tenant/shell/tenant_migrations.clj`.
+tenant). See `libs/tenant/src/wagoe/tenant/shell/tenant_migrations.clj`.
 
 ---
 
@@ -258,7 +258,7 @@ Enriches the Ring request with `:tenant-membership` for the current user+tenant 
 Must run **after** both `wrap-tenant-resolution` (platform) and user authentication middleware.
 
 ```clojure
-(require '[boundary.tenant.shell.membership_middleware :refer [wrap-tenant-membership]])
+(require '[wagoe.tenant.shell.membership_middleware :refer [wrap-tenant-membership]])
 
 ;; In your Ring handler stack
 (-> handler
@@ -277,7 +277,7 @@ See `libs/platform/AGENTS.md` for `wrap-tenant-resolution`, `wrap-tenant-schema`
 
 ## Interceptors (from `user` library)
 
-The four tenant-aware HTTP interceptors live in `boundary.user.shell.http-interceptors`:
+The four tenant-aware HTTP interceptors live in `wagoe.user.shell.http-interceptors`:
 
 | Interceptor | Behaviour on failure |
 |-------------|---------------------|
@@ -362,8 +362,8 @@ clojure -M:migrate up
 
 | Module | Integration point |
 |--------|-------------------|
-| **Jobs** | `boundary.jobs.shell.tenant-context/enqueue-tenant-job!` — jobs execute in tenant schema |
-| **Cache** | `boundary.cache.shell.tenant-cache/create-tenant-cache` — keys prefixed with tenant ID |
+| **Jobs** | `wagoe.jobs.shell.tenant-context/enqueue-tenant-job!` — jobs execute in tenant schema |
+| **Cache** | `wagoe.cache.shell.tenant-cache/create-tenant-cache` — keys prefixed with tenant ID |
 | **Platform** | `wrap-tenant-resolution`, `wrap-tenant-schema`, `wrap-multi-tenant` — tenant detection and schema switching |
 | **User** | `require-tenant-member`, `require-tenant-admin`, `require-web-tenant-admin` interceptors |
 
@@ -373,13 +373,13 @@ clojure -M:migrate up
 
 ```bash
 clojure -M:test:db/h2 :tenant                                             # All tenant tests
-clojure -M:test:db/h2 --focus boundary.tenant.core.tenant-test            # Slug/schema pure functions
-clojure -M:test:db/h2 --focus boundary.tenant.core.membership-test        # Membership pure functions
-clojure -M:test:db/h2 --focus boundary.tenant.shell.service-test          # TenantService (mocked repo)
-clojure -M:test:db/h2 --focus boundary.tenant.shell.membership-service-test  # MembershipService
-clojure -M:test:db/h2 --focus boundary.tenant.shell.invite-service-test   # InviteService
-clojure -M:test:db/h2 --focus boundary.tenant.shell.persistence-test      # Contract tests (H2)
-clojure -M:test:db/h2 --focus boundary.tenant.integration-test            # End-to-end flows
+clojure -M:test:db/h2 --focus wagoe.tenant.core.tenant-test            # Slug/schema pure functions
+clojure -M:test:db/h2 --focus wagoe.tenant.core.membership-test        # Membership pure functions
+clojure -M:test:db/h2 --focus wagoe.tenant.shell.service-test          # TenantService (mocked repo)
+clojure -M:test:db/h2 --focus wagoe.tenant.shell.membership-service-test  # MembershipService
+clojure -M:test:db/h2 --focus wagoe.tenant.shell.invite-service-test   # InviteService
+clojure -M:test:db/h2 --focus wagoe.tenant.shell.persistence-test      # Contract tests (H2)
+clojure -M:test:db/h2 --focus wagoe.tenant.integration-test            # End-to-end flows
 ```
 
 ---

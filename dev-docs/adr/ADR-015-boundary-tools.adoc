@@ -135,10 +135,10 @@ Babashka's Maven dependency support:
 ;; bb.edn in a boundary-starter project
 {:deps {org.wagoe/wagoe-tools {:mvn/version "1.0.0"}}
  :tasks
- {:requires ([boundary.tools.scaffold :as scaffold]
-             [boundary.tools.i18n     :as i18n]
-             [boundary.tools.ai       :as ai]
-             [boundary.tools.dev      :as dev])
+ {:requires ([wagoe.tools.scaffold :as scaffold]
+             [wagoe.tools.i18n     :as i18n]
+             [wagoe.tools.ai       :as ai]
+             [wagoe.tools.dev      :as dev])
 
   scaffold      {:doc "Interactive module scaffolding wizard"
                  :task (scaffold/run)}

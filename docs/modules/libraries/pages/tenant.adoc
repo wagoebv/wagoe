@@ -12,28 +12,28 @@ NOTE: Requires PostgreSQL. Not supported with SQLite or H2.
 |===
 | Namespace | Purpose
 
-| `boundary.tenant.core.tenant`
+| `wagoe.tenant.core.tenant`
 | Pure functions: slug validation, schema name generation, prepare-tenant, decisions
 
-| `boundary.tenant.ports`
+| `wagoe.tenant.ports`
 | Protocols: `ITenantRepository`, `ITenantService`, `ITenantSchemaProvider`
 
-| `boundary.tenant.schema`
+| `wagoe.tenant.schema`
 | Malli schemas: `Tenant`, `TenantInput`, `TenantUpdate`, `TenantSettings`
 
-| `boundary.tenant.shell.service`
+| `wagoe.tenant.shell.service`
 | Service layer with observability interceptors
 
-| `boundary.tenant.shell.persistence`
+| `wagoe.tenant.shell.persistence`
 | Database CRUD with case conversion
 
-| `boundary.tenant.shell.provisioning`
+| `wagoe.tenant.shell.provisioning`
 | PostgreSQL schema provisioning/deprovisioning
 
-| `boundary.tenant.shell.http`
+| `wagoe.tenant.shell.http`
 | REST API handlers (CRUD + provision/suspend/activate)
 
-| `boundary.tenant.shell.module-wiring`
+| `wagoe.tenant.shell.module-wiring`
 | Integrant lifecycle (`ig/init-key`, `ig/halt-key!`)
 |===
 
@@ -64,7 +64,7 @@ NOTE: Requires PostgreSQL. Not supported with SQLite or H2.
 
 [source,clojure]
 ----
-(require '[boundary.tenant.shell.provisioning :as provisioning])
+(require '[wagoe.tenant.shell.provisioning :as provisioning])
 
 ;; Provision: creates PostgreSQL schema and copies table structure
 (provisioning/provision-tenant! db-ctx tenant)

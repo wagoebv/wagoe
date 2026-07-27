@@ -45,8 +45,8 @@ Marker-based internationalisation for Boundary apps — translation keys live as
 [:t :user/items {:n 3} 3]
 ```
 
-Markers are resolved by `boundary.i18n.shell.render/resolve-markers` during `render`.
-The translation function `boundary.i18n.core.translate/t` is pure (no I/O, no exceptions):
+Markers are resolved by `wagoe.i18n.shell.render/resolve-markers` during `render`.
+The translation function `wagoe.i18n.core.translate/t` is pure (no I/O, no exceptions):
 
 ```clojure
 (t catalogue locale-chain :user/sign-in)

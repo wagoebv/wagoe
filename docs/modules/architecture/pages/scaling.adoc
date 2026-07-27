@@ -112,7 +112,7 @@ the distributed adapter is "just configuration" once it exists.
 
 | Graceful shutdown
 | ✅
-| Integrant `halt!` runs on a JVM shutdown hook (`src/boundary/main.clj`), closing pools and stopping Jetty. Jetty is configured for *graceful connection draining* (`configure-graceful-shutdown!` in `wiring.clj`): on stop it stops accepting new connections, rejects new requests with *503*, and lets in-flight requests finish within `:wagoe/http :drain-timeout-ms` (default 30000 ms in prod/acc, env `HTTP_DRAIN_TIMEOUT_MS`; `0` disables). Set the window above the load balancer's deregistration delay for zero-downtime rollouts (BOU-86).
+| Integrant `halt!` runs on a JVM shutdown hook (`src/wagoe/main.clj`), closing pools and stopping Jetty. Jetty is configured for *graceful connection draining* (`configure-graceful-shutdown!` in `wiring.clj`): on stop it stops accepting new connections, rejects new requests with *503*, and lets in-flight requests finish within `:wagoe/http :drain-timeout-ms` (default 30000 ms in prod/acc, env `HTTP_DRAIN_TIMEOUT_MS`; `0` disables). Set the window above the load balancer's deregistration delay for zero-downtime rollouts (BOU-86).
 
 | Realtime / WebSocket
 | ✅ *
@@ -132,7 +132,7 @@ the distributed adapter is "just configuration" once it exists.
 | The main horizontal mode. N copies of the uberjar behind a load balancer, sharing Postgres + Redis. Cache, jobs, auth, tenancy all scale. Caveats: wire Redis rate limiting; WebSocket scales horizontally via `:provider :redis` (sticky sessions are only required when running the `:in-memory` provider).
 
 | *Web / worker split* (future)
-| Run dedicated job-worker processes separate from web. The jobs Redis queue already supports it, but there is currently no `worker` launch mode — `boundary.main` exposes only `server` and `cli`. Adding a worker entrypoint is the enabling step.
+| Run dedicated job-worker processes separate from web. The jobs Redis queue already supports it, but there is currently no `worker` launch mode — `wagoe.main` exposes only `server` and `cli`. Adding a worker entrypoint is the enabling step.
 |===
 
 == Production checklist
@@ -184,7 +184,7 @@ today, but the architecture is positioned for it.
 * *Break the allowlisted dependency cycles* — `check_deps.clj` allows `admin↔user`, `platform↔{user,tenant,admin,workflow,search}`. A cycle means two modules can't be cleanly separated; these must be broken (e.g. extract the shared auth check behind a port) before slicing.
 * *Async option* — there is no event-bus port today (the dead `IEventBus` stub in `libs/user/ports.clj` was removed in BOU-170). Event-driven decoupling needs a dedicated port plus a real adapter (Redis Streams / Kafka / RabbitMQ).
 * *Data ownership decision* — schema-per-tenant assumes co-located modules in one Postgres. Across services either share the DB (pragmatic) or give each service its own; there are no distributed transactions, so split writes become eventual-consistency.
-* *Service launch mode* — `boundary.main` exposes only `server` and `cli`; slicing needs an entrypoint that boots a named module subset as a service.
+* *Service launch mode* — `wagoe.main` exposes only `server` and `cli`; slicing needs an entrypoint that boots a named module subset as a service.
 
 === Sliceability by module
 
@@ -230,6 +230,6 @@ The architecture delivers the promise; these are the concrete pieces that make
 For *functional decomposition* (the bigger bet):
 
 . *Generic remote-port adapter + RPC envelope* — `clj-http` client implementing a module protocol, Malli (de)serialization, context propagation, error unwrap, retry/circuit-breaker. Pilot by extracting `payments`.
-. *Service launch mode* — `boundary.main` entrypoint that boots a named module subset as an independent service.
+. *Service launch mode* — `wagoe.main` entrypoint that boots a named module subset as an independent service.
 . *Break allowlisted dependency cycles* — `admin↔user`, `platform↔{user,tenant,admin,workflow,search}` — prerequisite for slicing those modules.
 . *Event-bus port + adapter* — define an event-bus port and a Redis Streams / Kafka adapter for async, event-driven inter-service decoupling (no port exists today).

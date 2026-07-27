@@ -69,13 +69,13 @@ For a module with three fields:
 |===
 | Namespace | Purpose
 
-| `boundary.scaffolder.shell.cli-entry`
+| `wagoe.scaffolder.shell.cli-entry`
 | CLI entrypoint
 
-| `boundary.scaffolder.core.*`
+| `wagoe.scaffolder.core.*`
 | Pure generation logic and naming/field transforms
 
-| `boundary.scaffolder.shell.templates.*`
+| `wagoe.scaffolder.shell.templates.*`
 | File templates and output orchestration
 |===
 

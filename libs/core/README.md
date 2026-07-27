@@ -41,7 +41,7 @@ Foundation library providing validation, utilities, and interceptor framework fo
 
 ```clojure
 (ns myapp.core
-  (:require [boundary.core.utils.case-conversion :as case]))
+  (:require [wagoe.core.utils.case-conversion :as case]))
 
 ;; kebab-case to snake_case (for database)
 (case/kebab-case->snake-case-map {:user-id 123 :first-name "John"})
@@ -60,7 +60,7 @@ Foundation library providing validation, utilities, and interceptor framework fo
 
 ```clojure
 (ns myapp.validation
-  (:require [boundary.core.validation :as v]))
+  (:require [wagoe.core.validation :as v]))
 
 ;; Define schema
 (def user-schema
@@ -81,7 +81,7 @@ Foundation library providing validation, utilities, and interceptor framework fo
 
 ```clojure
 (ns myapp.types
-  (:require [boundary.core.utils.type-conversion :as tc]))
+  (:require [wagoe.core.utils.type-conversion :as tc]))
 
 ;; Safe UUID parsing
 (tc/string->uuid "550e8400-e29b-41d4-a716-446655440000")
@@ -99,7 +99,7 @@ Foundation library providing validation, utilities, and interceptor framework fo
 
 ```clojure
 (ns myapp.logging
-  (:require [boundary.core.utils.pii-redaction :as pii]))
+  (:require [wagoe.core.utils.pii-redaction :as pii]))
 
 ;; Redact sensitive fields before logging
 (pii/redact-map {:email "john@example.com" :password "secret123" :name "John"})
@@ -109,7 +109,7 @@ Foundation library providing validation, utilities, and interceptor framework fo
 ## Module Structure
 
 ```
-libs/core/src/boundary/core/
+libs/core/src/wagoe/core/
 ├── validation.clj           # Malli validation utilities
 ├── interceptors/            # Interceptor framework
 │   ├── core.clj

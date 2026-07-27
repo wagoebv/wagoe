@@ -16,30 +16,30 @@ The system is built on a clean layered architecture with proper separation of co
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │              Business Logic Layer                           │
-│        (boundary.<module>.shell.service)                    │
+│        (wagoe.<module>.shell.service)                    │
 │               - Database agnostic                           │
 │               - Uses dependency injection                   │
 ├─────────────────────────────────────────────────────────────┤
 │              Repository Interfaces                          │
-│            (boundary.<module>.ports)                        │
+│            (wagoe.<module>.ports)                        │
 ├─────────────────────────────────────────────────────────────┤
 │              Database Layer                                 │
-│     (boundary.<module>.shell.persistence                    │
+│     (wagoe.<module>.shell.persistence                    │
 │               - Implements repositories                     │
 │               - Handles entity transformations              │
 ├─────────────────────────────────────────────────────────────┤
 │              Common Database API                            │
-│  (boundary.platform.shell.adapters.database.common.core)             │
+│  (wagoe.platform.shell.adapters.database.common.core)             │
 │               - Connection pool management                  │
 │               - Query execution & transactions              │
 │               - Schema introspection                        │
 ├─────────────────────────────────────────────────────────────┤
 │              Schema Generation                              │
-│    (boundary.platform.shell.adapters.database.schema)                │
+│    (wagoe.platform.shell.adapters.database.schema)                │
 │               - Malli to DDL conversion                     │
 ├─────────────────────────────────────────────────────────────┤
 │              DBAdapter Protocol                             │
-│   (boundary.platform.shell.adapters.database.protocols)              │
+│   (wagoe.platform.shell.adapters.database.protocols)              │
 ├─────────────────────────────────────────────────────────────┤
 │  SQLite      │    H2        │  PostgreSQL  │    MySQL       │
 │  Module      │   Module     │   Module     │   Module       │
@@ -88,7 +88,7 @@ Ensure your `deps.edn` includes the necessary JDBC drivers:
 ### 2. Create Database Context
 
 ```clojure
-(require '[boundary.platform.shell.adapters.database.factory :as dbf])
+(require '[wagoe.platform.shell.adapters.database.factory :as dbf])
 
 ;; SQLite (file-based)
 (def sqlite-ctx (dbf/db-context {:adapter :sqlite
@@ -118,7 +118,7 @@ Ensure your `deps.edn` includes the necessary JDBC drivers:
 ### 3. Execute Queries
 
 ```clojure
-(require '[boundary.platform.shell.adapters.database.common.core :as db])
+(require '[wagoe.platform.shell.adapters.database.common.core :as db])
 
 ;; The same query works with any database context
 (db/execute-query! ctx {:select [:*] :from [:users] :where [:= :active true]})
@@ -138,8 +138,8 @@ Ensure your `deps.edn` includes the necessary JDBC drivers:
 ### 4. Use Database-Agnostic User System
 
 ```clojure
-(require '[boundary.platform.shell.adapters.database.user :as db-user]
-         '[boundary.user.shell.service :as user-service])
+(require '[wagoe.platform.shell.adapters.database.user :as db-user]
+         '[wagoe.user.shell.service :as user-service])
 
 ;; Initialize schema
 (db-user/initialize-user-schema! ctx)
@@ -166,7 +166,7 @@ Ensure your `deps.edn` includes the necessary JDBC drivers:
 ### Environment-Based Configuration
 
 ```clojure
-(require '[boundary.platform.shell.adapters.database.factory :as dbf])
+(require '[wagoe.platform.shell.adapters.database.factory :as dbf])
 
 ;; Configure from environment variables
 ;; DB_ADAPTER=postgresql DB_HOST=localhost DB_PORT=5432 DB_NAME=myapp ...
@@ -257,13 +257,13 @@ The system includes comprehensive tests for all databases:
 
 ```bash
 # Run basic tests (SQLite and H2 only, no external dependencies)
-clojure -M:test:db/h2 boundary.platform.shell.adapters.database.multi-db-test/run-basic-tests
+clojure -M:test:db/h2 wagoe.platform.shell.adapters.database.multi-db-test/run-basic-tests
 
 # Run integration tests (requires PostgreSQL and MySQL servers)
-clojure -M:test:db/h2 boundary.platform.shell.adapters.database.multi-db-test/run-integration-tests
+clojure -M:test:db/h2 wagoe.platform.shell.adapters.database.multi-db-test/run-integration-tests
 
 # Run performance tests
-clojure -M:test:db/h2 boundary.platform.shell.adapters.database.multi-db-test/run-performance-tests
+clojure -M:test:db/h2 wagoe.platform.shell.adapters.database.multi-db-test/run-performance-tests
 ```
 
 ## Troubleshooting
@@ -294,7 +294,7 @@ Enable debug logging to troubleshoot issues:
 
 ```clojure
 ;; Add to your logging configuration
-{"boundary.platform.shell.adapters.database" :debug
+{"wagoe.platform.shell.adapters.database" :debug
  "com.zaxxer.hikari" :debug}
 ```
 

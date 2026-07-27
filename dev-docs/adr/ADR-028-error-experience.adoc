@@ -121,7 +121,7 @@ The relevant Boundary namespace appears at the top.
 
 === Mitigation
 
-* Error codes are defined in `boundary.devtools.core.error_codes` with tests
+* Error codes are defined in `wagoe.devtools.core.error_codes` with tests
   ensuring all codes have documentation.
 * `(fix! *e)` always explains what it will do before doing it. Destructive
   fixes (deps.edn modification) require explicit confirmation.

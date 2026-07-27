@@ -56,13 +56,13 @@ Unlike a generic assistant, `boundary/ai` knows Boundary's own conventions (FC/I
 
 Require the wiring namespace in your system config loader:
 ```clojure
-(require '[boundary.ai.shell.module-wiring])  ; registers :wagoe/ai-service
+(require '[wagoe.ai.shell.module-wiring])  ; registers :wagoe/ai-service
 ```
 
 ### Service API
 
 ```clojure
-(require '[boundary.ai.shell.service :as ai])
+(require '[wagoe.ai.shell.service :as ai])
 
 ;; Explain a stack trace with Boundary-specific context
 (ai/explain-error service stacktrace-string ".")
@@ -78,7 +78,7 @@ Require the wiring namespace in your system config loader:
 ```bash
 bb scaffold ai "product module with name, price, stock"   # NL scaffolding
 bb ai explain --file stacktrace.txt                        # Error explainer
-bb ai gen-tests libs/user/src/boundary/user/core/validation.clj  # Test generator
+bb ai gen-tests libs/user/src/wagoe/user/core/validation.clj  # Test generator
 bb ai sql "find active users with orders in the last 7 days"     # SQL copilot
 bb ai docs --module libs/user --type agents                # Docs wizard (agents/openapi/readme)
 bb ai admin-entity "products with name, price, status"     # Admin entity EDN config

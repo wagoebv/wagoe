@@ -28,7 +28,7 @@ Validation always happens in the shell, never in core.
 
 [source,clojure]
 ----
-(require '[boundary.core.utils.validation :as validation])
+(require '[wagoe.core.utils.validation :as validation])
 
 (defn create-user [this input]
   (let [{:keys [valid? data errors]}
@@ -43,7 +43,7 @@ Validation always happens in the shell, never in core.
 
 [source,clojure]
 ----
-(require '[boundary.core.utils.validation :as v])
+(require '[wagoe.core.utils.validation :as v])
 
 (def CLIArgs
   [:map
@@ -57,7 +57,7 @@ Validation always happens in the shell, never in core.
 
 [source,clojure]
 ----
-(require '[boundary.core.validation.coverage :as coverage])
+(require '[wagoe.core.validation.coverage :as coverage])
 
 ;; Report which fields are validated vs. unvalidated
 (coverage/report UserInput)

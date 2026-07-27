@@ -478,7 +478,7 @@ flowchart LR
 
 [source,clojure]
 ----
-;; libs/user/src/boundary/user/ports.clj
+;; libs/user/src/wagoe/user/ports.clj
 
 (defprotocol IUserRepository
   "Output port — de kijk van het domein op 'iets dat gebruikers opslaat'.
@@ -581,7 +581,7 @@ Boundary is geen monoliet. Het zijn 13 onafhankelijk publiceerbare libraries, el
 
 [source]
 ----
-libs/{elke-library}/src/boundary/{library}/
+libs/{elke-library}/src/wagoe/{library}/
 ├── core/           ← pure functies. punt. einde verhaal.
 │   ├── domain.clj
 │   └── validation.clj
@@ -843,7 +843,7 @@ Vragen die je niet kunt beantwoorden door dit te lezen:
 
 [source,clojure]
 ----
-;; libs/user/src/boundary/user/core/user.clj
+;; libs/user/src/wagoe/user/core/user.clj
 ;; Dit bestand heeft nul imports van welke I/O-library dan ook. Nooit.
 
 (defn check-duplicate-user-decision
@@ -888,7 +888,7 @@ Test voor `check-duplicate-user-decision`: één regel. Geen mocks. Geen databas
 
 [source,clojure]
 ----
-;; libs/user/src/boundary/user/shell/service.clj — vereenvoudigd
+;; libs/user/src/wagoe/user/shell/service.clj — vereenvoudigd
 ;; De shell is een script: ophalen → beslissen → handelen → herhalen.
 
 (defn register-user! [repositories user-data]
@@ -940,7 +940,7 @@ _De momenten die al die late nachten de moeite waard maakten._
 .Boundary — hoe een test er werkelijk uitziet
 [source,clojure]
 ----
-;; libs/user/test/boundary/user/core/authentication_test.clj
+;; libs/user/test/wagoe/user/core/authentication_test.clj
 
 (def active-user {:id "uuid-1"  :email "alice@example.com"
                   :active true  :role :user
@@ -989,7 +989,7 @@ def is_session_valid(session):
 .Boundary — tijd is expliciet
 [source,clojure]
 ----
-;; libs/user/src/boundary/user/core/session.clj
+;; libs/user/src/wagoe/user/core/session.clj
 
 (defn is-session-valid?
   "current-time wordt geïnjecteerd door de shell. De core leest nooit de klok."

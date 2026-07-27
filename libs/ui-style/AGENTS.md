@@ -22,7 +22,7 @@ plus a `resources/` asset tree.
 
 | Namespace | Responsibility |
 |-----------|----------------|
-| `boundary.ui-style` | Bundle registries (`css-bundles`, `js-bundles`) + `bundle` / `js-bundle` lookup fns. This is the entire public API. |
+| `wagoe.ui-style` | Bundle registries (`css-bundles`, `js-bundles`) + `bundle` / `js-bundle` lookup fns. This is the entire public API. |
 
 ## Public API
 
@@ -39,7 +39,7 @@ Bundle vars — each a vector of `/`-rooted asset paths, in load order:
 Lookup functions:
 
 ```clojure
-(require '[boundary.ui-style :as ui-style])
+(require '[wagoe.ui-style :as ui-style])
 
 (ui-style/bundle :pilot)          ;; => ["/css/boundary-tokens.css" "/css/app.css" "/css/daisy-admin.css"]
 (ui-style/js-bundle :admin-pilot) ;; => ["/js/theme.js" "/js/components.js" ...]
@@ -70,7 +70,7 @@ Recommended bundle per page type:
 
 Paths in the bundle vectors are root-relative (`/css/...`, `/js/...`). The
 platform serves them from the classpath via Ring `wrap-resource "public"`
-(see `libs/platform/src/boundary/platform/shell/http/reitit_router.clj`), so
+(see `libs/platform/src/wagoe/platform/shell/http/reitit_router.clj`), so
 `/css/app.css` resolves to `resources/public/css/app.css`.
 
 ## How it's consumed
@@ -78,18 +78,18 @@ platform serves them from the classpath via Ring `wrap-resource "public"`
 Only layout namespaces reach for `ui-style`; feature code goes through the
 shared layout entry points instead.
 
-- `boundary.shared.ui.core.layout` (lib `shared-ui`) binds `default-css`,
+- `wagoe.shared.ui.core.layout` (lib `shared-ui`) binds `default-css`,
   `pilot-css`, `admin-pilot-css`, and the matching `*-js` vars from
   `ui-style/bundle` / `ui-style/js-bundle`, then injects them into the page
   `<head>`. Its `pilot-page-layout` / `admin-pilot-page-layout` helpers are what
   modules call.
-- `boundary.devtools.shell.dashboard.layout` uses `(ui-style/js-bundle :base)`.
+- `wagoe.devtools.shell.dashboard.layout` uses `(ui-style/js-bundle :base)`.
 
 Example (feature namespace — no CSS list of its own):
 
 ```clojure
 (ns my.module.core.ui
-  (:require [boundary.shared.ui.core.layout :as layout]))
+  (:require [wagoe.shared.ui.core.layout :as layout]))
 
 (defn page [opts]
   (layout/pilot-page-layout "My Page" [:div "Content"] opts))
@@ -105,7 +105,7 @@ and `:paths ["src" "resources"]` so the assets travel with the jar.
 
 1. **Do not hardcode CSS/JS file lists in feature modules.** Choose a bundle key
    in the layout namespace; add/remove files only by editing the bundle vectors
-   in `boundary.ui-style`.
+   in `wagoe.ui-style`.
 2. **JS load order is load-bearing.** `components.js` (and `admin-ux.js` for the
    admin bundle) must load *before* `alpine.min.js` — they register Alpine
    components/stores on the `alpine:init` event. Preserve the vector order when
@@ -127,6 +127,6 @@ and `:paths ["src" "resources"]` so the assets travel with the jar.
 clojure -M:test:db/h2 :ui-style
 ```
 
-Tests live in `test/boundary/ui_style_test.clj` (tagged `^:unit`) and cover
+Tests live in `test/wagoe/ui_style_test.clj` (tagged `^:unit`) and cover
 bundle-key selection and the base-fallback for unknown keys. When you add or
 reorder a bundle, update the corresponding assertion.

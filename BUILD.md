@@ -106,7 +106,7 @@ Logging is configured via `resources/logback.xml` (included in the jar).
 
 Logs are written to:
 - Console (stdout)
-- `logs/boundary.log` - Main application log
+- `logs/wagoe.log` - Main application log
 - `logs/audit.log` - Audit events
 - `logs/security.log` - Security events
 
@@ -114,11 +114,11 @@ To change log levels without rebuilding:
 1. Extract logback.xml from the jar
 2. Modify it
 3. Place it in the same directory as the jar
-4. Run with: `java -Dlogback.configurationFile=./logback.xml -jar boundary.jar`
+4. Run with: `java -Dlogback.configurationFile=./logback.xml -jar wagoe.jar`
 
 Or set environment variable:
 ```bash
-JAVA_OPTS="-Dlogback.configurationFile=/path/to/logback.xml" java -jar boundary.jar
+JAVA_OPTS="-Dlogback.configurationFile=/path/to/logback.xml" java -jar wagoe.jar
 ```
 
 ## Performance Tuning
@@ -126,7 +126,7 @@ JAVA_OPTS="-Dlogback.configurationFile=/path/to/logback.xml" java -jar boundary.
 ### JVM Options
 
 ```bash
-java -Xmx2g -Xms512m -XX:+UseG1GC -jar boundary.jar
+java -Xmx2g -Xms512m -XX:+UseG1GC -jar wagoe.jar
 ```
 
 ### Recommended Production Settings
@@ -138,7 +138,7 @@ java \
   -XX:+UseG1GC \
   -XX:MaxGCPauseMillis=200 \
   -Dlogback.configurationFile=/etc/boundary/logback.xml \
-  -jar boundary.jar server
+  -jar wagoe.jar server
 ```
 
 ## Docker Deployment
@@ -150,7 +150,7 @@ FROM eclipse-temurin:17-jre-alpine
 
 WORKDIR /app
 
-COPY target/wagoe-1.2.X-standalone.jar boundary.jar
+COPY target/wagoe-1.2.X-standalone.jar wagoe.jar
 COPY resources/conf/prod/config.edn /app/config/config.edn
 
 ENV ENV=prod
@@ -158,7 +158,7 @@ ENV HTTP_PORT=8080
 
 EXPOSE 8080
 
-CMD ["java", "-jar", "boundary.jar", "server"]
+CMD ["java", "-jar", "wagoe.jar", "server"]
 ```
 
 Build and run:
@@ -170,7 +170,7 @@ docker run -p 8080:8080 boundary:latest
 
 ## Systemd Service
 
-Create `/etc/systemd/system/boundary.service`:
+Create `/etc/systemd/system/wagoe.service`:
 
 ```ini
 [Unit]
@@ -183,7 +183,7 @@ User=boundary
 WorkingDirectory=/opt/boundary
 Environment="ENV=prod"
 Environment="HTTP_PORT=8080"
-ExecStart=/usr/bin/java -Xmx2g -jar /opt/boundary/boundary.jar server
+ExecStart=/usr/bin/java -Xmx2g -jar /opt/boundary/wagoe.jar server
 Restart=on-failure
 RestartSec=10
 
@@ -223,7 +223,7 @@ jar tf wagoe-1.2.X-standalone.jar | grep -E "(sqlite|postgresql|h2|mysql)"
 ### Enable Debug Logging
 
 ```bash
-java -Dlogback.debug=true -jar boundary.jar
+java -Dlogback.debug=true -jar wagoe.jar
 ```
 
 ## Build Automation

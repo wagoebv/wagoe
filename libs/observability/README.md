@@ -65,8 +65,8 @@ Unified observability stack with pluggable adapters for logging, metrics, and er
 
 ```clojure
 (ns myapp.core
-  (:require [boundary.observability.logging.core :as log]
-            [boundary.observability.logging.shell.adapters.stdout :as stdout]))
+  (:require [wagoe.observability.logging.core :as log]
+            [wagoe.observability.logging.shell.adapters.stdout :as stdout]))
 
 ;; Create logger
 (def logger (stdout/create-logger {:level :info}))
@@ -81,8 +81,8 @@ Unified observability stack with pluggable adapters for logging, metrics, and er
 
 ```clojure
 (ns myapp.metrics
-  (:require [boundary.observability.metrics.core :as metrics]
-            [boundary.observability.metrics.shell.adapters.no-op :as noop]))
+  (:require [wagoe.observability.metrics.core :as metrics]
+            [wagoe.observability.metrics.shell.adapters.no-op :as noop]))
 
 ;; Create metrics emitter
 (def emitter (noop/create-emitter))
@@ -97,8 +97,8 @@ Unified observability stack with pluggable adapters for logging, metrics, and er
 
 ```clojure
 (ns myapp.errors
-  (:require [boundary.observability.errors.core :as errors]
-            [boundary.observability.errors.shell.adapters.no-op :as noop]))
+  (:require [wagoe.observability.errors.core :as errors]
+            [wagoe.observability.errors.shell.adapters.no-op :as noop]))
 
 ;; Create error reporter
 (def reporter (noop/create-reporter))
@@ -137,7 +137,7 @@ Unified observability stack with pluggable adapters for logging, metrics, and er
 ## Module Structure
 
 ```
-libs/observability/src/boundary/observability/
+libs/observability/src/wagoe/observability/
 ├── logging/
 │   ├── core.clj              # Logging protocol
 │   └── shell/adapters/

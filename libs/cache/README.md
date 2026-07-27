@@ -25,8 +25,8 @@ Distributed caching for the Boundary Framework — Redis and in-memory backends 
 
 ```clojure
 (ns my-app.cache-example
-  (:require [boundary.cache.ports :as cache]
-            [boundary.cache.shell.adapters.in-memory :as mem-cache]))
+  (:require [wagoe.cache.ports :as cache]
+            [wagoe.cache.shell.adapters.in-memory :as mem-cache]))
 
 ;; Create cache
 (def cache (mem-cache/create-in-memory-cache))
@@ -52,8 +52,8 @@ Distributed caching for the Boundary Framework — Redis and in-memory backends 
 
 ```clojure
 (ns my-app.cache-example
-  (:require [boundary.cache.ports :as cache]
-            [boundary.cache.shell.adapters.redis :as redis-cache]))
+  (:require [wagoe.cache.ports :as cache]
+            [wagoe.cache.shell.adapters.redis :as redis-cache]))
 
 ;; Create Redis connection pool
 (def redis-pool (redis-cache/create-redis-pool
@@ -303,8 +303,8 @@ The cache module provides automatic tenant isolation for multi-tenant applicatio
 ### Creating Tenant-Scoped Cache
 
 ```clojure
-(require '[boundary.cache.shell.tenant-cache :as tenant-cache]
-         '[boundary.cache.ports :as cache-ports])
+(require '[wagoe.cache.shell.tenant-cache :as tenant-cache]
+         '[wagoe.cache.ports :as cache-ports])
 
 ;; Base cache (Redis or in-memory)
 (def base-cache (mem-cache/create-in-memory-cache))
@@ -348,7 +348,7 @@ This ensures complete isolation - two tenants can use the same logical key witho
 Extract tenant context from HTTP requests:
 
 ```clojure
-(require '[boundary.cache.shell.tenant-cache :as tenant-cache])
+(require '[wagoe.cache.shell.tenant-cache :as tenant-cache])
 
 (defn extract-tenant-cache
   "Ring middleware to add tenant-scoped cache to request."
@@ -542,18 +542,18 @@ Comprehensive tests verify tenant isolation:
 
 ```bash
 # Run tenant-cache integration tests
-clojure -M:test:db/h2 --focus boundary.cache.shell.tenant-cache-test
+clojure -M:test:db/h2 --focus wagoe.cache.shell.tenant-cache-test
 
 # Results: 20 tests, 182 assertions, 0 failures
 ```
 
 ### API Reference
 
-**`boundary.cache.shell.tenant-cache`**
+**`wagoe.cache.shell.tenant-cache`**
 
 - `(create-tenant-cache base-cache tenant-id)` - Create tenant-scoped cache
 - `(extract-tenant-cache handler base-cache)` - Ring middleware for tenant caching
-- All `boundary.cache.ports` operations supported transparently
+- All `wagoe.cache.ports` operations supported transparently
 
 ---
 
@@ -677,7 +677,7 @@ The module includes comprehensive tests covering all operations:
 
 ```bash
 # Run cache tests
-clojure -X:test :dirs '["test"]' :patterns '["boundary.cache.*"]'
+clojure -X:test :dirs '["test"]' :patterns '["wagoe.cache.*"]'
 ```
 
 ## Production Checklist
@@ -736,7 +736,7 @@ Benefits:
 
 ## API Reference
 
-See protocol definitions in `boundary.cache.ports` for complete API documentation.
+See protocol definitions in `wagoe.cache.ports` for complete API documentation.
 
 ## License
 

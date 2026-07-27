@@ -42,7 +42,7 @@ clj-nrepl-eval -p 7888 "(+ 1 2)"
 (def db (get integrant.repl.state/system :wagoe/db))
 
 ;; Call service methods directly
-(require '[boundary.user.ports :as ports])
+(require '[wagoe.user.ports :as ports])
 (ports/list-users user-svc {:limit 10})
 
 ;; Query the database directly
@@ -55,7 +55,7 @@ clj-nrepl-eval -p 7888 "(+ 1 2)"
 [source,clojure]
 ----
 ;; Reload a single namespace
-(require '[boundary.user.core.user :as user-core] :reload)
+(require '[wagoe.user.core.user :as user-core] :reload)
 
 ;; Full system reset (handles most changes)
 (reset)
@@ -73,12 +73,12 @@ If you changed a record definition and the change isn't taking effect, do a full
 [source,clojure]
 ----
 ;; Test core functions directly (no system needed)
-(require '[boundary.user.core.user :as user-core])
+(require '[wagoe.user.core.user :as user-core])
 (user-core/prepare-user {:email "alice@example.com" :name "Alice"})
 
 ;; Test a service method
 (def admin-svc (get integrant.repl.state/system :wagoe/admin-service))
-(require '[boundary.admin.ports :as admin-ports])
+(require '[wagoe.admin.ports :as admin-ports])
 (admin-ports/list-entities admin-svc :users {:limit 5})
 ----
 

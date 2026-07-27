@@ -24,7 +24,7 @@ The library saves boilerplate around:
 
 ```clojure
 ;; The definition registry + `defaudience` live in the shell (mutable state)
-(require '[boundary.audience.shell.registry :as audience])
+(require '[wagoe.audience.shell.registry :as audience])
 
 (audience/defaudience active-free-users
   {:id      :active-free-users
@@ -42,7 +42,7 @@ The library saves boilerplate around:
 ### Resolving an audience
 
 ```clojure
-(require '[boundary.audience.ports :as ports])
+(require '[wagoe.audience.ports :as ports])
 
 ;; Via IAudienceResolver (injected by Integrant)
 (ports/resolve-audience resolver :active-free-users)
@@ -77,7 +77,7 @@ Seven built-in filter types are supported. Dispatch is via the `:type` key.
 ### Registering a custom filter type
 
 ```clojure
-(require '[boundary.audience.core.filter :as f])
+(require '[wagoe.audience.core.filter :as f])
 
 ;; SQL representation (return nil if not SQL-evaluable)
 (defmethod f/filter->sql :subscription-tier [filt]
@@ -109,7 +109,7 @@ Defined with `defaudience`, registered in the in-process atom. Supports fn refs 
 Stored as JSON in `audience_segments`. Validated against `DynamicAudienceDefinition`, which rejects fn-typed `:value` fields. Loaded at resolve time when the in-process registry misses.
 
 ```clojure
-(require '[boundary.audience.schema :as schema])
+(require '[wagoe.audience.schema :as schema])
 (require '[malli.core :as m])
 
 ;; fn values are rejected by the dynamic schema
@@ -173,7 +173,7 @@ Results are persisted to `audience_memberships` with a timestamp in `audience_se
 | Manual invalidate | Call `ports/invalidate` or `ports/invalidate-all` on the cache instance |
 
 ```clojure
-(require '[boundary.audience.ports :as ports])
+(require '[wagoe.audience.ports :as ports])
 
 ;; Invalidate one segment
 (ports/invalidate cache :weekly-digest-targets)
@@ -186,7 +186,7 @@ Results are persisted to `audience_memberships` with a timestamp in `audience_se
 
 ## 7. Builder UI
 
-The builder UI is served by `boundary.audience.shell.http`.
+The builder UI is served by `wagoe.audience.shell.http`.
 
 ### Routes
 
@@ -219,7 +219,7 @@ A hidden input `#audience-filters-data` carries the serialized filter state to t
 
 ```clojure
 (ns my-app.notifications
-  (:require [boundary.audience.ports :as ports]))
+  (:require [wagoe.audience.ports :as ports]))
 
 (defn send-campaign [resolver]
   (let [result (ports/resolve-audience resolver :newsletter-subscribers)]
@@ -264,9 +264,9 @@ The `:wagoe/audience` component returns `{:store <IAudienceRepository> :resolver
 ```clojure
 (use-fixtures :each
   (fn [f]
-    (boundary.audience.shell.registry/clear-registry!)
+    (wagoe.audience.shell.registry/clear-registry!)
     (f)
-    (boundary.audience.shell.registry/clear-registry!)))
+    (wagoe.audience.shell.registry/clear-registry!)))
 ```
 
 ### Test commands
@@ -279,7 +279,7 @@ clojure -M:test:db/h2 :audience
 clojure -M:test:db/h2 --focus-meta :unit :audience
 
 # Single namespace
-clojure -M:test:db/h2 --focus boundary.audience.core.filter-test
+clojure -M:test:db/h2 --focus wagoe.audience.core.filter-test
 
 # Security-tagged tests
 clojure -M:test:db/h2 --focus-meta :security :audience

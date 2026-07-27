@@ -15,14 +15,14 @@ builds the sender from config.
 
 | Namespace | Purpose |
 |-----------|---------|
-| `boundary.email.core.email` | Pure functions: validate addresses/recipients, normalize + prepare emails, format headers, add reply-to/cc/bcc, summarize |
-| `boundary.email.ports` | Protocols: `EmailSenderProtocol`, `EmailQueueProtocol` |
-| `boundary.email.schema` | Malli schemas: `EmailAddress`, `Attachment`, `Email`, `SendEmailInput`, `EmailValidationResult`, `RecipientValidationResult`, `EmailSummary` + validators |
-| `boundary.email.shell.adapters.smtp` | Production SMTP sender — thin wrapper over `libs/external`'s `SmtpProviderAdapter` |
-| `boundary.email.shell.adapters.logging` | Dev/test sender — records + prints emails instead of delivering them |
-| `boundary.email.shell.adapters.queue` | `InMemoryEmailQueue` — in-process `EmailQueueProtocol` impl, bounded retry |
-| `boundary.email.shell.jobs-integration` | Optional distributed queued sending via `libs/jobs` (loaded through `requiring-resolve`) |
-| `boundary.email.shell.module-wiring` | `:wagoe/email` + `:wagoe/email-queue` Integrant keys |
+| `wagoe.email.core.email` | Pure functions: validate addresses/recipients, normalize + prepare emails, format headers, add reply-to/cc/bcc, summarize |
+| `wagoe.email.ports` | Protocols: `EmailSenderProtocol`, `EmailQueueProtocol` |
+| `wagoe.email.schema` | Malli schemas: `EmailAddress`, `Attachment`, `Email`, `SendEmailInput`, `EmailValidationResult`, `RecipientValidationResult`, `EmailSummary` + validators |
+| `wagoe.email.shell.adapters.smtp` | Production SMTP sender — thin wrapper over `libs/external`'s `SmtpProviderAdapter` |
+| `wagoe.email.shell.adapters.logging` | Dev/test sender — records + prints emails instead of delivering them |
+| `wagoe.email.shell.adapters.queue` | `InMemoryEmailQueue` — in-process `EmailQueueProtocol` impl, bounded retry |
+| `wagoe.email.shell.jobs-integration` | Optional distributed queued sending via `libs/jobs` (loaded through `requiring-resolve`) |
+| `wagoe.email.shell.module-wiring` | `:wagoe/email` + `:wagoe/email-queue` Integrant keys |
 
 ## Relationship to `libs/external`
 
@@ -63,7 +63,7 @@ bounded retry (`:max-retries`), built via `:wagoe/email-queue`. For
 **distributed** queuing across replicas use `shell.jobs-integration` (below); the
 in-memory queue is per-process and lost on restart.
 
-## Core functions (pure — `boundary.email.core.email`)
+## Core functions (pure — `wagoe.email.core.email`)
 
 - `(valid-email-address? s)` → boolean (basic RFC 5322 regex)
 - `(validate-recipients recipients)` → `{:valid? :valid-emails :invalid-emails}`
@@ -101,7 +101,7 @@ in-memory queue is per-process and lost on restart.
 
 ## Wiring & configuration
 
-`boundary.email.shell.module-wiring` ships `:wagoe/email` (builds a sender —
+`wagoe.email.shell.module-wiring` ships `:wagoe/email` (builds a sender —
 `:provider :smtp` / `:logging`) and `:wagoe/email-queue` (in-memory queue over
 a sender). The app refs `:wagoe/email` and threads it into
 `:wagoe/user-routes` as `:email-sender`:
@@ -116,7 +116,7 @@ a sender). The app refs `:wagoe/email` and threads it into
 You can also construct a sender directly (no Integrant) and pass it where needed:
 
 ```clojure
-(require '[boundary.email.shell.adapters.smtp :as smtp])
+(require '[wagoe.email.shell.adapters.smtp :as smtp])
 
 ;; create-smtp-sender config keys:
 ;;   :host     (required)  SMTP hostname
@@ -138,9 +138,9 @@ the app layer; never hard-code them in a module.
 ## Usage example
 
 ```clojure
-(require '[boundary.email.core.email :as email]
-         '[boundary.email.ports :as ports]
-         '[boundary.email.shell.adapters.smtp :as smtp])
+(require '[wagoe.email.core.email :as email]
+         '[wagoe.email.ports :as ports]
+         '[wagoe.email.shell.adapters.smtp :as smtp])
 
 (def sender (smtp/create-smtp-sender {:host "localhost" :port 1025 :tls? false}))
 

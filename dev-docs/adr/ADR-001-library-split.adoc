@@ -337,7 +337,7 @@ should be a dev-only dependency
 
 [source,clojure]
 ----
-;; In boundary.platform.system.modules (platform library)
+;; In wagoe.platform.system.modules (platform library)
 (defonce registered-modules (atom {}))
 
 (defn register-module! [module-key wiring-ns-sym]
@@ -347,17 +347,17 @@ should be a dev-only dependency
   (doseq [[_ ns-sym] @registered-modules]
     (require ns-sym)))
 
-;; In boundary.user.shell.module-wiring (user library)
-(ns boundary.user.shell.module-wiring
-  (:require [boundary.platform.system.modules :as modules]))
+;; In wagoe.user.shell.module-wiring (user library)
+(ns wagoe.user.shell.module-wiring
+  (:require [wagoe.platform.system.modules :as modules]))
 
 ;; Self-register on namespace load
-(modules/register-module! :user 'boundary.user.shell.module-wiring)
+(modules/register-module! :user 'wagoe.user.shell.module-wiring)
 
 ;; In application code
 (ns myapp.main
-  (:require [boundary.user.shell.module-wiring]  ; Triggers registration
-            [boundary.platform.system.wiring]))   ; Uses registered modules
+  (:require [wagoe.user.shell.module-wiring]  ; Triggers registration
+            [wagoe.platform.system.wiring]))   ; Uses registered modules
 ----
 
 ==== Namespace Renames
@@ -367,27 +367,27 @@ should be a dev-only dependency
 [cols=",,",options="header",]
 |===
 |Old |New |Reason
-|`boundary.shared.core.++*++` |`boundary.core.++*++` |"shared" is
+|`wagoe.shared.core.++*++` |`wagoe.core.++*++` |"shared" is
 unclear; "core" indicates foundation
 
-|`boundary.shared.ui.++*++` |`boundary.ui.++*++` |Move to admin library,
+|`wagoe.shared.ui.++*++` |`wagoe.ui.++*++` |Move to admin library,
 remove "shared"
 
-|`boundary.logging.++*++` |`boundary.observability.logging.++*++` |Group
+|`wagoe.logging.++*++` |`wagoe.observability.logging.++*++` |Group
 with metrics/errors
 
-|`boundary.metrics.++*++` |`boundary.observability.metrics.++*++` |Group
+|`wagoe.metrics.++*++` |`wagoe.observability.metrics.++*++` |Group
 with logging/errors
 
-|`boundary.error++_++reporting.++*++`
-|`boundary.observability.errors.++*++` |Group with logging/metrics
+|`wagoe.error++_++reporting.++*++`
+|`wagoe.observability.errors.++*++` |Group with logging/metrics
 |===
 
 *Non-Breaking:*
 
-* `boundary.platform.++*++` stays the same
-* `boundary.user.++*++` stays the same
-* `boundary.admin.++*++` stays the same
+* `wagoe.platform.++*++` stays the same
+* `wagoe.user.++*++` stays the same
+* `wagoe.admin.++*++` stays the same
 
 ==== Dependency Management
 
@@ -491,7 +491,7 @@ vs Polyrepo Discussion]
 . *Version Strategy Post-1.0*: Should libraries version independently
 after 1.0?
 . *Database Driver Strategy*: Should platform bundle a default driver?
-. *UI Component Library*: Should `boundary.ui` become a separate
+. *UI Component Library*: Should `wagoe.ui` become a separate
 library?
 
 ==== Future Considerations

@@ -51,9 +51,9 @@ Auto-generated CRUD admin interface with database schema introspection, filterin
 
 ```clojure
 (ns myapp.main
-  (:require [boundary.admin.shell.module-wiring]  ; Auto-registers module
-            [boundary.user.shell.module-wiring]   ; Required for auth
-            [boundary.platform.shell.system.wiring :as wiring]))
+  (:require [wagoe.admin.shell.module-wiring]  ; Auto-registers module
+            [wagoe.user.shell.module-wiring]   ; Required for auth
+            [wagoe.platform.shell.system.wiring :as wiring]))
 
 (defn -main [& args]
   (wiring/start!))
@@ -294,7 +294,7 @@ If you register your Malli schemas with the admin schema provider, enum types an
 :wagoe/admin-schema-provider
 {:db-ctx       (ig/ref :wagoe/database-context)
  :config       (ig/ref :wagoe/admin)
- :malli-schemas {:users boundary.user.schema/User
+ :malli-schemas {:users wagoe.user.schema/User
                  :products myapp.product.schema/Product}}
 ```
 
@@ -429,7 +429,7 @@ When entity data lives across multiple tables (e.g. `auth_users` + `users`), use
 ## Module Structure
 
 ```
-libs/admin/src/boundary/
+libs/admin/src/wagoe/
 ├── admin/
 │   ├── core/
 │   │   ├── ui.clj                   # Admin UI rendering (tables, forms, layout)

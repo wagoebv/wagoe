@@ -156,7 +156,7 @@ WARNING: Every test namespace using `defaudience` must call `(clear-registry!)` 
 an `:each` fixture to prevent inter-test pollution. Same pattern as `boundary-calendar`
 and `boundary-reports`.
 
-For clj-kondo: add `boundary.audience.core.audience/defaudience clojure.core/def`
+For clj-kondo: add `wagoe.audience.core.audience/defaudience clojure.core/def`
 to `.clj-kondo/config.edn` `:lint-as` map.
 
 === Decision 2a: Dual Identifier Semantics
@@ -318,7 +318,7 @@ libs/audience/
 ├── deps.edn
 ├── build.clj                               ; org.wagoe/wagoe-audience
 ├── AGENTS.md
-├── src/boundary/audience/
+├── src/wagoe/audience/
 │   ├── schema.clj                          ; AudienceDefinition, FilterDef, SegmentResult
 │   ├── ports.clj                           ; IAudienceResolver, IAudienceRepository, IAudienceCache, IUserDataSource
 │   ├── core/
@@ -333,11 +333,11 @@ libs/audience/
 │       ├── cache.clj                       ; IAudienceCache impl
 │       ├── http.clj                        ; Ring routes: builder UI + API
 │       └── module_wiring.clj               ; Integrant keys
-├── resources/boundary/audience/builder/    ; ClojureScript + Replicant
+├── resources/wagoe/audience/builder/    ; ClojureScript + Replicant
 │   ├── app.cljs
 │   ├── filter_panel.cljs
 │   └── preview.cljs
-└── test/boundary/audience/
+└── test/wagoe/audience/
     ├── core/                               ; ^:unit tests
     └── shell/                              ; ^:integration + ^:contract tests
 ----
@@ -546,8 +546,8 @@ CLJS is progressive enhancement, not a hard dependency for core functionality.
 * link:ADR-001-library-split.adoc[ADR-001: Library Split] — monorepo library structure
 * link:ADR-011-calendar-library.adoc[ADR-011: Calendar Library] — `defevent` macro pattern
 * link:ADR-021-fcis-boundary-rules.adoc[ADR-021: FC/IS Boundary Rules] — core/shell enforcement
-* `libs/reports/src/boundary/reports/core/report.clj` — `defreport` macro reference
-* `libs/calendar/src/boundary/calendar/core/event.clj` — `defevent` macro reference
+* `libs/reports/src/wagoe/reports/core/report.clj` — `defreport` macro reference
+* `libs/calendar/src/wagoe/calendar/core/event.clj` — `defevent` macro reference
 * `libs/cache/AGENTS.md` — boundary-cache integration patterns
 * `libs/jobs/AGENTS.md` — boundary-jobs scheduled task patterns
 

@@ -4,18 +4,18 @@ Shared, framework-default UI style resources.
 
 ## UI Contract
 
-All modules must consume style bundles from `boundary.ui-style`.
+All modules must consume style bundles from `wagoe.ui-style`.
 Do not hardcode CSS file lists inside module/page namespaces.
 
 Namespace/API:
-- `boundary.ui-style/base-css`
-- `boundary.ui-style/pilot-css`
-- `boundary.ui-style/admin-pilot-css`
-- `boundary.ui-style/base-js`
-- `boundary.ui-style/pilot-js`
-- `boundary.ui-style/admin-pilot-js`
-- `(boundary.ui-style/bundle :base|:pilot|:admin-pilot)`
-- `(boundary.ui-style/js-bundle :base|:pilot|:admin-pilot)`
+- `wagoe.ui-style/base-css`
+- `wagoe.ui-style/pilot-css`
+- `wagoe.ui-style/admin-pilot-css`
+- `wagoe.ui-style/base-js`
+- `wagoe.ui-style/pilot-js`
+- `wagoe.ui-style/admin-pilot-js`
+- `(wagoe.ui-style/bundle :base|:pilot|:admin-pilot)`
+- `(wagoe.ui-style/js-bundle :base|:pilot|:admin-pilot)`
 
 Rules:
 1. Forms are rendered with the same form classes and token variables across modules.
@@ -32,7 +32,7 @@ Recommended bundle usage:
 Example:
 ```clojure
 (ns my.module.core.ui
-  (:require [boundary.shared.ui.core.layout :as layout]))
+  (:require [wagoe.shared.ui.core.layout :as layout]))
 
 (defn page [opts]
   (layout/pilot-page-layout
@@ -73,7 +73,7 @@ Use this checklist when onboarding a new module or converting an existing module
    - `:base` for public/auth/basic pages
    - `:pilot` for user/profile/audit pilot pages
    - `:admin-pilot` for admin CRUD pages
-3. Do not define module-local `:css [...]` stacks in feature namespaces; let layout resolve bundles via `boundary.ui-style`.
+3. Do not define module-local `:css [...]` stacks in feature namespaces; let layout resolve bundles via `wagoe.ui-style`.
 4. Render forms with shared form classes/components and token variables only (no hardcoded per-page colors).
 5. Render tables with shared table classes/components so sort, hover, row states, and spacing stay consistent.
 6. Use shared badge classes (including fixed-width badge variants where provided) for role/status/action/result labels.

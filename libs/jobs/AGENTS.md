@@ -10,14 +10,14 @@ Background job processing with priority queues, scheduled execution, automatic r
 
 | Namespace | Purpose |
 |-----------|---------|
-| `boundary.jobs.core.job` | Pure functions: job creation, state transitions, retry logic |
-| `boundary.jobs.ports` | Protocols: IJobQueue, IJobStore, IJobStats, IJobWorker, IJobRegistry |
-| `boundary.jobs.schema` | Malli schemas: job states, priorities, retry config |
-| `boundary.jobs.shell.adapters.in-memory` | In-memory adapter (atoms, for dev/test) |
-| `boundary.jobs.shell.adapters.redis` | Redis adapter (sorted sets, lists, hashes) |
-| `boundary.jobs.shell.adapters.db` | DB adapter (next.jdbc, H2/PostgreSQL) — durable jobs on your existing SQL database |
-| `boundary.jobs.shell.worker` | Worker implementation: polling, processing, pool management |
-| `boundary.jobs.shell.tenant-context` | Multi-tenant job execution with schema switching |
+| `wagoe.jobs.core.job` | Pure functions: job creation, state transitions, retry logic |
+| `wagoe.jobs.ports` | Protocols: IJobQueue, IJobStore, IJobStats, IJobWorker, IJobRegistry |
+| `wagoe.jobs.schema` | Malli schemas: job states, priorities, retry config |
+| `wagoe.jobs.shell.adapters.in-memory` | In-memory adapter (atoms, for dev/test) |
+| `wagoe.jobs.shell.adapters.redis` | Redis adapter (sorted sets, lists, hashes) |
+| `wagoe.jobs.shell.adapters.db` | DB adapter (next.jdbc, H2/PostgreSQL) — durable jobs on your existing SQL database |
+| `wagoe.jobs.shell.worker` | Worker implementation: polling, processing, pool management |
+| `wagoe.jobs.shell.tenant-context` | Multi-tenant job execution with schema switching |
 
 ## DB-backed adapter (`adapters.db`)
 
@@ -25,7 +25,7 @@ Durable jobs on your existing SQL database (H2 or PostgreSQL) — no Redis
 required, survives a Redis outage.
 
 ```clojure
-(require '[boundary.jobs.shell.adapters.db :as db])
+(require '[wagoe.jobs.shell.adapters.db :as db])
 (db/create-jobs-table! ds)                 ; once at startup (or ship as a migration)
 (def q (db/create-db-job-queue ds :lease-ms 60000))
 ```
@@ -50,7 +50,7 @@ row *is* the outbox row; no separate outbox table or relay is needed.
 
 ```clojure
 (require '[next.jdbc :as jdbc]
-         '[boundary.jobs.shell.adapters.db :as db])
+         '[wagoe.jobs.shell.adapters.db :as db])
 
 (jdbc/with-transaction [tx ds]
   (orders/create! tx order)              ; business write
@@ -79,12 +79,12 @@ autocommit). A worker on the DB queue picks the job up after commit.
 
 ```clojure
 ;; Register handler
-(require '[boundary.jobs.shell.worker :as worker])
+(require '[wagoe.jobs.shell.worker :as worker])
 (def registry (worker/create-job-registry))
 (ports/register-handler! registry :send-email email-handler)
 
 ;; Enqueue job
-(require '[boundary.jobs.core.job :as job])
+(require '[wagoe.jobs.core.job :as job])
 (let [new-job (job/create-job {:job-type :send-email
                                 :args {:to "user@example.com"}
                                 :priority :high

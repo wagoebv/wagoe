@@ -10,19 +10,19 @@ Supports sync, async (future-based), and queued (jobs library) sending modes.
 |===
 | Namespace | Purpose
 
-| `boundary.email.core.email`
+| `wagoe.email.core.email`
 | Pure functions: prepare, validate, add headers, summarize
 
-| `boundary.email.ports`
+| `wagoe.email.ports`
 | Protocols: `EmailSenderProtocol`, `EmailQueueProtocol`
 
-| `boundary.email.schema`
+| `wagoe.email.schema`
 | Malli schemas: `EmailAddress`, `Email`, `SendEmailInput`
 
-| `boundary.email.shell.adapters.smtp`
-| SMTP adapter — delegates to `boundary.external` SMTP transport
+| `wagoe.email.shell.adapters.smtp`
+| SMTP adapter — delegates to `wagoe.external` SMTP transport
 
-| `boundary.email.shell.jobs-integration`
+| `wagoe.email.shell.jobs-integration`
 | Optional integration with `boundary-jobs` for queued sending
 |===
 
@@ -41,9 +41,9 @@ boundary-email (application layer)  →  boundary-external (transport layer)
 
 [source,clojure]
 ----
-(require '[boundary.email.core.email :as email]
-         '[boundary.email.ports :as ports]
-         '[boundary.email.shell.adapters.smtp :as smtp])
+(require '[wagoe.email.core.email :as email]
+         '[wagoe.email.ports :as ports]
+         '[wagoe.email.shell.adapters.smtp :as smtp])
 
 ;; 1. Create sender
 (def sender (smtp/create-smtp-sender

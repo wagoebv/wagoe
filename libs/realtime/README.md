@@ -49,10 +49,10 @@ JWT-authenticated WebSocket support with:
 ### 2. Create Realtime Service
 
 ```clojure
-(require '[boundary.realtime.shell.service :as realtime-service]
-         '[boundary.realtime.shell.connection-registry :as registry]
-         '[boundary.realtime.shell.adapters.jwt-adapter :as jwt]
-         '[boundary.realtime.ports :as ports])
+(require '[wagoe.realtime.shell.service :as realtime-service]
+         '[wagoe.realtime.shell.connection-registry :as registry]
+         '[wagoe.realtime.shell.adapters.jwt-adapter :as jwt]
+         '[wagoe.realtime.ports :as ports])
 
 ;; Create connection registry
 (def connection-registry (registry/create-in-memory-registry))
@@ -69,7 +69,7 @@ JWT-authenticated WebSocket support with:
 ### 3. Add WebSocket Endpoint
 
 ```clojure
-(require '[boundary.realtime.shell.adapters.websocket-adapter :as ws])
+(require '[wagoe.realtime.shell.adapters.websocket-adapter :as ws])
 
 (defn websocket-handler
   "WebSocket upgrade handler for Ring."
@@ -197,7 +197,7 @@ ws.onclose = () => {
 **Server-side setup:**
 
 ```clojure
-(require '[boundary.realtime.shell.pubsub-manager :as pubsub-mgr])
+(require '[wagoe.realtime.shell.pubsub-manager :as pubsub-mgr])
 
 ;; Create pub/sub manager
 (def pubsub-manager (pubsub-mgr/create-pubsub-manager))
@@ -829,7 +829,7 @@ For multi-server deployments (future feature), you'll need:
 
 ```
 libs/realtime/
-├── src/boundary/realtime/
+├── src/wagoe/realtime/
 │   ├── core/                          # Pure business logic
 │   │   ├── connection.clj             # Connection state management (pure)
 │   │   ├── message.clj                # Message routing logic (pure)

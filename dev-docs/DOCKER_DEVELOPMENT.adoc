@@ -256,7 +256,7 @@ psql -U postgres -d boundary_dev
 
 # Run specific test namespace
 ./scripts/docker-dev.sh shell dev-tools
-clojure -X:test :ns-patterns '["boundary.user.*"]'
+clojure -X:test :ns-patterns '["wagoe.user.*"]'
 ----
 
 === Debugging
@@ -495,7 +495,7 @@ considerations:
 
 === Related Documentation
 
-* link:../src/boundary/shell/utils/port_manager.clj[Port Management
+* link:../src/wagoe/shell/utils/port_manager.clj[Port Management
 System]
 * link:./DOCUMENTATION_SERVING.adoc[Documentation Serving]
 * link:../resources/conf/dev/config.edn[Environment Configuration]

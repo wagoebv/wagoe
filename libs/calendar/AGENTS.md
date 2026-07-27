@@ -18,25 +18,25 @@ It saves ~€3.2k–€4k per project by eliminating boilerplate around:
 
 | Namespace | Layer | Responsibility |
 |-----------|-------|----------------|
-| `boundary.calendar.schema` | shared | Malli schemas: `EventData`, `EventDef`, `OccurrenceResult`, `ConflictResult` |
-| `boundary.calendar.ports` | shared | `CalendarAdapterProtocol` interface |
-| `boundary.calendar.core.event` | core | Pure helpers: `duration`, `all-day?`, `within-range?`, `valid-event?` |
-| `boundary.calendar.core.recurrence` | core | RRULE parsing, `occurrences`, `next-occurrence*`, `expand-event` |
-| `boundary.calendar.core.conflict` | core | `overlaps?`, `conflicts?`, `find-conflicts` |
-| `boundary.calendar.core.ui` | core | Pure Hiccup: `month-view`, `week-view`, `mini-calendar`, `event-badge` |
-| `boundary.calendar.shell.registry` | shell | `defevent` macro, event type registry (`register-event-type!`, `get-event-type`, `list-event-types`, `clear-registry!`) |
-| `boundary.calendar.shell.adapters.ical` | shell | ical4j adapter (`ICalAdapter`) |
-| `boundary.calendar.shell.service` | shell | Public API: `export-ical`, `import-ical`, `ical-feed-response` |
+| `wagoe.calendar.schema` | shared | Malli schemas: `EventData`, `EventDef`, `OccurrenceResult`, `ConflictResult` |
+| `wagoe.calendar.ports` | shared | `CalendarAdapterProtocol` interface |
+| `wagoe.calendar.core.event` | core | Pure helpers: `duration`, `all-day?`, `within-range?`, `valid-event?` |
+| `wagoe.calendar.core.recurrence` | core | RRULE parsing, `occurrences`, `next-occurrence*`, `expand-event` |
+| `wagoe.calendar.core.conflict` | core | `overlaps?`, `conflicts?`, `find-conflicts` |
+| `wagoe.calendar.core.ui` | core | Pure Hiccup: `month-view`, `week-view`, `mini-calendar`, `event-badge` |
+| `wagoe.calendar.shell.registry` | shell | `defevent` macro, event type registry (`register-event-type!`, `get-event-type`, `list-event-types`, `clear-registry!`) |
+| `wagoe.calendar.shell.adapters.ical` | shell | ical4j adapter (`ICalAdapter`) |
+| `wagoe.calendar.shell.service` | shell | Public API: `export-ical`, `import-ical`, `ical-feed-response` |
 
 ---
 
 ## 3. `defevent` Usage
 
 The `defevent` macro and the event type registry live in the shell
-(`boundary.calendar.shell.registry`); `boundary.calendar.core.event` is pure.
+(`wagoe.calendar.shell.registry`); `wagoe.calendar.core.event` is pure.
 
 ```clojure
-(require '[boundary.calendar.shell.registry :as registry])
+(require '[wagoe.calendar.shell.registry :as registry])
 
 ;; Define an event type with optional schema extension
 (registry/defevent appointment-event
@@ -54,7 +54,7 @@ The `defevent` macro and the event type registry live in the shell
 
 **Validation** of raw EventData maps (independent of type registry, pure core):
 ```clojure
-(require '[boundary.calendar.core.event :as event])
+(require '[wagoe.calendar.core.event :as event])
 
 (event/valid-event? {:id (random-uuid) :title "X"
                      :start #inst "2026-03-10T09:00:00Z"
@@ -67,10 +67,10 @@ The `defevent` macro and the event type registry live in the shell
 
 ## 4. Occurrence Calculation
 
-All occurrence functions are pure and live in `boundary.calendar.core.recurrence`.
+All occurrence functions are pure and live in `wagoe.calendar.core.recurrence`.
 
 ```clojure
-(require '[boundary.calendar.core.recurrence :as r])
+(require '[wagoe.calendar.core.recurrence :as r])
 
 (def standup
   {:id        (random-uuid)
@@ -112,7 +112,7 @@ All occurrence functions are pure and live in `boundary.calendar.core.recurrence
 ## 5. Conflict Detection
 
 ```clojure
-(require '[boundary.calendar.core.conflict :as c])
+(require '[wagoe.calendar.core.conflict :as c])
 
 ;; Simple overlap check (expanded, single-occurrence events)
 (c/overlaps? event-a event-b)   ;; => bool
@@ -138,7 +138,7 @@ All occurrence functions are pure and live in `boundary.calendar.core.recurrence
 ## 6. iCal Export + HTTP Feed
 
 ```clojure
-(require '[boundary.calendar.shell.service :as cal])
+(require '[wagoe.calendar.shell.service :as cal])
 
 ;; Export to RFC 5545 string
 (cal/export-ical [standup appointment] {})
@@ -183,10 +183,10 @@ Wire into a Reitit route:
 
 ## 8. Calendar UI Components
 
-All components are pure Hiccup functions in `boundary.calendar.core.ui`.
+All components are pure Hiccup functions in `wagoe.calendar.core.ui`.
 
 ```clojure
-(require '[boundary.calendar.core.ui :as ui])
+(require '[wagoe.calendar.core.ui :as ui])
 (require '[java.time LocalDate])
 
 ;; Month grid
@@ -233,7 +233,7 @@ ical4j `DateTime` objects are mutable. The adapter always creates new instances 
 `all-day?` checks for midnight UTC. If your app treats events as all-day based on local midnight, compute this at the application layer before calling the library.
 
 ### 8. Registry pollution in tests
-Always use `(use-fixtures :each (fn [f] (registry/clear-registry!) (f) (registry/clear-registry!)))` (with `boundary.calendar.shell.registry` aliased as `registry`) to prevent `defevent` definitions at namespace load time from leaking across tests.
+Always use `(use-fixtures :each (fn [f] (registry/clear-registry!) (f) (registry/clear-registry!)))` (with `wagoe.calendar.shell.registry` aliased as `registry`) to prevent `defevent` definitions at namespace load time from leaking across tests.
 
 ---
 
@@ -247,7 +247,7 @@ clojure -M:test:db/h2 :calendar
 clojure -M:test:db/h2 --focus-meta :unit :calendar
 
 # DST edge cases specifically
-clojure -M:test:db/h2 --focus boundary.calendar.core.recurrence-test
+clojure -M:test:db/h2 --focus wagoe.calendar.core.recurrence-test
 
 # iCal round-trip integration tests
 clojure -M:test:db/h2 --focus-meta :integration :calendar
@@ -261,8 +261,8 @@ clojure -M:clj-kondo --lint libs/calendar/src libs/calendar/test
 ## 11. REPL Smoke Check
 
 ```clojure
-(require '[boundary.calendar.core.recurrence :as r])
-(require '[boundary.calendar.shell.service :as cal])
+(require '[wagoe.calendar.core.recurrence :as r])
+(require '[wagoe.calendar.shell.service :as cal])
 
 (def standup
   {:id        (random-uuid)

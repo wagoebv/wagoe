@@ -138,7 +138,7 @@ the server on the classpath and launch its main, so cwd stays the project root:
 ```bash
 # from the Boundary project root
 WAG_ENV=dev clojure -Sdeps '{:deps {wagoe/mcp {:local/root "libs/wagoe-mcp"}}}' \
-  -M -m boundary.mcp.shell.server
+  -M -m wagoe.mcp.shell.server
 ```
 
 An app consuming Boundary as a dependency would instead add `boundary/mcp` to its
@@ -188,7 +188,7 @@ Claude Code CLI, run this from the project root:
 ```bash
 claude mcp add boundary --env WAG_ENV=dev -- \
   clojure -Sdeps '{:deps {wagoe/mcp {:local/root "libs/wagoe-mcp"}}}' \
-  -M -m boundary.mcp.shell.server
+  -M -m wagoe.mcp.shell.server
 ```
 
 Or by hand, in your MCP config (`.mcp.json` / client settings):
@@ -199,7 +199,7 @@ Or by hand, in your MCP config (`.mcp.json` / client settings):
     "boundary": {
       "command": "clojure",
       "args": ["-Sdeps", "{:deps {wagoe/mcp {:local/root \"libs/wagoe-mcp\"}}}",
-               "-M", "-m", "boundary.mcp.shell.server"],
+               "-M", "-m", "wagoe.mcp.shell.server"],
       "cwd": "/absolute/path/to/your/boundary/project",
       "env": { "WAG_ENV": "dev" }
     }
@@ -281,9 +281,9 @@ tests — and returns a structured report:
 {
   "status": "fail",
   "module": "invoice",
-  "files":  [{"path":"src/boundary/invoice/core/invoice.clj","action":"created"}, ...],
+  "files":  [{"path":"src/wagoe/invoice/core/invoice.clj","action":"created"}, ...],
   "issues": [
-    {"step":"fc-is","severity":"error","file":"src/boundary/invoice/core/invoice.clj",
+    {"step":"fc-is","severity":"error","file":"src/wagoe/invoice/core/invoice.clj",
      "line":7,"code":"BND-806","message":"core/ must not import shell"}
   ],
   "counts": {"errors":1,"warnings":0},
@@ -322,7 +322,7 @@ Imperative Shell** — the same discipline wagoe-mcp enforces on its users.
 ### Layout
 
 ```
-src/boundary/mcp/
+src/wagoe/mcp/
 ├── core/              # PURE — no JSON, no I/O. All decisions live here.
 │   ├── protocol.clj   #   JSON-RPC 2.0 + MCP message builders, error codes, version negotiation
 │   ├── registry.clj   #   tool/resource registry as data
@@ -419,7 +419,7 @@ lands — never a silent empty answer.
    capability — so declare the right tier. Tier 2 work must also audit its
    payload.
 4. The stdio transport stays unchanged. A new transport (HTTP/SSE) just implements
-   `boundary.mcp.ports/Transport`; the serve loop is transport-agnostic.
+   `wagoe.mcp.ports/Transport`; the serve loop is transport-agnostic.
 
 See [`AGENTS.md`](./AGENTS.md) for the full reference: every tool's exact inputs
 and outputs, every BND guardrail code, the ADRs (ADR-031 gating, ADR-032

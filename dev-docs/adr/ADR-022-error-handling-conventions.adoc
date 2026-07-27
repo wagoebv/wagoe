@@ -14,7 +14,7 @@ Accepted
 Boundary's HTTP interceptor pipeline (ADR-010) transforms exceptions into
 structured HTTP responses. The `http-error-handler` interceptor inspects
 `ex-data` to determine the response status code, while
-`boundary.platform.core.http.problem-details` provides RFC 7807 mappings.
+`wagoe.platform.core.http.problem-details` provides RFC 7807 mappings.
 
 === Problem
 
@@ -77,7 +77,7 @@ with a `:type` keyword in the data map:
 
 Additional specialized types (`:user-not-found`, `:resource-not-found`,
 `:auth-failed`, etc.) are defined in
-`boundary.platform.core.http.problem-details/default-error-mappings` and map
+`wagoe.platform.core.http.problem-details/default-error-mappings` and map
 to the same base status codes.
 
 === Forbidden patterns
@@ -122,7 +122,7 @@ handler to avoid leaking internal diagnostics.
 
 === Mitigation
 
-The security test suite (`boundary.platform.shell.security-test`) verifies
+The security test suite (`wagoe.platform.shell.security-test`) verifies
 that all canonical error types map to their expected HTTP status codes. Adding
 a new type without updating the test and this ADR will cause a test failure.
 

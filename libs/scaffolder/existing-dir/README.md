@@ -8,7 +8,7 @@ A new Boundary project.
 2. Start REPL: `clojure -M:repl`
 3. Generate your first module:
    ```bash
-   clojure -M:dev -m boundary.scaffolder.shell.cli-entry generate \
+   clojure -M:dev -m wagoe.scaffolder.shell.cli-entry generate \
      --module-name user --entity User --field email:string:required:unique
    ```
 

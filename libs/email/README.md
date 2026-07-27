@@ -46,7 +46,7 @@ Simple, robust email delivery with:
 ### 2. Create SMTP Sender
 
 ```clojure
-(require '[boundary.email.shell.adapters.smtp :as smtp])
+(require '[wagoe.email.shell.adapters.smtp :as smtp])
 
 ;; Gmail example (use App Password, not regular password!)
 (def email-sender
@@ -61,8 +61,8 @@ Simple, robust email delivery with:
 ### 3. Send Email
 
 ```clojure
-(require '[boundary.email.core.email :as email-core]
-         '[boundary.email.ports :as ports])
+(require '[wagoe.email.core.email :as email-core]
+         '[wagoe.email.ports :as ports])
 
 ;; Prepare email (pure function, no side effects)
 (def prepared-email
@@ -104,10 +104,10 @@ This module follows the FC/IS pattern:
 
 | Layer | Namespace | Responsibility |
 |-------|-----------|----------------|
-| **Core** | `boundary.email.core.email` | Pure functions: validate, prepare, format |
-| **Ports** | `boundary.email.ports` | Protocol definitions (interfaces) |
-| **Shell** | `boundary.email.shell.adapters.smtp` | I/O: SMTP sending, error handling |
-| **Integration** | `boundary.email.shell.jobs-integration` | Optional: background job queuing |
+| **Core** | `wagoe.email.core.email` | Pure functions: validate, prepare, format |
+| **Ports** | `wagoe.email.ports` | Protocol definitions (interfaces) |
+| **Shell** | `wagoe.email.shell.adapters.smtp` | I/O: SMTP sending, error handling |
+| **Integration** | `wagoe.email.shell.jobs-integration` | Optional: background job queuing |
 
 ### Email Structure
 
@@ -468,8 +468,8 @@ For high-volume email sending with automatic retries and monitoring, integrate w
 ### 2. Setup Job Queue
 
 ```clojure
-(require '[boundary.jobs.shell.adapters.redis :as redis-jobs]
-         '[boundary.email.shell.jobs-integration :as email-jobs])
+(require '[wagoe.jobs.shell.adapters.redis :as redis-jobs]
+         '[wagoe.email.shell.jobs-integration :as email-jobs])
 
 ;; Create Redis job queue
 (def redis-pool (redis-jobs/create-redis-pool
@@ -585,7 +585,7 @@ For high-volume email sending with automatic retries and monitoring, integrate w
 
 ### Core Functions
 
-**boundary.email.core.email**
+**wagoe.email.core.email**
 
 #### `prepare-email`
 
@@ -747,7 +747,7 @@ Create summary for logging/monitoring (pure function).
 
 ### Ports (Protocols)
 
-**boundary.email.ports/EmailSenderProtocol**
+**wagoe.email.ports/EmailSenderProtocol**
 
 #### `send-email!`
 
@@ -802,7 +802,7 @@ Send email asynchronously using Clojure future.
 
 ### SMTP Adapter
 
-**boundary.email.shell.adapters.smtp**
+**wagoe.email.shell.adapters.smtp**
 
 #### `create-smtp-sender`
 
@@ -830,12 +830,12 @@ Create SMTP email sender.
                      :username "user@gmail.com"
                      :password "app-password"
                      :tls? true})
-;; => #boundary.email.shell.adapters.smtp.SmtpEmailSender{...}
+;; => #wagoe.email.shell.adapters.smtp.SmtpEmailSender{...}
 ```
 
 ### Jobs Integration
 
-**boundary.email.shell.jobs-integration**
+**wagoe.email.shell.jobs-integration**
 
 #### `queue-email-job!`
 

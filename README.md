@@ -149,7 +149,7 @@ Boundary is a monorepo of **23 independently publishable libraries** plus develo
 Boundary enforces the **Functional Core / Imperative Shell** pattern throughout:
 
 ```
-libs/{library}/src/boundary/{library}/
+libs/{library}/src/wagoe/{library}/
 ├── core/       # Pure functions only — no I/O, no logging, no exceptions
 ├── shell/      # All side effects: persistence, services, HTTP handlers
 ├── ports.clj   # Protocol definitions (interfaces for dependency injection)
@@ -172,7 +172,7 @@ This keeps business logic fast to test (no mocks needed), easy to reason about, 
 | Database | `snake_case` |
 | API (JSON) | `camelCase` |
 
-Use `boundary.core.utils.case-conversion` for conversions. Never convert manually.
+Use `wagoe.core.utils.case-conversion` for conversions. Never convert manually.
 
 ---
 
@@ -207,7 +207,7 @@ bb scaffold ai "product module with name, price, stock" --yes  # Non-interactive
 
 # AI tooling
 bb ai explain --file stacktrace.txt  # Explain error
-bb ai gen-tests libs/user/src/boundary/user/core/validation.clj  # Generate tests
+bb ai gen-tests libs/user/src/wagoe/user/core/validation.clj  # Generate tests
 bb ai sql "find active users with orders in last 7 days"          # HoneySQL from NL
 bb ai docs --module libs/user --type agents                       # Generate AGENTS.md
 

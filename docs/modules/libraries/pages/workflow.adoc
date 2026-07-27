@@ -10,28 +10,28 @@ Provides permission-based transitions, automatic audit trails, and optional side
 |===
 | Namespace | Purpose
 
-| `boundary.workflow.schema`
+| `wagoe.workflow.schema`
 | Malli schemas: `WorkflowDefinition`, `WorkflowInstance`, `AuditEntry`
 
-| `boundary.workflow.ports`
+| `wagoe.workflow.ports`
 | Protocols: `IWorkflowStore`, `IWorkflowEngine`, `IWorkflowRegistry`
 
-| `boundary.workflow.core.machine`
+| `wagoe.workflow.core.machine`
 | `defworkflow` macro, in-process definition registry
 
-| `boundary.workflow.core.transitions`
+| `wagoe.workflow.core.transitions`
 | Pure transition logic; `available-transitions-with-status`
 
-| `boundary.workflow.core.audit`
+| `wagoe.workflow.core.audit`
 | Pure audit entry constructors
 
-| `boundary.workflow.shell.service`
+| `wagoe.workflow.shell.service`
 | Orchestration: load → validate → persist → side-effects
 
-| `boundary.workflow.shell.persistence`
+| `wagoe.workflow.shell.persistence`
 | DB persistence via next.jdbc + HoneySQL
 
-| `boundary.workflow.shell.http`
+| `wagoe.workflow.shell.http`
 | REST API routes (start, transition, state, audit log)
 |===
 
@@ -39,7 +39,7 @@ Provides permission-based transitions, automatic audit trails, and optional side
 
 [source,clojure]
 ----
-(require '[boundary.workflow.core.machine :refer [defworkflow]])
+(require '[wagoe.workflow.core.machine :refer [defworkflow]])
 
 (defworkflow order-workflow
   {:id             :order-workflow
@@ -79,7 +79,7 @@ GET  /api/workflows/:id/audit      # Get audit trail
 
 [source,clojure]
 ----
-(require '[boundary.workflow.core.transitions :as transitions])
+(require '[wagoe.workflow.core.transitions :as transitions])
 
 ;; Returns all transitions with :enabled? flag
 (transitions/available-transitions-with-status order-workflow :paid user-permissions)

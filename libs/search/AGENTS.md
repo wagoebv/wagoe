@@ -9,7 +9,7 @@ Provides document indexing, full-text search (PostgreSQL FTS / LIKE fallback), a
 
 ```
 libs/search/
-├── src/boundary/search/
+├── src/wagoe/search/
 │   ├── schema.clj          # Malli schemas: SearchDocument, SearchResult, SearchResponse, SearchDefinition (+ :filters)
 │   ├── ports.clj           # ISearchStore (persistence), ISearchEngine (orchestration)
 │   ├── core/
@@ -24,7 +24,7 @@ libs/search/
 │       ├── service.clj      # SearchService (orchestration, pagination, reindex)
 │       ├── http.clj         # Ring routes: API + admin web UI
 │       └── module_wiring.clj # Integrant keys :wagoe/search + :wagoe/search-routes
-└── test/boundary/search/
+└── test/wagoe/search/
     ├── core/index_test.clj         # unit: registry (shell) + build-document*
     ├── core/query_test.clj         # unit: sanitize-query, SQL builders
     ├── core/ranking_test.clj       # unit: scoring/normalization/boost (pure)
@@ -40,11 +40,11 @@ libs/search/
 ### defsearch Macro
 
 Defines a search index and registers it in a global atom registry. The registry
-is mutable process state, so it lives in the shell (`boundary.search.shell.registry`);
-the core (`boundary.search.core.index`) stays pure:
+is mutable process state, so it lives in the shell (`wagoe.search.shell.registry`);
+the core (`wagoe.search.core.index`) stays pure:
 
 ```clojure
-(require '[boundary.search.shell.registry :as registry])
+(require '[wagoe.search.shell.registry :as registry])
 
 (registry/defsearch product-search
   {:id          :product-search
@@ -61,10 +61,10 @@ The var `product-search` holds the `SearchDefinition` map.
 
 ### build-document*
 
-Converts field values to weighted content columns (pure — `boundary.search.core.index`):
+Converts field values to weighted content columns (pure — `wagoe.search.core.index`):
 
 ```clojure
-(require '[boundary.search.core.index :as search])
+(require '[wagoe.search.core.index :as search])
 
 (search/build-document* product-search entity-id
                        {:title "Widget Pro"
@@ -101,8 +101,8 @@ Adapter is selected by `db-type` passed to `create-search-store`.
 Call `ports/index-document!` from your module's service layer or event handler:
 
 ```clojure
-(require '[boundary.search.ports :as search-ports])
-(require '[boundary.search.core.index :as search])
+(require '[wagoe.search.ports :as search-ports])
+(require '[wagoe.search.core.index :as search])
 
 ;; 1. Get search service from system
 (def search-svc (get integrant.repl.state/system :wagoe/search))
@@ -221,10 +221,10 @@ with the `search_documents` table — no external dependencies required.
 ### 1. Registry Leakage Between Tests
 
 `defsearch` registers in a global atom that lives in the shell
-(`boundary.search.shell.registry`). Reset it in test fixtures:
+(`wagoe.search.shell.registry`). Reset it in test fixtures:
 
 ```clojure
-(require '[boundary.search.shell.registry :as registry])
+(require '[wagoe.search.shell.registry :as registry])
 
 (use-fixtures :each
   (fn [f]
@@ -262,7 +262,7 @@ H2 2.4.x does not support `JSON_VALUE`, `JSON_EXTRACT`, or `->>` via JDBC prepar
 statements — the INSTR fallback is intentional and tested.
 
 Filter keys follow snake_case in JSON: `:tenant-id` → `"tenant_id"`.
-This conversion is done by `filter-key->json-key` in `boundary.search.core.index`.
+This conversion is done by `filter-key->json-key` in `wagoe.search.core.index`.
 
 ---
 

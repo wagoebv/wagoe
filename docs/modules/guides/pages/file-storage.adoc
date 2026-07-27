@@ -7,7 +7,7 @@ The `storage` library provides file storage with local and S3 backends behind a 
 
 [source,clojure]
 ----
-(require '[boundary.storage.ports :as ports])
+(require '[wagoe.storage.ports :as ports])
 
 ;; Store a file
 (ports/store-file storage
@@ -33,7 +33,7 @@ The `storage` library provides file storage with local and S3 backends behind a 
 
 [source,clojure]
 ----
-(require '[boundary.storage.core.validation :as validation])
+(require '[wagoe.storage.core.validation :as validation])
 
 ;; Validate before storing
 (validation/validate-file
@@ -47,7 +47,7 @@ The `storage` library provides file storage with local and S3 backends behind a 
 
 [source,clojure]
 ----
-(require '[boundary.storage.ports :as ports])
+(require '[wagoe.storage.ports :as ports])
 
 ;; Resize image
 (ports/resize-image image-processor file-bytes

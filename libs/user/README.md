@@ -44,8 +44,8 @@ Complete user management and authentication system with MFA support, session man
 
 ```clojure
 (ns myapp.main
-  (:require [boundary.user.shell.module-wiring]  ; Auto-registers module
-            [boundary.platform.shell.system.wiring :as wiring]))
+  (:require [wagoe.user.shell.module-wiring]  ; Auto-registers module
+            [wagoe.platform.shell.system.wiring :as wiring]))
 
 (defn -main [& args]
   (wiring/start!))
@@ -72,7 +72,7 @@ Complete user management and authentication system with MFA support, session man
 
 ```clojure
 (ns myapp.handlers
-  (:require [boundary.user.ports :as user-ports]))
+  (:require [wagoe.user.ports :as user-ports]))
 
 ;; Create user
 (user-ports/create-user user-service
@@ -159,7 +159,7 @@ The module registers these routes automatically:
 ## Module Structure
 
 ```
-libs/user/src/boundary/user/
+libs/user/src/wagoe/user/
 ├── core/
 │   ├── user.clj             # User business logic (pure)
 │   ├── authentication.clj   # Auth logic (pure)

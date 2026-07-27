@@ -23,19 +23,19 @@
 
 | Namespace | Layer | Responsibility |
 |-----------|-------|----------------|
-| `boundary.ai.schema` | shared | Malli schemas: `Message`, `AIRequest`, `AIResponse`, `ProviderConfig`, `AIConfig` |
-| `boundary.ai.ports` | shared | `IAIProvider` protocol: `complete`, `complete-json`, `provider-name` |
-| `boundary.ai.core.prompts` | core | Pure prompt builders for all 7 features |
-| `boundary.ai.core.context` | core | Pure context extractors (module names, stack traces, function signatures, schema) |
-| `boundary.ai.core.parsing` | core | Pure response parsers (JSON, module spec, SQL response, test code) |
-| `boundary.ai.shell.providers.ollama` | shell | Ollama HTTP adapter (`OllamaProvider`) |
-| `boundary.ai.shell.providers.anthropic` | shell | Anthropic API adapter (`AnthropicProvider`) |
-| `boundary.ai.shell.providers.openai` | shell | OpenAI API adapter (`OpenAIProvider`) |
-| `boundary.ai.shell.providers.no-op` | shell | Test stub (`NoOpProvider`) |
-| `boundary.ai.shell.service` | shell | Public API: `scaffold-from-description`, `explain-error`, `generate-tests`, `sql-from-description`, `generate-docs`, `generate-admin-entity`, `parse-setup-description` |
-| `boundary.ai.shell.repl` | shell | REPL helpers: `explain`, `sql`, `gen-tests` |
-| `boundary.ai.shell.cli-entry` | shell | `-main` for `clojure -M -m boundary.ai.shell.cli-entry` |
-| `boundary.ai.shell.module-wiring` | shell | Integrant `:wagoe/ai-service` |
+| `wagoe.ai.schema` | shared | Malli schemas: `Message`, `AIRequest`, `AIResponse`, `ProviderConfig`, `AIConfig` |
+| `wagoe.ai.ports` | shared | `IAIProvider` protocol: `complete`, `complete-json`, `provider-name` |
+| `wagoe.ai.core.prompts` | core | Pure prompt builders for all 7 features |
+| `wagoe.ai.core.context` | core | Pure context extractors (module names, stack traces, function signatures, schema) |
+| `wagoe.ai.core.parsing` | core | Pure response parsers (JSON, module spec, SQL response, test code) |
+| `wagoe.ai.shell.providers.ollama` | shell | Ollama HTTP adapter (`OllamaProvider`) |
+| `wagoe.ai.shell.providers.anthropic` | shell | Anthropic API adapter (`AnthropicProvider`) |
+| `wagoe.ai.shell.providers.openai` | shell | OpenAI API adapter (`OpenAIProvider`) |
+| `wagoe.ai.shell.providers.no-op` | shell | Test stub (`NoOpProvider`) |
+| `wagoe.ai.shell.service` | shell | Public API: `scaffold-from-description`, `explain-error`, `generate-tests`, `sql-from-description`, `generate-docs`, `generate-admin-entity`, `parse-setup-description` |
+| `wagoe.ai.shell.repl` | shell | REPL helpers: `explain`, `sql`, `gen-tests` |
+| `wagoe.ai.shell.cli-entry` | shell | `-main` for `clojure -M -m wagoe.ai.shell.cli-entry` |
+| `wagoe.ai.shell.module-wiring` | shell | Integrant `:wagoe/ai-service` |
 
 ---
 
@@ -71,7 +71,7 @@ Add to `resources/conf/{env}/config.edn`:
 
 Require the wiring namespace in your system config loader:
 ```clojure
-(require '[boundary.ai.shell.module-wiring])
+(require '[wagoe.ai.shell.module-wiring])
 ```
 
 ---
@@ -81,7 +81,7 @@ Require the wiring namespace in your system config loader:
 ### Service functions
 
 ```clojure
-(require '[boundary.ai.shell.service :as ai])
+(require '[wagoe.ai.shell.service :as ai])
 
 ;; NL Scaffolding
 (ai/scaffold-from-description service "product module with name, price, stock" ".")
@@ -92,8 +92,8 @@ Require the wiring namespace in your system config loader:
 ;; => {:text "Root cause: ..." :tokens 150 :provider :ollama :model "qwen2.5-coder:7b"}
 
 ;; Test Generator
-(ai/generate-tests service "libs/user/src/boundary/user/core/validation.clj")
-;; => {:text "(ns boundary.user.core.validation-test ...)" :tokens 320 ...}
+(ai/generate-tests service "libs/user/src/wagoe/user/core/validation.clj")
+;; => {:text "(ns wagoe.user.core.validation-test ...)" :tokens 320 ...}
 
 ;; SQL Copilot
 (ai/sql-from-description service "find active users with orders in the last 7 days" ".")
@@ -115,14 +115,14 @@ Require the wiring namespace in your system config loader:
 ### REPL helpers
 
 ```clojure
-(require '[boundary.ai.shell.repl :as ai])
+(require '[wagoe.ai.shell.repl :as ai])
 
 ;; Bind the service after system start
 (ai/set-service! (integrant.repl.state/system :wagoe/ai-service))
 
 (ai/explain *e)                                           ;; explain last exception
 (ai/sql "find all active users")                          ;; HoneySQL from NL
-(ai/gen-tests "libs/user/src/boundary/user/core/v.clj")  ;; generate test ns
+(ai/gen-tests "libs/user/src/wagoe/user/core/v.clj")  ;; generate test ns
 ```
 
 ---
@@ -139,8 +139,8 @@ cat stacktrace.txt | bb ai explain
 bb ai explain --file stacktrace.txt
 
 # Test Generator
-bb ai gen-tests libs/user/src/boundary/user/core/validation.clj
-bb ai gen-tests libs/user/src/boundary/user/core/validation.clj --output libs/user/test/boundary/user/core/validation_test.clj
+bb ai gen-tests libs/user/src/wagoe/user/core/validation.clj
+bb ai gen-tests libs/user/src/wagoe/user/core/validation.clj --output libs/user/test/wagoe/user/core/validation_test.clj
 
 # SQL Copilot
 bb ai sql "find active users with orders in the last 7 days"
@@ -168,8 +168,8 @@ bb ai setup-parse "PostgreSQL with Stripe payments and Redis caching"
 
 ## 6. Common Pitfalls
 
-### 1. IAIProvider protocol is in `boundary.ai.ports`, not in individual provider namespaces
-Always require `[boundary.ai.ports :as ports]` and call `(ports/complete ...)`. Never call adapter methods directly.
+### 1. IAIProvider protocol is in `wagoe.ai.ports`, not in individual provider namespaces
+Always require `[wagoe.ai.ports :as ports]` and call `(ports/complete ...)`. Never call adapter methods directly.
 
 ### 2. `complete-json` does not validate the schema argument
 The `schema` argument to `complete-json` is a descriptive hint string, not a Malli schema. JSON validation of the response is the caller's responsibility (see `parsing/parse-module-spec`).

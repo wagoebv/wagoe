@@ -10,13 +10,13 @@ structured logging, metrics, tracing breadcrumbs, and pluggable error reporting 
 |===
 | Namespace | Purpose
 
-| `boundary.observability.logging.ports`
+| `wagoe.observability.logging.ports`
 | Logging protocol used by shell/service layers for structured events
 
-| `boundary.observability.metrics.ports`
+| `wagoe.observability.metrics.ports`
 | Metrics protocol for counters, gauges, and timing instrumentation
 
-| `boundary.observability.*.shell.adapters.*`
+| `wagoe.observability.*.shell.adapters.*`
 | Pluggable providers: no-op (default), Datadog, Sentry
 |===
 
@@ -26,8 +26,8 @@ Use observability ports from services/adapters:
 
 [source,clojure]
 ----
-(require '[boundary.observability.logging.ports :as log-ports]
-         '[boundary.observability.metrics.ports :as metrics-ports])
+(require '[wagoe.observability.logging.ports :as log-ports]
+         '[wagoe.observability.metrics.ports :as metrics-ports])
 
 ;; Service layer — automatic logging, metrics, error reporting
 (defn create-user [this user-data]

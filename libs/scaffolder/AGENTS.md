@@ -10,10 +10,10 @@ Generates new Boundary modules with FC/IS structure, tests, and migrations. Prod
 
 | Namespace | Purpose |
 |-----------|---------|
-| `boundary.scaffolder.shell.cli-entry` | CLI entrypoint — dispatches commands |
-| `boundary.scaffolder.cli` | Command definitions, option specs, wizard structure |
-| `boundary.scaffolder.core.generators` | Pure generation logic (schemas, ports, handlers) |
-| `boundary.scaffolder.shell.templates.*` | File templates and output orchestration |
+| `wagoe.scaffolder.shell.cli-entry` | CLI entrypoint — dispatches commands |
+| `wagoe.scaffolder.cli` | Command definitions, option specs, wizard structure |
+| `wagoe.scaffolder.core.generators` | Pure generation logic (schemas, ports, handlers) |
+| `wagoe.scaffolder.shell.templates.*` | File templates and output orchestration |
 
 ---
 
@@ -136,7 +136,7 @@ Running `bb scaffold generate --module-name product --entity Product --field nam
 
 ```
 libs/product/
-├── src/boundary/product/
+├── src/wagoe/product/
 │   ├── core/
 │   │   ├── product.clj      # Pure business logic
 │   │   └── validation.clj   # Validation rules
@@ -146,20 +146,20 @@ libs/product/
 │   │   └── service.clj      # Shell orchestration (UserService record)
 │   ├── ports.clj            # IProductRepository, IProductService protocols
 │   └── schema.clj           # Malli schemas: Product, CreateProductRequest, etc.
-├── test/boundary/product/
+├── test/wagoe/product/
 │   ├── core/
 │   │   └── product_test.clj # Unit tests (^:unit metadata)
 │   ├── shell/
 │   │   ├── service_test.clj # Integration tests (^:integration metadata)
 │   │   └── persistence_contract_test.clj # Contract tests (^:contract metadata)
-└── resources/boundary/product/migrations/
+└── resources/wagoe/product/migrations/
     └── 001-create-product.sql
 ```
 
 ### Sample Generated schema.clj
 
 ```clojure
-(ns boundary.product.schema
+(ns wagoe.product.schema
   (:require [malli.core :as m]))
 
 (def Product
@@ -190,7 +190,7 @@ libs/product/
 ### Sample Generated ports.clj
 
 ```clojure
-(ns boundary.product.ports)
+(ns wagoe.product.ports)
 
 (defprotocol IProductRepository
   (find-by-id   [this id])
@@ -243,8 +243,8 @@ After running `bb scaffold generate`, wire the new module into the system:
 ### 4. Add Routes
 
 ```clojure
-;; In src/boundary/system.clj or your router config
-(require '[boundary.product.shell.http :as product-http])
+;; In src/wagoe/system.clj or your router config
+(require '[wagoe.product.shell.http :as product-http])
 
 (defn all-routes [config]
   (concat

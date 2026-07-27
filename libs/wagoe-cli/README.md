@@ -21,7 +21,7 @@ Requires [Babashka](https://babashka.org) and [bbin](https://github.com/babashka
 
 | Command | Description |
 |---------|-------------|
-| `wagoe new <project-name>` | Create a new Boundary project (full FC/IS template: `src/boundary/config.clj`, `src/<project>/system.clj`, `deps.edn`, `bb.edn`, `.env`, tests, git hooks) |
+| `wagoe new <project-name>` | Create a new Boundary project (full FC/IS template: `src/wagoe/config.clj`, `src/<project>/system.clj`, `deps.edn`, `bb.edn`, `.env`, tests, git hooks) |
 | `wagoe add <module>` | Add a framework module (payments, tenant, admin, …) to the current project — patches `deps.edn`, config, and the AGENTS.md module table |
 | `wagoe list` | List the available modules from the module catalogue |
 | `boundary agents update [--check]` | Re-sync the project's `AGENTS.md` installed-modules table with what is actually installed (`--check` verifies without writing) |
@@ -48,9 +48,9 @@ Projects created with `wagoe new` are agent-ready out of the box: they ship a
 
 ## How it works
 
-The CLI renders a set of templates (`resources/boundary/cli/templates/*.tmpl`)
+The CLI renders a set of templates (`resources/wagoe/cli/templates/*.tmpl`)
 against a project name, and drives module installation from a shared
-**module catalogue** (`resources/boundary/cli/modules-catalogue.edn`) that lists
+**module catalogue** (`resources/wagoe/cli/modules-catalogue.edn`) that lists
 each module, its published version, and its dependencies. `wagoe add` uses
 that catalogue to wire the right `org.wagoe/wagoe-<module>` coordinate
 and config into the target project.

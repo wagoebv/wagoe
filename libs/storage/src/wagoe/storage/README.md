@@ -38,9 +38,9 @@ File upload and storage functionality for the Boundary framework. Supports local
 ### 1. Local Filesystem Storage
 
 ```clojure
-(require '[boundary.storage.shell.adapters.local :as local]
-         '[boundary.storage.shell.service :as service]
-         '[boundary.storage.shell.http-handlers :as handlers])
+(require '[wagoe.storage.shell.adapters.local :as local]
+         '[wagoe.storage.shell.service :as service]
+         '[wagoe.storage.shell.http-handlers :as handlers])
 
 ;; Create local storage adapter
 (def storage
@@ -72,7 +72,7 @@ File upload and storage functionality for the Boundary framework. Supports local
 ### 2. S3 Storage
 
 ```clojure
-(require '[boundary.storage.shell.adapters.s3 :as s3])
+(require '[wagoe.storage.shell.adapters.s3 :as s3])
 
 ;; Create S3 storage adapter
 (def storage
@@ -111,7 +111,7 @@ File upload and storage functionality for the Boundary framework. Supports local
 ### 3. HTTP API Integration
 
 ```clojure
-(require '[boundary.storage.shell.http-handlers :as handlers])
+(require '[wagoe.storage.shell.http-handlers :as handlers])
 
 ;; Add storage routes to your Reitit router
 (def app-routes
@@ -297,8 +297,8 @@ Response: 200 OK
 ### Resize Image
 
 ```clojure
-(require '[boundary.storage.shell.adapters.image-processor :as img]
-         '[boundary.storage.ports :as ports])
+(require '[wagoe.storage.shell.adapters.image-processor :as img]
+         '[wagoe.storage.ports :as ports])
 
 (def processor (img/create-image-processor {}))
 
@@ -381,15 +381,15 @@ Add rate limiting to upload endpoints to prevent abuse (use Boundary's rate limi
 Run the test suite:
 
 ```bash
-clojure -M:test -m kaocha.runner --focus boundary.storage
+clojure -M:test -m kaocha.runner --focus wagoe.storage
 ```
 
 Run specific test namespaces:
 
 ```bash
-clojure -M:test -m kaocha.runner --focus boundary.storage.core.validation-test
-clojure -M:test -m kaocha.runner --focus boundary.storage.shell.adapters.local-test
-clojure -M:test -m kaocha.runner --focus boundary.storage.shell.service-test
+clojure -M:test -m kaocha.runner --focus wagoe.storage.core.validation-test
+clojure -M:test -m kaocha.runner --focus wagoe.storage.shell.adapters.local-test
+clojure -M:test -m kaocha.runner --focus wagoe.storage.shell.service-test
 ```
 
 ## Architecture
@@ -397,19 +397,19 @@ clojure -M:test -m kaocha.runner --focus boundary.storage.shell.service-test
 The storage module follows Boundary's Functional Core / Imperative Shell pattern:
 
 ### Functional Core (Pure Functions)
-- `boundary.storage.core.validation` - File validation logic
-- `boundary.storage.schema` - Malli schemas
+- `wagoe.storage.core.validation` - File validation logic
+- `wagoe.storage.schema` - Malli schemas
 
 ### Imperative Shell (Side Effects)
-- `boundary.storage.shell.adapters.local` - Local filesystem operations
-- `boundary.storage.shell.adapters.s3` - S3 API calls
-- `boundary.storage.shell.adapters.image-processor` - Image manipulation
-- `boundary.storage.shell.service` - Service orchestration
-- `boundary.storage.shell.http-handlers` - HTTP request/response handling
+- `wagoe.storage.shell.adapters.local` - Local filesystem operations
+- `wagoe.storage.shell.adapters.s3` - S3 API calls
+- `wagoe.storage.shell.adapters.image-processor` - Image manipulation
+- `wagoe.storage.shell.service` - Service orchestration
+- `wagoe.storage.shell.http-handlers` - HTTP request/response handling
 
 ### Ports (Interfaces)
-- `boundary.storage.ports/IFileStorage` - Storage operations contract
-- `boundary.storage.ports/IImageProcessor` - Image processing contract
+- `wagoe.storage.ports/IFileStorage` - Storage operations contract
+- `wagoe.storage.ports/IImageProcessor` - Image processing contract
 
 ## Extending
 
@@ -419,7 +419,7 @@ Implement the `IFileStorage` protocol:
 
 ```clojure
 (ns my-app.storage.custom
-  (:require [boundary.storage.ports :as ports]))
+  (:require [wagoe.storage.ports :as ports]))
 
 (defrecord CustomStorage [config]
   ports/IFileStorage

@@ -30,7 +30,7 @@ reach it*?
 
 === 1. Producers are pure functions of a project *snapshot*
 
-`boundary.mcp.core.resources` holds the resource catalog and a pure
+`wagoe.mcp.core.resources` holds the resource catalog and a pure
 `read-resource(snapshot, uri)`. A *snapshot* is a plain map
 (`:conventions :module-graph :kondo-rules :schema-registry :routes :workflows
 :libs`). Producers never do I/O; they shape snapshot data into resource content.
@@ -40,7 +40,7 @@ producers.
 
 === 2. A `SystemSource` port supplies the snapshot (hybrid: in-process now, nREPL later)
 
-`boundary.mcp.ports/SystemSource` has one method, `snapshot`. The shell provides
+`wagoe.mcp.ports/SystemSource` has one method, `snapshot`. The shell provides
 adapters:
 
 * *In-process* (`shell/system-source`, this PR): reflects the project at the

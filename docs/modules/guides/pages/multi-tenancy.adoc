@@ -87,8 +87,8 @@ Each one depends on data set by the previous.
 
 [source,clojure]
 ----
-(require '[boundary.tenant.shell.tenant-middleware :as tm]
-         '[boundary.tenant.shell.membership-middleware :refer [wrap-tenant-membership]])
+(require '[wagoe.tenant.shell.tenant-middleware :as tm]
+         '[wagoe.tenant.shell.membership-middleware :refer [wrap-tenant-membership]])
 
 (defn build-handler [routes system]
   (-> (create-router routes)
@@ -138,7 +138,7 @@ Import the interceptors from the `user` library:
 
 [source,clojure]
 ----
-(require '[boundary.user.shell.http-interceptors :as auth])
+(require '[wagoe.user.shell.http-interceptors :as auth])
 ----
 
 === Require active membership (any role)
@@ -192,8 +192,8 @@ Use `bootstrap-open?` to check, then create the first active membership directly
 
 [source,clojure]
 ----
-(require '[boundary.tenant.core.membership :as m]
-         '[boundary.tenant.ports :as ports])
+(require '[wagoe.tenant.core.membership :as m]
+         '[wagoe.tenant.ports :as ports])
 
 (defn on-tenant-created! [tenant user-id membership-service]
   (when (ports/bootstrap-open? membership-service (:id tenant))
@@ -324,7 +324,7 @@ know, use the token-based external invite flow.
 
 [source,clojure]
 ----
-(require '[boundary.tenant.ports :as ports])
+(require '[wagoe.tenant.ports :as ports])
 
 ;; Returns {:invite {...} :token "<raw-token>"}
 ;; Send :token to the user via email — it is NOT stored in the database
@@ -360,7 +360,7 @@ Always send the raw token to the user and discard it after.
 
 [source,clojure]
 ----
-(require '[boundary.tenant.shell.provisioning :as provisioning])
+(require '[wagoe.tenant.shell.provisioning :as provisioning])
 
 (provisioning/with-tenant-schema db-ctx "tenant_acme_corp"
   (fn [tx]
@@ -389,10 +389,10 @@ Always send the raw token to the user and discard it after.
 clojure -M:test:db/h2 :tenant
 
 # Focused suites
-clojure -M:test:db/h2 --focus boundary.tenant.core.membership-test
-clojure -M:test:db/h2 --focus boundary.tenant.shell.membership-service-test
-clojure -M:test:db/h2 --focus boundary.tenant.shell.invite-service-test
-clojure -M:test:db/h2 --focus boundary.tenant.integration-test
+clojure -M:test:db/h2 --focus wagoe.tenant.core.membership-test
+clojure -M:test:db/h2 --focus wagoe.tenant.shell.membership-service-test
+clojure -M:test:db/h2 --focus wagoe.tenant.shell.invite-service-test
+clojure -M:test:db/h2 --focus wagoe.tenant.integration-test
 ----
 
 See `libs/tenant/AGENTS.md` for the full library reference.

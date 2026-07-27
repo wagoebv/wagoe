@@ -392,7 +392,7 @@ CREATE TABLE orders (
 
 [source,clojure]
 ----
-(ns boundary.platform.shell.db.tenant
+(ns wagoe.platform.shell.db.tenant
   (:require [next.jdbc :as jdbc]))
 
 (defn with-tenant-schema
@@ -438,7 +438,7 @@ CREATE TABLE orders (
 
 [source,clojure]
 ----
-(ns boundary.platform.core.tenant
+(ns wagoe.platform.core.tenant
   (:require [clojure.string :as str]))
 
 (defn create-tenant-decision
@@ -465,8 +465,8 @@ CREATE TABLE orders (
 
 [source,clojure]
 ----
-(ns boundary.platform.shell.service.tenant
-  (:require [boundary.platform.core.tenant :as tenant-core]
+(ns wagoe.platform.shell.service.tenant
+  (:require [wagoe.platform.core.tenant :as tenant-core]
             [next.jdbc :as jdbc]))
 
 (defn create-tenant!
@@ -514,7 +514,7 @@ CREATE TABLE orders (
 
 [source,clojure]
 ----
-(ns boundary.platform.shell.db.migrations
+(ns wagoe.platform.shell.db.migrations
   (:require [migratus.core :as migratus]
             [next.jdbc :as jdbc]))
 
@@ -615,8 +615,8 @@ CREATE TABLE roles (
 
 [source,clojure]
 ----
-(ns boundary.jobs.shell.multi-tenant
-  (:require [boundary.jobs.ports :as jobs]))
+(ns wagoe.jobs.shell.multi-tenant
+  (:require [wagoe.jobs.ports :as jobs]))
 
 (defn enqueue-tenant-job!
   "Enqueue job with tenant context."
@@ -648,8 +648,8 @@ CREATE TABLE roles (
 
 [source,clojure]
 ----
-(ns boundary.cache.shell.multi-tenant
-  (:require [boundary.cache.ports :as cache]))
+(ns wagoe.cache.shell.multi-tenant
+  (:require [wagoe.cache.ports :as cache]))
 
 (defn tenant-cache-key
   "Prefix cache key with tenant ID."
@@ -689,8 +689,8 @@ DELETE /admin/tenants/:id        ; Delete tenant (soft delete)
 
 [source,clojure]
 ----
-(ns boundary.realtime.shell.multi-tenant
-  (:require [boundary.realtime.ports :as realtime]))
+(ns wagoe.realtime.shell.multi-tenant
+  (:require [wagoe.realtime.ports :as realtime]))
 
 (defn tenant-channel-name
   "Scope channel to tenant."
@@ -973,9 +973,9 @@ pg_restore -d boundary_production --schema=tenant_acme_corp tenant_acme_corp.dum
 * PostgreSQL schema switching via `SET search++_++path`
 * In-memory caching with 1-hour TTL
 * Located:
-`libs/platform/src/boundary/platform/shell/interfaces/http/tenant++_++middleware.clj`
+`libs/platform/src/wagoe/platform/shell/interfaces/http/tenant++_++middleware.clj`
 * Tests:
-`libs/platform/test/boundary/platform/shell/interfaces/http/tenant++_++middleware++_++test.clj`
+`libs/platform/test/wagoe/platform/shell/interfaces/http/tenant++_++middleware++_++test.clj`
 
 ==== Phase 2: Core Integration (Weeks 3-4)
 
@@ -1513,7 +1513,7 @@ and testing strategies.
 [arabic]
 . Create migration for `public.tenants` table
 . Create migration for `public.auth++_++users` table
-. Implement `boundary.platform.core.tenant` namespace (pure functions)
+. Implement `wagoe.platform.core.tenant` namespace (pure functions)
 . Implement tenant validation logic
 . Write comprehensive unit tests
 
@@ -1521,13 +1521,13 @@ and testing strategies.
 
 [source,clojure]
 ----
-;; boundary.platform.core.tenant
+;; wagoe.platform.core.tenant
 - create-tenant-decision
 - valid-slug?
 - schema-name-from-slug
 - can-delete-tenant?
 
-;; boundary.platform.schema
+;; wagoe.platform.schema
 - Tenant (Malli schema)
 - TenantInput (validation schema)
 ----
@@ -1568,19 +1568,19 @@ and testing strategies.
 
 [source,clojure]
 ----
-;; boundary.platform.shell.db.schema
+;; wagoe.platform.shell.db.schema
 - create-schema!
 - drop-schema!
 - schema-exists?
 - list-all-schemas
 
-;; boundary.platform.shell.persistence.tenant
+;; wagoe.platform.shell.persistence.tenant
 - create-tenant-record!
 - find-tenant-by-slug
 - find-tenant-by-id
 - list-all-tenants
 
-;; boundary.platform.shell.service.tenant
+;; wagoe.platform.shell.service.tenant
 - create-tenant!
 - delete-tenant!
 - suspend-tenant!
@@ -1630,7 +1630,7 @@ and testing strategies.
 
 [source,clojure]
 ----
-;; boundary.platform.shell.http.middleware.tenant
+;; wagoe.platform.shell.http.middleware.tenant
 - wrap-tenant-context
 - extract-subdomain
 - extract-jwt-tenant
@@ -1676,7 +1676,7 @@ and testing strategies.
 
 [source,clojure]
 ----
-;; boundary.platform.shell.db.tenant
+;; wagoe.platform.shell.db.tenant
 - with-tenant-schema
 - set-search-path!
 - get-current-schema
@@ -1728,7 +1728,7 @@ and testing strategies.
 
 [source,clojure]
 ----
-;; boundary.platform.shell.db.migrations
+;; wagoe.platform.shell.db.migrations
 - migrate-all-tenants!
 - migrate-tenant!
 - rollback-tenant!
@@ -1824,12 +1824,12 @@ clojure -M:migrate tenants status
 
 [source,clojure]
 ----
-;; boundary.jobs.shell.multi-tenant
+;; wagoe.jobs.shell.multi-tenant
 - enqueue-tenant-job!
 - process-tenant-job!
 - tenant-job-stats
 
-;; boundary.cache.shell.multi-tenant
+;; wagoe.cache.shell.multi-tenant
 - tenant-cache-key
 - with-tenant-cache
 - clear-tenant-cache!
@@ -1874,7 +1874,7 @@ clojure -M:migrate tenants status
 
 [source,clojure]
 ----
-;; boundary.realtime.shell.multi-tenant
+;; wagoe.realtime.shell.multi-tenant
 - tenant-channel-name
 - subscribe-tenant-channel!
 - broadcast-to-tenant!
@@ -1989,7 +1989,7 @@ POST   /api/admin/tenants/:id/activate
 
 [source,clojure]
 ----
-;; boundary.platform.shell.db.backup
+;; wagoe.platform.shell.db.backup
 - backup-tenant!
 - restore-tenant!
 - schedule-tenant-backups!
@@ -2047,8 +2047,8 @@ clojure -M:restore tenant <slug> <backup-file>
 [source,clojure]
 ----
 ;; Test coverage targets
-boundary.platform.core.tenant     ; 100% coverage
-boundary.platform.schema          ; 100% coverage
+wagoe.platform.core.tenant     ; 100% coverage
+wagoe.platform.schema          ; 100% coverage
 ----
 
 ==== Integration Tests (Phase 2-4)
@@ -2144,12 +2144,12 @@ service"
 
 *Files Created*:
 
-* `libs/tenant/src/boundary/tenant/shell/provisioning.clj` (419 lines)
+* `libs/tenant/src/wagoe/tenant/shell/provisioning.clj` (419 lines)
 ** `provision-tenant!` - Create PostgreSQL schema from public template
 ** `deprovision-tenant!` - Drop tenant schema (irreversible)
 ** `with-tenant-schema` - Execute function in tenant schema
 ** `tenant-provisioned?` - Check provision status
-* `libs/tenant/test/boundary/tenant/shell/provisioning++_++test.clj`
+* `libs/tenant/test/wagoe/tenant/shell/provisioning++_++test.clj`
 (250{plus} lines)
 ** 250{plus} assertions, 0 failures
 ** Schema creation, structure copying, isolation verification
@@ -2157,9 +2157,9 @@ service"
 
 *Files Modified*:
 
-* `libs/tenant/src/boundary/tenant/shell/http.clj` - Added provisioning
+* `libs/tenant/src/wagoe/tenant/shell/http.clj` - Added provisioning
 endpoints
-* `libs/tenant/src/boundary/tenant/shell/module++_++wiring.clj` -
+* `libs/tenant/src/wagoe/tenant/shell/module++_++wiring.clj` -
 Integrant wiring
 
 *Functionality*:
@@ -2179,11 +2179,11 @@ background jobs"
 
 *Files Created*:
 
-* `libs/jobs/src/boundary/jobs/shell/tenant++_++context.clj` (280 lines)
+* `libs/jobs/src/wagoe/jobs/shell/tenant++_++context.clj` (280 lines)
 ** `enqueue-tenant-job!` - Enqueue job with tenant metadata
 ** `extract-tenant-context` - Extract tenant from job metadata
 ** `process-tenant-job!` - Process job with automatic schema switching
-* `libs/jobs/test/boundary/jobs/shell/tenant++_++context++_++test.clj`
+* `libs/jobs/test/wagoe/jobs/shell/tenant++_++context++_++test.clj`
 (330{plus} lines)
 ** 10 tests, 80 assertions, 0 failures
 ** Tenant context extraction, schema switching verification
@@ -2192,7 +2192,7 @@ background jobs"
 
 *Files Modified*:
 
-* `libs/tenant/src/boundary/tenant/shell/provisioning.clj` ({plus}62
+* `libs/tenant/src/wagoe/tenant/shell/provisioning.clj` ({plus}62
 lines)
 ** Added `with-tenant-schema` utility for jobs module
 
@@ -2213,14 +2213,14 @@ automatic key prefixing"
 
 *Files Created*:
 
-* `libs/cache/src/boundary/cache/shell/tenant++_++cache.clj` (370{plus}
+* `libs/cache/src/wagoe/cache/shell/tenant++_++cache.clj` (370{plus}
 lines)
 ** `create-tenant-cache` - Create tenant-scoped cache wrapper
 ** Automatic key prefixing:
 `tenant:++<++tenant-id++>++:++<++original-key++>++`
 ** All cache operations (get, set, delete, increment, patterns,
 namespaces)
-* `libs/cache/test/boundary/cache/shell/tenant++_++cache++_++test.clj`
+* `libs/cache/test/wagoe/cache/shell/tenant++_++cache++_++test.clj`
 (440{plus} lines)
 ** 20 tests, 182 assertions, 0 failures
 ** Key prefixing verification
@@ -2278,7 +2278,7 @@ comprehensive module-level tests:
 
 *File Created* (but not working):
 
-* `libs/tenant/test/boundary/tenant/integration++_++test.clj` (730{plus}
+* `libs/tenant/test/wagoe/tenant/integration++_++test.clj` (730{plus}
 lines, 7 scenarios)
 ** Complete tenant lifecycle test
 ** Multi-tenant isolation test
@@ -2322,7 +2322,7 @@ note E2E test deferral"
 ** Key prefixing documentation
 ** Middleware integration guide
 ** Isolation verification examples
-* `libs/tenant/test/boundary/tenant/integration++_++test.clj` ({plus}15
+* `libs/tenant/test/wagoe/tenant/integration++_++test.clj` ({plus}15
 lines)
 ** Added deferral note explaining E2E test status
 ** Referenced module-level test coverage

@@ -138,7 +138,7 @@ Three AI-powered commands (require an AI provider to be configured):
 (ai/test-ideas "path/to/file.clj")
 
 ;; FC/IS refactoring guide
-(ai/refactor-fcis 'boundary.product.core.validation)
+(ai/refactor-fcis 'wagoe.product.core.validation)
 ----
 
 == `(new-feature!)` Workflow
@@ -159,67 +159,67 @@ Steps: AI spec generation → confirm → scaffold → integrate → test.
 |===
 | Namespace | Layer | Responsibility
 
-| `boundary.devtools.core.error-classifier`
+| `wagoe.devtools.core.error-classifier`
 | core
 | Exception → BND-xxx code mapping (5 strategies)
 
-| `boundary.devtools.core.error-enricher`
+| `wagoe.devtools.core.error-enricher`
 | core
 | Adds stacktrace, suggestions, fix descriptor, URLs
 
-| `boundary.devtools.core.error-formatter`
+| `wagoe.devtools.core.error-formatter`
 | core
 | Rich formatted output with BND code header
 
-| `boundary.devtools.core.auto-fix`
+| `wagoe.devtools.core.auto-fix`
 | core
 | Pure fix descriptor registry
 
-| `boundary.devtools.error-codes`
+| `wagoe.devtools.error-codes`
 | core
 | BND error catalog (BND-1xx through BND-6xx)
 
-| `boundary.devtools.core.guidance`
+| `wagoe.devtools.core.guidance`
 | core
 | Startup dashboard, tips, command palette
 
-| `boundary.devtools.core.introspection`
+| `wagoe.devtools.core.introspection`
 | core
 | Route table, config tree, module summary
 
-| `boundary.devtools.core.schema-tools`
+| `wagoe.devtools.core.schema-tools`
 | core
 | Schema tree, diff, example generation
 
-| `boundary.devtools.core.recording`
+| `wagoe.devtools.core.recording`
 | core
 | Request/response session management
 
-| `boundary.devtools.core.router`
+| `wagoe.devtools.core.router`
 | core
 | Route addition/removal, tap interceptor injection
 
-| `boundary.devtools.core.prototype`
+| `wagoe.devtools.core.prototype`
 | core
 | Malli schema → scaffold spec conversion
 
-| `boundary.devtools.core.config-editor`
+| `wagoe.devtools.core.config-editor`
 | core
 | Config redaction, formatting, diff
 
-| `boundary.devtools.core.security-analyzer`
+| `wagoe.devtools.core.security-analyzer`
 | core
 | Security posture analysis
 
-| `boundary.devtools.shell.repl`
+| `wagoe.devtools.shell.repl`
 | shell
 | Unified REPL API
 
-| `boundary.devtools.shell.dashboard.server`
+| `wagoe.devtools.shell.dashboard.server`
 | shell
 | Integrant component, Reitit router for dashboard
 
-| `boundary.devtools.shell.http-error-middleware`
+| `wagoe.devtools.shell.http-error-middleware`
 | shell
 | Dev error enrichment middleware
 |===

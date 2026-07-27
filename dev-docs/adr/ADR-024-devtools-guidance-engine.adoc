@@ -36,7 +36,7 @@ A new dev-only library (not published to Clojars) following the FC/IS pattern:
 [source]
 ----
 libs/devtools/
-├── src/boundary/devtools/
+├── src/wagoe/devtools/
 │   ├── core/
 │   │   ├── guidance.clj          # Pure: message formatting, level filtering
 │   │   ├── error_codes.clj       # Error code catalog (BND-xxx)
