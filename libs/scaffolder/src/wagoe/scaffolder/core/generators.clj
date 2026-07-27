@@ -6,9 +6,9 @@
   (:require [clojure.string :as str]
             [wagoe.scaffolder.core.template :as template]))
 
-;; When bumping the boundary-tools release, update this version and redeploy
+;; When bumping the wagoe-tools release, update this version and redeploy
 ;; libs/tools to Clojars before cutting a new boundary-starters release.
-(def boundary-tools-version "1.0.0-beta-1")
+(def wagoe-tools-version "1.0.0-beta-1")
 
 ;; =============================================================================
 ;; Schema File Generator
@@ -831,7 +831,7 @@ CREATE INDEX IF NOT EXISTS idx_%s_created_at ON %s(created_at);
 (defn generate-project-bb-edn
   "Generate bb.edn for a new project.
 
-   Wires boundary-tools so all bb tasks (scaffold, i18n, deploy, etc.)
+   Wires wagoe-tools so all bb tasks (scaffold, i18n, deploy, etc.)
    are available out of the box.
 
    Args:
@@ -843,8 +843,8 @@ CREATE INDEX IF NOT EXISTS idx_%s_created_at ON %s(created_at);
    Pure: true"
   [_name]
   (str ";; bb.edn — Babashka task runner for this Boundary project\n"
-       ";; All tasks are provided by boundary-tools; no local scripts needed.\n"
-       "{:deps {org.wagoe/wagoe-tools {:mvn/version \"" boundary-tools-version "\"}}\n"
+       ";; All tasks are provided by wagoe-tools; no local scripts needed.\n"
+       "{:deps {org.wagoe/wagoe-tools {:mvn/version \"" wagoe-tools-version "\"}}\n"
        "\n"
        " :tasks\n"
        " {:requires ([wagoe.tools.scaffold    :as scaffold]\n
@@ -1223,7 +1223,7 @@ Guidance for coding agents (Claude Code, etc.) working in this Boundary project.
 ## Architecture: Functional Core / Imperative Shell + Ports
 
 This project follows the **Functional Core / Imperative Shell** (FC/IS) pattern
-with a **Hexagonal (ports & adapters)** wagoe. Dependencies flow downward:
+with a **Hexagonal (ports & adapters)** boundary. Dependencies flow downward:
 the shell depends on protocols defined in `ports.clj`; the core implements the
 behaviour those protocols describe. The core never depends on the shell.
 
@@ -1333,7 +1333,7 @@ of protocols.
 - Shell services depend on the protocols in `ports.clj`, not on concrete records.
 - Web / HTTP layers never require `*.shell.persistence` directly — go through the service port.
 - Use `bb scaffold` to create modules; it generates `ports.clj` correctly.
-- Run `bb check:ports` to verify the wagoe.
+- Run `bb check:ports` to verify the boundary.
 "
           name))
 

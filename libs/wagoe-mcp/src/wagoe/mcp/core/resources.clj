@@ -50,7 +50,7 @@
     :capability  :read}
    {:uri         (str lib-uri-prefix "{name}")
     :name        "Library API surface"
-    :description "Public API surface of a boundary library at its installed version. Read wagoe://lib/<name> (e.g. wagoe://lib/user)."
+    :description "Public API surface of a wagoe library at its installed version. Read wagoe://lib/<name> (e.g. wagoe://lib/user)."
     :mimeType    "application/json"
     :capability  :read}])
 

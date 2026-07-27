@@ -13,7 +13,7 @@ the Wagoe monorepo and is consumed via a `:local/root` dependency in the root
 
 ```clojure
 ;; bb.edn
-{:deps {boundary-tools {:local/root "libs/tools"}}}
+{:deps {wagoe-tools {:local/root "libs/tools"}}}
 ```
 
 ## What's inside

@@ -1,4 +1,4 @@
-= ADR-015: boundary-tools — Distributing Developer Tooling to Starter Projects
+= ADR-015: wagoe-tools — Distributing Developer Tooling to Starter Projects
 :status: Accepted
 :date: 2026-03-23
 :deciders: boundary-team
@@ -94,7 +94,7 @@ of which are unacceptable as the toolset grows.
 | Always latest version; no publishing step
 | Requires internet at every run; no version pinning; fragile if URL changes
 
-| **`boundary-tools` Clojars artifact** (chosen)
+| **`wagoe-tools` Clojars artifact** (chosen)
 | Version-pinned; offline after first fetch; consistent with existing model;
   central release process
 | Requires a publish step per release; slightly more setup than URL import
@@ -175,16 +175,16 @@ Babashka's Maven dependency support:
 
 === 3. Versioning and release cadence
 
-`boundary-tools` follows the same versioning scheme as the domain libraries:
+`wagoe-tools` follows the same versioning scheme as the domain libraries:
 `MAJOR.MINOR.PATCH` with semantic versioning.  It is released independently
-— a new scaffolding feature does not force a release of `boundary-user`.
+— a new scaffolding feature does not force a release of `wagoe-user`.
 
 The `bb deploy` task in the monorepo is extended to include
-`boundary-tools` alongside the 20 domain libraries:
+`wagoe-tools` alongside the 20 domain libraries:
 
 [source,bash]
 ----
-bb deploy boundary-tools          ; deploy tools only
+bb deploy wagoe-tools          ; deploy tools only
 bb deploy --all                   ; deploy all 21 artifacts (20 libs + tools)
 bb deploy --missing               ; deploy artifacts not yet on Clojars
 ----
@@ -196,7 +196,7 @@ across all included artifacts.
 
 === 4. Monorepo alignment
 
-The monorepo's own `bb.edn` is refactored to consume `boundary-tools` as a
+The monorepo's own `bb.edn` is refactored to consume `wagoe-tools` as a
 local path dependency during development and the published artifact in CI:
 
 [source,clojure]
@@ -233,7 +233,7 @@ resolve correctly.
 - [ ] Refactor monorepo `bb.edn` to consume `libs/tools` as local path dep
 - [ ] Verify all existing `bb *` commands still work in the monorepo
 - [ ] Publish `org.wagoe/wagoe-tools 1.0.0` to Clojars
-- [ ] Extend `bb deploy` to include `boundary-tools`
+- [ ] Extend `bb deploy` to include `wagoe-tools`
 
 === Phase 2 — Update boundary-starter template
 - [ ] Replace ad-hoc `bb.edn` in `boundary-starter` with the artifact-based
@@ -244,12 +244,12 @@ resolve correctly.
 === Phase 3 — Add i18n tooling (follows ADR-013 Phase 1)
 - [ ] Implement `bb i18n find`, `bb i18n scan`, `bb i18n missing`,
       `bb i18n unused` in `libs/tools/scripts/i18n.clj`
-- [ ] Release `boundary-tools 1.1.0`
+- [ ] Release `wagoe-tools 1.1.0`
 
 === Phase 4 — Documentation
 - [ ] Write `libs/tools/AGENTS.md` with full command reference
 - [ ] Add upgrade guide to `boundary-starter` README
-- [ ] Update root `AGENTS.md` to reference `boundary-tools` versioning
+- [ ] Update root `AGENTS.md` to reference `wagoe-tools` versioning
 
 == Consequences
 
@@ -277,7 +277,7 @@ resolve correctly.
 
 * Teams that do not use `boundary-starter` (e.g., the monorepo itself) see no
   change in workflow — the local path dependency is transparent.
-* The `boundary-tools` artifact contains Babashka scripts only; it adds no
+* The `wagoe-tools` artifact contains Babashka scripts only; it adds no
   JVM compile-time dependency to application code.
 
 == Alternatives Considered

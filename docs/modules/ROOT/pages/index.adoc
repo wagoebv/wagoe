@@ -6,7 +6,7 @@ pure business logic in `core/`, side effects in `shell/`, and clean interfaces t
 
 == What Wagoe provides
 
-* *23 independently publishable libraries* on Clojars — use only what you need (plus `wagoe-cli` and `boundary-devtools`)
+* *23 independently publishable libraries* on Clojars — use only what you need (plus `wagoe-cli` and `wagoe-devtools`)
 * *Scaffolder* that generates fully structured modules (entity + routes + tests) in seconds
 * *Auto-generated admin UI* from your schema — no manual forms
 * *Built-in observability*, RFC 5988 pagination, and declarative interceptors

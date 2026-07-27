@@ -29,9 +29,9 @@
                              [:url "https://www.eclipse.org/legal/epl-2.0/"]]]]})
   (b/copy-dir {:src-dirs ["src"]
                :target-dir class-dir})
-  ;; BOU-76: ship the shared error catalogue inside the boundary-tools jar so
-  ;; consumer projects that depend on boundary-tools alone (without
-  ;; boundary-devtools) can run `bb guide error BND-xxx` and don't crash on
+  ;; BOU-76: ship the shared error catalogue inside the wagoe-tools jar so
+  ;; consumer projects that depend on wagoe-tools alone (without
+  ;; wagoe-devtools) can run `bb guide error BND-xxx` and don't crash on
   ;; namespace-load of wagoe.tools.help. Source of truth lives in
   ;; libs/devtools/resources; copied here at build time.
   (b/copy-file {:src    "../devtools/resources/wagoe/devtools/error_catalog.edn"

@@ -81,7 +81,7 @@ Function names and signatures are unchanged (`wrap-multi-tenant`,
 `wagoe.shared.ui.*` namespaces moved from the admin lib into a new
 `org.wagoe/wagoe-shared-ui` artifact. The namespaces themselves are
 unchanged, and since alpha-42 the published POMs declare their inter-Wagoe
-dependencies, so `boundary-user`/`boundary-admin`/etc. pull `shared-ui` in
+dependencies, so `wagoe-user`/`wagoe-admin`/etc. pull `shared-ui` in
 transitively.
 
 **Action:** usually none. If your deps.edn hand-enumerates the Wagoe

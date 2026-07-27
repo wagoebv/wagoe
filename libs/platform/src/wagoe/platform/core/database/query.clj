@@ -69,7 +69,7 @@
 
 (defn- convert-query-identifiers
   "Walk through HoneySQL query map and convert table/column identifiers to snake_case.
-   This handles table names, column names, etc. at the database wagoe.
+   This handles table names, column names, etc. at the database boundary.
    
    IMPORTANT: Only converts VALUES (table names, column names), NOT KEYS (HoneySQL clauses).
    HoneySQL clauses like :insert-into, :select, :from must remain kebab-case.
@@ -126,7 +126,7 @@
 
 (defn format-sql
   "Format HoneySQL query map to SQL string with parameters.
-   Converts kebab-case identifiers to snake_case at database wagoe.
+   Converts kebab-case identifiers to snake_case at database boundary.
    
    Pure function: transforms data structure to SQL without executing it.
    
@@ -151,7 +151,7 @@
 
 (defn format-sql-with-opts
   "Format HoneySQL query map with custom options.
-   Converts kebab-case identifiers to snake_case at database wagoe.
+   Converts kebab-case identifiers to snake_case at database boundary.
    
    Pure function: transforms data with configuration.
    

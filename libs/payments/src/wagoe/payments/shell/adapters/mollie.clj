@@ -13,7 +13,7 @@
   {"Authorization"  (str "Bearer " api-key)
    "Content-Type"   "application/json"
    "Accept"         "application/json"
-   "User-Agent"     "boundary-payments/1.0"})
+   "User-Agent"     "wagoe-payments/1.0"})
 
 (defn- fetch-payment [api-key payment-id]
   (let [url      (str mollie-api-base "/payments/" payment-id)

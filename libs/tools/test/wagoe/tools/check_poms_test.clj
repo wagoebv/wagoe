@@ -144,7 +144,7 @@
   {:dir (name d) :coord (poms/wagoe-dep->coord d)})
 
 (deftest ^:unit unpublishable-deps-flags-referenced-non-publishable-lib
-  (testing "the shared-ui failure: user's POM references boundary-shared-ui but shared-ui has no build.clj"
+  (testing "the shared-ui failure: user's POM references wagoe-shared-ui but shared-ui has no build.clj"
     (let [results [{:lib "user" :publishable? true :wagoe-deps [(dep-entry 'wagoe/shared-ui)]}
                    {:lib "shared-ui" :publishable? false :wagoe-deps []}]]
       (is (= [{:lib "user" :dep 'org.wagoe/wagoe-shared-ui}]

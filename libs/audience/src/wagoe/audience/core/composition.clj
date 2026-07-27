@@ -5,7 +5,7 @@
    Well-formedness (unknown operator, NOT-inside-OR, circular/unknown/invalid
    segment refs) is checked up front by `explain-composition`; the shell
    validates a composition tree before evaluating it and raises the typed error
-   at the HTTP wagoe. The evaluation functions below therefore assume a valid
+   at the HTTP boundary. The evaluation functions below therefore assume a valid
    tree and never throw — their error branches fail safe (an empty result set,
    and the cycle guard still terminates)."
   (:require [clojure.set :as set]))
@@ -147,7 +147,7 @@
 
 ;; =============================================================================
 ;; Validation (pure) — the shell calls this before evaluation and raises the
-;; typed error at the HTTP wagoe. Mirrors the resolution traversal so the
+;; typed error at the HTTP boundary. Mirrors the resolution traversal so the
 ;; evaluation functions above can stay throw-free.
 ;; =============================================================================
 

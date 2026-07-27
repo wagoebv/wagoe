@@ -1,4 +1,4 @@
-# boundary-push
+# wagoe-push
 
 [![Status](https://img.shields.io/badge/status-alpha-orange)]()
 [![Clojure](https://img.shields.io/badge/clojure-1.12+-blue)]()
@@ -106,7 +106,7 @@ Use `:provider :mock` for FCM and APNs in dev/test environments.
 
 ## DB Migration
 
-Run once before using push notifications. When `boundary-push` is on the classpath, `clojure -M:migrate up` auto-discovers these migrations:
+Run once before using push notifications. When `wagoe-push` is on the classpath, `clojure -M:migrate up` auto-discovers these migrations:
 
 ```sql
 -- 20260524000000-device-tokens.up.sql

@@ -17,7 +17,7 @@
 (defn- stripe-headers [api-key]
   {"Authorization" (str "Bearer " api-key)
    "Accept"        "application/json"
-   "User-Agent"    "boundary-payments/1.0"})
+   "User-Agent"    "wagoe-payments/1.0"})
 
 (defn- url-encode [^String s]
   (java.net.URLEncoder/encode s "UTF-8"))

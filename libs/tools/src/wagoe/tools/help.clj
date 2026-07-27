@@ -25,8 +25,8 @@
    Returns {} when the resource is absent instead of throwing, so that
    `wagoe.tools.help` loads — and every unrelated bb task (doctor,
    scaffold, …) starts — even in a consumer project that depends on
-   boundary-tools without boundary-devtools on the classpath. The catalogue
-   ships inside the boundary-tools jar (see build.clj), so this fallback only
+   wagoe-tools without wagoe-devtools on the classpath. The catalogue
+   ships inside the wagoe-tools jar (see build.clj), so this fallback only
    triggers on a broken classpath. (BOU-76)"
   [resource]
   (if resource
@@ -38,7 +38,7 @@
 
    Loaded lazily (not at namespace-load time) and degrades gracefully to {}
    when the resource is missing — see read-catalog. Deref with @error-catalog.
-   The EDN is packaged into the boundary-tools jar and also resolves from
+   The EDN is packaged into the wagoe-tools jar and also resolves from
    libs/devtools/resources via bb.edn :paths inside the monorepo."
   (delay (read-catalog (io/resource "wagoe/devtools/error_catalog.edn"))))
 
@@ -361,9 +361,9 @@
 (defn- catalog-unavailable []
   (println)
   (println (yellow "Error catalogue not available on the classpath."))
-  (println (dim "  The boundary-tools jar ships boundary/devtools/error_catalog.edn;"))
+  (println (dim "  The wagoe-tools jar ships boundary/devtools/error_catalog.edn;"))
   (println (dim "  inside the monorepo it loads from libs/devtools/resources via bb.edn :paths."))
-  (println (dim "  Reinstall/upgrade boundary-tools, or add libs/devtools/resources to bb.edn :paths.")))
+  (println (dim "  Reinstall/upgrade wagoe-tools, or add libs/devtools/resources to bb.edn :paths.")))
 
 (defn- help-error [code]
   (let [catalog @error-catalog]

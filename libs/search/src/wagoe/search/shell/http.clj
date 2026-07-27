@@ -1,5 +1,5 @@
 (ns wagoe.search.shell.http
-  "HTTP API routes and admin web UI handlers for boundary-search.
+  "HTTP API routes and admin web UI handlers for wagoe-search.
 
    API Endpoints (mounted under /api/v1):
      POST   /search/:index-id              — search

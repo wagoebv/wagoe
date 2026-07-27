@@ -23,7 +23,7 @@ consuming applications:
 * copied migrations drift from the source library and create ownership confusion
 
 This is especially problematic for reusable Wagoe libraries such as
-`boundary-geo`, where the library owns a table contract but the consuming
+`wagoe-geo`, where the library owns a table contract but the consuming
 application must currently discover and copy that migration manually.
 
 == Decision
@@ -104,4 +104,4 @@ For application authors:
 
 * ADR-001: Library Split
 * ADR-004: Multi-Tenancy Architecture
-* ADR-015: boundary-tools
+* ADR-015: wagoe-tools

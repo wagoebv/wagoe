@@ -1,5 +1,5 @@
 (ns wagoe.mcp.shell.codec
-  "JSON <-> Clojure data codec for the JSON-RPC wagoe. Lives in shell so
+  "JSON <-> Clojure data codec for the JSON-RPC boundary. Lives in shell so
    cheshire (an I/O-adjacent dependency) stays out of the functional core."
   (:require [cheshire.core :as json]
             [clojure.string :as str]))

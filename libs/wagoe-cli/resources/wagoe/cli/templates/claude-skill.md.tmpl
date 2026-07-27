@@ -1,5 +1,5 @@
 ---
-name: boundary
+name: wagoe
 description: Wagoe framework (Clojure FC/IS) toolkit. Use when the user wants to add a module, entity, or feature ("add a product module with name and price"), add a field/endpoint/adapter to a module, wire a module into the app, explain a Clojure/Wagoe error or stacktrace, generate tests, write SQL from a description, configure the project, or diagnose setup issues. ALWAYS scaffold new modules with `bb scaffold` instead of hand-writing them.
 ---
 
@@ -60,7 +60,7 @@ Field spec format: `name:type[:required][:unique]` with types
 
 <!-- This file exists in two places and must stay byte-identical:
      libs/wagoe-cli/resources/wagoe/cli/templates/claude-skill.md.tmpl
-       (copied into generated projects as .claude/skills/boundary/SKILL.md)
-     claude-plugin/skills/boundary/SKILL.md
+       (copied into generated projects as .claude/skills/wagoe/SKILL.md)
+     claude-plugin/skills/wagoe/SKILL.md
        (shipped as the Claude Code plugin for existing projects)
      A test in libs/wagoe-cli verifies they match. -->

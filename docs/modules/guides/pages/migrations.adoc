@@ -175,7 +175,7 @@ The key principle: **schema changes and code changes deploy separately**. The da
 
 == Multi-Tenant Migrations
 
-When using `boundary-tenant` (schema-per-tenant), migrations run in two scopes:
+When using `wagoe-tenant` (schema-per-tenant), migrations run in two scopes:
 
 . **Shared schema** (`public`) — tenant registry, shared tables. Use `resources/migrations/` as normal.
 . **Per-tenant schema** — tenant-specific tables. The tenant library applies these automatically during provisioning.

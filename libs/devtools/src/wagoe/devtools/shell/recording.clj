@@ -6,7 +6,7 @@
             [clojure.string :as str])
   (:import [java.io InputStream]))
 
-(def ^:private default-dir ".boundary/recordings")
+(def ^:private default-dir ".wagoe/recordings")
 
 (defonce ^:private session-atom (atom nil))
 

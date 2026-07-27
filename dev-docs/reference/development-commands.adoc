@@ -406,7 +406,7 @@ bb i18n:unused            # Report catalogue keys not referenced in source
 
 [source,bash]
 ----
-bb test:tools             # Run boundary-tools unit tests
+bb test:tools             # Run wagoe-tools unit tests
 bb check-links            # Validate markdown links in AGENTS.md files
 bb smoke-check            # Verify deps.edn aliases and key tool entrypoints
 bb install-hooks          # Configure git hooks path to .githooks

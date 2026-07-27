@@ -13,7 +13,7 @@ Wagoe packages those decisions into one coherent framework, so you do not have t
 
 === For developers: 24 composable libraries
 
-Use just `boundary-core` for validation utilities in an existing app, or compose the full stack with JWT + MFA auth, auto-generated CRUD UIs, background jobs, multi-tenancy, real-time WebSockets, and more.
+Use just `wagoe-core` for validation utilities in an existing app, or compose the full stack with JWT + MFA auth, auto-generated CRUD UIs, background jobs, multi-tenancy, real-time WebSockets, and more.
 
 Every library follows the same FC/IS structure, so a Wagoe codebase feels familiar fast.
 
@@ -28,7 +28,7 @@ The scaffolder generates fully structured modules in seconds. The admin UI can b
 
 === Zero lock-in
 
-Each library is a standard `deps.edn` dependency. Swap what doesn't fit. If you do not need multi-tenancy, skip `boundary-tenant`. If you prefer a different cache backend, implement the cache port you need.
+Each library is a standard `deps.edn` dependency. Swap what doesn't fit. If you do not need multi-tenancy, skip `wagoe-tenant`. If you prefer a different cache backend, implement the cache port you need.
 
 == The FC/IS guarantee
 
