@@ -92,5 +92,5 @@ serialization, and the guardrail lookup; pure protocol methods still delegate to
 
 * nREPL `SystemSource` adapter populating schema-registry / routes / workflows /
   `lib/{name}` from a running project.
-* `resources/templates/list` for the `boundary://lib/{name}` template (currently
+* `resources/templates/list` for the `wagoe://lib/{name}` template (currently
   advertised as a single templated catalog entry).

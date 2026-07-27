@@ -128,7 +128,7 @@ point of wagoe-mcp.
 
 > **The working directory matters.** The in-process adapter reflects **cwd** —
 > tool paths, the `lint` targets, and the reflective resources
-> (`boundary://conventions`, `boundary://module-graph`, …) all resolve against the
+> (`wagoe://conventions`, `wagoe://module-graph`, …) all resolve against the
 > directory the server runs in. Run it from the **root of the Wagoe project you
 > want the agent to work on**, or those resources come back `:unavailable`.
 
@@ -252,9 +252,9 @@ This is the loop in action. The agent wants to add an `invoice` module.
 **1. It orients itself** — reads ground truth instead of guessing:
 
 ```jsonc
-// tools/call → describe-module, and a read of boundary://conventions
+// tools/call → describe-module, and a read of wagoe://conventions
 {"jsonrpc":"2.0","id":10,"method":"resources/read",
- "params":{"uri":"boundary://conventions"}}
+ "params":{"uri":"wagoe://conventions"}}
 // → FC/IS rules + naming conventions, straight from the project's knowledge.edn
 ```
 
@@ -397,13 +397,13 @@ supplies the snapshot.
 
 | URI | Source | Status |
 |-----|--------|--------|
-| `boundary://conventions` | `resources/agents/knowledge.edn` (FC/IS + naming) | concrete |
-| `boundary://module-graph` | `libs/*/deps.edn` + `ports.clj` presence | concrete |
-| `boundary://kondo-rules` | `.clj-kondo/config.edn` | concrete |
-| `boundary://schema-registry` | live Malli registry | `:unavailable` until nREPL bridge |
-| `boundary://routes` | live reitit router | `:unavailable` until nREPL bridge |
-| `boundary://workflows` | workflow registry | `:unavailable` until nREPL bridge |
-| `boundary://lib/{name}` | installed lib API surface | `:unavailable` until nREPL bridge |
+| `wagoe://conventions` | `resources/agents/knowledge.edn` (FC/IS + naming) | concrete |
+| `wagoe://module-graph` | `libs/*/deps.edn` + `ports.clj` presence | concrete |
+| `wagoe://kondo-rules` | `.clj-kondo/config.edn` | concrete |
+| `wagoe://schema-registry` | live Malli registry | `:unavailable` until nREPL bridge |
+| `wagoe://routes` | live reitit router | `:unavailable` until nREPL bridge |
+| `wagoe://workflows` | workflow registry | `:unavailable` until nREPL bridge |
+| `wagoe://lib/{name}` | installed lib API surface | `:unavailable` until nREPL bridge |
 
 The "concrete" ones work today by reflecting files in the working directory. The
 live-system ones honestly return `{:status :unavailable}` until the nREPL bridge
