@@ -33,7 +33,7 @@
                           com.h2database/h2           {:mvn/version "2.4.240"}
                           com.mysql/mysql-connector-j {:mvn/version "9.6.0"}}
              :main-opts  ["-e" "(require '[boundary.user.shell.cli-entry :as e]) (System/exit (e/run-cli! (vec *command-line-args*)))"]}
-  ;; Boundary MCP server for editor agents (Claude Code / Cursor). Kept in an
+  ;; Wagoe MCP server for editor agents (Claude Code / Cursor). Kept in an
   ;; alias — NOT in :deps — so the app runtime never pulls the MCP server.
   ;; Launched by .mcp.json via `clojure -M:mcp`. wagoe-mcp's pom now declares
   ;; its full boundary closure (ai, devtools, scaffolder, tools, jobs via
