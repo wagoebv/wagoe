@@ -4,7 +4,7 @@
 
   Pure helpers prefer returning data/strings; any I/O (writing files) is left to the caller."
   (:require [malli.core :as m]
-            [wagoe.core.validation.registry :as reg]
+            [wagoe.platform.shell.validation-registry :as reg]
             [wagoe.core.validation.snapshot :as snap]
             [clojure.string :as str]))
 
@@ -33,7 +33,7 @@
 (defn conflicts
   "Find potentially conflicting rules (same category and fields)."
   []
-  (reg/find-conflicting-rules))
+  (reg/conflicting-rules))
 
 ;; ----------------------------------------------------------------------------
 ;; Schema helpers (generic)

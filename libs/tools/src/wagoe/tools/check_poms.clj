@@ -39,13 +39,13 @@
            (map (fn [d] [(.getName d) d]))
            (sort-by first)))))
 
-(defn boundary-dep->coord
+(defn wagoe-dep->coord
   "Published Maven coordinate symbol for a `boundary/<x>` dep symbol, mirroring
-   `build-shared/rewrite-boundary-deps`."
+   `build-shared/rewrite-wagoe-deps`."
   [dep]
   (symbol "org.wagoe" (str "wagoe-" (name dep))))
 
-(defn boundary-local-deps
+(defn wagoe-local-deps
   "For every `boundary/<x> {:local/root ...}` dep in a lib's deps.edn, a map
    {:dir <:local/root target dir name> :coord <published coord symbol>}, sorted
    by :dir. :dir is the authoritative publishable-lib key (the actual directory
@@ -60,7 +60,7 @@
                               (contains? coord :local/root)
                               (= "wagoe" (namespace dep)))
                      {:dir   (last (str/split (:local/root coord) #"/"))
-                      :coord (boundary-dep->coord dep)})))
+                      :coord (wagoe-dep->coord dep)})))
            (sort-by :dir)
            (vec))
       [])))
@@ -102,17 +102,17 @@
 (defn check-lib
   "Regression mode B: a build.clj that generates a pom (calls write-pom) must
    feed it the rewritten basis via build-shared/pom-basis. Returns a map:
-   {:lib :publishable? :uses-pom-basis? :boundary-deps :violation?}."
+   {:lib :publishable? :uses-pom-basis? :wagoe-deps :violation?}."
   [[lib-name lib-dir]]
   (let [build-file    (io/file lib-dir "build.clj")
         src           (when (.exists build-file) (slurp build-file))
         publishable?  (boolean (and src (str/includes? src "write-pom")))
         uses-pom-basis? (pom-basis-wired? src)
-        boundary-deps (boundary-local-deps lib-dir)]
+        wagoe-deps (wagoe-local-deps lib-dir)]
     {:lib             lib-name
      :publishable?    publishable?
      :uses-pom-basis? uses-pom-basis?
-     :boundary-deps   boundary-deps
+     :wagoe-deps   wagoe-deps
      ;; A publishable lib that skips pom-basis will silently drop its boundary
      ;; deps from the pom. A non-publishable lib (no write-pom) is exempt.
      :violation?      (and publishable? (not uses-pom-basis?))}))
@@ -125,9 +125,9 @@
    rather than reverse-engineering the coord. Returns a seq of {:lib :dep}."
   [results]
   (let [publishable (into #{} (comp (filter :publishable?) (map :lib)) results)]
-    (for [{:keys [lib publishable? boundary-deps]} results
+    (for [{:keys [lib publishable? wagoe-deps]} results
           :when publishable?                         ; only published libs emit a POM
-          {:keys [dir coord]} boundary-deps
+          {:keys [dir coord]} wagoe-deps
           :when (not (contains? publishable dir))]
       {:lib lib :dep coord})))
 
@@ -141,12 +141,12 @@
         results        (map check-lib libs)
         violations     (filter :violation? results)
         unpublishable  (unpublishable-deps results)
-        with-deps      (filter #(and (:publishable? %) (seq (:boundary-deps %))) results)]
+        with-deps      (filter #(and (:publishable? %) (seq (:wagoe-deps %))) results)]
     ;; Informational: the boundary closure each pom will declare.
     (when (seq with-deps)
       (println (ansi/dim "Boundary dependencies each published POM will declare:"))
-      (doseq [{:keys [lib boundary-deps]} with-deps]
-        (println (str "  " lib " -> " (str/join ", " (map (comp str :coord) boundary-deps)))))
+      (doseq [{:keys [lib wagoe-deps]} with-deps]
+        (println (str "  " lib " -> " (str/join ", " (map (comp str :coord) wagoe-deps)))))
       (println))
     (if (or (seq shared-issues) (seq violations) (seq unpublishable))
       (do
@@ -175,5 +175,5 @@
       (do
         (println (ansi/green "POM dependency check passed.")
                  (str (count libs) " libraries scanned, "
-                      (count with-deps) " declare boundary deps, 0 violations."))
+                      (count with-deps) " declare wagoe deps, 0 violations."))
         (System/exit 0)))))

@@ -7,7 +7,7 @@
   (:require [clojure.edn :as edn]
             [clojure.tools.build.api :as b]))
 
-(defn- rewrite-boundary-deps
+(defn- rewrite-wagoe-deps
   "Rewrite boundary/<artifact> :local/root deps to their published
    org.wagoe/wagoe-<artifact> :mvn/version coordinates.
 
@@ -31,5 +31,5 @@
    published :mvn/version coords at the given suite version."
   [version]
   (let [project   (edn/read-string (slurp "deps.edn"))
-        rewritten (update project :deps rewrite-boundary-deps version)]
+        rewritten (update project :deps rewrite-wagoe-deps version)]
     (b/create-basis {:project rewritten})))

@@ -1,6 +1,6 @@
 {:paths ["scripts"                    ; still needed for docs_lint.clj + verify_doc_links.clj
-         "libs/tools/src"              ; boundary-tools — pure bb, no Maven deps needed at runtime
-         "libs/devtools/resources"     ; shared error catalogue EDN (boundary/devtools/core/error_catalog.edn)
+         "libs/tools/src"              ; wagoe-tools — pure bb, no Maven deps needed at runtime
+         "libs/devtools/resources"     ; shared error catalogue EDN (wagoe/devtools/core/error_catalog.edn)
          "libs/wagoe-cli/src"       ; bbin installs via --deps-root repo-root, so root bb.edn :paths must include CLI src
          "libs/wagoe-cli/resources"]
  :tasks
@@ -22,7 +22,7 @@
              [wagoe.tools.check-ports :as check-ports]
              [wagoe.tools.check-poms  :as check-poms]
              [wagoe.tools.check-hygiene :as check-hygiene]
-             [check-no-boundary :as check-no-boundary]  ; scripts/check_no_boundary.clj — outside the renamed tree
+             [check-no-boundary :as check-no-boundary]  ; lives under scripts/, outside the renamed tree
              [wagoe.tools.doctor-env  :as doctor-env]
              [wagoe.tools.db          :as db]
              [wagoe.tools.check       :as check]
@@ -58,13 +58,13 @@
                       :task (apply integrate/-main *command-line-args*)}
   upgrade-outdated {:doc "Check (and optionally upgrade) outdated Maven deps across all libs (--update to apply, --lib <name> to filter)"
                     :task (apply deps/-main *command-line-args*)}
-  deploy        {:doc "Deploy Boundary libraries to Clojars (bb deploy --help for usage)"
+  deploy        {:doc "Deploy Wagoe libraries to Clojars (bb deploy --help for usage)"
                  :task (apply deploy/-main *command-line-args*)}
-  migrate       {:doc "Run database migrations via the standard Boundary migrate CLI (bb migrate [up|status|rollback|create ...])"
+  migrate       {:doc "Run database migrations via the standard Wagoe migrate CLI (bb migrate [up|status|rollback|create ...])"
                  :task (apply dev/migrate *command-line-args*)}
-  coverage      {:doc "Run Cloverage coverage with the monorepo Boundary test/classpath setup"
+  coverage      {:doc "Run Cloverage coverage with the monorepo Wagoe test/classpath setup"
                  :task (clojure "-M:coverage:db")}
-  create-admin  {:doc "Create the first admin user for a new Boundary project (interactive wizard)"
+  create-admin  {:doc "Create the first admin user for a new Wagoe project (interactive wizard)"
                  :task (apply admin/-main *command-line-args*)}
   check-links   {:doc "Validate local markdown links in AGENTS documentation"
                  :task (dev/check-links)}
@@ -100,13 +100,13 @@
               :task (check-deps/-main)}
   check:ports {:doc "Hexagonal boundary enforcement — modules must define ports.clj; shell/web must not bypass protocols (bb check:ports)"
                :task (check-ports/-main)}
-  check:poms {:doc "POM dependency completeness — published POMs must carry inter-Boundary deps via build-shared/pom-basis (bb check:poms)"
+  check:poms {:doc "POM dependency completeness — published POMs must carry inter-Wagoe deps via build-shared/pom-basis (bb check:poms)"
               :task (check-poms/-main)}
   check:hygiene {:doc "Reject tracked backup/cruft files (*.bak, *.backup, *.orig, *~) (bb check:hygiene)"
                  :task (check-hygiene/-main)}
   check:no-boundary {:doc "Rename gate: scan for residual boundary tokens (ns/keys/coords/env/dirs/urls); args select groups (bb check:no-boundary)"
                      :task (apply check-no-boundary/-main *command-line-args*)}
-  test:tools {:doc "Run boundary-tools unit tests (bb test:tools)"
+  test:tools {:doc "Run wagoe-tools unit tests (bb test:tools)"
               :extra-paths ["libs/tools/test"]
               :task (do (require 'wagoe.tools.doctor-test
                                  'wagoe.tools.doctor-env-test
@@ -152,7 +152,7 @@
                (when (pos? (+ (:fail summary) (:error summary)))
                  (System/exit 1))))}
   run-e2e-server
-  {:doc "Start the Boundary app on :test profile (port 3100) for Playwright/spel e2e runs"
+  {:doc "Start the Wagoe app on :test profile (port 3100) for Playwright/spel e2e runs"
    :task (let [proc (process/process
                      ;; HTTP_PORT pinned here so a caller's shell env cannot
                      ;; silently reroute the e2e server to another port.

@@ -14,19 +14,19 @@
     f))
 
 ;; ---------------------------------------------------------------------------
-;; boundary-dep->coord — mirrors build-shared/rewrite-boundary-deps
+;; wagoe-dep->coord — mirrors build-shared/rewrite-wagoe-deps
 ;; ---------------------------------------------------------------------------
 
-(deftest ^:unit boundary-dep->coord-maps-to-published-artifact
-  (is (= 'org.wagoe/wagoe-user (poms/boundary-dep->coord 'boundary/user)))
-  (is (= 'org.wagoe/wagoe-ui-style (poms/boundary-dep->coord 'boundary/ui-style)))
-  (is (= 'org.wagoe/wagoe-shared-ui (poms/boundary-dep->coord 'boundary/shared-ui))))
+(deftest ^:unit wagoe-dep->coord-maps-to-published-artifact
+  (is (= 'org.wagoe/wagoe-user (poms/wagoe-dep->coord 'wagoe/user)))
+  (is (= 'org.wagoe/wagoe-ui-style (poms/wagoe-dep->coord 'wagoe/ui-style)))
+  (is (= 'org.wagoe/wagoe-shared-ui (poms/wagoe-dep->coord 'wagoe/shared-ui))))
 
 ;; ---------------------------------------------------------------------------
-;; boundary-local-deps — only :local/root boundary deps, as {:dir :coord}
+;; wagoe-local-deps — only :local/root boundary deps, as {:dir :coord}
 ;; ---------------------------------------------------------------------------
 
-(deftest ^:unit boundary-local-deps-selects-only-local-root-boundary-deps
+(deftest ^:unit wagoe-local-deps-selects-only-local-root-wagoe-deps
   (let [dir (tmp-dir)]
     (spit-file dir "deps.edn"
                (pr-str {:deps {'wagoe/core     {:local/root "../core"}
@@ -37,18 +37,18 @@
                                'ring/ring-core    {:mvn/version "1.15.4"}}}))
     (is (= [{:dir "core"     :coord 'org.wagoe/wagoe-core}
             {:dir "platform" :coord 'org.wagoe/wagoe-platform}]
-           (poms/boundary-local-deps dir)))))
+           (poms/wagoe-local-deps dir)))))
 
-(deftest ^:unit boundary-local-deps-dir-tracks-local-root-target-not-dep-symbol
+(deftest ^:unit wagoe-local-deps-dir-tracks-local-root-target-not-dep-symbol
   (testing ":dir is the :local/root target (authoritative), even if it diverges from the coord suffix"
     (let [dir (tmp-dir)]
       (spit-file dir "deps.edn"
                  (pr-str {:deps {'wagoe/shared-ui {:local/root "../shared-ui"}}}))
       (is (= [{:dir "shared-ui" :coord 'org.wagoe/wagoe-shared-ui}]
-             (poms/boundary-local-deps dir))))))
+             (poms/wagoe-local-deps dir))))))
 
-(deftest ^:unit boundary-local-deps-empty-when-no-deps-file
-  (is (empty? (poms/boundary-local-deps (tmp-dir)))))
+(deftest ^:unit wagoe-local-deps-empty-when-no-deps-file
+  (is (empty? (poms/wagoe-local-deps (tmp-dir)))))
 
 ;; ---------------------------------------------------------------------------
 ;; pom-basis-wired? — regression mode B guard (write-pom basis bound to pom-basis)
@@ -101,7 +101,7 @@
       (is (:uses-pom-basis? r))
       (is (not (:violation? r)))
       (is (= [{:dir "core" :coord 'org.wagoe/wagoe-core}]
-             (:boundary-deps r))))))
+             (:wagoe-deps r))))))
 
 (deftest ^:unit check-lib-exempts-non-publishable-lib
   (testing "a build.clj with no write-pom (e.g. uberjar CLI) is exempt"
@@ -141,22 +141,22 @@
 ;; ---------------------------------------------------------------------------
 
 (defn- dep-entry [d]
-  {:dir (name d) :coord (poms/boundary-dep->coord d)})
+  {:dir (name d) :coord (poms/wagoe-dep->coord d)})
 
 (deftest ^:unit unpublishable-deps-flags-referenced-non-publishable-lib
   (testing "the shared-ui failure: user's POM references boundary-shared-ui but shared-ui has no build.clj"
-    (let [results [{:lib "user" :publishable? true :boundary-deps [(dep-entry 'boundary/shared-ui)]}
-                   {:lib "shared-ui" :publishable? false :boundary-deps []}]]
+    (let [results [{:lib "user" :publishable? true :wagoe-deps [(dep-entry 'wagoe/shared-ui)]}
+                   {:lib "shared-ui" :publishable? false :wagoe-deps []}]]
       (is (= [{:lib "user" :dep 'org.wagoe/wagoe-shared-ui}]
              (poms/unpublishable-deps results))))))
 
 (deftest ^:unit unpublishable-deps-passes-when-all-deps-publishable
-  (let [results [{:lib "user" :publishable? true :boundary-deps [(dep-entry 'boundary/shared-ui)]}
-                 {:lib "shared-ui" :publishable? true :boundary-deps []}]]
+  (let [results [{:lib "user" :publishable? true :wagoe-deps [(dep-entry 'wagoe/shared-ui)]}
+                 {:lib "shared-ui" :publishable? true :wagoe-deps []}]]
     (is (empty? (poms/unpublishable-deps results)))))
 
 (deftest ^:unit unpublishable-deps-ignores-non-publishable-referrer
   (testing "a non-publishable harness (no build.clj) emits no POM, so its deps are exempt"
-    (let [results [{:lib "e2e" :publishable? false :boundary-deps [(dep-entry 'boundary/user)]}
-                   {:lib "user" :publishable? true :boundary-deps []}]]
+    (let [results [{:lib "e2e" :publishable? false :wagoe-deps [(dep-entry 'wagoe/user)]}
+                   {:lib "user" :publishable? true :wagoe-deps []}]]
       (is (empty? (poms/unpublishable-deps results))))))

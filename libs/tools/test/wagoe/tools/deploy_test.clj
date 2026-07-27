@@ -14,9 +14,10 @@
     (is (= "wagoe-platform" (deploy/artifact-name "platform")))
     (is (= "wagoe-core" (deploy/artifact-name "core"))))
 
-  (testing "a lib dir already starting with boundary- is not double-prefixed"
-    ;; libs/wagoe-cli publishes org.wagoe/wagoe-cli, NOT
-    ;; boundary-wagoe-cli — the Clojars check must use the real coordinate.
+  (testing "a lib dir already starting with wagoe- is not double-prefixed"
+    ;; libs/wagoe-cli publishes org.wagoe/wagoe-cli, NOT wagoe-wagoe-cli —
+    ;; artifact-name reads the real coordinate from build.clj rather than
+    ;; string-prefixing the dir name.
     (is (= "wagoe-cli" (deploy/artifact-name "wagoe-cli")))))
 
 (deftest ^:unit pom-url-test
@@ -80,7 +81,7 @@
   (testing "every lib is published after all of its boundary deps (the BOU-203 invariant)"
     (let [idx (zipmap deploy/publish-order (range))]
       (doseq [lib deploy/publish-order
-              dep (deploy/boundary-dep-dirs lib)
+              dep (deploy/wagoe-dep-dirs lib)
               :when (idx dep)] ; only deps that are themselves published
         (is (< (idx dep) (idx lib))
             (str dep " must be published before " lib))))))

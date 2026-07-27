@@ -83,11 +83,11 @@
 ;; Publish order — topological sort of all-libs by deps.edn boundary deps
 ;; =============================================================================
 
-(defn boundary-dep-dirs
+(defn wagoe-dep-dirs
   "The directory names of the boundary libs `lib` depends on, per its deps.edn
    (via check-poms — the same :local/root parsing the check:poms gate uses)."
   [lib]
-  (map :dir (check-poms/boundary-local-deps (io/file (lib-dir lib)))))
+  (map :dir (check-poms/wagoe-local-deps (io/file (lib-dir lib)))))
 
 (defn topo-sort
   "Reorder `libs` so every lib follows all of its deps (per `dep-fn`). Stable:
@@ -109,7 +109,7 @@
 
 (def publish-order
   "all-libs in a valid publish order: each lib after its boundary deps."
-  (topo-sort all-libs boundary-dep-dirs))
+  (topo-sort all-libs wagoe-dep-dirs))
 
 (defn artifact-name
   "Clojars artifact id for a lib, read from its build.clj coordinate

@@ -84,8 +84,8 @@
 
 ;; Publish order — topological sort of all-libs by deps.edn boundary deps.
 ;; Mirrors wagoe.tools.deploy (canonical); both derive the same order.
-(defn boundary-dep-dirs [lib]
-  (map :dir (check-poms/boundary-local-deps (io/file (lib-dir lib)))))
+(defn wagoe-dep-dirs [lib]
+  (map :dir (check-poms/wagoe-local-deps (io/file (lib-dir lib)))))
 
 (defn topo-sort
   "Reorder `libs` so every lib follows all of its deps (per `dep-fn`). Stable:
@@ -103,7 +103,7 @@
             (throw (ex-info "Cycle in deploy dependency graph"
                             {:remaining remaining}))))))))
 
-(def publish-order (topo-sort all-libs boundary-dep-dirs))
+(def publish-order (topo-sort all-libs wagoe-dep-dirs))
 
 (defn read-version [lib]
   (let [build-file (io/file (lib-dir lib) "build.clj")]

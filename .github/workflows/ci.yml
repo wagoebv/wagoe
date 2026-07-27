@@ -28,33 +28,14 @@ jobs:
 
       - name: Lint with clj-kondo
         run: |
+          # Glob instead of a hand-maintained list: the explicit list had
+          # drifted — root src/, dev/, scripts/ and libs audience|devtools|
+          # wagoe-cli were never linted, which is how a dev/ arity error went
+          # unnoticed. Matches the documented command in AGENTS.md, so a newly
+          # added lib is covered automatically.
           clojure -M:clj-kondo --lint \
-            libs/tools/src \
-            libs/core/src \
-            libs/observability/src \
-            libs/platform/src \
-            libs/user/src \
-            libs/admin/src \
-            libs/storage/src \
-            libs/cache/src \
-            libs/jobs/src \
-            libs/tenant/src \
-            libs/email/src \
-            libs/realtime/src \
-            libs/workflow/src \
-            libs/search/src \
-            libs/external/src \
-            libs/payments/src \
-            libs/scaffolder/src \
-            libs/calendar/src \
-            libs/reports/src \
-            libs/geo/src \
-            libs/ai/src \
-            libs/ui-style/src \
-            libs/shared-ui/src libs/shared-ui/test \
-            libs/i18n/src \
-            libs/push/src \
-            libs/wagoe-mcp/src \
+            src test dev scripts \
+            libs/*/src libs/*/test \
             examples/todo/src
 
   # =============================================================================
