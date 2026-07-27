@@ -3,7 +3,7 @@
             [clojure.java.io :as io]
             [wagoe.devtools.shell.recording :as recording]))
 
-(def ^:private test-dir ".boundary/recordings-test")
+(def ^:private test-dir ".wagoe/recordings-test")
 
 (use-fixtures :each
   (fn [f]

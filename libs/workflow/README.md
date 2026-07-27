@@ -8,7 +8,7 @@
 **Declarative state machine workflows for domain entities in the Wagoe Framework**
 
 Define state machines as data, execute guarded transitions, and get a full audit trail automatically.
-Optionally enqueue side-effect jobs via `boundary-jobs` after successful transitions.
+Optionally enqueue side-effect jobs via `wagoe-jobs` after successful transitions.
 
 ---
 
@@ -102,7 +102,7 @@ map from the transition request and return `true` (allow) or `false` (reject):
 
 ### Side Effects
 
-Side-effect keywords declared on a transition are enqueued as `boundary-jobs` jobs after
+Side-effect keywords declared on a transition are enqueued as `wagoe-jobs` jobs after
 a successful transition. The `job-queue` dependency is optional — if nil, side effects are
 silently skipped:
 

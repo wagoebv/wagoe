@@ -1,5 +1,5 @@
 (ns wagoe.search.schema
-  "Malli schemas for the boundary-search library.
+  "Malli schemas for the wagoe-search library.
 
    All internal data uses kebab-case keywords.
    snake_case conversion happens only at DB/HTTP boundaries.")

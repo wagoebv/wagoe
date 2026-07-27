@@ -139,7 +139,7 @@ info "Installing boundary CLI @ $BOUNDARY_TAG..."
 # bbin's git dep resolution (--deps-root + --config) does not reliably set up
 # the classpath for monorepo sub-projects. Clone the repo and write a plain
 # wrapper script with an explicit classpath instead.
-BOUNDARY_CACHE="$HOME/.boundary/releases/$BOUNDARY_TAG"
+BOUNDARY_CACHE="$HOME/.wagoe/releases/$BOUNDARY_TAG"
 if [[ -d "$BOUNDARY_CACHE" ]]; then
   info "Using cached source at $BOUNDARY_CACHE"
 else

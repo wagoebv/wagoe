@@ -217,7 +217,7 @@
             ;; Enable MFA. Backup codes are bcrypt-hashed for storage (the
             ;; plaintext was shown to the user once at setup); the TOTP secret is
             ;; stored plaintext in the entity and encrypted at the persistence
-            ;; wagoe.
+            ;; boundary.
             (let [current-time (Instant/now)
                   hashed-codes (mapv mfa-crypto/hash-backup-code backup-codes)
                   updates (mfa-core/prepare-mfa-enablement

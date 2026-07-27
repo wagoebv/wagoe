@@ -129,7 +129,7 @@ Make user, auth, and authorization logic pluggable (like observability and datab
 ADR-016-tenant-user-membership.adoc
 
 Introduce `tenant_memberships` as a first-class framework concept in
-`boundary-tenant`, separating global user identity from tenant-scoped roles and
+`wagoe-tenant`, separating global user identity from tenant-scoped roles and
 membership lifecycle.
 
 *Key Decisions:*

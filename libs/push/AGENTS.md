@@ -1,4 +1,4 @@
-# boundary-push — Push Notification Library
+# wagoe-push — Push Notification Library
 
 Multi-platform push notification delivery for FCM (Firebase) and APNs (Apple). Device token management, job-based async delivery, HMAC-secured analytics callbacks. Uses `defpush` macro for notification definitions.
 

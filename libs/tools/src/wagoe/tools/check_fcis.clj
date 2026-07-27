@@ -150,10 +150,10 @@
          "alter-var-root" "agent" "send" "send-off" "add-watch"]))
 
 (defn read-config
-  "Read the optional .boundary/check-fcis.edn allowlist. Returns a map with
+  "Read the optional .wagoe/check-fcis.edn allowlist. Returns a map with
    :allow-throw and :allow-mutable-state sets (namespace-name string members)."
   []
-  (let [f (io/file (System/getProperty "user.dir") ".boundary" "check-fcis.edn")]
+  (let [f (io/file (System/getProperty "user.dir") ".wagoe" "check-fcis.edn")]
     (if (.exists f)
       (try
         (let [m (edn/read-string (slurp f))]
@@ -181,7 +181,7 @@
 (defn- scan-impurity
   "Scan stripped content for (throw ...) and mutable-state constructs.
    A namespace is exempt from the throw ban via ^:wagoe/allow-throw metadata
-   or a .boundary/check-fcis.edn :allow-throw entry, and from the mutable-state
+   or a .wagoe/check-fcis.edn :allow-throw entry, and from the mutable-state
    ban via ^:wagoe/allow-mutable-state or an :allow-mutable-state entry.
    Returns a seq of {:file :ns :req :line :kind} maps."
   [file content ns-form ns-name {:keys [allow-throw allow-mutable-state]}]
@@ -387,7 +387,7 @@
    Returns a seq of violation maps {:file :ns :req :kind [:line]}, or empty seq
    if clean. Public so callers (e.g. the wagoe-mcp verify loop) can check an
    arbitrary core file outside the monorepo's `core-source-paths` discovery.
-   The 1-arity reads the .boundary/check-fcis.edn allowlist itself."
+   The 1-arity reads the .wagoe/check-fcis.edn allowlist itself."
   ([file] (check-file file (read-config)))
   ([file config]
    (let [content  (slurp file)
@@ -456,7 +456,7 @@
                 (println (str "    namespace " ns " requires " (ansi/red req))))))
         (println)
         (println (str (count violations) " violation(s) found. Core namespaces must not import shell, I/O, logging, or DB code, throw, or hold mutable state."))
-        (println (ansi/dim "Escape hatch: ^:wagoe/allow-throw / ^:wagoe/allow-mutable-state ns metadata, or .boundary/check-fcis.edn allowlist."))
+        (println (ansi/dim "Escape hatch: ^:wagoe/allow-throw / ^:wagoe/allow-mutable-state ns metadata, or .wagoe/check-fcis.edn allowlist."))
         (System/exit 1))
       (do
         (println (ansi/green "FC/IS check passed.") (str (count files) " core file(s) scanned, 0 violations."))

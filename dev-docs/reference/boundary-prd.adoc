@@ -910,12 +910,12 @@ See `docs/user-guide/modules/ROOT/pages/reference/scaffolder.adoc` for complete 
 
 The module-centric architecture enables Wagoe to evolve into a comprehensive development platform:
 
-. *Core Framework Library* (`boundary-core`)
+. *Core Framework Library* (`wagoe-core`)
 +
 * Extractable shared infrastructure
 * Reusable across multiple applications
 * Standardized patterns for ports, adapters, validation
-. *✅ Production Scaffolder* (`boundary-scaffolder`) - *COMPLETE*
+. *✅ Production Scaffolder* (`wagoe-scaffolder`) - *COMPLETE*
 +
 * Fully automated module generation via CLI
 * Generates 12 files per module (9 source {plus} 3 test files {plus} migration)
@@ -4644,7 +4644,7 @@ boundary [global-options] <resource> <action> [resource-options]
 [width="100%",cols="20%,20%,60%",options="header",]
 |===
 |Option |Default |Description
-|`--config=++<++path++>++` |`~/.boundary/config.edn` |Path to configuration file
+|`--config=++<++path++>++` |`~/.wagoe/config.edn` |Path to configuration file
 |`--profile=++<++name++>++` |`default` |Configuration profile to use
 |`--token=++<++jwt++>++` |From config |Authentication token
 |`--format=++<++fmt++>++` |`table` |Output format: `table`, `json`, `edn`, or `yaml`
@@ -5429,7 +5429,7 @@ Wagoe’s development follows a strategic path from application framework to com
 
 *Phase 3: Framework Library Extraction* (Q3 2026)
 
-* *Core Infrastructure Library* (`boundary-core`)
+* *Core Infrastructure Library* (`wagoe-core`)
 +
 ** Extractable shared components
 ** Standardized port/adapter patterns
@@ -5448,7 +5448,7 @@ Wagoe’s development follows a strategic path from application framework to com
 ** Basic module scaffolding
 ** Domain-specific templates
 ** Architecture pattern enforcement
-** Integration with `boundary-core` library
+** Integration with `wagoe-core` library
 * *Template Ecosystem*
 +
 ** Financial services templates
@@ -5480,7 +5480,7 @@ Wagoe’s development follows a strategic path from application framework to com
 
 *Phase 0-1: Foundation Metrics* ++*++ Module independence score (no cross-module dependencies) ++*++ Feature flag coverage (100% of modules controllable) ++*++ Documentation completeness (all architectural patterns documented)
 
-*Phase 2-3: Usage Metrics* ++*++ Library adoption rate ++*++ Community contributions to `boundary-core` ++*++ Number of applications built with Wagoe
+*Phase 2-3: Usage Metrics* ++*++ Library adoption rate ++*++ Community contributions to `wagoe-core` ++*++ Number of applications built with Wagoe
 
 *Phase 4-6: Platform Metrics* ++*++ Module template usage ++*++ Community-contributed modules ++*++ Time-to-production for new applications ++*++ Industry-specific framework adoption
 

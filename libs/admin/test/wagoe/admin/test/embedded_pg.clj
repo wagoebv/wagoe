@@ -7,7 +7,7 @@
 
    Usage:
      (def pg (start!))                          ;; start embedded PG
-     (def ctx (db-context pg))                  ;; get boundary db-context
+     (def ctx (db-context pg))                  ;; get wagoe db-context
      ;; ... run tests against ctx ...
      (stop! pg)                                 ;; shut down
 
@@ -33,7 +33,7 @@
   (.getPort pg))
 
 (defn db-context
-  "Create a boundary-compatible db-context from an embedded PG instance.
+  "Create a wagoe-compatible db-context from an embedded PG instance.
 
    Returns {:adapter adapter :datasource datasource} suitable for use with
    wagoe.platform.shell.adapters.database.common.execution functions."

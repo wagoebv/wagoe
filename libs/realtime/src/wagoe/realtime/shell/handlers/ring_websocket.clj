@@ -1,5 +1,5 @@
 (ns wagoe.realtime.shell.handlers.ring-websocket
-  "Ring 1.15 WebSocket upgrade handler for boundary-realtime.
+  "Ring 1.15 WebSocket upgrade handler for wagoe-realtime.
 
    Bridges Ring's map-based Listener (::ring.websocket/listener response)
    to the IRealtimeService connect/disconnect lifecycle.

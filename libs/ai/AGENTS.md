@@ -1,8 +1,8 @@
-# boundary-ai — Dev Guide
+# wagoe-ai — Dev Guide
 
 ## 1. Purpose
 
-`boundary-ai` provides framework-aware AI tooling for Wagoe-based applications. Unlike a generic AI assistant, it knows Wagoe's own conventions (FC/IS, ports, kebab↔snake naming, Malli schemas, HoneySQL syntax) and uses that knowledge to deliver higher-quality output.
+`wagoe-ai` provides framework-aware AI tooling for Wagoe-based applications. Unlike a generic AI assistant, it knows Wagoe's own conventions (FC/IS, ports, kebab↔snake naming, Malli schemas, HoneySQL syntax) and uses that knowledge to deliver higher-quality output.
 
 **Features:**
 1. **NL Scaffolding** — parse a natural language description into a scaffolding spec (`bb scaffold ai "..."`)
@@ -101,7 +101,7 @@ Require the wiring namespace in your system config loader:
 
 ;; Documentation Wizard
 (ai/generate-docs service "libs/user" :agents)
-;; => {:text "# boundary-user — Dev Guide\n..." :tokens 800 ...}
+;; => {:text "# wagoe-user — Dev Guide\n..." :tokens 800 ...}
 
 ;; Admin Entity Generator
 (ai/generate-admin-entity service "products with name, price, status" ".")

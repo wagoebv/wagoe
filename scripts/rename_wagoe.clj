@@ -55,12 +55,12 @@
 (def ^:private default-allow
   ["scripts/rename_wagoe.clj"
    "scripts/check_no_boundary.clj"
-   ".boundary/"
+   ".wagoe/"
    "CHANGELOG.md"
    "docs/superpowers/"])
 
 (defn- allow-prefixes []
-  (let [f ".boundary/check-no-boundary.edn"]
+  (let [f ".wagoe/check-no-boundary.edn"]
     (into default-allow
           (when (fs/exists? f)
             (:allow-paths (edn/read-string (slurp f)))))))

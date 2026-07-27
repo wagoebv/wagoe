@@ -97,7 +97,7 @@
  "BND-601" {:code        "BND-601"
             :category    :fcis
             :title       "FC/IS Boundary Violation"
-            :description "A core namespace imports from a shell namespace, violating the Functional Core / Imperative Shell wagoe."
+            :description "A core namespace imports from a shell namespace, violating the Functional Core / Imperative Shell boundary."
             :fix         "Move the data access behind a port (protocol) in ports.clj, then have shell implement it."}
 
  "BND-602" {:code        "BND-602"
@@ -165,7 +165,7 @@
  "BND-806" {:code        "BND-806"
             :category    :mcp
             :title       "FC/IS Boundary Guardrail"
-            :description "Generated or edited code would place I/O, logging, or shell dependencies in a core namespace, violating the Functional Core / Imperative Shell wagoe."
+            :description "Generated or edited code would place I/O, logging, or shell dependencies in a core namespace, violating the Functional Core / Imperative Shell boundary."
             :fix         "Move the side effect to the shell and depend on a port (protocol). To proceed anyway, re-invoke with the audited override flag."}
 
  "BND-807" {:code        "BND-807"

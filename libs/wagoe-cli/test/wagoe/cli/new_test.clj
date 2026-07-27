@@ -35,7 +35,7 @@
       (testing "generates required files"
         (doseq [f ["deps.edn" "bb.edn" ".gitignore" ".env" ".env.example" "tests.edn"
                    "CLAUDE.md" "AGENTS.md"
-                   ".claude/skills/boundary/SKILL.md"
+                   ".claude/skills/wagoe/SKILL.md"
                    "resources/conf/dev/config.edn"
                    "resources/conf/test/config.edn"
                    "src/wagoe/config.clj"
@@ -76,9 +76,9 @@
           (is (not (str/includes? content "{{project-name}}")))))
 
       (testing "Claude Code skill points the agent at the scaffolder"
-        (let [content (slurp (io/file tmp ".claude/skills/boundary/SKILL.md"))]
+        (let [content (slurp (io/file tmp ".claude/skills/wagoe/SKILL.md"))]
           (is (str/includes? content "bb scaffold"))
-          (is (str/includes? content "name: boundary"))
+          (is (str/includes? content "name: wagoe"))
           (is (not (str/includes? content "{{")))))
 
       (testing "sentinel comments are present in AGENTS.md"

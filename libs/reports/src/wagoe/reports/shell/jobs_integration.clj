@@ -1,5 +1,5 @@
 (ns wagoe.reports.shell.jobs-integration
-  "Optional integration with boundary-jobs for async report generation.
+  "Optional integration with wagoe-jobs for async report generation.
 
    This namespace provides async report generation via the jobs module.
    The jobs module is an OPTIONAL dependency — add it to your deps.edn:
@@ -19,7 +19,7 @@
    The job handler will:
      - Resolve data via :data-source (if defined)
      - Generate the report bytes
-     - Optionally store via boundary-storage (:storage-key in opts)
+     - Optionally store via wagoe-storage (:storage-key in opts)
      - Optionally send an email notification (:notify-email in opts)"
   (:require [wagoe.reports.ports :as ports]
             [wagoe.reports.shell.adapters.excel :as excel]
@@ -34,18 +34,18 @@
 ;; =============================================================================
 
 (defn queue-report-job!
-  "Queue a report for async generation via boundary-jobs.
+  "Queue a report for async generation via wagoe-jobs.
 
    Args:
      report-def - ReportDefinition map (from defreport or plain map)
      opts       - Options forwarded to the job handler:
                   :notify-email - Email address for completion notification
-                  :storage-key  - Object key for boundary-storage output
+                  :storage-key  - Object key for wagoe-storage output
                   + any other opts passed to generate
 
    Returns job-id (UUID string).
 
-   Throws ex-info with :type :missing-dependency if boundary-jobs is unavailable."
+   Throws ex-info with :type :missing-dependency if wagoe-jobs is unavailable."
   [report-def opts]
   (if-let [enqueue-fn (requiring-resolve 'wagoe.jobs.ports/enqueue-job!)]
     (let [job {:job-type :generate-report
@@ -60,7 +60,7 @@
       (enqueue-fn nil :reports job))
     (throw (ex-info "Jobs module not available. Add org.wagoe/wagoe-jobs to deps.edn"
                     {:type          :missing-dependency
-                     :module        "boundary-jobs"
+                     :module        "wagoe-jobs"
                      :required-for  "Async report generation"
                      :documentation "https://github.com/thijs-creemers/boundary/tree/main/libs/jobs"}))))
 
@@ -72,7 +72,7 @@
   "Job handler for generating reports.
 
    Called by the jobs module worker pool. Generates the report, optionally
-   stores via boundary-storage, and optionally sends an email notification.
+   stores via wagoe-storage, and optionally sends an email notification.
 
    Job args structure:
      :report-def - ReportDefinition map
@@ -115,17 +115,17 @@
 ;; =============================================================================
 
 (defn register-report-job-handler!
-  "Register the :generate-report job handler with boundary-jobs.
+  "Register the :generate-report job handler with wagoe-jobs.
 
    After registration, jobs with :job-type :generate-report will be processed
    by process-report-job.
 
    Args:
-     job-registry - IJobRegistry instance from boundary-jobs
+     job-registry - IJobRegistry instance from wagoe-jobs
 
    Returns :generate-report (the job-type keyword).
 
-   Throws ex-info with :type :missing-dependency if boundary-jobs is unavailable."
+   Throws ex-info with :type :missing-dependency if wagoe-jobs is unavailable."
   [job-registry]
   (if-let [register-fn (requiring-resolve 'wagoe.jobs.ports/register-handler!)]
     (do
@@ -134,6 +134,6 @@
       (register-fn job-registry :generate-report process-report-job))
     (throw (ex-info "Jobs module not available. Add org.wagoe/wagoe-jobs to deps.edn"
                     {:type          :missing-dependency
-                     :module        "boundary-jobs"
+                     :module        "wagoe-jobs"
                      :required-for  "Report job handler registration"
                      :documentation "https://github.com/thijs-creemers/boundary/tree/main/libs/jobs"}))))

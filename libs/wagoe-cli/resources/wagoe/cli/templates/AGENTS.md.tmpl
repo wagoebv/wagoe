@@ -90,7 +90,7 @@ src/{{project-ns}}/
 Every module MUST define `ports.clj`.
 
 - core/ must not import shell/IO/logging/DB
-- core/ must not throw — return typed error values ({:error {:type ... :message ...}}); the shell translates them into HTTP responses (escape hatch: ^:wagoe/allow-throw ns metadata or .boundary/check-fcis.edn)
+- core/ must not throw — return typed error values ({:error {:type ... :message ...}}); the shell translates them into HTTP responses (escape hatch: ^:wagoe/allow-throw ns metadata or .wagoe/check-fcis.edn)
 - core/ must not hold mutable state (defonce/atom/swap!/reset!) — definition registries and process state live in the shell (wagoe.<lib>.shell.registry)
 - cross-module calls go through service ports
 - web/HTTP layers never require *.shell.persistence directly
@@ -282,7 +282,7 @@ clojure -M:repl
 
 The agent decision table (scaffold, `bb ai explain|gen-tests|sql|docs`,
 `bb setup ai`, `bb doctor`, `bb guide`) lives in
-`.claude/skills/boundary/SKILL.md` — auto-discovered by Claude Code and
+`.claude/skills/wagoe/SKILL.md` — auto-discovered by Claude Code and
 compatible agentic CLIs. Rule of thumb: **scaffold, don't hand-write.**
 
 Install once with bbin to enable REPL-driven development from the terminal:

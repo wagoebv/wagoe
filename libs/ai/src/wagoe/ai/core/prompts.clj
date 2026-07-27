@@ -279,7 +279,7 @@ Output ONLY the JSON object, no markdown fences."))
   (str framework-system-context "\n\n"
        (case doc-type
          :agents
-         "Your task: generate an AGENTS.md developer guide for a Boundary library module.
+         "Your task: generate an AGENTS.md developer guide for a Wagoe library module.
 
 Structure:
 1. ## 1. Purpose — what the module does, what problem it solves
@@ -302,7 +302,7 @@ Include example values where possible.
 Output ONLY valid YAML starting with 'openapi: \"3.0.3\"'."
 
          :readme
-         "Your task: generate a README.md for a Boundary library module.
+         "Your task: generate a README.md for a Wagoe library module.
 
 Structure: module name as h1, short description, Installation (deps.edn snippet), Quick Start, Configuration, API Reference, License.
 

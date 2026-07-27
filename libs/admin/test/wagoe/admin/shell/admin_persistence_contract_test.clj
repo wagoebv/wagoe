@@ -1,5 +1,5 @@
 (ns wagoe.admin.shell.admin-persistence-contract-test
-  "Contract tests for the admin auto-CRUD persistence wagoe.
+  "Contract tests for the admin auto-CRUD persistence boundary.
 
    The admin service is a generic CRUD engine over other modules' tables. Its
    contract is the case + type conversion at the DB boundary: a kebab-cased

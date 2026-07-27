@@ -7,8 +7,8 @@
          get-cached reads memberships when stamp is fresh, else nil.
          invalidate / invalidate-all clear cached_at and memberships.
 
-   L2 — boundary-cache (Redis / in-memory) can be layered in later.
-         The boundary-cache param is accepted but not yet wired."
+   L2 — wagoe-cache (Redis / in-memory) can be layered in later.
+         The wagoe-cache param is accepted but not yet wired."
   (:require [wagoe.audience.ports :as ports]
             [wagoe.audience.shell.persistence :as persistence]
             [cheshire.core :as json]
@@ -81,7 +81,7 @@
 ;; IAudienceCache implementation — L1 only (DB-backed)
 ;; =============================================================================
 
-(defrecord AudienceCache [datasource boundary-cache]
+(defrecord AudienceCache [datasource wagoe-cache]
   ports/IAudienceCache
 
   (put-cached [_ audience-id result ttl-minutes]
@@ -174,11 +174,11 @@
 
    Args:
      datasource      - javax.sql.DataSource
-     boundary-cache  - optional boundary-cache instance for L2 (ignored for now)
+     wagoe-cache  - optional wagoe-cache instance for L2 (ignored for now)
 
    Returns:
      AudienceCache implementing IAudienceCache"
   ([datasource]
    (create-audience-cache datasource nil))
-  ([datasource boundary-cache]
-   (->AudienceCache datasource boundary-cache)))
+  ([datasource wagoe-cache]
+   (->AudienceCache datasource wagoe-cache)))

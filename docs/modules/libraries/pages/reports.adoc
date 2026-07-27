@@ -3,7 +3,7 @@
 
 PDF, Excel (XLSX), and Word (DOCX) report generation with Hiccup-style templates
 and declarative sections. Saves 5–8 days of boilerplate per project.
-Supports sync generation and optional async via `boundary-jobs`.
+Supports sync generation and optional async via `wagoe-jobs`.
 
 == Key namespaces
 
@@ -33,7 +33,7 @@ Supports sync generation and optional async via `boundary-jobs`.
 | Public API: `generate`, `generate-async`
 
 | `wagoe.reports.shell.jobs-integration`
-| Optional `boundary-jobs` integration for async generation
+| Optional `wagoe-jobs` integration for async generation
 |===
 
 == PDF report

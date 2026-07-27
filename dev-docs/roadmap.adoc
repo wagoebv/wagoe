@@ -84,8 +84,8 @@ Wagoe is a module-centric Clojure framework implementing Functional Core / Imper
 - [x] AI tooling (`libs/ai`): Ollama/Anthropic/OpenAI, NL scaffolding, error explainer, test generator, SQL copilot, docs wizard
 
 === Remaining
-- [ ] Push notifications library (`boundary-push`): APNs, FCM adapters
-- [ ] Audience / segmentation library (`boundary-audience`): targeted messaging, cohorts
+- [ ] Push notifications library (`wagoe-push`): APNs, FCM adapters
+- [ ] Audience / segmentation library (`wagoe-audience`): targeted messaging, cohorts
 - [ ] Forms library (`boundary-forms`): dynamic form definitions, validation, rendering
 - [ ] Realtime multi-server scaling: Redis-backed registry and pub/sub
 - [ ] Datomic / XTDB backend integration

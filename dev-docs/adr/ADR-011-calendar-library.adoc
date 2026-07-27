@@ -1,6 +1,6 @@
 = ADR-011: Calendar Library
 :revdate: 2026-03-13
-:revremark: boundary-calendar — persistence-agnostic calendar engine with ical4j, defevent, and pure Hiccup UI
+:revremark: wagoe-calendar — persistence-agnostic calendar engine with ical4j, defevent, and pure Hiccup UI
 :toc:
 :toclevels: 3
 
@@ -38,11 +38,11 @@ Estimated savings per project: **€3.2k – €4k** by eliminating this boilerp
 4. **Pure core layer**: all business logic (recurrence, conflict, UI) must be in
    `core/` namespaces — no I/O, no side effects, no exceptions for valid inputs.
 
-5. **Named event types**: follow the `defreport` pattern from `boundary-reports` so
+5. **Named event types**: follow the `defreport` pattern from `wagoe-reports` so
    domain teams can register named event type schemas.
 
 6. **Admin UI included**: pure Hiccup calendar view components composable into any
-   Ring handler, consistent with `boundary-workflow/core/ui.clj`.
+   Ring handler, consistent with `wagoe-workflow/core/ui.clj`.
 
 === Alternatives Considered
 
@@ -74,7 +74,7 @@ of the Wagoe Framework.
 
 == Decision
 
-We implement **`boundary-calendar`** as a pure-Clojure, persistence-agnostic calendar
+We implement **`wagoe-calendar`** as a pure-Clojure, persistence-agnostic calendar
 library with the following key decisions:
 
 === Decision 1: ical4j 4.x as the sole RFC 5545 dependency
@@ -157,12 +157,12 @@ This means the same library works for any persistence backend without modificati
 
 === Decision 5: `defevent` macro follows `defreport` pattern
 
-The `defevent` macro is a direct parallel to `defreport` in `boundary-reports`.
+The `defevent` macro is a direct parallel to `defreport` in `wagoe-reports`.
 It registers event type definitions in an in-process atom-backed registry.
 
 [source,clojure]
 ----
-;; Pattern from boundary-reports (libs/reports/src/wagoe/reports/core/report.clj)
+;; Pattern from wagoe-reports (libs/reports/src/wagoe/reports/core/report.clj)
 (defmacro defreport [sym definition-map]
   `(do (def ~sym ~definition-map)
        (register-report-type! ~sym)
@@ -198,7 +198,7 @@ callers.
 === Decision 7: Pure Hiccup UI components in `core/ui.clj`
 
 Calendar view components live in the `core/` namespace (pure — no I/O) following the
-pattern established by `boundary-workflow/core/ui.clj`.  All components accept plain
+pattern established by `wagoe-workflow/core/ui.clj`.  All components accept plain
 data and return Hiccup vectors.  No HTMX markup is added; composable into any Ring
 handler or template.
 
@@ -273,7 +273,7 @@ core/ui.clj
 5. **Persistence-agnostic** — works with any application database or storage backend.
 
 6. **Consistent with framework patterns** — `defevent` mirrors `defreport`; Hiccup UI
-   mirrors `boundary-workflow/core/ui.clj`; test fixtures mirror `reports` tests.
+   mirrors `wagoe-workflow/core/ui.clj`; test fixtures mirror `reports` tests.
 
 7. **Composable conflict detection** — `find-conflicts` correctly handles pairs of
    recurring events by expanding both before comparison.
@@ -363,7 +363,7 @@ must call it in an `:each` fixture.  Documented prominently in AGENTS.md.
 - [ ] Attendee RSVP support (`:status` on attendee records)
 - [ ] `EXDATE` / exception date handling in UI components
 - [ ] Free/busy query: given a list of calendars, find available slots
-- [ ] Optional CalDAV sync adapter (separate `boundary-calendar-caldav` library)
+- [ ] Optional CalDAV sync adapter (separate `wagoe-calendar-caldav` library)
 - [ ] `agenda-view` Hiccup component (upcoming events list)
 - [ ] ical4j upgrade path notes when 4.1.x is released
 

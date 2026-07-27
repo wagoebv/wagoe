@@ -51,7 +51,7 @@ Key ideas on display:
 
 ## About the dependency
 
-`deps.edn` pulls `boundary-core` via `:local/root "../../libs/core"`, so this
+`deps.edn` pulls `wagoe-core` via `:local/root "../../libs/core"`, so this
 example runs against the source in this repository with no publish step. A real
 project would instead use the published coordinate:
 
