@@ -89,7 +89,7 @@ File storage abstraction with local filesystem and S3 backends, including upload
 
 ```clojure
 ;; config.edn
-{:boundary/storage
+{:wagoe/storage
  #profile
  {:development
   {:adapter :local
@@ -244,7 +244,7 @@ For S3 storage, configure AWS credentials via:
 
 2. **Configuration file** (development):
    ```clojure
-   {:boundary/storage
+   {:wagoe/storage
     {:adapter :s3
      :bucket "my-bucket"
      :region "us-east-1"
@@ -254,7 +254,7 @@ For S3 storage, configure AWS credentials via:
 
 3. **IAM Role** (EC2, ECS, Lambda):
    ```clojure
-   {:boundary/storage
+   {:wagoe/storage
     {:adapter :s3
      :bucket "my-bucket"
      :region "us-east-1"

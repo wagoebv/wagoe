@@ -1,5 +1,5 @@
 (ns wagoe.storage.shell.module-wiring-test
-  "The :boundary/storage Integrant key must build a working storage service from
+  "The :wagoe/storage Integrant key must build a working storage service from
    the catalogue-advertised config shape ({:provider :local :root ...})."
   (:require [clojure.test :refer [deftest is testing]]
             [wagoe.storage.shell.module-wiring]
@@ -18,7 +18,7 @@
 (deftest ^:integration storage-init-key-builds-service-from-catalogue-shape
   (cleanup)
   (try
-    (let [component (ig/init-key :boundary/storage {:provider :local :root test-root})]
+    (let [component (ig/init-key :wagoe/storage {:provider :local :root test-root})]
       (testing "returns the provider + a usable IStorageService"
         (is (= :local (:provider component)))
         (is (satisfies? service/IStorageService (:service component))))
@@ -29,22 +29,22 @@
                                       {:filename "a.txt"} {})]
           (is success)
           (is (true? (ports/file-exists? (:storage component) (:key data))))))
-      (ig/halt-key! :boundary/storage component))
+      (ig/halt-key! :wagoe/storage component))
     (finally (cleanup))))
 
 (deftest ^:unit storage-init-key-rejects-unknown-provider
   (is (thrown? clojure.lang.ExceptionInfo
-               (ig/init-key :boundary/storage {:provider :dropbox}))))
+               (ig/init-key :wagoe/storage {:provider :dropbox}))))
 
 (deftest ^:unit storage-routes-key-emits-normalized-api-routes
   (cleanup)
   (try
-    (let [component (ig/init-key :boundary/storage {:provider :local :root test-root})
-          routes    (ig/init-key :boundary/storage-routes {:storage component})]
+    (let [component (ig/init-key :wagoe/storage {:provider :local :root test-root})
+          routes    (ig/init-key :wagoe/storage-routes {:storage component})]
       (testing "routes component exposes normalized :api vector"
         (is (vector? (:api routes)))
         (is (every? (every-pred :path :methods) (:api routes)))
         (is (every? #(re-find #"^/storage" (:path %)) (:api routes))
             "paths carry no /api prefix (versioning adds it)"))
-      (ig/halt-key! :boundary/storage component))
+      (ig/halt-key! :wagoe/storage component))
     (finally (cleanup))))

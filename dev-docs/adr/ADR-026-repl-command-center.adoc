@@ -84,7 +84,7 @@ state.
 
 [source,clojure]
 ----
-(restart-component :boundary/http-server)  ; Hot-swap one component
+(restart-component :wagoe/http-server)  ; Hot-swap one component
 (defroute! :get "/api/test" handler-fn)    ; Add route at runtime
 (tap-handler! :create-user inspect-fn)     ; Intercept requests
 ----

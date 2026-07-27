@@ -10,19 +10,19 @@
 
  :active
  {  ;; Core application settings (always active)
-  :boundary/settings
+  :wagoe/settings
   {:name              "boundary-test"
    :secure-cookies?   false  ;; test over HTTP
    :version           "0.1.0"
    :date-format       "yyyy-MM-dd"
    :date-time-format  "yyyy-MM-dd HH:mm:ss"
    :currency/iso-code "EUR"
-   :features          {:user-web-ui {:enabled? #or [#env BND_WEB_UI_ENABLED true]}}}
+   :features          {:user-web-ui {:enabled? #or [#env WAG_WEB_UI_ENABLED true]}}}
 
   ;; Active database configurations
   ;; Test environment uses in-memory H2 for fast, isolated tests
 
-  :boundary/h2
+  :wagoe/h2
   {:memory true  ; In-memory database for fast test execution
    :pool   {:minimum-idle 1
             :maximum-pool-size 5
@@ -30,7 +30,7 @@
 
   ;; HTTP Server configuration (used by `bb run-e2e-server` for Playwright/spel e2e runs).
   ;; Port defaults to 3100 to avoid clashing with a dev server on 3000; override via HTTP_PORT.
-  :boundary/http
+  :wagoe/http
   {:port       #or [#env HTTP_PORT 3100]
    :host       #or [#env HTTP_HOST "0.0.0.0"]
    :join?      false
@@ -43,7 +43,7 @@
    :security   {:csrf {:enabled? false}}}
 
   ;; Test logging configuration
-  :boundary/logging
+  :wagoe/logging
   {:level     :debug  ; Verbose logging for debugging tests
    :console   true    ; Log to console during tests
    :appenders [{:appender       :rolling-file
@@ -55,7 +55,7 @@
 
   ;; Error reporting configuration for tests
   ;; Defaults to no-op; can be switched to Sentry via ERROR_REPORTING_PROVIDER
-  :boundary/error-reporting
+  :wagoe/error-reporting
   {:provider    #or [#env "ERROR_REPORTING_PROVIDER" :no-op]
    :dsn         #or [#env "SENTRY_DSN" ""]
    :environment #or [#env "APP_ENV" "test"]
@@ -63,7 +63,7 @@
    :sample-rate 1.0}
 
   ;; Admin interface configuration (enabled in tests to satisfy system wiring)
-  :boundary/admin
+  :wagoe/admin
   {:enabled?         true
    :base-path        "/web/admin"
    :require-role     :admin
@@ -75,24 +75,24 @@
                       :max-page-size     200}}
 
   ;; AI tooling — no-op provider for tests (no network calls, no API keys)
-  :boundary/ai-service
+  :wagoe/ai-service
   {:provider :no-op}
 
   ;; Payment provider — mock adapter for tests (no external calls)
-  :boundary/payment-provider
+  :wagoe/payment-provider
   {:provider :mock}}
 
  :inactive
  {  ;; Alternative test database configurations
   ;; These can be activated for integration testing or specific test scenarios
 
-  :boundary/sqlite
+  :wagoe/sqlite
   {:memory true  ; In-memory SQLite for compatibility testing
    :pool {:minimum-idle 1
           :maximum-pool-size 3
           :connection-timeout-ms 5000}}
 
-  :boundary/postgresql
+  :wagoe/postgresql
   {:host          "localhost"
    :port          5432
    :dbname        "boundary_test"
@@ -103,7 +103,7 @@
                    :maximum-pool-size 5
                    :connection-timeout-ms 10000}}
 
-  :boundary/mysql
+  :wagoe/mysql
   {:host          "localhost"
    :port          3306
    :dbname        "boundary_test"

@@ -47,16 +47,16 @@
         http-server  (:http-server config)
         db-context   (:db-context config)
         app-port     (or (jetty-port http-server) (:http-port config) 3000)
-        ;; Jobs: standard setup uses :boundary/jobs as a composite map
+        ;; Jobs: standard setup uses :wagoe/jobs as a composite map
         ;; with {:queue :store :stats} keys. Also check for separate keys.
-        jobs-composite (when sys (get sys :boundary/jobs))
+        jobs-composite (when sys (get sys :wagoe/jobs))
         job-queue     (when sys (or (when (map? jobs-composite) (:queue jobs-composite))
-                                    (get sys :boundary/job-queue)))
+                                    (get sys :wagoe/job-queue)))
         job-store     (when sys (or (when (map? jobs-composite) (:store jobs-composite))
-                                    (get sys :boundary/job-store)
+                                    (get sys :wagoe/job-store)
                                     (when (satisfies? job-ports/IJobStore job-queue) job-queue)))
         job-stats-svc (when sys (or (when (map? jobs-composite) (:stats jobs-composite))
-                                    (get sys :boundary/job-stats)
+                                    (get sys :wagoe/job-stats)
                                     (when (satisfies? job-ports/IJobStats job-queue) job-queue)))]
     {:system-status   (if (or sys http-handler) :running :stopped)
      :component-count (when sys (count sys))
@@ -71,7 +71,7 @@
      :failed-jobs     (when job-store
                         (try (job-ports/failed-jobs job-store 20) (catch Exception _ nil)))
      :config          (when sys (try @(resolve 'integrant.repl.state/config) (catch Exception _ nil)))
-     :active-sessions (when-let [session-repo (when sys (get sys :boundary/session-repository))]
+     :active-sessions (when-let [session-repo (when sys (get sys :wagoe/session-repository))]
                         (try (let [now (java.time.Instant/now)]
                                (count (filter (fn [s]
                                                 (and (nil? (:revoked-at s))
@@ -80,7 +80,7 @@
                                               (user-ports/find-all-sessions session-repo))))
                              (catch Exception _ 0)))
      :recent-auth-failures
-     (when-let [audit-repo (when sys (get sys :boundary/audit-repository))]
+     (when-let [audit-repo (when sys (get sys :wagoe/audit-repository))]
        (try (let [logs (:audit-logs
                         (user-ports/find-audit-logs
                          audit-repo
@@ -368,7 +368,7 @@
                        nil))]
         (or result (recur (inc p)))))))
 
-(defmethod ig/init-key :boundary/dashboard [_ {:keys [port host] :as config}]
+(defmethod ig/init-key :wagoe/dashboard [_ {:keys [port host] :as config}]
   (let [port   (or port 9999)
         host   (or host "127.0.0.1")
         result (try-start-jetty (make-handler config) host port (+ port 10))]
@@ -382,7 +382,7 @@
         (log/warnf "Could not start dev dashboard — ports %d–%d all in use" port (+ port 10))
         nil))))
 
-(defmethod ig/halt-key! :boundary/dashboard [_ {:keys [server]}]
+(defmethod ig/halt-key! :wagoe/dashboard [_ {:keys [server]}]
   (when server
     (.stop server)
     (schemas-page/reset-schemas!)

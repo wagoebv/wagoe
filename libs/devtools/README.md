@@ -69,7 +69,7 @@ Require a configured AI provider; all degrade gracefully when none is set.
 
 ### Dev dashboard
 
-The `:boundary/dashboard` Integrant component starts Jetty on port 9999. Pages:
+The `:wagoe/dashboard` Integrant component starts Jetty on port 9999. Pages:
 `/dashboard` (overview), `/routes`, `/requests`, `/schemas`, `/db`, `/errors`,
 `/jobs`, `/config`, `/security`, `/docs`.
 

@@ -1,17 +1,17 @@
 {;; {{project-name}} — test configuration
  :active
- {  :boundary/settings
+ {  :wagoe/settings
     {:name             "{{project-name}}-test"
      :version          "0.1.0"
      :date-format      "yyyy-MM-dd"
      :date-time-format "yyyy-MM-dd HH:mm:ss"
      :features         {}}
 
-   :boundary/h2
+   :wagoe/h2
    {:memory true
     :pool   {:minimum-idle 1 :maximum-pool-size 5}}
 
-   :boundary/logging
+   :wagoe/logging
    {:level :warn :console true}}
 
  :inactive

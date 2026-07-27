@@ -1,22 +1,22 @@
 (ns wagoe.ai.shell.module-wiring
   "Integrant wiring for the AI module.
 
-   Config key: :boundary/ai-service
+   Config key: :wagoe/ai-service
 
    Example (Ollama, offline-first):
-     :boundary/ai-service
+     :wagoe/ai-service
      {:provider :ollama
       :model    \"qwen2.5-coder:7b\"
       :base-url \"http://localhost:11434\"}
 
    Example (Anthropic):
-     :boundary/ai-service
+     :wagoe/ai-service
      {:provider :anthropic
       :model    \"claude-haiku-4-5-20251001\"
       :api-key  #env ANTHROPIC_API_KEY}
 
    Example (Ollama with Anthropic fallback):
-     :boundary/ai-service
+     :wagoe/ai-service
      {:provider :ollama
       :model    \"qwen2.5-coder:7b\"
       :fallback {:provider :anthropic
@@ -24,7 +24,7 @@
                  :api-key  #env ANTHROPIC_API_KEY}}
 
    Example (no-op, for tests):
-     :boundary/ai-service
+     :wagoe/ai-service
      {:provider :no-op}"
   (:require [wagoe.ai.shell.providers.anthropic :as anthropic]
             [wagoe.ai.shell.providers.no-op :as no-op]
@@ -57,7 +57,7 @@
 ;; Integrant lifecycle
 ;; =============================================================================
 
-(defmethod ig/init-key :boundary/ai-service
+(defmethod ig/init-key :wagoe/ai-service
   [_ {:keys [provider fallback] :as config}]
   (log/info "Initializing AI service" {:provider provider})
   (let [primary-provider  (build-provider config)
@@ -67,7 +67,7 @@
     {:provider primary-provider
      :fallback fallback-provider}))
 
-(defmethod ig/halt-key! :boundary/ai-service
+(defmethod ig/halt-key! :wagoe/ai-service
   [_ _]
   (log/info "Halting AI service")
   nil)

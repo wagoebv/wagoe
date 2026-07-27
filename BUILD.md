@@ -95,9 +95,9 @@ ENV=prod HTTP_PORT=8080 java -jar boundary-1.2.X-standalone.jar server
 The uberjar includes all database drivers. Configure the active database in `resources/conf/{env}/config.edn`:
 
 ```edn
-:boundary/sqlite {:db "production.db"}
+:wagoe/sqlite {:db "production.db"}
 ;; or
-:boundary/postgresql {:host "localhost" :port 5432 ...}
+:wagoe/postgresql {:host "localhost" :port 5432 ...}
 ```
 
 ## Logging

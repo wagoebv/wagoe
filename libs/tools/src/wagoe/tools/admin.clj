@@ -122,7 +122,7 @@
 
             shell-opts (cond-> {:continue true
                                 :in (str password "\n")
-                                :env (assoc (into {} (System/getenv)) "BND_ENV" env)}
+                                :env (assoc (into {} (System/getenv)) "WAG_ENV" env)}
                          dir (assoc :dir dir))
 
             result (p/shell

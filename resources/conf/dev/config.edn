@@ -4,7 +4,7 @@
 
  :active
  {;; Core application settings (always active)
-  :boundary/settings
+  :wagoe/settings
   {:name              "boundary-dev"
    :secure-cookies?   false  ;; local HTTP dev; set true behind HTTPS
    :version           "0.1.0"
@@ -14,7 +14,7 @@
 
    ;; Feature flags
    :features
-   {:user-web-ui {:enabled? #or [#env BND_WEB_UI_ENABLED true]}}
+   {:user-web-ui {:enabled? #or [#env WAG_WEB_UI_ENABLED true]}}
 
    ;; User validation configuration
    :user-validation
@@ -40,7 +40,7 @@
 
   ;; Active database configurations
   ;; Only databases listed here will be loaded and initialized
-  :boundary/postgresql
+  :wagoe/postgresql
   {:host        #or [#env POSTGRES_HOST "localhost"]
    :port        #or [#long #or [#env POSTGRES_PORT 5432] 5432]
    :dbname      #or [#env POSTGRES_DB "boundary_dev"]
@@ -52,7 +52,7 @@
                  :connection-timeout-ms 30000}}
 
   ;; HTTP Server configuration
-  :boundary/http
+  :wagoe/http
   {:port       #or [#env HTTP_PORT 3000]
    :host       #or [#env HTTP_HOST "0.0.0.0"]
    :join?      false
@@ -61,7 +61,7 @@
    ;; Graceful shutdown drain window (ms): stop accepting new connections, let
    ;; in-flight requests finish (up to this bound), then halt. 0 disables.
    :drain-timeout-ms #long #or [#env HTTP_DRAIN_TIMEOUT_MS 5000]
-   ;; Per-client rate limiting (fixed window). Uses :boundary/cache (Redis) for a
+   ;; Per-client rate limiting (fixed window). Uses :wagoe/cache (Redis) for a
    ;; limit shared across replicas; with no active cache it falls back to a
    ;; per-process counter (single-node only) and logs a warning at startup.
    ;; Generous limit for dev so HTMX/admin sub-requests aren't throttled.
@@ -79,13 +79,13 @@
                        :exempt-paths ["/api/v1/payments/webhook"]}}}
 
   ;; HTTP Router configuration
-  :boundary/router
+  :wagoe/router
   {:adapter    :reitit                                      ; Router implementation: :reitit, :pedestal, etc.
    :coercion   :malli                                       ; Coercion library: :malli, :spec, etc.
    :middleware []}                                          ; Global middleware (specific middleware in routes)
 
   ;; API Versioning configuration
-  :boundary/api-versioning
+  :wagoe/api-versioning
   {:default-version     :v1                                 ; Default version when not specified
    :latest-stable       :v1                                 ; Latest stable version
    :deprecated-versions #{}                                 ; Set of deprecated versions (e.g., #{:v0})
@@ -93,7 +93,7 @@
    :supported-versions  #{:v1}}                             ; Set of all supported versions
 
   ;; Pagination configuration
-  :boundary/pagination
+  :wagoe/pagination
   {:default-limit       20                                  ; Default items per page
    :max-limit           100                                 ; Maximum items per page
    :default-type        :offset                             ; Default pagination type (:offset or :cursor)
@@ -102,21 +102,21 @@
 
   ;; Observability configurations
   ;; Using SLF4J provider with Logback backend for unified logging
-  :boundary/logging
+  :wagoe/logging
   {:provider     :slf4j
    :level        :debug
    :logger-name  "boundary"
    :default-tags {:service     "boundary-dev"
                   :environment "development"}}
 
-  :boundary/metrics
+  :wagoe/metrics
   {:provider :no-op}
 
-  :boundary/error-reporting
+  :wagoe/error-reporting
   {:provider :no-op}
 
   ;; Admin interface configuration
-  :boundary/admin
+  :wagoe/admin
   {:enabled?         true
    :base-path        "/web/admin"
    :require-role     :admin
@@ -128,27 +128,27 @@
                       :max-page-size     200}}
 
   ;; Workflow engine configuration
-  :boundary/workflow
+  :wagoe/workflow
   {:enabled? true}
 
   ;; Search engine configuration
-  :boundary/search
+  :wagoe/search
   {:enabled? true}
 
   ;; Internationalisation — marker-based i18n with EDN catalogues
-  :boundary/i18n
+  :wagoe/i18n
   {:catalogue-path "wagoe/i18n/translations"
    :default-locale :en
    :dev?           true}
 
   ;; Payment provider — mock adapter for development (no external calls)
   ;; Move to :inactive and configure :mollie or :stripe for real PSP testing.
-  :boundary/payment-provider
+  :wagoe/payment-provider
   {:provider :mock}
 
   ;; AI tooling — offline-first via oMLX (OpenAI-compatible), with OpenAI cloud fallback
   ;; Move to :inactive to disable. Set OPENAI_API_KEY to enable cloud fallback.
-  :boundary/ai-service
+  :wagoe/ai-service
   {:provider :openai
    :model    #or [#env AI_MODEL "gemma-4-26b-a4b-it-4bit"]
    :base-url #or [#env OPENAI_BASE_URL "http://localhost:8000"]
@@ -158,16 +158,16 @@
               :api-key  #env OPENAI_API_KEY}}
 
   ;; Developer dashboard — live system introspection UI (dev only)
-  :boundary/dashboard {:port 9999}}
+  :wagoe/dashboard {:port 9999}}
 
  ;; Guidance engine is managed by the REPL (dev/repl/user.clj), not by Integrant.
  ;; Set level in your REPL: (guidance :minimal) or (guidance :off)
 
  :inactive
- {;; Cache configuration — move :boundary/cache to :active to enable Redis caching.
+ {;; Cache configuration — move :wagoe/cache to :active to enable Redis caching.
   ;; Requires a Redis instance (e.g. `docker run -p 6379:6379 redis:7-alpine`).
   ;; With :in-memory provider no Redis is needed (useful for local dev without Docker).
-  :boundary/cache
+  :wagoe/cache
   {:provider    :redis
    :host        #or [#env REDIS_HOST "localhost"]
    :port        #or [#long #or [#env REDIS_PORT 6379] 6379]
@@ -182,13 +182,13 @@
   ;; Inactive database configurations
   ;; These are available for reference but won't be loaded unless moved to :active
 
-  :boundary/sqlite
+  :wagoe/sqlite
   {:db   "dev-database.db"
    :pool {:minimum-idle          1
           :maximum-pool-size     3
           :connection-timeout-ms 10000}}
 
-  :boundary/mysql
+  :wagoe/mysql
   {:host     #env "MYSQL_HOST"
    :port     #env "MYSQL_PORT"
    :dbname   #env "MYSQL_DB"
@@ -198,7 +198,7 @@
               :maximum-pool-size     15
               :connection-timeout-ms 30000}}
 
-  :boundary/h2
+  :wagoe/h2
   {:memory true                                               ; For fast in-memory testing
    :pool   {:minimum-idle      1
             :maximum-pool-size 10}}
@@ -206,7 +206,7 @@
   ;; Example observability configurations for future use
   ;; Move to :active section when you need real providers
 
-  :boundary/logging-with-stdout
+  :wagoe/logging-with-stdout
   {:provider          :stdout
    :level             :debug
    :format            :json
@@ -216,31 +216,31 @@
    :include-thread    false
    :default-tags      {:service "boundary-dev"}}
 
-  :boundary/metrics-with-prometheus
+  :wagoe/metrics-with-prometheus
   {:provider :prometheus
    :port     9090
    :path     "/metrics"}
 
-  :boundary/error-reporting-with-sentry
+  :wagoe/error-reporting-with-sentry
   {:provider    :sentry
    :dsn         #env "SENTRY_DSN"
    :environment "development"}
 
-  :boundary/metrics-with-datadog
+  :wagoe/metrics-with-datadog
   {:provider    :datadog-statsd
    :host        #or [#env DD_AGENT_HOST "127.0.0.1"]
    :port        #or [#env DD_DOGSTATSD_PORT 8125]
    :service     "boundary"
-   :environment #or [#env BND_ENV "production"]
+   :environment #or [#env WAG_ENV "production"]
    :global-tags ["service:boundary" "environment:production"]}
 
-  :boundary/logging-with-file
+  :wagoe/logging-with-file
   {:provider :file
    :level    :debug
    :file     "logs/dev-service.log"
    :format   :json}
 
-  :boundary/logging-no-op
+  :wagoe/logging-no-op
   {:provider :no-op}
 
   ;; External service adapters — move to :active to enable.
@@ -259,7 +259,7 @@
    :password #env IMAP_PASSWORD
    :ssl?     true}
 
-  ;; Stripe payments now handled by :boundary/payment-provider (libs/payments).
+  ;; Stripe payments now handled by :wagoe/payment-provider (libs/payments).
   ;; Configure with {:provider :stripe :api-key ... :webhook-secret ...} in :active.
 
   :wagoe.external/twilio

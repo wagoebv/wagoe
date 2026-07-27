@@ -1,5 +1,5 @@
 (ns wagoe.payments.shell.module-wiring-test
-  "Boot-time credential validation for :boundary/payment-provider (BOU-77)."
+  "Boot-time credential validation for :wagoe/payment-provider (BOU-77)."
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest testing is]]
             [integrant.core :as ig]
@@ -8,7 +8,7 @@
             [wagoe.payments.shell.module-wiring]))
 
 (defn- init [config]
-  (ig/init-key :boundary/payment-provider config))
+  (ig/init-key :wagoe/payment-provider config))
 
 (defn- config-error [config]
   (try (init config) nil

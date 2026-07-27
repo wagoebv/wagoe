@@ -182,7 +182,7 @@
    :correlation       {:header              "x-correlation-id"
                        :generate-if-missing true
                        :include-in-logs     true}
-   :default-tags      {:service "boundary"}})
+   :default-tags      {:service "wagoe"}})
 
 ;;Default JSON logging configuration.
 (def default-json-config
@@ -195,7 +195,7 @@
    :correlation             {:header              "x-correlation-id"
                              :generate-if-missing true
                              :include-in-logs     true}
-   :default-tags            {:service "boundary"}})
+   :default-tags            {:service "wagoe"}})
 
 ;; Default audit logging configuration.
 (def default-audit-config

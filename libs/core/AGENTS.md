@@ -10,7 +10,7 @@ feature flags. It sits at the bottom of the dependency graph — **it depends on
 on `org.clojure/clojure` and `metosin/malli`, and no Boundary library depends
 *downward* into anything else from here.** There is **no `shell/`, no
 `ports.clj`, no I/O**; everything is a pure function (the interceptor/generator
-engines are the only namespaces tagged `^:boundary/allow-throw`, because
+engines are the only namespaces tagged `^:wagoe/allow-throw`, because
 throwing *is* their error model).
 
 The four namespaces below carry almost all the traffic: `utils.type-conversion`,
@@ -36,7 +36,7 @@ return `nil` for invalid input by design.
 | Namespace | Key fns / vars |
 |-----------|----------------|
 | `boundary.core.utils.validation` | `validate-with-transform` / `validate-cli-args` / `validate-request` (decode-then-validate a Malli schema → `{:valid? bool :data …}` / `{:valid? false :errors …}`); result accessors `validation-passed?`, `get-validation-errors`, `get-validated-data`; CLI helpers `valid-uuid?`, `valid-output-format?` |
-| `boundary.core.validation` | Legacy/back-compat facade. Cached compiled `validator` / `explainer` / `decoder` (memoized), `valid?`, `explain`, `validate-with-transform` (switches to structured errors when `BND_DEVEX_VALIDATION` is on), `success-result`, `failure-result`, `error-map`, `devex-enabled?` |
+| `boundary.core.validation` | Legacy/back-compat facade. Cached compiled `validator` / `explainer` / `decoder` (memoized), `valid?`, `explain`, `validate-with-transform` (switches to structured errors when `WAG_DEVEX_VALIDATION` is on), `success-result`, `failure-result`, `error-map`, `devex-enabled?` |
 | `boundary.core.validation.result` | Canonical result format: `success-result`, `failure-result`, `error-map`, `warning-map`, predicates `validation-passed?` / `validation-failed?` / `has-warnings?`, accessors `get-errors` / `get-warnings` / `get-validated-data`, grouping `errors-by-field` / `errors-by-code`, `first-error`, `error-count`, `merge-results`, `add-error` / `add-warning`, `normalize-result` |
 | `boundary.core.validation.codes` | Error-code catalog: `common-error-codes`, `user-error-codes`, `billing-error-codes`, `workflow-error-codes`, merged `error-code-catalog`; lookups `get-error-code-info`, `error-code-exists?`, `get-error-codes-by-category`, `get-error-codes-for-field`, `suggest-error-code` |
 | `boundary.core.validation.messages` | Templating + "did you mean?" engine (Damerau-Levenshtein): `render-message`, `render-suggestion`, `enhance-error`, `interpolate-template`, `suggest-similar-value`, `format-field-name`, hint builders `create-did-you-mean-suggestion` / `create-expected-value-hint` / `create-range-hint` / `create-length-hint` / `create-dependency-hint` |
@@ -59,7 +59,7 @@ return `nil` for invalid input by design.
 
 | Namespace | Key fns / vars |
 |-----------|----------------|
-| `boundary.core.config.feature-flags` | `enabled?`, `all-flags`, `flag-info`, `add-flags-to-config`, `parse-bool`, `get-env-value`; `known-flags` registry (`:devex-validation` → `BND_DEVEX_VALIDATION`, `:structured-logging` → `BND_STRUCTURED_LOGGING`) |
+| `boundary.core.config.feature-flags` | `enabled?`, `all-flags`, `flag-info`, `add-flags-to-config`, `parse-bool`, `get-env-value`; `known-flags` registry (`:devex-validation` → `WAG_DEVEX_VALIDATION`, `:structured-logging` → `WAG_STRUCTURED_LOGGING`) |
 
 ### PII redaction
 
@@ -152,7 +152,7 @@ interceptor metadata.
   return `nil`. Pick the right one for your call site.
 - **Two `validate-with-transform`s exist.** `utils.validation` is the plain
   decode-then-validate helper; `boundary.core.validation` is the legacy facade
-  that switches to structured errors under `BND_DEVEX_VALIDATION`. Prefer the new
+  that switches to structured errors under `WAG_DEVEX_VALIDATION`. Prefer the new
   `validation.result` API for new code.
 - **`default-error-mappings` lives in `interceptor-context`**, inlined there on
   purpose to avoid a `core → platform` circular dependency — do not re-home it.

@@ -13,9 +13,9 @@ mode you'd see without it, and the fix.
 
 ### 1. Tenant HTTP middleware is now wired by the app — **silent if missed** (BOU-200)
 
-The platform `:boundary/http-handler` no longer builds tenant/membership
+The platform `:wagoe/http-handler` no longer builds tenant/membership
 middleware from a `:membership-service` key — it ignores that key entirely.
-The tenant lib now provides a `:boundary/tenant-http-middleware` component,
+The tenant lib now provides a `:wagoe/tenant-http-middleware` component,
 and the app injects it via the handler's generic `:extra-middleware` seam.
 
 **Failure mode:** the system boots normally, but tenant resolution and
@@ -24,20 +24,20 @@ no error. This is the highest-priority step.
 
 ```clojure
 ;; BEFORE (ignored since alpha-42)
-:boundary/http-handler
-{:tenant-service     (ig/ref :boundary/tenant-service)
- :membership-service (ig/ref :boundary/membership-service)   ; <- dead key
+:wagoe/http-handler
+{:tenant-service     (ig/ref :wagoe/tenant-service)
+ :membership-service (ig/ref :wagoe/membership-service)   ; <- dead key
  ...}
 
 ;; AFTER
-:boundary/tenant-http-middleware
-{:tenant-service     (ig/ref :boundary/tenant-service)
- :membership-service (ig/ref :boundary/membership-service)
- :db-context         (ig/ref :boundary/db-context)}
+:wagoe/tenant-http-middleware
+{:tenant-service     (ig/ref :wagoe/tenant-service)
+ :membership-service (ig/ref :wagoe/membership-service)
+ :db-context         (ig/ref :wagoe/db-context)}
 
-:boundary/http-handler
-{:tenant-service   (ig/ref :boundary/tenant-service)          ; still used (readiness/test-reset)
- :extra-middleware (ig/ref :boundary/tenant-http-middleware)
+:wagoe/http-handler
+{:tenant-service   (ig/ref :wagoe/tenant-service)          ; still used (readiness/test-reset)
+ :extra-middleware (ig/ref :wagoe/tenant-http-middleware)
  ...}
 ```
 
@@ -48,7 +48,7 @@ feature modules' `module-wiring` namespaces (user, admin, tenant, workflow,
 search). The application that assembles the system owns those loads.
 
 **Failure mode:** loud — Integrant init fails with a missing `init-key`
-defmethod (e.g. `:boundary/user-repository`).
+defmethod (e.g. `:wagoe/user-repository`).
 
 ```clojure
 ;; In your app's config/main namespace, alongside the platform wiring require:

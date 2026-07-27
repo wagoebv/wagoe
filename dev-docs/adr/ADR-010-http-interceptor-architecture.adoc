@@ -415,7 +415,7 @@ Create higher-order interceptors:
 (deftest auth-interceptor-e2e-test
   (testing "full auth flow with real system"
     (with-system [sys (ig/init test-config)]
-      (let [handler (:boundary/http-handler sys)]
+      (let [handler (:wagoe/http-handler sys)]
         
         ;; Without auth - should reject
         (let [resp (handler {:request-method :post

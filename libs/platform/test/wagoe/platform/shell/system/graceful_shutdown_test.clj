@@ -2,7 +2,7 @@
   "Integration tests for BOU-86 graceful connection draining.
 
    Exercises the real `configure-graceful-shutdown!` helper used by the
-   `:boundary/http-server` Integrant component: with a drain timeout configured,
+   `:wagoe/http-server` Integrant component: with a drain timeout configured,
    `.stop` must let in-flight requests finish before halting, and new requests
    must be rejected once draining has started.
 

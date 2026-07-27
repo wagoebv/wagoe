@@ -206,7 +206,7 @@
           user2 (create-test-user {:name "Bob" :email "bob@example.com"})
           service (create-mock-service {(:id user1) user1
                                         (:id user2) user2})
-          config {:active {:boundary/settings {:user-limits {:max-users 1000}}}}
+          config {:active {:wagoe/settings {:user-limits {:max-users 1000}}}}
           handler (web-handlers/users-page-handler service config)
           request {}
           response (handler request)]
@@ -221,7 +221,7 @@
   (testing "renders users list for all users"
     (let [user1 (create-test-user {})
           service (create-mock-service {(:id user1) user1})
-          config {:active {:boundary/settings {:user-limits {:max-users 1000}}}}
+          config {:active {:wagoe/settings {:user-limits {:max-users 1000}}}}
           handler (web-handlers/users-page-handler service config)
           request {}
           response (handler request)]
@@ -231,7 +231,7 @@
 
   (testing "handles empty users list"
     (let [service (create-mock-service)
-          config {:active {:boundary/settings {:user-limits {:max-users 1000}}}}
+          config {:active {:wagoe/settings {:user-limits {:max-users 1000}}}}
           handler (web-handlers/users-page-handler service config)
           request {}
           response (handler request)]
@@ -259,7 +259,7 @@
                     (list-audit-logs [_ _] {:audit-logs [] :total-count 0})
                     (get-audit-logs-for-user [_ _ _] [])
                     (change-password [_ _ _ _] false))
-          config {:active {:boundary/settings {:user-limits {:max-users 1000}}}}
+          config {:active {:wagoe/settings {:user-limits {:max-users 1000}}}}
           handler (web-handlers/users-page-handler service config)
           request {}
           response (handler request)]
@@ -299,7 +299,7 @@
   (testing "renders user detail page for existing user"
     (let [user (create-test-user {:name "Alice" :email "alice@example.com"})
           service (create-mock-service {(:id user) user})
-          config {:active {:boundary/settings {:user-limits {:max-users 1000}}}}
+          config {:active {:wagoe/settings {:user-limits {:max-users 1000}}}}
           handler (web-handlers/user-detail-page-handler service config)
           request {:path-params {:id (str (:id user))}}
           response (handler request)]
@@ -311,7 +311,7 @@
 
   (testing "returns 404 for non-existent user"
     (let [service (create-mock-service)
-          config {:active {:boundary/settings {:user-limits {:max-users 1000}}}}
+          config {:active {:wagoe/settings {:user-limits {:max-users 1000}}}}
           handler (web-handlers/user-detail-page-handler service config)
           request {:path-params {:id (str (UUID/randomUUID))}}
           response (handler request)]
@@ -321,7 +321,7 @@
 
   (testing "returns 400 for invalid UUID"
     (let [service (create-mock-service)
-          config {:active {:boundary/settings {:user-limits {:max-users 1000}}}}
+          config {:active {:wagoe/settings {:user-limits {:max-users 1000}}}}
           handler (web-handlers/user-detail-page-handler service config)
           request {:path-params {:id "not-a-uuid"}}
           response (handler request)]
@@ -350,7 +350,7 @@
                     (list-audit-logs [_ _] {:audit-logs [] :total-count 0})
                     (get-audit-logs-for-user [_ _ _] [])
                     (change-password [_ _ _ _] false))
-          config {:active {:boundary/settings {:user-limits {:max-users 1000}}}}
+          config {:active {:wagoe/settings {:user-limits {:max-users 1000}}}}
           handler (web-handlers/user-detail-page-handler service config)
           request {:path-params {:id (str (:id user))}}
           response (handler request)]
@@ -360,7 +360,7 @@
 
 (deftest ^:contract create-user-page-handler-test
   (testing "renders create user page"
-    (let [config {:active {:boundary/settings {:user-limits {:max-users 1000}}}}
+    (let [config {:active {:wagoe/settings {:user-limits {:max-users 1000}}}}
           handler (web-handlers/create-user-page-handler config)
           request {}
           response (handler request)]
@@ -371,7 +371,7 @@
       (is (html-contains? response "form"))))
 
   (testing "includes flash messages when present"
-    (let [config {:active {:boundary/settings {:user-limits {:max-users 1000}}}}
+    (let [config {:active {:wagoe/settings {:user-limits {:max-users 1000}}}}
           handler (web-handlers/create-user-page-handler config)
           request {:flash {:error "Previous creation failed"}}
           response (handler request)]
@@ -388,7 +388,7 @@
           user2 (create-test-user {:name "Bob"})
           service (create-mock-service {(:id user1) user1
                                         (:id user2) user2})
-          config {:active {:boundary/settings {:user-limits {:max-users 1000}}}}
+          config {:active {:wagoe/settings {:user-limits {:max-users 1000}}}}
           handler (web-handlers/users-table-fragment-handler service config)
           request {}
           response (handler request)]
@@ -419,7 +419,7 @@
                     (list-audit-logs [_ _] {:audit-logs [] :total-count 0})
                     (get-audit-logs-for-user [_ _ _] [])
                     (change-password [_ _ _ _] false))
-          config {:active {:boundary/settings {:user-limits {:max-users 1000}}}}
+          config {:active {:wagoe/settings {:user-limits {:max-users 1000}}}}
           handler (web-handlers/users-table-fragment-handler service config)
           request {}
           response (handler request)]
@@ -430,7 +430,7 @@
 (deftest ^:contract create-user-htmx-handler-test
   (testing "creates user successfully and instructs HTMX to navigate to return-to"
     (let [service (create-mock-service)
-          config {:active {:boundary/settings {:user-limits {:max-users 1000}}}}
+          config {:active {:wagoe/settings {:user-limits {:max-users 1000}}}}
           handler (web-handlers/create-user-htmx-handler service nil config)
           request {:form-params {"name" "New User"
                                  "email" "newuser@example.com"
@@ -447,7 +447,7 @@
 
   (testing "falls back to /web/admin/users when return-to is missing or unsafe"
     (let [service (create-mock-service)
-          config {:active {:boundary/settings {:user-limits {:max-users 1000}}}}
+          config {:active {:wagoe/settings {:user-limits {:max-users 1000}}}}
           handler (web-handlers/create-user-htmx-handler service nil config)
           ;; Open-redirect attempt via scheme-relative URL
           request {:form-params {"name" "New User"
@@ -464,7 +464,7 @@
 
   (testing "returns validation errors for invalid data"
     (let [service (create-mock-service)
-          config {:active {:boundary/settings {:user-limits {:max-users 1000}}}}
+          config {:active {:wagoe/settings {:user-limits {:max-users 1000}}}}
           handler (web-handlers/create-user-htmx-handler service nil config)
           request {:form-params {"name" ""
                                  "email" "invalid-email"
@@ -494,7 +494,7 @@
                     (list-audit-logs [_ _] {:audit-logs [] :total-count 0})
                     (get-audit-logs-for-user [_ _ _] [])
                     (change-password [_ _ _ _] false))
-          config {:active {:boundary/settings {:user-limits {:max-users 1000}}}}
+          config {:active {:wagoe/settings {:user-limits {:max-users 1000}}}}
           handler (web-handlers/create-user-htmx-handler service nil config)
           request {:form-params {"name" "Test User"
                                  "email" "test@example.com"
@@ -554,7 +554,7 @@
   (testing "updates user successfully and re-renders form with success banner"
     (let [user (create-test-user {:name "Original Name"})
           service (create-mock-service {(:id user) user})
-          config {:active {:boundary/settings {:user-limits {:max-users 1000}}}}
+          config {:active {:wagoe/settings {:user-limits {:max-users 1000}}}}
           handler (web-handlers/update-user-htmx-handler service config)
           request {:path-params {:id (str (:id user))}
                    :form-params {"name" "Updated Name"
@@ -574,7 +574,7 @@
   (testing "returns validation errors for invalid data"
     (let [user (create-test-user {})
           service (create-mock-service {(:id user) user})
-          config {:active {:boundary/settings {:user-limits {:max-users 1000}}}}
+          config {:active {:wagoe/settings {:user-limits {:max-users 1000}}}}
           handler (web-handlers/update-user-htmx-handler service config)
           request {:path-params {:id (str (:id user))}
                    :form-params {"name" ""
@@ -585,7 +585,7 @@
 
   (testing "returns error for invalid UUID"
     (let [service (create-mock-service)
-          config {:active {:boundary/settings {:user-limits {:max-users 1000}}}}
+          config {:active {:wagoe/settings {:user-limits {:max-users 1000}}}}
           handler (web-handlers/update-user-htmx-handler service config)
           request {:path-params {:id "not-a-uuid"}
                    :form-params {"name" "Test"
@@ -617,7 +617,7 @@
                     (list-audit-logs [_ _] {:audit-logs [] :total-count 0})
                     (get-audit-logs-for-user [_ _ _] [])
                     (change-password [_ _ _ _] false))
-          config {:active {:boundary/settings {:user-limits {:max-users 1000}}}}
+          config {:active {:wagoe/settings {:user-limits {:max-users 1000}}}}
           handler (web-handlers/update-user-htmx-handler service config)
           request {:path-params {:id (str (:id user))}
                    :form-params {"name" "Test User"
@@ -633,7 +633,7 @@
   (testing "deactivates user successfully and returns success message"
     (let [user (create-test-user {})
           service (create-mock-service {(:id user) user})
-          config {:active {:boundary/settings {:user-limits {:max-users 1000}}}}
+          config {:active {:wagoe/settings {:user-limits {:max-users 1000}}}}
           handler (web-handlers/delete-user-htmx-handler service config)
           request {:path-params {:id (str (:id user))}}
           response (handler request)]
@@ -646,7 +646,7 @@
 
   (testing "returns error for invalid UUID"
     (let [service (create-mock-service)
-          config {:active {:boundary/settings {:user-limits {:max-users 1000}}}}
+          config {:active {:wagoe/settings {:user-limits {:max-users 1000}}}}
           handler (web-handlers/delete-user-htmx-handler service config)
           request {:path-params {:id "not-a-uuid"}}
           response (handler request)]
@@ -675,7 +675,7 @@
                     (list-audit-logs [_ _] nil)
                     (get-audit-logs-for-user [_ _ _] nil)
                     (change-password [_ _ _ _] nil))
-          config {:active {:boundary/settings {:user-limits {:max-users 1000}}}}
+          config {:active {:wagoe/settings {:user-limits {:max-users 1000}}}}
           handler (web-handlers/delete-user-htmx-handler service config)
           request {:path-params {:id (str (:id user))}}
           response (handler request)]
@@ -690,7 +690,7 @@
 (deftest ^:contract web-handlers-integration-test
   (testing "complete workflow: list -> create -> view -> update -> delete"
     (let [service (create-mock-service)
-          config {:active {:boundary/settings {:user-limits {:max-users 1000}}}}
+          config {:active {:wagoe/settings {:user-limits {:max-users 1000}}}}
 
           ;; 1. List users (empty)
           list-handler (web-handlers/users-page-handler service config)
@@ -749,9 +749,9 @@
                           (-> ((web-handlers/login-submit-handler auth-svc config) request)
                               (get-in [:cookies "session-token" :secure])))]
       (testing "secure when config enables it (e.g. prod/acc over HTTPS)"
-        (is (true? (cookie-secure {:boundary/settings {:secure-cookies? true}}))))
+        (is (true? (cookie-secure {:wagoe/settings {:secure-cookies? true}}))))
       (testing "insecure when config disables it (local HTTP dev)"
-        (is (false? (cookie-secure {:boundary/settings {:secure-cookies? false}}))))
+        (is (false? (cookie-secure {:wagoe/settings {:secure-cookies? false}}))))
       (testing "defaults to secure when unset (fail-secure)"
         (is (true? (cookie-secure {})))))))
 

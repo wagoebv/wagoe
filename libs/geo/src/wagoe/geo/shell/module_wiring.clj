@@ -1,26 +1,26 @@
 (ns wagoe.geo.shell.module-wiring
   "Integrant wiring for the geo module.
 
-   Config key: :boundary/geo-service
+   Config key: :wagoe/geo-service
 
    Example (single provider, no caching):
-     :boundary/geo-service
+     :wagoe/geo-service
      {:provider  :openstreetmap
       :user-agent \"MyApp/1.0 (contact@example.com)\"}
 
    Example (Google with DB cache):
-     :boundary/geo-service
+     :wagoe/geo-service
      {:provider   :google
-      :api-key    #env BND_GEO_API_KEY
+      :api-key    #env WAG_GEO_API_KEY
       :cache-ttl  86400
-      :db         #ig/ref :boundary/db}
+      :db         #ig/ref :wagoe/db}
 
    Example (fallback chain):
-     :boundary/geo-service
+     :wagoe/geo-service
      {:provider   [:openstreetmap :google]
-      :api-key    #env BND_GEO_API_KEY
+      :api-key    #env WAG_GEO_API_KEY
       :cache-ttl  86400
-      :db         #ig/ref :boundary/db}"
+      :db         #ig/ref :wagoe/db}"
   (:require [wagoe.geo.shell.adapters.osm :as osm]
             [wagoe.geo.shell.adapters.google :as google]
             [wagoe.geo.shell.adapters.mapbox :as mapbox]
@@ -65,7 +65,7 @@
 ;; Integrant lifecycle
 ;; =============================================================================
 
-(defmethod ig/init-key :boundary/geo-service
+(defmethod ig/init-key :wagoe/geo-service
   [_ {:keys [provider db cache-ttl] :as config}]
   (log/info "Initializing geo service" {:provider provider})
   (let [providers (build-providers provider config)
@@ -76,7 +76,7 @@
     {:providers providers
      :cache     geo-cache}))
 
-(defmethod ig/halt-key! :boundary/geo-service
+(defmethod ig/halt-key! :wagoe/geo-service
   [_ _]
   (log/info "Halting geo service")
   nil)

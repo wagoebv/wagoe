@@ -99,7 +99,7 @@ checked; safe methods (GET/HEAD/OPTIONS) and `:exempt-paths` are skipped.
 [source,clojure]
 ----
 ;; resources/conf/<env>/config.edn under :active
-:boundary/http
+:wagoe/http
 {:security
  {:csrf {:enabled?     true                                  ; OPT-IN: lib default is false
          :secret       #or [#env CSRF_SECRET #env JWT_SECRET] ; defaults to JWT_SECRET

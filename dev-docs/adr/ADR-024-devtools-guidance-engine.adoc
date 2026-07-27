@@ -60,7 +60,7 @@ production overhead.
 
 === Implement guidance engine
 
-A `:boundary/guidance` Integrant key with configurable levels:
+A `:wagoe/guidance` Integrant key with configurable levels:
 
 * `:full` (default for new projects) -- startup dashboard, post-scaffold
   steps, contextual tips, enriched error messages, FC/IS warnings at REPL time.

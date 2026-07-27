@@ -2,7 +2,7 @@
   "Legacy validation namespace maintained for backward compatibility.
   
    This namespace provides the original validation interface while supporting
-   the new structured result format when BND_DEVEX_VALIDATION is enabled.
+   the new structured result format when WAG_DEVEX_VALIDATION is enabled.
    
    New code should use:
      - wagoe.core.validation.result
@@ -43,7 +43,7 @@
 (defn validate-with-transform
   "Validate data with transformation (legacy interface).
   
-   When BND_DEVEX_VALIDATION is enabled, returns enhanced result format.
+   When WAG_DEVEX_VALIDATION is enabled, returns enhanced result format.
    Otherwise maintains legacy format for backward compatibility.
   
    Args:

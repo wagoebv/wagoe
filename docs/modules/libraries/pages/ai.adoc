@@ -44,19 +44,19 @@ Falls back to cloud providers if configured:
 [source,clojure]
 ----
 ;; Offline-first (Ollama, no API key)
-:boundary/ai-service
+:wagoe/ai-service
 {:provider :ollama
  :model    "qwen2.5-coder:7b"
  :base-url "http://localhost:11434"}
 
 ;; Anthropic
-:boundary/ai-service
+:wagoe/ai-service
 {:provider :anthropic
  :model    "claude-haiku-4-5-20251001"
  :api-key  #env ANTHROPIC_API_KEY}
 
 ;; Ollama primary + Anthropic fallback
-:boundary/ai-service
+:wagoe/ai-service
 {:provider  :ollama
  :model     "qwen2.5-coder:7b"
  :base-url  "http://localhost:11434"

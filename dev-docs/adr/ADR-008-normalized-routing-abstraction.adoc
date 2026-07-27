@@ -408,29 +408,29 @@ Both can be used together. Interceptors are converted to middleware by the route
                      'boundary.platform.shell.interfaces.http.middleware/wrap-correlation-id]}}
 
 ;; In system wiring
-(defmethod ig/init-key :boundary/router
+(defmethod ig/init-key :wagoe/router
   [_ {:keys [config]}]
   (case (:router (:http config))
     :reitit (->ReititRouter)
     :mock (->MockRouter)))
 
-(defmethod ig/init-key :boundary/http-server
+(defmethod ig/init-key :wagoe/http-server
   [_ {:keys [config]}]
   (case (:server (:http config))
     :ring-jetty (->RingJettyServer)
     :undertow (->UndertowServer)))
 
-(defmethod ig/init-key :boundary/http-routes
+(defmethod ig/init-key :wagoe/http-routes
   [_ {:keys [user-routes inventory-routes]}]
   ;; Aggregate all module routes
   (concat user-routes inventory-routes))
 
-(defmethod ig/init-key :boundary/http-handler
+(defmethod ig/init-key :wagoe/http-handler
   [_ {:keys [router routes config]}]
   ;; Compile routes using selected router
   (ports/compile-routes router routes (:http config)))
 
-(defmethod ig/init-key :boundary/http-server-instance
+(defmethod ig/init-key :wagoe/http-server-instance
   [_ {:keys [server handler config]}]
   ;; Start server with compiled handler
   (ports/start! server handler (:http config)))
@@ -514,7 +514,7 @@ Both can be used together. Interceptors are converted to middleware by the route
   (testing "can swap routers via config"
     (with-system [sys (-> (test-config {:http {:router :mock}})
                           ig/init)]
-      (let [handler (:boundary/http-handler sys)
+      (let [handler (:wagoe/http-handler sys)
             response (handler {:request-method :get :uri "/api/users"})]
         (is (= 200 (:status response)))))))
 ----

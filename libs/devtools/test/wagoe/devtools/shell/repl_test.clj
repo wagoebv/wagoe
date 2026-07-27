@@ -97,41 +97,41 @@
 
 (deftest ^:unit find-dependents-direct-test
   (testing "finds direct dependents"
-    (let [config {:boundary/db       {:host "localhost"}
-                  :boundary/repo     {:db (ig/ref :boundary/db)}
-                  :boundary/unrelated {:foo "bar"}}]
-      (is (= [:boundary/repo] (repl/find-dependents config :boundary/db))))))
+    (let [config {:wagoe/db       {:host "localhost"}
+                  :wagoe/repo     {:db (ig/ref :wagoe/db)}
+                  :wagoe/unrelated {:foo "bar"}}]
+      (is (= [:wagoe/repo] (repl/find-dependents config :wagoe/db))))))
 
 (deftest ^:unit find-dependents-transitive-test
   (testing "chain: repo before service before handler"
-    (let [config {:boundary/db       {:host "localhost"}
-                  :boundary/repo     {:db (ig/ref :boundary/db)}
-                  :boundary/service  {:repo (ig/ref :boundary/repo)}
-                  :boundary/handler  {:svc (ig/ref :boundary/service)}
-                  :boundary/unrelated {:foo "bar"}}
-          deps   (repl/find-dependents config :boundary/db)]
+    (let [config {:wagoe/db       {:host "localhost"}
+                  :wagoe/repo     {:db (ig/ref :wagoe/db)}
+                  :wagoe/service  {:repo (ig/ref :wagoe/repo)}
+                  :wagoe/handler  {:svc (ig/ref :wagoe/service)}
+                  :wagoe/unrelated {:foo "bar"}}
+          deps   (repl/find-dependents config :wagoe/db)]
       (is (= 3 (count deps)))
-      (is (every? (set deps) [:boundary/repo :boundary/service :boundary/handler]))
-      (is (< (.indexOf deps :boundary/repo) (.indexOf deps :boundary/service)))
-      (is (< (.indexOf deps :boundary/service) (.indexOf deps :boundary/handler)))))
+      (is (every? (set deps) [:wagoe/repo :wagoe/service :wagoe/handler]))
+      (is (< (.indexOf deps :wagoe/repo) (.indexOf deps :wagoe/service)))
+      (is (< (.indexOf deps :wagoe/service) (.indexOf deps :wagoe/handler)))))
 
   (testing "diamond: handler depends on both db and service, so service before handler"
-    ;; Changing :boundary/db should restart :boundary/service first,
-    ;; then :boundary/handler (which refs both db AND service).
+    ;; Changing :wagoe/db should restart :wagoe/service first,
+    ;; then :wagoe/handler (which refs both db AND service).
     ;; BFS level-order would put them on the same level — wrong.
-    (let [config {:boundary/db       {:host "localhost"}
-                  :boundary/service  {:db (ig/ref :boundary/db)}
-                  :boundary/handler  {:db  (ig/ref :boundary/db)
-                                      :svc (ig/ref :boundary/service)}
-                  :boundary/unrelated {:foo "bar"}}
-          deps   (repl/find-dependents config :boundary/db)]
+    (let [config {:wagoe/db       {:host "localhost"}
+                  :wagoe/service  {:db (ig/ref :wagoe/db)}
+                  :wagoe/handler  {:db  (ig/ref :wagoe/db)
+                                      :svc (ig/ref :wagoe/service)}
+                  :wagoe/unrelated {:foo "bar"}}
+          deps   (repl/find-dependents config :wagoe/db)]
       (is (= 2 (count deps)))
-      (is (every? (set deps) [:boundary/service :boundary/handler]))
+      (is (every? (set deps) [:wagoe/service :wagoe/handler]))
       ;; service must restart before handler so handler gets fresh service ref
-      (is (< (.indexOf deps :boundary/service) (.indexOf deps :boundary/handler))))))
+      (is (< (.indexOf deps :wagoe/service) (.indexOf deps :wagoe/handler))))))
 
 (deftest ^:unit find-dependents-no-dependents-test
   (testing "returns empty when no dependents exist"
-    (let [config {:boundary/db   {:host "localhost"}
-                  :boundary/cache {:ttl 300}}]
-      (is (empty? (repl/find-dependents config :boundary/db))))))
+    (let [config {:wagoe/db   {:host "localhost"}
+                  :wagoe/cache {:ttl 300}}]
+      (is (empty? (repl/find-dependents config :wagoe/db))))))

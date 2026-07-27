@@ -141,7 +141,7 @@ From the REPL:
 
 [source,clojure]
 ----
-(def ds (get-in integrant.repl.state/system [:boundary/db-context :datasource]))
+(def ds (get-in integrant.repl.state/system [:wagoe/db-context :datasource]))
 (require '[next.jdbc :as jdbc])
 (jdbc/execute! ds ["SELECT * FROM users LIMIT 5"])
 ----

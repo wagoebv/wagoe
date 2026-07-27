@@ -712,7 +712,7 @@
    Returns:
      Map with keys :api, :web, :static containing normalized route vectors"
   [user-service mfa-service config]
-  (let [web-ui-enabled? (get-in config [:active :boundary/settings :features :user-web-ui :enabled?] true)]
+  (let [web-ui-enabled? (get-in config [:active :wagoe/settings :features :user-web-ui :enabled?] true)]
     {:api    (normalized-api-routes user-service mfa-service)
      :web    (when web-ui-enabled? (normalized-web-routes user-service mfa-service config))
      :static []}))

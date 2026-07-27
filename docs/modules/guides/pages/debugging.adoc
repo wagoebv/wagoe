@@ -31,7 +31,7 @@ Bypass the HTTP layer and call services directly:
 
 [source,clojure]
 ----
-(def user-svc (get integrant.repl.state/system :boundary/user-service))
+(def user-svc (get integrant.repl.state/system :wagoe/user-service))
 (ports/find-user-by-email user-svc "alice@example.com")
 ----
 
@@ -51,7 +51,7 @@ Add temporary logging in handlers:
 
 [source,clojure]
 ----
-(def ds (get-in integrant.repl.state/system [:boundary/db-context :datasource]))
+(def ds (get-in integrant.repl.state/system [:wagoe/db-context :datasource]))
 (require '[next.jdbc :as jdbc])
 (jdbc/execute! ds ["SELECT * FROM users WHERE email = ?" "alice@example.com"])
 ----

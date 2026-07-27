@@ -17,7 +17,7 @@ protocols, plus a tenant-scoped wrapper for multi-tenant isolation.
 | `boundary.cache.shell.adapters.in-memory` | In-memory adapter (atoms, TTL, LRU eviction, stats) — `create-in-memory-cache` |
 | `boundary.cache.shell.adapters.redis` | Redis adapter (Jedis pool, Nippy serialization) — `create-redis-pool`, `create-redis-cache` |
 | `boundary.cache.shell.tenant-cache` | Tenant-scoped wrapper with automatic key prefixing — `create-tenant-cache`, `extract-tenant-cache` |
-| `boundary.cache.shell.module-wiring` | Integrant `:boundary/cache` init/halt; selects adapter by `:provider` |
+| `boundary.cache.shell.module-wiring` | Integrant `:wagoe/cache` init/halt; selects adapter by `:provider` |
 
 ## The Cache Port
 
@@ -68,11 +68,11 @@ a warning.
 
 ## Integrant Wiring
 
-Component key: **`:boundary/cache`**. Config is passed straight to the adapter.
+Component key: **`:wagoe/cache`**. Config is passed straight to the adapter.
 
 ```clojure
 ;; Redis (production) — resources/conf/{dev,prod,acc}/config.edn
-:boundary/cache
+:wagoe/cache
 {:provider    :redis
  :host        "localhost"
  :port        6379
@@ -85,7 +85,7 @@ Component key: **`:boundary/cache`**. Config is passed straight to the adapter.
  :min-idle    1}
 
 ;; In-memory (dev without Docker / tests)
-:boundary/cache
+:wagoe/cache
 {:provider     :in-memory
  :default-ttl  300
  :max-size     10000         ; entries before LRU eviction
@@ -94,8 +94,8 @@ Component key: **`:boundary/cache`**. Config is passed straight to the adapter.
 
 `halt-key!` calls `close!` when the instance satisfies `ICacheManagement`
 (closes the Jedis pool; no-op for in-memory). In the sample configs
-`:boundary/cache` ships under `:inactive` — move it to `:active` to enable it.
-Downstream components reference it with `(ig/ref :boundary/cache)` (e.g. HTTP
+`:wagoe/cache` ships under `:inactive` — move it to `:active` to enable it.
+Downstream components reference it with `(ig/ref :wagoe/cache)` (e.g. HTTP
 rate-limiting and the user service session/user caches).
 
 ## Usage
@@ -142,7 +142,7 @@ rate-limiting and the user service session/user caches).
 4. **Pattern cost**: in-memory does an O(n) scan; Redis uses cursor-based SCAN. Expensive on large caches — avoid hot-path `keys-matching`/`delete-matching!`.
 5. **LRU eviction is in-memory only** (`:max-size`). The `:eviction-policy` schema enum lists `:lru/:lfu/:fifo/:random` but the in-memory adapter implements LRU; Redis relies on the server's own eviction config.
 6. **Tenant isolation**: `flush-all!` on a `TenantCache` only deletes that tenant's `tenant:<id>:*` keys, and `close!` does **not** close the shared underlying cache. But `cache-stats` returns **global** (not tenant-scoped) stats.
-7. **Rate-limiting fallback**: without an active `:boundary/cache`, the HTTP rate limiter falls back to a per-process counter — not a shared limit across replicas.
+7. **Rate-limiting fallback**: without an active `:wagoe/cache`, the HTTP rate limiter falls back to a per-process counter — not a shared limit across replicas.
 
 ## Testing
 

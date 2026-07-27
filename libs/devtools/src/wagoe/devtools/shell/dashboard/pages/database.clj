@@ -64,7 +64,7 @@
    Each entry: {:name <string> :status :applied|:pending}"
   [ctx]
   (let [db-ctx (or (:db-context ctx)
-                   (when-let [sys state/system] (get sys :boundary/db-context)))
+                   (when-let [sys state/system] (get sys :wagoe/db-context)))
         ds     (when db-ctx (:datasource db-ctx))
         applied-ids (applied-migration-ids ds)
         filenames (discover-migration-files)]
@@ -87,7 +87,7 @@
   ([] (pool-stats nil))
   ([ctx]
    (let [db-ctx (or (:db-context ctx)
-                    (when-let [sys state/system] (get sys :boundary/db-context)))]
+                    (when-let [sys state/system] (get sys :wagoe/db-context)))]
      (when-let [ds (when db-ctx (:datasource db-ctx))]
        (try
          (let [pool (.getHikariPoolMXBean ^com.zaxxer.hikari.HikariDataSource ds)]
@@ -103,7 +103,7 @@
   ([] (table-list nil))
   ([ctx]
    (let [db-ctx (or (:db-context ctx)
-                    (when-let [sys state/system] (get sys :boundary/db-context)))]
+                    (when-let [sys state/system] (get sys :wagoe/db-context)))]
      (when-let [ds (when db-ctx (:datasource db-ctx))]
        (try
          (with-open [conn (.getConnection ds)]
@@ -185,7 +185,7 @@
   (let [params  (get req :params {})
         sql     (str/trim (or (get params "sql") (get params :sql) ""))
         db-ctx  (or (:db-context req)
-                    (when-let [sys state/system] (get sys :boundary/db-context)))
+                    (when-let [sys state/system] (get sys :wagoe/db-context)))
         ds      (when db-ctx (:datasource db-ctx))]
     (cond
       (str/blank? sql)

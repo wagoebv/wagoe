@@ -119,9 +119,9 @@ silently skipped:
 
 ```edn
 ;; resources/conf/dev/config.edn
-{:boundary/workflow
- {:db-ctx    #ig/ref :boundary/database-context
-  :job-queue #ig/ref :boundary/job-queue}}  ; optional
+{:wagoe/workflow
+ {:db-ctx    #ig/ref :wagoe/database-context
+  :job-queue #ig/ref :wagoe/job-queue}}  ; optional
 ```
 
 The component map returned by Integrant:

@@ -41,7 +41,7 @@
    that forgets to set it still gets Secure cookies. Set to false only for
    local development over plain HTTP."
   [config]
-  (get-in config [:boundary/settings :secure-cookies?] true))
+  (get-in config [:wagoe/settings :secure-cookies?] true))
 
 (defn- escape-js-string
   "Escape a string for safe embedding inside a JavaScript single-quoted
@@ -361,7 +361,7 @@
           page-opts {:user (get request :user)
                      :flash (get request :flash)
                      :return-to return-to
-                     :logo-url (get-in config [:boundary/settings :logo-url])}]
+                     :logo-url (get-in config [:wagoe/settings :logo-url])}]
       (html-response request (user-ui/login-page initial-data {} page-opts)))))
 
 (defn login-submit-handler
@@ -379,7 +379,7 @@
                          :user-agent (get-in request [:headers "user-agent"])}
           [valid? validation-errors validated-data]
           (validate-request-data user-schema/LoginRequest prepared-data)
-          logo-url (get-in config [:boundary/settings :logo-url])]
+          logo-url (get-in config [:wagoe/settings :logo-url])]
       (if-not valid?
         ;; Re-render login page with validation errors, preserving return-to
         (html-response request
@@ -697,7 +697,7 @@
 (defn- send-welcome-email!
   "Send welcome email to a newly created user through the email lib.
    email-sender satisfies wagoe.email.ports/EmailSenderProtocol (wired from
-   :boundary/email), so welcome mail flows through the framework's email module
+   :wagoe/email), so welcome mail flows through the framework's email module
    rather than the lower-level external SMTP provider.
    Config keys used: :welcome-email-from, :app-name (set at wiring time)."
   [email-sender user config]

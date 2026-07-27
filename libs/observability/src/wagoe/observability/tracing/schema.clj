@@ -41,5 +41,5 @@
   {:provider     :otlp
    :endpoint     "http://localhost:4318"
    :protocol     :http/protobuf
-   :service-name "boundary"
+   :service-name "wagoe"
    :timeout-ms   10000})

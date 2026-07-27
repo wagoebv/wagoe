@@ -218,7 +218,7 @@
   "Build an `SdkMeterProvider` with a periodic OTLP/HTTP metric exporter."
   ^SdkMeterProvider [{:keys [endpoint service-name interval-ms timeout-ms headers]
                       :or   {endpoint     "http://localhost:4318"
-                             service-name "boundary"
+                             service-name "wagoe"
                              interval-ms  60000
                              timeout-ms   10000}}]
   (let [eb       (-> (OtlpHttpMetricExporter/builder)

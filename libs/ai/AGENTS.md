@@ -35,7 +35,7 @@
 | `boundary.ai.shell.service` | shell | Public API: `scaffold-from-description`, `explain-error`, `generate-tests`, `sql-from-description`, `generate-docs`, `generate-admin-entity`, `parse-setup-description` |
 | `boundary.ai.shell.repl` | shell | REPL helpers: `explain`, `sql`, `gen-tests` |
 | `boundary.ai.shell.cli-entry` | shell | `-main` for `clojure -M -m boundary.ai.shell.cli-entry` |
-| `boundary.ai.shell.module-wiring` | shell | Integrant `:boundary/ai-service` |
+| `boundary.ai.shell.module-wiring` | shell | Integrant `:wagoe/ai-service` |
 
 ---
 
@@ -45,19 +45,19 @@ Add to `resources/conf/{env}/config.edn`:
 
 ```edn
 ;; Offline-first (Ollama, no API key)
-:boundary/ai-service
+:wagoe/ai-service
 {:provider :ollama
  :model    "qwen2.5-coder:7b"
  :base-url "http://localhost:11434"}
 
 ;; Anthropic (cloud)
-:boundary/ai-service
+:wagoe/ai-service
 {:provider :anthropic
  :model    "claude-haiku-4-5-20251001"
  :api-key  #env ANTHROPIC_API_KEY}
 
 ;; Ollama primary + Anthropic fallback
-:boundary/ai-service
+:wagoe/ai-service
 {:provider :ollama
  :model    "qwen2.5-coder:7b"
  :fallback {:provider :anthropic
@@ -65,7 +65,7 @@ Add to `resources/conf/{env}/config.edn`:
             :api-key  #env ANTHROPIC_API_KEY}}
 
 ;; Test environments
-:boundary/ai-service
+:wagoe/ai-service
 {:provider :no-op}
 ```
 
@@ -118,7 +118,7 @@ Require the wiring namespace in your system config loader:
 (require '[boundary.ai.shell.repl :as ai])
 
 ;; Bind the service after system start
-(ai/set-service! (integrant.repl.state/system :boundary/ai-service))
+(ai/set-service! (integrant.repl.state/system :wagoe/ai-service))
 
 (ai/explain *e)                                           ;; explain last exception
 (ai/sql "find all active users")                          ;; HoneySQL from NL
@@ -178,7 +178,7 @@ The `schema` argument to `complete-json` is a descriptive hint string, not a Mal
 Start with: `ollama serve`. The adapter will throw a connection exception if Ollama is not running; the fallback provider will be tried automatically if configured.
 
 ### 4. Module wiring uses the flat config (no nested `:config` map)
-The `ig/init-key :boundary/ai-service` handler receives the full config map directly. Unlike some other modules, there is no separate `:config` sub-key.
+The `ig/init-key :wagoe/ai-service` handler receives the full config map directly. Unlike some other modules, there is no separate `:config` sub-key.
 
 ### 5. No-op provider for tests — not a mock
 `NoOpProvider` returns deterministic canned responses. For integration tests that need to assert on specific AI outputs, use `reify IAIProvider` directly in the test.

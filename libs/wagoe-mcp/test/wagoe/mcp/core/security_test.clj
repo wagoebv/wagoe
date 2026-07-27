@@ -6,30 +6,30 @@
 
 (deftest ^:unit resolve-from-bnd-env
   (testing "dev → full"
-    (let [c (sec/resolve-context {"BND_ENV" "dev"})]
+    (let [c (sec/resolve-context {"WAG_ENV" "dev"})]
       (is (= :full (:mode c)))
       (is (= :execute (:max-tier c)))
       (is (false? (:read-only? c)))
       (is (= :bnd-env (:source c)))))
   (testing "prod → no-execute (Tier 2 denied, writes still allowed)"
-    (let [c (sec/resolve-context {"BND_ENV" "production"})]
+    (let [c (sec/resolve-context {"WAG_ENV" "production"})]
       (is (= :no-execute (:mode c)))
       (is (= :generate (:max-tier c)))))
   (testing "test → full"
-    (is (= :full (:mode (sec/resolve-context {"BND_ENV" "test"}))))))
+    (is (= :full (:mode (sec/resolve-context {"WAG_ENV" "test"}))))))
 
 (deftest ^:unit ci-overrides-bnd-env
-  (testing "CI forces read-only even when BND_ENV=dev"
-    (let [c (sec/resolve-context {"BND_ENV" "dev" "CI" "true"})]
+  (testing "CI forces read-only even when WAG_ENV=dev"
+    (let [c (sec/resolve-context {"WAG_ENV" "dev" "CI" "true"})]
       (is (= :read-only (:mode c)))
       (is (true? (:read-only? c)))
       (is (= :ci (:source c)))))
   (testing "CI=false is not truthy"
-    (is (= :full (:mode (sec/resolve-context {"BND_ENV" "dev" "CI" "false"}))))))
+    (is (= :full (:mode (sec/resolve-context {"WAG_ENV" "dev" "CI" "false"}))))))
 
 (deftest ^:unit explicit-override-wins
-  (testing "MCP_CAPABILITY_MODE beats CI and BND_ENV"
-    (let [c (sec/resolve-context {"BND_ENV" "prod" "CI" "true"
+  (testing "MCP_CAPABILITY_MODE beats CI and WAG_ENV"
+    (let [c (sec/resolve-context {"WAG_ENV" "prod" "CI" "true"
                                   "MCP_CAPABILITY_MODE" "full"})]
       (is (= :full (:mode c)))
       (is (= :override (:source c)))))
@@ -38,7 +38,7 @@
 
 (deftest ^:unit malformed-override-is-ignored-with-warning
   (testing "garbage override falls through to inferred mode, not full"
-    (let [c (sec/resolve-context {"MCP_CAPABILITY_MODE" "yolo" "BND_ENV" "prod"})]
+    (let [c (sec/resolve-context {"MCP_CAPABILITY_MODE" "yolo" "WAG_ENV" "prod"})]
       (is (= :no-execute (:mode c)))
       (is (= :bnd-env (:source c)))
       (is (seq (:warnings c)))
@@ -54,8 +54,8 @@
 
 ;; --- authorization ----------------------------------------------------------
 
-(def ^:private dev   (sec/resolve-context {"BND_ENV" "dev"}))
-(def ^:private prod  (sec/resolve-context {"BND_ENV" "prod"}))
+(def ^:private dev   (sec/resolve-context {"WAG_ENV" "dev"}))
+(def ^:private prod  (sec/resolve-context {"WAG_ENV" "prod"}))
 (def ^:private ci    (sec/resolve-context {"CI" "1"}))
 
 (defn- tool [name capability] {:name name :capability capability})

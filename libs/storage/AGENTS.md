@@ -8,7 +8,7 @@ File storage abstraction with pluggable backends. Ships local filesystem, AWS
 S3 / S3-compatible, and Google Cloud Storage adapters behind a single
 `IFileStorage` port, plus pure file validation, a Java-AWT image processor
 (resize + thumbnails, no native deps), signed-URL generation, a
-`:boundary/storage` Integrant key, and Ring upload/download handlers.
+`:wagoe/storage` Integrant key, and Ring upload/download handlers.
 
 ## Key Namespaces
 
@@ -22,7 +22,7 @@ S3 / S3-compatible, and Google Cloud Storage adapters behind a single
 | `boundary.storage.shell.adapters.s3` | `S3FileStorage` — AWS S3 / S3-compatible (MinIO, DO Spaces) via AWS SDK v2 |
 | `boundary.storage.shell.adapters.gcs` | `GCSFileStorage` — Google Cloud Storage via `google-cloud-storage`; V4 signed URLs |
 | `boundary.storage.shell.adapters.image-processor` | `JavaImageProcessor` — Java AWT / `javax.imageio` |
-| `boundary.storage.shell.module-wiring` | `:boundary/storage` + `:boundary/storage-routes` Integrant keys |
+| `boundary.storage.shell.module-wiring` | `:wagoe/storage` + `:wagoe/storage-routes` Integrant keys |
 | `boundary.storage.shell.http-handlers` | Ring handlers + `storage-routes` (normalized `:api` map format) |
 
 ## Ports
@@ -118,20 +118,20 @@ S3 / S3-compatible, and Google Cloud Storage adapters behind a single
 - `generate-signed-url` uses GCS V4 signing (needs service-account credentials);
   returns `nil` + logs on failure.
 
-## Wiring — `:boundary/storage` Integrant key
+## Wiring — `:wagoe/storage` Integrant key
 
 `boundary.storage.shell.module-wiring` ships `defmethod ig/init-key
-:boundary/storage`, dispatching on `:provider` (`:local` / `:s3` / `:gcs`). It
+:wagoe/storage`, dispatching on `:provider` (`:local` / `:s3` / `:gcs`). It
 builds the adapter + a default image processor and returns
 `{:provider <kw> :storage <IFileStorage> :service <IStorageService>}`; the
-halt-key closes the S3/GCS client. `:boundary/storage-routes` turns the service
+halt-key closes the S3/GCS client. `:wagoe/storage-routes` turns the service
 into normalized `:api` routes. The config matches the `boundary new` catalogue
 (`:local` accepts `:root` as an alias for `:base-path`):
 
 ```clojure
-:boundary/storage {:provider :local :root "uploads"}
+:wagoe/storage {:provider :local :root "uploads"}
 ;; or :s3 / :gcs — see the adapter configs above
-:boundary/storage-routes {:storage (ig/ref :boundary/storage)}
+:wagoe/storage-routes {:storage (ig/ref :wagoe/storage)}
 ```
 
 To wire the factories by hand instead (no Integrant), use
@@ -201,7 +201,7 @@ adapter (`store-file`, `retrieve-file`, `file-exists?`, `delete-file`,
 `(http-handlers/storage-routes svc {:base-path "/storage"})` returns the
 framework's **normalized module `:api` map format** — a vector of
 `{:path … :methods {…}}` maps. Paths carry NO `/api` prefix (versioning adds
-`/api/v1`). Mount via the module route mechanism (`:boundary/storage-routes`):
+`/api/v1`). Mount via the module route mechanism (`:wagoe/storage-routes`):
 
 | Method | Path | Handler |
 |--------|------|---------|
@@ -227,7 +227,7 @@ Errors are emitted as RFC-7807 problem details via
    extension (`mime-type-from-extension`), falling back to `image/jpeg` for
    unknown extensions — a PNG/WebP/GIF keeps its real type.
 5. **Cloud resources must be released** — call `close-s3-storage` /
-   `close-gcs-storage` on shutdown (the `:boundary/storage` halt-key does this).
+   `close-gcs-storage` on shutdown (the `:wagoe/storage` halt-key does this).
 6. **Local signed URLs** are real HMAC-SHA256 signatures **only with a
    `:signing-secret`**; the serving route must call `local/verify-signed-url`
    to enforce expiry (the filesystem adapter can't). Without a secret the URL is

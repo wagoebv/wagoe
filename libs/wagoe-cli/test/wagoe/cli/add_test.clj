@@ -56,17 +56,17 @@
       (make-boundary-project! tmp)
       (testing "injects config-snippet into dev config"
         (add/patch-config! tmp "resources/conf/dev/config.edn"
-                           "  :boundary/payment-provider\n  {:provider :mock}\n")
+                           "  :wagoe/payment-provider\n  {:provider :mock}\n")
         (let [content (slurp (io/file tmp "resources/conf/dev/config.edn"))]
-          (is (str/includes? content ":boundary/payment-provider"))))
+          (is (str/includes? content ":wagoe/payment-provider"))))
 
       (testing "does not inject if key already present"
         (let [before (slurp (io/file tmp "resources/conf/dev/config.edn"))]
           (add/patch-config! tmp "resources/conf/dev/config.edn"
-                             "  :boundary/payment-provider\n  {:provider :mock}\n")
+                             "  :wagoe/payment-provider\n  {:provider :mock}\n")
           (let [after (slurp (io/file tmp "resources/conf/dev/config.edn"))]
-            (is (= (count (re-seq #":boundary/payment-provider" before))
-                   (count (re-seq #":boundary/payment-provider" after)))))))
+            (is (= (count (re-seq #":wagoe/payment-provider" before))
+                   (count (re-seq #":wagoe/payment-provider" after)))))))
       (finally
         (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))
 

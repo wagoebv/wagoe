@@ -22,7 +22,7 @@
 (def default-version-config
   "Default API versioning configuration.
    
-   Override in config.edn under :boundary/api-versioning"
+   Override in config.edn under :wagoe/api-versioning"
   {:default-version :v1           ; Version to use when not specified
    :latest-stable :v1              ; Latest stable version
    :deprecated-versions #{}        ; Set of deprecated version keywords
@@ -39,7 +39,7 @@
      Version config map with defaults applied"
   [config]
   (merge default-version-config
-         (get-in config [:active :boundary/api-versioning])))
+         (get-in config [:active :wagoe/api-versioning])))
 
 ;; =============================================================================
 ;; Route Transformation
@@ -267,7 +267,7 @@
      (apply-versioning
        [{:path \"/users\" :methods {:get {...}}}
         {:path \"/items\" :methods {:get {...}}}]
-       {:active {:boundary/api-versioning
+       {:active {:wagoe/api-versioning
                  {:default-version :v1
                   :latest-stable :v1
                   :supported-versions #{:v1}}}})
@@ -314,7 +314,7 @@
      (def versioned-handler
        (wrap-handler-with-version-headers
          my-handler
-         {:active {:boundary/api-versioning
+         {:active {:wagoe/api-versioning
                    {:default-version :v1
                     :latest-stable :v1}}}))
      
@@ -344,7 +344,7 @@
    (def versioned-routes
      (apply-versioning
        user-routes
-       {:active {:boundary/api-versioning
+       {:active {:wagoe/api-versioning
                  {:default-version :v1
                   :latest-stable :v1
                   :deprecated-versions #{}

@@ -5,7 +5,7 @@
 
 (deftest ^:unit renders-security-page
   (testing "renders security summary"
-    (let [html (sec-page/render {:config {:boundary/settings
+    (let [html (sec-page/render {:config {:wagoe/settings
                                           {:user-validation
                                            {:password-policy {:min-length 12
                                                               :require-uppercase? true

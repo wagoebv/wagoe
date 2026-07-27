@@ -56,7 +56,7 @@
   [active-config]
   (let [db-keys     (filter (fn [k]
                               (and (keyword? k)
-                                   (= (namespace k) "boundary")
+                                   (= (namespace k) "wagoe")
                                    (contains? #{"postgresql" "sqlite" "mysql" "h2"}
                                               (name k))))
                             (keys active-config))
@@ -131,7 +131,7 @@
   "Drop and recreate the database after confirmation.
    Only operates on the dev environment."
   []
-  (let [env (or (System/getenv "BND_ENV") "dev")]
+  (let [env (or (System/getenv "WAG_ENV") "dev")]
     (when (contains? #{"prod" "acc" "production"} env)
       (println (red (str "  REFUSED: bb db:reset cannot run in " env " environment.")))
       (println (dim "  This command is only for development use."))

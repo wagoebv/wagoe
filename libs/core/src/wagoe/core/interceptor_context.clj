@@ -1,6 +1,6 @@
-;; ^:boundary/allow-throw — a construction-time guard for the interceptor
+;; ^:wagoe/allow-throw — a construction-time guard for the interceptor
 ;; context schema (part of the pipeline engine, see wagoe.core.interceptor).
-(ns ^:boundary/allow-throw wagoe.core.interceptor-context
+(ns ^:wagoe/allow-throw wagoe.core.interceptor-context
   "Context schema and validation for interceptor pipelines.
 
    Defines the structure and validation rules for the context map that flows

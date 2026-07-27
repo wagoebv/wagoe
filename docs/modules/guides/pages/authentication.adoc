@@ -123,7 +123,7 @@ Unauthenticated flows (login, register, MFA) have no session yet, so the token i
 to a `SameSite=Strict` `csrf-session` cookie minted on the page GET and validated on the
 subsequent POST.
 
-Configure under `:boundary/http :security :csrf`:
+Configure under `:wagoe/http :security :csrf`:
 
 [source,clojure]
 ----

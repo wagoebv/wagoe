@@ -64,7 +64,7 @@ Auto-generated CRUD admin interface with database schema introspection, filterin
 Add to `resources/conf/dev/config.edn`:
 
 ```clojure
-:boundary/admin
+:wagoe/admin
 {:enabled?         true
  :base-path        "/web/admin"       ; URL prefix for all admin pages
  :require-role     :admin             ; Role required to access admin
@@ -224,7 +224,7 @@ This is the full schema for a single entity config file. All keys are optional u
    :soft-delete-table :primary_table}
 
   ;; ─────────────────────────────────────────────────────────────────────
-  ;; UI OVERRIDES (per-entity, overrides global :ui in :boundary/admin)
+  ;; UI OVERRIDES (per-entity, overrides global :ui in :wagoe/admin)
   ;; ─────────────────────────────────────────────────────────────────────
 
   :ui {:field-grouping {:other-label "Advanced"}}}}
@@ -291,9 +291,9 @@ If you register your Malli schemas with the admin schema provider, enum types an
 
 ```clojure
 ;; In your Integrant config:
-:boundary/admin-schema-provider
-{:db-ctx       (ig/ref :boundary/database-context)
- :config       (ig/ref :boundary/admin)
+:wagoe/admin-schema-provider
+{:db-ctx       (ig/ref :wagoe/database-context)
+ :config       (ig/ref :wagoe/admin)
  :malli-schemas {:users boundary.user.schema/User
                  :products myapp.product.schema/Product}}
 ```

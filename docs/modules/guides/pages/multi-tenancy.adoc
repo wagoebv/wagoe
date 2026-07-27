@@ -30,54 +30,54 @@ Add the tenant components to your `config.edn`:
 [source,clojure]
 ----
 ;; Initialise DB tables (run once on startup)
-:boundary/tenant-db-schema
-{:db-context #ig/ref :boundary/db-context
- :logger     #ig/ref :boundary/logger}
+:wagoe/tenant-db-schema
+{:db-context #ig/ref :wagoe/db-context
+ :logger     #ig/ref :wagoe/logger}
 
 ;; Tenant CRUD
-:boundary/tenant-repository
-{:db-context     #ig/ref :boundary/db-context
- :logger         #ig/ref :boundary/logger
- :error-reporter #ig/ref :boundary/error-reporter}
+:wagoe/tenant-repository
+{:db-context     #ig/ref :wagoe/db-context
+ :logger         #ig/ref :wagoe/logger
+ :error-reporter #ig/ref :wagoe/error-reporter}
 
-:boundary/tenant-service
-{:tenant-repository #ig/ref :boundary/tenant-repository
- :logger            #ig/ref :boundary/logger
- :metrics-emitter   #ig/ref :boundary/metrics-emitter
- :error-reporter    #ig/ref :boundary/error-reporter}
+:wagoe/tenant-service
+{:tenant-repository #ig/ref :wagoe/tenant-repository
+ :logger            #ig/ref :wagoe/logger
+ :metrics-emitter   #ig/ref :wagoe/metrics-emitter
+ :error-reporter    #ig/ref :wagoe/error-reporter}
 
 ;; Membership management
-:boundary/membership-repository
-{:db-context     #ig/ref :boundary/db-context
- :logger         #ig/ref :boundary/logger
- :error-reporter #ig/ref :boundary/error-reporter}
+:wagoe/membership-repository
+{:db-context     #ig/ref :wagoe/db-context
+ :logger         #ig/ref :wagoe/logger
+ :error-reporter #ig/ref :wagoe/error-reporter}
 
-:boundary/membership-service
-{:repository      #ig/ref :boundary/membership-repository
- :logger          #ig/ref :boundary/logger
- :metrics-emitter #ig/ref :boundary/metrics-emitter
- :error-reporter  #ig/ref :boundary/error-reporter}
+:wagoe/membership-service
+{:repository      #ig/ref :wagoe/membership-repository
+ :logger          #ig/ref :wagoe/logger
+ :metrics-emitter #ig/ref :wagoe/metrics-emitter
+ :error-reporter  #ig/ref :wagoe/error-reporter}
 
 ;; Email invite flow
-:boundary/invite-repository
-{:db-context     #ig/ref :boundary/db-context
- :logger         #ig/ref :boundary/logger
- :error-reporter #ig/ref :boundary/error-reporter}
+:wagoe/invite-repository
+{:db-context     #ig/ref :wagoe/db-context
+ :logger         #ig/ref :wagoe/logger
+ :error-reporter #ig/ref :wagoe/error-reporter}
 
-:boundary/invite-service
-{:repository            #ig/ref :boundary/invite-repository
- :membership-repository #ig/ref :boundary/membership-repository
- :logger                #ig/ref :boundary/logger
- :metrics-emitter       #ig/ref :boundary/metrics-emitter
- :error-reporter        #ig/ref :boundary/error-reporter}
+:wagoe/invite-service
+{:repository            #ig/ref :wagoe/invite-repository
+ :membership-repository #ig/ref :wagoe/membership-repository
+ :logger                #ig/ref :wagoe/logger
+ :metrics-emitter       #ig/ref :wagoe/metrics-emitter
+ :error-reporter        #ig/ref :wagoe/error-reporter}
 
 ;; Routes (merged into top-level router)
-:boundary/tenant-routes
-{:tenant-service #ig/ref :boundary/tenant-service
- :db-context     #ig/ref :boundary/db-context}
+:wagoe/tenant-routes
+{:tenant-service #ig/ref :wagoe/tenant-service
+ :db-context     #ig/ref :wagoe/db-context}
 
-:boundary/membership-routes
-{:service #ig/ref :boundary/membership-service}
+:wagoe/membership-routes
+{:service #ig/ref :wagoe/membership-service}
 ----
 
 == Step 2 — Add middleware to your Ring stack
@@ -93,13 +93,13 @@ Each one depends on data set by the previous.
 (defn build-handler [routes system]
   (-> (create-router routes)
       ;; 3. Enrich request with :tenant-membership (needs :user + :tenant)
-      (wrap-tenant-membership (:boundary/membership-service system))
+      (wrap-tenant-membership (:wagoe/membership-service system))
       ;; 2. Resolve :tenant from subdomain / JWT / header; set search_path
-      (tm/wrap-multi-tenant (:boundary/tenant-service system)
+      (tm/wrap-multi-tenant (:wagoe/tenant-service system)
                             {:require-tenant? true
                              :cache (tm/create-tenant-cache)})
       ;; 1. Authenticate user; sets :user on request
-      (wrap-user-authentication (:boundary/user-service system))))
+      (wrap-user-authentication (:wagoe/user-service system))))
 ----
 
 After this middleware stack the request map contains:

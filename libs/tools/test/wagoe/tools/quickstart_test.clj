@@ -37,19 +37,19 @@
 ;; =============================================================================
 
 (deftest ^:unit inject-module-config-test
-  (testing "injects :boundary/tasks into single-module :active section"
+  (testing "injects :wagoe/tasks into single-module :active section"
     (let [tmp (java.io.File/createTempFile "config" ".edn")
           path (.getAbsolutePath tmp)]
       (try
         (spit path (str "{:active\n"
-                        " {:boundary/settings {:name \"test\"}}\n"
+                        " {:wagoe/settings {:name \"test\"}}\n"
                         "\n"
                         " :inactive\n"
-                        " {:boundary/cache {:provider :redis}}}\n"))
+                        " {:wagoe/cache {:provider :redis}}}\n"))
         (is (true? (#'quickstart/inject-module-config path)))
         (let [result (slurp path)]
-          (is (re-find #":boundary/tasks" result)
-              "config should contain :boundary/tasks after injection")
+          (is (re-find #":wagoe/tasks" result)
+              "config should contain :wagoe/tasks after injection")
           (is (re-find #":enabled\? true" result)
               "config should contain :enabled? true"))
         (finally
@@ -61,31 +61,31 @@
       (try
         ;; Realistic config: multiple modules with nested maps
         (spit path (str "{:active\n"
-                        " {:boundary/settings {:name \"test\"}\n"
-                        "  :boundary/http {:port 3000 :host \"0.0.0.0\"}\n"
-                        "  :boundary/admin {:enabled? true\n"
+                        " {:wagoe/settings {:name \"test\"}\n"
+                        "  :wagoe/http {:port 3000 :host \"0.0.0.0\"}\n"
+                        "  :wagoe/admin {:enabled? true\n"
                         "                   :base-path \"/web/admin\"}}\n"
                         "\n"
                         " :inactive\n"
-                        " {:boundary/cache {:provider :redis}}}\n"))
+                        " {:wagoe/cache {:provider :redis}}}\n"))
         (is (true? (#'quickstart/inject-module-config path)))
         (let [result (slurp path)]
-          (is (re-find #":boundary/tasks" result)
-              "config should contain :boundary/tasks")
+          (is (re-find #":wagoe/tasks" result)
+              "config should contain :wagoe/tasks")
           ;; The snippet must NOT be inside another module's value map
-          (is (not (re-find #":boundary/admin \{[^}]*:boundary/tasks" result))
+          (is (not (re-find #":wagoe/admin \{[^}]*:wagoe/tasks" result))
               "tasks must not be nested inside admin config"))
         (finally
           (.delete tmp)))))
 
-  (testing "skips injection when :boundary/tasks already present"
+  (testing "skips injection when :wagoe/tasks already present"
     (let [tmp (java.io.File/createTempFile "config" ".edn")
           path (.getAbsolutePath tmp)]
       (try
-        (spit path ":boundary/tasks {:enabled? true}\n:inactive {}")
+        (spit path ":wagoe/tasks {:enabled? true}\n:inactive {}")
         (is (true? (#'quickstart/inject-module-config path)))
         ;; Should not duplicate
-        (is (= 1 (count (re-seq #":boundary/tasks" (slurp path)))))
+        (is (= 1 (count (re-seq #":wagoe/tasks" (slurp path)))))
         (finally
           (.delete tmp)))))
 

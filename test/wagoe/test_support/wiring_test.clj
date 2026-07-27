@@ -12,10 +12,10 @@
   (testing ":test profile has :test/reset-endpoint-enabled? true"
     (let [cfg (config/load-config {:profile :test})]
       (is (true? (:test/reset-endpoint-enabled? cfg)))
-      (is (= :test (:boundary/profile cfg))))))
+      (is (= :test (:wagoe/profile cfg))))))
 
 (deftest ^:unit reset-endpoint-disabled-in-prod
   (testing ":prod profile does not enable the reset flag"
     (let [cfg (config/load-config {:profile :prod})]
       (is (not (true? (:test/reset-endpoint-enabled? cfg))))
-      (is (= :prod (:boundary/profile cfg))))))
+      (is (= :prod (:wagoe/profile cfg))))))

@@ -12,10 +12,10 @@
 (defn enabled-modules
   "Return the vector of enabled modules based on app config.
 
-  Looks at [:active :boundary/settings :modules] in the configuration map.
+  Looks at [:active :wagoe/settings :modules] in the configuration map.
   If no modules are configured, defaults to [:user] for backwards compatibility."
   [config]
-  (let [mods (get-in config [:active :boundary/settings :modules])]
+  (let [mods (get-in config [:active :wagoe/settings :modules])]
     (if (seq mods)
       (vec mods)
       [:user])))

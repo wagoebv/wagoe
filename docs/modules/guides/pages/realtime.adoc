@@ -72,9 +72,9 @@ with JWT authentication, message routing, and topic-based pub/sub.
 
 [source,clojure]
 ----
-:boundary/realtime-service
-{:jwt-verifier #ig/ref :boundary/jwt-verifier
- :db           #ig/ref :boundary/db}   ; optional, for persistence
+:wagoe/realtime-service
+{:jwt-verifier #ig/ref :wagoe/jwt-verifier
+ :db           #ig/ref :wagoe/db}   ; optional, for persistence
 ----
 
 See xref:libraries:realtime.adoc[realtime library] for the full reference.

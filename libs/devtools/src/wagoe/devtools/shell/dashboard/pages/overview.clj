@@ -23,8 +23,8 @@
    falls back to integrant.repl.state/system for supplementary data."
   [ctx]
   (let [sys      (try state/system (catch Exception _ nil))
-        handler  (or (:http-handler ctx) (when sys (get sys :boundary/http-handler)))
-        db-ctx   (or (:db-context ctx) (when sys (get sys :boundary/db-context)))
+        handler  (or (:http-handler ctx) (when sys (get sys :wagoe/http-handler)))
+        db-ctx   (or (:db-context ctx) (when sys (get sys :wagoe/db-context)))
         routes   (when handler
                    (try (devtools-repl/extract-routes-from-handler handler)
                         (catch Exception _ [])))
@@ -53,7 +53,7 @@
      :module-count    (count (or modules []))
      :module-names    modules
      :components      components
-     :profile         (or (System/getenv "BND_ENV") "dev")
+     :profile         (or (System/getenv "WAG_ENV") "dev")
      :db-info         (when adapter (str adapter " @ " (or host "localhost")))
      :http-port       (or (:http-port ctx) 3000)
      :nrepl-port      7888

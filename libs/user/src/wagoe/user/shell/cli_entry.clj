@@ -42,7 +42,7 @@
           (user-persistence/initialize-user-schema! db-ctx)
 
           ;; Create repositories
-          (let [pagination-cfg (get-in cfg [:active :boundary/pagination] {:default-limit 20})
+          (let [pagination-cfg (get-in cfg [:active :wagoe/pagination] {:default-limit 20})
                 user-repo (user-persistence/create-user-repository db-ctx)
                 session-repo (user-persistence/create-session-repository db-ctx)
                 audit-repo (user-persistence/create-audit-repository db-ctx pagination-cfg)

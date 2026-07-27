@@ -36,7 +36,7 @@
    :disabled   {:max-tier nil       :read-only? true :disabled? true}})
 
 ;; Environment → default mode. The CI flag (detected separately) overrides this
-;; to :read-only regardless of BND_ENV; an explicit MCP override beats both.
+;; to :read-only regardless of WAG_ENV; an explicit MCP override beats both.
 (def ^:private env->mode
   {:dev  :full
    :test :full
@@ -45,7 +45,7 @@
 
 ;; --- Environment parsing (pure; the shell supplies the env map) -------------
 (def override-var "MCP_CAPABILITY_MODE")
-(def bnd-env-var  "BND_ENV")
+(def bnd-env-var  "WAG_ENV")
 (def ci-var       "CI")
 
 (defn- normalise [s] (some-> s str/trim str/lower-case))
@@ -75,7 +75,7 @@
 (defn resolve-context
   "Pure: derive the active security context from an environment map
    (String -> String). Precedence — explicit MCP override > CI detection >
-   BND_ENV > fail-closed default (:read-only).
+   WAG_ENV > fail-closed default (:read-only).
 
    Returns a context map: {:mode :source :env :ci? :allowlist + policy keys}.
    `:allowlist` defaults to :all (see `with-allowlist`)."

@@ -25,7 +25,7 @@ bb scaffold integrate product                      # Guide integration of a scaf
 
 # Testing - All tests across all libraries
 clojure -M:test:db/h2                                    # All tests (default test profile uses H2 in-memory)
-JWT_SECRET="dev-secret-32-chars-minimum" BND_ENV=test clojure -M:test:db/h2  # With JWT secret
+JWT_SECRET="dev-secret-32-chars-minimum" WAG_ENV=test clojure -M:test:db/h2  # With JWT secret
 
 # Testing - Per-library test suites
 clojure -M:test:db/h2 :core                              # Core library tests
@@ -327,7 +327,7 @@ clojure -M:test:db/h2 --watch :{module-name}  # Watch tests
 Every module MUST define `ports.clj`.
 
 - core/ must not import shell/IO/logging/DB
-- core/ must not throw — return typed error values ({:error {:type ... :message ...}}); the shell translates them into HTTP responses (escape hatch: ^:boundary/allow-throw ns metadata or .boundary/check-fcis.edn)
+- core/ must not throw — return typed error values ({:error {:type ... :message ...}}); the shell translates them into HTTP responses (escape hatch: ^:wagoe/allow-throw ns metadata or .boundary/check-fcis.edn)
 - core/ must not hold mutable state (defonce/atom/swap!/reset!) — definition registries and process state live in the shell (boundary.<lib>.shell.registry)
 - cross-module calls go through service ports
 - web/HTTP layers never require *.shell.persistence directly
@@ -415,13 +415,13 @@ To do a complete run against PostgreSQL:
 
 1. Start a disposable PostgreSQL instance that matches the credentials in
    `resources/conf/test/config.edn`.
-2. Temporarily move `:boundary/postgresql` from `:inactive` to `:active` in
-   `resources/conf/test/config.edn`, and move `:boundary/h2` out of `:active`.
+2. Temporarily move `:wagoe/postgresql` from `:inactive` to `:active` in
+   `resources/conf/test/config.edn`, and move `:wagoe/h2` out of `:active`.
 3. Run:
 
 ```bash
-BND_ENV=test JWT_SECRET="dev-secret-32-chars-minimum" clojure -M:migrate up
-BND_ENV=test JWT_SECRET="dev-secret-32-chars-minimum" clojure -M:test:db/h2
+WAG_ENV=test JWT_SECRET="dev-secret-32-chars-minimum" clojure -M:migrate up
+WAG_ENV=test JWT_SECRET="dev-secret-32-chars-minimum" clojure -M:test:db/h2
 ```
 
 4. Revert `resources/conf/test/config.edn` afterwards so normal local and CI
@@ -431,7 +431,7 @@ BND_ENV=test JWT_SECRET="dev-secret-32-chars-minimum" clojure -M:test:db/h2
 
 ```clojure
 ;; Get system component
-(def user-svc (get integrant.repl.state/system :boundary/user-service))
+(def user-svc (get integrant.repl.state/system :wagoe/user-service))
 
 ;; Test directly
 (ports/list-users user-svc {:limit 10})
@@ -461,7 +461,7 @@ When encountering 500 errors or unexpected behavior:
 
 3. **Test in isolation via REPL** - Bypass HTTP layer to test services directly:
    ```clojure
-   (def admin-svc (get integrant.repl.state/system :boundary/admin-service))
+   (def admin-svc (get integrant.repl.state/system :wagoe/admin-service))
    (admin-ports/update-entity admin-svc :users uuid {:name "Test"})
    ```
 
@@ -475,7 +475,7 @@ When encountering 500 errors or unexpected behavior:
 
 5. **Verify database state** - Query directly via REPL:
    ```clojure
-   (def ds (get-in integrant.repl.state/system [:boundary/db-context :datasource]))
+   (def ds (get-in integrant.repl.state/system [:wagoe/db-context :datasource]))
    (jdbc/execute! ds ["SELECT * FROM users WHERE id = ?" uuid])
    ```
 
@@ -667,7 +667,7 @@ java.time.temporal.ChronoUnit/DAYS
 ```clojure
 ;; WRONG — system-component is called before it is defined
 (defn dev-resend-invite! [...]
-  (let [svc (system-component :boundary/my-service)] ...))  ; used here
+  (let [svc (system-component :wagoe/my-service)] ...))  ; used here
 
 (defn- system-component [k]   ; defined here — too late!
   (get integrant.repl.state/system k))
@@ -677,7 +677,7 @@ java.time.temporal.ChronoUnit/DAYS
   (get integrant.repl.state/system k))
 
 (defn dev-resend-invite! [...]
-  (let [svc (system-component :boundary/my-service)] ...))
+  (let [svc (system-component :wagoe/my-service)] ...))
 ```
 
 ### 11. Swagger/OpenAPI — parameters invisible without explicit declaration
@@ -728,7 +728,7 @@ java.time.temporal.ChronoUnit/DAYS
 **Current Setup (Development)**:
 - **Database**: SQLite (`dev-database.db`) - no setup required
 - **HTTP**: Port 3000 (auto-find if busy: 3001-3099)
-- **Environment**: Set `BND_ENV=development`
+- **Environment**: Set `WAG_ENV=development`
 
 **Environment Variables**:
 ```bash
@@ -850,7 +850,7 @@ Seven automated safeguards run in CI (and `check:fcis` + `check:ports` in pre-co
 | **clj-kondo lint** | `clojure -M:clj-kondo --lint ...` | Static analysis (existing gate) | Yes |
 | **Config doctor** | `bb doctor --env dev --ci` | Configuration errors (existing gate) | Yes |
 
-**`check:ports` escape hatch (for legitimate exceptions / gradual adoption):** add `^:boundary/allow-direct` metadata to a namespace to exempt it from the coupling rules, or list `:allow-missing-ports` (module ns prefixes) / `:allow-direct` (namespaces) in a `.boundary/check-ports.edn` at the repo root.
+**`check:ports` escape hatch (for legitimate exceptions / gradual adoption):** add `^:wagoe/allow-direct` metadata to a namespace to exempt it from the coupling rules, or list `:allow-missing-ports` (module ns prefixes) / `:allow-direct` (namespaces) in a `.boundary/check-ports.edn` at the repo root.
 
 **Scripts location:** `libs/tools/src/boundary/tools/check_{fcis,tests,deps,ports,poms}.clj`
 **Security tests:** `libs/platform/test/boundary/platform/shell/security_test.clj` (tagged `^:security ^:unit`)

@@ -17,7 +17,7 @@
   ([ctx]
    (let [handler (or (:http-handler ctx)
                      (when-let [sys state/system]
-                       (get sys :boundary/http-handler)))]
+                       (get sys :wagoe/http-handler)))]
      (when handler
        (devtools-repl/extract-routes-from-handler handler)))))
 
@@ -183,7 +183,7 @@
                   (try (edn/read-string raw-body) (catch Exception _ nil)))
         handler (or (:http-handler req)
                     (when-let [sys state/system]
-                      (get sys :boundary/http-handler)))]
+                      (get sys :wagoe/http-handler)))]
     (if-not handler
       (str (h/html [:div.detail-panel.detail-panel-error
                     [:p "System not running"]]))

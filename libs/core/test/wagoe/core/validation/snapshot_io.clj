@@ -4,7 +4,7 @@
   This namespace contains side-effectful operations for reading and writing snapshots.
   All I/O is guarded by environment variables:
   - UPDATE_SNAPSHOTS: When true, writes new snapshots
-  - BND_DEVEX_VALIDATION: When false, snapshots act as pass-through assertions
+  - WAG_DEVEX_VALIDATION: When false, snapshots act as pass-through assertions
 
   Usage:
     ;; In tests - check snapshot matches
@@ -14,7 +14,7 @@
     UPDATE_SNAPSHOTS=true clojure -M:test:db/h2
 
     ;; Disable validation devex (snapshots pass through)
-    BND_DEVEX_VALIDATION=false clojure -M:test:db/h2"
+    WAG_DEVEX_VALIDATION=false clojure -M:test:db/h2"
   (:require [wagoe.core.validation.snapshot :as snapshot]
             [clojure.java.io :as io]
             [clojure.test :as t]
@@ -30,9 +30,9 @@
   (= "true" (System/getenv "UPDATE_SNAPSHOTS")))
 
 (defn- devex-enabled?
-  "Check if BND_DEVEX_VALIDATION is enabled (default true)."
+  "Check if WAG_DEVEX_VALIDATION is enabled (default true)."
   []
-  (not= "false" (System/getenv "BND_DEVEX_VALIDATION")))
+  (not= "false" (System/getenv "WAG_DEVEX_VALIDATION")))
 
 ;; -----------------------------------------------------------------------------
 ;; File I/O
@@ -113,7 +113,7 @@
   - UPDATE_SNAPSHOTS=true: Always writes new snapshot (pass)
   - File missing: Writes snapshot and passes
   - File exists: Compares and fails with diff if mismatch
-  - BND_DEVEX_VALIDATION=false: Pass-through (always passes)
+  - WAG_DEVEX_VALIDATION=false: Pass-through (always passes)
 
   Args:
     actual - Actual validation result or data to snapshot
@@ -142,7 +142,7 @@
   (if-not (devex-enabled?)
     ;; Pass-through mode when devex disabled
     (do
-      (t/is true "Snapshot check skipped (BND_DEVEX_VALIDATION=false)")
+      (t/is true "Snapshot check skipped (WAG_DEVEX_VALIDATION=false)")
       true)
 
     ;; Normal snapshot checking

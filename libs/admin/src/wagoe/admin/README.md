@@ -22,7 +22,7 @@ Add configuration to `resources/conf/dev/config.edn`:
 
 ```clojure
 :active
-{:boundary/admin
+{:wagoe/admin
  {:enabled? true
   :base-path "/web/admin"
   :require-role :admin
@@ -244,10 +244,10 @@ Admin module leverages existing authentication:
 
 ```clojure
 ;; From user module
-:boundary/admin-routes
-{:user-service (ig/ref :boundary/user-service)  ; For auth
- :admin-service (ig/ref :boundary/admin-service)
- :schema-provider (ig/ref :boundary/admin-schema-provider)}
+:wagoe/admin-routes
+{:user-service (ig/ref :wagoe/user-service)  ; For auth
+ :admin-service (ig/ref :wagoe/admin-service)
+ :schema-provider (ig/ref :wagoe/admin-schema-provider)}
 ```
 
 Session-based or token-based auth both supported.
@@ -258,11 +258,11 @@ Works with existing database infrastructure:
 
 ```clojure
 ;; Reuses platform database context
-:boundary/admin-service
-{:db-ctx (ig/ref :boundary/database-context)  ; Same DB connection
- :schema-provider (ig/ref :boundary/admin-schema-provider)
- :logger (ig/ref :boundary/logging)
- :error-reporter (ig/ref :boundary/error-reporting)}
+:wagoe/admin-service
+{:db-ctx (ig/ref :wagoe/database-context)  ; Same DB connection
+ :schema-provider (ig/ref :wagoe/admin-schema-provider)
+ :logger (ig/ref :wagoe/logging)
+ :error-reporter (ig/ref :wagoe/error-reporting)}
 ```
 
 ## Testing

@@ -188,7 +188,7 @@ Which id appears where:
 
 ```clojure
 ;; config.edn
-:boundary/payment-provider
+:wagoe/payment-provider
 {:provider        :mock        ; :mock | :mollie | :stripe
  :api-key         #env PSP_API_KEY
  :webhook-secret  #env PSP_WEBHOOK_SECRET   ; Stripe only

@@ -265,7 +265,7 @@
   {:provider :sentry
    :enabled true
    :environment :development
-   :service-name "boundary"
+   :service-name "wagoe"
    :sample-rate 1.0
    :traces-sample-rate 0.1
    :max-breadcrumbs 100
@@ -303,7 +303,7 @@
   {:provider :webhook
    :enabled true
    :environment :development
-   :service-name "boundary"
+   :service-name "wagoe"
    :method :post
    :timeout 10000
    :authentication {:type :none}

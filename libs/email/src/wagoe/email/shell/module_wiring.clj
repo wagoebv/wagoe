@@ -3,14 +3,14 @@
 
    Config keys:
 
-   :boundary/email
+   :wagoe/email
      {:provider :smtp :host \"...\" :port 587 :username \"...\" :password \"...\"}
      {:provider :logging}                          ; dev — logs instead of sending
 
      Returns an EmailSenderProtocol implementation.
 
-   :boundary/email-queue
-     {:sender (ig/ref :boundary/email) :max-retries 3}
+   :wagoe/email-queue
+     {:sender (ig/ref :wagoe/email) :max-retries 3}
 
      Returns an EmailQueueProtocol implementation (in-memory, single-process)."
   (:require [integrant.core :as ig]
@@ -19,7 +19,7 @@
             [wagoe.email.shell.adapters.queue :as queue]
             [clojure.tools.logging :as log]))
 
-(defmethod ig/init-key :boundary/email
+(defmethod ig/init-key :wagoe/email
   [_ {:keys [provider] :or {provider :logging} :as config}]
   (log/info "Initializing email sender" {:provider provider})
   (case provider
@@ -30,15 +30,15 @@
                 {:provider provider})
       (logging-adapter/create-logging-sender config))))
 
-(defmethod ig/halt-key! :boundary/email
+(defmethod ig/halt-key! :wagoe/email
   [_ _sender]
   (log/info "Email sender halted"))
 
-(defmethod ig/init-key :boundary/email-queue
+(defmethod ig/init-key :wagoe/email-queue
   [_ config]
   (log/info "Initializing in-memory email queue")
   (queue/create-in-memory-queue config))
 
-(defmethod ig/halt-key! :boundary/email-queue
+(defmethod ig/halt-key! :wagoe/email-queue
   [_ _queue]
   (log/info "Email queue halted"))

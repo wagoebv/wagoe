@@ -14,7 +14,7 @@
 ;;      go through service ports.
 ;;
 ;; Escape hatches (for legitimate exceptions and gradual adoption downstream):
-;;   - `^:boundary/allow-direct` metadata on a namespace exempts it from
+;;   - `^:wagoe/allow-direct` metadata on a namespace exempts it from
 ;;     rules 2 and 3.
 ;;   - An optional .boundary/check-ports.edn at the repo root supplies
 ;;     :allow-missing-ports (module ns prefixes) and :allow-direct (namespace
@@ -152,9 +152,9 @@
              (remove nil?))))))
 
 (defn- ns-allow-direct?
-  "True when the namespace symbol carries ^:boundary/allow-direct metadata."
+  "True when the namespace symbol carries ^:wagoe/allow-direct metadata."
   [ns-form]
-  (boolean (:boundary/allow-direct (meta (second ns-form)))))
+  (boolean (:wagoe/allow-direct (meta (second ns-form)))))
 
 ;; ---------------------------------------------------------------------------
 ;; Per-file rules (2 + 3)
@@ -193,7 +193,7 @@
                  :req  req})))))
 
 (defn- check-file
-  "Apply rules 2 and 3 to a single file. Honours ^:boundary/allow-direct and
+  "Apply rules 2 and 3 to a single file. Honours ^:wagoe/allow-direct and
    the :allow-direct config allowlist."
   [file allow-direct-set]
   (let [ns-form (parsing/read-ns-form file)
@@ -299,7 +299,7 @@
                               " directly (go through a service port)")))))
         (println)
         (println (str (count violations) " violation(s) found across " modules " module(s)."))
-        (println (ansi/dim "Escape hatch: ^:boundary/allow-direct ns metadata, or .boundary/check-ports.edn allowlist."))
+        (println (ansi/dim "Escape hatch: ^:wagoe/allow-direct ns metadata, or .boundary/check-ports.edn allowlist."))
         (System/exit 1))
       (do
         (println (ansi/green "Ports check passed.")

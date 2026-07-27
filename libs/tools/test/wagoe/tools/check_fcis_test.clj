@@ -103,8 +103,8 @@
       (is (some #(= :throw (:kind %)) vs)))))
 
 (deftest ^:unit allow-throw-metadata-exempts
-  (testing "^:boundary/allow-throw ns metadata suppresses the throw violation"
-    (let [vs (check-src "(ns ^:boundary/allow-throw ex.core)\n(defn f [x] (throw (ex-info \"bad\" {:type :x})))\n")]
+  (testing "^:wagoe/allow-throw ns metadata suppresses the throw violation"
+    (let [vs (check-src "(ns ^:wagoe/allow-throw ex.core)\n(defn f [x] (throw (ex-info \"bad\" {:type :x})))\n")]
       (is (not (some #(= :throw (:kind %)) vs))))))
 
 (deftest ^:unit allow-throw-config-exempts
@@ -126,8 +126,8 @@
       (is (contains? labels "reset!")))))
 
 (deftest ^:unit allow-mutable-state-metadata-exempts
-  (testing "^:boundary/allow-mutable-state ns metadata suppresses mutable-state violations"
-    (let [vs (check-src "(ns ^:boundary/allow-mutable-state ex.core)\n(defonce reg (atom {}))\n")]
+  (testing "^:wagoe/allow-mutable-state ns metadata suppresses mutable-state violations"
+    (let [vs (check-src "(ns ^:wagoe/allow-mutable-state ex.core)\n(defonce reg (atom {}))\n")]
       (is (not (some #(= :mutable-state (:kind %)) vs))))))
 
 (deftest ^:unit ignores-throw-inside-string-literal

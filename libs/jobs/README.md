@@ -494,7 +494,7 @@ clojure -M:test:db/h2 --focus boundary.jobs.shell.tenant-context-test
 
 ```clojure
 ;; config/prod.edn
-{:boundary/jobs
+{:wagoe/jobs
  {:redis {:host #env REDIS_HOST
           :port #long #env [REDIS_PORT 6379]
           :password #env REDIS_PASSWORD

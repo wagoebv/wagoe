@@ -1,6 +1,6 @@
 {;; {{project-name}} — dev configuration
  :active
- {  :boundary/settings
+ {  :wagoe/settings
     {:name             "{{project-name}}-dev"
      :version          "0.1.0"
      :date-format      "yyyy-MM-dd"
@@ -10,20 +10,20 @@
      :secure-cookies?  false
      :features         {}}
 
-   :boundary/h2
+   :wagoe/h2
    {:memory true
     :pool   {:minimum-idle 1 :maximum-pool-size 10}}
 
-   :boundary/http
+   :wagoe/http
    {:port       #or [#env HTTP_PORT 3000]
     :host       #or [#env HTTP_HOST "0.0.0.0"]
     :join?      false
     :port-range {:start 3000 :end 3099}}
 
-   :boundary/router
+   :wagoe/router
    {:adapter :reitit :coercion :malli :middleware []}
 
-   :boundary/logging
+   :wagoe/logging
    {:level :debug :console true}}
 
  :inactive

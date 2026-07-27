@@ -903,7 +903,7 @@ jobs:
         continue-on-error: true
         run: bb e2e
         env:
-          BND_ENV: test
+          WAG_ENV: test
           CI: "true"
 
       - name: Upload failure artifacts

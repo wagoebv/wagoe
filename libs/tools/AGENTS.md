@@ -89,12 +89,12 @@ Summary: 4 passed, 1 warning, 1 error
 **Known valid providers** (used by the `providers` check):
 
 ```clojure
-{:boundary/logging          #{:no-op :stdout :slf4j :file}
- :boundary/metrics          #{:no-op :prometheus :datadog-statsd}
- :boundary/error-reporting  #{:no-op :sentry}
- :boundary/payment-provider #{:mock :mollie :stripe}
- :boundary/ai-service       #{:ollama :anthropic :openai :no-op}
- :boundary/cache            #{:redis :in-memory}}
+{:wagoe/logging          #{:no-op :stdout :slf4j :file}
+ :wagoe/metrics          #{:no-op :prometheus :datadog-statsd}
+ :wagoe/error-reporting  #{:no-op :sentry}
+ :wagoe/payment-provider #{:mock :mollie :stripe}
+ :wagoe/ai-service       #{:ollama :anthropic :openai :no-op}
+ :wagoe/cache            #{:redis :in-memory}}
 ```
 
 **CI integration example** (GitHub Actions):

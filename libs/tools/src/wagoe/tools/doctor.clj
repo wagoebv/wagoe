@@ -23,12 +23,12 @@
 ;; =============================================================================
 
 (def known-providers
-  {:boundary/logging          #{:no-op :stdout :slf4j :file}
-   :boundary/metrics          #{:no-op :prometheus :datadog-statsd}
-   :boundary/error-reporting  #{:no-op :sentry}
-   :boundary/payment-provider #{:mock :mollie :stripe}
-   :boundary/ai-service       #{:ollama :anthropic :openai :no-op}
-   :boundary/cache            #{:redis :in-memory}})
+  {:wagoe/logging          #{:no-op :stdout :slf4j :file}
+   :wagoe/metrics          #{:no-op :prometheus :datadog-statsd}
+   :wagoe/error-reporting  #{:no-op :sentry}
+   :wagoe/payment-provider #{:mock :mollie :stripe}
+   :wagoe/ai-service       #{:ollama :anthropic :openai :no-op}
+   :wagoe/cache            #{:redis :in-memory}})
 
 ;; =============================================================================
 ;; Pure check functions
@@ -137,7 +137,7 @@
   (let [user-active? (some (fn [k]
                              (and (keyword? k)
                                   (str/starts-with? (name k) "user")
-                                  (= (namespace k) "boundary")))
+                                  (= (namespace k) "wagoe")))
                            (keys active-config))]
     (cond
       (not user-active?)
@@ -244,8 +244,8 @@
 
    Two migration hazards from the Phase-2 refactors:
    - BOU-200 (SILENT): the platform http-handler no longer builds tenant
-     middleware itself. An app that wires :boundary/tenant-service but never
-     references :boundary/tenant-http-middleware boots fine — with tenant
+     middleware itself. An app that wires :wagoe/tenant-service but never
+     references :wagoe/tenant-http-middleware boots fine — with tenant
      resolution silently absent.
    - BOU-198 (loud): the tenant HTTP middleware namespaces moved from platform
      to the tenant lib; requiring the old platform ns fails at compile."
@@ -254,10 +254,10 @@
         ;; Any of these keys implies the tenant module is wired — an app may
         ;; reference routes or membership without the service key itself.
         tenant-wired? (boolean (some #(str/includes? src-text %)
-                                     [":boundary/tenant-service"
-                                      ":boundary/tenant-routes"
-                                      ":boundary/membership-service"]))
-        mw-wired?     (str/includes? src-text ":boundary/tenant-http-middleware")]
+                                     [":wagoe/tenant-service"
+                                      ":wagoe/tenant-routes"
+                                      ":wagoe/membership-service"]))
+        mw-wired?     (str/includes? src-text ":wagoe/tenant-http-middleware")]
     (concat
      (when (seq stale)
        (mapv (fn [old-ns]
@@ -270,14 +270,14 @@
        (and tenant-wired? (not mw-wired?))
        [{:id    :upgrade-wiring
          :level :warn
-         :msg   (str "Tenant module wired but :boundary/tenant-http-middleware is never "
+         :msg   (str "Tenant module wired but :wagoe/tenant-http-middleware is never "
                      "referenced — tenant HTTP middleware will NOT be mounted (BOU-200)")
          :fix   (str "Add the component and inject it into the http-handler:\n"
-                     "  :boundary/tenant-http-middleware {:tenant-service     (ig/ref :boundary/tenant-service)\n"
-                     "                                    :membership-service (ig/ref :boundary/membership-service)\n"
-                     "                                    :db-context         (ig/ref :boundary/db-context)}\n"
-                     "  ;; and in the :boundary/http-handler config:\n"
-                     "  :extra-middleware (ig/ref :boundary/tenant-http-middleware)")}]
+                     "  :wagoe/tenant-http-middleware {:tenant-service     (ig/ref :wagoe/tenant-service)\n"
+                     "                                    :membership-service (ig/ref :wagoe/membership-service)\n"
+                     "                                    :db-context         (ig/ref :wagoe/db-context)}\n"
+                     "  ;; and in the :wagoe/http-handler config:\n"
+                     "  :extra-middleware (ig/ref :wagoe/tenant-http-middleware)")}]
        (and (empty? stale) (or (not tenant-wired?) mw-wired?))
        [{:id :upgrade-wiring :level :pass :msg "No stale framework wiring detected"}]
        :else nil))))
@@ -297,8 +297,8 @@
                                     ;; wagoe.external/* keys
                                     (str/starts-with? (str k) ":wagoe.external/")
                                     "external"
-                                    ;; :boundary/foo keys -> foo
-                                    (= ns-part "boundary")
+                                    ;; :wagoe/foo keys -> foo
+                                    (= ns-part "wagoe")
                                     nm
                                     :else nil))))
                          (remove nil?)

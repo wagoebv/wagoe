@@ -150,7 +150,7 @@ started, has exceptions recorded + rethrown, and is always ended:
   (process! order))
 ```
 
-Providers via `:boundary/tracing {:provider …}`:
+Providers via `:wagoe/tracing {:provider …}`:
 
 | Provider | Behaviour |
 |----------|-----------|
@@ -174,7 +174,7 @@ on the `ITracer` port).
 
 ```clojure
 ;; resources/conf/prod/config.edn
-{:boundary/tracing {:provider     :otlp
+{:wagoe/tracing {:provider     :otlp
                     ;; OTEL_EXPORTER_OTLP_ENDPOINT base; /v1/traces is appended.
                     :endpoint     #or [#env OTEL_EXPORTER_OTLP_ENDPOINT "http://localhost:4318"]
                     :protocol     :http/protobuf   ; only HTTP is bundled (no gRPC)
@@ -209,14 +209,14 @@ no-op stub):
 
 Pure-Clojure in-memory registry (`metrics.shell.adapters.prometheus`) that renders
 the Prometheus text exposition format — no external client dependency. When
-`:boundary/metrics {:provider :prometheus}` is active, platform mounts a
+`:wagoe/metrics {:provider :prometheus}` is active, platform mounts a
 **`GET /metrics`** endpoint that serves the scrape output (counters, gauges,
 histograms with `_bucket`/`_sum`/`_count`). Other providers leave `/metrics`
 returning an empty body.
 
 ```clojure
 ;; resources/conf/prod/config.edn
-{:boundary/metrics {:provider :prometheus
+{:wagoe/metrics {:provider :prometheus
                     :include-help-text true
                     ;; optional default histogram buckets (seconds)
                     :histogram-buckets [0.005 0.01 0.025 0.05 0.1 0.25 0.5 1 2.5 5 10]}}
@@ -233,7 +233,7 @@ feeds SigNoz, Grafana, Datadog-via-OTel, etc.
 
 ```clojure
 ;; resources/conf/prod/config.edn
-{:boundary/metrics {:provider     :otlp
+{:wagoe/metrics {:provider     :otlp
                     :endpoint     #or [#env OTEL_EXPORTER_OTLP_ENDPOINT "http://localhost:4318"]
                     :protocol     :http/protobuf
                     :service-name #or [#env OTEL_SERVICE_NAME "boundary"]
@@ -260,7 +260,7 @@ export OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:4318"
 export OTEL_SERVICE_NAME="my-app"
 ```
 
-Set both `:boundary/tracing` and `:boundary/metrics` to `:provider :otlp`. The
+Set both `:wagoe/tracing` and `:wagoe/metrics` to `:provider :otlp`. The
 same env vars retarget Grafana Tempo, Jaeger, Honeycomb, or Datadog-via-OTel —
 only the endpoint changes.
 
@@ -270,7 +270,7 @@ The default provider — all operations are silent. No configuration required.
 
 ```clojure
 ;; resources/conf/dev/config.edn
-{:boundary/observability
+{:wagoe/observability
  {:logger         {:type :no-op}
   :error-reporter {:type :no-op}
   :metrics        {:type :no-op}}}
@@ -280,11 +280,11 @@ The default provider — all operations are silent. No configuration required.
 
 ```clojure
 ;; resources/conf/prod/config.edn
-{:boundary/observability
+{:wagoe/observability
  {:metrics {:type    :datadog
             :api-key #env DATADOG_API_KEY
             :host    #env ["DATADOG_HOST" "datadoghq.com"]
-            :tags    {:env #env BND_ENV
+            :tags    {:env #env WAG_ENV
                       :service "boundary"}}}}
 ```
 
@@ -292,10 +292,10 @@ The default provider — all operations are silent. No configuration required.
 
 ```clojure
 ;; resources/conf/prod/config.edn
-{:boundary/observability
+{:wagoe/observability
  {:error-reporter {:type  :sentry
                    :dsn   #env SENTRY_DSN
-                   :env   #env BND_ENV
+                   :env   #env WAG_ENV
                    :release #env APP_VERSION}}}
 ```
 
@@ -332,7 +332,7 @@ Register it in your Integrant config:
 
 ```clojure
 ;; In your system config
-{:boundary/observability {:logger (my-app.observability.adapters.my-logger/create-my-logger
+{:wagoe/observability {:logger (my-app.observability.adapters.my-logger/create-my-logger
                                    {:endpoint "..."})}}}
 ```
 

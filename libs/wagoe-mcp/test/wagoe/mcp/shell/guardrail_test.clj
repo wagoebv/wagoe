@@ -3,7 +3,7 @@
             [wagoe.mcp.shell.guardrail :as guardrail]
             [clojure.test :refer [deftest is testing]]))
 
-(def ^:private prod (sec/resolve-context {"BND_ENV" "prod"}))
+(def ^:private prod (sec/resolve-context {"WAG_ENV" "prod"}))
 (def ^:private ci   (sec/resolve-context {"CI" "1"}))
 
 (deftest ^:unit payload-enriched-from-real-catalog
@@ -21,7 +21,7 @@
       (is (= "BND-803" (:code p)))))
   (testing "a read-only-clamped context (ceiling above :read) → BND-804"
     ;; read-only? clamp fires only when the tier would otherwise be allowed.
-    (let [clamped (assoc (sec/resolve-context {"BND_ENV" "prod"}) :read-only? true)
+    (let [clamped (assoc (sec/resolve-context {"WAG_ENV" "prod"}) :read-only? true)
           p       (guardrail/payload-for-denial
                    (sec/authorize clamped {:name "scaffold" :capability :generate}))]
       (is (= "BND-804" (:code p))))))

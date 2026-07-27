@@ -1,4 +1,4 @@
-(ns ^:boundary/allow-direct wagoe.mcp.shell.server
+(ns ^:wagoe/allow-direct wagoe.mcp.shell.server
   ;; Composition root: -main wires concrete adapters (audit, system-source, the
   ;; scaffolder service) the way an Integrant config would. Constructing another
   ;; module's adapter here is the canonical hexagonal exception, so this ns is

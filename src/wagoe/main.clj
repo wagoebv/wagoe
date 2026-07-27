@@ -42,18 +42,18 @@
   (println "Environment Variables:")
   (println "  HTTP_PORT           - HTTP server port (default: 3000)")
   (println "  HTTP_HOST           - HTTP server host (default: 0.0.0.0)")
-  (println "  BND_ENV             - Environment profile (dev, prod, test, acc)")
+  (println "  WAG_ENV             - Environment profile (dev, prod, test, acc)")
   (println)
   (println "Examples:")
   (println "  java -jar wagoe.jar")
   (println "  java -jar wagoe.jar server")
-  (println "  BND_ENV=prod java -jar wagoe.jar server")
+  (println "  WAG_ENV=prod java -jar wagoe.jar server")
   (println "  java -jar wagoe.jar cli user list"))
 
 (def http-surface-keys
   "Integrant keys that make up the HTTP-serving surface. A worker node omits
    them so it binds no port and runs only background components."
-  [:boundary/http-server :boundary/http-handler :boundary/dashboard])
+  [:wagoe/http-server :wagoe/http-handler :wagoe/dashboard])
 
 (defn worker-ig-config
   "The Integrant config for a worker node: the full system minus the HTTP

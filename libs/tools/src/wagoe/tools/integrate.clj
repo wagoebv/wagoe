@@ -63,7 +63,7 @@
   [module-name has-routes?]
   (let [ns-name (str/replace module-name "_" "-")]
     (str "  ;; " (str/capitalize ns-name) " module\n"
-         "  :boundary/" ns-name "\n"
+         "  :wagoe/" ns-name "\n"
          "  {:enabled? true"
          (when has-routes?
            (str "\n   :base-path \"/api/" ns-name "\""))

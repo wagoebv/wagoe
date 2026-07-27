@@ -72,7 +72,7 @@ The `:on-open` callback runs after a successful `realtime-ports/connect`. Use it
 
 ## Scaling & providers
 
-`:boundary/realtime` accepts a `:provider` key that selects the pub/sub backend:
+`:wagoe/realtime` accepts a `:provider` key that selects the pub/sub backend:
 
 | Provider | Default | Replica-safe |
 |----------|---------|--------------|
@@ -86,7 +86,7 @@ Every replica keeps its own in-memory connection registry (live WebSocket socket
 ### Redis config keys
 
 ```clojure
-:boundary/realtime {:provider    :redis
+:wagoe/realtime {:provider    :redis
                     :host        "localhost"   ; Redis host
                     :port        6379          ; Redis port
                     :password    "..."         ; AUTH password (production; optional)
@@ -116,7 +116,7 @@ Under `:redis`, `send-to-user`, `send-to-role`, `broadcast`, `publish-to-topic`,
 
 ### Wiring note
 
-The web / WS server component **must declare `:boundary/realtime` as a dependency** so the Redis subscriber is active before the first WebSocket connection is accepted. Without this ordering, messages published during startup may be missed.
+The web / WS server component **must declare `:wagoe/realtime` as a dependency** so the Redis subscriber is active before the first WebSocket connection is accepted. Without this ordering, messages published during startup may be missed.
 
 See [ADR-035](../../dev-docs/adr/ADR-035-realtime-redis-scaling.adoc) for the full design rationale.
 

@@ -24,8 +24,8 @@
 
 (deftest ^:unit get-env-value-test
   (testing "reads from provided env map"
-    (is (= "true" (flags/get-env-value "BND_DEVEX_VALIDATION"
-                                       {"BND_DEVEX_VALIDATION" "true"}))))
+    (is (= "true" (flags/get-env-value "WAG_DEVEX_VALIDATION"
+                                       {"WAG_DEVEX_VALIDATION" "true"}))))
 
   (testing "returns nil for missing key"
     (is (nil? (flags/get-env-value "MISSING_KEY" {})))))
@@ -33,11 +33,11 @@
 (deftest ^:unit enabled?-test
   (testing "known flag enabled via env"
     (is (true? (flags/enabled? :devex-validation
-                               {"BND_DEVEX_VALIDATION" "true"}))))
+                               {"WAG_DEVEX_VALIDATION" "true"}))))
 
   (testing "known flag disabled via env"
     (is (false? (flags/enabled? :devex-validation
-                                {"BND_DEVEX_VALIDATION" "false"}))))
+                                {"WAG_DEVEX_VALIDATION" "false"}))))
 
   (testing "known flag uses default when env not set"
     (is (false? (flags/enabled? :devex-validation {}))))
@@ -47,7 +47,7 @@
 
 (deftest ^:unit all-flags-test
   (testing "returns map of all flags with status"
-    (let [result (flags/all-flags {"BND_DEVEX_VALIDATION" "true"})]
+    (let [result (flags/all-flags {"WAG_DEVEX_VALIDATION" "true"})]
       (is (map? result))
       (is (true? (:devex-validation result)))
       (is (false? (:structured-logging result)))))
@@ -60,9 +60,9 @@
 (deftest ^:unit flag-info-test
   (testing "known flag returns full info"
     (let [info (flags/flag-info :devex-validation
-                                {"BND_DEVEX_VALIDATION" "true"})]
+                                {"WAG_DEVEX_VALIDATION" "true"})]
       (is (true? (:enabled? info)))
-      (is (= "BND_DEVEX_VALIDATION" (:env-var info)))
+      (is (= "WAG_DEVEX_VALIDATION" (:env-var info)))
       (is (string? (:description info)))
       (is (= "true" (:current-value info)))))
 

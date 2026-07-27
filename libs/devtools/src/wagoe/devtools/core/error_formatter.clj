@@ -55,7 +55,7 @@
   "Format a configuration error with specific fix instructions.
    `error-info` is a map with:
      :code      - BND-1xx error code
-     :config-key - the config key path (e.g. :boundary/user-service :jwt-secret)
+     :config-key - the config key path (e.g. :wagoe/user-service :jwt-secret)
      :expected   - what was expected (e.g. \"#env JWT_SECRET\")
      :found      - what was found (e.g. nil)
      :reason     - why this is needed

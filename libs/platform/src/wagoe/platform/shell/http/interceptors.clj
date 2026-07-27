@@ -249,7 +249,7 @@
   [system]
   (some-> (or (:environment system)
               (get-in system [:config :environment])
-              (System/getenv "BND_ENV")
+              (System/getenv "WAG_ENV")
               (System/getProperty "environment")
               "development")
           str

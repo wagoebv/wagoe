@@ -12,7 +12,7 @@
             [clojure.java.io :as io]
             [clojure.tools.logging :as log]
             [integrant.core :as ig]
-            ;; core-system-config emits :boundary/email unconditionally, so the
+            ;; core-system-config emits :wagoe/email unconditionally, so the
             ;; config that references it self-registers the init/halt methods —
             ;; every full-system boot (app + tests) then resolves the key.
             [wagoe.email.shell.module-wiring]
@@ -30,7 +30,7 @@
    "testing"     "test"})
 
 (defn- normalize-env
-  "Normalize a BND_ENV value to one of the short config directory names (dev, test, prod, acc)."
+  "Normalize a WAG_ENV value to one of the short config directory names (dev, test, prod, acc)."
   [env]
   (let [s (some-> env str .trim .toLowerCase)]
     (get env-aliases s s)))
@@ -48,7 +48,7 @@
      (load-config)
      (load-config {:profile :test})"
   ([] (load-config {}))
-  ([{:keys [profile] :or {profile (keyword (or (System/getenv "BND_ENV") "dev"))}}]
+  ([{:keys [profile] :or {profile (keyword (or (System/getenv "WAG_ENV") "dev"))}}]
    (let [profile (keyword (normalize-env (name profile)))
          config-path (str "conf/" (name profile) "/config.edn")
          config-resource (io/resource config-path)]
@@ -56,7 +56,7 @@
        (do
          (log/info "Loading configuration" {:profile profile :path config-path})
          (assoc (aero/read-config config-resource {:profile profile})
-                :boundary/profile profile))
+                :wagoe/profile profile))
        (throw (ex-info "Configuration file not found"
                        {:profile profile
                         :path config-path
@@ -77,10 +77,10 @@
   [config]
   (let [active-config (:active config)]
     (cond
-      (:boundary/sqlite active-config) :sqlite
-      (:boundary/h2 active-config) :h2
-      (:boundary/postgresql active-config) :postgresql
-      (:boundary/mysql active-config) :mysql
+      (:wagoe/sqlite active-config) :sqlite
+      (:wagoe/h2 active-config) :h2
+      (:wagoe/postgresql active-config) :postgresql
+      (:wagoe/mysql active-config) :mysql
       :else nil)))
 
 (defn db-adapter
@@ -109,7 +109,7 @@
      {:adapter :sqlite :database-path \"dev-database.db\"}"
   [config]
   (let [adapter (db-adapter config)
-        adapter-key (keyword "boundary" (name adapter))
+        adapter-key (keyword "wagoe" (name adapter))
         slash-key (keyword (str "wagoe/" (name adapter)))
         adapter-config (or (get-in config [:active adapter-key])
                            (get-in config [:active slash-key]))]
@@ -129,7 +129,7 @@
       :h2
       {:adapter :h2
        :database-path (if (:memory adapter-config)
-                        "mem:boundary;DB_CLOSE_DELAY=-1"
+                        "mem:wagoe;DB_CLOSE_DELAY=-1"
                         (:db adapter-config))
        :pool (:pool adapter-config)}
 
@@ -168,7 +168,7 @@
    accepting new connections, lets in-flight requests finish (bounded by this
    timeout, in milliseconds), then halts. 0 or nil disables graceful draining."
   [config]
-  (let [http-cfg (get-in config [:active :boundary/http])]
+  (let [http-cfg (get-in config [:active :wagoe/http])]
     {:port (or (:port http-cfg) 3000)
      :host (or (:host http-cfg) "0.0.0.0")
      :join? (or (:join? http-cfg) false)
@@ -185,7 +185,7 @@
    Returns:
      Map with application settings"
   [config]
-  (get-in config [:active :boundary/settings] {}))
+  (get-in config [:active :wagoe/settings] {}))
 
 (defn default-tenant-id
   "Extract default tenant ID for development/testing.
@@ -205,7 +205,7 @@
      Production systems should NOT rely on defaults and must
      always specify tenant-id explicitly in requests."
   [config]
-  (get-in config [:active :boundary/settings :default-tenant-id]))
+  (get-in config [:active :wagoe/settings :default-tenant-id]))
 
 (defn user-validation-config
   "Extract user validation configuration.
@@ -222,7 +222,7 @@
      - :tenant-limits - Per-tenant user limits
      - :cross-field-validation - Cross-field validation rules"
   [config]
-  (get-in config [:active :boundary/settings :user-validation] {}))
+  (get-in config [:active :wagoe/settings :user-validation] {}))
 
 (defn logging-config
   "Extract logging configuration.
@@ -233,7 +233,7 @@
    Returns:
      Map with logging provider and settings"
   [config]
-  (get-in config [:active :boundary/logging] {:provider :no-op}))
+  (get-in config [:active :wagoe/logging] {:provider :no-op}))
 
 (defn metrics-config
   "Extract metrics configuration.
@@ -244,12 +244,12 @@
    Returns:
      Map with metrics provider and settings"
   [config]
-  (get-in config [:active :boundary/metrics] {:provider :no-op}))
+  (get-in config [:active :wagoe/metrics] {:provider :no-op}))
 
 (defn tracing-config
   "Extract tracing configuration (defaults to the inert no-op tracer)."
   [config]
-  (get-in config [:active :boundary/tracing] {:provider :no-op}))
+  (get-in config [:active :wagoe/tracing] {:provider :no-op}))
 
 (defn error-reporting-config
   "Extract error reporting configuration.
@@ -260,7 +260,7 @@
    Returns:
      Map with error reporting provider and settings"
   [config]
-  (get-in config [:active :boundary/error-reporting] {:provider :no-op}))
+  (get-in config [:active :wagoe/error-reporting] {:provider :no-op}))
 
 ;; =============================================================================
 ;; Integrant Configuration Generation
@@ -269,12 +269,12 @@
 (defn- cache-config
   "Extract cache configuration from active config, or nil if not configured."
   [config]
-  (get-in config [:active :boundary/cache]))
+  (get-in config [:active :wagoe/cache]))
 
 (defn- email-config
   "Extract email sender configuration (defaults to the dev logging sender)."
   [config]
-  (get-in config [:active :boundary/email] {:provider :logging}))
+  (get-in config [:active :wagoe/email] {:provider :logging}))
 
 (defn- core-system-config
   "Return core system components (database, observability) independent of modules."
@@ -285,16 +285,16 @@
         tracing-cfg (tracing-config config)
         error-reporting-cfg (error-reporting-config config)
         email-cfg (email-config config)
-        router-cfg (get-in config [:active :boundary/router] {:adapter :reitit})
+        router-cfg (get-in config [:active :wagoe/router] {:adapter :reitit})
         cache-cfg (cache-config config)]
-    (cond-> {:boundary/db-context db-cfg
-             :boundary/logging logging-cfg
-             :boundary/metrics metrics-cfg
-             :boundary/tracing tracing-cfg
-             :boundary/error-reporting error-reporting-cfg
-             :boundary/email email-cfg
-             :boundary/router router-cfg}
-      cache-cfg (assoc :boundary/cache cache-cfg))))
+    (cond-> {:wagoe/db-context db-cfg
+             :wagoe/logging logging-cfg
+             :wagoe/metrics metrics-cfg
+             :wagoe/tracing tracing-cfg
+             :wagoe/error-reporting error-reporting-cfg
+             :wagoe/email email-cfg
+             :wagoe/router router-cfg}
+      cache-cfg (assoc :wagoe/cache cache-cfg))))
 
 (defn- user-module-config
   "Return Integrant configuration for the user module.
@@ -312,81 +312,81 @@
   [config]
   (let [http-cfg (http-config config)
         validation-cfg (user-validation-config config)
-        pagination-cfg (get-in config [:active :boundary/pagination] {:default-limit 20 :max-limit 100})
-        admin-enabled? (get-in config [:active :boundary/admin :enabled?])
-        workflow-enabled? (get-in config [:active :boundary/workflow :enabled?])
-        search-enabled? (get-in config [:active :boundary/search :enabled?])
+        pagination-cfg (get-in config [:active :wagoe/pagination] {:default-limit 20 :max-limit 100})
+        admin-enabled? (get-in config [:active :wagoe/admin :enabled?])
+        workflow-enabled? (get-in config [:active :wagoe/workflow :enabled?])
+        search-enabled? (get-in config [:active :wagoe/search :enabled?])
         cache-enabled? (boolean (cache-config config))
         http-handler-config (cond-> {:config config
-                                     :user-routes (ig/ref :boundary/user-routes)
-                                     :tenant-routes (ig/ref :boundary/tenant-routes)
-                                     :membership-routes (ig/ref :boundary/membership-routes)
-                                     :router (ig/ref :boundary/router)
-                                     :logger (ig/ref :boundary/logging)
-                                     :metrics-emitter (ig/ref :boundary/metrics)
-                                     :tracer (ig/ref :boundary/tracing)
-                                     :error-reporter (ig/ref :boundary/error-reporting)
-                                     :user-service (ig/ref :boundary/user-service)
-                                     :tenant-service (ig/ref :boundary/tenant-service)
-                                     :db-context (ig/ref :boundary/db-context)
-                                     :extra-middleware (ig/ref :boundary/tenant-http-middleware)
-                                     :i18n (ig/ref :boundary/i18n)}
-                              cache-enabled? (assoc :cache (ig/ref :boundary/cache))
+                                     :user-routes (ig/ref :wagoe/user-routes)
+                                     :tenant-routes (ig/ref :wagoe/tenant-routes)
+                                     :membership-routes (ig/ref :wagoe/membership-routes)
+                                     :router (ig/ref :wagoe/router)
+                                     :logger (ig/ref :wagoe/logging)
+                                     :metrics-emitter (ig/ref :wagoe/metrics)
+                                     :tracer (ig/ref :wagoe/tracing)
+                                     :error-reporter (ig/ref :wagoe/error-reporting)
+                                     :user-service (ig/ref :wagoe/user-service)
+                                     :tenant-service (ig/ref :wagoe/tenant-service)
+                                     :db-context (ig/ref :wagoe/db-context)
+                                     :extra-middleware (ig/ref :wagoe/tenant-http-middleware)
+                                     :i18n (ig/ref :wagoe/i18n)}
+                              cache-enabled? (assoc :cache (ig/ref :wagoe/cache))
                               admin-enabled?
-                              (assoc :admin-routes (ig/ref :boundary/admin-routes))
+                              (assoc :admin-routes (ig/ref :wagoe/admin-routes))
                               workflow-enabled?
-                              (assoc :workflow-routes (ig/ref :boundary/workflow-routes))
+                              (assoc :workflow-routes (ig/ref :wagoe/workflow-routes))
                               search-enabled?
-                              (assoc :search-routes (ig/ref :boundary/search-routes)))
+                              (assoc :search-routes (ig/ref :wagoe/search-routes)))
         http-handler-config (cond-> http-handler-config
-                              (= (:boundary/profile config) :dev)
+                              (= (:wagoe/profile config) :dev)
                               (assoc :request-capture? true))]
-    {:boundary/user-db-schema
-     {:ctx (ig/ref :boundary/db-context)}
+    {:wagoe/user-db-schema
+     {:ctx (ig/ref :wagoe/db-context)}
 
-     :boundary/user-repository
-     {:ctx (ig/ref :boundary/db-context)}
+     :wagoe/user-repository
+     {:ctx (ig/ref :wagoe/db-context)}
 
-     :boundary/session-repository
-     {:ctx (ig/ref :boundary/db-context)}
+     :wagoe/session-repository
+     {:ctx (ig/ref :wagoe/db-context)}
 
-     :boundary/audit-repository
-     {:ctx (ig/ref :boundary/db-context)
+     :wagoe/audit-repository
+     {:ctx (ig/ref :wagoe/db-context)
       :pagination-config pagination-cfg}
 
-     :boundary/mfa-service
-     {:user-repository (ig/ref :boundary/user-repository)
+     :wagoe/mfa-service
+     {:user-repository (ig/ref :wagoe/user-repository)
       :mfa-config {}} ; Add actual MFA config if needed
 
-     :boundary/auth-service
-     {:user-repository (ig/ref :boundary/user-repository)
-      :session-repository (ig/ref :boundary/session-repository)
-      :mfa-service (ig/ref :boundary/mfa-service)
+     :wagoe/auth-service
+     {:user-repository (ig/ref :wagoe/user-repository)
+      :session-repository (ig/ref :wagoe/session-repository)
+      :mfa-service (ig/ref :wagoe/mfa-service)
       :auth-config {}} ; Add actual auth config if needed
 
-     :boundary/user-service
-     (cond-> {:user-repository (ig/ref :boundary/user-repository)
-              :session-repository (ig/ref :boundary/session-repository)
-              :audit-repository (ig/ref :boundary/audit-repository)
+     :wagoe/user-service
+     (cond-> {:user-repository (ig/ref :wagoe/user-repository)
+              :session-repository (ig/ref :wagoe/session-repository)
+              :audit-repository (ig/ref :wagoe/audit-repository)
               :validation-config validation-cfg
-              :auth-service (ig/ref :boundary/auth-service)
-              :logger (ig/ref :boundary/logging)
-              :metrics (ig/ref :boundary/metrics)
-              :error-reporter (ig/ref :boundary/error-reporting)}
-       cache-enabled? (assoc :cache (ig/ref :boundary/cache)))
+              :auth-service (ig/ref :wagoe/auth-service)
+              :logger (ig/ref :wagoe/logging)
+              :metrics (ig/ref :wagoe/metrics)
+              :error-reporter (ig/ref :wagoe/error-reporting)}
+       cache-enabled? (assoc :cache (ig/ref :wagoe/cache)))
 
-     :boundary/user-routes
-     {:user-service (ig/ref :boundary/user-service)
-      :mfa-service (ig/ref :boundary/mfa-service)
-      :email-sender (ig/ref :boundary/email)
+     :wagoe/user-routes
+     {:user-service (ig/ref :wagoe/user-service)
+      :mfa-service (ig/ref :wagoe/mfa-service)
+      :email-sender (ig/ref :wagoe/email)
       :config config}
 
-     :boundary/http-handler
+     :wagoe/http-handler
      http-handler-config
 
-     :boundary/http-server
+     :wagoe/http-server
      (merge http-cfg
-            {:handler (ig/ref :boundary/http-handler)
+            {:handler (ig/ref :wagoe/http-handler)
              :config http-cfg})}))
 
 (defn- admin-module-config
@@ -397,27 +397,27 @@
    - Admin service for CRUD operations
    - Admin routes for web UI
 
-   The admin module is only active if :boundary/admin is present
+   The admin module is only active if :wagoe/admin is present
    in the active config with :enabled? true."
   [config]
-  (let [admin-cfg (get-in config [:active :boundary/admin])]
+  (let [admin-cfg (get-in config [:active :wagoe/admin])]
     (when (and admin-cfg (:enabled? admin-cfg))
-      {:boundary/admin-schema-provider
-       {:db-ctx (ig/ref :boundary/db-context)
+      {:wagoe/admin-schema-provider
+       {:db-ctx (ig/ref :wagoe/db-context)
         :config admin-cfg
         :malli-schemas {:users user-schema/User}}
 
-       :boundary/admin-service
-       {:db-ctx (ig/ref :boundary/db-context)
-        :schema-provider (ig/ref :boundary/admin-schema-provider)
-        :logger (ig/ref :boundary/logging)
-        :error-reporter (ig/ref :boundary/error-reporting)
+       :wagoe/admin-service
+       {:db-ctx (ig/ref :wagoe/db-context)
+        :schema-provider (ig/ref :wagoe/admin-schema-provider)
+        :logger (ig/ref :wagoe/logging)
+        :error-reporter (ig/ref :wagoe/error-reporting)
         :config admin-cfg}
 
-       :boundary/admin-routes
-       {:admin-service (ig/ref :boundary/admin-service)
-        :schema-provider (ig/ref :boundary/admin-schema-provider)
-        :user-service (ig/ref :boundary/user-service)
+       :wagoe/admin-routes
+       {:admin-service (ig/ref :wagoe/admin-service)
+        :schema-provider (ig/ref :wagoe/admin-schema-provider)
+        :user-service (ig/ref :wagoe/user-service)
         :config admin-cfg}})))
 
 (defn- tenant-module-config
@@ -436,90 +436,90 @@
    Multi-tenant middleware is integrated separately in the HTTP handler."
   [config]
   (let [validation-cfg (user-validation-config config)]
-    {:boundary/tenant-db-schema
-     {:ctx (ig/ref :boundary/db-context)}
+    {:wagoe/tenant-db-schema
+     {:ctx (ig/ref :wagoe/db-context)}
 
-     :boundary/tenant-repository
-     {:ctx (ig/ref :boundary/db-context)
-      :logger (ig/ref :boundary/logging)
-      :error-reporter (ig/ref :boundary/error-reporting)}
+     :wagoe/tenant-repository
+     {:ctx (ig/ref :wagoe/db-context)
+      :logger (ig/ref :wagoe/logging)
+      :error-reporter (ig/ref :wagoe/error-reporting)}
 
-     :boundary/membership-repository
-     {:ctx (ig/ref :boundary/db-context)
-      :logger (ig/ref :boundary/logging)
-      :error-reporter (ig/ref :boundary/error-reporting)}
+     :wagoe/membership-repository
+     {:ctx (ig/ref :wagoe/db-context)
+      :logger (ig/ref :wagoe/logging)
+      :error-reporter (ig/ref :wagoe/error-reporting)}
 
-     :boundary/invite-repository
-     {:ctx (ig/ref :boundary/db-context)
-      :logger (ig/ref :boundary/logging)
-      :error-reporter (ig/ref :boundary/error-reporting)}
+     :wagoe/invite-repository
+     {:ctx (ig/ref :wagoe/db-context)
+      :logger (ig/ref :wagoe/logging)
+      :error-reporter (ig/ref :wagoe/error-reporting)}
 
-     :boundary/tenant-service
-     {:tenant-repository (ig/ref :boundary/tenant-repository)
+     :wagoe/tenant-service
+     {:tenant-repository (ig/ref :wagoe/tenant-repository)
       :validation-config validation-cfg
-      :logger (ig/ref :boundary/logging)
-      :metrics-emitter (ig/ref :boundary/metrics)
-      :error-reporter (ig/ref :boundary/error-reporting)}
+      :logger (ig/ref :wagoe/logging)
+      :metrics-emitter (ig/ref :wagoe/metrics)
+      :error-reporter (ig/ref :wagoe/error-reporting)}
 
-     :boundary/membership-service
-     {:repository (ig/ref :boundary/membership-repository)
-      :logger (ig/ref :boundary/logging)
-      :metrics-emitter (ig/ref :boundary/metrics)
-      :error-reporter (ig/ref :boundary/error-reporting)}
+     :wagoe/membership-service
+     {:repository (ig/ref :wagoe/membership-repository)
+      :logger (ig/ref :wagoe/logging)
+      :metrics-emitter (ig/ref :wagoe/metrics)
+      :error-reporter (ig/ref :wagoe/error-reporting)}
 
-     :boundary/invite-service
-     {:repository (ig/ref :boundary/invite-repository)
-      :membership-repository (ig/ref :boundary/membership-repository)
-      :logger (ig/ref :boundary/logging)
-      :metrics-emitter (ig/ref :boundary/metrics)
-      :error-reporter (ig/ref :boundary/error-reporting)}
+     :wagoe/invite-service
+     {:repository (ig/ref :wagoe/invite-repository)
+      :membership-repository (ig/ref :wagoe/membership-repository)
+      :logger (ig/ref :wagoe/logging)
+      :metrics-emitter (ig/ref :wagoe/metrics)
+      :error-reporter (ig/ref :wagoe/error-reporting)}
 
-     :boundary/tenant-routes
-     {:tenant-service (ig/ref :boundary/tenant-service)
-      :db-context (ig/ref :boundary/db-context)
+     :wagoe/tenant-routes
+     {:tenant-service (ig/ref :wagoe/tenant-service)
+      :db-context (ig/ref :wagoe/db-context)
       :config config}
 
-     :boundary/membership-routes
-     {:service (ig/ref :boundary/membership-service)
+     :wagoe/membership-routes
+     {:service (ig/ref :wagoe/membership-service)
       :config config}
 
      ;; Tenant HTTP middleware seq, injected into platform's http-handler via
      ;; :extra-middleware (BOU-200). Built in the tenant lib so platform's
      ;; http-handler does not require the tenant lib.
-     :boundary/tenant-http-middleware
-     {:tenant-service (ig/ref :boundary/tenant-service)
-      :membership-service (ig/ref :boundary/membership-service)
-      :db-context (ig/ref :boundary/db-context)}}))
+     :wagoe/tenant-http-middleware
+     {:tenant-service (ig/ref :wagoe/tenant-service)
+      :membership-service (ig/ref :wagoe/membership-service)
+      :db-context (ig/ref :wagoe/db-context)}}))
 
 (defn- workflow-module-config
   "Return Integrant configuration for the workflow module.
 
    Wires the workflow state machine engine, persistence store, and admin UI routes.
-   Enabled when :boundary/workflow {:enabled? true} is present in the active config."
+   Enabled when :wagoe/workflow {:enabled? true} is present in the active config."
   [config]
-  (let [wf-cfg (get-in config [:active :boundary/workflow])]
+  (let [wf-cfg (get-in config [:active :wagoe/workflow])]
     (when (and wf-cfg (:enabled? wf-cfg))
-      {:boundary/workflow
-       {:db-ctx        (ig/ref :boundary/db-context)
+      {:wagoe/workflow
+       {:db-ctx        (ig/ref :wagoe/db-context)
         :guard-registry {}}
 
-       :boundary/workflow-routes
-       {:workflow-service (ig/ref :boundary/workflow)
-        :user-service     (ig/ref :boundary/user-service)}})))
+       :wagoe/workflow-routes
+       {:workflow-service (ig/ref :wagoe/workflow)
+        :user-service     (ig/ref :wagoe/user-service)}})))
 
 (defn- search-module-config
   "Return Integrant configuration for the search module.
 
    Wires the full-text search engine, persistence store, and admin UI routes.
-   Enabled when :boundary/search {:enabled? true} is present in the active config."
+   Enabled when :wagoe/search {:enabled? true} is present in the active config."
   [config]
-  (let [search-cfg (get-in config [:active :boundary/search])]
+  (let [search-cfg (get-in config [:active :wagoe/search])]
     (when (and search-cfg (:enabled? search-cfg))
-      {:boundary/search
-       {:db-ctx (ig/ref :boundary/db-context)}
+      {:wagoe/search
+       {:db-ctx (ig/ref :wagoe/db-context)}
 
-       :boundary/search-routes
-       {:search-service (ig/ref :boundary/search)}})))
+       :wagoe/search-routes
+       {:search-service (ig/ref :wagoe/search)}})))
 
 (defn- external-module-config
   "Extract external service adapter configs from active config.
@@ -536,24 +536,24 @@
 (defn- payments-module-config
   "Return Integrant configuration for the payments module.
 
-   Wires the :boundary/payment-provider component with the configured PSP adapter
-   (mock, mollie, or stripe). Enabled when :boundary/payment-provider is present
+   Wires the :wagoe/payment-provider component with the configured PSP adapter
+   (mock, mollie, or stripe). Enabled when :wagoe/payment-provider is present
    in the active config."
   [config]
-  (let [payments-cfg (get-in config [:active :boundary/payment-provider])]
+  (let [payments-cfg (get-in config [:active :wagoe/payment-provider])]
     (when payments-cfg
-      {:boundary/payment-provider payments-cfg})))
+      {:wagoe/payment-provider payments-cfg})))
 
 (defn- i18n-module-config
   "Return Integrant configuration for the i18n module.
 
-   Reads :boundary/i18n from active config. Falls back to sensible defaults
+   Reads :wagoe/i18n from active config. Falls back to sensible defaults
    (English-only, classpath catalogue) when the key is absent."
   [config]
-  (let [i18n-cfg (get-in config [:active :boundary/i18n]
+  (let [i18n-cfg (get-in config [:active :wagoe/i18n]
                          {:catalogue-path "wagoe/i18n/translations"
                           :default-locale :en})]
-    {:boundary/i18n i18n-cfg}))
+    {:wagoe/i18n i18n-cfg}))
 
 (defn- dashboard-module-config
   "Dashboard config — only active in dev profile.
@@ -561,21 +561,21 @@
    so non-REPL dev boots (wagoe.main) don't fail when the
    devtools namespace isn't pre-loaded."
   [config]
-  (when (= (:boundary/profile config) :dev)
-    (let [dashboard-cfg (get-in config [:active :boundary/dashboard])]
+  (when (= (:wagoe/profile config) :dev)
+    (let [dashboard-cfg (get-in config [:active :wagoe/dashboard])]
       (when dashboard-cfg
         ;; Ensure the init-key/halt-key! defmethods are registered.
         ;; Wrapped in try/catch because devtools may not be on the classpath
-        ;; in non-REPL dev boots (e.g. wagoe.main or BND_ENV=development).
+        ;; in non-REPL dev boots (e.g. wagoe.main or WAG_ENV=development).
         (try
           (require 'wagoe.devtools.shell.dashboard.server)
-          {:boundary/dashboard
+          {:wagoe/dashboard
            {:port         (:port dashboard-cfg 9999)
-            :http-handler (ig/ref :boundary/http-handler)
-            :http-server  (ig/ref :boundary/http-server)
-            :db-context   (ig/ref :boundary/db-context)
-            :router       (ig/ref :boundary/router)
-            :logging      (ig/ref :boundary/logging)}}
+            :http-handler (ig/ref :wagoe/http-handler)
+            :http-server  (ig/ref :wagoe/http-server)
+            :db-context   (ig/ref :wagoe/db-context)
+            :router       (ig/ref :wagoe/router)
+            :logging      (ig/ref :wagoe/logging)}}
           (catch Exception _
             nil))))))
 

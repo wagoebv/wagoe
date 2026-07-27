@@ -63,13 +63,13 @@ The `storage` library provides file storage with local and S3 backends behind a 
 [source,clojure]
 ----
 ;; Local filesystem (development)
-:boundary/storage
+:wagoe/storage
 {:backend   :local
  :base-path "/var/app/uploads"
  :base-url  "http://localhost:3000/uploads"}
 
 ;; AWS S3 (production)
-:boundary/storage
+:wagoe/storage
 {:backend    :s3
  :bucket     #env AWS_S3_BUCKET
  :region     #env AWS_REGION

@@ -85,7 +85,7 @@
 (deftest ^:unit generate-config-snippet-test
   (testing "basic config snippet"
     (let [snippet (integrate/generate-config-snippet "product" false)]
-      (is (re-find #":boundary/product" snippet))
+      (is (re-find #":wagoe/product" snippet))
       (is (re-find #":enabled\? true" snippet))
       (is (not (re-find #":base-path" snippet)))))
 

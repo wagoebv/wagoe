@@ -3,7 +3,7 @@
             [wagoe.devtools.core.error-enricher :as enricher]))
 
 (deftest ^:unit enrich-classified-error-test
-  (let [ex (ex-info "validation failed" {:boundary/error-code "BND-201"})
+  (let [ex (ex-info "validation failed" {:wagoe/error-code "BND-201"})
         classified {:code "BND-201"
                     :category :validation
                     :exception ex
@@ -24,7 +24,7 @@
       (is (string? (:docs-url enriched))))))
 
 (deftest ^:unit enrich-with-fix-test
-  (let [ex (ex-info "migration" {:boundary/error-code "BND-301"})
+  (let [ex (ex-info "migration" {:wagoe/error-code "BND-301"})
         classified {:code "BND-301"
                     :category :persistence
                     :exception ex

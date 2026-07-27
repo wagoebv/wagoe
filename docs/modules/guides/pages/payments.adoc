@@ -24,17 +24,17 @@ Add one key to your `config.edn`:
 [source,clojure]
 ----
 ;; resources/conf/dev/config.edn — development
-:boundary/payment-provider
+:wagoe/payment-provider
 {:provider :mock}
 
 ;; resources/conf/prod/config.edn — Mollie
-:boundary/payment-provider
+:wagoe/payment-provider
 {:provider          :mollie
  :api-key           #env MOLLIE_API_KEY
  :webhook-base-url  #env APP_BASE_URL}   ; e.g. "https://app.example.com"
 
 ;; resources/conf/prod/config.edn — Stripe
-:boundary/payment-provider
+:wagoe/payment-provider
 {:provider         :stripe
  :api-key          #env STRIPE_SECRET_KEY
  :webhook-secret   #env STRIPE_WEBHOOK_SECRET}
@@ -44,8 +44,8 @@ Inject it wherever payment operations are needed:
 
 [source,clojure]
 ----
-:boundary/order-service
-{:payment-provider #ig/ref :boundary/payment-provider
+:wagoe/order-service
+{:payment-provider #ig/ref :wagoe/payment-provider
  ...}
 ----
 

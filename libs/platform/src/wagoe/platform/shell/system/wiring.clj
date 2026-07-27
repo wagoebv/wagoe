@@ -6,15 +6,15 @@
    injection for the entire application.
    
    Components:
-   - :boundary/db-context - Database connection pool and adapter
-   - :boundary/user-repository - User data persistence
-   - :boundary/session-repository - Session data persistence
-   - :boundary/user-service - User business logic orchestration
-   - :boundary/logging - Structured logging and audit trails
-   - :boundary/metrics - Application and business metrics collection
-   - :boundary/error-reporting - Error tracking and alerting
-   - :boundary/http-handler - HTTP request routing and handling
-   - :boundary/http-server - Jetty HTTP server
+   - :wagoe/db-context - Database connection pool and adapter
+   - :wagoe/user-repository - User data persistence
+   - :wagoe/session-repository - Session data persistence
+   - :wagoe/user-service - User business logic orchestration
+   - :wagoe/logging - Structured logging and audit trails
+   - :wagoe/metrics - Application and business metrics collection
+   - :wagoe/error-reporting - Error tracking and alerting
+   - :wagoe/http-handler - HTTP request routing and handling
+   - :wagoe/http-server - Jetty HTTP server
    
    Usage:
      (require '[wagoe.config :as config])
@@ -64,7 +64,7 @@
 ;; Database Context
 ;; =============================================================================
 
-(defmethod ig/init-key :boundary/db-context
+(defmethod ig/init-key :wagoe/db-context
   [_ config]
   (log/info "Initializing database context" {:adapter (:adapter config)})
   (let [ctx (db-factory/db-context config)]
@@ -72,7 +72,7 @@
               {:adapter (:adapter config)})
     ctx))
 
-(defmethod ig/halt-key! :boundary/db-context
+(defmethod ig/halt-key! :wagoe/db-context
   [_ ctx]
   (log/info "Halting database context")
   (db-factory/close-db-context! ctx)
@@ -81,8 +81,8 @@
 ;; =============================================================================
 ;; User and Session Repositories
 ;;
-;; NOTE: The actual Integrant wiring for :boundary/user-repository and
-;; :boundary/session-repository lives in
+;; NOTE: The actual Integrant wiring for :wagoe/user-repository and
+;; :wagoe/session-repository lives in
 ;; `wagoe.user.shell.module-wiring` to avoid system wiring depending
 ;; directly on user shell namespaces.
 ;; =============================================================================
@@ -91,7 +91,7 @@
 ;; HTTP Router Adapter
 ;; =============================================================================
 
-(defmethod ig/init-key :boundary/router
+(defmethod ig/init-key :wagoe/router
   [_ {:keys [adapter]}]
   (log/info "Initializing HTTP router adapter" {:adapter adapter})
   (let [router (case adapter
@@ -106,7 +106,7 @@
     (log/info "HTTP router adapter initialized" {:adapter adapter})
     router))
 
-(defmethod ig/halt-key! :boundary/router
+(defmethod ig/halt-key! :wagoe/router
   [_ _router]
   (log/info "HTTP router adapter halted"))
 
@@ -126,7 +126,7 @@
    namespace (which would reverse the library dependency direction)."
   [{:keys [config user-service tenant-service db-context]}]
   (when (true? (:test/reset-endpoint-enabled? config))
-    (let [profile (:boundary/profile config)]
+    (let [profile (:wagoe/profile config)]
       (when-not (contains? #{:test :dev} profile)
         (throw (ex-info "test/reset endpoint cannot be enabled outside :test/:dev"
                         {:profile profile
@@ -148,7 +148,7 @@
                          :no-doc  true
                          :skip-interceptors? true}}}])))
 
-(defmethod ig/init-key :boundary/http-handler
+(defmethod ig/init-key :wagoe/http-handler
   [_ {:keys [user-routes admin-routes tenant-routes membership-routes workflow-routes search-routes router logger metrics-emitter tracer error-reporter config tenant-service db-context cache i18n user-service request-capture? extra-middleware]}]
   (log/info "Initializing top-level HTTP handler with normalized routing and API versioning")
   (require 'wagoe.platform.ports.http)
@@ -159,8 +159,8 @@
         ;; Create health check handler
         health-handler (let [health-fn (ns-resolve 'wagoe.platform.shell.interfaces.http.common 'health-check-handler)]
                          (health-fn
-                          (get-in config [:active :boundary/settings :name] "boundary")
-                          (get-in config [:active :boundary/settings :version] "unknown")
+                          (get-in config [:active :wagoe/settings :name] "wagoe")
+                          (get-in config [:active :wagoe/settings :version] "unknown")
                           nil))
 
         ;; Create readiness handler with dependency checks
@@ -329,14 +329,14 @@
         ;; CSRF config consumed by http-csrf-protection interceptor.
         ;; Opt-in: disabled by default so a framework upgrade cannot 403 consumers
         ;; that don't yet emit tokens. Each app enables it (after emitting tokens in
-        ;; its /web forms) via :boundary/http :security :csrf :enabled? true. Secret
+        ;; its /web forms) via :wagoe/http :security :csrf :enabled? true. Secret
         ;; prefers a dedicated CSRF_SECRET, falling back to JWT_SECRET so existing
         ;; deployments keep working while allowing key separation. Config overrides.
         csrf-config (merge {:enabled?     false
                             :secret       (or (System/getenv "CSRF_SECRET")
                                               (System/getenv "JWT_SECRET"))
                             :exempt-paths []}
-                           (get-in config [:active :boundary/http :security :csrf]))
+                           (get-in config [:active :wagoe/http :security :csrf]))
         ;; Fail-loud guard: an enabled CSRF interceptor with no secret cannot validate
         ;; (the interceptor short-circuits to a no-op — fail OPEN). Refuse to boot rather
         ;; than start an app that silently accepts unvalidated state-changing requests.
@@ -344,7 +344,7 @@
             (throw (ex-info (str "CSRF protection is enabled but no secret is configured. "
                                  "An enabled interceptor with a blank secret fails OPEN — "
                                  "state-changing requests would NOT be CSRF-validated. "
-                                 "Set CSRF_SECRET or JWT_SECRET, or :boundary/http :security :csrf :secret.")
+                                 "Set CSRF_SECRET or JWT_SECRET, or :wagoe/http :security :csrf :secret.")
                             {:csrf/enabled? true :csrf/secret-present? false})))
 
         ;; Rate-limit config consumed by the http-rate-limit-protection interceptor.
@@ -355,26 +355,26 @@
         rate-limit-config (merge {:enabled?  false
                                   :limit     100
                                   :window-ms 60000}
-                                 (get-in config [:active :boundary/http :rate-limit]))
+                                 (get-in config [:active :wagoe/http :rate-limit]))
         ;; Fail-loud in :prod, warn elsewhere. In production a per-process fallback
         ;; is almost never intended (multi-replica → effective limit is limit x N,
         ;; i.e. not a real limit), so refuse to boot rather than provide a false
         ;; sense of protection. dev/test/acc are single-node by default, so a warn
         ;; is enough there.
         _ (when (and (:enabled? rate-limit-config) (nil? cache))
-            (if (= :prod (:boundary/profile config))
+            (if (= :prod (:wagoe/profile config))
               (throw (ex-info (str "Rate limiting is enabled in the :prod profile but no "
-                                   ":boundary/cache (Redis) is active. Without a shared cache the "
+                                   ":wagoe/cache (Redis) is active. Without a shared cache the "
                                    "limiter falls back to a per-process counter — across replicas the "
                                    "effective global limit is limit x N, so it is NOT a real limit. "
-                                   "Activate :boundary/cache (Redis), or disable rate limiting "
+                                   "Activate :wagoe/cache (Redis), or disable rate limiting "
                                    "(HTTP_RATE_LIMIT_ENABLED=false).")
                               {:rate-limit/enabled? true :cache/present? false :profile :prod}))
               (log/warn (str "Rate limiting is enabled but no cache is configured — "
                              "falling back to a per-process counter. This is correct on a "
                              "single node only; across replicas each instance counts "
                              "independently, so the effective global limit is limit x N. "
-                             "Configure :boundary/cache (Redis) for a shared limit."))))
+                             "Configure :wagoe/cache (Redis) for a shared limit."))))
 
         ;; Build system services map for HTTP interceptors
         ;; Register the standard HTTP metrics once so the request interceptor can
@@ -397,7 +397,7 @@
 
         ;; Compile routes using router adapter with system services.
         ;; `extra-middleware` is a seq of (fn [handler] ...) supplied by the app
-        ;; (e.g. tenant/membership middleware via :boundary/tenant-http-middleware).
+        ;; (e.g. tenant/membership middleware via :wagoe/tenant-http-middleware).
         ;; Platform provides the pipeline; feature libs inject their middleware —
         ;; platform no longer requires the tenant lib (BOU-200). Applied before the
         ;; method-override middleware, matching the previous ordering.
@@ -423,7 +423,7 @@
         ;; Conditionally wrap with request capture middleware (dev only).
         ;; Uses requiring-resolve to avoid hard dependency on devtools from platform.
         ;; Guarded with try/catch because devtools may not be on the classpath
-        ;; in non-REPL dev boots (e.g. BND_ENV=development clojure -M -m wagoe.main).
+        ;; in non-REPL dev boots (e.g. WAG_ENV=development clojure -M -m wagoe.main).
         final-handler (if request-capture?
                         (try
                           (let [wrap-fn (requiring-resolve 'wagoe.devtools.shell.dashboard.middleware/wrap-request-capture)]
@@ -454,7 +454,7 @@
                :request-capture-enabled (boolean request-capture?)})
     final-handler))
 
-(defmethod ig/halt-key! :boundary/http-handler
+(defmethod ig/halt-key! :wagoe/http-handler
   [_ _handler]
   (log/info "HTTP handler halted"))
 
@@ -462,7 +462,7 @@
 ;; Logging Component
 ;; =============================================================================
 
-(defmethod ig/init-key :boundary/logging
+(defmethod ig/init-key :wagoe/logging
   [_ config]
   (log/info "Initializing logging component" {:provider (:provider config)})
   (let [logger (case (:provider config)
@@ -476,7 +476,7 @@
     (log/info "Logging component initialized" {:provider (:provider config)})
     logger))
 
-(defmethod ig/halt-key! :boundary/logging
+(defmethod ig/halt-key! :wagoe/logging
   [_ _logger]
   (log/info "Logging component halted"))
 
@@ -484,7 +484,7 @@
 ;; Metrics Component
 ;; =============================================================================
 
-(defmethod ig/init-key :boundary/metrics
+(defmethod ig/init-key :wagoe/metrics
   [_ config]
   (log/info "Initializing metrics component" {:provider (:provider config)})
   (let [metrics (case (:provider config)
@@ -502,7 +502,7 @@
     (log/info "Metrics component initialized" {:provider (:provider config)})
     metrics))
 
-(defmethod ig/halt-key! :boundary/metrics
+(defmethod ig/halt-key! :wagoe/metrics
   [_ _metrics]
   (log/info "Metrics component halted"))
 
@@ -510,7 +510,7 @@
 ;; Tracing Component
 ;; =============================================================================
 
-(defmethod ig/init-key :boundary/tracing
+(defmethod ig/init-key :wagoe/tracing
   [_ config]
   (log/info "Initializing tracing component" {:provider (:provider config)})
   (let [tracer (case (:provider config)
@@ -524,7 +524,7 @@
     (log/info "Tracing component initialized" {:provider (:provider config)})
     tracer))
 
-(defmethod ig/halt-key! :boundary/tracing
+(defmethod ig/halt-key! :wagoe/tracing
   [_ tracer]
   ;; OTLP tracer owns an OpenTelemetry SDK with a batch processor — flush + shut
   ;; it down so buffered spans are exported before the process exits.
@@ -536,7 +536,7 @@
 ;; Error Reporting Component
 ;; =============================================================================
 
-(defmethod ig/init-key :boundary/error-reporting
+(defmethod ig/init-key :wagoe/error-reporting
   [_ config]
   (log/info "Initializing error reporting component" {:provider (:provider config)})
   (let [error-reporter (case (:provider config)
@@ -552,7 +552,7 @@
     (log/info "Error reporting component initialized" {:provider (:provider config)})
     error-reporter))
 
-(defmethod ig/halt-key! :boundary/error-reporting
+(defmethod ig/halt-key! :wagoe/error-reporting
   [_ _error-reporter]
   (log/info "Error reporting component halted"))
 
@@ -608,7 +608,7 @@
       (.setHandler graceful existing)
       (.setHandler s graceful))))
 
-(defmethod ig/init-key :boundary/http-server
+(defmethod ig/init-key :wagoe/http-server
   [_ {:keys [handler port host join? config drain-timeout-ms]}]
   (let [http-config (or config {})
         port-allocation (port-manager/allocate-port port http-config)
@@ -636,7 +636,7 @@
                  :allocation-message (:message port-allocation)})
       server)))
 
-(defmethod ig/halt-key! :boundary/http-server
+(defmethod ig/halt-key! :wagoe/http-server
   [_ server]
   (log/info "Stopping HTTP server")
   (when server

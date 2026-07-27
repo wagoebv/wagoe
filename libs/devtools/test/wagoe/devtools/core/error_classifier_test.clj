@@ -3,8 +3,8 @@
             [wagoe.devtools.core.error-classifier :as classifier]))
 
 (deftest ^:unit classify-strategy-1-explicit-code-test
-  (testing "ex-data with :boundary/error-code uses that code directly"
-    (let [ex (ex-info "validation failed" {:boundary/error-code "BND-201"
+  (testing "ex-data with :wagoe/error-code uses that code directly"
+    (let [ex (ex-info "validation failed" {:wagoe/error-code "BND-201"
                                            :schema :user/create})
           result (classifier/classify ex)]
       (is (= "BND-201" (:code result)))
@@ -47,15 +47,15 @@
       (is (nil? (:code (classifier/classify ex)))))))
 
 (deftest ^:unit classify-chained-exception-test
-  (testing "root cause is classified when wrapper has no :boundary/error-code"
+  (testing "root cause is classified when wrapper has no :wagoe/error-code"
     (let [root (java.sql.SQLException. "ERROR: relation \"users\" does not exist")
           wrapper (ex-info "operation failed" {:operation :save} root)
           result (classifier/classify wrapper)]
       (is (= "BND-301" (:code result)))))
 
-  (testing "wrapper :boundary/error-code takes precedence over root cause"
+  (testing "wrapper :wagoe/error-code takes precedence over root cause"
     (let [root (java.sql.SQLException. "connection refused")
-          wrapper (ex-info "known error" {:boundary/error-code "BND-201"} root)
+          wrapper (ex-info "known error" {:wagoe/error-code "BND-201"} root)
           result (classifier/classify wrapper)]
       (is (= "BND-201" (:code result))))))
 

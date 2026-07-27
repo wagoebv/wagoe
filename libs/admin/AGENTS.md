@@ -31,7 +31,7 @@ resources/conf/dev/
 
 **Main config uses Aero's `#include`**:
 ```clojure
-:boundary/admin
+:wagoe/admin
 {:enabled?         true
  :base-path        "/web/admin"
  :require-role     :admin

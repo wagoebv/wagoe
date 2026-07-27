@@ -359,7 +359,7 @@ docker run -d -p 1025:1025 -p 8025:8025 mailhog/mailhog
 **Production config** (`config/prod.edn`):
 
 ```clojure
-{:boundary/email
+{:wagoe/email
  {:smtp {:host #env SMTP_HOST
          :port #long #env [SMTP_PORT 587]
          :username #env SMTP_USERNAME

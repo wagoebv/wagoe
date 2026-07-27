@@ -64,16 +64,16 @@
   "Extract adapter type from configuration key.
 
    Args:
-     config-key: Configuration key like :boundary/sqlite
+     config-key: Configuration key like :wagoe/sqlite
 
    Returns:
      Keyword - adapter key like :sqlite
 
    Example:
-     (config-key->adapter-key :boundary/sqlite) ;; => :sqlite"
+     (config-key->adapter-key :wagoe/sqlite) ;; => :sqlite"
   [config-key]
   (when (and (keyword? config-key)
-             (= "boundary" (namespace config-key)))
+             (= "wagoe" (namespace config-key)))
     (keyword (name config-key))))
 
 (defn determine-required-drivers

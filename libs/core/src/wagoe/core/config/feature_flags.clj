@@ -22,12 +22,12 @@
    - :default - Default value if not set
    - :description - Human-readable description"
   {:devex-validation
-   {:env-var "BND_DEVEX_VALIDATION"
+   {:env-var "WAG_DEVEX_VALIDATION"
     :default false
     :description "Enable enhanced validation error messages and developer experience features"}
 
    :structured-logging
-   {:env-var "BND_STRUCTURED_LOGGING"
+   {:env-var "WAG_STRUCTURED_LOGGING"
     :default false
     :description "Enable structured logging with detailed context"}})
 
@@ -81,7 +81,7 @@
    
    Example:
      (enabled? :devex-validation)
-     => true  ; if BND_DEVEX_VALIDATION=true in environment"
+     => true  ; if WAG_DEVEX_VALIDATION=true in environment"
   ([flag-key]
    (enabled? flag-key (System/getenv)))
   ([flag-key env-map]

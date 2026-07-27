@@ -27,7 +27,7 @@
 | `boundary.geo.shell.adapters.mapbox` | shell | Mapbox adapter (`MapboxAdapter`) |
 | `boundary.geo.shell.cache` | shell | `DbGeoCache` — next.jdbc-backed cache |
 | `boundary.geo.shell.service` | shell | Public API: `geocode!`, `reverse-geocode!`, `distance` |
-| `boundary.geo.shell.module-wiring` | shell | Integrant `:boundary/geo-service` |
+| `boundary.geo.shell.module-wiring` | shell | Integrant `:wagoe/geo-service` |
 
 ---
 
@@ -37,26 +37,26 @@ Add to your `resources/conf/{env}/config.edn`:
 
 ```edn
 ;; OpenStreetMap only (no API key needed)
-:boundary/geo-service
+:wagoe/geo-service
 {:provider   :openstreetmap
  :user-agent "MyApp/1.0 (contact@example.com)"
  :cache-ttl  86400
- :db         #ig/ref :boundary/db}
+ :db         #ig/ref :wagoe/db}
 
 ;; Google Maps with DB cache
-:boundary/geo-service
+:wagoe/geo-service
 {:provider  :google
- :api-key   #env BND_GEO_API_KEY
+ :api-key   #env WAG_GEO_API_KEY
  :cache-ttl 86400
- :db        #ig/ref :boundary/db}
+ :db        #ig/ref :wagoe/db}
 
 ;; Fallback chain: try OSM first, fall back to Google
-:boundary/geo-service
+:wagoe/geo-service
 {:provider   [:openstreetmap :google]
- :api-key    #env BND_GEO_API_KEY
+ :api-key    #env WAG_GEO_API_KEY
  :cache-ttl  86400
  :rate-limit 1
- :db         #ig/ref :boundary/db}
+ :db         #ig/ref :wagoe/db}
 ```
 
 Require the wiring namespace in your system config loader:

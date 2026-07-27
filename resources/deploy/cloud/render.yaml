@@ -12,7 +12,7 @@ services:
     plan: standard
     healthCheckPath: /health/ready
     envVars:
-      - key: BND_ENV
+      - key: WAG_ENV
         value: prod
       - key: HTTP_PORT
         value: "3000"

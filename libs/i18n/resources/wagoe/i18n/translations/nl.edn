@@ -512,5 +512,5 @@
  :workflow/audit-count                  {:one "{count} overgang geregistreerd"
                                          :many "{count} overgangen geregistreerd"}
 
- ;; Branding — override in app-specific translations (e.g. :boundary/app-name "MijnApp")
- :boundary/app-name "Boundary"}
+ ;; Branding — override in app-specific translations (e.g. :wagoe/app-name "MijnApp")
+ :wagoe/app-name "Boundary"}

@@ -15,7 +15,7 @@ This produces `target/boundary-*.jar`.
 [source,bash]
 ----
 export JWT_SECRET="your-production-secret-min-32-chars"
-export BND_ENV="production"
+export WAG_ENV="production"
 export DB_URL="jdbc:postgresql://host:5432/myapp"
 export DB_PASSWORD="..."
 
@@ -32,7 +32,7 @@ java -jar target/boundary-*.jar server
 | Yes
 | Minimum 32 characters. Used for signing JWT tokens.
 
-| `BND_ENV`
+| `WAG_ENV`
 | Yes
 | `development`, `test`, `acc`, or `production`.
 
@@ -65,23 +65,23 @@ A Dockerfile is included in the starter:
 [source,bash]
 ----
 docker build -t my-boundary-app .
-docker run -e JWT_SECRET="..." -e BND_ENV=production -p 3000:3000 my-boundary-app
+docker run -e JWT_SECRET="..." -e WAG_ENV=production -p 3000:3000 my-boundary-app
 ----
 
 == Configuration per environment
 
-Aero reads from `+resources/conf/{BND_ENV}/config.edn+`.
+Aero reads from `+resources/conf/{WAG_ENV}/config.edn+`.
 The production config uses environment variables for all secrets:
 
 [source,clojure]
 ----
 ;; resources/conf/prod/config.edn
-:boundary/db
+:wagoe/db
 {:url      #env DB_URL
  :password #env DB_PASSWORD
  :pool-size 20}
 
-:boundary/jwt
+:wagoe/jwt
 {:secret #env JWT_SECRET}
 ----
 

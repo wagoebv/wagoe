@@ -35,7 +35,7 @@
       ;; the failure so it can be alerted on and re-run.
       (log/error e "Tenant migration fan-out failed on startup"))))
 
-(defmethod ig/init-key :boundary/tenant-db-schema
+(defmethod ig/init-key :wagoe/tenant-db-schema
   [_ {:keys [ctx]}]
   (log/info "Initializing tenant module database schema")
   (tenant-persistence/initialize-tenant-schema! ctx)
@@ -43,7 +43,7 @@
   (log/info "Tenant module database schema initialized")
   {:status :initialized})
 
-(defmethod ig/halt-key! :boundary/tenant-db-schema
+(defmethod ig/halt-key! :wagoe/tenant-db-schema
   [_ _state]
   (log/info "Tenant module database schema component halted"))
 
@@ -51,18 +51,18 @@
 ;; Tenant Repository
 ;; =============================================================================
 
-(defmethod ig/init-key :boundary/tenant-repository
+(defmethod ig/init-key :wagoe/tenant-repository
   [_ {:keys [ctx logger error-reporter]}]
   (log/info "Initializing tenant repository")
   (let [repo (tenant-persistence/create-tenant-repository ctx logger error-reporter)]
     (log/info "Tenant repository initialized")
     repo))
 
-(defmethod ig/halt-key! :boundary/tenant-repository
+(defmethod ig/halt-key! :wagoe/tenant-repository
   [_ _repo]
   (log/info "Tenant repository halted (no cleanup needed)"))
 
-(defmethod ig/init-key :boundary/tenant-service
+(defmethod ig/init-key :wagoe/tenant-service
   [_ {:keys [tenant-repository validation-config logger metrics-emitter error-reporter]}]
   (log/info "Initializing tenant service")
   (let [service (tenant-service/create-tenant-service
@@ -74,7 +74,7 @@
     (log/info "Tenant service initialized")
     service))
 
-(defmethod ig/halt-key! :boundary/tenant-service
+(defmethod ig/halt-key! :wagoe/tenant-service
   [_ _service]
   (log/info "Tenant service halted (no cleanup needed)"))
 
@@ -82,7 +82,7 @@
 ;; Tenant Routes (Structured Format for Top-Level Composition)
 ;; =============================================================================
 
-(defmethod ig/init-key :boundary/tenant-routes
+(defmethod ig/init-key :wagoe/tenant-routes
   [_ {:keys [tenant-service db-context config]}]
   (log/info "Initializing tenant module routes (normalized format)")
   (require 'wagoe.tenant.shell.http)
@@ -93,7 +93,7 @@
                :api-count (count (:api routes))})
     routes))
 
-(defmethod ig/halt-key! :boundary/tenant-routes
+(defmethod ig/halt-key! :wagoe/tenant-routes
   [_ _routes]
   (log/info "Tenant module routes halted (no cleanup needed)"))
 
@@ -101,14 +101,14 @@
 ;; Membership Repository
 ;; =============================================================================
 
-(defmethod ig/init-key :boundary/membership-repository
+(defmethod ig/init-key :wagoe/membership-repository
   [_ {:keys [ctx logger error-reporter]}]
   (log/info "Initializing membership repository")
   (let [repo (membership-persistence/create-membership-repository ctx logger error-reporter)]
     (log/info "Membership repository initialized")
     repo))
 
-(defmethod ig/halt-key! :boundary/membership-repository
+(defmethod ig/halt-key! :wagoe/membership-repository
   [_ _repo]
   (log/info "Membership repository halted (no cleanup needed)"))
 
@@ -116,7 +116,7 @@
 ;; Membership Service
 ;; =============================================================================
 
-(defmethod ig/init-key :boundary/membership-service
+(defmethod ig/init-key :wagoe/membership-service
   [_ {:keys [repository logger metrics-emitter error-reporter]}]
   (log/info "Initializing membership service")
   (let [service (membership-service/create-membership-service
@@ -127,7 +127,7 @@
     (log/info "Membership service initialized")
     service))
 
-(defmethod ig/halt-key! :boundary/membership-service
+(defmethod ig/halt-key! :wagoe/membership-service
   [_ _service]
   (log/info "Membership service halted (no cleanup needed)"))
 
@@ -135,14 +135,14 @@
 ;; Invite Repository
 ;; =============================================================================
 
-(defmethod ig/init-key :boundary/invite-repository
+(defmethod ig/init-key :wagoe/invite-repository
   [_ {:keys [ctx logger error-reporter]}]
   (log/info "Initializing invite repository")
   (let [repo (invite-persistence/create-invite-repository ctx logger error-reporter)]
     (log/info "Invite repository initialized")
     repo))
 
-(defmethod ig/halt-key! :boundary/invite-repository
+(defmethod ig/halt-key! :wagoe/invite-repository
   [_ _repo]
   (log/info "Invite repository halted (no cleanup needed)"))
 
@@ -150,7 +150,7 @@
 ;; Invite Service
 ;; =============================================================================
 
-(defmethod ig/init-key :boundary/invite-service
+(defmethod ig/init-key :wagoe/invite-service
   [_ {:keys [repository membership-repository logger metrics-emitter error-reporter]}]
   (log/info "Initializing invite service")
   (let [service (invite-service/create-invite-service
@@ -162,7 +162,7 @@
     (log/info "Invite service initialized")
     service))
 
-(defmethod ig/halt-key! :boundary/invite-service
+(defmethod ig/halt-key! :wagoe/invite-service
   [_ _service]
   (log/info "Invite service halted (no cleanup needed)"))
 
@@ -170,7 +170,7 @@
 ;; Membership Routes
 ;; =============================================================================
 
-(defmethod ig/init-key :boundary/membership-routes
+(defmethod ig/init-key :wagoe/membership-routes
   [_ {:keys [service]}]
   (log/info "Initializing membership module routes (normalized format)")
   (require 'wagoe.tenant.shell.membership-http)
@@ -181,7 +181,7 @@
                :api-count  (count (:api routes))})
     routes))
 
-(defmethod ig/halt-key! :boundary/membership-routes
+(defmethod ig/halt-key! :wagoe/membership-routes
   [_ _routes]
   (log/info "Membership module routes halted (no cleanup needed)"))
 
@@ -189,7 +189,7 @@
 ;; Tenant HTTP middleware
 ;; =============================================================================
 
-(defmethod ig/init-key :boundary/tenant-http-middleware
+(defmethod ig/init-key :wagoe/tenant-http-middleware
   [_ {ts :tenant-service ms :membership-service db :db-context}]
   ;; Build the tenant HTTP middleware seq here, in the tenant lib, and let the
   ;; app inject it into platform's http-handler via :extra-middleware. Platform's
@@ -208,6 +208,6 @@
             (log/info "Adding tenant membership middleware to HTTP pipeline")
             (membership-mw/wrap-tenant-membership ms handler)))))
 
-(defmethod ig/halt-key! :boundary/tenant-http-middleware
+(defmethod ig/halt-key! :wagoe/tenant-http-middleware
   [_ _mw]
   (log/info "Tenant HTTP middleware halted (no cleanup needed)"))

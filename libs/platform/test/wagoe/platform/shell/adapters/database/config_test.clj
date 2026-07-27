@@ -11,19 +11,19 @@
 (def sample-config
   "Sample configuration for testing"
   {:active
-   {:boundary/sqlite
+   {:wagoe/sqlite
     {:db "test-database.db"
      :pool {:minimum-idle 1
             :maximum-pool-size 3
             :connection-timeout-ms 10000}}
 
-    :boundary/h2
+    :wagoe/h2
     {:memory true
      :pool {:minimum-idle 1
             :maximum-pool-size 5}}}
 
    :inactive
-   {:boundary/postgresql
+   {:wagoe/postgresql
     {:host "localhost"
      :port 5432
      :dbname "test_db"
@@ -32,7 +32,7 @@
      :pool {:minimum-idle 5
             :maximum-pool-size 15}}
 
-    :boundary/mysql
+    :wagoe/mysql
     {:host "localhost"
      :port 3306
      :dbname "test_db"
@@ -41,7 +41,7 @@
      :pool {:minimum-idle 5
             :maximum-pool-size 15}}}
 
-   :boundary/settings
+   :wagoe/settings
    {:name "test-app"
     :version "1.0.0"}})
 
@@ -57,11 +57,11 @@
       (is (contains? config :inactive) "Config should have :inactive section")
 
       ;; In current dev config PostgreSQL is the active database
-      (is (contains? (:active config) :boundary/postgresql)
+      (is (contains? (:active config) :wagoe/postgresql)
           "PostgreSQL should be active in dev environment")
 
       ;; SQLite is available but inactive in dev
-      (is (contains? (:inactive config) :boundary/sqlite)
+      (is (contains? (:inactive config) :wagoe/sqlite)
           "SQLite should be inactive in dev environment"))))
 
 (deftest ^:unit test-load-config-test
@@ -71,11 +71,11 @@
       (is (contains? config :active) "Config should have :active section")
 
       ;; Check that H2 is active in test
-      (is (contains? (:active config) :boundary/h2)
+      (is (contains? (:active config) :wagoe/h2)
           "H2 should be active in test environment")
 
       ;; Check H2 is configured for in-memory
-      (let [h2-config (get-in config [:active :boundary/h2])]
+      (let [h2-config (get-in config [:active :wagoe/h2])]
         (is (true? (:memory h2-config))
             "H2 should be configured for in-memory in test environment")))))
 
@@ -86,11 +86,11 @@
       (is (contains? config :active) "Config should have :active section")
 
       ;; Check that PostgreSQL is active in prod
-      (is (contains? (:active config) :boundary/postgresql)
+      (is (contains? (:active config) :wagoe/postgresql)
           "PostgreSQL should be active in prod environment")
 
       ;; Check PostgreSQL pool configuration
-      (let [pg-config (get-in config [:active :boundary/postgresql])]
+      (let [pg-config (get-in config [:active :wagoe/postgresql])]
         (is (contains? pg-config :pool)
             "PostgreSQL should have pool configuration")
         (is (>= (get-in pg-config [:pool :maximum-pool-size]) 10)
@@ -110,11 +110,11 @@
     (let [active-adapters (config/get-active-adapters-from-config sample-config)]
       (is (map? active-adapters) "Active adapters should be a map")
       (is (= 2 (count active-adapters)) "Should have 2 active adapters")
-      (is (contains? active-adapters :boundary/sqlite)
+      (is (contains? active-adapters :wagoe/sqlite)
           "Should contain SQLite adapter")
-      (is (contains? active-adapters :boundary/h2)
+      (is (contains? active-adapters :wagoe/h2)
           "Should contain H2 adapter")
-      (is (not (contains? active-adapters :boundary/postgresql))
+      (is (not (contains? active-adapters :wagoe/postgresql))
           "Should not contain inactive PostgreSQL adapter"))))
 
 (deftest ^:unit test-get-inactive-adapters
@@ -122,11 +122,11 @@
     (let [inactive-adapters (config/get-inactive-adapters sample-config)]
       (is (map? inactive-adapters) "Inactive adapters should be a map")
       (is (= 2 (count inactive-adapters)) "Should have 2 inactive adapters")
-      (is (contains? inactive-adapters :boundary/postgresql)
+      (is (contains? inactive-adapters :wagoe/postgresql)
           "Should contain PostgreSQL adapter")
-      (is (contains? inactive-adapters :boundary/mysql)
+      (is (contains? inactive-adapters :wagoe/mysql)
           "Should contain MySQL adapter")
-      (is (not (contains? inactive-adapters :boundary/sqlite))
+      (is (not (contains? inactive-adapters :wagoe/sqlite))
           "Should not contain active SQLite adapter"))))
 
 (deftest ^:unit test-get-all-database-configs
@@ -134,10 +134,10 @@
     (let [all-configs (config/get-all-database-configs sample-config)]
       (is (map? all-configs) "All configs should be a map")
       (is (= 4 (count all-configs)) "Should have 4 total database configs")
-      (is (contains? all-configs :boundary/sqlite) "Should contain SQLite")
-      (is (contains? all-configs :boundary/h2) "Should contain H2")
-      (is (contains? all-configs :boundary/postgresql) "Should contain PostgreSQL")
-      (is (contains? all-configs :boundary/mysql) "Should contain MySQL"))))
+      (is (contains? all-configs :wagoe/sqlite) "Should contain SQLite")
+      (is (contains? all-configs :wagoe/h2) "Should contain H2")
+      (is (contains? all-configs :wagoe/postgresql) "Should contain PostgreSQL")
+      (is (contains? all-configs :wagoe/mysql) "Should contain MySQL"))))
 
 ;; =============================================================================
 ;; Configuration Structure Validation Tests
@@ -173,7 +173,7 @@
       (let [sqlite-config {:db "test.db"
                            :pool {:minimum-idle 1
                                   :maximum-pool-size 5}}]
-        (is (config/valid-adapter-config? :boundary/sqlite sqlite-config)
+        (is (config/valid-adapter-config? :wagoe/sqlite sqlite-config)
             "Valid SQLite config should pass validation")))
 
     (testing "Valid PostgreSQL config"
@@ -182,17 +182,17 @@
                        :dbname "testdb"
                        :user "testuser"
                        :password "testpass"}]
-        (is (config/valid-adapter-config? :boundary/postgresql pg-config)
+        (is (config/valid-adapter-config? :wagoe/postgresql pg-config)
             "Valid PostgreSQL config should pass validation")))
 
     (testing "Valid H2 config"
       (let [h2-config {:memory true}]
-        (is (config/valid-adapter-config? :boundary/h2 h2-config)
+        (is (config/valid-adapter-config? :wagoe/h2 h2-config)
             "Valid H2 config should pass validation")))
 
     (testing "Invalid config - missing required fields"
       (let [invalid-pg-config {:host "localhost"}] ; missing required fields
-        (is (not (config/valid-adapter-config? :boundary/postgresql invalid-pg-config))
+        (is (not (config/valid-adapter-config? :wagoe/postgresql invalid-pg-config))
             "PostgreSQL config missing required fields should fail validation")))))
 
 ;; =============================================================================
@@ -208,7 +208,7 @@
       (System/clearProperty "env"))
 
     ;; Env vars can't be modified inside a JVM (and the documented test
-    ;; invocation exports BND_ENV=test), so exercise the env-var branches
+    ;; invocation exports WAG_ENV=test), so exercise the env-var branches
     ;; through the config/getenv seam instead of the real environment.
     (testing "System property takes precedence over env vars"
       (System/setProperty "env" "prop-env")
@@ -216,9 +216,9 @@
         (is (= "prop-env" (config/detect-environment))))
       (System/clearProperty "env"))
 
-    (testing "BND_ENV wins over ENV and ENVIRONMENT"
+    (testing "WAG_ENV wins over ENV and ENVIRONMENT"
       (System/clearProperty "env")
-      (with-redefs [config/getenv {"BND_ENV" "from-bnd" "ENV" "from-env"}]
+      (with-redefs [config/getenv {"WAG_ENV" "from-bnd" "ENV" "from-env"}]
         (is (= "from-bnd" (config/detect-environment))))
       (with-redefs [config/getenv {"ENV" "from-env" "ENVIRONMENT" "from-environment"}]
         (is (= "from-env" (config/detect-environment))))
@@ -237,17 +237,17 @@
 
 (deftest ^:unit test-merge-configurations
   (testing "Merging configurations for override scenarios"
-    (let [base-config {:active {:boundary/sqlite {:db "base.db"}}
-                       :inactive {:boundary/h2 {:memory true}}}
-          override-config {:active {:boundary/h2 {:memory false :db "override.db"}}
-                           :inactive {:boundary/sqlite {:db "moved.db"}}}
+    (let [base-config {:active {:wagoe/sqlite {:db "base.db"}}
+                       :inactive {:wagoe/h2 {:memory true}}}
+          override-config {:active {:wagoe/h2 {:memory false :db "override.db"}}
+                           :inactive {:wagoe/sqlite {:db "moved.db"}}}
           merged (config/merge-configs base-config override-config)]
 
-      (is (contains? (:active merged) :boundary/h2)
+      (is (contains? (:active merged) :wagoe/h2)
           "H2 should be moved to active")
-      (is (contains? (:inactive merged) :boundary/sqlite)
+      (is (contains? (:inactive merged) :wagoe/sqlite)
           "SQLite should be moved to inactive")
-      (is (= "override.db" (get-in merged [:active :boundary/h2 :db]))
+      (is (= "override.db" (get-in merged [:active :wagoe/h2 :db]))
           "H2 config should be updated with override values"))))
 
 ;; =============================================================================

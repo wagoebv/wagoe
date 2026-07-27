@@ -4,12 +4,12 @@
             [clojure.string :as str]
             [integrant.core :as ig]
             [wagoe.observability.logging.ports :as ports]
-            ;; Ensure Integrant init-key/ halt-key! for :boundary/logging are loaded
+            ;; Ensure Integrant init-key/ halt-key! for :wagoe/logging are loaded
             [wagoe.platform.shell.system.wiring]))
 
 (deftest ^:integration stdout-logging-component-end-to-end
   (testing "stdout logging component is initialized via Integrant and emits log output"
-    (let [ig-config {:boundary/logging {:provider :stdout
+    (let [ig-config {:wagoe/logging {:provider :stdout
                                         :level :info
                                         :format :text
                                         :include-timestamp false
@@ -19,7 +19,7 @@
                                         :default-tags {:service "stdout-integration-test"}}}
           system (ig/init ig-config)]
       (try
-        (let [logger (:boundary/logging system)
+        (let [logger (:wagoe/logging system)
               out    (with-out-str
                        (ports/info logger "integration test message" {:integration true}))
               lines  (->> (str/split-lines out)

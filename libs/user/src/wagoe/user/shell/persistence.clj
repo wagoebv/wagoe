@@ -1485,7 +1485,7 @@
      (create-user-repository ctx)"
   [ctx]
   ;; Ensure preference columns exist even in test setups that create the users
-  ;; table without running :boundary/user-db-schema.
+  ;; table without running :wagoe/user-db-schema.
   (ensure-users-preference-columns! ctx)
   (->DatabaseUserRepository ctx))
 

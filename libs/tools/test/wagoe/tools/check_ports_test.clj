@@ -86,15 +86,15 @@
                  ["wagoe.license.customer.shell.persistence"])))))
 
 ;; ---------------------------------------------------------------------------
-;; Escape hatch — ^:boundary/allow-direct ns metadata
+;; Escape hatch — ^:wagoe/allow-direct ns metadata
 ;; ---------------------------------------------------------------------------
 
 (deftest ^:unit allow-direct-metadata-exempts-namespace
-  (testing "the ns symbol's :boundary/allow-direct metadata is detected"
-    (let [form (read-string "(ns ^:boundary/allow-direct wagoe.license.web.http (:require [x]))")]
-      (is (true? (:boundary/allow-direct (meta (second form))))))
+  (testing "the ns symbol's :wagoe/allow-direct metadata is detected"
+    (let [form (read-string "(ns ^:wagoe/allow-direct wagoe.license.web.http (:require [x]))")]
+      (is (true? (:wagoe/allow-direct (meta (second form))))))
     (let [form (read-string "(ns wagoe.license.web.http (:require [x]))")]
-      (is (nil? (:boundary/allow-direct (meta (second form))))))))
+      (is (nil? (:wagoe/allow-direct (meta (second form))))))))
 
 ;; ---------------------------------------------------------------------------
 ;; Rule 1 — module completeness

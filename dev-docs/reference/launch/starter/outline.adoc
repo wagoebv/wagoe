@@ -48,7 +48,7 @@ Quickstart (README excerpt)
 
 ....
 # Quickstart
-export BND_ENV=development
+export WAG_ENV=development
 export JWT_SECRET="dev-secret-minimum-32-characters"
 clojure -M:repl-clj
 (require '[integrant.repl :as ig-repl])
