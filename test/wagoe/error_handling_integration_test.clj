@@ -72,7 +72,7 @@
   [& {:keys [method uri user-id tenant-id correlation-id headers]}]
   {:request-method (or method :get)
    :uri (or uri "/api/users")
-   :headers (merge {"user-agent" "boundary-client/1.0"
+   :headers (merge {"user-agent" "wagoe-client/1.0"
                     "accept" "application/json"
                     "content-type" "application/json"
                     "x-forwarded-for" "203.0.113.42, 198.51.100.17"
@@ -147,7 +147,7 @@
         (is (= correlation-id (:trace-id context)))
         (is (= "POST" (:method context)))
         (is (= "/api/users" (:uri context)))
-        (is (= "boundary-client/1.0" (:user-agent context)))
+        (is (= "wagoe-client/1.0" (:user-agent context)))
         (is (= "203.0.113.42" (:ip-address context)))
         (is (contains? context :timestamp))
         (is (contains? context :environment)))))

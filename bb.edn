@@ -1,8 +1,8 @@
 {:paths ["scripts"                    ; still needed for docs_lint.clj + verify_doc_links.clj
          "libs/tools/src"              ; boundary-tools — pure bb, no Maven deps needed at runtime
          "libs/devtools/resources"     ; shared error catalogue EDN (boundary/devtools/core/error_catalog.edn)
-         "libs/boundary-cli/src"       ; bbin installs via --deps-root repo-root, so root bb.edn :paths must include CLI src
-         "libs/boundary-cli/resources"]
+         "libs/wagoe-cli/src"       ; bbin installs via --deps-root repo-root, so root bb.edn :paths must include CLI src
+         "libs/wagoe-cli/resources"]
  :tasks
  {:requires ([babashka.http-client       :as http]
              [babashka.process          :as process]
@@ -135,11 +135,11 @@
                                        'wagoe.tools.help-test)]
                           (when (pos? (+ (:fail summary) (:error summary)))
                             (System/exit 1))))}
-  test:boundary-cli
-  {:doc "Run boundary-cli tests"
-   :extra-paths ["libs/boundary-cli/src"
-                 "libs/boundary-cli/resources"
-                 "libs/boundary-cli/test"]
+  test:wagoe-cli
+  {:doc "Run wagoe-cli tests"
+   :extra-paths ["libs/wagoe-cli/src"
+                 "libs/wagoe-cli/resources"
+                 "libs/wagoe-cli/test"]
    :task (do (require 'wagoe.cli.catalogue-test
                       'wagoe.cli.list-modules-test
                       'wagoe.cli.new-test

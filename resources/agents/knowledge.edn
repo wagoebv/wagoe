@@ -24,8 +24,8 @@
    :docs-url "https://github.com/thijs-creemers/boundary/blob/main/libs/tools/AGENTS.md"}
   {:name "devtools" :description "Dev-only tools: REPL helpers, error pipeline, dashboard"
    :docs-url "https://github.com/thijs-creemers/boundary/blob/main/libs/devtools/AGENTS.md"}
-  {:name "boundary-mcp" :description "MCP server (stdio): tool/resource registry + JSON-RPC transport for editor agents"
-   :docs-url "https://github.com/thijs-creemers/boundary/blob/main/libs/boundary-mcp/AGENTS.md"}]
+  {:name "wagoe-mcp" :description "MCP server (stdio): tool/resource registry + JSON-RPC transport for editor agents"
+   :docs-url "https://github.com/thijs-creemers/boundary/blob/main/libs/wagoe-mcp/AGENTS.md"}]
 
  :pitfalls
  [{:id "P01"

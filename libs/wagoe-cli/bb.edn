@@ -1,0 +1,3 @@
+{:paths ["src" "resources"
+         "libs/wagoe-cli/src" "libs/wagoe-cli/resources"]
+ :bbin/bin {wagoe {:main-opts ["-m" "wagoe.cli.main"]}}}

@@ -13,7 +13,7 @@
      BND-5xx  Interceptor pipeline errors
      BND-6xx  FC/IS boundary violations
      BND-7xx  Tooling / build errors
-     BND-8xx  MCP guardrails (boundary-mcp)"
+     BND-8xx  MCP guardrails (wagoe-mcp)"
   (:require [clojure.edn :as edn]
             [clojure.java.io :as io]))
 

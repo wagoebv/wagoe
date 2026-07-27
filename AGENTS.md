@@ -172,7 +172,7 @@ clj-paren-repair --help
 | # Layout exceptions (the shape above is the norm; these libs deviate by design):
 | #   - cache/         has no core/ — thin adapter lib (shell + ports only)
 | #   - platform/ , observability/  split ports across several files, not one ports.clj
-| #   - boundary-mcp/  sources live under boundary/mcp/ (ns boundary.mcp.*) —
+| #   - wagoe-mcp/  sources live under boundary/mcp/ (ns boundary.mcp.*) —
 | #                    lib dir name and namespace segment differ on purpose
 | #   - shared-ui/     shared Hiccup UI primitives (boundary.shared.ui.*); no ports/schema
 | 
@@ -817,7 +817,7 @@ See `libs/i18n/AGENTS.md` for complete API reference, middleware wiring, and com
 
 FC/IS rules, naming conventions, pitfalls, and the module table in this file —
 and the FC/IS / naming / pitfalls sections of the downstream
-`libs/boundary-cli/resources/boundary/cli/templates/AGENTS.md.tmpl` — are
+`libs/wagoe-cli/resources/boundary/cli/templates/AGENTS.md.tmpl` — are
 generated from `resources/agents/knowledge.edn` (+ `modules-catalogue.edn` for the
 module table). The generator lives at `scripts/agents_gen.clj`.
 
@@ -827,7 +827,7 @@ module table). The generator lives at `scripts/agents_gen.clj`.
   then run `bb agents:gen`.
 - Add a library: add it to `modules-catalogue.edn` (or, for dev-only tooling not
   published as an app module, to `:dev-modules` in `knowledge.edn`), then `bb agents:gen`.
-- **Regenerate before publishing `boundary-cli`** so downstream `boundary new`
+- **Regenerate before publishing `wagoe-cli`** so downstream `boundary new`
   projects ship the current template.
 
 The per-module AI doc generator (`bb ai docs --module libs/<x> --type agents`) is
@@ -867,7 +867,7 @@ Seven automated safeguards run in CI (and `check:fcis` + `check:ports` in pre-co
 | [admin](https://github.com/thijs-creemers/boundary/blob/main/libs/admin/AGENTS.md)                 | Admin UI with entity config, HTMX forms                                           |
 | [ai](https://github.com/thijs-creemers/boundary/blob/main/libs/ai/AGENTS.md)                       | Multi-provider AI — Ollama, Anthropic Claude, OpenAI                              |
 | [audience](https://github.com/thijs-creemers/boundary/blob/main/libs/audience/AGENTS.md)           | Rule-based audience segmentation with SQL + predicate pipeline                    |
-| [boundary-mcp](https://github.com/thijs-creemers/boundary/blob/main/libs/boundary-mcp/AGENTS.md)   | MCP server (stdio): tool/resource registry + JSON-RPC transport for editor agents |
+| [wagoe-mcp](https://github.com/thijs-creemers/boundary/blob/main/libs/wagoe-mcp/AGENTS.md)   | MCP server (stdio): tool/resource registry + JSON-RPC transport for editor agents |
 | [cache](https://github.com/thijs-creemers/boundary/blob/main/libs/cache/AGENTS.md)                 | Distributed caching — Redis or in-memory, TTL, atomic ops                         |
 | [calendar](https://github.com/thijs-creemers/boundary/blob/main/libs/calendar/AGENTS.md)           | iCal, RRULE recurrence, conflict detection, Hiccup UI                             |
 | [core](https://github.com/thijs-creemers/boundary/blob/main/libs/core/AGENTS.md)                   | Pure validation, case conversion, interceptor pipeline, feature flags             |

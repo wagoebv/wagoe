@@ -3,7 +3,7 @@
 `knowledge.edn` is the single structured source for Boundary's agent guardrails.
 A deterministic generator (`scripts/agents_gen.clj`, `bb agents:gen`) renders it
 into the framework root `AGENTS.md` and the downstream
-`libs/boundary-cli/resources/boundary/cli/templates/AGENTS.md.tmpl`.
+`libs/wagoe-cli/resources/boundary/cli/templates/AGENTS.md.tmpl`.
 
 ## Keys
 - `:fc-is`    — layer/dependency rules (Functional Core / Imperative Shell)
@@ -15,7 +15,7 @@ into the framework root `AGENTS.md` and the downstream
                    and used as the module-source validation allowlist
 
 Installable module data comes from
-`libs/boundary-cli/resources/boundary/cli/modules-catalogue.edn`.
+`libs/wagoe-cli/resources/boundary/cli/modules-catalogue.edn`.
 
 ## Commands
 - `bb agents:gen`     — regenerate both AGENTS files

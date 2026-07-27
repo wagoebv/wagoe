@@ -54,7 +54,7 @@ jobs:
             libs/shared-ui/src libs/shared-ui/test \
             libs/i18n/src \
             libs/push/src \
-            libs/boundary-mcp/src \
+            libs/wagoe-mcp/src \
             examples/todo/src
 
   # =============================================================================
@@ -706,10 +706,10 @@ jobs:
         run: clojure -M:test :ai
 
   # =============================================================================
-  # Test boundary/boundary-mcp (standalone dev lib — not on the app classpath)
+  # Test boundary/wagoe-mcp (standalone dev lib — not on the app classpath)
   # =============================================================================
   test-mcp:
-    name: Test boundary/boundary-mcp
+    name: Test boundary/wagoe-mcp
     runs-on: ubuntu-latest
     needs: lint
 
@@ -722,11 +722,11 @@ jobs:
           aliases: -M:test
 
       - name: Run tests
-        working-directory: libs/boundary-mcp
+        working-directory: libs/wagoe-mcp
         run: clojure -M:test
 
-  test-boundary-cli:
-    name: Test boundary/boundary-cli
+  test-wagoe-cli:
+    name: Test boundary/wagoe-cli
     runs-on: ubuntu-latest
     needs: lint
 
@@ -739,7 +739,7 @@ jobs:
           aliases: -M:test
 
       - name: Run tests
-        working-directory: libs/boundary-cli
+        working-directory: libs/wagoe-cli
         run: clojure -M:test
 
   # =============================================================================
@@ -922,7 +922,7 @@ jobs:
   test-summary:
     name: All Tests Passed
     runs-on: ubuntu-latest
-    needs: [build-ui-assets, docs-lint, agents-links, command-smoke, config-doctor, i18n-scan, check-fcis, check-placeholder-tests, check-test-meta, check-test-tags, check-deps, check-ports, check-hygiene, check-poms, example-smoke, test-i18n, test-core, test-observability, test-platform, test-user, test-admin, test-ui-style, test-storage, test-cache, test-jobs, test-tenant, test-email, test-realtime, test-workflow, test-search, test-scaffolder, test-external, test-payments, test-push, test-calendar, test-reports, test-geo, test-ai, test-mcp, test-boundary-cli, test-shared-ui]
+    needs: [build-ui-assets, docs-lint, agents-links, command-smoke, config-doctor, i18n-scan, check-fcis, check-placeholder-tests, check-test-meta, check-test-tags, check-deps, check-ports, check-hygiene, check-poms, example-smoke, test-i18n, test-core, test-observability, test-platform, test-user, test-admin, test-ui-style, test-storage, test-cache, test-jobs, test-tenant, test-email, test-realtime, test-workflow, test-search, test-scaffolder, test-external, test-payments, test-push, test-calendar, test-reports, test-geo, test-ai, test-mcp, test-wagoe-cli, test-shared-ui]
 
     steps:
       - name: Summary
@@ -953,8 +953,8 @@ jobs:
           echo "  - boundary/geo"
           echo "  - boundary/ai"
           echo "  - boundary/i18n"
-          echo "  - boundary/boundary-mcp"
-          echo "  - boundary/boundary-cli"
+          echo "  - boundary/wagoe-mcp"
+          echo "  - boundary/wagoe-cli"
           echo "Gates passed:"
           echo "  - config-doctor (no config errors)"
           echo "  - i18n:scan (no unexternalised strings)"

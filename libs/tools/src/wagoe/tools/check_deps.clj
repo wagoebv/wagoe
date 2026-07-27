@@ -87,7 +87,7 @@
              lib-entries)))
 
 (defn- dir-name->ns-prefix
-  "For hyphenated lib dirs like 'boundary-cli', return the namespace segment
+  "For hyphenated lib dirs like 'wagoe-cli', return the namespace segment
    'cli' that the library's own sources actually use under wagoe.<segment>.*.
    Returns nil for libs whose dir name equals their namespace segment."
   [lib-name]
