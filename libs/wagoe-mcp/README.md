@@ -137,7 +137,7 @@ the server on the classpath and launch its main, so cwd stays the project root:
 
 ```bash
 # from the Boundary project root
-WAG_ENV=dev clojure -Sdeps '{:deps {boundary/mcp {:local/root "libs/wagoe-mcp"}}}' \
+WAG_ENV=dev clojure -Sdeps '{:deps {wagoe/mcp {:local/root "libs/wagoe-mcp"}}}' \
   -M -m boundary.mcp.shell.server
 ```
 
@@ -187,7 +187,7 @@ Claude Code CLI, run this from the project root:
 
 ```bash
 claude mcp add boundary --env WAG_ENV=dev -- \
-  clojure -Sdeps '{:deps {boundary/mcp {:local/root "libs/wagoe-mcp"}}}' \
+  clojure -Sdeps '{:deps {wagoe/mcp {:local/root "libs/wagoe-mcp"}}}' \
   -M -m boundary.mcp.shell.server
 ```
 
@@ -198,7 +198,7 @@ Or by hand, in your MCP config (`.mcp.json` / client settings):
   "mcpServers": {
     "boundary": {
       "command": "clojure",
-      "args": ["-Sdeps", "{:deps {boundary/mcp {:local/root \"libs/wagoe-mcp\"}}}",
+      "args": ["-Sdeps", "{:deps {wagoe/mcp {:local/root \"libs/wagoe-mcp\"}}}",
                "-M", "-m", "boundary.mcp.shell.server"],
       "cwd": "/absolute/path/to/your/boundary/project",
       "env": { "WAG_ENV": "dev" }

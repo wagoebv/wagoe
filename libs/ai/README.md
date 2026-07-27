@@ -3,7 +3,7 @@
 [![Status](https://img.shields.io/badge/status-stable-brightgreen)]()
 [![Clojure](https://img.shields.io/badge/clojure-1.12+-blue)]()
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
-[![Clojars Project](https://img.shields.io/clojars/v/org.boundary-app/boundary-ai.svg)](https://clojars.org/org.boundary-app/boundary-ai)
+[![Clojars Project](https://img.shields.io/clojars/v/org.wagoe/wagoe-ai.svg)](https://clojars.org/org.wagoe/wagoe-ai)
 
 Framework-aware AI tooling for Boundary applications — offline-first via Ollama, with cloud fallback to Anthropic Claude or OpenAI.
 
@@ -11,12 +11,12 @@ Framework-aware AI tooling for Boundary applications — offline-first via Ollam
 
 **deps.edn** (recommended):
 ```clojure
-{:deps {org.boundary-app/boundary-ai {:mvn/version "1.0.0-beta-1"}}}
+{:deps {org.wagoe/wagoe-ai {:mvn/version "1.0.0-beta-1"}}}
 ```
 
 **Leiningen**:
 ```clojure
-[org.boundary-app/boundary-ai "1.0.0-beta-1"]
+[org.wagoe/wagoe-ai "1.0.0-beta-1"]
 ```
 
 ## Features

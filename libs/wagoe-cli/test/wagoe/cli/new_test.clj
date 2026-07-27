@@ -97,7 +97,7 @@
       (testing "deps.edn has an :mcp alias with a resolved version"
         (let [content (slurp (io/file tmp "deps.edn"))]
           (is (str/includes? content ":mcp"))
-          (is (str/includes? content "org.boundary-app/wagoe-mcp"))
+          (is (str/includes? content "org.wagoe/wagoe-mcp"))
           (is (not (str/includes? content "{{wagoe-mcp-version}}")))))
 
       (testing ":mcp alias lists mcp's full boundary closure"
@@ -106,9 +106,9 @@
         ;; published poms (pre-alpha-43). If a closure lib silently disappears
         ;; from the template, -M:mcp would fail to resolve at runtime — guard it.
         (let [content (slurp (io/file tmp "deps.edn"))]
-          (doseq [lib ["boundary-ai" "boundary-devtools" "boundary-scaffolder"
-                       "boundary-tools" "boundary-jobs"]]
-            (is (str/includes? content (str "org.boundary-app/" lib))
+          (doseq [lib ["wagoe-ai" "wagoe-devtools" "wagoe-scaffolder"
+                       "wagoe-tools" "wagoe-jobs"]]
+            (is (str/includes? content (str "org.wagoe/" lib))
                 (str "Missing from :mcp closure: " lib)))))
 
       (testing "pre-commit hook is executable"

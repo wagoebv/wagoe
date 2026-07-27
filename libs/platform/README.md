@@ -3,7 +3,7 @@
 [![Status](https://img.shields.io/badge/status-stable-brightgreen)]()
 [![Clojure](https://img.shields.io/badge/clojure-1.12+-blue)]()
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
-[![Clojars Project](https://img.shields.io/clojars/v/org.boundary-app/boundary-platform.svg)](https://clojars.org/org.boundary-app/boundary-platform)
+[![Clojars Project](https://img.shields.io/clojars/v/org.wagoe/wagoe-platform.svg)](https://clojars.org/org.wagoe/wagoe-platform)
 
 Core infrastructure for web applications: database, HTTP routing, pagination, search, and system lifecycle management.
 
@@ -11,14 +11,14 @@ Core infrastructure for web applications: database, HTTP routing, pagination, se
 
 **deps.edn** (recommended):
 ```clojure
-{:deps {org.boundary-app/boundary-platform {:mvn/version "1.0.0-beta-1"}
+{:deps {org.wagoe/wagoe-platform {:mvn/version "1.0.0-beta-1"}
         ;; Choose your database driver
         org.postgresql/postgresql {:mvn/version "42.7.8"}}}
 ```
 
 **Leiningen**:
 ```clojure
-[org.boundary-app/boundary-platform "1.0.0-beta-1"]
+[org.wagoe/wagoe-platform "1.0.0-beta-1"]
 [org.postgresql/postgresql "42.7.8"]
 ```
 

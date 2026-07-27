@@ -225,14 +225,14 @@ Development (monorepo, local `deps.edn`):
 [source,clojure]
 ----
 ;; :dev-local alias in application deps.edn
-org.boundary-app/boundary-payments {:local/root "../boundary/libs/payments"}
+org.wagoe/wagoe-payments {:local/root "../boundary/libs/payments"}
 ----
 
 Production (published on Clojars):
 
 [source,clojure]
 ----
-org.boundary-app/boundary-payments {:mvn/version "0.x.x"}
+org.wagoe/wagoe-payments {:mvn/version "0.x.x"}
 ----
 
 === Considered alternatives

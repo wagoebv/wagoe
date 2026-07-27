@@ -102,7 +102,7 @@ of which are unacceptable as the toolset grows.
 
 == Decision
 
-=== 1. New artifact — `org.boundary-app/boundary-tools`
+=== 1. New artifact — `org.wagoe/wagoe-tools`
 
 All Babashka scripts are extracted from the monorepo into a dedicated,
 independently publishable artifact published to Clojars:
@@ -110,7 +110,7 @@ independently publishable artifact published to Clojars:
 ----
 libs/tools/
 ├── bb.edn                          ; task definitions, references scripts/
-├── deps.edn                        ; coordinates: org.boundary-app/boundary-tools
+├── deps.edn                        ; coordinates: org.wagoe/wagoe-tools
 ├── scripts/
 │   ├── scaffold.clj                ; bb scaffold (moved from monorepo scripts/)
 │   ├── ai.clj                      ; bb ai:* commands
@@ -133,7 +133,7 @@ Babashka's Maven dependency support:
 [source,clojure]
 ----
 ;; bb.edn in a boundary-starter project
-{:deps {org.boundary-app/boundary-tools {:mvn/version "1.0.0"}}
+{:deps {org.wagoe/wagoe-tools {:mvn/version "1.0.0"}}
  :tasks
  {:requires ([boundary.tools.scaffold :as scaffold]
              [boundary.tools.i18n     :as i18n]
@@ -202,7 +202,7 @@ local path dependency during development and the published artifact in CI:
 [source,clojure]
 ----
 ;; monorepo bb.edn — development
-{:deps {org.boundary-app/boundary-tools {:local/root "libs/tools"}}}
+{:deps {org.wagoe/wagoe-tools {:local/root "libs/tools"}}}
 ----
 
 This guarantees that the monorepo and starter projects run identical task
@@ -216,7 +216,7 @@ Upgrading the tools in a starter project is a one-line change in `bb.edn`:
 [source,clojure]
 ----
 ;; bump version number
-{:deps {org.boundary-app/boundary-tools {:mvn/version "1.1.0"}}}
+{:deps {org.wagoe/wagoe-tools {:mvn/version "1.1.0"}}}
 ----
 
 A `bb smoke-check` after the bump verifies that all task entrypoints still
@@ -232,7 +232,7 @@ resolve correctly.
 - [ ] Write `libs/tools/deps.edn` with Maven coordinates
 - [ ] Refactor monorepo `bb.edn` to consume `libs/tools` as local path dep
 - [ ] Verify all existing `bb *` commands still work in the monorepo
-- [ ] Publish `org.boundary-app/boundary-tools 1.0.0` to Clojars
+- [ ] Publish `org.wagoe/wagoe-tools 1.0.0` to Clojars
 - [ ] Extend `bb deploy` to include `boundary-tools`
 
 === Phase 2 — Update boundary-starter template
@@ -302,4 +302,4 @@ incompatible with air-gapped or offline development environments.
 * ADR-013 — Internationalisation (`bb i18n` commands)
 * ADR-001 — Library split and independent publishability
 * https://book.babashka.org/#_tasks[Babashka Tasks documentation]
-* https://clojars.org/org.boundary-app[boundary-app on Clojars]
+* https://clojars.org/org.wagoe[boundary-app on Clojars]

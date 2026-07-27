@@ -3,7 +3,7 @@
 [![Status](https://img.shields.io/badge/status-stable-brightgreen)]()
 [![Clojure](https://img.shields.io/badge/clojure-1.12+-blue)]()
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
-[![Clojars Project](https://img.shields.io/clojars/v/org.boundary-app/boundary-storage.svg)](https://clojars.org/org.boundary-app/boundary-storage)
+[![Clojars Project](https://img.shields.io/clojars/v/org.wagoe/wagoe-storage.svg)](https://clojars.org/org.wagoe/wagoe-storage)
 
 File storage abstraction with local filesystem and S3 backends, including upload validation and image processing.
 
@@ -11,12 +11,12 @@ File storage abstraction with local filesystem and S3 backends, including upload
 
 **deps.edn** (recommended):
 ```clojure
-{:deps {org.boundary-app/boundary-storage {:mvn/version "1.0.0-beta-1"}}}
+{:deps {org.wagoe/wagoe-storage {:mvn/version "1.0.0-beta-1"}}}
 ```
 
 **Leiningen**:
 ```clojure
-[org.boundary-app/boundary-storage "1.0.0-beta-1"]
+[org.wagoe/wagoe-storage "1.0.0-beta-1"]
 ```
 
 ## Features

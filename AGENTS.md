@@ -938,7 +938,7 @@ Clojure's `{:or {limit 20 offset 0}}` destructuring only fires for **absent** ke
 
 ```clojure
 ;; bb.edn (monorepo)
-{:deps {org.boundary-app/boundary-tools {:local/root "libs/tools"}}}
+{:deps {org.wagoe/wagoe-tools {:local/root "libs/tools"}}}
 ```
 
 > **Note:** `libs/tools` is not published to Clojars. It is a dev-only dependency and is not included in `bb deploy --all`.

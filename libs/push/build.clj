@@ -1,7 +1,7 @@
 (ns build
   (:require [clojure.tools.build.api :as b]))
 
-(def lib 'org.boundary-app/boundary-push)
+(def lib 'org.wagoe/wagoe-push)
 (def version "1.0.0-beta-1")
 (def class-dir "target/classes")
 (load-file "../build_shared.clj")

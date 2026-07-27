@@ -3,7 +3,7 @@
 [![Status](https://img.shields.io/badge/status-stable-brightgreen)]()
 [![Clojure](https://img.shields.io/badge/clojure-1.12+-blue)]()
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
-[![Clojars Project](https://img.shields.io/clojars/v/org.boundary-app/boundary-cache.svg)](https://clojars.org/org.boundary-app/boundary-cache)
+[![Clojars Project](https://img.shields.io/clojars/v/org.wagoe/wagoe-cache.svg)](https://clojars.org/org.wagoe/wagoe-cache)
 
 Distributed caching for the Boundary Framework — Redis and in-memory backends with TTL, atomic operations, and pattern matching.
 

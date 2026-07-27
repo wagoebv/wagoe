@@ -115,7 +115,7 @@ jobs:
             All libraries published to Clojars.
 
             ```clojure
-            org.boundary-app/boundary-platform {:mvn/version "${{ steps.version.outputs.version }}"}
+            org.wagoe/wagoe-platform {:mvn/version "${{ steps.version.outputs.version }}"}
             ```
 
             See [CHANGELOG.md](https://github.com/thijs-creemers/boundary/blob/main/CHANGELOG.md) for details.

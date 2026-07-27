@@ -113,7 +113,7 @@
 
 (defn artifact-name
   "Clojars artifact id for a lib, read from its build.clj coordinate
-   `(def lib 'org.boundary-app/<artifact>)`. Reading the coordinate (rather than
+   `(def lib 'org.wagoe/<artifact>)`. Reading the coordinate (rather than
    string-prefixing) avoids a double `boundary-` for libs whose dir already starts
    with it (e.g. wagoe-cli → wagoe-cli, not boundary-wagoe-cli). Falls
    back to `boundary-<lib>` when build.clj is unreadable."
@@ -121,7 +121,7 @@
   (let [build-file (io/file (lib-dir lib) "build.clj")]
     (or (when (.exists build-file)
           (second (re-find #"\(def lib '[^/]+/([^\)\s]+)" (slurp build-file))))
-        (str "boundary-" lib))))
+        (str "wagoe-" lib))))
 
 (defn read-version [lib]
   (let [build-file (io/file (lib-dir lib) "build.clj")]

@@ -3,7 +3,7 @@
 [![Status](https://img.shields.io/badge/status-stable-brightgreen)]()
 [![Clojure](https://img.shields.io/badge/clojure-1.12+-blue)]()
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
-[![Clojars Project](https://img.shields.io/clojars/v/org.boundary-app/boundary-admin.svg)](https://clojars.org/org.boundary-app/boundary-admin)
+[![Clojars Project](https://img.shields.io/clojars/v/org.wagoe/wagoe-admin.svg)](https://clojars.org/org.wagoe/wagoe-admin)
 
 Auto-generated CRUD admin interface with database schema introspection, filtering, sorting, and role-based access control.
 
@@ -13,7 +13,7 @@ Auto-generated CRUD admin interface with database schema introspection, filterin
 
 **deps.edn** (recommended):
 ```clojure
-{:deps {org.boundary-app/boundary-admin {:mvn/version "1.0.0-beta-1"}}}
+{:deps {org.wagoe/wagoe-admin {:mvn/version "1.0.0-beta-1"}}}
 ```
 
 ---

@@ -7,7 +7,7 @@
 ;; tools.build's `write-pom` omits `:local/root` deps from the generated pom, so
 ;; each lib's build.clj must feed write-pom a *rewritten* basis (produced by
 ;; `build-shared/pom-basis`) that translates `boundary/<x> {:local/root ...}`
-;; into the published `org.boundary-app/boundary-<x> {:mvn/version ...}` coord.
+;; into the published `org.wagoe/wagoe-<x> {:mvn/version ...}` coord.
 ;;
 ;; Without that rewrite a published lib's pom lists none of its boundary deps and
 ;; downstream consumers must hand-enumerate the whole closure (BOU-202).
@@ -43,7 +43,7 @@
   "Published Maven coordinate symbol for a `boundary/<x>` dep symbol, mirroring
    `build-shared/rewrite-boundary-deps`."
   [dep]
-  (symbol "org.boundary-app" (str "boundary-" (name dep))))
+  (symbol "org.wagoe" (str "wagoe-" (name dep))))
 
 (defn boundary-local-deps
   "For every `boundary/<x> {:local/root ...}` dep in a lib's deps.edn, a map
@@ -58,7 +58,7 @@
            (keep (fn [[dep coord]]
                    (when (and (map? coord)
                               (contains? coord :local/root)
-                              (= "boundary" (namespace dep)))
+                              (= "wagoe" (namespace dep)))
                      {:dir   (last (str/split (:local/root coord) #"/"))
                       :coord (boundary-dep->coord dep)})))
            (sort-by :dir)
@@ -80,7 +80,7 @@
 
      (let [src (slurp f)]
        (not (and (str/includes? src "pom-basis")
-                 (str/includes? src "org.boundary-app")
+                 (str/includes? src "org.wagoe")
                  (str/includes? src ":local/root"))))
      [{:type :build-shared-no-rewrite}]
 

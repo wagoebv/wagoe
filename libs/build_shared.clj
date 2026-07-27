@@ -9,7 +9,7 @@
 
 (defn- rewrite-boundary-deps
   "Rewrite boundary/<artifact> :local/root deps to their published
-   org.boundary-app/boundary-<artifact> :mvn/version coordinates.
+   org.wagoe/wagoe-<artifact> :mvn/version coordinates.
 
    tools.build's write-pom omits :local/root deps from the generated pom, so
    without this a published lib's pom lists none of its inter-Boundary deps and
@@ -19,8 +19,8 @@
    (fn [m dep coord]
      (if (and (map? coord)
               (contains? coord :local/root)
-              (= "boundary" (namespace dep)))
-       (assoc m (symbol "org.boundary-app" (str "boundary-" (name dep)))
+              (= "wagoe" (namespace dep)))
+       (assoc m (symbol "org.wagoe" (str "wagoe-" (name dep)))
               {:mvn/version version})
        (assoc m dep coord)))
    {}

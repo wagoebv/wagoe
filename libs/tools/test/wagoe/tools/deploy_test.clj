@@ -10,12 +10,12 @@
             [wagoe.tools.deploy :as deploy]))
 
 (deftest ^:unit artifact-name-test
-  (testing "normal libs get the boundary- prefix"
-    (is (= "boundary-platform" (deploy/artifact-name "platform")))
-    (is (= "boundary-core" (deploy/artifact-name "core"))))
+  (testing "normal libs get the wagoe- prefix"
+    (is (= "wagoe-platform" (deploy/artifact-name "platform")))
+    (is (= "wagoe-core" (deploy/artifact-name "core"))))
 
   (testing "a lib dir already starting with boundary- is not double-prefixed"
-    ;; libs/wagoe-cli publishes org.boundary-app/wagoe-cli, NOT
+    ;; libs/wagoe-cli publishes org.wagoe/wagoe-cli, NOT
     ;; boundary-wagoe-cli — the Clojars check must use the real coordinate.
     (is (= "wagoe-cli" (deploy/artifact-name "wagoe-cli")))))
 

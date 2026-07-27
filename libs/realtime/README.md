@@ -3,7 +3,7 @@
 [![Status](https://img.shields.io/badge/status-in%20development-yellow)]()
 [![Clojure](https://img.shields.io/badge/clojure-1.12+-blue)]()
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
-[![Clojars Project](https://img.shields.io/clojars/v/org.boundary-app/boundary-realtime.svg)](https://clojars.org/org.boundary-app/boundary-realtime)
+[![Clojars Project](https://img.shields.io/clojars/v/org.wagoe/wagoe-realtime.svg)](https://clojars.org/org.wagoe/wagoe-realtime)
 
 **WebSocket-based real-time communication for Boundary Framework**
 
@@ -42,8 +42,8 @@ JWT-authenticated WebSocket support with:
 
 ```clojure
 ;; deps.edn
-{:deps {org.boundary-app/boundary-realtime {:mvn/version "1.0.0-beta-1"}
-        org.boundary-app/boundary-user {:mvn/version "1.0.0-beta-1"}}}
+{:deps {org.wagoe/wagoe-realtime {:mvn/version "1.0.0-beta-1"}
+        org.wagoe/wagoe-user {:mvn/version "1.0.0-beta-1"}}}
 ```
 
 ### 2. Create Realtime Service

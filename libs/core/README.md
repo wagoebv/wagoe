@@ -3,7 +3,7 @@
 [![Status](https://img.shields.io/badge/status-stable-brightgreen)]()
 [![Clojure](https://img.shields.io/badge/clojure-1.12+-blue)]()
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
-[![Clojars Project](https://img.shields.io/clojars/v/org.boundary-app/boundary-core.svg)](https://clojars.org/org.boundary-app/boundary-core)
+[![Clojars Project](https://img.shields.io/clojars/v/org.wagoe/wagoe-core.svg)](https://clojars.org/org.wagoe/wagoe-core)
 
 Foundation library providing validation, utilities, and interceptor framework for the Boundary ecosystem.
 
@@ -11,12 +11,12 @@ Foundation library providing validation, utilities, and interceptor framework fo
 
 **deps.edn** (recommended):
 ```clojure
-{:deps {org.boundary-app/boundary-core {:mvn/version "1.0.0-beta-1"}}}
+{:deps {org.wagoe/wagoe-core {:mvn/version "1.0.0-beta-1"}}}
 ```
 
 **Leiningen**:
 ```clojure
-[org.boundary-app/boundary-core "1.0.0-beta-1"]
+[org.wagoe/wagoe-core "1.0.0-beta-1"]
 ```
 
 ## Features

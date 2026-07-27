@@ -396,8 +396,8 @@ with logging/errors
 [source,clojure]
 ----
 ;; Use :local/root for development
-{:deps {boundary/core {:local/root "../core"}
-        boundary/platform {:local/root "../platform"}}}
+{:deps {wagoe/core {:local/root "../core"}
+        wagoe/platform {:local/root "../platform"}}}
 ----
 
 *Production (Published):*

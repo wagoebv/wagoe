@@ -112,7 +112,7 @@
 
 (defn artifact-name
   "Clojars artifact id for a lib, read from its build.clj coordinate
-   `(def lib 'org.boundary-app/<artifact>)`. Reading the coordinate (rather than
+   `(def lib 'org.wagoe/<artifact>)`. Reading the coordinate (rather than
    string-prefixing) avoids a double `boundary-` for libs whose dir already starts
    with it (e.g. wagoe-cli → wagoe-cli, not boundary-wagoe-cli). Falls
    back to `boundary-<lib>` when build.clj is unreadable."
@@ -168,7 +168,7 @@
    version, which must match the pushed git tag) and renders API docs + source
    links. Non-fatal on failure — the release already succeeded."
   [lib version]
-  (let [artifact (str "org.boundary-app/" (artifact-name lib))
+  (let [artifact (str "org.wagoe/" (artifact-name lib))
         resp     (http/post "https://cljdoc.org/api/request-build2"
                             {:form-params {:project artifact :version version}
                              :throw       false})]
