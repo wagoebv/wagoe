@@ -11,7 +11,7 @@
 
 ## Why Wagoe?
 
-**For developers:** 23 independently-publishable libraries on Clojars — use just `boundary-core` for validation utilities, or go full-stack with JWT + MFA auth, auto-generated CRUD UIs, background jobs, multi-tenancy, real-time WebSockets, and more. Every library follows the same FC/IS structure, making any Wagoe codebase instantly familiar.
+**For developers:** 23 independently-publishable libraries on Clojars — use just `wagoe-core` for validation utilities, or go full-stack with JWT + MFA auth, auto-generated CRUD UIs, background jobs, multi-tenancy, real-time WebSockets, and more. Every library follows the same FC/IS structure, making any Wagoe codebase instantly familiar.
 
 **Ship faster:** The scaffolder generates fully structured modules (entity + routes + tests) in seconds. The admin UI auto-generates CRUD interfaces from your schema — no manual forms. Built-in observability, RFC 5988 pagination, and declarative interceptors mean you write business logic, not plumbing. AI tooling (`bb scaffold ai`, `bb ai gen-tests`, `bb ai sql`) handles the repetitive parts.
 
@@ -72,7 +72,7 @@ You get: H2 in-memory database (zero-config), HTTP server on port 3000, a comple
 
 Projects created with `boundary new` are agent-ready out of the box: they
 include a `CLAUDE.md`, an `AGENTS.md`, and a Claude Code skill at
-`.claude/skills/boundary/SKILL.md` that teaches the agent to use Wagoe's
+`.claude/skills/wagoe/SKILL.md` that teaches the agent to use Wagoe's
 scaffolder and AI tooling instead of hand-writing boilerplate. Open Claude
 Code in a fresh project and ask:
 

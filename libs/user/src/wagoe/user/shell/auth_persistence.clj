@@ -168,7 +168,7 @@
     (-> auth-user-entity
         (update :id type-conversion/uuid->string)
         (update :active #(protocols/boolean->db adapter %))
-        ;; Encrypt the reversible TOTP secret at the persistence wagoe. Backup
+        ;; Encrypt the reversible TOTP secret at the persistence boundary. Backup
         ;; codes are already bcrypt-hashed before they reach here.
         (update :mfa-secret #(when % (mfa-crypto/encrypt-secret %)))
         (update :mfa-backup-codes #(when % (cheshire.core/generate-string %)))

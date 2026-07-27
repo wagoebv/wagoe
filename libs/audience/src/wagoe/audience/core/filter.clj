@@ -214,7 +214,7 @@
 
 ;; =============================================================================
 ;; Validation (pure) — the shell calls this before compilation and raises the
-;; typed error at the HTTP wagoe. Keeping it here lets the multimethods above
+;; typed error at the HTTP boundary. Keeping it here lets the multimethods above
 ;; assume valid input and stay throw-free.
 ;; =============================================================================
 

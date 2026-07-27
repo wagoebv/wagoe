@@ -133,13 +133,13 @@ reflection now; nREPL bridge later for live-system views).
 
 | URI | Source | Status |
 |-----|--------|--------|
-| `boundary://conventions`     | `resources/agents/knowledge.edn` (FC/IS + naming) | concrete |
-| `boundary://module-graph`    | `libs/*/deps.edn` + `ports.clj` presence | concrete |
-| `boundary://kondo-rules`     | `.clj-kondo/config.edn` | concrete |
-| `boundary://schema-registry` | live Malli registry | `:unavailable` until nREPL bridge |
-| `boundary://routes`          | live reitit router | `:unavailable` until nREPL bridge |
-| `boundary://workflows`       | workflow registry | `:unavailable` until nREPL bridge |
-| `boundary://lib/{name}`      | installed lib API surface | `:unavailable` until nREPL bridge |
+| `wagoe://conventions`     | `resources/agents/knowledge.edn` (FC/IS + naming) | concrete |
+| `wagoe://module-graph`    | `libs/*/deps.edn` + `ports.clj` presence | concrete |
+| `wagoe://kondo-rules`     | `.clj-kondo/config.edn` | concrete |
+| `wagoe://schema-registry` | live Malli registry | `:unavailable` until nREPL bridge |
+| `wagoe://routes`          | live reitit router | `:unavailable` until nREPL bridge |
+| `wagoe://workflows`       | workflow registry | `:unavailable` until nREPL bridge |
+| `wagoe://lib/{name}`      | installed lib API surface | `:unavailable` until nREPL bridge |
 
 - `resources/read` is gated (`security/authorize` `:read`) + audited in
   `shell/dispatch`; denial returns the guardrail payload. Unknown uri →

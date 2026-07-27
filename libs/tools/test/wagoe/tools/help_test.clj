@@ -32,7 +32,7 @@
       (is (some #(str/starts-with? % "BND-7") codes) "BND-7xx tooling family"))))
 
 ;; BOU-76: namespace-load must not depend on the catalogue resource, so that a
-;; consumer project depending on boundary-tools alone can run any bb task.
+;; consumer project depending on wagoe-tools alone can run any bb task.
 (deftest ^:unit read-catalog-degrades-gracefully
   (testing "missing resource yields {} instead of throwing (consumer w/o devtools)"
     (is (= {} (#'help/read-catalog nil))))

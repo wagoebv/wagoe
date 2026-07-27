@@ -36,7 +36,7 @@
 
 (defn- convert-query-identifiers
   "Walk through HoneySQL query map and convert all identifiers to snake_case.
-   This handles table names, column names, etc. at the database wagoe."
+   This handles table names, column names, etc. at the database boundary."
   [query-map]
   (walk/postwalk
    (fn [x]
@@ -66,7 +66,7 @@
 
 (defn format-sql
   "Format HoneySQL query map using adapter's dialect.
-   Converts kebab-case identifiers to snake_case at database wagoe.
+   Converts kebab-case identifiers to snake_case at database boundary.
 
    Args:
      adapter: Database adapter
@@ -88,7 +88,7 @@
 
 (defn format-sql*
   "Format HoneySQL query map with custom options.
-   Converts kebab-case identifiers to snake_case at database wagoe.
+   Converts kebab-case identifiers to snake_case at database boundary.
 
    Args:
      adapter: Database adapter

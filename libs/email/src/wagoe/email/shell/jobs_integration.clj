@@ -85,7 +85,7 @@
     (throw (ex-info "Jobs module not available. Add org.wagoe/wagoe-jobs to deps.edn"
 
                     {:type :missing-dependency
-                     :module "boundary-jobs"
+                     :module "wagoe-jobs"
                      :required-for "Async email sending"
                      :documentation "https://github.com/thijs-creemers/boundary/tree/main/libs/jobs"}))))
 
@@ -221,6 +221,6 @@
     
     (throw (ex-info "Jobs module not available. Add org.wagoe/wagoe-jobs to deps.edn"
                     {:type :missing-dependency
-                     :module "boundary-jobs"
+                     :module "wagoe-jobs"
                      :required-for "Email job handler registration"
                      :documentation "https://github.com/thijs-creemers/boundary/tree/main/libs/jobs"}))))

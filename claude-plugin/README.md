@@ -5,7 +5,7 @@ scaffolder and AI tooling, so the agent reaches for `bb scaffold` / `bb ai`
 instead of hand-writing module boilerplate.
 
 New projects created with `boundary new` already include this skill at
-`.claude/skills/boundary/SKILL.md` — the plugin is for **existing** projects.
+`.claude/skills/wagoe/SKILL.md` — the plugin is for **existing** projects.
 
 ## Install
 
@@ -27,7 +27,7 @@ A single `boundary` skill with:
 
 ## Keeping in sync
 
-`skills/boundary/SKILL.md` must stay byte-identical to
+`skills/wagoe/SKILL.md` must stay byte-identical to
 `libs/wagoe-cli/resources/wagoe/cli/templates/claude-skill.md.tmpl`.
 A test in `libs/wagoe-cli` enforces this.
 

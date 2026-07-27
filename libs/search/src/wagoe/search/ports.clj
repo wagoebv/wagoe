@@ -1,5 +1,5 @@
 (ns wagoe.search.ports
-  "Port definitions for the boundary-search library.
+  "Port definitions for the wagoe-search library.
 
    Three protocols cover the full lifecycle:
 

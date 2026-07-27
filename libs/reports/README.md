@@ -29,7 +29,7 @@ Report generation library for the Wagoe Framework — produce PDF, Excel, and Wo
 | **`defreport` macro** | Register reports as data in an in-process registry (`wagoe.reports.shell.registry`) |
 | **Declarative sections** | `:header`, `:paragraph`, `:table`, `:footer`, `:spacer` section types |
 | **Column formats** | `:string`, `:number`, `:currency` (nl-NL), `:date` (ISO-8601) |
-| **Async generation** | Optional boundary-jobs integration for large, background reports |
+| **Async generation** | Optional wagoe-jobs integration for large, background reports |
 | **FC/IS pattern** | Pure `core/` functions; all I/O in `shell/` adapters |
 
 ## Requirements
@@ -125,7 +125,7 @@ Report generation library for the Wagoe Framework — produce PDF, Excel, and Wo
 {"Content-Type" "application/vnd.openxmlformats-officedocument.wordprocessingml.document"}
 ```
 
-### Async generation (requires boundary-jobs)
+### Async generation (requires wagoe-jobs)
 
 ```clojure
 (require '[wagoe.reports.shell.service :as reports])
@@ -165,7 +165,7 @@ libs/reports/src/wagoe/reports/
     │   ├── excel.clj            # docjure (Apache POI) adapter
     │   └── word.clj             # Apache POI XWPF adapter
     ├── service.clj              # Public API: generate, generate-async
-    └── jobs_integration.clj     # Optional boundary-jobs integration
+    └── jobs_integration.clj     # Optional wagoe-jobs integration
 ```
 
 ## Protocol

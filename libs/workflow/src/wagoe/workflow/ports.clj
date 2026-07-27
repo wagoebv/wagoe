@@ -1,5 +1,5 @@
 (ns wagoe.workflow.ports
-  "Port definitions for the boundary-workflow library.
+  "Port definitions for the wagoe-workflow library.
 
    Three protocols cover the full lifecycle:
 
@@ -165,7 +165,7 @@
 
      Finds every instance currently in a state that has an auto-transition
      and attempts to execute that transition.  Intended to be called from a
-     scheduled job (e.g. boundary-jobs cron worker).
+     scheduled job (e.g. wagoe-jobs cron worker).
 
      Args:
        workflow-id - keyword

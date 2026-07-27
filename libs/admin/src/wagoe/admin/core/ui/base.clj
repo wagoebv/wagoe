@@ -131,7 +131,7 @@
 (def ^:private long-name-pattern
   ;; String fields whose names suggest long-form content deserve extra width.
   ;; \b word-boundaries keep this from matching substrings (e.g. "name" inside
-  ;; "username"); kebab-cased names still match because '-' is a wagoe.
+  ;; "username"); kebab-cased names still match because '-' is a boundary.
   #"(?i)\b(description|omschrijving|notes?|opmerking|address|adres|comment|bio|summary|samenvatting|content|inhoud|body|message|bericht|excerpt)\b")
 
 (def ^:private medium-name-pattern

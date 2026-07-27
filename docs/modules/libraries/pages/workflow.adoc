@@ -2,7 +2,7 @@
 :description: Declarative state machine workflows with permission-based transitions and audit trail.
 
 Declarative state machine workflows for domain entities.
-Provides permission-based transitions, automatic audit trails, and optional side-effect dispatch via `boundary-jobs`.
+Provides permission-based transitions, automatic audit trails, and optional side-effect dispatch via `wagoe-jobs`.
 
 == Key namespaces
 

@@ -1,4 +1,4 @@
-# boundary-tools
+# wagoe-tools
 
 **Location:** `libs/tools`
 **Version:** `1.0.0-beta-1`
@@ -15,7 +15,7 @@ Developer tooling for the Wagoe framework: scaffolding, AI assistance, config ma
 The root `bb.edn` wiring looks like this:
 
 ```clojure
-{:deps {boundary-tools {:local/root "libs/tools"}}
+{:deps {wagoe-tools {:local/root "libs/tools"}}
  :tasks
  {:requires ([wagoe.tools.scaffold  :as scaffold]
              [wagoe.tools.ai        :as ai]
@@ -341,7 +341,7 @@ Run database migrations first: `clojure -M:migrate up`
 
 ### `bb deploy` — Deploy to Clojars
 
-Deploys the 22 published Wagoe libraries to Clojars. `boundary-tools` itself is not published — it is a monorepo-internal tool.
+Deploys the 22 published Wagoe libraries to Clojars. `wagoe-tools` itself is not published — it is a monorepo-internal tool.
 
 ```bash
 bb deploy --help                    # Show help
@@ -355,7 +355,7 @@ Required environment variables:
 - `CLOJARS_PASSWORD` — your Clojars deploy token
 
 Important release note:
-- `bb deploy --all` publishes every artifact listed in `wagoe.tools.deploy/all-libs`. `boundary-tools` is excluded from this list.
+- `bb deploy --all` publishes every artifact listed in `wagoe.tools.deploy/all-libs`. `wagoe-tools` is excluded from this list.
 - A Git tag only triggers the GitHub Actions workflow; actual artifact versions still come from each artifact's `build.clj`.
 - For a tagged full release, bump every included artifact to an unpublished version first, otherwise the workflow will fail on the first duplicate version.
 
@@ -425,6 +425,6 @@ Translation files live in `libs/i18n/resources/wagoe/i18n/translations/`.
 
 ---
 
-## Releasing boundary-tools
+## Releasing wagoe-tools
 
-`boundary-tools` is not published to Clojars. It is distributed as part of the Wagoe monorepo. To update it, commit and push changes to `libs/tools` — consumers pick up changes by pulling the repository.
+`wagoe-tools` is not published to Clojars. It is distributed as part of the Wagoe monorepo. To update it, commit and push changes to `libs/tools` — consumers pick up changes by pulling the repository.

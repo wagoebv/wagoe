@@ -327,7 +327,7 @@ clojure -M:test:db/h2 --watch :{module-name}  # Watch tests
 Every module MUST define `ports.clj`.
 
 - core/ must not import shell/IO/logging/DB
-- core/ must not throw — return typed error values ({:error {:type ... :message ...}}); the shell translates them into HTTP responses (escape hatch: ^:wagoe/allow-throw ns metadata or .boundary/check-fcis.edn)
+- core/ must not throw — return typed error values ({:error {:type ... :message ...}}); the shell translates them into HTTP responses (escape hatch: ^:wagoe/allow-throw ns metadata or .wagoe/check-fcis.edn)
 - core/ must not hold mutable state (defonce/atom/swap!/reset!) — definition registries and process state live in the shell (wagoe.<lib>.shell.registry)
 - cross-module calls go through service ports
 - web/HTTP layers never require *.shell.persistence directly
@@ -691,7 +691,7 @@ java.time.temporal.ChronoUnit/DAYS
 :get {:handler ...
       :summary "Get product by slug"
       :swagger {:parameters [{:name "slug" :in "path" :required true :type "string"
-                              :description "Product slug (e.g. boundary-tshirt)"}]}}
+                              :description "Product slug (e.g. wagoe-tshirt)"}]}}
 
 ;; Query parameters — on the method
 :get {:handler ...
@@ -850,7 +850,7 @@ Seven automated safeguards run in CI (and `check:fcis` + `check:ports` in pre-co
 | **clj-kondo lint** | `clojure -M:clj-kondo --lint ...` | Static analysis (existing gate) | Yes |
 | **Config doctor** | `bb doctor --env dev --ci` | Configuration errors (existing gate) | Yes |
 
-**`check:ports` escape hatch (for legitimate exceptions / gradual adoption):** add `^:wagoe/allow-direct` metadata to a namespace to exempt it from the coupling rules, or list `:allow-missing-ports` (module ns prefixes) / `:allow-direct` (namespaces) in a `.boundary/check-ports.edn` at the repo root.
+**`check:ports` escape hatch (for legitimate exceptions / gradual adoption):** add `^:wagoe/allow-direct` metadata to a namespace to exempt it from the coupling rules, or list `:allow-missing-ports` (module ns prefixes) / `:allow-direct` (namespaces) in a `.wagoe/check-ports.edn` at the repo root.
 
 **Scripts location:** `libs/tools/src/wagoe/tools/check_{fcis,tests,deps,ports,poms}.clj`
 **Security tests:** `libs/platform/test/wagoe/platform/shell/security_test.clj` (tagged `^:security ^:unit`)

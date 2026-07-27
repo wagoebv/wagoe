@@ -1,4 +1,4 @@
-# boundary-audience
+# wagoe-audience
 
 [![Status](https://img.shields.io/badge/status-alpha-orange)]()
 [![Clojure](https://img.shields.io/badge/clojure-1.12+-blue)]()
@@ -112,7 +112,7 @@ Segments can be composed with AND, OR, and NOT using the `:compose` key:
 
 ## DB Migration
 
-Run once before using audience segmentation. When `boundary-audience` is on the
+Run once before using audience segmentation. When `wagoe-audience` is on the
 classpath, `clojure -M:migrate up` auto-discovers these migrations:
 
 ```sql

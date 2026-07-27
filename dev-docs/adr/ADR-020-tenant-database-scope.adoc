@@ -11,7 +11,7 @@ Accepted
 
 === Background
 
-The `boundary-tenant` library implements schema-per-tenant isolation using
+The `wagoe-tenant` library implements schema-per-tenant isolation using
 PostgreSQL's `CREATE SCHEMA` / `SET search_path` mechanism. This approach
 provides strong, database-enforced tenant boundaries with sub-millisecond
 schema switching and clean queries that do not require manual `tenant_id`

@@ -1,5 +1,5 @@
 (ns wagoe.audience.schema
-  "Malli schemas for the boundary-audience library.
+  "Malli schemas for the wagoe-audience library.
    All internal data uses kebab-case keywords.
    snake_case conversion happens only at DB boundaries.")
 

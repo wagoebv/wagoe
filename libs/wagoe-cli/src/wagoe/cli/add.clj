@@ -110,7 +110,7 @@
                                (and dep-present?
                                     (str/includes? config-content (str ":" config-key))))
                              ;; No config snippet — check AGENTS.md installed section to avoid
-                             ;; false positives from pre-installed deps (e.g. boundary-external).
+                             ;; false positives from pre-installed deps (e.g. wagoe-external).
                              (let [agents-f (io/file dir "AGENTS.md")]
                                (if (.exists agents-f)
                                  (let [content          (slurp agents-f)

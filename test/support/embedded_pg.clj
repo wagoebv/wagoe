@@ -46,7 +46,7 @@
    :password "postgres"})
 
 (defn db-context
-  "Boundary db-context ({:adapter :datasource ...}) backed by the embedded PG."
+  "Wagoe db-context ({:adapter :datasource ...}) backed by the embedded PG."
   ([pg] (db-context pg {}))
   ([^EmbeddedPostgres pg opts]
    (db-factory/db-context (merge (db-config pg)

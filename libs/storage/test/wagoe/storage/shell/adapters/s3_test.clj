@@ -29,7 +29,7 @@
 (def ^:private test-endpoint "http://localhost:9000")
 (def ^:private test-access-key "minioadmin")
 (def ^:private test-secret-key "minioadmin")
-(def ^:private test-bucket "test-boundary-storage")
+(def ^:private test-bucket "test-wagoe-storage")
 (def ^:private test-region "us-east-1")
 
 (defn s3-available?

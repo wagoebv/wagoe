@@ -108,7 +108,7 @@
       (is (not (some #(= :throw (:kind %)) vs))))))
 
 (deftest ^:unit allow-throw-config-exempts
-  (testing ".boundary/check-fcis.edn :allow-throw allowlist suppresses by ns name"
+  (testing ".wagoe/check-fcis.edn :allow-throw allowlist suppresses by ns name"
     (let [vs (check-src "(ns ex.core)\n(defn f [] (throw (ex-info \"bad\" {})))\n"
                         {:allow-throw #{"ex.core"}})]
       (is (not (some #(= :throw (:kind %)) vs))))))

@@ -13,44 +13,44 @@
    purely a shell concern."
   (:require [clojure.string :as str]))
 
-(def lib-uri-prefix "boundary://lib/")
+(def lib-uri-prefix "wagoe://lib/")
 
 ;; Catalog — the resource set advertised over resources/list. Every resource is
 ;; capability :read (zero mutation); the gate is applied in the shell dispatch.
 (def catalog
-  [{:uri         "boundary://conventions"
+  [{:uri         "wagoe://conventions"
     :name        "Conventions"
     :description "FC/IS boundary rules and naming conventions for this project."
     :mimeType    "application/json"
     :capability  :read}
-   {:uri         "boundary://module-graph"
+   {:uri         "wagoe://module-graph"
     :name        "Module graph"
     :description "Modules, their ports, dependency edges, and libraries in use."
     :mimeType    "application/json"
     :capability  :read}
-   {:uri         "boundary://kondo-rules"
+   {:uri         "wagoe://kondo-rules"
     :name        "clj-kondo rules"
     :description "Active clj-kondo configuration and hooks for this project."
     :mimeType    "application/json"
     :capability  :read}
-   {:uri         "boundary://schema-registry"
+   {:uri         "wagoe://schema-registry"
     :name        "Schema registry"
     :description "Live Malli schemas, per module (reflects the running system)."
     :mimeType    "application/json"
     :capability  :read}
-   {:uri         "boundary://routes"
+   {:uri         "wagoe://routes"
     :name        "Routes"
     :description "HTTP routes with their interceptor chains (reflects the running system)."
     :mimeType    "application/json"
     :capability  :read}
-   {:uri         "boundary://workflows"
+   {:uri         "wagoe://workflows"
     :name        "Workflows"
     :description "Workflow states, transitions, guards, and permissions."
     :mimeType    "application/json"
     :capability  :read}
    {:uri         (str lib-uri-prefix "{name}")
     :name        "Library API surface"
-    :description "Public API surface of a boundary library at its installed version. Read boundary://lib/<name> (e.g. boundary://lib/user)."
+    :description "Public API surface of a wagoe library at its installed version. Read wagoe://lib/<name> (e.g. wagoe://lib/user)."
     :mimeType    "application/json"
     :capability  :read}])
 
@@ -90,15 +90,15 @@
    until the snapshot carries their data. Only the requested view is forced."
   [snapshot uri]
   (cond
-    (= uri "boundary://conventions")     (fetch snapshot :conventions)
-    (= uri "boundary://module-graph")    (fetch snapshot :module-graph)
-    (= uri "boundary://kondo-rules")     (fetch snapshot :kondo-rules)
-    (= uri "boundary://schema-registry") (fetch snapshot :schema-registry)
-    (= uri "boundary://routes")          (fetch snapshot :routes)
-    (= uri "boundary://workflows")       (fetch snapshot :workflows)
+    (= uri "wagoe://conventions")     (fetch snapshot :conventions)
+    (= uri "wagoe://module-graph")    (fetch snapshot :module-graph)
+    (= uri "wagoe://kondo-rules")     (fetch snapshot :kondo-rules)
+    (= uri "wagoe://schema-registry") (fetch snapshot :schema-registry)
+    (= uri "wagoe://routes")          (fetch snapshot :routes)
+    (= uri "wagoe://workflows")       (fetch snapshot :workflows)
     (str/starts-with? uri lib-uri-prefix)
     (let [lib-name (subs uri (count lib-uri-prefix))]
-      (when-not (str/blank? lib-name)              ;; "boundary://lib/" -> unknown
+      (when-not (str/blank? lib-name)              ;; "wagoe://lib/" -> unknown
         (let [v (force-val (get (force-val (get snapshot :libs)) lib-name))]
           (if (nil? v) unavailable v))))
     :else nil))

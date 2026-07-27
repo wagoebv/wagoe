@@ -39,7 +39,7 @@
     (case provider-kw
       :openstreetmap
       (osm/create-nominatim-adapter
-       (cond-> {:user-agent (or user-agent "boundary-geo/1.0 (https://github.com/thijs-creemers/boundary)")}
+       (cond-> {:user-agent (or user-agent "wagoe-geo/1.0 (https://github.com/thijs-creemers/boundary)")}
          min-ms (assoc :min-interval-ms min-ms)))
 
       :google

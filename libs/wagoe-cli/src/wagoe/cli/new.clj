@@ -6,9 +6,9 @@
             [wagoe.cli.templates :as templates]))
 
 ;; Keep in sync with libs/tools/build.clj version
-(def ^:private boundary-tools-version "1.0.0-beta-1")
+(def ^:private wagoe-tools-version "1.0.0-beta-1")
 
-;; Keep in sync with libs/wagoe-mcp/build.clj version (release-bumped with boundary-tools-version)
+;; Keep in sync with libs/wagoe-mcp/build.clj version (release-bumped with wagoe-tools-version)
 (def ^:private wagoe-mcp-version "1.0.0-beta-1")
 
 (defn validate-name [n]
@@ -50,7 +50,7 @@
         subs        {:project-name             project-name
                      :project-ns               project-ns
                      :jwt-secret               jwt-secret
-                     :boundary-tools-version   boundary-tools-version
+                     :wagoe-tools-version   wagoe-tools-version
                      :wagoe-mcp-version     wagoe-mcp-version
                      :core-version             (:version (cat/find-module "core"))
                      :observability-version (:version (cat/find-module "observability"))
@@ -73,7 +73,7 @@
                      "tests.edn"                           "tests.edn.tmpl"
                      "CLAUDE.md"                           "CLAUDE.md.tmpl"
                      "AGENTS.md"                           "AGENTS.md.tmpl"
-                     ".claude/skills/boundary/SKILL.md"    "claude-skill.md.tmpl"
+                     ".claude/skills/wagoe/SKILL.md"    "claude-skill.md.tmpl"
                      "resources/conf/dev/config.edn"       "dev-config.edn.tmpl"
                      "resources/conf/test/config.edn"      "test-config.edn.tmpl"
                      "src/wagoe/config.clj"             "config.clj.tmpl"

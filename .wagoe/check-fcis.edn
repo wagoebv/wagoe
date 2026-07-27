@@ -4,13 +4,13 @@
 ;; swap!, reset!, …) in core namespaces.
 ;;
 ;; Namespaces that LEGITIMATELY need an exception are exempted INLINE via
-;; ^:boundary/allow-throw / ^:boundary/allow-mutable-state ns metadata, with the
-;; rationale next to the code (boundary.core.interceptor, the validation-testing
-;; tooling, and boundary.platform.core.search.ranking).
+;; ^:wagoe/allow-throw / ^:wagoe/allow-mutable-state ns metadata, with the
+;; rationale next to the code (wagoe.core.interceptor, the validation-testing
+;; tooling, and wagoe.platform.core.search.ranking).
 ;;
 ;; This file is reserved for REAL debt to migrate. There is none right now — the
 ;; validation rule registry's mutable state moved to
-;; boundary.platform.shell.validation-registry in BOU-188. Add an entry here only
+;; wagoe.platform.shell.validation-registry in BOU-188. Add an entry here only
 ;; as a temporary allowance while a new violation is being migrated out.
 {:allow-throw         []
  :allow-mutable-state []}
