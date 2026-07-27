@@ -5,7 +5,6 @@
             [wagoe.push.shell.persistence :as p]
             [wagoe.push.shell.persistence-test :as pt]
             [wagoe.push.shell.jobs :as jobs]
-            [wagoe.push.core.notification :as notif]
             [wagoe.push.shell.registry :as registry]
             [wagoe.push.ports :as ports]))
 

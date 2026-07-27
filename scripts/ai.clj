@@ -15,8 +15,7 @@
 ;;   bb scripts/ai.clj explain --file stacktrace.txt
 
 (ns ai
-  (:require [clojure.string :as str]
-            [babashka.process :refer [shell]]))
+  (:require [babashka.process :refer [shell]]))
 
 ;; =============================================================================
 ;; ANSI helpers

@@ -22,8 +22,7 @@
 (ns docs-lint
   (:require [clojure.string :as str]
             [clojure.java.io :as io]
-            [clojure.edn :as edn]
-            [clojure.set :as set]))
+            [clojure.edn :as edn]))
 
 ;; =============================================================================
 ;; Configuration

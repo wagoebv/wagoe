@@ -4,7 +4,6 @@
             [wagoe.push.shell.adapters.mock :as mock]
             [wagoe.push.shell.persistence :as p]
             [wagoe.push.shell.persistence-test :as pt]
-            [wagoe.push.core.notification :as notif]
             [wagoe.push.shell.registry :as registry]
             [wagoe.push.ports :as ports]
             [wagoe.jobs.ports]))

@@ -17,6 +17,12 @@
                 ;; test stubs intentionally reify only the protocol methods they exercise
                 wagoe.admin.shell.http-test {:linters {:missing-protocol-method {:level :off}}}
                 wagoe.user.shell.session-rotation-security-test {:linters {:missing-protocol-method {:level :off}}}
+                ;; surfaced once CI started linting test/ + dev/ (BOU-213):
+                ;; same intentional partial-stub pattern as the two above
+                wagoe.user.shell.auth-lockout-fixation-security-test {:linters {:missing-protocol-method {:level :off}}}
+                wagoe.user.shell.web-handlers-test {:linters {:missing-protocol-method {:level :off}}}
+                wagoe.platform.shell.http.rate-limit-interceptor-test {:linters {:missing-protocol-method {:level :off}}}
+                wagoe.bench.hotpaths {:linters {:missing-protocol-method {:level :off}}}
                 wagoe.user.ports {:linters {:redefined-var {:level :off}}}
                 build {:linters {:redefined-var {:level :off}}}
                 hooks.com.github.seancorfield.next-jdbc {:linters {:redefined-var {:level :off}}}

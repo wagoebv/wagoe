@@ -11,7 +11,7 @@
 (deftest ^:unit all-checks-have-required-fields
   (testing "every check has :id, :label, :cmd"
     (doseq [c check/all-checks]
-      (is (keyword? (:id c)) (str "check missing :id"))
+      (is (keyword? (:id c)) "check missing :id")
       (is (string? (:label c)) (str "check " (:id c) " missing :label"))
       (is (vector? (:cmd c)) (str "check " (:id c) " missing :cmd")))))
 

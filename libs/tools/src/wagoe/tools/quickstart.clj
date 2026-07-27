@@ -198,7 +198,7 @@
                   :continue? true)
         ;; Step 6: Activate module in config — the part integrate leaves manual
         (println)
-        (println (bold (str "[6/8] Activating sample module in config")))
+        (println (bold "[6/8] Activating sample module in config"))
         (if (inject-sample-module-config)
           (println (green "  Done"))
           (println (dim "  Skipped — could not inject config (add :wagoe/tasks manually)")))))
