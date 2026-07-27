@@ -54,7 +54,7 @@
     (let [config {:active {:wagoe/h2 {:memory true
                                          :pool {:maximum-pool-size 3}}}}]
       (is (= {:adapter :h2
-              :database-path "mem:boundary;DB_CLOSE_DELAY=-1"
+              :database-path "mem:wagoe;DB_CLOSE_DELAY=-1"
               :pool {:maximum-pool-size 3}}
              (sut/db-spec config)))))
 

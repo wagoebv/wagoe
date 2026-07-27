@@ -129,7 +129,7 @@
       :h2
       {:adapter :h2
        :database-path (if (:memory adapter-config)
-                        "mem:boundary;DB_CLOSE_DELAY=-1"
+                        "mem:wagoe;DB_CLOSE_DELAY=-1"
                         (:db adapter-config))
        :pool (:pool adapter-config)}
 

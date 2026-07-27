@@ -29,8 +29,8 @@
 (defn- lib-deps [deps-file]
   (let [deps (:deps (read-edn-file deps-file))
         names (keys deps)]
-    {:boundary (->> names (filter #(= "wagoe" (namespace %))) (map name) sort vec)
-     :external (->> names (remove #(= "wagoe" (namespace %))) (map str) sort vec)}))
+    {:boundary (->> names (filter #(= "boundary" (namespace %))) (map name) sort vec)
+     :external (->> names (remove #(= "boundary" (namespace %))) (map str) sort vec)}))
 
 (defn- has-ports? [lib-dir]
   (let [src (io/file lib-dir "src")]
