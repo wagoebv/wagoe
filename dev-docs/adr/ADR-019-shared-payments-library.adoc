@@ -15,7 +15,7 @@ ZZPGuard requires a payment module to handle SaaS subscription payments during
 tenant onboarding. The initial implementation placed both the PSP integration
 and the payment lifecycle directly inside the `zzp-guard` application.
 
-This is a short-term solution: every Boundary application that processes payments
+This is a short-term solution: every Wagoe application that processes payments
 (subscriptions, marketplace transactions, one-off purchases) would have to solve
 the same integration problem independently. PSP-specific code then duplicates
 across applications, leading to:
@@ -52,7 +52,7 @@ This flow is generic enough to offer as a shared framework component.
 
 === Requirements for the abstraction
 
-A PSP abstraction in the Boundary Framework must satisfy:
+A PSP abstraction in the Wagoe Framework must satisfy:
 
 . *Checkout session flow* — create → redirect → webhook → status: the full
   payment path behind a single protocol.
@@ -69,7 +69,7 @@ A PSP abstraction in the Boundary Framework must satisfy:
 == Decision
 
 A new shared library `boundary/libs/payments` is created as part of the
-Boundary Framework monorepo.
+Wagoe Framework monorepo.
 
 === Namespace structure
 
@@ -206,7 +206,7 @@ The application is responsible for the correct calling order:
 body-parsing middleware runs. Stripe's HMAC is computed over the exact raw
 string; once the body is parsed the signature no longer matches.
 
-=== Boundary: what does NOT belong in the library
+=== Wagoe: what does NOT belong in the library
 
 The library provides only the PSP abstraction. The following remain
 application responsibilities:
@@ -266,7 +266,7 @@ Use an existing Clojure library such as `clj-stripe` or `commerce`.
 
 *Rejected because:*
 
-* No support for the Integrant lifecycle model used by Boundary.
+* No support for the Integrant lifecycle model used by Wagoe.
 * Does not cover all required providers (Mollie + Stripe + Mock).
 * No control over the webhook pattern and event normalisation.
 * Adds a transitive dependency without benefit over a lightweight own protocol.
@@ -275,7 +275,7 @@ Use an existing Clojure library such as `clj-stripe` or `commerce`.
 
 === Positive
 
-* *Reusability* — every Boundary application with payments takes one dependency
+* *Reusability* — every Wagoe application with payments takes one dependency
   and immediately has Mock, Mollie, and Stripe available.
 * *PSP independence* — application code works against the `IPaymentProvider`
   protocol; swap PSP by changing one config value.
@@ -284,7 +284,7 @@ Use an existing Clojure library such as `clj-stripe` or `commerce`.
 * *Consistency* — normalised event types across providers mean application logic
   does not branch per PSP.
 * *FC/IS compliance* — pure helpers in `core/`, adapters in `shell/`, protocol
-  in `ports.clj` follows the standard Boundary layer model.
+  in `ports.clj` follows the standard Wagoe layer model.
 
 === Negative / risks
 

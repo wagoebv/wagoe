@@ -23,7 +23,7 @@ significantly improve the development experience:
 | Natural-language module scaffolding via AI
 
 | `bb ai explain`
-| Explain a Clojure/Boundary stacktrace via AI
+| Explain a Clojure/Wagoe stacktrace via AI
 
 | `bb ai gen-tests`
 | Generate a test namespace for a source file
@@ -145,7 +145,7 @@ Babashka's Maven dependency support:
   scaffold:ai   {:doc "NL scaffolding via AI"
                  :task (scaffold/run-ai)}
 
-  ai:explain    {:doc "Explain a Clojure/Boundary stacktrace"
+  ai:explain    {:doc "Explain a Clojure/Wagoe stacktrace"
                  :task (ai/explain)}
   ai:gen-tests  {:doc "Generate a test namespace"
                  :task (ai/gen-tests)}

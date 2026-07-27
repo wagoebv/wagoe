@@ -2,7 +2,7 @@
 
 ## 1. Overview
 
-`boundary-audience` provides declarative audience segmentation for Boundary applications. It resolves "who belongs to this audience right now?" using a hybrid SQL + predicate pipeline:
+`boundary-audience` provides declarative audience segmentation for Wagoe applications. It resolves "who belongs to this audience right now?" using a hybrid SQL + predicate pipeline:
 
 1. Filters that map cleanly to SQL are pushed to the database (fewer rows returned).
 2. Filters that need in-process logic (arbitrary predicates, feature-usage lookups) run as Clojure functions over the candidate set.

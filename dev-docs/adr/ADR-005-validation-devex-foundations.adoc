@@ -10,7 +10,7 @@
 
 == Context
 
-The Boundary framework's validation system has grown organically, with validation logic spread across schema validation (Malli), business rules (pure functions in core), and orchestration (shell services). While the current system works well, it lacks:
+The Wagoe framework's validation system has grown organically, with validation logic spread across schema validation (Malli), business rules (pure functions in core), and orchestration (shell services). While the current system works well, it lacks:
 
 1. **Structured error reporting** - Errors are inconsistent across modules
 2. **Developer tooling** - Limited REPL helpers, no visualization, no coverage tracking
@@ -304,7 +304,7 @@ Phase 2.1 delivered comprehensive unit tests for user validation in the function
    - Error path verification
    - Comprehensive required field coverage (email, name, role, user-id)
 
-4. **Name Length Boundary Tests**
+4. **Name Length Wagoe Tests**
    - Too short: Empty name rejection
    - Too long: 256+ character rejection
    - Valid boundaries: 1-255 characters acceptance
@@ -385,7 +385,7 @@ Total execution time: 0.027 seconds
 
 - ✅ Schema validation (Malli): Email format, name length, required fields
 - ✅ Business rules: User-id immutability, email immutability
-- ✅ Edge cases: Boundary values, empty strings, nil values
+- ✅ Edge cases: Wagoe values, empty strings, nil values
 - ✅ Error aggregation: Multiple simultaneous validation failures
 - ✅ Change detection: `calculate-user-changes` function
 
@@ -420,7 +420,7 @@ Phase 3.1 delivered comprehensive property-based testing infrastructure using `t
    - 18 property-based tests (defspec) with 100 iterations each = 1,800 test cases
    - Custom generators for domain-specific data types
    - Smart email generation with realistic format variations
-   - Boundary-aware name generation (1-255 characters)
+   - Wagoe-aware name generation (1-255 characters)
    - Fast execution: ~0.274 seconds for all 18 tests
 
 2. **Email Generators**
@@ -730,7 +730,7 @@ Coverage (user): 100.0% (6/6 rules executed)
 
 3. **Enhanced Example Generation**
    - Valid/invalid example pairs for each validation rule
-   - Boundary case examples (min/max values)
+   - Wagoe case examples (min/max values)
    - Generated test fixtures from schemas
 
 4. **Validation Rule Composition**

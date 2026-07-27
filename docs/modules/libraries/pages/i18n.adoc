@@ -1,7 +1,7 @@
 = i18n
-:description: Internationalisation for Boundary apps: marker-based translation, locale chain resolution, EDN catalogues, and Ring middleware.
+:description: Internationalisation for Wagoe apps: marker-based translation, locale chain resolution, EDN catalogues, and Ring middleware.
 
-Internationalisation for Boundary apps: marker-based translation, locale chain resolution, EDN catalogues, and Ring middleware. Follows ADR-013.
+Internationalisation for Wagoe apps: marker-based translation, locale chain resolution, EDN catalogues, and Ring middleware. Follows ADR-013.
 
 == Key namespaces
 

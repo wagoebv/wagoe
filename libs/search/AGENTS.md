@@ -1,6 +1,6 @@
 # boundary-search — AI Agent Quick Reference
 
-Full-text search library for the Boundary Framework.
+Full-text search library for the Wagoe Framework.
 Provides document indexing, full-text search (PostgreSQL FTS / LIKE fallback), and an admin UI.
 
 ---

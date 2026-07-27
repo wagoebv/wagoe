@@ -1,5 +1,5 @@
 = Testing
-:description: Writing and running tests in Boundary projects.
+:description: Writing and running tests in Wagoe projects.
 
 See xref:architecture:testing-strategy.adoc[Testing Strategy] for the conceptual overview.
 This guide covers the day-to-day commands and patterns.
@@ -123,4 +123,4 @@ Add new libraries to `tests.edn`:
 bb ai gen-tests libs/product/src/wagoe/product/core/product.clj
 ----
 
-Generates a complete test namespace from the source file using Boundary conventions.
+Generates a complete test namespace from the source file using Wagoe conventions.

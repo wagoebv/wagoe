@@ -1,6 +1,6 @@
 = Documentation Lint Tool
 
-The Boundary repository includes a documentation linter that detects drift between docs and the current monorepo structure.
+The Wagoe repository includes a documentation linter that detects drift between docs and the current monorepo structure.
 
 == What It Checks
 

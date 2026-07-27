@@ -1,7 +1,7 @@
 = Testing Strategy
-:description: How Boundary tests are structured across unit, integration, and contract levels.
+:description: How Wagoe tests are structured across unit, integration, and contract levels.
 
-Boundary uses Kaocha as the test runner with H2 in-memory database for all test suites.
+Wagoe uses Kaocha as the test runner with H2 in-memory database for all test suites.
 
 == Three test levels
 

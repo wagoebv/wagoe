@@ -6,11 +6,11 @@
 
 == Overview
 
-This document captures the implementation details, architectural decisions, and design patterns used in the Boundary User Module. It serves as both implementation guidance and architectural reference for the module-centric, hexagonal architecture approach.
+This document captures the implementation details, architectural decisions, and design patterns used in the Wagoe User Module. It serves as both implementation guidance and architectural reference for the module-centric, hexagonal architecture approach.
 
 === Module Structure
 
-The User Module follows Boundary's standardized module structure:
+The User Module follows Wagoe's standardized module structure:
 
 ```
 libs/user/src/wagoe/user/
@@ -800,7 +800,7 @@ The user adapter implementation leverages shared type conversion utilities from 
 
 == Conclusion
 
-The User Module implementation demonstrates Boundary's module-centric, hexagonal architecture principles in practice. The comprehensive schema system provides type safety and interface consistency, while the port definitions enable flexible, testable, and scalable implementations.
+The User Module implementation demonstrates Wagoe's module-centric, hexagonal architecture principles in practice. The comprehensive schema system provides type safety and interface consistency, while the port definitions enable flexible, testable, and scalable implementations.
 
 Key achievements:
 - **Type-safe data handling** across all interfaces
@@ -810,4 +810,4 @@ Key achievements:
 - **Security-first approach** with audit trails
 - **Future-proof extensibility** through modular design patterns
 
-This implementation serves as a template for other modules in the Boundary framework, establishing patterns and practices that ensure consistency and quality across the entire system.
+This implementation serves as a template for other modules in the Wagoe framework, establishing patterns and practices that ensure consistency and quality across the entire system.

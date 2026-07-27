@@ -1,6 +1,6 @@
 # Agents knowledge source
 
-`knowledge.edn` is the single structured source for Boundary's agent guardrails.
+`knowledge.edn` is the single structured source for Wagoe's agent guardrails.
 A deterministic generator (`scripts/agents_gen.clj`, `bb agents:gen`) renders it
 into the framework root `AGENTS.md` and the downstream
 `libs/wagoe-cli/resources/wagoe/cli/templates/AGENTS.md.tmpl`.
@@ -29,7 +29,7 @@ generated regions and is NOT drift-checked — if you reorder or insert pitfalls
 `knowledge.edn`, update those hand-written references by hand.
 
 ## Phase 2 — MCP server data contract
-A future Boundary MCP guardrails server serves this same data, no schema change:
+A future Wagoe MCP guardrails server serves this same data, no schema change:
 
 | MCP tool         | Source                            |
 |------------------|-----------------------------------|

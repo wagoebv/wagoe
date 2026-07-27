@@ -11,7 +11,7 @@ Accepted
 
 === Background
 
-Boundary follows the Functional Core / Imperative Shell (FC/IS) architecture
+Wagoe follows the Functional Core / Imperative Shell (FC/IS) architecture
 pattern. Each library is split into `core/` (pure functions) and `shell/`
 (side-effecting I/O, persistence, HTTP handlers). This separation enables
 fast unit testing without mocks and makes business logic easy to reason about.
@@ -74,7 +74,7 @@ the forbidden patterns.
   but is actually pure will be flagged. This is unlikely given the project's
   naming conventions and can be addressed by renaming.
 * *Incomplete coverage* — the check only inspects `:require` directives, not
-  dynamic `require` or `resolve` calls. These are extremely rare in Boundary
+  dynamic `require` or `resolve` calls. These are extremely rare in Wagoe
   and not worth the complexity of detecting.
 
 === Mitigation

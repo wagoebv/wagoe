@@ -5,7 +5,7 @@
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
 [![Clojars Project](https://img.shields.io/clojars/v/org.wagoe/wagoe-geo.svg)](https://clojars.org/org.wagoe/wagoe-geo)
 
-> Multi-provider geocoding for the Boundary framework — addresses to coordinates, coordinates to addresses, and distance calculations. Batteries included: rate limiting, DB-backed caching, and a provider fallback chain.
+> Multi-provider geocoding for the Wagoe framework — addresses to coordinates, coordinates to addresses, and distance calculations. Batteries included: rate limiting, DB-backed caching, and a provider fallback chain.
 
 ---
 

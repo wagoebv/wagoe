@@ -1,10 +1,10 @@
 ---
-title: "Boundary: opinionated Clojure web framework for teams"
+title: "Wagoe: opinionated Clojure web framework for teams"
 weight: 10
 description: "Clojurians Slack announcement draft."
 ---
 
-= Boundary: opinionated Clojure web framework for teams
+= Wagoe: opinionated Clojure web framework for teams
 
 Tagline: Batteries included, boundaries enforced
 

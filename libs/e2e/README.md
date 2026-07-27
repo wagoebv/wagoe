@@ -4,7 +4,7 @@
 [![Clojure](https://img.shields.io/badge/clojure-1.12+-blue)]()
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
 
-End-to-end browser + HTTP-API test suite for the Boundary platform. **Test code only** — this library ships no production namespaces and is **not published to Clojars**.
+End-to-end browser + HTTP-API test suite for the Wagoe platform. **Test code only** — this library ships no production namespaces and is **not published to Clojars**.
 
 It uses [`com.blockether/spel`](https://github.com/blockether/spel), an idiomatic
 Clojure wrapper around Playwright (Java), for both browser automation and

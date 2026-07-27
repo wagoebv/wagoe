@@ -1,7 +1,7 @@
 = Developer Tools
 :description: How to use the dev dashboard, error pipeline, REPL power tools, and AI commands for day-to-day development.
 
-Boundary ships with a suite of developer tools that give you x-ray vision into your running application. This guide covers the most useful features for day-to-day development.
+Wagoe ships with a suite of developer tools that give you x-ray vision into your running application. This guide covers the most useful features for day-to-day development.
 
 == Starting the Dev Dashboard
 

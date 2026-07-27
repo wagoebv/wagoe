@@ -11,7 +11,7 @@ Proposed
 
 === Background
 
-Boundary's REPL experience currently provides `(go)`, `(reset)`, `(halt)`,
+Wagoe's REPL experience currently provides `(go)`, `(reset)`, `(halt)`,
 `(system)`, `(config)`, and a few service accessors (`(user-service)`,
 `(db-context)`). While functional, this covers only system lifecycle -- not
 the full development workflow.

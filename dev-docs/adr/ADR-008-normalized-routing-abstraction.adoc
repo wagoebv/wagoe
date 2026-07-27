@@ -10,7 +10,7 @@
 
 == Context
 
-The Boundary Framework currently uses Reitit directly in module route definitions, creating tight coupling between business modules and the HTTP routing framework. This creates several challenges:
+The Wagoe Framework currently uses Reitit directly in module route definitions, creating tight coupling between business modules and the HTTP routing framework. This creates several challenges:
 
 === Current Limitations
 

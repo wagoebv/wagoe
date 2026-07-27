@@ -1,6 +1,6 @@
 * Getting Started
 ** xref:getting-started:index.adoc[Overview]
-** xref:getting-started:why-wagoe.adoc[Why Boundary?]
+** xref:getting-started:why-wagoe.adoc[Why Wagoe?]
 ** xref:getting-started:installation.adoc[Installation]
 ** xref:getting-started:quickstart.adoc[Quickstart]
 ** xref:getting-started:your-first-module.adoc[Your First Module]

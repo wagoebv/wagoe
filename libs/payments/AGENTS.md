@@ -4,7 +4,7 @@
 
 ## Purpose
 
-PSP (Payment Service Provider) abstraction for the Boundary Framework.
+PSP (Payment Service Provider) abstraction for the Wagoe Framework.
 Provides a single `IPaymentProvider` protocol that decouples application code
 from specific payment processors. Swap between Mollie, Stripe, and Mock without
 changing any business logic.

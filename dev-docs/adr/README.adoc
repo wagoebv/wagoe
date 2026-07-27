@@ -2,7 +2,7 @@
 
 This directory contains Architecture Decision Records documenting
 significant architectural decisions made during the development of the
-Boundary Framework.
+Wagoe Framework.
 
 === What are ADRs?
 
@@ -143,7 +143,7 @@ membership lifecycle.
 
 ADR-017-library-migration-discovery.adoc
 
-Allow Boundary libraries to publish Migratus migration directories through a
+Allow Wagoe libraries to publish Migratus migration directories through a
 classpath manifest so consuming applications automatically apply library-owned
 schema changes via the normal `clojure -M:migrate up` flow.
 
@@ -288,7 +288,7 @@ automatic recovery via `(fix! *e)`.
 
 ADR-029-discoverability-progressive-learning.adoc
 
-Ensures developers discover Boundary's features at the right moment through
+Ensures developers discover Wagoe's features at the right moment through
 contextual tips, state-aware guidance, and in-REPL documentation.
 
 *Key Decisions:*

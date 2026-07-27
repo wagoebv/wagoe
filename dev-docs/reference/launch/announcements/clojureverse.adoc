@@ -1,14 +1,14 @@
 ---
-title: "Boundary — batteries-included Clojure web framework for teams"
+title: "Wagoe — batteries-included Clojure web framework for teams"
 weight: 20
 description: "ClojureVerse announcement draft."
 ---
 
-= Boundary — batteries-included Clojure web framework for teams
+= Wagoe — batteries-included Clojure web framework for teams
 
 Tagline: Batteries included, boundaries enforced
 
-We’re excited to share Boundary, a Clojure web framework that helps teams ship secure, observable apps fast — with clean architecture and zero frontend build step.
+We’re excited to share Wagoe, a Clojure web framework that helps teams ship secure, observable apps fast — with clean architecture and zero frontend build step.
 
 What’s in the box - FC/IS architecture with Integrant lifecycle - Server-side rendering via Hiccup {plus} HTMX - Built-in admin interface - MFA out of the box - Module scaffolding {plus} Malli validation (snapshot tests) - Multi-layer observability (logging, metrics, error reporting)
 

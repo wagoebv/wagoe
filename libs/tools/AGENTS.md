@@ -2,15 +2,15 @@
 
 **Location:** `libs/tools`
 **Version:** `1.0.0-beta-1`
-**Distribution:** Part of the Boundary monorepo — not published to Clojars. Wired directly into `bb.edn` as a local dependency.
+**Distribution:** Part of the Wagoe monorepo — not published to Clojars. Wired directly into `bb.edn` as a local dependency.
 
-Developer tooling for the Boundary framework: scaffolding, AI assistance, config management, i18n management, deployment, and development utilities — available out of the box in every Boundary project.
+Developer tooling for the Wagoe framework: scaffolding, AI assistance, config management, i18n management, deployment, and development utilities — available out of the box in every Wagoe project.
 
 ---
 
 ## Getting started
 
-`libs/tools` is included in the monorepo and wired into the root `bb.edn` as a local dependency. No Clojars dependency needed — the tasks are available out of the box in every Boundary project.
+`libs/tools` is included in the monorepo and wired into the root `bb.edn` as a local dependency. No Clojars dependency needed — the tasks are available out of the box in every Wagoe project.
 
 The root `bb.edn` wiring looks like this:
 
@@ -50,7 +50,7 @@ The root `bb.edn` wiring looks like this:
 
 ### `bb doctor` — Config Doctor
 
-Validates your Boundary config files for common mistakes. Rule-based (no AI needed) — runs 6 checks against your `config.edn` and project files.
+Validates your Wagoe config files for common mistakes. Rule-based (no AI needed) — runs 6 checks against your `config.edn` and project files.
 
 ```bash
 bb doctor                    # Check dev environment (default)
@@ -73,7 +73,7 @@ bb doctor --ci               # Exit non-zero on any error (for CI pipelines)
 **Example output:**
 
 ```
-Boundary Config Doctor — dev
+Wagoe Config Doctor — dev
 
   ✓ env-refs             All #env references resolved or have defaults
   ✗ jwt-secret           JWT_SECRET not set (required by user module)
@@ -217,7 +217,7 @@ bb scaffold:integrate product
 **Example output:**
 
 ```
-Boundary Module Integration — product
+Wagoe Module Integration — product
 
 Discovered: src/wagoe/product
   Namespace: wagoe.product.*
@@ -279,7 +279,7 @@ Provider selection (first matching env var wins):
 
 #### `bb ai admin-entity` — Admin Entity Generator
 
-Generates admin entity EDN configuration files from a natural language description. Uses AI to understand your entity and produce a complete config that matches the Boundary admin UI format.
+Generates admin entity EDN configuration files from a natural language description. Uses AI to understand your entity and produce a complete config that matches the Wagoe admin UI format.
 
 ```bash
 # Generate an admin entity config
@@ -341,7 +341,7 @@ Run database migrations first: `clojure -M:migrate up`
 
 ### `bb deploy` — Deploy to Clojars
 
-Deploys the 22 published Boundary libraries to Clojars. `boundary-tools` itself is not published — it is a monorepo-internal tool.
+Deploys the 22 published Wagoe libraries to Clojars. `boundary-tools` itself is not published — it is a monorepo-internal tool.
 
 ```bash
 bb deploy --help                    # Show help
@@ -420,11 +420,11 @@ Translation files live in `libs/i18n/resources/wagoe/i18n/translations/`.
 | `wagoe.tools.admin_entity` | Admin Entity Generator — Babashka wrapper for AI admin entity generation |
 | `wagoe.tools.i18n` | i18n catalogue management (find/scan/missing/unused) |
 | `wagoe.tools.admin` | First admin user creation wizard |
-| `wagoe.tools.deploy` | Clojars deployment for all 22 published Boundary artifacts |
+| `wagoe.tools.deploy` | Clojars deployment for all 22 published Wagoe artifacts |
 | `wagoe.tools.dev` | migrate + check-links + smoke-check + install-hooks |
 
 ---
 
 ## Releasing boundary-tools
 
-`boundary-tools` is not published to Clojars. It is distributed as part of the Boundary monorepo. To update it, commit and push changes to `libs/tools` — consumers pick up changes by pulling the repository.
+`boundary-tools` is not published to Clojars. It is distributed as part of the Wagoe monorepo. To update it, commit and push changes to `libs/tools` — consumers pick up changes by pulling the repository.

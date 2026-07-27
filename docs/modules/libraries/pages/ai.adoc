@@ -1,12 +1,12 @@
 = ai
 :description: Framework-aware AI tooling including NL scaffolding, error explainer, test generator, SQL copilot, and docs wizard.
 
-Framework-aware AI tooling for Boundary applications. Unlike a generic assistant, it knows Boundary's conventions: FC/IS, ports, kebab↔snake naming, Malli schemas, and HoneySQL syntax.
+Framework-aware AI tooling for Wagoe applications. Unlike a generic assistant, it knows Wagoe's conventions: FC/IS, ports, kebab↔snake naming, Malli schemas, and HoneySQL syntax.
 
 == Features
 
 1. *NL Scaffolding* - parse a natural language description into a scaffolding spec
-2. *Error Explainer* - explain a stack trace with Boundary-specific context
+2. *Error Explainer* - explain a stack trace with Wagoe-specific context
 3. *Test Generator* - generate a complete test namespace for a source file
 4. *SQL Copilot* - translate a description into HoneySQL format
 5. *Documentation Wizard* - generate AGENTS.md, OpenAPI YAML, or README

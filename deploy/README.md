@@ -1,6 +1,6 @@
-# Deploying Boundary
+# Deploying Wagoe
 
-Production packaging for a Boundary application: a prod Docker image and an
+Production packaging for a Wagoe application: a prod Docker image and an
 example Kubernetes deployment that runs the **web/worker split**.
 
 ## Build the image

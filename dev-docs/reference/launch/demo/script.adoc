@@ -1,10 +1,10 @@
 ---
-title: "Boundary Demo Script (10–15 minutes)"
+title: "Wagoe Demo Script (10–15 minutes)"
 weight: 10
-description: "Draft demo script for a 10–15 minute Boundary walkthrough."
+description: "Draft demo script for a 10–15 minute Wagoe walkthrough."
 ---
 
-= Boundary Demo Script (10–15 minutes)
+= Wagoe Demo Script (10–15 minutes)
 
 Audience - Clojure teams building internal tools/SaaS backends - Goal: show speed {plus} structure (FC/IS), security (MFA), SSR/HTMX, and observability
 
@@ -14,7 +14,7 @@ Structure - 00:00–01:00 — Hook & value prop - 01:00–04:00 — Run starter,
 
 Script
 
-00:00–01:00 — Hook & value prop - "`Boundary helps teams ship secure, observable Clojure apps fast — with clean architecture and no frontend build step. Batteries included, boundaries enforced.`" - Show README tagline {plus} quickstart briefly.
+00:00–01:00 — Hook & value prop - "`Wagoe helps teams ship secure, observable Clojure apps fast — with clean architecture and no frontend build step. Batteries included, boundaries enforced.`" - Show README tagline {plus} quickstart briefly.
 
 01:00–04:00 — Run starter, tour architecture - Terminal: `clojure -M:repl-clj`, in REPL: `(require '++[++integrant.repl :as ig-repl++]++) (ig-repl/go)` - Browser: open `http://localhost:3000` (home page) - Explain module layout: `src/wagoe/++{++module}/core/`, `shell/`, `ports.clj`, `schema.clj` - Reinforce FC/IS: core = pure; shell = I/O/validation/adapters; ports = protocols.
 

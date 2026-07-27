@@ -2,7 +2,7 @@
 
 ## 1. Purpose
 
-`boundary-calendar` handles recurring events, timezone-aware occurrence expansion, conflict detection, iCal export/import, and admin UI components for any Boundary-based application dealing with scheduling (appointments, bookings, shifts, room reservations, etc.).
+`boundary-calendar` handles recurring events, timezone-aware occurrence expansion, conflict detection, iCal export/import, and admin UI components for any Wagoe-based application dealing with scheduling (appointments, bookings, shifts, room reservations, etc.).
 
 It saves ~€3.2k–€4k per project by eliminating boilerplate around:
 - RFC 5545 RRULE parsing (weekly standups, monthly invoices, annual reviews)

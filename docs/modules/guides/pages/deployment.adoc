@@ -1,5 +1,5 @@
 = Deployment
-:description: Building and deploying a Boundary application.
+:description: Building and deploying a Wagoe application.
 
 == Build an uberjar
 

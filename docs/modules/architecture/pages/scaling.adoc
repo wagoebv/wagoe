@@ -1,7 +1,7 @@
 = Sizing & Scaling
-:description: How Boundary scales vertically and horizontally — what works by configuration today, and where the real boundaries are.
+:description: How Wagoe scales vertically and horizontally — what works by configuration today, and where the real boundaries are.
 
-Boundary's architecture (xref:architecture:fc-is.adoc[FC/IS] + hexagonal ports)
+Wagoe's architecture (xref:architecture:fc-is.adoc[FC/IS] + hexagonal ports)
 is meant to let you scale *vertically*, *horizontally*, or a mix — mostly by
 configuration rather than rewrites. This page is an honest map of how far that
 holds today: which knobs exist, which components are already safe to run as many
@@ -14,7 +14,7 @@ replicas, and which still hold in-process state that you must account for.
 | Axis | Meaning
 
 | *Vertical*
-| One process, more resources. Bigger heap, larger connection/thread pools, more CPU. Pure configuration in Boundary.
+| One process, more resources. Bigger heap, larger connection/thread pools, more CPU. Pure configuration in Wagoe.
 
 | *Horizontal*
 | Many processes (replicas) behind a load balancer, sharing backing services (Postgres, Redis). Requires that no request-handling state lives in a single process.
@@ -194,7 +194,7 @@ today, but the architecture is positioned for it.
 
 | payments
 | Easy
-| Zero internal Boundary deps (only Maven). Already a self-contained provider. The natural *pilot* for the remote-adapter pattern.
+| Zero internal Wagoe deps (only Maven). Already a self-contained provider. The natural *pilot* for the remote-adapter pattern.
 
 | core, observability
 | Easy

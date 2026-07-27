@@ -11,7 +11,7 @@ Proposed
 
 === Background
 
-Boundary provides observability through structured logging and interceptor
+Wagoe provides observability through structured logging and interceptor
 metrics, but there is no visual interface for inspecting system state during
 development. Developers must query the REPL or read logs to understand what
 the system is doing.

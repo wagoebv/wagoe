@@ -1,7 +1,7 @@
 = tools
 :description: Developer tooling: deploy, doctor, setup wizard, scaffolder integration, quality checks, i18n management.
 
-Babashka-powered developer tooling for the Boundary framework. Available out of the box in every Boundary project via `bb.edn` — no separate install needed.
+Babashka-powered developer tooling for the Wagoe framework. Available out of the box in every Wagoe project via `bb.edn` — no separate install needed.
 
 NOTE: Not published to Clojars. Part of the monorepo at `libs/tools`.
 

@@ -30,14 +30,14 @@ Table of Contents
 * link:#_see_also[See Also]
 
 [[preamble]]
-This document describes the observability integration in the user module, acting as the primary reference for end-to-end observability integration in Boundary.
+This document describes the observability integration in the user module, acting as the primary reference for end-to-end observability integration in Wagoe.
 
 [width="100%",cols="50%,50%",]
 |===
 |__ a|
 *🎯 Multi-Layer Interceptor Pattern Achievement*
 
-The User module has been *fully converted* to use Boundary’s multi-layer interceptor pattern, representing a major framework evolution achievement:
+The User module has been *fully converted* to use Wagoe’s multi-layer interceptor pattern, representing a major framework evolution achievement:
 
 *Conversion Results:* - ✅ *31/31 methods* converted across service and persistence layers - ✅ *48-64% code reduction* through boilerplate elimination - ✅ *200{plus} manual observability calls* replaced with automatic integration - ✅ *100% business logic preservation* - core functions remain pure
 
@@ -60,7 +60,7 @@ The user module combines logging, metrics, and error reporting across REST, CLI,
 
 *Current implementation in production*
 
-The user module now uses Boundary’s multi-layer interceptor pattern for seamless observability integration:
+The user module now uses Wagoe’s multi-layer interceptor pattern for seamless observability integration:
 
 [source,highlightjs,highlight]
 ----

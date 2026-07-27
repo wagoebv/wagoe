@@ -1,7 +1,7 @@
 = devtools
 :description: Development-only tools: error pipeline, dev dashboard, REPL power tools, guidance engine, request recording, AI REPL commands.
 
-Development-only library providing x-ray vision into running Boundary applications. Zero production overhead — loaded only via the `:dev` and `:repl-clj` aliases.
+Development-only library providing x-ray vision into running Wagoe applications. Zero production overhead — loaded only via the `:dev` and `:repl-clj` aliases.
 
 NOTE: Not published to Clojars. Included as a local dependency via `libs/devtools`.
 

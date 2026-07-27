@@ -1,14 +1,14 @@
 = Conventions
-:description: Naming conventions, field checklists, and patterns used throughout Boundary.
+:description: Naming conventions, field checklists, and patterns used throughout Wagoe.
 
 == Case conventions
 
-The single most common source of bugs in Boundary projects.
+The single most common source of bugs in Wagoe projects.
 Three naming styles are used at three different system boundaries:
 
 [cols="1,1,2",options="header"]
 |===
-| Boundary | Convention | Example
+| Wagoe | Convention | Example
 
 | All Clojure code (everywhere)
 | `kebab-case`

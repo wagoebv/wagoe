@@ -1,6 +1,6 @@
 # HTTP Interface Module
 
-The `wagoe.platform.shell.interfaces.http` module provides a comprehensive HTTP interface infrastructure for the Boundary application. It implements a clean, modular architecture following clean architecture principles and provides reusable components for building REST APIs.
+The `wagoe.platform.shell.interfaces.http` module provides a comprehensive HTTP interface infrastructure for the Wagoe application. It implements a clean, modular architecture following clean architecture principles and provides reusable components for building REST APIs.
 
 ## Overview
 

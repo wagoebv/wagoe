@@ -9,12 +9,12 @@ Proposed
 
 == Context
 
-Boundary apps currently render all user-visible strings in English.  The `users`
+Wagoe apps currently render all user-visible strings in English.  The `users`
 table already carries a `:language` column (stored as BCP 47 tag, e.g. `"en"`,
 `"nl"`, `"fr"`) and the `User` schema exposes it as the optional `:language`
 field.  There is no mechanism yet to use that value for string lookup.
 
-Requirements for a Boundary i18n solution:
+Requirements for a Wagoe i18n solution:
 
 1. **String externalisation** — all user-facing strings must be addressable by a
    namespaced key; no hard-coded literals in Hiccup or handler code.
@@ -51,7 +51,7 @@ Requirements for a Boundary i18n solution:
 
 | https://github.com/ptaoussanis/tempura[Tempura]
 | Battle-tested; handles plurals, parameters, fallback natively
-| Additional dependency; slightly different key convention from Boundary style
+| Additional dependency; slightly different key convention from Wagoe style
 
 | Java `ResourceBundle`
 | JVM standard; handles locale negotiation natively
@@ -628,7 +628,7 @@ https://github.com/ptaoussanis/tempura[Tempura] is a mature Clojure i18n
 library with built-in fallback, ICU plural rules, and parameter substitution.
 
 *Rejected* because the custom approach requires no extra dependency, matches
-Boundary's EDN-first philosophy, and keeps the full implementation within the
+Wagoe's EDN-first philosophy, and keeps the full implementation within the
 team's control.  Tempura can be adopted as a drop-in replacement for the core
 `translate/t` function later if richer plural rules are needed.
 

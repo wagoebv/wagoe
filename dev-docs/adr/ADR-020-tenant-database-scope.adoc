@@ -26,7 +26,7 @@ specific version targets:
 
 === Current state
 
-No Boundary project has requested MySQL or SQLite support for production
+No Wagoe project has requested MySQL or SQLite support for production
 multi-tenancy. All production deployments use PostgreSQL. The library has
 68 tests and 466 assertions with 0 failures, covering provisioning, membership,
 invites, jobs integration, cache integration, and end-to-end lifecycle flows.
@@ -52,7 +52,7 @@ This effort is not justified without concrete project demand.
 
 Tenant provisioning is explicitly scoped to **PostgreSQL only**. The library
 will not implement MySQL, SQLite, or other database provisioning strategies
-until a Boundary project requires it.
+until a Wagoe project requires it.
 
 Specifically:
 

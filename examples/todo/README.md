@@ -1,6 +1,6 @@
-# Todo — a runnable Boundary example
+# Todo — a runnable Wagoe example
 
-A tiny, self-contained example that demonstrates Boundary's **Functional Core /
+A tiny, self-contained example that demonstrates Wagoe's **Functional Core /
 Imperative Shell** (FC/IS) pattern with a real database. No HTTP server, no
 configuration, no setup — it runs to completion in a couple of seconds.
 
@@ -27,7 +27,7 @@ one done, and lists them.
 
 ## What it shows
 
-The module follows the same FC/IS shape every Boundary module uses:
+The module follows the same FC/IS shape every Wagoe module uses:
 
 | File | Layer | Responsibility |
 |------|-------|----------------|

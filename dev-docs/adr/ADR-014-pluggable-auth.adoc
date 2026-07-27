@@ -10,7 +10,7 @@
 
 == Context
 
-- Boundary must remain domain-agnostic; built-in domain modules were removed from core.
+- Wagoe must remain domain-agnostic; built-in domain modules were removed from core.
 - Observability and database are already pluggable; authentication/authorization is still embedded (user module as reference).
 - Teams need to plug in their own IAM/SSO/authorization without modifying core.
 

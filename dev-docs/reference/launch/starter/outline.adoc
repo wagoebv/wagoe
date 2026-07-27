@@ -1,12 +1,12 @@
 ---
-title: "Boundary Starter Repository Outline"
+title: "Wagoe Starter Repository Outline"
 weight: 10
-description: "Outline/template for a Boundary starter repository structure and feature set."
+description: "Outline/template for a Wagoe starter repository structure and feature set."
 ---
 
-= Boundary Starter Repository Outline
+= Wagoe Starter Repository Outline
 
-Purpose - Provide a clean template for teams to try Boundary in minutes. - Showcase FC/IS, SSR/HTMX, admin, MFA, tests, and observability with minimal setup.
+Purpose - Provide a clean template for teams to try Wagoe in minutes. - Showcase FC/IS, SSR/HTMX, admin, MFA, tests, and observability with minimal setup.
 
 Repository Structure
 

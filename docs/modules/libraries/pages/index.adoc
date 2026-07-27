@@ -1,7 +1,7 @@
 = Library Overview
-:description: All 23 independently publishable Boundary libraries plus developer tooling.
+:description: All 23 independently publishable Wagoe libraries plus developer tooling.
 
-Boundary is a monorepo of 24 libraries publishable to Clojars, plus developer tooling.
+Wagoe is a monorepo of 24 libraries publishable to Clojars, plus developer tooling.
 Every library follows the same FC/IS structure, making the codebase instantly familiar across libraries.
 
 == Foundation

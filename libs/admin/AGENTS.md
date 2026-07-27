@@ -4,7 +4,7 @@
 
 ## Purpose
 
-Admin UI and CRUD management tooling for Boundary entities, including HTMX-driven views, forms, and module-owned entity configuration.
+Admin UI and CRUD management tooling for Wagoe entities, including HTMX-driven views, forms, and module-owned entity configuration.
 
 ## Key Namespaces
 
@@ -276,7 +276,7 @@ libs/{module}/src/wagoe/{module}/core/
 
 ```
 css/
-├── boundary-tokens.css          # Layer 2 — stable token contract (Boundary defaults)
+├── boundary-tokens.css          # Layer 2 — stable token contract (Wagoe defaults)
 ├── tokens-openprops.css         # Layer 3 — optional theme override (Cyberpunk Professionalism)
 ├── vendor/open-props/           # Vendored Open Props v1.7.23 (no CDN dependency)
 │   ├── colors.min.css           #   Named color scales (--indigo-4, --lime-6, etc.)
@@ -293,7 +293,7 @@ css/
 **Loading order** (set as default in `page-layout`):
 ```
 pico.min.css          ← CSS reset / base HTML element styles
-boundary-tokens.css   ← Token defaults (Boundary navy/green palette)
+boundary-tokens.css   ← Token defaults (Wagoe navy/green palette)
 tokens-openprops.css  ← Theme override (Cyberpunk Professionalism; load last to win)
 app.css               ← Component styles
 ```
@@ -334,7 +334,7 @@ The theming system has two layers:
 
 | File | Role |
 |------|------|
-| `boundary-tokens.css` | **Token contract** — every variable component CSS can reference. Neutral Boundary navy/green defaults. Self-contained (no imports, works offline and in JAR deployments). |
+| `boundary-tokens.css` | **Token contract** — every variable component CSS can reference. Neutral Wagoe navy/green defaults. Self-contained (no imports, works offline and in JAR deployments). |
 | `tokens-openprops.css` | **Theme override** — re-assigns the same variables to the "Cyberpunk Professionalism" palette (indigo primary, lime accent, neon glows, gradients). Imports vendored Open Props for its named color scale. |
 
 Because `tokens-openprops.css` is loaded after `boundary-tokens.css`, it wins on every variable it touches. Variables it doesn't touch keep their defaults from `boundary-tokens.css`.
@@ -425,7 +425,7 @@ Override whichever variables you want; leave the rest untouched (they fall back 
 
 **Option C — Remove the theme entirely**
 
-Drop `tokens-openprops.css` from the `:css` list to get the default Boundary navy/green palette from `boundary-tokens.css` with no Open Props dependency:
+Drop `tokens-openprops.css` from the `:css` list to get the default Wagoe navy/green palette from `boundary-tokens.css` with no Open Props dependency:
 ```clojure
 {:css ["/css/pico.min.css" "/css/boundary-tokens.css" "/css/app.css"]}
 ```

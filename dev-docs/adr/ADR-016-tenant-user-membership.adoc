@@ -9,11 +9,11 @@ Proposed
 
 == Context
 
-Boundary currently models tenant context primarily through a direct relationship
+Wagoe currently models tenant context primarily through a direct relationship
 between a user profile and a tenant, typically via a single `tenant_id` on the
 user-side profile record.
 
-That model is too restrictive for the next class of Boundary applications:
+That model is too restrictive for the next class of Wagoe applications:
 
 * one person may need access to multiple tenants
 * tenant-scoped roles must not be conflated with platform/global roles
@@ -28,7 +28,7 @@ administration. The missing concept is a tenant-scoped membership model.
 
 == Decision
 
-Boundary will extend the `boundary-tenant` library with a first-class
+Wagoe will extend the `boundary-tenant` library with a first-class
 `tenant_memberships` concept.
 
 The framework will model three separate concerns:

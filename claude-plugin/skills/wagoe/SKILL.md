@@ -1,11 +1,11 @@
 ---
 name: boundary
-description: Boundary framework (Clojure FC/IS) toolkit. Use when the user wants to add a module, entity, or feature ("add a product module with name and price"), add a field/endpoint/adapter to a module, wire a module into the app, explain a Clojure/Boundary error or stacktrace, generate tests, write SQL from a description, configure the project, or diagnose setup issues. ALWAYS scaffold new modules with `bb scaffold` instead of hand-writing them.
+description: Wagoe framework (Clojure FC/IS) toolkit. Use when the user wants to add a module, entity, or feature ("add a product module with name and price"), add a field/endpoint/adapter to a module, wire a module into the app, explain a Clojure/Wagoe error or stacktrace, generate tests, write SQL from a description, configure the project, or diagnose setup issues. ALWAYS scaffold new modules with `bb scaffold` instead of hand-writing them.
 ---
 
-# Boundary Toolkit
+# Wagoe Toolkit
 
-Boundary ships generators and AI tools as Babashka tasks. Use them instead of
+Wagoe ships generators and AI tools as Babashka tasks. Use them instead of
 hand-writing boilerplate: they generate the full FC/IS structure
 (core/shell/ports/schema), tests, and migrations, and keep the architecture
 consistent.

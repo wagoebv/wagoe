@@ -1,12 +1,12 @@
 ---
 title: "Publishing Libraries"
 weight: 10
-description: "Complete guide to building and publishing Boundary Framework libraries to Clojars"
+description: "Complete guide to building and publishing Wagoe Framework libraries to Clojars"
 ---
 
 = Publishing Libraries
 
-This guide covers everything needed to publish Boundary libraries to Clojars — locally or via GitHub Actions.
+This guide covers everything needed to publish Wagoe libraries to Clojars — locally or via GitHub Actions.
 
 ---
 
@@ -96,7 +96,7 @@ grep "^(def version" libs/*/build.clj
 
 === Version format
 
-Boundary follows semantic versioning:
+Wagoe follows semantic versioning:
 
 * `1.0.0-alpha-N` — alpha release, N is a sequential counter
 * `1.0.0-beta-N` — beta release

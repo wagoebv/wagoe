@@ -5,7 +5,7 @@
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
 [![Clojars Project](https://img.shields.io/clojars/v/org.wagoe/wagoe-push.svg)](https://clojars.org/org.wagoe/wagoe-push)
 
-> Multi-platform push notifications for the Boundary framework — FCM (Firebase) and APNs (Apple) with device token management, job-based async delivery, and HMAC-secured analytics callbacks.
+> Multi-platform push notifications for the Wagoe framework — FCM (Firebase) and APNs (Apple) with device token management, job-based async delivery, and HMAC-secured analytics callbacks.
 
 ---
 

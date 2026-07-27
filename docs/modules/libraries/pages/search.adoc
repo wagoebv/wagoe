@@ -48,7 +48,7 @@ Weight levels: `:a` (highest) → `:d` (lowest).
 (ports/index-document! search-store
   {:id        product-id
    :index-id  :product-search
-   :title     "Boundary Framework"
+   :title     "Wagoe Framework"
    :body      "A Clojure web framework..."
    :tags      "clojure framework"
    :tenant-id tenant-id})

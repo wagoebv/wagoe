@@ -5,7 +5,7 @@
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
 [![Clojars Project](https://img.shields.io/clojars/v/org.wagoe/wagoe-core.svg)](https://clojars.org/org.wagoe/wagoe-core)
 
-Foundation library providing validation, utilities, and interceptor framework for the Boundary ecosystem.
+Foundation library providing validation, utilities, and interceptor framework for the Wagoe ecosystem.
 
 ## Installation
 
@@ -130,11 +130,11 @@ This library has minimal dependencies:
 
 ## Relationship to Other Libraries
 
-`boundary/core` is the foundation layer with **no dependencies** on other Boundary libraries:
+`boundary/core` is the foundation layer with **no dependencies** on other Wagoe libraries:
 
 ```
 ┌─────────────────────────────────────────┐
-│           Other Boundary libs           │
+│           Other Wagoe libs           │
 │  (observability, platform, user, etc.)  │
 └─────────────────┬───────────────────────┘
                   │ depends on

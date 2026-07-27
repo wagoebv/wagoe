@@ -1,6 +1,6 @@
-# Boundary Claude Code Plugin
+# Wagoe Claude Code Plugin
 
-Makes agentic CLIs (Claude Code and compatible tools) aware of Boundary's
+Makes agentic CLIs (Claude Code and compatible tools) aware of Wagoe's
 scaffolder and AI tooling, so the agent reaches for `bb scaffold` / `bb ai`
 instead of hand-writing module boilerplate.
 

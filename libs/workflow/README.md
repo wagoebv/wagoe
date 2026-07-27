@@ -5,7 +5,7 @@
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
 [![Clojars Project](https://img.shields.io/clojars/v/org.wagoe/wagoe-workflow.svg)](https://clojars.org/org.wagoe/wagoe-workflow)
 
-**Declarative state machine workflows for domain entities in the Boundary Framework**
+**Declarative state machine workflows for domain entities in the Wagoe Framework**
 
 Define state machines as data, execute guarded transitions, and get a full audit trail automatically.
 Optionally enqueue side-effect jobs via `boundary-jobs` after successful transitions.
@@ -203,4 +203,4 @@ Test fixture pattern:
 
 ## License
 
-Part of Boundary Framework — see main LICENSE file.
+Part of Wagoe Framework — see main LICENSE file.

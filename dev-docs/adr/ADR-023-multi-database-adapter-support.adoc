@@ -11,7 +11,7 @@ Proposed
 
 === Background
 
-Boundary's persistence architecture follows the Functional Core / Imperative
+Wagoe's persistence architecture follows the Functional Core / Imperative
 Shell (FC/IS) pattern. Business domain protocols in `ports.clj` define
 SQL-free repository contracts (e.g. `IUserRepository`). Shell persistence
 implementations fulfil these contracts using HoneySQL and next.jdbc against
@@ -174,7 +174,7 @@ instantiated and injected.
 
 === Positive
 
-* Boundary becomes a multi-database framework, broadening its applicability.
+* Wagoe becomes a multi-database framework, broadening its applicability.
 * The FC/IS architecture and ports contracts remain unchanged — no impact on
   core business logic.
 * Each database adapter is independently deployable as a library.

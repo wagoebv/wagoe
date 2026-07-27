@@ -3,14 +3,14 @@
 *Status:* Accepted +
 *Date Proposed:* 2026-02-05 +
 *Date Accepted:* 2026-02-09 +
-*Deciders:* Boundary Core Team +
+*Deciders:* Wagoe Core Team +
 *Context:* Multi-Tenancy Design (Phase 8 - Implemented)
 
 '''''
 
 === Context and Problem Statement
 
-The Boundary Framework currently supports single-tenant deployments
+The Wagoe Framework currently supports single-tenant deployments
 where each application instance serves a single organization. As the
 framework targets SaaS applications and enterprise platforms,
 multi-tenancy becomes essential for:
@@ -34,7 +34,7 @@ infrastructure
 
 *Goal*: Design a multi-tenancy architecture that provides strong
 isolation, scales to thousands of tenants, and integrates seamlessly
-with Boundary's existing modules (user, admin, jobs, cache, realtime).
+with Wagoe's existing modules (user, admin, jobs, cache, realtime).
 
 '''''
 
@@ -235,7 +235,7 @@ tenants). Better suited for ++<++ 100 very large tenants.
 [arabic]
 . *Proven Pattern*: Rails Apartment gem and Django django-tenants have
 10{plus} years production use
-. *Scales Well*: Handles 100-10,000 tenants efficiently (Boundary's
+. *Scales Well*: Handles 100-10,000 tenants efficiently (Wagoe's
 target)
 . *Strong Isolation*: Schema boundaries prevent accidental data leaks
 . *Clojure-Friendly*: Works well with JDBC/next.jdbc connection
@@ -1197,7 +1197,7 @@ https://neon.tech/blog/multi-tenancy-and-database-per-user-design-in-postgres
 ==== Related ADRs
 
 * *ADR-001*: Library Split (module architecture)
-* *ADR-002*: Boundary New Command (scaffolding)
+* *ADR-002*: Wagoe New Command (scaffolding)
 * Future ADR: Tenant-Specific Configurations
 * Future ADR: Cross-Tenant Analytics
 

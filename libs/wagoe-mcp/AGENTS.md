@@ -1,6 +1,6 @@
-# wagoe-mcp — MCP Server for Boundary
+# wagoe-mcp — MCP Server for Wagoe
 
-Model Context Protocol server exposing Boundary's framework knowledge to editor
+Model Context Protocol server exposing Wagoe's framework knowledge to editor
 agents (Claude Code, Cursor). Standalone library — **deliberately not wired into
 the root `deps.edn` paths** so applications never pull an MCP server
 transitively. Depends on `boundary/ai` for the core context/parsing helpers that
@@ -146,7 +146,7 @@ reflection now; nREPL bridge later for live-system views).
   `-32602`. Content is JSON. Live views the snapshot can't fill return
   `{:status :unavailable :note ...}` (honest, not silent-empty).
 - The in-process adapter reflects the **current working directory** — run from a
-  Boundary project root.
+  Wagoe project root.
 
 ## Tier 0 tools (BOU-100)
 

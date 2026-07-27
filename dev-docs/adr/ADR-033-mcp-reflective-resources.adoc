@@ -9,7 +9,7 @@ Proposed
 
 == Context
 
-The MCP server should expose Boundary's project knowledge to agents as
+The MCP server should expose Wagoe's project knowledge to agents as
 *resources*: conventions, the schema registry, the module graph, clj-kondo
 rules, workflows, routes, and per-library API surface. The hard requirement
 (BOU-99): these must reflect the *actual running project*, never hand-written
@@ -85,7 +85,7 @@ serialization, and the guardrail lookup; pure protocol methods still delegate to
   `lib/{name}` return `:unavailable` until the nREPL bridge lands. The wiring,
   catalog, gating, and tests are complete, so that is purely additive.
 * The in-process adapter reflects the *current working directory*. Run from a
-  Boundary project root it reflects that project; run elsewhere it reports what
+  Wagoe project root it reflects that project; run elsewhere it reports what
   it can. The nREPL adapter removes this ambiguity by targeting a specific REPL.
 
 === Follow-ups

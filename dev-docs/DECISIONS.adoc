@@ -7,7 +7,7 @@
 
 ==== Audience
 
-*Primary:* Clojure developers new to Boundary +
+*Primary:* Clojure developers new to Wagoe +
 *Secondary:* Platform engineers and API integrators with some Clojure
 exposure
 

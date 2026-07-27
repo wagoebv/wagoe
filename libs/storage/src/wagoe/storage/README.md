@@ -1,6 +1,6 @@
-# Boundary Storage Module
+# Wagoe Storage Module
 
-File upload and storage functionality for the Boundary framework. Supports local filesystem and cloud storage (S3, S3-compatible services) with image processing capabilities.
+File upload and storage functionality for the Wagoe framework. Supports local filesystem and cloud storage (S3, S3-compatible services) with image processing capabilities.
 
 ## Features
 
@@ -374,7 +374,7 @@ Only make files public when necessary:
 
 ### 5. Implement Rate Limiting
 
-Add rate limiting to upload endpoints to prevent abuse (use Boundary's rate limiting middleware).
+Add rate limiting to upload endpoints to prevent abuse (use Wagoe's rate limiting middleware).
 
 ## Testing
 
@@ -394,7 +394,7 @@ clojure -M:test -m kaocha.runner --focus wagoe.storage.shell.service-test
 
 ## Architecture
 
-The storage module follows Boundary's Functional Core / Imperative Shell pattern:
+The storage module follows Wagoe's Functional Core / Imperative Shell pattern:
 
 ### Functional Core (Pure Functions)
 - `wagoe.storage.core.validation` - File validation logic
@@ -476,4 +476,4 @@ clojure -J-Xmx2g -M:dev  # 2 GB heap
 
 ## License
 
-Same as Boundary Framework
+Same as Wagoe Framework
