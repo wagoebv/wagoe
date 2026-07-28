@@ -1,5 +1,5 @@
 (ns wagoe.cli
-  "Main CLI entry point for Boundary framework.
+  "Main CLI entry point for Wagoe framework.
    
    Provides command-line interface for enabled modules.
    Currently user and scaffolder modules are wired, with selection driven by config."
@@ -16,7 +16,7 @@
    Delegates to the appropriate module CLI implementation(s) based on
    configuration and exits with the returned status code."
   [& args]
-  (log/info "Starting Boundary CLI" {:args args})
+  (log/info "Starting Wagoe CLI" {:args args})
   (let [cfg (config/load-config)
         enabled (modules/enabled-modules cfg)
         ;; Map of module keyword to its CLI runner function

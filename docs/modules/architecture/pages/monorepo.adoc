@@ -29,8 +29,8 @@ boundary/
 
 The starter template and example applications live in separate repositories:
 
-* https://github.com/thijs-creemers/boundary-starter[boundary-starter] — project scaffolding wizard
-* https://github.com/thijs-creemers/boundary-examples[boundary-examples] — reference applications (ecommerce-api, blog-app, and more)
+* https://github.com/wagoebv/wagoe-starter[boundary-starter] — project scaffolding wizard
+* https://github.com/wagoebv/wagoe-examples[boundary-examples] — reference applications (ecommerce-api, blog-app, and more)
 
 == Library structure
 

@@ -5,7 +5,7 @@
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
 [![Clojars Project](https://img.shields.io/clojars/v/org.wagoe/wagoe-calendar.svg)](https://clojars.org/org.wagoe/wagoe-calendar)
 
-Calendar and scheduling library for the [Wagoe](https://github.com/thijs-creemers/boundary) framework.
+Calendar and scheduling library for the [Wagoe](https://github.com/wagoebv/wagoe) framework.
 
 ## Features
 
@@ -56,7 +56,7 @@ org.wagoe/wagoe-calendar {:mvn/version "1.0.0-beta-1"}
 
 ## Architecture
 
-Follows the [Functional Core / Imperative Shell](https://github.com/thijs-creemers/boundary) pattern:
+Follows the [Functional Core / Imperative Shell](https://github.com/wagoebv/wagoe) pattern:
 
 - `core/` — pure functions (no I/O, testable without mocks)
 - `shell/` — adapters with side effects (ical4j serialization)

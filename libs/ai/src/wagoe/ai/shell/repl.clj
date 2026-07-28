@@ -242,7 +242,7 @@
 
 (defn help []
   (println
-   "\033[1mBoundary AI REPL Helpers\033[0m
+   "\033[1mWagoe AI REPL Helpers\033[0m
 
 First, bind the service:
   (require '[wagoe.ai.shell.repl :as ai])

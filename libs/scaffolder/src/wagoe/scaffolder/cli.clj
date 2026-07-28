@@ -485,12 +485,12 @@
 ;; =============================================================================
 
 (def root-help
-  "Boundary CLI - Module Scaffolding
+  "Wagoe CLI - Module Scaffolding
 
 Usage: boundary scaffolder <command> [options]
 
 Commands:
-  new         Bootstrap a new Boundary project
+  new         Bootstrap a new Wagoe project
   generate    Generate a new module with full FC/IS structure
   field       Add a field to an existing entity (creates migration)
   endpoint    Add an endpoint to an existing module (shows instructions)
@@ -525,7 +525,7 @@ For command-specific help:
 
 Usage: boundary scaffolder new [options]
 
-Bootstraps a new Boundary project following the Functional Core / Imperative Shell
+Bootstraps a new Wagoe project following the Functional Core / Imperative Shell
 architecture.
 
 Required Options:
@@ -548,7 +548,7 @@ Examples:
 
 Usage: boundary scaffolder generate [options]
 
-Generates a complete Boundary module with Functional Core / Imperative Shell
+Generates a complete Wagoe module with Functional Core / Imperative Shell
 architecture including:
   - Schema definitions (Malli)
   - Port protocols

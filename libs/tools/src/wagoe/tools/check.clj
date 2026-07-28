@@ -140,7 +140,7 @@
       :else              (recur more opts))))
 
 (defn- print-help []
-  (println (bold "bb check") " — Unified quality check for Boundary")
+  (println (bold "bb check") " — Unified quality check for Wagoe")
   (println)
   (println "Usage:")
   (println "  bb check                 Run all quality checks")
@@ -169,7 +169,7 @@
                     (filter #(contains? quick-check-ids (:id %)) all-checks)
                     all-checks)
           _       (do (println)
-                      (println (bold "Boundary Quality Check"))
+                      (println (bold "Wagoe Quality Check"))
                       (println (dim "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"))
                       (println))
           start   (System/currentTimeMillis)

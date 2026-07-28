@@ -196,7 +196,7 @@
 
 (defn- print-results [results]
   (println)
-  (println (bold "Boundary Environment Doctor"))
+  (println (bold "Wagoe Environment Doctor"))
   (println)
   (doseq [r results]
     (println (format-result r)))

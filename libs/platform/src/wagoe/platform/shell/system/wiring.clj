@@ -1,5 +1,5 @@
 (ns wagoe.platform.shell.system.wiring
-  "Integrant system lifecycle management for Boundary application.
+  "Integrant system lifecycle management for Wagoe application.
    
    This namespace defines init-key and halt-key! multimethods for all
    system components, providing proper lifecycle management and dependency
@@ -668,14 +668,14 @@
   (when @system-state
     (log/warn "System already started, halting existing system first")
     (stop!))
-  (log/info "Starting Boundary system")
+  (log/info "Starting Wagoe system")
   (let [_config (require 'wagoe.config)
         load-config (ns-resolve 'wagoe.config 'load-config)
         ig-config (ns-resolve 'wagoe.config 'ig-config)
         cfg (ig-config (load-config))
         system (ig/init cfg)]
     (reset! system-state system)
-    (log/info "Boundary system started successfully")
+    (log/info "Wagoe system started successfully")
     system))
 
 (defn stop!
@@ -688,10 +688,10 @@
      (stop!)"
   []
   (when-let [system @system-state]
-    (log/info "Stopping Boundary system")
+    (log/info "Stopping Wagoe system")
     (ig/halt! system)
     (reset! system-state nil)
-    (log/info "Boundary system stopped"))
+    (log/info "Wagoe system stopped"))
   nil)
 
 (defn restart!

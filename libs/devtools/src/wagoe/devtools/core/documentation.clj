@@ -1,6 +1,6 @@
 (ns wagoe.devtools.core.documentation
   "Pure documentation catalog for in-REPL exploration.
-   Provides (doc :topic) data for Boundary concepts with examples.
+   Provides (doc :topic) data for Wagoe concepts with examples.
    No I/O, no logging — pure data and transformations."
   (:require [clojure.string :as str]))
 

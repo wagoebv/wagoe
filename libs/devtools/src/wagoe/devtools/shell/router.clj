@@ -91,7 +91,7 @@
    Supports path parameters (e.g. /api/foo/:id matches /api/foo/123).
    Matched requests go through the standard HTTP middleware stack
    (params, cookies, content negotiation/body parsing via Muuntaja)
-   so dynamic handlers behave like normal Boundary routes.
+   so dynamic handlers behave like normal Wagoe routes.
    Otherwise the request falls through to the base handler."
   [base-handler]
   (let [;; Middleware stack for dynamic routes — applied once at wrap time.

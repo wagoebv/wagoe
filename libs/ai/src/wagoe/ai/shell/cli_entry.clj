@@ -137,7 +137,7 @@
       (println "Usage: bb scaffold ai <description>")
       (println "  Example: bb scaffold ai \"product module with name, price, stock\"")
       (System/exit 0))
-    (println (bold "\u2746 Boundary AI Scaffolder"))
+    (println (bold "\u2746 Wagoe AI Scaffolder"))
     (println)
     (println (dim (str "Parsing: " description)))
     (println)
@@ -218,7 +218,7 @@
     (when (or (:help options) (nil? source-path))
       (println "Usage: bb ai gen-tests <source-file>")
       (System/exit 0))
-    (println (bold "\u2746 Boundary AI Test Generator"))
+    (println (bold "\u2746 Wagoe AI Test Generator"))
     (println (dim (str "Source: " source-path)))
     (println)
     (let [service (make-service-from-config)
@@ -310,7 +310,7 @@
       (println "Usage: bb ai admin-entity <description>")
       (println "  Example: bb ai admin-entity \"products with name, price, status\"")
       (System/exit 0))
-    (println (bold "\u2746 Boundary AI Admin Entity Generator"))
+    (println (bold "\u2746 Wagoe AI Admin Entity Generator"))
     (println)
     (println (dim (str "Parsing: " description)))
     (println)
@@ -380,7 +380,7 @@
 ;; =============================================================================
 
 (def help-text
-  (str (bold "Boundary AI \u2014 Framework-aware AI tooling") "\n"
+  (str (bold "Wagoe AI \u2014 Framework-aware AI tooling") "\n"
        "\n"
        "Usage:\n"
        "  bb ai explain [--file path]                  Error explainer (also: stdin)\n"

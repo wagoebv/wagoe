@@ -1,6 +1,6 @@
 [Unit]
 Description=Boundary Application
-Documentation=https://github.com/tcbv/boundary
+Documentation=https://github.com/wagoebv/wagoe
 After=network-online.target postgresql.service
 Wants=network-online.target
 Requires=postgresql.service

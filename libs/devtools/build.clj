@@ -17,12 +17,12 @@
                 :version version
                 :basis basis
                 :src-dirs ["src"]
-                :scm {:url "https://github.com/thijs-creemers/boundary"
-                      :connection "scm:git:git://github.com/thijs-creemers/wagoe.git"
-                      :developerConnection "scm:git:ssh://git@github.com/thijs-creemers/wagoe.git"
+                :scm {:url "https://github.com/wagoebv/wagoe"
+                      :connection "scm:git:git://github.com/wagoebv/wagoe.git"
+                      :developerConnection "scm:git:ssh://git@github.com/wagoebv/wagoe.git"
                       :tag version}
-                :pom-data [[:description "Development tools and dashboard for the Boundary framework: dev dashboard, REPL utilities, system inspection"]
-                           [:url "https://github.com/thijs-creemers/boundary"]
+                :pom-data [[:description "Development tools and dashboard for the Wagoe framework: dev dashboard, REPL utilities, system inspection"]
+                           [:url "https://github.com/wagoebv/wagoe"]
                            [:licenses
                             [:license
                              [:name "Eclipse Public License 2.0"]

@@ -408,7 +408,7 @@
 ;; =============================================================================
 
 (defn guide
-  "Look up in-REPL documentation for a Boundary topic.
+  "Look up in-REPL documentation for a Wagoe topic.
    (guide :scaffold)       ; scaffolding guide
    (guide :fcis)           ; FC/IS architecture
    (guide :topics)         ; list all topics"
@@ -703,7 +703,7 @@
 ;; Quick Start Message
 ;; =============================================================================
 
-(println "\n\u250C\u2500 Boundary Development REPL \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510")
+(println "\n\u250C\u2500 Wagoe Development REPL \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510")
 (println "\u2502 (go)         Start the system                \u2502")
 (println "\u2502 (reset)      Reload and restart               \u2502")
 (println "\u2502 (halt)       Stop the system                  \u2502")

@@ -50,7 +50,7 @@
 ;; =============================================================================
 
 (def ^:private mdc-key-mapping
-  "Mapping from Boundary context keys to MDC keys."
+  "Mapping from Wagoe context keys to MDC keys."
   {:correlation-id "correlationId"
    :request-id "requestId"
    :tenant-id "tenantId"
@@ -62,7 +62,7 @@
   "Populate SLF4J MDC with context values.
    
    Args:
-     context - Context map with Boundary keys
+     context - Context map with Wagoe keys
    
    Returns:
      nil (side effect only)

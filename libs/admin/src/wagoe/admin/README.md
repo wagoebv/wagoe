@@ -441,6 +441,6 @@ Same as Wagoe framework
 
 ## Support
 
-- **Issues**: https://github.com/thijs-creemers/boundary/issues
-- **Discussions**: https://github.com/thijs-creemers/boundary/discussions
+- **Issues**: https://github.com/wagoebv/wagoe/issues
+- **Discussions**: https://github.com/wagoebv/wagoe/discussions
 - **Docs**: See [docs-site/](../../../../docs-site/) in the repository

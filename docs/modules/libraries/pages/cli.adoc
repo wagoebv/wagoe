@@ -9,17 +9,17 @@ NOTE: Not published to Clojars. Installed via bbin from the GitHub repository.
 
 [source,bash]
 ----
-curl -fsSL https://get.boundary-app.org | bash
+curl -fsSL https://get.wagoe.com | bash
 ----
 
 The installer handles all prerequisites: JVM, Clojure CLI, Babashka, bbin, and the `boundary` command itself.
 Supports macOS, Debian/Ubuntu, Arch Linux, and WSL2.
 
-Fallback if `get.boundary-app.org` is unavailable:
+Fallback if `get.wagoe.com` is unavailable:
 
 [source,bash]
 ----
-curl -fsSL https://raw.githubusercontent.com/thijs-creemers/boundary/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/wagoebv/wagoe/main/scripts/install.sh | bash
 ----
 
 == Commands
@@ -82,7 +82,7 @@ If you prefer to manage your own bbin installation:
 
 [source,bash]
 ----
-bbin install https://github.com/thijs-creemers/boundary \
+bbin install https://github.com/wagoebv/wagoe \
   --tag v1.0.1-alpha-15 \
   --git/root libs/wagoe-cli \
   --main-opts '["-m" "wagoe.cli.main"]' \

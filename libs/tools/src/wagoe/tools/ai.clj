@@ -1,7 +1,7 @@
 #!/usr/bin/env bb
 ;; libs/tools/src/wagoe/tools/ai.clj
 ;;
-;; Framework-aware AI tooling for the Boundary framework.
+;; Framework-aware AI tooling for the Wagoe framework.
 ;;
 ;; Usage (via bb.edn task):
 ;;   bb ai                           -- show help
@@ -33,7 +33,7 @@
 ;; =============================================================================
 
 (def ^:private help-text
-  (str (bold "Boundary AI \u2014 Framework-aware AI Tooling") "\n"
+  (str (bold "Wagoe AI \u2014 Framework-aware AI Tooling") "\n"
        "\n"
        "Usage:\n"
        "  bb ai                               Show this help\n"

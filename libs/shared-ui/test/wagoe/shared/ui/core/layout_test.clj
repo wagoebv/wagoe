@@ -41,7 +41,7 @@
     (let [result (layout/main-navigation)
           nav-html (str result)]
       ; Should contain the brand logo (with alt text) and login when no user
-      (is (str/includes? nav-html "Boundary"))
+      (is (str/includes? nav-html "Wagoe"))
       (is (str/includes? nav-html "Login")))))
 
 ;; =============================================================================
@@ -89,7 +89,7 @@
     (let [result (layout/page-layout "Test" [:div "Content"])
           page-html (str result)]
       (is (str/includes? page-html "site-header"))
-      (is (str/includes? page-html "Boundary")))))  ; Brand logo with alt text
+      (is (str/includes? page-html "Wagoe")))))  ; Brand logo with alt text
 
 ;; =============================================================================
 ;; Error Layout Tests

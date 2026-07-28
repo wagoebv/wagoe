@@ -1,5 +1,5 @@
 (ns wagoe.observability.metrics.shell.adapters.otlp
-  "OpenTelemetry OTLP metrics adapter: bridges the Boundary metrics ports onto
+  "OpenTelemetry OTLP metrics adapter: bridges the Wagoe metrics ports onto
    OpenTelemetry instruments and pushes them over OTLP/HTTP (protobuf) to any
    OTel collector (SigNoz, Grafana, Datadog-via-OTel, …). No backend-specific
    code — only the endpoint changes.

@@ -24,7 +24,7 @@
                    :modules        ["user" "admin" "payments"]
                    :guidance-level :full})]
       (is (string? result))
-      (is (clojure.string/includes? result "Boundary Dev"))
+      (is (clojure.string/includes? result "Wagoe Dev"))
       (is (clojure.string/includes? result "12 components"))
       (is (clojure.string/includes? result "PostgreSQL"))
       (is (clojure.string/includes? result "user, admin, payments"))

@@ -154,7 +154,7 @@
   (testing "TOTP URI generation"
     (let [secret "JBSWY3DPEHPK3PXP"
           email "test@example.com"
-          issuer "Boundary"
+          issuer "Wagoe"
           uri (mfa-shell/generate-totp-uri secret email issuer)]
 
       (testing "generates otpauth:// URI"
@@ -183,7 +183,7 @@
   (testing "QR code data URL generation"
     (let [secret "JBSWY3DPEHPK3PXP"
           email "test@example.com"
-          issuer "Boundary"
+          issuer "Wagoe"
           totp-uri (mfa-shell/generate-totp-uri secret email issuer)
           data-url (mfa-shell/generate-qr-code-data-url totp-uri)]
 

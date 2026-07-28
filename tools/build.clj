@@ -1,5 +1,5 @@
 (ns build
-  "Build tooling for Boundary monorepo.
+  "Build tooling for Wagoe monorepo.
    
    Usage:
      clojure -T:build test-all          ; Run all tests
@@ -165,7 +165,7 @@
    
    Note: Requires CLOJARS_USERNAME and CLOJARS_PASSWORD environment variables."
   [_]
-  (println "=== Boundary Release Process ===\n")
+  (println "=== Wagoe Release Process ===\n")
   
   ;; Step 1: Test
   (println "Step 1: Running all tests...")
@@ -189,14 +189,14 @@
 (defn list-libraries
   "List all libraries in the monorepo."
   [_]
-  (println "Boundary Libraries:")
+  (println "Wagoe Libraries:")
   (doseq [lib libraries]
     (println (str "  - " lib " (" group-id "/" lib ":" version ")"))))
 
 (defn status
   "Show status of all libraries."
   [_]
-  (println "=== Boundary Monorepo Status ===\n")
+  (println "=== Wagoe Monorepo Status ===\n")
   (println (str "Version: " version))
   (println (str "Group ID: " group-id))
   (println (str "Libraries: " (count libraries)))

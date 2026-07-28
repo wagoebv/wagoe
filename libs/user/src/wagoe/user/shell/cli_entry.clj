@@ -25,7 +25,7 @@
   [args]
   (let [exit-status (atom 1)]
     (try
-      (log/info "Starting Boundary User CLI" {:args args})
+      (log/info "Starting Wagoe User CLI" {:args args})
 
       ;; Load configuration — wagoe.config is loaded lazily so this lib
       ;; compiles even when boundary/src is not on the classpath.

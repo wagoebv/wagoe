@@ -92,4 +92,4 @@ curl -X POST http://localhost:3000/api/auth/login -d '{"email":"user@example.com
 
 Out-of-the-box Defaults - SQLite dev, H2 test, Postgres prod - Ports/Core/Shell separation enforced by scaffolder and conventions - SSR/HTMX patterns with admin UI - Interceptor-based observability
 
-Next Steps - Publish starter to GitHub: https://github.com/thijs-creemers/boundary-starter - Record demo using this repo - Iterate based on soft launch feedback
+Next Steps - Publish starter to GitHub: https://github.com/wagoebv/wagoe-starter - Record demo using this repo - Iterate based on soft launch feedback

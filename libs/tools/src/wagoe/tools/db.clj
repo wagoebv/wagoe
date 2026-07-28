@@ -1,7 +1,7 @@
 #!/usr/bin/env bb
 ;; libs/tools/src/wagoe/tools/db.clj
 ;;
-;; Database workflow commands for Boundary projects.
+;; Database workflow commands for Wagoe projects.
 ;;
 ;; Usage (via bb.edn task):
 ;;   bb db:status    # Show database config and migration info
@@ -84,7 +84,7 @@
   "Show database config and migration info."
   []
   (println)
-  (println (bold "Boundary Database Status"))
+  (println (bold "Wagoe Database Status"))
   (println)
 
   ;; Read and parse config
@@ -137,7 +137,7 @@
       (println (dim "  This command is only for development use."))
       (System/exit 1)))
   (println)
-  (println (bold "Boundary Database Reset"))
+  (println (bold "Wagoe Database Reset"))
   (println (dim "  Environment: dev"))
   (println)
   (println (yellow "  WARNING: This will DROP and recreate the dev database."))
@@ -170,7 +170,7 @@
   "Seed the database from the dev seed file."
   []
   (println)
-  (println (bold "Boundary Database Seed"))
+  (println (bold "Wagoe Database Seed"))
   (println)
   (let [seed-file (io/file (seed-path))]
     (if-not (.exists seed-file)

@@ -529,7 +529,7 @@
 ;; =============================================================================
 
 (def root-help
-  "Boundary CLI - User and Session Management
+  "Wagoe CLI - User and Session Management
 
 Usage: boundary <domain> <command> [options]
 

@@ -1,5 +1,5 @@
 (ns wagoe.bench.core
-  "CRUD benchmarks for Boundary core operations.
+  "CRUD benchmarks for Wagoe core operations.
 
    Run all benchmarks:
      clojure -M:bench
@@ -167,7 +167,7 @@
   "Run all benchmark suites."
   []
   (println "==============================================")
-  (println "  Boundary CRUD Benchmarks")
+  (println "  Wagoe CRUD Benchmarks")
   (println "==============================================")
   (run-validation)
   (run-json)

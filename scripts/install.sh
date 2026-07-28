@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Boundary Framework installer
-# Usage: curl -fsSL https://get.boundary-app.org | bash
-# Fallback: curl -fsSL https://raw.githubusercontent.com/thijs-creemers/boundary/main/scripts/install.sh | bash
+# Usage: curl -fsSL https://get.wagoe.com | bash
+# Fallback: curl -fsSL https://raw.githubusercontent.com/wagoebv/wagoe/main/scripts/install.sh | bash
 
 set -euo pipefail
 
@@ -126,7 +126,7 @@ export PATH="$BBIN_BIN:$PATH"
 
 # ── boundary CLI ──────────────────────────────────────────────
 info "Fetching latest boundary release tag..."
-BOUNDARY_TAG=$(curl -fsSL https://api.github.com/repos/thijs-creemers/boundary/releases/latest \
+BOUNDARY_TAG=$(curl -fsSL https://api.github.com/repos/wagoebv/wagoe/releases/latest \
   | grep '"tag_name"' \
   | sed 's/.*"tag_name": "\(.*\)".*/\1/') \
   || fail "Failed to fetch latest release tag. Check your internet connection."
@@ -144,7 +144,7 @@ if [[ -d "$BOUNDARY_CACHE" ]]; then
   info "Using cached source at $BOUNDARY_CACHE"
 else
   git clone --depth 1 --branch "$BOUNDARY_TAG" \
-    https://github.com/thijs-creemers/boundary.git \
+    https://github.com/wagoebv/wagoe.git \
     "$BOUNDARY_CACHE" 2>&1 | grep -v "^remote:" \
     || fail "Failed to clone boundary @ $BOUNDARY_TAG"
 fi

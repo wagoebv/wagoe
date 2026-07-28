@@ -22,7 +22,7 @@
         tenant-service ::tenant-service
         membership-service ::membership-service
         db-context {:datasource ::db}
-        config {:active {:wagoe/settings {:name "Boundary"}}}]
+        config {:active {:wagoe/settings {:name "Wagoe"}}}]
     (with-redefs [wagoe.tenant.shell.persistence/initialize-tenant-schema! (fn [arg]
                                                                                 (is (= ctx arg))
                                                                                 :initialized)

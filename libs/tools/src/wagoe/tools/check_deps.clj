@@ -3,7 +3,7 @@
 ;;
 ;; Dependency direction linting: verifies that runtime (:require ...) matches
 ;; declared deps.edn dependencies and that no circular dependency exists
-;; between Boundary libraries.
+;; between Wagoe libraries.
 
 (ns wagoe.tools.check-deps
   (:require [clojure.edn :as edn]
@@ -182,7 +182,7 @@
 ;; ---------------------------------------------------------------------------
 
 (def ^:private allowed-undeclared-deps
-  "Pre-existing [lib dep] pairs where a library :requires another Boundary
+  "Pre-existing [lib dep] pairs where a library :requires another Wagoe
    library without declaring it in deps.edn. These are acknowledged but not
    yet resolved. Remove entries as deps.edn files are updated; adding new
    entries requires an ADR."

@@ -1408,7 +1408,7 @@ ____
 * **Wagoe framework** — deze repository +
   Elke `libs/*/src/*/core/`-map is een levend voorbeeld.
 
-* **Beste startpunt** — https://github.com/thijs-creemers/boundary-examples/tree/main/ecommerce-api[boundary-examples/ecommerce-api] +
+* **Beste startpunt** — https://github.com/wagoebv/wagoe-examples/tree/main/ecommerce-api[boundary-examples/ecommerce-api] +
   De meest complete referentie-implementatie.
 
 [.notes]

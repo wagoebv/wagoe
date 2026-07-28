@@ -134,9 +134,9 @@
 
 (defn- print-banner []
   (println)
-  (println (bold "━━━ Boundary Quickstart ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"))
+  (println (bold "━━━ Wagoe Quickstart ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"))
   (println)
-  (println "  This will set up a complete Boundary development environment.")
+  (println "  This will set up a complete Wagoe development environment.")
   (println "  Steps: check environment, configure, scaffold, migrate, start.")
   (println))
 
@@ -144,11 +144,11 @@
   (println)
   (println (green (bold "━━━ Quickstart Complete ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")))
   (println)
-  (println (green "  Your Boundary project is configured and ready to start!"))
+  (println (green "  Your Wagoe project is configured and ready to start!"))
   (println)
   (println "  Next steps:")
   (println "    1. Start the REPL:  " (bold "clojure -M:repl") "  (headless nREPL on port 7888)")
-  (println "    2. Connect your editor (or the Boundary MCP server) and eval " (bold "(go)"))
+  (println "    2. Connect your editor (or the Wagoe MCP server) and eval " (bold "(go)"))
   (println "    3. The startup dashboard will show you the URLs and ports")
   (println)
   (println "  Useful commands:")

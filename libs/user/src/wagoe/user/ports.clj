@@ -3,7 +3,7 @@
    
    This namespace defines all ports (abstract interfaces) that the user module
    needs to interact with external systems and services. These ports follow
-   Boundary's hexagonal architecture pattern, allowing core business logic to
+   Wagoe's hexagonal architecture pattern, allowing core business logic to
    remain pure and testable while enabling flexible adapter implementations.
    
    Ports:

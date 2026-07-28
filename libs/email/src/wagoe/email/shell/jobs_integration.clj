@@ -87,7 +87,7 @@
                     {:type :missing-dependency
                      :module "wagoe-jobs"
                      :required-for "Async email sending"
-                     :documentation "https://github.com/thijs-creemers/boundary/tree/main/libs/jobs"}))))
+                     :documentation "https://github.com/wagoebv/wagoe/tree/main/libs/jobs"}))))
 
 ;; =============================================================================
 ;; Email Job Processor
@@ -223,4 +223,4 @@
                     {:type :missing-dependency
                      :module "wagoe-jobs"
                      :required-for "Email job handler registration"
-                     :documentation "https://github.com/thijs-creemers/boundary/tree/main/libs/jobs"}))))
+                     :documentation "https://github.com/wagoebv/wagoe/tree/main/libs/jobs"}))))

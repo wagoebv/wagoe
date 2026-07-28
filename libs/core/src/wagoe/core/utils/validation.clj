@@ -1,5 +1,5 @@
 (ns wagoe.core.utils.validation
-  "Generic validation utilities for use across Boundary application modules.
+  "Generic validation utilities for use across Wagoe application modules.
    
    This namespace provides reusable validation patterns and utilities that
    were previously embedded in specific modules. These functions work with

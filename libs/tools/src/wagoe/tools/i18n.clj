@@ -1,7 +1,7 @@
 #!/usr/bin/env bb
 ;; libs/tools/src/wagoe/tools/i18n.clj
 ;;
-;; i18n tooling for the Boundary framework.
+;; i18n tooling for the Wagoe framework.
 ;;
 ;; Usage (via bb.edn tasks):
 ;;   bb i18n:find "Sign in"       ; find key by substring in en.edn, then grep codebase
@@ -70,7 +70,7 @@
   [query]
   (let [en (load-locale :en)]
     (when-not en
-      (println "No Boundary i18n catalogue found. Expected either:")
+      (println "No Wagoe i18n catalogue found. Expected either:")
       (println "  libs/i18n/resources/wagoe/i18n/translations")
       (println "  ../boundary/libs/i18n/resources/wagoe/i18n/translations")
       (System/exit 1))
@@ -132,7 +132,7 @@
         locales [:nl]
         found-missing? (atom false)]
     (when-not en-keys
-      (println "No Boundary i18n catalogue found.")
+      (println "No Wagoe i18n catalogue found.")
       (System/exit 1))
     (doseq [locale locales]
       (let [other-keys (flat-keys (load-locale locale))
@@ -165,7 +165,7 @@
                                  en-keys))
         unused   (set/difference en-keys used)]
     (when-not en-keys
-      (println "No Boundary i18n catalogue found.")
+      (println "No Wagoe i18n catalogue found.")
       (System/exit 1))
     (if (seq unused)
       (do

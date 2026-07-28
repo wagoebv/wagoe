@@ -7,14 +7,14 @@ The Wagoe installer handles all prerequisites automatically:
 
 [source,bash]
 ----
-curl -fsSL https://get.boundary-app.org | bash
+curl -fsSL https://get.wagoe.com | bash
 ----
 
-Fallback if `get.boundary-app.org` is unavailable:
+Fallback if `get.wagoe.com` is unavailable:
 
 [source,bash]
 ----
-curl -fsSL https://raw.githubusercontent.com/thijs-creemers/boundary/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/wagoebv/wagoe/main/scripts/install.sh | bash
 ----
 
 Supports macOS, Debian/Ubuntu, Arch Linux, and WSL2.

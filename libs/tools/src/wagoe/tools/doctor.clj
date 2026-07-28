@@ -1,7 +1,7 @@
 #!/usr/bin/env bb
 ;; libs/tools/src/wagoe/tools/doctor.clj
 ;;
-;; Config Doctor — rule-based validation of Boundary config files.
+;; Config Doctor — rule-based validation of Wagoe config files.
 ;;
 ;; Usage (via bb.edn task):
 ;;   bb doctor                      # Check dev environment
@@ -471,7 +471,7 @@
 
 (defn- print-results [env results]
   (println)
-  (println (bold (str "Boundary Config Doctor — " env)))
+  (println (bold (str "Wagoe Config Doctor — " env)))
   (println)
   (doseq [r results]
     (println (format-result r)))
@@ -500,7 +500,7 @@
       :else (recur more opts))))
 
 (defn- print-help []
-  (println (bold "bb doctor") " — Validate Boundary config for common mistakes")
+  (println (bold "bb doctor") " — Validate Wagoe config for common mistakes")
   (println)
   (println "Usage:")
   (println "  bb doctor                  Check dev config")

@@ -18,7 +18,7 @@
    Args:
      events - seq of EventData maps
      opts   - options map; supported keys:
-                :product-id  string  PRODID value (default \"-//Boundary//Calendar//EN\")
+                :product-id  string  PRODID value (default \"-//Wagoe//Calendar//EN\")
                 :adapter     CalendarAdapterProtocol implementation (default ICalAdapter)
 
    Returns a string starting with \"BEGIN:VCALENDAR\"."

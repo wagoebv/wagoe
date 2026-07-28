@@ -145,6 +145,6 @@
     (str "\u2501\u2501\u2501 Unclassified Error \u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n"
          msg "\n"
          "\n"
-         "This error is not recognized by Boundary's error catalog.\n"
+         "This error is not recognized by Wagoe's error catalog.\n"
          "Try: (explain *e) for AI-powered analysis\n"
          (apply str (repeat 65 "\u2501")))))

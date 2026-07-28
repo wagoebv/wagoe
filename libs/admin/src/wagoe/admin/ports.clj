@@ -3,7 +3,7 @@
 
    This namespace defines all ports (abstract interfaces) that the admin module
    needs to provide auto-generated CRUD interfaces and administrative operations.
-   These ports follow Boundary's hexagonal architecture pattern, allowing core
+   These ports follow Wagoe's hexagonal architecture pattern, allowing core
    business logic to remain pure and testable while enabling flexible adapter
    implementations.
 

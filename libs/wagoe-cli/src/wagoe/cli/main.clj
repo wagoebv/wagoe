@@ -1,7 +1,7 @@
 (ns wagoe.cli.main)
 
 (defn- usage []
-  (println "boundary — Boundary Framework project tool")
+  (println "boundary — Wagoe Framework project tool")
   (println)
   (println "Commands:")
   (println "  wagoe new <project-name>       Create a new project")

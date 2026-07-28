@@ -11,7 +11,7 @@
    [:guidance-level {:default :full} GuidanceLevel]])
 
 (def ErrorCode
-  "Schema for a Boundary error code."
+  "Schema for a Wagoe error code."
   [:map
    [:code :string]
    [:category :keyword]

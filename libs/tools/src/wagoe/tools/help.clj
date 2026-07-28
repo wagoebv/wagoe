@@ -1,7 +1,7 @@
 #!/usr/bin/env bb
 ;; libs/tools/src/wagoe/tools/help.clj
 ;;
-;; Contextual Help — state-aware guidance and reference for Boundary projects.
+;; Contextual Help — state-aware guidance and reference for Wagoe projects.
 ;;
 ;; Usage (via bb.edn task):
 ;;   bb guide                    # General help listing all commands
@@ -62,7 +62,7 @@
 (defn- help-topic-scaffold []
   (println (bold "Scaffolding Guide"))
   (println)
-  (println "Boundary includes a scaffolding wizard to generate modules, fields, endpoints, and adapters.")
+  (println "Wagoe includes a scaffolding wizard to generate modules, fields, endpoints, and adapters.")
   (println)
   (println (cyan "Interactive mode:"))
   (println "  bb scaffold                                           # Launch interactive wizard")
@@ -186,7 +186,7 @@
 
 (defn- help-general []
   (println)
-  (println (bold "Boundary CLI — Available Commands"))
+  (println (bold "Wagoe CLI — Available Commands"))
   (println)
   (println (cyan "Scaffolding:"))
   (println "  bb scaffold                          Interactive module scaffolding wizard")
@@ -194,7 +194,7 @@
   (println "  bb scaffold integrate <module>        Wire scaffolded module into project")
   (println)
   (println (cyan "AI Tools:"))
-  (println "  bb ai explain --file stacktrace.txt   Explain a Clojure/Boundary error")
+  (println "  bb ai explain --file stacktrace.txt   Explain a Clojure/Wagoe error")
   (println "  bb ai gen-tests <file>                Generate test namespace")
   (println "  bb ai sql \"description\"               Generate HoneySQL from NL")
   (println "  bb ai docs --module <lib> --type agents  Generate AGENTS.md")
@@ -337,7 +337,7 @@
 
 (defn- help-next []
   (println)
-  (println (bold "Boundary — What To Do Next"))
+  (println (bold "Wagoe — What To Do Next"))
   (println)
   (let [results (concat (check-config-exists)
                         (check-unintegrated-modules)

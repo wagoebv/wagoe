@@ -68,7 +68,7 @@ more" links
 
 ==== Key Configuration Values
 
-* *Repository:* `https://github.com/thijs-creemers/boundary`
+* *Repository:* `https://github.com/wagoebv/wagoe`
 * *Default API URL:* `http://localhost:3000`
 * *Default database:* SQLite (`dev-database.db`)
 * *REPL port:* 7888

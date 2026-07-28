@@ -561,7 +561,7 @@
                 (-> (response/redirect return-to)
                     (assoc :status 303) ; See Other
                     (assoc :flash {:type :success
-                                   :message (str "Welcome to Boundary, " (:name user-result) "! "
+                                   :message (str "Welcome to Wagoe, " (:name user-result) "! "
                                                  "Your account has been created successfully. "
                                                  "Take a moment to review your profile and set up "
                                                  "Multi-Factor Authentication for enhanced security.")})
@@ -701,7 +701,7 @@
    rather than the lower-level external SMTP provider.
    Config keys used: :welcome-email-from, :app-name (set at wiring time)."
   [email-sender user config]
-  (let [app-name (or (:app-name config) "Boundary")
+  (let [app-name (or (:app-name config) "Wagoe")
         from     (or (:welcome-email-from config) "no-reply@localhost")]
     (email-ports/send-email!
      email-sender
@@ -1539,7 +1539,7 @@
                                                                   {:user current-user
                                                                    :flash {:success "Two-factor authentication enabled successfully"}}))
               ;; Invalid code - regenerate QR code data URL from the submitted secret
-              (let [issuer (get-in mfa-service [:config :issuer] "Boundary Framework")
+              (let [issuer (get-in mfa-service [:config :issuer] "Wagoe Framework")
                     account-name (:email current-user)
                     totp-uri (mfa/generate-totp-uri secret account-name issuer)
                     qr-code-url (mfa/generate-qr-code-data-url totp-uri)]

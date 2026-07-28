@@ -12,7 +12,7 @@
    org.wagoe/wagoe-<artifact> :mvn/version coordinates.
 
    tools.build's write-pom omits :local/root deps from the generated pom, so
-   without this a published lib's pom lists none of its inter-Boundary deps and
+   without this a published lib's pom lists none of its inter-Wagoe deps and
    consumers must hand-enumerate the whole closure (and cljdoc analysis fails)."
   [deps version]
   (reduce-kv

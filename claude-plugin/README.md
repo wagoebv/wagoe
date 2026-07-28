@@ -12,7 +12,7 @@ New projects created with `boundary new` already include this skill at
 In Claude Code:
 
 ```
-/plugin marketplace add thijs-creemers/boundary
+/plugin marketplace add wagoebv/wagoe
 /plugin install boundary@boundary
 ```
 

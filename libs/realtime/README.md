@@ -1037,7 +1037,7 @@ Distributed under the Eclipse Public License version 2.0.
 - Open issues on GitHub for feature requests
 
 **Need help?**
-- GitHub Issues: https://github.com/thijs-creemers/boundary/issues
+- GitHub Issues: https://github.com/wagoebv/wagoe/issues
 - Documentation: See [docs-site/](../../docs-site/) in the repository
 
 **Coming in v0.2.0:**

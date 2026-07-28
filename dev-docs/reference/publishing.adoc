@@ -266,7 +266,7 @@ Verify both secrets exist and are non-empty:
 ==== 3. Group `org.wagoe` not verified
 
 Clojars requires proof of domain ownership for groups outside `io.github.*` / `com.github.*`.
-For `org.wagoe`, add a DNS TXT record for `boundary-app.org` as described at
+For `org.wagoe`, add a DNS TXT record for `framework.wagoe.com` as described at
 https://github.com/clojars/clojars-web/wiki/Verified-Group-Names[Clojars: Verified Group Names].
 
 === Version already exists

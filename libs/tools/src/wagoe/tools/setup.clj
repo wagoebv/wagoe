@@ -1,7 +1,7 @@
 #!/usr/bin/env bb
 ;; libs/tools/src/wagoe/tools/setup.clj
 ;;
-;; Config Setup Wizard — interactive config generation for Boundary projects.
+;; Config Setup Wizard — interactive config generation for Wagoe projects.
 ;;
 ;; Usage (via bb.edn task):
 ;;   bb setup                                              # Interactive wizard
@@ -311,7 +311,7 @@
   "Generate .env.example content from a setup spec."
   [spec]
   (let [sections
-        [["# Boundary Environment Configuration" ""]
+        [["# Wagoe Environment Configuration" ""]
          ["# HTTP Server" "HTTP_PORT=3000" "HTTP_HOST=0.0.0.0" ""]
          (when (= (:database spec) :postgresql)
            (into ["# PostgreSQL Database"]
@@ -344,7 +344,7 @@
 
 (defn wizard-interactive []
   (println)
-  (println (bold "✦ Boundary Config Setup Wizard"))
+  (println (bold "✦ Wagoe Config Setup Wizard"))
   (println (dim "Generate config.edn, test config, and .env.example for your project."))
   (println)
 
@@ -465,7 +465,7 @@
 
 (defn wizard-ai [description]
   (println)
-  (println (bold "✦ Boundary AI Config Setup"))
+  (println (bold "✦ Wagoe AI Config Setup"))
   (println (dim (str "Parsing: " description)))
   (println)
   (try
@@ -530,7 +530,7 @@
 ;; =============================================================================
 
 (defn- print-help []
-  (println (bold "bb setup") " — Interactive config setup wizard for Boundary projects")
+  (println (bold "bb setup") " — Interactive config setup wizard for Wagoe projects")
   (println)
   (println "Usage:")
   (println "  bb setup                                              Interactive wizard")

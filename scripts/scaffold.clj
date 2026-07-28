@@ -1,7 +1,7 @@
 #!/usr/bin/env bb
 ;; scripts/scaffold.clj
 ;;
-;; Interactive scaffolding wizard for Boundary modules.
+;; Interactive scaffolding wizard for Wagoe modules.
 ;;
 ;; Usage (via bb.edn task):
 ;;   bb scaffold                     -- show help
@@ -169,7 +169,7 @@
 
 (defn wizard-generate []
   (println)
-  (println (bold "\u2746 Boundary Scaffolder \u2014 Generate Module"))
+  (println (bold "\u2746 Wagoe Scaffolder \u2014 Generate Module"))
   (println)
 
   (let [module (loop []
@@ -223,7 +223,7 @@
 
 (defn wizard-new []
   (println)
-  (println (bold "\u2746 Boundary Scaffolder \u2014 New Project"))
+  (println (bold "\u2746 Wagoe Scaffolder \u2014 New Project"))
   (println)
 
   (let [name-val (loop []
@@ -247,7 +247,7 @@
 
 (defn wizard-field []
   (println)
-  (println (bold "\u2746 Boundary Scaffolder \u2014 Add Field"))
+  (println (bold "\u2746 Wagoe Scaffolder \u2014 Add Field"))
   (println)
 
   (let [module (loop []
@@ -292,7 +292,7 @@
 
 (defn wizard-endpoint []
   (println)
-  (println (bold "\u2746 Boundary Scaffolder \u2014 Add Endpoint"))
+  (println (bold "\u2746 Wagoe Scaffolder \u2014 Add Endpoint"))
   (println)
 
   (let [module (loop []
@@ -334,7 +334,7 @@
 
 (defn wizard-adapter []
   (println)
-  (println (bold "\u2746 Boundary Scaffolder \u2014 Add Adapter"))
+  (println (bold "\u2746 Wagoe Scaffolder \u2014 Add Adapter"))
   (println)
 
   (let [module (loop []
@@ -402,7 +402,7 @@
 
 (defn wizard-ai [description yes?]
   (println)
-  (println (bold "\u2746 Boundary AI Scaffolder \u2014 Natural Language Module Generation"))
+  (println (bold "\u2746 Wagoe AI Scaffolder \u2014 Natural Language Module Generation"))
   (println)
   (println (dim (str "Parsing: " description)))
   (println)
@@ -420,7 +420,7 @@
 ;; =============================================================================
 
 (def help-text
-  (str (bold "Boundary Scaffolder \u2014 Interactive Wizard") "\n"
+  (str (bold "Wagoe Scaffolder \u2014 Interactive Wizard") "\n"
        "\n"
        "Usage:\n"
        "  bb scaffold                     Show this help\n"

@@ -1,5 +1,5 @@
 (ns wagoe.main
-  "Main entry point for Boundary application uberjar.
+  "Main entry point for Wagoe application uberjar.
    
    Provides unified entry point that can run the application in different modes:
    - server: Start HTTP server (default)
@@ -28,7 +28,7 @@
 (defn- print-usage
   "Print usage information."
   []
-  (println "Boundary Framework")
+  (println "Wagoe Framework")
   (println)
   (println "Usage:")
   (println "  java -jar wagoe.jar [mode] [options]")
@@ -68,7 +68,7 @@
    until the JVM is signalled to stop."
   [what ig-config]
   (let [system (ig/init ig-config)]
-    (log/info (str "Boundary " what " started successfully"))
+    (log/info (str "Wagoe " what " started successfully"))
     (log/info "Press Ctrl+C to stop")
     (.addShutdownHook
      (Runtime/getRuntime)
@@ -85,7 +85,7 @@
 (defn- start-server!
   "Start the full system including the HTTP server and block."
   []
-  (log/info "Starting Boundary HTTP server")
+  (log/info "Starting Wagoe HTTP server")
   (try
     (boot-and-block! "HTTP server" (config/ig-config (config/load-config)))
     (catch Exception e
@@ -95,7 +95,7 @@
 (defn- start-worker!
   "Start the system without the HTTP surface (background worker) and block."
   []
-  (log/info "Starting Boundary worker (no HTTP listener)")
+  (log/info "Starting Wagoe worker (no HTTP listener)")
   (try
     (boot-and-block! "worker" (worker-ig-config (config/ig-config (config/load-config))))
     (catch Exception e
@@ -105,7 +105,7 @@
 (defn- run-cli!
   "Run CLI command and exit with status code."
   [args]
-  (log/info "Running Boundary CLI" {:args args})
+  (log/info "Running Wagoe CLI" {:args args})
   (try
     ;; Load CLI namespace dynamically to avoid loading HTTP dependencies
     (require 'wagoe.cli)
