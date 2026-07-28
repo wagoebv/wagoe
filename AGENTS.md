@@ -977,7 +977,7 @@ See `libs/tools/AGENTS.md` for the full command reference.
 - **[MFA Setup Guide](docs/modules/guides/pages/authentication.adoc)** - Multi-factor authentication
 - **[Observability Integration](docs/modules/libraries/pages/observability.adoc)** - Custom adapters, configuration
 - **[HTTP Interceptors](dev-docs/adr/ADR-010-http-interceptor-architecture.adoc)** - Technical specification
-- **[PRD](dev-docs/reference/boundary-prd.adoc)** - Product vision and requirements
+- **[PRD](dev-docs/reference/wagoe-prd.adoc)** - Product vision and requirements
 
 ---
 

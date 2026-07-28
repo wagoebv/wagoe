@@ -15,7 +15,7 @@ A production-readiness checklist for Wagoe applications. Items marked icon:check
 |**HSTS** — `Strict-Transport-Security: max-age=31536000; includeSubDomains; preload` set by default in HTTP interceptors (`libs/platform/src/wagoe/platform/shell/http/interceptors.clj`)
 
 |icon:hand-o-right[]
-|**TLS termination** — Configure TLS at the reverse proxy (nginx, Caddy, cloud LB). Wagoe listens on plain HTTP; terminate HTTPS in front of it. See `resources/deploy/nginx/boundary.conf` for a reference config.
+|**TLS termination** — Configure TLS at the reverse proxy (nginx, Caddy, cloud LB). Wagoe listens on plain HTTP; terminate HTTPS in front of it. See `resources/deploy/nginx/wagoe.conf` for a reference config.
 
 |icon:hand-o-right[]
 |**Certificate rotation** — Use Let's Encrypt / ACME or your cloud provider's managed certificates. Automate renewal.

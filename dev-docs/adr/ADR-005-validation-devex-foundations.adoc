@@ -771,7 +771,7 @@ Coverage (user): 100.0% (6/6 rules executed)
 === Related Documentation
 
 - link:https://github.com/thijs-creemers/boundary/blob/main/AGENTS.md[Developer Guide] - Project overview and development workflow
-- link:../reference/boundary-prd.adoc[Product Requirements Document] - Project vision and requirements
+- link:../reference/wagoe-prd.adoc[Product Requirements Document] - Project vision and requirements
 
 == Notes
 

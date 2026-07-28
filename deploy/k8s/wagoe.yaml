@@ -5,7 +5,7 @@
 # image with the `worker` arg (no HTTP listener). Replace `REGISTRY/boundary:TAG`
 # and the Secret/env values for your environment.
 #
-#   kubectl apply -f deploy/k8s/boundary.yaml
+#   kubectl apply -f deploy/k8s/wagoe.yaml
 ---
 apiVersion: v1
 kind: Secret

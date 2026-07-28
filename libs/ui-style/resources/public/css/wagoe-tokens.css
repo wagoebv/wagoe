@@ -1,6 +1,6 @@
 /* =============================================================================
    Boundary Framework - Design Token Contract
-   "boundary-tokens.css" — self-contained, no external dependencies
+   "wagoe-tokens.css" — self-contained, no external dependencies
 
    PURPOSE:
    This file is the stable theming API contract that all component CSS
@@ -9,7 +9,7 @@
 
    LOADING ORDER:
    1. pico.min.css          (CSS reset / base styles)
-   2. boundary-tokens.css   (THIS FILE — neutral defaults)
+   2. wagoe-tokens.css   (THIS FILE — neutral defaults)
    3. tokens-openprops.css  (optional theme override — Cyberpunk Professionalism)
    4. admin.css / app.css   (component styles)
 

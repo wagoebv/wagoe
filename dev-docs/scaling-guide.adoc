@@ -179,7 +179,7 @@ Gzip is enabled by default for responses >1KB. This reduces bandwidth 60-80% for
 
 === Static Asset Caching
 
-The nginx reference config (`resources/deploy/nginx/boundary.conf`) sets 30-day cache headers on CSS/JS/images. For the built-in static serving, cache headers are set by the platform interceptors.
+The nginx reference config (`resources/deploy/nginx/wagoe.conf`) sets 30-day cache headers on CSS/JS/images. For the built-in static serving, cache headers are set by the platform interceptors.
 
 == Horizontal Scaling
 

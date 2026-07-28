@@ -176,7 +176,7 @@ The service soft-deletes by running `UPDATE <table> SET deleted_at = ? WHERE id 
 
 1. **Server-side rendering**: All HTML generated via Hiccup (no build step)
 2. **Progressive enhancement**: HTMX for dynamic behavior
-3. **Design tokens**: Stable contract in `libs/ui-style/resources/public/css/boundary-tokens.css` with optional theme override in `libs/ui-style/resources/public/css/tokens-openprops.css`
+3. **Design tokens**: Stable contract in `libs/ui-style/resources/public/css/wagoe-tokens.css` with optional theme override in `libs/ui-style/resources/public/css/tokens-openprops.css`
 4. **Icon library**: Use Lucide icons, never emoji in UI (CLI emoji is OK)
 5. **Bundle contract**: Use `wagoe.ui-style` bundles (via shared layout fns), never ad-hoc `:css [...]` lists in feature namespaces
 
@@ -276,7 +276,7 @@ libs/{module}/src/wagoe/{module}/core/
 
 ```
 css/
-├── boundary-tokens.css          # Layer 2 — stable token contract (Wagoe defaults)
+├── wagoe-tokens.css          # Layer 2 — stable token contract (Wagoe defaults)
 ├── tokens-openprops.css         # Layer 3 — optional theme override (Cyberpunk Professionalism)
 ├── vendor/open-props/           # Vendored Open Props v1.7.23 (no CDN dependency)
 │   ├── colors.min.css           #   Named color scales (--indigo-4, --lime-6, etc.)
@@ -293,7 +293,7 @@ css/
 **Loading order** (set as default in `page-layout`):
 ```
 pico.min.css          ← CSS reset / base HTML element styles
-boundary-tokens.css   ← Token defaults (Wagoe navy/green palette)
+wagoe-tokens.css   ← Token defaults (Wagoe navy/green palette)
 tokens-openprops.css  ← Theme override (Cyberpunk Professionalism; load last to win)
 app.css               ← Component styles
 ```
@@ -305,7 +305,7 @@ Use central bundle keys from `wagoe.ui-style`:
 
 **CSS Organisation Rules**:
 1. Component CSS (`app.css`, `admin.css`) must only reference token variables — never hardcode values
-2. All token variables are defined in `boundary-tokens.css`; the optional theme file overrides them
+2. All token variables are defined in `wagoe-tokens.css`; the optional theme file overrides them
 3. Dark mode is handled via `[data-theme="dark"]` and `@media (prefers-color-scheme: dark)` in both token files — no duplicate declarations in component CSS
 4. Open Props vendor files are imported only by `tokens-openprops.css` — component CSS never imports them directly
 
@@ -334,10 +334,10 @@ The theming system has two layers:
 
 | File | Role |
 |------|------|
-| `boundary-tokens.css` | **Token contract** — every variable component CSS can reference. Neutral Wagoe navy/green defaults. Self-contained (no imports, works offline and in JAR deployments). |
+| `wagoe-tokens.css` | **Token contract** — every variable component CSS can reference. Neutral Wagoe navy/green defaults. Self-contained (no imports, works offline and in JAR deployments). |
 | `tokens-openprops.css` | **Theme override** — re-assigns the same variables to the "Cyberpunk Professionalism" palette (indigo primary, lime accent, neon glows, gradients). Imports vendored Open Props for its named color scale. |
 
-Because `tokens-openprops.css` is loaded after `boundary-tokens.css`, it wins on every variable it touches. Variables it doesn't touch keep their defaults from `boundary-tokens.css`.
+Because `tokens-openprops.css` is loaded after `wagoe-tokens.css`, it wins on every variable it touches. Variables it doesn't touch keep their defaults from `wagoe-tokens.css`.
 
 **What Open Props provides** (vendored at `vendor/open-props/`):
 - Named color scales: `--indigo-0` … `--indigo-12`, `--lime-0` … `--lime-12`, etc., each with HSL variants (`--indigo-4-hsl`)
@@ -384,7 +384,7 @@ To replace "Cyberpunk Professionalism" with a custom look:
 
 **Option A — Edit `tokens-openprops.css` in place**
 
-Override whichever variables you want; leave the rest untouched (they fall back to `boundary-tokens.css` defaults):
+Override whichever variables you want; leave the rest untouched (they fall back to `wagoe-tokens.css` defaults):
 ```css
 /* my-theme additions inside tokens-openprops.css :root block */
 --color-primary: #0d9488;          /* Teal instead of Indigo */
@@ -396,7 +396,7 @@ Override whichever variables you want; leave the rest untouched (they fall back 
 
 1. Create `libs/ui-style/resources/public/css/my-brand.css`:
 ```css
-/* Brand theme — overrides boundary-tokens.css defaults */
+/* Brand theme — overrides wagoe-tokens.css defaults */
 /* Import Open Props if you want its color scales */
 @import "./vendor/open-props/colors.min.css";
 
@@ -418,20 +418,20 @@ Override whichever variables you want; leave the rest untouched (they fall back 
 (layout/page-layout
   "My Page" content
   {:css ["/css/pico.min.css"
-         "/css/boundary-tokens.css"
+         "/css/wagoe-tokens.css"
          "/css/my-brand.css"          ; your theme, replaces tokens-openprops.css
          "/css/app.css"]})
 ```
 
 **Option C — Remove the theme entirely**
 
-Drop `tokens-openprops.css` from the `:css` list to get the default Wagoe navy/green palette from `boundary-tokens.css` with no Open Props dependency:
+Drop `tokens-openprops.css` from the `:css` list to get the default Wagoe navy/green palette from `wagoe-tokens.css` with no Open Props dependency:
 ```clojure
-{:css ["/css/pico.min.css" "/css/boundary-tokens.css" "/css/app.css"]}
+{:css ["/css/pico.min.css" "/css/wagoe-tokens.css" "/css/app.css"]}
 ```
 
 **Tips for custom themes**:
-- You only need to override variables that differ from your defaults; unoverridden variables cascade from `boundary-tokens.css`
+- You only need to override variables that differ from your defaults; unoverridden variables cascade from `wagoe-tokens.css`
 - Always provide both `:root` and `[data-theme="dark"]` blocks for dark mode support
 - Set `--glow-*: none` to disable neon glows in professional/corporate themes
 - The `--font-sans` / `--font-display` tokens control typefaces — pair with a CDN or self-hosted font `@font-face`

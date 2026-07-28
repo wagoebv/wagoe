@@ -22,7 +22,7 @@ Rules:
 2. Tables are rendered with shared table classes and the same sort/hover/selection behavior.
 3. Badges use shared badge classes and fixed-width variants where applicable.
 4. Layout namespaces (`layout.clj`) decide which bundle to load; feature namespaces do not provide ad-hoc CSS stacks.
-5. Theme overrides must be token-based (`boundary-tokens.css`/`tokens-openprops.css`), not hardcoded colors in component CSS.
+5. Theme overrides must be token-based (`wagoe-tokens.css`/`tokens-openprops.css`), not hardcoded colors in component CSS.
 
 Recommended bundle usage:
 - Public/auth/basic pages: `:base`
@@ -45,7 +45,7 @@ Contains:
 - Tailwind input source: `resources/tailwind/admin-pilot.css`
 - Compiled CSS output: `resources/public/css/daisy-admin.css`
 - Shared CSS tokens/components:
-  - `resources/public/css/boundary-tokens.css`
+  - `resources/public/css/wagoe-tokens.css`
   - `resources/public/css/tokens-openprops.css`
   - `resources/public/css/app.css`
   - `resources/public/css/admin.css`
@@ -77,4 +77,4 @@ Use this checklist when onboarding a new module or converting an existing module
 4. Render forms with shared form classes/components and token variables only (no hardcoded per-page colors).
 5. Render tables with shared table classes/components so sort, hover, row states, and spacing stay consistent.
 6. Use shared badge classes (including fixed-width badge variants where provided) for role/status/action/result labels.
-7. If theme adjustments are needed, change token files (`boundary-tokens.css` / `tokens-openprops.css`) instead of component one-offs.
+7. If theme adjustments are needed, change token files (`wagoe-tokens.css` / `tokens-openprops.css`) instead of component one-offs.
