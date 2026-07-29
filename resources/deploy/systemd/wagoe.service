@@ -7,8 +7,8 @@ Requires=postgresql.service
 
 [Service]
 Type=simple
-User=boundary
-Group=boundary
+User=wagoe
+Group=wagoe
 WorkingDirectory=/opt/wagoe
 
 # Environment file with secrets (chmod 600, owned by root)

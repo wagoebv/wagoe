@@ -179,7 +179,7 @@ After=network.target
 
 [Service]
 Type=simple
-User=boundary
+User=wagoe
 WorkingDirectory=/opt/wagoe
 Environment="ENV=prod"
 Environment="HTTP_PORT=8080"
@@ -194,9 +194,9 @@ WantedBy=multi-user.target
 Enable and start:
 
 ```bash
-sudo systemctl enable boundary
-sudo systemctl start boundary
-sudo systemctl status boundary
+sudo systemctl enable wagoe
+sudo systemctl start wagoe
+sudo systemctl status wagoe
 ```
 
 ## Troubleshooting

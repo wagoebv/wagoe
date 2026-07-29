@@ -51,12 +51,12 @@ Reference files: `resources/deploy/systemd/`
 [source,bash]
 ----
 # 1. Create service user
-sudo useradd -r -s /usr/sbin/nologin boundary
+sudo useradd -r -s /usr/sbin/nologin wagoe
 
 # 2. Deploy the jar
 sudo mkdir -p /opt/wagoe/{logs,data}
 sudo cp target/wagoe-*.jar /opt/wagoe/wagoe.jar
-sudo chown -R boundary:boundary /opt/wagoe
+sudo chown -R wagoe:wagoe /opt/wagoe
 
 # 3. Configure secrets
 sudo mkdir -p /etc/wagoe
@@ -67,16 +67,16 @@ sudo chmod 600 /etc/wagoe/wagoe.env
 # 4. Install and start the service
 sudo cp resources/deploy/systemd/wagoe.service /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable --now boundary
+sudo systemctl enable --now wagoe
 ----
 
 === Operations
 
 [source,bash]
 ----
-sudo systemctl status boundary     # Check status
-sudo journalctl -u boundary -f     # Tail logs
-sudo systemctl restart boundary    # Restart after deploy
+sudo systemctl status wagoe     # Check status
+sudo journalctl -u wagoe -f     # Tail logs
+sudo systemctl restart wagoe    # Restart after deploy
 ----
 
 The unit file runs migrations via `ExecStartPre` before starting the server. On failure it restarts after 10 seconds, with a maximum of 5 retries per minute.
