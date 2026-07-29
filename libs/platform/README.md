@@ -13,13 +13,13 @@ Core infrastructure for web applications: database, HTTP routing, pagination, se
 ```clojure
 {:deps {org.wagoe/wagoe-platform {:mvn/version "1.0.0-beta-1"}
         ;; Choose your database driver
-        org.postgresql/postgresql {:mvn/version "42.7.8"}}}
+        org.postgresql/postgresql {:mvn/version "42.7.12"}}}
 ```
 
 **Leiningen**:
 ```clojure
 [org.wagoe/wagoe-platform "1.0.0-beta-1"]
-[org.postgresql/postgresql "42.7.8"]
+[org.postgresql/postgresql "42.7.12"]
 ```
 
 ## Features

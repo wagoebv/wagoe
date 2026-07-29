@@ -822,7 +822,7 @@ CREATE INDEX IF NOT EXISTS idx_%s_created_at ON %s(created_at);
   {:main-opts  [\"-m\" \"wagoe.platform.shell.database.cli-migrations\"]
    :extra-deps {org.wagoe/wagoe-platform {:mvn/version \"1.0.0-beta-1\"}
                 org.xerial/sqlite-jdbc             {:mvn/version \"3.51.0.0\"}
-                org.postgresql/postgresql          {:mvn/version \"42.7.8\"}
+                org.postgresql/postgresql          {:mvn/version \"42.7.12\"}
                 com.h2database/h2                  {:mvn/version \"2.4.240\"}
                 com.mysql/mysql-connector-j        {:mvn/version \"9.6.0\"}}}}}
 "

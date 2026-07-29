@@ -18,7 +18,7 @@
                             ;; Embedded PostgreSQL for split-table / tenant tests
                             io.zonky.test/embedded-postgres {:mvn/version "2.2.2"}
                             io.zonky.test.postgres/embedded-postgres-binaries-darwin-arm64v8 {:mvn/version "18.4.0"}
-                            org.postgresql/postgresql {:mvn/version "42.7.11"}}
+                            org.postgresql/postgresql {:mvn/version "42.7.12"}}
               :main-opts   ["-m" "kaocha.runner"]}
 
   :clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2026.04.15"}}
