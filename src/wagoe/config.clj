@@ -2,7 +2,7 @@
   "Configuration management using Aero for environment-based config.
    
    This namespace provides configuration loading and Integrant system
-   configuration generation for the Boundary application.
+   configuration generation for the Wagoe application.
    
    Usage:
      (def config (load-config))

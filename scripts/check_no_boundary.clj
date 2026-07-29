@@ -58,8 +58,16 @@
             ;; term at a sentence end ("at the HTTP boundary.") from matching —
             ;; Phase 1 had no such guard and corrupted 19 docstrings into
             ;; "at the HTTP wagoe.".
+            ;; *.tmpl / *.template are IN SCOPE on purpose: they become real
+            ;; source in generated projects. They were in no phase's glob, so
+            ;; every `wagoe new` project shipped pre-rename namespaces against
+            ;; renamed artifacts and could not boot (BOU-215).
             :grep  ["-nIE" "boundary\\\\\\.|boundary\\.[a-z]"]
-            :paths ["*.clj" "*.cljc" "*.cljs" "*.edn"]
+            ;; NO :paths — scan every tracked file. Restricting by extension is
+            ;; what let this class through repeatedly: a namespace reference is
+            ;; just a string, and it turned up in .tmpl (generated projects),
+            ;; .sh (the installer wrapper ran boundary.cli.main), .yml and
+            ;; .service. The allowlist, not the file type, decides exemptions.
             :hard? true}
    :keys   {:desc  ":boundary/ config + Integrant keys"
             :grep  ["-nIF" ":boundary/"]
@@ -72,8 +80,12 @@
             ;; the old group after the coord rename (BOU-213).
             :grep  ["-nIE" "org[./]boundary-app"]
             :hard? true}
-   :env    {:desc  "BND_ env prefix"
-            :grep  ["-nIE" "BND_[A-Z0-9_]+"]
+   :env    {:desc  "BND_ / BOUNDARY_ env prefixes"
+            ;; Both prefixes were in use. Matching only BND_ let three live
+            ;; runtime knobs through — BOUNDARY_ENFORCE_TYPED_ERRORS,
+            ;; BOUNDARY_TENANT_ID, BOUNDARY_USER_ID — while the gate reported
+            ;; env clean. Assume a token family has more than one spelling.
+            :grep  ["-nIE" "(BND|BOUNDARY)_[A-Z0-9_]+"]
             :hard? true}
    :dirs   {:desc  "boundary-cli / boundary-mcp dir names"
             :grep  ["-nIE" "boundary-(cli|mcp)"]

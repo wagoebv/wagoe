@@ -76,9 +76,9 @@
 
 (def sample-modules
   [{:name "core" :description "Validation, case conversion" :category :core
-    :docs-url "https://github.com/thijs-creemers/boundary/blob/main/libs/core/AGENTS.md"}
+    :docs-url "https://github.com/wagoebv/wagoe/blob/main/libs/core/AGENTS.md"}
    {:name "payments" :description "PSP abstraction" :category :optional
-    :docs-url "https://github.com/thijs-creemers/boundary/blob/main/libs/payments/AGENTS.md"}])
+    :docs-url "https://github.com/wagoebv/wagoe/blob/main/libs/payments/AGENTS.md"}])
 
 (deftest render-modules-emits-aligned-table-with-links
   (let [out (gen/render-modules sample-modules)]

@@ -108,8 +108,8 @@
   [config]
   [["/swagger.json"
     {:get {:no-doc true
-           :swagger {:info {:title (get-in config [:active :wagoe/settings :name] "Boundary API")
-                            :description "RESTful API for Boundary Application. Most business endpoints require authentication. Use POST /api/v1/auth/login or POST /api/v1/sessions to obtain a token, then click the Authorize button in Swagger UI and provide either 'Bearer <JWT>' or 'X-Session-Token'."
+           :swagger {:info {:title (get-in config [:active :wagoe/settings :name] "Wagoe API")
+                            :description "RESTful API for Wagoe Application. Most business endpoints require authentication. Use POST /api/v1/auth/login or POST /api/v1/sessions to obtain a token, then click the Authorize button in Swagger UI and provide either 'Bearer <JWT>' or 'X-Session-Token'."
                             :version (get-in config [:active :wagoe/settings :version] "1.0.0")
                             :contact {:name "Support"
                                       :email "support@wagoe.example.com"}}

@@ -1,6 +1,6 @@
 (ns wagoe.cli.agents-update
   "Refresh the framework-owned sections of a project's AGENTS.md after a
-   Boundary upgrade.
+   Wagoe upgrade.
 
    `wagoe new` renders AGENTS.md from a template that evolves with the
    framework (new pitfalls, conventions, modules). This command re-renders the
@@ -89,7 +89,7 @@
         f      (io/file "AGENTS.md")]
     (if-not (.exists f)
       (do (println "No AGENTS.md found in the current directory.")
-          (println "Run this from a Boundary project root (created with `wagoe new`).")
+          (println "Run this from a Wagoe project root (created with `wagoe new`).")
           (System/exit 1))
       (let [current      (slurp f)
             project-name (or (project-name-from-agents current)

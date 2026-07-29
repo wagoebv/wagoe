@@ -10,7 +10,7 @@
    :config-snippet      ""
    :test-config-snippet ""
    :add-command         "wagoe add core"
-   :docs-url            "https://github.com/thijs-creemers/boundary/blob/main/libs/core/AGENTS.md"}
+   :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/core/AGENTS.md"}
 
   {:name                "observability"
    :description         "Interceptor-based metrics, logging, and error reporting"
@@ -20,7 +20,7 @@
    :config-snippet      "  :wagoe/metrics\n  {:provider :no-op}\n\n  :wagoe/error-reporting\n  {:provider :no-op}\n"
    :test-config-snippet "  :wagoe/metrics\n  {:provider :no-op}\n\n  :wagoe/error-reporting\n  {:provider :no-op}\n"
    :add-command         "wagoe add observability"
-   :docs-url            "https://github.com/thijs-creemers/boundary/blob/main/libs/observability/AGENTS.md"}
+   :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/observability/AGENTS.md"}
 
   {:name                "platform"
    :description         "HTTP server, Reitit router, Ring middleware pipeline"
@@ -30,7 +30,7 @@
    :config-snippet      "  :wagoe/http\n  {:port #or [#env HTTP_PORT 3000] :host \"0.0.0.0\" :join? false}\n\n  :wagoe/router\n  {:adapter :reitit :coercion :malli :middleware []}\n"
    :test-config-snippet ""
    :add-command         "wagoe add platform"
-   :docs-url            "https://github.com/thijs-creemers/boundary/blob/main/libs/platform/AGENTS.md"}
+   :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/platform/AGENTS.md"}
 
   {:name                "user"
    :description         "Authentication, JWT, MFA, user management"
@@ -40,7 +40,7 @@
    :config-snippet      ""
    :test-config-snippet ""
    :add-command         "wagoe add user"
-   :docs-url            "https://github.com/thijs-creemers/boundary/blob/main/libs/user/AGENTS.md"}
+   :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/user/AGENTS.md"}
 
   ;; ─── Optional ─────────────────────────────────────────────────────────────
   {:name                "payments"
@@ -51,7 +51,7 @@
    :config-snippet      "  :wagoe/payment-provider\n  {:provider :mock}\n"
    :test-config-snippet "  :wagoe/payment-provider\n  {:provider :mock}\n"
    :add-command         "wagoe add payments"
-   :docs-url            "https://github.com/thijs-creemers/boundary/blob/main/libs/payments/AGENTS.md"}
+   :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/payments/AGENTS.md"}
 
   {:name                "storage"
    :description         "File storage — local filesystem and S3, image processing"
@@ -61,7 +61,7 @@
    :config-snippet      "  :wagoe/storage\n  {:provider :local :root \"uploads\"}\n"
    :test-config-snippet "  :wagoe/storage\n  {:provider :local :root \"/tmp/boundary-test-uploads\"}\n"
    :add-command         "wagoe add storage"
-   :docs-url            "https://github.com/thijs-creemers/boundary/blob/main/libs/storage/AGENTS.md"}
+   :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/storage/AGENTS.md"}
 
   {:name                "jobs"
    :description         "Background job processing with retry logic"
@@ -71,7 +71,7 @@
    :config-snippet      "  :wagoe/jobs\n  {:provider :in-memory}\n"
    :test-config-snippet "  :wagoe/jobs\n  {:provider :in-memory}\n"
    :add-command         "wagoe add jobs"
-   :docs-url            "https://github.com/thijs-creemers/boundary/blob/main/libs/jobs/AGENTS.md"}
+   :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/jobs/AGENTS.md"}
 
   {:name                "email"
    :description         "SMTP email sending, async and queued modes"
@@ -81,7 +81,7 @@
    :config-snippet      "  :wagoe.external/smtp\n  {:host #or [#env SMTP_HOST \"localhost\"] :port 1025 :tls? false :from \"no-reply@localhost\"}\n"
    :test-config-snippet "  :wagoe.external/smtp\n  {:host \"localhost\" :port 1025 :tls? false :from \"test@localhost\"}\n"
    :add-command         "wagoe add email"
-   :docs-url            "https://github.com/thijs-creemers/boundary/blob/main/libs/email/AGENTS.md"}
+   :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/email/AGENTS.md"}
 
   {:name                "cache"
    :description         "Distributed caching — Redis or in-memory, TTL, atomic ops"
@@ -91,7 +91,7 @@
    :config-snippet      "  :wagoe/cache\n  {:provider :in-memory :default-ttl 300}\n"
    :test-config-snippet "  :wagoe/cache\n  {:provider :in-memory :default-ttl 300}\n"
    :add-command         "wagoe add cache"
-   :docs-url            "https://github.com/thijs-creemers/boundary/blob/main/libs/cache/AGENTS.md"}
+   :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/cache/AGENTS.md"}
 
   {:name                "search"
    :description         "Full-text search"
@@ -101,7 +101,7 @@
    :config-snippet      "  :wagoe/search\n  {:provider :in-memory}\n"
    :test-config-snippet "  :wagoe/search\n  {:provider :in-memory}\n"
    :add-command         "wagoe add search"
-   :docs-url            "https://github.com/thijs-creemers/boundary/blob/main/libs/search/AGENTS.md"}
+   :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/search/AGENTS.md"}
 
   {:name                "realtime"
    :description         "WebSocket pub/sub messaging"
@@ -111,7 +111,7 @@
    :config-snippet      "  :wagoe/realtime\n  {:provider :in-memory}\n"
    :test-config-snippet "  :wagoe/realtime\n  {:provider :in-memory}\n"
    :add-command         "wagoe add realtime"
-   :docs-url            "https://github.com/thijs-creemers/boundary/blob/main/libs/realtime/AGENTS.md"}
+   :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/realtime/AGENTS.md"}
 
   {:name                "tenant"
    :description         "Multi-tenancy with schema-per-tenant isolation"
@@ -121,7 +121,7 @@
    :config-snippet      "  :wagoe/tenant\n  {:strategy :schema-per-tenant}\n"
    :test-config-snippet "  :wagoe/tenant\n  {:strategy :schema-per-tenant}\n"
    :add-command         "wagoe add tenant"
-   :docs-url            "https://github.com/thijs-creemers/boundary/blob/main/libs/tenant/AGENTS.md"}
+   :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/tenant/AGENTS.md"}
 
   {:name                "ai"
    :description         "Multi-provider AI — Ollama, Anthropic Claude, OpenAI"
@@ -131,7 +131,7 @@
    :config-snippet      "  :wagoe/ai-service\n  {:provider :ollama :model #or [#env AI_MODEL \"qwen2.5-coder:7b\"] :base-url #or [#env OLLAMA_URL \"http://localhost:11434\"]}\n"
    :test-config-snippet "  :wagoe/ai-service\n  {:provider :no-op}\n"
    :add-command         "wagoe add ai"
-   :docs-url            "https://github.com/thijs-creemers/boundary/blob/main/libs/ai/AGENTS.md"}
+   :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/ai/AGENTS.md"}
 
   {:name                "external"
    :description         "External service adapters — Twilio, SMTP, IMAP"
@@ -141,7 +141,7 @@
    :config-snippet      ""
    :test-config-snippet ""
    :add-command         "wagoe add external"
-   :docs-url            "https://github.com/thijs-creemers/boundary/blob/main/libs/external/AGENTS.md"}
+   :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/external/AGENTS.md"}
 
   {:name                "workflow"
    :description         "Workflow orchestration with state machines"
@@ -151,7 +151,7 @@
    :config-snippet      "  :wagoe/workflow\n  {:provider :in-memory}\n"
    :test-config-snippet "  :wagoe/workflow\n  {:provider :in-memory}\n"
    :add-command         "wagoe add workflow"
-   :docs-url            "https://github.com/thijs-creemers/boundary/blob/main/libs/workflow/AGENTS.md"}
+   :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/workflow/AGENTS.md"}
 
   {:name                "reports"
    :description         "PDF/CSV export and scheduled report generation"
@@ -161,7 +161,7 @@
    :config-snippet      "  :wagoe/reports\n  {:provider :in-memory}\n"
    :test-config-snippet "  :wagoe/reports\n  {:provider :in-memory}\n"
    :add-command         "wagoe add reports"
-   :docs-url            "https://github.com/thijs-creemers/boundary/blob/main/libs/reports/AGENTS.md"}
+   :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/reports/AGENTS.md"}
 
   {:name                "calendar"
    :description         "iCal, RRULE recurrence, conflict detection, Hiccup UI"
@@ -171,7 +171,7 @@
    :config-snippet      "  :wagoe/calendar\n  {:provider :in-memory}\n"
    :test-config-snippet "  :wagoe/calendar\n  {:provider :in-memory}\n"
    :add-command         "wagoe add calendar"
-   :docs-url            "https://github.com/thijs-creemers/boundary/blob/main/libs/calendar/AGENTS.md"}
+   :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/calendar/AGENTS.md"}
 
   {:name                "geo"
    :description         "Multi-provider geocoding (OSM/Google/Mapbox), Haversine distance"
@@ -181,7 +181,7 @@
    :config-snippet      "  :wagoe/geo-service\n  {:provider :openstreetmap}\n"
    :test-config-snippet "  :wagoe/geo-service\n  {:provider :openstreetmap}\n"
    :add-command         "wagoe add geo"
-   :docs-url            "https://github.com/thijs-creemers/boundary/blob/main/libs/geo/AGENTS.md"}
+   :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/geo/AGENTS.md"}
 
   {:name                "i18n"
    :description         "Marker-based i18n, translation catalogues, locale chains"
@@ -191,7 +191,7 @@
    :config-snippet      "  :wagoe/i18n\n  {:default-locale :en}\n"
    :test-config-snippet "  :wagoe/i18n\n  {:default-locale :en}\n"
    :add-command         "wagoe add i18n"
-   :docs-url            "https://github.com/thijs-creemers/boundary/blob/main/libs/i18n/AGENTS.md"}
+   :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/i18n/AGENTS.md"}
 
   {:name                "push"
    :description         "Multi-platform push notifications — FCM (Firebase) + APNs (Apple)"
@@ -201,7 +201,7 @@
    :config-snippet      "  :wagoe/push\n  {:fcm-credentials #env WAG_FCM_CREDENTIALS\n   :apns-credentials {:key-file #env WAG_APNS_KEY_FILE\n                      :team-id #env WAG_APNS_TEAM_ID\n                      :key-id #env WAG_APNS_KEY_ID\n                      :bundle-id #env WAG_APNS_BUNDLE_ID}}\n"
    :test-config-snippet "  :wagoe/push\n  {:provider :mock}\n"
    :add-command         "wagoe add push"
-   :docs-url            "https://github.com/thijs-creemers/boundary/blob/main/libs/push/AGENTS.md"}
+   :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/push/AGENTS.md"}
 
   {:name                "audience"
    :description         "Rule-based audience segmentation with SQL + predicate pipeline"
@@ -211,7 +211,7 @@
    :config-snippet      "  :wagoe/audience\n  {:db-ctx #ig/ref :wagoe/db-context\n   :cache-service #ig/ref :wagoe/cache\n   :user-data-source #ig/ref :wagoe/user-data-source}\n"
    :test-config-snippet "  :wagoe/audience\n  {:db-ctx #ig/ref :wagoe/db-context}\n"
    :add-command         "wagoe add audience"
-   :docs-url            "https://github.com/thijs-creemers/boundary/blob/main/libs/audience/AGENTS.md"}
+   :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/audience/AGENTS.md"}
 
   {:name                "admin"
    :description         "Admin UI with entity config, HTMX forms"
@@ -221,7 +221,7 @@
    :config-snippet      "  :wagoe/admin\n  {:enabled? true :base-path \"/web/admin\" :require-role :admin}\n"
    :test-config-snippet "  :wagoe/admin\n  {:enabled? true :base-path \"/web/admin\" :require-role :admin}\n"
    :add-command         "wagoe add admin"
-   :docs-url            "https://github.com/thijs-creemers/boundary/blob/main/libs/admin/AGENTS.md"}
+   :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/admin/AGENTS.md"}
 
   {:name                "ui-style"
    :description         "Shared CSS/JS style bundles — :base, :pilot, :admin-pilot"
@@ -231,4 +231,4 @@
    :config-snippet      "  :wagoe/ui-style\n  {:bundle :base}\n"
    :test-config-snippet ""
    :add-command         "wagoe add ui-style"
-   :docs-url            "https://github.com/thijs-creemers/boundary/blob/main/libs/ui-style/AGENTS.md"}]}
+   :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/ui-style/AGENTS.md"}]}

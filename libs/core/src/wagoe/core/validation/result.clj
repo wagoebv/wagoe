@@ -2,7 +2,7 @@
   "Standard validation result format and utilities.
 
    This namespace defines the canonical result format for all validation
-   operations in the Boundary framework, supporting both schema validation
+   operations in the Wagoe framework, supporting both schema validation
    and business rule validation with structured errors and warnings.
 
    Result Format:

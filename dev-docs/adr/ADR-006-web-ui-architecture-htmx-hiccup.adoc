@@ -191,7 +191,7 @@ libs/storage/src/wagoe/storage/
 
 === ✅ Completed: Phase 1 - Shared Component Foundation
 
-**Shared UI Component Library** - `link:https://github.com/thijs-creemers/boundary/blob/main/libs/shared-ui/src/wagoe/shared/ui/core/`
+**Shared UI Component Library** - `link:https://github.com/wagoebv/wagoe/blob/main/libs/shared-ui/src/wagoe/shared/ui/core/`
 
 *Components (`components.clj`):*
 - `text-input` - Text input fields with full attribute passthrough
@@ -532,7 +532,7 @@ Consider Replicant for a page/module when ALL criteria apply:
 - https://martinfowler.com/articles/practical-test-pyramid.html[Testing Pyramid] - Testing strategy guidance
 
 === Framework Documentation
-- link:https://github.com/thijs-creemers/boundary/blob/main/AGENTS.md[Developer Guide] - Project overview and development workflow
+- link:https://github.com/wagoebv/wagoe/blob/main/AGENTS.md[Developer Guide] - Project overview and development workflow
 - link:../reference/wagoe-prd.adoc[Product Requirements Document] - Product vision and requirements
 - link:../architecture/overview.adoc[Architecture Overview] - Framework architectural principles
 

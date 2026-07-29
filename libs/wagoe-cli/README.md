@@ -12,7 +12,7 @@ Standalone project bootstrapper and module installer for the Wagoe framework. Cr
 One-liner (installs the `wagoe` command via [bbin](https://github.com/babashka/bbin)):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/thijs-creemers/boundary/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/wagoebv/wagoe/main/scripts/install.sh | bash
 ```
 
 Requires [Babashka](https://babashka.org) and [bbin](https://github.com/babashka/bbin). The artifact is also published to Clojars as `org.wagoe/wagoe-cli`.

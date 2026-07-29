@@ -23,7 +23,7 @@
   (let [captured-routes (atom nil)
         captured-config (atom nil)
         compiled-handler (fn [request] {:status 200 :body request})
-        config {:active {:wagoe/settings {:name "Boundary"
+        config {:active {:wagoe/settings {:name "Wagoe"
                                              :version "1.2.3"}}}
         ;; Tenant/membership middleware now arrives via :extra-middleware, built
         ;; by the tenant lib's :wagoe/tenant-http-middleware component (BOU-200);
@@ -116,7 +116,7 @@
                                 :metrics-emitter ::metrics
                                 :tracer ::tracer
                                 :error-reporter ::error-reporter
-                                :config {:active {:wagoe/settings {:name "Boundary"
+                                :config {:active {:wagoe/settings {:name "Wagoe"
                                                                       :version "1.2.3"}}}}))]
     (testing "web routes are prefixed and route meta is merged at the route root"
       (is (some #(and (= "/web/profile" (:path %))

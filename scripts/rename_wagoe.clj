@@ -47,7 +47,7 @@
       (->> (str/split-lines out) (remove str/blank?))
       (throw (ex-info "git ls-files failed" {:exit exit})))))
 
-(def code-globs ["*.clj" "*.cljc" "*.cljs" "*.edn"])
+(def code-globs ["*.clj" "*.cljc" "*.cljs" "*.edn" "*.tmpl" "*.template"])
 
 ;; Paths the driver must NEVER rewrite — the rename tooling itself (its literals
 ;; ARE the tokens) plus history/planning docs. Mirrors the check:no-boundary
@@ -111,10 +111,19 @@
              :moves (fn [] (->> [["libs/boundary-cli" "libs/wagoe-cli"]
                                  ["libs/boundary-mcp" "libs/wagoe-mcp"]]
                                 (filter #(fs/exists? (first %)))))}
+   ;; ORDER MATTERS in both groups: the longer pattern must run first or the
+   ;; shorter one eats its prefix (boundary-examples -> boundary, get. -> bare).
+   ;; Repo names verified against the actual org after transfer: the examples
+   ;; repo landed as wagoebv/wagoe-examples, NOT wagoebv/examples as planned.
+   ;; docs.boundary-app.org is retired — docs are folded into the main site.
    "urls"   {:desc "external refs -> Wagoe homes"
-             :subs [[#"boundary-app\.org" "framework.wagoe.com"]
-                    [#"thijs-creemers/boundary-examples" "wagoebv/examples"]
-                    [#"thijs-creemers/boundary" "wagoebv/wagoe"]]}
+             :subs [[#"get\.boundary-app\.org" "get.wagoe.com"]
+                    [#"docs\.boundary-app\.org" "framework.wagoe.com/docs"]
+                    [#"boundary-app\.org" "framework.wagoe.com"]
+                    [#"thijs-creemers/boundary-examples" "wagoebv/wagoe-examples"]
+                    [#"tcbv/boundary-examples" "wagoebv/wagoe-examples"]
+                    [#"thijs-creemers/boundary" "wagoebv/wagoe"]
+                    [#"tcbv/boundary" "wagoebv/wagoe"]]}
    "prose"  {:desc  "docs Boundary -> Wagoe (assist: flags arch 'boundary')"
              :globs ["*.md" "*.adoc"]
              :subs  [[#"Boundary framework" "Wagoe framework"]

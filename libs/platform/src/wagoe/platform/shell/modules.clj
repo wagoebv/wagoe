@@ -1,5 +1,5 @@
 (ns wagoe.platform.shell.modules
-  "Module registry and composition helpers for the Boundary shell.
+  "Module registry and composition helpers for the Wagoe shell.
 
   This namespace provides utilities to:
   - Determine which modules are enabled based on configuration.

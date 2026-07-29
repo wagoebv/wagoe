@@ -8,7 +8,7 @@
     </encoder>
   </appender>
 
-  <logger name="boundary" level="ERROR" additivity="false">
+  <logger name="wagoe" level="ERROR" additivity="false">
     <appender-ref ref="CONSOLE" />
   </logger>
 

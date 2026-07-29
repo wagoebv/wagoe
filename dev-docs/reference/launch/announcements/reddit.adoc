@@ -12,6 +12,6 @@ Wagoe is a batteries-included Clojure web framework designed for teams: - FC/IS 
 
 Why try it? - Ship faster with consistent patterns and fewer moving parts - Strong defaults for security and observability - Great fit for internal tools and back-office apps
 
-Links - Quickstart: /getting-started/quickstart/ - Starter repo: https://github.com/thijs-creemers/boundary-starter - Demo video: TODO:demo-video-url
+Links - Quickstart: /getting-started/quickstart/ - Starter repo: https://github.com/wagoebv/wagoe-starter - Demo video: TODO:demo-video-url
 
 Feedback welcome — especially from teams currently on Kit/Duct/Biff or rolling their own stacks.

@@ -1,6 +1,6 @@
 # Wagoe Framework
 
-[![CI](https://github.com/thijs-creemers/boundary/actions/workflows/ci.yml/badge.svg)](https://github.com/thijs-creemers/boundary/actions/workflows/ci.yml)
+[![CI](https://github.com/wagoebv/wagoe/actions/workflows/ci.yml/badge.svg)](https://github.com/wagoebv/wagoe/actions/workflows/ci.yml)
 [![Clojars Project](https://img.shields.io/clojars/v/org.wagoe/wagoe-core.svg)](https://clojars.org/org.wagoe/wagoe-core)
 [![cljdoc](https://cljdoc.org/badge/org.wagoe/wagoe-core)](https://cljdoc.org/d/org.wagoe/wagoe-core)
 [![License: EPL-2.0](https://img.shields.io/badge/License-EPL_2.0-blue.svg)](https://www.eclipse.org/legal/epl-2.0/)
@@ -26,13 +26,13 @@
 Install the Wagoe CLI — it handles all prerequisites (JVM, Clojure CLI, Babashka, bbin) automatically:
 
 ```bash
-curl -fsSL https://get.boundary-app.org | bash
+curl -fsSL https://get.wagoe.com | bash
 ```
 
-Fallback if `get.boundary-app.org` is unavailable:
+Fallback if `get.wagoe.com` is unavailable:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/thijs-creemers/boundary/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/wagoebv/wagoe/main/scripts/install.sh | bash
 ```
 
 Supports macOS, Debian/Ubuntu, Arch Linux, and WSL2.
@@ -85,7 +85,7 @@ For **existing** projects (or to get updates without regenerating), install
 the plugin from this repo's marketplace:
 
 ```
-/plugin marketplace add thijs-creemers/boundary
+/plugin marketplace add wagoebv/wagoe
 /plugin install boundary@boundary
 ```
 
@@ -345,7 +345,7 @@ See the [Deployment Patterns guide](./docs/modules/guides/pages/deployment-patte
 
 ## Website
 
-https://boundary-app.org
+https://framework.wagoe.com
 
 ---
 ## License

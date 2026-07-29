@@ -1,7 +1,7 @@
 #!/usr/bin/env bb
 ;; libs/tools/src/wagoe/tools/dev.clj
 ;;
-;; Development utilities for Boundary projects:
+;; Development utilities for Wagoe projects:
 ;;   - check-links    Validate local markdown links in AGENTS documentation
 ;;   - smoke-check    Verify deps.edn aliases and key tool entrypoints
 ;;   - migrate        Babashka passthrough to the standard migrate CLI
@@ -79,7 +79,7 @@
 ;; smoke-check — verify deps.edn aliases and key tool entrypoints
 ;; =============================================================================
 
-;; Aliases every Boundary project must have.
+;; Aliases every Wagoe project must have.
 (def ^:private required-aliases [:migrate :test])
 
 ;; The REPL alias name differs between the monorepo (:repl-clj) and generated
@@ -127,7 +127,7 @@
 ;; =============================================================================
 
 (defn migrate
-  "Run the standard Boundary migrate CLI via bb for a shorter DX path.
+  "Run the standard Wagoe migrate CLI via bb for a shorter DX path.
 
    Examples:
      bb migrate up
@@ -137,7 +137,7 @@
   (if (or (empty? args)
           (#{"--help" "-h" "help"} (first args)))
     (do
-      (println "Boundary migration CLI")
+      (println "Wagoe migration CLI")
       (println)
       (println "Usage:")
       (println "  bb migrate [command] [options]")

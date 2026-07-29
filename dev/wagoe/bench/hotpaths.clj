@@ -141,7 +141,7 @@
 
 (defn run-all []
   (println "==============================================")
-  (println "  Boundary hot-path baseline benchmarks")
+  (println "  Wagoe hot-path baseline benchmarks")
   (println "==============================================")
   (run-malli)
   (run-case-conversion)

@@ -176,7 +176,7 @@
           ;; Generate MFA setup data
           (let [secret (generate-totp-secret)
                 backup-codes (generate-backup-codes 10)
-                issuer (get config :issuer "Boundary Framework")
+                issuer (get config :issuer "Wagoe Framework")
                 account-name (:email user)
                 totp-uri (generate-totp-uri secret account-name issuer)
                 qr-code-url (generate-qr-code-data-url totp-uri)]

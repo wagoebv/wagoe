@@ -190,7 +190,7 @@
      Hiccup structure for home page"
   []
   [:div.home-content
-   [:h1 "Welcome to Boundary Application"]
+   [:h1 "Welcome to Wagoe Application"]
    [:p "This is a modular application built with Clojure."]
    [:div.navigation-links
     [:a.button {:href "/users"} "Manage Users"]]])

@@ -21,7 +21,7 @@
   [:div.dashboard-sidebar {:x-data "{collapsed: false}" ":class" "collapsed && 'collapsed'"}
    [:div.sidebar-brand
     [:span.sidebar-brand-icon "⚡"]
-    [:span.sidebar-brand-text "Boundary Dev"]]
+    [:span.sidebar-brand-text "Wagoe Dev"]]
    [:nav.sidebar-nav
     (for [{:keys [path icon label]} nav-items]
       [:a.nav-item {:href path :class (when (or (= path active-path)
@@ -62,7 +62,7 @@
        [:head
         [:meta {:charset "UTF-8"}]
         [:meta {:name "viewport" :content "width=device-width, initial-scale=1"}]
-        [:title (str (or title "Dashboard") " — Boundary Dev")]
+        [:title (str (or title "Dashboard") " — Wagoe Dev")]
         [:link {:rel "stylesheet" :href "/assets/dashboard.css"}]
         (for [js-src js-files]
           [:script {:src js-src :defer true}])]

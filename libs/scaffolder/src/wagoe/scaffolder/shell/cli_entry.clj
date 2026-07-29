@@ -15,7 +15,7 @@
   [args]
   (let [exit-status (atom 1)]
     (try
-      (log/info "Starting Boundary Scaffolder CLI" {:args args})
+      (log/info "Starting Wagoe Scaffolder CLI" {:args args})
 
       ;; Create scaffolder service (no filesystem adapter needed)
       (let [scaffolder-svc (scaffolder-service/create-scaffolder-service)

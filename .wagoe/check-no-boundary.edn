@@ -7,6 +7,9 @@
 {:allow-paths
  ["CHANGELOG.md"
   "docs/superpowers/"
+  ;; Historical issue log: it REPORTS a stale docs/boundary.prd.adoc path.
+  ;; Rewriting it would falsify the record. Same category as CHANGELOG.
+  "dev-docs/LINK_ISSUES.adoc"
   ".wagoe/"
   "scripts/rename_wagoe.clj"
   "scripts/check_no_wagoe.clj"

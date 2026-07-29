@@ -85,7 +85,7 @@
       (System/exit 1))
 
     (println)
-    (println (bold (str "Boundary Module Integration — " module-name)))
+    (println (bold (str "Wagoe Module Integration — " module-name)))
     (println)
     (println (str "Discovered: " (cyan (:src-path module))))
     (println (str "  Namespace: " (dim (:module-ns module)) ".*"))

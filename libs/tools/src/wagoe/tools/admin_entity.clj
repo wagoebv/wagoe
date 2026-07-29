@@ -22,7 +22,7 @@
     (System/exit 1))
 
   (println)
-  (println (bold "✦ Boundary AI Admin Entity Generator"))
+  (println (bold "✦ Wagoe AI Admin Entity Generator"))
   (println (dim (str "Parsing: " description)))
   (println)
 

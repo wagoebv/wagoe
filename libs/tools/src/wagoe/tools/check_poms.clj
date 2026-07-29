@@ -2,7 +2,7 @@
 ;; libs/tools/src/wagoe/tools/check_poms.clj
 ;;
 ;; POM dependency completeness: verifies that published library POMs will carry
-;; their inter-Boundary dependencies.
+;; their inter-Wagoe dependencies.
 ;;
 ;; tools.build's `write-pom` omits `:local/root` deps from the generated pom, so
 ;; each lib's build.clj must feed write-pom a *rewritten* basis (produced by
@@ -144,7 +144,7 @@
         with-deps      (filter #(and (:publishable? %) (seq (:wagoe-deps %))) results)]
     ;; Informational: the boundary closure each pom will declare.
     (when (seq with-deps)
-      (println (ansi/dim "Boundary dependencies each published POM will declare:"))
+      (println (ansi/dim "Wagoe dependencies each published POM will declare:"))
       (doseq [{:keys [lib wagoe-deps]} with-deps]
         (println (str "  " lib " -> " (str/join ", " (map (comp str :coord) wagoe-deps)))))
       (println))

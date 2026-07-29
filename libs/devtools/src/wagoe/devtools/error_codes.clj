@@ -1,5 +1,5 @@
 (ns wagoe.devtools.error-codes
-  "Error code catalog for Boundary. Loads from the shared EDN resource
+  "Error code catalog for Wagoe. Loads from the shared EDN resource
    so the Babashka CLI and JVM runtime share one source of truth.
 
    Not under core/ deliberately — loading a resource requires I/O,

@@ -1,5 +1,5 @@
 (ns wagoe.shared.ui.core.icons
-  "Lucide-based icon system for Boundary Framework.
+  "Lucide-based icon system for Wagoe Framework.
    
    Provides inline SVG icons that work seamlessly with Hiccup.
    Icons are ISC-licensed from https://lucide.dev/
@@ -431,7 +431,7 @@
        (icon :moon {:size size :aria-label "Switch to dark mode"})]])))
 
 (defn brand-logo
-  "Render the Boundary brand logo with automatic light/dark theme switching.
+  "Render the Wagoe brand logo with automatic light/dark theme switching.
    
    Uses CSS to show the appropriate logo variant based on the current theme.
    In light mode, shows the dark logo (dark text on light background).
@@ -464,12 +464,12 @@
       ;; Light theme logo (dark text) - shown when data-theme="light" or no theme set
       [:img.brand-logo-light
        {:src light-src
-        :alt "Boundary"
+        :alt "Wagoe"
         :style img-style}]
       ;; Dark theme logo (light text) - shown when data-theme="dark"
       [:img.brand-logo-dark
        {:src dark-src
-        :alt "Boundary"
+        :alt "Wagoe"
         :style img-style}]])))
 
 (comment

@@ -212,7 +212,7 @@ The abstraction serves as **documentation and structure**, even with single impl
 === Completed Actions
 
 1. ✅ **Deleted Pedestal adapter draft code**
-   - `link:https://github.com/thijs-creemers/boundary/blob/main/libs/platform/src/wagoe/platform/shell/http/pedestal_router.clj`
+   - `link:https://github.com/wagoebv/wagoe/blob/main/libs/platform/src/wagoe/platform/shell/http/pedestal_router.clj`
    - `test/wagoe/platform/shell/http/pedestal_router_test.clj`
 
 2. ✅ **Removed Pedestal dependencies from `deps.edn`**
@@ -279,8 +279,8 @@ This decision should be revisited if:
 - **Analysis Document**: link:../architecture/pedestal-adapter-analysis.adoc[Pedestal Adapter Analysis]
 - **Reitit Documentation**: https://cljdoc.org/d/metosin/reitit/
 - **Pedestal Documentation**: https://pedestal.io/
-- **Reitit Adapter**: `link:https://github.com/thijs-creemers/boundary/blob/main/libs/platform/src/wagoe/platform/shell/http/reitit_router.clj`
-- **IRouter Protocol**: `link:https://github.com/thijs-creemers/boundary/blob/main/libs/platform/src/wagoe/platform/ports/http.clj`
+- **Reitit Adapter**: `link:https://github.com/wagoebv/wagoe/blob/main/libs/platform/src/wagoe/platform/shell/http/reitit_router.clj`
+- **IRouter Protocol**: `link:https://github.com/wagoebv/wagoe/blob/main/libs/platform/src/wagoe/platform/ports/http.clj`
 
 == Lessons Learned
 

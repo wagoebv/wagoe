@@ -10,7 +10,7 @@
    Key Features:
    - Valid data generation conforming to schemas
    - Invalid data generation with specific violation types
-   - Boundary case generation (min/max values, edge cases)
+   - Wagoe case generation (min/max values, edge cases)
    - Rule-aware generation for targeted testing
    - Deterministic seeding for reproducible tests
    
@@ -385,7 +385,7 @@
            (range count)))))
 
 ;; =============================================================================
-;; Boundary Case Generation
+;; Wagoe Case Generation
 ;; =============================================================================
 
 (defn gen-boundaries

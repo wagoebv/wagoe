@@ -451,8 +451,8 @@
      in the router config passed to compile-routes.
 
    Example swagger-data:
-     {:info {:title \"Boundary API\"
-             :description \"Boundary Framework REST API\"
+     {:info {:title \"Wagoe API\"
+             :description \"Wagoe Framework REST API\"
              :version \"0.1.0\"}
       :tags [{:name \"users\" :description \"User management\"}
              {:name \"inventory\" :description \"Inventory tracking\"}]}"
@@ -548,8 +548,8 @@
           ;; Extract Swagger configuration (optional)
           swagger-enabled? (get config :swagger-enabled true)  ; Enabled by default
           swagger-data (or (:swagger-data config)
-                           {:info {:title "Boundary API"
-                                   :description "Boundary Framework REST API"
+                           {:info {:title "Wagoe API"
+                                   :description "Wagoe Framework REST API"
                                    :version "0.1.0"}})
 
           ;; Convert normalized routes to Reitit format

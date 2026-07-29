@@ -10,9 +10,9 @@
 ;; =============================================================================
 
 (def ^:private framework-system-context
-  "You are an AI assistant integrated into Boundary, a Clojure monorepo framework.
+  "You are an AI assistant integrated into Wagoe, a Clojure monorepo framework.
 
-Boundary follows the Functional Core / Imperative Shell (FC/IS) pattern strictly:
+Wagoe follows the Functional Core / Imperative Shell (FC/IS) pattern strictly:
 - core/ namespaces: pure functions only — no I/O, no logging, no side effects
 - shell/ namespaces: all side effects — HTTP handlers, DB, logging, external APIs
 - ports.clj: protocol definitions (interfaces)
@@ -45,7 +45,7 @@ Testing strategy:
   []
   (str framework-system-context "
 
-Your task: parse a natural language description of a Boundary module into a structured JSON specification.
+Your task: parse a natural language description of a Wagoe module into a structured JSON specification.
 
 Output ONLY valid JSON with this exact structure:
 {
@@ -106,7 +106,7 @@ Rules:
   []
   (str framework-system-context "
 
-Your task: explain a Clojure/Boundary stack trace and suggest a fix.
+Your task: explain a Clojure/Wagoe stack trace and suggest a fix.
 
 Structure your response as:
 1. Root cause (1-2 sentences)
@@ -114,7 +114,7 @@ Structure your response as:
 3. Fix suggestion (concrete code change)
 4. FC/IS relevance (only if the error relates to a boundary violation)
 
-Known common error patterns in Boundary:
+Known common error patterns in Wagoe:
 - Malli validation failures: ExceptionInfo with :type :malli/validation
 - HoneySQL key errors: keywords must be qualified (e.g. :users/id not :id in joins)
 - Integrant init failures: usually missing ref or bad config key
@@ -130,7 +130,7 @@ Known common error patterns in Boundary:
 
    Returns a string."
   [stacktrace source-files]
-  (str "Explain this Clojure/Boundary error and suggest a fix:\n\n"
+  (str "Explain this Clojure/Wagoe error and suggest a fix:\n\n"
        "```\n" stacktrace "\n```"
        (when (seq source-files)
          (str "\n\nReferenced source files:\n"
@@ -163,7 +163,7 @@ Known common error patterns in Boundary:
   []
   (str framework-system-context "
 
-Your task: generate a complete Kaocha-compatible test namespace for a Boundary source file.
+Your task: generate a complete Kaocha-compatible test namespace for a Wagoe source file.
 
 Rules:
 - For core/ files: use ^:unit metadata on the deftest forms
@@ -188,7 +188,7 @@ Output ONLY valid Clojure code — no markdown fences, no explanation."))
 
    Returns a string."
   [source-file source-code test-type]
-  (str "Generate a complete test namespace for this Boundary source file.\n"
+  (str "Generate a complete test namespace for this Wagoe source file.\n"
        "Test type: " (name test-type) "\n"
        "Source file: " source-file "\n\n"
        "```clojure\n" source-code "\n```"))
@@ -227,7 +227,7 @@ Output JSON with this structure:
   \"raw-sql\": \"equivalent raw SQL for reference\"
 }
 
-HoneySQL rules for Boundary:
+HoneySQL rules for Wagoe:
 - Use keyword qualifications for ambiguous columns: :table/column
 - Use {:select [:col1 :col2] :from [:table] :where [...] :order-by [...] :limit n}
 - Date functions: [:> :created-at [:raw \"NOW() - INTERVAL '7 days'\"]] for PostgreSQL
@@ -293,7 +293,7 @@ Structure:
 Output ONLY the markdown content."
 
          :openapi
-         "Your task: generate an OpenAPI 3.x YAML specification for a Boundary HTTP module.
+         "Your task: generate an OpenAPI 3.x YAML specification for a Wagoe HTTP module.
 
 Extract endpoints from the Reitit route definitions and Malli schemas.
 Use application/json for all request/response bodies.
@@ -318,7 +318,7 @@ Output ONLY the markdown content.")))
 
    Returns a string."
   [module-path source-files doc-type]
-  (str "Generate " (name doc-type) " documentation for the Boundary module at: " module-path "\n\n"
+  (str "Generate " (name doc-type) " documentation for the Wagoe module at: " module-path "\n\n"
        "Source files:\n"
        (str/join "\n\n"
                  (map (fn [[path content]]
@@ -353,7 +353,7 @@ Output ONLY the markdown content.")))
   [existing-entities]
   (str framework-system-context "
 
-Your task: generate a Boundary admin entity configuration in EDN format.
+Your task: generate a Wagoe admin entity configuration in EDN format.
 
 Admin entity configs define how entities appear in the admin UI. They are EDN maps stored
 in resources/conf/{dev,test}/admin/<entity>.edn.
@@ -442,7 +442,7 @@ Only add :width when field semantics differ from these defaults:
   []
   (str framework-system-context "
 
-Your task: parse a natural language description of a Boundary project setup into a JSON configuration spec.
+Your task: parse a natural language description of a Wagoe project setup into a JSON configuration spec.
 
 Output ONLY valid JSON with this exact structure:
 {
@@ -502,7 +502,7 @@ Your task: review the given Clojure namespace for:
 2. Code quality issues (naming, complexity, missing edge cases)
 3. Malli schema mismatches or missing validations
 4. Potential bugs or race conditions
-5. Adherence to Boundary conventions (kebab-case, case conversion boundaries)
+5. Adherence to Wagoe conventions (kebab-case, case conversion boundaries)
 
 Be specific and actionable. Reference line numbers when possible.
 Format: list each issue with severity (critical/warning/info) and suggested fix.")}

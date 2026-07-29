@@ -1,7 +1,7 @@
 #!/usr/bin/env bb
 ;; libs/tools/src/wagoe/tools/admin.clj
 ;;
-;; Interactive wizard to create the first admin user for a new Boundary project.
+;; Interactive wizard to create the first admin user for a new Wagoe project.
 ;;
 ;; Usage (via bb.edn task):
 ;;   bb create-admin                                         -- interactive wizard
@@ -46,7 +46,7 @@
 ;; =============================================================================
 
 (defn- print-help []
-  (println (bold "bb create-admin") "\u2014 Create initial admin user for a Boundary project")
+  (println (bold "bb create-admin") "\u2014 Create initial admin user for a Wagoe project")
   (println)
   (println (bold "Usage:"))
   (println "  bb create-admin                            Interactive wizard (root project)")
@@ -77,7 +77,7 @@
       (System/exit 0))
 
     (println)
-    (println (bold (cyan "Boundary \u2014 Create Admin User")))
+    (println (bold (cyan "Wagoe \u2014 Create Admin User")))
     (println (dim "Sets up the first administrator account for your project."))
     (println)
 

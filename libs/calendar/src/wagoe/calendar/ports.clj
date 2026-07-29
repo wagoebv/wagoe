@@ -20,7 +20,7 @@
      Args:
        events - seq of EventData maps
        opts   - options map; supported keys:
-                  :product-id  string  PRODID property (default \"-//Boundary//Calendar//EN\")
+                  :product-id  string  PRODID property (default \"-//Wagoe//Calendar//EN\")
                   :cal-name    string  optional X-WR-CALNAME property
 
      Returns a string starting with \"BEGIN:VCALENDAR\".")

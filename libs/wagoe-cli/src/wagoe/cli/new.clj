@@ -169,6 +169,6 @@
         (println (format "  %-25s %s" add-command description)))
       (println "  ... (wagoe list modules for full list)")
       (println "\nAI-ready: CLAUDE.md, AGENTS.md, a Claude Code skill, and a wired MCP server (.mcp.json) are included.")
-      (println "Open Claude Code or Cursor here — the Boundary MCP server is live, so the agent has Boundary's tools immediately.")
+      (println "Open Claude Code or Cursor here — the Wagoe MCP server is live, so the agent has Wagoe's tools immediately.")
       (println (str "\nNext:\n  cd " project-name
                     "\n  bb quickstart        # download deps, migrate, optional first module, start")))))

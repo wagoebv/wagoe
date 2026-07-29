@@ -105,7 +105,7 @@
 ;; =============================================================================
 
 (defn explain-error
-  "Explain a Clojure/Boundary stack trace and suggest a fix.
+  "Explain a Clojure/Wagoe stack trace and suggest a fix.
 
    Args:
      service      - AIService map
@@ -204,7 +204,7 @@
 ;; =============================================================================
 
 (defn generate-docs
-  "Generate documentation for a Boundary module.
+  "Generate documentation for a Wagoe module.
 
    Args:
      service      - AIService map

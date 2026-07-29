@@ -862,35 +862,35 @@ Seven automated safeguards run in CI (and `check:fcis` + `check:ports` in pre-co
 ## Library-Specific Guides
 
 <!-- gen:modules -->
-| Module                                                                                             | Description                                                                       |
-|----------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------|
-| [admin](https://github.com/thijs-creemers/boundary/blob/main/libs/admin/AGENTS.md)                 | Admin UI with entity config, HTMX forms                                           |
-| [ai](https://github.com/thijs-creemers/boundary/blob/main/libs/ai/AGENTS.md)                       | Multi-provider AI — Ollama, Anthropic Claude, OpenAI                              |
-| [audience](https://github.com/thijs-creemers/boundary/blob/main/libs/audience/AGENTS.md)           | Rule-based audience segmentation with SQL + predicate pipeline                    |
-| [cache](https://github.com/thijs-creemers/boundary/blob/main/libs/cache/AGENTS.md)                 | Distributed caching — Redis or in-memory, TTL, atomic ops                         |
-| [calendar](https://github.com/thijs-creemers/boundary/blob/main/libs/calendar/AGENTS.md)           | iCal, RRULE recurrence, conflict detection, Hiccup UI                             |
-| [core](https://github.com/thijs-creemers/boundary/blob/main/libs/core/AGENTS.md)                   | Pure validation, case conversion, interceptor pipeline, feature flags             |
-| [devtools](https://github.com/thijs-creemers/boundary/blob/main/libs/devtools/AGENTS.md)           | Dev-only tools: REPL helpers, error pipeline, dashboard                           |
-| [email](https://github.com/thijs-creemers/boundary/blob/main/libs/email/AGENTS.md)                 | SMTP email sending, async and queued modes                                        |
-| [external](https://github.com/thijs-creemers/boundary/blob/main/libs/external/AGENTS.md)           | External service adapters — Twilio, SMTP, IMAP                                    |
-| [geo](https://github.com/thijs-creemers/boundary/blob/main/libs/geo/AGENTS.md)                     | Multi-provider geocoding (OSM/Google/Mapbox), Haversine distance                  |
-| [i18n](https://github.com/thijs-creemers/boundary/blob/main/libs/i18n/AGENTS.md)                   | Marker-based i18n, translation catalogues, locale chains                          |
-| [jobs](https://github.com/thijs-creemers/boundary/blob/main/libs/jobs/AGENTS.md)                   | Background job processing with retry logic                                        |
-| [observability](https://github.com/thijs-creemers/boundary/blob/main/libs/observability/AGENTS.md) | Interceptor-based metrics, logging, and error reporting                           |
-| [payments](https://github.com/thijs-creemers/boundary/blob/main/libs/payments/AGENTS.md)           | PSP abstraction — Mollie, Stripe, Mock checkout and webhook verification          |
-| [platform](https://github.com/thijs-creemers/boundary/blob/main/libs/platform/AGENTS.md)           | HTTP server, Reitit router, Ring middleware pipeline                              |
-| [push](https://github.com/thijs-creemers/boundary/blob/main/libs/push/AGENTS.md)                   | Multi-platform push notifications — FCM (Firebase) + APNs (Apple)                 |
-| [realtime](https://github.com/thijs-creemers/boundary/blob/main/libs/realtime/AGENTS.md)           | WebSocket pub/sub messaging                                                       |
-| [reports](https://github.com/thijs-creemers/boundary/blob/main/libs/reports/AGENTS.md)             | PDF/CSV export and scheduled report generation                                    |
-| [scaffolder](https://github.com/thijs-creemers/boundary/blob/main/libs/scaffolder/AGENTS.md)       | Module generation with FC/IS structure, tests, migrations                         |
-| [search](https://github.com/thijs-creemers/boundary/blob/main/libs/search/AGENTS.md)               | Full-text search                                                                  |
-| [storage](https://github.com/thijs-creemers/boundary/blob/main/libs/storage/AGENTS.md)             | File storage — local filesystem and S3, image processing                          |
-| [tenant](https://github.com/thijs-creemers/boundary/blob/main/libs/tenant/AGENTS.md)               | Multi-tenancy with schema-per-tenant isolation                                    |
-| [tools](https://github.com/thijs-creemers/boundary/blob/main/libs/tools/AGENTS.md)                 | Developer CLI: scaffolding, AI, config, i18n, deployment                          |
-| [ui-style](https://github.com/thijs-creemers/boundary/blob/main/libs/ui-style/AGENTS.md)           | Shared CSS/JS style bundles — :base, :pilot, :admin-pilot                         |
-| [user](https://github.com/thijs-creemers/boundary/blob/main/libs/user/AGENTS.md)                   | Authentication, JWT, MFA, user management                                         |
-| [wagoe-mcp](https://github.com/thijs-creemers/boundary/blob/main/libs/wagoe-mcp/AGENTS.md)         | MCP server (stdio): tool/resource registry + JSON-RPC transport for editor agents |
-| [workflow](https://github.com/thijs-creemers/boundary/blob/main/libs/workflow/AGENTS.md)           | Workflow orchestration with state machines                                        |
+| Module                                                                                   | Description                                                                       |
+|------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------|
+| [admin](https://github.com/wagoebv/wagoe/blob/main/libs/admin/AGENTS.md)                 | Admin UI with entity config, HTMX forms                                           |
+| [ai](https://github.com/wagoebv/wagoe/blob/main/libs/ai/AGENTS.md)                       | Multi-provider AI — Ollama, Anthropic Claude, OpenAI                              |
+| [audience](https://github.com/wagoebv/wagoe/blob/main/libs/audience/AGENTS.md)           | Rule-based audience segmentation with SQL + predicate pipeline                    |
+| [cache](https://github.com/wagoebv/wagoe/blob/main/libs/cache/AGENTS.md)                 | Distributed caching — Redis or in-memory, TTL, atomic ops                         |
+| [calendar](https://github.com/wagoebv/wagoe/blob/main/libs/calendar/AGENTS.md)           | iCal, RRULE recurrence, conflict detection, Hiccup UI                             |
+| [core](https://github.com/wagoebv/wagoe/blob/main/libs/core/AGENTS.md)                   | Pure validation, case conversion, interceptor pipeline, feature flags             |
+| [devtools](https://github.com/wagoebv/wagoe/blob/main/libs/devtools/AGENTS.md)           | Dev-only tools: REPL helpers, error pipeline, dashboard                           |
+| [email](https://github.com/wagoebv/wagoe/blob/main/libs/email/AGENTS.md)                 | SMTP email sending, async and queued modes                                        |
+| [external](https://github.com/wagoebv/wagoe/blob/main/libs/external/AGENTS.md)           | External service adapters — Twilio, SMTP, IMAP                                    |
+| [geo](https://github.com/wagoebv/wagoe/blob/main/libs/geo/AGENTS.md)                     | Multi-provider geocoding (OSM/Google/Mapbox), Haversine distance                  |
+| [i18n](https://github.com/wagoebv/wagoe/blob/main/libs/i18n/AGENTS.md)                   | Marker-based i18n, translation catalogues, locale chains                          |
+| [jobs](https://github.com/wagoebv/wagoe/blob/main/libs/jobs/AGENTS.md)                   | Background job processing with retry logic                                        |
+| [observability](https://github.com/wagoebv/wagoe/blob/main/libs/observability/AGENTS.md) | Interceptor-based metrics, logging, and error reporting                           |
+| [payments](https://github.com/wagoebv/wagoe/blob/main/libs/payments/AGENTS.md)           | PSP abstraction — Mollie, Stripe, Mock checkout and webhook verification          |
+| [platform](https://github.com/wagoebv/wagoe/blob/main/libs/platform/AGENTS.md)           | HTTP server, Reitit router, Ring middleware pipeline                              |
+| [push](https://github.com/wagoebv/wagoe/blob/main/libs/push/AGENTS.md)                   | Multi-platform push notifications — FCM (Firebase) + APNs (Apple)                 |
+| [realtime](https://github.com/wagoebv/wagoe/blob/main/libs/realtime/AGENTS.md)           | WebSocket pub/sub messaging                                                       |
+| [reports](https://github.com/wagoebv/wagoe/blob/main/libs/reports/AGENTS.md)             | PDF/CSV export and scheduled report generation                                    |
+| [scaffolder](https://github.com/wagoebv/wagoe/blob/main/libs/scaffolder/AGENTS.md)       | Module generation with FC/IS structure, tests, migrations                         |
+| [search](https://github.com/wagoebv/wagoe/blob/main/libs/search/AGENTS.md)               | Full-text search                                                                  |
+| [storage](https://github.com/wagoebv/wagoe/blob/main/libs/storage/AGENTS.md)             | File storage — local filesystem and S3, image processing                          |
+| [tenant](https://github.com/wagoebv/wagoe/blob/main/libs/tenant/AGENTS.md)               | Multi-tenancy with schema-per-tenant isolation                                    |
+| [tools](https://github.com/wagoebv/wagoe/blob/main/libs/tools/AGENTS.md)                 | Developer CLI: scaffolding, AI, config, i18n, deployment                          |
+| [ui-style](https://github.com/wagoebv/wagoe/blob/main/libs/ui-style/AGENTS.md)           | Shared CSS/JS style bundles — :base, :pilot, :admin-pilot                         |
+| [user](https://github.com/wagoebv/wagoe/blob/main/libs/user/AGENTS.md)                   | Authentication, JWT, MFA, user management                                         |
+| [wagoe-mcp](https://github.com/wagoebv/wagoe/blob/main/libs/wagoe-mcp/AGENTS.md)         | MCP server (stdio): tool/resource registry + JSON-RPC transport for editor agents |
+| [workflow](https://github.com/wagoebv/wagoe/blob/main/libs/workflow/AGENTS.md)           | Workflow orchestration with state machines                                        |
 <!-- /gen:modules -->
 
 ---
@@ -910,11 +910,11 @@ Also add the lib's `:id` test suite to `tests.edn` and its source/test paths to 
 ## Ecommerce API Example
 
 A complete reference application demonstrating Wagoe patterns with SQLite, Integrant, Reitit, and Swagger UI.
-Source: https://github.com/thijs-creemers/boundary-examples/tree/main/ecommerce-api
+Source: https://github.com/wagoebv/wagoe-examples/tree/main/ecommerce-api
 
 ```bash
 # Clone boundary-examples and run from ecommerce-api/
-git clone https://github.com/thijs-creemers/boundary-examples
+git clone https://github.com/wagoebv/wagoe-examples
 cd boundary-examples/ecommerce-api
 clojure -M:run          # Start server on port 3002
 ```

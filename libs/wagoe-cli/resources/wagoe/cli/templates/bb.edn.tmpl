@@ -1,26 +1,26 @@
 ;; bb.edn — Babashka task runner for this Wagoe project
-;; All tasks are provided by boundary-tools; no local scripts needed.
-{:deps {org.wagoe/wagoe-tools {:mvn/version "{{boundary-tools-version}}"}}
+;; All tasks are provided by wagoe-tools; no local scripts needed.
+{:deps {org.wagoe/wagoe-tools {:mvn/version "{{wagoe-tools-version}}"}}
 
  :tasks
- {:requires ([boundary.tools.scaffold    :as scaffold]
-             [boundary.tools.ai          :as ai]
-             [boundary.tools.deps        :as deps]
-             [boundary.tools.i18n        :as i18n]
-             [boundary.tools.admin       :as admin]
-             [boundary.tools.deploy      :as deploy]
-             [boundary.tools.dev         :as dev]
-             [boundary.tools.setup       :as setup]
-             [boundary.tools.doctor      :as doctor]
-             [boundary.tools.doctor-env  :as doctor-env]
-             [boundary.tools.check       :as check]
-             [boundary.tools.check-fcis  :as check-fcis]
-             [boundary.tools.check-tests :as check-tests]
-             [boundary.tools.check-deps  :as check-deps]
-             [boundary.tools.db          :as db]
-             [boundary.tools.quickstart  :as quickstart]
-             [boundary.tools.help        :as help]
-             [boundary.tools.integrate   :as integrate])
+ {:requires ([wagoe.tools.scaffold    :as scaffold]
+             [wagoe.tools.ai          :as ai]
+             [wagoe.tools.deps        :as deps]
+             [wagoe.tools.i18n        :as i18n]
+             [wagoe.tools.admin       :as admin]
+             [wagoe.tools.deploy      :as deploy]
+             [wagoe.tools.dev         :as dev]
+             [wagoe.tools.setup       :as setup]
+             [wagoe.tools.doctor      :as doctor]
+             [wagoe.tools.doctor-env  :as doctor-env]
+             [wagoe.tools.check       :as check]
+             [wagoe.tools.check-fcis  :as check-fcis]
+             [wagoe.tools.check-tests :as check-tests]
+             [wagoe.tools.check-deps  :as check-deps]
+             [wagoe.tools.db          :as db]
+             [wagoe.tools.quickstart  :as quickstart]
+             [wagoe.tools.help        :as help]
+             [wagoe.tools.integrate   :as integrate])
 
   ;; Generate a new FC/IS module interactively
   scaffold          {:doc "Interactive module scaffolding wizard"

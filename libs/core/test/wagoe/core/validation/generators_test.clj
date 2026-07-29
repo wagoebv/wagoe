@@ -186,7 +186,7 @@
       (is (not= invalid1 invalid2) "Different seeds should produce different invalid data"))))
 
 ;; =============================================================================
-;; Boundary Case Generation Tests
+;; Wagoe Case Generation Tests
 ;; =============================================================================
 
 (deftest ^:unit ^:phase3 gen-boundaries-test

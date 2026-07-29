@@ -10,10 +10,10 @@
 
   <!-- File appender for persistent logs -->
   <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-    <file>logs/boundary.log</file>
+    <file>logs/wagoe.log</file>
     <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
       <!-- Daily rollover -->
-      <fileNamePattern>logs/boundary.%d{yyyy-MM-dd}.log</fileNamePattern>
+      <fileNamePattern>logs/wagoe.%d{yyyy-MM-dd}.log</fileNamePattern>
       <!-- Keep 30 days of history -->
       <maxHistory>30</maxHistory>
       <!-- Total size cap -->
@@ -80,7 +80,7 @@
   <!-- Logger configurations by package -->
   
   <!-- Boundary application logging -->
-  <logger name="boundary" level="INFO" additivity="false">
+  <logger name="wagoe" level="INFO" additivity="false">
     <appender-ref ref="ASYNC_CONSOLE" />
     <appender-ref ref="ASYNC_FILE" />
     <appender-ref ref="AUDIT" />

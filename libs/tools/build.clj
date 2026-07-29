@@ -17,12 +17,12 @@
                 :version version
                 :basis basis
                 :src-dirs ["src"]
-                :scm {:url "https://github.com/thijs-creemers/boundary"
-                      :connection "scm:git:git://github.com/thijs-creemers/wagoe.git"
-                      :developerConnection "scm:git:ssh://git@github.com/thijs-creemers/wagoe.git"
+                :scm {:url "https://github.com/wagoebv/wagoe"
+                      :connection "scm:git:git://github.com/wagoebv/wagoe.git"
+                      :developerConnection "scm:git:ssh://git@github.com/wagoebv/wagoe.git"
                       :tag version}
-                :pom-data [[:description "Developer tooling for the Boundary framework: scaffolding, AI assistance, i18n management, deployment and development utilities"]
-                           [:url "https://github.com/thijs-creemers/boundary"]
+                :pom-data [[:description "Developer tooling for the Wagoe framework: scaffolding, AI assistance, i18n management, deployment and development utilities"]
+                           [:url "https://github.com/wagoebv/wagoe"]
                            [:licenses
                             [:license
                              [:name "Eclipse Public License 2.0"]
@@ -35,7 +35,7 @@
   ;; namespace-load of wagoe.tools.help. Source of truth lives in
   ;; libs/devtools/resources; copied here at build time.
   (b/copy-file {:src    "../devtools/resources/wagoe/devtools/error_catalog.edn"
-                :target (str class-dir "/boundary/devtools/error_catalog.edn")})
+                :target (str class-dir "/wagoe/devtools/error_catalog.edn")})
   (spit (str class-dir "/cljdoc.edn")
         (pr-str {:cljdoc/root "libs/tools"}))
   (b/jar {:class-dir class-dir

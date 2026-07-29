@@ -28,7 +28,7 @@
 (defn- base-config
   []
   {:active
-   {:wagoe/settings {:name "Boundary Test"
+   {:wagoe/settings {:name "Wagoe Test"
                         :version "0.1.0"
                         :user-validation {:password-policy {:min-length 12}}}
     :wagoe/http {:port 3000

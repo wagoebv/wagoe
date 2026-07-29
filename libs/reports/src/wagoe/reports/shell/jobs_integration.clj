@@ -62,7 +62,7 @@
                     {:type          :missing-dependency
                      :module        "wagoe-jobs"
                      :required-for  "Async report generation"
-                     :documentation "https://github.com/thijs-creemers/boundary/tree/main/libs/jobs"}))))
+                     :documentation "https://github.com/wagoebv/wagoe/tree/main/libs/jobs"}))))
 
 ;; =============================================================================
 ;; Report Job Processor
@@ -136,4 +136,4 @@
                     {:type          :missing-dependency
                      :module        "wagoe-jobs"
                      :required-for  "Report job handler registration"
-                     :documentation "https://github.com/thijs-creemers/boundary/tree/main/libs/jobs"}))))
+                     :documentation "https://github.com/wagoebv/wagoe/tree/main/libs/jobs"}))))

@@ -1,7 +1,7 @@
 #!/usr/bin/env bb
 ;; scripts/docs_lint.clj
 ;; 
-;; Documentation drift linter for Boundary Framework.
+;; Documentation drift linter for Wagoe Framework.
 ;; Detects stale paths, broken links, unknown namespaces, and invalid aliases.
 ;;
 ;; Usage (babashka):
@@ -349,7 +349,7 @@
         :message (str "Error reading file: " (.getMessage e))}])))
 
 (defn run-lint []
-  (println "Boundary Docs Lint")
+  (println "Wagoe Docs Lint")
   (println "==================")
   (println)
 
@@ -404,7 +404,7 @@
         ;; Write text report
         (spit (io/file out-dir "report.txt")
               (with-out-str
-                (println "Boundary Docs Lint Report")
+                (println "Wagoe Docs Lint Report")
                 (println "=========================")
                 (println)
                 (println "Summary:")

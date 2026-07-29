@@ -1,5 +1,5 @@
 (ns wagoe.tools.docs-lint
-  "Documentation drift linter for Boundary Framework.
+  "Documentation drift linter for Wagoe Framework.
    
    This is a Clojure CLI wrapper for the babashka docs-lint script,
    enabling CI to run docs-lint without requiring babashka installed.
@@ -348,7 +348,7 @@
         :message (str "Error reading file: " (.getMessage e))}])))
 
 (defn run-lint []
-  (println "Boundary Docs Lint")
+  (println "Wagoe Docs Lint")
   (println "==================")
   (println)
 
@@ -403,7 +403,7 @@
         ;; Write text report
         (spit (io/file out-dir "report.txt")
               (with-out-str
-                (println "Boundary Docs Lint Report")
+                (println "Wagoe Docs Lint Report")
                 (println "=========================")
                 (println)
                 (println "Summary:")

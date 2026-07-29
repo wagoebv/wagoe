@@ -49,7 +49,7 @@
                          (when (> (count modules) 5)
                            (str " (+" (- (count modules) 5) " more)")))
                     "none")
-        lines     (cond-> [(str "\u250C\u2500 Boundary Dev " (apply str (repeat (- width 15) "\u2500")) "\u2510")
+        lines     (cond-> [(str "\u250C\u2500 Wagoe Dev " (apply str (repeat (- width 15) "\u2500")) "\u2510")
                            (line (str "System:    running (" components " components, " errors " errors)"))
                            (when database (line (str "Database:  " database)))
                            (when web-url (line (str "Web:       " web-url)))
@@ -161,7 +161,7 @@
                {:name "(lint)"                 :desc "Run clj-kondo"}
                {:name "(check-all)"            :desc "Run all quality checks"}]
    :help      [{:name "(commands)"       :desc "Show this list"}
-               {:name "(guide :topic)"   :desc "Boundary topic guide"}
+               {:name "(guide :topic)"   :desc "Wagoe topic guide"}
                {:name "(guide :topics)"  :desc "List available topics"}
                {:name "(next-steps)"     :desc "What should you do next?"}
                {:name "(guidance lv)"    :desc "Set guidance level"}]})

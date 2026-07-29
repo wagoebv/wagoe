@@ -44,7 +44,7 @@
    
    Extraction priority:
    1. --tenant-id CLI option (explicit override)
-   2. BOUNDARY_TENANT_ID environment variable
+   2. WAGOE_TENANT_ID environment variable
    3. :tenant-id from config map (if provided)
    
    Args:
@@ -55,7 +55,7 @@
      Tenant ID string or nil"
   [cli-opts config]
   (or (:tenant-id cli-opts)
-      (System/getenv "BOUNDARY_TENANT_ID")
+      (System/getenv "WAGOE_TENANT_ID")
       (:tenant-id config)))
 
 (defn extract-user-context
@@ -63,7 +63,7 @@
    
    For CLI commands, user context typically comes from:
    1. --user-id CLI option (for admin operations)
-   2. BOUNDARY_USER_ID environment variable
+   2. WAGOE_USER_ID environment variable
    3. Current authenticated user from config
    
    Args:
@@ -74,7 +74,7 @@
      User ID string or nil"
   [cli-opts config]
   (or (:user-id cli-opts)
-      (System/getenv "BOUNDARY_USER_ID")
+      (System/getenv "WAGOE_USER_ID")
       (get-in config [:auth :user-id])))
 
 (defn build-cli-context

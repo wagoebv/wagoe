@@ -23,7 +23,7 @@
 
 (def catalog
   [{:name        "explain-error"
-    :description "Explain a Clojure/Boundary error or stacktrace: a concise summary plus any matching BND error code (rule, principle, fix)."
+    :description "Explain a Clojure/Wagoe error or stacktrace: a concise summary plus any matching BND error code (rule, principle, fix)."
     :capability  :read
     :inputSchema {:type       "object"
                   :properties {"error" {:type "string"

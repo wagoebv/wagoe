@@ -842,7 +842,7 @@ CREATE INDEX IF NOT EXISTS idx_%s_created_at ON %s(created_at);
 
    Pure: true"
   [_name]
-  (str ";; bb.edn — Babashka task runner for this Boundary project\n"
+  (str ";; bb.edn — Babashka task runner for this Wagoe project\n"
        ";; All tasks are provided by wagoe-tools; no local scripts needed.\n"
        "{:deps {org.wagoe/wagoe-tools {:mvn/version \"" wagoe-tools-version "\"}}\n"
        "\n"
@@ -953,7 +953,7 @@ CREATE INDEX IF NOT EXISTS idx_%s_created_at ON %s(created_at);
   (let [name-snake (str/replace name "-" "_")]
     (format "# %s
 
-A Clojure web application built with the Boundary Framework.
+A Clojure web application built with the Wagoe Framework.
 
 ## Quick Start
 
@@ -1015,7 +1015,7 @@ The recommended development workflow uses Integrant REPL:
 
 ### Adding Features
 
-Use the Boundary scaffolder to generate new modules:
+Use the Wagoe scaffolder to generate new modules:
 
 ```bash
 clojure -M -m wagoe.scaffolder.shell.cli-entry generate \\
@@ -1218,7 +1218,7 @@ Distributed under the Eclipse Public License version 2.0.
   [name]
   (format "# AGENTS.md — %s
 
-Guidance for coding agents (Claude Code, etc.) working in this Boundary project.
+Guidance for coding agents (Claude Code, etc.) working in this Wagoe project.
 
 ## Architecture: Functional Core / Imperative Shell + Ports
 

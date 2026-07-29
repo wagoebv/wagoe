@@ -143,7 +143,7 @@
 (defn print-help
   "Prints CLI help message."
   []
-  (println "\nBoundary Database Migration CLI")
+  (println "\nWagoe Database Migration CLI")
   (println "================================\n")
   (println "Usage:")
   (println "  clojure -M -m wagoe.platform.shell.database.cli-migrations [command] [options]\n")

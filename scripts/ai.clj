@@ -1,7 +1,7 @@
 #!/usr/bin/env bb
 ;; scripts/ai.clj
 ;;
-;; Babashka frontend for Boundary AI tooling.
+;; Babashka frontend for Wagoe AI tooling.
 ;;
 ;; Usage (via bb.edn task):
 ;;   bb ai                           -- show help
@@ -46,7 +46,7 @@
 ;; =============================================================================
 
 (def help-text
-  (str (bold "Boundary AI \u2014 Framework-aware AI Tooling") "\n"
+  (str (bold "Wagoe AI \u2014 Framework-aware AI Tooling") "\n"
        "\n"
        "Usage:\n"
        "  bb ai                               Show this help\n"

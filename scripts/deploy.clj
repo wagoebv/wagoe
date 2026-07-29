@@ -1,7 +1,7 @@
 #!/usr/bin/env bb
 ;; scripts/deploy.clj
 ;;
-;; Deploy one or more Boundary libraries to Clojars.
+;; Deploy one or more Wagoe libraries to Clojars.
 ;;
 ;; Usage (via bb.edn task):
 ;;   bb deploy                         -- show help
@@ -237,7 +237,7 @@
   (deploy-sequence! libs))
 
 (defn print-help []
-  (println (bold "bb deploy") "— Deploy Boundary libraries to Clojars")
+  (println (bold "bb deploy") "— Deploy Wagoe libraries to Clojars")
   (println)
   (println "Usage:")
   (println "  bb deploy --all              Deploy all 23 libraries in dependency order")

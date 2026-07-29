@@ -259,7 +259,7 @@
 (defn- enforce-error-type?
   "Return true when exceptions must include :type in ex-data."
   [system]
-  (let [override (or (System/getenv "BOUNDARY_ENFORCE_TYPED_ERRORS")
+  (let [override (or (System/getenv "WAGOE_ENFORCE_TYPED_ERRORS")
                      (System/getProperty "wagoe.enforceTypedErrors"))
         parsed-override (parse-boolean-config override)
         env (detect-environment system)]

@@ -157,7 +157,7 @@
   ports/CalendarAdapterProtocol
 
   (export-ical [_this events opts]
-    (let [product-id (get opts :product-id "-//Boundary//Calendar//EN")
+    (let [product-id (get opts :product-id "-//Wagoe//Calendar//EN")
           vevents    (mapv event->vevent events)
           calendar   (build-calendar vevents product-id)
           writer     (StringWriter.)

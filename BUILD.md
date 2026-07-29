@@ -137,7 +137,7 @@ java \
   -Xms512m \
   -XX:+UseG1GC \
   -XX:MaxGCPauseMillis=200 \
-  -Dlogback.configurationFile=/etc/boundary/logback.xml \
+  -Dlogback.configurationFile=/etc/wagoe/logback.xml \
   -jar wagoe.jar server
 ```
 
@@ -179,11 +179,11 @@ After=network.target
 
 [Service]
 Type=simple
-User=boundary
-WorkingDirectory=/opt/boundary
+User=wagoe
+WorkingDirectory=/opt/wagoe
 Environment="ENV=prod"
 Environment="HTTP_PORT=8080"
-ExecStart=/usr/bin/java -Xmx2g -jar /opt/boundary/wagoe.jar server
+ExecStart=/usr/bin/java -Xmx2g -jar /opt/wagoe/wagoe.jar server
 Restart=on-failure
 RestartSec=10
 
@@ -194,9 +194,9 @@ WantedBy=multi-user.target
 Enable and start:
 
 ```bash
-sudo systemctl enable boundary
-sudo systemctl start boundary
-sudo systemctl status boundary
+sudo systemctl enable wagoe
+sudo systemctl start wagoe
+sudo systemctl status wagoe
 ```
 
 ## Troubleshooting
