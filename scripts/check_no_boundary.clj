@@ -80,8 +80,12 @@
             ;; the old group after the coord rename (BOU-213).
             :grep  ["-nIE" "org[./]boundary-app"]
             :hard? true}
-   :env    {:desc  "BND_ env prefix"
-            :grep  ["-nIE" "BND_[A-Z0-9_]+"]
+   :env    {:desc  "BND_ / BOUNDARY_ env prefixes"
+            ;; Both prefixes were in use. Matching only BND_ let three live
+            ;; runtime knobs through — BOUNDARY_ENFORCE_TYPED_ERRORS,
+            ;; BOUNDARY_TENANT_ID, BOUNDARY_USER_ID — while the gate reported
+            ;; env clean. Assume a token family has more than one spelling.
+            :grep  ["-nIE" "(BND|BOUNDARY)_[A-Z0-9_]+"]
             :hard? true}
    :dirs   {:desc  "boundary-cli / boundary-mcp dir names"
             :grep  ["-nIE" "boundary-(cli|mcp)"]
