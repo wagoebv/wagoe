@@ -23,7 +23,7 @@
   :test     {:extra-paths ["test"]
              :extra-deps  {lambdaisland/kaocha {:mvn/version "1.91.1392"}}
              :main-opts   ["-m" "kaocha.runner"]}
-  :migrate  {:main-opts ["-m" "boundary.platform.shell.database.cli-migrations"]}
+  :migrate  {:main-opts ["-m" "wagoe.platform.shell.database.cli-migrations"]}
   ;; clj-kondo static analysis. Isolated via :replace-deps so it pulls only the
   ;; linter, not the project's deps. Used by the .githooks/pre-commit gate.
   :clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2026.04.15"}}
@@ -32,7 +32,7 @@
                           org.postgresql/postgresql   {:mvn/version "42.7.10"}
                           com.h2database/h2           {:mvn/version "2.4.240"}
                           com.mysql/mysql-connector-j {:mvn/version "9.6.0"}}
-             :main-opts  ["-e" "(require '[boundary.user.shell.cli-entry :as e]) (System/exit (e/run-cli! (vec *command-line-args*)))"]}
+             :main-opts  ["-e" "(require '[wagoe.user.shell.cli-entry :as e]) (System/exit (e/run-cli! (vec *command-line-args*)))"]}
   ;; Wagoe MCP server for editor agents (Claude Code / Cursor). Kept in an
   ;; alias — NOT in :deps — so the app runtime never pulls the MCP server.
   ;; Launched by .mcp.json via `clojure -M:mcp`. wagoe-mcp's pom now declares
@@ -46,5 +46,5 @@
                           org.wagoe/wagoe-scaffolder {:mvn/version "{{wagoe-mcp-version}}"}
                           org.wagoe/wagoe-tools      {:mvn/version "{{wagoe-mcp-version}}"}
                           org.wagoe/wagoe-jobs       {:mvn/version "{{wagoe-mcp-version}}"}}
-             :main-opts  ["-m" "boundary.mcp.shell.server"]}}}
+             :main-opts  ["-m" "wagoe.mcp.shell.server"]}}}
 

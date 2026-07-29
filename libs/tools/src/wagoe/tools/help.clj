@@ -361,7 +361,7 @@
 (defn- catalog-unavailable []
   (println)
   (println (yellow "Error catalogue not available on the classpath."))
-  (println (dim "  The wagoe-tools jar ships boundary/devtools/error_catalog.edn;"))
+  (println (dim "  The wagoe-tools jar ships wagoe/devtools/error_catalog.edn;"))
   (println (dim "  inside the monorepo it loads from libs/devtools/resources via bb.edn :paths."))
   (println (dim "  Reinstall/upgrade wagoe-tools, or add libs/devtools/resources to bb.edn :paths.")))
 
