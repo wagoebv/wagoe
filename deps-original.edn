@@ -77,7 +77,7 @@
            ;; =============================================================================
 
            :db        {:extra-deps {org.xerial/sqlite-jdbc      {:mvn/version "3.53.0.0"}
-                                    org.postgresql/postgresql   {:mvn/version "42.7.10"}
+                                    org.postgresql/postgresql   {:mvn/version "42.7.12"}
                                     com.h2database/h2           {:mvn/version "2.4.240"}
                                     com.mysql/mysql-connector-j {:mvn/version "9.6.0"}}}
 
@@ -87,12 +87,12 @@
            ;; =============================================================================
 
            :dev       {:extra-deps {org.xerial/sqlite-jdbc      {:mvn/version "3.53.0.0"}
-                                    org.postgresql/postgresql   {:mvn/version "42.7.10"}
+                                    org.postgresql/postgresql   {:mvn/version "42.7.12"}
                                     com.h2database/h2           {:mvn/version "2.4.240"}
                                     com.mysql/mysql-connector-j {:mvn/version "9.6.0"}}
                        :jvm-opts   ["-Denv=dev"]}
            :prod      {:extra-deps {org.xerial/sqlite-jdbc      {:mvn/version "3.53.0.0"}
-                                    org.postgresql/postgresql   {:mvn/version "42.7.10"}
+                                    org.postgresql/postgresql   {:mvn/version "42.7.12"}
                                     com.h2database/h2           {:mvn/version "2.4.240"}
                                     com.mysql/mysql-connector-j {:mvn/version "9.6.0"}}
                        :jvm-opts   ["-Denv=prod"]}
@@ -112,7 +112,7 @@
                                      org.clojure/test.check      {:mvn/version "1.1.2"}
                                      com.gfredericks/test.chuck  {:mvn/version "0.2.15"}
                                      org.xerial/sqlite-jdbc      {:mvn/version "3.53.0.0"}
-                                     org.postgresql/postgresql   {:mvn/version "42.7.10"}
+                                     org.postgresql/postgresql   {:mvn/version "42.7.12"}
                                      com.h2database/h2           {:mvn/version "2.4.240"}
                                      com.mysql/mysql-connector-j {:mvn/version "9.6.0"}}
                        :jvm-opts    ["-Denv=test"]}
@@ -124,7 +124,7 @@
                        :ns-default build}
            :migrate   {:main-opts  ["-m" "wagoe.platform.shell.database.cli-migrations"]
                        :extra-deps {org.xerial/sqlite-jdbc      {:mvn/version "3.53.0.0"}
-                                    org.postgresql/postgresql   {:mvn/version "42.7.10"}
+                                    org.postgresql/postgresql   {:mvn/version "42.7.12"}
                                     com.h2database/h2           {:mvn/version "2.4.240"}
                                     com.mysql/mysql-connector-j {:mvn/version "9.6.0"}}}
            :coverage  {:extra-deps  {cloverage/cloverage {:mvn/version "1.2.4"}}
@@ -140,7 +140,7 @@
            ;; =============================================================================
 
            :cli       {:extra-deps {org.xerial/sqlite-jdbc      {:mvn/version "3.53.0.0"}
-                                    org.postgresql/postgresql   {:mvn/version "42.7.10"}
+                                    org.postgresql/postgresql   {:mvn/version "42.7.12"}
                                     com.h2database/h2           {:mvn/version "2.4.240"}
                                     com.mysql/mysql-connector-j {:mvn/version "9.6.0"}}
                        :main-opts  ["-m" "wagoe.cli"]

@@ -80,7 +80,7 @@ Ensure your `deps.edn` includes the necessary JDBC drivers:
 ```clojure
 {:deps {org.xerial/sqlite-jdbc {:mvn/version "3.50.3.0"}
         com.h2database/h2 {:mvn/version "2.3.232"}
-        org.postgresql/postgresql {:mvn/version "42.7.7"}
+        org.postgresql/postgresql {:mvn/version "42.7.12"}
         com.mysql/mysql-connector-j {:mvn/version "9.1.0"}
         com.zaxxer/HikariCP {:mvn/version "7.0.2"}}}
 ```
