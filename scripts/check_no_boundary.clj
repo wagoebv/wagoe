@@ -58,8 +58,12 @@
             ;; term at a sentence end ("at the HTTP boundary.") from matching —
             ;; Phase 1 had no such guard and corrupted 19 docstrings into
             ;; "at the HTTP wagoe.".
+            ;; *.tmpl / *.template are IN SCOPE on purpose: they become real
+            ;; source in generated projects. They were in no phase's glob, so
+            ;; every `wagoe new` project shipped pre-rename namespaces against
+            ;; renamed artifacts and could not boot (BOU-215).
             :grep  ["-nIE" "boundary\\\\\\.|boundary\\.[a-z]"]
-            :paths ["*.clj" "*.cljc" "*.cljs" "*.edn"]
+            :paths ["*.clj" "*.cljc" "*.cljs" "*.edn" "*.tmpl" "*.template"]
             :hard? true}
    :keys   {:desc  ":boundary/ config + Integrant keys"
             :grep  ["-nIF" ":boundary/"]

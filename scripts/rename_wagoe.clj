@@ -47,7 +47,7 @@
       (->> (str/split-lines out) (remove str/blank?))
       (throw (ex-info "git ls-files failed" {:exit exit})))))
 
-(def code-globs ["*.clj" "*.cljc" "*.cljs" "*.edn"])
+(def code-globs ["*.clj" "*.cljc" "*.cljs" "*.edn" "*.tmpl" "*.template"])
 
 ;; Paths the driver must NEVER rewrite — the rename tooling itself (its literals
 ;; ARE the tokens) plus history/planning docs. Mirrors the check:no-boundary
