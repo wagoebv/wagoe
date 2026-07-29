@@ -112,7 +112,7 @@
         db       (db-spec config)
         http-cfg (get active :wagoe/http {:port 3000 :host "0.0.0.0" :join? false})
         router   (get active :wagoe/router {:adapter :reitit :coercion :malli :middleware []})
-        i18n-cfg (get active :wagoe/i18n {:catalogue-path "boundary/i18n/translations"
+        i18n-cfg (get active :wagoe/i18n {:catalogue-path "wagoe/i18n/translations"
                                              :default-locale  :en})
         val-cfg  (get-in active [:wagoe/settings :user-validation] {})
 

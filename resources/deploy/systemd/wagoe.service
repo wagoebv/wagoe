@@ -9,16 +9,16 @@ Requires=postgresql.service
 Type=simple
 User=boundary
 Group=boundary
-WorkingDirectory=/opt/boundary
+WorkingDirectory=/opt/wagoe
 
 # Environment file with secrets (chmod 600, owned by root)
-EnvironmentFile=/etc/boundary/boundary.env
+EnvironmentFile=/etc/wagoe/wagoe.env
 
 # JVM tuning for production (adjust heap to ~70% of available RAM)
 Environment=JAVA_OPTS="-Xms512m -Xmx2g -XX:+UseG1GC -XX:+UseContainerSupport -XX:MaxGCPauseMillis=200 -Djava.security.egd=file:/dev/urandom"
 
 # Run migrations separately before deploying: clojure -M:migrate up
-ExecStart=/usr/bin/java ${JAVA_OPTS} -jar /opt/boundary/boundary.jar server
+ExecStart=/usr/bin/java ${JAVA_OPTS} -jar /opt/wagoe/wagoe.jar server
 
 Restart=on-failure
 RestartSec=10
@@ -29,7 +29,7 @@ StartLimitIntervalSec=60
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/opt/boundary/logs /opt/boundary/data
+ReadWritePaths=/opt/wagoe/logs /opt/wagoe/data
 PrivateTmp=true
 
 # Logging

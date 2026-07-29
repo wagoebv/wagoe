@@ -54,15 +54,15 @@ Reference files: `resources/deploy/systemd/`
 sudo useradd -r -s /usr/sbin/nologin boundary
 
 # 2. Deploy the jar
-sudo mkdir -p /opt/boundary/{logs,data}
-sudo cp target/wagoe-*.jar /opt/boundary/wagoe.jar
-sudo chown -R boundary:boundary /opt/boundary
+sudo mkdir -p /opt/wagoe/{logs,data}
+sudo cp target/wagoe-*.jar /opt/wagoe/wagoe.jar
+sudo chown -R boundary:boundary /opt/wagoe
 
 # 3. Configure secrets
-sudo mkdir -p /etc/boundary
-sudo cp resources/deploy/systemd/wagoe.env.example /etc/boundary/wagoe.env
-sudo chmod 600 /etc/boundary/wagoe.env
-# Edit /etc/boundary/wagoe.env with real values
+sudo mkdir -p /etc/wagoe
+sudo cp resources/deploy/systemd/wagoe.env.example /etc/wagoe/wagoe.env
+sudo chmod 600 /etc/wagoe/wagoe.env
+# Edit /etc/wagoe/wagoe.env with real values
 
 # 4. Install and start the service
 sudo cp resources/deploy/systemd/wagoe.service /etc/systemd/system/

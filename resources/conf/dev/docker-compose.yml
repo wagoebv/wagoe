@@ -23,7 +23,7 @@ services:
       - DB_USER=${POSTGRES_USER}
       - DB_PASSWORD=${POSTGRES_PASSWORD}
     volumes:
-      - ./resources/conf/dev:/boundary/resources/conf/dev:ro
+      - ./resources/conf/dev:/wagoe/resources/conf/dev:ro
     ports:
       - "3000:3000"
 

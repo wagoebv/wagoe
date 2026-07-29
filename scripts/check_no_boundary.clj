@@ -63,7 +63,11 @@
             ;; every `wagoe new` project shipped pre-rename namespaces against
             ;; renamed artifacts and could not boot (BOU-215).
             :grep  ["-nIE" "boundary\\\\\\.|boundary\\.[a-z]"]
-            :paths ["*.clj" "*.cljc" "*.cljs" "*.edn" "*.tmpl" "*.template"]
+            ;; NO :paths — scan every tracked file. Restricting by extension is
+            ;; what let this class through repeatedly: a namespace reference is
+            ;; just a string, and it turned up in .tmpl (generated projects),
+            ;; .sh (the installer wrapper ran boundary.cli.main), .yml and
+            ;; .service. The allowlist, not the file type, decides exemptions.
             :hard? true}
    :keys   {:desc  ":boundary/ config + Integrant keys"
             :grep  ["-nIF" ":boundary/"]
