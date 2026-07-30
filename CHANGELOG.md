@@ -1,11 +1,54 @@
 # Changelog
 
-All notable changes to the Boundary Framework will be documented in this file.
+All notable changes to the Wagoe Framework will be documented in this file.
+
+> **Note:** entries below the "Renamed" section predate the Boundary → Wagoe
+> rename and keep their original `boundary-*` names, `:boundary/*` keys, and
+> `org.boundary-app` coordinates on purpose — they describe releases that
+> shipped under those names.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+### Renamed — Boundary is now Wagoe (BOU-209 … BOU-217)
+
+The framework is renamed from **Boundary** to **Wagoe** ahead of the first
+public release, and versioning moves to plain SemVer starting `1.0.0-beta-1`.
+This is a hard rename with no compatibility shims: nothing had been published
+under a stable version, so no deprecation window is provided.
+
+**Migration — mechanical replacements, in this order:**
+
+| Kind | Before | After |
+|---|---|---|
+| Namespaces | `boundary.<seg>.…` | `wagoe.<seg>.…` |
+| Integrant / config keys | `:boundary/http-server` | `:wagoe/http-server` |
+| Maven / Clojars coords | `org.boundary-app/boundary-<lib>` | `org.wagoe/wagoe-<lib>` |
+| deps.edn local aliases | `boundary/<lib>` | `wagoe/<lib>` |
+| Environment variables | `BND_*`, `BOUNDARY_*` | `WAG_*` |
+| CLI binary | `boundary <cmd>` | `wagoe <cmd>` |
+| Resource paths | `boundary/i18n/translations` | `wagoe/i18n/translations` |
+| MCP resource URIs | `boundary://…` | `wagoe://…` |
+| MCP server name (`.mcp.json`) | `"boundary"` | `"wagoe"` |
+| `AGENTS.md` region markers | `<!-- boundary:installed-modules -->` | `<!-- wagoe:installed-modules -->` |
+| Redis pub/sub channel | `boundary:realtime:bus` | `wagoe:realtime:bus` |
+| Logger name (logback) | `boundary` | `wagoe` |
+| Repositories | `thijs-creemers/boundary{,-examples}` | `wagoebv/wagoe{,-examples}` |
+| Sites | `boundary-app.org`, `get.boundary-app.org` | `framework.wagoe.com`, `get.wagoe.com` |
+
+`docs.boundary-app.org` is retired; the documentation is folded into
+`framework.wagoe.com/docs`. The GitHub repository transfers preserve history
+and leave redirects in place, so existing clones keep working until you update
+the remote.
+
+**Not renamed, on purpose.** "Boundary" is also an architecture term in this
+codebase, and those uses are unchanged: the FC/IS *boundary rules* (ADR-021),
+the persistence / HTTP / API / DB *boundary*, the `boundary-check` step,
+*boundary conditions* and *boundary testing*, and "System Boundary" in the PRD.
+A `bb check:no-boundary` gate guards the renamed token families and treats the
+prose word as report-only for exactly this reason.
 
 ### Security
 
