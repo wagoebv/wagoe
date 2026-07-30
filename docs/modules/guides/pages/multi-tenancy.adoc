@@ -10,7 +10,7 @@ H2 and SQLite skip provisioning with a warning and are fine for unit/integration
 == Prerequisites
 
 * PostgreSQL database (for production)
-* `boundary/tenant` and `boundary/platform` libraries on the classpath
+* `wagoe/tenant` and `wagoe/platform` libraries on the classpath
 * User authentication middleware already configured (tenant middleware runs after auth)
 
 Run database migrations before starting the server:
@@ -30,54 +30,54 @@ Add the tenant components to your `config.edn`:
 [source,clojure]
 ----
 ;; Initialise DB tables (run once on startup)
-:boundary/tenant-db-schema
-{:db-context #ig/ref :boundary/db-context
- :logger     #ig/ref :boundary/logger}
+:wagoe/tenant-db-schema
+{:db-context #ig/ref :wagoe/db-context
+ :logger     #ig/ref :wagoe/logger}
 
 ;; Tenant CRUD
-:boundary/tenant-repository
-{:db-context     #ig/ref :boundary/db-context
- :logger         #ig/ref :boundary/logger
- :error-reporter #ig/ref :boundary/error-reporter}
+:wagoe/tenant-repository
+{:db-context     #ig/ref :wagoe/db-context
+ :logger         #ig/ref :wagoe/logger
+ :error-reporter #ig/ref :wagoe/error-reporter}
 
-:boundary/tenant-service
-{:tenant-repository #ig/ref :boundary/tenant-repository
- :logger            #ig/ref :boundary/logger
- :metrics-emitter   #ig/ref :boundary/metrics-emitter
- :error-reporter    #ig/ref :boundary/error-reporter}
+:wagoe/tenant-service
+{:tenant-repository #ig/ref :wagoe/tenant-repository
+ :logger            #ig/ref :wagoe/logger
+ :metrics-emitter   #ig/ref :wagoe/metrics-emitter
+ :error-reporter    #ig/ref :wagoe/error-reporter}
 
 ;; Membership management
-:boundary/membership-repository
-{:db-context     #ig/ref :boundary/db-context
- :logger         #ig/ref :boundary/logger
- :error-reporter #ig/ref :boundary/error-reporter}
+:wagoe/membership-repository
+{:db-context     #ig/ref :wagoe/db-context
+ :logger         #ig/ref :wagoe/logger
+ :error-reporter #ig/ref :wagoe/error-reporter}
 
-:boundary/membership-service
-{:repository      #ig/ref :boundary/membership-repository
- :logger          #ig/ref :boundary/logger
- :metrics-emitter #ig/ref :boundary/metrics-emitter
- :error-reporter  #ig/ref :boundary/error-reporter}
+:wagoe/membership-service
+{:repository      #ig/ref :wagoe/membership-repository
+ :logger          #ig/ref :wagoe/logger
+ :metrics-emitter #ig/ref :wagoe/metrics-emitter
+ :error-reporter  #ig/ref :wagoe/error-reporter}
 
 ;; Email invite flow
-:boundary/invite-repository
-{:db-context     #ig/ref :boundary/db-context
- :logger         #ig/ref :boundary/logger
- :error-reporter #ig/ref :boundary/error-reporter}
+:wagoe/invite-repository
+{:db-context     #ig/ref :wagoe/db-context
+ :logger         #ig/ref :wagoe/logger
+ :error-reporter #ig/ref :wagoe/error-reporter}
 
-:boundary/invite-service
-{:repository            #ig/ref :boundary/invite-repository
- :membership-repository #ig/ref :boundary/membership-repository
- :logger                #ig/ref :boundary/logger
- :metrics-emitter       #ig/ref :boundary/metrics-emitter
- :error-reporter        #ig/ref :boundary/error-reporter}
+:wagoe/invite-service
+{:repository            #ig/ref :wagoe/invite-repository
+ :membership-repository #ig/ref :wagoe/membership-repository
+ :logger                #ig/ref :wagoe/logger
+ :metrics-emitter       #ig/ref :wagoe/metrics-emitter
+ :error-reporter        #ig/ref :wagoe/error-reporter}
 
 ;; Routes (merged into top-level router)
-:boundary/tenant-routes
-{:tenant-service #ig/ref :boundary/tenant-service
- :db-context     #ig/ref :boundary/db-context}
+:wagoe/tenant-routes
+{:tenant-service #ig/ref :wagoe/tenant-service
+ :db-context     #ig/ref :wagoe/db-context}
 
-:boundary/membership-routes
-{:service #ig/ref :boundary/membership-service}
+:wagoe/membership-routes
+{:service #ig/ref :wagoe/membership-service}
 ----
 
 == Step 2 — Add middleware to your Ring stack
@@ -87,19 +87,19 @@ Each one depends on data set by the previous.
 
 [source,clojure]
 ----
-(require '[boundary.tenant.shell.tenant-middleware :as tm]
-         '[boundary.tenant.shell.membership-middleware :refer [wrap-tenant-membership]])
+(require '[wagoe.tenant.shell.tenant-middleware :as tm]
+         '[wagoe.tenant.shell.membership-middleware :refer [wrap-tenant-membership]])
 
 (defn build-handler [routes system]
   (-> (create-router routes)
       ;; 3. Enrich request with :tenant-membership (needs :user + :tenant)
-      (wrap-tenant-membership (:boundary/membership-service system))
+      (wrap-tenant-membership (:wagoe/membership-service system))
       ;; 2. Resolve :tenant from subdomain / JWT / header; set search_path
-      (tm/wrap-multi-tenant (:boundary/tenant-service system)
+      (tm/wrap-multi-tenant (:wagoe/tenant-service system)
                             {:require-tenant? true
                              :cache (tm/create-tenant-cache)})
       ;; 1. Authenticate user; sets :user on request
-      (wrap-user-authentication (:boundary/user-service system))))
+      (wrap-user-authentication (:wagoe/user-service system))))
 ----
 
 After this middleware stack the request map contains:
@@ -138,7 +138,7 @@ Import the interceptors from the `user` library:
 
 [source,clojure]
 ----
-(require '[boundary.user.shell.http-interceptors :as auth])
+(require '[wagoe.user.shell.http-interceptors :as auth])
 ----
 
 === Require active membership (any role)
@@ -192,8 +192,8 @@ Use `bootstrap-open?` to check, then create the first active membership directly
 
 [source,clojure]
 ----
-(require '[boundary.tenant.core.membership :as m]
-         '[boundary.tenant.ports :as ports])
+(require '[wagoe.tenant.core.membership :as m]
+         '[wagoe.tenant.ports :as ports])
 
 (defn on-tenant-created! [tenant user-id membership-service]
   (when (ports/bootstrap-open? membership-service (:id tenant))
@@ -324,7 +324,7 @@ know, use the token-based external invite flow.
 
 [source,clojure]
 ----
-(require '[boundary.tenant.ports :as ports])
+(require '[wagoe.tenant.ports :as ports])
 
 ;; Returns {:invite {...} :token "<raw-token>"}
 ;; Send :token to the user via email — it is NOT stored in the database
@@ -360,7 +360,7 @@ Always send the raw token to the user and discard it after.
 
 [source,clojure]
 ----
-(require '[boundary.tenant.shell.provisioning :as provisioning])
+(require '[wagoe.tenant.shell.provisioning :as provisioning])
 
 (provisioning/with-tenant-schema db-ctx "tenant_acme_corp"
   (fn [tx]
@@ -389,10 +389,10 @@ Always send the raw token to the user and discard it after.
 clojure -M:test:db/h2 :tenant
 
 # Focused suites
-clojure -M:test:db/h2 --focus boundary.tenant.core.membership-test
-clojure -M:test:db/h2 --focus boundary.tenant.shell.membership-service-test
-clojure -M:test:db/h2 --focus boundary.tenant.shell.invite-service-test
-clojure -M:test:db/h2 --focus boundary.tenant.integration-test
+clojure -M:test:db/h2 --focus wagoe.tenant.core.membership-test
+clojure -M:test:db/h2 --focus wagoe.tenant.shell.membership-service-test
+clojure -M:test:db/h2 --focus wagoe.tenant.shell.invite-service-test
+clojure -M:test:db/h2 --focus wagoe.tenant.integration-test
 ----
 
 See `libs/tenant/AGENTS.md` for the full library reference.

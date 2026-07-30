@@ -1,18 +1,18 @@
 ---
-title: "Boundary Starter Repository Outline"
+title: "Wagoe Starter Repository Outline"
 weight: 10
-description: "Outline/template for a Boundary starter repository structure and feature set."
+description: "Outline/template for a Wagoe starter repository structure and feature set."
 ---
 
-= Boundary Starter Repository Outline
+= Wagoe Starter Repository Outline
 
-Purpose - Provide a clean template for teams to try Boundary in minutes. - Showcase FC/IS, SSR/HTMX, admin, MFA, tests, and observability with minimal setup.
+Purpose - Provide a clean template for teams to try Wagoe in minutes. - Showcase FC/IS, SSR/HTMX, admin, MFA, tests, and observability with minimal setup.
 
 Repository Structure
 
 ....
-boundary-starter/
-├── src/boundary/
+wagoe-starter/
+├── src/wagoe/
 │   ├── app.clj                # Entrypoint wiring (Integrant)
 │   ├── shared/
 │   │   ├── core/              # Utilities (case conversion, etc.)
@@ -34,9 +34,9 @@ boundary-starter/
 │   ├── public/css/            # tokens.css, app.css, admin.css
 │   └── public/js/             # Optional helper JS
 ├── test/
-│   ├── boundary/user/core/*_test.clj
-│   ├── boundary/user/shell/*_test.clj
-│   └── boundary/product/core/*_test.clj
+│   ├── wagoe/user/core/*_test.clj
+│   ├── wagoe/user/shell/*_test.clj
+│   └── wagoe/product/core/*_test.clj
 ├── deps.edn                   # Clojure CLI deps (Integrant, Malli, HTMX/Hiccup, next.jdbc)
 ├── README.md                  # Quickstart and how to explore
 └── Dockerfile                 # Minimal container build
@@ -48,7 +48,7 @@ Quickstart (README excerpt)
 
 ....
 # Quickstart
-export BND_ENV=development
+export WAG_ENV=development
 export JWT_SECRET="dev-secret-minimum-32-characters"
 clojure -M:repl-clj
 (require '[integrant.repl :as ig-repl])
@@ -59,7 +59,7 @@ clojure -M:repl-clj
 Add a module (scaffold)
 
 ....
-clojure -M -m boundary.scaffolder.shell.cli-entry generate \
+clojure -M -m wagoe.scaffolder.shell.cli-entry generate \
   --module-name product \
   --entity Product \
   --field name:string:required \
@@ -79,7 +79,7 @@ Deploy
 
 ....
 clojure -T:build clean && clojure -T:build uber
-java -jar target/boundary-*.jar server
+java -jar target/wagoe-*.jar server
 ....
 
 MFA demo
@@ -92,4 +92,4 @@ curl -X POST http://localhost:3000/api/auth/login -d '{"email":"user@example.com
 
 Out-of-the-box Defaults - SQLite dev, H2 test, Postgres prod - Ports/Core/Shell separation enforced by scaffolder and conventions - SSR/HTMX patterns with admin UI - Interceptor-based observability
 
-Next Steps - Publish starter to GitHub: https://github.com/thijs-creemers/boundary-starter - Record demo using this repo - Iterate based on soft launch feedback
+Next Steps - Publish starter to GitHub: https://github.com/wagoebv/wagoe-starter - Record demo using this repo - Iterate based on soft launch feedback

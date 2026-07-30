@@ -24,17 +24,17 @@ Add one key to your `config.edn`:
 [source,clojure]
 ----
 ;; resources/conf/dev/config.edn — development
-:boundary/payment-provider
+:wagoe/payment-provider
 {:provider :mock}
 
 ;; resources/conf/prod/config.edn — Mollie
-:boundary/payment-provider
+:wagoe/payment-provider
 {:provider          :mollie
  :api-key           #env MOLLIE_API_KEY
  :webhook-base-url  #env APP_BASE_URL}   ; e.g. "https://app.example.com"
 
 ;; resources/conf/prod/config.edn — Stripe
-:boundary/payment-provider
+:wagoe/payment-provider
 {:provider         :stripe
  :api-key          #env STRIPE_SECRET_KEY
  :webhook-secret   #env STRIPE_WEBHOOK_SECRET}
@@ -44,8 +44,8 @@ Inject it wherever payment operations are needed:
 
 [source,clojure]
 ----
-:boundary/order-service
-{:payment-provider #ig/ref :boundary/payment-provider
+:wagoe/order-service
+{:payment-provider #ig/ref :wagoe/payment-provider
  ...}
 ----
 
@@ -53,7 +53,7 @@ Inject it wherever payment operations are needed:
 
 [source,clojure]
 ----
-(require '[boundary.payments.ports :as psp])
+(require '[wagoe.payments.ports :as psp])
 
 (defn initiate-payment! [payment-provider order]
   (let [{:keys [checkout-url provider-checkout-id]}
@@ -79,7 +79,7 @@ Inject it wherever payment operations are needed:
 
 [source,clojure]
 ----
-(require '[boundary.payments.ports :as psp])
+(require '[wagoe.payments.ports :as psp])
 
 (defn payment-webhook-handler [request payment-provider]
   ;; IMPORTANT: read raw body BEFORE any body-parsing middleware
@@ -149,7 +149,7 @@ GET /web/payment/mock-return?checkout-id=<uuid>
 [source,clojure]
 ----
 ;; In tests
-(require '[boundary.payments.shell.adapters.mock :as mock])
+(require '[wagoe.payments.shell.adapters.mock :as mock])
 (def test-provider (mock/->MockPaymentProvider))
 ----
 
@@ -187,7 +187,7 @@ Always use the mock provider in tests:
 
 [source,clojure]
 ----
-(require '[boundary.payments.shell.adapters.mock :as mock])
+(require '[wagoe.payments.shell.adapters.mock :as mock])
 
 (deftest checkout-test
   (let [provider (mock/->MockPaymentProvider)

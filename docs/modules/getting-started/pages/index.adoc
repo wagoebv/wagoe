@@ -1,7 +1,7 @@
 = Getting Started
-:description: A concise path from first install to first Boundary module.
+:description: A concise path from first install to first Wagoe module.
 
-Boundary is opinionated on purpose. This guide takes you from installation to a running app, then to your first module, and ends with the ideas that keep the codebase predictable.
+Wagoe is opinionated on purpose. This guide takes you from installation to a running app, then to your first module, and ends with the ideas that keep the codebase predictable.
 
 == The path
 
@@ -22,7 +22,7 @@ Boundary is opinionated on purpose. This guide takes you from installation to a 
 | Generate your first module and wire it into the running system.
 
 | 5. Understand
-| Learn FC/IS, ports, schemas, and the naming conventions that keep Boundary predictable.
+| Learn FC/IS, ports, schemas, and the naming conventions that keep Wagoe predictable.
 |===
 
 == Recommended order
@@ -31,11 +31,11 @@ Boundary is opinionated on purpose. This guide takes you from installation to a 
 * xref:getting-started:quickstart.adoc[Quickstart]
 * xref:getting-started:your-first-module.adoc[Your First Module]
 * xref:getting-started:concepts.adoc[Key Concepts]
-* xref:getting-started:why-boundary.adoc[Why Boundary?]
+* xref:getting-started:why-wagoe.adoc[Why Wagoe?]
 
 == What you'll have by the end
 
-* A local Boundary app running on `http://localhost:3000`
+* A local Wagoe app running on `http://localhost:3000`
 * A generated module with tests, schema, service, HTTP, and migration files
 * A working mental model for where code belongs
 * Enough context to jump into the library docs without getting lost

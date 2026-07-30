@@ -1,9 +1,9 @@
-# boundary/external
+# wagoe/external
 
 [![Status](https://img.shields.io/badge/status-in%20development-yellow)]()
 [![Clojure](https://img.shields.io/badge/clojure-1.12+-blue)]()
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
-[![Clojars Project](https://img.shields.io/clojars/v/org.boundary-app/boundary-external.svg)](https://clojars.org/org.boundary-app/boundary-external)
+[![Clojars Project](https://img.shields.io/clojars/v/org.wagoe/wagoe-external.svg)](https://clojars.org/org.wagoe/wagoe-external)
 
 **Status:** Active (not production-ready)  
 **Version:** 1.0.0-beta-1
@@ -13,7 +13,7 @@ Adapters for external services: Twilio SMS/WhatsApp, SMTP transport, and IMAP ma
 ## Installation
 
 ```clojure
-{:deps {org.boundary-app/boundary-external {:mvn/version "1.0.0-beta-1"}}}
+{:deps {org.wagoe/wagoe-external {:mvn/version "1.0.0-beta-1"}}}
 ```
 
 ## Features
@@ -26,10 +26,10 @@ Adapters for external services: Twilio SMS/WhatsApp, SMTP transport, and IMAP ma
 
 ```clojure
 (ns myapp.notifications
-  (:require [boundary.external.shell.adapters.smtp :as smtp]))
+  (:require [wagoe.external.shell.adapters.smtp :as smtp]))
 
 ;; Create an SMTP provider via Integrant config:
-;; {:boundary/smtp-provider {:host "smtp.example.com"
+;; {:wagoe/smtp-provider {:host "smtp.example.com"
 ;;                           :port 587
 ;;                           :username "user"
 ;;                           :password "pass"}}

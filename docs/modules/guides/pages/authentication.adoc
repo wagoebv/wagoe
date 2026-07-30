@@ -1,7 +1,7 @@
 = Authentication & JWT
-:description: Setting up authentication, JWT tokens, sessions, and MFA in Boundary.
+:description: Setting up authentication, JWT tokens, sessions, and MFA in Wagoe.
 
-Boundary's `user` library handles the full authentication lifecycle:
+Wagoe's `user` library handles the full authentication lifecycle:
 user registration, login, JWT tokens, sessions, and multi-factor authentication.
 
 == Prerequisites
@@ -15,7 +15,7 @@ The JWT secret must be at least 32 characters. Tests that exercise auth also req
 
 [source,bash]
 ----
-JWT_SECRET="dev-secret-32-chars-minimum" clojure -M:test:db/h2 :user
+JWT_SECRET="dev-secret-at-least-32-characters-long" clojure -M:test:db/h2 :user
 ----
 
 == Login
@@ -117,13 +117,13 @@ How a token reaches the browser and back:
 * For HTMX requests, a global `htmx:configRequest` listener copies that token into the
   `X-CSRF-Token` header automatically — no per-form work.
 * Plain `<form method=post>` forms carry it in a hidden `__anti-forgery-token` field
-  (added via `(boundary.platform.core.csrf/hidden-field)`).
+  (added via `(wagoe.platform.core.csrf/hidden-field)`).
 
 Unauthenticated flows (login, register, MFA) have no session yet, so the token is bound
 to a `SameSite=Strict` `csrf-session` cookie minted on the page GET and validated on the
 subsequent POST.
 
-Configure under `:boundary/http :security :csrf`:
+Configure under `:wagoe/http :security :csrf`:
 
 [source,clojure]
 ----

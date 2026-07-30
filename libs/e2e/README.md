@@ -1,10 +1,10 @@
-# boundary/e2e
+# wagoe/e2e
 
 [![Status](https://img.shields.io/badge/status-internal-lightgrey)]()
 [![Clojure](https://img.shields.io/badge/clojure-1.12+-blue)]()
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
 
-End-to-end browser + HTTP-API test suite for the Boundary platform. **Test code only** — this library ships no production namespaces and is **not published to Clojars**.
+End-to-end browser + HTTP-API test suite for the Wagoe platform. **Test code only** — this library ships no production namespaces and is **not published to Clojars**.
 
 It uses [`com.blockether/spel`](https://github.com/blockether/spel), an idiomatic
 Clojure wrapper around Playwright (Java), for both browser automation and
@@ -16,7 +16,7 @@ All code lives under `test/` (a placeholder empty `src/` is kept only so
 monorepo tooling that assumes the standard library layout doesn't choke):
 
 ```
-libs/e2e/test/boundary/e2e/
+libs/e2e/test/wagoe/e2e/
 ├── fixtures.clj          # Shared setup (server handle, browser, auth helpers)
 ├── smoke_test.clj        # Minimal up-and-running check
 ├── html/                 # Browser (Playwright) flows

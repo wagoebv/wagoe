@@ -1,8 +1,8 @@
 {:paths ["src"]
 
  :deps  {org.clojure/clojure {:mvn/version "1.12.5"}
-         boundary/platform   {:local/root "../platform"}
-         boundary/ui-style   {:local/root "../ui-style"}
+         wagoe/platform   {:local/root "../platform"}
+         wagoe/ui-style   {:local/root "../ui-style"}
          hiccup/hiccup       {:mvn/version "2.0.0"}}
 
  :aliases

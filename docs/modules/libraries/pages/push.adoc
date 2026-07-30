@@ -12,31 +12,31 @@ service, with job-backed reliable delivery and delivery analytics.
 |===
 | Namespace | Purpose
 
-| `boundary.push.core.notification`
+| `wagoe.push.core.notification`
 | Pure: `defpush` macro, notification records, i18n locale maps
 
-| `boundary.push.core.delivery`
+| `wagoe.push.core.delivery`
 | Pure: delivery planning + error classification (retryable / permanent / token-invalid)
 
-| `boundary.push.core.device`
+| `wagoe.push.core.device`
 | Pure: device-token lifecycle logic (registration, rotation, deactivation)
 
-| `boundary.push.core.analytics`
+| `wagoe.push.core.analytics`
 | Pure: delivery analytics aggregation
 
-| `boundary.push.ports`
+| `wagoe.push.ports`
 | Protocols: `IPushService`, `IFCMProvider`, `IAPNsProvider`
 
-| `boundary.push.shell.service`
+| `wagoe.push.shell.service`
 | Orchestrator dispatching to platform providers
 
-| `boundary.push.shell.adapters.fcm`
+| `wagoe.push.shell.adapters.fcm`
 | FCM provider — async parallel delivery via `sendAsync` + `CompletableFuture`
 
-| `boundary.push.shell.adapters.apns`
+| `wagoe.push.shell.adapters.apns`
 | APNs provider — async parallel delivery via `sendAsync` + `CompletableFuture`
 
-| `boundary.push.shell.handlers`
+| `wagoe.push.shell.handlers`
 | REST endpoints (devices, callback, stats)
 |===
 
@@ -53,7 +53,7 @@ multi-tenant support.
 
 == Reliable delivery
 
-Delivery runs as jobs via a hard dependency on `boundary-jobs`, so sends
+Delivery runs as jobs via a hard dependency on `wagoe-jobs`, so sends
 are retried according to each notification's retry configuration. Error
 classification decides whether a failure is retried, dropped, or marks
 the token invalid.

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Boundary Framework installer
-# Usage: curl -fsSL https://get.boundary-app.org | bash
-# Fallback: curl -fsSL https://raw.githubusercontent.com/thijs-creemers/boundary/main/scripts/install.sh | bash
+# Wagoe Framework installer
+# Usage: curl -fsSL https://get.wagoe.com | bash
+# Fallback: curl -fsSL https://raw.githubusercontent.com/wagoebv/wagoe/main/scripts/install.sh | bash
 
 set -euo pipefail
 
@@ -11,7 +11,7 @@ fail() { echo -e "${RED}✗${RESET} $1"; exit 1; }
 info() { echo -e "${DIM}  $1${RESET}"; }
 
 echo ""
-echo "━━━ Boundary Framework Installer ━━━━━━━━━━━━━━━━━━━━━"
+echo "━━━ Wagoe Framework Installer ━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
 # ── Detect OS ────────────────────────────────────────────────
@@ -24,7 +24,7 @@ elif [[ -f /etc/debian_version ]]; then
 elif [[ -f /etc/arch-release ]]; then
   OS="arch"
 else
-  fail "Unsupported OS. Boundary supports macOS, Debian/Ubuntu, Arch, and WSL2.
+  fail "Unsupported OS. Wagoe supports macOS, Debian/Ubuntu, Arch, and WSL2.
   Windows users: install WSL2 first — https://learn.microsoft.com/en-us/windows/wsl/install"
 fi
 ok "Detected OS: $OS"
@@ -124,44 +124,44 @@ fi
 
 export PATH="$BBIN_BIN:$PATH"
 
-# ── boundary CLI ──────────────────────────────────────────────
-info "Fetching latest boundary release tag..."
-BOUNDARY_TAG=$(curl -fsSL https://api.github.com/repos/thijs-creemers/boundary/releases/latest \
+# ── wagoe CLI ──────────────────────────────────────────────
+info "Fetching latest Wagoe release tag..."
+WAGOE_TAG=$(curl -fsSL https://api.github.com/repos/wagoebv/wagoe/releases/latest \
   | grep '"tag_name"' \
   | sed 's/.*"tag_name": "\(.*\)".*/\1/') \
   || fail "Failed to fetch latest release tag. Check your internet connection."
 
-if [[ -z "$BOUNDARY_TAG" ]]; then
-  fail "Could not determine latest boundary release tag."
+if [[ -z "$WAGOE_TAG" ]]; then
+  fail "Could not determine latest Wagoe release tag."
 fi
 
-info "Installing boundary CLI @ $BOUNDARY_TAG..."
+info "Installing wagoe CLI @ $WAGOE_TAG..."
 # bbin's git dep resolution (--deps-root + --config) does not reliably set up
 # the classpath for monorepo sub-projects. Clone the repo and write a plain
 # wrapper script with an explicit classpath instead.
-BOUNDARY_CACHE="$HOME/.boundary/releases/$BOUNDARY_TAG"
-if [[ -d "$BOUNDARY_CACHE" ]]; then
-  info "Using cached source at $BOUNDARY_CACHE"
+WAGOE_CACHE="$HOME/.wagoe/releases/$WAGOE_TAG"
+if [[ -d "$WAGOE_CACHE" ]]; then
+  info "Using cached source at $WAGOE_CACHE"
 else
-  git clone --depth 1 --branch "$BOUNDARY_TAG" \
-    https://github.com/thijs-creemers/boundary.git \
-    "$BOUNDARY_CACHE" 2>&1 | grep -v "^remote:" \
-    || fail "Failed to clone boundary @ $BOUNDARY_TAG"
+  git clone --depth 1 --branch "$WAGOE_TAG" \
+    https://github.com/wagoebv/wagoe.git \
+    "$WAGOE_CACHE" 2>&1 | grep -v "^remote:" \
+    || fail "Failed to clone Wagoe @ $WAGOE_TAG"
 fi
 
 mkdir -p "$BBIN_BIN"
-cat > "$BBIN_BIN/boundary" << EOF
+cat > "$BBIN_BIN/wagoe" << EOF
 #!/usr/bin/env bash
-exec bb --classpath "$BOUNDARY_CACHE/libs/boundary-cli/src:$BOUNDARY_CACHE/libs/boundary-cli/resources" -m boundary.cli.main "\$@"
+exec bb --classpath "$WAGOE_CACHE/libs/wagoe-cli/src:$WAGOE_CACHE/libs/wagoe-cli/resources" -m wagoe.cli.main "\$@"
 EOF
-chmod +x "$BBIN_BIN/boundary"
+chmod +x "$BBIN_BIN/wagoe"
 
 hash -r 2>/dev/null || true
-if ! command -v boundary &>/dev/null; then
-  fail "Failed to install boundary CLI."
+if ! command -v wagoe &>/dev/null; then
+  fail "Failed to install wagoe CLI."
 fi
 
-ok "boundary CLI installed"
+ok "wagoe CLI installed"
 
 # ── AI agent tooling ──────────────────────────────────────────
 info "Installing AI agent tooling (clj-nrepl-eval + clj-paren-repair)..."
@@ -178,7 +178,7 @@ echo -e "${GREEN}━━━ Install complete ━━━━━━━━━━━━
 echo ""
 echo "  Next step:"
 echo ""
-echo "    boundary new <your-app-name>"
+echo "    wagoe new <your-app-name>"
 echo ""
 echo "  AI tooling (REPL eval + paren repair):"
 echo ""

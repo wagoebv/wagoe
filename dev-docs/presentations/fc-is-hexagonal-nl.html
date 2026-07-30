@@ -5,7 +5,7 @@
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="generator" content="Asciidoctor 2.0.26">
-<meta name="description" content="Een presentatie van 60 minuten voor Django/Rails/Spring-engineers over FC/IS en hexagonale architectuur, geïmplementeerd in het Boundary framework.">
+<meta name="description" content="Een presentatie van 60 minuten voor Django/Rails/Spring-engineers over FC/IS en hexagonale architectuur, geïmplementeerd in het Wagoe framework.">
 <meta name="author" content="Thijs Creemers">
 <title>Voorbij MVC: Functional Core / Imperative Shell</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:300,300italic,400,400italic,600,600italic%7CNoto+Serif:400,400italic,700,700italic%7CDroid+Sans+Mono:400,700">
@@ -667,7 +667,7 @@ pre.rouge {
 <div id="toctitle">Inhoud</div>
 <ul class="sectlevel1">
 <li><a href="#_voorbij_mvc_functional_core_imperative_shell">Voorbij MVC: Functional Core / Imperative Shell</a></li>
-<li><a href="#_waarom_ik_boundary">Waarom ik Boundary?</a></li>
+<li><a href="#_waarom_ik_wagoe">Waarom ik Wagoe?</a></li>
 <li><a href="#_wat_we_behandelen">Wat we behandelen</a></li>
 <li><a href="#_deel_1_de_pijn">Deel 1: De Pijn</a>
 <ul class="sectlevel2">
@@ -688,10 +688,10 @@ pre.rouge {
 <li><a href="#_deel_3_hexagonale_architectuur">Deel 3: Hexagonale Architectuur</a>
 <ul class="sectlevel2">
 <li><a href="#_wat_hexagonaal_toevoegt">Wat Hexagonaal Toevoegt</a></li>
-<li><a href="#_een_port_in_boundary">Een Port in Boundary</a></li>
+<li><a href="#_een_port_in_wagoe">Een Port in Wagoe</a></li>
 </ul>
 </li>
-<li><a href="#_deel_4_boundary_gebouwd_op_modulariteit">Deel 4: Boundary — Gebouwd op Modulariteit</a>
+<li><a href="#_deel_4_wagoe_gebouwd_op_modulariteit">Deel 4: Wagoe — Gebouwd op Modulariteit</a>
 <ul class="sectlevel2">
 <li><a href="#_de_13_libraries">De 13 Libraries</a></li>
 <li><a href="#_elke_library_ziet_er_van_binnen_hetzelfde_uit">Elke Library Ziet Er Van Binnen Hetzelfde Uit</a></li>
@@ -708,8 +708,8 @@ pre.rouge {
 <li><a href="#_deel_6_echte_code_naast_elkaar">Deel 6: Echte Code, Naast Elkaar</a>
 <ul class="sectlevel2">
 <li><a href="#_gebruikersregistratie_django">Gebruikersregistratie: Django</a></li>
-<li><a href="#_gebruikersregistratie_boundary_core_pure_logica">Gebruikersregistratie: Boundary Core (Pure Logica)</a></li>
-<li><a href="#_gebruikersregistratie_boundary_shell_orkestratie">Gebruikersregistratie: Boundary Shell (Orkestratie)</a></li>
+<li><a href="#_gebruikersregistratie_wagoe_core_pure_logica">Gebruikersregistratie: Wagoe Core (Pure Logica)</a></li>
+<li><a href="#_gebruikersregistratie_wagoe_shell_orkestratie">Gebruikersregistratie: Wagoe Shell (Orkestratie)</a></li>
 </ul>
 </li>
 <li><a href="#_deel_7_vijf_aha_momenten">Deel 7: Vijf Aha-momenten</a>
@@ -750,7 +750,7 @@ pre.rouge {
 <p>"Hallo allemaal."</p>
 </li>
 <li>
-<p>"De afgelopen tijd heb ik een framework gebouwd met de naam  Boundary. Niet omdat het ecosysteem een nieuw framework nodig had, maar omdat ik dit architectuurpatroon echt wilde <strong>begrijpen</strong> — en de beste manier voor mij om iets te begrijpen is het zelf bouwen."</p>
+<p>"De afgelopen tijd heb ik een framework gebouwd met de naam  Wagoe. Niet omdat het ecosysteem een nieuw framework nodig had, maar omdat ik dit architectuurpatroon echt wilde <strong>begrijpen</strong> — en de beste manier voor mij om iets te begrijpen is het zelf bouwen."</p>
 </li>
 <li>
 <p>"Vandaag wil ik delen wat ik gedurende dat proces heb geleerd. En ondanks het feit dat ik voor het schrijven van het framework clojure gebruikt heb, ben ik er van overtuigd dat de inzichten die ik opgedaan heb ook relevant kunnen zijn voor jullie Python- Java- en Ruby-code."</p>
@@ -765,7 +765,7 @@ pre.rouge {
 </div>
 </div>
 <div class="sect1">
-<h2 id="_waarom_ik_boundary">Waarom ik Boundary?</h2>
+<h2 id="_waarom_ik_wagoe">Waarom ik Wagoe?</h2>
 <div class="sectionbody">
 <div class="paragraph">
 <p>Ik een simpele vraag:</p>
@@ -798,7 +798,7 @@ En het heeft de manier waarop ik over <strong>elke</strong> codebase denk verand
 <p>"De vraag bleek een heel elegant antwoord te hebben — en dat antwoord is wat ik je vandaag wil laten zien."</p>
 </li>
 <li>
-<p>"Spoiler: je hebt geen Clojure nodig, en ook Boundary niet, om dit toe te passen. Ik ga het laten zien."</p>
+<p>"Spoiler: je hebt geen Clojure nodig, en ook Wagoe niet, om dit toe te passen. Ik ga het laten zien."</p>
 </li>
 </ul>
 </div>
@@ -821,7 +821,7 @@ En het heeft de manier waarop ik over <strong>elke</strong> codebase denk verand
 <p>Hexagonale architectuur: ports, adapters en waarom de naam zo slecht is</p>
 </li>
 <li>
-<p>Boundary: 13 modules, één patroon, eindeloze uitwisselbaarheid</p>
+<p>Wagoe: 13 modules, één patroon, eindeloze uitwisselbaarheid</p>
 </li>
 <li>
 <p>Vijf "aha"-momenten met echte code</p>
@@ -1287,7 +1287,7 @@ Serieus. Dat is het. De rest is implementatie.</p>
 <p>"Ik weet dat het te simpel klinkt. Maar de implicaties zijn enorm."</p>
 </li>
 <li>
-<p>"In Boundary wordt deze regel afgedwongen door de linter. Een compile-time check. Als een <code>core/</code>-namespace iets vereist uit <code>shell/</code>, mislukt de build."</p>
+<p>"In Wagoe wordt deze regel afgedwongen door de linter. Een compile-time check. Als een <code>core/</code>-namespace iets vereist uit <code>shell/</code>, mislukt de build."</p>
 </li>
 <li>
 <p>"In Python en Ruby dwing je het af met code reviews en discipline. Minder betrouwbaar, maar nog steeds effectief."</p>
@@ -1350,10 +1350,10 @@ Serieus. Dat is het. De rest is implementatie.</p>
 </div>
 </div>
 <div class="sect2">
-<h3 id="_een_port_in_boundary">Een Port in Boundary</h3>
+<h3 id="_een_port_in_wagoe">Een Port in Wagoe</h3>
 <div class="listingblock">
 <div class="content">
-<pre class="rouge highlight"><code data-lang="clojure"><span class="c1">;; libs/user/src/boundary/user/ports.clj</span><span class="w">
+<pre class="rouge highlight"><code data-lang="clojure"><span class="c1">;; libs/user/src/wagoe/user/ports.clj</span><span class="w">
 
 </span><span class="p">(</span><span class="nf">defprotocol</span><span class="w"> </span><span class="n">IUserRepository</span><span class="w">
   </span><span class="s">"Output port — de kijk van het domein op 'iets dat gebruikers opslaat'.
@@ -1395,7 +1395,7 @@ Beide koppelen je bedrijfslogica aan een specifieke database-library op klasseni
 </div>
 </div>
 <div class="sect1">
-<h2 id="_deel_4_boundary_gebouwd_op_modulariteit">Deel 4: Boundary — Gebouwd op Modulariteit</h2>
+<h2 id="_deel_4_wagoe_gebouwd_op_modulariteit">Deel 4: Wagoe — Gebouwd op Modulariteit</h2>
 <div class="sectionbody">
 <div class="paragraph">
 <p><em>13 libraries. Één patroon. Elk onafhankelijk inzetbaar.</em></p>
@@ -1403,7 +1403,7 @@ Beide koppelen je bedrijfslogica aan een specifieke database-library op klasseni
 <div class="sect2">
 <h3 id="_de_13_libraries">De 13 Libraries</h3>
 <div class="paragraph">
-<p>Boundary is geen monoliet. Het zijn 13 onafhankelijk publiceerbare libraries, elk gericht op <strong>één ding</strong>:</p>
+<p>Wagoe is geen monoliet. Het zijn 13 onafhankelijk publiceerbare libraries, elk gericht op <strong>één ding</strong>:</p>
 </div>
 <table class="tableblock frame-all grid-all stretch">
 <colgroup>
@@ -1483,7 +1483,7 @@ Beide koppelen je bedrijfslogica aan een specifieke database-library op klasseni
 <div class="ulist">
 <ul>
 <li>
-<p>"Elke library heeft zijn eigen <code>build.clj</code>, zijn eigen tests, zijn eigen versie. Je kunt alleen <code>boundary/user</code> naar Clojars publiceren."</p>
+<p>"Elke library heeft zijn eigen <code>build.clj</code>, zijn eigen tests, zijn eigen versie. Je kunt alleen <code>wagoe/user</code> naar Clojars publiceren."</p>
 </li>
 <li>
 <p>"Je hoeft niet alle 13 te gebruiken. Pak wat je nodig hebt. Het patroon houdt ze consistent."</p>
@@ -1500,7 +1500,7 @@ Beide koppelen je bedrijfslogica aan een specifieke database-library op klasseni
 <h3 id="_elke_library_ziet_er_van_binnen_hetzelfde_uit">Elke Library Ziet Er Van Binnen Hetzelfde Uit</h3>
 <div class="listingblock">
 <div class="content">
-<pre class="rouge highlight"><code>libs/{elke-library}/src/boundary/{library}/
+<pre class="rouge highlight"><code>libs/{elke-library}/src/wagoe/{library}/
 ├── core/           ← pure functies. punt. einde verhaal.
 │   ├── domain.clj
 │   └── validation.clj
@@ -1579,7 +1579,7 @@ De <code>user</code>-service kent alleen interfaces — het heeft geen idee wat 
 <div class="sect2">
 <h3 id="_de_database_is_gewoon_een_adapter">De Database Is Gewoon een Adapter</h3>
 <div class="paragraph">
-<p>Boundary wordt geleverd met adapters voor vier databases — allemaal dezelfde port implementerend:</p>
+<p>Wagoe wordt geleverd met adapters voor vier databases — allemaal dezelfde port implementerend:</p>
 </div>
 <div class="listingblock">
 <div class="content">
@@ -1612,7 +1612,7 @@ De <code>user</code>-service kent alleen interfaces — het heeft geen idee wat 
 <p>"In Django <strong>is</strong> je model de ORM. Als je zonder database wilt testen, mock je de ORM. Dat is shimmen."</p>
 </li>
 <li>
-<p>"In Boundary is de database een stekker. Je trekt de ene stekker eruit en steekt een andere erin. Geen shimmen nodig."</p>
+<p>"In Wagoe is de database een stekker. Je trekt de ene stekker eruit en steekt een andere erin. Geen shimmen nodig."</p>
 </li>
 <li>
 <p>"De HoneySQL-map vermijdt raw SQL-strings volledig — geen SQL-injection-aanvalsoppervlak, en dezelfde map werkt voor alle vier databasedialecten."</p>
@@ -1800,10 +1800,10 @@ Het enige dat verandert is wat er wordt ingeplugd.</p>
 </div>
 </div>
 <div class="sect2">
-<h3 id="_gebruikersregistratie_boundary_core_pure_logica">Gebruikersregistratie: Boundary Core (Pure Logica)</h3>
+<h3 id="_gebruikersregistratie_wagoe_core_pure_logica">Gebruikersregistratie: Wagoe Core (Pure Logica)</h3>
 <div class="listingblock">
 <div class="content">
-<pre class="rouge highlight"><code data-lang="clojure"><span class="c1">;; libs/user/src/boundary/user/core/user.clj</span><span class="w">
+<pre class="rouge highlight"><code data-lang="clojure"><span class="c1">;; libs/user/src/wagoe/user/core/user.clj</span><span class="w">
 </span><span class="c1">;; Dit bestand heeft nul imports van welke I/O-library dan ook. Nooit.</span><span class="w">
 
 </span><span class="p">(</span><span class="k">defn</span><span class="w"> </span><span class="n">check-duplicate-user-decision</span><span class="w">
@@ -1854,10 +1854,10 @@ Het enige dat verandert is wat er wordt ingeplugd.</p>
 </div>
 </div>
 <div class="sect2">
-<h3 id="_gebruikersregistratie_boundary_shell_orkestratie">Gebruikersregistratie: Boundary Shell (Orkestratie)</h3>
+<h3 id="_gebruikersregistratie_wagoe_shell_orkestratie">Gebruikersregistratie: Wagoe Shell (Orkestratie)</h3>
 <div class="listingblock">
 <div class="content">
-<pre class="rouge highlight"><code data-lang="clojure"><span class="c1">;; libs/user/src/boundary/user/shell/service.clj — vereenvoudigd</span><span class="w">
+<pre class="rouge highlight"><code data-lang="clojure"><span class="c1">;; libs/user/src/wagoe/user/shell/service.clj — vereenvoudigd</span><span class="w">
 </span><span class="c1">;; De shell is een script: ophalen → beslissen → handelen → herhalen.</span><span class="w">
 
 </span><span class="p">(</span><span class="k">defn</span><span class="w"> </span><span class="n">register-user!</span><span class="w"> </span><span class="p">[</span><span class="n">repositories</span><span class="w"> </span><span class="n">user-data</span><span class="p">]</span><span class="w">
@@ -1916,9 +1916,9 @@ Het enige dat verandert is wat er wordt ingeplugd.</p>
 <div class="sect2">
 <h3 id="_aha_1_je_tests_stoppen_met_liegen">Aha #1 — Je Tests Stoppen Met Liegen</h3>
 <div class="listingblock">
-<div class="title">Boundary — hoe een test er werkelijk uitziet</div>
+<div class="title">Wagoe — hoe een test er werkelijk uitziet</div>
 <div class="content">
-<pre class="rouge highlight"><code data-lang="clojure"><span class="c1">;; libs/user/test/boundary/user/core/authentication_test.clj</span><span class="w">
+<pre class="rouge highlight"><code data-lang="clojure"><span class="c1">;; libs/user/test/wagoe/user/core/authentication_test.clj</span><span class="w">
 
 </span><span class="p">(</span><span class="k">def</span><span class="w"> </span><span class="n">active-user</span><span class="w"> </span><span class="p">{</span><span class="no">:id</span><span class="w"> </span><span class="s">"uuid-1"</span><span class="w">  </span><span class="no">:email</span><span class="w"> </span><span class="s">"alice@example.com"</span><span class="w">
                   </span><span class="no">:active</span><span class="w"> </span><span class="n">true</span><span class="w">  </span><span class="no">:role</span><span class="w"> </span><span class="no">:user</span><span class="w">
@@ -1974,9 +1974,9 @@ Gewoon data in, data uit. Draait in <strong>minder dan 5 milliseconden</strong>.
 </div>
 </div>
 <div class="listingblock">
-<div class="title">Boundary — tijd is expliciet</div>
+<div class="title">Wagoe — tijd is expliciet</div>
 <div class="content">
-<pre class="rouge highlight"><code data-lang="clojure"><span class="c1">;; libs/user/src/boundary/user/core/session.clj</span><span class="w">
+<pre class="rouge highlight"><code data-lang="clojure"><span class="c1">;; libs/user/src/wagoe/user/core/session.clj</span><span class="w">
 
 </span><span class="p">(</span><span class="k">defn</span><span class="w"> </span><span class="n">is-session-valid?</span><span class="w">
   </span><span class="s">"current-time wordt geïnjecteerd door de shell. De core leest nooit de klok."</span><span class="w">
@@ -2020,7 +2020,7 @@ Gewoon data in, data uit. Draait in <strong>minder dan 5 milliseconden</strong>.
 <div class="sect2">
 <h3 id="_aha_3_complexe_domeinlogica_wordt_leesbaar">Aha #3 — Complexe Domeinlogica Wordt Leesbaar</h3>
 <div class="paragraph">
-<p>Hier is Boundary&#8217;s inlog-risicoscorer. Lees het als een specificatie.</p>
+<p>Hier is Wagoe&#8217;s inlog-risicoscorer. Lees het als een specificatie.</p>
 </div>
 <div class="listingblock">
 <div class="content">
@@ -2092,7 +2092,7 @@ Gewoon data in, data uit. Draait in <strong>minder dan 5 milliseconden</strong>.
 <p>"Dit is enorm in de praktijk. Hoeveel Django-projecten hebben een management command dat de logica uit de view subtiel opnieuw implementeert?"</p>
 </li>
 <li>
-<p>"In Boundary roepen zowel het CLI-startpunt als de HTTP-handler dezelfde shell-service aan, die dezelfde core aanroept."</p>
+<p>"In Wagoe roepen zowel het CLI-startpunt als de HTTP-handler dezelfde shell-service aan, die dezelfde core aanroept."</p>
 </li>
 <li>
 <p>"Voeg een nieuw afleverkanaal toe — een GraphQL API, een gRPC-endpoint — en je krijgt de bedrijfslogica gratis."</p>
@@ -2197,7 +2197,7 @@ Gewoon data in, data uit. Draait in <strong>minder dan 5 milliseconden</strong>.
 </tr>
 <tr>
 <td class="tableblock halign-left valign-top"><p class="tableblock"><strong>Library/framework-ontwikkeling</strong></p></td>
-<td class="tableblock halign-left valign-top"><p class="tableblock">Het patroon is hoe Boundary zelf is gestructureerd. Werkt prachtig voor herbruikbare code.</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Het patroon is hoe Wagoe zelf is gestructureerd. Werkt prachtig voor herbruikbare code.</p></td>
 </tr>
 </tbody>
 </table>
@@ -2470,7 +2470,7 @@ Gewoon data in, data uit. Draait in <strong>minder dan 5 milliseconden</strong>.
 <div class="quoteblock">
 <blockquote>
 <div class="paragraph">
-<p>Je hebt geen Clojure nodig. Je hebt Boundary niet nodig.<br>
+<p>Je hebt geen Clojure nodig. Je hebt Wagoe niet nodig.<br>
 Je hebt alleen een <code>core/</code>-map nodig en de discipline om hem schoon te houden.</p>
 </div>
 </blockquote>
@@ -2512,11 +2512,11 @@ Waar ports en adapters hun naam vandaan krijgen.</p>
 Een goede brug tussen FP-ideeën en praktische architectuur.</p>
 </li>
 <li>
-<p><strong>Boundary framework</strong> — deze repository<br>
+<p><strong>Wagoe framework</strong> — deze repository<br>
 Elke <code>libs/<strong>/src/</strong>/core/</code>-map is een levend voorbeeld.</p>
 </li>
 <li>
-<p><strong>Beste startpunt</strong> — <a href="https://github.com/thijs-creemers/boundary-examples/tree/main/ecommerce-api">boundary-examples/ecommerce-api</a><br>
+<p><strong>Beste startpunt</strong> — <a href="https://github.com/wagoebv/wagoe-examples/tree/main/ecommerce-api">wagoe-examples/ecommerce-api</a><br>
 De meest complete referentie-implementatie.</p>
 </li>
 </ul>

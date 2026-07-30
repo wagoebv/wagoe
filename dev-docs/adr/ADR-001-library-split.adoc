@@ -1,15 +1,15 @@
-== ADR-001: Split Boundary Monolith into Modular Libraries
+== ADR-001: Split Wagoe Monolith into Modular Libraries
 
 *Status:* Accepted +
 *Date:* 2026-01-18 +
-*Deciders:* Boundary Core Team +
+*Deciders:* Wagoe Core Team +
 *Context:* Planning Phase
 
 '''''
 
 === Context and Problem Statement
 
-The Boundary framework currently exists as a monolithic codebase where
+The Wagoe framework currently exists as a monolithic codebase where
 all components (user management, admin interface, platform
 infrastructure, utilities) are tightly bundled. While this simplifies
 initial development, it creates several problems for external adoption
@@ -19,7 +19,7 @@ and long-term maintainability:
 . *All-or-Nothing Dependency*: Users must include the entire framework
 even if they only need core utilities or database infrastructure
 . *Difficult to Extend*: Third-party developers cannot easily depend on
-specific Boundary components without pulling in unrelated code
+specific Wagoe components without pulling in unrelated code
 . *Publishing Challenges*: Cannot publish to Clojars as a single
 artifact without bloating user dependencies
 . *Maintenance Complexity*: Changes to core utilities require releasing
@@ -27,7 +27,7 @@ entire framework
 . *Limited Flexibility*: Users who want custom authentication cannot
 easily swap out the user module while keeping platform infrastructure
 
-The goal is to transform Boundary from an application into a *framework
+The goal is to transform Wagoe from an application into a *framework
 foundation* that others can build upon, while maintaining the cohesive
 "batteries-included" experience for users who want the full stack.
 
@@ -67,7 +67,7 @@ releases
 *Structure:*
 
 * Single repository
-* Single artifact: `boundary/boundary`
+* Single artifact: `wagoe/wagoe`
 * All components bundled together
 
 *Pros:*
@@ -94,9 +94,9 @@ releases
 *Structure:*
 
 ....
-boundary/boundary        - Everything (platform + modules + utils)
-boundary/boundary-dev    - Development tools only
-boundary/boundary-cli    - CLI tools only
+wagoe/wagoe        - Everything (platform + modules + utils)
+wagoe/wagoe-dev    - Development tools only
+wagoe/wagoe-cli    - CLI tools only
 ....
 
 *Pros:*
@@ -122,19 +122,19 @@ boundary/boundary-cli    - CLI tools only
 *Structure:*
 
 ....
-boundary/core            - Minimal utilities
-boundary/database        - Database adapters only
-boundary/http            - HTTP routing only
-boundary/pagination      - Pagination only
-boundary/search          - Search only
-boundary/logging         - Logging only
-boundary/metrics         - Metrics only
-boundary/errors          - Error reporting only
-boundary/user            - User management
-boundary/admin           - Admin interface
-boundary/storage         - File storage
-boundary/external        - External services
-boundary/scaffolder      - Code generator
+wagoe/core            - Minimal utilities
+wagoe/database        - Database adapters only
+wagoe/http            - HTTP routing only
+wagoe/pagination      - Pagination only
+wagoe/search          - Search only
+wagoe/logging         - Logging only
+wagoe/metrics         - Metrics only
+wagoe/errors          - Error reporting only
+wagoe/user            - User management
+wagoe/admin           - Admin interface
+wagoe/storage         - File storage
+wagoe/external        - External services
+wagoe/scaffolder      - Code generator
 ....
 
 *Pros:*
@@ -162,14 +162,14 @@ boundary/scaffolder      - Code generator
 *Structure:*
 
 ....
-boundary/core            - Validation, utils, interceptors
-boundary/observability   - Logging, metrics, error reporting
-boundary/platform        - Database, HTTP, pagination, search
-boundary/user            - User management, auth, MFA
-boundary/admin           - Admin CRUD + shared UI
-boundary/storage         - File storage adapters
-boundary/external        - External service adapters
-boundary/scaffolder      - Code generation tool
+wagoe/core            - Validation, utils, interceptors
+wagoe/observability   - Logging, metrics, error reporting
+wagoe/platform        - Database, HTTP, pagination, search
+wagoe/user            - User management, auth, MFA
+wagoe/admin           - Admin CRUD + shared UI
+wagoe/storage         - File storage adapters
+wagoe/external        - External service adapters
+wagoe/scaffolder      - Code generation tool
 ....
 
 *Pros:*
@@ -195,7 +195,7 @@ boundary/scaffolder      - Code generation tool
 
 *Chosen Option:* Medium-Grained Split (8 Libraries)
 
-We will split Boundary into 8 independently publishable Clojars
+We will split Wagoe into 8 independently publishable Clojars
 artifacts with the following dependency hierarchy:
 
 ....
@@ -243,7 +243,7 @@ should be a dev-only dependency
 
 *Publishing Strategy:*
 
-* Group ID: `boundary` (fallback to `io.github.boundary` if unavailable)
+* Group ID: `wagoe` (fallback to `io.github.wagoe` if unavailable)
 * Synchronized versioning: All libs share version number (e.g., `0.1.0`)
 * Initial release as `0.x.x` to allow breaking changes
 * Post-1.0: Standard semantic versioning guarantees
@@ -262,13 +262,13 @@ should be a dev-only dependency
 
 [arabic]
 . *Flexibility for Users*
-* Use full framework: `++{++boundary/admin ++{++:mvn/version "0.1.0"}}`
-* Platform only: `++{++boundary/platform ++{++:mvn/version "0.1.0"}}`
-* Core utils only: `++{++boundary/core ++{++:mvn/version "0.1.0"}}`
+* Use full framework: `++{++wagoe/admin ++{++:mvn/version "0.1.0"}}`
+* Platform only: `++{++wagoe/platform ++{++:mvn/version "0.1.0"}}`
+* Core utils only: `++{++wagoe/core ++{++:mvn/version "0.1.0"}}`
 . *Clear Extension Points*
-* Third-party modules can depend on `boundary/platform`
-* Custom auth implementations can replace `boundary/user`
-* Custom admin interfaces can use `boundary/ui` components
+* Third-party modules can depend on `wagoe/platform`
+* Custom auth implementations can replace `wagoe/user`
+* Custom admin interfaces can use `wagoe/ui` components
 . *Better Testing*
 * Each library can be tested independently
 * Integration tests verify cross-library compatibility
@@ -315,7 +315,7 @@ should be a dev-only dependency
 
 * Clear dependency diagram in documentation
 * Starter templates with common configurations
-* Single "get everything" dependency option (`boundary/admin`)
+* Single "get everything" dependency option (`wagoe/admin`)
 
 *For Maintenance:*
 
@@ -337,7 +337,7 @@ should be a dev-only dependency
 
 [source,clojure]
 ----
-;; In boundary.platform.system.modules (platform library)
+;; In wagoe.platform.system.modules (platform library)
 (defonce registered-modules (atom {}))
 
 (defn register-module! [module-key wiring-ns-sym]
@@ -347,17 +347,17 @@ should be a dev-only dependency
   (doseq [[_ ns-sym] @registered-modules]
     (require ns-sym)))
 
-;; In boundary.user.shell.module-wiring (user library)
-(ns boundary.user.shell.module-wiring
-  (:require [boundary.platform.system.modules :as modules]))
+;; In wagoe.user.shell.module-wiring (user library)
+(ns wagoe.user.shell.module-wiring
+  (:require [wagoe.platform.system.modules :as modules]))
 
 ;; Self-register on namespace load
-(modules/register-module! :user 'boundary.user.shell.module-wiring)
+(modules/register-module! :user 'wagoe.user.shell.module-wiring)
 
 ;; In application code
 (ns myapp.main
-  (:require [boundary.user.shell.module-wiring]  ; Triggers registration
-            [boundary.platform.system.wiring]))   ; Uses registered modules
+  (:require [wagoe.user.shell.module-wiring]  ; Triggers registration
+            [wagoe.platform.system.wiring]))   ; Uses registered modules
 ----
 
 ==== Namespace Renames
@@ -367,27 +367,27 @@ should be a dev-only dependency
 [cols=",,",options="header",]
 |===
 |Old |New |Reason
-|`boundary.shared.core.++*++` |`boundary.core.++*++` |"shared" is
+|`wagoe.shared.core.++*++` |`wagoe.core.++*++` |"shared" is
 unclear; "core" indicates foundation
 
-|`boundary.shared.ui.++*++` |`boundary.ui.++*++` |Move to admin library,
+|`wagoe.shared.ui.++*++` |`wagoe.ui.++*++` |Move to admin library,
 remove "shared"
 
-|`boundary.logging.++*++` |`boundary.observability.logging.++*++` |Group
+|`wagoe.logging.++*++` |`wagoe.observability.logging.++*++` |Group
 with metrics/errors
 
-|`boundary.metrics.++*++` |`boundary.observability.metrics.++*++` |Group
+|`wagoe.metrics.++*++` |`wagoe.observability.metrics.++*++` |Group
 with logging/errors
 
-|`boundary.error++_++reporting.++*++`
-|`boundary.observability.errors.++*++` |Group with logging/metrics
+|`wagoe.error++_++reporting.++*++`
+|`wagoe.observability.errors.++*++` |Group with logging/metrics
 |===
 
 *Non-Breaking:*
 
-* `boundary.platform.++*++` stays the same
-* `boundary.user.++*++` stays the same
-* `boundary.admin.++*++` stays the same
+* `wagoe.platform.++*++` stays the same
+* `wagoe.user.++*++` stays the same
+* `wagoe.admin.++*++` stays the same
 
 ==== Dependency Management
 
@@ -396,8 +396,8 @@ with logging/errors
 [source,clojure]
 ----
 ;; Use :local/root for development
-{:deps {boundary/core {:local/root "../core"}
-        boundary/platform {:local/root "../platform"}}}
+{:deps {wagoe/core {:local/root "../core"}
+        wagoe/platform {:local/root "../platform"}}}
 ----
 
 *Production (Published):*
@@ -405,8 +405,8 @@ with logging/errors
 [source,clojure]
 ----
 ;; Use :mvn/version for production
-{:deps {boundary/core {:mvn/version "0.1.0"}
-        boundary/platform {:mvn/version "0.1.0"}}}
+{:deps {wagoe/core {:mvn/version "0.1.0"}
+        wagoe/platform {:mvn/version "0.1.0"}}}
 ----
 
 *Build Process:*
@@ -474,7 +474,7 @@ vs Polyrepo Discussion]
 
 === Approval
 
-*Approved by:* Boundary Core Team +
+*Approved by:* Wagoe Core Team +
 *Date:* 2026-01-18 +
 *Implementation Owner:* ++[++TBD++]++ +
 *Expected Completion:* 6 weeks from approval
@@ -486,12 +486,12 @@ vs Polyrepo Discussion]
 ==== Open Questions
 
 [arabic]
-. *Clojars Group Name*: Is `boundary` available? Fallback to
-`io.github.boundary`
+. *Clojars Group Name*: Is `wagoe` available? Fallback to
+`io.github.wagoe`
 . *Version Strategy Post-1.0*: Should libraries version independently
 after 1.0?
 . *Database Driver Strategy*: Should platform bundle a default driver?
-. *UI Component Library*: Should `boundary.ui` become a separate
+. *UI Component Library*: Should `wagoe.ui` become a separate
 library?
 
 ==== Future Considerations
@@ -500,9 +500,9 @@ library?
 . *Plugin System*: Consider formal plugin API for third-party modules
 . *Version Independence*: Post-1.0, evaluate decoupling library versions
 . *Additional Libraries*:
-* `boundary/jobs` for background job processing
-* `boundary/cache` for caching abstractions
-* `boundary/search-advanced` for Elasticsearch/Solr integration
+* `wagoe/jobs` for background job processing
+* `wagoe/cache` for caching abstractions
+* `wagoe/search-advanced` for Elasticsearch/Solr integration
 . *Performance Optimizations*: AOT compilation options for production
 
 '''''

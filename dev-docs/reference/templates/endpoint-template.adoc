@@ -89,7 +89,7 @@ _Brief description of what this endpoint does_
 [source,highlightjs,highlight]
 ----
 {
-  "type": "https://boundary.example.com/problems/validation-error",
+  "type": "https://wagoe.example.com/problems/validation-error",
   "title": "Validation Error",
   "status": 400,
   "detail": "One or more fields failed validation",
@@ -107,7 +107,7 @@ _Brief description of what this endpoint does_
 ===== link:#_implementation_notes[]Implementation Notes
 
 * _Implementation details, business rules, constraints_
-* _Core function mapping: ++`++boundary.core.++[++domain++]++/++[++function-name++]`++_
+* _Core function mapping: ++`++wagoe.core.++[++domain++]++/++[++function-name++]`++_
 * _Repository dependencies: ++`[++IRepository++]`++_
 
 [[_examples]]
@@ -117,7 +117,7 @@ _Brief description of what this endpoint does_
 
 [source,highlightjs,highlight]
 ----
-boundary [resource] [action] --field="value"
+wagoe [resource] [action] --field="value"
 ----
 
 *cURL Example:*

@@ -1,7 +1,7 @@
 = ADR-025: Zero-Friction Onboarding
 :status: Proposed
 :date: 2026-04-18
-:deciders: boundary-team
+:deciders: wagoe-team
 
 == Status
 
@@ -11,7 +11,7 @@ Proposed
 
 === Background
 
-Boundary provides `bb setup` for interactive configuration and `bb scaffold`
+Wagoe provides `bb setup` for interactive configuration and `bb scaffold`
 for module generation. However, a new developer must discover and chain these
 commands manually. There is no single command that takes them from a fresh
 clone to a running application.
@@ -105,7 +105,7 @@ Support multiple local and cloud AI providers:
 
 == Related ADRs
 
-* ADR-015 -- Boundary Tools (CLI task infrastructure)
+* ADR-015 -- Wagoe Tools (CLI task infrastructure)
 * ADR-024 -- Devtools Library & Guidance Engine
 
 == References

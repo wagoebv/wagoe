@@ -1,12 +1,12 @@
 {:paths ["src" "resources"]
 
  :deps  {org.clojure/clojure     {:mvn/version "1.12.5"}
-         boundary/platform       {:local/root "../platform"}
-         boundary/core           {:local/root "../core"}
-         boundary/ui-style       {:local/root "../ui-style"}
-         boundary/scaffolder     {:local/root "../scaffolder"}
-         boundary/jobs           {:local/root "../jobs"}
-         boundary/user           {:local/root "../user"}
+         wagoe/platform       {:local/root "../platform"}
+         wagoe/core           {:local/root "../core"}
+         wagoe/ui-style       {:local/root "../ui-style"}
+         wagoe/scaffolder     {:local/root "../scaffolder"}
+         wagoe/jobs           {:local/root "../jobs"}
+         wagoe/user           {:local/root "../user"}
          hiccup/hiccup           {:mvn/version "2.0.0"}
          ring/ring-jetty-adapter {:mvn/version "1.15.4"}}
 

@@ -1,7 +1,7 @@
 = ADR-032: MCP Guardrail Error Payload — "Guardrail, Not Straitjacket"
 :status: Proposed
 :date: 2026-06-16
-:deciders: boundary-team
+:deciders: wagoe-team
 
 == Status
 
@@ -14,13 +14,13 @@ ADR-031 established *that* the MCP server denies dangerous operations
 communicated back to the agent* so the agent can self-correct — and where a
 denial may be deliberately bypassed.
 
-The guiding principle: Boundary's enforcement is a *guardrail*, not a
+The guiding principle: Wagoe's enforcement is a *guardrail*, not a
 *straitjacket*. A straitjacket says "no" with no recourse. A guardrail says
 "no, *because* of this principle, *here* is the fix — and if you really mean it,
 *here* is the audited override." An agent that receives the rule, the principle,
 and a concrete fix can re-plan; a bare error code makes it guess.
 
-Boundary already has a single source of truth for this kind of guidance: the
+Wagoe already has a single source of truth for this kind of guidance: the
 `devtools` *BND error catalog* (`BND-1xx`..`BND-7xx`), each entry carrying a
 `:title`, `:description` (the principle), and `:fix`. Reusing it keeps MCP
 errors consistent with REPL/HTTP errors and avoids a second catalog.
@@ -43,8 +43,8 @@ errors consistent with REPL/HTTP errors and avoids a second catalog.
 ----
 
 Carried over JSON-RPC as an application error (`:forbidden`, `-32001`) with the
-payload in `:data`. Built purely in `boundary.mcp.core.guardrail`; the BND
-catalog lookup (I/O) is done in `boundary.mcp.shell.guardrail`, so the core
+payload in `:data`. Built purely in `wagoe.mcp.core.guardrail`; the BND
+catalog lookup (I/O) is done in `wagoe.mcp.shell.guardrail`, so the core
 stays decoupled from the catalog's resource loading.
 
 === 2. New BND range: `BND-8xx` — MCP guardrails
@@ -95,7 +95,7 @@ a trail — never silently.
 
 === Negative / trade-offs
 
-* `boundary-mcp` now depends on `boundary/devtools` (a heavy transitive
+* `wagoe-mcp` now depends on `wagoe/devtools` (a heavy transitive
   footprint) to reach the catalog. Accepted because (a) the ticket mandates
   reusing the catalog as the single source of truth and (b) BOU-99/100
   introspection tooling will pull much of the framework anyway. Coupling is

@@ -1,7 +1,7 @@
 = Voorbij MVC: Functional Core / Imperative Shell
 :author: Thijs Creemers
 :revdate: 2026-03-07
-:description: Een presentatie van 60 minuten voor Django/Rails/Spring-engineers over FC/IS en hexagonale architectuur, geïmplementeerd in het Boundary framework.
+:description: Een presentatie van 60 minuten voor Django/Rails/Spring-engineers over FC/IS en hexagonale architectuur, geïmplementeerd in het Wagoe framework.
 :toc: left
 :toc-title: Inhoud
 :toclevels: 2
@@ -20,15 +20,15 @@ _Een verhaal van iemand die een "rabit hole" in dook — en op de bodem een fram
 [.notes]
 --
 * "Hallo allemaal."
-* "De afgelopen tijd heb ik een framework gebouwd met de naam  Boundary. Niet omdat het ecosysteem een nieuw framework nodig had, maar omdat ik dit architectuurpatroon echt wilde *begrijpen* — en de beste manier voor mij om iets te begrijpen is het zelf bouwen."
+* "De afgelopen tijd heb ik een framework gebouwd met de naam  Wagoe. Niet omdat het ecosysteem een nieuw framework nodig had, maar omdat ik dit architectuurpatroon echt wilde *begrijpen* — en de beste manier voor mij om iets te begrijpen is het zelf bouwen."
 * "Vandaag wil ik delen wat ik gedurende dat proces heb geleerd. En ondanks het feit dat ik voor het schrijven van het framework clojure gebruikt heb, ben ik er van overtuigd dat de inzichten die ik opgedaan heb ook relevant kunnen zijn voor jullie Python- Java- en Ruby-code."
 * Toon: nieuwsgierige collega, geen evangelist. "Hier is iets cools dat ik heb gevonden."
 --
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SLIDE 2 — WAAROM IK BOUNDARY BOUWDE
+// SLIDE 2 — WAAROM IK WAGOE BOUWDE
 // ─────────────────────────────────────────────────────────────────────────────
-== Waarom ik Boundary?
+== Waarom ik Wagoe?
 
 Ik een simpele vraag:
 
@@ -49,7 +49,7 @@ En het heeft de manier waarop ik over *elke* codebase denk veranderd — dan bed
 --
 * "Niet om Django of Rails niet te vervangen. maar om een architectuurvraag te beantwoorden."
 * "De vraag bleek een heel elegant antwoord te hebben — en dat antwoord is wat ik je vandaag wil laten zien."
-* "Spoiler: je hebt geen Clojure nodig, en ook Boundary niet, om dit toe te passen. Ik ga het laten zien."
+* "Spoiler: je hebt geen Clojure nodig, en ook Wagoe niet, om dit toe te passen. Ik ga het laten zien."
 --
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -60,7 +60,7 @@ En het heeft de manier waarop ik over *elke* codebase denk veranderd — dan bed
 . Het probleem met hoe we normaal code schrijven — en waarom het eigenlijk niet onze schuld is
 . Het ene inzicht dat alles verandert
 . Hexagonale architectuur: ports, adapters en waarom de naam zo slecht is
-. Boundary: 13 modules, één patroon, eindeloze uitwisselbaarheid
+. Wagoe: 13 modules, één patroon, eindeloze uitwisselbaarheid
 . Vijf "aha"-momenten met echte code
 . Is dit de moeite waard? (Eerlijk antwoord: soms wel, soms niet)
 
@@ -408,7 +408,7 @@ Serieus. Dat is het. De rest is implementatie.
 [.notes]
 --
 * "Ik weet dat het te simpel klinkt. Maar de implicaties zijn enorm."
-* "In Boundary wordt deze regel afgedwongen door de linter. Een compile-time check. Als een `core/`-namespace iets vereist uit `shell/`, mislukt de build."
+* "In Wagoe wordt deze regel afgedwongen door de linter. Een compile-time check. Als een `core/`-namespace iets vereist uit `shell/`, mislukt de build."
 * "In Python en Ruby dwing je het af met code reviews en discipline. Minder betrouwbaar, maar nog steeds effectief."
 --
 
@@ -472,13 +472,13 @@ flowchart LR
 --
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SLIDE — EEN PORT IN BOUNDARY
+// SLIDE — EEN PORT IN WAGOE
 // ─────────────────────────────────────────────────────────────────────────────
-=== Een Port in Boundary
+=== Een Port in Wagoe
 
 [source,clojure]
 ----
-;; libs/user/src/boundary/user/ports.clj
+;; libs/user/src/wagoe/user/ports.clj
 
 (defprotocol IUserRepository
   "Output port — de kijk van het domein op 'iets dat gebruikers opslaat'.
@@ -505,9 +505,9 @@ Een port zegt: "Ik heb *iets* nodig dat gebruikers kan vinden en opslaan. Ik gee
 --
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SECTIE 4 — BOUNDARY: MODULARITEIT
+// SECTIE 4 — WAGOE: MODULARITEIT
 // ─────────────────────────────────────────────────────────────────────────────
-== Deel 4: Boundary — Gebouwd op Modulariteit
+== Deel 4: Wagoe — Gebouwd op Modulariteit
 
 _13 libraries. Één patroon. Elk onafhankelijk inzetbaar._
 
@@ -516,7 +516,7 @@ _13 libraries. Één patroon. Elk onafhankelijk inzetbaar._
 // ─────────────────────────────────────────────────────────────────────────────
 === De 13 Libraries
 
-Boundary is geen monoliet. Het zijn 13 onafhankelijk publiceerbare libraries, elk gericht op *één ding*:
+Wagoe is geen monoliet. Het zijn 13 onafhankelijk publiceerbare libraries, elk gericht op *één ding*:
 
 [cols="1,1,3", options="header"]
 |===
@@ -569,7 +569,7 @@ Boundary is geen monoliet. Het zijn 13 onafhankelijk publiceerbare libraries, el
 
 [.notes]
 --
-* "Elke library heeft zijn eigen `build.clj`, zijn eigen tests, zijn eigen versie. Je kunt alleen `boundary/user` naar Clojars publiceren."
+* "Elke library heeft zijn eigen `build.clj`, zijn eigen tests, zijn eigen versie. Je kunt alleen `wagoe/user` naar Clojars publiceren."
 * "Je hoeft niet alle 13 te gebruiken. Pak wat je nodig hebt. Het patroon houdt ze consistent."
 * "De scaffolder genereert een nieuwe library met de juiste FC/IS-structuur in één commando."
 --
@@ -581,7 +581,7 @@ Boundary is geen monoliet. Het zijn 13 onafhankelijk publiceerbare libraries, el
 
 [source]
 ----
-libs/{elke-library}/src/boundary/{library}/
+libs/{elke-library}/src/wagoe/{library}/
 ├── core/           ← pure functies. punt. einde verhaal.
 │   ├── domain.clj
 │   └── validation.clj
@@ -682,7 +682,7 @@ _Als het de port implementeert, werkt het._
 // ─────────────────────────────────────────────────────────────────────────────
 === De Database Is Gewoon een Adapter
 
-Boundary wordt geleverd met adapters voor vier databases — die allemaal dezelfde port implementeren:
+Wagoe wordt geleverd met adapters voor vier databases — die allemaal dezelfde port implementeren:
 
 [source,clojure]
 ----
@@ -709,7 +709,7 @@ De HoneySQL-map compileert naar een geparametriseerde prepared statement — `[:
 [.notes]
 --
 * "In Django *is* je model de ORM. Als je zonder database wilt testen, mock je de ORM. Dat is shimmen."
-* "In Boundary is de database een stekker. Je trekt de ene stekker eruit en steekt een andere erin. Geen shimmen nodig."
+* "In Wagoe is de database een stekker. Je trekt de ene stekker eruit en steekt een andere erin. Geen shimmen nodig."
 * "De HoneySQL-map vermijdt raw SQL-strings volledig — geen SQL-injection-aanvalsoppervlak, en dezelfde map werkt voor alle vier databasedialecten."
 * "De in-memory adapter maakt unit tests voor shell-services triviaal — geen Docker, geen migraties."
 --
@@ -837,13 +837,13 @@ Vragen die je niet kunt beantwoorden door dit te lezen:
 --
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SLIDE — GEBRUIKERSREGISTRATIE: BOUNDARY CORE
+// SLIDE — GEBRUIKERSREGISTRATIE: WAGOE CORE
 // ─────────────────────────────────────────────────────────────────────────────
-=== Gebruikersregistratie: Boundary Core (Pure Logica)
+=== Gebruikersregistratie: Wagoe Core (Pure Logica)
 
 [source,clojure]
 ----
-;; libs/user/src/boundary/user/core/user.clj
+;; libs/user/src/wagoe/user/core/user.clj
 ;; Dit bestand heeft nul imports van welke I/O-library dan ook. Nooit.
 
 (defn check-duplicate-user-decision
@@ -882,13 +882,13 @@ Test voor `check-duplicate-user-decision`: één regel. Geen mocks. Geen databas
 --
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SLIDE — GEBRUIKERSREGISTRATIE: BOUNDARY SHELL
+// SLIDE — GEBRUIKERSREGISTRATIE: WAGOE SHELL
 // ─────────────────────────────────────────────────────────────────────────────
-=== Gebruikersregistratie: Boundary Shell (Orkestratie)
+=== Gebruikersregistratie: Wagoe Shell (Orkestratie)
 
 [source,clojure]
 ----
-;; libs/user/src/boundary/user/shell/service.clj — vereenvoudigd
+;; libs/user/src/wagoe/user/shell/service.clj — vereenvoudigd
 ;; De shell is een script: ophalen → beslissen → handelen → herhalen.
 
 (defn register-user! [repositories user-data]
@@ -937,10 +937,10 @@ _De momenten die al die late nachten de moeite waard maakten._
 // ─────────────────────────────────────────────────────────────────────────────
 === Aha #1 — Je Tests Stoppen Met Liegen
 
-.Boundary — hoe een test er werkelijk uitziet
+.Wagoe — hoe een test er werkelijk uitziet
 [source,clojure]
 ----
-;; libs/user/test/boundary/user/core/authentication_test.clj
+;; libs/user/test/wagoe/user/core/authentication_test.clj
 
 (def active-user {:id "uuid-1"  :email "alice@example.com"
                   :active true  :role :user
@@ -986,10 +986,10 @@ def is_session_valid(session):
     return session.expires_at > datetime.now()  # ← waar komt "nu" vandaan?
 ----
 
-.Boundary — tijd is expliciet
+.Wagoe — tijd is expliciet
 [source,clojure]
 ----
-;; libs/user/src/boundary/user/core/session.clj
+;; libs/user/src/wagoe/user/core/session.clj
 
 (defn is-session-valid?
   "current-time wordt geïnjecteerd door de shell. De core leest nooit de klok."
@@ -1023,7 +1023,7 @@ Dezelfde truc werkt voor UUID's, willekeurige tokens, externe API-antwoorden —
 // ─────────────────────────────────────────────────────────────────────────────
 === Aha #3 — Complexe Domeinlogica Wordt Leesbaar
 
-Hier is Boundary's inlog-risicoscorer. Lees het als een specificatie.
+Hier is Wagoe's inlog-risicoscorer. Lees het als een specificatie.
 
 [source,clojure]
 ----
@@ -1097,7 +1097,7 @@ Geen copy-paste. Geen "de CLI-versie doet het net iets anders." +
 [.notes]
 --
 * "Dit is enorm in de praktijk. Hoeveel Django-projecten hebben een management command dat de logica uit de view subtiel opnieuw implementeert?"
-* "In Boundary roepen zowel het CLI-startpunt als de HTTP-handler dezelfde shell-service aan, die dezelfde core aanroept."
+* "In Wagoe roepen zowel het CLI-startpunt als de HTTP-handler dezelfde shell-service aan, die dezelfde core aanroept."
 * "Voeg een nieuw afleverkanaal toe — een GraphQL API, een gRPC-endpoint — en je krijgt de bedrijfslogica gratis."
 --
 
@@ -1175,7 +1175,7 @@ _Het eerlijke antwoord._
 | Nieuwe developers leren het patroon één keer. Elke module is navigeerbaar.
 
 | **Library/framework-ontwikkeling**
-| Het patroon is hoe Boundary zelf is gestructureerd. Werkt prachtig voor herbruikbare code.
+| Het patroon is hoe Wagoe zelf is gestructureerd. Werkt prachtig voor herbruikbare code.
 |===
 
 [.notes]
@@ -1380,7 +1380,7 @@ Dat is het. Één module. Kijk hoe het voelt.
 
 [quote]
 ____
-Je hebt geen Clojure nodig. Je hebt Boundary niet nodig. +
+Je hebt geen Clojure nodig. Je hebt Wagoe niet nodig. +
 Je hebt alleen een `core/`-map nodig en de discipline om hem schoon te houden.
 ____
 
@@ -1405,10 +1405,10 @@ ____
 * **Mark Seemann** — _"Functional architecture: the pits of success"_ (NDC 2016) +
   Een goede brug tussen FP-ideeën en praktische architectuur.
 
-* **Boundary framework** — deze repository +
+* **Wagoe framework** — deze repository +
   Elke `libs/*/src/*/core/`-map is een levend voorbeeld.
 
-* **Beste startpunt** — https://github.com/thijs-creemers/boundary-examples/tree/main/ecommerce-api[boundary-examples/ecommerce-api] +
+* **Beste startpunt** — https://github.com/wagoebv/wagoe-examples/tree/main/ecommerce-api[wagoe-examples/ecommerce-api] +
   De meest complete referentie-implementatie.
 
 [.notes]

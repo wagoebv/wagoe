@@ -1,6 +1,6 @@
 # UI Style Library — Development Guide
 
-> Central app-wide styling contract for Boundary: named CSS/JS asset bundles,
+> Central app-wide styling contract for Wagoe: named CSS/JS asset bundles,
 > design tokens, and the shared static assets served to every page.
 >
 > For general conventions, testing commands, and FC/IS patterns, see the
@@ -22,7 +22,7 @@ plus a `resources/` asset tree.
 
 | Namespace | Responsibility |
 |-----------|----------------|
-| `boundary.ui-style` | Bundle registries (`css-bundles`, `js-bundles`) + `bundle` / `js-bundle` lookup fns. This is the entire public API. |
+| `wagoe.ui-style` | Bundle registries (`css-bundles`, `js-bundles`) + `bundle` / `js-bundle` lookup fns. This is the entire public API. |
 
 ## Public API
 
@@ -30,18 +30,18 @@ Bundle vars — each a vector of `/`-rooted asset paths, in load order:
 
 | Var | Bundle | Contents (load order) |
 |-----|--------|-----------------------|
-| `base-css` | `:base` | pico → boundary-tokens → tokens-openprops → app |
-| `pilot-css` | `:pilot` | boundary-tokens → app → daisy-admin |
-| `admin-pilot-css` | `:admin-pilot` | fonts → boundary-tokens → admin → app → daisy-admin |
+| `base-css` | `:base` | pico → wagoe-tokens → tokens-openprops → app |
+| `pilot-css` | `:pilot` | wagoe-tokens → app → daisy-admin |
+| `admin-pilot-css` | `:admin-pilot` | fonts → wagoe-tokens → admin → app → daisy-admin |
 | `base-js` / `pilot-js` | `:base` / `:pilot` | theme → components → alpine → htmx (`pilot-js` aliases `base-js`) |
 | `admin-pilot-js` | `:admin-pilot` | theme → components → admin-ux → alpine → htmx → forms → keyboard |
 
 Lookup functions:
 
 ```clojure
-(require '[boundary.ui-style :as ui-style])
+(require '[wagoe.ui-style :as ui-style])
 
-(ui-style/bundle :pilot)          ;; => ["/css/boundary-tokens.css" "/css/app.css" "/css/daisy-admin.css"]
+(ui-style/bundle :pilot)          ;; => ["/css/wagoe-tokens.css" "/css/app.css" "/css/daisy-admin.css"]
 (ui-style/js-bundle :admin-pilot) ;; => ["/js/theme.js" "/js/components.js" ...]
 
 ;; Unknown keys fall back to the :base stack (never nil):
@@ -57,20 +57,20 @@ Recommended bundle per page type:
 
 ## Assets shipped (`resources/public/`)
 
-- **CSS** (`css/`): `pico.min.css` (vendored), `boundary-tokens.css` +
+- **CSS** (`css/`): `pico.min.css` (vendored), `wagoe-tokens.css` +
   `tokens-openprops.css` (design tokens), `app.css`, `admin.css`,
   `daisy-admin.css` (Tailwind/daisyUI compiled output), `fonts.css`, and
   `vendor/open-props/*`.
 - **JS** (`js/`): `theme.js`, `components.js`, `admin-ux.js`, `forms.js`,
   `keyboard.js`, `init.js`, plus vendored `alpine.min.js` and `htmx.min.js`.
 - **Fonts** (`fonts/`): DM Sans + JetBrains Mono woff2.
-- **Assets** (`assets/`): Boundary light/dark logo + icon PNGs.
+- **Assets** (`assets/`): Wagoe light/dark logo + icon PNGs.
 - **Tailwind source** (`resources/tailwind/admin-pilot.css`): input compiled to
   `css/daisy-admin.css`.
 
 Paths in the bundle vectors are root-relative (`/css/...`, `/js/...`). The
 platform serves them from the classpath via Ring `wrap-resource "public"`
-(see `libs/platform/src/boundary/platform/shell/http/reitit_router.clj`), so
+(see `libs/platform/src/wagoe/platform/shell/http/reitit_router.clj`), so
 `/css/app.css` resolves to `resources/public/css/app.css`.
 
 ## How it's consumed
@@ -78,18 +78,18 @@ platform serves them from the classpath via Ring `wrap-resource "public"`
 Only layout namespaces reach for `ui-style`; feature code goes through the
 shared layout entry points instead.
 
-- `boundary.shared.ui.core.layout` (lib `shared-ui`) binds `default-css`,
+- `wagoe.shared.ui.core.layout` (lib `shared-ui`) binds `default-css`,
   `pilot-css`, `admin-pilot-css`, and the matching `*-js` vars from
   `ui-style/bundle` / `ui-style/js-bundle`, then injects them into the page
   `<head>`. Its `pilot-page-layout` / `admin-pilot-page-layout` helpers are what
   modules call.
-- `boundary.devtools.shell.dashboard.layout` uses `(ui-style/js-bundle :base)`.
+- `wagoe.devtools.shell.dashboard.layout` uses `(ui-style/js-bundle :base)`.
 
 Example (feature namespace — no CSS list of its own):
 
 ```clojure
 (ns my.module.core.ui
-  (:require [boundary.shared.ui.core.layout :as layout]))
+  (:require [wagoe.shared.ui.core.layout :as layout]))
 
 (defn page [opts]
   (layout/pilot-page-layout "My Page" [:div "Content"] opts))
@@ -105,12 +105,12 @@ and `:paths ["src" "resources"]` so the assets travel with the jar.
 
 1. **Do not hardcode CSS/JS file lists in feature modules.** Choose a bundle key
    in the layout namespace; add/remove files only by editing the bundle vectors
-   in `boundary.ui-style`.
+   in `wagoe.ui-style`.
 2. **JS load order is load-bearing.** `components.js` (and `admin-ux.js` for the
    admin bundle) must load *before* `alpine.min.js` — they register Alpine
    components/stores on the `alpine:init` event. Preserve the vector order when
    editing.
-3. **Theme changes go in token files.** Adjust `boundary-tokens.css` /
+3. **Theme changes go in token files.** Adjust `wagoe-tokens.css` /
    `tokens-openprops.css`, not one-off colors in component CSS.
 4. **`daisy-admin.css` is generated.** Edit `resources/tailwind/admin-pilot.css`
    and recompile (`npm run build:css:admin` from the monorepo root); do not
@@ -127,6 +127,6 @@ and `:paths ["src" "resources"]` so the assets travel with the jar.
 clojure -M:test:db/h2 :ui-style
 ```
 
-Tests live in `test/boundary/ui_style_test.clj` (tagged `^:unit`) and cover
+Tests live in `test/wagoe/ui_style_test.clj` (tagged `^:unit`) and cover
 bundle-key selection and the base-fallback for unknown keys. When you add or
 reorder a bundle, update the corresponding assertion.

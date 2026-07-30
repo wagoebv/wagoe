@@ -1,7 +1,7 @@
 = ADR-017: Library Migration Discovery
 :status: Proposed
 :date: 2026-03-24
-:deciders: boundary-team
+:deciders: wagoe-team
 
 == Status
 
@@ -9,7 +9,7 @@ Proposed
 
 == Context
 
-Boundary applications can depend on framework libraries that introduce new
+Wagoe applications can depend on framework libraries that introduce new
 database migrations over time.
 
 Today the migration CLI only points Migratus at the application-local
@@ -22,13 +22,13 @@ consuming applications:
   files into their own project
 * copied migrations drift from the source library and create ownership confusion
 
-This is especially problematic for reusable Boundary libraries such as
-`boundary-geo`, where the library owns a table contract but the consuming
+This is especially problematic for reusable Wagoe libraries such as
+`wagoe-geo`, where the library owns a table contract but the consuming
 application must currently discover and copy that migration manually.
 
 == Decision
 
-Boundary will support automatic migration discovery for libraries.
+Wagoe will support automatic migration discovery for libraries.
 
 The migration system will keep using Migratus, but `:migration-dir` will become
 an aggregated set of directories:
@@ -39,7 +39,7 @@ an aggregated set of directories:
 Library convention:
 
 * a library that owns database migrations publishes a
-  `boundary/migration-paths.edn` resource
+  `wagoe/migration-paths.edn` resource
 * that manifest contains a vector of Migratus-compatible resource directories,
   or a map with `:paths`
 * each declared directory contains standard Migratus filenames such as
@@ -49,7 +49,7 @@ Example manifest:
 
 [source,edn]
 ----
-{:paths ["boundary/geo/migrations/"]}
+{:paths ["wagoe/geo/migrations/"]}
 ----
 
 Example resulting Migratus config:
@@ -57,8 +57,8 @@ Example resulting Migratus config:
 [source,clojure]
 ----
 {:migration-dir ["migrations/"
-                 "boundary/geo/migrations/"
-                 "boundary/search/migrations/"]}
+                 "wagoe/geo/migrations/"
+                 "wagoe/search/migrations/"]}
 ----
 
 `clojure -M:migrate up` will therefore apply both application migrations and
@@ -89,9 +89,9 @@ library-owned migrations without any manual copy step.
 For library authors:
 
 1. Store library migrations under a stable resource directory such as
-   `resources/boundary/<library>/migrations/`.
+   `resources/wagoe/<library>/migrations/`.
 2. Use standard Migratus up/down filenames.
-3. Publish `resources/boundary/migration-paths.edn` with the directory path.
+3. Publish `resources/wagoe/migration-paths.edn` with the directory path.
 
 For application authors:
 
@@ -104,4 +104,4 @@ For application authors:
 
 * ADR-001: Library Split
 * ADR-004: Multi-Tenancy Architecture
-* ADR-015: boundary-tools
+* ADR-015: wagoe-tools

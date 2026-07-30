@@ -1,8 +1,8 @@
-== Boundary Framework Documentation
+== Wagoe Framework Documentation
 
-Welcome to the Boundary Framework documentation. This documentation
+Welcome to the Wagoe Framework documentation. This documentation
 covers architecture, guides, API references, and implementation details
-for the Boundary Framework - a module-centric software framework built
+for the Wagoe Framework - a module-centric software framework built
 on Clojure that implements the "Functional Core / Imperative Shell"
 architectural paradigm.
 
@@ -46,7 +46,7 @@ utility modules
 [[mortar_board-guides]]
 ==== 🎓 link:guides/[Guides]
 
-Step-by-step tutorials and how-to guides for working with Boundary
+Step-by-step tutorials and how-to guides for working with Wagoe
 Framework.
 
 *Getting Started:*
@@ -88,7 +88,7 @@ issues and solutions
 
 Technical reference documentation for APIs, commands, and configuration.
 
-* link:reference/boundary-prd.adoc[Product Requirements Document] - Complete 
+* link:reference/wagoe-prd.adoc[Product Requirements Document] - Complete 
 PRD with architecture and specifications
 * link:reference/commands.adoc[Commands] - CLI command reference
 * link:reference/cli/user-cli.adoc[User CLI Reference] - User management 
@@ -182,7 +182,7 @@ documentation locally
 
 === Quick Links
 
-* link:https://github.com/thijs-creemers/boundary/blob/main/AGENTS.md[AGENTS.md] - Comprehensive guide for AI coding
+* link:https://github.com/wagoebv/wagoe/blob/main/AGENTS.md[AGENTS.md] - Comprehensive guide for AI coding
 agents
 * link:../README.md[README.md] - Project README
 * link:../CONTRIBUTING.md[CONTRIBUTING.md] - Contribution guidelines
@@ -193,7 +193,7 @@ agents
 For the best development experience, refer to:
 
 [arabic]
-. *link:https://github.com/thijs-creemers/boundary/blob/main/AGENTS.md[AGENTS.md]* - Complete development guide with
+. *link:https://github.com/wagoebv/wagoe/blob/main/AGENTS.md[AGENTS.md]* - Complete development guide with
 commands and patterns
 . *link:guides/quickstart.adoc[Quickstart Guide]* - Get started
 developing

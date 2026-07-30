@@ -1,7 +1,7 @@
 = ADR-018: Admin Module — :belongs-to Widget for Foreign Key Lookups
 :status: Proposed
 :date: 2026-03-26
-:deciders: boundary-team
+:deciders: wagoe-team
 
 == Status
 
@@ -77,7 +77,7 @@ The admin module will add support for a new field type and widget: `:belongs-to`
 
 === Implementation approach
 
-==== Schema (`boundary.admin.schema`)
+==== Schema (`wagoe.admin.schema`)
 
 * `FieldType` gains `:belongs-to` as a new value.
 * `FieldWidget` gains `:belongs-to` as a new value.
@@ -92,7 +92,7 @@ The admin module will add support for a new field type and widget: `:belongs-to`
   [:display-field :keyword]]] ; field on the related entity to display
 ----
 
-==== Service (`boundary.admin.shell.service`)
+==== Service (`wagoe.admin.shell.service`)
 
 * `list-entities` and `get-entity` detect `:belongs-to` fields in the
   entity config and append the resolved values to each record before returning.
@@ -101,7 +101,7 @@ The admin module will add support for a new field type and widget: `:belongs-to`
 * Cross-schema lookups are handled by the schema provider, which knows the
   table and schema name of the related entity.
 
-==== UI (`boundary.admin.core.ui`)
+==== UI (`wagoe.admin.core.ui`)
 
 * The `:belongs-to` widget renders the field as read-only text (identical to
   a `:text-input` with `readonly: true`).

@@ -1,10 +1,10 @@
-= Boundary Alpha Release Checklist
+= Wagoe Alpha Release Checklist
 :toc:
 :toclevels: 3
 :icons: font
 
-This document tracks all required steps to release the Boundary Framework Alpha publicly.
-The goal is to deliver a stable, approachable, minimal-but-complete version of Boundary for early adopters.
+This document tracks all required steps to release the Wagoe Framework Alpha publicly.
+The goal is to deliver a stable, approachable, minimal-but-complete version of Wagoe for early adopters.
 
 == 1. Core System Readiness
 
@@ -43,7 +43,7 @@ The goal is to deliver a stable, approachable, minimal-but-complete version of B
 == 3. Starter Template
 
 === 3.1 Project Structure
-- [ ] Create `boundary-starter` GitHub repository.
+- [ ] Create `wagoe-starter` GitHub repository.
 - [ ] Include User + Inventory modules.
 - [ ] Include login/logout functionality.
 - [ ] Include a minimal CRUD flow (HTMX UI is enough).
@@ -57,14 +57,14 @@ The goal is to deliver a stable, approachable, minimal-but-complete version of B
 === 3.3 Documentation in Repo
 - [ ] README with clear “Getting Started” steps.
 - [ ] Architecture overview (very short).
-- [ ] Link to full Boundary docs site.
+- [ ] Link to full Wagoe docs site.
 
 == 4. Documentation
 
 === 4.1 Essential Guides
 - [ ] Getting Started (5-minute guide).
 - [ ] Create Your First Module (20-minute tutorial).
-- [ ] Understanding FC/IS in Boundary (high-level explanation).
+- [ ] Understanding FC/IS in Wagoe (high-level explanation).
 - [ ] Quick guide to normalized routing.
 - [ ] Quick guide to interceptors.
 
@@ -84,7 +84,7 @@ The goal is to deliver a stable, approachable, minimal-but-complete version of B
 - [ ] Test coverage acceptable for Alpha (no need for 100%).
 
 === 5.2 Manual QA
-- [ ] Boot Boundary REPL manually and run through:
+- [ ] Boot Wagoe REPL manually and run through:
 - [ ] Login
 - [ ] Create item
 - [ ] Edit item
@@ -106,9 +106,9 @@ The goal is to deliver a stable, approachable, minimal-but-complete version of B
 - [ ] Enable Discussions.
 
 === 6.2 Clojars
-- [ ] Publish Boundary core.
-- [ ] Publish Boundary scaffolder.
-- [ ] Publish Boundary starter template (if applicable).
+- [ ] Publish Wagoe core.
+- [ ] Publish Wagoe scaffolder.
+- [ ] Publish Wagoe starter template (if applicable).
 
 === 6.3 Versioning
 - [ ] Tag version: `v0.1.0-alpha`.
@@ -120,7 +120,7 @@ The goal is to deliver a stable, approachable, minimal-but-complete version of B
 - [ ] Post introduction on Clojurian Slack (#clojure, #announcements).
 - [ ] Post introduction on r/Clojure.
 - [ ] Publish a short blog post:
-- What Boundary is
+- What Wagoe is
 - Why FC/IS matters
 - Why normalized routing is powerful
 - How to get started quickly
@@ -129,7 +129,7 @@ The goal is to deliver a stable, approachable, minimal-but-complete version of B
 Use this summary:
 
 ----
-Boundary is a modern Functional Core / Imperative Shell framework for Clojure.
+Wagoe is a modern Functional Core / Imperative Shell framework for Clojure.
 It offers normalized routing, declarative interceptors, production-ready scaffolding,
 enterprise-grade validation, and a clean development workflow.
 Alpha is ready to try today.
@@ -145,7 +145,7 @@ Alpha is ready to try today.
 
 == Completion Criteria
 
-Boundary Alpha is considered *successfully released* when:
+Wagoe Alpha is considered *successfully released* when:
 
 - [ ] Developers can clone the starter template and build a working CRUD app in under 10 minutes.
 - [ ] Scaffolder produces fully functional modules with normalized routing.

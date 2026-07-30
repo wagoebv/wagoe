@@ -1,7 +1,7 @@
 = Developer Tools
 :description: How to use the dev dashboard, error pipeline, REPL power tools, and AI commands for day-to-day development.
 
-Boundary ships with a suite of developer tools that give you x-ray vision into your running application. This guide covers the most useful features for day-to-day development.
+Wagoe ships with a suite of developer tools that give you x-ray vision into your running application. This guide covers the most useful features for day-to-day development.
 
 == Starting the Dev Dashboard
 
@@ -79,7 +79,7 @@ You can add temporary routes for testing without restarting:
 
 [source,clojure]
 ----
-(require '[boundary.devtools.core.router :as router])
+(require '[wagoe.devtools.core.router :as router])
 
 ;; Add a test route
 (router/add-route {:path "/test" :method :get :handler my-handler})
@@ -94,7 +94,7 @@ Capture HTTP request/response pairs for debugging:
 
 [source,clojure]
 ----
-(require '[boundary.devtools.core.recording :as rec])
+(require '[wagoe.devtools.core.recording :as rec])
 
 ;; Create a recording session
 (def session (rec/create-session))
@@ -141,7 +141,7 @@ From the REPL:
 
 [source,clojure]
 ----
-(def ds (get-in integrant.repl.state/system [:boundary/db-context :datasource]))
+(def ds (get-in integrant.repl.state/system [:wagoe/db-context :datasource]))
 (require '[next.jdbc :as jdbc])
 (jdbc/execute! ds ["SELECT * FROM users LIMIT 5"])
 ----
@@ -162,13 +162,13 @@ Three AI commands are available when an AI provider is configured (see xref:libr
 [source,clojure]
 ----
 ;; Code review with framework-specific feedback
-(ai/review "libs/user/src/boundary/user/core/validation.clj")
+(ai/review "libs/user/src/wagoe/user/core/validation.clj")
 
 ;; Suggest missing test cases
-(ai/test-ideas "libs/user/src/boundary/user/core/validation.clj")
+(ai/test-ideas "libs/user/src/wagoe/user/core/validation.clj")
 
 ;; Get an FC/IS refactoring plan for a namespace with violations
-(ai/refactor-fcis 'boundary.product.core.validation)
+(ai/refactor-fcis 'wagoe.product.core.validation)
 ----
 
 All three degrade gracefully when no AI service is configured — they print a message and return `nil`.

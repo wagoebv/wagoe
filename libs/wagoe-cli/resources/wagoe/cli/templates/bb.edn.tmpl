@@ -1,0 +1,118 @@
+;; bb.edn — Babashka task runner for this Wagoe project
+;; All tasks are provided by wagoe-tools; no local scripts needed.
+{:deps {org.wagoe/wagoe-tools {:mvn/version "{{wagoe-tools-version}}"}}
+
+ :tasks
+ {:requires ([wagoe.tools.scaffold    :as scaffold]
+             [wagoe.tools.ai          :as ai]
+             [wagoe.tools.deps        :as deps]
+             [wagoe.tools.i18n        :as i18n]
+             [wagoe.tools.admin       :as admin]
+             [wagoe.tools.deploy      :as deploy]
+             [wagoe.tools.dev         :as dev]
+             [wagoe.tools.setup       :as setup]
+             [wagoe.tools.doctor      :as doctor]
+             [wagoe.tools.doctor-env  :as doctor-env]
+             [wagoe.tools.check       :as check]
+             [wagoe.tools.check-fcis  :as check-fcis]
+             [wagoe.tools.check-tests :as check-tests]
+             [wagoe.tools.check-deps  :as check-deps]
+             [wagoe.tools.db          :as db]
+             [wagoe.tools.quickstart  :as quickstart]
+             [wagoe.tools.help        :as help]
+             [wagoe.tools.integrate   :as integrate])
+
+  ;; Generate a new FC/IS module interactively
+  scaffold          {:doc "Interactive module scaffolding wizard"
+                     :task (apply scaffold/-main *command-line-args*)}
+  scaffold:ai       {:doc "NL scaffolding via AI (--yes for non-interactive)"
+                     :task (apply scaffold/-main "ai" *command-line-args*)}
+  scaffold:integrate {:doc "Wire a scaffolded module into deps.edn, tests.edn, wiring.clj"
+                      :task (apply integrate/-main *command-line-args*)}
+
+  ;; Config setup wizard
+  setup             {:doc "Interactive config setup wizard (bb setup [ai <description>])"
+                     :task (apply setup/-main *command-line-args*)}
+
+  ;; Config validation
+  doctor            {:doc "Validate config for common mistakes"
+                     :task (apply doctor/-main *command-line-args*)}
+  doctor:env        {:doc "Check development environment prerequisites"
+                     :task (apply doctor-env/-main *command-line-args*)}
+
+  ;; Quality checks
+  check             {:doc "Run all quality checks (FC/IS, deps, placeholder-tests, kondo, doctor)"
+                     :task (apply check/-main *command-line-args*)}
+  check:fcis        {:doc "FC/IS boundary enforcement"
+                     :task (check-fcis/-main)}
+  check:placeholder-tests {:doc "Detect placeholder (is true) assertions in test files"
+                           :task (check-tests/-main)}
+  check:deps        {:doc "Verify library dependency direction and detect cycles"
+                     :task (check-deps/-main)}
+
+  ;; Development
+  repl              {:doc "Start the nREPL server on port 7888 (clojure -M:repl)"
+                     :override-builtin true
+                     :task (clojure "-M:repl")}
+  test              {:doc "Run tests via Kaocha (clojure -M:test [args])"
+                     :task (apply clojure "-M:test" *command-line-args*)}
+
+  ;; Database management
+  migrate           {:doc "Run database migrations (bb migrate [up|status|rollback|create ...])"
+                     :task (apply dev/migrate *command-line-args*)}
+  db:status         {:doc "Show database configuration and migration status"
+                     :task (db/-main "status")}
+  db:reset          {:doc "Drop and recreate the database with all migrations"
+                     :task (db/-main "reset")}
+  db:seed           {:doc "Seed database from resources/seeds/dev.edn"
+                     :task (db/-main "seed")}
+
+  ;; Onboarding
+  quickstart        {:doc "Zero-to-running-app setup: check env, configure, scaffold, migrate, start"
+                     :task (apply quickstart/-main *command-line-args*)}
+  guide             {:doc "Contextual help and guidance"
+                     :task (apply help/-main *command-line-args*)}
+
+  ;; AI-assisted tooling (NL scaffolding, error explainer, SQL copilot, docs wizard)
+  ai                {:doc "Framework-aware AI tooling (explain|gen-tests|sql|docs|admin-entity)"
+                     :task (apply ai/-main *command-line-args*)}
+
+  ;; Bootstrap the first admin user (prompts for password securely)
+  create-admin      {:doc "Create the first admin user (interactive wizard)"
+                     :task (apply admin/-main *command-line-args*)}
+
+  ;; Check and optionally update outdated Maven dependencies
+  upgrade-outdated  {:doc "Check and optionally upgrade outdated Maven deps"
+                     :task (apply deps/-main *command-line-args*)}
+
+  ;; Publish libraries to Clojars
+  deploy            {:doc "Deploy libraries to Clojars"
+                     :task (apply deploy/-main *command-line-args*)}
+
+  ;; Developer utilities
+  check-links       {:doc "Validate local markdown links in AGENTS documentation"
+                     :task (dev/check-links)}
+  smoke-check       {:doc "Verify deps.edn aliases and key tool entrypoints"
+                     :task (dev/smoke-check)}
+  install-hooks     {:doc "Configure git hooks path to .githooks"
+                     :task (dev/install-hooks)}
+
+  ;; AGENTS.md maintenance — shells out to the globally installed `wagoe`
+  ;; CLI, which owns the AGENTS.md template this task syncs against.
+  agents:update     {:doc "Refresh framework sections of AGENTS.md after a Wagoe upgrade (--check for CI)"
+                     :requires ([babashka.fs :as fs])
+                     :task (if (fs/which "wagoe")
+                             (apply shell "wagoe" "agents" "update" *command-line-args*)
+                             (do (println "The `wagoe` CLI was not found on PATH.")
+                                 (println "Install it with bbin, then re-run: bb agents:update")
+                                 (System/exit 1)))}
+
+  ;; i18n tooling
+  i18n:find         {:doc "Find a translation key by substring or exact keyword"
+                     :task (apply i18n/-main "find" *command-line-args*)}
+  i18n:scan         {:doc "Scan core/ui.clj files for unexternalised string literals"
+                     :task (i18n/-main "scan")}
+  i18n:missing      {:doc "Report translation keys missing from locale files"
+                     :task (i18n/-main "missing")}
+  i18n:unused       {:doc "Report catalogue keys not referenced in source"
+                     :task (i18n/-main "unused")}}}

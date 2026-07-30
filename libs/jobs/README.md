@@ -3,9 +3,9 @@
 [![Status](https://img.shields.io/badge/status-stable-brightgreen)]()
 [![Clojure](https://img.shields.io/badge/clojure-1.12+-blue)]()
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
-[![Clojars Project](https://img.shields.io/clojars/v/org.boundary-app/boundary-jobs.svg)](https://clojars.org/org.boundary-app/boundary-jobs)
+[![Clojars Project](https://img.shields.io/clojars/v/org.wagoe/wagoe-jobs.svg)](https://clojars.org/org.wagoe/wagoe-jobs)
 
-**Asynchronous job processing for Boundary Framework**
+**Asynchronous job processing for Wagoe Framework**
 
 Redis-backed background job processing with:
 
@@ -45,7 +45,7 @@ Redis-backed background job processing with:
 ### 2. Create Job Queue
 
 ```clojure
-(require '[boundary.jobs.shell.adapters.redis :as redis-jobs])
+(require '[wagoe.jobs.shell.adapters.redis :as redis-jobs])
 
 ;; Create Redis connection pool
 (def redis-pool
@@ -61,7 +61,7 @@ Redis-backed background job processing with:
 ### 3. Define Job Handler
 
 ```clojure
-(require '[boundary.jobs.ports :as ports])
+(require '[wagoe.jobs.ports :as ports])
 
 (defn send-email-handler
   "Job handler for sending emails."
@@ -86,7 +86,7 @@ Redis-backed background job processing with:
 ### 4. Enqueue Jobs
 
 ```clojure
-(require '[boundary.jobs.core.job :as job])
+(require '[wagoe.jobs.core.job :as job])
 
 ;; Create and enqueue immediate job
 (let [job-input {:job-type :send-email
@@ -209,7 +209,7 @@ The jobs module provides first-class support for multi-tenant applications with 
 ### Enqueuing Tenant Jobs
 
 ```clojure
-(require '[boundary.jobs.shell.tenant-context :as tenant-jobs])
+(require '[wagoe.jobs.shell.tenant-context :as tenant-jobs])
 
 ;; Enqueue job with tenant context
 (tenant-jobs/enqueue-tenant-job! 
@@ -228,8 +228,8 @@ The jobs module provides first-class support for multi-tenant applications with 
 Jobs are automatically processed in the correct tenant schema:
 
 ```clojure
-(require '[boundary.jobs.shell.tenant-context :as tenant-jobs]
-         '[boundary.jobs.ports :as job-ports])
+(require '[wagoe.jobs.shell.tenant-context :as tenant-jobs]
+         '[wagoe.jobs.ports :as job-ports])
 
 (defn send-email-handler
   "Job handler - receives tenant-scoped database context."
@@ -356,7 +356,7 @@ Comprehensive tests verify tenant isolation:
 
 ```bash
 # Run tenant-context integration tests
-clojure -M:test:db/h2 --focus boundary.jobs.shell.tenant-context-test
+clojure -M:test:db/h2 --focus wagoe.jobs.shell.tenant-context-test
 
 # Results: 10 tests, 80 assertions, 0 failures
 ```
@@ -385,7 +385,7 @@ clojure -M:test:db/h2 --focus boundary.jobs.shell.tenant-context-test
 
 ### API Reference
 
-**`boundary.jobs.shell.tenant-context`**
+**`wagoe.jobs.shell.tenant-context`**
 
 - `(enqueue-tenant-job! job-queue tenant-id job-type args)` - Enqueue job with tenant context
 - `(extract-tenant-context job tenant-service)` - Extract tenant metadata from job
@@ -404,7 +404,7 @@ clojure -M:test:db/h2 --focus boundary.jobs.shell.tenant-context-test
   [job-queue user]
   (let [job-input {:job-type :send-email
                    :args {:to (:email user)
-                          :subject "Welcome to Boundary!"
+                          :subject "Welcome to Wagoe!"
                           :body (str "Hi " (:name user) ", welcome!")
                           :template :welcome}
                    :priority :high
@@ -494,7 +494,7 @@ clojure -M:test:db/h2 --focus boundary.jobs.shell.tenant-context-test
 
 ```clojure
 ;; config/prod.edn
-{:boundary/jobs
+{:wagoe/jobs
  {:redis {:host #env REDIS_HOST
           :port #long #env [REDIS_PORT 6379]
           :password #env REDIS_PASSWORD
@@ -602,7 +602,7 @@ clojure -M:test:db/h2 --focus boundary.jobs.shell.tenant-context-test
 ### Job Statistics
 
 ```clojure
-(require '[boundary.jobs.ports :as ports])
+(require '[wagoe.jobs.ports :as ports])
 
 ;; Get overall statistics
 (ports/job-stats job-stats)
@@ -661,8 +661,8 @@ clojure -M:test:db/h2 --focus boundary.jobs.shell.tenant-context-test
 
 ```clojure
 (ns my-app.workers
-  (:require [boundary.jobs.shell.adapters.redis :as redis-jobs]
-            [boundary.jobs.ports :as ports]
+  (:require [wagoe.jobs.shell.adapters.redis :as redis-jobs]
+            [wagoe.jobs.ports :as ports]
             [integrant.core :as ig]))
 
 (defmethod ig/init-key :my-app/job-workers
@@ -786,7 +786,7 @@ volumes:
 
 ### Core Functions
 
-**boundary.jobs.core.job**
+**wagoe.jobs.core.job**
 
 - `(create-job job-input job-id)` - Create new job
 - `(schedule-job job-input job-id execute-at)` - Create scheduled job
@@ -895,7 +895,7 @@ redis-cli ping
 **Enable debug logging:**
 ```clojure
 ;; In logback.xml
-<logger name="boundary.jobs" level="DEBUG"/>
+<logger name="wagoe.jobs" level="DEBUG"/>
 ```
 
 ### Memory Issues
@@ -913,7 +913,7 @@ redis-cli ping
 
 ## License
 
-Part of Boundary Framework - See main LICENSE file.
+Part of Wagoe Framework - See main LICENSE file.
 
 ---
 

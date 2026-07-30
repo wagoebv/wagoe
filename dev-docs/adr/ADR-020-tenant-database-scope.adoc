@@ -1,7 +1,7 @@
 = ADR-020: PostgreSQL-Only Tenant Provisioning
 :status: Accepted
 :date: 2026-03-28
-:deciders: boundary-team
+:deciders: wagoe-team
 
 == Status
 
@@ -11,7 +11,7 @@ Accepted
 
 === Background
 
-The `boundary-tenant` library implements schema-per-tenant isolation using
+The `wagoe-tenant` library implements schema-per-tenant isolation using
 PostgreSQL's `CREATE SCHEMA` / `SET search_path` mechanism. This approach
 provides strong, database-enforced tenant boundaries with sub-millisecond
 schema switching and clean queries that do not require manual `tenant_id`
@@ -26,7 +26,7 @@ specific version targets:
 
 === Current state
 
-No Boundary project has requested MySQL or SQLite support for production
+No Wagoe project has requested MySQL or SQLite support for production
 multi-tenancy. All production deployments use PostgreSQL. The library has
 68 tests and 466 assertions with 0 failures, covering provisioning, membership,
 invites, jobs integration, cache integration, and end-to-end lifecycle flows.
@@ -52,7 +52,7 @@ This effort is not justified without concrete project demand.
 
 Tenant provisioning is explicitly scoped to **PostgreSQL only**. The library
 will not implement MySQL, SQLite, or other database provisioning strategies
-until a Boundary project requires it.
+until a Wagoe project requires it.
 
 Specifically:
 

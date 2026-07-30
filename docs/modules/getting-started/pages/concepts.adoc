@@ -1,11 +1,11 @@
 = Key Concepts
-:description: The core ideas you need to understand before working with Boundary.
+:description: The core ideas you need to understand before working with Wagoe.
 
-If the quickstart showed you how to run Boundary, this page explains why the codebase is shaped the way it is.
+If the quickstart showed you how to run Wagoe, this page explains why the codebase is shaped the way it is.
 
 == Functional Core / Imperative Shell
 
-The most important concept in Boundary is the split between pure business logic and side effects:
+The most important concept in Wagoe is the split between pure business logic and side effects:
 
 [source]
 ----
@@ -60,11 +60,11 @@ Swapping the implementation requires zero changes to business logic.
 
 == Case conventions
 
-This is a frequent source of bugs. Boundary uses three different naming conventions at different boundaries:
+This is a frequent source of bugs. Wagoe uses three different naming conventions at different boundaries:
 
 [cols="1,1,2",options="header"]
 |===
-| Boundary | Convention | Example
+| Wagoe | Convention | Example
 
 | All Clojure code
 | `kebab-case`
@@ -79,11 +79,11 @@ This is a frequent source of bugs. Boundary uses three different naming conventi
 | `passwordHash`, `createdAt`
 |===
 
-Always use `boundary.core.utils.case-conversion` for conversions. Never convert manually.
+Always use `wagoe.core.utils.case-conversion` for conversions. Never convert manually.
 
 [source,clojure]
 ----
-(require '[boundary.core.utils.case-conversion :as cc])
+(require '[wagoe.core.utils.case-conversion :as cc])
 
 ;; DB record → Clojure entity
 (cc/snake-case->kebab-case-map db-record)
@@ -99,7 +99,7 @@ See xref:architecture:conventions.adoc[Conventions] for the full guide.
 
 == Integrant lifecycle
 
-Boundary uses Integrant for dependency injection and system lifecycle management.
+Wagoe uses Integrant for dependency injection and system lifecycle management.
 All components are defined as Integrant keys in `config.edn`.
 
 [source,clojure]
@@ -114,7 +114,7 @@ NOTE: After changing a `defrecord`, use `(halt)` + `(go)` instead of `reset`.
 
 == Malli schemas
 
-Boundary uses Malli for validation and schema definitions.
+Wagoe uses Malli for validation and schema definitions.
 Schemas live in `schema.clj` at the root of each module:
 
 [source,clojure]

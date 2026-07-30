@@ -65,7 +65,7 @@ The recommended development workflow uses Integrant REPL:
 Use the Boundary scaffolder to generate new modules:
 
 ```bash
-clojure -M -m boundary.scaffolder.shell.cli-entry generate \
+clojure -M -m wagoe.scaffolder.shell.cli-entry generate \
   --module-name product \
   --entity Product \
   --field name:string:required \

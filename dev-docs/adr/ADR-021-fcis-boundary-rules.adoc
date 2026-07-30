@@ -1,7 +1,7 @@
 = ADR-021: FC/IS Boundary Rules
 :status: Accepted
 :date: 2026-04-03
-:deciders: boundary-team
+:deciders: wagoe-team
 
 == Status
 
@@ -11,7 +11,7 @@ Accepted
 
 === Background
 
-Boundary follows the Functional Core / Imperative Shell (FC/IS) architecture
+Wagoe follows the Functional Core / Imperative Shell (FC/IS) architecture
 pattern. Each library is split into `core/` (pure functions) and `shell/`
 (side-effecting I/O, persistence, HTTP handlers). This separation enables
 fast unit testing without mocks and makes business logic easy to reason about.
@@ -43,17 +43,17 @@ The following rules are enforced for all namespaces under `core/`:
 external data (e.g. `Integer/parseInt`, `UUID/fromString`) and return error
 maps are permitted. These are pure data transformations where the exception
 is an implementation detail of the parsing, not a side-effect boundary.
-See `boundary.core.parsing` and PR #116 for the documented justification.
+See `wagoe.core.parsing` and PR #116 for the documented justification.
 
 === Enforcement
 
-The rules are enforced by `libs/tools/src/boundary/tools/check_fcis.clj`:
+The rules are enforced by `libs/tools/src/wagoe/tools/check_fcis.clj`:
 
 * **CI gate:** `bb check:fcis` runs as a standalone job in `.github/workflows/ci.yml`
 * **Pre-commit hook:** `.githooks/pre-commit` runs `bb check:fcis` before every commit
 * **Local validation:** developers can run `bb check:fcis` at any time
 
-The script globs all `libs/*/src/boundary/*/core/**/*.clj` files, parses each
+The script globs all `libs/*/src/wagoe/*/core/**/*.clj` files, parses each
 `(ns ...)` form, extracts `:require` entries, and exits non-zero if any match
 the forbidden patterns.
 
@@ -74,7 +74,7 @@ the forbidden patterns.
   but is actually pure will be flagged. This is unlikely given the project's
   naming conventions and can be addressed by renaming.
 * *Incomplete coverage* — the check only inspects `:require` directives, not
-  dynamic `require` or `resolve` calls. These are extremely rare in Boundary
+  dynamic `require` or `resolve` calls. These are extremely rare in Wagoe
   and not worth the complexity of detecting.
 
 === Mitigation

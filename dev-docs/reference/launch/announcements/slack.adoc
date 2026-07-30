@@ -1,13 +1,13 @@
 ---
-title: "Boundary: opinionated Clojure web framework for teams"
+title: "Wagoe: opinionated Clojure web framework for teams"
 weight: 10
 description: "Clojurians Slack announcement draft."
 ---
 
-= Boundary: opinionated Clojure web framework for teams
+= Wagoe: opinionated Clojure web framework for teams
 
 Tagline: Batteries included, boundaries enforced
 
 Highlights - SSR via Hiccup {plus} HTMX (no build step) - Admin UI {plus} MFA included - FC/IS {plus} Integrant, Malli validation - Interceptor‑based observability
 
-Start here: /getting-started/quickstart/ Links: Starter (https://github.com/thijs-creemers/boundary-starter) · Demo (TODO:demo-video-url)
+Start here: /getting-started/quickstart/ Links: Starter (https://github.com/wagoebv/wagoe-starter) · Demo (TODO:demo-video-url)

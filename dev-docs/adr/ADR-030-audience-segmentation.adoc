@@ -1,6 +1,6 @@
 = ADR-030: Audience Segmentation Library
 :revdate: 2026-05-29
-:revremark: boundary-audience — declarative audience engine with hybrid evaluation, composable segments, and visual builder UI
+:revremark: wagoe-audience — declarative audience engine with hybrid evaluation, composable segments, and visual builder UI
 :toc:
 :toclevels: 3
 
@@ -10,9 +10,9 @@
 
 == Context
 
-The Boundary Framework Roadmap (Phase 3 — Ecosystem Expansion) identified audience
+The Wagoe Framework Roadmap (Phase 3 — Ecosystem Expansion) identified audience
 segmentation as a cross-cutting concern needed by multiple consumer libraries
-(`boundary-push`, `boundary-email`, `boundary-forms`).
+(`wagoe-push`, `wagoe-email`, `wagoe-forms`).
 
 Targeted communication is 2–5× more effective than broadcast. Without a shared
 audience engine, each consumer library re-implements its own filter logic, leading
@@ -35,8 +35,8 @@ to duplicated code, inconsistent segment definitions, and no admin visibility.
    can reference other segments by `:id`.
 
 5. **Two-layer caching**: precomputed membership table in DB (survives restarts) +
-   in-memory/Redis hot cache via `boundary-cache`. Scheduled refresh via
-   `boundary-jobs`.
+   in-memory/Redis hot cache via `wagoe-cache`. Scheduled refresh via
+   `wagoe-jobs`.
 
 6. **Consumer integration**: `IAudienceResolver` protocol injected via Integrant.
    Consumer libraries never depend on implementation details.
@@ -81,7 +81,7 @@ All candidate users loaded into memory, all filters applied as Clojure predicate
 Rejected. Does not scale beyond ~100k users. Loading all user records into memory
 for every segment evaluation is prohibitively expensive for production workloads.
 
-==== Alternative D: Persistence-Agnostic (Like boundary-calendar)
+==== Alternative D: Persistence-Agnostic (Like wagoe-calendar)
 
 Library provides pure segment logic only. Application responsible for querying users,
 managing cache, and persisting segment definitions.
@@ -102,7 +102,7 @@ entered segment → trigger push") without breaking the port-based API.
 
 == Decision
 
-We implement **`boundary-audience`** as a single library with layered namespaces
+We implement **`wagoe-audience`** as a single library with layered namespaces
 following the FC/IS pattern.
 
 === Decision 1: Hybrid Evaluation via Two-Phase Pipeline
@@ -153,10 +153,10 @@ registry with `register-audience!`, `get-audience`, `list-audiences`,
 ----
 
 WARNING: Every test namespace using `defaudience` must call `(clear-registry!)` in
-an `:each` fixture to prevent inter-test pollution. Same pattern as `boundary-calendar`
-and `boundary-reports`.
+an `:each` fixture to prevent inter-test pollution. Same pattern as `wagoe-calendar`
+and `wagoe-reports`.
 
-For clj-kondo: add `boundary.audience.core.audience/defaudience clojure.core/def`
+For clj-kondo: add `wagoe.audience.core.audience/defaudience clojure.core/def`
 to `.clj-kondo/config.edn` `:lint-as` map.
 
 === Decision 2a: Dual Identifier Semantics
@@ -222,13 +222,13 @@ predicate evaluation). Two cache layers optimize for different access patterns:
 * **Layer 1 — Membership table** (`audience_memberships`): precomputed segment
   results in DB. Survives restarts. Source of truth for "who's in this segment."
 
-* **Layer 2 — In-memory/Redis** (via `boundary-cache`): hot cache for
+* **Layer 2 — In-memory/Redis** (via `wagoe-cache`): hot cache for
   `resolve-audience` and `member?` calls. Sub-millisecond lookups.
 
 **Refresh modes**:
 
 * On-demand — stale cache triggers re-evaluation on next call
-* Scheduled — `boundary-jobs` runs cron from `:refresh-schedule` in segment definition
+* Scheduled — `wagoe-jobs` runs cron from `:refresh-schedule` in segment definition
 * Manual — admin button or API call
 
 === Decision 5: Port-Based Consumer Integration
@@ -263,7 +263,7 @@ visualization require client-side state management.
 HTMX submits to server. Preview requests send filter state as EDN body, server
 evaluates and returns count + sample via HTMX swap.
 
-NOTE: This is the first ClojureScript dependency in the Boundary Framework.
+NOTE: This is the first ClojureScript dependency in the Wagoe Framework.
 
 **Build tooling**: shadow-cljs compiles Replicant widgets to a single JS artifact
 (`resources/public/js/audience/main.js`) included in the library JAR. Consumers
@@ -295,7 +295,7 @@ rather than duplicating form logic.
 === Decision 8: `IUserDataSource` Protocol Bridges to User Data
 
 **Rationale**: the audience library must query user data without depending on
-`boundary-user` directly. Applications implement `IUserDataSource` to bridge
+`wagoe-user` directly. Applications implement `IUserDataSource` to bridge
 the audience engine to their user storage (which may span multiple tables,
 tenants, or databases).
 
@@ -316,9 +316,9 @@ tenants, or databases).
 ----
 libs/audience/
 ├── deps.edn
-├── build.clj                               ; org.boundary-app/boundary-audience
+├── build.clj                               ; org.wagoe/wagoe-audience
 ├── AGENTS.md
-├── src/boundary/audience/
+├── src/wagoe/audience/
 │   ├── schema.clj                          ; AudienceDefinition, FilterDef, SegmentResult
 │   ├── ports.clj                           ; IAudienceResolver, IAudienceRepository, IAudienceCache, IUserDataSource
 │   ├── core/
@@ -333,11 +333,11 @@ libs/audience/
 │       ├── cache.clj                       ; IAudienceCache impl
 │       ├── http.clj                        ; Ring routes: builder UI + API
 │       └── module_wiring.clj               ; Integrant keys
-├── resources/boundary/audience/builder/    ; ClojureScript + Replicant
+├── resources/wagoe/audience/builder/    ; ClojureScript + Replicant
 │   ├── app.cljs
 │   ├── filter_panel.cljs
 │   └── preview.cljs
-└── test/boundary/audience/
+└── test/wagoe/audience/
     ├── core/                               ; ^:unit tests
     └── shell/                              ; ^:integration + ^:contract tests
 ----
@@ -483,14 +483,14 @@ CLJS is progressive enhancement, not a hard dependency for core functionality.
 ==== Risk: Registry pollution between tests
 
 **Mitigation**: `clear-registry!` function provided (same pattern as
-`boundary-calendar` and `boundary-reports`). Tests use `:each` fixture.
+`wagoe-calendar` and `wagoe-reports`). Tests use `:each` fixture.
 
 == Implementation Checklist
 
 === Phase 1: Library Scaffold
 
-- [ ] `libs/audience/deps.edn` with boundary-core, malli, honeysql
-- [ ] `libs/audience/build.clj` — `org.boundary-app/boundary-audience`
+- [ ] `libs/audience/deps.edn` with wagoe-core, malli, honeysql
+- [ ] `libs/audience/build.clj` — `org.wagoe/wagoe-audience`
 - [ ] Root `deps.edn` — add audience source/test paths
 - [ ] Root `tests.edn` — add `:audience` test suite
 - [ ] `.clj-kondo/config.edn` — `defaudience` lint-as registration
@@ -507,7 +507,7 @@ CLJS is progressive enhancement, not a hard dependency for core functionality.
 === Phase 3: Shell Layer
 
 - [ ] `shell/persistence.clj` — IAudienceRepository (next.jdbc + HoneySQL)
-- [ ] `shell/cache.clj` — IAudienceCache (membership table + boundary-cache)
+- [ ] `shell/cache.clj` — IAudienceCache (membership table + wagoe-cache)
 - [ ] `shell/service.clj` — IAudienceResolver (evaluation orchestrator)
 - [ ] `shell/http.clj` — Ring routes, builder page, API endpoints
 - [ ] `shell/module_wiring.clj` — Integrant keys
@@ -539,21 +539,21 @@ CLJS is progressive enhancement, not a hard dependency for core functionality.
 - [ ] A/B segment splitting (random subset of audience for experiments)
 - [ ] Membership export (CSV, JSON)
 - [ ] Segment templates (pre-built common audience patterns)
-- [ ] Tenant-aware segments (multi-tenancy support via `boundary-tenant`)
+- [ ] Tenant-aware segments (multi-tenancy support via `wagoe-tenant`)
 
 == References
 
 * link:ADR-001-library-split.adoc[ADR-001: Library Split] — monorepo library structure
 * link:ADR-011-calendar-library.adoc[ADR-011: Calendar Library] — `defevent` macro pattern
 * link:ADR-021-fcis-boundary-rules.adoc[ADR-021: FC/IS Boundary Rules] — core/shell enforcement
-* `libs/reports/src/boundary/reports/core/report.clj` — `defreport` macro reference
-* `libs/calendar/src/boundary/calendar/core/event.clj` — `defevent` macro reference
-* `libs/cache/AGENTS.md` — boundary-cache integration patterns
-* `libs/jobs/AGENTS.md` — boundary-jobs scheduled task patterns
+* `libs/reports/src/wagoe/reports/core/report.clj` — `defreport` macro reference
+* `libs/calendar/src/wagoe/calendar/core/event.clj` — `defevent` macro reference
+* `libs/cache/AGENTS.md` — wagoe-cache integration patterns
+* `libs/jobs/AGENTS.md` — wagoe-jobs scheduled task patterns
 
 == Approval
 
-**Proposed By**: Boundary Framework Team +
+**Proposed By**: Wagoe Framework Team +
 **Date**: 2026-05-29 +
 **Status**: Proposed +
 **Reviewers**: Architecture Team

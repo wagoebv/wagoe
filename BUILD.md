@@ -1,6 +1,6 @@
-# Building Boundary Uberjar
+# Building Wagoe Uberjar
 
-This document describes how to build and run the Boundary application as a standalone uberjar.
+This document describes how to build and run the Wagoe application as a standalone uberjar.
 
 ## Prerequisites
 
@@ -27,7 +27,7 @@ This will:
 - Copy source files and resources
 - Compile the main namespace for faster startup
 - Package all dependencies including database drivers (SQLite, PostgreSQL, H2, MySQL)
-- Create `target/boundary-1.2.X-standalone.jar` (where X is the git commit count)
+- Create `target/wagoe-1.2.X-standalone.jar` (where X is the git commit count)
 
 The resulting jar file is approximately 60MB and includes:
 - All Clojure source code
@@ -43,13 +43,13 @@ The resulting jar file is approximately 60MB and includes:
 Start the HTTP server:
 
 ```bash
-java -jar target/boundary-1.2.X-standalone.jar
+java -jar target/wagoe-1.2.X-standalone.jar
 ```
 
 Or explicitly:
 
 ```bash
-java -jar target/boundary-1.2.X-standalone.jar server
+java -jar target/wagoe-1.2.X-standalone.jar server
 ```
 
 The server will:
@@ -64,8 +64,8 @@ The server will:
 Run CLI commands:
 
 ```bash
-java -jar target/boundary-1.2.X-standalone.jar cli user list
-java -jar target/boundary-1.2.X-standalone.jar cli user create --email test@example.com
+java -jar target/wagoe-1.2.X-standalone.jar cli user list
+java -jar target/wagoe-1.2.X-standalone.jar cli user create --email test@example.com
 ```
 
 ### Help
@@ -73,7 +73,7 @@ java -jar target/boundary-1.2.X-standalone.jar cli user create --email test@exam
 Show usage information:
 
 ```bash
-java -jar target/boundary-1.2.X-standalone.jar help
+java -jar target/wagoe-1.2.X-standalone.jar help
 ```
 
 ## Configuration
@@ -87,7 +87,7 @@ java -jar target/boundary-1.2.X-standalone.jar help
 ### Running in Production
 
 ```bash
-ENV=prod HTTP_PORT=8080 java -jar boundary-1.2.X-standalone.jar server
+ENV=prod HTTP_PORT=8080 java -jar wagoe-1.2.X-standalone.jar server
 ```
 
 ### Database Configuration
@@ -95,9 +95,9 @@ ENV=prod HTTP_PORT=8080 java -jar boundary-1.2.X-standalone.jar server
 The uberjar includes all database drivers. Configure the active database in `resources/conf/{env}/config.edn`:
 
 ```edn
-:boundary/sqlite {:db "production.db"}
+:wagoe/sqlite {:db "production.db"}
 ;; or
-:boundary/postgresql {:host "localhost" :port 5432 ...}
+:wagoe/postgresql {:host "localhost" :port 5432 ...}
 ```
 
 ## Logging
@@ -106,7 +106,7 @@ Logging is configured via `resources/logback.xml` (included in the jar).
 
 Logs are written to:
 - Console (stdout)
-- `logs/boundary.log` - Main application log
+- `logs/wagoe.log` - Main application log
 - `logs/audit.log` - Audit events
 - `logs/security.log` - Security events
 
@@ -114,11 +114,11 @@ To change log levels without rebuilding:
 1. Extract logback.xml from the jar
 2. Modify it
 3. Place it in the same directory as the jar
-4. Run with: `java -Dlogback.configurationFile=./logback.xml -jar boundary.jar`
+4. Run with: `java -Dlogback.configurationFile=./logback.xml -jar wagoe.jar`
 
 Or set environment variable:
 ```bash
-JAVA_OPTS="-Dlogback.configurationFile=/path/to/logback.xml" java -jar boundary.jar
+JAVA_OPTS="-Dlogback.configurationFile=/path/to/logback.xml" java -jar wagoe.jar
 ```
 
 ## Performance Tuning
@@ -126,7 +126,7 @@ JAVA_OPTS="-Dlogback.configurationFile=/path/to/logback.xml" java -jar boundary.
 ### JVM Options
 
 ```bash
-java -Xmx2g -Xms512m -XX:+UseG1GC -jar boundary.jar
+java -Xmx2g -Xms512m -XX:+UseG1GC -jar wagoe.jar
 ```
 
 ### Recommended Production Settings
@@ -137,8 +137,8 @@ java \
   -Xms512m \
   -XX:+UseG1GC \
   -XX:MaxGCPauseMillis=200 \
-  -Dlogback.configurationFile=/etc/boundary/logback.xml \
-  -jar boundary.jar server
+  -Dlogback.configurationFile=/etc/wagoe/logback.xml \
+  -jar wagoe.jar server
 ```
 
 ## Docker Deployment
@@ -150,7 +150,7 @@ FROM eclipse-temurin:17-jre-alpine
 
 WORKDIR /app
 
-COPY target/boundary-1.2.X-standalone.jar boundary.jar
+COPY target/wagoe-1.2.X-standalone.jar wagoe.jar
 COPY resources/conf/prod/config.edn /app/config/config.edn
 
 ENV ENV=prod
@@ -158,32 +158,32 @@ ENV HTTP_PORT=8080
 
 EXPOSE 8080
 
-CMD ["java", "-jar", "boundary.jar", "server"]
+CMD ["java", "-jar", "wagoe.jar", "server"]
 ```
 
 Build and run:
 
 ```bash
-docker build -t boundary:latest .
-docker run -p 8080:8080 boundary:latest
+docker build -t wagoe:latest .
+docker run -p 8080:8080 wagoe:latest
 ```
 
 ## Systemd Service
 
-Create `/etc/systemd/system/boundary.service`:
+Create `/etc/systemd/system/wagoe.service`:
 
 ```ini
 [Unit]
-Description=Boundary HTTP Server
+Description=Wagoe HTTP Server
 After=network.target
 
 [Service]
 Type=simple
-User=boundary
-WorkingDirectory=/opt/boundary
+User=wagoe
+WorkingDirectory=/opt/wagoe
 Environment="ENV=prod"
 Environment="HTTP_PORT=8080"
-ExecStart=/usr/bin/java -Xmx2g -jar /opt/boundary/boundary.jar server
+ExecStart=/usr/bin/java -Xmx2g -jar /opt/wagoe/wagoe.jar server
 Restart=on-failure
 RestartSec=10
 
@@ -194,9 +194,9 @@ WantedBy=multi-user.target
 Enable and start:
 
 ```bash
-sudo systemctl enable boundary
-sudo systemctl start boundary
-sudo systemctl status boundary
+sudo systemctl enable wagoe
+sudo systemctl start wagoe
+sudo systemctl status wagoe
 ```
 
 ## Troubleshooting
@@ -204,26 +204,26 @@ sudo systemctl status boundary
 ### Check Version
 
 ```bash
-jar xf boundary-1.2.X-standalone.jar META-INF/MANIFEST.MF
+jar xf wagoe-1.2.X-standalone.jar META-INF/MANIFEST.MF
 cat META-INF/MANIFEST.MF
 ```
 
 ### Verify Main Class
 
 ```bash
-jar tf boundary-1.2.X-standalone.jar | grep "boundary/main"
+jar tf wagoe-1.2.X-standalone.jar | grep "wagoe/main"
 ```
 
 ### Test Database Drivers
 
 ```bash
-jar tf boundary-1.2.X-standalone.jar | grep -E "(sqlite|postgresql|h2|mysql)"
+jar tf wagoe-1.2.X-standalone.jar | grep -E "(sqlite|postgresql|h2|mysql)"
 ```
 
 ### Enable Debug Logging
 
 ```bash
-java -Dlogback.debug=true -jar boundary.jar
+java -Dlogback.debug=true -jar wagoe.jar
 ```
 
 ## Build Automation
@@ -252,8 +252,8 @@ jobs:
       - run: clojure -T:build uber
       - uses: actions/upload-artifact@v3
         with:
-          name: boundary-uberjar
-          path: target/boundary-*-standalone.jar
+          name: wagoe-uberjar
+          path: target/wagoe-*-standalone.jar
 ```
 
 ## File Size Optimization

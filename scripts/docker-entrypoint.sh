@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #
-# Docker Entrypoint for Boundary Framework
+# Docker Entrypoint for Wagoe Framework
 # Integrates with port management and provides environment setup
 #
 
@@ -15,19 +15,19 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 log_info() {
-    echo -e "${BLUE}[BOUNDARY] $1${NC}"
+    echo -e "${BLUE}[WAGOE] $1${NC}"
 }
 
 log_success() {
-    echo -e "${GREEN}[BOUNDARY] $1${NC}"
+    echo -e "${GREEN}[WAGOE] $1${NC}"
 }
 
 log_warning() {
-    echo -e "${YELLOW}[BOUNDARY] $1${NC}"
+    echo -e "${YELLOW}[WAGOE] $1${NC}"
 }
 
 log_error() {
-    echo -e "${RED}[BOUNDARY] $1${NC}"
+    echo -e "${RED}[WAGOE] $1${NC}"
 }
 
 # Environment detection
@@ -57,7 +57,7 @@ setup_port_management() {
     if command -v netstat >/dev/null 2>&1; then
         if netstat -tuln 2>/dev/null | grep -q ":$http_port "; then
             log_warning "⚠️  Port $http_port appears to be in use"
-            log_info "   Boundary's port manager will handle conflicts automatically"
+            log_info "   Wagoe's port manager will handle conflicts automatically"
         else
             log_success "✅ Port $http_port appears to be available"
         fi
@@ -73,7 +73,7 @@ check_database() {
     if [[ -n "$POSTGRES_HOST" ]]; then
         local db_host="${POSTGRES_HOST:-localhost}"
         local db_port="${POSTGRES_PORT:-5432}"
-        local db_name="${POSTGRES_DB:-boundary_dev}"
+        local db_name="${POSTGRES_DB:-wagoe_dev}"
         local db_user="${POSTGRES_USER:-postgres}"
         
         log_info "🗄️  Database configuration:"
@@ -129,7 +129,7 @@ wait_for_app_ready() {
     
     if curl -f "http://localhost:$http_port/health" >/dev/null 2>&1; then
         log_success "✅ Application is ready and healthy"
-        log_success "🚀 Boundary Framework is running at http://localhost:$http_port"
+        log_success "🚀 Wagoe Framework is running at http://localhost:$http_port"
     fi
 }
 
@@ -146,7 +146,7 @@ setup_jvm() {
 
 # Main execution
 main() {
-    log_info "🚀 Starting Boundary Framework..."
+    log_info "🚀 Starting Wagoe Framework..."
     
     detect_environment
     setup_jvm

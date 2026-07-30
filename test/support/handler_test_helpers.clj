@@ -6,7 +6,7 @@
    - Response assertion helpers (assert-status, assert-redirect, assert-header)
    - Authentication / CSRF helpers for request enrichment"
   (:require [clojure.test :refer [is]]
-            [boundary.platform.core.csrf :as csrf]
+            [wagoe.platform.core.csrf :as csrf]
             [buddy.core.nonce :as nonce])
   (:import [java.util UUID]))
 

@@ -1,15 +1,15 @@
 {:paths ["src" "resources"]
 
  :deps  {org.clojure/clojure     {:mvn/version "1.12.5"}
-         boundary/shared-ui  {:local/root "../shared-ui"}
-         boundary/platform       {:local/root "../platform"}
-         boundary/external       {:local/root "../external"}
-         boundary/email          {:local/root "../email"}
-         boundary/tenant         {:local/root "../tenant"}
-         boundary/cache          {:local/root "../cache"}
-         boundary/observability  {:local/root "../observability"}
-         boundary/i18n           {:local/root "../i18n"}
-         boundary/core           {:local/root "../core"}
+         wagoe/shared-ui  {:local/root "../shared-ui"}
+         wagoe/platform       {:local/root "../platform"}
+         wagoe/external       {:local/root "../external"}
+         wagoe/email          {:local/root "../email"}
+         wagoe/tenant         {:local/root "../tenant"}
+         wagoe/cache          {:local/root "../cache"}
+         wagoe/observability  {:local/root "../observability"}
+         wagoe/i18n           {:local/root "../i18n"}
+         wagoe/core           {:local/root "../core"}
 
          ;; Authentication
          buddy/buddy-hashers     {:mvn/version "2.0.167"}

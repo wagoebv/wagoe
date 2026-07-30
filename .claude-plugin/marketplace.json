@@ -1,14 +1,14 @@
 {
-  "name": "boundary",
+  "name": "wagoe",
   "owner": {
-    "name": "Boundary Framework"
+    "name": "Wagoe Framework"
   },
-  "description": "Plugins for the Boundary Clojure framework",
+  "description": "Plugins for the Wagoe Clojure framework",
   "plugins": [
     {
-      "name": "boundary",
+      "name": "wagoe",
       "source": "./claude-plugin",
-      "description": "Boundary framework toolkit: scaffold FC/IS modules, explain errors, generate tests, SQL copilot, and project setup via bb tasks."
+      "description": "Wagoe framework toolkit: scaffold FC/IS modules, explain errors, generate tests, SQL copilot, and project setup via bb tasks."
     }
   ]
 }

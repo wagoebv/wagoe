@@ -3,7 +3,7 @@
 
 PDF, Excel (XLSX), and Word (DOCX) report generation with Hiccup-style templates
 and declarative sections. Saves 5–8 days of boilerplate per project.
-Supports sync generation and optional async via `boundary-jobs`.
+Supports sync generation and optional async via `wagoe-jobs`.
 
 == Key namespaces
 
@@ -11,37 +11,37 @@ Supports sync generation and optional async via `boundary-jobs`.
 |===
 | Namespace | Purpose
 
-| `boundary.reports.core.report`
+| `wagoe.reports.core.report`
 | Registry, `defreport` macro, pure helpers
 
-| `boundary.reports.ports`
+| `wagoe.reports.ports`
 | Protocol: `ReportGeneratorProtocol` (`generate!`, `supported-type?`)
 
-| `boundary.reports.schema`
+| `wagoe.reports.schema`
 | Malli schemas: `ColumnDef`, `SectionDef`, `ReportDefinition`, `ReportOutput`
 
-| `boundary.reports.shell.adapters.pdf`
+| `wagoe.reports.shell.adapters.pdf`
 | OpenHTMLtoPDF adapter — Hiccup → HTML → PDF bytes
 
-| `boundary.reports.shell.adapters.excel`
+| `wagoe.reports.shell.adapters.excel`
 | docjure adapter — column defs + data → XLSX bytes
 
-| `boundary.reports.shell.adapters.word`
+| `wagoe.reports.shell.adapters.word`
 | Apache POI XWPF adapter — sections → DOCX bytes
 
-| `boundary.reports.shell.service`
+| `wagoe.reports.shell.service`
 | Public API: `generate`, `generate-async`
 
-| `boundary.reports.shell.jobs-integration`
-| Optional `boundary-jobs` integration for async generation
+| `wagoe.reports.shell.jobs-integration`
+| Optional `wagoe-jobs` integration for async generation
 |===
 
 == PDF report
 
 [source,clojure]
 ----
-(require '[boundary.reports.core.report :as r]
-         '[boundary.reports.shell.service :as reports])
+(require '[wagoe.reports.core.report :as r]
+         '[wagoe.reports.shell.service :as reports])
 
 (r/defreport invoice-report
   {:id        :invoice-report

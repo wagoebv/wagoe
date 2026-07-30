@@ -10,14 +10,14 @@ Cross-cutting observability for services and persistence layers: structured logg
 
 | Namespace | Purpose |
 |-----------|---------|
-| `boundary.observability.logging.ports` | `ILogger`, `IAuditLogger` protocols |
-| `boundary.observability.errors.ports` | `IErrorReporter`, `IErrorContext`, `IErrorFilter` protocols |
-| `boundary.observability.metrics.ports` | `IMetricsRegistry`, `IMetricsEmitter` protocols |
-| `boundary.observability.tracing.ports` | `ITracer` protocol (spans) |
-| `boundary.observability.tracing.core` | `with-span` macro |
-| `boundary.observability.shell.service-interceptors` | Service-layer operation wrappers |
-| `boundary.observability.shell.persistence-interceptors` | Persistence-layer query wrappers |
-| `boundary.observability.shell.adapters.*` | Provider implementations (no-op, Datadog, Sentry) |
+| `wagoe.observability.logging.ports` | `ILogger`, `IAuditLogger` protocols |
+| `wagoe.observability.errors.ports` | `IErrorReporter`, `IErrorContext`, `IErrorFilter` protocols |
+| `wagoe.observability.metrics.ports` | `IMetricsRegistry`, `IMetricsEmitter` protocols |
+| `wagoe.observability.tracing.ports` | `ITracer` protocol (spans) |
+| `wagoe.observability.tracing.core` | `with-span` macro |
+| `wagoe.observability.shell.service-interceptors` | Service-layer operation wrappers |
+| `wagoe.observability.shell.persistence-interceptors` | Persistence-layer query wrappers |
+| `wagoe.observability.shell.adapters.*` | Provider implementations (no-op, Datadog, Sentry) |
 
 ---
 
@@ -28,7 +28,7 @@ The recommended way to add observability is to wrap operations with interceptors
 ### Service Layer
 
 ```clojure
-(require '[boundary.observability.shell.service-interceptors :as service-interceptors])
+(require '[wagoe.observability.shell.service-interceptors :as service-interceptors])
 
 ;; Wrap each service method call
 (defn create-user [this user-data]
@@ -50,7 +50,7 @@ The interceptor automatically:
 ### Persistence Layer
 
 ```clojure
-(require '[boundary.observability.shell.persistence-interceptors :as persistence-interceptors])
+(require '[wagoe.observability.shell.persistence-interceptors :as persistence-interceptors])
 
 ;; Wrap each database call
 (defn find-user-by-email [this email]
@@ -70,7 +70,7 @@ The interceptor automatically:
 ### ILogger
 
 ```clojure
-;; In boundary.observability.logging.ports
+;; In wagoe.observability.logging.ports
 (defprotocol ILogger
   (log* [this level message context exception])
   (trace [this message] [this message context])
@@ -142,15 +142,15 @@ Backend-agnostic spans behind `ITracer`. Wrap work with `with-span`; the span is
 started, has exceptions recorded + rethrown, and is always ended:
 
 ```clojure
-(require '[boundary.observability.tracing.core :refer [with-span]]
-         '[boundary.observability.tracing.ports :as t])
+(require '[wagoe.observability.tracing.core :refer [with-span]]
+         '[wagoe.observability.tracing.ports :as t])
 
 (with-span tracer [sp "handle-order" {:order-id id}]
   (t/add-event! tracer sp "validated")
   (process! order))
 ```
 
-Providers via `:boundary/tracing {:provider …}`:
+Providers via `:wagoe/tracing {:provider …}`:
 
 | Provider | Behaviour |
 |----------|-----------|
@@ -174,11 +174,11 @@ on the `ITracer` port).
 
 ```clojure
 ;; resources/conf/prod/config.edn
-{:boundary/tracing {:provider     :otlp
+{:wagoe/tracing {:provider     :otlp
                     ;; OTEL_EXPORTER_OTLP_ENDPOINT base; /v1/traces is appended.
                     :endpoint     #or [#env OTEL_EXPORTER_OTLP_ENDPOINT "http://localhost:4318"]
                     :protocol     :http/protobuf   ; only HTTP is bundled (no gRPC)
-                    :service-name #or [#env OTEL_SERVICE_NAME "boundary"]
+                    :service-name #or [#env OTEL_SERVICE_NAME "wagoe"]
                     :timeout-ms   10000}}
 ```
 
@@ -209,14 +209,14 @@ no-op stub):
 
 Pure-Clojure in-memory registry (`metrics.shell.adapters.prometheus`) that renders
 the Prometheus text exposition format — no external client dependency. When
-`:boundary/metrics {:provider :prometheus}` is active, platform mounts a
+`:wagoe/metrics {:provider :prometheus}` is active, platform mounts a
 **`GET /metrics`** endpoint that serves the scrape output (counters, gauges,
 histograms with `_bucket`/`_sum`/`_count`). Other providers leave `/metrics`
 returning an empty body.
 
 ```clojure
 ;; resources/conf/prod/config.edn
-{:boundary/metrics {:provider :prometheus
+{:wagoe/metrics {:provider :prometheus
                     :include-help-text true
                     ;; optional default histogram buckets (seconds)
                     :histogram-buckets [0.005 0.01 0.025 0.05 0.1 0.25 0.5 1 2.5 5 10]}}
@@ -233,10 +233,10 @@ feeds SigNoz, Grafana, Datadog-via-OTel, etc.
 
 ```clojure
 ;; resources/conf/prod/config.edn
-{:boundary/metrics {:provider     :otlp
+{:wagoe/metrics {:provider     :otlp
                     :endpoint     #or [#env OTEL_EXPORTER_OTLP_ENDPOINT "http://localhost:4318"]
                     :protocol     :http/protobuf
-                    :service-name #or [#env OTEL_SERVICE_NAME "boundary"]
+                    :service-name #or [#env OTEL_SERVICE_NAME "wagoe"]
                     :interval-ms  60000        ; push interval to the collector
                     :timeout-ms   10000}}
 ```
@@ -260,7 +260,7 @@ export OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:4318"
 export OTEL_SERVICE_NAME="my-app"
 ```
 
-Set both `:boundary/tracing` and `:boundary/metrics` to `:provider :otlp`. The
+Set both `:wagoe/tracing` and `:wagoe/metrics` to `:provider :otlp`. The
 same env vars retarget Grafana Tempo, Jaeger, Honeycomb, or Datadog-via-OTel —
 only the endpoint changes.
 
@@ -270,7 +270,7 @@ The default provider — all operations are silent. No configuration required.
 
 ```clojure
 ;; resources/conf/dev/config.edn
-{:boundary/observability
+{:wagoe/observability
  {:logger         {:type :no-op}
   :error-reporter {:type :no-op}
   :metrics        {:type :no-op}}}
@@ -280,22 +280,22 @@ The default provider — all operations are silent. No configuration required.
 
 ```clojure
 ;; resources/conf/prod/config.edn
-{:boundary/observability
+{:wagoe/observability
  {:metrics {:type    :datadog
             :api-key #env DATADOG_API_KEY
             :host    #env ["DATADOG_HOST" "datadoghq.com"]
-            :tags    {:env #env BND_ENV
-                      :service "boundary"}}}}
+            :tags    {:env #env WAG_ENV
+                      :service "wagoe"}}}}
 ```
 
 ### Sentry
 
 ```clojure
 ;; resources/conf/prod/config.edn
-{:boundary/observability
+{:wagoe/observability
  {:error-reporter {:type  :sentry
                    :dsn   #env SENTRY_DSN
-                   :env   #env BND_ENV
+                   :env   #env WAG_ENV
                    :release #env APP_VERSION}}}
 ```
 
@@ -307,7 +307,7 @@ Implement the protocols for your observability provider:
 
 ```clojure
 (ns my-app.observability.adapters.my-logger
-  (:require [boundary.observability.logging.ports :as ports]))
+  (:require [wagoe.observability.logging.ports :as ports]))
 
 (defrecord MyLogger [config]
   ports/ILogger
@@ -332,7 +332,7 @@ Register it in your Integrant config:
 
 ```clojure
 ;; In your system config
-{:boundary/observability {:logger (my-app.observability.adapters.my-logger/create-my-logger
+{:wagoe/observability {:logger (my-app.observability.adapters.my-logger/create-my-logger
                                    {:endpoint "..."})}}}
 ```
 

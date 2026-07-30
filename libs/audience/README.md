@@ -1,11 +1,11 @@
-# boundary-audience
+# wagoe-audience
 
 [![Status](https://img.shields.io/badge/status-alpha-orange)]()
 [![Clojure](https://img.shields.io/badge/clojure-1.12+-blue)]()
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
-[![Clojars Project](https://img.shields.io/clojars/v/org.boundary-app/boundary-audience.svg)](https://clojars.org/org.boundary-app/boundary-audience)
+[![Clojars Project](https://img.shields.io/clojars/v/org.wagoe/wagoe-audience.svg)](https://clojars.org/org.wagoe/wagoe-audience)
 
-> Rule-based audience segmentation for the Boundary framework — define segments with `defaudience`, resolve them via a SQL + predicate hybrid pipeline, and compose them with AND/OR/NOT. Batteries included: DB-backed membership cache and an HTMX builder UI.
+> Rule-based audience segmentation for the Wagoe framework — define segments with `defaudience`, resolve them via a SQL + predicate hybrid pipeline, and compose them with AND/OR/NOT. Batteries included: DB-backed membership cache and an HTMX builder UI.
 
 ---
 
@@ -13,12 +13,12 @@
 
 ```clojure
 ;; deps.edn
-{:deps {org.boundary-app/boundary-audience {:mvn/version "1.0.0-beta-1"}}}
+{:deps {org.wagoe/wagoe-audience {:mvn/version "1.0.0-beta-1"}}}
 ```
 
 ```clojure
-(require '[boundary.audience.shell.registry :as audience])
-(require '[boundary.audience.ports :as ports])
+(require '[wagoe.audience.shell.registry :as audience])
+(require '[wagoe.audience.ports :as ports])
 
 ;; Define a segment
 (audience/defaudience active-free-users
@@ -44,21 +44,21 @@
 
 ## Integrant Configuration
 
-Add to `resources/conf/{env}/config.edn` and require `boundary.audience.shell.module-wiring` at system start:
+Add to `resources/conf/{env}/config.edn` and require `wagoe.audience.shell.module-wiring` at system start:
 
 ```edn
-:boundary/audience
-{:db-ctx           #ig/ref :boundary/db-context
- :cache-service    #ig/ref :boundary/cache
- :user-data-source #ig/ref :boundary/user-data-source}
+:wagoe/audience
+{:db-ctx           #ig/ref :wagoe/db-context
+ :cache-service    #ig/ref :wagoe/cache
+ :user-data-source #ig/ref :wagoe/user-data-source}
 
-:boundary/audience-routes
-{:audience-service #ig/ref :boundary/audience}
+:wagoe/audience-routes
+{:audience-service #ig/ref :wagoe/audience}
 ```
 
-The `:boundary/audience` component returns `{:store <IAudienceRepository> :resolver <IAudienceResolver> :cache <IAudienceCache>}`.
+The `:wagoe/audience` component returns `{:store <IAudienceRepository> :resolver <IAudienceResolver> :cache <IAudienceCache>}`.
 
-`:boundary/audience-routes` returns `{:api [...] :web [...]}` for composition by the HTTP handler.
+`:wagoe/audience-routes` returns `{:api [...] :web [...]}` for composition by the HTTP handler.
 
 `:user-data-source` is required. Provide any implementation of `IUserDataSource`:
 
@@ -74,8 +74,8 @@ The `:boundary/audience` component returns `{:store <IAudienceRepository> :resol
 ## API
 
 ```clojure
-(require '[boundary.audience.shell.registry :as audience])
-(require '[boundary.audience.ports :as ports])
+(require '[wagoe.audience.shell.registry :as audience])
+(require '[wagoe.audience.ports :as ports])
 
 ;; Registry
 (audience/get-audience :active-free-users)   ;; => {:id :active-free-users ...}
@@ -112,11 +112,11 @@ Segments can be composed with AND, OR, and NOT using the `:compose` key:
 
 ## DB Migration
 
-Run once before using audience segmentation. When `boundary-audience` is on the
+Run once before using audience segmentation. When `wagoe-audience` is on the
 classpath, `clojure -M:migrate up` auto-discovers these migrations:
 
 ```sql
--- libs/audience/resources/boundary/audience/migrations/...-audience-segments.up.sql
+-- libs/audience/resources/wagoe/audience/migrations/...-audience-segments.up.sql
 CREATE TABLE audience_segments (
   audience_id   TEXT PRIMARY KEY,
   label         TEXT NOT NULL,
@@ -128,7 +128,7 @@ CREATE TABLE audience_segments (
   updated_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- libs/audience/resources/boundary/audience/migrations/...-audience-memberships.up.sql
+-- libs/audience/resources/wagoe/audience/migrations/...-audience-memberships.up.sql
 CREATE TABLE audience_memberships (
   audience_id TEXT      NOT NULL,
   user_id     UUID      NOT NULL,

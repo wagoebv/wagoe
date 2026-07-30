@@ -1,7 +1,7 @@
 {
   "calva.replConnectSequences": [
     {
-      "name": "Boundary Dev",
+      "name": "Wagoe Dev",
       "projectType": "deps.edn",
       "cljsType": "none",
       "menuSelections": {

@@ -1,14 +1,14 @@
 = Functional Core / Imperative Shell
-:description: The architectural pattern that Boundary enforces at every layer.
+:description: The architectural pattern that Wagoe enforces at every layer.
 
-FC/IS is Boundary's core architectural concept.
+FC/IS is Wagoe's core architectural concept.
 It draws a hard boundary between *pure business logic* and *side effects*.
 
 == The two zones
 
 [source]
 ----
-libs/{library}/src/boundary/{library}/
+libs/{library}/src/wagoe/{library}/
 ├── core/       ← FUNCTIONAL CORE: pure functions only
 ├── shell/      ← IMPERATIVE SHELL: all side effects
 ├── ports.clj   ← interfaces between the zones

@@ -10,7 +10,7 @@
 
 == Context
 
-The Boundary framework's validation system has grown organically, with validation logic spread across schema validation (Malli), business rules (pure functions in core), and orchestration (shell services). While the current system works well, it lacks:
+The Wagoe framework's validation system has grown organically, with validation logic spread across schema validation (Malli), business rules (pure functions in core), and orchestration (shell services). While the current system works well, it lacks:
 
 1. **Structured error reporting** - Errors are inconsistent across modules
 2. **Developer tooling** - Limited REPL helpers, no visualization, no coverage tracking
@@ -27,7 +27,7 @@ We will implement a **layered validation infrastructure** that enhances develope
 
 - **Backward compatibility** - Existing code continues to work unchanged
 - **FC/IS architecture** - Pure functional core, imperative shell separation preserved
-- **Feature-flag gating** - New functionality controlled by `BND_DEVEX_VALIDATION` environment variable
+- **Feature-flag gating** - New functionality controlled by `WAG_DEVEX_VALIDATION` environment variable
 - **i18n readiness** - Error codes and message templates enable future internationalization
 
 === Core Components
@@ -83,7 +83,7 @@ Hierarchical error codes with consistent naming:
 
 ==== 4. Feature Flag System
 
-Environment variable `BND_DEVEX_VALIDATION=true` enables:
+Environment variable `WAG_DEVEX_VALIDATION=true` enables:
 
 - Enhanced error formatting
 - Message templating and suggestions
@@ -100,32 +100,32 @@ Environment variable `BND_DEVEX_VALIDATION=true` enables:
 |Layer |Location |Responsibility
 
 |**Schema Validation**
-|`boundary.<module>.schema`
+|`wagoe.<module>.schema`
 |Malli schema definitions, structure validation
 
 |**Business Rules**
-|`boundary.<module>.core.*`
+|`wagoe.<module>.core.*`
 |Pure functions with domain logic
 
 |**Orchestration**
-|`boundary.<module>.shell.service`
+|`wagoe.<module>.shell.service`
 |I/O coordination, external dependencies
 
 |**Validation Infrastructure**
-|`boundary.core.validation.*`
+|`wagoe.core.validation.*`
 |Results, registry, codes, messages
 |===
 
 === 2. Backward Compatibility Strategy
 
-**Existing code path (BND_DEVEX_VALIDATION=false or unset):**
+**Existing code path (WAG_DEVEX_VALIDATION=false or unset):**
 
 - Legacy result format: `{:valid? boolean :data map :errors malli-errors}`
 - No execution tracking
 - Original error messages
 - Zero overhead
 
-**Enhanced code path (BND_DEVEX_VALIDATION=true):**
+**Enhanced code path (WAG_DEVEX_VALIDATION=true):**
 
 - Structured result format with `:warnings` key
 - Execution tracking for coverage
@@ -134,7 +134,7 @@ Environment variable `BND_DEVEX_VALIDATION=true` enables:
 
 **Compatibility shim:**
 
-`boundary.core.validation` namespace delegates to new implementations while preserving API:
+`wagoe.core.validation` namespace delegates to new implementations while preserving API:
 
 [source,clojure]
 ----
@@ -199,7 +199,7 @@ Phase 2 successfully delivered enhanced error messaging capabilities while maint
 
 **Key Achievements:**
 
-1. **Message Templating System** (`boundary.core.validation.messages`)
+1. **Message Templating System** (`wagoe.core.validation.messages`)
    - Template resolution with fallback chain (operation → role → module → base → default)
    - Safe parameter interpolation with PII redaction
    - Field name formatting (kebab-case → Title Case with acronym handling)
@@ -210,7 +210,7 @@ Phase 2 successfully delivered enhanced error messaging capabilities while maint
    - Intelligent similarity scoring (threshold-based matching)
    - Formatted suggestion rendering with allowed values list
 
-3. **Contextual Rendering** (`boundary.core.validation.context`)
+3. **Contextual Rendering** (`wagoe.core.validation.context`)
    - Operation-specific templates (create/update/delete)
    - Role-based guidance (admin/user/viewer/moderator/guest)
    - Multi-user context support
@@ -231,7 +231,7 @@ All validation infrastructure maintains strict Functional Core / Imperative Shel
 
 **Feature Flag Integration:**
 
-Enhanced features controlled by `BND_DEVEX_VALIDATION` environment variable:
+Enhanced features controlled by `WAG_DEVEX_VALIDATION` environment variable:
 - Feature flag checked once per request in shell layer
 - Core functions accept optional `{:enhanced? boolean :context map}` parameter
 - Legacy behavior preserved when feature flag disabled (default)
@@ -286,7 +286,7 @@ Phase 2.1 delivered comprehensive unit tests for user validation in the function
 
 **Key Achievements:**
 
-1. **Test Coverage** (`test/boundary/user/core/user_validation_test.clj`)
+1. **Test Coverage** (`test/wagoe/user/core/user_validation_test.clj`)
    - 12 test functions with 80 assertions
    - Fast execution: ~0.027 seconds total
    - Zero failures, 100% pass rate
@@ -304,7 +304,7 @@ Phase 2.1 delivered comprehensive unit tests for user validation in the function
    - Error path verification
    - Comprehensive required field coverage (email, name, role, user-id)
 
-4. **Name Length Boundary Tests**
+4. **Name Length Wagoe Tests**
    - Too short: Empty name rejection
    - Too long: 256+ character rejection
    - Valid boundaries: 1-255 characters acceptance
@@ -323,13 +323,13 @@ Phase 2.1 delivered comprehensive unit tests for user validation in the function
 
 **Bugs Fixed:**
 
-1. **Email Regex Pattern** (`link:https://github.com/thijs-creemers/boundary/blob/main/libs/user/src/boundary/user/schema.clj`)
+1. **Email Regex Pattern** (`link:https://github.com/wagoebv/wagoe/blob/main/libs/user/src/wagoe/user/schema.clj`)
    - Fixed: Double-backslash escape sequence causing validation failures
    - Improved: Regex now prevents consecutive dots in domain names
    - Changed from: `#"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$"`
    - Changed to: `#"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9]+([.-][a-zA-Z0-9]+)*\.[a-zA-Z]{2,}$"`
 
-2. **Business Rule Validation Logic** (`link:https://github.com/thijs-creemers/boundary/blob/main/libs/user/src/boundary/user/core/user.clj`)
+2. **Business Rule Validation Logic** (`link:https://github.com/wagoebv/wagoe/blob/main/libs/user/src/wagoe/user/core/user.clj`)
    - Fixed: Incorrect nested map access in `validate-user-business-rules`
    - Issue: Using default parameter syntax instead of `get-in` for nested maps
    - Impact: User-id and email immutability rules now correctly enforced
@@ -348,7 +348,7 @@ Tests organized by validation concern:
 **FC/IS Compliance:**
 
 All tests maintain strict Functional Core / Imperative Shell separation:
-- **Pure test subjects**: Testing only pure functions in `boundary.user.core.user`
+- **Pure test subjects**: Testing only pure functions in `wagoe.user.core.user`
 - **No side effects**: No database, no I/O, no external dependencies
 - **Deterministic**: Same inputs always produce same outputs
 - **Fast execution**: Sub-millisecond per test
@@ -376,16 +376,16 @@ Total execution time: 0.027 seconds
 
 **Files Modified:**
 
-1. ✅ `test/boundary/user/core/user_validation_test.clj` (created, 287 lines)
-2. ✅ `link:https://github.com/thijs-creemers/boundary/blob/main/libs/user/src/boundary/user/schema.clj` (email regex fix)
-3. ✅ `link:https://github.com/thijs-creemers/boundary/blob/main/libs/user/src/boundary/user/core/user.clj` (business rule validation fix)
+1. ✅ `test/wagoe/user/core/user_validation_test.clj` (created, 287 lines)
+2. ✅ `link:https://github.com/wagoebv/wagoe/blob/main/libs/user/src/wagoe/user/schema.clj` (email regex fix)
+3. ✅ `link:https://github.com/wagoebv/wagoe/blob/main/libs/user/src/wagoe/user/core/user.clj` (business rule validation fix)
 4. ✅ `TEST_IMPLEMENTATION_SUMMARY.md` (documentation)
 
 **Validation Coverage Achieved:**
 
 - ✅ Schema validation (Malli): Email format, name length, required fields
 - ✅ Business rules: User-id immutability, email immutability
-- ✅ Edge cases: Boundary values, empty strings, nil values
+- ✅ Edge cases: Wagoe values, empty strings, nil values
 - ✅ Error aggregation: Multiple simultaneous validation failures
 - ✅ Change detection: `calculate-user-changes` function
 
@@ -416,11 +416,11 @@ Phase 3.1 delivered comprehensive property-based testing infrastructure using `t
 
 **Key Achievements:**
 
-1. **Generator Infrastructure** (`test/boundary/user/core/user_property_test.clj`)
+1. **Generator Infrastructure** (`test/wagoe/user/core/user_property_test.clj`)
    - 18 property-based tests (defspec) with 100 iterations each = 1,800 test cases
    - Custom generators for domain-specific data types
    - Smart email generation with realistic format variations
-   - Boundary-aware name generation (1-255 characters)
+   - Wagoe-aware name generation (1-255 characters)
    - Fast execution: ~0.274 seconds for all 18 tests
 
 2. **Email Generators**
@@ -494,7 +494,7 @@ Total execution time: 0.274 seconds
 **FC/IS Compliance:**
 
 All property-based tests maintain strict Functional Core principles:
-- **Pure test subjects**: Only testing pure functions from `boundary.user.core.user`
+- **Pure test subjects**: Only testing pure functions from `wagoe.user.core.user`
 - **No side effects**: No database, no I/O, completely deterministic
 - **Generator purity**: All generators use pure functional composition
 - **Fast execution**: Sub-second for 1,800 test cases
@@ -520,7 +520,7 @@ All property-based tests maintain strict Functional Core principles:
 
 **Files Created:**
 
-1. ✅ `test/boundary/user/core/user_property_test.clj` (304 lines)
+1. ✅ `test/wagoe/user/core/user_property_test.clj` (304 lines)
    - 7 generator definitions
    - 18 property-based tests (defspec)
    - Organized by validation concern
@@ -537,10 +537,10 @@ All property-based tests maintain strict Functional Core principles:
 
 **Completion Date:** 2025-11-05
 
-- [x] Implemented snapshot capture/serialize/compare/path utilities (pure) (`link:https://github.com/thijs-creemers/boundary/blob/main/libs/core/src/boundary/core/validation/snapshot.clj`)
-- [x] Added test I/O helpers with UPDATE_SNAPSHOTS flow (`test/boundary/shared/core/validation/snapshot_io.clj`)
+- [x] Implemented snapshot capture/serialize/compare/path utilities (pure) (`link:https://github.com/wagoebv/wagoe/blob/main/libs/core/src/wagoe/core/validation/snapshot.clj`)
+- [x] Added test I/O helpers with UPDATE_SNAPSHOTS flow (`test/wagoe/shared/core/validation/snapshot_io.clj`)
 - [x] Created user validation snapshots (12 files) under `test/snapshots/validation/user/`
-- [x] Snapshot tests for user validation results (`test/boundary/user/core/user_validation_snapshot_test.clj`)
+- [x] Snapshot tests for user validation results (`test/wagoe/user/core/user_validation_snapshot_test.clj`)
 
 **Testing Metrics:**
 
@@ -550,14 +550,14 @@ Snapshots: 12 EDN files generated
 ```
 
 **Files Created:**
-- `test/boundary/user/core/user_validation_snapshot_test.clj`
+- `test/wagoe/user/core/user_validation_snapshot_test.clj`
 - `test/snapshots/validation/user/*.edn`
 
 === Phase 3.3: Behavior Specification DSL ✅ **COMPLETE**
 
 **Completion Date:** 2025-11-05
 
-- [x] Behavior DSL available with mutation helpers, scenario execution, compilation (`link:https://github.com/thijs-creemers/boundary/blob/main/libs/core/src/boundary/core/validation/behavior.clj`)
+- [x] Behavior DSL available with mutation helpers, scenario execution, compilation (`link:https://github.com/wagoebv/wagoe/blob/main/libs/core/src/wagoe/core/validation/behavior.clj`)
 - [x] Applied DSL to user module CreateUserRequest
 - [x] Scenarios: valid data, four required-field cases, wrong email format
 
@@ -568,13 +568,13 @@ Snapshots: 12 EDN files generated
 ```
 
 **Files Created:**
-- `test/boundary/user/core/user_behavior_spec_test.clj`
+- `test/wagoe/user/core/user_behavior_spec_test.clj`
 
 === Phase 3.4: Validation Coverage Reporting ✅ **COMPLETE**
 
 **Completion Date:** 2025-11-05
 
-- [x] Coverage computation utilities (pure) (`link:https://github.com/thijs-creemers/boundary/blob/main/libs/core/src/boundary/core/validation/coverage.clj`)
+- [x] Coverage computation utilities (pure) (`link:https://github.com/wagoebv/wagoe/blob/main/libs/core/src/wagoe/core/validation/coverage.clj`)
 - [x] Coverage reporting integrated with Behavior DSL scenarios (user module)
 - [x] EDN and human-readable reports generated under `test/reports/coverage/`
 
@@ -598,7 +598,7 @@ Coverage (user): 100.0% (6/6 rules executed)
 
 === Phase 4.1: REPL Helpers ✅
 
-- New namespace: `link:https://github.com/thijs-creemers/boundary/blob/main/dev/boundary/shared/tools/validation/repl.clj`
+- New namespace: `link:https://github.com/wagoebv/wagoe/blob/main/dev/wagoe/shared/tools/validation/repl.clj`
 - Features: registry listing, stats, conflicts, malli validate/explain wrappers,
   snapshot EDN generation, snapshot compare, timing helper
 
@@ -730,7 +730,7 @@ Coverage (user): 100.0% (6/6 rules executed)
 
 3. **Enhanced Example Generation**
    - Valid/invalid example pairs for each validation rule
-   - Boundary case examples (min/max values)
+   - Wagoe case examples (min/max values)
    - Generated test fixtures from schemas
 
 4. **Validation Rule Composition**
@@ -748,30 +748,30 @@ Coverage (user): 100.0% (6/6 rules executed)
 
 === Implementation Files
 
-- `link:https://github.com/thijs-creemers/boundary/blob/main/libs/core/src/boundary/core/validation/messages.clj` - Message templating and suggestion engine
-- `link:https://github.com/thijs-creemers/boundary/blob/main/libs/core/src/boundary/core/validation/context.clj` - Contextual rendering and example generation
-- `link:https://github.com/thijs-creemers/boundary/blob/main/libs/core/src/boundary/core/validation/codes.clj` - Error code catalog
-- `link:https://github.com/thijs-creemers/boundary/blob/main/libs/core/src/boundary/core/validation/result.clj` - Standard result format
-- `link:https://github.com/thijs-creemers/boundary/blob/main/libs/core/src/boundary/core/validation/registry.clj` - Rule registry for coverage tracking
-- `link:https://github.com/thijs-creemers/boundary/blob/main/dev/boundary/shared/tools/validation/repl.clj` - REPL helpers (stats, conflicts, DOT, timing, snapshots)
-- `link:https://github.com/thijs-creemers/boundary/blob/main/libs/core/src/boundary/core/config/feature_flags.clj` - Feature flag management
+- `link:https://github.com/wagoebv/wagoe/blob/main/libs/core/src/wagoe/core/validation/messages.clj` - Message templating and suggestion engine
+- `link:https://github.com/wagoebv/wagoe/blob/main/libs/core/src/wagoe/core/validation/context.clj` - Contextual rendering and example generation
+- `link:https://github.com/wagoebv/wagoe/blob/main/libs/core/src/wagoe/core/validation/codes.clj` - Error code catalog
+- `link:https://github.com/wagoebv/wagoe/blob/main/libs/core/src/wagoe/core/validation/result.clj` - Standard result format
+- `link:https://github.com/wagoebv/wagoe/blob/main/libs/core/src/wagoe/core/validation/registry.clj` - Rule registry for coverage tracking
+- `link:https://github.com/wagoebv/wagoe/blob/main/dev/wagoe/shared/tools/validation/repl.clj` - REPL helpers (stats, conflicts, DOT, timing, snapshots)
+- `link:https://github.com/wagoebv/wagoe/blob/main/libs/core/src/wagoe/core/config/feature_flags.clj` - Feature flag management
 
 === Test Files
 
-- `test/boundary/shared/core/validation/messages_test.clj` - Message templating tests (7 tests, 54 assertions)
-- `test/boundary/shared/core/validation/context_test.clj` - Context rendering tests (8 tests, 78 assertions)
-- `test/boundary/shared/core/validation/result_test.clj` - Result format tests
-- `test/boundary/user/core/user_validation_test.clj` - User validation unit tests (12 tests, 80 assertions) ✅
-- `test/boundary/user/core/user_property_test.clj` - Property-based validation tests (18 tests, 1,800 test cases) ✅
-- `test/boundary/user/core/user_validation_snapshot_test.clj` - Snapshot tests (12 snapshots) ✅
-- `test/boundary/user/core/user_behavior_spec_test.clj` - Behavior DSL suite + coverage (1 suite, 6 scenarios) ✅
+- `test/wagoe/shared/core/validation/messages_test.clj` - Message templating tests (7 tests, 54 assertions)
+- `test/wagoe/shared/core/validation/context_test.clj` - Context rendering tests (8 tests, 78 assertions)
+- `test/wagoe/shared/core/validation/result_test.clj` - Result format tests
+- `test/wagoe/user/core/user_validation_test.clj` - User validation unit tests (12 tests, 80 assertions) ✅
+- `test/wagoe/user/core/user_property_test.clj` - Property-based validation tests (18 tests, 1,800 test cases) ✅
+- `test/wagoe/user/core/user_validation_snapshot_test.clj` - Snapshot tests (12 snapshots) ✅
+- `test/wagoe/user/core/user_behavior_spec_test.clj` - Behavior DSL suite + coverage (1 suite, 6 scenarios) ✅
 - `test/reports/coverage/user.edn` - User module coverage EDN report ✅
 - `test/reports/coverage/user.txt` - User module coverage summary ✅
 
 === Related Documentation
 
-- link:https://github.com/thijs-creemers/boundary/blob/main/AGENTS.md[Developer Guide] - Project overview and development workflow
-- link:../boundary.prd.adoc[Product Requirements Document] - Project vision and requirements
+- link:https://github.com/wagoebv/wagoe/blob/main/AGENTS.md[Developer Guide] - Project overview and development workflow
+- link:../reference/wagoe-prd.adoc[Product Requirements Document] - Project vision and requirements
 
 == Notes
 
@@ -784,14 +784,14 @@ Coverage (user): 100.0% (6/6 rules executed)
 
 **Implementation Files:**
 
-- `link:https://github.com/thijs-creemers/boundary/blob/main/libs/core/src/boundary/core/validation/result.clj` - Standard result format
-- `link:https://github.com/thijs-creemers/boundary/blob/main/libs/core/src/boundary/core/validation/registry.clj` - Rule registry
-- `link:https://github.com/thijs-creemers/boundary/blob/main/libs/core/src/boundary/core/validation/codes.clj` - Error code catalog
-- `link:https://github.com/thijs-creemers/boundary/blob/main/libs/core/src/boundary/core/validation.clj` - Backward-compatible API
+- `link:https://github.com/wagoebv/wagoe/blob/main/libs/core/src/wagoe/core/validation/result.clj` - Standard result format
+- `link:https://github.com/wagoebv/wagoe/blob/main/libs/core/src/wagoe/core/validation/registry.clj` - Rule registry
+- `link:https://github.com/wagoebv/wagoe/blob/main/libs/core/src/wagoe/core/validation/codes.clj` - Error code catalog
+- `link:https://github.com/wagoebv/wagoe/blob/main/libs/core/src/wagoe/core/validation.clj` - Backward-compatible API
 
 **Environment Variables:**
 
-- `BND_DEVEX_VALIDATION` - Enable DevEx features (default: false)
+- `WAG_DEVEX_VALIDATION` - Enable DevEx features (default: false)
 
 ---
 

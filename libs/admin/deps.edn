@@ -1,12 +1,12 @@
 {:paths ["src" "resources"]
 
  :deps  {org.clojure/clojure {:mvn/version "1.12.5"}
-         boundary/shared-ui  {:local/root "../shared-ui"}
-         boundary/platform   {:local/root "../platform"}
-         boundary/user       {:local/root "../user"}
-         boundary/i18n       {:local/root "../i18n"}
-         boundary/core       {:local/root "../core"}
-         boundary/ui-style   {:local/root "../ui-style"}
+         wagoe/shared-ui  {:local/root "../shared-ui"}
+         wagoe/platform   {:local/root "../platform"}
+         wagoe/user       {:local/root "../user"}
+         wagoe/i18n       {:local/root "../i18n"}
+         wagoe/core       {:local/root "../core"}
+         wagoe/ui-style   {:local/root "../ui-style"}
 
          ;; UI
          hiccup/hiccup       {:mvn/version "2.0.0"}}
@@ -18,7 +18,7 @@
                             ;; Embedded PostgreSQL for split-table / tenant tests
                             io.zonky.test/embedded-postgres {:mvn/version "2.2.2"}
                             io.zonky.test.postgres/embedded-postgres-binaries-darwin-arm64v8 {:mvn/version "18.4.0"}
-                            org.postgresql/postgresql {:mvn/version "42.7.11"}}
+                            org.postgresql/postgresql {:mvn/version "42.7.12"}}
               :main-opts   ["-m" "kaocha.runner"]}
 
   :clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2026.04.15"}}

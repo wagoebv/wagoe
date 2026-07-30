@@ -1,4 +1,4 @@
-# boundary-push — Push Notification Library
+# wagoe-push — Push Notification Library
 
 Multi-platform push notification delivery for FCM (Firebase) and APNs (Apple). Device token management, job-based async delivery, HMAC-secured analytics callbacks. Uses `defpush` macro for notification definitions.
 
@@ -6,20 +6,20 @@ Multi-platform push notification delivery for FCM (Firebase) and APNs (Apple). D
 
 | Namespace | Layer | Purpose |
 |-----------|-------|---------|
-| `boundary.push.core.notification` | Core | `defpush` macro, registry, template rendering |
-| `boundary.push.core.delivery` | Core | Payload building (FCM/APNs), error classification, retry calc |
-| `boundary.push.core.device` | Core | Token validation, platform detection, staleness |
-| `boundary.push.core.analytics` | Core | Rate calculations |
-| `boundary.push.ports` | Ports | IPushService, IFCMProvider, IAPNsProvider, IDeviceTokenStore, IPushAnalyticsStore |
-| `boundary.push.schema` | Schema | Malli schemas for all domain types |
-| `boundary.push.shell.service` | Shell | IPushService impl, HMAC generation/verification |
-| `boundary.push.shell.persistence` | Shell | next.jdbc/HoneySQL stores for devices + analytics |
-| `boundary.push.shell.adapters.mock` | Shell | Mock FCM + APNs (dev/test) |
-| `boundary.push.shell.adapters.fcm` | Shell | Google FCM v1 API adapter |
-| `boundary.push.shell.adapters.apns` | Shell | Apple APNs HTTP/2 adapter |
-| `boundary.push.shell.handlers` | Shell | Ring handlers for device CRUD + callback |
-| `boundary.push.shell.jobs` | Shell | Job handlers for async delivery |
-| `boundary.push.shell.module-wiring` | Shell | Integrant lifecycle |
+| `wagoe.push.core.notification` | Core | `defpush` macro, registry, template rendering |
+| `wagoe.push.core.delivery` | Core | Payload building (FCM/APNs), error classification, retry calc |
+| `wagoe.push.core.device` | Core | Token validation, platform detection, staleness |
+| `wagoe.push.core.analytics` | Core | Rate calculations |
+| `wagoe.push.ports` | Ports | IPushService, IFCMProvider, IAPNsProvider, IDeviceTokenStore, IPushAnalyticsStore |
+| `wagoe.push.schema` | Schema | Malli schemas for all domain types |
+| `wagoe.push.shell.service` | Shell | IPushService impl, HMAC generation/verification |
+| `wagoe.push.shell.persistence` | Shell | next.jdbc/HoneySQL stores for devices + analytics |
+| `wagoe.push.shell.adapters.mock` | Shell | Mock FCM + APNs (dev/test) |
+| `wagoe.push.shell.adapters.fcm` | Shell | Google FCM v1 API adapter |
+| `wagoe.push.shell.adapters.apns` | Shell | Apple APNs HTTP/2 adapter |
+| `wagoe.push.shell.handlers` | Shell | Ring handlers for device CRUD + callback |
+| `wagoe.push.shell.jobs` | Shell | Job handlers for async delivery |
+| `wagoe.push.shell.module-wiring` | Shell | Integrant lifecycle |
 
 ## Protocol: IPushService
 
@@ -132,7 +132,7 @@ All three methods enqueue jobs and return a job UUID immediately — delivery is
 
 ## Job Handlers
 
-Two job types registered under `:boundary.push/job-handlers`:
+Two job types registered under `:wagoe.push/job-handlers`:
 
 **`:push/send`** args: `{:notification-id kw :data map :user-id uuid :locale kw}`
 1. Look up push-def from registry (throws `:not-found` if missing)
@@ -148,7 +148,7 @@ Two job types registered under `:boundary.push/job-handlers`:
 
 ## HTTP Routes
 
-Registered via `:boundary.push/routes` Integrant key. All device routes require authenticated request (`:identity :user-id` from middleware).
+Registered via `:wagoe.push/routes` Integrant key. All device routes require authenticated request (`:identity :user-id` from middleware).
 
 | Method | Path | Handler |
 |--------|------|---------|
@@ -201,7 +201,7 @@ Both adapters also set `:token-invalid? true` on the result map for `:token-inva
 
 ## DB Tables
 
-Three migrations under `libs/push/resources/boundary/push/migrations/`:
+Three migrations under `libs/push/resources/wagoe/push/migrations/`:
 
 **`push_device_tokens`** (migration `20260524000000`)
 - `(token, app_id)` UNIQUE constraint drives upsert behaviour
@@ -219,11 +219,11 @@ Three migrations under `libs/push/resources/boundary/push/migrations/`:
 
 ```clojure
 ;; Providers
-:boundary.push/fcm-provider  {:provider :fcm   ; or :mock
+:wagoe.push/fcm-provider  {:provider :fcm   ; or :mock
                                :project-id "my-project"
                                :credentials-path "/path/to/service-account.json"}
 
-:boundary.push/apns-provider {:provider :apns  ; or :mock
+:wagoe.push/apns-provider {:provider :apns  ; or :mock
                                :team-id  "TEAM123"
                                :key-id   "KEY456"
                                :key-path "/path/to/key.p8"
@@ -231,27 +231,27 @@ Three migrations under `libs/push/resources/boundary/push/migrations/`:
                                :sandbox? false}
 
 ;; Stores
-:boundary.push/device-store    {:db #ig/ref :boundary/db}
-:boundary.push/analytics-store {:db #ig/ref :boundary/db}
+:wagoe.push/device-store    {:db #ig/ref :wagoe/db}
+:wagoe.push/analytics-store {:db #ig/ref :wagoe/db}
 
 ;; Service
-:boundary.push/service {:device-store    #ig/ref :boundary.push/device-store
-                        :analytics-store #ig/ref :boundary.push/analytics-store
-                        :fcm-provider    #ig/ref :boundary.push/fcm-provider
-                        :apns-provider   #ig/ref :boundary.push/apns-provider
-                        :job-queue       #ig/ref :boundary/jobs
-                        :callback-secret #env BND_PUSH_CALLBACK_SECRET}
+:wagoe.push/service {:device-store    #ig/ref :wagoe.push/device-store
+                        :analytics-store #ig/ref :wagoe.push/analytics-store
+                        :fcm-provider    #ig/ref :wagoe.push/fcm-provider
+                        :apns-provider   #ig/ref :wagoe.push/apns-provider
+                        :job-queue       #ig/ref :wagoe/jobs
+                        :callback-secret #env WAG_PUSH_CALLBACK_SECRET}
 
 ;; Job handlers — register returned map with your job dispatcher
-:boundary.push/job-handlers {:push-service #ig/ref :boundary.push/service}
+:wagoe.push/job-handlers {:push-service #ig/ref :wagoe.push/service}
 
 ;; Routes — mount in your router
-:boundary.push/routes {:device-store    #ig/ref :boundary.push/device-store
-                       :analytics-store #ig/ref :boundary.push/analytics-store
-                       :callback-secret #env BND_PUSH_CALLBACK_SECRET}
+:wagoe.push/routes {:device-store    #ig/ref :wagoe.push/device-store
+                       :analytics-store #ig/ref :wagoe.push/analytics-store
+                       :callback-secret #env WAG_PUSH_CALLBACK_SECRET}
 ```
 
-Require `boundary.push.shell.module-wiring` at system start to load the `defmethod` definitions.
+Require `wagoe.push.shell.module-wiring` at system start to load the `defmethod` definitions.
 
 ## Gotchas
 
@@ -264,27 +264,27 @@ Require `boundary.push.shell.module-wiring` at system start to load the `defmeth
 7. **Upsert strategy** — persistence uses INSERT + catch `SQLIntegrityConstraintViolationException` + UPDATE for H2+PostgreSQL compat (avoids dialect-specific `ON CONFLICT`)
 8. **FCM "multicast" is concurrent single sends** — `fcm-send-multicast!` sends one per-token request via `sendAsync`, not FCM batch API
 9. **APNs JWT is minted per call** — `make-jwt` runs on every `apns-send!` and `apns-send-batch!` invocation; no caching. Fine for normal throughput; at broadcast scale (thousands of tokens) this becomes a known bottleneck — JWT caching with a ~45-min expiry window is the fix
-10. **Registry lives in the shell** — the definition registry (`defpush`, `register-push!`, `get-push`, `list-pushes`, `clear-registry!`) is in `boundary.push.shell.registry`; `boundary.push.core.notification` is pure (rendering only). Call `registry/clear-registry!` in test setup when testing notification lookup.
+10. **Registry lives in the shell** — the definition registry (`defpush`, `register-push!`, `get-push`, `list-pushes`, `clear-registry!`) is in `wagoe.push.shell.registry`; `wagoe.push.core.notification` is pure (rendering only). Call `registry/clear-registry!` in test setup when testing notification lookup.
 
 ## REPL Smoke Checks
 
 ```clojure
 ;; Verify registry (shell)
-(require '[boundary.push.shell.registry :as registry])
+(require '[wagoe.push.shell.registry :as registry])
 (registry/list-pushes)
 
 ;; Render a notification (core is pure)
-(require '[boundary.push.core.notification :as notif])
+(require '[wagoe.push.core.notification :as notif])
 (notif/build-notification (registry/get-push :order-shipped)
                           {:order-id "ORD-123"} :en)
 
 ;; Inspect FCM payload shape
-(require '[boundary.push.core.delivery :as delivery])
+(require '[wagoe.push.core.delivery :as delivery])
 (delivery/build-fcm-payload {:title "Hi" :body "Test" :priority :high
                              :ttl 3600 :data {:order-id "1"}} "some-fcm-token")
 
 ;; Verify HMAC round-trip
-(require '[boundary.push.shell.service :as svc])
+(require '[wagoe.push.shell.service :as svc])
 (let [secret "dev-secret"
       msg-id "msg-123"
       tok    (svc/generate-callback-token secret msg-id)]

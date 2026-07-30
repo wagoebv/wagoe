@@ -1,7 +1,7 @@
 = ADR-027: Dev Dashboard
 :status: Proposed
 :date: 2026-04-18
-:deciders: boundary-team
+:deciders: wagoe-team
 
 == Status
 
@@ -11,7 +11,7 @@ Proposed
 
 === Background
 
-Boundary provides observability through structured logging and interceptor
+Wagoe provides observability through structured logging and interceptor
 metrics, but there is no visual interface for inspecting system state during
 development. Developers must query the REPL or read logs to understand what
 the system is doing.
@@ -138,7 +138,7 @@ Also available via REPL `(worktrees)` and CLI `bb worktree:list`.
   security) in Phase 6.
 * Dashboard reads from existing system state (Integrant, Reitit, HikariCP) --
   no separate data layer needed.
-* Port configurable via `:boundary/dashboard {:port 9999}`.
+* Port configurable via `:wagoe/dashboard {:port 9999}`.
 * Web REPL binds to localhost only, not 0.0.0.0.
 
 == Related ADRs

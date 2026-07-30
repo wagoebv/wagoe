@@ -212,8 +212,8 @@ The abstraction serves as **documentation and structure**, even with single impl
 === Completed Actions
 
 1. ✅ **Deleted Pedestal adapter draft code**
-   - `link:https://github.com/thijs-creemers/boundary/blob/main/libs/platform/src/boundary/platform/shell/http/pedestal_router.clj`
-   - `test/boundary/platform/shell/http/pedestal_router_test.clj`
+   - `link:https://github.com/wagoebv/wagoe/blob/main/libs/platform/src/wagoe/platform/shell/http/pedestal_router.clj`
+   - `test/wagoe/platform/shell/http/pedestal_router_test.clj`
 
 2. ✅ **Removed Pedestal dependencies from `deps.edn`**
    - `io.pedestal/pedestal.service`
@@ -232,12 +232,12 @@ Router is configured via Integrant:
 
 ```clojure
 ;; In config.edn (implicit, no configuration needed)
-:boundary/router
+:wagoe/router
 {:adapter :reitit  ;; Only option currently
  :config {...}}
 
 ;; Router adapter created in system wiring
-(defmethod ig/init-key :boundary/router [_ {:keys [config]}]
+(defmethod ig/init-key :wagoe/router [_ {:keys [config]}]
   (reitit-router/create-router config))
 ```
 
@@ -246,8 +246,8 @@ Router is configured via Integrant:
 Modules continue using normalized format:
 
 ```clojure
-(ns boundary.user.shell.http
-  (:require [boundary.user.shell.web-handlers :as handlers]))
+(ns wagoe.user.shell.http
+  (:require [wagoe.user.shell.web-handlers :as handlers]))
 
 (defn user-routes-normalized [service config]
   {:api
@@ -279,8 +279,8 @@ This decision should be revisited if:
 - **Analysis Document**: link:../architecture/pedestal-adapter-analysis.adoc[Pedestal Adapter Analysis]
 - **Reitit Documentation**: https://cljdoc.org/d/metosin/reitit/
 - **Pedestal Documentation**: https://pedestal.io/
-- **Reitit Adapter**: `link:https://github.com/thijs-creemers/boundary/blob/main/libs/platform/src/boundary/platform/shell/http/reitit_router.clj`
-- **IRouter Protocol**: `link:https://github.com/thijs-creemers/boundary/blob/main/libs/platform/src/boundary/platform/ports/http.clj`
+- **Reitit Adapter**: `link:https://github.com/wagoebv/wagoe/blob/main/libs/platform/src/wagoe/platform/shell/http/reitit_router.clj`
+- **IRouter Protocol**: `link:https://github.com/wagoebv/wagoe/blob/main/libs/platform/src/wagoe/platform/ports/http.clj`
 
 == Lessons Learned
 

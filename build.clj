@@ -2,7 +2,7 @@
   (:require [clojure.string :as str]
             [clojure.tools.build.api :as b]))
 
-(def lib 'tcbv/boundary)
+(def lib 'wagoe/wagoe)
 (def version (format "1.2.%s" (b/git-count-revs nil)))
 (def class-dir "target/classes")
 
@@ -44,7 +44,7 @@
   (b/compile-clj {:basis basis
                   :src-dirs all-src-dirs
                   :class-dir class-dir
-                  :ns-compile '[boundary.main]
+                  :ns-compile '[wagoe.main]
                   :java-opts ["-Dclojure.compiler.direct-linking=true"]})
 
   ;; Build uberjar
@@ -53,7 +53,7 @@
   (b/uber {:class-dir class-dir
            :uber-file uber-file
            :basis basis
-           :main 'boundary.main
+           :main 'wagoe.main
            :exclude ["^LICENSE(/.*)?$" "^NOTICE(/.*)?$"]})
 
   (println (str "✓ Uberjar built successfully: " uber-file))

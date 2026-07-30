@@ -1,9 +1,9 @@
-# boundary/payments
+# wagoe/payments
 
 [![Status](https://img.shields.io/badge/status-stable-brightgreen)]()
 [![Clojure](https://img.shields.io/badge/clojure-1.12+-blue)]()
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
-[![Clojars Project](https://img.shields.io/clojars/v/org.boundary-app/boundary-payments.svg)](https://clojars.org/org.boundary-app/boundary-payments)
+[![Clojars Project](https://img.shields.io/clojars/v/org.wagoe/wagoe-payments.svg)](https://clojars.org/org.wagoe/wagoe-payments)
 
 PSP (Payment Service Provider) abstraction — a single `IPaymentProvider` protocol that decouples application code from Mollie, Stripe, and Mock across the checkout-session flow: create → redirect → webhook → status.
 
@@ -11,12 +11,12 @@ PSP (Payment Service Provider) abstraction — a single `IPaymentProvider` proto
 
 **deps.edn** (recommended):
 ```clojure
-{:deps {org.boundary-app/boundary-payments {:mvn/version "1.0.0-beta-1"}}}
+{:deps {org.wagoe/wagoe-payments {:mvn/version "1.0.0-beta-1"}}}
 ```
 
 **Leiningen**:
 ```clojure
-[org.boundary-app/boundary-payments "1.0.0-beta-1"]
+[org.wagoe/wagoe-payments "1.0.0-beta-1"]
 ```
 
 ## Features
@@ -36,7 +36,7 @@ PSP (Payment Service Provider) abstraction — a single `IPaymentProvider` proto
 
 ```clojure
 ;; config.edn — one provider at a time; switch by changing :provider
-:boundary/payment-provider
+:wagoe/payment-provider
 {:provider         :mock       ; :mock | :mollie | :stripe
  :api-key          #env PSP_API_KEY
  :webhook-secret   #env PSP_WEBHOOK_SECRET   ; Stripe only
@@ -47,7 +47,7 @@ PSP (Payment Service Provider) abstraction — a single `IPaymentProvider` proto
 
 ```clojure
 (ns myapp.checkout
-  (:require [boundary.payments.ports :as ports]))
+  (:require [wagoe.payments.ports :as ports]))
 
 (ports/create-checkout-session payment-provider
   {:amount-cents 11900          ; integer cents — 11900 = €119.00
@@ -97,7 +97,7 @@ resolving to nil) **fails the boot** with a `{:type :config-error}` error naming
 each missing key. In tests, build the Mock directly:
 
 ```clojure
-(require '[boundary.payments.shell.adapters.mock :as mock])
+(require '[wagoe.payments.shell.adapters.mock :as mock])
 (def test-provider (mock/make-mock-provider))
 ```
 

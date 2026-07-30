@@ -1,5 +1,5 @@
 #!/bin/bash
-# verify-security.sh - Verify security configuration for Boundary Framework
+# verify-security.sh - Verify security configuration for Wagoe Framework
 #
 # This script checks that all security measures are properly configured.
 #
@@ -19,12 +19,12 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Configuration
-REPO_OWNER="thijs-creemers"
-REPO_NAME="boundary"
+REPO_OWNER="wagoebv"
+REPO_NAME="wagoe"
 BRANCH_NAME="main"
 
 echo -e "${BLUE}========================================${NC}"
-echo -e "${BLUE}Boundary Framework Security Verification${NC}"
+echo -e "${BLUE}Wagoe Framework Security Verification${NC}"
 echo -e "${BLUE}========================================${NC}"
 echo ""
 

@@ -1,5 +1,5 @@
 = Create a Module
-:description: How to scaffold and integrate a new Boundary module.
+:description: How to scaffold and integrate a new Wagoe module.
 
 The scaffolder generates a complete FC/IS module quickly.
 
@@ -67,7 +67,7 @@ After scaffolding:
 clojure -M:migrate up
 
 # 2. Wire the module into config.edn
-# Add :boundary/product key to resources/conf/dev/config.edn
+# Add :wagoe/product key to resources/conf/dev/config.edn
 
 # 3. Register routes in module HTTP wiring and config
 
@@ -88,7 +88,7 @@ This generates a new migration and updates schema.clj and persistence.clj.
 
 [source,bash]
 ----
-bb scaffold new         # Bootstrap a new Boundary project
+bb scaffold new         # Bootstrap a new Wagoe project
 bb scaffold endpoint    # Add an endpoint to an existing module
 bb scaffold adapter     # Generate a new adapter implementation
 bb scaffold             # Show all commands and help

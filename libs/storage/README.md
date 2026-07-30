@@ -1,9 +1,9 @@
-# boundary/storage
+# wagoe/storage
 
 [![Status](https://img.shields.io/badge/status-stable-brightgreen)]()
 [![Clojure](https://img.shields.io/badge/clojure-1.12+-blue)]()
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
-[![Clojars Project](https://img.shields.io/clojars/v/org.boundary-app/boundary-storage.svg)](https://clojars.org/org.boundary-app/boundary-storage)
+[![Clojars Project](https://img.shields.io/clojars/v/org.wagoe/wagoe-storage.svg)](https://clojars.org/org.wagoe/wagoe-storage)
 
 File storage abstraction with local filesystem and S3 backends, including upload validation and image processing.
 
@@ -11,12 +11,12 @@ File storage abstraction with local filesystem and S3 backends, including upload
 
 **deps.edn** (recommended):
 ```clojure
-{:deps {org.boundary-app/boundary-storage {:mvn/version "1.0.0-beta-1"}}}
+{:deps {org.wagoe/wagoe-storage {:mvn/version "1.0.0-beta-1"}}}
 ```
 
 **Leiningen**:
 ```clojure
-[org.boundary-app/boundary-storage "1.0.0-beta-1"]
+[org.wagoe/wagoe-storage "1.0.0-beta-1"]
 ```
 
 ## Features
@@ -33,8 +33,8 @@ File storage abstraction with local filesystem and S3 backends, including upload
 ## Requirements
 
 - Clojure 1.12+
-- boundary/platform
-- boundary/core
+- wagoe/platform
+- wagoe/core
 
 ## Quick Start
 
@@ -42,7 +42,7 @@ File storage abstraction with local filesystem and S3 backends, including upload
 
 ```clojure
 (ns myapp.storage
-  (:require [boundary.storage.shell.adapters.local :as local]))
+  (:require [wagoe.storage.shell.adapters.local :as local]))
 
 ;; Create local storage adapter
 (def store (local/create-adapter
@@ -69,7 +69,7 @@ File storage abstraction with local filesystem and S3 backends, including upload
 
 ```clojure
 (ns myapp.storage
-  (:require [boundary.storage.shell.adapters.s3 :as s3]))
+  (:require [wagoe.storage.shell.adapters.s3 :as s3]))
 
 ;; Create S3 storage adapter
 (def store (s3/create-adapter
@@ -89,7 +89,7 @@ File storage abstraction with local filesystem and S3 backends, including upload
 
 ```clojure
 ;; config.edn
-{:boundary/storage
+{:wagoe/storage
  #profile
  {:development
   {:adapter :local
@@ -107,7 +107,7 @@ File storage abstraction with local filesystem and S3 backends, including upload
 
 ```clojure
 (ns myapp.uploads
-  (:require [boundary.storage.core.validation :as v]))
+  (:require [wagoe.storage.core.validation :as v]))
 
 ;; Define allowed uploads
 (def image-rules
@@ -149,7 +149,7 @@ File storage abstraction with local filesystem and S3 backends, including upload
 
 ```clojure
 (ns myapp.images
-  (:require [boundary.storage.ports :as storage-ports]))
+  (:require [wagoe.storage.ports :as storage-ports]))
 
 ;; Resize image (via configured image processor)
 (storage-ports/resize-image image-processor file-bytes {:width 200 :height 200})
@@ -166,8 +166,8 @@ File storage abstraction with local filesystem and S3 backends, including upload
 
 ```clojure
 (ns myapp.handlers
-  (:require [boundary.storage.ports :as storage-ports]
-            [boundary.storage.core.validation :as v]))
+  (:require [wagoe.storage.ports :as storage-ports]
+            [wagoe.storage.core.validation :as v]))
 
 (defn upload-avatar [request]
   (let [file (get-in request [:multipart-params "file"])
@@ -187,7 +187,7 @@ File storage abstraction with local filesystem and S3 backends, including upload
 ## Module Structure
 
 ```
-libs/storage/src/boundary/storage/
+libs/storage/src/wagoe/storage/
 ├── core/
 │   ├── validation.clj       # Upload validation (pure)
 │   ├── path.clj             # Path generation (pure)
@@ -227,7 +227,7 @@ libs/storage/src/boundary/storage/
 
 | Dependency | Version | Purpose |
 |------------|---------|---------|
-| `boundary/platform` | 1.0.0-beta-1 | Configuration, database |
+| `wagoe/platform` | 1.0.0-beta-1 | Configuration, database |
 | `aws-sdk/s3` | 2.39.5 | S3 client |
 | `aws-sdk/s3-transfer-manager` | 2.39.5 | Efficient uploads |
 
@@ -244,7 +244,7 @@ For S3 storage, configure AWS credentials via:
 
 2. **Configuration file** (development):
    ```clojure
-   {:boundary/storage
+   {:wagoe/storage
     {:adapter :s3
      :bucket "my-bucket"
      :region "us-east-1"
@@ -254,7 +254,7 @@ For S3 storage, configure AWS credentials via:
 
 3. **IAM Role** (EC2, ECS, Lambda):
    ```clojure
-   {:boundary/storage
+   {:wagoe/storage
     {:adapter :s3
      :bucket "my-bucket"
      :region "us-east-1"
@@ -270,13 +270,13 @@ For S3 storage, configure AWS credentials via:
                   │ uses
                   ▼
 ┌─────────────────────────────────────────┐
-│            boundary/storage             │
+│            wagoe/storage             │
 │        (local, S3, validation)          │
 └─────────────────┬───────────────────────┘
                   │ depends on
                   ▼
 ┌─────────────────────────────────────────┐
-│           boundary/platform             │
+│           wagoe/platform             │
 └─────────────────────────────────────────┘
 ```
 

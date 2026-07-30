@@ -5,7 +5,7 @@
 [[overview]]
 == Overview
 
-This is the **canonical reference** for all development commands in the Boundary Framework. All commands should be run from the repository root directory.
+This is the **canonical reference** for all development commands in the Wagoe Framework. All commands should be run from the repository root directory.
 
 [IMPORTANT]
 ====
@@ -15,7 +15,7 @@ This document is the source of truth for development commands. If you find discr
 [[assistant-tooling]]
 == AI Assistant Tooling
 
-Boundary documents two assistant-friendly Clojure CLI tools:
+Wagoe documents two assistant-friendly Clojure CLI tools:
 
 - `clj-nrepl-eval` for evaluating code in a running nREPL from the shell
 - `clj-paren-repair` for repairing delimiter errors in edited Clojure files
@@ -44,7 +44,7 @@ clj-paren-repair --help
 [[testing]]
 == Testing
 
-Boundary uses https://github.com/lambdaisland/kaocha[Kaocha] for testing with H2 in-memory database.
+Wagoe uses https://github.com/lambdaisland/kaocha[Kaocha] for testing with H2 in-memory database.
 
 [[test-all]]
 === Run All Tests
@@ -58,7 +58,7 @@ With JWT secret (required for auth tests):
 
 [source,bash]
 ----
-JWT_SECRET="dev-secret-32-chars-minimum" clojure -M:test:db/h2
+JWT_SECRET="dev-secret-at-least-32-characters-long" clojure -M:test:db/h2
 ----
 
 [[test-library]]
@@ -103,8 +103,8 @@ clojure -M:test:db/h2 --focus-meta :contract     # Database contract tests
 
 [source,bash]
 ----
-clojure -M:test:db/h2 --focus boundary.user.core.user-test
-clojure -M:test:db/h2 --focus boundary.admin.core.entity-test
+clojure -M:test:db/h2 --focus wagoe.user.core.user-test
+clojure -M:test:db/h2 --focus wagoe.admin.core.entity-test
 ----
 
 [[test-watch]]
@@ -115,7 +115,7 @@ clojure -M:test:db/h2 --focus boundary.admin.core.entity-test
 clojure -M:test:db/h2 --watch                           # Watch all tests
 clojure -M:test:db/h2 --watch :core                     # Watch core library
 clojure -M:test:db/h2 --watch --focus-meta :unit        # Watch unit tests
-clojure -M:test:db/h2 --watch --focus boundary.user.core.user-test  # Watch specific namespace
+clojure -M:test:db/h2 --watch --focus wagoe.user.core.user-test  # Watch specific namespace
 ----
 
 [[test-snapshots]]
@@ -124,7 +124,7 @@ clojure -M:test:db/h2 --watch --focus boundary.user.core.user-test  # Watch spec
 [source,bash]
 ----
 UPDATE_SNAPSHOTS=true clojure -M:test:db/h2 \
-  --focus boundary.user.core.user-validation-snapshot-test
+  --focus wagoe.user.core.user-validation-snapshot-test
 ----
 
 [[linting]]
@@ -196,14 +196,14 @@ This starts an nREPL server on port 7888.
 [source,clojure]
 ----
 ;; Get a service
-(def user-svc (get integrant.repl.state/system :boundary/user-service))
+(def user-svc (get integrant.repl.state/system :wagoe/user-service))
 
 ;; Test service directly
-(require '[boundary.user.ports :as user-ports])
+(require '[wagoe.user.ports :as user-ports])
 (user-ports/list-users user-svc {:limit 10})
 
 ;; Reload namespace with changes
-(require '[boundary.user.core.user :as user-core] :reload)
+(require '[wagoe.user.core.user :as user-core] :reload)
 ----
 
 [[repl-eval]]
@@ -232,14 +232,14 @@ clj-nrepl-eval -p 7888 "(require '[integrant.repl :as ig-repl]) (ig-repl/reset)"
 clojure -T:build clean && clojure -T:build uber
 ----
 
-Output: `target/boundary-*.jar`
+Output: `target/wagoe-*.jar`
 
 [[build-run]]
 === Run Standalone Jar
 
 [source,bash]
 ----
-java -jar target/boundary-*.jar server
+java -jar target/wagoe-*.jar server
 ----
 
 [[database]]
@@ -286,7 +286,7 @@ bb scaffold ai "product module with name, price, stock" --yes    # Non-interacti
 
 [source,bash]
 ----
-clojure -M -m boundary.scaffolder.shell.cli-entry generate \
+clojure -M -m wagoe.scaffolder.shell.cli-entry generate \
   --module-name product \
   --entity Product \
   --field name:string:required \
@@ -406,7 +406,7 @@ bb i18n:unused            # Report catalogue keys not referenced in source
 
 [source,bash]
 ----
-bb test:tools             # Run boundary-tools unit tests
+bb test:tools             # Run wagoe-tools unit tests
 bb check-links            # Validate markdown links in AGENTS.md files
 bb smoke-check            # Verify deps.edn aliases and key tool entrypoints
 bb install-hooks          # Configure git hooks path to .githooks
@@ -420,7 +420,7 @@ bb coverage               # Run Cloverage coverage report
 
 [source,bash]
 ----
-clj-paren-repair libs/user/src/boundary/user/core/user.clj
+clj-paren-repair libs/user/src/wagoe/user/core/user.clj
 ----
 
 [CAUTION]
@@ -437,7 +437,7 @@ Always use `clj-paren-repair` to fix parenthesis issues. Never manually repair -
 [source,bash]
 ----
 # Start watch mode for your focus area
-clojure -M:test:db/h2 --watch --focus boundary.user.core.user-test
+clojure -M:test:db/h2 --watch --focus wagoe.user.core.user-test
 
 # Edit code, save, tests run automatically
 # Ctrl+C to exit
@@ -486,7 +486,7 @@ clj-nrepl-eval -p 7888 "(require '[integrant.repl :as ig-repl]) (ig-repl/reset)"
 |JWT signing secret (min 32 chars)
 |(required for auth)
 
-|`BND_ENV`
+|`WAG_ENV`
 |Environment name
 |`development`
 
@@ -518,7 +518,7 @@ clj-nrepl-eval -p 7888 "(require '[integrant.repl :as ig-repl]) (ig-repl/reset)"
 
 |`POSTGRES_DB`
 |PostgreSQL database name
-|`boundary_dev`
+|`wagoe_dev`
 
 |`POSTGRES_USER`
 |PostgreSQL user

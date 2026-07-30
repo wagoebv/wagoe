@@ -12,23 +12,23 @@ For payment processing (Mollie, Stripe), see [`libs/payments/AGENTS.md`](../paym
 ## Key Namespaces
 
 ```
-boundary.external.schema           — Malli schemas for all three adapters
-boundary.external.ports            — Protocol definitions (ISmtpProvider, IImapMailbox, ITwilioMessaging)
-boundary.external.core.smtp        — Pure SMTP helpers (normalize-recipients, build-mime-properties)
-boundary.external.core.imap        — Pure IMAP helpers (parse-message-headers, extract-body-text,
+wagoe.external.schema           — Malli schemas for all three adapters
+wagoe.external.ports            — Protocol definitions (ISmtpProvider, IImapMailbox, ITwilioMessaging)
+wagoe.external.core.smtp        — Pure SMTP helpers (normalize-recipients, build-mime-properties)
+wagoe.external.core.imap        — Pure IMAP helpers (parse-message-headers, extract-body-text,
                                      build-inbound-message, filter-by-date, filter-unread)
-boundary.external.core.twilio      — Pure Twilio helpers (build-sms-params, build-whatsapp-params,
+wagoe.external.core.twilio      — Pure Twilio helpers (build-sms-params, build-whatsapp-params,
                                      parse-message-response, parse-twilio-error)
-boundary.external.shell.adapters.smtp    — SmtpProviderAdapter (javax.mail)
-boundary.external.shell.adapters.imap    — ImapMailboxAdapter (javax.mail, UIDFolder)
-boundary.external.shell.adapters.twilio  — TwilioAdapter (clj-http, Basic auth)
-boundary.external.shell.module-wiring    — Integrant init/halt for :boundary.external/* keys
+wagoe.external.shell.adapters.smtp    — SmtpProviderAdapter (javax.mail)
+wagoe.external.shell.adapters.imap    — ImapMailboxAdapter (javax.mail, UIDFolder)
+wagoe.external.shell.adapters.twilio  — TwilioAdapter (clj-http, Basic auth)
+wagoe.external.shell.module-wiring    — Integrant init/halt for :wagoe.external/* keys
 ```
 
 ## FC/IS Layout
 
 ```
-libs/external/src/boundary/external/
+libs/external/src/wagoe/external/
 ├── schema.clj          Malli schemas
 ├── ports.clj           Protocol definitions
 ├── core/
@@ -48,7 +48,7 @@ libs/external/src/boundary/external/
 All three keys are opt-in — add to `:active` in `config.edn` to enable:
 
 ```clojure
-:boundary.external/smtp
+:wagoe.external/smtp
 {:host     #env SMTP_HOST
  :port     587
  :username #env SMTP_USERNAME
@@ -56,14 +56,14 @@ All three keys are opt-in — add to `:active` in `config.edn` to enable:
  :tls?     true
  :from     "noreply@example.com"}
 
-:boundary.external/imap
+:wagoe.external/imap
 {:host     #env IMAP_HOST
  :port     993
  :username #env IMAP_USERNAME
  :password #env IMAP_PASSWORD
  :ssl?     true}
 
-:boundary.external/twilio
+:wagoe.external/twilio
 {:account-sid  #env TWILIO_ACCOUNT_SID
  :auth-token   #env TWILIO_AUTH_TOKEN
  :from-number  #env TWILIO_FROM_NUMBER}
@@ -104,7 +104,7 @@ docker run -d -p 1025:1025 -p 8025:8025 mailhog/mailhog
 
 **Config** (`config.edn` dev profile):
 ```clojure
-:boundary.external/smtp
+:wagoe.external/smtp
 {:host "localhost" :port 1025 :tls? false :from "no-reply@localhost"}
 ```
 
@@ -116,7 +116,7 @@ docker run -d -p 1025:1025 -p 8025:8025 mailhog/mailhog
 
 **Alternative** (no Docker): Use `LoggingEmailSender` from `libs/email` which logs emails to console and stores in an atom for REPL inspection:
 ```clojure
-(require '[boundary.email.shell.adapters.logging :as log-email])
+(require '[wagoe.email.shell.adapters.logging :as log-email])
 (def sender (log-email/create-logging-sender))
 ;; After sending:
 (log-email/list-sent-emails)  ;; all emails

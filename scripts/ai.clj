@@ -1,7 +1,7 @@
 #!/usr/bin/env bb
 ;; scripts/ai.clj
 ;;
-;; Babashka frontend for Boundary AI tooling.
+;; Babashka frontend for Wagoe AI tooling.
 ;;
 ;; Usage (via bb.edn task):
 ;;   bb ai                           -- show help
@@ -15,8 +15,7 @@
 ;;   bb scripts/ai.clj explain --file stacktrace.txt
 
 (ns ai
-  (:require [clojure.string :as str]
-            [babashka.process :refer [shell]]))
+  (:require [babashka.process :refer [shell]]))
 
 ;; =============================================================================
 ;; ANSI helpers
@@ -37,7 +36,7 @@
   "Shell out to the Clojure AI CLI with given args. Streams output to terminal."
   [args]
   (try
-    (apply shell "clojure" "-M" "-m" "boundary.ai.shell.cli-entry" args)
+    (apply shell "clojure" "-M" "-m" "wagoe.ai.shell.cli-entry" args)
     (catch Exception e
       (println (red (str "AI CLI exited with error: " (.getMessage e))))
       (System/exit 1))))
@@ -47,7 +46,7 @@
 ;; =============================================================================
 
 (def help-text
-  (str (bold "Boundary AI \u2014 Framework-aware AI Tooling") "\n"
+  (str (bold "Wagoe AI \u2014 Framework-aware AI Tooling") "\n"
        "\n"
        "Usage:\n"
        "  bb ai                               Show this help\n"
@@ -68,7 +67,7 @@
        "Examples:\n"
        "  cat stacktrace.txt | bb ai explain\n"
        "  bb ai explain --file errors.txt\n"
-       "  bb ai gen-tests libs/user/src/boundary/user/core/validation.clj\n"
+       "  bb ai gen-tests libs/user/src/wagoe/user/core/validation.clj\n"
        "  bb ai sql \"find active users with orders in the last 7 days\"\n"
        "  bb ai docs --module libs/user --type agents\n"
        "\n"
@@ -76,7 +75,7 @@
        "  bb scaffold ai \"product module with name, price, stock\"\n"
        "\n"
        "The tool delegates to:\n"
-       "  clojure -M -m boundary.ai.shell.cli-entry <subcommand> [opts]"))
+       "  clojure -M -m wagoe.ai.shell.cli-entry <subcommand> [opts]"))
 
 ;; =============================================================================
 ;; Main entry point

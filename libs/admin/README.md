@@ -1,9 +1,9 @@
-# boundary/admin
+# wagoe/admin
 
 [![Status](https://img.shields.io/badge/status-stable-brightgreen)]()
 [![Clojure](https://img.shields.io/badge/clojure-1.12+-blue)]()
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
-[![Clojars Project](https://img.shields.io/clojars/v/org.boundary-app/boundary-admin.svg)](https://clojars.org/org.boundary-app/boundary-admin)
+[![Clojars Project](https://img.shields.io/clojars/v/org.wagoe/wagoe-admin.svg)](https://clojars.org/org.wagoe/wagoe-admin)
 
 Auto-generated CRUD admin interface with database schema introspection, filtering, sorting, and role-based access control.
 
@@ -13,7 +13,7 @@ Auto-generated CRUD admin interface with database schema introspection, filterin
 
 **deps.edn** (recommended):
 ```clojure
-{:deps {org.boundary-app/boundary-admin {:mvn/version "1.0.0-beta-1"}}}
+{:deps {org.wagoe/wagoe-admin {:mvn/version "1.0.0-beta-1"}}}
 ```
 
 ---
@@ -40,8 +40,8 @@ Auto-generated CRUD admin interface with database schema introspection, filterin
 ## Requirements
 
 - Clojure 1.12+
-- boundary/platform
-- boundary/user
+- wagoe/platform
+- wagoe/user
 
 ---
 
@@ -51,9 +51,9 @@ Auto-generated CRUD admin interface with database schema introspection, filterin
 
 ```clojure
 (ns myapp.main
-  (:require [boundary.admin.shell.module-wiring]  ; Auto-registers module
-            [boundary.user.shell.module-wiring]   ; Required for auth
-            [boundary.platform.shell.system.wiring :as wiring]))
+  (:require [wagoe.admin.shell.module-wiring]  ; Auto-registers module
+            [wagoe.user.shell.module-wiring]   ; Required for auth
+            [wagoe.platform.shell.system.wiring :as wiring]))
 
 (defn -main [& args]
   (wiring/start!))
@@ -64,7 +64,7 @@ Auto-generated CRUD admin interface with database schema introspection, filterin
 Add to `resources/conf/dev/config.edn`:
 
 ```clojure
-:boundary/admin
+:wagoe/admin
 {:enabled?         true
  :base-path        "/web/admin"       ; URL prefix for all admin pages
  :require-role     :admin             ; Role required to access admin
@@ -224,7 +224,7 @@ This is the full schema for a single entity config file. All keys are optional u
    :soft-delete-table :primary_table}
 
   ;; ─────────────────────────────────────────────────────────────────────
-  ;; UI OVERRIDES (per-entity, overrides global :ui in :boundary/admin)
+  ;; UI OVERRIDES (per-entity, overrides global :ui in :wagoe/admin)
   ;; ─────────────────────────────────────────────────────────────────────
 
   :ui {:field-grouping {:other-label "Advanced"}}}}
@@ -291,10 +291,10 @@ If you register your Malli schemas with the admin schema provider, enum types an
 
 ```clojure
 ;; In your Integrant config:
-:boundary/admin-schema-provider
-{:db-ctx       (ig/ref :boundary/database-context)
- :config       (ig/ref :boundary/admin)
- :malli-schemas {:users boundary.user.schema/User
+:wagoe/admin-schema-provider
+{:db-ctx       (ig/ref :wagoe/database-context)
+ :config       (ig/ref :wagoe/admin)
+ :malli-schemas {:users wagoe.user.schema/User
                  :products myapp.product.schema/Product}}
 ```
 
@@ -429,7 +429,7 @@ When entity data lives across multiple tables (e.g. `auth_users` + `users`), use
 ## Module Structure
 
 ```
-libs/admin/src/boundary/
+libs/admin/src/wagoe/
 ├── admin/
 │   ├── core/
 │   │   ├── ui.clj                   # Admin UI rendering (tables, forms, layout)
@@ -457,19 +457,19 @@ libs/admin/src/boundary/
 
 ```
 ┌─────────────────────────────────────────┐
-│              boundary/admin             │
+│              wagoe/admin             │
 │      (auto-CRUD, schema introspection)  │
 └───────────┬─────────────┬───────────────┘
             │             │
             ▼             ▼
 ┌───────────────┐ ┌───────────────────────┐
-│ boundary/user │ │   boundary/platform   │
+│ wagoe/user │ │   wagoe/platform   │
 └───────┬───────┘ └───────────┬───────────┘
         │                     │
         └──────────┬──────────┘
                    ▼
 ┌─────────────────────────────────────────┐
-│  boundary/observability + boundary/core │
+│  wagoe/observability + wagoe/core │
 └─────────────────────────────────────────┘
 ```
 

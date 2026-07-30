@@ -1,7 +1,7 @@
 = scaffolder
-:description: Interactive module code generator for Boundary projects.
+:description: Interactive module code generator for Wagoe projects.
 
-Generates new Boundary modules with FC/IS structure, tests, and migrations.
+Generates new Wagoe modules with FC/IS structure, tests, and migrations.
 
 == Commands
 
@@ -9,7 +9,7 @@ Generates new Boundary modules with FC/IS structure, tests, and migrations.
 ----
 bb scaffold           # Show help and all commands
 bb scaffold generate  # Generate a new module (interactive wizard)
-bb scaffold new       # Bootstrap a new Boundary project
+bb scaffold new       # Bootstrap a new Wagoe project
 bb scaffold field     # Add a field to an existing entity
 bb scaffold endpoint  # Add an endpoint to an existing module
 bb scaffold adapter   # Generate a new adapter implementation
@@ -69,13 +69,13 @@ For a module with three fields:
 |===
 | Namespace | Purpose
 
-| `boundary.scaffolder.shell.cli-entry`
+| `wagoe.scaffolder.shell.cli-entry`
 | CLI entrypoint
 
-| `boundary.scaffolder.core.*`
+| `wagoe.scaffolder.core.*`
 | Pure generation logic and naming/field transforms
 
-| `boundary.scaffolder.shell.templates.*`
+| `wagoe.scaffolder.shell.templates.*`
 | File templates and output orchestration
 |===
 

@@ -1,8 +1,8 @@
 = Database Migration Best Practices
-:description: Conventions, safe patterns, and recipes for Boundary database migrations.
+:description: Conventions, safe patterns, and recipes for Wagoe database migrations.
 :toc:
 
-Boundary uses https://github.com/yogthos/migratus[Migratus] for SQL-based, versioned migrations. This guide covers the naming convention, safe patterns, and common recipes.
+Wagoe uses https://github.com/yogthos/migratus[Migratus] for SQL-based, versioned migrations. This guide covers the naming convention, safe patterns, and common recipes.
 
 == Quick Reference
 
@@ -15,7 +15,7 @@ clojure -M:migrate up
 clojure -M:migrate down
 
 # Check status (REPL)
-(require '[boundary.platform.shell.database.migrations :as mig])
+(require '[wagoe.platform.shell.database.migrations :as mig])
 (mig/print-status)
 ----
 
@@ -51,19 +51,19 @@ Rules:
 | `resources/migrations/`
 | Application-level migrations (main schema)
 
-| `libs/<library>/resources/boundary/<library>/migrations/`
+| `libs/<library>/resources/wagoe/<library>/migrations/`
 | Library-contributed migrations (auto-discovered)
 |===
 
-Libraries contribute migrations by publishing a `boundary/migration-paths.edn` manifest on the classpath:
+Libraries contribute migrations by publishing a `wagoe/migration-paths.edn` manifest on the classpath:
 
 [source,clojure]
 ----
-;; libs/geo/resources/boundary/migration-paths.edn
-{:paths ["boundary/geo/migrations/"]}
+;; libs/geo/resources/wagoe/migration-paths.edn
+{:paths ["wagoe/geo/migrations/"]}
 ----
 
-The migration system (`boundary.platform.shell.database.migrations`) discovers the manifests and merges their directories at startup.
+The migration system (`wagoe.platform.shell.database.migrations`) discovers the manifests and merges their directories at startup.
 
 == Statement Separator
 
@@ -175,7 +175,7 @@ The key principle: **schema changes and code changes deploy separately**. The da
 
 == Multi-Tenant Migrations
 
-When using `boundary-tenant` (schema-per-tenant), migrations run in two scopes:
+When using `wagoe-tenant` (schema-per-tenant), migrations run in two scopes:
 
 . **Shared schema** (`public`) — tenant registry, shared tables. Use `resources/migrations/` as normal.
 . **Per-tenant schema** — tenant-specific tables. The tenant library applies these automatically during provisioning.

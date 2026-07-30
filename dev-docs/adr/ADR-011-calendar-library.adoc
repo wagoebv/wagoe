@@ -1,6 +1,6 @@
 = ADR-011: Calendar Library
 :revdate: 2026-03-13
-:revremark: boundary-calendar — persistence-agnostic calendar engine with ical4j, defevent, and pure Hiccup UI
+:revremark: wagoe-calendar — persistence-agnostic calendar engine with ical4j, defevent, and pure Hiccup UI
 :toc:
 :toclevels: 3
 
@@ -10,7 +10,7 @@
 
 == Context
 
-The Boundary Framework Roadmap (Phase 2, Q3 2026) identified recurring calendar logic as the
+The Wagoe Framework Roadmap (Phase 2, Q3 2026) identified recurring calendar logic as the
 fourth highest-value cross-cutting concern to extract into a reusable library.  Across
 client projects, the same logic is written from scratch each time:
 
@@ -38,23 +38,23 @@ Estimated savings per project: **€3.2k – €4k** by eliminating this boilerp
 4. **Pure core layer**: all business logic (recurrence, conflict, UI) must be in
    `core/` namespaces — no I/O, no side effects, no exceptions for valid inputs.
 
-5. **Named event types**: follow the `defreport` pattern from `boundary-reports` so
+5. **Named event types**: follow the `defreport` pattern from `wagoe-reports` so
    domain teams can register named event type schemas.
 
 6. **Admin UI included**: pure Hiccup calendar view components composable into any
-   Ring handler, consistent with `boundary-workflow/core/ui.clj`.
+   Ring handler, consistent with `wagoe-workflow/core/ui.clj`.
 
 === Alternatives Considered
 
 ==== Alternative A: Wrap Google Calendar / Outlook APIs
 
 Rejected.  External API calls introduce network latency, authentication complexity,
-rate limits, and hard vendor lock-in.  Most Boundary applications need an internal
+rate limits, and hard vendor lock-in.  Most Wagoe applications need an internal
 calendar store with optional sync — not a read/write proxy to an external service.
 
 ==== Alternative B: clj-time / Joda-Time based RRULE expansion
 
-Rejected.  `clj-time` is a legacy wrapper around Joda-Time.  The Boundary codebase
+Rejected.  `clj-time` is a legacy wrapper around Joda-Time.  The Wagoe codebase
 already uses `java.time` throughout (as of JDK 17+).  Writing RRULE parsing from
 scratch against `java.time` would be hundreds of lines of error-prone edge-case code
 (BYDAY ordinals, UNTIL parsing, EXDATE handling, COUNT).
@@ -70,11 +70,11 @@ is the current stable release.
 
 Rejected.  CalDAV servers require separate infrastructure, docker containers, and
 WebDAV access patterns that are incompatible with the in-process, zero-ops philosophy
-of the Boundary Framework.
+of the Wagoe Framework.
 
 == Decision
 
-We implement **`boundary-calendar`** as a pure-Clojure, persistence-agnostic calendar
+We implement **`wagoe-calendar`** as a pure-Clojure, persistence-agnostic calendar
 library with the following key decisions:
 
 === Decision 1: ical4j 4.x as the sole RFC 5545 dependency
@@ -157,12 +157,12 @@ This means the same library works for any persistence backend without modificati
 
 === Decision 5: `defevent` macro follows `defreport` pattern
 
-The `defevent` macro is a direct parallel to `defreport` in `boundary-reports`.
+The `defevent` macro is a direct parallel to `defreport` in `wagoe-reports`.
 It registers event type definitions in an in-process atom-backed registry.
 
 [source,clojure]
 ----
-;; Pattern from boundary-reports (libs/reports/src/boundary/reports/core/report.clj)
+;; Pattern from wagoe-reports (libs/reports/src/wagoe/reports/core/report.clj)
 (defmacro defreport [sym definition-map]
   `(do (def ~sym ~definition-map)
        (register-report-type! ~sym)
@@ -175,12 +175,12 @@ It registers event type definitions in an in-process atom-backed registry.
        ~sym))
 ----
 
-For clj-kondo: add `boundary.calendar.core.event/defevent clojure.core/def` to the
+For clj-kondo: add `wagoe.calendar.core.event/defevent clojure.core/def` to the
 project's `.clj-kondo/config.edn` `:lint-as` map.
 
 === Decision 6: Shell service wraps adapter — callers never import ical4j
 
-`boundary.calendar.shell.service` creates an `ICalAdapter` internally:
+`wagoe.calendar.shell.service` creates an `ICalAdapter` internally:
 
 [source,clojure]
 ----
@@ -191,14 +191,14 @@ project's `.clj-kondo/config.edn` `:lint-as` map.
      (ports/export-ical adapter events (dissoc opts :adapter)))))
 ----
 
-Application code depends only on `boundary.calendar.shell.service`.  Swapping the
+Application code depends only on `wagoe.calendar.shell.service`.  Swapping the
 adapter (e.g. for a custom CalDAV-backed implementation) requires no changes to
 callers.
 
 === Decision 7: Pure Hiccup UI components in `core/ui.clj`
 
 Calendar view components live in the `core/` namespace (pure — no I/O) following the
-pattern established by `boundary-workflow/core/ui.clj`.  All components accept plain
+pattern established by `wagoe-workflow/core/ui.clj`.  All components accept plain
 data and return Hiccup vectors.  No HTMX markup is added; composable into any Ring
 handler or template.
 
@@ -212,8 +212,8 @@ Components: `event-badge`, `day-cell`, `month-view`, `week-view`, `mini-calendar
 ----
 libs/calendar/
 ├── deps.edn                              ; ical4j 4.x, Malli, kaocha test alias
-├── build.clj                             ; Maven publish: org.boundary-app/boundary-calendar
-├── src/boundary/calendar/
+├── build.clj                             ; Maven publish: org.wagoe/wagoe-calendar
+├── src/wagoe/calendar/
 │   ├── schema.clj                        ; EventData, EventDef, OccurrenceResult, ConflictResult
 │   ├── ports.clj                         ; CalendarAdapterProtocol
 │   ├── core/
@@ -224,7 +224,7 @@ libs/calendar/
 │   └── shell/
 │       ├── service.clj                   ; Public API
 │       └── adapters/ical.clj             ; ICalAdapter (ical4j 4.x)
-└── test/boundary/calendar/
+└── test/wagoe/calendar/
     ├── core/
     │   ├── event_test.clj                ; ^:unit
     │   ├── recurrence_test.clj           ; ^:unit — DST edge cases
@@ -273,7 +273,7 @@ core/ui.clj
 5. **Persistence-agnostic** — works with any application database or storage backend.
 
 6. **Consistent with framework patterns** — `defevent` mirrors `defreport`; Hiccup UI
-   mirrors `boundary-workflow/core/ui.clj`; test fixtures mirror `reports` tests.
+   mirrors `wagoe-workflow/core/ui.clj`; test fixtures mirror `reports` tests.
 
 7. **Composable conflict detection** — `find-conflicts` correctly handles pairs of
    recurring events by expanding both before comparison.
@@ -323,7 +323,7 @@ must call it in an `:each` fixture.  Documented prominently in AGENTS.md.
 === Phase 1: Library scaffold ✅
 
 - [x] `libs/calendar/deps.edn` with `org.mnode.ical4j/ical4j 4.0.3`
-- [x] `libs/calendar/build.clj` — `org.boundary-app/boundary-calendar`
+- [x] `libs/calendar/build.clj` — `org.wagoe/wagoe-calendar`
 - [x] Root `deps.edn` — add calendar source/test paths and ical4j dep
 - [x] Root `tests.edn` — add `:calendar` test suite
 
@@ -363,7 +363,7 @@ must call it in an `:each` fixture.  Documented prominently in AGENTS.md.
 - [ ] Attendee RSVP support (`:status` on attendee records)
 - [ ] `EXDATE` / exception date handling in UI components
 - [ ] Free/busy query: given a list of calendars, find available slots
-- [ ] Optional CalDAV sync adapter (separate `boundary-calendar-caldav` library)
+- [ ] Optional CalDAV sync adapter (separate `wagoe-calendar-caldav` library)
 - [ ] `agenda-view` Hiccup component (upcoming events list)
 - [ ] ical4j upgrade path notes when 4.1.x is released
 
@@ -379,7 +379,7 @@ must call it in an `:each` fixture.  Documented prominently in AGENTS.md.
 
 == Approval
 
-**Proposed By**: Boundary Framework Team +
+**Proposed By**: Wagoe Framework Team +
 **Date**: 2026-03-13 +
 **Status**: Accepted and Implemented +
 **Reviewers**: Architecture Team

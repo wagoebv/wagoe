@@ -10,19 +10,19 @@ Provides in-memory (development/tests) and Redis (production) backends.
 |===
 | Namespace | Purpose
 
-| `boundary.cache.ports`
+| `wagoe.cache.ports`
 | Protocols: `ICache`, `IBatchCache`, `IAtomicCache`, `IPatternCache`, `INamespacedCache`, `ICacheStats`
 
-| `boundary.cache.schema`
+| `wagoe.cache.schema`
 | Malli schemas for `CacheKey`, `CacheValue`, `TTL`, `CacheConfig`, `RedisConfig`
 
-| `boundary.cache.shell.adapters.in-memory`
+| `wagoe.cache.shell.adapters.in-memory`
 | In-memory adapter (atoms, LRU eviction, TTL)
 
-| `boundary.cache.shell.adapters.redis`
+| `wagoe.cache.shell.adapters.redis`
 | Redis adapter (Jedis, connection pooling, JSON serialization)
 
-| `boundary.cache.shell.tenant-cache`
+| `wagoe.cache.shell.tenant-cache`
 | Tenant-scoped wrapper with automatic key prefixing
 |===
 
@@ -30,8 +30,8 @@ Provides in-memory (development/tests) and Redis (production) backends.
 
 [source,clojure]
 ----
-(require '[boundary.cache.shell.adapters.in-memory :as in-mem]
-         '[boundary.cache.ports :as ports])
+(require '[wagoe.cache.shell.adapters.in-memory :as in-mem]
+         '[wagoe.cache.ports :as ports])
 
 ;; Create in-memory cache
 (def cache (in-mem/create-in-memory-cache {:max-size 1000 :track-stats? true}))
@@ -46,7 +46,7 @@ Provides in-memory (development/tests) and Redis (production) backends.
 (ports/set-if-absent! cache :lock "holder-id" 30)  ; SETNX pattern
 
 ;; Tenant-scoped cache
-(require '[boundary.cache.shell.tenant-cache :as tenant-cache])
+(require '[wagoe.cache.shell.tenant-cache :as tenant-cache])
 (def tenant-cache (tenant-cache/create-tenant-cache cache "acme-corp"))
 ;; Keys automatically prefixed: "tenant:acme-corp:user-123"
 ----
@@ -69,10 +69,10 @@ Provides in-memory (development/tests) and Redis (production) backends.
 [source,clojure]
 ----
 ;; In-memory (development)
-:boundary/cache {:backend :in-memory :max-size 10000}
+:wagoe/cache {:backend :in-memory :max-size 10000}
 
 ;; Redis (production)
-:boundary/cache {:backend :redis :url #env REDIS_URL :pool-size 10}
+:wagoe/cache {:backend :redis :url #env REDIS_URL :pool-size 10}
 ----
 
 == Testing

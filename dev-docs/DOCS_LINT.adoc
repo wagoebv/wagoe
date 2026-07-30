@@ -1,6 +1,6 @@
 = Documentation Lint Tool
 
-The Boundary repository includes a documentation linter that detects drift between docs and the current monorepo structure.
+The Wagoe repository includes a documentation linter that detects drift between docs and the current monorepo structure.
 
 == What It Checks
 
@@ -12,13 +12,13 @@ The Boundary repository includes a documentation linter that detects drift betwe
 |Internal links (markdown/asciidoc) that point to non-existent files
 
 |`stale-path`
-|References to pre-library-split paths (e.g., `src/boundary/user/` instead of `libs/user/src/boundary/user/`)
+|References to pre-library-split paths (e.g., `src/wagoe/user/` instead of `libs/user/src/wagoe/user/`)
 
 |`unknown-namespace`
-|Namespace references that don't match known boundary module prefixes
+|Namespace references that don't match known wagoe module prefixes
 
 |`stale-github-link`
-|GitHub links to boundary repo that use outdated paths
+|GitHub links to wagoe repo that use outdated paths
 
 |`invalid-lib-path`
 |Library paths that reference non-existent libraries
@@ -78,12 +78,12 @@ Documentation references old paths from before the library split.
 
 **Example:**
 ----
-src/boundary/user/core/user.clj
+src/wagoe/user/core/user.clj
 ----
 
 **Should be:**
 ----
-libs/user/src/boundary/user/core/user.clj
+libs/user/src/wagoe/user/core/user.clj
 ----
 
 **Reference:** See link:reference/migrations/library-split.adoc[Library Split Migration Guide]
@@ -93,34 +93,34 @@ libs/user/src/boundary/user/core/user.clj
 A namespace reference doesn't match any known module prefix.
 
 **Valid prefixes:**
-* `boundary.core.*`
-* `boundary.shared.*`
-* `boundary.observability.*`
-* `boundary.platform.*`
-* `boundary.user.*`
-* `boundary.admin.*`
-* `boundary.storage.*`
-* `boundary.cache.*`
-* `boundary.jobs.*`
-* `boundary.email.*`
-* `boundary.realtime.*`
-* `boundary.tenant.*`
-* `boundary.external.*`
-* `boundary.scaffolder.*`
+* `wagoe.core.*`
+* `wagoe.shared.*`
+* `wagoe.observability.*`
+* `wagoe.platform.*`
+* `wagoe.user.*`
+* `wagoe.admin.*`
+* `wagoe.storage.*`
+* `wagoe.cache.*`
+* `wagoe.jobs.*`
+* `wagoe.email.*`
+* `wagoe.realtime.*`
+* `wagoe.tenant.*`
+* `wagoe.external.*`
+* `wagoe.scaffolder.*`
 
 === `stale-github-link`
 
-A GitHub link to the boundary repository uses an outdated path structure.
+A GitHub link to the wagoe repository uses an outdated path structure.
 
 **Fix:** Update the path in the GitHub URL to use the new `libs/` structure.
 
 == Known Limitations
 
 * Does not validate external URLs (only internal links)
-* Does not check if referenced boundary repo files actually exist (only validates path patterns)
+* Does not check if referenced wagoe repo files actually exist (only validates path patterns)
 * Some false positives may occur in example/template documentation
 
 == Related
 
-* link:reference/repo-structure.adoc[Repository Structure] - Current boundary repo structure
+* link:reference/repo-structure.adoc[Repository Structure] - Current wagoe repo structure
 * link:reference/migrations/library-split.adoc[Library Split Migration] - Path mapping guide

@@ -1,7 +1,7 @@
 = Testing Strategy
-:description: How Boundary tests are structured across unit, integration, and contract levels.
+:description: How Wagoe tests are structured across unit, integration, and contract levels.
 
-Boundary uses Kaocha as the test runner with H2 in-memory database for all test suites.
+Wagoe uses Kaocha as the test runner with H2 in-memory database for all test suites.
 
 == Three test levels
 
@@ -45,7 +45,7 @@ clojure -M:test:db/h2 --focus user-property-test
 clojure -M:test:db/h2 --watch :core
 
 # With JWT secret (required for auth tests)
-JWT_SECRET="dev-secret-32-chars-minimum" clojure -M:test:db/h2 :user
+JWT_SECRET="dev-secret-at-least-32-characters-long" clojure -M:test:db/h2 :user
 ----
 
 == Unit test example

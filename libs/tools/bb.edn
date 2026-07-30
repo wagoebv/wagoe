@@ -1,11 +1,11 @@
 {:paths ["src"]
  :tasks
- {:requires ([boundary.tools.scaffold :as scaffold]
-             [boundary.tools.ai       :as ai]
-             [boundary.tools.i18n     :as i18n]
-             [boundary.tools.admin    :as admin]
-             [boundary.tools.deploy   :as deploy]
-             [boundary.tools.dev      :as dev])
+ {:requires ([wagoe.tools.scaffold :as scaffold]
+             [wagoe.tools.ai       :as ai]
+             [wagoe.tools.i18n     :as i18n]
+             [wagoe.tools.admin    :as admin]
+             [wagoe.tools.deploy   :as deploy]
+             [wagoe.tools.dev      :as dev])
 
   scaffold      {:doc "Interactive module scaffolding wizard"
                  :task (apply scaffold/-main *command-line-args*)}
@@ -13,7 +13,7 @@
                  :task (apply scaffold/-main "ai" *command-line-args*)}
   ai            {:doc "Framework-aware AI tooling (explain|gen-tests|sql|docs)"
                  :task (apply ai/-main *command-line-args*)}
-  deploy        {:doc "Deploy Boundary libraries to Clojars (--help for usage)"
+  deploy        {:doc "Deploy Wagoe libraries to Clojars (--help for usage)"
                  :task (apply deploy/-main *command-line-args*)}
   create-admin  {:doc "Create the first admin user (interactive wizard)"
                  :task (apply admin/-main *command-line-args*)}

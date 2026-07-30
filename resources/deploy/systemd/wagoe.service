@@ -1,0 +1,46 @@
+[Unit]
+Description=Wagoe Application
+Documentation=https://github.com/wagoebv/wagoe
+After=network-online.target postgresql.service
+Wants=network-online.target
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=wagoe
+Group=wagoe
+WorkingDirectory=/opt/wagoe
+
+# Environment file with secrets (chmod 600, owned by root)
+EnvironmentFile=/etc/wagoe/wagoe.env
+
+# JVM tuning for production (adjust heap to ~70% of available RAM)
+Environment=JAVA_OPTS="-Xms512m -Xmx2g -XX:+UseG1GC -XX:+UseContainerSupport -XX:MaxGCPauseMillis=200 -Djava.security.egd=file:/dev/urandom"
+
+# Run migrations separately before deploying: clojure -M:migrate up
+ExecStart=/usr/bin/java ${JAVA_OPTS} -jar /opt/wagoe/wagoe.jar server
+
+Restart=on-failure
+RestartSec=10
+StartLimitBurst=5
+StartLimitIntervalSec=60
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/wagoe/logs /opt/wagoe/data
+PrivateTmp=true
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=wagoe
+
+# Graceful shutdown (30s)
+TimeoutStopSec=30
+KillMode=mixed
+KillSignal=SIGTERM
+
+[Install]
+WantedBy=multi-user.target

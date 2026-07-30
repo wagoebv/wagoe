@@ -2,7 +2,7 @@
   "Functional core: pure business rules only. No I/O, no clock, no database —
    `now` and `id` are passed in by the shell so these functions stay
    deterministic and trivially testable."
-  (:require [boundary.core.validation :as v]
+  (:require [wagoe.core.validation :as v]
             [todo.schema :as schema]))
 
 (defn valid-input?

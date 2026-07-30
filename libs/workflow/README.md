@@ -1,14 +1,14 @@
-# boundary/workflow
+# wagoe/workflow
 
 [![Status](https://img.shields.io/badge/status-stable-brightgreen)]()
 [![Clojure](https://img.shields.io/badge/clojure-1.12+-blue)]()
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
-[![Clojars Project](https://img.shields.io/clojars/v/org.boundary-app/boundary-workflow.svg)](https://clojars.org/org.boundary-app/boundary-workflow)
+[![Clojars Project](https://img.shields.io/clojars/v/org.wagoe/wagoe-workflow.svg)](https://clojars.org/org.wagoe/wagoe-workflow)
 
-**Declarative state machine workflows for domain entities in the Boundary Framework**
+**Declarative state machine workflows for domain entities in the Wagoe Framework**
 
 Define state machines as data, execute guarded transitions, and get a full audit trail automatically.
-Optionally enqueue side-effect jobs via `boundary-jobs` after successful transitions.
+Optionally enqueue side-effect jobs via `wagoe-jobs` after successful transitions.
 
 ---
 
@@ -17,7 +17,7 @@ Optionally enqueue side-effect jobs via `boundary-jobs` after successful transit
 ### 1. Define a Workflow
 
 ```clojure
-(require '[boundary.workflow.shell.registry :refer [defworkflow]])
+(require '[wagoe.workflow.shell.registry :refer [defworkflow]])
 
 (defworkflow order-workflow
   {:id            :order-workflow
@@ -39,7 +39,7 @@ Optionally enqueue side-effect jobs via `boundary-jobs` after successful transit
 ### 2. Start an Instance
 
 ```clojure
-(require '[boundary.workflow.ports :as ports])
+(require '[wagoe.workflow.ports :as ports])
 
 (def instance
   (ports/start-workflow! engine
@@ -102,7 +102,7 @@ map from the transition request and return `true` (allow) or `false` (reject):
 
 ### Side Effects
 
-Side-effect keywords declared on a transition are enqueued as `boundary-jobs` jobs after
+Side-effect keywords declared on a transition are enqueued as `wagoe-jobs` jobs after
 a successful transition. The `job-queue` dependency is optional — if nil, side effects are
 silently skipped:
 
@@ -119,9 +119,9 @@ silently skipped:
 
 ```edn
 ;; resources/conf/dev/config.edn
-{:boundary/workflow
- {:db-ctx    #ig/ref :boundary/database-context
-  :job-queue #ig/ref :boundary/job-queue}}  ; optional
+{:wagoe/workflow
+ {:db-ctx    #ig/ref :wagoe/database-context
+  :job-queue #ig/ref :wagoe/job-queue}}  ; optional
 ```
 
 The component map returned by Integrant:
@@ -203,4 +203,4 @@ Test fixture pattern:
 
 ## License
 
-Part of Boundary Framework — see main LICENSE file.
+Part of Wagoe Framework — see main LICENSE file.

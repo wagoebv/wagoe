@@ -2,7 +2,7 @@
 
 This directory contains Architecture Decision Records documenting
 significant architectural decisions made during the development of the
-Boundary Framework.
+Wagoe Framework.
 
 === What are ADRs?
 
@@ -129,7 +129,7 @@ Make user, auth, and authorization logic pluggable (like observability and datab
 ADR-016-tenant-user-membership.adoc
 
 Introduce `tenant_memberships` as a first-class framework concept in
-`boundary-tenant`, separating global user identity from tenant-scoped roles and
+`wagoe-tenant`, separating global user identity from tenant-scoped roles and
 membership lifecycle.
 
 *Key Decisions:*
@@ -143,14 +143,14 @@ membership lifecycle.
 
 ADR-017-library-migration-discovery.adoc
 
-Allow Boundary libraries to publish Migratus migration directories through a
+Allow Wagoe libraries to publish Migratus migration directories through a
 classpath manifest so consuming applications automatically apply library-owned
 schema changes via the normal `clojure -M:migrate up` flow.
 
 *Key Decisions:*
 
 * Keep application-local `migrations/` as the default migration source
-* Let libraries advertise extra migration dirs via `boundary/migration-paths.edn`
+* Let libraries advertise extra migration dirs via `wagoe/migration-paths.edn`
 * Aggregate all discovered dirs into Migratus `:migration-dir`
 * Require standard Migratus up/down filenames for library migrations
 
@@ -288,7 +288,7 @@ automatic recovery via `(fix! *e)`.
 
 ADR-029-discoverability-progressive-learning.adoc
 
-Ensures developers discover Boundary's features at the right moment through
+Ensures developers discover Wagoe's features at the right moment through
 contextual tips, state-aware guidance, and in-REPL documentation.
 
 *Key Decisions:*

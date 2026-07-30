@@ -67,7 +67,7 @@ _What initiates this use case?_
 [[_core_function]]
 ====== link:#_core_function[]Core Function
 
-`boundary.core.++[++domain++]++/++[++function-name++]++`
+`wagoe.core.++[++domain++]++/++[++function-name++]++`
 
 [[_input_schema]]
 ====== link:#_input_schema[]Input Schema
@@ -97,8 +97,8 @@ _What initiates this use case?_
 [[_shell_components]]
 ====== link:#_shell_components[]Shell Components
 
-* *HTTP Handler:* `boundary.platform.shell.http/handle-++[++action++]++`
-* *CLI Command:* `boundary ++[++resource++]++ ++[++action++]++`
+* *HTTP Handler:* `wagoe.platform.shell.http/handle-++[++action++]++`
+* *CLI Command:* `wagoe ++[++resource++]++ ++[++action++]++`
 * *Validation:* Uses `++[++Schema++]++` with malli
 
 [[_test_cases]]
@@ -144,7 +144,7 @@ curl -X POST http://localhost:8080/api/v1/[resource] \
 
 [source,highlightjs,highlight]
 ----
-boundary [resource] [action] --field="example"
+wagoe [resource] [action] --field="example"
 ----
 
 [[_expected_response]]

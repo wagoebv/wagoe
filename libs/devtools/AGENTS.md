@@ -25,7 +25,7 @@ All pure functions in `core/`, side effects in `shell/`.
 |------|---------|
 | `shell/repl_error_handler.clj` | `last-exception*` atom + `handle-repl-error!` — runs full pipeline |
 | `shell/auto_fix.clj` | Executes fix descriptors: migrations, env vars, JWT, module wiring. Multimethod dispatch on `:action` |
-| `shell/http_error_middleware.clj` | `wrap-dev-error-enrichment` — catches exceptions, attaches `:boundary/dev-info` to ex-data, re-throws |
+| `shell/http_error_middleware.clj` | `wrap-dev-error-enrichment` — catches exceptions, attaches `:wagoe/dev-info` to ex-data, re-throws |
 | `shell/fcis_checker.clj` | Post-reset namespace scan for BND-601 (core imports shell). Runs after `(go)` and `(reset)` |
 
 ### REPL Commands
@@ -70,7 +70,7 @@ Local web UI at `localhost:9999` providing x-ray vision into the running system.
 
 ### Architecture
 
-- Integrant component (`:boundary/dashboard`) starts Jetty on port 9999
+- Integrant component (`:wagoe/dashboard`) starts Jetty on port 9999
 - Server-rendered Hiccup + HTMX polling for live updates
 - Request capture middleware wraps main HTTP handler (port 3000)
 - Dark theme CSS in `resources/dashboard/assets/dashboard.css`
@@ -137,7 +137,7 @@ Monitors background job processing in real time.
 | Failed Jobs list | Job type, error message, retry count, queue — with **Retry** button (HTMX POST) |
 
 - HTMX polling every **5 seconds** keeps the failed-jobs container live
-- Page degrades gracefully when no `:boundary/jobs` component is configured
+- Page degrades gracefully when no `:wagoe/jobs` component is configured
 - Key files: `shell/dashboard/pages/jobs.clj`
 
 #### Config Editor — `/dashboard/config`
@@ -171,7 +171,7 @@ Point-in-time security posture of the running application.
 
 ### AI REPL Commands
 
-Three new commands exposed via the `ai/` alias (namespace `boundary.ai.shell.repl`):
+Three new commands exposed via the `ai/` alias (namespace `wagoe.ai.shell.repl`):
 
 ```clojure
 (ai/review "path/to/file.clj")
@@ -183,7 +183,7 @@ Three new commands exposed via the `ai/` alias (namespace `boundary.ai.shell.rep
 ;; Suggest missing test cases — analyzes source + existing test file
 ;; (auto-resolved from namespace), prints a list of uncovered scenarios.
 
-(ai/refactor-fcis 'boundary.product.core.validation)
+(ai/refactor-fcis 'wagoe.product.core.validation)
 ;; FC/IS refactoring guide — locates the source file from the namespace symbol,
 ;; identifies violations, and prints a step-by-step migration plan.
 ;; Also surfaced by (fix!) when a BND-601 violation is detected.

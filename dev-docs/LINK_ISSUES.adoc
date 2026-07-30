@@ -34,7 +34,7 @@ These are intentionally outside docs/ directory:
 
 * `../PRD.adoc` → `/PRD.adoc` (project root)
 * `../AGENTS.md` → `/AGENTS.md` (project root)
-* `../src/boundary/shell/utils/port++_++manager.clj` (source code)
+* `../src/wagoe/shell/utils/port++_++manager.clj` (source code)
 * `REFACTORING-SUMMARY.adoc`, `TEST-FIXES-SUMMARY.adoc` (project root)
 
 ===== Non-existent Subdirectories

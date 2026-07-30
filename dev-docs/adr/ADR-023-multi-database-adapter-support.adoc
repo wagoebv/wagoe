@@ -1,7 +1,7 @@
 = ADR-023: Multi-Database Adapter Support
 :status: Proposed
 :date: 2026-04-17
-:deciders: boundary-team
+:deciders: wagoe-team
 
 == Status
 
@@ -11,14 +11,14 @@ Proposed
 
 === Background
 
-Boundary's persistence architecture follows the Functional Core / Imperative
+Wagoe's persistence architecture follows the Functional Core / Imperative
 Shell (FC/IS) pattern. Business domain protocols in `ports.clj` define
 SQL-free repository contracts (e.g. `IUserRepository`). Shell persistence
 implementations fulfil these contracts using HoneySQL and next.jdbc against
 relational databases (H2, PostgreSQL, SQLite, MySQL).
 
 The platform library provides a `DBAdapter` protocol
-(`boundary.platform.shell.adapters.database.protocols`) that abstracts
+(`wagoe.platform.shell.adapters.database.protocols`) that abstracts
 dialect-level differences between SQL engines. Connection management uses
 HikariCP, query execution uses next.jdbc, and migrations use Migratus with
 plain SQL files.
@@ -94,7 +94,7 @@ Each module with persistence gets per-database implementations:
 
 [source]
 ----
-libs/user/src/boundary/user/
+libs/user/src/wagoe/user/
 ├── ports.clj                    # Contract — unchanged
 ├── core/                        # Pure functions — unchanged
 └── shell/
@@ -174,7 +174,7 @@ instantiated and injected.
 
 === Positive
 
-* Boundary becomes a multi-database framework, broadening its applicability.
+* Wagoe becomes a multi-database framework, broadening its applicability.
 * The FC/IS architecture and ports contracts remain unchanged — no impact on
   core business logic.
 * Each database adapter is independently deployable as a library.

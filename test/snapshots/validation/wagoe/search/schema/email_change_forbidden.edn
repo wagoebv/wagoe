@@ -1,0 +1,10 @@
+{:meta
+ {:case-name nil,
+  :schema-version "1.0",
+  :seed 51,
+  :test-name email-change-forbidden,
+  :test-ns wagoe.search.schema},
+ :result
+ {:errors
+  {:email "Email changes require separate verification process"},
+  :valid? false}}

@@ -2,14 +2,14 @@
 
 *Status:* Proposed +
 *Date:* 2026-02-04 +
-*Deciders:* Boundary Core Team +
+*Deciders:* Wagoe Core Team +
 *Context:* Real-time/WebSocket Module (Phase 5)
 
 '''''
 
 === Context and Problem Statement
 
-The Boundary framework currently supports HTTP-based request-response
+The Wagoe framework currently supports HTTP-based request-response
 patterns but lacks built-in support for real-time, bidirectional
 communication. Modern web applications often require real-time features
 such as:
@@ -20,12 +20,12 @@ such as:
 * Event streaming (e.g., order status updates, job progress)
 
 Users currently must implement WebSocket support from scratch, leading
-to inconsistent patterns and integration challenges with Boundary's
+to inconsistent patterns and integration challenges with Wagoe's
 existing authentication and module system.
 
 This ADR defines the architecture for a `libs/realtime/` module that
 provides WebSocket support with first-class integration into the
-Boundary framework's Functional Core / Imperative Shell paradigm.
+Wagoe framework's Functional Core / Imperative Shell paradigm.
 
 '''''
 
@@ -36,7 +36,7 @@ Boundary framework's Functional Core / Imperative Shell paradigm.
 * *FC/IS Compliance*: Must follow Functional Core / Imperative Shell
 architecture
 * *Authentication Integration*: Seamless JWT-based auth with existing
-`boundary/user` module
+`wagoe/user` module
 * *Simplicity*: Start with core use cases, avoid premature complexity
 * *Testability*: Pure functions in core, mockable adapters in shell
 * *Performance*: Efficient message routing without external dependencies
@@ -223,7 +223,7 @@ architecture.
 
 ....
 libs/realtime/
-├── src/boundary/realtime/
+├── src/wagoe/realtime/
 │   ├── core/
 │   │   ├── connection.clj      # Connection state management (pure)
 │   │   ├── message.clj         # Message validation/routing (pure)
@@ -234,7 +234,7 @@ libs/realtime/
 │       ├── service.clj         # Shell orchestration
 │       ├── websocket_adapter.clj  # WebSocket I/O adapter
 │       └── connection_registry.clj # In-memory connection store (atom)
-├── test/boundary/realtime/
+├── test/wagoe/realtime/
 │   ├── core/                   # Unit tests
 │   └── shell/                  # Integration tests
 └── README.md
@@ -247,7 +247,7 @@ libs/realtime/
 
 [source,clojure]
 ----
-(ns boundary.realtime.core.connection)
+(ns wagoe.realtime.core.connection)
 
 ;; Pure data structures
 (defrecord Connection [id user-id roles metadata created-at])
@@ -270,8 +270,8 @@ libs/realtime/
 
 [source,clojure]
 ----
-(ns boundary.realtime.core.message
-  (:require [boundary.realtime.schema :as schema]
+(ns wagoe.realtime.core.message
+  (:require [wagoe.realtime.schema :as schema]
             [malli.core :as m]))
 
 ;; Pure validation
@@ -292,7 +292,7 @@ libs/realtime/
 
 [source,clojure]
 ----
-(ns boundary.realtime.core.auth)
+(ns wagoe.realtime.core.auth)
 
 ;; Pure JWT extraction
 (defn extract-token-from-query [query-string]
@@ -311,10 +311,10 @@ libs/realtime/
 
 [source,clojure]
 ----
-(ns boundary.realtime.shell.service
-  (:require [boundary.realtime.ports :as ports]
-            [boundary.realtime.core.connection :as conn]
-            [boundary.realtime.core.message :as msg]))
+(ns wagoe.realtime.shell.service
+  (:require [wagoe.realtime.ports :as ports]
+            [wagoe.realtime.core.connection :as conn]
+            [wagoe.realtime.core.message :as msg]))
 
 (defrecord RealtimeService [connection-registry jwt-service logger]
   ports/IRealtimeService
@@ -350,8 +350,8 @@ libs/realtime/
 
 [source,clojure]
 ----
-(ns boundary.realtime.shell.connection-registry
-  (:require [boundary.realtime.ports :as ports]))
+(ns wagoe.realtime.shell.connection-registry
+  (:require [wagoe.realtime.ports :as ports]))
 
 (defrecord InMemoryConnectionRegistry [state] ;; state is an atom
   ports/IConnectionRegistry
@@ -382,9 +382,9 @@ libs/realtime/
 
 [source,clojure]
 ----
-(ns boundary.realtime.shell.websocket-adapter
-  (:require [boundary.platform.shell.interfaces.web.websockets :as ws]
-            [boundary.realtime.ports :as ports]))
+(ns wagoe.realtime.shell.websocket-adapter
+  (:require [wagoe.platform.shell.interfaces.web.websockets :as ws]
+            [wagoe.realtime.ports :as ports]))
 
 ;; Adapter wraps Ring/Reitit WebSocket implementation
 (defrecord RingWebSocketAdapter [ws-connection]
@@ -401,7 +401,7 @@ libs/realtime/
 
 [source,clojure]
 ----
-(ns boundary.realtime.ports)
+(ns wagoe.realtime.ports)
 
 (defprotocol IRealtimeService
   (connect [this ws-connection query-params]
@@ -438,7 +438,7 @@ libs/realtime/
 
 [source,clojure]
 ----
-(ns boundary.realtime.schema
+(ns wagoe.realtime.schema
   (:require [malli.core :as m]))
 
 (def Connection
@@ -485,12 +485,12 @@ ws://localhost:3000/ws?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 * Validate token on every connection attempt
 * Implement token rotation for long-lived connections
 
-==== Integration with boundary/user
+==== Integration with wagoe/user
 
 [source,clojure]
 ----
 ;; User module provides JWT verification
-(require '[boundary.user.ports :as user-ports])
+(require '[wagoe.user.ports :as user-ports])
 
 (defn connect [this ws-connection query-params]
   (let [token (get query-params "token")
@@ -876,7 +876,7 @@ ws.send(JSON.stringify({type: 'ping', payload: {}}));
 
 ==== Logging
 
-All WebSocket events logged via boundary/observability:
+All WebSocket events logged via wagoe/observability:
 
 [source,clojure]
 ----
@@ -951,7 +951,7 @@ initial use cases)
 (inspiration for architecture)
 * *WebSocket RFC 6455*: https://datatracker.ietf.org/doc/html/rfc6455
 * *JWT Best Practices*: https://tools.ietf.org/html/rfc8725
-* *Boundary FC/IS Pattern*: `docs/ARCHITECTURE.md`
+* *Wagoe FC/IS Pattern*: `docs/ARCHITECTURE.md`
 
 '''''
 
@@ -977,4 +977,4 @@ progress)
 . Implement shell layer (service, registry, adapter)
 . Write tests (unit {plus} integration)
 . Write README matching `libs/jobs/README.md` quality
-. Integration with boundary/user for JWT verification
+. Integration with wagoe/user for JWT verification

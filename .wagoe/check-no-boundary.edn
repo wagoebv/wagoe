@@ -1,0 +1,20 @@
+;; Allowlist for `bb check:no-boundary` (BOU-209 rename gate).
+;;
+;; Repo-relative path PREFIXES exempt from the residual-boundary scan. These
+;; legitimately keep "boundary" tokens: history, planning docs, and the rename
+;; tooling itself. Extend as genuine exceptions surface during the rename; do
+;; NOT add real source here to silence the gate.
+{:allow-paths
+ ["CHANGELOG.md"
+  "docs/superpowers/"
+  ;; Historical issue log: it REPORTS a stale docs/boundary.prd.adoc path.
+  ;; Rewriting it would falsify the record. Same category as CHANGELOG.
+  "dev-docs/LINK_ISSUES.adoc"
+  ".wagoe/"
+  "scripts/rename_wagoe.clj"
+  "scripts/check_no_wagoe.clj"
+  ;; Doc-drift linter: its #"boundary\.<ns>" pattern matches ns references in
+  ;; the (still boundary-era) docs it lints. Renames with the docs in Phase 4
+  ;; (BOU-214); exempt until then. Two copies: scripts/ (bb) + dev/ (repl).
+  "scripts/docs_lint.clj"
+  "dev/wagoe/tools/docs_lint.clj"]}

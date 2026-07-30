@@ -5,7 +5,7 @@
 [[overview]]
 == Overview
 
-Boundary uses a **monorepo with modular libraries** architecture. After the library split (v2.2.0), all domain and infrastructure code lives in the `libs/` directory, with each library owning its complete functionality stack.
+Wagoe uses a **monorepo with modular libraries** architecture. After the library split (v2.2.0), all domain and infrastructure code lives in the `libs/` directory, with each library owning its complete functionality stack.
 
 This document is the **canonical reference** for repository structure and paths after the library split.
 
@@ -119,7 +119,7 @@ Each library follows the **Functional Core / Imperative Shell** pattern:
 libs/{library}/
 ├── deps.edn                    # Library-specific dependencies
 ├── src/
-│   └── boundary/
+│   └── wagoe/
 │       └── {library}/
 │           ├── core/           # Pure business logic (no I/O)
 │           │   ├── {domain}.clj
@@ -132,7 +132,7 @@ libs/{library}/
 │           ├── ports.clj       # Protocol definitions
 │           └── schema.clj      # Malli validation schemas
 └── test/
-    └── boundary/
+    └── wagoe/
         └── {library}/
             ├── core/           # Unit tests (pure functions)
             └── shell/          # Integration/contract tests
@@ -141,11 +141,11 @@ libs/{library}/
 [[shared-namespace]]
 === Shared Namespace
 
-Cross-cutting utilities live under `boundary.shared` within the appropriate library:
+Cross-cutting utilities live under `wagoe.shared` within the appropriate library:
 
 [source]
 ----
-libs/core/src/boundary/shared/
+libs/core/src/wagoe/shared/
 ├── core/
 │   └── utils/
 │       ├── case_conversion.clj   # kebab-case <-> snake_case
@@ -162,7 +162,7 @@ libs/core/src/boundary/shared/
 libs/user/
 ├── deps.edn
 ├── src/
-│   └── boundary/
+│   └── wagoe/
 │       └── user/
 │           ├── core/
 │           │   ├── user.clj          # User entity logic
@@ -178,7 +178,7 @@ libs/user/
 │           ├── ports.clj             # IUserService, IUserRepository
 │           └── schema.clj            # User, Session schemas
 └── test/
-    └── boundary/
+    └── wagoe/
         └── user/
             ├── core/
             │   ├── user_test.clj
@@ -193,7 +193,7 @@ libs/user/
 
 [source]
 ----
-boundary/
+wagoe/
 ├── libs/                        # All 21 library modules
 │   ├── core/                    # Foundation utilities, validation
 │   ├── observability/           # Logging, metrics, error reporting
@@ -218,8 +218,8 @@ boundary/
 │   ├── i18n/                    # Internationalisation
 │   └── ui-style/                # Shared UI style bundles
 │   └── tools/                   # Babashka developer tooling (bb tasks, not published to Clojars)
-│       ├── src/boundary/tools/  # scaffold, ai, doctor, setup, deploy, etc.
-│       └── test/boundary/tools/ # Unit tests (bb test:tools)
+│       ├── src/wagoe/tools/  # scaffold, ai, doctor, setup, deploy, etc.
+│       └── test/wagoe/tools/ # Unit tests (bb test:tools)
 ├── resources/
 │   ├── conf/                    # Environment-based Aero configuration
 │   │   ├── dev/
@@ -293,8 +293,8 @@ scaffolder --> core
 * `platform` provides infrastructure that other modules consume
 * Domain libraries (`user`, `admin`, `tenant`, `cache`, `jobs`, `realtime`, etc.) depend on platform
 * `email` delegates raw SMTP transport to `external`; `external` sits at the platform level
-* `payments`, `i18n`, and `ui-style` are standalone — no internal Boundary deps
-* `boundary-tools` is consumed via `{:local/root "libs/tools"}` in `bb.edn`, not as a library dependency
+* `payments`, `i18n`, and `ui-style` are standalone — no internal Wagoe deps
+* `wagoe-tools` is consumed via `{:local/root "libs/tools"}` in `bb.edn`, not as a library dependency
 
 [[configuration]]
 == Configuration Structure
@@ -319,7 +319,7 @@ Admin entity configs are modular - each module owns its config in `admin/{module
 [source,clojure]
 ----
 ;; In config.edn
-:boundary/admin
+:wagoe/admin
 {:enabled? true
  :entities #merge [#include "admin/users.edn"]
  :pagination {...}}
@@ -335,15 +335,15 @@ Tests are organized by category and library:
 |Category |Location |Purpose
 
 |Unit tests
-|`libs/{library}/test/boundary/{library}/core/`
+|`libs/{library}/test/wagoe/{library}/core/`
 |Pure function tests, no I/O
 
 |Integration tests
-|`libs/{library}/test/boundary/{library}/shell/`
+|`libs/{library}/test/wagoe/{library}/shell/`
 |Service tests with mocked dependencies
 
 |Contract tests
-|`libs/{library}/test/boundary/{library}/shell/`
+|`libs/{library}/test/wagoe/{library}/shell/`
 |Adapter tests with real database
 |===
 

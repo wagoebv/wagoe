@@ -1,17 +1,17 @@
-# Boundary Framework
+# Wagoe Framework
 
-[![CI](https://github.com/thijs-creemers/boundary/actions/workflows/ci.yml/badge.svg)](https://github.com/thijs-creemers/boundary/actions/workflows/ci.yml)
-[![Clojars Project](https://img.shields.io/clojars/v/org.boundary-app/boundary-core.svg)](https://clojars.org/org.boundary-app/boundary-core)
-[![cljdoc](https://cljdoc.org/badge/org.boundary-app/boundary-core)](https://cljdoc.org/d/org.boundary-app/boundary-core)
+[![CI](https://github.com/wagoebv/wagoe/actions/workflows/ci.yml/badge.svg)](https://github.com/wagoebv/wagoe/actions/workflows/ci.yml)
+[![Clojars Project](https://img.shields.io/clojars/v/org.wagoe/wagoe-core.svg)](https://clojars.org/org.wagoe/wagoe-core)
+[![cljdoc](https://cljdoc.org/badge/org.wagoe/wagoe-core)](https://cljdoc.org/d/org.wagoe/wagoe-core)
 [![License: EPL-2.0](https://img.shields.io/badge/License-EPL_2.0-blue.svg)](https://www.eclipse.org/legal/epl-2.0/)
 
-**Boundary** is a batteries-included Clojure web framework that enforces the **Functional Core / Imperative Shell (FC/IS)** pattern: pure business logic in `core/`, side effects in `shell/`, and clean interfaces through `ports.clj` protocols.
+**Wagoe** is a batteries-included Clojure web framework that enforces the **Functional Core / Imperative Shell (FC/IS)** pattern: pure business logic in `core/`, side effects in `shell/`, and clean interfaces through `ports.clj` protocols.
 
 ---
 
-## Why Boundary?
+## Why Wagoe?
 
-**For developers:** 23 independently-publishable libraries on Clojars — use just `boundary-core` for validation utilities, or go full-stack with JWT + MFA auth, auto-generated CRUD UIs, background jobs, multi-tenancy, real-time WebSockets, and more. Every library follows the same FC/IS structure, making any Boundary codebase instantly familiar.
+**For developers:** 23 independently-publishable libraries on Clojars — use just `wagoe-core` for validation utilities, or go full-stack with JWT + MFA auth, auto-generated CRUD UIs, background jobs, multi-tenancy, real-time WebSockets, and more. Every library follows the same FC/IS structure, making any Wagoe codebase instantly familiar.
 
 **Ship faster:** The scaffolder generates fully structured modules (entity + routes + tests) in seconds. The admin UI auto-generates CRUD interfaces from your schema — no manual forms. Built-in observability, RFC 5988 pagination, and declarative interceptors mean you write business logic, not plumbing. AI tooling (`bb scaffold ai`, `bb ai gen-tests`, `bb ai sql`) handles the repetitive parts.
 
@@ -23,16 +23,16 @@
 
 ## Install
 
-Install the Boundary CLI — it handles all prerequisites (JVM, Clojure CLI, Babashka, bbin) automatically:
+Install the Wagoe CLI — it handles all prerequisites (JVM, Clojure CLI, Babashka, bbin) automatically:
 
 ```bash
-curl -fsSL https://get.boundary-app.org | bash
+curl -fsSL https://get.wagoe.com | bash
 ```
 
-Fallback if `get.boundary-app.org` is unavailable:
+Fallback if `get.wagoe.com` is unavailable:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/thijs-creemers/boundary/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/wagoebv/wagoe/main/scripts/install.sh | bash
 ```
 
 Supports macOS, Debian/Ubuntu, Arch Linux, and WSL2.
@@ -41,22 +41,22 @@ Supports macOS, Debian/Ubuntu, Arch Linux, and WSL2.
 
 ```bash
 # 1. Create a new project
-boundary new my-app
+wagoe new my-app
 cd my-app
 
 # 2. Add optional modules (e.g. payments, cache, search)
-boundary add payments
-boundary list modules    # see all 19 optional modules
+wagoe add payments
+wagoe list modules    # see all 19 optional modules
 
 # 3. Run database migrations
 clojure -M:migrate up
 
 # 4. Start the REPL (headless nREPL server on port 7888)
 export JWT_SECRET="change-me-dev-secret-min-32-chars"
-clojure -M:repl
+clojure -M:repl-clj
 ```
 
-Connect your editor (or the Boundary MCP server) to the nREPL port, then eval:
+Connect your editor (or the Wagoe MCP server) to the nREPL port, then eval:
 
 ```clojure
 (go)    ; start the system — http://localhost:3000
@@ -70,9 +70,9 @@ You get: H2 in-memory database (zero-config), HTTP server on port 3000, a comple
 
 ## AI-Native Development (Claude Code & Agentic CLIs)
 
-Projects created with `boundary new` are agent-ready out of the box: they
+Projects created with `wagoe new` are agent-ready out of the box: they
 include a `CLAUDE.md`, an `AGENTS.md`, and a Claude Code skill at
-`.claude/skills/boundary/SKILL.md` that teaches the agent to use Boundary's
+`.claude/skills/wagoe/SKILL.md` that teaches the agent to use Wagoe's
 scaffolder and AI tooling instead of hand-writing boilerplate. Open Claude
 Code in a fresh project and ask:
 
@@ -85,8 +85,8 @@ For **existing** projects (or to get updates without regenerating), install
 the plugin from this repo's marketplace:
 
 ```
-/plugin marketplace add thijs-creemers/boundary
-/plugin install boundary@boundary
+/plugin marketplace add wagoebv/wagoe
+/plugin install wagoe@wagoe
 ```
 
 See [claude-plugin/README.md](./claude-plugin/README.md) for details.
@@ -111,7 +111,7 @@ Each library also has its own `AGENTS.md` with library-specific documentation.
 
 ## Libraries
 
-Boundary is a monorepo of **23 independently publishable libraries** plus development tooling:
+Wagoe is a monorepo of **23 independently publishable libraries** plus development tooling:
 
 | Library | Description |
 |---------|-------------|
@@ -146,10 +146,10 @@ Boundary is a monorepo of **23 independently publishable libraries** plus develo
 
 ## Architecture
 
-Boundary enforces the **Functional Core / Imperative Shell** pattern throughout:
+Wagoe enforces the **Functional Core / Imperative Shell** pattern throughout:
 
 ```
-libs/{library}/src/boundary/{library}/
+libs/{library}/src/wagoe/{library}/
 ├── core/       # Pure functions only — no I/O, no logging, no exceptions
 ├── shell/      # All side effects: persistence, services, HTTP handlers
 ├── ports.clj   # Protocol definitions (interfaces for dependency injection)
@@ -166,13 +166,13 @@ This keeps business logic fast to test (no mocks needed), easy to reason about, 
 
 **Case conventions** — a frequent source of bugs:
 
-| Boundary | Convention |
+| Wagoe | Convention |
 |----------|------------|
 | Clojure code | `kebab-case` (`:password-hash`, `:created-at`) |
 | Database | `snake_case` |
 | API (JSON) | `camelCase` |
 
-Use `boundary.core.utils.case-conversion` for conversions. Never convert manually.
+Use `wagoe.core.utils.case-conversion` for conversions. Never convert manually.
 
 ---
 
@@ -185,7 +185,7 @@ clojure -M:test:db/h2 :core                                    # Single library
 clojure -M:test:db/h2 --focus-meta :unit                       # Unit tests only
 clojure -M:test:db/h2 --focus-meta :integration                # Integration tests only
 clojure -M:test:db/h2 --watch :core                            # Watch mode
-JWT_SECRET="dev-secret-32-chars-minimum" BND_ENV=test clojure -M:test:db/h2
+JWT_SECRET="dev-secret-at-least-32-characters-long" WAG_ENV=test clojure -M:test:db/h2
 
 # Linting
 clojure -M:clj-kondo --lint src test libs/*/src libs/*/test
@@ -207,7 +207,7 @@ bb scaffold ai "product module with name, price, stock" --yes  # Non-interactive
 
 # AI tooling
 bb ai explain --file stacktrace.txt  # Explain error
-bb ai gen-tests libs/user/src/boundary/user/core/validation.clj  # Generate tests
+bb ai gen-tests libs/user/src/wagoe/user/core/validation.clj  # Generate tests
 bb ai sql "find active users with orders in last 7 days"          # HoneySQL from NL
 bb ai docs --module libs/user --type agents                       # Generate AGENTS.md
 
@@ -228,13 +228,13 @@ The default `test` profile runs against in-memory H2. To run against PostgreSQL:
 
 1. Start a PostgreSQL instance matching the credentials in
    [`resources/conf/test/config.edn`](./resources/conf/test/config.edn).
-2. In `resources/conf/test/config.edn`, move `:boundary/postgresql` from `:inactive` to `:active`
-   and move `:boundary/h2` out of `:active`.
+2. In `resources/conf/test/config.edn`, move `:wagoe/postgresql` from `:inactive` to `:active`
+   and move `:wagoe/h2` out of `:active`.
 3. Run:
 
 ```bash
-BND_ENV=test JWT_SECRET="dev-secret-32-chars-minimum" clojure -M:migrate up
-BND_ENV=test JWT_SECRET="dev-secret-32-chars-minimum" clojure -M:test:db/h2
+WAG_ENV=test JWT_SECRET="dev-secret-at-least-32-characters-long" clojure -M:migrate up
+WAG_ENV=test JWT_SECRET="dev-secret-at-least-32-characters-long" clojure -M:test:db/h2
 ```
 
 4. Revert `resources/conf/test/config.edn` after the run.
@@ -309,12 +309,12 @@ bb deploy --all
 
 ```clojure
 ;; Validation utilities only
-{:deps {org.boundary-app/boundary-core {:mvn/version "1.0.0-beta-1"}}}
+{:deps {org.wagoe/wagoe-core {:mvn/version "1.0.0-beta-1"}}}
 
 ;; Full web application stack
-{:deps {org.boundary-app/boundary-platform {:mvn/version "1.0.0-beta-1"}
-        org.boundary-app/boundary-user     {:mvn/version "1.0.0-beta-1"}
-        org.boundary-app/boundary-admin    {:mvn/version "1.0.0-beta-1"}}}
+{:deps {org.wagoe/wagoe-platform {:mvn/version "1.0.0-beta-1"}
+        org.wagoe/wagoe-user     {:mvn/version "1.0.0-beta-1"}
+        org.wagoe/wagoe-admin    {:mvn/version "1.0.0-beta-1"}}}
 ```
 
 ---
@@ -325,7 +325,7 @@ Build the uberjar and deploy to any platform:
 
 ```bash
 clojure -T:build clean && clojure -T:build uber
-BND_ENV=prod java -jar target/boundary-*-standalone.jar
+WAG_ENV=prod java -jar target/wagoe-*-standalone.jar
 ```
 
 Reference configurations are provided under `resources/deploy/`:
@@ -345,7 +345,7 @@ See the [Deployment Patterns guide](./docs/modules/guides/pages/deployment-patte
 
 ## Website
 
-https://boundary-app.org
+https://framework.wagoe.com
 
 ---
 ## License

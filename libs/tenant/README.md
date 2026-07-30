@@ -3,9 +3,9 @@
 [![Status](https://img.shields.io/badge/status-stable-brightgreen)]()
 [![Clojure](https://img.shields.io/badge/clojure-1.12+-blue)]()
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
-[![Clojars Project](https://img.shields.io/clojars/v/org.boundary-app/boundary-tenant.svg)](https://clojars.org/org.boundary-app/boundary-tenant)
+[![Clojars Project](https://img.shields.io/clojars/v/org.wagoe/wagoe-tenant.svg)](https://clojars.org/org.wagoe/wagoe-tenant)
 
-Multi-tenancy for the Boundary Framework — isolated PostgreSQL schemas, tenant-scoped caching, and automatic tenant context propagation across background jobs.
+Multi-tenancy for the Wagoe Framework — isolated PostgreSQL schemas, tenant-scoped caching, and automatic tenant context propagation across background jobs.
 
 ## Features
 
@@ -22,7 +22,7 @@ Multi-tenancy for the Boundary Framework — isolated PostgreSQL schemas, tenant
 
 ```clojure
 (ns my-app.tenants
-  (:require [boundary.tenant.ports :as tenant-ports]))
+  (:require [wagoe.tenant.ports :as tenant-ports]))
 
 ;; Create new tenant
 (def tenant-input
@@ -42,7 +42,7 @@ Multi-tenancy for the Boundary Framework — isolated PostgreSQL schemas, tenant
 ### 2. Provision Tenant (PostgreSQL)
 
 ```clojure
-(require '[boundary.tenant.shell.provisioning :as provisioning])
+(require '[wagoe.tenant.shell.provisioning :as provisioning])
 
 ;; Provision creates isolated schema and copies structure
 (provisioning/provision-tenant! db-ctx tenant)
@@ -76,10 +76,10 @@ Multi-tenancy for the Boundary Framework — isolated PostgreSQL schemas, tenant
 
 ### 4. HTTP Tenant Resolution
 
-Tenant middleware lives in the **tenant** library (`boundary.tenant.shell.tenant-middleware`):
+Tenant middleware lives in the **tenant** library (`wagoe.tenant.shell.tenant-middleware`):
 
 ```clojure
-(require '[boundary.tenant.shell.tenant-middleware :as tenant-mw])
+(require '[wagoe.tenant.shell.tenant-middleware :as tenant-mw])
 
 ;; Add tenant resolution middleware (resolves tenant from subdomain/header/token)
 (def app
@@ -98,8 +98,8 @@ Tenant middleware lives in the **tenant** library (`boundary.tenant.shell.tenant
 ```
 
 **Middleware locations** (all in the tenant lib since BOU-198):
-- `boundary.tenant.shell.tenant-middleware`: `wrap-tenant-resolution` (resolves tenant from request), `wrap-tenant-schema` (sets DB search_path), `wrap-multi-tenant` (combines both)
-- `boundary.tenant.shell.membership-middleware`: `wrap-tenant-membership` (checks user membership in tenant)
+- `wagoe.tenant.shell.tenant-middleware`: `wrap-tenant-resolution` (resolves tenant from request), `wrap-tenant-schema` (sets DB search_path), `wrap-multi-tenant` (combines both)
+- `wagoe.tenant.shell.membership-middleware`: `wrap-tenant-membership` (checks user membership in tenant)
 
 ## Tenant Provisioning
 
@@ -123,7 +123,7 @@ Provisioning creates an isolated PostgreSQL schema for each tenant:
 ### Provisioning API
 
 ```clojure
-(require '[boundary.tenant.shell.provisioning :as provisioning])
+(require '[wagoe.tenant.shell.provisioning :as provisioning])
 
 ;; Provision new tenant
 (provisioning/provision-tenant! db-ctx tenant)
@@ -272,7 +272,7 @@ Provisioning creates an isolated PostgreSQL schema for each tenant:
 Background jobs automatically execute in tenant schema:
 
 ```clojure
-(require '[boundary.jobs.shell.tenant-context :as tenant-jobs])
+(require '[wagoe.jobs.shell.tenant-context :as tenant-jobs])
 
 ;; Enqueue tenant-scoped job
 (tenant-jobs/enqueue-tenant-job! 
@@ -297,7 +297,7 @@ See [Jobs Module README](../jobs/README.md#multi-tenancy-support) for details.
 Cache keys automatically scoped per tenant:
 
 ```clojure
-(require '[boundary.cache.shell.tenant-cache :as tenant-cache])
+(require '[wagoe.cache.shell.tenant-cache :as tenant-cache])
 
 ;; Create tenant-scoped cache
 (def tenant-cache (tenant-cache/create-tenant-cache base-cache tenant-id))
@@ -316,10 +316,10 @@ See [Cache Module README](../cache/README.md#tenant-scoping) for details.
 ## Complete Tenant Lifecycle Example
 
 ```clojure
-(require '[boundary.tenant.ports :as tenant-ports]
-         '[boundary.tenant.shell.provisioning :as provisioning]
-         '[boundary.jobs.shell.tenant-context :as tenant-jobs]
-         '[boundary.cache.shell.tenant-cache :as tenant-cache])
+(require '[wagoe.tenant.ports :as tenant-ports]
+         '[wagoe.tenant.shell.provisioning :as provisioning]
+         '[wagoe.jobs.shell.tenant-context :as tenant-jobs]
+         '[wagoe.cache.shell.tenant-cache :as tenant-cache])
 
 ;; 1. Create tenant
 (def tenant-input
@@ -380,32 +380,32 @@ under `/api/v1/tenants` (JSON responses; standard 400/404/500 error handling):
 
 ```clojure
 ;; config/dev.edn
-{:boundary/db-context {...}
+{:wagoe/db-context {...}
  
- :boundary/tenant-repository
- {:db-context #ig/ref :boundary/db-context}
+ :wagoe/tenant-repository
+ {:db-context #ig/ref :wagoe/db-context}
  
- :boundary/tenant-service
- {:repository #ig/ref :boundary/tenant-repository
-  :logger #ig/ref :boundary/logger
-  :error-reporter #ig/ref :boundary/error-reporter}
+ :wagoe/tenant-service
+ {:repository #ig/ref :wagoe/tenant-repository
+  :logger #ig/ref :wagoe/logger
+  :error-reporter #ig/ref :wagoe/error-reporter}
  
- :boundary/membership-service
- {:repository #ig/ref :boundary/membership-repository
-  :logger #ig/ref :boundary/logger}
+ :wagoe/membership-service
+ {:repository #ig/ref :wagoe/membership-repository
+  :logger #ig/ref :wagoe/logger}
 
  ;; Builds the tenant HTTP middleware seq (tenant resolution + membership).
  ;; The app injects it into platform's http-handler via :extra-middleware (BOU-200),
  ;; so platform never requires the tenant lib directly.
- :boundary/tenant-http-middleware
- {:tenant-service #ig/ref :boundary/tenant-service
-  :membership-service #ig/ref :boundary/membership-service
-  :db-context #ig/ref :boundary/db-context}}
+ :wagoe/tenant-http-middleware
+ {:tenant-service #ig/ref :wagoe/tenant-service
+  :membership-service #ig/ref :wagoe/membership-service
+  :db-context #ig/ref :wagoe/db-context}}
 ```
 
-Under the Boundary app wiring (`boundary.config`), these keys are added
-automatically and `:boundary/tenant-http-middleware` is referenced by
-`:boundary/http-handler`'s `:extra-middleware` — no manual middleware mounting
+Under the Wagoe app wiring (`wagoe.config`), these keys are added
+automatically and `:wagoe/tenant-http-middleware` is referenced by
+`:wagoe/http-handler`'s `:extra-middleware` — no manual middleware mounting
 is required.
 
 ### Database Migrations
@@ -432,12 +432,12 @@ CREATE INDEX idx_tenants_status ON tenants(status);
 
 ```bash
 # All tenant module tests
-clojure -M:test:db/h2 --focus boundary.tenant.*
+clojure -M:test:db/h2 --focus wagoe.tenant.*
 
 # Specific test suites
-clojure -M:test:db/h2 --focus boundary.tenant.core.tenant-test         # Unit tests
-clojure -M:test:db/h2 --focus boundary.tenant.shell.service-test       # Service tests
-clojure -M:test:db/h2 --focus boundary.tenant.shell.provisioning-test  # Provisioning tests
+clojure -M:test:db/h2 --focus wagoe.tenant.core.tenant-test         # Unit tests
+clojure -M:test:db/h2 --focus wagoe.tenant.shell.service-test       # Service tests
+clojure -M:test:db/h2 --focus wagoe.tenant.shell.provisioning-test  # Provisioning tests
 ```
 
 ### Test Coverage
@@ -512,7 +512,7 @@ clojure -M:test:db/h2 --focus boundary.tenant.shell.provisioning-test  # Provisi
 
 ### Migration Steps
 
-1. **Install Module**: Add `boundary-tenant` dependency
+1. **Install Module**: Add `wagoe-tenant` dependency
 2. **Run Migration**: Create `tenants` table via migration 011
 3. **Create Tenants**: Insert existing tenants into `tenants` table
 4. **Provision Schemas**: Run provisioning for each existing tenant
@@ -525,7 +525,7 @@ clojure -M:test:db/h2 --focus boundary.tenant.shell.provisioning-test  # Provisi
 
 ### Core Operations
 
-**`boundary.tenant.ports`**
+**`wagoe.tenant.ports`**
 
 - `(create-new-tenant service tenant-input)` - Create new tenant
 - `(find-tenant-by-id service tenant-id)` - Lookup by ID
@@ -536,7 +536,7 @@ clojure -M:test:db/h2 --focus boundary.tenant.shell.provisioning-test  # Provisi
 
 ### Provisioning Operations
 
-**`boundary.tenant.shell.provisioning`**
+**`wagoe.tenant.shell.provisioning`**
 
 - `(provision-tenant! db-ctx tenant)` - Create tenant schema
 - `(deprovision-tenant! db-ctx tenant)` - Drop tenant schema
@@ -546,13 +546,13 @@ clojure -M:test:db/h2 --focus boundary.tenant.shell.provisioning-test  # Provisi
 
 ### Middleware
 
-**`boundary.tenant.shell.tenant-middleware`** (tenant lib):
+**`wagoe.tenant.shell.tenant-middleware`** (tenant lib):
 
 - `(wrap-tenant-resolution handler service opts)` - Resolve tenant from request (subdomain/header/token); pass `:require-tenant? true` to enforce tenant presence
 - `(wrap-tenant-schema handler db-ctx)` - Automatic schema switching
 - `(wrap-multi-tenant handler service db-ctx opts)` - Combines resolution + schema switching
 
-**`boundary.tenant.shell.membership-middleware`** (tenant lib):
+**`wagoe.tenant.shell.membership-middleware`** (tenant lib):
 
 - `(wrap-tenant-membership membership-service handler)` - Verify user membership in tenant
 
@@ -589,7 +589,7 @@ The decision to keep PostgreSQL-only is documented in [ADR-020](../../dev-docs/a
 
 ## License
 
-Part of Boundary Framework - See main LICENSE file.
+Part of Wagoe Framework - See main LICENSE file.
 
 ---
 

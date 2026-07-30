@@ -1,7 +1,7 @@
 = Sizing & Scaling
-:description: How Boundary scales vertically and horizontally — what works by configuration today, and where the real boundaries are.
+:description: How Wagoe scales vertically and horizontally — what works by configuration today, and where the real boundaries are.
 
-Boundary's architecture (xref:architecture:fc-is.adoc[FC/IS] + hexagonal ports)
+Wagoe's architecture (xref:architecture:fc-is.adoc[FC/IS] + hexagonal ports)
 is meant to let you scale *vertically*, *horizontally*, or a mix — mostly by
 configuration rather than rewrites. This page is an honest map of how far that
 holds today: which knobs exist, which components are already safe to run as many
@@ -14,7 +14,7 @@ replicas, and which still hold in-process state that you must account for.
 | Axis | Meaning
 
 | *Vertical*
-| One process, more resources. Bigger heap, larger connection/thread pools, more CPU. Pure configuration in Boundary.
+| One process, more resources. Bigger heap, larger connection/thread pools, more CPU. Pure configuration in Wagoe.
 
 | *Horizontal*
 | Many processes (replicas) behind a load balancer, sharing backing services (Postgres, Redis). Requires that no request-handling state lives in a single process.
@@ -33,11 +33,11 @@ environment variables. Change the value, restart the process. No code.
 | Knob | Where | Notes
 
 | DB connection pool
-| `:boundary/postgresql :pool` — `minimum-idle`, `maximum-pool-size`, `connection-timeout-ms`, `idle-timeout-ms`, `max-lifetime-ms`, `keepalive-time-ms`, `leak-detection-threshold-ms`
+| `:wagoe/postgresql :pool` — `minimum-idle`, `maximum-pool-size`, `connection-timeout-ms`, `idle-timeout-ms`, `max-lifetime-ms`, `keepalive-time-ms`, `leak-detection-threshold-ms`
 | HikariCP. prod default `min 10 / max 50`, dev `2 / 10`, test (H2) `1 / 5`. `DB_POOL_SIZE` env override.
 
 | HTTP server
-| `:boundary/http` — `:port`, `:host`, `:port-range`
+| `:wagoe/http` — `:port`, `:host`, `:port-range`
 | Jetty. `HTTP_PORT` / `HTTP_HOST` env. Jetty manages its own thread pool.
 
 | JVM heap / GC
@@ -45,7 +45,7 @@ environment variables. Change the value, restart the process. No code.
 | Default `-Xmx512m -Xms128m -XX:+UseG1GC -XX:+UseContainerSupport`. Raise `-Xmx` for vertical scale.
 
 | Cache (Redis) pool
-| `:boundary/cache` — `:max-total`, `:max-idle`, `:min-idle`, `:timeout`, `:default-ttl`
+| `:wagoe/cache` — `:max-total`, `:max-idle`, `:min-idle`, `:timeout`, `:default-ttl`
 | Jedis pool. prod default `max-total 50 / max-idle 20 / min-idle 5`.
 |===
 
@@ -70,7 +70,7 @@ Two libraries already ship both adapters and pick between them in config:
 ----
 ;; libs/cache  — :in-memory (dev/test) | :redis (multi-instance)
 ;; libs/jobs   — :in-memory (dev/test) | :redis (shared queue across workers)
-:boundary/cache {:provider :redis ...}
+:wagoe/cache {:provider :redis ...}
 ----
 
 This is the template every other seam follows: the protocol is the contract,
@@ -108,11 +108,11 @@ the distributed adapter is "just configuration" once it exists.
 
 | Rate limiting
 | ✅
-| The config-driven `http-rate-limit-protection` interceptor is wired into the default route pipeline (`wiring.clj` injects `:rate-limit` config + the `:boundary/cache` into the interceptor `system` map). Configure under `:boundary/http :rate-limit {:enabled? :limit :window-ms}` (per-env; `HTTP_RATE_LIMIT`/`HTTP_RATE_LIMIT_WINDOW_MS`). Enforcement is *opt-in* (default off — the bundled prod/acc configs ship it disabled; enable it together with an active Redis cache) so an upgrade cannot start 429-ing existing consumers, nor silently run a per-process limiter in production. With an active Redis cache the fixed-window limit is shared across replicas; *with no cache it falls back to a per-process counter — single-node only, effective global limit = limit × N* (the wiring logs a warning at startup in that case). The in-process fallback is heap-bounded by a hard cap — before a new client is recorded at the cap, stale clients are swept and, if the map is still full, the least-recently-active client is evicted — so high-cardinality client ids can't leak memory on a long-running node even when every client is in-window. BOU-87.
+| The config-driven `http-rate-limit-protection` interceptor is wired into the default route pipeline (`wiring.clj` injects `:rate-limit` config + the `:wagoe/cache` into the interceptor `system` map). Configure under `:wagoe/http :rate-limit {:enabled? :limit :window-ms}` (per-env; `HTTP_RATE_LIMIT`/`HTTP_RATE_LIMIT_WINDOW_MS`). Enforcement is *opt-in* (default off — the bundled prod/acc configs ship it disabled; enable it together with an active Redis cache) so an upgrade cannot start 429-ing existing consumers, nor silently run a per-process limiter in production. With an active Redis cache the fixed-window limit is shared across replicas; *with no cache it falls back to a per-process counter — single-node only, effective global limit = limit × N* (the wiring logs a warning at startup in that case). The in-process fallback is heap-bounded by a hard cap — before a new client is recorded at the cap, stale clients are swept and, if the map is still full, the least-recently-active client is evicted — so high-cardinality client ids can't leak memory on a long-running node even when every client is in-window. BOU-87.
 
 | Graceful shutdown
 | ✅
-| Integrant `halt!` runs on a JVM shutdown hook (`src/boundary/main.clj`), closing pools and stopping Jetty. Jetty is configured for *graceful connection draining* (`configure-graceful-shutdown!` in `wiring.clj`): on stop it stops accepting new connections, rejects new requests with *503*, and lets in-flight requests finish within `:boundary/http :drain-timeout-ms` (default 30000 ms in prod/acc, env `HTTP_DRAIN_TIMEOUT_MS`; `0` disables). Set the window above the load balancer's deregistration delay for zero-downtime rollouts (BOU-86).
+| Integrant `halt!` runs on a JVM shutdown hook (`src/wagoe/main.clj`), closing pools and stopping Jetty. Jetty is configured for *graceful connection draining* (`configure-graceful-shutdown!` in `wiring.clj`): on stop it stops accepting new connections, rejects new requests with *503*, and lets in-flight requests finish within `:wagoe/http :drain-timeout-ms` (default 30000 ms in prod/acc, env `HTTP_DRAIN_TIMEOUT_MS`; `0` disables). Set the window above the load balancer's deregistration delay for zero-downtime rollouts (BOU-86).
 
 | Realtime / WebSocket
 | ✅ *
@@ -132,17 +132,17 @@ the distributed adapter is "just configuration" once it exists.
 | The main horizontal mode. N copies of the uberjar behind a load balancer, sharing Postgres + Redis. Cache, jobs, auth, tenancy all scale. Caveats: wire Redis rate limiting; WebSocket scales horizontally via `:provider :redis` (sticky sessions are only required when running the `:in-memory` provider).
 
 | *Web / worker split* (future)
-| Run dedicated job-worker processes separate from web. The jobs Redis queue already supports it, but there is currently no `worker` launch mode — `boundary.main` exposes only `server` and `cli`. Adding a worker entrypoint is the enabling step.
+| Run dedicated job-worker processes separate from web. The jobs Redis queue already supports it, but there is currently no `worker` launch mode — `wagoe.main` exposes only `server` and `cli`. Adding a worker entrypoint is the enabling step.
 |===
 
 == Production checklist
 
 * Use the *Redis* cache and jobs adapters, never `:in-memory`, for more than one replica.
 * Register all job handlers on *every* instance. A dequeued job with no local handler is re-enqueued (bounded by `:max-requeues`) so another instance can run it, and is dead-lettered only if no instance handles it — but a job-type that *no* worker registers still burns its requeue budget before failing, so keep handler sets consistent.
-* Enable rate limiting (`:boundary/http :rate-limit :enabled? true`) with an *active Redis cache* for a global limit across replicas; without a cache each instance counts independently (limit × N).
+* Enable rate limiting (`:wagoe/http :rate-limit :enabled? true`) with an *active Redis cache* for a global limit across replicas; without a cache each instance counts independently (limit × N).
 * Keep `replicas × maximum-pool-size` under Postgres `max_connections`.
 * Confirm your load balancer points health probes at `/health/ready` (503-aware), not `/health/live`.
-* For WebSocket: use `:provider :redis` on `:boundary/realtime` to scale across replicas (ADR-035). Sticky sessions / single-node are only required with the default `:in-memory` provider.
+* For WebSocket: use `:provider :redis` on `:wagoe/realtime` to scale across replicas (ADR-035). Sticky sessions / single-node are only required with the default `:in-memory` provider.
 * Add Redis (and, for testing N replicas, a load balancer) to your deployment — `docker-compose.yml` currently defines a single app service only.
 
 == Functional decomposition (slicing services out)
@@ -184,7 +184,7 @@ today, but the architecture is positioned for it.
 * *Break the allowlisted dependency cycles* — `check_deps.clj` allows `admin↔user`, `platform↔{user,tenant,admin,workflow,search}`. A cycle means two modules can't be cleanly separated; these must be broken (e.g. extract the shared auth check behind a port) before slicing.
 * *Async option* — there is no event-bus port today (the dead `IEventBus` stub in `libs/user/ports.clj` was removed in BOU-170). Event-driven decoupling needs a dedicated port plus a real adapter (Redis Streams / Kafka / RabbitMQ).
 * *Data ownership decision* — schema-per-tenant assumes co-located modules in one Postgres. Across services either share the DB (pragmatic) or give each service its own; there are no distributed transactions, so split writes become eventual-consistency.
-* *Service launch mode* — `boundary.main` exposes only `server` and `cli`; slicing needs an entrypoint that boots a named module subset as a service.
+* *Service launch mode* — `wagoe.main` exposes only `server` and `cli`; slicing needs an entrypoint that boots a named module subset as a service.
 
 === Sliceability by module
 
@@ -194,7 +194,7 @@ today, but the architecture is positioned for it.
 
 | payments
 | Easy
-| Zero internal Boundary deps (only Maven). Already a self-contained provider. The natural *pilot* for the remote-adapter pattern.
+| Zero internal Wagoe deps (only Maven). Already a self-contained provider. The natural *pilot* for the remote-adapter pattern.
 
 | core, observability
 | Easy
@@ -221,15 +221,15 @@ extracting *payments* as a standalone service, then tackle `user`. Don't attempt
 The architecture delivers the promise; these are the concrete pieces that make
 "scale by configuration" fully true. Tracked under the BOU-84 spike:
 
-. ✅ *Realtime Redis pub/sub adapter* — shipped in BOU-85 (ADR-035). WebSocket is now replica-safe via `:provider :redis` on `:boundary/realtime`.
-. ✅ *Graceful connection draining* — shipped in BOU-86. Configurable shutdown grace (`:boundary/http :drain-timeout-ms`) lets rollouts finish in-flight requests; Jetty `GracefulHandler` + `setStopTimeout` wired in `wiring.clj`.
-. ✅ *Default rate-limit wiring* — shipped in BOU-87. Config-driven `http-rate-limit-protection` is in the default pipeline; enable via `:boundary/http :rate-limit` and it uses the Redis cache for a cross-replica limit (per-process fallback documented).
+. ✅ *Realtime Redis pub/sub adapter* — shipped in BOU-85 (ADR-035). WebSocket is now replica-safe via `:provider :redis` on `:wagoe/realtime`.
+. ✅ *Graceful connection draining* — shipped in BOU-86. Configurable shutdown grace (`:wagoe/http :drain-timeout-ms`) lets rollouts finish in-flight requests; Jetty `GracefulHandler` + `setStopTimeout` wired in `wiring.clj`.
+. ✅ *Default rate-limit wiring* — shipped in BOU-87. Config-driven `http-rate-limit-protection` is in the default pipeline; enable via `:wagoe/http :rate-limit` and it uses the Redis cache for a cross-replica limit (per-process fallback documented).
 . ✅ *Jobs hardening* — shipped in BOU-88. Missing-handler jobs are re-enqueued (bounded) instead of silently dead-lettered, an empty-registry worker warns at startup, and scheduled-job promotion is an atomic claim (`ZREM` / `swap-vals!`) so a due job runs exactly once across workers.
 . *Deploy topology reference* — compose + k8s example with N replicas, Redis, a load balancer, instance-id, and a web/worker split.
 
 For *functional decomposition* (the bigger bet):
 
 . *Generic remote-port adapter + RPC envelope* — `clj-http` client implementing a module protocol, Malli (de)serialization, context propagation, error unwrap, retry/circuit-breaker. Pilot by extracting `payments`.
-. *Service launch mode* — `boundary.main` entrypoint that boots a named module subset as an independent service.
+. *Service launch mode* — `wagoe.main` entrypoint that boots a named module subset as an independent service.
 . *Break allowlisted dependency cycles* — `admin↔user`, `platform↔{user,tenant,admin,workflow,search}` — prerequisite for slicing those modules.
 . *Event-bus port + adapter* — define an event-bus port and a Redis Streams / Kafka adapter for async, event-driven inter-service decoupling (no port exists today).

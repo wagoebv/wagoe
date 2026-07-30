@@ -3,7 +3,7 @@
 :toclevels: 2
 :icons: font
 
-Production tuning recommendations for Boundary applications.
+Production tuning recommendations for Wagoe applications.
 
 == JVM Tuning
 
@@ -32,7 +32,7 @@ java -Xms512m -Xmx2g \
      -XX:MaxGCPauseMillis=200 \
      -XX:+UseContainerSupport \
      -Djava.security.egd=file:/dev/urandom \
-     -jar boundary.jar server
+     -jar wagoe.jar server
 ----
 
 [cols="1,3",options="header"]
@@ -48,7 +48,7 @@ For latency-sensitive applications on JDK 21+, consider ZGC:
 
 [source,bash]
 ----
-java -XX:+UseZGC -XX:+ZGenerational -Xmx4g -jar boundary.jar server
+java -XX:+UseZGC -XX:+ZGenerational -Xmx4g -jar wagoe.jar server
 ----
 
 === Container Environments
@@ -86,7 +86,7 @@ Configure in `resources/conf/prod/config.edn`:
 
 [source,clojure]
 ----
-:boundary/postgresql
+:wagoe/postgresql
 {:pool {:minimum-idle 10
         :maximum-pool-size 25
         :connection-timeout-ms 30000   ;; Wait 30s for a connection
@@ -111,7 +111,7 @@ The `/health/ready` endpoint checks database connectivity — integrate with you
 
 [source,clojure]
 ----
-:boundary/cache
+:wagoe/cache
 {:provider :redis
  :max-total 20      ;; Max connections in pool
  :max-idle  10      ;; Max idle connections
@@ -158,12 +158,12 @@ Set TTL based on staleness tolerance:
 
 === Thread Pool
 
-Jetty uses a default thread pool of 200 threads. For most Boundary apps this is sufficient. If you need to tune:
+Jetty uses a default thread pool of 200 threads. For most Wagoe apps this is sufficient. If you need to tune:
 
 [source,clojure]
 ----
 ;; In config.edn
-:boundary/http
+:wagoe/http
 {:port 3000
  :host "0.0.0.0"
  :min-threads 10      ;; Minimum threads
@@ -179,11 +179,11 @@ Gzip is enabled by default for responses >1KB. This reduces bandwidth 60-80% for
 
 === Static Asset Caching
 
-The nginx reference config (`resources/deploy/nginx/boundary.conf`) sets 30-day cache headers on CSS/JS/images. For the built-in static serving, cache headers are set by the platform interceptors.
+The nginx reference config (`resources/deploy/nginx/wagoe.conf`) sets 30-day cache headers on CSS/JS/images. For the built-in static serving, cache headers are set by the platform interceptors.
 
 == Horizontal Scaling
 
-Boundary applications are stateless by design — scale horizontally by adding instances behind a load balancer.
+Wagoe applications are stateless by design — scale horizontally by adding instances behind a load balancer.
 
 === Requirements for Horizontal Scaling
 
@@ -198,7 +198,7 @@ Boundary applications are stateless by design — scale horizontally by adding i
 | All instances share the same Redis. This enables consistent cache across the cluster. Increase `max-total` per instance if needed.
 
 | Sessions
-| Store in database (default) or Redis — not in-memory. Boundary's session repository uses the DB, so sessions survive instance restarts.
+| Store in database (default) or Redis — not in-memory. Wagoe's session repository uses the DB, so sessions survive instance restarts.
 
 | File uploads
 | Use S3 or shared storage (`libs/storage`), not local disk.
@@ -220,7 +220,7 @@ Boundary applications are stateless by design — scale horizontally by adding i
               ┌────────────┼────────────┐
               ▼            ▼            ▼
         ┌─────────-─┐ ┌────────-──┐ ┌─────────-─┐
-        │ Boundary  │ │ Boundary  │ │ Boundary  │
+        │ Wagoe  │ │ Wagoe  │ │ Wagoe  │
         │ Instance 1│ │ Instance 2│ │ Instance 3│
         └─────┬───-─┘ └─────┬─-───┘ └────┬──--──┘
               │             │            │
@@ -248,11 +248,11 @@ The migration best practices guide covers index creation patterns: xref:migratio
 
 === Query Optimization
 
-Boundary uses HoneySQL, which generates parameterised queries. Performance tips:
+Wagoe uses HoneySQL, which generates parameterised queries. Performance tips:
 
 - **Use pagination** — never `SELECT *` without `LIMIT`. The pagination config (`default-limit`, `max-limit`) prevents unbounded queries.
 - **Batch inserts** — use `insert-batch!` for bulk operations instead of individual inserts.
-- **Window functions** — for count + data queries, use `COUNT(*) OVER()` (already used in Boundary's pagination layer).
+- **Window functions** — for count + data queries, use `COUNT(*) OVER()` (already used in Wagoe's pagination layer).
 - **Connection reuse** — HikariCP handles this. Avoid creating ad-hoc datasources.
 
 == Benchmarking

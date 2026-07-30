@@ -1,5 +1,5 @@
 = Testing
-:description: Writing and running tests in Boundary projects.
+:description: Writing and running tests in Wagoe projects.
 
 See xref:architecture:testing-strategy.adoc[Testing Strategy] for the conceptual overview.
 This guide covers the day-to-day commands and patterns.
@@ -28,7 +28,7 @@ clojure -M:test:db/h2 --watch :core
 clojure -M:test:db/h2 --watch --focus-meta :unit
 
 # Auth tests (JWT secret required)
-JWT_SECRET="dev-secret-32-chars-minimum" clojure -M:test:db/h2 :user
+JWT_SECRET="dev-secret-at-least-32-characters-long" clojure -M:test:db/h2 :user
 ----
 
 == Writing unit tests
@@ -37,9 +37,9 @@ Tag with `^:unit`. Call core functions directly - no setup needed:
 
 [source,clojure]
 ----
-(ns boundary.product.core.product-test
+(ns wagoe.product.core.product-test
   (:require [clojure.test :refer [deftest is testing]]
-            [boundary.product.core.product :as product-core]))
+            [wagoe.product.core.product :as product-core]))
 
 (deftest ^:unit test-prepare-product
   (testing "returns a product with a generated id"
@@ -62,10 +62,10 @@ Tag with `^:integration`. Use in-memory adapters to test service orchestration:
 
 [source,clojure]
 ----
-(ns boundary.product.shell.service-test
+(ns wagoe.product.shell.service-test
   (:require [clojure.test :refer [deftest is use-fixtures]]
-            [boundary.product.shell.service :as service]
-            [boundary.product.shell.adapters.in-memory :as mem]))
+            [wagoe.product.shell.service :as service]
+            [wagoe.product.shell.adapters.in-memory :as mem]))
 
 (defn with-service [f]
   (let [repo (mem/create-in-memory-repo)]
@@ -86,10 +86,10 @@ Tag with `^:contract`. Test against a real H2 in-memory database:
 
 [source,clojure]
 ----
-(ns boundary.product.shell.persistence-test
+(ns wagoe.product.shell.persistence-test
   (:require [clojure.test :refer [deftest is use-fixtures]]
-            [boundary.product.shell.persistence :as persistence]
-            [boundary.test.fixtures :as fixtures]))
+            [wagoe.product.shell.persistence :as persistence]
+            [wagoe.test.fixtures :as fixtures]))
 
 (use-fixtures :each fixtures/with-database)
 
@@ -113,14 +113,14 @@ Add new libraries to `tests.edn`:
   {:kaocha.testable/id :product
    :kaocha/source-paths ["libs/product/src"]
    :kaocha/test-paths   ["libs/product/test"]
-   :kaocha/ns-patterns  ["boundary.product.*-test"]}]}
+   :kaocha/ns-patterns  ["wagoe.product.*-test"]}]}
 ----
 
 == AI test generation
 
 [source,bash]
 ----
-bb ai gen-tests libs/product/src/boundary/product/core/product.clj
+bb ai gen-tests libs/product/src/wagoe/product/core/product.clj
 ----
 
-Generates a complete test namespace from the source file using Boundary conventions.
+Generates a complete test namespace from the source file using Wagoe conventions.

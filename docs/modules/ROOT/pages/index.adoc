@@ -1,12 +1,12 @@
-= Boundary Framework
+= Wagoe Framework
 :description: Batteries-included Clojure web framework enforcing the Functional Core / Imperative Shell pattern.
 
-**Boundary** is a batteries-included Clojure web framework that enforces the *Functional Core / Imperative Shell (FC/IS)* pattern:
+**Wagoe** is a batteries-included Clojure web framework that enforces the *Functional Core / Imperative Shell (FC/IS)* pattern:
 pure business logic in `core/`, side effects in `shell/`, and clean interfaces through `ports.clj` protocols.
 
-== What Boundary provides
+== What Wagoe provides
 
-* *23 independently publishable libraries* on Clojars — use only what you need (plus `boundary-cli` and `boundary-devtools`)
+* *23 independently publishable libraries* on Clojars — use only what you need (plus `wagoe-cli` and `wagoe-devtools`)
 * *Scaffolder* that generates fully structured modules (entity + routes + tests) in seconds
 * *Auto-generated admin UI* from your schema — no manual forms
 * *Built-in observability*, RFC 5988 pagination, and declarative interceptors
@@ -19,11 +19,11 @@ pure business logic in `core/`, side effects in `shell/`, and clean interfaces t
 | I want to...
 | Go to
 
-| Try Boundary in minutes
+| Try Wagoe in minutes
 | xref:getting-started:index.adoc[Getting Started]
 
 | Understand the design philosophy
-| xref:getting-started:why-boundary.adoc[Why Boundary?]
+| xref:getting-started:why-wagoe.adoc[Why Wagoe?]
 
 | Learn the core architecture
 | xref:architecture:fc-is.adoc[Functional Core / Imperative Shell]
@@ -39,21 +39,21 @@ pure business logic in `core/`, side effects in `shell/`, and clean interfaces t
 
 [source,bash]
 ----
-# Install Boundary (JVM, Clojure CLI, Babashka, bbin, boundary CLI)
-curl -fsSL https://get.boundary-app.org | bash
+# Install Wagoe (JVM, Clojure CLI, Babashka, bbin, wagoe CLI)
+curl -fsSL https://get.wagoe.com | bash
 
 # Start a new project
-boundary new my-app
+wagoe new my-app
 cd my-app
 
 # Add optional modules
-boundary add payments
-boundary list modules
+wagoe add payments
+wagoe list modules
 
 # REPL-driven development (headless nREPL on port 7888 — connect your editor)
 export JWT_SECRET="change-me-dev-secret-min-32-chars"
-export BND_ENV="development"
-clojure -M:repl
+export WAG_ENV="development"
+clojure -M:repl-clj
 
 # Scaffold a new module (interactive)
 bb scaffold

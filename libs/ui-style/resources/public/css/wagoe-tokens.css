@@ -1,0 +1,586 @@
+/* =============================================================================
+   Wagoe Framework - Design Token Contract
+   "wagoe-tokens.css" — self-contained, no external dependencies
+
+   PURPOSE:
+   This file is the stable theming API contract that all component CSS
+   (app.css, admin.css, etc.) is written against. It defines neutral,
+   professional defaults using the original Wagoe navy/green palette.
+
+   LOADING ORDER:
+   1. pico.min.css          (CSS reset / base styles)
+   2. wagoe-tokens.css   (THIS FILE — neutral defaults)
+   3. tokens-openprops.css  (optional theme override — Cyberpunk Professionalism)
+   4. admin.css / app.css   (component styles)
+
+   CUSTOMIZATION:
+   Override any variable in your own theme file loaded after this one.
+   The tokens-openprops.css file demonstrates how to apply a full theme.
+
+   NO @imports — fully self-contained, works offline and in JAR-based deployments.
+   ============================================================================= */
+
+:root {
+  /* ============================================================================
+     COLOR SYSTEM
+     ============================================================================ */
+
+  /* --------------------------------------------------------------------------
+     Primary brand color — Navy (Wagoe brand guide: Core #1E3A5F)
+     Override for your brand.
+     -------------------------------------------------------------------------- */
+  --color-primary: #1E3A5F;
+  --color-primary-hover: #2d4a73;
+  --color-primary-active: #162d49;
+  --color-primary-light: rgba(30, 58, 95, 0.12);
+  --color-primary-faint: rgba(30, 58, 95, 0.05);
+
+  /* Numeric scale (used by app.css button/badge styles) */
+  --color-primary-50:  rgba(30, 58, 95, 0.05);
+  --color-primary-100: rgba(30, 58, 95, 0.12);
+  --color-primary-500: #2d5a8f;
+  --color-primary-600: #1E3A5F;
+  --color-primary-700: #2d4a73;
+  --color-primary-800: #162d49;
+
+  /* HSL / RGB for alpha composition */
+  --color-primary-hsl: 213 52% 24%;
+  --color-primary-rgb: 30 58 95;
+
+  /* --------------------------------------------------------------------------
+     Accent / secondary brand color — Forest Green (Wagoe brand: Shell #3A7F3F)
+     -------------------------------------------------------------------------- */
+  --color-accent: #3A7F3F;
+  --color-accent-hover: #4a9f4f;
+  --color-accent-active: #2d6332;
+  --color-accent-light: rgba(58, 127, 63, 0.12);
+  --color-accent-faint: rgba(58, 127, 63, 0.05);
+
+  /* HSL / RGB for alpha composition */
+  --color-accent-hsl: 123 37% 36%;
+  --color-accent-rgb: 58 127 63;
+
+  /* --------------------------------------------------------------------------
+     Tertiary / secondary color
+     -------------------------------------------------------------------------- */
+  --color-secondary: #4B5563;
+  --color-secondary-hover: #374151;
+  --color-secondary-light: rgba(75, 85, 99, 0.12);
+
+  /* --------------------------------------------------------------------------
+     Status semantic colors — 4 states × 4 shades
+     -------------------------------------------------------------------------- */
+
+  /* Success */
+  --color-success: #15803d;
+  --color-success-hover: #166534;
+  --color-success-bg: #f0fdf4;
+  --color-success-border: #86efac;
+  --color-success-hsl: 142 72% 29%;
+
+  /* Warning */
+  --color-warning: #b45309;
+  --color-warning-hover: #92400e;
+  --color-warning-bg: #fffbeb;
+  --color-warning-border: #fcd34d;
+  --color-warning-hsl: 32 97% 37%;
+
+  /* Error */
+  --color-error: #b91c1c;
+  --color-error-hover: #991b1b;
+  --color-error-bg: #fef2f2;
+  --color-error-border: #fca5a5;
+  --color-error-hsl: 0 72% 41%;
+
+  /* Danger alias (app.css uses --color-danger) */
+  --color-danger: var(--color-error);
+
+  /* Info */
+  --color-info: #1d4ed8;
+  --color-info-hover: #1e40af;
+  --color-info-bg: #eff6ff;
+  --color-info-border: #93c5fd;
+  --color-info-hsl: 224 76% 48%;
+
+  /* --------------------------------------------------------------------------
+     Neutral gray scale
+     Used for code blocks, skeletons, file inputs
+     -------------------------------------------------------------------------- */
+  --color-neutral-50:  #f9fafb;
+  --color-neutral-100: #f3f4f6;
+  --color-neutral-200: #e5e7eb;
+  --color-neutral-300: #d1d5db;
+  --color-neutral-400: #9ca3af;
+  --color-neutral-500: #6b7280;
+  --color-neutral-600: #4b5563;
+  --color-neutral-700: #374151;
+  --color-neutral-800: #1f2937;
+
+  /* ============================================================================
+     SURFACES & BACKGROUNDS
+     ============================================================================ */
+  --surface-0: #ffffff;
+  --surface-1: #fafaf9;    /* warm off-white */
+  --surface-2: #f5f5f4;    /* warm light gray */
+  --surface-3: #e7e5e4;
+  --surface-4: #d6d3d1;
+
+  /* Legacy aliases → surface-* */
+  --bg-primary:   var(--surface-0);
+  --bg-secondary: var(--surface-1);
+  --bg-tertiary:  var(--surface-2);
+
+  /* ============================================================================
+     TEXT
+     ============================================================================ */
+  --text-primary:   #0f172a;
+  --text-muted:     #64748b;
+  --text-faint:     #94a3b8;
+  --text-inverse:   #f8fafc;
+  --text-secondary: var(--text-muted);   /* app.css alias */
+
+  /* ============================================================================
+     BORDERS
+     ============================================================================ */
+  --border-default: #e2e8f0;
+  --border-strong:  #cbd5e1;
+  --border-focus:   var(--color-primary);
+  --border-accent:  var(--color-accent);
+  --border-subtle:  #f1f5f9;
+
+  /* ============================================================================
+     EFFECTS — neutral defaults (no external dependencies)
+     theme overrides in tokens-openprops.css supply the Cyberpunk glows/gradients
+     ============================================================================ */
+
+  /* Shadows — layered, softer, modern */
+  --shadow-sm:  0 1px 2px rgba(0,0,0,0.04), 0 1px 3px rgba(0,0,0,0.03);
+  --shadow-md:  0 2px 4px rgba(0,0,0,0.04), 0 4px 6px rgba(0,0,0,0.03);
+  --shadow-lg:  0 4px 6px rgba(0,0,0,0.04), 0 10px 15px rgba(0,0,0,0.05);
+  --shadow-xl:  0 10px 25px rgba(0,0,0,0.06), 0 20px 48px rgba(0,0,0,0.05);
+  --shadow-2xl: 0 25px 50px rgba(0,0,0,0.1);
+  --shadow-focus: 0 0 0 2px var(--surface-0), 0 0 0 4px var(--color-primary);
+
+  /* Card hover elevation */
+  --shadow-card-hover: 0 8px 25px rgba(0,0,0,0.08), 0 2px 6px rgba(0,0,0,0.04);
+
+  /* Subtle inner glow for active states */
+  --shadow-inner-glow: inset 0 1px 0 rgba(255,255,255,0.1);
+
+  /* Letter spacing for headings */
+  --tracking-tight: -0.025em;
+  --tracking-tighter: -0.04em;
+
+  /* Topbar blur backdrop */
+  --topbar-backdrop: blur(12px) saturate(180%);
+
+  /* Glows — off by default, theme can override */
+  --glow-primary:        none;
+  --glow-primary-strong: none;
+  --glow-accent:         none;
+  --glow-accent-strong:  none;
+  --glow-error:          none;
+  --glow-warning:        none;
+  --glow-info:           none;
+
+  /* Gradients — transparent by default, theme can override */
+  --gradient-hero:   none;
+  --gradient-accent: none;
+  --gradient-subtle: none;
+  --gradient-card:   none;
+
+  /* ============================================================================
+     TYPOGRAPHY
+     ============================================================================ */
+
+  /* Font stacks */
+  --font-sans:    'DM Sans', system-ui, -apple-system, sans-serif;
+  --font-display: 'DM Sans', system-ui, sans-serif;
+  --font-mono:    'JetBrains Mono', ui-monospace, 'SF Mono', monospace;
+
+  /* Font weights */
+  --font-normal:   400;
+  --font-medium:   500;
+  --font-semibold: 600;
+  --font-bold:     700;
+
+  /* Font sizes — compact for admin density */
+  --text-xs:   0.6875rem;   /* 11px */
+  --text-sm:   0.8125rem;   /* 13px */
+  --text-base: 0.875rem;    /* 14px */
+  --text-lg:   1rem;        /* 16px */
+  --text-xl:   1.125rem;    /* 18px */
+  --text-2xl:  1.25rem;     /* 20px */
+  --text-3xl:  1.5rem;      /* 24px */
+  --text-4xl:  2rem;        /* 32px */
+
+  /* app.css compatibility alias */
+  --font-size-sm: var(--text-sm);
+
+  /* Line heights — legacy token names */
+  --leading-tight:   1.25;
+  --leading-normal:  1.5;
+  --leading-relaxed: 1.625;
+
+  /* Line height aliases — app.css names */
+  --line-height-tight:   1.25;
+  --line-height-normal:  1.5;
+  --line-height-relaxed: 1.625;
+  --line-height-snug:    1.375;
+
+  /* ============================================================================
+     SPACING SCALE — 4px base unit
+     ============================================================================ */
+  --space-0:  0;
+  --space-1:  0.25rem;   /*  4px */
+  --space-2:  0.5rem;    /*  8px */
+  --space-3:  0.75rem;   /* 12px */
+  --space-4:  1rem;      /* 16px */
+  --space-5:  1.25rem;   /* 20px */
+  --space-6:  1.5rem;    /* 24px */
+  --space-8:  2rem;      /* 32px */
+  --space-10: 2.5rem;    /* 40px */
+  --space-12: 3rem;      /* 48px */
+  --space-16: 4rem;      /* 64px */
+  --space-20: 5rem;      /* 80px */
+
+  /* ============================================================================
+     LAYOUT
+     ============================================================================ */
+  --nav-width:         200px;
+  --topbar-height:     64px;
+  --content-max-width: 1400px;
+  --max-content-width: var(--content-max-width);   /* app.css alias */
+  --content-padding:   var(--space-4);
+  --table-row-height:  40px;
+
+  /* ============================================================================
+     BORDER RADII
+     ============================================================================ */
+  --radius-sm:   0.375rem;  /*  6px */
+  --radius-md:   0.5rem;    /*  8px */
+  --radius-lg:   0.75rem;   /* 12px */
+  --radius-xl:   1rem;      /* 16px */
+  --radius-full: 9999px;
+
+  /* ============================================================================
+     TRANSITIONS
+     ============================================================================ */
+  --transition-fast:   120ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  --transition-normal: 200ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  --transition-slow:   300ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  --transition-bounce: 500ms cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* ============================================================================
+     Z-INDEX
+     ============================================================================ */
+  --z-dropdown:       10;
+  --z-sticky:         20;
+  --z-sidebar:        30;
+  --z-modal-backdrop: 40;
+  --z-modal:          50;
+  --z-toast:          60;
+  --z-overlay:        var(--z-modal-backdrop);   /* app.css alias */
+
+  /* ============================================================================
+     LEGACY ALIASES — backward compat with admin.css + older token consumers
+     ============================================================================ */
+
+  /* Accent (admin.css uses --accent-* naming) */
+  --accent-primary:       var(--color-primary);
+  --accent-primary-hover: var(--color-primary-hover);
+  --accent-primary-light: var(--color-primary-light);
+  --accent-secondary:     var(--color-accent);
+
+  /* Brand gradient backgrounds */
+  --brand-core-subtle:  var(--color-primary-light);
+  --brand-shell-subtle: var(--color-accent-light);
+
+  /* Status aliases (admin.css uses --status-* naming) */
+  --status-success:        var(--color-success);
+  --status-success-bg:     var(--color-success-bg);
+  --status-success-border: var(--color-success-border);
+
+  --status-warning:        var(--color-warning);
+  --status-warning-bg:     var(--color-warning-bg);
+  --status-warning-border: var(--color-warning-border);
+
+  --status-error:        var(--color-error);
+  --status-error-bg:     var(--color-error-bg);
+  --status-error-border: var(--color-error-border);
+
+  --status-info:        var(--color-info);
+  --status-info-bg:     var(--color-info-bg);
+  --status-info-border: var(--color-info-border);
+
+  /* Sidebar aliases */
+  --sidebar-bg:               var(--surface-1);
+  --sidebar-text:             var(--text-primary);
+  --sidebar-text-secondary:   var(--text-muted);
+  --sidebar-hover:            var(--surface-2);
+  --sidebar-active:           var(--color-primary-light);
+  --sidebar-border:           var(--border-default);
+  --sidebar-width-expanded:   var(--nav-width);
+  --sidebar-width-collapsed:  64px;
+  --topbar-height-legacy:     var(--topbar-height);
+}
+
+/* ============================================================================
+   DARK MODE
+   ============================================================================ */
+
+[data-theme="dark"] {
+  /* Primary */
+  --color-primary:       #5b8fbf;
+  --color-primary-hover: #7ba8d4;
+  --color-primary-active: #4a7aaa;
+  --color-primary-light: rgba(91, 143, 191, 0.15);
+  --color-primary-faint: rgba(91, 143, 191, 0.08);
+  --color-primary-50:    rgba(91, 143, 191, 0.08);
+  --color-primary-100:   rgba(91, 143, 191, 0.15);
+  --color-primary-500:   #7ba8d4;
+  --color-primary-600:   #5b8fbf;
+  --color-primary-700:   #7ba8d4;
+  --color-primary-800:   #4a7aaa;
+  --color-primary-hsl:   210 45% 55%;
+  --color-primary-rgb:   91 143 191;
+
+  /* Accent */
+  --color-accent:       #6abf6f;
+  --color-accent-hover: #8fd993;
+  --color-accent-active: #4fa854;
+  --color-accent-light: rgba(106, 191, 111, 0.15);
+  --color-accent-faint: rgba(106, 191, 111, 0.08);
+  --color-accent-hsl:   123 37% 58%;
+  --color-accent-rgb:   106 191 111;
+
+  /* Secondary */
+  --color-secondary:       #9ca3af;
+  --color-secondary-hover: #d1d5db;
+  --color-secondary-light: rgba(156, 163, 175, 0.15);
+
+  /* Status */
+  --color-success:        #4ade80;
+  --color-success-hover:  #86efac;
+  --color-success-bg:     rgba(74, 222, 128, 0.10);
+  --color-success-border: #166534;
+  --color-success-hsl:    142 69% 58%;
+
+  --color-warning:        #fbbf24;
+  --color-warning-hover:  #fcd34d;
+  --color-warning-bg:     rgba(251, 191, 36, 0.10);
+  --color-warning-border: #92400e;
+  --color-warning-hsl:    38 92% 50%;
+
+  --color-error:        #f87171;
+  --color-error-hover:  #fca5a5;
+  --color-error-bg:     rgba(248, 113, 113, 0.10);
+  --color-error-border: #991b1b;
+  --color-error-hsl:    0 91% 71%;
+
+  --color-info:        #60a5fa;
+  --color-info-hover:  #93c5fd;
+  --color-info-bg:     rgba(96, 165, 250, 0.10);
+  --color-info-border: #1e40af;
+  --color-info-hsl:    217 91% 60%;
+
+  /* Neutrals */
+  --color-neutral-50:  #111827;
+  --color-neutral-100: #1f2937;
+  --color-neutral-200: #374151;
+  --color-neutral-300: #4b5563;
+  --color-neutral-400: #6b7280;
+  --color-neutral-500: #9ca3af;
+  --color-neutral-600: #d1d5db;
+  --color-neutral-700: #e5e7eb;
+  --color-neutral-800: #f3f4f6;
+
+  /* Surfaces — warmer dark, slightly blue-tinted for depth */
+  --surface-0: #0c0f17;    /* deeper, slightly blue */
+  --surface-1: #151921;    /* card background */
+  --surface-2: #1e2330;    /* elevated */
+  --surface-3: #2a2f3e;    /* hover */
+  --surface-4: #3a3f4e;    /* active */
+
+  --bg-primary:   var(--surface-0);
+  --bg-secondary: var(--surface-1);
+  --bg-tertiary:  var(--surface-2);
+
+  /* Text */
+  --text-primary:   #f8fafc;
+  --text-muted:     #94a3b8;
+  --text-faint:     #64748b;
+  --text-inverse:   #0f172a;
+  --text-secondary: var(--text-muted);
+
+  /* Borders — more subtle in dark mode */
+  --border-default: rgba(255,255,255,0.08);
+  --border-strong:  rgba(255,255,255,0.12);
+  --border-subtle:  rgba(255,255,255,0.04);
+
+  /* Shadows — colored subtle glow instead of pure black */
+  --shadow-sm:  0 1px 3px rgba(0,0,0,0.4), 0 0 1px rgba(0,0,0,0.3);
+  --shadow-md:  0 4px 6px rgba(0,0,0,0.4), 0 0 2px rgba(0,0,0,0.3);
+  --shadow-lg:  0 8px 16px rgba(0,0,0,0.5), 0 0 4px rgba(0,0,0,0.3);
+  --shadow-xl:  0 10px 25px rgba(0,0,0,0.5), 0 0 6px rgba(0,0,0,0.3);
+  --shadow-2xl: 0 25px 50px rgba(0,0,0,0.6);
+  --shadow-card-hover: 0 8px 25px rgba(0,0,0,0.4), 0 0 1px var(--color-primary-light);
+  --shadow-focus: 0 0 0 2px var(--surface-0), 0 0 0 4px var(--color-primary);
+
+  /* Legacy aliases */
+  --accent-primary:       var(--color-primary);
+  --accent-primary-hover: var(--color-primary-hover);
+  --accent-primary-light: var(--color-primary-light);
+  --accent-secondary:     var(--color-accent);
+
+  --brand-core-subtle:  var(--color-primary-light);
+  --brand-shell-subtle: var(--color-accent-light);
+
+  --status-success:        var(--color-success);
+  --status-success-bg:     var(--color-success-bg);
+  --status-success-border: var(--color-success-border);
+  --status-warning:        var(--color-warning);
+  --status-warning-bg:     var(--color-warning-bg);
+  --status-warning-border: var(--color-warning-border);
+  --status-error:          var(--color-error);
+  --status-error-bg:       var(--color-error-bg);
+  --status-error-border:   var(--color-error-border);
+  --status-info:           var(--color-info);
+  --status-info-bg:        var(--color-info-bg);
+  --status-info-border:    var(--color-info-border);
+
+  --sidebar-bg:     #020617;
+  --sidebar-hover:  var(--surface-2);
+  --sidebar-active: var(--color-primary-light);
+  --sidebar-border: var(--border-default);
+}
+
+/* System preference dark mode */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --color-primary:       #5b8fbf;
+    --color-primary-hover: #7ba8d4;
+    --color-primary-active: #4a7aaa;
+    --color-primary-light: rgba(91, 143, 191, 0.15);
+    --color-primary-faint: rgba(91, 143, 191, 0.08);
+    --color-primary-50:    rgba(91, 143, 191, 0.08);
+    --color-primary-100:   rgba(91, 143, 191, 0.15);
+    --color-primary-500:   #7ba8d4;
+    --color-primary-600:   #5b8fbf;
+    --color-primary-700:   #7ba8d4;
+    --color-primary-800:   #4a7aaa;
+    --color-primary-hsl:   210 45% 55%;
+    --color-primary-rgb:   91 143 191;
+
+    --color-accent:       #6abf6f;
+    --color-accent-hover: #8fd993;
+    --color-accent-light: rgba(106, 191, 111, 0.15);
+    --color-accent-hsl:   123 37% 58%;
+    --color-accent-rgb:   106 191 111;
+
+    --color-secondary:       #9ca3af;
+    --color-secondary-hover: #d1d5db;
+    --color-secondary-light: rgba(156, 163, 175, 0.15);
+
+    --color-success:        #4ade80;
+    --color-success-hover:  #86efac;
+    --color-success-bg:     rgba(74, 222, 128, 0.10);
+    --color-success-border: #166534;
+    --color-success-hsl:    142 69% 58%;
+
+    --color-warning:        #fbbf24;
+    --color-warning-hover:  #fcd34d;
+    --color-warning-bg:     rgba(251, 191, 36, 0.10);
+    --color-warning-border: #92400e;
+    --color-warning-hsl:    38 92% 50%;
+
+    --color-error:        #f87171;
+    --color-error-hover:  #fca5a5;
+    --color-error-bg:     rgba(248, 113, 113, 0.10);
+    --color-error-border: #991b1b;
+    --color-error-hsl:    0 91% 71%;
+
+    --color-info:        #60a5fa;
+    --color-info-hover:  #93c5fd;
+    --color-info-bg:     rgba(96, 165, 250, 0.10);
+    --color-info-border: #1e40af;
+    --color-info-hsl:    217 91% 60%;
+
+    --color-neutral-50:  #111827;
+    --color-neutral-100: #1f2937;
+    --color-neutral-200: #374151;
+    --color-neutral-300: #4b5563;
+    --color-neutral-400: #6b7280;
+    --color-neutral-500: #9ca3af;
+    --color-neutral-600: #d1d5db;
+    --color-neutral-700: #e5e7eb;
+    --color-neutral-800: #f3f4f6;
+
+    --surface-0: #0c0f17;
+    --surface-1: #151921;
+    --surface-2: #1e2330;
+    --surface-3: #2a2f3e;
+    --surface-4: #3a3f4e;
+
+    --bg-primary:   var(--surface-0);
+    --bg-secondary: var(--surface-1);
+    --bg-tertiary:  var(--surface-2);
+
+    --text-primary:   #f8fafc;
+    --text-muted:     #94a3b8;
+    --text-faint:     #64748b;
+    --text-inverse:   #0f172a;
+    --text-secondary: var(--text-muted);
+
+    --border-default: rgba(255,255,255,0.08);
+    --border-strong:  rgba(255,255,255,0.12);
+    --border-subtle:  rgba(255,255,255,0.04);
+
+    --shadow-sm:  0 1px 3px rgba(0,0,0,0.4), 0 0 1px rgba(0,0,0,0.3);
+    --shadow-md:  0 4px 6px rgba(0,0,0,0.4), 0 0 2px rgba(0,0,0,0.3);
+    --shadow-lg:  0 8px 16px rgba(0,0,0,0.5), 0 0 4px rgba(0,0,0,0.3);
+    --shadow-xl:  0 10px 25px rgba(0,0,0,0.5), 0 0 6px rgba(0,0,0,0.3);
+    --shadow-2xl: 0 25px 50px rgba(0,0,0,0.6);
+    --shadow-card-hover: 0 8px 25px rgba(0,0,0,0.4), 0 0 1px var(--color-primary-light);
+    --shadow-focus: 0 0 0 2px var(--surface-0), 0 0 0 4px var(--color-primary);
+
+    --accent-primary:       var(--color-primary);
+    --accent-primary-hover: var(--color-primary-hover);
+    --accent-primary-light: var(--color-primary-light);
+    --accent-secondary:     var(--color-accent);
+
+    --brand-core-subtle:  var(--color-primary-light);
+    --brand-shell-subtle: var(--color-accent-light);
+
+    --status-success:        var(--color-success);
+    --status-success-bg:     var(--color-success-bg);
+    --status-success-border: var(--color-success-border);
+    --status-warning:        var(--color-warning);
+    --status-warning-bg:     var(--color-warning-bg);
+    --status-warning-border: var(--color-warning-border);
+    --status-error:          var(--color-error);
+    --status-error-bg:       var(--color-error-bg);
+    --status-error-border:   var(--color-error-border);
+    --status-info:           var(--color-info);
+    --status-info-bg:        var(--color-info-bg);
+    --status-info-border:    var(--color-info-border);
+
+    --sidebar-bg:     #020617;
+    --sidebar-hover:  var(--surface-2);
+    --sidebar-active: var(--color-primary-light);
+    --sidebar-border: var(--border-default);
+  }
+}
+
+/* ============================================================================
+   ACCESSIBILITY — Reduced Motion
+   ============================================================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --transition-fast:   0ms;
+    --transition-normal: 0ms;
+    --transition-slow:   0ms;
+    --transition-bounce: 0ms;
+  }
+}

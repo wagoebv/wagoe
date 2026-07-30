@@ -8,7 +8,7 @@ and an admin UI. Uses PostgreSQL FTS in production with LIKE fallback for H2/SQL
 
 [source]
 ----
-libs/search/src/boundary/search/
+libs/search/src/wagoe/search/
 ├── schema.clj         — Malli schemas: SearchDocument, SearchResult, SearchResponse
 ├── ports.clj          — ISearchStore (persistence), ISearchEngine (orchestration)
 ├── core/
@@ -25,7 +25,7 @@ libs/search/src/boundary/search/
 
 [source,clojure]
 ----
-(require '[boundary.search.core.index :as search])
+(require '[wagoe.search.core.index :as search])
 
 (search/defsearch product-search
   {:id          :product-search
@@ -43,12 +43,12 @@ Weight levels: `:a` (highest) → `:d` (lowest).
 
 [source,clojure]
 ----
-(require '[boundary.search.ports :as ports])
+(require '[wagoe.search.ports :as ports])
 
 (ports/index-document! search-store
   {:id        product-id
    :index-id  :product-search
-   :title     "Boundary Framework"
+   :title     "Wagoe Framework"
    :body      "A Clojure web framework..."
    :tags      "clojure framework"
    :tenant-id tenant-id})

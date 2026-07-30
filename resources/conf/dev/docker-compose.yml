@@ -3,7 +3,7 @@ services:
     image: postgres:18
     container_name: my-app-db
     environment:
-      POSTGRES_DB: boundary_dev
+      POSTGRES_DB: wagoe_dev
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     ports:
@@ -23,7 +23,7 @@ services:
       - DB_USER=${POSTGRES_USER}
       - DB_PASSWORD=${POSTGRES_PASSWORD}
     volumes:
-      - ./resources/conf/dev:/boundary/resources/conf/dev:ro
+      - ./resources/conf/dev:/wagoe/resources/conf/dev:ro
     ports:
       - "3000:3000"
 

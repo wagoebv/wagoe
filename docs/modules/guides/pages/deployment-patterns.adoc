@@ -1,5 +1,5 @@
 = Deployment Patterns
-:description: Reference configurations for deploying Boundary applications.
+:description: Reference configurations for deploying Wagoe applications.
 :toc:
 
 This guide covers deployment patterns beyond Docker. For the Docker path, see xref:deployment.adoc[] and `dev-docs/DOCKER_DEVELOPMENT.adoc`. Reference configs live in `resources/deploy/`.
@@ -11,25 +11,25 @@ Build the uberjar before any deployment:
 [source,bash]
 ----
 clojure -T:build clean && clojure -T:build uber
-# Produces target/boundary-*.jar
+# Produces target/wagoe-*.jar
 ----
 
 Run migrations before starting the server:
 
 [source,bash]
 ----
-java -jar target/boundary-*.jar migrate up
+java -jar target/wagoe-*.jar migrate up
 ----
 
 == Environment Variables
 
-All deployments need these variables. See `resources/deploy/systemd/boundary.env.example` for a full template.
+All deployments need these variables. See `resources/deploy/systemd/wagoe.env.example` for a full template.
 
 [cols="1,1,2",options="header"]
 |===
 | Variable | Required | Description
 
-| `BND_ENV` | Yes | `production` (or `acc` for staging)
+| `WAG_ENV` | Yes | `production` (or `acc` for staging)
 | `JWT_SECRET` | Yes | 32+ character signing secret
 | `POSTGRES_HOST` | Yes | Database hostname
 | `POSTGRES_PORT` | Yes | Database port (default 5432)
@@ -51,32 +51,32 @@ Reference files: `resources/deploy/systemd/`
 [source,bash]
 ----
 # 1. Create service user
-sudo useradd -r -s /usr/sbin/nologin boundary
+sudo useradd -r -s /usr/sbin/nologin wagoe
 
 # 2. Deploy the jar
-sudo mkdir -p /opt/boundary/{logs,data}
-sudo cp target/boundary-*.jar /opt/boundary/boundary.jar
-sudo chown -R boundary:boundary /opt/boundary
+sudo mkdir -p /opt/wagoe/{logs,data}
+sudo cp target/wagoe-*.jar /opt/wagoe/wagoe.jar
+sudo chown -R wagoe:wagoe /opt/wagoe
 
 # 3. Configure secrets
-sudo mkdir -p /etc/boundary
-sudo cp resources/deploy/systemd/boundary.env.example /etc/boundary/boundary.env
-sudo chmod 600 /etc/boundary/boundary.env
-# Edit /etc/boundary/boundary.env with real values
+sudo mkdir -p /etc/wagoe
+sudo cp resources/deploy/systemd/wagoe.env.example /etc/wagoe/wagoe.env
+sudo chmod 600 /etc/wagoe/wagoe.env
+# Edit /etc/wagoe/wagoe.env with real values
 
 # 4. Install and start the service
-sudo cp resources/deploy/systemd/boundary.service /etc/systemd/system/
+sudo cp resources/deploy/systemd/wagoe.service /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable --now boundary
+sudo systemctl enable --now wagoe
 ----
 
 === Operations
 
 [source,bash]
 ----
-sudo systemctl status boundary     # Check status
-sudo journalctl -u boundary -f     # Tail logs
-sudo systemctl restart boundary    # Restart after deploy
+sudo systemctl status wagoe     # Check status
+sudo journalctl -u wagoe -f     # Tail logs
+sudo systemctl restart wagoe    # Restart after deploy
 ----
 
 The unit file runs migrations via `ExecStartPre` before starting the server. On failure it restarts after 10 seconds, with a maximum of 5 retries per minute.
@@ -87,7 +87,7 @@ The unit file sets default JVM options. Adjust for your server:
 
 [source,ini]
 ----
-# In boundary.service — set heap to ~70% of available RAM
+# In wagoe.service — set heap to ~70% of available RAM
 Environment=JAVA_OPTS="-Xms512m -Xmx2g -XX:+UseG1GC -XX:MaxGCPauseMillis=200"
 ----
 
@@ -102,13 +102,13 @@ Environment=JAVA_OPTS="-Xms512m -Xmx2g -XX:+UseG1GC -XX:MaxGCPauseMillis=200"
 
 == nginx Reverse Proxy
 
-Reference file: `resources/deploy/nginx/boundary.conf`
+Reference file: `resources/deploy/nginx/wagoe.conf`
 
 [source,bash]
 ----
 # 1. Install
-sudo cp resources/deploy/nginx/boundary.conf /etc/nginx/sites-available/boundary
-sudo ln -s /etc/nginx/sites-available/boundary /etc/nginx/sites-enabled/
+sudo cp resources/deploy/nginx/wagoe.conf /etc/nginx/sites-available/wagoe
+sudo ln -s /etc/nginx/sites-available/wagoe /etc/nginx/sites-enabled/
 
 # 2. Replace your-domain.com with your actual domain
 
@@ -141,8 +141,8 @@ Reference file: `resources/deploy/cloud/fly.toml`
 fly launch --copy-config
 
 # 3. Create database
-fly postgres create --name my-boundary-app-db
-fly postgres attach my-boundary-app-db
+fly postgres create --name my-wagoe-app-db
+fly postgres attach my-wagoe-app-db
 
 # 4. Set secrets
 fly secrets set JWT_SECRET="your-secret-32-chars-min" POSTGRES_PASSWORD="..."

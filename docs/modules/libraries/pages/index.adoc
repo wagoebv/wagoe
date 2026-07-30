@@ -1,7 +1,7 @@
 = Library Overview
-:description: All 23 independently publishable Boundary libraries plus developer tooling.
+:description: All 23 independently publishable Wagoe libraries plus developer tooling.
 
-Boundary is a monorepo of 24 libraries publishable to Clojars, plus developer tooling.
+Wagoe is a monorepo of 24 libraries publishable to Clojars, plus developer tooling.
 Every library follows the same FC/IS structure, making the codebase instantly familiar across libraries.
 
 == Foundation
@@ -114,14 +114,14 @@ These libraries are not published to Clojars — they are part of the monorepo a
 
 == Clojars coordinates
 
-All libraries share the `org.boundary-app` group:
+All libraries share the `org.wagoe` group:
 
 [source,clojure]
 ----
-{org.boundary-app/boundary-core      {:mvn/version "1.0.1-alpha-26"}
- org.boundary-app/boundary-user      {:mvn/version "1.0.1-alpha-26"}
- org.boundary-app/boundary-admin     {:mvn/version "1.0.1-alpha-26"}
- org.boundary-app/boundary-platform  {:mvn/version "1.0.1-alpha-26"}
+{org.wagoe/wagoe-core      {:mvn/version "1.0.1-alpha-26"}
+ org.wagoe/wagoe-user      {:mvn/version "1.0.1-alpha-26"}
+ org.wagoe/wagoe-admin     {:mvn/version "1.0.1-alpha-26"}
+ org.wagoe/wagoe-platform  {:mvn/version "1.0.1-alpha-26"}
  ;; etc.
  }
 ----

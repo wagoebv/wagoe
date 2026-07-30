@@ -25,8 +25,8 @@ Uses an in-memory backend for development/tests and Redis for production.
 
 [source,clojure]
 ----
-(require '[boundary.jobs.shell.worker :as worker]
-         '[boundary.jobs.ports :as ports])
+(require '[wagoe.jobs.shell.worker :as worker]
+         '[wagoe.jobs.ports :as ports])
 
 (def registry (worker/create-job-registry))
 (ports/register-handler! registry :send-welcome-email send-welcome-email)
@@ -37,7 +37,7 @@ Uses an in-memory backend for development/tests and Redis for production.
 
 [source,clojure]
 ----
-(require '[boundary.jobs.core.job :as job])
+(require '[wagoe.jobs.core.job :as job])
 
 (let [new-job (job/create-job {:job-type  :send-welcome-email
                                 :args      {:user-id  (random-uuid)
@@ -73,13 +73,13 @@ Priority levels: `:critical`, `:high`, `:default`, `:low`, `:bulk`.
 [source,clojure]
 ----
 ;; config.edn
-:boundary/job-queue {:backend :redis :redis-url #env REDIS_URL}
-:boundary/job-store {:backend :redis :redis-url #env REDIS_URL}
-:boundary/job-worker {:queue-name :default
+:wagoe/job-queue {:backend :redis :redis-url #env REDIS_URL}
+:wagoe/job-store {:backend :redis :redis-url #env REDIS_URL}
+:wagoe/job-worker {:queue-name :default
                       :worker-count 5
-                      :queue   #ig/ref :boundary/job-queue
-                      :store   #ig/ref :boundary/job-store
-                      :registry #ig/ref :boundary/job-registry}
+                      :queue   #ig/ref :wagoe/job-queue
+                      :store   #ig/ref :wagoe/job-store
+                      :registry #ig/ref :wagoe/job-registry}
 ----
 
 == Retry logic

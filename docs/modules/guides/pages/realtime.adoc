@@ -1,5 +1,5 @@
 = Real-Time (WebSocket)
-:description: Adding WebSocket messaging and pub/sub to a Boundary application.
+:description: Adding WebSocket messaging and pub/sub to a Wagoe application.
 
 The `realtime` library provides WebSocket-based real-time communication
 with JWT authentication, message routing, and topic-based pub/sub.
@@ -39,7 +39,7 @@ with JWT authentication, message routing, and topic-based pub/sub.
 
 [source,clojure]
 ----
-(require '[boundary.realtime.ports :as ports])
+(require '[wagoe.realtime.ports :as ports])
 
 ;; Broadcast to all
 (ports/send-to-all service {:type :announcement :text "System maintenance in 5 minutes"})
@@ -72,9 +72,9 @@ with JWT authentication, message routing, and topic-based pub/sub.
 
 [source,clojure]
 ----
-:boundary/realtime-service
-{:jwt-verifier #ig/ref :boundary/jwt-verifier
- :db           #ig/ref :boundary/db}   ; optional, for persistence
+:wagoe/realtime-service
+{:jwt-verifier #ig/ref :wagoe/jwt-verifier
+ :db           #ig/ref :wagoe/db}   ; optional, for persistence
 ----
 
 See xref:libraries:realtime.adoc[realtime library] for the full reference.

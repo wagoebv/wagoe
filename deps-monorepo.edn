@@ -4,7 +4,7 @@
 ;; Individual libraries have their own deps.edn files in libs/*/deps.edn
 ;;
 ;; For production use, depend on individual published libraries:
-;;   {:deps {boundary/platform {:mvn/version "0.1.0"}}}
+;;   {:deps {wagoe/platform {:mvn/version "0.1.0"}}}
 
 {:paths []  ;; No paths at root - libraries define their own paths
 
@@ -81,7 +81,7 @@
 
                      ;; Database drivers for development
                      org.xerial/sqlite-jdbc {:mvn/version "3.53.0.0"}
-                     org.postgresql/postgresql {:mvn/version "42.7.10"}
+                     org.postgresql/postgresql {:mvn/version "42.7.12"}
                      com.h2database/h2 {:mvn/version "2.4.240"}
                      com.mysql/mysql-connector-j {:mvn/version "9.6.0"}
 
@@ -146,7 +146,7 @@
   ;; =============================================================================
 
   :db {:extra-deps {org.xerial/sqlite-jdbc {:mvn/version "3.53.0.0"}
-                    org.postgresql/postgresql {:mvn/version "42.7.10"}
+                    org.postgresql/postgresql {:mvn/version "42.7.12"}
                     com.h2database/h2 {:mvn/version "2.4.240"}
                     com.mysql/mysql-connector-j {:mvn/version "9.6.0"}}}
 
@@ -154,7 +154,7 @@
 
   :db/sqlite {:extra-deps {org.xerial/sqlite-jdbc {:mvn/version "3.53.0.0"}}}
 
-  :db/postgresql {:extra-deps {org.postgresql/postgresql {:mvn/version "42.7.10"}}}
+  :db/postgresql {:extra-deps {org.postgresql/postgresql {:mvn/version "42.7.12"}}}
 
   :db/mysql {:extra-deps {com.mysql/mysql-connector-j {:mvn/version "9.6.0"}}}
 
@@ -190,12 +190,12 @@
   ;; Migrations
   ;; =============================================================================
 
-  :migrate {:main-opts ["-m" "boundary.platform.shell.database.cli-migrations"]
+  :migrate {:main-opts ["-m" "wagoe.platform.shell.database.cli-migrations"]
             :jvm-opts ["-Denv=dev"]}
 
   ;; =============================================================================
   ;; CLI Interface
   ;; =============================================================================
 
-  :cli {:main-opts ["-m" "boundary.cli"]
+  :cli {:main-opts ["-m" "wagoe.cli"]
         :jvm-opts ["-Denv=dev"]}}}

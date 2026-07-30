@@ -1,7 +1,7 @@
 #!/usr/bin/env bb
 ;; scripts/deploy.clj
 ;;
-;; Deploy one or more Boundary libraries to Clojars.
+;; Deploy one or more Wagoe libraries to Clojars.
 ;;
 ;; Usage (via bb.edn task):
 ;;   bb deploy                         -- show help
@@ -21,7 +21,7 @@
             [clojure.java.io :as io]
             [babashka.http-client :as http]
             [babashka.process :as p]
-            [boundary.tools.check-poms :as check-poms]))
+            [wagoe.tools.check-poms :as check-poms]))
 
 ;; =============================================================================
 ;; ANSI helpers
@@ -37,7 +37,7 @@
 ;; Library registry (membership only — publish ORDER is derived, see below)
 ;; =============================================================================
 
-;; Keep the SET in sync with libs/tools/src/boundary/tools/deploy.clj all-libs
+;; Keep the SET in sync with libs/tools/src/wagoe/tools/deploy.clj all-libs
 ;; (the canonical registry `bb deploy` publishes from). The ORDER here is not
 ;; authoritative: `publish-order` topologically sorts it from each lib's deps.edn
 ;; (BOU-203), so both registries derive the same order and can't drift on it.
@@ -68,9 +68,9 @@
    "ui-style"
    "shared-ui"
    "admin"
-   "boundary-cli"
+   "wagoe-cli"
    "devtools"
-   "boundary-mcp"])
+   "wagoe-mcp"])
 
 (def valid-libs (set all-libs))
 (def root-dir (System/getProperty "user.dir"))
@@ -82,10 +82,10 @@
 (defn lib-dir [lib]
   (str (io/file root-dir "libs" lib)))
 
-;; Publish order — topological sort of all-libs by deps.edn boundary deps.
-;; Mirrors boundary.tools.deploy (canonical); both derive the same order.
-(defn boundary-dep-dirs [lib]
-  (map :dir (check-poms/boundary-local-deps (io/file (lib-dir lib)))))
+;; Publish order — topological sort of all-libs by deps.edn wagoe deps.
+;; Mirrors wagoe.tools.deploy (canonical); both derive the same order.
+(defn wagoe-dep-dirs [lib]
+  (map :dir (check-poms/wagoe-local-deps (io/file (lib-dir lib)))))
 
 (defn topo-sort
   "Reorder `libs` so every lib follows all of its deps (per `dep-fn`). Stable:
@@ -103,7 +103,7 @@
             (throw (ex-info "Cycle in deploy dependency graph"
                             {:remaining remaining}))))))))
 
-(def publish-order (topo-sort all-libs boundary-dep-dirs))
+(def publish-order (topo-sort all-libs wagoe-dep-dirs))
 
 (defn read-version [lib]
   (let [build-file (io/file (lib-dir lib) "build.clj")]
@@ -112,20 +112,20 @@
 
 (defn artifact-name
   "Clojars artifact id for a lib, read from its build.clj coordinate
-   `(def lib 'org.boundary-app/<artifact>)`. Reading the coordinate (rather than
-   string-prefixing) avoids a double `boundary-` for libs whose dir already starts
-   with it (e.g. boundary-cli → boundary-cli, not boundary-boundary-cli). Falls
-   back to `boundary-<lib>` when build.clj is unreadable."
+   `(def lib 'org.wagoe/<artifact>)`. Reading the coordinate (rather than
+   string-prefixing) avoids a double `wagoe-` for libs whose dir already starts
+   with it (e.g. wagoe-cli → wagoe-cli, not wagoe-wagoe-cli). Falls
+   back to `wagoe-<lib>` when build.clj is unreadable."
   [lib]
   (let [build-file (io/file (lib-dir lib) "build.clj")]
     (or (when (.exists build-file)
           (second (re-find #"\(def lib '[^/]+/([^\)\s]+)" (slurp build-file))))
-        (str "boundary-" lib))))
+        (str "wagoe-" lib))))
 
 (defn published? [lib]
   (let [version  (read-version lib)
         artifact (artifact-name lib)
-        url      (format "https://clojars.org/repo/org/boundary-app/%s/%s/%s-%s.pom"
+        url      (format "https://clojars.org/repo/org/wagoe/%s/%s/%s-%s.pom"
                          artifact version artifact version)
         response (http/get url {:throw false})]
     (= 200 (:status response))))
@@ -145,7 +145,7 @@
 ;; =============================================================================
 
 (def ^:private catalogue-path
-  "libs/boundary-cli/resources/boundary/cli/modules-catalogue.edn")
+  "libs/wagoe-cli/resources/wagoe/cli/modules-catalogue.edn")
 
 (defn- patch-catalogue-version!
   "Update :version for lib-name in modules-catalogue.edn after a successful deploy."
@@ -168,7 +168,7 @@
    version, which must match the pushed git tag) and renders API docs + source
    links. Non-fatal on failure — the release already succeeded."
   [lib version]
-  (let [artifact (str "org.boundary-app/" (artifact-name lib))
+  (let [artifact (str "org.wagoe/" (artifact-name lib))
         resp     (http/post "https://cljdoc.org/api/request-build2"
                             {:form-params {:project artifact :version version}
                              :throw       false})]
@@ -237,7 +237,7 @@
   (deploy-sequence! libs))
 
 (defn print-help []
-  (println (bold "bb deploy") "— Deploy Boundary libraries to Clojars")
+  (println (bold "bb deploy") "— Deploy Wagoe libraries to Clojars")
   (println)
   (println "Usage:")
   (println "  bb deploy --all              Deploy all 23 libraries in dependency order")

@@ -1,9 +1,9 @@
-= Boundary Security Checklist
+= Wagoe Security Checklist
 :toc:
 :toclevels: 2
 :icons: font
 
-A production-readiness checklist for Boundary applications. Items marked icon:check-circle[] are handled by the framework; items marked icon:hand-o-right[] require application-level action.
+A production-readiness checklist for Wagoe applications. Items marked icon:check-circle[] are handled by the framework; items marked icon:hand-o-right[] require application-level action.
 
 == 1. Transport Security
 
@@ -12,10 +12,10 @@ A production-readiness checklist for Boundary applications. Items marked icon:ch
 |Status |Item
 
 |icon:check-circle[]
-|**HSTS** — `Strict-Transport-Security: max-age=31536000; includeSubDomains; preload` set by default in HTTP interceptors (`libs/platform/src/boundary/platform/shell/http/interceptors.clj`)
+|**HSTS** — `Strict-Transport-Security: max-age=31536000; includeSubDomains; preload` set by default in HTTP interceptors (`libs/platform/src/wagoe/platform/shell/http/interceptors.clj`)
 
 |icon:hand-o-right[]
-|**TLS termination** — Configure TLS at the reverse proxy (nginx, Caddy, cloud LB). Boundary listens on plain HTTP; terminate HTTPS in front of it. See `resources/deploy/nginx/boundary.conf` for a reference config.
+|**TLS termination** — Configure TLS at the reverse proxy (nginx, Caddy, cloud LB). Wagoe listens on plain HTTP; terminate HTTPS in front of it. See `resources/deploy/nginx/wagoe.conf` for a reference config.
 
 |icon:hand-o-right[]
 |**Certificate rotation** — Use Let's Encrypt / ACME or your cloud provider's managed certificates. Automate renewal.
@@ -102,10 +102,10 @@ All headers below are set by the `security-headers` interceptor. No application 
 |Status |Item
 
 |icon:hand-o-right[]
-|**CSRF tokens** — Custom HMAC synchronizer-token protection in `boundary.platform.core.csrf` (not Ring anti-forgery). Enforcement is opt-in (`:boundary/http :security :csrf :enabled?`, lib default off) — enable it per app, then emit tokens via `csrf/hidden-field` (forms) and `csrf/hx-headers` or the `<meta>` tag (HTMX).
+|**CSRF tokens** — Custom HMAC synchronizer-token protection in `wagoe.platform.core.csrf` (not Ring anti-forgery). Enforcement is opt-in (`:wagoe/http :security :csrf :enabled?`, lib default off) — enable it per app, then emit tokens via `csrf/hidden-field` (forms) and `csrf/hx-headers` or the `<meta>` tag (HTMX).
 
 |icon:hand-o-right[]
-|**CORS** — Configure allowed origins in production config (`boundary/http :cors`). Never use `*` in production. Restrict to your actual frontend domains.
+|**CORS** — Configure allowed origins in production config (`wagoe/http :cors`). Never use `*` in production. Restrict to your actual frontend domains.
 |===
 
 == 6. Rate Limiting & DDoS Mitigation
@@ -243,7 +243,7 @@ clojure -T:nvd check
 
 [cols="1,2,1"]
 |===
-|OWASP Category |Boundary Coverage |Action
+|OWASP Category |Wagoe Coverage |Action
 
 |A01: Broken Access Control
 |Role-based auth, session management, tenant isolation

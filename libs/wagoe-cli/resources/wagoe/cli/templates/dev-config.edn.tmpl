@@ -1,0 +1,30 @@
+{;; {{project-name}} — dev configuration
+ :active
+ {  :wagoe/settings
+    {:name             "{{project-name}}-dev"
+     :version          "0.1.0"
+     :date-format      "yyyy-MM-dd"
+     :date-time-format "yyyy-MM-dd HH:mm:ss"
+     ;; Auth cookies omit the Secure attribute for local HTTP dev.
+     ;; Defaults to true (HTTPS-only) when unset — set true behind TLS in prod.
+     :secure-cookies?  false
+     :features         {}}
+
+   :wagoe/h2
+   {:memory true
+    :pool   {:minimum-idle 1 :maximum-pool-size 10}}
+
+   :wagoe/http
+   {:port       #or [#env HTTP_PORT 3000]
+    :host       #or [#env HTTP_HOST "0.0.0.0"]
+    :join?      false
+    :port-range {:start 3000 :end 3099}}
+
+   :wagoe/router
+   {:adapter :reitit :coercion :malli :middleware []}
+
+   :wagoe/logging
+   {:level :debug :console true}}
+
+ :inactive
+ {}}

@@ -1,11 +1,11 @@
-# boundary-calendar
+# wagoe-calendar
 
 [![Status](https://img.shields.io/badge/status-stable-brightgreen)]()
 [![Clojure](https://img.shields.io/badge/clojure-1.12+-blue)]()
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
-[![Clojars Project](https://img.shields.io/clojars/v/org.boundary-app/boundary-calendar.svg)](https://clojars.org/org.boundary-app/boundary-calendar)
+[![Clojars Project](https://img.shields.io/clojars/v/org.wagoe/wagoe-calendar.svg)](https://clojars.org/org.wagoe/wagoe-calendar)
 
-Calendar and scheduling library for the [Boundary](https://github.com/thijs-creemers/boundary) framework.
+Calendar and scheduling library for the [Wagoe](https://github.com/wagoebv/wagoe) framework.
 
 ## Features
 
@@ -13,23 +13,23 @@ Calendar and scheduling library for the [Boundary](https://github.com/thijs-cree
 - **DST-safe occurrence expansion** — 9:00 AM local time stays at 9:00 AM local across spring-forward / fall-back transitions
 - **Conflict detection** — overlap check for any pair of events, including recurring ones, within a time window
 - **iCal export** — RFC 5545 VCALENDAR strings ready for Google Calendar / Outlook / iOS subscription
-- **iCal import** — parse `.ics` files back to boundary EventData maps
+- **iCal import** — parse `.ics` files back to wagoe EventData maps
 - **Hiccup UI components** — pure month-view, week-view, mini-calendar for admin interfaces
-- **`defevent` macro** — named event type registry (same pattern as `defreport` in boundary-reports)
+- **`defevent` macro** — named event type registry (same pattern as `defreport` in wagoe-reports)
 
 ## Installation
 
 Add to your `deps.edn`:
 
 ```clojure
-org.boundary-app/boundary-calendar {:mvn/version "1.0.0-beta-1"}
+org.wagoe/wagoe-calendar {:mvn/version "1.0.0-beta-1"}
 ```
 
 ## Quick Start
 
 ```clojure
-(require '[boundary.calendar.core.recurrence :as r])
-(require '[boundary.calendar.shell.service :as cal])
+(require '[wagoe.calendar.core.recurrence :as r])
+(require '[wagoe.calendar.shell.service :as cal])
 
 (def standup
   {:id        (random-uuid)
@@ -56,7 +56,7 @@ org.boundary-app/boundary-calendar {:mvn/version "1.0.0-beta-1"}
 
 ## Architecture
 
-Follows the [Functional Core / Imperative Shell](https://github.com/thijs-creemers/boundary) pattern:
+Follows the [Functional Core / Imperative Shell](https://github.com/wagoebv/wagoe) pattern:
 
 - `core/` — pure functions (no I/O, testable without mocks)
 - `shell/` — adapters with side effects (ical4j serialization)

@@ -1,11 +1,11 @@
-# boundary/search
+# wagoe/search
 
 [![Status](https://img.shields.io/badge/status-stable-brightgreen)]()
 [![Clojure](https://img.shields.io/badge/clojure-1.12+-blue)]()
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
-[![Clojars Project](https://img.shields.io/clojars/v/org.boundary-app/boundary-search.svg)](https://clojars.org/org.boundary-app/boundary-search)
+[![Clojars Project](https://img.shields.io/clojars/v/org.wagoe/wagoe-search.svg)](https://clojars.org/org.wagoe/wagoe-search)
 
-**Full-text search for the Boundary Framework**
+**Full-text search for the Wagoe Framework**
 
 Document indexing, full-text search (PostgreSQL FTS or LIKE fallback), trigram suggestions,
 and an admin UI — all wired in via a single Integrant key.
@@ -17,7 +17,7 @@ and an admin UI — all wired in via a single Integrant key.
 ### 1. Define a Search Index
 
 ```clojure
-(require '[boundary.search.shell.registry :as registry])
+(require '[wagoe.search.shell.registry :as registry])
 
 (registry/defsearch product-search
   {:id          :product-search
@@ -30,15 +30,15 @@ and an admin UI — all wired in via a single Integrant key.
 
 `defsearch` binds the var and registers the definition in the in-process registry.
 The registry is mutable process state, so it lives in the shell
-(`boundary.search.shell.registry`); `boundary.search.core.index` stays pure.
+(`wagoe.search.shell.registry`); `wagoe.search.core.index` stays pure.
 
 ### 2. Index Documents
 
 ```clojure
-(require '[boundary.search.ports :as search-ports])
+(require '[wagoe.search.ports :as search-ports])
 
 ;; Get the service from the system
-(def search-svc (get integrant.repl.state/system :boundary/search))
+(def search-svc (get integrant.repl.state/system :wagoe/search))
 
 (search-ports/index-document!
   search-svc
@@ -93,7 +93,7 @@ Higher-weight fields boost ranking:
 | PostgreSQL | `to_tsvector` / `plainto_tsquery` / `ts_rank` / `ts_headline` |
 | H2, SQLite | `LOWER(content_all) LIKE LOWER('%q%')` |
 
-The adapter is selected automatically from the shared `:boundary/db-context` dialect.
+The adapter is selected automatically from the shared `:wagoe/db-context` dialect.
 
 ### Empty Query Handling
 
@@ -106,7 +106,7 @@ returns an empty `SearchResponse` with `:total 0` without touching the database.
 
 ```edn
 ;; resources/conf/dev/config.edn
-{:boundary/search {:enabled? true}}
+{:wagoe/search {:enabled? true}}
 ```
 
 No additional options are needed — the module auto-detects the database type.
@@ -173,7 +173,7 @@ H2 integration tests create their own in-memory database — no external depende
 Test fixture pattern (reset the global registry between tests):
 
 ```clojure
-(require '[boundary.search.shell.registry :as registry])
+(require '[wagoe.search.shell.registry :as registry])
 
 (use-fixtures :each
   (fn [f]
@@ -185,4 +185,4 @@ Test fixture pattern (reset the global registry between tests):
 
 ## License
 
-Part of Boundary Framework — see main LICENSE file.
+Part of Wagoe Framework — see main LICENSE file.

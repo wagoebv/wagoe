@@ -1,12 +1,12 @@
-= Boundary Framework Roadmap
+= Wagoe Framework Roadmap
 :toc:
 :toclevels: 3
 :icons: font
 
-Boundary is a module-centric Clojure framework implementing Functional Core / Imperative Shell. This roadmap tracks progress toward 1.0 and beyond. Updated April 2026.
+Wagoe is a module-centric Clojure framework implementing Functional Core / Imperative Shell. This roadmap tracks progress toward 1.0 and beyond. Updated April 2026.
 
 == Phase 0 — Alpha icon:check-circle[] *COMPLETE*
-*Goal: Make Boundary usable for early adopters with minimal friction.*
+*Goal: Make Wagoe usable for early adopters with minimal friction.*
 
 === Delivered
 - [x] Core APIs frozen (FC/IS, Interceptors, Normalized Routing)
@@ -20,7 +20,7 @@ Boundary is a module-centric Clojure framework implementing Functional Core / Im
 '''
 
 == Phase 1 — Beta icon:check-circle[] *COMPLETE*
-*Goal: Make Boundary comfortable and delightful to build real-world applications.*
+*Goal: Make Wagoe comfortable and delightful to build real-world applications.*
 
 === Delivered
 - [x] Full CRUD Web UI for User module (create, edit, delete, MFA, sessions) via HTMX + Hiccup
@@ -42,7 +42,7 @@ Boundary is a module-centric Clojure framework implementing Functional Core / Im
 '''
 
 == Phase 2 — v1.0 (Stability & Production Readiness) icon:check-circle[] *COMPLETE*
-*Goal: Make Boundary fully reliable and attractive for company-level adoption.*
+*Goal: Make Wagoe fully reliable and attractive for company-level adoption.*
 
 === Objectives
 - Build trust through stability and polish
@@ -63,8 +63,8 @@ Boundary is a module-centric Clojure framework implementing Functional Core / Im
 - [x] Deployment patterns: systemd, nginx, Fly.io, Render reference configs (`resources/deploy/`)
 - [x] Deployment patterns guide (`docs/modules/guides/pages/deployment-patterns.adoc`)
 - [x] Database migration best practices guide (`docs/modules/guides/pages/migrations.adoc`)
-- [x] Starter project walkthrough (`boundary-starter/WALKTHROUGH.adoc`): guided 10-minute experience
-- [x] CRUD benchmarks (`dev/boundary/bench/core.clj`): Criterium benchmarks via `clojure -M:bench`
+- [x] Starter project walkthrough (`wagoe-starter/WALKTHROUGH.adoc`): guided 10-minute experience
+- [x] CRUD benchmarks (`dev/wagoe/bench/core.clj`): Criterium benchmarks via `clojure -M:bench`
 - [x] Scaling & tuning guide (`dev-docs/scaling-guide.adoc`): JVM, HikariCP, Redis, horizontal scaling
 - [x] Admin UI "Refined Editorial" redesign: DM Sans + JetBrains Mono, layered shadows, HTMX loading bar, toast system, skeleton screens, styled delete modal
 - [x] Full admin UI internationalisation: entity configs, filter operators, flash messages, inline edit, breadcrumbs, sidebar tooltips all use `[:t :key]` markers (EN + NL catalogues)
@@ -73,7 +73,7 @@ Boundary is a module-centric Clojure framework implementing Functional Core / Im
 '''
 
 == Phase 3 — Ecosystem Expansion (Post-1.0)
-*Goal: Build a vibrant Boundary ecosystem and optional advanced capabilities.*
+*Goal: Build a vibrant Wagoe ecosystem and optional advanced capabilities.*
 
 === Delivered (ahead of schedule)
 - [x] Workflow engine (`libs/workflow`): state machines with guards, lifecycle hooks, auto-transitions, audit trails
@@ -84,12 +84,12 @@ Boundary is a module-centric Clojure framework implementing Functional Core / Im
 - [x] AI tooling (`libs/ai`): Ollama/Anthropic/OpenAI, NL scaffolding, error explainer, test generator, SQL copilot, docs wizard
 
 === Remaining
-- [ ] Push notifications library (`boundary-push`): APNs, FCM adapters
-- [ ] Audience / segmentation library (`boundary-audience`): targeted messaging, cohorts
-- [ ] Forms library (`boundary-forms`): dynamic form definitions, validation, rendering
+- [ ] Push notifications library (`wagoe-push`): APNs, FCM adapters
+- [ ] Audience / segmentation library (`wagoe-audience`): targeted messaging, cohorts
+- [ ] Forms library (`wagoe-forms`): dynamic form definitions, validation, rendering
 - [ ] Realtime multi-server scaling: Redis-backed registry and pub/sub
 - [ ] Datomic / XTDB backend integration
-- [ ] Boundary SaaS Starter Kit (login, storage, admin, payments)
+- [ ] Wagoe SaaS Starter Kit (login, storage, admin, payments)
 - [ ] Application templates: API-only, admin dashboard, SaaS boilerplate
 - [ ] Extension / plugin marketplace
 
@@ -129,10 +129,10 @@ As of April 2026: **3044 tests, 15742 assertions, 0 failures** across all 22 lib
 == Strategic Notes
 
 === 1. Focus on onboarding, not architectural depth
-Boundary already has deep documentation. The guided walkthrough (`boundary-starter/WALKTHROUGH.adoc`) now provides a narrative, 10-minute experience for beginners.
+Wagoe already has deep documentation. The guided walkthrough (`wagoe-starter/WALKTHROUGH.adoc`) now provides a narrative, 10-minute experience for beginners.
 
 === 2. Use the Scaffolder as your flagship feature
-Boundary's scaffolder (`bb scaffold`) is a key differentiator — it should define the developer workflow from day one. With NL scaffolding (`bb scaffold ai`) and module integration (`bb scaffold integrate`), the end-to-end module creation flow is now nearly automated.
+Wagoe's scaffolder (`bb scaffold`) is a key differentiator — it should define the developer workflow from day one. With NL scaffolding (`bb scaffold ai`) and module integration (`bb scaffold integrate`), the end-to-end module creation flow is now nearly automated.
 
 === 3. Developer tooling reduces friction
 Config Doctor (`bb doctor`), Setup Wizard (`bb setup`), and the AI tools (`bb ai`) address the biggest friction points for new developers: configuration, debugging, and boilerplate.
@@ -141,7 +141,7 @@ Config Doctor (`bb doctor`), Setup Wizard (`bb setup`), and the AI tools (`bb ai
 The framework is already more mature than most early-stage OSS releases. Early feedback accelerates correctness.
 
 === 5. First-class internationalisation
-With the admin UI fully translatable via `[:t :key]` markers in entity configs and catalogues shipped for English and Dutch, Boundary is ready for non-English-speaking markets out of the box. New modules inherit i18n support automatically.
+With the admin UI fully translatable via `[:t :key]` markers in entity configs and catalogues shipped for English and Dutch, Wagoe is ready for non-English-speaking markets out of the box. New modules inherit i18n support automatically.
 
 '''
 

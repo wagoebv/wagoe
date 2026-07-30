@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
   - name: Documentation
-    url: https://docs.boundary-app.org
+    url: https://framework.wagoe.com/docs
     about: Getting-started guides, per-library references, and architecture docs.
   - name: Clojurians Slack
     url: https://clojurians.slack.com
-    about: Ask questions and discuss Boundary with the community.
+    about: Ask questions and discuss Wagoe with the community.

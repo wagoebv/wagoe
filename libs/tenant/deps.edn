@@ -1,8 +1,8 @@
 {:paths ["src" "resources"]
 
  :deps  {org.clojure/clojure {:mvn/version "1.12.5"}
-         boundary/platform   {:local/root "../platform"}
-         boundary/core       {:local/root "../core"}
+         wagoe/platform   {:local/root "../platform"}
+         wagoe/core       {:local/root "../core"}
 
          cheshire/cheshire   {:mvn/version "6.2.0"}}
 

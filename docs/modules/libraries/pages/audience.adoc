@@ -12,34 +12,34 @@ predicate pipeline.
 |===
 | Namespace | Purpose
 
-| `boundary.audience.core.audience`
+| `wagoe.audience.shell.registry`
 | Pure: segment definition registry and the `defaudience` macro
 
-| `boundary.audience.core.filter`
+| `wagoe.audience.core.filter`
 | Pure: built-in filter types and the `filter->sql` / `filter->predicate` multimethods
 
-| `boundary.audience.core.compiler`
+| `wagoe.audience.core.compiler`
 | Pure: compile segments into SQL + predicate execution plans
 
-| `boundary.audience.core.composition`
+| `wagoe.audience.core.composition`
 | Pure: AND/OR/NOT composition of segment result sets
 
-| `boundary.audience.core.ui`
+| `wagoe.audience.core.ui`
 | Pure: Hiccup UI components for segments
 
-| `boundary.audience.ports`
+| `wagoe.audience.ports`
 | Protocols: `IAudienceResolver`, `IAudienceRepository`, `IAudienceCache`, `IUserDataSource`
 
-| `boundary.audience.shell.service`
+| `wagoe.audience.shell.service`
 | Service orchestrating resolution, caching, and persistence
 
-| `boundary.audience.shell.persistence`
+| `wagoe.audience.shell.persistence`
 | `IAudienceRepository` — DB persistence (next.jdbc + HoneySQL)
 
-| `boundary.audience.shell.cache`
+| `wagoe.audience.shell.cache`
 | `IAudienceCache` — DB-backed cache of evaluated results
 
-| `boundary.audience.shell.http`
+| `wagoe.audience.shell.http`
 | REST + web endpoints (CRUD, preview, evaluate, members)
 |===
 

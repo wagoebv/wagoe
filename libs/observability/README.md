@@ -1,9 +1,9 @@
-# boundary/observability
+# wagoe/observability
 
 [![Status](https://img.shields.io/badge/status-stable-brightgreen)]()
 [![Clojure](https://img.shields.io/badge/clojure-1.12+-blue)]()
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
-[![Clojars Project](https://img.shields.io/clojars/v/org.boundary-app/boundary-observability.svg)](https://clojars.org/org.boundary-app/boundary-observability)
+[![Clojars Project](https://img.shields.io/clojars/v/org.wagoe/wagoe-observability.svg)](https://clojars.org/org.wagoe/wagoe-observability)
 
 Unified observability stack with pluggable adapters for logging, metrics, and error reporting.
 
@@ -11,12 +11,12 @@ Unified observability stack with pluggable adapters for logging, metrics, and er
 
 **deps.edn** (recommended):
 ```clojure
-{:deps {org.boundary-app/boundary-observability {:mvn/version "1.0.0-beta-1"}}}
+{:deps {org.wagoe/wagoe-observability {:mvn/version "1.0.0-beta-1"}}}
 ```
 
 **Leiningen**:
 ```clojure
-[org.boundary-app/boundary-observability "1.0.0-beta-1"]
+[org.wagoe/wagoe-observability "1.0.0-beta-1"]
 ```
 
 ## Features
@@ -32,7 +32,7 @@ Unified observability stack with pluggable adapters for logging, metrics, and er
 ## Requirements
 
 - Clojure 1.12+
-- boundary/core
+- wagoe/core
 
 ## Adapters
 
@@ -65,8 +65,8 @@ Unified observability stack with pluggable adapters for logging, metrics, and er
 
 ```clojure
 (ns myapp.core
-  (:require [boundary.observability.logging.core :as log]
-            [boundary.observability.logging.shell.adapters.stdout :as stdout]))
+  (:require [wagoe.observability.logging.core :as log]
+            [wagoe.observability.logging.shell.adapters.stdout :as stdout]))
 
 ;; Create logger
 (def logger (stdout/create-logger {:level :info}))
@@ -81,8 +81,8 @@ Unified observability stack with pluggable adapters for logging, metrics, and er
 
 ```clojure
 (ns myapp.metrics
-  (:require [boundary.observability.metrics.core :as metrics]
-            [boundary.observability.metrics.shell.adapters.no-op :as noop]))
+  (:require [wagoe.observability.metrics.core :as metrics]
+            [wagoe.observability.metrics.shell.adapters.no-op :as noop]))
 
 ;; Create metrics emitter
 (def emitter (noop/create-emitter))
@@ -97,8 +97,8 @@ Unified observability stack with pluggable adapters for logging, metrics, and er
 
 ```clojure
 (ns myapp.errors
-  (:require [boundary.observability.errors.core :as errors]
-            [boundary.observability.errors.shell.adapters.no-op :as noop]))
+  (:require [wagoe.observability.errors.core :as errors]
+            [wagoe.observability.errors.shell.adapters.no-op :as noop]))
 
 ;; Create error reporter
 (def reporter (noop/create-reporter))
@@ -118,17 +118,17 @@ Unified observability stack with pluggable adapters for logging, metrics, and er
 
 ```clojure
 ;; config.edn with Integrant
-{:boundary/logger
+{:wagoe/logger
  {:adapter :slf4j
   :level :info
   :context {:app "myapp" :env "production"}}
  
- :boundary/metrics
+ :wagoe/metrics
  {:adapter :datadog
   :prefix "myapp"
   :tags {:env "production"}}
  
- :boundary/error-reporter
+ :wagoe/error-reporter
  {:adapter :sentry
   :dsn #env SENTRY_DSN
   :environment "production"}}
@@ -137,7 +137,7 @@ Unified observability stack with pluggable adapters for logging, metrics, and er
 ## Module Structure
 
 ```
-libs/observability/src/boundary/observability/
+libs/observability/src/wagoe/observability/
 ├── logging/
 │   ├── core.clj              # Logging protocol
 │   └── shell/adapters/
@@ -161,7 +161,7 @@ libs/observability/src/boundary/observability/
 
 | Dependency | Version | Purpose |
 |------------|---------|---------|
-| `boundary/core` | 1.0.0-beta-1 | Foundation utilities |
+| `wagoe/core` | 1.0.0-beta-1 | Foundation utilities |
 | `org.clojure/tools.logging` | 1.3.1 | Logging abstraction |
 | `ch.qos.logback/logback-classic` | 1.5.23 | SLF4J implementation |
 | `io.sentry/sentry-clj` | 8.29.238 | Sentry integration |
@@ -175,13 +175,13 @@ libs/observability/src/boundary/observability/
                   │ depends on
                   ▼
 ┌─────────────────────────────────────────┐
-│         boundary/observability          │
+│         wagoe/observability          │
 │   (logging, metrics, error-reporting)   │
 └─────────────────┬───────────────────────┘
                   │ depends on
                   ▼
 ┌─────────────────────────────────────────┐
-│            boundary/core                │
+│            wagoe/core                │
 └─────────────────────────────────────────┘
 ```
 

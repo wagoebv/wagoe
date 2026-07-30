@@ -1,19 +1,19 @@
 = REPL Workflow
-:description: Day-to-day development with the Boundary REPL.
+:description: Day-to-day development with the Wagoe REPL.
 
-Boundary is designed for REPL-driven development. The nREPL server runs on port 7888.
+Wagoe is designed for REPL-driven development. The nREPL server runs on port 7888.
 
 == Starting the system
 
 [source,bash]
 ----
 export JWT_SECRET="change-me-dev-secret-min-32-chars"
-export BND_ENV="development"
-clojure -M:repl
+export WAG_ENV="development"
+clojure -M:repl-clj
 ----
 
 This starts a headless nREPL server on port 7888. Connect your editor (or the
-Boundary MCP server) to it, then eval:
+Wagoe MCP server) to it, then eval:
 
 [source,clojure]
 ----
@@ -38,11 +38,11 @@ clj-nrepl-eval -p 7888 "(+ 1 2)"
 [source,clojure]
 ----
 ;; Get a running service from the Integrant system
-(def user-svc (get integrant.repl.state/system :boundary/user-service))
-(def db (get integrant.repl.state/system :boundary/db))
+(def user-svc (get integrant.repl.state/system :wagoe/user-service))
+(def db (get integrant.repl.state/system :wagoe/db))
 
 ;; Call service methods directly
-(require '[boundary.user.ports :as ports])
+(require '[wagoe.user.ports :as ports])
 (ports/list-users user-svc {:limit 10})
 
 ;; Query the database directly
@@ -55,7 +55,7 @@ clj-nrepl-eval -p 7888 "(+ 1 2)"
 [source,clojure]
 ----
 ;; Reload a single namespace
-(require '[boundary.user.core.user :as user-core] :reload)
+(require '[wagoe.user.core.user :as user-core] :reload)
 
 ;; Full system reset (handles most changes)
 (reset)
@@ -73,12 +73,12 @@ If you changed a record definition and the change isn't taking effect, do a full
 [source,clojure]
 ----
 ;; Test core functions directly (no system needed)
-(require '[boundary.user.core.user :as user-core])
+(require '[wagoe.user.core.user :as user-core])
 (user-core/prepare-user {:email "alice@example.com" :name "Alice"})
 
 ;; Test a service method
-(def admin-svc (get integrant.repl.state/system :boundary/admin-service))
-(require '[boundary.admin.ports :as admin-ports])
+(def admin-svc (get integrant.repl.state/system :wagoe/admin-service))
+(require '[wagoe.admin.ports :as admin-ports])
 (admin-ports/list-entities admin-svc :users {:limit 5})
 ----
 
@@ -86,7 +86,7 @@ If you changed a record definition and the change isn't taking effect, do a full
 
 [source,clojure]
 ----
-(def ds (get-in integrant.repl.state/system [:boundary/db-context :datasource]))
+(def ds (get-in integrant.repl.state/system [:wagoe/db-context :datasource]))
 (jdbc/execute! ds ["SELECT id, email FROM users WHERE id = ?" some-uuid])
 ----
 

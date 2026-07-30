@@ -1,7 +1,7 @@
 = admin
 :description: Auto-generated CRUD admin UI built with Hiccup and HTMX.
 
-Admin UI and CRUD management tooling for Boundary entities.
+Admin UI and CRUD management tooling for Wagoe entities.
 Generates admin interfaces automatically from entity configuration — no manual forms.
 
 == Technology stack
@@ -20,7 +20,7 @@ Generates admin interfaces automatically from entity configuration — no manual
 | Minimal, semantic CSS framework
 
 | Lucide icons
-| Icon set via `boundary.shared.ui.core.icons`
+| Icon set via `wagoe.shared.ui.core.icons`
 |===
 
 == Key namespaces
@@ -29,13 +29,13 @@ Generates admin interfaces automatically from entity configuration — no manual
 |===
 | Namespace | Purpose
 
-| `boundary.admin.core.ui`
+| `wagoe.admin.core.ui`
 | Main admin UI rendering (tables, forms, layout composition)
 
-| `boundary.shared.ui.core.icons`
+| `wagoe.shared.ui.core.icons`
 | Shared Lucide icon rendering
 
-| `boundary.admin.shell.http`
+| `wagoe.admin.shell.http`
 | Admin HTTP handlers and HTMX fragment endpoints
 |===
 
@@ -66,7 +66,7 @@ resources/conf/dev/
 [source,clojure]
 ----
 ;; config.edn — include all entity configs
-:boundary/admin
+:wagoe/admin
 {:enabled?   true
  :entities   #merge [#include "admin/users.edn"
                      #include "admin/products.edn"]

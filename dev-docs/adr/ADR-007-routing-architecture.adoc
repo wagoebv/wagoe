@@ -10,7 +10,7 @@
 
 == Context
 
-The Boundary Framework supports three interaction modes: REST API, CLI, and Web Frontend. The HTTP routing infrastructure needed to properly support:
+The Wagoe Framework supports three interaction modes: REST API, CLI, and Web Frontend. The HTTP routing infrastructure needed to properly support:
 
 1. **REST API endpoints** under `/api/*` prefix for external integration
 2. **Web UI endpoints** under `/web/*` prefix for browser-based interaction
@@ -18,7 +18,7 @@ The Boundary Framework supports three interaction modes: REST API, CLI, and Web 
 
 === Previous State
 
-The initial routing implementation had modules exporting complete Ring handlers via `:boundary/user-http-handler`. This approach caused several issues:
+The initial routing implementation had modules exporting complete Ring handlers via `:wagoe/user-http-handler`. This approach caused several issues:
 
 **Problems:**
 - `/api/users` → 500 Server Error (routes not accessible under `/api` prefix)
@@ -28,7 +28,7 @@ The initial routing implementation had modules exporting complete Ring handlers 
 - Difficult to apply consistent middleware per route group
 
 **Root Cause:**
-User module created its own complete router using `routes/create-router` internally with all routes pre-defined. The system used this handler directly via `:boundary/user-http-handler`, bypassing the intended top-level route composition and prefix application.
+User module created its own complete router using `routes/create-router` internally with all routes pre-defined. The system used this handler directly via `:wagoe/user-http-handler`, bypassing the intended top-level route composition and prefix application.
 
 === Requirements
 
@@ -88,11 +88,11 @@ Modules return a map with three keys:
 
 ==== 2. Top-Level Route Composition
 
-System wiring (`boundary.platform.shell.system.wiring`) composes routes:
+System wiring (`wagoe.platform.shell.system.wiring`) composes routes:
 
 [source,clojure]
 ----
-(defmethod ig/init-key :boundary/http-handler
+(defmethod ig/init-key :wagoe/http-handler
   [_ {:keys [config user-routes]}]
   (let [static-routes-vec (or (:static user-routes) [])
         web-routes-vec (or (:web user-routes) [])
@@ -151,7 +151,7 @@ The `routes/create-router` function automatically groups routes:
 
 === Module Integration Pattern
 
-==== Module HTTP Layer (`boundary.user.shell.http`)
+==== Module HTTP Layer (`wagoe.user.shell.http`)
 
 [source,clojure]
 ----
@@ -176,35 +176,35 @@ The `routes/create-router` function automatically groups routes:
    :static []})
 ----
 
-==== Module Wiring (`boundary.user.shell.module-wiring`)
+==== Module Wiring (`wagoe.user.shell.module-wiring`)
 
 [source,clojure]
 ----
-(defmethod ig/init-key :boundary/user-routes
+(defmethod ig/init-key :wagoe/user-routes
   [_ {:keys [user-service config]}]
   (log/info "Initializing user module routes (structured format)")
-  (require 'boundary.user.shell.http)
-  (let [user-routes-fn (ns-resolve 'boundary.user.shell.http 'user-routes)
+  (require 'wagoe.user.shell.http)
+  (let [user-routes-fn (ns-resolve 'wagoe.user.shell.http 'user-routes)
         routes (user-routes-fn user-service (or config {}))]
     (log/info "User module routes initialized successfully" 
               {:route-keys (keys routes)})
     routes))
 ----
 
-==== Integrant Configuration (`boundary.config`)
+==== Integrant Configuration (`wagoe.config`)
 
 [source,clojure]
 ----
-{:boundary/user-routes
- {:user-service (ig/ref :boundary/user-service)
+{:wagoe/user-routes
+ {:user-service (ig/ref :wagoe/user-service)
   :config config}
 
- :boundary/http-handler
+ :wagoe/http-handler
  {:config config
-  :user-routes (ig/ref :boundary/user-routes)}
+  :user-routes (ig/ref :wagoe/user-routes)}
 
- :boundary/http-server
- {:handler (ig/ref :boundary/http-handler)
+ :wagoe/http-server
+ {:handler (ig/ref :wagoe/http-handler)
   :port 3000
   :host "0.0.0.0"}}
 ----
@@ -248,7 +248,7 @@ The `routes/create-router` function automatically groups routes:
 
 === Why Module-Provides-Routes Pattern
 
-This pattern aligns with Boundary's architectural principles:
+This pattern aligns with Wagoe's architectural principles:
 
 1. **Functional Core / Imperative Shell**
    - Routes are data (functional)
@@ -267,37 +267,37 @@ This pattern aligns with Boundary's architectural principles:
 
 === Files Modified
 
-1. **libs/user/src/boundary/user/shell/http.clj**
+1. **libs/user/src/wagoe/user/shell/http.clj**
    - Created `api-routes` function (routes without `/api` prefix)
    - Renamed `web-routes` to `web-ui-routes` (routes without `/web` prefix)
    - Restructured `user-routes` to return `{:api :web :static}` map
    - Added `user-routes-flat` for backward compatibility
    - Deprecated `create-handler`, `create-router`, `create-app`
 
-2. **libs/user/src/boundary/user/shell/module_wiring.clj**
-   - Added `:boundary/user-routes` init-key
-   - Deprecated `:boundary/user-http-handler` with warnings
+2. **libs/user/src/wagoe/user/shell/module_wiring.clj**
+   - Added `:wagoe/user-routes` init-key
+   - Deprecated `:wagoe/user-http-handler` with warnings
    - Returns structured route format
 
-3. **libs/platform/src/boundary/platform/shell/system/wiring.clj**
-   - Updated `:boundary/http-handler` to accept `:user-routes`
+3. **libs/platform/src/wagoe/platform/shell/system/wiring.clj**
+   - Updated `:wagoe/http-handler` to accept `:user-routes`
    - Extracts `:api`, `:web`, `:static` from routes structure
    - Adds `/web` prefix to web routes
    - Composes all routes for router creation
 
-4. **libs/platform/src/boundary/platform/shell/interfaces/http/routes.clj**
+4. **libs/platform/src/wagoe/platform/shell/interfaces/http/routes.clj**
    - Added `[ring.middleware.resource :refer [wrap-resource]]`
    - Modified `create-handler` to use `wrap-resource` middleware
    - Static files served before Reitit routing
 
-5. **src/boundary/config.clj**
-   - Changed `:boundary/http-handler` dependency to `:user-routes`
+5. **src/wagoe/config.clj**
+   - Changed `:wagoe/http-handler` dependency to `:user-routes`
    - Updated documentation for structured route format
 
 === Backward Compatibility
 
 **Deprecated Components:**
-- `:boundary/user-http-handler` - Still functional, logs deprecation warning
+- `:wagoe/user-http-handler` - Still functional, logs deprecation warning
 - `create-handler`, `create-router`, `create-app` - Marked deprecated in docs
 
 **Migration Path:**
@@ -305,7 +305,7 @@ For existing modules or new modules:
 1. Define `api-routes` returning routes WITHOUT `/api` prefix
 2. Define `web-ui-routes` returning routes WITHOUT `/web` prefix
 3. Define `module-routes` returning `{:api [...] :web [...]}`
-4. Wire as `:boundary/<module>-routes` in Integrant
+4. Wire as `:wagoe/<module>-routes` in Integrant
 5. System automatically applies prefixes and composes
 
 == Consequences
@@ -322,7 +322,7 @@ For existing modules or new modules:
 
 === Negative
 
-1. **Breaking Change**: `:boundary/user-http-handler` replaced (deprecated but functional)
+1. **Breaking Change**: `:wagoe/user-http-handler` replaced (deprecated but functional)
 2. **Additional Abstraction**: One more layer between module and HTTP server
 3. **Learning Curve**: Developers need to understand structured route format
 
@@ -375,7 +375,7 @@ All endpoints functioning correctly with proper prefixes and content types.
 
 4. **Deprecation Cleanup**
    - Remove deprecated functions in next major version
-   - Clean up `boundary.platform.shell.modules` compose-http-handlers
+   - Clean up `wagoe.platform.shell.modules` compose-http-handlers
 
 === Extension Points
 
@@ -383,19 +383,19 @@ All endpoints functioning correctly with proper prefixes and content types.
 
 [source,clojure]
 ----
-;; 1. Define routes in boundary.inventory.shell.http
+;; 1. Define routes in wagoe.inventory.shell.http
 (defn inventory-routes [inventory-service config]
   {:api (storage-api-routes inventory-service)
    :web (storage-web-routes inventory-service config)
    :static []})
 
-;; 2. Wire in boundary.inventory.shell.module-wiring
-(defmethod ig/init-key :boundary/inventory-routes
+;; 2. Wire in wagoe.inventory.shell.module-wiring
+(defmethod ig/init-key :wagoe/inventory-routes
   [_ {:keys [inventory-service config]}]
   (inventory-http/inventory-routes inventory-service config))
 
 ;; 3. Update system wiring to compose storage routes
-(defmethod ig/init-key :boundary/http-handler
+(defmethod ig/init-key :wagoe/http-handler
   [_ {:keys [config user-routes inventory-routes]}]
   ;; Compose user-routes and inventory-routes...
   )
@@ -462,7 +462,7 @@ All endpoints functioning correctly with proper prefixes and content types.
 
 [source,clojure]
 ----
-(ns boundary.example.shell.http)
+(ns wagoe.example.shell.http)
 
 (defn api-routes [example-service]
   [["/items" {:get {:handler (list-items-handler example-service)

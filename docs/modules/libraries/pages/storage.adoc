@@ -10,28 +10,28 @@ Includes file validation, image processing, and signed URL generation.
 |===
 | Namespace | Purpose
 
-| `boundary.storage.core.validation`
+| `wagoe.storage.core.validation`
 | Pure: file validation (size, type, extension), filename sanitization
 
-| `boundary.storage.ports`
+| `wagoe.storage.ports`
 | Protocols: `IFileStorage`, `IImageProcessor`
 
-| `boundary.storage.schema`
+| `wagoe.storage.schema`
 | Malli schemas: `FileData`, `FileMetadata`, `StorageResult`
 
-| `boundary.storage.shell.service`
+| `wagoe.storage.shell.service`
 | Service layer orchestrating validation + storage
 
-| `boundary.storage.shell.adapters.local`
+| `wagoe.storage.shell.adapters.local`
 | Local filesystem adapter (content-addressed with SHA-256)
 
-| `boundary.storage.shell.adapters.s3`
+| `wagoe.storage.shell.adapters.s3`
 | AWS S3 / S3-compatible adapter (MinIO, DigitalOcean Spaces)
 
-| `boundary.storage.shell.adapters.image-processor`
+| `wagoe.storage.shell.adapters.image-processor`
 | Java AWT image processing (no external deps)
 
-| `boundary.storage.shell.http-handlers`
+| `wagoe.storage.shell.http-handlers`
 | Ring handlers for upload/download/delete
 |===
 
@@ -39,7 +39,7 @@ Includes file validation, image processing, and signed URL generation.
 
 [source,clojure]
 ----
-(require '[boundary.storage.ports :as ports])
+(require '[wagoe.storage.ports :as ports])
 
 (ports/store-file storage
   {:bytes (.getBytes "content") :content-type "text/plain"}
@@ -56,7 +56,7 @@ Includes file validation, image processing, and signed URL generation.
 
 [source,clojure]
 ----
-(require '[boundary.storage.core.validation :as validation])
+(require '[wagoe.storage.core.validation :as validation])
 
 (validation/validate-file
   {:bytes file-bytes :content-type "image/png" :filename "photo.png"}
@@ -83,10 +83,10 @@ Includes file validation, image processing, and signed URL generation.
 [source,clojure]
 ----
 ;; Local (development)
-:boundary/storage {:backend :local :base-path "/var/uploads" :base-url "http://localhost:3000/uploads"}
+:wagoe/storage {:backend :local :base-path "/var/uploads" :base-url "http://localhost:3000/uploads"}
 
 ;; S3 (production)
-:boundary/storage {:backend :s3 :bucket #env AWS_S3_BUCKET :region #env AWS_REGION
+:wagoe/storage {:backend :s3 :bucket #env AWS_S3_BUCKET :region #env AWS_REGION
                    :access-key #env AWS_ACCESS_KEY_ID :secret-key #env AWS_SECRET_ACCESS_KEY}
 ----
 

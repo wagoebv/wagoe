@@ -24,8 +24,8 @@ document.addEventListener('alpine:init', function () {
   };
 
   window.Alpine.store('sidebar', {
-    state: persist('expanded', 'boundary-admin-sidebar-state'),
-    pinned: persist(false, 'boundary-admin-sidebar-pinned'),
+    state: persist('expanded', 'wagoe-admin-sidebar-state'),
+    pinned: persist(false, 'wagoe-admin-sidebar-pinned'),
     mobileOpen: false,
 
     toggle: function () {

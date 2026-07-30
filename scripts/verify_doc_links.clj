@@ -67,7 +67,7 @@
           results   (map check-file files)
           total     (reduce + (map :checked results))
           broken    (vec (mapcat :broken results))]
-      (println (str "\nResults:"))
+      (println "\nResults:")
       (println (str "  Files checked: " (count files)))
       (println (str "  Links checked: " total))
       (println (str "  Broken links:  " (count broken)))

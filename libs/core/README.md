@@ -1,22 +1,22 @@
-# boundary/core
+# wagoe/core
 
 [![Status](https://img.shields.io/badge/status-stable-brightgreen)]()
 [![Clojure](https://img.shields.io/badge/clojure-1.12+-blue)]()
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
-[![Clojars Project](https://img.shields.io/clojars/v/org.boundary-app/boundary-core.svg)](https://clojars.org/org.boundary-app/boundary-core)
+[![Clojars Project](https://img.shields.io/clojars/v/org.wagoe/wagoe-core.svg)](https://clojars.org/org.wagoe/wagoe-core)
 
-Foundation library providing validation, utilities, and interceptor framework for the Boundary ecosystem.
+Foundation library providing validation, utilities, and interceptor framework for the Wagoe ecosystem.
 
 ## Installation
 
 **deps.edn** (recommended):
 ```clojure
-{:deps {org.boundary-app/boundary-core {:mvn/version "1.0.0-beta-1"}}}
+{:deps {org.wagoe/wagoe-core {:mvn/version "1.0.0-beta-1"}}}
 ```
 
 **Leiningen**:
 ```clojure
-[org.boundary-app/boundary-core "1.0.0-beta-1"]
+[org.wagoe/wagoe-core "1.0.0-beta-1"]
 ```
 
 ## Features
@@ -41,7 +41,7 @@ Foundation library providing validation, utilities, and interceptor framework fo
 
 ```clojure
 (ns myapp.core
-  (:require [boundary.core.utils.case-conversion :as case]))
+  (:require [wagoe.core.utils.case-conversion :as case]))
 
 ;; kebab-case to snake_case (for database)
 (case/kebab-case->snake-case-map {:user-id 123 :first-name "John"})
@@ -60,7 +60,7 @@ Foundation library providing validation, utilities, and interceptor framework fo
 
 ```clojure
 (ns myapp.validation
-  (:require [boundary.core.validation :as v]))
+  (:require [wagoe.core.validation :as v]))
 
 ;; Define schema
 (def user-schema
@@ -81,7 +81,7 @@ Foundation library providing validation, utilities, and interceptor framework fo
 
 ```clojure
 (ns myapp.types
-  (:require [boundary.core.utils.type-conversion :as tc]))
+  (:require [wagoe.core.utils.type-conversion :as tc]))
 
 ;; Safe UUID parsing
 (tc/string->uuid "550e8400-e29b-41d4-a716-446655440000")
@@ -99,7 +99,7 @@ Foundation library providing validation, utilities, and interceptor framework fo
 
 ```clojure
 (ns myapp.logging
-  (:require [boundary.core.utils.pii-redaction :as pii]))
+  (:require [wagoe.core.utils.pii-redaction :as pii]))
 
 ;; Redact sensitive fields before logging
 (pii/redact-map {:email "john@example.com" :password "secret123" :name "John"})
@@ -109,7 +109,7 @@ Foundation library providing validation, utilities, and interceptor framework fo
 ## Module Structure
 
 ```
-libs/core/src/boundary/core/
+libs/core/src/wagoe/core/
 ├── validation.clj           # Malli validation utilities
 ├── interceptors/            # Interceptor framework
 │   ├── core.clj
@@ -130,17 +130,17 @@ This library has minimal dependencies:
 
 ## Relationship to Other Libraries
 
-`boundary/core` is the foundation layer with **no dependencies** on other Boundary libraries:
+`wagoe/core` is the foundation layer with **no dependencies** on other Wagoe libraries:
 
 ```
 ┌─────────────────────────────────────────┐
-│           Other Boundary libs           │
+│           Other Wagoe libs           │
 │  (observability, platform, user, etc.)  │
 └─────────────────┬───────────────────────┘
                   │ depends on
                   ▼
 ┌─────────────────────────────────────────┐
-│            boundary/core                │
+│            wagoe/core                │
 │   (validation, utils, interceptors)     │
 └─────────────────────────────────────────┘
 ```

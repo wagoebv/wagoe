@@ -1,11 +1,11 @@
-# boundary-geo
+# wagoe-geo
 
 [![Status](https://img.shields.io/badge/status-stable-brightgreen)]()
 [![Clojure](https://img.shields.io/badge/clojure-1.12+-blue)]()
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
-[![Clojars Project](https://img.shields.io/clojars/v/org.boundary-app/boundary-geo.svg)](https://clojars.org/org.boundary-app/boundary-geo)
+[![Clojars Project](https://img.shields.io/clojars/v/org.wagoe/wagoe-geo.svg)](https://clojars.org/org.wagoe/wagoe-geo)
 
-> Multi-provider geocoding for the Boundary framework — addresses to coordinates, coordinates to addresses, and distance calculations. Batteries included: rate limiting, DB-backed caching, and a provider fallback chain.
+> Multi-provider geocoding for the Wagoe framework — addresses to coordinates, coordinates to addresses, and distance calculations. Batteries included: rate limiting, DB-backed caching, and a provider fallback chain.
 
 ---
 
@@ -13,12 +13,12 @@
 
 ```clojure
 ;; deps.edn
-{:deps {org.boundary-app/boundary-geo {:mvn/version "1.0.0-beta-1"}}}
+{:deps {org.wagoe/wagoe-geo {:mvn/version "1.0.0-beta-1"}}}
 ```
 
 ```clojure
-(require '[boundary.geo.shell.service :as geo])
-(require '[boundary.geo.shell.adapters.osm :as osm])
+(require '[wagoe.geo.shell.service :as geo])
+(require '[wagoe.geo.shell.adapters.osm :as osm])
 
 ;; Create an adapter (no API key needed for OpenStreetMap)
 (def adapter (osm/create-nominatim-adapter
@@ -41,30 +41,30 @@
 
 ## Integrant Configuration
 
-Add to `resources/conf/{env}/config.edn` and require `boundary.geo.shell.module-wiring` at system start:
+Add to `resources/conf/{env}/config.edn` and require `wagoe.geo.shell.module-wiring` at system start:
 
 ```edn
 ;; OpenStreetMap (free, no key)
-:boundary/geo-service
+:wagoe/geo-service
 {:provider   :openstreetmap
  :user-agent "MyApp/1.0 (contact@example.com)"
  :cache-ttl  86400
- :db         #ig/ref :boundary/db}
+ :db         #ig/ref :wagoe/db}
 
 ;; Google Maps
-:boundary/geo-service
+:wagoe/geo-service
 {:provider  :google
- :api-key   #env BND_GEO_API_KEY
+ :api-key   #env WAG_GEO_API_KEY
  :cache-ttl 86400
- :db        #ig/ref :boundary/db}
+ :db        #ig/ref :wagoe/db}
 
 ;; Fallback chain (try OSM first, then Google)
-:boundary/geo-service
+:wagoe/geo-service
 {:provider   [:openstreetmap :google]
- :api-key    #env BND_GEO_API_KEY
+ :api-key    #env WAG_GEO_API_KEY
  :cache-ttl  86400
  :rate-limit 1
- :db         #ig/ref :boundary/db}
+ :db         #ig/ref :wagoe/db}
 ```
 
 ---
@@ -72,7 +72,7 @@ Add to `resources/conf/{env}/config.edn` and require `boundary.geo.shell.module-
 ## API
 
 ```clojure
-(require '[boundary.geo.shell.service :as geo])
+(require '[wagoe.geo.shell.service :as geo])
 
 ;; Geocode an address → coordinates (cache-first)
 (geo/geocode! service {:address "Damrak 1" :city "Amsterdam"})
@@ -91,11 +91,11 @@ Add to `resources/conf/{env}/config.edn` and require `boundary.geo.shell.module-
 
 ## DB Migration
 
-Run once before using DB-backed caching. When `boundary-geo` is on the
+Run once before using DB-backed caching. When `wagoe-geo` is on the
 classpath, `clojure -M:migrate up` now auto-discovers this migration:
 
 ```sql
--- libs/geo/resources/boundary/geo/migrations/20260324010000-geo-cache.up.sql
+-- libs/geo/resources/wagoe/geo/migrations/20260324010000-geo-cache.up.sql
 CREATE TABLE geo_cache (
   address_hash      TEXT PRIMARY KEY,
   lat               NUMERIC(10, 7) NOT NULL,

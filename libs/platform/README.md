@@ -1,9 +1,9 @@
-# boundary/platform
+# wagoe/platform
 
 [![Status](https://img.shields.io/badge/status-stable-brightgreen)]()
 [![Clojure](https://img.shields.io/badge/clojure-1.12+-blue)]()
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
-[![Clojars Project](https://img.shields.io/clojars/v/org.boundary-app/boundary-platform.svg)](https://clojars.org/org.boundary-app/boundary-platform)
+[![Clojars Project](https://img.shields.io/clojars/v/org.wagoe/wagoe-platform.svg)](https://clojars.org/org.wagoe/wagoe-platform)
 
 Core infrastructure for web applications: database, HTTP routing, pagination, search, and system lifecycle management.
 
@@ -11,15 +11,15 @@ Core infrastructure for web applications: database, HTTP routing, pagination, se
 
 **deps.edn** (recommended):
 ```clojure
-{:deps {org.boundary-app/boundary-platform {:mvn/version "1.0.0-beta-1"}
+{:deps {org.wagoe/wagoe-platform {:mvn/version "1.0.0-beta-1"}
         ;; Choose your database driver
-        org.postgresql/postgresql {:mvn/version "42.7.8"}}}
+        org.postgresql/postgresql {:mvn/version "42.7.12"}}}
 ```
 
 **Leiningen**:
 ```clojure
-[org.boundary-app/boundary-platform "1.0.0-beta-1"]
-[org.postgresql/postgresql "42.7.8"]
+[org.wagoe/wagoe-platform "1.0.0-beta-1"]
+[org.postgresql/postgresql "42.7.12"]
 ```
 
 ## Features
@@ -40,8 +40,8 @@ Core infrastructure for web applications: database, HTTP routing, pagination, se
 ## Requirements
 
 - Clojure 1.12+
-- boundary/core
-- boundary/observability
+- wagoe/core
+- wagoe/observability
 - Database driver (PostgreSQL, SQLite, MySQL, or H2)
 
 ## Database Support
@@ -59,13 +59,13 @@ Core infrastructure for web applications: database, HTTP routing, pagination, se
 
 ```clojure
 (ns myapp.main
-  (:require [boundary.platform.shell.system.wiring :as wiring]
-            [boundary.config :as config]))
+  (:require [wagoe.platform.shell.system.wiring :as wiring]
+            [wagoe.config :as config]))
 
 (defn -main [& args]
   (let [cfg (config/load-config "production")
         system (wiring/start! cfg)]
-    (println "System started on port" (get-in system [:boundary/http :port]))
+    (println "System started on port" (get-in system [:wagoe/http :port]))
     system))
 ```
 
@@ -73,7 +73,7 @@ Core infrastructure for web applications: database, HTTP routing, pagination, se
 
 ```clojure
 (ns myapp.routes
-  (:require [boundary.platform.ports.http :as http]))
+  (:require [wagoe.platform.ports.http :as http]))
 
 ;; Define normalized routes
 (def routes
@@ -93,7 +93,7 @@ Core infrastructure for web applications: database, HTTP routing, pagination, se
 
 ```clojure
 (ns myapp.persistence
-  (:require [boundary.platform.shell.adapters.database.common.execution :as db]))
+  (:require [wagoe.platform.shell.adapters.database.common.execution :as db]))
 
 ;; Query with connection pool
 (defn find-user-by-id [db-ctx user-id]
@@ -112,7 +112,7 @@ Core infrastructure for web applications: database, HTTP routing, pagination, se
 
 ```clojure
 (ns myapp.handlers
-  (:require [boundary.platform.core.pagination :as pagination]))
+  (:require [wagoe.platform.core.pagination :as pagination]))
 
 ;; Offset pagination
 (defn list-users [request]
@@ -130,13 +130,13 @@ Core infrastructure for web applications: database, HTTP routing, pagination, se
 ### Search
 
 Full-text search lives in the dedicated **`libs/search`** module
-(`boundary.search.*`), not in platform. See `libs/search/AGENTS.md`.
+(`wagoe.search.*`), not in platform. See `libs/search/AGENTS.md`.
 
 ### Multi-Tenancy
 
 Multi-tenant middleware, tenant resolution (subdomain/JWT/header), PostgreSQL
 schema switching, caching, and the tenant management REST API live in the
-**tenant** lib (`boundary.tenant.shell.tenant-middleware`). The app injects the
+**tenant** lib (`wagoe.tenant.shell.tenant-middleware`). The app injects the
 tenant middleware into platform's HTTP pipeline via `:extra-middleware` (BOU-200).
 See [libs/tenant/README.md](../tenant/README.md).
 
@@ -144,7 +144,7 @@ See [libs/tenant/README.md](../tenant/README.md).
 
 ```clojure
 ;; resources/conf/prod/config.edn
-{:boundary/db-context
+{:wagoe/db-context
  {:adapter :postgresql
   :host #env DB_HOST
   :port #env [DB_PORT :int 5432]
@@ -153,19 +153,19 @@ See [libs/tenant/README.md](../tenant/README.md).
   :password #env DB_PASSWORD
   :pool-size 10}
 
- :boundary/http
+ :wagoe/http
  {:port #env [PORT :int 3000]
   :host "0.0.0.0"}
 
- :boundary/modules
- [:boundary.user.shell.module-wiring
-  :boundary.admin.shell.module-wiring]}
+ :wagoe/modules
+ [:wagoe.user.shell.module-wiring
+  :wagoe.admin.shell.module-wiring]}
 ```
 
 ## Module Structure
 
 ```
-libs/platform/src/boundary/platform/
+libs/platform/src/wagoe/platform/
 ├── core/
 │   ├── pagination.clj       # Pagination utilities
 │   ├── search.clj           # Search utilities
@@ -187,7 +187,7 @@ libs/platform/src/boundary/platform/
 
 | Dependency | Version | Purpose |
 |------------|---------|---------|
-| `boundary/observability` | 1.0.0-beta-1 | Logging, metrics |
+| `wagoe/observability` | 1.0.0-beta-1 | Logging, metrics |
 | `next.jdbc` | 1.3.1086 | Database access |
 | `honeysql` | 2.7.1364 | SQL generation |
 | `HikariCP` | 7.0.2 | Connection pooling |
@@ -206,13 +206,13 @@ libs/platform/src/boundary/platform/
                   │ depends on
                   ▼
 ┌─────────────────────────────────────────┐
-│           boundary/platform             │
+│           wagoe/platform             │
 │   (database, HTTP, config, modules)     │
 └─────────────────┬───────────────────────┘
                   │ depends on
                   ▼
 ┌─────────────────────────────────────────┐
-│   boundary/observability + boundary/core│
+│   wagoe/observability + wagoe/core│
 └─────────────────────────────────────────┘
 ```
 

@@ -10,13 +10,13 @@ CLI/runtime wiring, and shared platform adapters used by feature libraries.
 |===
 | Namespace | Purpose
 
-| `boundary.platform.shell.http.interceptors`
+| `wagoe.platform.shell.http.interceptors`
 | HTTP interceptor composition and execution
 
-| `boundary.platform.shell.interfaces.http.routes`
+| `wagoe.platform.shell.interfaces.http.routes`
 | Normalized route handling and dispatch
 
-| `boundary.platform.shell.adapters.database.*`
+| `wagoe.platform.shell.adapters.database.*`
 | Database setup, context, and shared persistence infrastructure
 |===
 
@@ -51,7 +51,7 @@ Declarative cross-cutting concerns (auth, rate limiting, audit):
 
 == Built-in interceptors
 
-The default HTTP stack (`boundary.platform.shell.http.interceptors/default-http-interceptors`)
+The default HTTP stack (`wagoe.platform.shell.http.interceptors/default-http-interceptors`)
 is applied to every route unless the route opts out with `:skip-interceptors? true`
 (used only for internal endpoints such as health checks). In `:enter`/`:leave` order:
 
@@ -87,7 +87,7 @@ would overwrite it. `:leave` still runs for interceptors that already executed.
 
 `http-csrf-protection` enforces CSRF for session-authenticated, state-changing
 requests and issues tokens for rendering. Pure token functions live in
-`boundary.platform.core.csrf`.
+`wagoe.platform.core.csrf`.
 
 A state-changing request (POST/PUT/DELETE/PATCH) is validated — `403` on a missing or
 invalid token — when CSRF is enabled, the path is not exempt, and the request is either
@@ -99,7 +99,7 @@ checked; safe methods (GET/HEAD/OPTIONS) and `:exempt-paths` are skipped.
 [source,clojure]
 ----
 ;; resources/conf/<env>/config.edn under :active
-:boundary/http
+:wagoe/http
 {:security
  {:csrf {:enabled?     true                                  ; OPT-IN: lib default is false
          :secret       #or [#env CSRF_SECRET #env JWT_SECRET] ; defaults to JWT_SECRET
@@ -122,7 +122,7 @@ field:
 
 [source,clojure]
 ----
-(require '[boundary.platform.core.csrf :as csrf])
+(require '[wagoe.platform.core.csrf :as csrf])
 
 [:form {:method "post" :action "/web/logout"}
  (csrf/hidden-field)        ; reads the token bound for the current request

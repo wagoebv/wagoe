@@ -1,0 +1,175 @@
+{;; BND-1xx — Configuration
+ "BND-101" {:code        "BND-101"
+            :category    :config
+            :title       "Missing Environment Variable"
+            :description "A required #env reference in config.edn is not set and has no #or default."
+            :fix         "Set the environment variable before starting, or add a default with #or."}
+
+ "BND-102" {:code        "BND-102"
+            :category    :config
+            :title       "Unknown Provider"
+            :description "A :provider value in config.edn is not recognized."
+            :fix         "Check the valid providers list in libs/tools/AGENTS.md."}
+
+ "BND-103" {:code        "BND-103"
+            :category    :config
+            :title       "Missing JWT Secret"
+            :description "JWT_SECRET is not set but the user module is active."
+            :fix         "export JWT_SECRET=\"your-secret-at-least-32-characters\""}
+
+ "BND-104" {:code        "BND-104"
+            :category    :config
+            :title       "Placeholder Value in Production"
+            :description "A placeholder value (TODO, example.com, CHANGEME) was found in production config."
+            :fix         "Replace all placeholder values with real configuration."}
+
+ "BND-105" {:code        "BND-105"
+            :category    :config
+            :title       "Dangerous Reset Endpoint Enabled"
+            :description ":test/reset-endpoint-enabled? is true outside of dev/test profiles."
+            :fix         "Remove or set to false in production config."}
+
+ ;; BND-2xx — Validation
+ "BND-201" {:code        "BND-201"
+            :category    :validation
+            :title       "Schema Validation Failed"
+            :description "Input data does not match the expected Malli schema."
+            :fix         "Check the schema definition and ensure all required fields are present with valid values."}
+
+ "BND-202" {:code        "BND-202"
+            :category    :validation
+            :title       "Invalid Field Format"
+            :description "A field value does not match the expected format (email, URL, etc.)."
+            :fix         "Check the schema constraints for the specific field."}
+
+ "BND-203" {:code        "BND-203"
+            :category    :validation
+            :title       "Case Conversion Mismatch"
+            :description "A field name uses the wrong case convention at a boundary crossing."
+            :fix         "Use wagoe.core.utils.case-conversion for conversions between kebab-case (Clojure), snake_case (DB), and camelCase (API)."}
+
+ ;; BND-3xx — Persistence
+ "BND-301" {:code        "BND-301"
+            :category    :persistence
+            :title       "Migration Not Applied"
+            :description "A database table or column is missing because a migration has not been run."
+            :fix         "Run: bb migrate up"}
+
+ "BND-302" {:code        "BND-302"
+            :category    :persistence
+            :title       "Connection Pool Exhausted"
+            :description "All database connections in the HikariCP pool are in use."
+            :fix         "Check for connection leaks or increase :pool-size in config."}
+
+ "BND-303" {:code        "BND-303"
+            :category    :persistence
+            :title       "Database Connection Failed"
+            :description "Could not connect to the configured database."
+            :fix         "Verify the database is running and config values (host, port, name) are correct."}
+
+ "BND-305" {:code        "BND-305"
+            :category    :persistence
+            :title       "Migration Version Conflict"
+            :description "Two migration files share the same version number, or there is a gap in the sequence."
+            :fix         "Check resources/migrations/ for duplicate version numbers and rename as needed."}
+
+ ;; BND-4xx — Authentication / Authorization
+ "BND-401" {:code        "BND-401"
+            :category    :auth
+            :title       "Authentication Required"
+            :description "The request requires authentication but no valid token/session was provided."
+            :fix         "Include a valid JWT token or session cookie with the request."}
+
+ "BND-402" {:code        "BND-402"
+            :category    :auth
+            :title       "Insufficient Permissions"
+            :description "The authenticated user does not have the required role for this action."
+            :fix         "Check the route's required roles and the user's assigned roles."}
+
+ ;; BND-5xx — Interceptor pipeline
+ "BND-501" {:code        "BND-501"
+            :category    :interceptor
+            :title       "Interceptor Error"
+            :description "An interceptor in the pipeline threw an unhandled exception."
+            :fix         "Check the interceptor chain for the failing route with (interceptors :handler-name)."}
+
+ ;; BND-6xx — FC/IS boundary violations
+ "BND-601" {:code        "BND-601"
+            :category    :fcis
+            :title       "FC/IS Boundary Violation"
+            :description "A core namespace imports from a shell namespace, violating the Functional Core / Imperative Shell boundary."
+            :fix         "Move the data access behind a port (protocol) in ports.clj, then have shell implement it."}
+
+ "BND-602" {:code        "BND-602"
+            :category    :fcis
+            :title       "Core Namespace Uses I/O"
+            :description "A core namespace uses I/O operations (logging, file access, HTTP) directly."
+            :fix         "Core functions must be pure. Move I/O to the shell layer."}
+
+ ;; BND-7xx — Tooling / build
+ "BND-701" {:code        "BND-701"
+            :category    :tooling
+            :title       "Circular Library Dependency"
+            :description "Two or more libraries depend on each other, creating a cycle."
+            :fix         "Run `bb check:deps` to identify the cycle. Extract shared code into a lower-level library (usually core)."}
+
+ "BND-702" {:code        "BND-702"
+            :category    :tooling
+            :title       "Admin Entity Config Missing Required Field"
+            :description "An admin entity EDN file is missing a required field such as :entity/name or :entity/table."
+            :fix         "Check the entity EDN file in resources/conf/<env>/admin/ and add the missing field."}
+
+ "BND-703" {:code        "BND-703"
+            :category    :tooling
+            :title       "Module Not Wired"
+            :description "A module is active in config.edn but has no require entry in wiring.clj, so Integrant cannot find its init-key methods."
+            :fix         "Add a require for the module in libs/platform/src/wagoe/platform/shell/system/wiring.clj."}
+
+ ;; BND-8xx — MCP guardrails (wagoe-mcp)
+ "BND-800" {:code        "BND-800"
+            :category    :mcp
+            :title       "Guardrail Triggered"
+            :description "A tool invocation was denied by a guardrail that has no more specific code."
+            :fix         "See the accompanying :reason for the specific rule that fired."}
+
+ "BND-801" {:code        "BND-801"
+            :category    :mcp
+            :title       "MCP Capabilities Disabled"
+            :description "The MCP server is running in a context where all tool capabilities are disabled."
+            :fix         "Run the server in a less restricted environment, or set MCP_CAPABILITY_MODE to full/no-execute/read-only as appropriate."}
+
+ "BND-802" {:code        "BND-802"
+            :category    :mcp
+            :title       "Unknown Capability Tier"
+            :description "A tool declared a capability tier that is not one of :read, :generate, or :execute."
+            :fix         "Declare the tool's capability as :read (Tier 0), :generate (Tier 1), or :execute (Tier 2)."}
+
+ "BND-803" {:code        "BND-803"
+            :category    :mcp
+            :title       "Capability Tier Exceeded"
+            :description "The tool's capability tier exceeds the ceiling granted by the current environment (prod disables execute; CI is read-only)."
+            :fix         "Run in local dev for full capabilities, choose a lower-tier tool, or set MCP_CAPABILITY_MODE explicitly (audited)."}
+
+ "BND-804" {:code        "BND-804"
+            :category    :mcp
+            :title       "Read-Only Context"
+            :description "A mutating tool was invoked in a read-only context (CI, or no environment signal)."
+            :fix         "Run in a writable environment (local dev), or set MCP_CAPABILITY_MODE explicitly (audited)."}
+
+ "BND-805" {:code        "BND-805"
+            :category    :mcp
+            :title       "Tool Not In Allowlist"
+            :description "The tool is not present in the session's explicit tool allowlist."
+            :fix         "Add the tool to the session allowlist, or start the server without an allowlist restriction."}
+
+ "BND-806" {:code        "BND-806"
+            :category    :mcp
+            :title       "FC/IS Boundary Guardrail"
+            :description "Generated or edited code would place I/O, logging, or shell dependencies in a core namespace, violating the Functional Core / Imperative Shell boundary."
+            :fix         "Move the side effect to the shell and depend on a port (protocol). To proceed anyway, re-invoke with the audited override flag."}
+
+ "BND-807" {:code        "BND-807"
+            :category    :mcp
+            :title       "Convention Guardrail"
+            :description "Generated or edited code violates a Wagoe convention (e.g. snake_case keys inside Clojure, validation in core instead of shell)."
+            :fix         "Follow the convention (kebab-case internally; validate in the shell). To proceed anyway, re-invoke with the audited override flag."}}

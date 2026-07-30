@@ -110,18 +110,18 @@ jobs:
           tag_name: ${{ github.ref_name }}
           name: ${{ steps.version.outputs.version }}
           body: |
-            ## Boundary Framework ${{ steps.version.outputs.version }}
+            ## Wagoe Framework ${{ steps.version.outputs.version }}
 
             All libraries published to Clojars.
 
             ```clojure
-            org.boundary-app/boundary-platform {:mvn/version "${{ steps.version.outputs.version }}"}
+            org.wagoe/wagoe-platform {:mvn/version "${{ steps.version.outputs.version }}"}
             ```
 
-            See [CHANGELOG.md](https://github.com/thijs-creemers/boundary/blob/main/CHANGELOG.md) for details.
+            See [CHANGELOG.md](https://github.com/wagoebv/wagoe/blob/main/CHANGELOG.md) for details.
           draft: false
           # Never mark releases as prerelease: scripts/install.sh resolves
-          # BOUNDARY_TAG via /releases/latest, which excludes prereleases —
+          # WAGOE_TAG via /releases/latest, which excludes prereleases —
           # an alpha marked prerelease is silently uninstallable (alpha-29
           # never became "latest" for exactly this reason).
           prerelease: false

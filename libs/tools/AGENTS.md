@@ -1,31 +1,31 @@
-# boundary-tools
+# wagoe-tools
 
 **Location:** `libs/tools`
 **Version:** `1.0.0-beta-1`
-**Distribution:** Part of the Boundary monorepo — not published to Clojars. Wired directly into `bb.edn` as a local dependency.
+**Distribution:** Part of the Wagoe monorepo — not published to Clojars. Wired directly into `bb.edn` as a local dependency.
 
-Developer tooling for the Boundary framework: scaffolding, AI assistance, config management, i18n management, deployment, and development utilities — available out of the box in every Boundary project.
+Developer tooling for the Wagoe framework: scaffolding, AI assistance, config management, i18n management, deployment, and development utilities — available out of the box in every Wagoe project.
 
 ---
 
 ## Getting started
 
-`libs/tools` is included in the monorepo and wired into the root `bb.edn` as a local dependency. No Clojars dependency needed — the tasks are available out of the box in every Boundary project.
+`libs/tools` is included in the monorepo and wired into the root `bb.edn` as a local dependency. No Clojars dependency needed — the tasks are available out of the box in every Wagoe project.
 
 The root `bb.edn` wiring looks like this:
 
 ```clojure
-{:deps {boundary-tools {:local/root "libs/tools"}}
+{:deps {wagoe-tools {:local/root "libs/tools"}}
  :tasks
- {:requires ([boundary.tools.scaffold  :as scaffold]
-             [boundary.tools.ai        :as ai]
-             [boundary.tools.i18n      :as i18n]
-             [boundary.tools.admin     :as admin]
-             [boundary.tools.deploy    :as deploy]
-             [boundary.tools.dev       :as dev]
-             [boundary.tools.doctor    :as doctor]
-             [boundary.tools.setup     :as setup]
-             [boundary.tools.integrate :as integrate])
+ {:requires ([wagoe.tools.scaffold  :as scaffold]
+             [wagoe.tools.ai        :as ai]
+             [wagoe.tools.i18n      :as i18n]
+             [wagoe.tools.admin     :as admin]
+             [wagoe.tools.deploy    :as deploy]
+             [wagoe.tools.dev       :as dev]
+             [wagoe.tools.doctor    :as doctor]
+             [wagoe.tools.setup     :as setup]
+             [wagoe.tools.integrate :as integrate])
 
   scaffold     {:task (apply scaffold/-main *command-line-args*)}
   ai           {:task (apply ai/-main *command-line-args*)}
@@ -50,7 +50,7 @@ The root `bb.edn` wiring looks like this:
 
 ### `bb doctor` — Config Doctor
 
-Validates your Boundary config files for common mistakes. Rule-based (no AI needed) — runs 6 checks against your `config.edn` and project files.
+Validates your Wagoe config files for common mistakes. Rule-based (no AI needed) — runs 6 checks against your `config.edn` and project files.
 
 ```bash
 bb doctor                    # Check dev environment (default)
@@ -73,7 +73,7 @@ bb doctor --ci               # Exit non-zero on any error (for CI pipelines)
 **Example output:**
 
 ```
-Boundary Config Doctor — dev
+Wagoe Config Doctor — dev
 
   ✓ env-refs             All #env references resolved or have defaults
   ✗ jwt-secret           JWT_SECRET not set (required by user module)
@@ -89,12 +89,12 @@ Summary: 4 passed, 1 warning, 1 error
 **Known valid providers** (used by the `providers` check):
 
 ```clojure
-{:boundary/logging          #{:no-op :stdout :slf4j :file}
- :boundary/metrics          #{:no-op :prometheus :datadog-statsd}
- :boundary/error-reporting  #{:no-op :sentry}
- :boundary/payment-provider #{:mock :mollie :stripe}
- :boundary/ai-service       #{:ollama :anthropic :openai :no-op}
- :boundary/cache            #{:redis :in-memory}}
+{:wagoe/logging          #{:no-op :stdout :slf4j :file}
+ :wagoe/metrics          #{:no-op :prometheus :datadog-statsd}
+ :wagoe/error-reporting  #{:no-op :sentry}
+ :wagoe/payment-provider #{:mock :mollie :stripe}
+ :wagoe/ai-service       #{:ollama :anthropic :openai :no-op}
+ :wagoe/cache            #{:redis :in-memory}}
 ```
 
 **CI integration example** (GitHub Actions):
@@ -164,7 +164,7 @@ bb migrate up
 clojure -M:repl-clj
 ```
 
-**AI mode** delegates to `clojure -M -m boundary.ai.shell.cli-entry setup-parse` to parse the description, then renders templates from the parsed spec. Falls back to interactive mode if no AI provider is available.
+**AI mode** delegates to `clojure -M -m wagoe.ai.shell.cli-entry setup-parse` to parse the description, then renders templates from the parsed spec. Falls back to interactive mode if no AI provider is available.
 
 ---
 
@@ -206,7 +206,7 @@ bb scaffold integrate product --dry-run
 bb scaffold:integrate product
 ```
 
-**What it does:** `bb scaffold generate [--base-ns NS]` writes a module to `src/<base-ns-path>/<module>/` (default base-ns `boundary`). Because `src`/`test` are already on the project's paths, the module is **already on the classpath and covered by the standard test suites** — there is nothing to patch into `deps.edn`/`tests.edn`. What remains is registering the module's Integrant components, which `integrate` guides:
+**What it does:** `bb scaffold generate [--base-ns NS]` writes a module to `src/<base-ns-path>/<module>/` (default base-ns `wagoe`). Because `src`/`test` are already on the project's paths, the module is **already on the classpath and covered by the standard test suites** — there is nothing to patch into `deps.edn`/`tests.edn`. What remains is registering the module's Integrant components, which `integrate` guides:
 
 | Step | Where | What |
 |------|-------|------|
@@ -217,11 +217,11 @@ bb scaffold:integrate product
 **Example output:**
 
 ```
-Boundary Module Integration — product
+Wagoe Module Integration — product
 
-Discovered: src/boundary/product
-  Namespace: boundary.product.*
-  Tests:     test/boundary/product
+Discovered: src/wagoe/product
+  Namespace: wagoe.product.*
+  Tests:     test/wagoe/product
   HTTP:      yes
   Wiring:    no
 
@@ -279,7 +279,7 @@ Provider selection (first matching env var wins):
 
 #### `bb ai admin-entity` — Admin Entity Generator
 
-Generates admin entity EDN configuration files from a natural language description. Uses AI to understand your entity and produce a complete config that matches the Boundary admin UI format.
+Generates admin entity EDN configuration files from a natural language description. Uses AI to understand your entity and produce a complete config that matches the Wagoe admin UI format.
 
 ```bash
 # Generate an admin entity config
@@ -341,7 +341,7 @@ Run database migrations first: `clojure -M:migrate up`
 
 ### `bb deploy` — Deploy to Clojars
 
-Deploys the 22 published Boundary libraries to Clojars. `boundary-tools` itself is not published — it is a monorepo-internal tool.
+Deploys the 22 published Wagoe libraries to Clojars. `wagoe-tools` itself is not published — it is a monorepo-internal tool.
 
 ```bash
 bb deploy --help                    # Show help
@@ -355,7 +355,7 @@ Required environment variables:
 - `CLOJARS_PASSWORD` — your Clojars deploy token
 
 Important release note:
-- `bb deploy --all` publishes every artifact listed in `boundary.tools.deploy/all-libs`. `boundary-tools` is excluded from this list.
+- `bb deploy --all` publishes every artifact listed in `wagoe.tools.deploy/all-libs`. `wagoe-tools` is excluded from this list.
 - A Git tag only triggers the GitHub Actions workflow; actual artifact versions still come from each artifact's `build.clj`.
 - For a tagged full release, bump every included artifact to an unpublished version first, otherwise the workflow will fail on the first duplicate version.
 
@@ -404,7 +404,7 @@ bb i18n:missing             # Report keys in en.edn missing from other locales
 bb i18n:unused              # Report catalogue keys not referenced in source
 ```
 
-Translation files live in `libs/i18n/resources/boundary/i18n/translations/`.
+Translation files live in `libs/i18n/resources/wagoe/i18n/translations/`.
 
 ---
 
@@ -412,19 +412,19 @@ Translation files live in `libs/i18n/resources/boundary/i18n/translations/`.
 
 | Namespace | Purpose |
 |---|---|
-| `boundary.tools.scaffold` | Interactive scaffolding wizards + AI passthrough + integrate dispatch |
-| `boundary.tools.ai` | AI CLI frontend (explain, gen-tests, sql, docs, admin-entity) |
-| `boundary.tools.doctor` | Config Doctor — rule-based config validation (6 checks) |
-| `boundary.tools.setup` | Config Setup Wizard — interactive + template-based config generation |
-| `boundary.tools.integrate` | Module Integration — locate scaffolded modules under src/ and guide Integrant config + wiring |
-| `boundary.tools.admin_entity` | Admin Entity Generator — Babashka wrapper for AI admin entity generation |
-| `boundary.tools.i18n` | i18n catalogue management (find/scan/missing/unused) |
-| `boundary.tools.admin` | First admin user creation wizard |
-| `boundary.tools.deploy` | Clojars deployment for all 22 published Boundary artifacts |
-| `boundary.tools.dev` | migrate + check-links + smoke-check + install-hooks |
+| `wagoe.tools.scaffold` | Interactive scaffolding wizards + AI passthrough + integrate dispatch |
+| `wagoe.tools.ai` | AI CLI frontend (explain, gen-tests, sql, docs, admin-entity) |
+| `wagoe.tools.doctor` | Config Doctor — rule-based config validation (6 checks) |
+| `wagoe.tools.setup` | Config Setup Wizard — interactive + template-based config generation |
+| `wagoe.tools.integrate` | Module Integration — locate scaffolded modules under src/ and guide Integrant config + wiring |
+| `wagoe.tools.admin_entity` | Admin Entity Generator — Babashka wrapper for AI admin entity generation |
+| `wagoe.tools.i18n` | i18n catalogue management (find/scan/missing/unused) |
+| `wagoe.tools.admin` | First admin user creation wizard |
+| `wagoe.tools.deploy` | Clojars deployment for all 22 published Wagoe artifacts |
+| `wagoe.tools.dev` | migrate + check-links + smoke-check + install-hooks |
 
 ---
 
-## Releasing boundary-tools
+## Releasing wagoe-tools
 
-`boundary-tools` is not published to Clojars. It is distributed as part of the Boundary monorepo. To update it, commit and push changes to `libs/tools` — consumers pick up changes by pulling the repository.
+`wagoe-tools` is not published to Clojars. It is distributed as part of the Wagoe monorepo. To update it, commit and push changes to `libs/tools` — consumers pick up changes by pulling the repository.

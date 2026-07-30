@@ -4,29 +4,29 @@
 
 ## Purpose
 
-PDF, Excel, and Word report generation with Hiccup-style templates and declarative sections. Saves 5–8 days of boilerplate per project. Supports sync generation and optional async via boundary-jobs.
+PDF, Excel, and Word report generation with Hiccup-style templates and declarative sections. Saves 5–8 days of boilerplate per project. Supports sync generation and optional async via wagoe-jobs.
 
 ## Key Namespaces
 
 | Namespace | Purpose |
 |-----------|---------|
-| `boundary.reports.core.report` | Pure helpers (`format-cell*`, `map-columns*`, `build-table-rows*`, `build-sections-hiccup*`, `prepare-report`, `resolve-data`) |
-| `boundary.reports.shell.registry` | Definition registry + `defreport` macro (`register-report!`, `get-report`, `list-reports`, `clear-registry!`) — mutable process state, lives in the shell |
-| `boundary.reports.ports` | Protocol: `ReportGeneratorProtocol` (`generate!`, `supported-type?`) |
-| `boundary.reports.schema` | Malli schemas: `ColumnDef`, `SectionDef`, `ReportDefinition`, `ReportOutput` |
-| `boundary.reports.shell.adapters.pdf` | OpenHTMLtoPDF adapter — Hiccup → HTML → PDF bytes |
-| `boundary.reports.shell.adapters.excel` | docjure adapter — column defs + data → XLSX bytes |
-| `boundary.reports.shell.adapters.word` | Apache POI XWPF adapter — sections → DOCX bytes |
-| `boundary.reports.shell.service` | Public convenience API: `generate`, `generate-async` |
-| `boundary.reports.shell.jobs-integration` | Optional boundary-jobs integration for async generation |
+| `wagoe.reports.core.report` | Pure helpers (`format-cell*`, `map-columns*`, `build-table-rows*`, `build-sections-hiccup*`, `prepare-report`, `resolve-data`) |
+| `wagoe.reports.shell.registry` | Definition registry + `defreport` macro (`register-report!`, `get-report`, `list-reports`, `clear-registry!`) — mutable process state, lives in the shell |
+| `wagoe.reports.ports` | Protocol: `ReportGeneratorProtocol` (`generate!`, `supported-type?`) |
+| `wagoe.reports.schema` | Malli schemas: `ColumnDef`, `SectionDef`, `ReportDefinition`, `ReportOutput` |
+| `wagoe.reports.shell.adapters.pdf` | OpenHTMLtoPDF adapter — Hiccup → HTML → PDF bytes |
+| `wagoe.reports.shell.adapters.excel` | docjure adapter — column defs + data → XLSX bytes |
+| `wagoe.reports.shell.adapters.word` | Apache POI XWPF adapter — sections → DOCX bytes |
+| `wagoe.reports.shell.service` | Public convenience API: `generate`, `generate-async` |
+| `wagoe.reports.shell.jobs-integration` | Optional wagoe-jobs integration for async generation |
 
 ## `defreport` Macro Usage
 
 ### PDF report with a template function
 
 ```clojure
-(require '[boundary.reports.shell.registry :as registry])
-(require '[boundary.reports.shell.service :as reports])
+(require '[wagoe.reports.shell.registry :as registry])
+(require '[wagoe.reports.shell.service :as reports])
 
 (registry/defreport invoice-report
   {:id        :invoice-report
@@ -122,7 +122,7 @@ PDF, Excel, and Word report generation with Hiccup-style templates and declarati
 ## HTTP Handler Integration
 
 ```clojure
-(require '[boundary.reports.shell.service :as reports])
+(require '[wagoe.reports.shell.service :as reports])
 
 (defn export-pdf-handler [request]
   (let [invoice-id (-> request :path-params :id parse-long)
@@ -149,11 +149,11 @@ PDF, Excel, and Word report generation with Hiccup-style templates and declarati
      :body    (java.io.ByteArrayInputStream. (:bytes output))}))
 ```
 
-## Async Generation via boundary-jobs
+## Async Generation via wagoe-jobs
 
 ```clojure
-(require '[boundary.reports.shell.service :as reports])
-(require '[boundary.reports.shell.jobs-integration :as jobs])
+(require '[wagoe.reports.shell.service :as reports])
+(require '[wagoe.reports.shell.jobs-integration :as jobs])
 
 ;; Register handler at startup (in your Integrant system)
 (jobs/register-report-job-handler! job-registry)
@@ -218,7 +218,7 @@ Set the matching CSS `@page { size: A4 landscape; }` in your custom CSS string.
    NOT in `core/report.clj`. Core must stay pure. Do not import shell namespaces from core.
 
 4. **Large reports** — for > 10k rows, use `:data-source` + async generation to avoid blocking
-   the HTTP thread. `generate-async` queues a boundary-jobs job.
+   the HTTP thread. `generate-async` queues a wagoe-jobs job.
 
 5. **Missing :columns for Excel sections** — if no `:columns` key is found in the first `:table`
    section, `create-excel-generator` will attempt to map `nil` columns and produce an empty sheet.
@@ -245,8 +245,8 @@ clojure -M:clj-kondo --lint libs/reports/src libs/reports/test
 ## REPL Smoke Check
 
 ```clojure
-(require '[boundary.reports.shell.registry :as registry])
-(require '[boundary.reports.shell.service :as reports])
+(require '[wagoe.reports.shell.registry :as registry])
+(require '[wagoe.reports.shell.service :as reports])
 
 (registry/defreport smoke-report
   {:id       :smoke-report

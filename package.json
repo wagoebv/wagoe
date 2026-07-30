@@ -1,7 +1,7 @@
 {
-  "name": "boundary-framework",
+  "name": "wagoe-framework",
   "version": "1.0.0",
-  "description": "Boundary Framework - Module-centric Clojure framework",
+  "description": "Wagoe Framework - Module-centric Clojure framework",
   "scripts": {
     "build:css:admin": "tailwindcss -i ./libs/ui-style/resources/tailwind/admin-pilot.css -o ./libs/ui-style/resources/public/css/daisy-admin.css --minify",
     "watch:css:admin": "tailwindcss -i ./libs/ui-style/resources/tailwind/admin-pilot.css -o ./libs/ui-style/resources/public/css/daisy-admin.css --watch"

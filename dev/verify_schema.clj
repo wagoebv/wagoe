@@ -1,8 +1,8 @@
 (ns verify-schema
   "Quick verification script for user schema initialization."
-  (:require [boundary.platform.shell.adapters.database.factory :as dbf]
-            ;[boundary.platform.shell.adapters.database.core :as db]
-            [boundary.user.shell.persistence :as user-persistence]))
+  (:require [wagoe.platform.shell.adapters.database.factory :as dbf]
+            ;[wagoe.platform.shell.adapters.database.core :as db]
+            [wagoe.user.shell.persistence :as user-persistence]))
 
 (defn verify-schema-creation
   "Verify that user schema creation works with SQLite."

@@ -3,9 +3,9 @@
 [![Status](https://img.shields.io/badge/status-stable-brightgreen)]()
 [![Clojure](https://img.shields.io/badge/clojure-1.12+-blue)]()
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
-[![Clojars Project](https://img.shields.io/clojars/v/org.boundary-app/boundary-email.svg)](https://clojars.org/org.boundary-app/boundary-email)
+[![Clojars Project](https://img.shields.io/clojars/v/org.wagoe/wagoe-email.svg)](https://clojars.org/org.wagoe/wagoe-email)
 
-**Email sending for Boundary Framework**
+**Email sending for Wagoe Framework**
 
 Simple, robust email delivery with:
 
@@ -40,13 +40,13 @@ Simple, robust email delivery with:
 
 ```clojure
 ;; deps.edn
-{:deps {org.boundary-app/boundary-email {:mvn/version "1.0.0-beta-1"}}}
+{:deps {org.wagoe/wagoe-email {:mvn/version "1.0.0-beta-1"}}}
 ```
 
 ### 2. Create SMTP Sender
 
 ```clojure
-(require '[boundary.email.shell.adapters.smtp :as smtp])
+(require '[wagoe.email.shell.adapters.smtp :as smtp])
 
 ;; Gmail example (use App Password, not regular password!)
 (def email-sender
@@ -61,8 +61,8 @@ Simple, robust email delivery with:
 ### 3. Send Email
 
 ```clojure
-(require '[boundary.email.core.email :as email-core]
-         '[boundary.email.ports :as ports])
+(require '[wagoe.email.core.email :as email-core]
+         '[wagoe.email.ports :as ports])
 
 ;; Prepare email (pure function, no side effects)
 (def prepared-email
@@ -104,10 +104,10 @@ This module follows the FC/IS pattern:
 
 | Layer | Namespace | Responsibility |
 |-------|-----------|----------------|
-| **Core** | `boundary.email.core.email` | Pure functions: validate, prepare, format |
-| **Ports** | `boundary.email.ports` | Protocol definitions (interfaces) |
-| **Shell** | `boundary.email.shell.adapters.smtp` | I/O: SMTP sending, error handling |
-| **Integration** | `boundary.email.shell.jobs-integration` | Optional: background job queuing |
+| **Core** | `wagoe.email.core.email` | Pure functions: validate, prepare, format |
+| **Ports** | `wagoe.email.ports` | Protocol definitions (interfaces) |
+| **Shell** | `wagoe.email.shell.adapters.smtp` | I/O: SMTP sending, error handling |
+| **Integration** | `wagoe.email.shell.jobs-integration` | Optional: background job queuing |
 
 ### Email Structure
 
@@ -359,7 +359,7 @@ docker run -d -p 1025:1025 -p 8025:8025 mailhog/mailhog
 **Production config** (`config/prod.edn`):
 
 ```clojure
-{:boundary/email
+{:wagoe/email
  {:smtp {:host #env SMTP_HOST
          :port #long #env [SMTP_PORT 587]
          :username #env SMTP_USERNAME
@@ -460,16 +460,16 @@ For high-volume email sending with automatic retries and monitoring, integrate w
 
 ```clojure
 ;; deps.edn
-{:deps {org.boundary-app/boundary-email {:mvn/version "1.0.0-beta-1"}
-        org.boundary-app/boundary-jobs {:mvn/version "1.0.0-beta-1"}
+{:deps {org.wagoe/wagoe-email {:mvn/version "1.0.0-beta-1"}
+        org.wagoe/wagoe-jobs {:mvn/version "1.0.0-beta-1"}
         redis.clients/jedis {:mvn/version "5.2.0"}}}
 ```
 
 ### 2. Setup Job Queue
 
 ```clojure
-(require '[boundary.jobs.shell.adapters.redis :as redis-jobs]
-         '[boundary.email.shell.jobs-integration :as email-jobs])
+(require '[wagoe.jobs.shell.adapters.redis :as redis-jobs]
+         '[wagoe.email.shell.jobs-integration :as email-jobs])
 
 ;; Create Redis job queue
 (def redis-pool (redis-jobs/create-redis-pool
@@ -585,7 +585,7 @@ For high-volume email sending with automatic retries and monitoring, integrate w
 
 ### Core Functions
 
-**boundary.email.core.email**
+**wagoe.email.core.email**
 
 #### `prepare-email`
 
@@ -747,7 +747,7 @@ Create summary for logging/monitoring (pure function).
 
 ### Ports (Protocols)
 
-**boundary.email.ports/EmailSenderProtocol**
+**wagoe.email.ports/EmailSenderProtocol**
 
 #### `send-email!`
 
@@ -802,7 +802,7 @@ Send email asynchronously using Clojure future.
 
 ### SMTP Adapter
 
-**boundary.email.shell.adapters.smtp**
+**wagoe.email.shell.adapters.smtp**
 
 #### `create-smtp-sender`
 
@@ -830,12 +830,12 @@ Create SMTP email sender.
                      :username "user@gmail.com"
                      :password "app-password"
                      :tls? true})
-;; => #boundary.email.shell.adapters.smtp.SmtpEmailSender{...}
+;; => #wagoe.email.shell.adapters.smtp.SmtpEmailSender{...}
 ```
 
 ### Jobs Integration
 
-**boundary.email.shell.jobs-integration**
+**wagoe.email.shell.jobs-integration**
 
 #### `queue-email-job!`
 
@@ -1171,7 +1171,7 @@ docker run -d -p 1025:1025 -p 8025:8025 mailhog/mailhog
 
 ## License
 
-Part of Boundary Framework - See main LICENSE file.
+Part of Wagoe Framework - See main LICENSE file.
 
 ---
 

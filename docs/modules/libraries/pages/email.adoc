@@ -10,29 +10,29 @@ Supports sync, async (future-based), and queued (jobs library) sending modes.
 |===
 | Namespace | Purpose
 
-| `boundary.email.core.email`
+| `wagoe.email.core.email`
 | Pure functions: prepare, validate, add headers, summarize
 
-| `boundary.email.ports`
+| `wagoe.email.ports`
 | Protocols: `EmailSenderProtocol`, `EmailQueueProtocol`
 
-| `boundary.email.schema`
+| `wagoe.email.schema`
 | Malli schemas: `EmailAddress`, `Email`, `SendEmailInput`
 
-| `boundary.email.shell.adapters.smtp`
-| SMTP adapter — delegates to `boundary.external` SMTP transport
+| `wagoe.email.shell.adapters.smtp`
+| SMTP adapter — delegates to `wagoe.external` SMTP transport
 
-| `boundary.email.shell.jobs-integration`
-| Optional integration with `boundary-jobs` for queued sending
+| `wagoe.email.shell.jobs-integration`
+| Optional integration with `wagoe-jobs` for queued sending
 |===
 
 == Transport layer
 
-`boundary-email` delegates raw SMTP transport to `boundary-external`:
+`wagoe-email` delegates raw SMTP transport to `wagoe-external`:
 
 [source]
 ----
-boundary-email (application layer)  →  boundary-external (transport layer)
+wagoe-email (application layer)  →  wagoe-external (transport layer)
   Email {id, created-at, metadata}  →  OutboundEmail {to, from, subject, body}
   EmailSenderProtocol                →  ISmtpProvider (javax.mail)
 ----
@@ -41,9 +41,9 @@ boundary-email (application layer)  →  boundary-external (transport layer)
 
 [source,clojure]
 ----
-(require '[boundary.email.core.email :as email]
-         '[boundary.email.ports :as ports]
-         '[boundary.email.shell.adapters.smtp :as smtp])
+(require '[wagoe.email.core.email :as email]
+         '[wagoe.email.ports :as ports]
+         '[wagoe.email.shell.adapters.smtp :as smtp])
 
 ;; 1. Create sender
 (def sender (smtp/create-smtp-sender
@@ -76,7 +76,7 @@ boundary-email (application layer)  →  boundary-external (transport layer)
 | Async (`future`)
 | Non-critical emails where a short delay is acceptable
 
-| Queued (`boundary-jobs`)
+| Queued (`wagoe-jobs`)
 | High volume or when retry logic is needed
 |===
 

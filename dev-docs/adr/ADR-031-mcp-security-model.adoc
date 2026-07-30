@@ -1,7 +1,7 @@
 = ADR-031: MCP Server Security Model — Threat Model & Capability/Context Gating
 :status: Proposed
 :date: 2026-06-16
-:deciders: boundary-team
+:deciders: wagoe-team
 
 == Status
 
@@ -11,7 +11,7 @@ Proposed
 
 === Background
 
-`boundary-mcp` (ADR introduced by BOU-96) exposes Boundary's framework
+`wagoe-mcp` (ADR introduced by BOU-96) exposes Wagoe's framework
 knowledge — and, in later phases, *tools that read, generate, and execute
 code* — to editor agents (Claude Code, Cursor) over the Model Context Protocol.
 The roadmap layers tools in tiers:
@@ -58,7 +58,7 @@ over-eager or prompt-injected agent:
 Every tool declares exactly one capability: `:read`, `:generate`, or
 `:execute` (ordered least → most dangerous). The active *context* grants a
 ceiling; a tool runs only if its capability is within the ceiling. Tiers and
-the decision live in the pure namespace `boundary.mcp.core.security`.
+the decision live in the pure namespace `wagoe.mcp.core.security`.
 
 === 2. Context derived from the environment, explicit override wins
 
@@ -79,8 +79,8 @@ Resolution precedence (`security/resolve-context`, pure over an env map):
 . *Explicit override* — `MCP_CAPABILITY_MODE` (`full` / `no-execute` /
   `read-only` / `disabled`). Deliberate, audited, beats everything.
 . *CI detection* — a truthy `CI` env var ⇒ `:read-only`, regardless of
-  `BND_ENV`.
-. *`BND_ENV`* — `dev`/`test` ⇒ `:full`; `prod` ⇒ `:no-execute`; `ci` ⇒
+  `WAG_ENV`.
+. *`WAG_ENV`* — `dev`/`test` ⇒ `:full`; `prod` ⇒ `:no-execute`; `ci` ⇒
   `:read-only`.
 . *Fail-closed default* — no signal ⇒ `:read-only` (never `:full`).
 
@@ -107,7 +107,7 @@ mechanism for "this session may only run lint + describe".
 
 === 5. Audit logging
 
-`boundary.mcp.ports/AuditLog` records every security-relevant event —
+`wagoe.mcp.ports/AuditLog` records every security-relevant event —
 server start, authorization decision, override use, and (Tier 1/2) every
 mutation. The shell sink (`shell/audit`) emits structured JSON to *stderr* via
 `tools.logging`; *stdout is reserved for the protocol stream* and must never
@@ -140,13 +140,13 @@ specified in BOU-98.
 
 * The dangerous surface is off by default and off where it matters; the
   decision is one pure, unit-tested function.
-* Fail-closed defaults mean a forgotten `BND_ENV` degrades to read-only, not to
+* Fail-closed defaults mean a forgotten `WAG_ENV` degrades to read-only, not to
   full execute.
 * Audit gives incident response a reconstructable trail.
 
 === Negative / trade-offs
 
-* Local dev with no `BND_ENV` is read-only until configured — a minor friction,
+* Local dev with no `WAG_ENV` is read-only until configured — a minor friction,
   chosen deliberately over an unsafe default.
 * `MCP_CAPABILITY_MODE=full` can re-enable execute anywhere (including CI). This
   is intentional (explicit, audited) but is a foot-gun; it is logged on every

@@ -1,7 +1,7 @@
 (ns build
   (:require [clojure.tools.build.api :as b]))
 
-(def lib 'org.boundary-app/boundary-jobs)
+(def lib 'org.wagoe/wagoe-jobs)
 (def version "1.0.0-beta-1")
 (def class-dir "target/classes")
 (load-file "../build_shared.clj")
@@ -17,12 +17,12 @@
                 :version version
                 :basis basis
                 :src-dirs ["src"]
-                :scm {:url "https://github.com/thijs-creemers/boundary"
-                      :connection "scm:git:git://github.com/thijs-creemers/boundary.git"
-                      :developerConnection "scm:git:ssh://git@github.com/thijs-creemers/boundary.git"
+                :scm {:url "https://github.com/wagoebv/wagoe"
+                      :connection "scm:git:git://github.com/wagoebv/wagoe.git"
+                      :developerConnection "scm:git:ssh://git@github.com/wagoebv/wagoe.git"
                       :tag version}
-                :pom-data [[:description "Jobs library for Boundary framework: background job queuing with in-memory and Redis adapters"]
-                           [:url "https://github.com/thijs-creemers/boundary"]
+                :pom-data [[:description "Jobs library for Wagoe framework: background job queuing with in-memory and Redis adapters"]
+                           [:url "https://github.com/wagoebv/wagoe"]
                            [:licenses
                             [:license
                              [:name "Eclipse Public License 2.0"]

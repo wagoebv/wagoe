@@ -1,4 +1,4 @@
-# Production Dockerfile for a Boundary application.
+# Production Dockerfile for a Wagoe application.
 #
 # Multi-stage: build the uberjar, then ship it on a slim JRE as a non-root user.
 # The same image runs either mode — the container arg selects it:
@@ -9,7 +9,7 @@
 # wide port range, hot-reload stage).
 
 # =============================================================================
-# Build stage — produce target/boundary-<version>-standalone.jar
+# Build stage — produce target/wagoe-<version>-standalone.jar
 # =============================================================================
 FROM clojure:temurin-17-tools-deps AS builder
 
@@ -37,20 +37,20 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 # Non-root runtime user.
-RUN groupadd -g 1001 boundary \
-    && useradd -m -u 1001 -g boundary -s /usr/sbin/nologin boundary
+RUN groupadd -g 1001 wagoe \
+    && useradd -m -u 1001 -g wagoe -s /usr/sbin/nologin wagoe
 
 WORKDIR /app
 
 COPY --from=builder /app/target/*-standalone.jar ./app.jar
 COPY resources/conf ./resources/conf
-RUN mkdir -p logs && chown -R boundary:boundary /app
+RUN mkdir -p logs && chown -R wagoe:wagoe /app
 
-USER boundary
+USER wagoe
 
 # Container-aware heap sizing; override JAVA_OPTS to tune per deployment.
 ENV JAVA_OPTS="-XX:MaxRAMPercentage=75 -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError" \
-    BND_ENV=prod \
+    WAG_ENV=prod \
     HTTP_PORT=3000 \
     HTTP_HOST=0.0.0.0
 

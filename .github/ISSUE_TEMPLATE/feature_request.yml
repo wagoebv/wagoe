@@ -1,12 +1,12 @@
 name: Feature request
-description: Suggest a capability or improvement for the Boundary Framework
+description: Suggest a capability or improvement for the Wagoe Framework
 labels: ["Feature"]
 body:
   - type: textarea
     id: problem
     attributes:
       label: Problem
-      description: What are you trying to do that Boundary makes hard or impossible today?
+      description: What are you trying to do that Wagoe makes hard or impossible today?
       placeholder: There's no built-in way to ...
     validations:
       required: true
@@ -14,7 +14,7 @@ body:
     id: proposal
     attributes:
       label: Proposed solution
-      description: What should Boundary do? Sketch the API, CLI command, or module shape if you can.
+      description: What should Wagoe do? Sketch the API, CLI command, or module shape if you can.
     validations:
       required: true
   - type: textarea
@@ -28,7 +28,7 @@ body:
     id: scope
     attributes:
       label: Scope
-      description: Which part of Boundary does this touch?
+      description: Which part of Wagoe does this touch?
       options:
         - A single library (which one?)
         - Cross-cutting / framework-wide

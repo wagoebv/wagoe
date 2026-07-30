@@ -1,7 +1,7 @@
 = ADR-034: Tier 1 Generate Tools + Closed Verify Loop — the Moat
 :status: Proposed
 :date: 2026-06-17
-:deciders: boundary-team
+:deciders: wagoe-team
 
 == Status
 
@@ -17,12 +17,12 @@ which a generic Clojure MCP + an editor agent can already do badly.
 The differentiator is not the generation; it is the *closed verify loop*. After
 writing, the tool runs the project's own gates and tests and returns a structured
 report so the agent self-corrects and re-invokes — converging to passing code
-without a human. Boundary's pure functional core makes the test step fast and
+without a human. Wagoe's pure functional core makes the test step fast and
 infra-free, which is what makes this loop practical as a per-call contract.
 
 Two forces shaped the design:
 
-* The scaffolder writes *app-layout* files (`src/boundary/<module>/…`) and is a
+* The scaffolder writes *app-layout* files (`src/wagoe/<module>/…`) and is a
   monorepo dev lib. The MCP server runs *inside the target project*.
 * There is no stable programmatic Kaocha API, and affected tests must run in the
   *project's* classpath (H2, fixtures, the module under test), not the MCP
@@ -32,22 +32,22 @@ Two forces shaped the design:
 
 === 1. In-process codegen, pure report, injected test step
 
-`boundary/scaffolder` and `boundary/tools` are server deps (both dev tooling, as
+`wagoe/scaffolder` and `wagoe/tools` are server deps (both dev tooling, as
 is the server). Tools call the scaffolder service directly — deterministic, and
 the file plan comes back as data (`:dry-run` powers `preview`).
 
 The loop splits along the FC/IS boundary:
 
-* `boundary.mcp.shell.verify` runs the side-effecting steps over the written
+* `wagoe.mcp.shell.verify` runs the side-effecting steps over the written
   files and hands raw per-step results to…
-* `boundary.mcp.core.verify/build-report`, a *pure* function that assembles the
+* `wagoe.mcp.core.verify/build-report`, a *pure* function that assembles the
   single structured report (`:status`, flat `:issues` with file/line/BND
   code/expected/actual, `:counts`, `:steps`).
 
 === 2. The four steps
 
 * *kondo* — `clj-kondo.core/run!` in-process over the written `.clj` files.
-* *FC/IS* — `boundary.tools.check-fcis/check-file` per written `core/` file →
+* *FC/IS* — `wagoe.tools.check-fcis/check-file` per written `core/` file →
   **BND-806**. Per-file (not the monorepo's `core-source-paths` discovery), so it
   works regardless of project layout. `check-file` was made public for this.
 * *Malli* — the scaffolder validates the generate request before writing; its

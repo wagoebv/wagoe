@@ -1,7 +1,7 @@
 = ADR-024: Devtools Library & Guidance Engine
 :status: Proposed
 :date: 2026-04-18
-:deciders: boundary-team
+:deciders: wagoe-team
 
 == Status
 
@@ -11,7 +11,7 @@ Proposed
 
 === Background
 
-Boundary has strong DX foundations: AI-powered scaffolding, config doctor,
+Wagoe has strong DX foundations: AI-powered scaffolding, config doctor,
 structured validation, REPL workflow with Integrant, and per-library AGENTS.md
 documentation. However, these features are passive -- developers must know they
 exist and actively seek them out.
@@ -36,7 +36,7 @@ A new dev-only library (not published to Clojars) following the FC/IS pattern:
 [source]
 ----
 libs/devtools/
-├── src/boundary/devtools/
+├── src/wagoe/devtools/
 │   ├── core/
 │   │   ├── guidance.clj          # Pure: message formatting, level filtering
 │   │   ├── error_codes.clj       # Error code catalog (BND-xxx)
@@ -60,7 +60,7 @@ production overhead.
 
 === Implement guidance engine
 
-A `:boundary/guidance` Integrant key with configurable levels:
+A `:wagoe/guidance` Integrant key with configurable levels:
 
 * `:full` (default for new projects) -- startup dashboard, post-scaffold
   steps, contextual tips, enriched error messages, FC/IS warnings at REPL time.
@@ -107,7 +107,7 @@ nREPL port, active modules, and suggested next commands.
 
 == Related ADRs
 
-* ADR-015 -- Boundary Tools (CLI task infrastructure)
+* ADR-015 -- Wagoe Tools (CLI task infrastructure)
 * ADR-021 -- FC/IS Boundary Rules (architecture enforcement)
 * ADR-022 -- Error Handling Conventions (error type system)
 

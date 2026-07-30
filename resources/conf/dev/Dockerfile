@@ -1,4 +1,4 @@
-# Multi-stage Dockerfile for Boundary Framework
+# Multi-stage Dockerfile for Wagoe Framework
 # Optimized for development with port management integration
 
 # =============================================================================
@@ -41,8 +41,8 @@ RUN apt-get update && \
 WORKDIR /app
 
 # Create non-root user for security (Debian/Ubuntu style)
-RUN groupadd -g 1001 boundary && \
-    useradd -m -u 1001 -g boundary -s /bin/bash boundary
+RUN groupadd -g 1001 wagoe && \
+    useradd -m -u 1001 -g wagoe -s /bin/bash wagoe
 
 # Copy built application
 COPY --from=builder /app/target/*.jar ./app.jar
@@ -52,10 +52,10 @@ COPY resources/conf/dev ./resources/conf/dev
 
 # Create necessary directories
 RUN mkdir -p logs && \
-    chown -R boundary:boundary /app
+    chown -R wagoe:wagoe /app
 
 # Switch to non-root user
-USER boundary
+USER wagoe
 
 # Environment configuration
 ENV JAVA_OPTS="-Xmx512m -Xms128m -XX:+UseG1GC -XX:+UseContainerSupport"
@@ -71,7 +71,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD curl -f http://localhost:${HTTP_PORT:-3000}/health || exit 1
 
 # Entry point with port management awareness
-COPY --chown=boundary:boundary scripts/docker-entrypoint.sh /app/docker-entrypoint.sh
+COPY --chown=wagoe:wagoe scripts/docker-entrypoint.sh /app/docker-entrypoint.sh
 RUN chmod +x /app/docker-entrypoint.sh
 
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
@@ -102,13 +102,13 @@ RUN curl -O https://download.clojure.org/install/linux-install-1.11.1.1413.sh &&
     rm linux-install-1.11.1.1413.sh
 
 # Copy source for development
-COPY --chown=boundary:boundary src ./src
-COPY --chown=boundary:boundary test ./test
-COPY --chown=boundary:boundary deps.edn .
-COPY --chown=boundary:boundary build.clj .
+COPY --chown=wagoe:wagoe src ./src
+COPY --chown=wagoe:wagoe test ./test
+COPY --chown=wagoe:wagoe deps.edn .
+COPY --chown=wagoe:wagoe build.clj .
 
-# Switch back to boundary user
-USER boundary
+# Switch back to wagoe user
+USER wagoe
 
 # Enable live reload and development features
 ENV DEV_MODE=true

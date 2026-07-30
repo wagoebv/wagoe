@@ -1,22 +1,22 @@
-# boundary/reports
+# wagoe/reports
 
 [![Status](https://img.shields.io/badge/status-stable-brightgreen)]()
 [![Clojure](https://img.shields.io/badge/clojure-1.12+-blue)]()
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
-[![Clojars Project](https://img.shields.io/clojars/v/org.boundary-app/boundary-reports.svg)](https://clojars.org/org.boundary-app/boundary-reports)
+[![Clojars Project](https://img.shields.io/clojars/v/org.wagoe/wagoe-reports.svg)](https://clojars.org/org.wagoe/wagoe-reports)
 
-Report generation library for the Boundary Framework — produce PDF, Excel, and Word (DOCX) documents from a single declarative definition.
+Report generation library for the Wagoe Framework — produce PDF, Excel, and Word (DOCX) documents from a single declarative definition.
 
 ## Installation
 
 **deps.edn** (recommended):
 ```clojure
-{:deps {org.boundary-app/boundary-reports {:mvn/version "1.0.0-beta-1"}}}
+{:deps {org.wagoe/wagoe-reports {:mvn/version "1.0.0-beta-1"}}}
 ```
 
 **Leiningen**:
 ```clojure
-[org.boundary-app/boundary-reports "1.0.0-beta-1"]
+[org.wagoe/wagoe-reports "1.0.0-beta-1"]
 ```
 
 ## Features
@@ -26,10 +26,10 @@ Report generation library for the Boundary Framework — produce PDF, Excel, and
 | **PDF generation** | Hiccup → HTML → PDF via OpenHTMLtoPDF; custom CSS, page sizes |
 | **Excel generation** | Column-based XLSX via docjure; single and multi-sheet support |
 | **Word generation** | Declarative DOCX via Apache POI XWPF; no extra Maven deps |
-| **`defreport` macro** | Register reports as data in an in-process registry (`boundary.reports.shell.registry`) |
+| **`defreport` macro** | Register reports as data in an in-process registry (`wagoe.reports.shell.registry`) |
 | **Declarative sections** | `:header`, `:paragraph`, `:table`, `:footer`, `:spacer` section types |
 | **Column formats** | `:string`, `:number`, `:currency` (nl-NL), `:date` (ISO-8601) |
-| **Async generation** | Optional boundary-jobs integration for large, background reports |
+| **Async generation** | Optional wagoe-jobs integration for large, background reports |
 | **FC/IS pattern** | Pure `core/` functions; all I/O in `shell/` adapters |
 
 ## Requirements
@@ -42,8 +42,8 @@ Report generation library for the Boundary Framework — produce PDF, Excel, and
 ### PDF report with a template function
 
 ```clojure
-(require '[boundary.reports.shell.registry :as registry]
-         '[boundary.reports.shell.service :as reports])
+(require '[wagoe.reports.shell.registry :as registry]
+         '[wagoe.reports.shell.service :as reports])
 
 (registry/defreport invoice-report
   {:id        :invoice-report
@@ -125,10 +125,10 @@ Report generation library for the Boundary Framework — produce PDF, Excel, and
 {"Content-Type" "application/vnd.openxmlformats-officedocument.wordprocessingml.document"}
 ```
 
-### Async generation (requires boundary-jobs)
+### Async generation (requires wagoe-jobs)
 
 ```clojure
-(require '[boundary.reports.shell.service :as reports])
+(require '[wagoe.reports.shell.service :as reports])
 
 (defn export-handler [request]
   (let [job-id (reports/generate-async sales-report
@@ -153,7 +153,7 @@ Report generation library for the Boundary Framework — produce PDF, Excel, and
 ## Module Structure
 
 ```
-libs/reports/src/boundary/reports/
+libs/reports/src/wagoe/reports/
 ├── core/
 │   └── report.clj               # pure helpers (formatting, sections, prepare)
 ├── ports.clj                    # ReportGeneratorProtocol
@@ -165,7 +165,7 @@ libs/reports/src/boundary/reports/
     │   ├── excel.clj            # docjure (Apache POI) adapter
     │   └── word.clj             # Apache POI XWPF adapter
     ├── service.clj              # Public API: generate, generate-async
-    └── jobs_integration.clj     # Optional boundary-jobs integration
+    └── jobs_integration.clj     # Optional wagoe-jobs integration
 ```
 
 ## Protocol
@@ -198,13 +198,13 @@ Apache POI XWPF (Word) is included as a transitive dependency of docjure — no 
                   │ uses
                   ▼
 ┌─────────────────────────────────────────┐
-│            boundary/reports             │
+│            wagoe/reports             │
 │       (PDF, Excel, Word generation)     │
 └──────────┬──────────────────────────────┘
            │ optional
            ▼
 ┌─────────────────────────────────────────┐
-│             boundary/jobs               │
+│             wagoe/jobs               │
 │      (async generation, retry)          │
 └─────────────────────────────────────────┘
 ```

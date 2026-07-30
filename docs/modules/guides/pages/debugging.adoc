@@ -1,5 +1,5 @@
 = Debugging
-:description: Systematic debugging strategies for Boundary applications.
+:description: Systematic debugging strategies for Wagoe applications.
 
 == General approach
 
@@ -13,7 +13,7 @@ Don't debug through the full stack when you can isolate the issue.
 tail -100 logs/app.log | grep -A 10 "ERROR"
 ----
 
-Errors are logged with stack traces. Look for the first non-Boundary frame in the trace.
+Errors are logged with stack traces. Look for the first non-Wagoe frame in the trace.
 
 == 2. Add temporary logging
 
@@ -31,7 +31,7 @@ Bypass the HTTP layer and call services directly:
 
 [source,clojure]
 ----
-(def user-svc (get integrant.repl.state/system :boundary/user-service))
+(def user-svc (get integrant.repl.state/system :wagoe/user-service))
 (ports/find-user-by-email user-svc "alice@example.com")
 ----
 
@@ -51,7 +51,7 @@ Add temporary logging in handlers:
 
 [source,clojure]
 ----
-(def ds (get-in integrant.repl.state/system [:boundary/db-context :datasource]))
+(def ds (get-in integrant.repl.state/system [:wagoe/db-context :datasource]))
 (require '[next.jdbc :as jdbc])
 (jdbc/execute! ds ["SELECT * FROM users WHERE email = ?" "alice@example.com"])
 ----
@@ -109,5 +109,5 @@ clj-paren-repair <file-with-issue>
 *Fix*:
 [source,bash]
 ----
-JWT_SECRET="dev-secret-32-chars-minimum" clojure -M:test:db/h2 :user
+JWT_SECRET="dev-secret-at-least-32-characters-long" clojure -M:test:db/h2 :user
 ----

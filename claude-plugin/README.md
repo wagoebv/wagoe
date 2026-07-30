@@ -1,24 +1,24 @@
-# Boundary Claude Code Plugin
+# Wagoe Claude Code Plugin
 
-Makes agentic CLIs (Claude Code and compatible tools) aware of Boundary's
+Makes agentic CLIs (Claude Code and compatible tools) aware of Wagoe's
 scaffolder and AI tooling, so the agent reaches for `bb scaffold` / `bb ai`
 instead of hand-writing module boilerplate.
 
-New projects created with `boundary new` already include this skill at
-`.claude/skills/boundary/SKILL.md` — the plugin is for **existing** projects.
+New projects created with `wagoe new` already include this skill at
+`.claude/skills/wagoe/SKILL.md` — the plugin is for **existing** projects.
 
 ## Install
 
 In Claude Code:
 
 ```
-/plugin marketplace add thijs-creemers/boundary
-/plugin install boundary@boundary
+/plugin marketplace add wagoebv/wagoe
+/plugin install wagoe@wagoe
 ```
 
 ## What it provides
 
-A single `boundary` skill with:
+A single `wagoe` skill with:
 
 - A decision table mapping user requests ("add a product module") to the
   right `bb scaffold` / `bb ai` / `bb setup` / `bb doctor` / `bb guide` command
@@ -27,9 +27,9 @@ A single `boundary` skill with:
 
 ## Keeping in sync
 
-`skills/boundary/SKILL.md` must stay byte-identical to
-`libs/boundary-cli/resources/boundary/cli/templates/claude-skill.md.tmpl`.
-A test in `libs/boundary-cli` enforces this.
+`skills/wagoe/SKILL.md` must stay byte-identical to
+`libs/wagoe-cli/resources/wagoe/cli/templates/claude-skill.md.tmpl`.
+A test in `libs/wagoe-cli` enforces this.
 
 ## Versioning
 

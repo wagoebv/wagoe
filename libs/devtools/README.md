@@ -1,11 +1,11 @@
-# boundary/devtools
+# wagoe/devtools
 
 [![Status](https://img.shields.io/badge/status-stable-brightgreen)]()
 [![Clojure](https://img.shields.io/badge/clojure-1.12+-blue)]()
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
-[![Clojars Project](https://img.shields.io/clojars/v/org.boundary-app/boundary-devtools.svg)](https://clojars.org/org.boundary-app/boundary-devtools)
+[![Clojars Project](https://img.shields.io/clojars/v/org.wagoe/wagoe-devtools.svg)](https://clojars.org/org.wagoe/wagoe-devtools)
 
-Development-only tooling that gives x-ray vision into a running Boundary application: BND-coded error pipeline, REPL power tools, and a live dev dashboard.
+Development-only tooling that gives x-ray vision into a running Wagoe application: BND-coded error pipeline, REPL power tools, and a live dev dashboard.
 
 > **Dev-only library.** This is loaded exclusively via the `:dev` / `:repl-clj` aliases and adds **zero production overhead**. Never wire it into your production runtime.
 
@@ -18,7 +18,7 @@ Add as a **`:dev` alias** extra-dep so it never reaches production:
 {:aliases
  {:dev
   {:extra-deps
-   {org.boundary-app/boundary-devtools {:mvn/version "1.0.0-beta-1"}}}}}
+   {org.wagoe/wagoe-devtools {:mvn/version "1.0.0-beta-1"}}}}}
 ```
 
 ## Features
@@ -64,12 +64,12 @@ Require a configured AI provider; all degrade gracefully when none is set.
 ```clojure
 (ai/review "path/to/file.clj")           ; AI code review
 (ai/test-ideas "path/to/file.clj")       ; suggest missing test cases
-(ai/refactor-fcis 'boundary.product.core.validation)  ; FC/IS refactor guide
+(ai/refactor-fcis 'wagoe.product.core.validation)  ; FC/IS refactor guide
 ```
 
 ### Dev dashboard
 
-The `:boundary/dashboard` Integrant component starts Jetty on port 9999. Pages:
+The `:wagoe/dashboard` Integrant component starts Jetty on port 9999. Pages:
 `/dashboard` (overview), `/routes`, `/requests`, `/schemas`, `/db`, `/errors`,
 `/jobs`, `/config`, `/security`, `/docs`.
 

@@ -10,25 +10,25 @@ automatic retries with exponential backoff, and multi-tenant support.
 |===
 | Namespace | Purpose
 
-| `boundary.jobs.core.job`
+| `wagoe.jobs.core.job`
 | Pure functions: job creation, state transitions, retry logic
 
-| `boundary.jobs.ports`
+| `wagoe.jobs.ports`
 | Protocols: `IJobQueue`, `IJobStore`, `IJobStats`, `IJobWorker`, `IJobRegistry`
 
-| `boundary.jobs.schema`
+| `wagoe.jobs.schema`
 | Malli schemas: job states, priorities, retry config
 
-| `boundary.jobs.shell.adapters.in-memory`
+| `wagoe.jobs.shell.adapters.in-memory`
 | In-memory adapter (atoms, for dev/test)
 
-| `boundary.jobs.shell.adapters.redis`
+| `wagoe.jobs.shell.adapters.redis`
 | Redis adapter (sorted sets, lists, hashes)
 
-| `boundary.jobs.shell.worker`
+| `wagoe.jobs.shell.worker`
 | Worker implementation: polling, processing, pool management
 
-| `boundary.jobs.shell.tenant-context`
+| `wagoe.jobs.shell.tenant-context`
 | Multi-tenant job execution with schema switching
 |===
 
@@ -51,8 +51,8 @@ automatic retries with exponential backoff, and multi-tenant support.
 
 [source,clojure]
 ----
-(require '[boundary.jobs.core.job :as job]
-         '[boundary.jobs.ports :as ports])
+(require '[wagoe.jobs.core.job :as job]
+         '[wagoe.jobs.ports :as ports])
 
 (let [new-job (job/create-job {:job-type    :send-email
                                 :args        {:to "user@example.com"}
@@ -68,7 +68,7 @@ Priority levels: `:critical`, `:high`, `:default`, `:low`, `:bulk`.
 
 [source,clojure]
 ----
-(require '[boundary.jobs.shell.worker :as worker])
+(require '[wagoe.jobs.shell.worker :as worker])
 
 (def pool (worker/create-worker-pool
             {:queue-name :default :worker-count 5 :poll-interval-ms 500}

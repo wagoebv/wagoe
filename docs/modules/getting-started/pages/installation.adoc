@@ -1,20 +1,20 @@
 = Installation
-:description: Prerequisites and installation instructions for Boundary Framework.
+:description: Prerequisites and installation instructions for Wagoe Framework.
 
 == One-liner install (recommended)
 
-The Boundary installer handles all prerequisites automatically:
+The Wagoe installer handles all prerequisites automatically:
 
 [source,bash]
 ----
-curl -fsSL https://get.boundary-app.org | bash
+curl -fsSL https://get.wagoe.com | bash
 ----
 
-Fallback if `get.boundary-app.org` is unavailable:
+Fallback if `get.wagoe.com` is unavailable:
 
 [source,bash]
 ----
-curl -fsSL https://raw.githubusercontent.com/thijs-creemers/boundary/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/wagoebv/wagoe/main/scripts/install.sh | bash
 ----
 
 Supports macOS, Debian/Ubuntu, Arch Linux, and WSL2.
@@ -77,17 +77,17 @@ bb --version
 
 == Using individual libraries
 
-Boundary libraries are published to Clojars. Add only what you need:
+Wagoe libraries are published to Clojars. Add only what you need:
 
 [source,clojure]
 ----
 ;; Validation utilities only
-{:deps {org.boundary-app/boundary-core {:mvn/version "1.0.1-alpha-42"}}}
+{:deps {org.wagoe/wagoe-core {:mvn/version "1.0.1-alpha-42"}}}
 
 ;; Full web application stack
-{:deps {org.boundary-app/boundary-platform {:mvn/version "1.0.1-alpha-42"}
-        org.boundary-app/boundary-user     {:mvn/version "1.0.1-alpha-42"}
-        org.boundary-app/boundary-admin    {:mvn/version "1.0.1-alpha-42"}}}
+{:deps {org.wagoe/wagoe-platform {:mvn/version "1.0.1-alpha-42"}
+        org.wagoe/wagoe-user     {:mvn/version "1.0.1-alpha-42"}
+        org.wagoe/wagoe-admin    {:mvn/version "1.0.1-alpha-42"}}}
 ----
 
 See xref:libraries:index.adoc[Library Overview] for the complete list of available libraries.

@@ -10,15 +10,15 @@ NOTE: Stripe payments have moved to xref:payments.adoc[payments] library.
 
 [source]
 ----
-boundary.external.schema              — Malli schemas for all three adapters
-boundary.external.ports               — Protocols: ISmtpProvider, IImapMailbox,
+wagoe.external.schema              — Malli schemas for all three adapters
+wagoe.external.ports               — Protocols: ISmtpProvider, IImapMailbox,
                                         ITwilioMessaging
-boundary.external.core.smtp           — Pure SMTP helpers
-boundary.external.core.imap           — Pure IMAP helpers
-boundary.external.core.twilio         — Pure Twilio helpers (build SMS/WhatsApp params)
-boundary.external.shell.adapters.smtp — SmtpProviderAdapter (javax.mail)
-boundary.external.shell.adapters.imap — ImapMailboxAdapter (javax.mail, UIDFolder)
-boundary.external.shell.adapters.twilio  — TwilioAdapter (clj-http, Basic auth)
+wagoe.external.core.smtp           — Pure SMTP helpers
+wagoe.external.core.imap           — Pure IMAP helpers
+wagoe.external.core.twilio         — Pure Twilio helpers (build SMS/WhatsApp params)
+wagoe.external.shell.adapters.smtp — SmtpProviderAdapter (javax.mail)
+wagoe.external.shell.adapters.imap — ImapMailboxAdapter (javax.mail, UIDFolder)
+wagoe.external.shell.adapters.twilio  — TwilioAdapter (clj-http, Basic auth)
 ----
 
 == Enabling adapters
@@ -29,19 +29,19 @@ All three adapters ship as `:inactive` in `config.edn`. Move to `:active` to ena
 ----
 ;; In :active section of resources/conf/dev/config.edn
 
-:boundary.external/twilio
+:wagoe.external/twilio
 {:account-sid #env TWILIO_ACCOUNT_SID
  :auth-token  #env TWILIO_AUTH_TOKEN
  :from-number #env TWILIO_FROM_NUMBER}
 
-:boundary.external/smtp
+:wagoe.external/smtp
 {:host     #env SMTP_HOST
  :port     587
  :username #env SMTP_USERNAME
  :password #env SMTP_PASSWORD
  :tls?     true}
 
-:boundary.external/imap
+:wagoe.external/imap
 {:host     #env IMAP_HOST
  :port     993
  :username #env IMAP_USERNAME
@@ -53,7 +53,7 @@ All three adapters ship as `:inactive` in `config.edn`. Move to `:active` to ena
 
 [source,clojure]
 ----
-(require '[boundary.external.ports :as ports])
+(require '[wagoe.external.ports :as ports])
 
 ;; Send SMS
 (ports/send-sms twilio {:to "+31612345678" :body "Your code: 123456"})

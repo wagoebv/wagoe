@@ -11,34 +11,34 @@
      (status)    ; System health overview
      (routes)    ; Show all HTTP routes
      (commands)  ; Show all available commands"
-  (:require [boundary.config :as config]
+  (:require [wagoe.config :as config]
             ;; platform Integrant init/halt methods load via the :as wiring
             ;; require below; feature modules load here (app layer, not platform —
             ;; BOU-171 / BOU-192).
-            [boundary.user.shell.module-wiring]
-            [boundary.admin.shell.module-wiring]
-            [boundary.workflow.shell.module-wiring]
-            [boundary.search.shell.module-wiring]
-            [boundary.tenant.shell.module-wiring]
-            [boundary.devtools.core.guidance :as guidance]
-            [boundary.devtools.core.introspection :as introspection]
-            [boundary.devtools.core.schema-tools :as schema-tools]
-            [boundary.devtools.core.documentation :as docs]
-            [boundary.devtools.core.state-analyzer :as state-analyzer]
-            [boundary.devtools.core.error-classifier :as classifier]
-            [boundary.devtools.core.auto-fix :as auto-fix]
-            [boundary.devtools.shell.dashboard.server :as dashboard]  ;; Load dashboard Integrant init/halt methods
-            [boundary.devtools.shell.repl :as devtools-repl]
-            [boundary.devtools.shell.repl-error-handler :as repl-errors]
-            [boundary.devtools.shell.fcis-checker :as fcis]
-            [boundary.devtools.shell.auto-fix :as auto-fix-shell]
-            [boundary.devtools.shell.recording :as rec]
-            [boundary.devtools.shell.router :as dev-router]
-            [boundary.devtools.shell.prototype :as prototype]
-            [boundary.platform.shell.adapters.database.common.core :as db]
-            [boundary.platform.shell.system.wiring :as wiring]
-            [boundary.ai.shell.repl :as ai]
-            [boundary.ai.shell.service :as ai-svc]
+            [wagoe.user.shell.module-wiring]
+            [wagoe.admin.shell.module-wiring]
+            [wagoe.workflow.shell.module-wiring]
+            [wagoe.search.shell.module-wiring]
+            [wagoe.tenant.shell.module-wiring]
+            [wagoe.devtools.core.guidance :as guidance]
+            [wagoe.devtools.core.introspection :as introspection]
+            [wagoe.devtools.core.schema-tools :as schema-tools]
+            [wagoe.devtools.core.documentation :as docs]
+            [wagoe.devtools.core.state-analyzer :as state-analyzer]
+            [wagoe.devtools.core.error-classifier :as classifier]
+            [wagoe.devtools.core.auto-fix :as auto-fix]
+            [wagoe.devtools.shell.dashboard.server :as dashboard]  ;; Load dashboard Integrant init/halt methods
+            [wagoe.devtools.shell.repl :as devtools-repl]
+            [wagoe.devtools.shell.repl-error-handler :as repl-errors]
+            [wagoe.devtools.shell.fcis-checker :as fcis]
+            [wagoe.devtools.shell.auto-fix :as auto-fix-shell]
+            [wagoe.devtools.shell.recording :as rec]
+            [wagoe.devtools.shell.router :as dev-router]
+            [wagoe.devtools.shell.prototype :as prototype]
+            [wagoe.platform.shell.adapters.database.common.core :as db]
+            [wagoe.platform.shell.system.wiring :as wiring]
+            [wagoe.ai.shell.repl :as ai]
+            [wagoe.ai.shell.service :as ai-svc]
             [clojure.java.shell :as shell]
             [clojure.string :as str]
             [integrant.repl :as ig-repl]
@@ -100,7 +100,7 @@
     (dashboard/clear-config-overrides!)
     (let [result (ig-repl/reset)]
       (apply-taps-to-handler!)
-      (ai/set-service! (get state/system :boundary/ai-service))
+      (ai/set-service! (get state/system :wagoe/ai-service))
       (fcis/check-fcis-violations!)
       result)
     (catch Exception e
@@ -129,22 +129,22 @@
 (defn db-context
   "Get the database context from the running system."
   []
-  (get (system) :boundary/db-context))
+  (get (system) :wagoe/db-context))
 
 (defn user-service
   "Get the user service from the running system."
   []
-  (get (system) :boundary/user-service))
+  (get (system) :wagoe/user-service))
 
 (defn user-repository
   "Get the user repository from the running system."
   []
-  (get (system) :boundary/user-repository))
+  (get (system) :wagoe/user-repository))
 
 (defn session-repository
   "Get the session repository from the running system."
   []
-  (get (system) :boundary/session-repository))
+  (get (system) :wagoe/session-repository))
 
 ;; =============================================================================
 ;; Devtools REPL Helpers
@@ -174,14 +174,14 @@
    Falls back to configured port if server object isn't accessible."
   []
   (let [sys (system)
-        server (get sys :boundary/http-server)]
+        server (get sys :wagoe/http-server)]
     (if server
       (try
         (let [connector (first (.getConnectors server))]
           (.getLocalPort connector))
         (catch Exception _
-          (or (get-in (config) [:boundary/http :port]) 3000)))
-      (or (get-in (config) [:boundary/http :port]) 3000))))
+          (or (get-in (config) [:wagoe/http :port]) 3000)))
+      (or (get-in (config) [:wagoe/http :port]) 3000))))
 
 (defn status
   "Show system health overview."
@@ -192,15 +192,15 @@
       (println "System not running. Start with (go)")
       (let [cfg        (config)
             http-port  (actual-http-port)
-            http-host  (or (get-in cfg [:boundary/http :host]) "localhost")
-            admin-cfg  (get cfg :boundary/admin)
+            http-host  (or (get-in cfg [:wagoe/http :host]) "localhost")
+            admin-cfg  (get cfg :wagoe/admin)
             admin-path (or (:base-path admin-cfg) "/admin")
             base-url   (str "http://" (if (= http-host "0.0.0.0") "localhost" http-host)
                             ":" http-port)
             components (count sys)
             modules    (->> (keys sys)
                             (filter #(and (keyword? %)
-                                          (= "boundary" (namespace %))
+                                          (= "wagoe" (namespace %))
                                           (not (contains? infra-keys (name %)))))
                             (map #(name %))
                             sort)]
@@ -219,7 +219,7 @@
   (when-let [sys (system)]
     (->> (keys sys)
          (filter #(and (keyword? %)
-                       (= "boundary" (namespace %))
+                       (= "wagoe" (namespace %))
                        (not (contains? infra-keys (name %)))))
          (map #(name %))
          sort
@@ -286,7 +286,7 @@
   ([]
    (routes nil))
   ([filter-key]
-   (when-let [handler (get (system) :boundary/http-handler)]
+   (when-let [handler (get (system) :wagoe/http-handler)]
      (let [all-routes (devtools-repl/extract-routes-from-handler handler)
            filtered (if filter-key
                       (introspection/filter-routes all-routes filter-key)
@@ -310,7 +310,7 @@
    ;; routes, taps, and recording middleware.
    (with-error-handling
      (when-let [handler (or (wiring/current-handler)
-                            (get (system) :boundary/http-handler))]
+                            (get (system) :wagoe/http-handler))]
        (devtools-repl/simulate-request handler method path opts)))))
 
 ;; =============================================================================
@@ -408,7 +408,7 @@
 ;; =============================================================================
 
 (defn guide
-  "Look up in-REPL documentation for a Boundary topic.
+  "Look up in-REPL documentation for a Wagoe topic.
    (guide :scaffold)       ; scaffolding guide
    (guide :fcis)           ; FC/IS architecture
    (guide :topics)         ; list all topics"
@@ -442,7 +442,7 @@
 (defn- print-startup-dashboard []
   (when (= (guidance) :full)
     (status)
-    (when-let [dashboard (get state/system :boundary/dashboard)]
+    (when-let [dashboard (get state/system :wagoe/dashboard)]
       (let [port (or (:port dashboard) 9999)]
         (println (str "  Dashboard: http://localhost:" port "/dashboard"))))))
 
@@ -453,7 +453,7 @@
     (dashboard/clear-config-overrides!)
     (let [result (ig-repl/go)]
       (print-startup-dashboard)
-      (ai/set-service! (get state/system :boundary/ai-service))
+      (ai/set-service! (get state/system :wagoe/ai-service))
       (fcis/check-fcis-violations!)
       (maybe-show-tip :start)
       result)
@@ -584,10 +584,10 @@
 
 (defn restart-component
   "Hot-swap a single Integrant component without full system reset.
-   (restart-component :boundary/http-server)"
+   (restart-component :wagoe/http-server)"
   [component-key]
-  (require 'boundary.devtools.shell.repl)
-  (let [restart-fn (resolve 'boundary.devtools.shell.repl/restart-component)]
+  (require 'wagoe.devtools.shell.repl)
+  (let [restart-fn (resolve 'wagoe.devtools.shell.repl/restart-component)]
     (restart-fn #'integrant.repl.state/system
                 state/config
                 component-key)))
@@ -624,7 +624,7 @@
   (println (str "\n━━━ New Feature: " module-name " ━━━━━━━━━━━━━━━━━━━━━━━━━"))
   (println (str "Description: " description "\n"))
 
-  (let [ai-service (get (system) :boundary/ai-service)
+  (let [ai-service (get (system) :wagoe/ai-service)
         ai-spec (when ai-service
                   (println "Generating module spec from description...")
                   (let [result (ai-svc/scaffold-from-description
@@ -703,7 +703,7 @@
 ;; Quick Start Message
 ;; =============================================================================
 
-(println "\n\u250C\u2500 Boundary Development REPL \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510")
+(println "\n\u250C\u2500 Wagoe Development REPL \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510")
 (println "\u2502 (go)         Start the system                \u2502")
 (println "\u2502 (reset)      Reload and restart               \u2502")
 (println "\u2502 (halt)       Stop the system                  \u2502")

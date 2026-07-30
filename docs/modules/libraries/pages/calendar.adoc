@@ -10,35 +10,35 @@ iCal export/import, and admin UI components for scheduling applications.
 |===
 | Namespace | Layer | Responsibility
 
-| `boundary.calendar.schema`
+| `wagoe.calendar.schema`
 | shared
 | Malli schemas: `EventData`, `EventDef`, `OccurrenceResult`, `ConflictResult`
 
-| `boundary.calendar.ports`
+| `wagoe.calendar.ports`
 | shared
 | `CalendarAdapterProtocol` interface
 
-| `boundary.calendar.core.event`
+| `wagoe.calendar.core.event`
 | core
 | `defevent` macro, registry, `duration`, `all-day?`, `within-range?`
 
-| `boundary.calendar.core.recurrence`
+| `wagoe.calendar.core.recurrence`
 | core
 | RRULE parsing, `occurrences`, `next-occurrence*`, `expand-event`
 
-| `boundary.calendar.core.conflict`
+| `wagoe.calendar.core.conflict`
 | core
 | `overlaps?`, `conflicts?`, `find-conflicts`
 
-| `boundary.calendar.core.ui`
+| `wagoe.calendar.core.ui`
 | core
 | Pure Hiccup: `month-view`, `week-view`, `mini-calendar`, `event-badge`
 
-| `boundary.calendar.shell.adapters.ical`
+| `wagoe.calendar.shell.adapters.ical`
 | shell
 | ical4j adapter (`ICalAdapter`)
 
-| `boundary.calendar.shell.service`
+| `wagoe.calendar.shell.service`
 | shell
 | Public API: `export-ical`, `import-ical`, `ical-feed-response`
 |===
@@ -47,7 +47,7 @@ iCal export/import, and admin UI components for scheduling applications.
 
 [source,clojure]
 ----
-(require '[boundary.calendar.core.event :as event])
+(require '[wagoe.calendar.core.event :as event])
 
 (event/defevent appointment-event
   {:id     :appointment
@@ -64,7 +64,7 @@ iCal export/import, and admin UI components for scheduling applications.
 
 [source,clojure]
 ----
-(require '[boundary.calendar.core.recurrence :as recurrence])
+(require '[wagoe.calendar.core.recurrence :as recurrence])
 
 ;; Expand weekly recurring event
 (recurrence/occurrences event-data start-dt end-dt)
@@ -80,7 +80,7 @@ iCal export/import, and admin UI components for scheduling applications.
 
 [source,clojure]
 ----
-(require '[boundary.calendar.core.conflict :as conflict])
+(require '[wagoe.calendar.core.conflict :as conflict])
 
 (conflict/overlaps? event-a event-b)    ;=> true/false
 (conflict/find-conflicts new-event existing-events)
@@ -91,7 +91,7 @@ iCal export/import, and admin UI components for scheduling applications.
 
 [source,clojure]
 ----
-(require '[boundary.calendar.shell.service :as cal])
+(require '[wagoe.calendar.shell.service :as cal])
 
 ;; Export to iCal string
 (cal/export-ical events)

@@ -10,11 +10,11 @@ Infrastructure layer for HTTP routing/interceptors, database integration, CLI/ru
 
 | Namespace | Purpose |
 |-----------|---------|
-| `boundary.platform.shell.http.interceptors` | HTTP-specific interceptor pipeline execution |
-| `boundary.platform.shell.interceptors` | Universal cross-cutting interceptors (logging, metrics, error) |
-| `boundary.platform.shell.interfaces.http.routes` | Reitit router and Ring handler creation |
-| `boundary.platform.ports.http` | HTTP router and server protocols |
-| `boundary.platform.db.*` | Database context, connection pooling, shared persistence utilities |
+| `wagoe.platform.shell.http.interceptors` | HTTP-specific interceptor pipeline execution |
+| `wagoe.platform.shell.interceptors` | Universal cross-cutting interceptors (logging, metrics, error) |
+| `wagoe.platform.shell.interfaces.http.routes` | Reitit router and Ring handler creation |
+| `wagoe.platform.ports.http` | HTTP router and server protocols |
+| `wagoe.platform.db.*` | Database context, connection pooling, shared persistence utilities |
 
 ---
 
@@ -49,7 +49,7 @@ The context map threaded through all interceptors:
 
 ### Built-in HTTP Interceptors
 
-From `boundary.platform.shell.http.interceptors`:
+From `wagoe.platform.shell.http.interceptors`:
 
 | Interceptor | Phase | What it does |
 |-------------|-------|--------------|
@@ -65,7 +65,7 @@ From `boundary.platform.shell.http.interceptors`:
 
 ### Universal Cross-Cutting Interceptors
 
-From `boundary.platform.shell.interceptors`:
+From `wagoe.platform.shell.interceptors`:
 
 | Interceptor | Purpose |
 |-------------|---------|
@@ -100,7 +100,7 @@ cli-response-pipeline         ; error-handling + response-shape-cli
 
 `http-csrf-protection` (in the default interceptor stack) protects session-cookie
 authenticated, state-changing requests. Pure token functions live in
-`boundary.platform.core.csrf`; the interceptor (shell) does validation, issuance,
+`wagoe.platform.core.csrf`; the interceptor (shell) does validation, issuance,
 and pre-session cookie minting.
 
 ### Token model
@@ -127,7 +127,7 @@ paths (webhooks/callbacks).
 
 ```clojure
 ;; resources/conf/<env>/config.edn under :active
-:boundary/http
+:wagoe/http
 {:security
  {:csrf {:enabled?     true                                  ; OPT-IN: lib default is false
          :secret       #or [#env CSRF_SECRET #env JWT_SECRET] ; defaults to JWT_SECRET
@@ -171,10 +171,10 @@ For that case, wrap the bypassing handler with `interceptors/wrap-csrf`, the Rin
 form of the interceptor (same binding model, same opt-in/exempt/safe-method rules):
 
 ```clojure
-(require '[boundary.platform.shell.http.interceptors :as interceptors])
+(require '[wagoe.platform.shell.http.interceptors :as interceptors])
 
 ;; csrf-config is the same {:enabled? :secret :exempt-paths} map read from
-;; [:active :boundary/http :security :csrf]; thread it in from system config.
+;; [:active :wagoe/http :security :csrf]; thread it in from system config.
 (def app-web-handler
   (interceptors/wrap-csrf my-web-routes-handler csrf-config))
 ```
@@ -192,11 +192,11 @@ Disabled or secretless config makes it a pass-through.
 
 ```clojure
 {:path    "/api/users"
- :methods {:get  {:handler  'boundary.user.shell.http/list-users-handler
+ :methods {:get  {:handler  'wagoe.user.shell.http/list-users-handler
                   :summary  "List users"
                   :tags     ["users"]
                   :parameters {:query [:map [:limit {:optional true} :int]]}}
-           :post {:handler  'boundary.user.shell.http/create-user-handler
+           :post {:handler  'wagoe.user.shell.http/create-user-handler
                   :summary  "Create user"
                   :tags     ["users"]
                   :coercion {:body CreateUserRequest}}}}
@@ -205,7 +205,7 @@ Disabled or secretless config makes it a pass-through.
 ### Creating a Router
 
 ```clojure
-(require '[boundary.platform.shell.interfaces.http.routes :as routes])
+(require '[wagoe.platform.shell.interfaces.http.routes :as routes])
 
 ;; Creates complete Reitit router with health, api-docs, and your routes
 (def router
@@ -250,9 +250,9 @@ Disabled or secretless config makes it a pass-through.
 The platform library provides database context and connection pooling:
 
 ```clojure
-;; Integrant key: :boundary/db-context
+;; Integrant key: :wagoe/db-context
 ;; Config in resources/conf/{env}/config.edn
-{:boundary/db-context
+{:wagoe/db-context
  {:jdbc-url #env ["DATABASE_URL" "jdbc:h2:mem:dev;DB_CLOSE_DELAY=-1"]}}
 ```
 
@@ -311,17 +311,17 @@ Exceptions thrown with `:type` in `ex-data` are automatically converted:
 `http-rate-limit-protection` runs in the default interceptor stack for every
 route. It is **opt-in** — disabled unless configured, so a framework upgrade
 cannot start 429-ing existing consumers. Configure per env under
-`:boundary/http`:
+`:wagoe/http`:
 
 ```clojure
-:boundary/http
+:wagoe/http
 {:rate-limit {:enabled?  true
               :limit     300       ; max requests per window per client
               :window-ms 60000}}   ; window length
 ;; env overrides: HTTP_RATE_LIMIT, HTTP_RATE_LIMIT_WINDOW_MS
 ```
 
-The wiring injects the policy and the `:boundary/cache` into the interceptor
+The wiring injects the policy and the `:wagoe/cache` into the interceptor
 `system` map automatically. **With an active Redis cache the limit is shared
 across replicas** (fixed-window counter keyed in Redis). **With no cache it
 falls back to a per-process counter — correct on a single node only; across N

@@ -99,8 +99,8 @@
          (str/join "\n" (map #(row (cell-name %) (esc-cell (:description %))) sorted)))))
 
 (def knowledge-path "resources/agents/knowledge.edn")
-(def catalogue-resource "boundary/cli/modules-catalogue.edn")
-(def tmpl-path "libs/boundary-cli/resources/boundary/cli/templates/AGENTS.md.tmpl")
+(def catalogue-resource "wagoe/cli/modules-catalogue.edn")
+(def tmpl-path "libs/wagoe-cli/resources/wagoe/cli/templates/AGENTS.md.tmpl")
 
 (defn load-knowledge [] (edn/read-string (slurp knowledge-path)))
 (defn load-modules []

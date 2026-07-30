@@ -1,9 +1,9 @@
-# boundary/user
+# wagoe/user
 
 [![Status](https://img.shields.io/badge/status-stable-brightgreen)]()
 [![Clojure](https://img.shields.io/badge/clojure-1.12+-blue)]()
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
-[![Clojars Project](https://img.shields.io/clojars/v/org.boundary-app/boundary-user.svg)](https://clojars.org/org.boundary-app/boundary-user)
+[![Clojars Project](https://img.shields.io/clojars/v/org.wagoe/wagoe-user.svg)](https://clojars.org/org.wagoe/wagoe-user)
 
 Complete user management and authentication system with MFA support, session management, and pre-built web UI.
 
@@ -11,12 +11,12 @@ Complete user management and authentication system with MFA support, session man
 
 **deps.edn** (recommended):
 ```clojure
-{:deps {org.boundary-app/boundary-user {:mvn/version "1.0.0-beta-1"}}}
+{:deps {org.wagoe/wagoe-user {:mvn/version "1.0.0-beta-1"}}}
 ```
 
 **Leiningen**:
 ```clojure
-[org.boundary-app/boundary-user "1.0.0-beta-1"]
+[org.wagoe/wagoe-user "1.0.0-beta-1"]
 ```
 
 ## Features
@@ -34,9 +34,9 @@ Complete user management and authentication system with MFA support, session man
 ## Requirements
 
 - Clojure 1.12+
-- boundary/platform
-- boundary/observability
-- boundary/core
+- wagoe/platform
+- wagoe/observability
+- wagoe/core
 
 ## Quick Start
 
@@ -44,8 +44,8 @@ Complete user management and authentication system with MFA support, session man
 
 ```clojure
 (ns myapp.main
-  (:require [boundary.user.shell.module-wiring]  ; Auto-registers module
-            [boundary.platform.shell.system.wiring :as wiring]))
+  (:require [wagoe.user.shell.module-wiring]  ; Auto-registers module
+            [wagoe.platform.shell.system.wiring :as wiring]))
 
 (defn -main [& args]
   (wiring/start!))
@@ -55,7 +55,7 @@ Complete user management and authentication system with MFA support, session man
 
 ```clojure
 ;; config.edn
-{:boundary/user-service
+{:wagoe/user-service
  {:jwt-secret #env JWT_SECRET
   :jwt-expiration-hours 24
   :session-expiration-hours 168  ; 7 days
@@ -64,15 +64,15 @@ Complete user management and authentication system with MFA support, session man
   :lockout-duration-minutes 15
   :mfa-enabled? true}
  
- :boundary/user-repository
- {:db-context #ig/ref :boundary/db-context}}
+ :wagoe/user-repository
+ {:db-context #ig/ref :wagoe/db-context}}
 ```
 
 ### User Service API
 
 ```clojure
 (ns myapp.handlers
-  (:require [boundary.user.ports :as user-ports]))
+  (:require [wagoe.user.ports :as user-ports]))
 
 ;; Create user
 (user-ports/create-user user-service
@@ -159,7 +159,7 @@ The module registers these routes automatically:
 ## Module Structure
 
 ```
-libs/user/src/boundary/user/
+libs/user/src/wagoe/user/
 ├── core/
 │   ├── user.clj             # User business logic (pure)
 │   ├── authentication.clj   # Auth logic (pure)
@@ -178,7 +178,7 @@ libs/user/src/boundary/user/
 
 | Dependency | Version | Purpose |
 |------------|---------|---------|
-| `boundary/platform` | 1.0.0-beta-1 | HTTP, database |
+| `wagoe/platform` | 1.0.0-beta-1 | HTTP, database |
 | `buddy-hashers` | 2.0.167 | Password hashing |
 | `buddy-sign` | 3.6.1-359 | JWT tokens |
 | `one-time` | 0.8.0 | TOTP generation |
@@ -217,18 +217,18 @@ CREATE TABLE sessions (
 
 ```
 ┌─────────────────────────────────────────┐
-│              boundary/admin             │
+│              wagoe/admin             │
 └─────────────────┬───────────────────────┘
                   │ depends on
                   ▼
 ┌─────────────────────────────────────────┐
-│              boundary/user              │
+│              wagoe/user              │
 │   (authentication, sessions, MFA)       │
 └─────────────────┬───────────────────────┘
                   │ depends on
                   ▼
 ┌─────────────────────────────────────────┐
-│           boundary/platform             │
+│           wagoe/platform             │
 └─────────────────────────────────────────┘
 ```
 

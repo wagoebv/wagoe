@@ -1,12 +1,12 @@
 = ai
 :description: Framework-aware AI tooling including NL scaffolding, error explainer, test generator, SQL copilot, and docs wizard.
 
-Framework-aware AI tooling for Boundary applications. Unlike a generic assistant, it knows Boundary's conventions: FC/IS, ports, kebab↔snake naming, Malli schemas, and HoneySQL syntax.
+Framework-aware AI tooling for Wagoe applications. Unlike a generic assistant, it knows Wagoe's conventions: FC/IS, ports, kebab↔snake naming, Malli schemas, and HoneySQL syntax.
 
 == Features
 
 1. *NL Scaffolding* - parse a natural language description into a scaffolding spec
-2. *Error Explainer* - explain a stack trace with Boundary-specific context
+2. *Error Explainer* - explain a stack trace with Wagoe-specific context
 3. *Test Generator* - generate a complete test namespace for a source file
 4. *SQL Copilot* - translate a description into HoneySQL format
 5. *Documentation Wizard* - generate AGENTS.md, OpenAPI YAML, or README
@@ -25,7 +25,7 @@ bb scaffold ai "product module with name, price, stock" --yes
 bb ai explain --file stacktrace.txt
 
 # Generate test namespace
-bb ai gen-tests libs/user/src/boundary/user/core/validation.clj
+bb ai gen-tests libs/user/src/wagoe/user/core/validation.clj
 
 # Generate HoneySQL from description
 bb ai sql "find active users with orders in the last 7 days"
@@ -44,19 +44,19 @@ Falls back to cloud providers if configured:
 [source,clojure]
 ----
 ;; Offline-first (Ollama, no API key)
-:boundary/ai-service
+:wagoe/ai-service
 {:provider :ollama
  :model    "qwen2.5-coder:7b"
  :base-url "http://localhost:11434"}
 
 ;; Anthropic
-:boundary/ai-service
+:wagoe/ai-service
 {:provider :anthropic
  :model    "claude-haiku-4-5-20251001"
  :api-key  #env ANTHROPIC_API_KEY}
 
 ;; Ollama primary + Anthropic fallback
-:boundary/ai-service
+:wagoe/ai-service
 {:provider  :ollama
  :model     "qwen2.5-coder:7b"
  :base-url  "http://localhost:11434"
@@ -72,43 +72,43 @@ CLI provider resolution order: `ANTHROPIC_API_KEY` → `OPENAI_API_KEY` → `OLL
 |===
 | Namespace | Layer | Responsibility
 
-| `boundary.ai.ports`
+| `wagoe.ai.ports`
 | shared
 | `IAIProvider` protocol: `complete`, `complete-json`, `provider-name`
 
-| `boundary.ai.core.prompts`
+| `wagoe.ai.core.prompts`
 | core
 | Pure prompt builders for all 5 features
 
-| `boundary.ai.core.context`
+| `wagoe.ai.core.context`
 | core
 | Pure context extractors (module names, stack traces, function signatures)
 
-| `boundary.ai.core.parsing`
+| `wagoe.ai.core.parsing`
 | core
 | Pure response parsers (JSON, module spec, SQL, test code)
 
-| `boundary.ai.shell.providers.ollama`
+| `wagoe.ai.shell.providers.ollama`
 | shell
 | Ollama HTTP adapter
 
-| `boundary.ai.shell.providers.anthropic`
+| `wagoe.ai.shell.providers.anthropic`
 | shell
 | Anthropic API adapter
 
-| `boundary.ai.shell.providers.openai`
+| `wagoe.ai.shell.providers.openai`
 | shell
 | OpenAI API adapter
 
-| `boundary.ai.shell.providers.no-op`
+| `wagoe.ai.shell.providers.no-op`
 | shell
 | Test stub
 
-| `boundary.ai.shell.service`
+| `wagoe.ai.shell.service`
 | shell
 | Public API: `scaffold-from-description`, `explain-error`, `generate-tests`, `sql-from-description`, `generate-docs`
 
-| `boundary.ai.shell.repl`
+| `wagoe.ai.shell.repl`
 | shell
 | REPL helpers: `explain`, `sql`, `gen-tests`
 |===
@@ -117,15 +117,15 @@ CLI provider resolution order: `ANTHROPIC_API_KEY` → `OPENAI_API_KEY` → `OLL
 
 [source,clojure]
 ----
-(require '[boundary.ai.shell.repl :as ai])
+(require '[wagoe.ai.shell.repl :as ai])
 
 ;; Bind a service
 (ai/set-service! (create-service-from-config))
 
 ;; Use helpers
-(ai/explain "ClassNotFoundException: boundary.user.core.user")
+(ai/explain "ClassNotFoundException: wagoe.user.core.user")
 (ai/sql "find all users who logged in today")
-(ai/gen-tests "libs/user/src/boundary/user/core/validation.clj")
+(ai/gen-tests "libs/user/src/wagoe/user/core/validation.clj")
 ----
 
 == Testing

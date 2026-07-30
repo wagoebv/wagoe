@@ -1,6 +1,6 @@
 == Docker Development Guide
 
-The Boundary Framework provides a comprehensive Docker-based development
+The Wagoe Framework provides a comprehensive Docker-based development
 environment with intelligent port management, service orchestration, and
 development tools integration.
 
@@ -56,7 +56,7 @@ development tools integration.
              │
              ▼
 ┌─────────────────────────┐
-│    Boundary App         │  Port: 3000-3010
+│    Wagoe App         │  Port: 3000-3010
 │  (Main Application)     │  Health: /health
 └─────────────────────────┘
              │
@@ -182,7 +182,7 @@ POSTGRES_PORT=5432
 DOCS_PORT=8080
 
 # Database settings
-POSTGRES_DB=boundary_dev
+POSTGRES_DB=wagoe_dev
 POSTGRES_USER=postgres  
 POSTGRES_PASSWORD=postgres
 
@@ -233,7 +233,7 @@ clojure -M:dev:repl
 ./scripts/docker-dev.sh shell db
 
 # Inside container
-psql -U postgres -d boundary_dev
+psql -U postgres -d wagoe_dev
 ----
 
 ==== Live Development
@@ -256,7 +256,7 @@ psql -U postgres -d boundary_dev
 
 # Run specific test namespace
 ./scripts/docker-dev.sh shell dev-tools
-clojure -X:test :ns-patterns '["boundary.user.*"]'
+clojure -X:test :ns-patterns '["wagoe.user.*"]'
 ----
 
 === Debugging
@@ -431,7 +431,7 @@ docker system prune
 [arabic]
 . Install *Dev Containers* extension
 . Use *Remote-Containers: Attach to Running Container*
-. Select `boundary-dev-tools` container
+. Select `wagoe-dev-tools` container
 . Install Clojure extensions in container
 
 ==== IntelliJ IDEA
@@ -454,13 +454,13 @@ docker system prune
 
 All services run as non-root users:
 
-* *App container*: `boundary` user (UID 1001)
+* *App container*: `wagoe` user (UID 1001)
 * *Database*: `postgres` user
 * *Docs*: `node` user
 
 ==== Network Isolation
 
-* *Custom network*: Services communicate via `boundary-network`
+* *Custom network*: Services communicate via `wagoe-network`
 * *No host networking*: All port mappings explicit
 * *Internal communication*: Services use container names
 
@@ -495,7 +495,7 @@ considerations:
 
 === Related Documentation
 
-* link:../src/boundary/shell/utils/port_manager.clj[Port Management
+* link:../src/wagoe/shell/utils/port_manager.clj[Port Management
 System]
 * link:./DOCUMENTATION_SERVING.adoc[Documentation Serving]
 * link:../resources/conf/dev/config.edn[Environment Configuration]

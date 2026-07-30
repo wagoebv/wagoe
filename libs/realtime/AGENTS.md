@@ -10,17 +10,17 @@ WebSocket-based real-time communication with JWT authentication, message routing
 
 | Namespace | Purpose |
 |-----------|---------|
-| `boundary.realtime.core.connection` | Pure: connection records, authorization, filtering |
-| `boundary.realtime.core.message` | Pure: message creation, routing logic (4 types) |
-| `boundary.realtime.core.auth` | Pure: JWT extraction, claims validation, permission checks |
-| `boundary.realtime.core.pubsub` | Pure: topic subscription management |
-| `boundary.realtime.ports` | Protocols: IRealtimeService, IConnectionRegistry, IWebSocketConnection, IJWTVerifier, IPubSubManager |
-| `boundary.realtime.schema` | Malli schemas: Connection, Message, JWT Claims, Topic |
-| `boundary.realtime.shell.service` | Service orchestrating core + adapters |
-| `boundary.realtime.shell.connection-registry` | In-memory registry (atom-backed) |
-| `boundary.realtime.shell.pubsub-manager` | Atom-backed pub/sub state management |
-| `boundary.realtime.shell.adapters.websocket-adapter` | Ring/Jetty WebSocket adapter + TestWebSocketAdapter |
-| `boundary.realtime.shell.adapters.jwt-adapter` | JWT verifier delegating to boundary/user module + TestJWTAdapter |
+| `wagoe.realtime.core.connection` | Pure: connection records, authorization, filtering |
+| `wagoe.realtime.core.message` | Pure: message creation, routing logic (4 types) |
+| `wagoe.realtime.core.auth` | Pure: JWT extraction, claims validation, permission checks |
+| `wagoe.realtime.core.pubsub` | Pure: topic subscription management |
+| `wagoe.realtime.ports` | Protocols: IRealtimeService, IConnectionRegistry, IWebSocketConnection, IJWTVerifier, IPubSubManager |
+| `wagoe.realtime.schema` | Malli schemas: Connection, Message, JWT Claims, Topic |
+| `wagoe.realtime.shell.service` | Service orchestrating core + adapters |
+| `wagoe.realtime.shell.connection-registry` | In-memory registry (atom-backed) |
+| `wagoe.realtime.shell.pubsub-manager` | Atom-backed pub/sub state management |
+| `wagoe.realtime.shell.adapters.websocket-adapter` | Ring/Jetty WebSocket adapter + TestWebSocketAdapter |
+| `wagoe.realtime.shell.adapters.jwt-adapter` | JWT verifier delegating to wagoe/user module + TestJWTAdapter |
 
 ## Message Routing Types
 
@@ -45,7 +45,7 @@ WebSocket-based real-time communication with JWT authentication, message routing
 The `websocket-handler` accepts keyword options:
 
 ```clojure
-(require '[boundary.realtime.shell.handlers.ring-websocket :as ws-handler])
+(require '[wagoe.realtime.shell.handlers.ring-websocket :as ws-handler])
 
 (ws-handler/websocket-handler realtime-service
   :token-param "token"        ;; query param name for JWT (default "token")
@@ -72,7 +72,7 @@ The `:on-open` callback runs after a successful `realtime-ports/connect`. Use it
 
 ## Scaling & providers
 
-`:boundary/realtime` accepts a `:provider` key that selects the pub/sub backend:
+`:wagoe/realtime` accepts a `:provider` key that selects the pub/sub backend:
 
 | Provider | Default | Replica-safe |
 |----------|---------|--------------|
@@ -86,7 +86,7 @@ Every replica keeps its own in-memory connection registry (live WebSocket socket
 ### Redis config keys
 
 ```clojure
-:boundary/realtime {:provider    :redis
+:wagoe/realtime {:provider    :redis
                     :host        "localhost"   ; Redis host
                     :port        6379          ; Redis port
                     :password    "..."         ; AUTH password (production; optional)
@@ -95,7 +95,7 @@ Every replica keeps its own in-memory connection registry (live WebSocket socket
                     :max-total   8             ; publish-pool sizing (optional)
                     :max-idle    8             ; (optional)
                     :min-idle    0             ; (optional)
-                    :channel     "boundary:realtime:bus" ; pub/sub channel (default if omitted)
+                    :channel     "wagoe:realtime:bus" ; pub/sub channel (default if omitted)
                     :key-prefix  "realtime"    ; prefix for Redis set keys (default if omitted)
                     :subscribe-timeout-ms 5000 ; await window for the subscription to go live;
                                                ; if Redis is down at startup, init does NOT fail —
@@ -116,14 +116,14 @@ Under `:redis`, `send-to-user`, `send-to-role`, `broadcast`, `publish-to-topic`,
 
 ### Wiring note
 
-The web / WS server component **must declare `:boundary/realtime` as a dependency** so the Redis subscriber is active before the first WebSocket connection is accepted. Without this ordering, messages published during startup may be missed.
+The web / WS server component **must declare `:wagoe/realtime` as a dependency** so the Redis subscriber is active before the first WebSocket connection is accepted. Without this ordering, messages published during startup may be missed.
 
 See [ADR-035](../../dev-docs/adr/ADR-035-realtime-redis-scaling.adoc) for the full design rationale.
 
 ## Gotchas
 
 1. **Provider determines replica-safety** — the default `:in-memory` provider stores the connection registry and pub/sub state in process-local atoms; it is single-server only and requires sticky sessions when load-balanced. The `:redis` provider (shipped in BOU-85) scales across replicas — use it for any multi-instance deployment.
-2. **JWT adapter uses optional dependency** on boundary/user - `requiring-resolve` at load time. Throws `:type :internal-error` if user module unavailable
+2. **JWT adapter uses optional dependency** on wagoe/user - `requiring-resolve` at load time. Throws `:type :internal-error` if user module unavailable
 3. **Messages get JSON-encoded** via Cheshire before sending over WebSocket
 4. **Topic subscriptions are server-side only** - no client-side subscribe/unsubscribe protocol messages
 5. **Shell checks `ports/open?`** before sending to prevent errors on closed connections

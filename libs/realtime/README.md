@@ -3,9 +3,9 @@
 [![Status](https://img.shields.io/badge/status-in%20development-yellow)]()
 [![Clojure](https://img.shields.io/badge/clojure-1.12+-blue)]()
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
-[![Clojars Project](https://img.shields.io/clojars/v/org.boundary-app/boundary-realtime.svg)](https://clojars.org/org.boundary-app/boundary-realtime)
+[![Clojars Project](https://img.shields.io/clojars/v/org.wagoe/wagoe-realtime.svg)](https://clojars.org/org.wagoe/wagoe-realtime)
 
-**WebSocket-based real-time communication for Boundary Framework**
+**WebSocket-based real-time communication for Wagoe Framework**
 
 JWT-authenticated WebSocket support with:
 
@@ -17,7 +17,7 @@ JWT-authenticated WebSocket support with:
 - ✅ Topic-based pub/sub (subscribe to arbitrary topics)
 - ✅ Pure functional core (FC/IS pattern)
 - ✅ Pluggable adapters (test and production)
-- ✅ Integration with boundary/user authentication
+- ✅ Integration with wagoe/user authentication
 
 ---
 
@@ -42,22 +42,22 @@ JWT-authenticated WebSocket support with:
 
 ```clojure
 ;; deps.edn
-{:deps {org.boundary-app/boundary-realtime {:mvn/version "1.0.0-beta-1"}
-        org.boundary-app/boundary-user {:mvn/version "1.0.0-beta-1"}}}
+{:deps {org.wagoe/wagoe-realtime {:mvn/version "1.0.0-beta-1"}
+        org.wagoe/wagoe-user {:mvn/version "1.0.0-beta-1"}}}
 ```
 
 ### 2. Create Realtime Service
 
 ```clojure
-(require '[boundary.realtime.shell.service :as realtime-service]
-         '[boundary.realtime.shell.connection-registry :as registry]
-         '[boundary.realtime.shell.adapters.jwt-adapter :as jwt]
-         '[boundary.realtime.ports :as ports])
+(require '[wagoe.realtime.shell.service :as realtime-service]
+         '[wagoe.realtime.shell.connection-registry :as registry]
+         '[wagoe.realtime.shell.adapters.jwt-adapter :as jwt]
+         '[wagoe.realtime.ports :as ports])
 
 ;; Create connection registry
 (def connection-registry (registry/create-in-memory-registry))
 
-;; Create JWT verifier (integrates with boundary/user)
+;; Create JWT verifier (integrates with wagoe/user)
 (def jwt-verifier (jwt/create-user-jwt-adapter))
 
 ;; Create realtime service
@@ -69,7 +69,7 @@ JWT-authenticated WebSocket support with:
 ### 3. Add WebSocket Endpoint
 
 ```clojure
-(require '[boundary.realtime.shell.adapters.websocket-adapter :as ws])
+(require '[wagoe.realtime.shell.adapters.websocket-adapter :as ws])
 
 (defn websocket-handler
   "WebSocket upgrade handler for Ring."
@@ -197,7 +197,7 @@ ws.onclose = () => {
 **Server-side setup:**
 
 ```clojure
-(require '[boundary.realtime.shell.pubsub-manager :as pubsub-mgr])
+(require '[wagoe.realtime.shell.pubsub-manager :as pubsub-mgr])
 
 ;; Create pub/sub manager
 (def pubsub-manager (pubsub-mgr/create-pubsub-manager))
@@ -632,22 +632,22 @@ client.connect()
 
 ```clojure
 ;; resources/conf/config.edn
-{:boundary/realtime-service
- {:connection-registry #ig/ref :boundary/connection-registry
-  :jwt-verifier #ig/ref :boundary/jwt-verifier
-  :logger #ig/ref :boundary/logger
-  :error-reporter #ig/ref :boundary/error-reporter}
+{:wagoe/realtime-service
+ {:connection-registry #ig/ref :wagoe/connection-registry
+  :jwt-verifier #ig/ref :wagoe/jwt-verifier
+  :logger #ig/ref :wagoe/logger
+  :error-reporter #ig/ref :wagoe/error-reporter}
  
- :boundary/connection-registry {}
+ :wagoe/connection-registry {}
  
- :boundary/jwt-verifier {}}
+ :wagoe/jwt-verifier {}}
 ```
 
 ### Environment Variables
 
 ```bash
 # No environment variables needed for basic setup
-# JWT secret is managed by boundary/user module
+# JWT secret is managed by wagoe/user module
 ```
 
 ---
@@ -747,7 +747,7 @@ All messages sent via WebSocket follow this JSON structure:
 ### Graceful Shutdown
 
 ```clojure
-(defmethod ig/halt-key! :boundary/realtime-service
+(defmethod ig/halt-key! :wagoe/realtime-service
   [_ {:keys [connection-registry]}]
   ;; Close all active connections gracefully
   (let [connections (ports/all-connections connection-registry)]
@@ -829,7 +829,7 @@ For multi-server deployments (future feature), you'll need:
 
 ```
 libs/realtime/
-├── src/boundary/realtime/
+├── src/wagoe/realtime/
 │   ├── core/                          # Pure business logic
 │   │   ├── connection.clj             # Connection state management (pure)
 │   │   ├── message.clj                # Message routing logic (pure)
@@ -983,7 +983,7 @@ clojure -M:test
 **Solutions:**
 1. Check JWT token is included in query params: `?token=<jwt>`
 2. Verify JWT is valid and not expired
-3. Ensure boundary/user module is properly configured
+3. Ensure wagoe/user module is properly configured
 4. Check JWT secret matches between user module and realtime module
 
 ### Messages Not Being Received
@@ -1015,13 +1015,13 @@ clojure -M:test
 | `malli` | 0.20.0 | Schema validation |
 | `cheshire` | 6.1.0 | JSON encoding/decoding |
 | `tools.logging` | 1.3.1 | Logging |
-| `boundary/user` | 1.0.0-beta-1 | JWT authentication (optional) |
+| `wagoe/user` | 1.0.0-beta-1 | JWT authentication (optional) |
 
 ---
 
 ## License
 
-Part of Boundary Framework
+Part of Wagoe Framework
 
 Copyright © 2024-2026 Thijs Creemers
 
@@ -1037,7 +1037,7 @@ Distributed under the Eclipse Public License version 2.0.
 - Open issues on GitHub for feature requests
 
 **Need help?**
-- GitHub Issues: https://github.com/thijs-creemers/boundary/issues
+- GitHub Issues: https://github.com/wagoebv/wagoe/issues
 - Documentation: See [docs-site/](../../docs-site/) in the repository
 
 **Coming in v0.2.0:**

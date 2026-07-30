@@ -10,35 +10,35 @@ message routing, and topic-based pub/sub.
 |===
 | Namespace | Purpose
 
-| `boundary.realtime.core.connection`
+| `wagoe.realtime.core.connection`
 | Pure: connection records, authorization, filtering
 
-| `boundary.realtime.core.message`
+| `wagoe.realtime.core.message`
 | Pure: message creation, routing logic
 
-| `boundary.realtime.core.auth`
+| `wagoe.realtime.core.auth`
 | Pure: JWT extraction, claims validation, permission checks
 
-| `boundary.realtime.core.pubsub`
+| `wagoe.realtime.core.pubsub`
 | Pure: topic subscription management
 
-| `boundary.realtime.ports`
+| `wagoe.realtime.ports`
 | Protocols: `IRealtimeService`, `IConnectionRegistry`, `IWebSocketConnection`, `IJWTVerifier`, `IPubSubManager`
 
-| `boundary.realtime.shell.service`
+| `wagoe.realtime.shell.service`
 | Service orchestrating core + adapters
 
-| `boundary.realtime.shell.connection-registry`
+| `wagoe.realtime.shell.connection-registry`
 | In-memory registry (atom-backed)
 
-| `boundary.realtime.shell.pubsub-manager`
+| `wagoe.realtime.shell.pubsub-manager`
 | Atom-backed pub/sub state management
 
-| `boundary.realtime.shell.adapters.websocket-adapter`
+| `wagoe.realtime.shell.adapters.websocket-adapter`
 | Ring/Jetty WebSocket adapter
 
-| `boundary.realtime.shell.adapters.jwt-adapter`
-| JWT verifier delegating to `boundary-user`
+| `wagoe.realtime.shell.adapters.jwt-adapter`
+| JWT verifier delegating to `wagoe-user`
 |===
 
 == Message routing types
@@ -68,7 +68,7 @@ message routing, and topic-based pub/sub.
 
 [source,clojure]
 ----
-(require '[boundary.realtime.ports :as ports])
+(require '[wagoe.realtime.ports :as ports])
 
 ;; Broadcast
 (ports/send-to-all service {:type :announcement :text "Maintenance in 5 minutes"})

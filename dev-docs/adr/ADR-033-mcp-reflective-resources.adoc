@@ -1,7 +1,7 @@
 = ADR-033: Reflective MCP Resources — Ground Truth from the Running Project
 :status: Proposed
 :date: 2026-06-16
-:deciders: boundary-team
+:deciders: wagoe-team
 
 == Status
 
@@ -9,7 +9,7 @@ Proposed
 
 == Context
 
-The MCP server should expose Boundary's project knowledge to agents as
+The MCP server should expose Wagoe's project knowledge to agents as
 *resources*: conventions, the schema registry, the module graph, clj-kondo
 rules, workflows, routes, and per-library API surface. The hard requirement
 (BOU-99): these must reflect the *actual running project*, never hand-written
@@ -30,7 +30,7 @@ reach it*?
 
 === 1. Producers are pure functions of a project *snapshot*
 
-`boundary.mcp.core.resources` holds the resource catalog and a pure
+`wagoe.mcp.core.resources` holds the resource catalog and a pure
 `read-resource(snapshot, uri)`. A *snapshot* is a plain map
 (`:conventions :module-graph :kondo-rules :schema-registry :routes :workflows
 :libs`). Producers never do I/O; they shape snapshot data into resource content.
@@ -40,7 +40,7 @@ producers.
 
 === 2. A `SystemSource` port supplies the snapshot (hybrid: in-process now, nREPL later)
 
-`boundary.mcp.ports/SystemSource` has one method, `snapshot`. The shell provides
+`wagoe.mcp.ports/SystemSource` has one method, `snapshot`. The shell provides
 adapters:
 
 * *In-process* (`shell/system-source`, this PR): reflects the project at the
@@ -85,12 +85,12 @@ serialization, and the guardrail lookup; pure protocol methods still delegate to
   `lib/{name}` return `:unavailable` until the nREPL bridge lands. The wiring,
   catalog, gating, and tests are complete, so that is purely additive.
 * The in-process adapter reflects the *current working directory*. Run from a
-  Boundary project root it reflects that project; run elsewhere it reports what
+  Wagoe project root it reflects that project; run elsewhere it reports what
   it can. The nREPL adapter removes this ambiguity by targeting a specific REPL.
 
 === Follow-ups
 
 * nREPL `SystemSource` adapter populating schema-registry / routes / workflows /
   `lib/{name}` from a running project.
-* `resources/templates/list` for the `boundary://lib/{name}` template (currently
+* `resources/templates/list` for the `wagoe://lib/{name}` template (currently
   advertised as a single templated catalog entry).

@@ -1,7 +1,7 @@
 #!/usr/bin/env bb
 ;; scripts/docs_lint.clj
 ;; 
-;; Documentation drift linter for Boundary Framework.
+;; Documentation drift linter for Wagoe Framework.
 ;; Detects stale paths, broken links, unknown namespaces, and invalid aliases.
 ;;
 ;; Usage (babashka):
@@ -10,7 +10,7 @@
 ;;   bb scripts/docs_lint.clj --out-dir build/docs-lint
 ;;
 ;; Usage (Clojure CLI via wrapper):
-;;   clojure -M:dev -m boundary.tools.docs-lint
+;;   clojure -M:dev -m wagoe.tools.docs-lint
 ;;
 ;; Output:
 ;;   build/docs-lint/report.edn   - structured report
@@ -22,8 +22,7 @@
 (ns docs-lint
   (:require [clojure.string :as str]
             [clojure.java.io :as io]
-            [clojure.edn :as edn]
-            [clojure.set :as set]))
+            [clojure.edn :as edn]))
 
 ;; =============================================================================
 ;; Configuration
@@ -61,10 +60,15 @@
    #"^node_modules/.*"
    #"^docs/archive/.*"])   ;; archived/deprecated docs
 
-;; Known stale/pre-split path patterns to warn about
+;; Known stale/pre-split path patterns to warn about.
+;; NOTE: these keep the pre-rename `boundary` spelling on purpose. They detect
+;; the obsolete pre-monorepo-split layout, which used boundary.* namespaces.
+;; Post-rename, `src/wagoe/` is the CORRECT layout for a generated app (`wagoe
+;; new` puts modules at src/wagoe/<module>/), so matching on `wagoe` would flag
+;; correct docs.
 (def stale-path-patterns
-  [[#"(?<![/a-zA-Z])src/boundary/" "Pre-split path: code moved to libs/*/src/boundary/"]
-   [#"(?<![/a-zA-Z])test/boundary/" "Pre-split path: tests moved to libs/*/test/boundary/"]
+  [[#"(?<![/a-zA-Z])src/boundary/" "Pre-split path: pre-rename layout; code lives in libs/*/src/wagoe/"]
+   [#"(?<![/a-zA-Z])test/boundary/" "Pre-split path: pre-rename layout; tests live in libs/*/test/wagoe/"]
    [#"cd libs/\w+ && clojure" "Consider using root-level commands instead of cd into libs"]])
 
 ;; =============================================================================
@@ -113,15 +117,15 @@
   (let [base-dir (System/getProperty "user.dir")]
     (->> (concat
           (list-files-recursive (io/file base-dir "src"))
+          (list-files-recursive (io/file base-dir "dev"))
           (list-files-recursive (io/file base-dir "libs")))
          (filter #(or (str/ends-with? % ".clj")
-                      (str/ends-with? % ".cljc")))
-         (remove #(str/includes? % "/test/")))))
+                      (str/ends-with? % ".cljc"))))))
 
 (defn extract-namespace [file-path]
   (try
     (let [content (slurp file-path)]
-      (when-let [match (re-find #"\(ns\s+([a-zA-Z0-9._-]+)" content)]
+      (when-let [match (re-find #"\(ns\s+(?:\^[^\s]+\s+)*([a-zA-Z0-9._-]+)" content)]
         (second match)))
     (catch Exception _ nil)))
 
@@ -254,9 +258,14 @@
 ;; =============================================================================
 
 (defn extract-namespace-references [content]
-  ;; Look for boundary.* namespace-like tokens
-  (let [pattern #"boundary\.[a-zA-Z0-9._-]+"]
+  ;; Look for wagoe.* namespace-like tokens. The rename introduced a collision
+  ;; the old `boundary.` prefix never had: wagoe.com (the domain) and file names
+  ;; like wagoe.service / wagoe.jar / wagoe.env also start with `wagoe.`, so a
+  ;; bare prefix match reports them as unknown namespaces. Drop those suffixes.
+  (let [pattern  #"wagoe\.[a-zA-Z0-9._-]+"
+        non-ns   #"^wagoe\.(com|org|net|io|dev|app|jar|service|env|edn|clj|cljs|cljc|yml|yaml|json|toml|conf|lua|css|js|md|adoc|sh|xml|png|svg|pdf|csv|log|db|sql|properties)\b"]
     (->> (re-seq pattern content)
+         (remove #(re-find non-ns %))
          (distinct))))
 
 (defn check-namespace-references [file-path content known-namespaces]
@@ -268,10 +277,10 @@
                       (str/ends-with? % ".md")
                       (str/ends-with? % ".txt")
                       (str/ends-with? % ".")
-                      (str/starts-with? % "boundary.product.")
-                      (= % "boundary.test.fixtures")))
+                      (str/starts-with? % "wagoe.product.")
+                      (= % "wagoe.test.fixtures")))
          (remove #(contains? known-namespaces %))
-         ;; Also allow partial matches (e.g., boundary.user matches boundary.user.core.user)
+         ;; Also allow partial matches (e.g., wagoe.user matches wagoe.user.core.user)
          (remove (fn [ref]
                    (some #(str/starts-with? % ref) known-namespaces)))
          (map (fn [ns-ref]
@@ -350,7 +359,7 @@
         :message (str "Error reading file: " (.getMessage e))}])))
 
 (defn run-lint []
-  (println "Boundary Docs Lint")
+  (println "Wagoe Docs Lint")
   (println "==================")
   (println)
 
@@ -405,7 +414,7 @@
         ;; Write text report
         (spit (io/file out-dir "report.txt")
               (with-out-str
-                (println "Boundary Docs Lint Report")
+                (println "Wagoe Docs Lint Report")
                 (println "=========================")
                 (println)
                 (println "Summary:")

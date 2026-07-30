@@ -6,14 +6,14 @@
 
 == Overview
 
-This document captures the implementation details, architectural decisions, and design patterns used in the Boundary User Module. It serves as both implementation guidance and architectural reference for the module-centric, hexagonal architecture approach.
+This document captures the implementation details, architectural decisions, and design patterns used in the Wagoe User Module. It serves as both implementation guidance and architectural reference for the module-centric, hexagonal architecture approach.
 
 === Module Structure
 
-The User Module follows Boundary's standardized module structure:
+The User Module follows Wagoe's standardized module structure:
 
 ```
-libs/user/src/boundary/user/
+libs/user/src/wagoe/user/
 ├── schema.clj          # Comprehensive schema definitions (✅ Implemented)
 ├── ports.clj           # Port interfaces/contracts (✅ Implemented)  
 ├── core/               # Pure business logic (TODO)
@@ -26,7 +26,7 @@ libs/user/src/boundary/user/
     └── service.clj     # Service orchestration (TODO)
 ```
 
-== Schema Implementation (`boundary.user.schema`)
+== Schema Implementation (`wagoe.user.schema`)
 
 === Design Philosophy
 
@@ -190,7 +190,7 @@ The schema implementation embodies several key architectural principles:
 - Testing data generators
 - Clear error reporting
 
-== Ports Implementation (`boundary.user.ports`)
+== Ports Implementation (`wagoe.user.ports`)
 
 === Design Philosophy
 
@@ -283,7 +283,7 @@ logging/metrics/audit belong to observability; there is no event-bus port today
 - Audit trail requirements
 - Security context propagation
 
-== SQLite Adapter Implementation (`boundary.user.shell.adapters`)
+== SQLite Adapter Implementation (`wagoe.user.shell.adapters`)
 
 === Design Philosophy
 
@@ -590,7 +590,7 @@ CREATE TABLE IF NOT EXISTS user_sessions (
 
 **🔄 Architectural Refactoring**
 
-The user adapter implementation leverages shared type conversion utilities from `boundary.core.utils.type-conversion` and SQLite database utilities from `boundary.platform.shell.adapters.database.sqlite`:
+The user adapter implementation leverages shared type conversion utilities from `wagoe.core.utils.type-conversion` and SQLite database utilities from `wagoe.platform.shell.adapters.database.sqlite`:
 
 ```clojure
 ;; Before: Duplicate utility functions in each adapter
@@ -800,7 +800,7 @@ The user adapter implementation leverages shared type conversion utilities from 
 
 == Conclusion
 
-The User Module implementation demonstrates Boundary's module-centric, hexagonal architecture principles in practice. The comprehensive schema system provides type safety and interface consistency, while the port definitions enable flexible, testable, and scalable implementations.
+The User Module implementation demonstrates Wagoe's module-centric, hexagonal architecture principles in practice. The comprehensive schema system provides type safety and interface consistency, while the port definitions enable flexible, testable, and scalable implementations.
 
 Key achievements:
 - **Type-safe data handling** across all interfaces
@@ -810,4 +810,4 @@ Key achievements:
 - **Security-first approach** with audit trails
 - **Future-proof extensibility** through modular design patterns
 
-This implementation serves as a template for other modules in the Boundary framework, establishing patterns and practices that ensure consistency and quality across the entire system.
+This implementation serves as a template for other modules in the Wagoe framework, establishing patterns and practices that ensure consistency and quality across the entire system.

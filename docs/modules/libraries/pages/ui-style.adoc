@@ -1,5 +1,5 @@
 = ui-style
-:description: Shared UI styling contract and asset bundles for Boundary modules.
+:description: Shared UI styling contract and asset bundles for Wagoe modules.
 
 The `ui-style` library centralizes app-wide UI assets and conventions:
 
@@ -13,12 +13,12 @@ It prevents per-library style drift by making layout namespaces consume the same
 
 [source,clojure]
 ----
-{:deps {org.boundary-app/boundary-ui-style {:mvn/version "1.0.1-alpha-14"}}}
+{:deps {org.wagoe/wagoe-ui-style {:mvn/version "1.0.1-alpha-14"}}}
 ----
 
 == API
 
-Namespace: `boundary.ui-style`
+Namespace: `wagoe.ui-style`
 
 * `base-css`, `pilot-css`, `admin-pilot-css`
 * `base-js`, `pilot-js`, `admin-pilot-js`
