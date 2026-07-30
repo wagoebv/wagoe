@@ -18,14 +18,27 @@ runs:
       with:
         cli: 1.12.5.1654
 
+    # The `v2` segment is a manual invalidation lever, and it is load-bearing.
+    #
+    # actions/cache only WRITES on an exact-key miss. Before the warm-deps job
+    # existed, lint (deps: just -M:clj-kondo) raced the other root jobs and won,
+    # saving a ~12MB stub under this key. Adding warm-deps stopped new keys being
+    # poisoned but could not heal that one: warm-deps kept getting an exact hit,
+    # so it restored the stub, downloaded into ~/.m2, and never saved — leaving
+    # every downstream job to pull the full :test tree from Maven Central and get
+    # 429-ed. The key is pinned by hashFiles(**/deps.edn), so it would have
+    # stayed poisoned until a dependency changed.
+    #
+    # Bump this segment whenever a cache is known-bad; it mints a fresh key that
+    # warm-deps then populates properly.
     - name: Cache dependencies
       uses: actions/cache@v5
       with:
         path: |
           ~/.m2/repository
           ~/.gitlibs
-        key: ${{ runner.os }}-clojure-${{ hashFiles('**/deps.edn') }}
-        restore-keys: ${{ runner.os }}-clojure-
+        key: ${{ runner.os }}-clojure-v2-${{ hashFiles('**/deps.edn') }}
+        restore-keys: ${{ runner.os }}-clojure-v2-
 
     # Resolve deps single-threaded BEFORE any concurrent resolution. On a cold
     # ~/.m2, tools.deps parses many JDBC-driver POMs in parallel and intermittently
