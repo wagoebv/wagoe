@@ -23,14 +23,36 @@
         (throw (ex-info "cannot determine version: libs/core/build.clj unreadable"
                         {:path (.getPath f)})))))
 
-(def version (suite-version))
+;; Delayed on purpose: resolving the version reads (and can fail on) another
+;; file, and tasks like `clean` have no business needing it. Eager resolution
+;; would make every task fail when only `uber` actually cares.
+(def ^:private version* (delay (suite-version)))
+
+(defn- uber-file* []
+  (format "target/%s-%s-standalone.jar" (name lib) @version*))
+
+(defn print-version
+  "Print the artifact version and nothing else, so CI and scripts can read it
+   without re-implementing the parser:
+
+     clojure -T:build print-version
+
+   Keeping this the single way to ask makes it impossible for a shell-side
+   regex to drift from the one in suite-version (BOU-250)."
+  [_]
+  (println @version*))
+
+(defn print-uber-file
+  "Print the uberjar path `uber` will produce. Same rationale as print-version:
+   CI asserts against this instead of rebuilding the name itself."
+  [_]
+  (println (uber-file*)))
+
 (def class-dir "target/classes")
 
 ;; Include database drivers in the uberjar basis
 (def basis (b/create-basis {:project "deps.edn"
                             :aliases [:db]}))
-
-(def uber-file (format "target/%s-%s-standalone.jar" (name lib) version))
 
 ;; All source/resource directories, derived from deps.edn :paths so new libs
 ;; are packaged automatically (test dirs excluded).
@@ -48,24 +70,26 @@
   "Build uberjar with all dependencies including database drivers."
   [_]
   (clean nil)
-  (println "Building uberjar...")
-  (println (str "  Library: " lib))
-  (println (str "  Version: " version))
-  (println (str "  Output:  " uber-file))
+  (let [version   @version*
+        uber-file (uber-file*)]
+    (println "Building uberjar...")
+    (println (str "  Library: " lib))
+    (println (str "  Version: " version))
+    (println (str "  Output:  " uber-file))
 
   ;; Copy source and resources from all libs
-  (b/copy-dir {:src-dirs all-src-dirs
-               :target-dir class-dir})
+    (b/copy-dir {:src-dirs all-src-dirs
+                 :target-dir class-dir})
 
   ;; Compile Clojure namespaces for better startup time.
   ;; Direct linking removes var indirection in compiled code; dynamic vars are
   ;; unaffected, but alter-var-root/with-redefs on non-dynamic vars won't be
   ;; seen by compiled call sites.
-  (b/compile-clj {:basis basis
-                  :src-dirs all-src-dirs
-                  :class-dir class-dir
-                  :ns-compile '[wagoe.main]
-                  :java-opts ["-Dclojure.compiler.direct-linking=true"]})
+    (b/compile-clj {:basis basis
+                    :src-dirs all-src-dirs
+                    :class-dir class-dir
+                    :ns-compile '[wagoe.main]
+                    :java-opts ["-Dclojure.compiler.direct-linking=true"]})
 
   ;; Build uberjar.
   ;;
@@ -81,23 +105,23 @@
   ;; filesystem those are distinct paths and the build succeeds — which is why
   ;; this only failed on macOS while Linux and the Docker build were fine.
   ;; Excluding them makes the build behave identically on both.
-  (b/uber {:class-dir class-dir
-           :uber-file uber-file
-           :basis basis
-           :main 'wagoe.main
-           :exclude ["^LICENSE(/.*)?$"
-                     "^NOTICE(/.*)?$"
-                     "(?i)^META-INF/LICENSE(/.*|\\.[^/]*)?$"
-                     "(?i)^META-INF/NOTICE(/.*|\\.[^/]*)?$"]})
+    (b/uber {:class-dir class-dir
+             :uber-file uber-file
+             :basis basis
+             :main 'wagoe.main
+             :exclude ["^LICENSE(/.*)?$"
+                       "^NOTICE(/.*)?$"
+                       "(?i)^META-INF/LICENSE(/.*|\\.[^/]*)?$"
+                       "(?i)^META-INF/NOTICE(/.*|\\.[^/]*)?$"]})
 
-  (println (str "✓ Uberjar built successfully: " uber-file))
-  (println)
-  (println "Run with:")
-  (println (str "  java -jar " uber-file))
-  (println (str "  java -jar " uber-file " server"))
-  (println (str "  java -jar " uber-file " worker"))
-  (println (str "  java -jar " uber-file " cli user list"))
-  (println)
-  (println "Recommended production JVM flags:")
-  (println (str "  java -XX:+UseG1GC -XX:MaxRAMPercentage=75"
-                " -Dclojure.compiler.direct-linking=true -jar " uber-file " server")))
+    (println (str "✓ Uberjar built successfully: " uber-file))
+    (println)
+    (println "Run with:")
+    (println (str "  java -jar " uber-file))
+    (println (str "  java -jar " uber-file " server"))
+    (println (str "  java -jar " uber-file " worker"))
+    (println (str "  java -jar " uber-file " cli user list"))
+    (println)
+    (println "Recommended production JVM flags:")
+    (println (str "  java -XX:+UseG1GC -XX:MaxRAMPercentage=75"
+                  " -Dclojure.compiler.direct-linking=true -jar " uber-file " server"))))

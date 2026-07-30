@@ -987,19 +987,44 @@ jobs:
       - name: Build uberjar
         run: clojure -T:build uber
 
+      # Ask build.clj for the version and path rather than re-deriving them in
+      # shell — a second parser here could drift from the one in suite-version,
+      # which is the class of bug this whole PR is about (BOU-250).
       - name: Assert the artifact is versioned and runnable
         run: |
           set -euo pipefail
-          version=$(sed -n 's/^(def version *"\(.*\)")/\1/p' libs/core/build.clj)
-          jar="target/wagoe-${version}-standalone.jar"
-          echo "expecting $jar"
-          test -f "$jar" || { echo "::error::missing $jar"; ls -1 target/*.jar || true; exit 1; }
+          version=$(clojure -T:build print-version)
+          jar=$(clojure -T:build print-uber-file)
+          echo "expecting $jar (version $version)"
+
           case "$version" in
             *null*|"") echo "::error::version did not resolve: '$version'"; exit 1 ;;
           esac
-          unzip -p "$jar" META-INF/MANIFEST.MF | grep -q 'Main-Class: wagoe.main'
-          java -jar "$jar" --help >/dev/null 2>&1 || true
+
+          test -f "$jar" || { echo "::error::missing $jar"; ls -1 target/*.jar || true; exit 1; }
+
+          # Read the manifest into a variable first: `unzip -p ... | grep -q`
+          # lets grep exit on the first match, and under `pipefail` the SIGPIPE
+          # on the writer can fail the step for the wrong reason.
+          manifest=$(unzip -p "$jar" META-INF/MANIFEST.MF)
+          grep -q 'Main-Class: wagoe.main' <<<"$manifest" \
+            || { echo "::error::Main-Class is not wagoe.main"; exit 1; }
+
+          # A real assertion, not `|| true`: --help is a supported mode that
+          # exits 0 and prints usage, so requiring the banner proves the jar
+          # loads its classes and reaches main.
+          java -jar "$jar" --help | grep -q 'Usage:' \
+            || { echo "::error::jar did not print usage via --help"; exit 1; }
+
           echo "ok: $jar"
+
+      - name: Upload the uberjar
+        uses: actions/upload-artifact@v4
+        with:
+          name: wagoe-uberjar
+          path: target/wagoe-*-standalone.jar
+          retention-days: 7
+          if-no-files-found: error
 
   # =============================================================================
   # Summary job

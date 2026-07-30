@@ -27,14 +27,35 @@ This will:
 - Copy source files and resources
 - Compile the main namespace for faster startup
 - Package all dependencies including database drivers (SQLite, PostgreSQL, H2, MySQL)
-- Create `target/wagoe-1.2.X-standalone.jar` (where X is the git commit count)
+- Create `target/wagoe-<version>-standalone.jar`, where `<version>` is the library-suite
+  version read from `libs/core/build.clj` (currently `1.0.0-beta-1`). Ask for it with
+  `clojure -T:build print-version`, or for the full path `clojure -T:build print-uber-file`.
 
-The resulting jar file is approximately 60MB and includes:
+The resulting jar file is approximately 160MB and includes:
 - All Clojure source code
 - All dependencies (Integrant, Ring, Reitit, Logback, etc.)
 - Database drivers (SQLite, PostgreSQL, H2, MySQL)
 - Configuration files (logback.xml)
 - Static resources
+
+### Bundled third-party licenses
+
+`b/uber` explodes every dependency jar onto one tree, and some jars ship
+`META-INF/LICENSE` as a **file** while others ship `META-INF/license/` as a
+**directory** — the same path on a case-insensitive filesystem. They cannot both
+be written, so `build.clj` excludes the top-level and `META-INF` `LICENSE`/`NOTICE`
+entries.
+
+Still shipped, because they do not collide: `META-INF/licenses/` (plural — the
+ongres/scram texts bundled inside the PostgreSQL driver) and the
+`META-INF/LICENSE-*.txt` variants.
+
+**Redistribution note:** several bundled dependencies are Apache-2.0, whose
+section 4(d) asks that a `NOTICE` file be carried with derivative works. Dropping
+`NOTICE` is common practice for uberjars, but if you redistribute this artifact
+externally, ship the dependency notices alongside it (for example generated into
+`target/` and copied next to the jar) rather than relying on the jar contents.
+The framework itself is EPL-2.0 (see `LICENSE`).
 
 ## Running the Uberjar
 
@@ -43,13 +64,13 @@ The resulting jar file is approximately 60MB and includes:
 Start the HTTP server:
 
 ```bash
-java -jar target/wagoe-1.2.X-standalone.jar
+java -jar target/wagoe-1.0.0-beta-1-standalone.jar
 ```
 
 Or explicitly:
 
 ```bash
-java -jar target/wagoe-1.2.X-standalone.jar server
+java -jar target/wagoe-1.0.0-beta-1-standalone.jar server
 ```
 
 The server will:
@@ -64,8 +85,8 @@ The server will:
 Run CLI commands:
 
 ```bash
-java -jar target/wagoe-1.2.X-standalone.jar cli user list
-java -jar target/wagoe-1.2.X-standalone.jar cli user create --email test@example.com
+java -jar target/wagoe-1.0.0-beta-1-standalone.jar cli user list
+java -jar target/wagoe-1.0.0-beta-1-standalone.jar cli user create --email test@example.com
 ```
 
 ### Help
@@ -73,7 +94,7 @@ java -jar target/wagoe-1.2.X-standalone.jar cli user create --email test@example
 Show usage information:
 
 ```bash
-java -jar target/wagoe-1.2.X-standalone.jar help
+java -jar target/wagoe-1.0.0-beta-1-standalone.jar help
 ```
 
 ## Configuration
@@ -87,7 +108,7 @@ java -jar target/wagoe-1.2.X-standalone.jar help
 ### Running in Production
 
 ```bash
-ENV=prod HTTP_PORT=8080 java -jar wagoe-1.2.X-standalone.jar server
+WAG_ENV=prod HTTP_PORT=8080 java -jar wagoe-1.0.0-beta-1-standalone.jar server
 ```
 
 ### Database Configuration
@@ -150,10 +171,10 @@ FROM eclipse-temurin:17-jre-alpine
 
 WORKDIR /app
 
-COPY target/wagoe-1.2.X-standalone.jar wagoe.jar
+COPY target/wagoe-1.0.0-beta-1-standalone.jar wagoe.jar
 COPY resources/conf/prod/config.edn /app/config/config.edn
 
-ENV ENV=prod
+ENV WAG_ENV=prod
 ENV HTTP_PORT=8080
 
 EXPOSE 8080
@@ -181,7 +202,7 @@ After=network.target
 Type=simple
 User=wagoe
 WorkingDirectory=/opt/wagoe
-Environment="ENV=prod"
+Environment="WAG_ENV=prod"
 Environment="HTTP_PORT=8080"
 ExecStart=/usr/bin/java -Xmx2g -jar /opt/wagoe/wagoe.jar server
 Restart=on-failure
@@ -204,20 +225,20 @@ sudo systemctl status wagoe
 ### Check Version
 
 ```bash
-jar xf wagoe-1.2.X-standalone.jar META-INF/MANIFEST.MF
+jar xf wagoe-1.0.0-beta-1-standalone.jar META-INF/MANIFEST.MF
 cat META-INF/MANIFEST.MF
 ```
 
 ### Verify Main Class
 
 ```bash
-jar tf wagoe-1.2.X-standalone.jar | grep "wagoe/main"
+jar tf wagoe-1.0.0-beta-1-standalone.jar | grep "wagoe/main"
 ```
 
 ### Test Database Drivers
 
 ```bash
-jar tf wagoe-1.2.X-standalone.jar | grep -E "(sqlite|postgresql|h2|mysql)"
+jar tf wagoe-1.0.0-beta-1-standalone.jar | grep -E "(sqlite|postgresql|h2|mysql)"
 ```
 
 ### Enable Debug Logging
