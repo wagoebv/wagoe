@@ -117,7 +117,7 @@ _Brief description of what this endpoint does_
 
 [source,highlightjs,highlight]
 ----
-boundary [resource] [action] --field="value"
+wagoe [resource] [action] --field="value"
 ----
 
 *cURL Example:*

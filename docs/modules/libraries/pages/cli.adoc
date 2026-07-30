@@ -1,5 +1,5 @@
 = cli
-:description: Standalone project bootstrapper and module installer for Wagoe. Install everything with one curl command and generate new projects with boundary new.
+:description: Standalone project bootstrapper and module installer for Wagoe. Install everything with one curl command and generate new projects with wagoe new.
 
 Standalone CLI tool for bootstrapping new Wagoe projects and adding optional modules. Installed via bbin — does not require the monorepo. Generated projects are fully self-contained.
 
@@ -12,7 +12,7 @@ NOTE: Not published to Clojars. Installed via bbin from the GitHub repository.
 curl -fsSL https://get.wagoe.com | bash
 ----
 
-The installer handles all prerequisites: JVM, Clojure CLI, Babashka, bbin, and the `boundary` command itself.
+The installer handles all prerequisites: JVM, Clojure CLI, Babashka, bbin, and the `wagoe` command itself.
 Supports macOS, Debian/Ubuntu, Arch Linux, and WSL2.
 
 Fallback if `get.wagoe.com` is unavailable:
@@ -28,8 +28,8 @@ curl -fsSL https://raw.githubusercontent.com/wagoebv/wagoe/main/scripts/install.
 
 [source,bash]
 ----
-boundary new my-app          # Scaffold a new project
-boundary new my-app --force  # Overwrite existing directory
+wagoe new my-app          # Scaffold a new project
+wagoe new my-app --force  # Overwrite existing directory
 ----
 
 Generates a complete project with four core modules pre-wired: `core`, `observability`, `platform`, and `user`. The project is immediately runnable after `clojure -M:migrate up`.
@@ -38,10 +38,10 @@ Generates a complete project with four core modules pre-wired: `core`, `observab
 
 [source,bash]
 ----
-boundary add payments          # PSP abstraction (Stripe / Mollie / Mock)
-boundary add cache             # Redis / in-memory caching
-boundary add search            # Full-text search (Meilisearch)
-boundary add jobs              # Background job processing
+wagoe add payments          # PSP abstraction (Stripe / Mollie / Mock)
+wagoe add cache             # Redis / in-memory caching
+wagoe add search            # Full-text search (Meilisearch)
+wagoe add jobs              # Background job processing
 ----
 
 Wires the module into `deps.edn`, `system.clj`, and migration files.
@@ -50,15 +50,15 @@ Wires the module into `deps.edn`, `system.clj`, and migration files.
 
 [source,bash]
 ----
-boundary list modules          # Human-readable table
-boundary list modules --json   # Machine-readable JSON
+wagoe list modules          # Human-readable table
+wagoe list modules --json   # Machine-readable JSON
 ----
 
 === Show version
 
 [source,bash]
 ----
-boundary version
+wagoe version
 ----
 
 == Generated project structure
@@ -86,7 +86,7 @@ bbin install https://github.com/wagoebv/wagoe \
   --tag v1.0.1-alpha-15 \
   --git/root libs/wagoe-cli \
   --main-opts '["-m" "wagoe.cli.main"]' \
-  --as boundary
+  --as wagoe
 ----
 
 == AI agent tooling

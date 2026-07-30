@@ -1,4 +1,4 @@
-# boundary/admin
+# wagoe/admin
 
 [![Status](https://img.shields.io/badge/status-stable-brightgreen)]()
 [![Clojure](https://img.shields.io/badge/clojure-1.12+-blue)]()
@@ -40,8 +40,8 @@ Auto-generated CRUD admin interface with database schema introspection, filterin
 ## Requirements
 
 - Clojure 1.12+
-- boundary/platform
-- boundary/user
+- wagoe/platform
+- wagoe/user
 
 ---
 
@@ -457,19 +457,19 @@ libs/admin/src/wagoe/
 
 ```
 ┌─────────────────────────────────────────┐
-│              boundary/admin             │
+│              wagoe/admin             │
 │      (auto-CRUD, schema introspection)  │
 └───────────┬─────────────┬───────────────┘
             │             │
             ▼             ▼
 ┌───────────────┐ ┌───────────────────────┐
-│ boundary/user │ │   boundary/platform   │
+│ wagoe/user │ │   wagoe/platform   │
 └───────┬───────┘ └───────────┬───────────┘
         │                     │
         └──────────┬──────────┘
                    ▼
 ┌─────────────────────────────────────────┐
-│  boundary/observability + boundary/core │
+│  wagoe/observability + wagoe/core │
 └─────────────────────────────────────────┘
 ```
 

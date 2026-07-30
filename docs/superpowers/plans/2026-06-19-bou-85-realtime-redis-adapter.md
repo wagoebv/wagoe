@@ -1080,10 +1080,10 @@ Expected: FAIL — namespace not found.
 
 (defn create-redis-bus
   "Create a Redis message bus.
-   Config: {:host :port :channel}. :channel defaults to \"boundary:realtime:bus\"."
+   Config: {:host :port :channel}. :channel defaults to \"wagoe:realtime:bus\"."
   [{:keys [channel] :as config}]
   (->RedisMessageBus (make-pool config)
-                     (->bytes (or channel "boundary:realtime:bus"))
+                     (->bytes (or channel "wagoe:realtime:bus"))
                      (atom {:running? false})))
 ```
 
@@ -1126,7 +1126,7 @@ git commit -m "feat(realtime): Redis-backed message bus (BOU-85)"
      {:provider :in-memory | :redis
       ;; redis only:
       :host \"localhost\" :port 6379
-      :channel \"boundary:realtime:bus\"
+      :channel \"wagoe:realtime:bus\"
       :key-prefix \"realtime\"
       :jwt-verifier <IJWTVerifier ref>}
 

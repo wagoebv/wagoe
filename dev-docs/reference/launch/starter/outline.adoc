@@ -11,7 +11,7 @@ Purpose - Provide a clean template for teams to try Wagoe in minutes. - Showcase
 Repository Structure
 
 ....
-boundary-starter/
+wagoe-starter/
 ├── src/wagoe/
 │   ├── app.clj                # Entrypoint wiring (Integrant)
 │   ├── shared/
@@ -34,9 +34,9 @@ boundary-starter/
 │   ├── public/css/            # tokens.css, app.css, admin.css
 │   └── public/js/             # Optional helper JS
 ├── test/
-│   ├── boundary/user/core/*_test.clj
-│   ├── boundary/user/shell/*_test.clj
-│   └── boundary/product/core/*_test.clj
+│   ├── wagoe/user/core/*_test.clj
+│   ├── wagoe/user/shell/*_test.clj
+│   └── wagoe/product/core/*_test.clj
 ├── deps.edn                   # Clojure CLI deps (Integrant, Malli, HTMX/Hiccup, next.jdbc)
 ├── README.md                  # Quickstart and how to explore
 └── Dockerfile                 # Minimal container build

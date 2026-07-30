@@ -11,7 +11,7 @@
  :active
  {  ;; Core application settings (always active)
   :wagoe/settings
-  {:name              "boundary-test"
+  {:name              "wagoe-test"
    :secure-cookies?   false  ;; test over HTTP
    :version           "0.1.0"
    :date-format       "yyyy-MM-dd"
@@ -47,7 +47,7 @@
   {:level     :debug  ; Verbose logging for debugging tests
    :console   true    ; Log to console during tests
    :appenders [{:appender       :rolling-file
-                :file           "logs/boundary-test.log"
+                :file           "logs/wagoe-test.log"
                 :rolling-policy {:type        :time-based
                                  :max-history 3  ; Keep only 3 days of test logs
                                  :max-size    5000000 ; 5MB

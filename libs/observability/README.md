@@ -1,4 +1,4 @@
-# boundary/observability
+# wagoe/observability
 
 [![Status](https://img.shields.io/badge/status-stable-brightgreen)]()
 [![Clojure](https://img.shields.io/badge/clojure-1.12+-blue)]()
@@ -32,7 +32,7 @@ Unified observability stack with pluggable adapters for logging, metrics, and er
 ## Requirements
 
 - Clojure 1.12+
-- boundary/core
+- wagoe/core
 
 ## Adapters
 
@@ -161,7 +161,7 @@ libs/observability/src/wagoe/observability/
 
 | Dependency | Version | Purpose |
 |------------|---------|---------|
-| `boundary/core` | 1.0.0-beta-1 | Foundation utilities |
+| `wagoe/core` | 1.0.0-beta-1 | Foundation utilities |
 | `org.clojure/tools.logging` | 1.3.1 | Logging abstraction |
 | `ch.qos.logback/logback-classic` | 1.5.23 | SLF4J implementation |
 | `io.sentry/sentry-clj` | 8.29.238 | Sentry integration |
@@ -175,13 +175,13 @@ libs/observability/src/wagoe/observability/
                   │ depends on
                   ▼
 ┌─────────────────────────────────────────┐
-│         boundary/observability          │
+│         wagoe/observability          │
 │   (logging, metrics, error-reporting)   │
 └─────────────────┬───────────────────────┘
                   │ depends on
                   ▼
 ┌─────────────────────────────────────────┐
-│            boundary/core                │
+│            wagoe/core                │
 └─────────────────────────────────────────┘
 ```
 

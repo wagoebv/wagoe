@@ -17,7 +17,7 @@ JWT-authenticated WebSocket support with:
 - ✅ Topic-based pub/sub (subscribe to arbitrary topics)
 - ✅ Pure functional core (FC/IS pattern)
 - ✅ Pluggable adapters (test and production)
-- ✅ Integration with boundary/user authentication
+- ✅ Integration with wagoe/user authentication
 
 ---
 
@@ -57,7 +57,7 @@ JWT-authenticated WebSocket support with:
 ;; Create connection registry
 (def connection-registry (registry/create-in-memory-registry))
 
-;; Create JWT verifier (integrates with boundary/user)
+;; Create JWT verifier (integrates with wagoe/user)
 (def jwt-verifier (jwt/create-user-jwt-adapter))
 
 ;; Create realtime service
@@ -647,7 +647,7 @@ client.connect()
 
 ```bash
 # No environment variables needed for basic setup
-# JWT secret is managed by boundary/user module
+# JWT secret is managed by wagoe/user module
 ```
 
 ---
@@ -983,7 +983,7 @@ clojure -M:test
 **Solutions:**
 1. Check JWT token is included in query params: `?token=<jwt>`
 2. Verify JWT is valid and not expired
-3. Ensure boundary/user module is properly configured
+3. Ensure wagoe/user module is properly configured
 4. Check JWT secret matches between user module and realtime module
 
 ### Messages Not Being Received
@@ -1015,7 +1015,7 @@ clojure -M:test
 | `malli` | 0.20.0 | Schema validation |
 | `cheshire` | 6.1.0 | JSON encoding/decoding |
 | `tools.logging` | 1.3.1 | Logging |
-| `boundary/user` | 1.0.0-beta-1 | JWT authentication (optional) |
+| `wagoe/user` | 1.0.0-beta-1 | JWT authentication (optional) |
 
 ---
 

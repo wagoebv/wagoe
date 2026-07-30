@@ -25,7 +25,7 @@ bb scaffold integrate product                      # Guide integration of a scaf
 
 # Testing - All tests across all libraries
 clojure -M:test:db/h2                                    # All tests (default test profile uses H2 in-memory)
-JWT_SECRET="dev-secret-32-chars-minimum" WAG_ENV=test clojure -M:test:db/h2  # With JWT secret
+JWT_SECRET="dev-secret-at-least-32-characters-long" WAG_ENV=test clojure -M:test:db/h2  # With JWT secret
 
 # Testing - Per-library test suites
 clojure -M:test:db/h2 :core                              # Core library tests
@@ -85,7 +85,7 @@ java -jar target/wagoe-*.jar server             # Run standalone jar (HTTP serve
 java -jar target/wagoe-*.jar worker             # Run as a background worker (no HTTP listener)
 
 # Deploy (see deploy/README.md)
-docker build -t boundary:latest .                  # Prod image (root Dockerfile; server + worker modes)
+docker build -t wagoe:latest .                  # Prod image (root Dockerfile; server + worker modes)
 
 # Database Migrations
 clojure -M:migrate up                              # Run migrations
@@ -172,7 +172,7 @@ clj-paren-repair --help
 | # Layout exceptions (the shape above is the norm; these libs deviate by design):
 | #   - cache/         has no core/ — thin adapter lib (shell + ports only)
 | #   - platform/ , observability/  split ports across several files, not one ports.clj
-| #   - wagoe-mcp/  sources live under boundary/mcp/ (ns wagoe.mcp.*) —
+| #   - wagoe-mcp/  sources live under wagoe/mcp/ (ns wagoe.mcp.*) —
 | #                    lib dir name and namespace segment differ on purpose
 | #   - shared-ui/     shared Hiccup UI primitives (wagoe.shared.ui.*); no ports/schema
 | 
@@ -401,7 +401,7 @@ clojure -M:clj-kondo --lint src test libs/*/src libs/*/test
 
 ### Custom Test Reporter
 
-The Kaocha reporter at `dev/boundary/test/reporter.clj` shows a green ✓ for
+The Kaocha reporter at `dev/wagoe/test/reporter.clj` shows a green ✓ for
 passing tests and a red ✗ for failing tests. It is configured in `tests.edn` as
 `:kaocha/reporter [wagoe.test.reporter/reporter]`. The `dev/` directory is on
 the `:test` classpath via `:extra-paths` in `deps.edn`.
@@ -420,8 +420,8 @@ To do a complete run against PostgreSQL:
 3. Run:
 
 ```bash
-WAG_ENV=test JWT_SECRET="dev-secret-32-chars-minimum" clojure -M:migrate up
-WAG_ENV=test JWT_SECRET="dev-secret-32-chars-minimum" clojure -M:test:db/h2
+WAG_ENV=test JWT_SECRET="dev-secret-at-least-32-characters-long" clojure -M:migrate up
+WAG_ENV=test JWT_SECRET="dev-secret-at-least-32-characters-long" clojure -M:test:db/h2
 ```
 
 4. Revert `resources/conf/test/config.edn` afterwards so normal local and CI
@@ -827,7 +827,7 @@ module table). The generator lives at `scripts/agents_gen.clj`.
   then run `bb agents:gen`.
 - Add a library: add it to `modules-catalogue.edn` (or, for dev-only tooling not
   published as an app module, to `:dev-modules` in `knowledge.edn`), then `bb agents:gen`.
-- **Regenerate before publishing `wagoe-cli`** so downstream `boundary new`
+- **Regenerate before publishing `wagoe-cli`** so downstream `wagoe new`
   projects ship the current template.
 
 The per-module AI doc generator (`bb ai docs --module libs/<x> --type agents`) is
@@ -845,7 +845,7 @@ Seven automated safeguards run in CI (and `check:fcis` + `check:ports` in pre-co
 | **Placeholder tests** | `bb check:placeholder-tests` | `(is true)` / `(is (= true true))` masking missing coverage | Yes |
 | **Dependency direction** | `bb check:deps` | Core independence violations, circular deps between libraries | Yes (cycles/core); warn (undeclared) |
 | **Ports / hexagonal** | `bb check:ports` | Modules missing `ports.clj`; shell coupling to another module's `shell.persistence`/`shell.service`; web/HTTP requiring `shell.persistence` directly | Yes |
-| **POM dep completeness** | `bb check:poms` | Published POMs dropping inter-Wagoe deps: `build_shared` losing the `:local/root`→mvn rewrite, a publishable `build.clj` bypassing `pom-basis`, or a referenced boundary dep that is not itself publishable | Yes |
+| **POM dep completeness** | `bb check:poms` | Published POMs dropping inter-Wagoe deps: `build_shared` losing the `:local/root`→mvn rewrite, a publishable `build.clj` bypassing `pom-basis`, or a referenced wagoe dep that is not itself publishable | Yes |
 | **Security tests** | `clojure -M:test:db/h2 --focus-meta :security` | Error→HTTP mapping, CSRF routing, XSS escaping, SQL injection, sensitive field leaks | Yes (test failure) |
 | **clj-kondo lint** | `clojure -M:clj-kondo --lint ...` | Static analysis (existing gate) | Yes |
 | **Config doctor** | `bb doctor --env dev --ci` | Configuration errors (existing gate) | Yes |
@@ -900,7 +900,7 @@ Seven automated safeguards run in CI (and `check:fcis` + `check:ports` in pre-co
 When a new library is added under `libs/`, update **`.github/workflows/ci.yml`** in three places:
 
 1. **Lint step** — add `libs/{name}/src` to the `clojure -M:clj-kondo --lint \` path list.
-2. **New test job** — copy an existing `test-*` job block; set `needs: lint` (or add a dependency if the lib depends on another boundary lib); run `clojure -M:test:db/h2 :{name}`.
+2. **New test job** — copy an existing `test-*` job block; set `needs: lint` (or add a dependency if the lib depends on another wagoe lib); run `clojure -M:test:db/h2 :{name}`.
 3. **`test-summary` job** — add `test-{name}` to the `needs:` array and add an echo line.
 
 Also add the lib's `:id` test suite to `tests.edn` and its source/test paths to the root `deps.edn`.
@@ -913,9 +913,9 @@ A complete reference application demonstrating Wagoe patterns with SQLite, Integ
 Source: https://github.com/wagoebv/wagoe-examples/tree/main/ecommerce-api
 
 ```bash
-# Clone boundary-examples and run from ecommerce-api/
+# Clone wagoe-examples and run from ecommerce-api/
 git clone https://github.com/wagoebv/wagoe-examples
-cd boundary-examples/ecommerce-api
+cd wagoe-examples/ecommerce-api
 clojure -M:run          # Start server on port 3002
 ```
 

@@ -4,7 +4,7 @@ Makes agentic CLIs (Claude Code and compatible tools) aware of Wagoe's
 scaffolder and AI tooling, so the agent reaches for `bb scaffold` / `bb ai`
 instead of hand-writing module boilerplate.
 
-New projects created with `boundary new` already include this skill at
+New projects created with `wagoe new` already include this skill at
 `.claude/skills/wagoe/SKILL.md` — the plugin is for **existing** projects.
 
 ## Install
@@ -13,12 +13,12 @@ In Claude Code:
 
 ```
 /plugin marketplace add wagoebv/wagoe
-/plugin install boundary@boundary
+/plugin install wagoe@wagoe
 ```
 
 ## What it provides
 
-A single `boundary` skill with:
+A single `wagoe` skill with:
 
 - A decision table mapping user requests ("add a product module") to the
   right `bb scaffold` / `bb ai` / `bb setup` / `bb doctor` / `bb guide` command

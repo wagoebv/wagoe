@@ -1,7 +1,7 @@
 = ADR-032: MCP Guardrail Error Payload — "Guardrail, Not Straitjacket"
 :status: Proposed
 :date: 2026-06-16
-:deciders: boundary-team
+:deciders: wagoe-team
 
 == Status
 
@@ -95,7 +95,7 @@ a trail — never silently.
 
 === Negative / trade-offs
 
-* `wagoe-mcp` now depends on `boundary/devtools` (a heavy transitive
+* `wagoe-mcp` now depends on `wagoe/devtools` (a heavy transitive
   footprint) to reach the catalog. Accepted because (a) the ticket mandates
   reusing the catalog as the single source of truth and (b) BOU-99/100
   introspection tooling will pull much of the framework anyway. Coupling is

@@ -1,7 +1,7 @@
 = ADR-017: Library Migration Discovery
 :status: Proposed
 :date: 2026-03-24
-:deciders: boundary-team
+:deciders: wagoe-team
 
 == Status
 
@@ -39,7 +39,7 @@ an aggregated set of directories:
 Library convention:
 
 * a library that owns database migrations publishes a
-  `boundary/migration-paths.edn` resource
+  `wagoe/migration-paths.edn` resource
 * that manifest contains a vector of Migratus-compatible resource directories,
   or a map with `:paths`
 * each declared directory contains standard Migratus filenames such as
@@ -49,7 +49,7 @@ Example manifest:
 
 [source,edn]
 ----
-{:paths ["boundary/geo/migrations/"]}
+{:paths ["wagoe/geo/migrations/"]}
 ----
 
 Example resulting Migratus config:
@@ -57,8 +57,8 @@ Example resulting Migratus config:
 [source,clojure]
 ----
 {:migration-dir ["migrations/"
-                 "boundary/geo/migrations/"
-                 "boundary/search/migrations/"]}
+                 "wagoe/geo/migrations/"
+                 "wagoe/search/migrations/"]}
 ----
 
 `clojure -M:migrate up` will therefore apply both application migrations and

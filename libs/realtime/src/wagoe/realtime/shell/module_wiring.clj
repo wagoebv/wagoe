@@ -8,7 +8,7 @@
       :password \"...\" :database 0        ; auth + db selection (production)
       :timeout 2000                        ; socket timeout ms
       :max-total 8 :max-idle 8 :min-idle 0 ; publish-pool sizing
-      :channel \"boundary:realtime:bus\"
+      :channel \"wagoe:realtime:bus\"
       :key-prefix \"realtime\"
       :subscribe-timeout-ms 5000           ; await window for subscription to go live
       :jwt-verifier <IJWTVerifier ref>}

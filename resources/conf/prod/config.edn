@@ -5,7 +5,7 @@
  :active
  {;; Core application settings (always active)
   :wagoe/settings
-  {:name "boundary-prod"
+  {:name "wagoe-prod"
    :secure-cookies? true  ;; HTTPS-only auth cookies
    :version "0.1.0"
    :date-format "yyyy-MM-dd"
@@ -62,7 +62,7 @@
   {:level :info
    :console false ; No console logging in production
    :appenders [{:appender :rolling-file
-                :file "logs/boundary-prod.log"
+                :file "logs/wagoe-prod.log"
                 :rolling-policy {:type :time-based
                                  :max-history 90 ; Keep 90 days
                                  :max-size 50000000 ; 50MB

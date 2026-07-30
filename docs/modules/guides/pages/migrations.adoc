@@ -55,12 +55,12 @@ Rules:
 | Library-contributed migrations (auto-discovered)
 |===
 
-Libraries contribute migrations by publishing a `boundary/migration-paths.edn` manifest on the classpath:
+Libraries contribute migrations by publishing a `wagoe/migration-paths.edn` manifest on the classpath:
 
 [source,clojure]
 ----
 ;; libs/geo/resources/wagoe/migration-paths.edn
-{:paths ["boundary/geo/migrations/"]}
+{:paths ["wagoe/geo/migrations/"]}
 ----
 
 The migration system (`wagoe.platform.shell.database.migrations`) discovers the manifests and merges their directories at startup.

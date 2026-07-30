@@ -36,7 +36,7 @@ Wagoe framework's Functional Core / Imperative Shell paradigm.
 * *FC/IS Compliance*: Must follow Functional Core / Imperative Shell
 architecture
 * *Authentication Integration*: Seamless JWT-based auth with existing
-`boundary/user` module
+`wagoe/user` module
 * *Simplicity*: Start with core use cases, avoid premature complexity
 * *Testability*: Pure functions in core, mockable adapters in shell
 * *Performance*: Efficient message routing without external dependencies
@@ -485,7 +485,7 @@ ws://localhost:3000/ws?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 * Validate token on every connection attempt
 * Implement token rotation for long-lived connections
 
-==== Integration with boundary/user
+==== Integration with wagoe/user
 
 [source,clojure]
 ----
@@ -876,7 +876,7 @@ ws.send(JSON.stringify({type: 'ping', payload: {}}));
 
 ==== Logging
 
-All WebSocket events logged via boundary/observability:
+All WebSocket events logged via wagoe/observability:
 
 [source,clojure]
 ----
@@ -977,4 +977,4 @@ progress)
 . Implement shell layer (service, registry, adapter)
 . Write tests (unit {plus} integration)
 . Write README matching `libs/jobs/README.md` quality
-. Integration with boundary/user for JWT verification
+. Integration with wagoe/user for JWT verification

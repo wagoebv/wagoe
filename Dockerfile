@@ -1,4 +1,4 @@
-# Production Dockerfile for a Boundary application.
+# Production Dockerfile for a Wagoe application.
 #
 # Multi-stage: build the uberjar, then ship it on a slim JRE as a non-root user.
 # The same image runs either mode — the container arg selects it:

@@ -1,4 +1,4 @@
-# boundary/ui-style
+# wagoe/ui-style
 
 Shared, framework-default UI style resources.
 

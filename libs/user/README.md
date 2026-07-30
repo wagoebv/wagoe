@@ -1,4 +1,4 @@
-# boundary/user
+# wagoe/user
 
 [![Status](https://img.shields.io/badge/status-stable-brightgreen)]()
 [![Clojure](https://img.shields.io/badge/clojure-1.12+-blue)]()
@@ -34,9 +34,9 @@ Complete user management and authentication system with MFA support, session man
 ## Requirements
 
 - Clojure 1.12+
-- boundary/platform
-- boundary/observability
-- boundary/core
+- wagoe/platform
+- wagoe/observability
+- wagoe/core
 
 ## Quick Start
 
@@ -178,7 +178,7 @@ libs/user/src/wagoe/user/
 
 | Dependency | Version | Purpose |
 |------------|---------|---------|
-| `boundary/platform` | 1.0.0-beta-1 | HTTP, database |
+| `wagoe/platform` | 1.0.0-beta-1 | HTTP, database |
 | `buddy-hashers` | 2.0.167 | Password hashing |
 | `buddy-sign` | 3.6.1-359 | JWT tokens |
 | `one-time` | 0.8.0 | TOTP generation |
@@ -217,18 +217,18 @@ CREATE TABLE sessions (
 
 ```
 ┌─────────────────────────────────────────┐
-│              boundary/admin             │
+│              wagoe/admin             │
 └─────────────────┬───────────────────────┘
                   │ depends on
                   ▼
 ┌─────────────────────────────────────────┐
-│              boundary/user              │
+│              wagoe/user              │
 │   (authentication, sessions, MFA)       │
 └─────────────────┬───────────────────────┘
                   │ depends on
                   ▼
 ┌─────────────────────────────────────────┐
-│           boundary/platform             │
+│           wagoe/platform             │
 └─────────────────────────────────────────┘
 ```
 

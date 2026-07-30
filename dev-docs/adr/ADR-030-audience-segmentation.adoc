@@ -12,7 +12,7 @@
 
 The Wagoe Framework Roadmap (Phase 3 — Ecosystem Expansion) identified audience
 segmentation as a cross-cutting concern needed by multiple consumer libraries
-(`wagoe-push`, `wagoe-email`, `boundary-forms`).
+(`wagoe-push`, `wagoe-email`, `wagoe-forms`).
 
 Targeted communication is 2–5× more effective than broadcast. Without a shared
 audience engine, each consumer library re-implements its own filter logic, leading

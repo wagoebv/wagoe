@@ -67,7 +67,7 @@ releases
 *Structure:*
 
 * Single repository
-* Single artifact: `boundary/boundary`
+* Single artifact: `wagoe/wagoe`
 * All components bundled together
 
 *Pros:*
@@ -94,9 +94,9 @@ releases
 *Structure:*
 
 ....
-boundary/boundary        - Everything (platform + modules + utils)
-boundary/boundary-dev    - Development tools only
-boundary/wagoe-cli    - CLI tools only
+wagoe/wagoe        - Everything (platform + modules + utils)
+wagoe/wagoe-dev    - Development tools only
+wagoe/wagoe-cli    - CLI tools only
 ....
 
 *Pros:*
@@ -122,19 +122,19 @@ boundary/wagoe-cli    - CLI tools only
 *Structure:*
 
 ....
-boundary/core            - Minimal utilities
-boundary/database        - Database adapters only
-boundary/http            - HTTP routing only
-boundary/pagination      - Pagination only
-boundary/search          - Search only
-boundary/logging         - Logging only
-boundary/metrics         - Metrics only
-boundary/errors          - Error reporting only
-boundary/user            - User management
-boundary/admin           - Admin interface
-boundary/storage         - File storage
-boundary/external        - External services
-boundary/scaffolder      - Code generator
+wagoe/core            - Minimal utilities
+wagoe/database        - Database adapters only
+wagoe/http            - HTTP routing only
+wagoe/pagination      - Pagination only
+wagoe/search          - Search only
+wagoe/logging         - Logging only
+wagoe/metrics         - Metrics only
+wagoe/errors          - Error reporting only
+wagoe/user            - User management
+wagoe/admin           - Admin interface
+wagoe/storage         - File storage
+wagoe/external        - External services
+wagoe/scaffolder      - Code generator
 ....
 
 *Pros:*
@@ -162,14 +162,14 @@ boundary/scaffolder      - Code generator
 *Structure:*
 
 ....
-boundary/core            - Validation, utils, interceptors
-boundary/observability   - Logging, metrics, error reporting
-boundary/platform        - Database, HTTP, pagination, search
-boundary/user            - User management, auth, MFA
-boundary/admin           - Admin CRUD + shared UI
-boundary/storage         - File storage adapters
-boundary/external        - External service adapters
-boundary/scaffolder      - Code generation tool
+wagoe/core            - Validation, utils, interceptors
+wagoe/observability   - Logging, metrics, error reporting
+wagoe/platform        - Database, HTTP, pagination, search
+wagoe/user            - User management, auth, MFA
+wagoe/admin           - Admin CRUD + shared UI
+wagoe/storage         - File storage adapters
+wagoe/external        - External service adapters
+wagoe/scaffolder      - Code generation tool
 ....
 
 *Pros:*
@@ -243,7 +243,7 @@ should be a dev-only dependency
 
 *Publishing Strategy:*
 
-* Group ID: `boundary` (fallback to `io.github.boundary` if unavailable)
+* Group ID: `wagoe` (fallback to `io.github.wagoe` if unavailable)
 * Synchronized versioning: All libs share version number (e.g., `0.1.0`)
 * Initial release as `0.x.x` to allow breaking changes
 * Post-1.0: Standard semantic versioning guarantees
@@ -262,13 +262,13 @@ should be a dev-only dependency
 
 [arabic]
 . *Flexibility for Users*
-* Use full framework: `++{++boundary/admin ++{++:mvn/version "0.1.0"}}`
-* Platform only: `++{++boundary/platform ++{++:mvn/version "0.1.0"}}`
-* Core utils only: `++{++boundary/core ++{++:mvn/version "0.1.0"}}`
+* Use full framework: `++{++wagoe/admin ++{++:mvn/version "0.1.0"}}`
+* Platform only: `++{++wagoe/platform ++{++:mvn/version "0.1.0"}}`
+* Core utils only: `++{++wagoe/core ++{++:mvn/version "0.1.0"}}`
 . *Clear Extension Points*
-* Third-party modules can depend on `boundary/platform`
-* Custom auth implementations can replace `boundary/user`
-* Custom admin interfaces can use `boundary/ui` components
+* Third-party modules can depend on `wagoe/platform`
+* Custom auth implementations can replace `wagoe/user`
+* Custom admin interfaces can use `wagoe/ui` components
 . *Better Testing*
 * Each library can be tested independently
 * Integration tests verify cross-library compatibility
@@ -315,7 +315,7 @@ should be a dev-only dependency
 
 * Clear dependency diagram in documentation
 * Starter templates with common configurations
-* Single "get everything" dependency option (`boundary/admin`)
+* Single "get everything" dependency option (`wagoe/admin`)
 
 *For Maintenance:*
 
@@ -405,8 +405,8 @@ with logging/errors
 [source,clojure]
 ----
 ;; Use :mvn/version for production
-{:deps {boundary/core {:mvn/version "0.1.0"}
-        boundary/platform {:mvn/version "0.1.0"}}}
+{:deps {wagoe/core {:mvn/version "0.1.0"}
+        wagoe/platform {:mvn/version "0.1.0"}}}
 ----
 
 *Build Process:*
@@ -486,8 +486,8 @@ vs Polyrepo Discussion]
 ==== Open Questions
 
 [arabic]
-. *Clojars Group Name*: Is `boundary` available? Fallback to
-`io.github.boundary`
+. *Clojars Group Name*: Is `wagoe` available? Fallback to
+`io.github.wagoe`
 . *Version Strategy Post-1.0*: Should libraries version independently
 after 1.0?
 . *Database Driver Strategy*: Should platform bundle a default driver?
@@ -500,9 +500,9 @@ library?
 . *Plugin System*: Consider formal plugin API for third-party modules
 . *Version Independence*: Post-1.0, evaluate decoupling library versions
 . *Additional Libraries*:
-* `boundary/jobs` for background job processing
-* `boundary/cache` for caching abstractions
-* `boundary/search-advanced` for Elasticsearch/Solr integration
+* `wagoe/jobs` for background job processing
+* `wagoe/cache` for caching abstractions
+* `wagoe/search-advanced` for Elasticsearch/Solr integration
 . *Performance Optimizations*: AOT compilation options for production
 
 '''''

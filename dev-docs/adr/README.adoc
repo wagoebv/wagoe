@@ -150,7 +150,7 @@ schema changes via the normal `clojure -M:migrate up` flow.
 *Key Decisions:*
 
 * Keep application-local `migrations/` as the default migration source
-* Let libraries advertise extra migration dirs via `boundary/migration-paths.edn`
+* Let libraries advertise extra migration dirs via `wagoe/migration-paths.edn`
 * Aggregate all discovered dirs into Migratus `:migration-dir`
 * Require standard Migratus up/down filenames for library migrations
 

@@ -141,7 +141,7 @@ WAG_ENV=dev clojure -Sdeps '{:deps {wagoe/mcp {:local/root "libs/wagoe-mcp"}}}' 
   -M -m wagoe.mcp.shell.server
 ```
 
-An app consuming Wagoe as a dependency would instead add `boundary/mcp` to its
+An app consuming Wagoe as a dependency would instead add `wagoe/mcp` to its
 own `deps.edn` and expose a one-line alias for that command.
 
 **Quick smoke / dev from the lib directory** — convenient, but cwd is then
@@ -186,7 +186,7 @@ targets the project) and whose command puts the server on the classpath. With th
 Claude Code CLI, run this from the project root:
 
 ```bash
-claude mcp add boundary --env WAG_ENV=dev -- \
+claude mcp add wagoe --env WAG_ENV=dev -- \
   clojure -Sdeps '{:deps {wagoe/mcp {:local/root "libs/wagoe-mcp"}}}' \
   -M -m wagoe.mcp.shell.server
 ```
@@ -196,11 +196,11 @@ Or by hand, in your MCP config (`.mcp.json` / client settings):
 ```json
 {
   "mcpServers": {
-    "boundary": {
+    "wagoe": {
       "command": "clojure",
       "args": ["-Sdeps", "{:deps {wagoe/mcp {:local/root \"libs/wagoe-mcp\"}}}",
                "-M", "-m", "wagoe.mcp.shell.server"],
-      "cwd": "/absolute/path/to/your/boundary/project",
+      "cwd": "/absolute/path/to/your/wagoe/project",
       "env": { "WAG_ENV": "dev" }
     }
   }
@@ -210,7 +210,7 @@ Or by hand, in your MCP config (`.mcp.json` / client settings):
 > `cwd` is the **project root**, not `libs/wagoe-mcp` — the server reflects its
 > working directory, so pointing it at the lib dir would leave the reflective
 > resources `:unavailable`. An app that depends on Wagoe would reference its own
-> `boundary/mcp` coordinate instead of the `libs/wagoe-mcp` local root.
+> `wagoe/mcp` coordinate instead of the `libs/wagoe-mcp` local root.
 
 Cursor and other MCP clients take the same shape: a `command`, `args`, `cwd`,
 and `env`.

@@ -5,7 +5,7 @@
  :active
  {  ;; Core application settings (always active)
   :wagoe/settings
-  {:name              "boundary-acc"
+  {:name              "wagoe-acc"
    :secure-cookies? true  ;; HTTPS-only auth cookies
    :version           "0.1.0"
    :date-format       "yyyy-MM-dd"
@@ -34,7 +34,7 @@
   {:level     :info
    :console   false
    :appenders [{:appender       :rolling-file
-                :file           "logs/boundary-acc.log"
+                :file           "logs/wagoe-acc.log"
                 :rolling-policy {:type        :time-based
                                  :max-history 30
                                  :max-size    20000000

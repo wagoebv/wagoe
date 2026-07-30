@@ -16,7 +16,7 @@ No UI function signatures change — the translation function is injected via th
 - **Marker syntax** — `[:t :key]` in Hiccup; resolved by `render/resolve-markers`.
 - **Locale chain** — user locale → tenant locale → default locale → `:en` fallback → `(str key)`.
 - **Graceful degradation** — missing key returns `(str key)` (e.g. `"user/sign-in"`), never throws.
-- **EDN catalogues** — one file per locale: `boundary/i18n/translations/en.edn`, `nl.edn`, etc.
+- **EDN catalogues** — one file per locale: `wagoe/i18n/translations/en.edn`, `nl.edn`, etc.
 - **Integrant component** — `:wagoe/i18n` loads catalogues at startup; injected into `:wagoe/http-handler`.
 
 ---
@@ -28,7 +28,7 @@ libs/i18n/
 ├── deps.edn
 ├── build.clj
 ├── resources/
-│   └── boundary/i18n/translations/
+│   └── wagoe/i18n/translations/
 │       ├── en.edn          ← English catalogue (canonical)
 │       └── nl.edn          ← Dutch catalogue
 ├── src/wagoe/i18n/
@@ -157,7 +157,7 @@ clojure -M:clj-kondo --lint libs/i18n/src libs/i18n/test
 
 ```edn
 ;; config.edn
-:wagoe/i18n {:catalogue-path "boundary/i18n/translations"
+:wagoe/i18n {:catalogue-path "wagoe/i18n/translations"
                 :default-locale :en
                 :dev?           true}   ; omit or false in production
 ```

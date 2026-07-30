@@ -100,7 +100,7 @@ _Brief description of what this feature accomplishes_
 [[_cli_requirements]]
 ======= link:#_cli_requirements[]CLI Requirements
 
-* Command must follow pattern: `boundary ++[++resource++]++ ++[++action++]++ ++[++options++]++`
+* Command must follow pattern: `wagoe ++[++resource++]++ ++[++action++]++ ++[++options++]++`
 * Help text must be clear and include examples
 * Exit codes must follow standard conventions
 

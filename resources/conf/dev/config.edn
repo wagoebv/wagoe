@@ -5,7 +5,7 @@
  :active
  {;; Core application settings (always active)
   :wagoe/settings
-  {:name              "boundary-dev"
+  {:name              "wagoe-dev"
    :secure-cookies?   false  ;; local HTTP dev; set true behind HTTPS
    :version           "0.1.0"
    :date-format       "yyyy-MM-dd"
@@ -75,7 +75,7 @@
    ;; JWT_SECRET from the environment. List webhooks/callbacks (which cannot carry a
    ;; token) under :exempt-paths; a trailing /* matches by prefix.
    :security   {:csrf {:enabled?     true
-                       :secret       #or [#env CSRF_SECRET "boundary-dev-csrf-secret-change-me-min-32"]
+                       :secret       #or [#env CSRF_SECRET "wagoe-dev-csrf-secret-change-me-min-32"]
                        :exempt-paths ["/api/v1/payments/webhook"]}}}
 
   ;; HTTP Router configuration
@@ -105,8 +105,8 @@
   :wagoe/logging
   {:provider     :slf4j
    :level        :debug
-   :logger-name  "boundary"
-   :default-tags {:service     "boundary-dev"
+   :logger-name  "wagoe"
+   :default-tags {:service     "wagoe-dev"
                   :environment "development"}}
 
   :wagoe/metrics
@@ -214,7 +214,7 @@
    :include-timestamp true
    :include-level     true
    :include-thread    false
-   :default-tags      {:service "boundary-dev"}}
+   :default-tags      {:service "wagoe-dev"}}
 
   :wagoe/metrics-with-prometheus
   {:provider :prometheus
@@ -230,9 +230,9 @@
   {:provider    :datadog-statsd
    :host        #or [#env DD_AGENT_HOST "127.0.0.1"]
    :port        #or [#env DD_DOGSTATSD_PORT 8125]
-   :service     "boundary"
+   :service     "wagoe"
    :environment #or [#env WAG_ENV "production"]
-   :global-tags ["service:boundary" "environment:production"]}
+   :global-tags ["service:wagoe" "environment:production"]}
 
   :wagoe/logging-with-file
   {:provider :file

@@ -20,7 +20,7 @@ WebSocket-based real-time communication with JWT authentication, message routing
 | `wagoe.realtime.shell.connection-registry` | In-memory registry (atom-backed) |
 | `wagoe.realtime.shell.pubsub-manager` | Atom-backed pub/sub state management |
 | `wagoe.realtime.shell.adapters.websocket-adapter` | Ring/Jetty WebSocket adapter + TestWebSocketAdapter |
-| `wagoe.realtime.shell.adapters.jwt-adapter` | JWT verifier delegating to boundary/user module + TestJWTAdapter |
+| `wagoe.realtime.shell.adapters.jwt-adapter` | JWT verifier delegating to wagoe/user module + TestJWTAdapter |
 
 ## Message Routing Types
 
@@ -95,7 +95,7 @@ Every replica keeps its own in-memory connection registry (live WebSocket socket
                     :max-total   8             ; publish-pool sizing (optional)
                     :max-idle    8             ; (optional)
                     :min-idle    0             ; (optional)
-                    :channel     "boundary:realtime:bus" ; pub/sub channel (default if omitted)
+                    :channel     "wagoe:realtime:bus" ; pub/sub channel (default if omitted)
                     :key-prefix  "realtime"    ; prefix for Redis set keys (default if omitted)
                     :subscribe-timeout-ms 5000 ; await window for the subscription to go live;
                                                ; if Redis is down at startup, init does NOT fail —
@@ -123,7 +123,7 @@ See [ADR-035](../../dev-docs/adr/ADR-035-realtime-redis-scaling.adoc) for the fu
 ## Gotchas
 
 1. **Provider determines replica-safety** — the default `:in-memory` provider stores the connection registry and pub/sub state in process-local atoms; it is single-server only and requires sticky sessions when load-balanced. The `:redis` provider (shipped in BOU-85) scales across replicas — use it for any multi-instance deployment.
-2. **JWT adapter uses optional dependency** on boundary/user - `requiring-resolve` at load time. Throws `:type :internal-error` if user module unavailable
+2. **JWT adapter uses optional dependency** on wagoe/user - `requiring-resolve` at load time. Throws `:type :internal-error` if user module unavailable
 3. **Messages get JSON-encoded** via Cheshire before sending over WebSocket
 4. **Topic subscriptions are server-side only** - no client-side subscribe/unsubscribe protocol messages
 5. **Shell checks `ports/open?`** before sending to prevent errors on closed connections

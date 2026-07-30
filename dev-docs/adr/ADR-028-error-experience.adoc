@@ -1,7 +1,7 @@
 = ADR-028: Error Experience & Auto-Recovery
 :status: Proposed
 :date: 2026-04-18
-:deciders: boundary-team
+:deciders: wagoe-team
 
 == Status
 

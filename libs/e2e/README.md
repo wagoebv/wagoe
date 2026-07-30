@@ -1,4 +1,4 @@
-# boundary/e2e
+# wagoe/e2e
 
 [![Status](https://img.shields.io/badge/status-internal-lightgrey)]()
 [![Clojure](https://img.shields.io/badge/clojure-1.12+-blue)]()

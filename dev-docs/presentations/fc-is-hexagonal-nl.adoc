@@ -569,7 +569,7 @@ Wagoe is geen monoliet. Het zijn 13 onafhankelijk publiceerbare libraries, elk g
 
 [.notes]
 --
-* "Elke library heeft zijn eigen `build.clj`, zijn eigen tests, zijn eigen versie. Je kunt alleen `boundary/user` naar Clojars publiceren."
+* "Elke library heeft zijn eigen `build.clj`, zijn eigen tests, zijn eigen versie. Je kunt alleen `wagoe/user` naar Clojars publiceren."
 * "Je hoeft niet alle 13 te gebruiken. Pak wat je nodig hebt. Het patroon houdt ze consistent."
 * "De scaffolder genereert een nieuwe library met de juiste FC/IS-structuur in één commando."
 --
@@ -1408,7 +1408,7 @@ ____
 * **Wagoe framework** — deze repository +
   Elke `libs/*/src/*/core/`-map is een levend voorbeeld.
 
-* **Beste startpunt** — https://github.com/wagoebv/wagoe-examples/tree/main/ecommerce-api[boundary-examples/ecommerce-api] +
+* **Beste startpunt** — https://github.com/wagoebv/wagoe-examples/tree/main/ecommerce-api[wagoe-examples/ecommerce-api] +
   De meest complete referentie-implementatie.
 
 [.notes]

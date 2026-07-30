@@ -8,7 +8,7 @@
 curl -fsSL https://get.wagoe.com | bash
 ----
 
-This installs all prerequisites (JVM, Clojure CLI, Babashka, bbin) and the `boundary` command. +
+This installs all prerequisites (JVM, Clojure CLI, Babashka, bbin) and the `wagoe` command. +
 Fallback if `get.wagoe.com` is unavailable:
 
 [source,bash]
@@ -23,7 +23,7 @@ See xref:getting-started:installation.adoc[Installation] for manual setup.
 
 [source,bash]
 ----
-boundary new my-app
+wagoe new my-app
 cd my-app
 ----
 
@@ -33,9 +33,9 @@ Add optional modules before starting the system:
 
 [source,bash]
 ----
-boundary add payments          # PSP abstraction (Stripe / Mollie / Mock)
-boundary add cache             # Redis / in-memory caching
-boundary list modules          # See all 19 optional modules
+wagoe add payments          # PSP abstraction (Stripe / Mollie / Mock)
+wagoe add cache             # Redis / in-memory caching
+wagoe list modules          # See all 19 optional modules
 ----
 
 == Run database migrations
@@ -49,11 +49,11 @@ clojure -M:migrate up
 
 [source,bash]
 ----
-source .env          # boundary new already generated this with a real JWT_SECRET
+source .env          # wagoe new already generated this with a real JWT_SECRET
 clojure -M:repl
 ----
 
-NOTE: `boundary new` writes a `.env` (git-ignored) containing a generated `JWT_SECRET` — no need to export one by hand. `source .env` (or `direnv allow`) loads it into the shell.
+NOTE: `wagoe new` writes a `.env` (git-ignored) containing a generated `JWT_SECRET` — no need to export one by hand. `source .env` (or `direnv allow`) loads it into the shell.
 
 `clojure -M:repl` starts a headless nREPL server on port 7888. Connect your editor
 (or the Wagoe MCP server) to it, then eval:

@@ -217,7 +217,7 @@ JWT tokens are issued on login and validated on each request:
 
 ```clojure
 ;; JWT_SECRET env var must be set (minimum 32 characters)
-export JWT_SECRET="dev-secret-32-chars-minimum-here"
+export JWT_SECRET="dev-secret-at-least-32-characters-long-here"
 
 ;; Token structure (decoded)
 {:user-id  uuid
@@ -320,7 +320,7 @@ The wizard accepts `--env dev|test|acc|prod` to pick the Aero config profile and
 clojure -M:test:db/h2 :user
 
 # JWT secret required for auth tests
-JWT_SECRET="dev-secret-32-chars-minimum" clojure -M:test:db/h2 :user
+JWT_SECRET="dev-secret-at-least-32-characters-long" clojure -M:test:db/h2 :user
 
 # Unit tests only (fast, no DB)
 clojure -M:test:db/h2 :user --focus-meta :unit

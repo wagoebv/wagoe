@@ -125,7 +125,7 @@ S3 / S3-compatible, and Google Cloud Storage adapters behind a single
 builds the adapter + a default image processor and returns
 `{:provider <kw> :storage <IFileStorage> :service <IStorageService>}`; the
 halt-key closes the S3/GCS client. `:wagoe/storage-routes` turns the service
-into normalized `:api` routes. The config matches the `boundary new` catalogue
+into normalized `:api` routes. The config matches the `wagoe new` catalogue
 (`:local` accepts `:root` as an alias for `:base-path`):
 
 ```clojure

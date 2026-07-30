@@ -45,7 +45,7 @@ clojure -M:test:db/h2 --focus user-property-test
 clojure -M:test:db/h2 --watch :core
 
 # With JWT secret (required for auth tests)
-JWT_SECRET="dev-secret-32-chars-minimum" clojure -M:test:db/h2 :user
+JWT_SECRET="dev-secret-at-least-32-characters-long" clojure -M:test:db/h2 :user
 ----
 
 == Unit test example

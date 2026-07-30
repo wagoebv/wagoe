@@ -107,8 +107,8 @@ Reference file: `resources/deploy/nginx/wagoe.conf`
 [source,bash]
 ----
 # 1. Install
-sudo cp resources/deploy/nginx/wagoe.conf /etc/nginx/sites-available/boundary
-sudo ln -s /etc/nginx/sites-available/boundary /etc/nginx/sites-enabled/
+sudo cp resources/deploy/nginx/wagoe.conf /etc/nginx/sites-available/wagoe
+sudo ln -s /etc/nginx/sites-available/wagoe /etc/nginx/sites-enabled/
 
 # 2. Replace your-domain.com with your actual domain
 

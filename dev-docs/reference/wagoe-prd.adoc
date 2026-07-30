@@ -20,7 +20,7 @@ Table of Contents
 ** link:#glossary[2.5. Glossary]
 * link:#_architecture[3. Architecture]
 ** link:#high-level-architecture[3.1. High-Level Architecture]
-*** link:#_system_boundary[3.1.1. System Wagoe]
+*** link:#_system_boundary[3.1.1. System Boundary]
 *** link:#_container_architecture[3.1.2. Container Architecture]
 *** link:#_architectural_layers[3.1.3. Architectural Layers]
 *** link:#_dependency_flow[3.1.4. Dependency Flow]
@@ -339,7 +339,7 @@ Figure 1. System Context - C4 Container View
 The Wagoe framework implements a layered architecture with strict dependency rules and clear separation of concerns:
 
 [[_system_boundary]]
-===== link:#_system_boundary[]3.1.1. System Wagoe
+===== link:#_system_boundary[]3.1.1. System Boundary
 
 Wagoe serves three primary user types through distinct interfaces:
 
@@ -4635,7 +4635,7 @@ All Wagoe commands follow this pattern:
 
 [source,highlightjs,highlight]
 ----
-boundary [global-options] <resource> <action> [resource-options]
+wagoe [global-options] <resource> <action> [resource-options]
 ----
 
 [[_global_options]]
@@ -4662,7 +4662,7 @@ boundary [global-options] <resource> <action> [resource-options]
 
 [source,highlightjs,highlight]
 ----
-boundary users create --email=<email> --role=<role> [--active=<bool>]
+wagoe users create --email=<email> --role=<role> [--active=<bool>]
 ----
 
 *Options:*
@@ -4680,7 +4680,7 @@ boundary users create --email=<email> --role=<role> [--active=<bool>]
 
 [source,highlightjs,highlight]
 ----
-$ boundary users create --email=john.doe@example.com --role=user
+$ wagoe users create --email=john.doe@example.com --role=user
 Created user: john.doe@example.com (role: user, id: 123e4567-e89b-12d3-a456-426614174000)
 ----
 
@@ -4688,7 +4688,7 @@ Created user: john.doe@example.com (role: user, id: 123e4567-e89b-12d3-a456-4266
 
 [source,highlightjs,highlight]
 ----
-boundary users get [--id=<uuid> | --email=<email>]
+wagoe users get [--id=<uuid> | --email=<email>]
 ----
 
 *Options:*
@@ -4704,7 +4704,7 @@ boundary users get [--id=<uuid> | --email=<email>]
 
 [source,highlightjs,highlight]
 ----
-$ boundary users get --id=123e4567-e89b-12d3-a456-426614174000
+$ wagoe users get --id=123e4567-e89b-12d3-a456-426614174000
 ╔════════════════════════════════════════╗
 ║ User Details                           ║
 ╠══════════════════╤═════════════════════╣
@@ -4722,7 +4722,7 @@ $ boundary users get --id=123e4567-e89b-12d3-a456-426614174000
 
 [source,highlightjs,highlight]
 ----
-boundary users list [--limit=<n>] [--offset=<n>] [--sort=<field>] [--filter-role=<role>] [--filter-active=<bool>]
+wagoe users list [--limit=<n>] [--offset=<n>] [--sort=<field>] [--filter-role=<role>] [--filter-active=<bool>]
 ----
 
 *Options:*
@@ -4742,7 +4742,7 @@ boundary users list [--limit=<n>] [--offset=<n>] [--sort=<field>] [--filter-role
 
 [source,highlightjs,highlight]
 ----
-$ boundary users list --limit=10 --filter-role=admin --sort=-created-at
+$ wagoe users list --limit=10 --filter-role=admin --sort=-created-at
 ╔════════════════════════════════════════════════════════════════════════════╗
 ║ Users (showing 3 of 3 total)                                               ║
 ╠════════════════════╤══════════════════════╤════════╤════════╤═════════════╣
@@ -4758,7 +4758,7 @@ $ boundary users list --limit=10 --filter-role=admin --sort=-created-at
 
 [source,highlightjs,highlight]
 ----
-boundary users update --id=<uuid> [--role=<role>] [--active=<bool>] [--email=<email>]
+wagoe users update --id=<uuid> [--role=<role>] [--active=<bool>] [--email=<email>]
 ----
 
 *Options:*
@@ -4776,7 +4776,7 @@ boundary users update --id=<uuid> [--role=<role>] [--active=<bool>] [--email=<em
 
 [source,highlightjs,highlight]
 ----
-$ boundary users update --id=123e4567-e89b-12d3-a456-426614174000 --role=admin
+$ wagoe users update --id=123e4567-e89b-12d3-a456-426614174000 --role=admin
 User updated successfully.
 ----
 
@@ -4784,7 +4784,7 @@ User updated successfully.
 
 [source,highlightjs,highlight]
 ----
-boundary users delete --id=<uuid> [--force]
+wagoe users delete --id=<uuid> [--force]
 ----
 
 *Options:*
@@ -4800,7 +4800,7 @@ boundary users delete --id=<uuid> [--force]
 
 [source,highlightjs,highlight]
 ----
-$ boundary users delete --id=123e4567-e89b-12d3-a456-426614174000
+$ wagoe users delete --id=123e4567-e89b-12d3-a456-426614174000
 Are you sure you want to delete user john.doe@example.com? [y/N]: y
 User deleted successfully.
 ----
@@ -4812,7 +4812,7 @@ User deleted successfully.
 
 [source,highlightjs,highlight]
 ----
-boundary jobs create --title=<title> [--description=<desc>] [--assigned-to=<user-id>] [--priority=<priority>] [--due-date=<iso-date>]
+wagoe jobs create --title=<title> [--description=<desc>] [--assigned-to=<user-id>] [--priority=<priority>] [--due-date=<iso-date>]
 ----
 
 *Options:*
@@ -4831,7 +4831,7 @@ boundary jobs create --title=<title> [--description=<desc>] [--assigned-to=<user
 
 [source,highlightjs,highlight]
 ----
-$ boundary jobs create --title="Update documentation" --assigned-to=123e4567-e89b-12d3-a456-426614174000 --priority=high
+$ wagoe jobs create --title="Update documentation" --assigned-to=123e4567-e89b-12d3-a456-426614174000 --priority=high
 Created job: Update documentation (id: abc12345-def6-7890-abcd-ef1234567890)
 ----
 
@@ -4839,7 +4839,7 @@ Created job: Update documentation (id: abc12345-def6-7890-abcd-ef1234567890)
 
 [source,highlightjs,highlight]
 ----
-boundary jobs get --id=<uuid>
+wagoe jobs get --id=<uuid>
 ----
 
 *Options:*
@@ -4854,7 +4854,7 @@ boundary jobs get --id=<uuid>
 
 [source,highlightjs,highlight]
 ----
-$ boundary jobs get --id=abc12345-def6-7890-abcd-ef1234567890
+$ wagoe jobs get --id=abc12345-def6-7890-abcd-ef1234567890
 ╔════════════════════════════════════════╗
 ║ Job Details                             ║
 ╠══════════════════╤═════════════════════╣
@@ -4874,7 +4874,7 @@ $ boundary jobs get --id=abc12345-def6-7890-abcd-ef1234567890
 
 [source,highlightjs,highlight]
 ----
-boundary jobs list [--limit=<n>] [--offset=<n>] [--sort=<field>] [--filter-status=<status>] [--filter-assigned-to=<user-id>] [--filter-priority=<priority>]
+wagoe jobs list [--limit=<n>] [--offset=<n>] [--sort=<field>] [--filter-status=<status>] [--filter-assigned-to=<user-id>] [--filter-priority=<priority>]
 ----
 
 *Options:*
@@ -4894,7 +4894,7 @@ boundary jobs list [--limit=<n>] [--offset=<n>] [--sort=<field>] [--filter-statu
 
 [source,highlightjs,highlight]
 ----
-$ boundary jobs list --filter-status=in-progress --sort=priority
+$ wagoe jobs list --filter-status=in-progress --sort=priority
 ╔═════════════════════════════════════════════════════════════════════════════════╗
 ║ Jobs (showing 2 of 2 total)                                                      ║
 ╠════════════════╤══════════════════════╤════════════╤══════════╤═════════════════╣
@@ -4909,7 +4909,7 @@ $ boundary jobs list --filter-status=in-progress --sort=priority
 
 [source,highlightjs,highlight]
 ----
-boundary jobs update-status --id=<uuid> --status=<status> [--comment=<comment>]
+wagoe jobs update-status --id=<uuid> --status=<status> [--comment=<comment>]
 ----
 
 *Options:*
@@ -4926,7 +4926,7 @@ boundary jobs update-status --id=<uuid> --status=<status> [--comment=<comment>]
 
 [source,highlightjs,highlight]
 ----
-$ boundary jobs update-status --id=abc12345-def6-7890-abcd-ef1234567890 --status=completed --comment="All sections updated and reviewed"
+$ wagoe jobs update-status --id=abc12345-def6-7890-abcd-ef1234567890 --status=completed --comment="All sections updated and reviewed"
 Job status updated to: completed
 ----
 
@@ -4934,7 +4934,7 @@ Job status updated to: completed
 
 [source,highlightjs,highlight]
 ----
-boundary jobs update --id=<uuid> [--title=<title>] [--description=<desc>] [--assigned-to=<user-id>] [--priority=<priority>] [--due-date=<iso-date>]
+wagoe jobs update --id=<uuid> [--title=<title>] [--description=<desc>] [--assigned-to=<user-id>] [--priority=<priority>] [--due-date=<iso-date>]
 ----
 
 *Options:*
@@ -4954,7 +4954,7 @@ boundary jobs update --id=<uuid> [--title=<title>] [--description=<desc>] [--ass
 
 [source,highlightjs,highlight]
 ----
-$ boundary jobs update --id=abc12345-def6-7890-abcd-ef1234567890 --priority=urgent --due-date=2025-08-20T17:00:00Z
+$ wagoe jobs update --id=abc12345-def6-7890-abcd-ef1234567890 --priority=urgent --due-date=2025-08-20T17:00:00Z
 Job updated successfully.
 ----
 
@@ -4965,7 +4965,7 @@ Job updated successfully.
 
 [source,highlightjs,highlight]
 ----
-boundary system health [--detailed]
+wagoe system health [--detailed]
 ----
 
 *Options:*
@@ -4980,7 +4980,7 @@ boundary system health [--detailed]
 
 [source,highlightjs,highlight]
 ----
-$ boundary system health
+$ wagoe system health
 ╔════════════════════════════════════════╗
 ║ System Health: HEALTHY                  ║
 ╠══════════════════╤═════════════════════╣
@@ -4995,7 +4995,7 @@ $ boundary system health
 
 [source,highlightjs,highlight]
 ----
-$ boundary system health --detailed
+$ wagoe system health --detailed
 ╔════════════════════════════════════════════════════════════════════════════╗
 ║ System Health: HEALTHY                                                     ║
 ╠══════════════════╤═══════════════════════════════════════════════════════════╣
@@ -5012,7 +5012,7 @@ $ boundary system health --detailed
 
 [source,highlightjs,highlight]
 ----
-boundary system config [--show-secrets] [--validate]
+wagoe system config [--show-secrets] [--validate]
 ----
 
 *Options:*
@@ -5028,7 +5028,7 @@ boundary system config [--show-secrets] [--validate]
 
 [source,highlightjs,highlight]
 ----
-$ boundary system config
+$ wagoe system config
 ╔════════════════════════════════════════════════════════════════════════════╗
 ║ System Configuration                                                        ║
 ╠══════════════════╤═══════════════════════════════════════════════════════════╣
@@ -5041,7 +5041,7 @@ $ boundary system config
 ║                  │ password               │ ************                   ║
 ║ email            │ host                   │ smtp.example.com               ║
 ║                  │ port                   │ 587                            ║
-║                  │ username               │ boundary@example.com              ║
+║                  │ username               │ wagoe@example.com              ║
 ║                  │ password               │ ************                   ║
 ╚══════════════════╧════════════════════════╧════════════════════════════════╝
 ----
@@ -5050,7 +5050,7 @@ $ boundary system config
 
 [source,highlightjs,highlight]
 ----
-boundary system migrate [--dry-run] [--to-version=<version>]
+wagoe system migrate [--dry-run] [--to-version=<version>]
 ----
 
 *Options:*
@@ -5066,7 +5066,7 @@ boundary system migrate [--dry-run] [--to-version=<version>]
 
 [source,highlightjs,highlight]
 ----
-$ boundary system migrate
+$ wagoe system migrate
 Starting database migration...
 Current version: 5
 Target version: 8
@@ -5080,7 +5080,7 @@ Migration complete.
 
 [source,highlightjs,highlight]
 ----
-boundary system generate-api-key --name=<name> [--expires=<iso-date>] [--scope=<scope>]
+wagoe system generate-api-key --name=<name> [--expires=<iso-date>] [--scope=<scope>]
 ----
 
 *Options:*
@@ -5097,7 +5097,7 @@ boundary system generate-api-key --name=<name> [--expires=<iso-date>] [--scope=<
 
 [source,highlightjs,highlight]
 ----
-$ boundary system generate-api-key --name="CI/CD Pipeline" --scope=write
+$ wagoe system generate-api-key --name="CI/CD Pipeline" --scope=write
 API key generated successfully.
 
 Key: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJzeXN0ZW0iLCJuYW1lIjoiQ0kvQ0QgUGlwZWxpbmUiLCJzY29wZSI6IndyaXRlIn0.Q6CM1qIQF5YgI-cIBfCOzZ9_eYcfZmcwp9DIzqRu3aM
@@ -5113,7 +5113,7 @@ Expires: 2026-08-15T14:14:30Z
 
 [source,highlightjs,highlight]
 ----
-boundary export --resources=<resource-list> --output=<file> [--format=<format>]
+wagoe export --resources=<resource-list> --output=<file> [--format=<format>]
 ----
 
 *Options:*
@@ -5130,7 +5130,7 @@ boundary export --resources=<resource-list> --output=<file> [--format=<format>]
 
 [source,highlightjs,highlight]
 ----
-$ boundary export --resources=users,jobs --output=./backup-2025-08-15.json
+$ wagoe export --resources=users,jobs --output=./backup-2025-08-15.json
 Exporting data...
 Exported 42 users and 156 jobs to ./backup-2025-08-15.json
 ----
@@ -5139,7 +5139,7 @@ Exported 42 users and 156 jobs to ./backup-2025-08-15.json
 
 [source,highlightjs,highlight]
 ----
-boundary import --input=<file> [--dry-run] [--overwrite]
+wagoe import --input=<file> [--dry-run] [--overwrite]
 ----
 
 *Options:*
@@ -5156,12 +5156,12 @@ boundary import --input=<file> [--dry-run] [--overwrite]
 
 [source,highlightjs,highlight]
 ----
-$ boundary import --input=./backup-2025-08-15.json --dry-run
+$ wagoe import --input=./backup-2025-08-15.json --dry-run
 Validating import data...
 Found 42 users and 156 jobs in import file.
 All data is valid for import.
 
-$ boundary import --input=./backup-2025-08-15.json
+$ wagoe import --input=./backup-2025-08-15.json
 Importing data...
 Imported 42 users and 156 jobs successfully.
 ----
@@ -5210,21 +5210,21 @@ Wagoe CLI supports multiple output formats controlled by the `--format` option:
 
 * Machine-readable output in JSON format
 * Identical structure to the REST API response bodies
-* Example: `boundary users list --format=json`
+* Example: `wagoe users list --format=json`
 * Useful for scripting and integration with other tools
 
 *EDN Format*
 
 * Clojure’s native data format for easy programmatic consumption
 * Preserves data types (UUIDs, dates, keywords) accurately
-* Example: `boundary users list --format=edn`
+* Example: `wagoe users list --format=edn`
 * Preferred for Clojure-based scripting and integration
 
 *YAML Format*
 
 * Human-readable alternative to JSON for complex data structures
 * Especially useful for configuration inspection
-* Example: `boundary system config --format=yaml`
+* Example: `wagoe system config --format=yaml`
 
 [[_error_handling]]
 ===== link:#_error_handling[]6.2.3. Error Handling
@@ -5250,7 +5250,7 @@ Authentication Error:
 ERROR: Authentication Required
 Your authentication token has expired or is invalid.
 
-Run 'boundary login' to obtain a new token or provide a valid token using --token.
+Run 'wagoe login' to obtain a new token or provide a valid token using --token.
 ----
 
 Resource Not Found Error:
@@ -5260,7 +5260,7 @@ Resource Not Found Error:
 ERROR: Resource Not Found
 User with ID '123e4567-e89b-12d3-a456-426614174000' not found.
 
-Use 'boundary users list' to see available users or check the ID and try again.
+Use 'wagoe users list' to see available users or check the ID and try again.
 ----
 
 Usage Error:
@@ -5270,7 +5270,7 @@ Usage Error:
 ERROR: Missing Required Option
 The '--email' option is required when creating a user.
 
-Run 'boundary users create --help' to see all required and optional arguments.
+Run 'wagoe users create --help' to see all required and optional arguments.
 ----
 
 [[_progress_indicators]]
@@ -5324,15 +5324,15 @@ Wagoe CLI supports different verbosity levels:
 
 All commands include built-in help:
 
-*General Help*: `boundary --help`
+*General Help*: `wagoe --help`
 
 * Lists all available resources and global options
 
-*Resource Help*: `boundary users --help`
+*Resource Help*: `wagoe users --help`
 
 * Lists all available actions for a specific resource
 
-*Command Help*: `boundary users create --help`
+*Command Help*: `wagoe users create --help`
 
 * Shows detailed usage, options, and examples for a specific command
 
@@ -5443,7 +5443,7 @@ Wagoe’s development follows a strategic path from application framework to com
 
 *Phase 4: Module Template System* (Q4 2026)
 
-* *Template Generator* (`boundary-gen`)
+* *Template Generator* (`wagoe-gen`)
 +
 ** Basic module scaffolding
 ** Domain-specific templates

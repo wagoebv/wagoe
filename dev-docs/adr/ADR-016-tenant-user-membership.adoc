@@ -1,7 +1,7 @@
 = ADR-016: Tenant User Membership
 :status: Proposed
 :date: 2026-03-24
-:deciders: boundary-team
+:deciders: wagoe-team
 
 == Status
 

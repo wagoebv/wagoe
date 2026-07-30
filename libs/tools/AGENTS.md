@@ -206,7 +206,7 @@ bb scaffold integrate product --dry-run
 bb scaffold:integrate product
 ```
 
-**What it does:** `bb scaffold generate [--base-ns NS]` writes a module to `src/<base-ns-path>/<module>/` (default base-ns `boundary`). Because `src`/`test` are already on the project's paths, the module is **already on the classpath and covered by the standard test suites** — there is nothing to patch into `deps.edn`/`tests.edn`. What remains is registering the module's Integrant components, which `integrate` guides:
+**What it does:** `bb scaffold generate [--base-ns NS]` writes a module to `src/<base-ns-path>/<module>/` (default base-ns `wagoe`). Because `src`/`test` are already on the project's paths, the module is **already on the classpath and covered by the standard test suites** — there is nothing to patch into `deps.edn`/`tests.edn`. What remains is registering the module's Integrant components, which `integrate` guides:
 
 | Step | Where | What |
 |------|-------|------|

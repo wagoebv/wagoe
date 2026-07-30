@@ -63,8 +63,8 @@ Wagoe is a module-centric Clojure framework implementing Functional Core / Imper
 - [x] Deployment patterns: systemd, nginx, Fly.io, Render reference configs (`resources/deploy/`)
 - [x] Deployment patterns guide (`docs/modules/guides/pages/deployment-patterns.adoc`)
 - [x] Database migration best practices guide (`docs/modules/guides/pages/migrations.adoc`)
-- [x] Starter project walkthrough (`boundary-starter/WALKTHROUGH.adoc`): guided 10-minute experience
-- [x] CRUD benchmarks (`dev/boundary/bench/core.clj`): Criterium benchmarks via `clojure -M:bench`
+- [x] Starter project walkthrough (`wagoe-starter/WALKTHROUGH.adoc`): guided 10-minute experience
+- [x] CRUD benchmarks (`dev/wagoe/bench/core.clj`): Criterium benchmarks via `clojure -M:bench`
 - [x] Scaling & tuning guide (`dev-docs/scaling-guide.adoc`): JVM, HikariCP, Redis, horizontal scaling
 - [x] Admin UI "Refined Editorial" redesign: DM Sans + JetBrains Mono, layered shadows, HTMX loading bar, toast system, skeleton screens, styled delete modal
 - [x] Full admin UI internationalisation: entity configs, filter operators, flash messages, inline edit, breadcrumbs, sidebar tooltips all use `[:t :key]` markers (EN + NL catalogues)
@@ -86,7 +86,7 @@ Wagoe is a module-centric Clojure framework implementing Functional Core / Imper
 === Remaining
 - [ ] Push notifications library (`wagoe-push`): APNs, FCM adapters
 - [ ] Audience / segmentation library (`wagoe-audience`): targeted messaging, cohorts
-- [ ] Forms library (`boundary-forms`): dynamic form definitions, validation, rendering
+- [ ] Forms library (`wagoe-forms`): dynamic form definitions, validation, rendering
 - [ ] Realtime multi-server scaling: Redis-backed registry and pub/sub
 - [ ] Datomic / XTDB backend integration
 - [ ] Wagoe SaaS Starter Kit (login, storage, admin, payments)
@@ -129,7 +129,7 @@ As of April 2026: **3044 tests, 15742 assertions, 0 failures** across all 22 lib
 == Strategic Notes
 
 === 1. Focus on onboarding, not architectural depth
-Wagoe already has deep documentation. The guided walkthrough (`boundary-starter/WALKTHROUGH.adoc`) now provides a narrative, 10-minute experience for beginners.
+Wagoe already has deep documentation. The guided walkthrough (`wagoe-starter/WALKTHROUGH.adoc`) now provides a narrative, 10-minute experience for beginners.
 
 === 2. Use the Scaffolder as your flagship feature
 Wagoe's scaffolder (`bb scaffold`) is a key differentiator — it should define the developer workflow from day one. With NL scaffolding (`bb scaffold ai`) and module integration (`bb scaffold integrate`), the end-to-end module creation flow is now nearly automated.

@@ -22,7 +22,7 @@ Clojars requires a deploy token — **not** your account password.
 
 . Log in at https://clojars.org
 . Go to *Profile → Deploy Tokens*
-. Click *Generate Token*, name it (e.g. `boundary-deploy`)
+. Click *Generate Token*, name it (e.g. `wagoe-deploy`)
 . Copy the token immediately — it is shown only once
 
 The token looks like: `CLOJARS_XXXXXXXXXXXXXXXXXXXXXXXX`

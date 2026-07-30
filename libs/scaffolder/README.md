@@ -1,4 +1,4 @@
-# boundary/scaffolder
+# wagoe/scaffolder
 
 [![Status](https://img.shields.io/badge/status-stable-brightgreen)]()
 [![Clojure](https://img.shields.io/badge/clojure-1.12+-blue)]()
@@ -29,12 +29,12 @@ Code generation tool for creating new Wagoe modules following the Functional Cor
 
 ## Creating a New Project
 
-> **Use `boundary new` for new projects.** The Wagoe CLI (`boundary new <name>`,
+> **Use `wagoe new` for new projects.** The Wagoe CLI (`wagoe new <name>`,
 > from `wagoe-cli`) is the canonical, actively-maintained project generator — it
 > produces the current template (`src/wagoe/config.clj`, `src/<project>/system.clj`,
 > `.env`, `bb.edn`, tests, hooks). The scaffolder's own `new` command below is a
 > lower-level/legacy generator kept for embedding; it emits a different, simpler
-> layout (`src/<name>/app.clj`) and does **not** match a `boundary new` project.
+> layout (`src/<name>/app.clj`) and does **not** match a `wagoe new` project.
 
 To generate the legacy starter layout directly from the scaffolder:
 
@@ -71,7 +71,7 @@ myapp/
 ## Requirements
 
 - Clojure 1.12+
-- boundary/core
+- wagoe/core
 
 ## Quick Start
 
@@ -340,7 +340,7 @@ resources/scaffolder/templates/
 
 | Dependency | Version | Purpose |
 |------------|---------|---------|
-| `boundary/core` | 1.0.0-beta-1 | Utilities |
+| `wagoe/core` | 1.0.0-beta-1 | Utilities |
 | `org.clojure/tools.cli` | 1.3.250 | CLI parsing |
 
 ## Relationship to Other Libraries
@@ -352,13 +352,13 @@ resources/scaffolder/templates/
                   │ uses
                   ▼
 ┌─────────────────────────────────────────┐
-│          boundary/scaffolder            │
+│          wagoe/scaffolder            │
 │        (code generation, CLI)           │
 └─────────────────┬───────────────────────┘
                   │ depends on
                   ▼
 ┌─────────────────────────────────────────┐
-│            boundary/core                │
+│            wagoe/core                │
 └─────────────────────────────────────────┘
 ```
 

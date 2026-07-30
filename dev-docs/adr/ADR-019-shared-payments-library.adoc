@@ -1,7 +1,7 @@
 = ADR-019: Shared Payments Library for PSP Integrations
 :status: Accepted
 :date: 2026-03-27
-:deciders: boundary-team
+:deciders: wagoe-team
 
 == Status
 
@@ -68,14 +68,14 @@ A PSP abstraction in the Wagoe Framework must satisfy:
 
 == Decision
 
-A new shared library `boundary/libs/payments` is created as part of the
+A new shared library `wagoe/libs/payments` is created as part of the
 Wagoe Framework monorepo.
 
 === Namespace structure
 
 [source]
 ----
-boundary/libs/payments/
+wagoe/libs/payments/
 ├── src/wagoe/payments/
 │   ├── ports.clj              ; IPaymentProvider protocol
 │   ├── schema.clj             ; Malli: CheckoutRequest, CheckoutResult,
@@ -225,7 +225,7 @@ Development (monorepo, local `deps.edn`):
 [source,clojure]
 ----
 ;; :dev-local alias in application deps.edn
-org.wagoe/wagoe-payments {:local/root "../boundary/libs/payments"}
+org.wagoe/wagoe-payments {:local/root "../wagoe/libs/payments"}
 ----
 
 Production (published on Clojars):

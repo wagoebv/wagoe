@@ -8,7 +8,7 @@ Each library can be published to Clojars as a standalone dependency.
 
 [source]
 ----
-boundary/
+wagoe/
 ├── src/                   ← Main application source tree
 ├── libs/                  ← 23 independently publishable libraries
 │   ├── core/
@@ -29,8 +29,8 @@ boundary/
 
 The starter template and example applications live in separate repositories:
 
-* https://github.com/wagoebv/wagoe-starter[boundary-starter] — project scaffolding wizard
-* https://github.com/wagoebv/wagoe-examples[boundary-examples] — reference applications (ecommerce-api, blog-app, and more)
+* https://github.com/wagoebv/wagoe-starter[wagoe-starter] — project scaffolding wizard
+* https://github.com/wagoebv/wagoe-examples[wagoe-examples] — reference applications (ecommerce-api, blog-app, and more)
 
 == Library structure
 

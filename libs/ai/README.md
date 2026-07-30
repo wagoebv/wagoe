@@ -1,4 +1,4 @@
-# boundary/ai
+# wagoe/ai
 
 [![Status](https://img.shields.io/badge/status-stable-brightgreen)]()
 [![Clojure](https://img.shields.io/badge/clojure-1.12+-blue)]()
@@ -32,7 +32,7 @@ Framework-aware AI tooling for Wagoe applications — offline-first via Ollama, 
 | **Setup Parser** | Parse a natural language project setup into a config spec |
 | **Multi-provider** | Ollama (local), Anthropic Claude, OpenAI, plus a no-op test stub |
 
-Unlike a generic assistant, `boundary/ai` knows Wagoe's own conventions (FC/IS, ports, kebab↔snake naming, Malli schemas, HoneySQL syntax) and uses that knowledge to produce higher-quality output. The functional core is pure — all HTTP, file I/O, and env-var reads live in the shell.
+Unlike a generic assistant, `wagoe/ai` knows Wagoe's own conventions (FC/IS, ports, kebab↔snake naming, Malli schemas, HoneySQL syntax) and uses that knowledge to produce higher-quality output. The functional core is pure — all HTTP, file I/O, and env-var reads live in the shell.
 
 ## Quick Start
 

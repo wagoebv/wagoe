@@ -1,4 +1,4 @@
-# boundary/reports
+# wagoe/reports
 
 [![Status](https://img.shields.io/badge/status-stable-brightgreen)]()
 [![Clojure](https://img.shields.io/badge/clojure-1.12+-blue)]()
@@ -198,13 +198,13 @@ Apache POI XWPF (Word) is included as a transitive dependency of docjure — no 
                   │ uses
                   ▼
 ┌─────────────────────────────────────────┐
-│            boundary/reports             │
+│            wagoe/reports             │
 │       (PDF, Excel, Word generation)     │
 └──────────┬──────────────────────────────┘
            │ optional
            ▼
 ┌─────────────────────────────────────────┐
-│             boundary/jobs               │
+│             wagoe/jobs               │
 │      (async generation, retry)          │
 └─────────────────────────────────────────┘
 ```

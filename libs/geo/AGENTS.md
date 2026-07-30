@@ -217,7 +217,7 @@ clojure -M:clj-kondo --lint libs/geo/src libs/geo/test
 (require '[wagoe.geo.shell.service :as geo])
 
 (def adapter (osm/create-nominatim-adapter
-               {:user-agent "boundary-dev/1.0 (dev@example.com)"}))
+               {:user-agent "wagoe-dev/1.0 (dev@example.com)"}))
 (def service {:providers [adapter] :cache nil})
 
 (geo/geocode! service {:postcode "1012 JS" :city "Amsterdam"})

@@ -1,7 +1,7 @@
 = ADR-015: wagoe-tools — Distributing Developer Tooling to Starter Projects
 :status: Accepted
 :date: 2026-03-23
-:deciders: boundary-team
+:deciders: wagoe-team
 
 == Status
 
@@ -9,7 +9,7 @@ Accepted — implemented 2026-03-23
 
 == Context
 
-The boundary monorepo ships a growing set of Babashka developer tools that
+The wagoe monorepo ships a growing set of Babashka developer tools that
 significantly improve the development experience:
 
 [cols="1,3", options="header"]
@@ -59,11 +59,11 @@ significantly improve the development experience:
 | Configure git hooks path to `.githooks`
 
 | `bb deploy`
-| Publish one or more boundary libraries to Clojars
+| Publish one or more wagoe libraries to Clojars
 |===
 
-All of these tools live in the `boundary` monorepo (`scripts/`, `bb.edn`) and
-are not available to projects that start from `boundary-starter`.  A developer
+All of these tools live in the `wagoe` monorepo (`scripts/`, `bb.edn`) and
+are not available to projects that start from `wagoe-starter`.  A developer
 using the starter template must either copy scripts manually or go without, both
 of which are unacceptable as the toolset grows.
 
@@ -76,7 +76,7 @@ of which are unacceptable as the toolset grows.
 3. **Offline capable** — tools must work without an internet connection after
    initial setup.
 4. **Same distribution model** — the mechanism should be consistent with how
-   boundary libraries are already distributed (Clojars).
+   wagoe libraries are already distributed (Clojars).
 5. **Independently evolvable** — tools can be released on their own cadence,
    decoupled from the 20 domain libraries.
 
@@ -127,12 +127,12 @@ in sync.
 
 === 2. Integration in starter projects
 
-A `boundary-starter` project declares the tools artifact in `bb.edn` using
+A `wagoe-starter` project declares the tools artifact in `bb.edn` using
 Babashka's Maven dependency support:
 
 [source,clojure]
 ----
-;; bb.edn in a boundary-starter project
+;; bb.edn in a wagoe-starter project
 {:deps {org.wagoe/wagoe-tools {:mvn/version "1.0.0"}}
  :tasks
  {:requires ([wagoe.tools.scaffold :as scaffold]
@@ -235,11 +235,11 @@ resolve correctly.
 - [ ] Publish `org.wagoe/wagoe-tools 1.0.0` to Clojars
 - [ ] Extend `bb deploy` to include `wagoe-tools`
 
-=== Phase 2 — Update boundary-starter template
-- [ ] Replace ad-hoc `bb.edn` in `boundary-starter` with the artifact-based
+=== Phase 2 — Update wagoe-starter template
+- [ ] Replace ad-hoc `bb.edn` in `wagoe-starter` with the artifact-based
       `bb.edn` shown in section 2
 - [ ] Add `bb smoke-check` to the starter's CI pipeline
-- [ ] Update `boundary-starter` README with `bb` command reference
+- [ ] Update `wagoe-starter` README with `bb` command reference
 
 === Phase 3 — Add i18n tooling (follows ADR-013 Phase 1)
 - [ ] Implement `bb i18n find`, `bb i18n scan`, `bb i18n missing`,
@@ -248,14 +248,14 @@ resolve correctly.
 
 === Phase 4 — Documentation
 - [ ] Write `libs/tools/AGENTS.md` with full command reference
-- [ ] Add upgrade guide to `boundary-starter` README
+- [ ] Add upgrade guide to `wagoe-starter` README
 - [ ] Update root `AGENTS.md` to reference `wagoe-tools` versioning
 
 == Consequences
 
 === Positive
 
-* Every boundary-starter project gets the full developer toolset from day one
+* Every wagoe-starter project gets the full developer toolset from day one
   without any manual setup.
 * Version pinning gives teams control over when they adopt new tooling —
   consistent with how they manage library upgrades.
@@ -264,7 +264,7 @@ resolve correctly.
 * New tools (e.g., future `bb i18n scan`) become available to all existing
   projects via a single version bump.
 * The `bb deploy --all` command gives a single release command for the entire
-  boundary ecosystem.
+  wagoe ecosystem.
 
 === Negative
 
@@ -275,7 +275,7 @@ resolve correctly.
 
 === Neutral
 
-* Teams that do not use `boundary-starter` (e.g., the monorepo itself) see no
+* Teams that do not use `wagoe-starter` (e.g., the monorepo itself) see no
   change in workflow — the local path dependency is transparent.
 * The `wagoe-tools` artifact contains Babashka scripts only; it adds no
   JVM compile-time dependency to application code.
@@ -302,4 +302,4 @@ incompatible with air-gapped or offline development environments.
 * ADR-013 — Internationalisation (`bb i18n` commands)
 * ADR-001 — Library split and independent publishability
 * https://book.babashka.org/#_tasks[Babashka Tasks documentation]
-* https://clojars.org/org.wagoe[boundary-app on Clojars]
+* https://clojars.org/org.wagoe[wagoe-app on Clojars]

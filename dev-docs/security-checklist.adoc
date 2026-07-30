@@ -105,7 +105,7 @@ All headers below are set by the `security-headers` interceptor. No application 
 |**CSRF tokens** — Custom HMAC synchronizer-token protection in `wagoe.platform.core.csrf` (not Ring anti-forgery). Enforcement is opt-in (`:wagoe/http :security :csrf :enabled?`, lib default off) — enable it per app, then emit tokens via `csrf/hidden-field` (forms) and `csrf/hx-headers` or the `<meta>` tag (HTMX).
 
 |icon:hand-o-right[]
-|**CORS** — Configure allowed origins in production config (`boundary/http :cors`). Never use `*` in production. Restrict to your actual frontend domains.
+|**CORS** — Configure allowed origins in production config (`wagoe/http :cors`). Never use `*` in production. Restrict to your actual frontend domains.
 |===
 
 == 6. Rate Limiting & DDoS Mitigation

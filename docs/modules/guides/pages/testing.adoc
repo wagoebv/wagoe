@@ -28,7 +28,7 @@ clojure -M:test:db/h2 --watch :core
 clojure -M:test:db/h2 --watch --focus-meta :unit
 
 # Auth tests (JWT secret required)
-JWT_SECRET="dev-secret-32-chars-minimum" clojure -M:test:db/h2 :user
+JWT_SECRET="dev-secret-at-least-32-characters-long" clojure -M:test:db/h2 :user
 ----
 
 == Writing unit tests

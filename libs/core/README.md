@@ -1,4 +1,4 @@
-# boundary/core
+# wagoe/core
 
 [![Status](https://img.shields.io/badge/status-stable-brightgreen)]()
 [![Clojure](https://img.shields.io/badge/clojure-1.12+-blue)]()
@@ -130,7 +130,7 @@ This library has minimal dependencies:
 
 ## Relationship to Other Libraries
 
-`boundary/core` is the foundation layer with **no dependencies** on other Wagoe libraries:
+`wagoe/core` is the foundation layer with **no dependencies** on other Wagoe libraries:
 
 ```
 ┌─────────────────────────────────────────┐
@@ -140,7 +140,7 @@ This library has minimal dependencies:
                   │ depends on
                   ▼
 ┌─────────────────────────────────────────┐
-│            boundary/core                │
+│            wagoe/core                │
 │   (validation, utils, interceptors)     │
 └─────────────────────────────────────────┘
 ```

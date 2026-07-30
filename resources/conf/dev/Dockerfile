@@ -1,4 +1,4 @@
-# Multi-stage Dockerfile for Boundary Framework
+# Multi-stage Dockerfile for Wagoe Framework
 # Optimized for development with port management integration
 
 # =============================================================================
@@ -107,7 +107,7 @@ COPY --chown=wagoe:wagoe test ./test
 COPY --chown=wagoe:wagoe deps.edn .
 COPY --chown=wagoe:wagoe build.clj .
 
-# Switch back to boundary user
+# Switch back to wagoe user
 USER wagoe
 
 # Enable live reload and development features

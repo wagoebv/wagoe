@@ -119,7 +119,7 @@ Each library follows the **Functional Core / Imperative Shell** pattern:
 libs/{library}/
 ├── deps.edn                    # Library-specific dependencies
 ├── src/
-│   └── boundary/
+│   └── wagoe/
 │       └── {library}/
 │           ├── core/           # Pure business logic (no I/O)
 │           │   ├── {domain}.clj
@@ -132,7 +132,7 @@ libs/{library}/
 │           ├── ports.clj       # Protocol definitions
 │           └── schema.clj      # Malli validation schemas
 └── test/
-    └── boundary/
+    └── wagoe/
         └── {library}/
             ├── core/           # Unit tests (pure functions)
             └── shell/          # Integration/contract tests
@@ -162,7 +162,7 @@ libs/core/src/wagoe/shared/
 libs/user/
 ├── deps.edn
 ├── src/
-│   └── boundary/
+│   └── wagoe/
 │       └── user/
 │           ├── core/
 │           │   ├── user.clj          # User entity logic
@@ -178,7 +178,7 @@ libs/user/
 │           ├── ports.clj             # IUserService, IUserRepository
 │           └── schema.clj            # User, Session schemas
 └── test/
-    └── boundary/
+    └── wagoe/
         └── user/
             ├── core/
             │   ├── user_test.clj
@@ -193,7 +193,7 @@ libs/user/
 
 [source]
 ----
-boundary/
+wagoe/
 ├── libs/                        # All 21 library modules
 │   ├── core/                    # Foundation utilities, validation
 │   ├── observability/           # Logging, metrics, error reporting

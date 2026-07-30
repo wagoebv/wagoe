@@ -9,7 +9,7 @@ The root [`Dockerfile`](../Dockerfile) is a multi-stage build (uberjar → slim
 JRE, non-root):
 
 ```bash
-docker build -t boundary:latest .
+docker build -t wagoe:latest .
 ```
 
 ## Run it
@@ -19,11 +19,11 @@ The same image runs either mode — the container arg selects it:
 ```bash
 docker run -p 3000:3000 \
   -e JWT_SECRET=... -e WAG_ENV=prod \
-  boundary:latest              # server (HTTP, default)
+  wagoe:latest              # server (HTTP, default)
 
 docker run \
   -e JWT_SECRET=... -e WAG_ENV=prod \
-  boundary:latest worker       # background worker (no HTTP listener)
+  wagoe:latest worker       # background worker (no HTTP listener)
 ```
 
 - **server** — the HTTP application (Jetty). Exposes `/health`, `/health/live`,
@@ -41,7 +41,7 @@ endpoints and a preStop drain), plus a `worker` Deployment running the same
 image with `args: ["worker"]`.
 
 ```bash
-# Set REGISTRY/boundary:TAG and the Secret values first.
+# Set REGISTRY/wagoe:TAG and the Secret values first.
 kubectl apply -f deploy/k8s/wagoe.yaml
 ```
 

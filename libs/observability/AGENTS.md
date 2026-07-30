@@ -178,7 +178,7 @@ on the `ITracer` port).
                     ;; OTEL_EXPORTER_OTLP_ENDPOINT base; /v1/traces is appended.
                     :endpoint     #or [#env OTEL_EXPORTER_OTLP_ENDPOINT "http://localhost:4318"]
                     :protocol     :http/protobuf   ; only HTTP is bundled (no gRPC)
-                    :service-name #or [#env OTEL_SERVICE_NAME "boundary"]
+                    :service-name #or [#env OTEL_SERVICE_NAME "wagoe"]
                     :timeout-ms   10000}}
 ```
 
@@ -236,7 +236,7 @@ feeds SigNoz, Grafana, Datadog-via-OTel, etc.
 {:wagoe/metrics {:provider     :otlp
                     :endpoint     #or [#env OTEL_EXPORTER_OTLP_ENDPOINT "http://localhost:4318"]
                     :protocol     :http/protobuf
-                    :service-name #or [#env OTEL_SERVICE_NAME "boundary"]
+                    :service-name #or [#env OTEL_SERVICE_NAME "wagoe"]
                     :interval-ms  60000        ; push interval to the collector
                     :timeout-ms   10000}}
 ```
@@ -285,7 +285,7 @@ The default provider — all operations are silent. No configuration required.
             :api-key #env DATADOG_API_KEY
             :host    #env ["DATADOG_HOST" "datadoghq.com"]
             :tags    {:env #env WAG_ENV
-                      :service "boundary"}}}}
+                      :service "wagoe"}}}}
 ```
 
 ### Sentry

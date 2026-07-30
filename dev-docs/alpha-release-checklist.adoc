@@ -43,7 +43,7 @@ The goal is to deliver a stable, approachable, minimal-but-complete version of W
 == 3. Starter Template
 
 === 3.1 Project Structure
-- [ ] Create `boundary-starter` GitHub repository.
+- [ ] Create `wagoe-starter` GitHub repository.
 - [ ] Include User + Inventory modules.
 - [ ] Include login/logout functionality.
 - [ ] Include a minimal CRUD flow (HTMX UI is enough).

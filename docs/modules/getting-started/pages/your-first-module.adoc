@@ -127,7 +127,7 @@ That split is deliberate:
 
 == Run the module's tests
 
-A project generated with `boundary new` runs its tests through Kaocha via the `:test` alias:
+A project generated with `wagoe new` runs its tests through Kaocha via the `:test` alias:
 
 [source,bash]
 ----

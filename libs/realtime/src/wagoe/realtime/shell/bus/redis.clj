@@ -148,7 +148,7 @@
      :password :database   - auth + db selection (production)
      :timeout              - socket timeout ms (default 2000)
      :max-total :max-idle :min-idle - publish-pool sizing
-     :channel              - pub/sub channel (default \"boundary:realtime:bus\")
+     :channel              - pub/sub channel (default \"wagoe:realtime:bus\")
      :subscribe-timeout-ms - how long start-subscriber! waits for the
                              subscription to go live before returning and
                              leaving the background loop to keep retrying
@@ -156,6 +156,6 @@
   [{:keys [channel subscribe-timeout-ms] :as config}]
   (->RedisMessageBus (create-pool config)
                      (select-keys config [:host :port :password :database :timeout])
-                     (->bytes (or channel "boundary:realtime:bus"))
+                     (->bytes (or channel "wagoe:realtime:bus"))
                      (long (or subscribe-timeout-ms 5000))
                      (atom {:running? false})))

@@ -98,7 +98,7 @@ _What initiates this use case?_
 ====== link:#_shell_components[]Shell Components
 
 * *HTTP Handler:* `wagoe.platform.shell.http/handle-++[++action++]++`
-* *CLI Command:* `boundary ++[++resource++]++ ++[++action++]++`
+* *CLI Command:* `wagoe ++[++resource++]++ ++[++action++]++`
 * *Validation:* Uses `++[++Schema++]++` with malli
 
 [[_test_cases]]
@@ -144,7 +144,7 @@ curl -X POST http://localhost:8080/api/v1/[resource] \
 
 [source,highlightjs,highlight]
 ----
-boundary [resource] [action] --field="example"
+wagoe [resource] [action] --field="example"
 ----
 
 [[_expected_response]]

@@ -1,7 +1,7 @@
 = ADR-034: Tier 1 Generate Tools + Closed Verify Loop — the Moat
 :status: Proposed
 :date: 2026-06-17
-:deciders: boundary-team
+:deciders: wagoe-team
 
 == Status
 
@@ -32,7 +32,7 @@ Two forces shaped the design:
 
 === 1. In-process codegen, pure report, injected test step
 
-`boundary/scaffolder` and `boundary/tools` are server deps (both dev tooling, as
+`wagoe/scaffolder` and `wagoe/tools` are server deps (both dev tooling, as
 is the server). Tools call the scaffolder service directly — deterministic, and
 the file plan comes back as data (`:dry-run` powers `preview`).
 

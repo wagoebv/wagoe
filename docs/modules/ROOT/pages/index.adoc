@@ -39,16 +39,16 @@ pure business logic in `core/`, side effects in `shell/`, and clean interfaces t
 
 [source,bash]
 ----
-# Install Wagoe (JVM, Clojure CLI, Babashka, bbin, boundary CLI)
+# Install Wagoe (JVM, Clojure CLI, Babashka, bbin, wagoe CLI)
 curl -fsSL https://get.wagoe.com | bash
 
 # Start a new project
-boundary new my-app
+wagoe new my-app
 cd my-app
 
 # Add optional modules
-boundary add payments
-boundary list modules
+wagoe add payments
+wagoe list modules
 
 # REPL-driven development (headless nREPL on port 7888 — connect your editor)
 export JWT_SECRET="change-me-dev-secret-min-32-chars"

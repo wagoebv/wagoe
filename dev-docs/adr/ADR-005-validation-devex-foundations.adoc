@@ -598,7 +598,7 @@ Coverage (user): 100.0% (6/6 rules executed)
 
 === Phase 4.1: REPL Helpers ✅
 
-- New namespace: `link:https://github.com/wagoebv/wagoe/blob/main/dev/boundary/shared/tools/validation/repl.clj`
+- New namespace: `link:https://github.com/wagoebv/wagoe/blob/main/dev/wagoe/shared/tools/validation/repl.clj`
 - Features: registry listing, stats, conflicts, malli validate/explain wrappers,
   snapshot EDN generation, snapshot compare, timing helper
 
@@ -753,7 +753,7 @@ Coverage (user): 100.0% (6/6 rules executed)
 - `link:https://github.com/wagoebv/wagoe/blob/main/libs/core/src/wagoe/core/validation/codes.clj` - Error code catalog
 - `link:https://github.com/wagoebv/wagoe/blob/main/libs/core/src/wagoe/core/validation/result.clj` - Standard result format
 - `link:https://github.com/wagoebv/wagoe/blob/main/libs/core/src/wagoe/core/validation/registry.clj` - Rule registry for coverage tracking
-- `link:https://github.com/wagoebv/wagoe/blob/main/dev/boundary/shared/tools/validation/repl.clj` - REPL helpers (stats, conflicts, DOT, timing, snapshots)
+- `link:https://github.com/wagoebv/wagoe/blob/main/dev/wagoe/shared/tools/validation/repl.clj` - REPL helpers (stats, conflicts, DOT, timing, snapshots)
 - `link:https://github.com/wagoebv/wagoe/blob/main/libs/core/src/wagoe/core/config/feature_flags.clj` - Feature flag management
 
 === Test Files

@@ -1,4 +1,4 @@
-== ADR-002: Implement `boundary new` Command in Scaffolder
+== ADR-002: Implement `wagoe new` Command in Scaffolder
 
 *Status:* Proposed +
 *Date:* 2026-01-26 +
@@ -14,7 +14,7 @@ bootstrapping new projects. Users are currently expected to manually
 clone a starter repository or copy files.
 
 To improve the "Time to First Hello World" and ensure consistent project
-structure, we need a `boundary new` command that can generate a fresh
+structure, we need a `wagoe new` command that can generate a fresh
 project based on the standardized Wagoe architecture (Functional Core
 / Imperative Shell).
 

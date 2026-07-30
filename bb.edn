@@ -158,7 +158,7 @@
                      ;; silently reroute the e2e server to another port.
                      {:extra-env {"WAG_ENV"    "test"
                                   "HTTP_PORT"  "3100"
-                                  "JWT_SECRET" "dev-secret-32-chars-minimum"}
+                                  "JWT_SECRET" "dev-secret-at-least-32-characters-long"}
                       :inherit   true
                       :shutdown  process/destroy-tree}
                      "clojure" "-M:run" "server")]
@@ -181,7 +181,7 @@
            (let [server (process/process
                          {:extra-env {"WAG_ENV"    "test"
                                       "HTTP_PORT"  "3100"
-                                      "JWT_SECRET" "dev-secret-32-chars-minimum"}
+                                      "JWT_SECRET" "dev-secret-at-least-32-characters-long"}
                           :inherit   true
                           :shutdown  process/destroy-tree}
                          "clojure" "-M:run" "server")

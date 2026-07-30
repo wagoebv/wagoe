@@ -1,4 +1,4 @@
-# boundary/platform
+# wagoe/platform
 
 [![Status](https://img.shields.io/badge/status-stable-brightgreen)]()
 [![Clojure](https://img.shields.io/badge/clojure-1.12+-blue)]()
@@ -40,8 +40,8 @@ Core infrastructure for web applications: database, HTTP routing, pagination, se
 ## Requirements
 
 - Clojure 1.12+
-- boundary/core
-- boundary/observability
+- wagoe/core
+- wagoe/observability
 - Database driver (PostgreSQL, SQLite, MySQL, or H2)
 
 ## Database Support
@@ -187,7 +187,7 @@ libs/platform/src/wagoe/platform/
 
 | Dependency | Version | Purpose |
 |------------|---------|---------|
-| `boundary/observability` | 1.0.0-beta-1 | Logging, metrics |
+| `wagoe/observability` | 1.0.0-beta-1 | Logging, metrics |
 | `next.jdbc` | 1.3.1086 | Database access |
 | `honeysql` | 2.7.1364 | SQL generation |
 | `HikariCP` | 7.0.2 | Connection pooling |
@@ -206,13 +206,13 @@ libs/platform/src/wagoe/platform/
                   │ depends on
                   ▼
 ┌─────────────────────────────────────────┐
-│           boundary/platform             │
+│           wagoe/platform             │
 │   (database, HTTP, config, modules)     │
 └─────────────────┬───────────────────────┘
                   │ depends on
                   ▼
 ┌─────────────────────────────────────────┐
-│   boundary/observability + boundary/core│
+│   wagoe/observability + wagoe/core│
 └─────────────────────────────────────────┘
 ```
 

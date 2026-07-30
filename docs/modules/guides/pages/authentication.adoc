@@ -15,7 +15,7 @@ The JWT secret must be at least 32 characters. Tests that exercise auth also req
 
 [source,bash]
 ----
-JWT_SECRET="dev-secret-32-chars-minimum" clojure -M:test:db/h2 :user
+JWT_SECRET="dev-secret-at-least-32-characters-long" clojure -M:test:db/h2 :user
 ----
 
 == Login

@@ -41,12 +41,12 @@ Supports macOS, Debian/Ubuntu, Arch Linux, and WSL2.
 
 ```bash
 # 1. Create a new project
-boundary new my-app
+wagoe new my-app
 cd my-app
 
 # 2. Add optional modules (e.g. payments, cache, search)
-boundary add payments
-boundary list modules    # see all 19 optional modules
+wagoe add payments
+wagoe list modules    # see all 19 optional modules
 
 # 3. Run database migrations
 clojure -M:migrate up
@@ -70,7 +70,7 @@ You get: H2 in-memory database (zero-config), HTTP server on port 3000, a comple
 
 ## AI-Native Development (Claude Code & Agentic CLIs)
 
-Projects created with `boundary new` are agent-ready out of the box: they
+Projects created with `wagoe new` are agent-ready out of the box: they
 include a `CLAUDE.md`, an `AGENTS.md`, and a Claude Code skill at
 `.claude/skills/wagoe/SKILL.md` that teaches the agent to use Wagoe's
 scaffolder and AI tooling instead of hand-writing boilerplate. Open Claude
@@ -86,7 +86,7 @@ the plugin from this repo's marketplace:
 
 ```
 /plugin marketplace add wagoebv/wagoe
-/plugin install boundary@boundary
+/plugin install wagoe@wagoe
 ```
 
 See [claude-plugin/README.md](./claude-plugin/README.md) for details.
@@ -185,7 +185,7 @@ clojure -M:test:db/h2 :core                                    # Single library
 clojure -M:test:db/h2 --focus-meta :unit                       # Unit tests only
 clojure -M:test:db/h2 --focus-meta :integration                # Integration tests only
 clojure -M:test:db/h2 --watch :core                            # Watch mode
-JWT_SECRET="dev-secret-32-chars-minimum" WAG_ENV=test clojure -M:test:db/h2
+JWT_SECRET="dev-secret-at-least-32-characters-long" WAG_ENV=test clojure -M:test:db/h2
 
 # Linting
 clojure -M:clj-kondo --lint src test libs/*/src libs/*/test
@@ -233,8 +233,8 @@ The default `test` profile runs against in-memory H2. To run against PostgreSQL:
 3. Run:
 
 ```bash
-WAG_ENV=test JWT_SECRET="dev-secret-32-chars-minimum" clojure -M:migrate up
-WAG_ENV=test JWT_SECRET="dev-secret-32-chars-minimum" clojure -M:test:db/h2
+WAG_ENV=test JWT_SECRET="dev-secret-at-least-32-characters-long" clojure -M:migrate up
+WAG_ENV=test JWT_SECRET="dev-secret-at-least-32-characters-long" clojure -M:test:db/h2
 ```
 
 4. Revert `resources/conf/test/config.edn` after the run.

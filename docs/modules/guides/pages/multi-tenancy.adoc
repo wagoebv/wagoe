@@ -10,7 +10,7 @@ H2 and SQLite skip provisioning with a warning and are fine for unit/integration
 == Prerequisites
 
 * PostgreSQL database (for production)
-* `boundary/tenant` and `boundary/platform` libraries on the classpath
+* `wagoe/tenant` and `wagoe/platform` libraries on the classpath
 * User authentication middleware already configured (tenant middleware runs after auth)
 
 Run database migrations before starting the server:

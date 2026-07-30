@@ -1,7 +1,7 @@
 = ADR-021: FC/IS Boundary Rules
 :status: Accepted
 :date: 2026-04-03
-:deciders: boundary-team
+:deciders: wagoe-team
 
 == Status
 

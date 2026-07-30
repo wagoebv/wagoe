@@ -72,7 +72,7 @@ Key namespacing conventions: `:common/*` for shared UI strings, `:user/*`, `:adm
 [source,edn]
 ----
 ;; config.edn
-:wagoe/i18n {:catalogue-path "boundary/i18n/translations"
+:wagoe/i18n {:catalogue-path "wagoe/i18n/translations"
                 :default-locale :en
                 :dev?           true}   ; omit or false in production
 ----

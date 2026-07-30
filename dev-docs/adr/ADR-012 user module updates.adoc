@@ -1,7 +1,7 @@
 = ADR-012: User Module Admin Integration — Split-Table Architecture
 :status: Accepted
 :date: 2026-03-22
-:deciders: boundary-team
+:deciders: wagoe-team
 
 == Status
 

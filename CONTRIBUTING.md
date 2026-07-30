@@ -13,8 +13,8 @@ Thank you for your interest in contributing to Wagoe! This guide will help you u
 brew install openjdk clojure/tools/clojure  # macOS
 
 # Clone and setup
-git clone <repo-url> boundary
-cd boundary
+git clone <repo-url> wagoe
+cd wagoe
 clojure -M:test:db/h2                      # Verify setup (includes H2 database)
 clojure -M:repl-clj                        # Start development REPL
 ```

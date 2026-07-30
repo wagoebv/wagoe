@@ -175,7 +175,7 @@ Complete health status with service information and optional additional checks.
 ```json
 {
   "status": "ok",
-  "service": "boundary-dev",
+  "service": "wagoe-dev",
   "version": "0.1.0",
   "timestamp": "2024-10-24T10:30:00Z",
   "database": {

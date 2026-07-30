@@ -3,7 +3,7 @@
 Model Context Protocol server exposing Wagoe's framework knowledge to editor
 agents (Claude Code, Cursor). Standalone library — **deliberately not wired into
 the root `deps.edn` paths** so applications never pull an MCP server
-transitively. Depends on `boundary/ai` for the core context/parsing helpers that
+transitively. Depends on `wagoe/ai` for the core context/parsing helpers that
 later tools reuse.
 
 > Status: **active** — stdio transport + JSON-RPC handshake, Tier 0 (read),
@@ -114,7 +114,7 @@ suggested **fix**, and (when overridable) the audited bypass:
 
 - BND text comes from the shared `devtools` catalog (`BND-8xx` = MCP guardrails),
   the single source of truth. `core/guardrail` is pure; `shell/guardrail` does
-  the catalog lookup (I/O) and `boundary/devtools` is a **shell-only** dep.
+  the catalog lookup (I/O) and `wagoe/devtools` is a **shell-only** dep.
 - Map a `security/authorize` denial → payload: `shell/guardrail/payload-for-denial`
   (or `error-for-denial` for the JSON-RPC error, app code `:forbidden` `-32001`).
 - **Hard vs soft:** security/capability denials (BND-801..805) are *not*
@@ -184,7 +184,7 @@ generate (scaffolder) → write → kondo → FC/IS → run affected tests → s
 | `gen-tests` | AI-generate a test ns for a source file (needs provider) | `wagoe.ai` `generate-tests` |
 | `gen-migration` | SQL migration for an entity's table | scaffolder migration generator |
 
-- **In-process codegen.** `boundary/scaffolder` + `boundary/tools` are deps
+- **In-process codegen.** `wagoe/scaffolder` + `wagoe/tools` are deps
   (dev tooling, like the server). The scaffolder writes app-layout files
   (`src/wagoe/<module>/…`); the server runs **inside the target project**.
 - **Verify loop** (`shell/verify` → pure `core/verify`):

@@ -164,8 +164,8 @@ CMD ["java", "-jar", "wagoe.jar", "server"]
 Build and run:
 
 ```bash
-docker build -t boundary:latest .
-docker run -p 8080:8080 boundary:latest
+docker build -t wagoe:latest .
+docker run -p 8080:8080 wagoe:latest
 ```
 
 ## Systemd Service
@@ -211,7 +211,7 @@ cat META-INF/MANIFEST.MF
 ### Verify Main Class
 
 ```bash
-jar tf wagoe-1.2.X-standalone.jar | grep "boundary/main"
+jar tf wagoe-1.2.X-standalone.jar | grep "wagoe/main"
 ```
 
 ### Test Database Drivers

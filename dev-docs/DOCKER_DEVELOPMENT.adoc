@@ -431,7 +431,7 @@ docker system prune
 [arabic]
 . Install *Dev Containers* extension
 . Use *Remote-Containers: Attach to Running Container*
-. Select `boundary-dev-tools` container
+. Select `wagoe-dev-tools` container
 . Install Clojure extensions in container
 
 ==== IntelliJ IDEA
@@ -454,7 +454,7 @@ docker system prune
 
 All services run as non-root users:
 
-* *App container*: `boundary` user (UID 1001)
+* *App container*: `wagoe` user (UID 1001)
 * *Database*: `postgres` user
 * *Docs*: `node` user
 

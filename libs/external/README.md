@@ -1,4 +1,4 @@
-# boundary/external
+# wagoe/external
 
 [![Status](https://img.shields.io/badge/status-in%20development-yellow)]()
 [![Clojure](https://img.shields.io/badge/clojure-1.12+-blue)]()
