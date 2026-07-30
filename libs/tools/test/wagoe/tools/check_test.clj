@@ -60,13 +60,19 @@
 ;; passes locally without it; missing from CI means nothing enforces it on a PR.
 
 (defn- ci-workflow
-  "The CI workflow source, or nil. `bb test:tools` runs from the repo root; a
-   standalone run inside libs/tools does not — try both."
+  "The CI workflow source. `bb test:tools` runs from the repo root; a standalone
+   run inside libs/tools does not — try both, then give up loudly.
+
+   Deliberately throws rather than returning nil: a lockstep test that quietly
+   passes when it cannot find the file it compares against is the same
+   stopped-checking failure it exists to prevent (BOU-250)."
   []
-  (let [cwd (System/getProperty "user.dir")]
-    (some (fn [f] (when (.exists ^java.io.File f) (slurp f)))
-          [(io/file cwd ".github" "workflows" "ci.yml")
-           (io/file cwd ".." ".." ".github" "workflows" "ci.yml")])))
+  (let [cwd        (System/getProperty "user.dir")
+        candidates [(io/file cwd ".github" "workflows" "ci.yml")
+                    (io/file cwd ".." ".." ".github" "workflows" "ci.yml")]]
+    (or (some (fn [f] (when (.exists ^java.io.File f) (slurp f))) candidates)
+        (throw (ex-info "ci.yml not found — cannot verify all-checks/CI lockstep"
+                        {:cwd cwd :tried (mapv str candidates)})))))
 
 (defn- ci-invoked-gates
   "Gate names CI runs directly, from `run: bb check:<gate>` lines."
@@ -75,32 +81,33 @@
        (map second)
        set))
 
+(deftest ^:unit ci-workflow-is-discoverable-and-runs-gates
+  (testing "the workflow is found and actually invokes gates — guards the two tests below"
+    (is (seq (ci-invoked-gates (ci-workflow)))
+        "found no `run: bb check:<gate>` lines; the lockstep tests below would pass vacuously")))
+
 (deftest ^:unit every-aggregate-check-also-runs-in-ci
   (testing "each bb check:<gate> in all-checks has a CI job invoking it"
-    (if-let [yaml (ci-workflow)]
-      (let [ci (ci-invoked-gates yaml)]
-        (doseq [{:keys [id cmd]} check/all-checks
-                :when (and (= "bb" (first cmd))
-                           (str/starts-with? (second cmd) "check:"))
-                :let [gate (subs (second cmd) (count "check:"))]]
-          (is (contains? ci gate)
-              (str "check:" gate " (" id ") is in all-checks but no CI job runs it"))))
-      (println "skipping: .github/workflows/ci.yml not reachable from" (System/getProperty "user.dir")))))
+    (let [ci (ci-invoked-gates (ci-workflow))]
+      (doseq [{:keys [id cmd]} check/all-checks
+              :when (and (= "bb" (first cmd))
+                         (str/starts-with? (second cmd) "check:"))
+              :let [gate (subs (second cmd) (count "check:"))]]
+        (is (contains? ci gate)
+            (str "check:" gate " (" id ") is in all-checks but no CI job runs it"))))))
 
 (deftest ^:unit every-ci-gate-is-also-in-the-aggregate-check
   (testing "each check:<gate> CI runs is reachable from `bb check`"
-    (if-let [yaml (ci-workflow)]
-      (let [aggregate (->> check/all-checks
-                           (map :cmd)
-                           (filter #(and (= "bb" (first %))
-                                         (str/starts-with? (second %) "check:")))
-                           (map #(subs (second %) (count "check:")))
-                           set)]
-        (doseq [gate (ci-invoked-gates yaml)]
-          (is (contains? aggregate gate)
-              (str "check:" gate " runs in CI but is missing from all-checks, so "
-                   "`bb check --ci` passes without it"))))
-      (println "skipping: .github/workflows/ci.yml not reachable"))))
+    (let [aggregate (->> check/all-checks
+                         (map :cmd)
+                         (filter #(and (= "bb" (first %))
+                                       (str/starts-with? (second %) "check:")))
+                         (map #(subs (second %) (count "check:")))
+                         set)]
+      (doseq [gate (ci-invoked-gates (ci-workflow))]
+        (is (contains? aggregate gate)
+            (str "check:" gate " runs in CI but is missing from all-checks, so "
+                 "`bb check --ci` passes without it"))))))
 
 ;; =============================================================================
 ;; Argument parsing
