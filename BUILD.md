@@ -103,12 +103,16 @@ java -jar target/wagoe-*-standalone.jar help
 
 - `HTTP_PORT` - HTTP server port (default: 3000)
 - `HTTP_HOST` - HTTP server host (default: 0.0.0.0)
-- `ENV` - Environment profile (dev, prod, test)
+- `WAG_ENV` - Environment profile (dev, prod, test)
+
+  Resolved by `detect-environment` in this order, first match wins:
+  the `env` JVM system property, then `WAG_ENV`, `ENV`, `ENVIRONMENT`.
+  `ENV` and `ENVIRONMENT` are legacy fallbacks — prefer `WAG_ENV`.
 
 ### Running in Production
 
 ```bash
-WAG_ENV=prod HTTP_PORT=8080 java -jar wagoe-*-standalone.jar server
+WAG_ENV=prod HTTP_PORT=8080 java -jar target/wagoe-*-standalone.jar server
 ```
 
 ### Database Configuration
@@ -225,8 +229,7 @@ sudo systemctl status wagoe
 ### Check Version
 
 ```bash
-jar xf target/wagoe-*-standalone.jar META-INF/MANIFEST.MF
-cat META-INF/MANIFEST.MF
+unzip -p target/wagoe-*-standalone.jar META-INF/MANIFEST.MF
 ```
 
 ### Verify Main Class
