@@ -542,18 +542,18 @@ Global Options:
   -h, --help           Show help
 
 Examples:
-  boundary user create --email john@example.com --name \"John Doe\" --role user
-  boundary user list --format json
+  wagoe user create --email john@example.com --name \"John Doe\" --role user
+  wagoe user list --format json
   boundary session create --user-id UUID
 
 For domain-specific help:
-  boundary user --help
+  wagoe user --help
   boundary session --help")
 
 (def user-help
   "User Management Commands
 
-Usage: boundary user <command> [options]
+Usage: wagoe user <command> [options]
 
 Commands:
   create    Create a new user
@@ -590,12 +590,12 @@ Options for 'delete':
   --id UUID            User ID (required)
 
 Examples:
-  boundary user create --email john@example.com --name \"John\" --role user
-  boundary user list --limit 10
-  boundary user find --id UUID
-  boundary user find --email john@example.com
-  boundary user update --id UUID --role admin
-  boundary user delete --id UUID")
+  wagoe user create --email john@example.com --name \"John\" --role user
+  wagoe user list --limit 10
+  wagoe user find --id UUID
+  wagoe user find --email john@example.com
+  wagoe user update --id UUID --role admin
+  wagoe user delete --id UUID")
 
 (def session-help
   "Session Management Commands

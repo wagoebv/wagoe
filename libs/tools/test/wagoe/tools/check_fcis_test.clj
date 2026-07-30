@@ -17,7 +17,7 @@
 
 (deftest ^:unit core-source-paths-includes-app-layout
   (testing "FC/IS scanner includes src/wagoe/<module>/core in an app layout (no libs/)"
-    ;; A project scaffolded with `boundary new` has no libs/ tree — its modules
+    ;; A project scaffolded with `wagoe new` has no libs/ tree — its modules
     ;; live under src/wagoe/<module>/core/. Build a fixture and scan it via the
     ;; explicit-root arity (the default arity reads user.dir = monorepo root).
     (let [tmp      (io/file (System/getProperty "java.io.tmpdir")

@@ -6,7 +6,7 @@
 
 ;; ─── Project detection ────────────────────────────────────────────────────────
 
-(defn boundary-project?
+(defn wagoe-project?
   "True if dir contains a deps.edn referencing org.wagoe."
   [dir]
   (let [f (io/file dir "deps.edn")]
@@ -61,15 +61,15 @@
   (let [f (io/file dir "AGENTS.md")]
     (when (.exists f)
       (let [content (slurp f)]
-        (if-not (str/includes? content "<!-- boundary:available-modules -->")
+        (if-not (str/includes? content "<!-- wagoe:available-modules -->")
           (println "  Warning: AGENTS.md sentinel comments not found — skipping AGENTS.md update")
           (let [without-row  (templates/update-block
-                              content "boundary:available-modules"
+                              content "wagoe:available-modules"
                               #(str/replace % (templates/module-row-pattern name) ""))
                 install-line (str "- " name " — [docs](" docs-url ")\n")
                 with-install (str/replace without-row
-                                          "<!-- /boundary:installed-modules -->"
-                                          (str install-line "<!-- /boundary:installed-modules -->"))]
+                                          "<!-- /wagoe:installed-modules -->"
+                                          (str install-line "<!-- /wagoe:installed-modules -->"))]
             (spit f with-install)))))))
 
 ;; ─── Main ────────────────────────────────────────────────────────────────────
@@ -81,8 +81,8 @@
       (println "Run 'wagoe list modules' to see available modules.")
       (System/exit 1))
     (let [dir (System/getProperty "user.dir")]
-      (when-not (boundary-project? dir)
-        (println "Error: No boundary project found in current directory.")
+      (when-not (wagoe-project? dir)
+        (println "Error: No wagoe project found in current directory.")
         (println "Run 'wagoe new <name>' first, then cd into the project.")
         (System/exit 1))
       (let [module (cat/find-module module-name)]
@@ -114,8 +114,8 @@
                              (let [agents-f (io/file dir "AGENTS.md")]
                                (if (.exists agents-f)
                                  (let [content          (slurp agents-f)
-                                       installed-start  (str/index-of content "<!-- boundary:installed-modules -->")
-                                       installed-end    (str/index-of content "<!-- /boundary:installed-modules -->")]
+                                       installed-start  (str/index-of content "<!-- wagoe:installed-modules -->")
+                                       installed-end    (str/index-of content "<!-- /wagoe:installed-modules -->")]
                                    (if (and installed-start installed-end)
                                      (str/includes? (subs content installed-start installed-end) module-name)
                                      dep-present?))

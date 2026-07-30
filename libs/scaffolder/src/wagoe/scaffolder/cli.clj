@@ -487,7 +487,7 @@
 (def root-help
   "Wagoe CLI - Module Scaffolding
 
-Usage: boundary scaffolder <command> [options]
+Usage: wagoe scaffolder <command> [options]
 
 Commands:
   new         Bootstrap a new Wagoe project
@@ -501,29 +501,29 @@ Global Options:
   -h, --help           Show help
 
 Examples:
-  boundary scaffolder new --name my-app
+  wagoe scaffolder new --name my-app
 
-  boundary scaffolder generate --module-name product --entity Product \\
+  wagoe scaffolder generate --module-name product --entity Product \\
     --field name:string:required \\
     --field sku:string:required:unique \\
     --field price:decimal:required
 
-  boundary scaffolder field --module-name product --entity Product \\
+  wagoe scaffolder field --module-name product --entity Product \\
     --name description --type text
 
-  boundary scaffolder endpoint --module-name product \\
+  wagoe scaffolder endpoint --module-name product \\
     --path /products/export --method GET --handler-name export-products
 
-  boundary scaffolder adapter --module-name notifications \\
+  wagoe scaffolder adapter --module-name notifications \\
     --port INotificationSender --adapter-name slack
 
 For command-specific help:
-  boundary scaffolder <command> --help")
+  wagoe scaffolder <command> --help")
 
 (def new-help
   "Bootstrap New Project Command
 
-Usage: boundary scaffolder new [options]
+Usage: wagoe scaffolder new [options]
 
 Bootstraps a new Wagoe project following the Functional Core / Imperative Shell
 architecture.
@@ -538,15 +538,15 @@ Other Options:
 
 Examples:
   # Bootstrap a new project in the current directory
-  boundary scaffolder new --name my-awesome-app
+  wagoe scaffolder new --name my-awesome-app
 
   # Bootstrap a new project in a specific directory
-  boundary scaffolder new --name my-app --output-dir ./projects/my-app")
+  wagoe scaffolder new --name my-app --output-dir ./projects/my-app")
 
 (def generate-help
   "Generate Module Command
 
-Usage: boundary scaffolder generate [options]
+Usage: wagoe scaffolder generate [options]
 
 Generates a complete Wagoe module with Functional Core / Imperative Shell
 architecture including:
@@ -596,7 +596,7 @@ Other Options:
 
 Examples:
   # Generate a product module
-  boundary scaffolder generate \\
+  wagoe scaffolder generate \\
     --module-name product \\
     --entity Product \\
     --field name:string:required \\
@@ -605,7 +605,7 @@ Examples:
     --field active:boolean:required
 
   # Generate a customer module with email
-  boundary scaffolder generate \\
+  wagoe scaffolder generate \\
     --module-name customer \\
     --entity Customer \\
     --field name:string:required \\
@@ -613,7 +613,7 @@ Examples:
     --field phone:string
 
   # Dry run to preview files
-  boundary scaffolder generate \\
+  wagoe scaffolder generate \\
     --module-name billing \\
     --entity Invoice \\
     --field amount:decimal:required \\
@@ -622,7 +622,7 @@ Examples:
 (def field-help
   "Add Field Command
 
-Usage: boundary scaffolder field [options]
+Usage: wagoe scaffolder field [options]
 
 Adds a new field to an existing entity by generating:
   - An ALTER TABLE migration to add the column
@@ -641,14 +641,14 @@ Optional Flags:
 
 Examples:
   # Add a description field
-  boundary scaffolder field \\
+  wagoe scaffolder field \\
     --module-name product \\
     --entity Product \\
     --name description \\
     --type text
 
   # Add a required unique field
-  boundary scaffolder field \\
+  wagoe scaffolder field \\
     --module-name customer \\
     --entity Customer \\
     --name tax-id \\
@@ -659,7 +659,7 @@ Examples:
 (def endpoint-help
   "Add Endpoint Command
 
-Usage: boundary scaffolder endpoint [options]
+Usage: wagoe scaffolder endpoint [options]
 
 Generates instructions for adding a new endpoint to an existing module.
 You will need to manually add the code to the http.clj file.
@@ -675,14 +675,14 @@ Optional:
 
 Examples:
   # Add a custom export endpoint
-  boundary scaffolder endpoint \\
+  wagoe scaffolder endpoint \\
     --module-name product \\
     --path /products/export \\
     --method GET \\
     --handler-name export-products
 
   # Add a bulk delete endpoint
-  boundary scaffolder endpoint \\
+  wagoe scaffolder endpoint \\
     --module-name customer \\
     --path /customers/bulk-delete \\
     --method POST \\
@@ -691,7 +691,7 @@ Examples:
 (def adapter-help
   "Add Adapter Command
 
-Usage: boundary scaffolder adapter [options]
+Usage: wagoe scaffolder adapter [options]
 
 Generates a new adapter implementation for a port/protocol.
 Useful for adding alternative implementations (e.g., different storage backends,
@@ -708,7 +708,7 @@ Optional:
 
 Examples:
   # Generate a Slack notification adapter
-  boundary scaffolder adapter \\
+  wagoe scaffolder adapter \\
     --module-name notifications \\
     --port INotificationSender \\
     --adapter-name slack \\
@@ -716,7 +716,7 @@ Examples:
     --method send-bulk:user-ids,message
 
   # Generate an S3 storage adapter
-  boundary scaffolder adapter \\
+  wagoe scaffolder adapter \\
     --module-name storage \\
     --port IFileStorage \\
     --adapter-name s3 \\

@@ -21,25 +21,25 @@
 ;; Helpers
 ;; =============================================================================
 
-(defn- detect-boundary-root []
+(defn- detect-wagoe-root []
   (cond
     (fs/exists? "libs/i18n/resources/wagoe/i18n/translations") "."
-    (fs/exists? "../boundary/libs/i18n/resources/wagoe/i18n/translations") "../boundary"
+    (fs/exists? "../wagoe/libs/i18n/resources/wagoe/i18n/translations") "../wagoe"
     :else nil))
 
 (defn- translations-dir []
-  (when-let [boundary-root (detect-boundary-root)]
-    (str boundary-root "/libs/i18n/resources/wagoe/i18n/translations")))
+  (when-let [wagoe-root (detect-wagoe-root)]
+    (str wagoe-root "/libs/i18n/resources/wagoe/i18n/translations")))
 
 (defn- ui-src-dirs []
-  (let [boundary-root (detect-boundary-root)
-        boundary-dirs (when boundary-root
-                        [(str boundary-root "/libs/user/src")
-                         (str boundary-root "/libs/admin/src")
-                         (str boundary-root "/libs/search/src")
-                         (str boundary-root "/libs/calendar/src")
-                         (str boundary-root "/libs/workflow/src")])]
-    (->> (concat ["src"] boundary-dirs)
+  (let [wagoe-root (detect-wagoe-root)
+        wagoe-dirs (when wagoe-root
+                        [(str wagoe-root "/libs/user/src")
+                         (str wagoe-root "/libs/admin/src")
+                         (str wagoe-root "/libs/search/src")
+                         (str wagoe-root "/libs/calendar/src")
+                         (str wagoe-root "/libs/workflow/src")])]
+    (->> (concat ["src"] wagoe-dirs)
          distinct
          (filter fs/exists?))))
 
@@ -72,7 +72,7 @@
     (when-not en
       (println "No Wagoe i18n catalogue found. Expected either:")
       (println "  libs/i18n/resources/wagoe/i18n/translations")
-      (println "  ../boundary/libs/i18n/resources/wagoe/i18n/translations")
+      (println "  ../wagoe/libs/i18n/resources/wagoe/i18n/translations")
       (System/exit 1))
     (println (str "=== Catalogue entries matching: " query " ==="))
     (doseq [[k v] (sort-by first en)

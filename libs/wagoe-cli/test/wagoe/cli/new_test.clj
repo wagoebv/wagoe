@@ -26,7 +26,7 @@
     (is (= "my_long_name" (new/name->ns "my-long-name")))))
 
 (deftest ^:integration generate-project-test
-  (let [tmp (str (System/getProperty "java.io.tmpdir") "/boundary-test-" (System/currentTimeMillis))]
+  (let [tmp (str (System/getProperty "java.io.tmpdir") "/wagoe-test-" (System/currentTimeMillis))]
     (try
       (testing "creates project directory"
         (new/generate! tmp "test-proj" {})
@@ -83,15 +83,15 @@
 
       (testing "sentinel comments are present in AGENTS.md"
         (let [content (slurp (io/file tmp "AGENTS.md"))]
-          (is (str/includes? content "<!-- boundary:available-modules -->"))
-          (is (str/includes? content "<!-- /boundary:available-modules -->"))
-          (is (str/includes? content "<!-- boundary:installed-modules -->"))
-          (is (str/includes? content "<!-- /boundary:installed-modules -->"))))
+          (is (str/includes? content "<!-- wagoe:available-modules -->"))
+          (is (str/includes? content "<!-- /wagoe:available-modules -->"))
+          (is (str/includes? content "<!-- wagoe:installed-modules -->"))
+          (is (str/includes? content "<!-- /wagoe:installed-modules -->"))))
 
-      (testing ".mcp.json wires the boundary MCP server via clojure -M:mcp"
+      (testing ".mcp.json wires the wagoe MCP server via clojure -M:mcp"
         (let [content (slurp (io/file tmp ".mcp.json"))]
           (is (str/includes? content "\"-M:mcp\""))
-          (is (str/includes? content "boundary"))
+          (is (str/includes? content "\"wagoe\""))
           (is (not (str/includes? content "{{")))))
 
       (testing "deps.edn has an :mcp alias with a resolved version"
@@ -100,8 +100,8 @@
           (is (str/includes? content "org.wagoe/wagoe-mcp"))
           (is (not (str/includes? content "{{wagoe-mcp-version}}")))))
 
-      (testing ":mcp alias lists mcp's full boundary closure"
-        ;; wagoe-mcp's pom now declares its full boundary closure, but the
+      (testing ":mcp alias lists mcp's full wagoe closure"
+        ;; wagoe-mcp's pom now declares its full wagoe closure, but the
         ;; alias still enumerates it so -M:mcp also resolves against currently
         ;; published poms (pre-alpha-43). If a closure lib silently disappears
         ;; from the template, -M:mcp would fail to resolve at runtime — guard it.
@@ -144,7 +144,7 @@
           "Sync check skipped: monorepo root (.claude-plugin/marketplace.json) not found"))))
 
 (deftest ^:integration directory-exists-test
-  (let [tmp (str (System/getProperty "java.io.tmpdir") "/boundary-exists-test")]
+  (let [tmp (str (System/getProperty "java.io.tmpdir") "/wagoe-exists-test")]
     (io/make-parents (io/file tmp "dummy.txt"))
     (spit (io/file tmp "dummy.txt") "x")
     (try
@@ -160,7 +160,7 @@
           (.delete f))))))
 
 (deftest ^:integration not-a-directory-test
-  (let [tmp (str (System/getProperty "java.io.tmpdir") "/boundary-file-test-" (System/currentTimeMillis))]
+  (let [tmp (str (System/getProperty "java.io.tmpdir") "/wagoe-file-test-" (System/currentTimeMillis))]
     (spit (io/file tmp) "x")
     (try
       (testing "existing regular file returns :not-a-dir"
@@ -169,7 +169,7 @@
         (.delete (io/file tmp))))))
 
 (deftest ^:unit git-bootstrap-test
-  (let [tmp (str (System/getProperty "java.io.tmpdir") "/boundary-git-test-" (System/currentTimeMillis))]
+  (let [tmp (str (System/getProperty "java.io.tmpdir") "/wagoe-git-test-" (System/currentTimeMillis))]
     (io/make-parents (io/file tmp "x"))
     (try
       (testing "a failing git runner is non-fatal and returns a warning"
@@ -190,7 +190,7 @@
         (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))
 
 (deftest ^:integration skip-git-test
-  (let [tmp (str (System/getProperty "java.io.tmpdir") "/boundary-skipgit-" (System/currentTimeMillis))]
+  (let [tmp (str (System/getProperty "java.io.tmpdir") "/wagoe-skipgit-" (System/currentTimeMillis))]
     (try
       (testing "real bootstrap creates a .git directory"
         (new/generate! tmp "gitproj" {})

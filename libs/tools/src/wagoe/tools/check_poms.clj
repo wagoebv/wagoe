@@ -6,18 +6,18 @@
 ;;
 ;; tools.build's `write-pom` omits `:local/root` deps from the generated pom, so
 ;; each lib's build.clj must feed write-pom a *rewritten* basis (produced by
-;; `build-shared/pom-basis`) that translates `boundary/<x> {:local/root ...}`
+;; `build-shared/pom-basis`) that translates `wagoe/<x> {:local/root ...}`
 ;; into the published `org.wagoe/wagoe-<x> {:mvn/version ...}` coord.
 ;;
-;; Without that rewrite a published lib's pom lists none of its boundary deps and
+;; Without that rewrite a published lib's pom lists none of its wagoe deps and
 ;; downstream consumers must hand-enumerate the whole closure (BOU-202).
 ;;
 ;; This gate is static (no tools.build / network): it guards the three regression
-;; modes that would silently drop boundary deps from a POM again —
+;; modes that would silently drop wagoe deps from a POM again —
 ;;   A. build_shared.clj loses the rewrite,
 ;;   B. a publishable build.clj feeds write-pom a basis not bound to pom-basis, or
-;;   C. a POM declares a boundary dep whose lib is not itself publishable.
-;; It also reports, per lib, the boundary closure that will land in its POM.
+;;   C. a POM declares a wagoe dep whose lib is not itself publishable.
+;; It also reports, per lib, the wagoe closure that will land in its POM.
 
 (ns wagoe.tools.check-poms
   (:require [clojure.edn :as edn]
@@ -40,13 +40,13 @@
            (sort-by first)))))
 
 (defn wagoe-dep->coord
-  "Published Maven coordinate symbol for a `boundary/<x>` dep symbol, mirroring
+  "Published Maven coordinate symbol for a `wagoe/<x>` dep symbol, mirroring
    `build-shared/rewrite-wagoe-deps`."
   [dep]
   (symbol "org.wagoe" (str "wagoe-" (name dep))))
 
 (defn wagoe-local-deps
-  "For every `boundary/<x> {:local/root ...}` dep in a lib's deps.edn, a map
+  "For every `wagoe/<x> {:local/root ...}` dep in a lib's deps.edn, a map
    {:dir <:local/root target dir name> :coord <published coord symbol>}, sorted
    by :dir. :dir is the authoritative publishable-lib key (the actual directory
    the dep resolves to); :coord is what build-shared/pom-basis emits into the
@@ -142,7 +142,7 @@
         violations     (filter :violation? results)
         unpublishable  (unpublishable-deps results)
         with-deps      (filter #(and (:publishable? %) (seq (:wagoe-deps %))) results)]
-    ;; Informational: the boundary closure each pom will declare.
+    ;; Informational: the wagoe closure each pom will declare.
     (when (seq with-deps)
       (println (ansi/dim "Wagoe dependencies each published POM will declare:"))
       (doseq [{:keys [lib wagoe-deps]} with-deps]
@@ -163,7 +163,7 @@
         (doseq [{:keys [lib]} violations]
           (println (str "  VIOLATION: " (ansi/red lib)
                         "/build.clj calls write-pom without build-shared/pom-basis"
-                        " — its boundary deps will be omitted from the published POM")))
+                        " — its wagoe deps will be omitted from the published POM")))
         (doseq [{:keys [lib dep]} unpublishable]
           (println (str "  VIOLATION: " (ansi/red lib) "'s POM declares " (ansi/red (str dep))
                         " but that lib is not publishable (no build.clj with write-pom+pom-basis)"

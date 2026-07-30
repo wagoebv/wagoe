@@ -12,9 +12,9 @@
      <!-- gen:fc-is -->               FC/IS rules
      <!-- gen:naming -->              case conventions
      <!-- gen:pitfalls -->            common pitfalls
-     <!-- boundary:available-modules -->  module table
+     <!-- wagoe:available-modules -->  module table
 
-   NOT synced (project state): <!-- boundary:installed-modules -->. Rows for
+   NOT synced (project state): <!-- wagoe:installed-modules -->. Rows for
    already-installed modules are re-removed from the refreshed available
    table, mirroring what `wagoe add` did at install time."
   (:require [clojure.java.io :as io]
@@ -22,7 +22,7 @@
             [wagoe.cli.templates :as templates]))
 
 (def ^:private synced-blocks
-  ["gen:fc-is" "gen:naming" "gen:pitfalls" "boundary:available-modules"])
+  ["gen:fc-is" "gen:naming" "gen:pitfalls" "wagoe:available-modules"])
 
 (def ^:private block-content templates/block-content)
 (def ^:private replace-block templates/replace-block)
@@ -31,7 +31,7 @@
   "Module names listed in the installed-modules block: lines like
    `- payments (`...`) — [docs](...)` or `- payments — [docs](...)`."
   [content]
-  (if-let [body (block-content content "boundary:installed-modules")]
+  (if-let [body (block-content content "wagoe:installed-modules")]
     (->> (str/split-lines body)
          (keep #(second (re-find #"^- ([a-z0-9-]+)[ (]" (str % " "))))
          set)
@@ -42,7 +42,7 @@
    ONLY — prose elsewhere mentioning `wagoe add <name>` is never touched.
    Keeps the rows removed that `wagoe add` removed at install time."
   [content installed]
-  (templates/update-block content "boundary:available-modules"
+  (templates/update-block content "wagoe:available-modules"
                           (fn [body]
                             (reduce (fn [b module-name]
                                       (str/replace b (templates/module-row-pattern module-name) ""))

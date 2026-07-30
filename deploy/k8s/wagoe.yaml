@@ -1,8 +1,8 @@
-# Example Kubernetes manifests for a Boundary application.
+# Example Kubernetes manifests for a Wagoe application.
 #
 # Demonstrates the web/worker split: one image, two Deployments — the `server`
 # Deployment serves HTTP behind a Service; the `worker` Deployment runs the same
-# image with the `worker` arg (no HTTP listener). Replace `REGISTRY/boundary:TAG`
+# image with the `worker` arg (no HTTP listener). Replace `REGISTRY/wagoe:TAG`
 # and the Secret/env values for your environment.
 #
 #   kubectl apply -f deploy/k8s/wagoe.yaml
@@ -35,19 +35,19 @@ data:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: boundary-server
-  labels: { app: boundary, role: server }
+  name: wagoe-server
+  labels: { app: wagoe, role: server }
 spec:
   replicas: 2
   selector:
-    matchLabels: { app: boundary, role: server }
+    matchLabels: { app: wagoe, role: server }
   template:
     metadata:
-      labels: { app: boundary, role: server }
+      labels: { app: wagoe, role: server }
     spec:
       containers:
-        - name: boundary
-          image: REGISTRY/boundary:TAG
+        - name: wagoe
+          image: REGISTRY/wagoe:TAG
           args: ["server"]
           ports:
             - containerPort: 3000
@@ -76,9 +76,9 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: boundary
+  name: wagoe
 spec:
-  selector: { app: boundary, role: server }
+  selector: { app: wagoe, role: server }
   ports:
     - port: 80
       targetPort: 3000
@@ -86,19 +86,19 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: boundary-worker
-  labels: { app: boundary, role: worker }
+  name: wagoe-worker
+  labels: { app: wagoe, role: worker }
 spec:
   replicas: 1
   selector:
-    matchLabels: { app: boundary, role: worker }
+    matchLabels: { app: wagoe, role: worker }
   template:
     metadata:
-      labels: { app: boundary, role: worker }
+      labels: { app: wagoe, role: worker }
     spec:
       containers:
-        - name: boundary
-          image: REGISTRY/boundary:TAG
+        - name: wagoe
+          image: REGISTRY/wagoe:TAG
           # Same image, worker mode — no HTTP listener, so no HTTP probes.
           args: ["worker"]
           envFrom:

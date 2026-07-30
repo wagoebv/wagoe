@@ -249,7 +249,7 @@
       (is (some #(str/includes? % "Dry run") (:warnings result))))))
 
 ;; =============================================================================
-;; generate-project command tests (boundary new)
+;; generate-project command tests (wagoe new)
 ;; =============================================================================
 
 (deftest ^:unit generate-project-test

@@ -5,7 +5,7 @@
             [clojure.string :as str]
             [wagoe.cli.add :as add]))
 
-(defn- make-boundary-project! [dir]
+(defn- make-wagoe-project! [dir]
   (io/make-parents (io/file dir "resources/conf/dev/config.edn"))
   (io/make-parents (io/file dir "resources/conf/test/config.edn"))
   (spit (io/file dir "deps.edn")
@@ -15,28 +15,28 @@
   (spit (io/file dir "resources/conf/test/config.edn")
         "{\n :active\n {\n }\n\n :inactive\n {}\n}")
   (spit (io/file dir "AGENTS.md")
-        "# Test\n<!-- boundary:available-modules -->\n| payments | desc | wagoe add payments |\n<!-- /boundary:available-modules -->\n<!-- boundary:installed-modules -->\n- core\n<!-- /boundary:installed-modules -->\n"))
+        "# Test\n<!-- wagoe:available-modules -->\n| payments | desc | wagoe add payments |\n<!-- /wagoe:available-modules -->\n<!-- wagoe:installed-modules -->\n- core\n<!-- /wagoe:installed-modules -->\n"))
 
-(deftest ^:integration boundary-project-detection-test
-  (let [tmp (str (System/getProperty "java.io.tmpdir") "/boundary-add-detect-" (System/currentTimeMillis))]
+(deftest ^:integration wagoe-project-detection-test
+  (let [tmp (str (System/getProperty "java.io.tmpdir") "/wagoe-add-detect-" (System/currentTimeMillis))]
     (try
-      (testing "detects a boundary project by deps.edn content"
-        (make-boundary-project! tmp)
-        (is (add/boundary-project? tmp)))
+      (testing "detects a wagoe project by deps.edn content"
+        (make-wagoe-project! tmp)
+        (is (add/wagoe-project? tmp)))
 
-      (testing "returns false for non-boundary project"
+      (testing "returns false for non-wagoe project"
         (let [other (str tmp "-other")]
           (io/make-parents (io/file other "deps.edn"))
           (spit (io/file other "deps.edn") "{:deps {}}")
-          (is (not (add/boundary-project? other)))
+          (is (not (add/wagoe-project? other)))
           (doseq [f (reverse (file-seq (io/file other)))] (.delete f))))
       (finally
         (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))
 
 (deftest ^:integration patch-deps-test
-  (let [tmp (str (System/getProperty "java.io.tmpdir") "/boundary-add-deps-" (System/currentTimeMillis))]
+  (let [tmp (str (System/getProperty "java.io.tmpdir") "/wagoe-add-deps-" (System/currentTimeMillis))]
     (try
-      (make-boundary-project! tmp)
+      (make-wagoe-project! tmp)
       (testing "adds module coordinate to deps.edn"
         (add/patch-deps! tmp {:clojars 'org.wagoe/wagoe-payments :version "1.0.0"})
         (let [content (slurp (io/file tmp "deps.edn"))]
@@ -51,9 +51,9 @@
         (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))
 
 (deftest ^:integration patch-config-test
-  (let [tmp (str (System/getProperty "java.io.tmpdir") "/boundary-add-cfg-" (System/currentTimeMillis))]
+  (let [tmp (str (System/getProperty "java.io.tmpdir") "/wagoe-add-cfg-" (System/currentTimeMillis))]
     (try
-      (make-boundary-project! tmp)
+      (make-wagoe-project! tmp)
       (testing "injects config-snippet into dev config"
         (add/patch-config! tmp "resources/conf/dev/config.edn"
                            "  :wagoe/payment-provider\n  {:provider :mock}\n")
@@ -71,9 +71,9 @@
         (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))
 
 (deftest ^:integration email-writes-smtp-to-test-config-test
-  (let [tmp (str (System/getProperty "java.io.tmpdir") "/boundary-add-email-" (System/currentTimeMillis))]
+  (let [tmp (str (System/getProperty "java.io.tmpdir") "/wagoe-add-email-" (System/currentTimeMillis))]
     (try
-      (make-boundary-project! tmp)
+      (make-wagoe-project! tmp)
       (testing "wagoe add email patches test/config.edn with :wagoe.external/smtp"
         (add/patch-config! tmp "resources/conf/test/config.edn"
                            "  :wagoe.external/smtp\n  {:host \"localhost\" :port 1025 :tls? false :from \"test@localhost\"}\n")
@@ -91,9 +91,9 @@
         (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))
 
 (deftest ^:integration patch-agents-md-test
-  (let [tmp (str (System/getProperty "java.io.tmpdir") "/boundary-add-agents-" (System/currentTimeMillis))]
+  (let [tmp (str (System/getProperty "java.io.tmpdir") "/wagoe-add-agents-" (System/currentTimeMillis))]
     (try
-      (make-boundary-project! tmp)
+      (make-wagoe-project! tmp)
       (testing "removes module from available block"
         (add/patch-agents-md! tmp {:name "payments" :docs-url "http://example.com"})
         (let [content (slurp (io/file tmp "AGENTS.md"))]

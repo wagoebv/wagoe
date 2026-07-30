@@ -11,12 +11,12 @@
        "middle\n"
        "<!-- gen:naming -->\nNEW naming\n<!-- /gen:naming -->\n"
        "<!-- gen:pitfalls -->\nNEW pitfalls: never run `wagoe add payments` twice\n<!-- /gen:pitfalls -->\n"
-       "<!-- boundary:available-modules -->\n"
+       "<!-- wagoe:available-modules -->\n"
        "| payments   | PSP abstraction | wagoe add payments |\n"
        "| search     | Full-text       | wagoe add search   |\n"
        "| geo        | Geocoding (new) | wagoe add geo      |\n"
-       "<!-- /boundary:available-modules -->\n"
-       "<!-- boundary:installed-modules -->\n- core\n<!-- /boundary:installed-modules -->\n"))
+       "<!-- /wagoe:available-modules -->\n"
+       "<!-- wagoe:installed-modules -->\n- core\n<!-- /wagoe:installed-modules -->\n"))
 
 (def ^:private project-agents
   (str "# shop — Developer Reference\n"
@@ -26,13 +26,13 @@
        "## My custom team notes\ndo not lose this\n"
        "<!-- gen:naming -->\nOLD naming\n<!-- /gen:naming -->\n"
        "<!-- gen:pitfalls -->\nOLD pitfalls\n<!-- /gen:pitfalls -->\n"
-       "<!-- boundary:available-modules -->\n"
+       "<!-- wagoe:available-modules -->\n"
        "| search     | Full-text       | wagoe add search   |\n"
-       "<!-- /boundary:available-modules -->\n"
-       "<!-- boundary:installed-modules -->\n"
+       "<!-- /wagoe:available-modules -->\n"
+       "<!-- wagoe:installed-modules -->\n"
        "- core\n"
        "- payments (`org.wagoe/wagoe-payments`) — [docs](https://x)\n"
-       "<!-- /boundary:installed-modules -->\n"))
+       "<!-- /wagoe:installed-modules -->\n"))
 
 (def ^:private substitutions {:project-name "shop" :project-ns "shop"})
 
@@ -43,7 +43,7 @@
       (is (str/includes? content "NEW naming"))
       (is (str/includes? content "wagoe add geo")
           "a module added to the framework since generation appears after update")
-      (is (= ["gen:fc-is" "gen:naming" "gen:pitfalls" "boundary:available-modules"] updated)))
+      (is (= ["gen:fc-is" "gen:naming" "gen:pitfalls" "wagoe:available-modules"] updated)))
     (testing "no markers are missing in a generated project"
       (is (empty? missing)))))
 
@@ -70,7 +70,7 @@
   (let [no-markers "# shop — Developer Reference\nhand-rolled file\n"
         {:keys [content missing]} (agents-update/update-agents-content no-markers template substitutions)]
     (is (= content no-markers))
-    (is (= ["gen:fc-is" "gen:naming" "gen:pitfalls" "boundary:available-modules"] missing))))
+    (is (= ["gen:fc-is" "gen:naming" "gen:pitfalls" "wagoe:available-modules"] missing))))
 
 (deftest ^:unit duplicated-markers-touch-first-pair-only-test
   (let [doubled (str project-agents
