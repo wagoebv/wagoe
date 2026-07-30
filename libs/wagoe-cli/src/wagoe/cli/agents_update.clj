@@ -107,7 +107,7 @@
 
           check?
           (do (println (str "AGENTS.md is out of date. Stale blocks: " (str/join ", " updated)))
-              (println "Run `boundary agents update` (or `bb agents:update`) to refresh.")
+              (println "Run `wagoe agents update` (or `bb agents:update`) to refresh.")
               (System/exit 1))
 
           :else

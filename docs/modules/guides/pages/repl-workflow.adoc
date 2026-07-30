@@ -9,7 +9,7 @@ Wagoe is designed for REPL-driven development. The nREPL server runs on port 788
 ----
 export JWT_SECRET="change-me-dev-secret-min-32-chars"
 export WAG_ENV="development"
-clojure -M:repl
+clojure -M:repl-clj
 ----
 
 This starts a headless nREPL server on port 7888. Connect your editor (or the

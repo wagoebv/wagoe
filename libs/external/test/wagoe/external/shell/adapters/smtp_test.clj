@@ -144,10 +144,10 @@
 (deftest ^:unit build-mime-message-message-id-already-bracketed-test
   (testing "an already-bracketed :message-id is used verbatim"
     (let [email {:to "dest@example.com" :subject "Invoice" :body "B"
-                 :message-id "<abc@boundary>"}
+                 :message-id "<abc@wagoe>"}
           msg   (doto (#'smtp/build-mime-message (test-session) email "from@example.com")
                   (.saveChanges))]
-      (is (= "<abc@boundary>" (.getMessageID msg))))))
+      (is (= "<abc@wagoe>" (.getMessageID msg))))))
 
 (deftest ^:unit build-mime-message-default-message-id-test
   (testing "no :message-id -> javax.mail generates one (unchanged default)"

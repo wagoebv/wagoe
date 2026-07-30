@@ -7,10 +7,10 @@
    - cli: Run CLI commands
 
    Usage:
-     java -jar boundary-standalone.jar              # Start HTTP server
-     java -jar boundary-standalone.jar server       # Start HTTP server explicitly
-     java -jar boundary-standalone.jar worker       # Start a background worker
-     java -jar boundary-standalone.jar cli [args]   # Run CLI commands"
+     java -jar wagoe-standalone.jar              # Start HTTP server
+     java -jar wagoe-standalone.jar server       # Start HTTP server explicitly
+     java -jar wagoe-standalone.jar worker       # Start a background worker
+     java -jar wagoe-standalone.jar cli [args]   # Run CLI commands"
   (:require [wagoe.config :as config]
             [wagoe.platform.shell.system.wiring] ; Required for Integrant init functions
             ;; Load feature modules' Integrant init/halt methods at the app layer

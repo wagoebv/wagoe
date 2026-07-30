@@ -1,4 +1,4 @@
--- Boundary Conjure configuration
+-- Wagoe Conjure configuration
 -- Add to your init.lua or init.vim:
 --
 -- vim.g["conjure#client#clojure#nrepl#connection#auto_repl#enabled"] = true

@@ -116,7 +116,7 @@
                                 :pitfall-surface :framework})]
     (is (str/includes? out "| Location | Convention"))
     (is (str/includes? out "Shell → Core"))
-    (is (not (str/includes? out "boundary:")))))
+    (is (not (str/includes? out "wagoe:")))))
 
 (deftest drifted-files-detects-mismatch
   (is (empty? (gen/drifted-files [{:file "A" :current "x" :rendered "x"}])))

@@ -1,5 +1,5 @@
 #
-# Boundary Framework - Docker Compose Configuration
+# Wagoe Framework - Docker Compose Configuration
 # Enhanced with intelligent port management and development optimization
 #
 
@@ -99,7 +99,7 @@ services:
     volumes:
       - .:/app:ro
       - /app/node_modules
-      - boundary_docs:/app/resources/public/docs
+      - wagoe_docs:/app/resources/public/docs
     networks:
       - wagoe-network
     profiles:
@@ -109,7 +109,7 @@ services:
   # Development Tools Container (Optional)
   dev-tools:
     image: clojure:openjdk-17-tools-deps
-    container_name: boundary-dev-tools
+    container_name: wagoe-dev-tools
     working_dir: /app
     command: tail -f /dev/null  # Keep container running
     environment:
@@ -120,8 +120,8 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
     volumes:
       - .:/app
-      - boundary_m2_cache:/root/.m2
-      - boundary_clj_cache:/root/.clojure
+      - wagoe_m2_cache:/root/.m2
+      - wagoe_clj_cache:/root/.clojure
     networks:
       - wagoe-network
     profiles:
@@ -142,12 +142,12 @@ volumes:
   wagoe_logs:
     name: wagoe_logs
     driver: local
-  boundary_docs:
-    name: boundary_docs
+  wagoe_docs:
+    name: wagoe_docs
     driver: local
-  boundary_m2_cache:
-    name: boundary_m2_cache
+  wagoe_m2_cache:
+    name: wagoe_m2_cache
     driver: local
-  boundary_clj_cache:
-    name: boundary_clj_cache
+  wagoe_clj_cache:
+    name: wagoe_clj_cache
     driver: local

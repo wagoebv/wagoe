@@ -97,7 +97,7 @@
 
  :user/page-created-title       "Account aangemaakt"
  :user/page-created-heading     "Account succesvol aangemaakt!"
- :user/page-created-welcome     "Welkom bij Boundary, {name}!"
+ :user/page-created-welcome     "Welkom bij Wagoe, {name}!"
  :user/page-created-details-intro "Uw account is aangemaakt met de volgende gegevens:"
  :user/page-created-signin-prompt "U kunt nu inloggen met uw e-mailadres en wachtwoord."
 
@@ -171,7 +171,7 @@
 
  :user/page-dashboard-title    "Dashboard"
  :user/dashboard-welcome       "Welkom, {name}"
- :user/dashboard-subtitle      "U bent ingelogd op Boundary Framework"
+ :user/dashboard-subtitle      "U bent ingelogd op Wagoe Framework"
  :user/stat-member-since       "Lid sinds"
  :user/stat-total-logins       "Totaal aanmeldingen"
  :user/stat-last-login         "Laatste aanmelding"
@@ -189,7 +189,7 @@
  :user/button-admin-panel                 "Naar admin"
 
  :user/page-welcome-title      "Welkom"
- :user/page-welcome-heading    "Welkom bij Boundary"
+ :user/page-welcome-heading    "Welkom bij Wagoe"
  :user/page-welcome-description "Uw gebruikers, sessies en audittrail."
 
  ;; Profiel
@@ -513,4 +513,4 @@
                                          :many "{count} overgangen geregistreerd"}
 
  ;; Branding — override in app-specific translations (e.g. :wagoe/app-name "MijnApp")
- :wagoe/app-name "Boundary"}
+ :wagoe/app-name "Wagoe"}

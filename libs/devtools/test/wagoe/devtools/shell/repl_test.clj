@@ -18,7 +18,7 @@
   (testing "extracts platform module from a deeper handler path"
     (is (= "platform" (repl/extract-module "wagoe.platform.shell.interfaces.http.common/health-check-handler"))))
 
-  (testing "returns nil for non-boundary handler"
+  (testing "returns nil for non-wagoe handler"
     (is (nil? (repl/extract-module "some.other/handler"))))
 
   (testing "returns nil for nil input"

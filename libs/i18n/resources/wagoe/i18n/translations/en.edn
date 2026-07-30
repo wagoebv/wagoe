@@ -97,7 +97,7 @@
 
  :user/page-created-title       "Account Created"
  :user/page-created-heading     "Account Created Successfully!"
- :user/page-created-welcome     "Welcome to Boundary, {name}!"
+ :user/page-created-welcome     "Welcome to Wagoe, {name}!"
  :user/page-created-details-intro "Your account has been created with the following details:"
  :user/page-created-signin-prompt "You can now sign in with your email and password."
 
@@ -171,7 +171,7 @@
 
  :user/page-dashboard-title    "Dashboard"
  :user/dashboard-welcome       "Welcome, {name}"
- :user/dashboard-subtitle      "You're logged into Boundary Framework"
+ :user/dashboard-subtitle      "You're logged into Wagoe Framework"
  :user/stat-member-since       "Member since"
  :user/stat-total-logins       "Total logins"
  :user/stat-last-login         "Last login"
@@ -189,7 +189,7 @@
  :user/button-admin-panel                 "Go to Admin Panel"
 
  :user/page-welcome-title      "Welcome"
- :user/page-welcome-heading    "Welcome to Boundary"
+ :user/page-welcome-heading    "Welcome to Wagoe"
  :user/page-welcome-description "Manage your users, sessions and audit trail."
 
  ;; Profile
@@ -513,4 +513,4 @@
                                          :many "{count} transitions recorded"}
 
  ;; Branding — override in app-specific translations (e.g. :wagoe/app-name "MyApp")
- :wagoe/app-name "Boundary"}
+ :wagoe/app-name "Wagoe"}

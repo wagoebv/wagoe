@@ -1456,7 +1456,7 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s;
      port-name - Port protocol name (e.g., \"ICache\")
      adapter-name - Adapter name (e.g., \"redis\")
      methods - Vector of method specs [{:name \"get-value\" :args [\"key\"]}]
-     base-ns - Optional base namespace (default \"boundary\")
+     base-ns - Optional base namespace (default \"wagoe\")
 
    Returns:
      String content for adapter.clj file

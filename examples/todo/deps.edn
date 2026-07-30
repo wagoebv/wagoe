@@ -2,7 +2,7 @@
 
  :deps  {org.clojure/clojure                {:mvn/version "1.12.5"}
 
-         ;; Boundary core — pulled straight from this repository via :local/root,
+         ;; Wagoe core — pulled straight from this repository via :local/root,
          ;; so the example runs against the checked-out source with no publish
          ;; step. In a real project you would use the published coordinate:
          ;;   org.wagoe/wagoe-core {:mvn/version "1.0.0-beta-1"}

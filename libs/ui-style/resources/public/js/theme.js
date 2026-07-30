@@ -18,7 +18,7 @@ const ThemeManager = (() => {
   // Constants
   // ============================================================================
   
-  const STORAGE_KEY = 'boundary-theme';
+  const STORAGE_KEY = 'wagoe-theme';
   const THEME_ATTR = 'data-theme';
   const THEMES = {
     LIGHT: 'light',

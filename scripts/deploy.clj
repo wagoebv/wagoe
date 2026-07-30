@@ -82,7 +82,7 @@
 (defn lib-dir [lib]
   (str (io/file root-dir "libs" lib)))
 
-;; Publish order — topological sort of all-libs by deps.edn boundary deps.
+;; Publish order — topological sort of all-libs by deps.edn wagoe deps.
 ;; Mirrors wagoe.tools.deploy (canonical); both derive the same order.
 (defn wagoe-dep-dirs [lib]
   (map :dir (check-poms/wagoe-local-deps (io/file (lib-dir lib)))))
@@ -113,14 +113,14 @@
 (defn artifact-name
   "Clojars artifact id for a lib, read from its build.clj coordinate
    `(def lib 'org.wagoe/<artifact>)`. Reading the coordinate (rather than
-   string-prefixing) avoids a double `boundary-` for libs whose dir already starts
-   with it (e.g. wagoe-cli → wagoe-cli, not boundary-wagoe-cli). Falls
-   back to `boundary-<lib>` when build.clj is unreadable."
+   string-prefixing) avoids a double `wagoe-` for libs whose dir already starts
+   with it (e.g. wagoe-cli → wagoe-cli, not wagoe-wagoe-cli). Falls
+   back to `wagoe-<lib>` when build.clj is unreadable."
   [lib]
   (let [build-file (io/file (lib-dir lib) "build.clj")]
     (or (when (.exists build-file)
           (second (re-find #"\(def lib '[^/]+/([^\)\s]+)" (slurp build-file))))
-        (str "boundary-" lib))))
+        (str "wagoe-" lib))))
 
 (defn published? [lib]
   (let [version  (read-version lib)

@@ -17,7 +17,7 @@
                       :connection "scm:git:git://github.com/wagoebv/wagoe.git"
                       :developerConnection "scm:git:ssh://git@github.com/wagoebv/wagoe.git"
                       :tag version}
-                :pom-data [[:description "boundary CLI — project generator and module installer"]
+                :pom-data [[:description "wagoe CLI — project generator and module installer"]
                            [:url "https://github.com/wagoebv/wagoe"]
                            [:licenses [:license
                                        [:name "Eclipse Public License 2.0"]

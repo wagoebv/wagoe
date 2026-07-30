@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Boundary Framework installer
+# Wagoe Framework installer
 # Usage: curl -fsSL https://get.wagoe.com | bash
 # Fallback: curl -fsSL https://raw.githubusercontent.com/wagoebv/wagoe/main/scripts/install.sh | bash
 
@@ -11,7 +11,7 @@ fail() { echo -e "${RED}✗${RESET} $1"; exit 1; }
 info() { echo -e "${DIM}  $1${RESET}"; }
 
 echo ""
-echo "━━━ Boundary Framework Installer ━━━━━━━━━━━━━━━━━━━━━"
+echo "━━━ Wagoe Framework Installer ━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
 # ── Detect OS ────────────────────────────────────────────────
@@ -24,7 +24,7 @@ elif [[ -f /etc/debian_version ]]; then
 elif [[ -f /etc/arch-release ]]; then
   OS="arch"
 else
-  fail "Unsupported OS. Boundary supports macOS, Debian/Ubuntu, Arch, and WSL2.
+  fail "Unsupported OS. Wagoe supports macOS, Debian/Ubuntu, Arch, and WSL2.
   Windows users: install WSL2 first — https://learn.microsoft.com/en-us/windows/wsl/install"
 fi
 ok "Detected OS: $OS"

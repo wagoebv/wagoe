@@ -3,7 +3,7 @@
          org.wagoe/wagoe-observability {:mvn/version "{{observability-version}}"}
          org.wagoe/wagoe-platform      {:mvn/version "{{platform-version}}"}
          org.wagoe/wagoe-user          {:mvn/version "{{user-version}}"}
-         ;; Required by boundary-platform's system wiring (unconditional module loads)
+         ;; Required by wagoe-platform's system wiring (unconditional module loads)
          org.wagoe/wagoe-cache         {:mvn/version "{{cache-version}}"}
          org.wagoe/wagoe-admin         {:mvn/version "{{admin-version}}"}
          org.wagoe/wagoe-ui-style      {:mvn/version "{{ui-style-version}}"}
@@ -36,7 +36,7 @@
   ;; Wagoe MCP server for editor agents (Claude Code / Cursor). Kept in an
   ;; alias — NOT in :deps — so the app runtime never pulls the MCP server.
   ;; Launched by .mcp.json via `clojure -M:mcp`. wagoe-mcp's pom now declares
-  ;; its full boundary closure (ai, devtools, scaffolder, tools, jobs via
+  ;; its full wagoe closure (ai, devtools, scaffolder, tools, jobs via
   ;; devtools), so once alpha-43+ poms are published this can be reduced to just
   ;; wagoe-mcp. The closure is enumerated explicitly for now so `-M:mcp` also
   ;; resolves against the current published poms.

@@ -52,7 +52,7 @@ docs-site/.hugo_build.lock
 existing-dir/
 .worktrees
 
-# Boundary devtools recordings (but keep the committed check:* allowlists)
+# Wagoe devtools recordings (but keep the committed check:* allowlists)
 .wagoe/*
 !.wagoe/check-fcis.edn
 !.wagoe/check-ports.edn

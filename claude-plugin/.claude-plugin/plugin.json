@@ -1,6 +1,6 @@
 {
-  "name": "boundary",
-  "description": "Boundary framework toolkit for agentic CLIs: scaffold FC/IS modules, explain errors, generate tests, SQL copilot, and project setup via bb tasks.",
+  "name": "wagoe",
+  "description": "Wagoe framework toolkit for agentic CLIs: scaffold FC/IS modules, explain errors, generate tests, SQL copilot, and project setup via bb tasks.",
   "author": {
     "name": "Thijs Creemers"
   },

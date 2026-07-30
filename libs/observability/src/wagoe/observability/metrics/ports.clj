@@ -89,7 +89,7 @@
        [{:name :http.requests
          :type :counter
          :description 'HTTP requests received'
-         :tags {:service 'boundary'}
+         :tags {:service 'wagoe'}
          :handle ...}]")
 
   (get-metric [this name]

@@ -366,7 +366,7 @@
 ;; =============================================================================
 
 (deftest ^:unit base-ns-parameterizes-module-namespaces
-  (testing "default base-ns is boundary (behavior unchanged)"
+  (testing "default base-ns is wagoe (behavior unchanged)"
     (is (str/includes? (gen/generate-schema-file base-ctx) "(ns wagoe.product.schema"))
     (is (str/includes? (gen/generate-service-file base-ctx) "(ns wagoe.product.shell.service"))
     (is (str/includes? (gen/generate-service-file base-ctx) "[wagoe.product.ports")))

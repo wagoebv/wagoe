@@ -6,7 +6,7 @@
             [migratus.core :as migratus]))
 
 (defn- with-temp-dir [f]
-  (let [dir (.toFile (java.nio.file.Files/createTempDirectory "boundary-migrations-test"
+  (let [dir (.toFile (java.nio.file.Files/createTempDirectory "wagoe-migrations-test"
                                                               (make-array java.nio.file.attribute.FileAttribute 0)))]
     (try
       (f dir)

@@ -1169,8 +1169,8 @@
   []
   [:script
    "(() => {
-      if (window.__boundaryAuditModalInit) return;
-      window.__boundaryAuditModalInit = true;
+      if (window.__wagoeAuditModalInit) return;
+      window.__wagoeAuditModalInit = true;
       document.addEventListener('click', (event) => {
         const trigger = event.target.closest('.audit-detail-trigger');
         if (!trigger) return;

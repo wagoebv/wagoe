@@ -1,5 +1,5 @@
 name: Bug report
-description: Report a defect in the Boundary Framework
+description: Report a defect in the Wagoe Framework
 labels: ["Bug"]
 body:
   - type: markdown
@@ -19,9 +19,9 @@ body:
     id: repro
     attributes:
       label: Steps to reproduce
-      description: Minimal steps. A failing snippet or `boundary new` command is ideal.
+      description: Minimal steps. A failing snippet or `wagoe new` command is ideal.
       placeholder: |
-        1. boundary new my-app
+        1. wagoe new my-app
         2. cd my-app
         3. bb quickstart
     validations:
@@ -29,8 +29,8 @@ body:
   - type: input
     id: version
     attributes:
-      label: Boundary version
-      description: Output of `boundary version`, or the library suite version from deps.edn.
+      label: Wagoe version
+      description: Output of `wagoe version`, or the library suite version from deps.edn.
       placeholder: 1.0.1-alpha-42
     validations:
       required: true

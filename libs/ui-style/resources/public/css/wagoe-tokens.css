@@ -1,11 +1,11 @@
 /* =============================================================================
-   Boundary Framework - Design Token Contract
+   Wagoe Framework - Design Token Contract
    "wagoe-tokens.css" — self-contained, no external dependencies
 
    PURPOSE:
    This file is the stable theming API contract that all component CSS
    (app.css, admin.css, etc.) is written against. It defines neutral,
-   professional defaults using the original Boundary navy/green palette.
+   professional defaults using the original Wagoe navy/green palette.
 
    LOADING ORDER:
    1. pico.min.css          (CSS reset / base styles)
@@ -26,7 +26,7 @@
      ============================================================================ */
 
   /* --------------------------------------------------------------------------
-     Primary brand color — Navy (Boundary brand guide: Core #1E3A5F)
+     Primary brand color — Navy (Wagoe brand guide: Core #1E3A5F)
      Override for your brand.
      -------------------------------------------------------------------------- */
   --color-primary: #1E3A5F;
@@ -48,7 +48,7 @@
   --color-primary-rgb: 30 58 95;
 
   /* --------------------------------------------------------------------------
-     Accent / secondary brand color — Forest Green (Boundary brand: Shell #3A7F3F)
+     Accent / secondary brand color — Forest Green (Wagoe brand: Shell #3A7F3F)
      -------------------------------------------------------------------------- */
   --color-accent: #3A7F3F;
   --color-accent-hover: #4a9f4f;

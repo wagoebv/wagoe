@@ -1,6 +1,6 @@
 #!/usr/bin/env zsh
 
-# Script to create 10 random users and retrieve them using the Boundary API
+# Script to create 10 random users and retrieve them using the Wagoe API
 # This assumes the HTTP server is already running
 
 set -e
@@ -15,7 +15,7 @@ if [ -z "$ADMIN_EMAIL" ] || [ -z "$ADMIN_PASSWORD" ]; then
   exit 1
 fi
 
-COOKIES_FILE="${COOKIES_FILE:-/tmp/boundary-random-users.cookies}"
+COOKIES_FILE="${COOKIES_FILE:-/tmp/wagoe-random-users.cookies}"
 
 echo "========================================="
 echo "Creating 10 Random Users"

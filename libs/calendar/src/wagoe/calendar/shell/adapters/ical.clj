@@ -1,7 +1,7 @@
 (ns wagoe.calendar.shell.adapters.ical
   "ical4j 4.x adapter implementing CalendarAdapterProtocol.
 
-   Converts boundary EventData maps ↔ RFC 5545 VCALENDAR strings using
+   Converts wagoe EventData maps ↔ RFC 5545 VCALENDAR strings using
    net.fortuna.ical4j 4.x. VEvents are built with ZonedDateTime so that
    TZID parameters are correctly emitted and preserved in round-trips.
 

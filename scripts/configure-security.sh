@@ -1,5 +1,5 @@
 #!/bin/bash
-# configure-security.sh - Automated security configuration for Boundary Framework
+# configure-security.sh - Automated security configuration for Wagoe Framework
 #
 # This script configures GitHub repository security settings to ensure
 # only the maintainer can merge PRs and publish releases.
@@ -21,12 +21,12 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Configuration
-REPO_OWNER="thijs-creemers"
-REPO_NAME="boundary"
+REPO_OWNER="wagoebv"
+REPO_NAME="wagoe"
 BRANCH_NAME="main"
 
 echo -e "${BLUE}========================================${NC}"
-echo -e "${BLUE}Boundary Framework Security Setup${NC}"
+echo -e "${BLUE}Wagoe Framework Security Setup${NC}"
 echo -e "${BLUE}========================================${NC}"
 echo ""
 

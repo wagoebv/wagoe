@@ -13,7 +13,7 @@
                  :task (apply scaffold/-main "ai" *command-line-args*)}
   ai            {:doc "Framework-aware AI tooling (explain|gen-tests|sql|docs)"
                  :task (apply ai/-main *command-line-args*)}
-  deploy        {:doc "Deploy Boundary libraries to Clojars (--help for usage)"
+  deploy        {:doc "Deploy Wagoe libraries to Clojars (--help for usage)"
                  :task (apply deploy/-main *command-line-args*)}
   create-admin  {:doc "Create the first admin user (interactive wizard)"
                  :task (apply admin/-main *command-line-args*)}

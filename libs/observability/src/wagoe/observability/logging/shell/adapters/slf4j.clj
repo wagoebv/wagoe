@@ -69,8 +69,8 @@
    
    Pure: No (mutates MDC thread-local state)"
   [context]
-  (doseq [[boundary-key mdc-key] mdc-key-mapping]
-    (when-let [value (get context boundary-key)]
+  (doseq [[wagoe-key mdc-key] mdc-key-mapping]
+    (when-let [value (get context wagoe-key)]
       (MDC/put mdc-key (str value))))
 
   ;; Handle tags map
@@ -356,7 +356,7 @@
      config - Configuration map with keys:
               :provider - Should be :slf4j
               :level - Minimum log level (default :info)
-              :logger-name - SLF4J logger name (default \"boundary\")
+              :logger-name - SLF4J logger name (default \"wagoe\")
               :default-tags - Map of default context tags
    
    Returns:

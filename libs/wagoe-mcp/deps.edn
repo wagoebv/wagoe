@@ -15,7 +15,7 @@
         ;; Runtime clj-kondo for the `lint` tool (structured findings).
         clj-kondo/clj-kondo       {:mvn/version "2026.04.15"}
         ;; Tier 1 generate tools (BOU-101): the scaffolder service does the
-        ;; codegen; boundary/tools supplies the FC/IS per-file checker the
+        ;; codegen; wagoe/tools supplies the FC/IS per-file checker the
         ;; closed verify loop reuses. Both are dev tooling — the MCP server is
         ;; itself dev tooling, so the coupling is acceptable.
         wagoe/scaffolder       {:local/root "../scaffolder"}

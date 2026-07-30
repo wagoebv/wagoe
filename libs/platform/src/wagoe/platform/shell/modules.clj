@@ -57,7 +57,7 @@
     args: raw CLI arguments vector
 
   CLI convention:
-    boundary <module> <command> [options]
+    wagoe <module> <command> [options]
 
   - <module> is a keyword name like user or billing.
   - If <module> is omitted, and only one enabled module exists, that module

@@ -79,7 +79,7 @@
 
   <!-- Logger configurations by package -->
   
-  <!-- Boundary application logging -->
+  <!-- Wagoe application logging -->
   <logger name="wagoe" level="INFO" additivity="false">
     <appender-ref ref="ASYNC_CONSOLE" />
     <appender-ref ref="ASYNC_FILE" />

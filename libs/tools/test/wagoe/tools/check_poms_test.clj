@@ -31,7 +31,7 @@
     (spit-file dir "deps.edn"
                (pr-str {:deps {'wagoe/core     {:local/root "../core"}
                                'wagoe/platform {:local/root "../platform"}
-                               ;; already-published boundary coord — not local/root, ignored
+                               ;; already-published wagoe coord — not local/root, ignored
                                'org.wagoe/wagoe-i18n {:mvn/version "1.0.0"}
                                ;; third-party mvn dep — ignored
                                'ring/ring-core    {:mvn/version "1.15.4"}}}))
@@ -120,7 +120,7 @@
   (let [dir (tmp-dir)
         f   (spit-file dir "build_shared.clj"
                        "(defn pom-basis [version]
-                          ;; rewrites boundary/<x> :local/root -> org.wagoe coords
+                          ;; rewrites wagoe/<x> :local/root -> org.wagoe coords
                           (symbol \"org.wagoe\" ...))")]
     (is (empty? (poms/check-build-shared f)))))
 

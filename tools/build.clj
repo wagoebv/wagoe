@@ -12,7 +12,7 @@
             [clojure.java.io :as io]))
 
 (def version "0.1.0-SNAPSHOT")
-(def group-id "boundary")
+(def group-id "org.wagoe")
 (def libraries 
   ["core" "observability" "platform" "user" "admin" "storage" "external" "scaffolder"])
 

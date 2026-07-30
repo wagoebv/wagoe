@@ -63,7 +63,7 @@
              (map #(cond (symbol? %) (str %) (vector? %) (str (first %)) :else nil))
              (remove nil?))))))
 
-(defn- ns->boundary-lib
+(defn- ns->wagoe-lib
   "Given a namespace string like 'wagoe.user.core.foo', extract the library
    name 'user'. Returns nil for non-boundary namespaces.
    Maps wagoe.shared.* to 'shared-ui' (those namespaces live in libs/shared-ui/src/)."
@@ -94,8 +94,8 @@
    'cli' that the library's own sources actually use under wagoe.<segment>.*.
    Returns nil for libs whose dir name equals their namespace segment."
   [lib-name]
-  (when (str/starts-with? lib-name "boundary-")
-    (subs lib-name (count "boundary-"))))
+  (when (str/starts-with? lib-name "wagoe-")
+    (subs lib-name (count "wagoe-"))))
 
 (defn- build-actual-graph
   "Build adjacency map from source :requires: {lib-name -> #{dep-lib-names}}."
@@ -108,7 +108,7 @@
                                    (mapcat (fn [f]
                                              (let [ns-form (parsing/read-ns-form f)]
                                                (extract-required-ns ns-form))))
-                                   (keep ns->boundary-lib)
+                                   (keep ns->wagoe-lib)
                                    (remove #(or (= % lib-name) (= % ns-prefix)))
                                    (set))]
                  [lib-name dep-libs]))

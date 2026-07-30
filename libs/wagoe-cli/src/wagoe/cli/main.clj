@@ -1,15 +1,15 @@
 (ns wagoe.cli.main)
 
 (defn- usage []
-  (println "boundary — Wagoe Framework project tool")
+  (println "wagoe — Wagoe Framework project tool")
   (println)
   (println "Commands:")
   (println "  wagoe new <project-name>       Create a new project")
   (println "  wagoe add <module>             Add a module to the current project")
   (println "  wagoe list modules             List available modules")
   (println "  wagoe list modules --json      Machine-readable module list")
-  (println "  boundary agents update [--check]  Refresh framework sections of AGENTS.md after an upgrade")
-  (println "  boundary version                  Show CLI version"))
+  (println "  wagoe agents update [--check]  Refresh framework sections of AGENTS.md after an upgrade")
+  (println "  wagoe version                  Show CLI version"))
 
 (defn -main [& args]
   (let [[cmd & rest-args] args]
@@ -23,9 +23,9 @@
       "agents"  (if (= (first rest-args) "update")
                   (do (require 'wagoe.cli.agents-update)
                       ((resolve 'wagoe.cli.agents-update/-main) (rest rest-args)))
-                  (do (println "Usage: boundary agents update [--check]")
+                  (do (println "Usage: wagoe agents update [--check]")
                       (System/exit 1)))
-      "version" (println "boundary CLI version 1.0.0-beta-1")
+      "version" (println "wagoe CLI version 1.0.0-beta-1")
       (do (when cmd (println (str "Unknown command: " cmd "\n")))
           (usage)
           (System/exit (if cmd 1 0))))))

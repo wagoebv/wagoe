@@ -1,4 +1,4 @@
-name: Boundary CI
+name: Wagoe CI
 
 on:
   push:
@@ -298,7 +298,7 @@ jobs:
         with:
           bb: latest
 
-      - name: Check published POMs carry inter-Boundary deps
+      - name: Check published POMs carry inter-Wagoe deps
         run: bb check:poms
 
   # =============================================================================
@@ -946,5 +946,5 @@ jobs:
           echo "  - check:deps (no dependency direction violations)"
           echo "  - check:ports (no hexagonal boundary violations)"
           echo "  - check:hygiene (no tracked backup/cruft files)"
-          echo "  - check:poms (published POMs carry inter-Boundary deps)"
+          echo "  - check:poms (published POMs carry inter-Wagoe deps)"
           echo "  - example-smoke (examples/todo runs)"

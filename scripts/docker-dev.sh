@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #
-# Boundary Framework - Docker Development Helper
+# Wagoe Framework - Docker Development Helper
 # Provides convenient commands for Docker-based development
 #
 
@@ -24,7 +24,7 @@ DEFAULT_DOCS_PORT="8080"
 
 show_help() {
     cat << EOF
-🐳 Boundary Framework - Docker Development Helper
+🐳 Wagoe Framework - Docker Development Helper
 
 USAGE:
     $0 [COMMAND] [OPTIONS]
@@ -171,7 +171,7 @@ check_ports() {
 start_services() {
     local profile="${1:-$DEFAULT_PROFILE}"
     
-    log_info "Starting Boundary Framework ($profile profile)..."
+    log_info "Starting Wagoe Framework ($profile profile)..."
     
     local compose_args=""
     
@@ -269,11 +269,11 @@ show_status() {
     
     echo
     log_info "Network status:"
-    docker network ls | grep boundary || log_warning "No boundary networks found"
+    docker network ls | grep wagoe || log_warning "No wagoe networks found"
     
     echo  
     log_info "Volume status:"
-    docker volume ls | grep boundary || log_warning "No boundary volumes found"
+    docker volume ls | grep wagoe || log_warning "No wagoe volumes found"
 }
 
 build_images() {

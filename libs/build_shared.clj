@@ -8,7 +8,7 @@
             [clojure.tools.build.api :as b]))
 
 (defn- rewrite-wagoe-deps
-  "Rewrite boundary/<artifact> :local/root deps to their published
+  "Rewrite wagoe/<artifact> :local/root deps to their published
    org.wagoe/wagoe-<artifact> :mvn/version coordinates.
 
    tools.build's write-pom omits :local/root deps from the generated pom, so
@@ -27,7 +27,7 @@
    deps))
 
 (defn pom-basis
-  "A basis for write-pom where boundary :local/root deps are rewritten to
+  "A basis for write-pom where wagoe :local/root deps are rewritten to
    published :mvn/version coords at the given suite version."
   [version]
   (let [project   (edn/read-string (slurp "deps.edn"))

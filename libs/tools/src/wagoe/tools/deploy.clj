@@ -36,7 +36,7 @@
 
 ;; This vector is the set of artifacts to publish. Its ORDER is not authoritative:
 ;; `publish-order` topologically sorts it from each lib's deps.edn so a lib is
-;; always published after every boundary lib it depends on (BOU-203). Add/remove
+;; always published after every wagoe lib it depends on (BOU-203). Add/remove
 ;; entries here; never hand-tune the order.
 (def all-libs
   ["tools"
@@ -80,11 +80,11 @@
   (str (io/file root-dir "libs" lib)))
 
 ;; =============================================================================
-;; Publish order — topological sort of all-libs by deps.edn boundary deps
+;; Publish order — topological sort of all-libs by deps.edn wagoe deps
 ;; =============================================================================
 
 (defn wagoe-dep-dirs
-  "The directory names of the boundary libs `lib` depends on, per its deps.edn
+  "The directory names of the wagoe libs `lib` depends on, per its deps.edn
    (via check-poms — the same :local/root parsing the check:poms gate uses)."
   [lib]
   (map :dir (check-poms/wagoe-local-deps (io/file (lib-dir lib)))))
@@ -108,15 +108,15 @@
                             {:remaining remaining}))))))))
 
 (def publish-order
-  "all-libs in a valid publish order: each lib after its boundary deps."
+  "all-libs in a valid publish order: each lib after its wagoe deps."
   (topo-sort all-libs wagoe-dep-dirs))
 
 (defn artifact-name
   "Clojars artifact id for a lib, read from its build.clj coordinate
    `(def lib 'org.wagoe/<artifact>)`. Reading the coordinate (rather than
-   string-prefixing) avoids a double `boundary-` for libs whose dir already starts
-   with it (e.g. wagoe-cli → wagoe-cli, not boundary-wagoe-cli). Falls
-   back to `boundary-<lib>` when build.clj is unreadable."
+   string-prefixing) avoids a double `wagoe-` for libs whose dir already starts
+   with it (e.g. wagoe-cli → wagoe-cli, not wagoe-wagoe-cli). Falls
+   back to `wagoe-<lib>` when build.clj is unreadable."
   [lib]
   (let [build-file (io/file (lib-dir lib) "build.clj")]
     (or (when (.exists build-file)

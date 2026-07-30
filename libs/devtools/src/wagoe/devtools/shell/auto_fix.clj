@@ -64,7 +64,7 @@
 
 (defmethod run-action! :set-jwt
   [_ _params]
-  (let [secret (str "dev-secret-" (System/currentTimeMillis) "-boundary")]
+  (let [secret (str "dev-secret-" (System/currentTimeMillis) "-wagoe")]
     (write-env-var! "JWT_SECRET" secret)))
 
 (defmethod run-action! :integrate-module

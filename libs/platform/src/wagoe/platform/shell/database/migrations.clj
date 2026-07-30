@@ -73,7 +73,7 @@
 
    The root application keeps using `migrations/`. Libraries can contribute
    additional Migratus-compatible directories by publishing a
-   `boundary/migration-paths.edn` resource on the classpath."
+   `wagoe/migration-paths.edn` resource on the classpath."
   []
   (let [library-dirs (mapcat parse-migration-manifest (manifest-urls))
         migration-dirs (->> (concat ["migrations/"] library-dirs)

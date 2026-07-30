@@ -26,7 +26,7 @@ _Een verhaal van iemand die een "rabit hole" in dook — en op de bodem een fram
 --
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SLIDE 2 — WAAROM IK BOUNDARY BOUWDE
+// SLIDE 2 — WAAROM IK WAGOE BOUWDE
 // ─────────────────────────────────────────────────────────────────────────────
 == Waarom ik Wagoe?
 
@@ -472,7 +472,7 @@ flowchart LR
 --
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SLIDE — EEN PORT IN BOUNDARY
+// SLIDE — EEN PORT IN WAGOE
 // ─────────────────────────────────────────────────────────────────────────────
 === Een Port in Wagoe
 
@@ -505,7 +505,7 @@ Een port zegt: "Ik heb *iets* nodig dat gebruikers kan vinden en opslaan. Ik gee
 --
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SECTIE 4 — BOUNDARY: MODULARITEIT
+// SECTIE 4 — WAGOE: MODULARITEIT
 // ─────────────────────────────────────────────────────────────────────────────
 == Deel 4: Wagoe — Gebouwd op Modulariteit
 
@@ -837,7 +837,7 @@ Vragen die je niet kunt beantwoorden door dit te lezen:
 --
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SLIDE — GEBRUIKERSREGISTRATIE: BOUNDARY CORE
+// SLIDE — GEBRUIKERSREGISTRATIE: WAGOE CORE
 // ─────────────────────────────────────────────────────────────────────────────
 === Gebruikersregistratie: Wagoe Core (Pure Logica)
 
@@ -882,7 +882,7 @@ Test voor `check-duplicate-user-decision`: één regel. Geen mocks. Geen databas
 --
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SLIDE — GEBRUIKERSREGISTRATIE: BOUNDARY SHELL
+// SLIDE — GEBRUIKERSREGISTRATIE: WAGOE SHELL
 // ─────────────────────────────────────────────────────────────────────────────
 === Gebruikersregistratie: Wagoe Shell (Orkestratie)
 

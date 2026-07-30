@@ -1,8 +1,8 @@
 (ns wagoe.cli.templates
-  "Shared template helpers for the boundary CLI: template loading, {{var}}
+  "Shared template helpers for the wagoe CLI: template loading, {{var}}
    rendering, and the module-row pattern used to keep AGENTS.md's available-
    modules table in sync (`wagoe add` removes a row at install time;
-   `boundary agents update` keeps it removed on refresh)."
+   `wagoe agents update` keeps it removed on refresh)."
   (:require [clojure.java.io :as io]
             [clojure.string :as str]))
 

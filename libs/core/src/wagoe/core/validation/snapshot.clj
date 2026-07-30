@@ -24,7 +24,7 @@
 
     ;; Compute file path
     (path-for {:ns 'wagoe.user.validation-test :test 'email-required :case 'missing})
-    ;; => \"test/snapshots/validation/boundary/user/validation_test/email_required__missing.edn\"
+    ;; => \"test/snapshots/validation/wagoe/user/validation_test/email_required__missing.edn\"
 
     ;; Compare snapshots
     (compare-snapshots expected actual)
@@ -222,11 +222,11 @@
     (path-for {:ns 'wagoe.user.validation-test 
                :test 'email-required 
                :case 'missing})
-    ;; => \"test/snapshots/validation/boundary/user/validation_test/email_required__missing.edn\"
+    ;; => \"test/snapshots/validation/wagoe/user/validation_test/email_required__missing.edn\"
 
     (path-for {:ns 'wagoe.user.validation-test 
                :test 'email-format})
-    ;; => \"test/snapshots/validation/boundary/user/validation_test/email_format.edn\""
+    ;; => \"test/snapshots/validation/wagoe/user/validation_test/email_format.edn\""
   [opts]
   (let [base-dir (get opts :base "test/snapshots/validation")
         ns-sym (get opts :ns)

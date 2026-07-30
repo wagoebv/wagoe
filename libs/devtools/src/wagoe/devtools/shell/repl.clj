@@ -27,7 +27,7 @@
   "Extract module name from a handler string.
    Works with both qualified symbol strings and compiled fn str representations.
    Returns the module name string (e.g. 'user', 'admin', 'platform') or nil
-   for non-boundary handlers."
+   for non-wagoe handlers."
   [handler-str]
   (when (string? handler-str)
     (when-let [m (re-find boundary-module-pattern handler-str)]

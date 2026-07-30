@@ -1,5 +1,5 @@
 [Unit]
-Description=Boundary Application
+Description=Wagoe Application
 Documentation=https://github.com/wagoebv/wagoe
 After=network-online.target postgresql.service
 Wants=network-online.target
@@ -35,7 +35,7 @@ PrivateTmp=true
 # Logging
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=boundary
+SyslogIdentifier=wagoe
 
 # Graceful shutdown (30s)
 TimeoutStopSec=30

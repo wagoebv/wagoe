@@ -97,13 +97,13 @@
   install-hooks     {:doc "Configure git hooks path to .githooks"
                      :task (dev/install-hooks)}
 
-  ;; AGENTS.md maintenance — shells out to the globally installed `boundary`
+  ;; AGENTS.md maintenance — shells out to the globally installed `wagoe`
   ;; CLI, which owns the AGENTS.md template this task syncs against.
   agents:update     {:doc "Refresh framework sections of AGENTS.md after a Wagoe upgrade (--check for CI)"
                      :requires ([babashka.fs :as fs])
-                     :task (if (fs/which "boundary")
-                             (apply shell "boundary" "agents" "update" *command-line-args*)
-                             (do (println "The `boundary` CLI was not found on PATH.")
+                     :task (if (fs/which "wagoe")
+                             (apply shell "wagoe" "agents" "update" *command-line-args*)
+                             (do (println "The `wagoe` CLI was not found on PATH.")
                                  (println "Install it with bbin, then re-run: bb agents:update")
                                  (System/exit 1)))}
 

@@ -19,7 +19,7 @@
 
 (deftest ^:unit base-ns-path-test
   (is (= "wagoe" (integrate/base-ns-path nil)))
-  (is (= "boundary" (integrate/base-ns-path "boundary")))
+  (is (= "acme" (integrate/base-ns-path "acme")))
   (is (= "myapp" (integrate/base-ns-path "myapp")))
   (is (= "com/acme" (integrate/base-ns-path "com.acme"))))
 

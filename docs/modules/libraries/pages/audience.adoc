@@ -12,7 +12,7 @@ predicate pipeline.
 |===
 | Namespace | Purpose
 
-| `wagoe.audience.core.audience`
+| `wagoe.audience.shell.registry`
 | Pure: segment definition registry and the `defaudience` macro
 
 | `wagoe.audience.core.filter`

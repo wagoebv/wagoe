@@ -56,10 +56,15 @@
    #"^node_modules/.*"
    #"^docs/archive/.*"])   ;; archived/deprecated docs
 
-;; Known stale/pre-split path patterns to warn about
+;; Known stale/pre-split path patterns to warn about.
+;; NOTE: these keep the pre-rename `boundary` spelling on purpose. They detect
+;; the obsolete pre-monorepo-split layout, which used boundary.* namespaces.
+;; Post-rename, `src/wagoe/` is the CORRECT layout for a generated app (`wagoe
+;; new` puts modules at src/wagoe/<module>/), so matching on `wagoe` would flag
+;; correct docs.
 (def stale-path-patterns
-  [[#"(?<![/a-zA-Z])src/boundary/" "Pre-split path: code moved to libs/*/src/boundary/"]
-   [#"(?<![/a-zA-Z])test/boundary/" "Pre-split path: tests moved to libs/*/test/boundary/"]
+  [[#"(?<![/a-zA-Z])src/boundary/" "Pre-split path: pre-rename layout; code lives in libs/*/src/wagoe/"]
+   [#"(?<![/a-zA-Z])test/boundary/" "Pre-split path: pre-rename layout; tests live in libs/*/test/wagoe/"]
    [#"cd libs/\w+ && clojure" "Consider using root-level commands instead of cd into libs"]])
 
 ;; =============================================================================
@@ -108,16 +113,16 @@
   (let [base-dir (System/getProperty "user.dir")]
     (->> (concat
           (list-files-recursive (io/file base-dir "src"))
+          (list-files-recursive (io/file base-dir "dev"))
           (list-files-recursive (io/file base-dir "libs"))
           (list-files-recursive (io/file base-dir "libs/tools/src")))
          (filter #(or (str/ends-with? % ".clj")
-                      (str/ends-with? % ".cljc")))
-         (remove #(str/includes? % "/test/")))))
+                      (str/ends-with? % ".cljc"))))))
 
 (defn extract-namespace [file-path]
   (try
     (let [content (slurp file-path)]
-      (when-let [match (re-find #"\(ns\s+([a-zA-Z0-9._-]+)" content)]
+      (when-let [match (re-find #"\(ns\s+(?:\^[^\s]+\s+)*([a-zA-Z0-9._-]+)" content)]
         (second match)))
     (catch Exception _ nil)))
 
@@ -250,9 +255,14 @@
 ;; =============================================================================
 
 (defn extract-namespace-references [content]
-  ;; Look for wagoe.* namespace-like tokens
-  (let [pattern #"boundary\.[a-zA-Z0-9._-]+"]
+  ;; Look for wagoe.* namespace-like tokens. The rename introduced a collision
+  ;; the old `boundary.` prefix never had: wagoe.com (the domain) and file names
+  ;; like wagoe.service / wagoe.jar / wagoe.env also start with `wagoe.`, so a
+  ;; bare prefix match reports them as unknown namespaces. Drop those suffixes.
+  (let [pattern  #"wagoe\.[a-zA-Z0-9._-]+"
+        non-ns   #"^wagoe\.(com|org|net|io|dev|app|jar|service|env|edn|clj|cljs|cljc|yml|yaml|json|toml|conf|lua|css|js|md|adoc|sh|xml|png|svg|pdf|csv|log|db|sql|properties)\b"]
     (->> (re-seq pattern content)
+         (remove #(re-find non-ns %))
          (distinct))))
 
 (defn check-namespace-references [file-path content known-namespaces]

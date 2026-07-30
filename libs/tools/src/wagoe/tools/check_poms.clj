@@ -113,7 +113,7 @@
      :publishable?    publishable?
      :uses-pom-basis? uses-pom-basis?
      :wagoe-deps   wagoe-deps
-     ;; A publishable lib that skips pom-basis will silently drop its boundary
+     ;; A publishable lib that skips pom-basis will silently drop its wagoe
      ;; deps from the pom. A non-publishable lib (no write-pom) is exempt.
      :violation?      (and publishable? (not uses-pom-basis?))}))
 

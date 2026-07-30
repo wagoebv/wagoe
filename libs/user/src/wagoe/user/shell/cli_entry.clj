@@ -5,7 +5,7 @@
   remain as module-agnostic as possible and delegate into this module.
 
   Note: wagoe.config is loaded lazily via requiring-resolve so this
-  namespace compiles cleanly when boundary/src is not on the classpath
+  namespace compiles cleanly when wagoe/src is not on the classpath
   (e.g. when using zzp-guard's :dev-local alias during REPL development)."
   (:require [wagoe.user.shell.cli :as user-cli]
             [wagoe.user.shell.persistence :as user-persistence]
@@ -28,7 +28,7 @@
       (log/info "Starting Wagoe User CLI" {:args args})
 
       ;; Load configuration — wagoe.config is loaded lazily so this lib
-      ;; compiles even when boundary/src is not on the classpath.
+      ;; compiles even when wagoe/src is not on the classpath.
       (let [load-config        (requiring-resolve 'wagoe.config/load-config)
             db-spec            (requiring-resolve 'wagoe.config/db-spec)
             user-val-config    (requiring-resolve 'wagoe.config/user-validation-config)

@@ -110,7 +110,7 @@ jobs:
           tag_name: ${{ github.ref_name }}
           name: ${{ steps.version.outputs.version }}
           body: |
-            ## Boundary Framework ${{ steps.version.outputs.version }}
+            ## Wagoe Framework ${{ steps.version.outputs.version }}
 
             All libraries published to Clojars.
 

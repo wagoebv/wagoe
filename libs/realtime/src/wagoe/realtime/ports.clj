@@ -27,7 +27,7 @@
     
     Validates JWT token from query parameters, creates connection record,
     and registers connection in registry. Token extraction and validation
-    delegated to auth module (boundary/user).
+    delegated to auth module (wagoe/user).
     
     Args:
       ws-connection - WebSocket connection adapter (IWebSocketConnection)

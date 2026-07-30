@@ -51,7 +51,7 @@
       (:wagoe/h2 active)
       {:adapter       :h2
        :database-path (if (get-in active [:wagoe/h2 :memory])
-                        "mem:boundary;DB_CLOSE_DELAY=-1"
+                        "mem:wagoe;DB_CLOSE_DELAY=-1"
                         (get-in active [:wagoe/h2 :db]))
        :pool          (get-in active [:wagoe/h2 :pool])}
 

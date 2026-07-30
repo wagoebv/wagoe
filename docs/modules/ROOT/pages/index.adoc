@@ -53,7 +53,7 @@ wagoe list modules
 # REPL-driven development (headless nREPL on port 7888 — connect your editor)
 export JWT_SECRET="change-me-dev-secret-min-32-chars"
 export WAG_ENV="development"
-clojure -M:repl
+clojure -M:repl-clj
 
 # Scaffold a new module (interactive)
 bb scaffold

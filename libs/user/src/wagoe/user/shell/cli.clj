@@ -531,7 +531,7 @@
 (def root-help
   "Wagoe CLI - User and Session Management
 
-Usage: boundary <domain> <command> [options]
+Usage: wagoe <domain> <command> [options]
 
 Domains:
   user       User management commands
@@ -544,11 +544,11 @@ Global Options:
 Examples:
   wagoe user create --email john@example.com --name \"John Doe\" --role user
   wagoe user list --format json
-  boundary session create --user-id UUID
+  wagoe session create --user-id UUID
 
 For domain-specific help:
   wagoe user --help
-  boundary session --help")
+  wagoe session --help")
 
 (def user-help
   "User Management Commands
@@ -600,7 +600,7 @@ Examples:
 (def session-help
   "Session Management Commands
 
-Usage: boundary session <command> [options]
+Usage: wagoe session <command> [options]
 
 Commands:
   create       Create a new session (login)
@@ -619,9 +619,9 @@ Options for 'list':
   --user-id UUID       User UUID (required)
 
 Examples:
-  boundary session create --user-id UUID
-  boundary session invalidate --token TOKEN
-  boundary session list --user-id UUID")
+  wagoe session create --user-id UUID
+  wagoe session invalidate --token TOKEN
+  wagoe session list --user-id UUID")
 
 ;; =============================================================================
 ;; Main CLI Entry Point

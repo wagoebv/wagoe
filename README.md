@@ -53,7 +53,7 @@ clojure -M:migrate up
 
 # 4. Start the REPL (headless nREPL server on port 7888)
 export JWT_SECRET="change-me-dev-secret-min-32-chars"
-clojure -M:repl
+clojure -M:repl-clj
 ```
 
 Connect your editor (or the Wagoe MCP server) to the nREPL port, then eval:

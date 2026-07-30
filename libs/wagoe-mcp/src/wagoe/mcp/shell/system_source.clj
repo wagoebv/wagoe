@@ -29,7 +29,7 @@
 (defn- lib-deps [deps-file]
   (let [deps (:deps (read-edn-file deps-file))
         names (keys deps)]
-    {:boundary (->> names (filter #(= "wagoe" (namespace %))) (map name) sort vec)
+    {:wagoe (->> names (filter #(= "wagoe" (namespace %))) (map name) sort vec)
      :external (->> names (remove #(= "wagoe" (namespace %))) (map str) sort vec)}))
 
 (defn- has-ports? [lib-dir]
@@ -44,9 +44,9 @@
                        :when (.isDirectory ^java.io.File d)
                        :let  [deps-file (io/file d "deps.edn")]
                        :when (.exists deps-file)
-                       :let  [{:keys [boundary external]} (lib-deps (str deps-file))]]
+                       :let  [{:keys [wagoe external]} (lib-deps (str deps-file))]]
                    {:name         (.getName ^java.io.File d)
-                    :deps         boundary
+                    :deps         wagoe
                     :external-libs external
                     :has-ports?   (has-ports? d)})]
         {:modules (vec (sort-by :name mods))

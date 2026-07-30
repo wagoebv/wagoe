@@ -1,4 +1,4 @@
-# fly.toml — Fly.io reference configuration for Boundary
+# fly.toml — Fly.io reference configuration for Wagoe
 # https://fly.io/docs/reference/configuration/
 #
 # Deploy: fly deploy
@@ -15,8 +15,8 @@ primary_region = "ams"
   HTTP_PORT = "3000"
   POSTGRES_HOST = "my-wagoe-app-db.internal"
   POSTGRES_PORT = "5432"
-  POSTGRES_DB = "boundary"
-  POSTGRES_USER = "boundary"
+  POSTGRES_DB = "wagoe"
+  POSTGRES_USER = "wagoe"
 
 [http_service]
   internal_port = 3000

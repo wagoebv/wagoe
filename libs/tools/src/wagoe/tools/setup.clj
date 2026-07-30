@@ -77,7 +77,7 @@
     (str "  :wagoe/postgresql\n"
          "  {:host        #or [#env POSTGRES_HOST \"localhost\"]\n"
          "   :port        #or [#long #or [#env POSTGRES_PORT 5432] 5432]\n"
-         "   :dbname      #or [#env POSTGRES_DB \"" "boundary_" env "\"]\n"
+         "   :dbname      #or [#env POSTGRES_DB \"" "wagoe_" env "\"]\n"
          "   :user        #or [#env POSTGRES_USER \"postgres\"]\n"
          "   :password    #or [#env POSTGRES_PASSWORD \"postgres\"]\n"
          "   :auto-commit true\n"
@@ -100,7 +100,7 @@
     (str "  :wagoe/mysql\n"
          "  {:host     #or [#env MYSQL_HOST \"localhost\"]\n"
          "   :port     #or [#long #or [#env MYSQL_PORT 3306] 3306]\n"
-         "   :dbname   #or [#env MYSQL_DB \"boundary_" env "\"]\n"
+         "   :dbname   #or [#env MYSQL_DB \"wagoe_" env "\"]\n"
          "   :user     #or [#env MYSQL_USER \"root\"]\n"
          "   :password #or [#env MYSQL_PASSWORD \"\"]\n"
          "   :pool     {:minimum-idle          2\n"
@@ -138,13 +138,13 @@
          "  {:level     :debug\n"
          "   :console   true\n"
          "   :appenders [{:appender       :rolling-file\n"
-         "                :file           \"logs/boundary-test.log\"\n"
+         "                :file           \"logs/wagoe-test.log\"\n"
          "                :rolling-policy {:type :time-based :max-history 3}}]}\n")
     (str "  :wagoe/logging\n"
          "  {:provider     :slf4j\n"
          "   :level        :debug\n"
-         "   :logger-name  \"boundary\"\n"
-         "   :default-tags {:service     \"boundary-" env "\"\n"
+         "   :logger-name  \"wagoe\"\n"
+         "   :default-tags {:service     \"wagoe-" env "\"\n"
          "                  :environment \"" (if (= env "prod") "production" "development") "\"}}\n")))
 
 (defn- observability-template [_env]

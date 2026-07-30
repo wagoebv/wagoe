@@ -234,7 +234,7 @@
   "Find all .clj files under any core/ directory that must be subject to
    FC/IS enforcement. Covers:
    - libs/*/src/wagoe/<lib>/core/ (monorepo lib layout, and non-standard libs
-     like boundary/shared/ui/core/)
+     like wagoe/shared/ui/core/)
    - src/**/core/ (the application layout — a project scaffolded with
      `wagoe new` puts modules at src/wagoe/<module>/core/, with no libs/)
    - src/wagoe/test_support/core.clj (monorepo-level shared test helpers)
