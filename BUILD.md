@@ -28,7 +28,7 @@ This will:
 - Compile the main namespace for faster startup
 - Package all dependencies including database drivers (SQLite, PostgreSQL, H2, MySQL)
 - Create `target/wagoe-<version>-standalone.jar`, where `<version>` is the library-suite
-  version read from `libs/core/build.clj` (currently `1.0.0-beta-1`). Ask for it with
+  version read from `libs/core/build.clj`. Ask for it with
   `clojure -T:build print-version`, or for the full path `clojure -T:build print-uber-file`.
 
 The resulting jar file is approximately 160MB and includes:
@@ -64,13 +64,13 @@ The framework itself is EPL-2.0 (see `LICENSE`).
 Start the HTTP server:
 
 ```bash
-java -jar target/wagoe-1.0.0-beta-1-standalone.jar
+java -jar target/wagoe-*-standalone.jar
 ```
 
 Or explicitly:
 
 ```bash
-java -jar target/wagoe-1.0.0-beta-1-standalone.jar server
+java -jar target/wagoe-*-standalone.jar server
 ```
 
 The server will:
@@ -85,8 +85,8 @@ The server will:
 Run CLI commands:
 
 ```bash
-java -jar target/wagoe-1.0.0-beta-1-standalone.jar cli user list
-java -jar target/wagoe-1.0.0-beta-1-standalone.jar cli user create --email test@example.com
+java -jar target/wagoe-*-standalone.jar cli user list
+java -jar target/wagoe-*-standalone.jar cli user create --email test@example.com
 ```
 
 ### Help
@@ -94,7 +94,7 @@ java -jar target/wagoe-1.0.0-beta-1-standalone.jar cli user create --email test@
 Show usage information:
 
 ```bash
-java -jar target/wagoe-1.0.0-beta-1-standalone.jar help
+java -jar target/wagoe-*-standalone.jar help
 ```
 
 ## Configuration
@@ -108,7 +108,7 @@ java -jar target/wagoe-1.0.0-beta-1-standalone.jar help
 ### Running in Production
 
 ```bash
-WAG_ENV=prod HTTP_PORT=8080 java -jar wagoe-1.0.0-beta-1-standalone.jar server
+WAG_ENV=prod HTTP_PORT=8080 java -jar wagoe-*-standalone.jar server
 ```
 
 ### Database Configuration
@@ -171,7 +171,7 @@ FROM eclipse-temurin:17-jre-alpine
 
 WORKDIR /app
 
-COPY target/wagoe-1.0.0-beta-1-standalone.jar wagoe.jar
+COPY target/wagoe-*-standalone.jar wagoe.jar
 COPY resources/conf/prod/config.edn /app/config/config.edn
 
 ENV WAG_ENV=prod
@@ -225,20 +225,20 @@ sudo systemctl status wagoe
 ### Check Version
 
 ```bash
-jar xf wagoe-1.0.0-beta-1-standalone.jar META-INF/MANIFEST.MF
+jar xf target/wagoe-*-standalone.jar META-INF/MANIFEST.MF
 cat META-INF/MANIFEST.MF
 ```
 
 ### Verify Main Class
 
 ```bash
-jar tf wagoe-1.0.0-beta-1-standalone.jar | grep "wagoe/main"
+jar tf target/wagoe-*-standalone.jar | grep "wagoe/main"
 ```
 
 ### Test Database Drivers
 
 ```bash
-jar tf wagoe-1.0.0-beta-1-standalone.jar | grep -E "(sqlite|postgresql|h2|mysql)"
+jar tf target/wagoe-*-standalone.jar | grep -E "(sqlite|postgresql|h2|mysql)"
 ```
 
 ### Enable Debug Logging
