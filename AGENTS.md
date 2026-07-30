@@ -23,8 +23,12 @@ bb scaffold field --module-name invoice --entity Invoice --name amount --type de
 bb scaffold endpoint --module-name invoice --path /invoices --method post --handler-name create-invoice  # Add HTTP endpoint
 bb scaffold integrate product                      # Guide integration of a scaffolded module (config + wiring)
 
-# Testing - All tests across all libraries
-clojure -M:test:db/h2                                    # All tests (default test profile uses H2 in-memory)
+# Testing - EVERY test surface (use this before committing / claiming green)
+bb test:all                                              # main + tools + agents + wagoe-cli + wagoe-mcp
+bb test:all --list                                       # show the surfaces, and what is deliberately excluded
+
+# Testing - main suite only (does NOT cover the standalone libs — see below)
+clojure -M:test:db/h2                                    # tests.edn suites (default test profile uses H2 in-memory)
 JWT_SECRET="dev-secret-at-least-32-characters-long" WAG_ENV=test clojure -M:test:db/h2  # With JWT secret
 
 # Testing - Per-library test suites
@@ -392,12 +396,39 @@ clojure -M:test:db/h2 --watch --focus-meta :unit
 # Watch specific library
 clojure -M:test:db/h2 --watch :core
 
-# Full test suite before committing
-clojure -M:test:db/h2
+# Full test suite before committing — every surface, not just tests.edn
+bb test:all
 
 # Lint before committing
 clojure -M:clj-kondo --lint src test libs/*/src libs/*/test
 ```
+
+### Test surfaces — why `bb test:all` exists
+
+`clojure -M:test:db/h2` runs the kaocha suites declared in `tests.edn`, which
+cover the libraries on the app classpath. Three surfaces are **not** on that
+classpath and are invisible to it:
+
+| Surface | Run by | Why it is separate |
+|---|---|---|
+| `libs/wagoe-cli` | `clojure -M:test` in that dir | standalone lib, own `deps.edn` + `:test` alias |
+| `libs/wagoe-mcp` | `clojure -M:test` in that dir | standalone lib, own `deps.edn` + `:test` alias |
+| `libs/tools` | `bb test:tools` | pure Babashka, no Maven deps at runtime |
+| `scripts/agents_gen_test.clj` | `bb test:agents` | generator test, outside the lib tree |
+
+During the Wagoe rename this hid real failures three times — 8 in `wagoe-mcp`,
+1 in `wagoe-cli`, 5 in `tools` (including a silently-broken FC/IS gate) — each
+found only by remembering to run an extra command.
+
+**So a green `clojure -M:test:db/h2` does not mean the codebase is green.**
+`bb test:all` runs all of them, prints a per-surface summary, and exits non-zero
+if any fails. `bb test:all --list` shows the set, including what is deliberately
+excluded (`e2e`, which needs a running server — use `bb e2e`).
+
+None of the surfaces enumerate namespaces: the standalone libs let kaocha
+discover `test/`, and the rest discover from disk. An earlier `bb test:wagoe-cli`
+hardcoded four requires and had already drifted, silently skipping
+`wagoe.cli.agents-update-test`.
 
 ### Custom Test Reporter
 

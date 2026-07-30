@@ -6,9 +6,12 @@
  :tasks
  {:requires ([babashka.http-client       :as http]
              [babashka.process          :as process]
+            [babashka.fs               :as fs]
+            [clojure.string            :as str]
              [wagoe.tools.scaffold    :as scaffold]
              [wagoe.tools.ai          :as ai]
              [wagoe.tools.deps        :as deps]
+             [wagoe.tools.test-all    :as test-all]
              [wagoe.tools.i18n        :as i18n]
              [wagoe.tools.admin       :as admin]
              [wagoe.tools.deploy      :as deploy]
@@ -106,51 +109,37 @@
                  :task (check-hygiene/-main)}
   check:no-boundary {:doc "Rename gate: scan for residual boundary tokens (ns/keys/coords/env/dirs/urls); args select groups (bb check:no-boundary)"
                      :task (apply check-no-boundary/-main *command-line-args*)}
+  ;; Namespaces are DISCOVERED, not listed. The previous version kept two
+  ;; parallel hardcoded lists — one to `require`, one to `run-tests` — so adding
+  ;; a test namespace to only one silently loaded it without running it. Same
+  ;; class as the drift this task removes elsewhere (BOU-246 / BOU-250).
   test:tools {:doc "Run wagoe-tools unit tests (bb test:tools)"
               :extra-paths ["libs/tools/test"]
-              :task (do (require 'wagoe.tools.doctor-test
-                                 'wagoe.tools.doctor-env-test
-                                 'wagoe.tools.integrate-test
-                                 'wagoe.tools.setup-test
-                                 'wagoe.tools.check-fcis-test
-                                 'wagoe.tools.check-tests-test
-                                 'wagoe.tools.check-ports-test
-                                 'wagoe.tools.check-test
-                                 'wagoe.tools.check-poms-test
-                                 'wagoe.tools.quickstart-test
-                                 'wagoe.tools.deploy-test
-                                 'wagoe.tools.help-test)
-                        (let [summary (clojure.test/run-tests
-                                       'wagoe.tools.doctor-test
-                                       'wagoe.tools.doctor-env-test
-                                       'wagoe.tools.integrate-test
-                                       'wagoe.tools.setup-test
-                                       'wagoe.tools.check-fcis-test
-                                       'wagoe.tools.check-tests-test
-                                       'wagoe.tools.check-ports-test
-                                       'wagoe.tools.check-test
-                                       'wagoe.tools.check-poms-test
-                                       'wagoe.tools.quickstart-test
-                                       'wagoe.tools.deploy-test
-                                       'wagoe.tools.help-test)]
-                          (when (pos? (+ (:fail summary) (:error summary)))
-                            (System/exit 1))))}
+              :task (let [nss (->> (fs/glob "libs/tools/test" "**/*_test.clj")
+                                   (map (fn [f]
+                                          (-> (str f)
+                                              (str/replace "libs/tools/test/" "")
+                                              (str/replace ".clj" "")
+                                              (str/replace "/" ".")
+                                              (str/replace "_" "-")
+                                              symbol)))
+                                   sort)]
+                      (when (empty? nss)
+                        (println "no test namespaces found under libs/tools/test")
+                        (System/exit 1))
+                      (apply require nss)
+                      (let [summary (apply clojure.test/run-tests nss)]
+                        (when (pos? (+ (:fail summary) (:error summary)))
+                          (System/exit 1))))}
   test:wagoe-cli
-  {:doc "Run wagoe-cli tests"
-   :extra-paths ["libs/wagoe-cli/src"
-                 "libs/wagoe-cli/resources"
-                 "libs/wagoe-cli/test"]
-   :task (do (require 'wagoe.cli.catalogue-test
-                      'wagoe.cli.list-modules-test
-                      'wagoe.cli.new-test
-                      'wagoe.cli.add-test)
-             (let [summary (clojure.test/run-tests
-                            'wagoe.cli.catalogue-test
-                            'wagoe.cli.list-modules-test
-                            'wagoe.cli.new-test
-                            'wagoe.cli.add-test)]
-               (when (pos? (+ (:fail summary) (:error summary)))
-                 (System/exit 1))))}
+  {:doc "Run wagoe-cli tests (delegates to its own kaocha runner)"
+   :task (let [{:keys [exit]} (process/shell {:dir "libs/wagoe-cli" :continue true}
+                                             "clojure" "-M:test")]
+           (System/exit exit))}
+
+  test:all
+  {:doc "Run EVERY test surface — main + tools + agents + wagoe-cli + wagoe-mcp (bb test:all [--list])"
+   :task (apply test-all/-main *command-line-args*)}
   run-e2e-server
   {:doc "Start the Wagoe app on :test profile (port 3100) for Playwright/spel e2e runs"
    :task (let [proc (process/process
