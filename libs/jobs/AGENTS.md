@@ -50,16 +50,39 @@ row *is* the outbox row; no separate outbox table or relay is needed.
 
 ```clojure
 (require '[next.jdbc :as jdbc]
-         '[wagoe.jobs.shell.adapters.db :as db])
+         '[wagoe.jobs.ports :as ports])
 
 (jdbc/with-transaction [tx ds]
-  (orders/create! tx order)              ; business write
-  (db/enqueue-in-tx! tx :emails receipt-job))  ; job, same tx
+  (orders/create! tx order)                        ; business write
+  (ports/enqueue-in-tx! queue tx :emails receipt-job))  ; job, same tx
 ;; commit -> both; rollback -> neither
 ```
 
-Pass a caller-managed transaction (not a bare datasource, which would
-autocommit). A worker on the DB queue picks the job up after commit.
+**This is a capability, not a base guarantee.** `enqueue-in-tx!` lives on its own
+protocol, `ports/ITransactionalJobQueue`, implemented only by the DB adapter —
+outbox semantics require the queue to sit in the same database as the business
+data, which Redis and in-memory cannot offer. Putting it on `IJobQueue` would
+force every adapter to declare a method most of them could only `throw` from.
+
+Ask before calling, rather than discovering the limitation at runtime:
+
+```clojure
+(if (ports/transactional-queue? queue)
+  (jdbc/with-transaction [tx ds]
+    (orders/create! tx order)
+    (ports/enqueue-in-tx! queue tx :emails receipt-job))
+  (do (orders/create! ds order)
+      (ports/enqueue-job! queue :emails receipt-job)))  ; accepts the dual-write window
+```
+
+`tx` must be a caller-managed transaction. Passing a datasource **throws**
+(`:type :validation-error`) — it would otherwise autocommit and silently
+reintroduce the dual-write window this exists to close, with no error and no log.
+A worker on the DB queue picks the job up after commit.
+
+> `wagoe.jobs.shell.adapters.db/enqueue-in-tx!` still exists but is deprecated —
+> calling into the adapter namespace couples application code to one
+> implementation. Use the port.
 
 ## Job Handler Signature
 

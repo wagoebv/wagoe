@@ -102,12 +102,43 @@
 
 (defn- opts [] {:builder-fn rs/as-unqualified-lower-maps})
 
-(defn insert-job!
-  "INSERT a job row using the given `connectable` — a datasource, a connection,
-   or (the point of this fn) an open `next.jdbc` transaction. Returns the job id.
+(defn- open-transaction?
+  "True only for a `java.sql.Connection` with autocommit OFF — i.e. a connection
+   inside a caller-managed transaction.
 
-   Used by `enqueue-job!` (autocommit via the adapter's datasource) and by
-   `enqueue-in-tx!` (the caller's transaction, for a transactional enqueue)."
+   A datasource is not rejected because it fails; it is rejected because it
+   SUCCEEDS. Passing one autocommits the insert, so the job is durable
+   independently of the business change — silently restoring the dual-write
+   window that transactional enqueue exists to close. The failure would be
+   invisible: no error, no log, correct-looking code."
+  [connectable]
+  (and (instance? java.sql.Connection connectable)
+       (not (.getAutoCommit ^java.sql.Connection connectable))))
+
+(defn- assert-open-transaction!
+  "Throw unless `tx` is an open transaction. Single definition on purpose: the
+   port method and the deprecated adapter fn both need it, and two copies of a
+   safety check drift — the first version of this PR already had them throwing
+   different ex-data, leaving the deprecated path with nothing actionable."
+  [tx queue-name]
+  (when-not (open-transaction? tx)
+    (throw (ex-info "enqueue-in-tx! requires an open transaction, not a datasource"
+                    {:type       :validation-error
+                     :queue-name queue-name
+                     :hint       (str "pass the tx bound by jdbc/with-transaction; "
+                                      "a datasource would autocommit and reopen the "
+                                      "dual-write window")}))))
+
+(defn- insert-job!
+  "INSERT a job row using the given `connectable` — a datasource, a connection,
+   or an open `next.jdbc` transaction. Returns the job id.
+
+   PRIVATE on purpose. It accepts a datasource because `enqueue-job!` legitimately
+   passes one (autocommit is correct for a non-transactional enqueue), so the
+   transaction guard cannot live here. Public, it would be a third entry point
+   that skips the guard entirely: `insert-job!` with a datasource reproduces the
+   exact silent dual-write this change exists to prevent. Callers use
+   `ports/enqueue-in-tx!`."
   [connectable queue-name job]
   (let [job-id     (:id job)
         scheduled? (some? (:execute-at job))]
@@ -124,11 +155,27 @@
     job-id))
 
 (defrecord DbJobQueue [ds lease-ms]
+  ;; Implemented here and NOT by the Redis / in-memory adapters: outbox
+  ;; semantics need the queue to live in the same database as the business data.
+  ports/ITransactionalJobQueue
+
+  (enqueue-in-tx! [_ tx queue-name job]
+    (assert-open-transaction! tx queue-name)
+    (let [job-id (insert-job! tx queue-name job)]
+      (log/info "Enqueued job in caller transaction"
+                {:job-id job-id :queue queue-name})
+      job-id))
+
   ports/IJobQueue
 
   (enqueue-job! [_ queue-name job]
+    ;; :scheduled? distinguishes an immediate enqueue from schedule-job!, which
+    ;; funnels through here too. It was lost when the INSERT moved into
+    ;; insert-job!, leaving the two indistinguishable in logs (BOU-252).
     (let [job-id (insert-job! ds queue-name job)]
-      (log/info "Enqueued job" {:job-id job-id :queue queue-name})
+      (log/info "Enqueued job" {:job-id     job-id
+                                :queue      queue-name
+                                :scheduled? (some? (:execute-at job))})
       job-id))
 
   (schedule-job! [this queue-name job execute-at]
@@ -208,26 +255,15 @@
           WHERE status = 'scheduled' AND execute_at <= ?"
        (ts (Instant/now))]))))
 
-(defn enqueue-in-tx!
-  "Transactional (outbox) enqueue: insert the job into the queue **within the
-   caller's open transaction**, so the job commits atomically with the business
-   change. If the business transaction rolls back, no job is left behind; if it
-   commits, a worker picks the job up. This is the durable alternative to a
-   dual-write (enqueueing to an external queue separately from the DB commit,
-   where a crash between the two loses the job or runs it for a rolled-back
-   change).
+(defn ^:deprecated enqueue-in-tx!
+  "DEPRECATED — use `wagoe.jobs.ports/enqueue-in-tx!` on the queue component.
 
-   `tx` is a next.jdbc transactable already inside a transaction, e.g.:
-
-     (jdbc/with-transaction [tx ds]
-       (orders/create! tx order)
-       (db/enqueue-in-tx! tx :emails receipt-job))
-
-   Because the queue is a table in the same database, no separate outbox table
-   or relay is needed — the queue row *is* the outbox row. `tx` MUST be a
-   transaction the caller manages (do not pass a bare datasource, or the enqueue
-   would autocommit and defeat the point). Returns the job id."
+   Kept so existing callers keep working, but reaching into this adapter
+   namespace couples application code to one implementation. The capability now
+   lives on `ports/ITransactionalJobQueue`, so callers can stay on the port and
+   ask `ports/transactional-queue?` instead of knowing which adapter they have."
   [tx queue-name job]
+  (assert-open-transaction! tx queue-name)
   (insert-job! tx queue-name job))
 
 (defn create-db-job-queue
