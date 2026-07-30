@@ -11,9 +11,33 @@ jobs:
   # =============================================================================
   # Lint all code
   # =============================================================================
+  # =============================================================================
+  # Warm the shared dependency cache ONCE, before anything fans out.
+  #
+  # Without this, lint/docs-lint/command-smoke all start on a cold cache and race
+  # to save the same key. lint has the smallest dep set (-M:clj-kondo) so it
+  # usually wins — poisoning the key with a near-empty cache. The ~26 test jobs
+  # then each restore that stub and pull the whole :test tree from Maven Central
+  # in parallel, which reliably trips Central's rate limiter (429/403) and fails
+  # a job before any test runs. Prefetching the union of aliases here means every
+  # later job restores a fully populated ~/.m2. (BOU-250, mechanism 4.)
+  # =============================================================================
+  warm-deps:
+    name: Warm Dependency Cache
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Clojure + warm deps
+        uses: ./.github/actions/clojure-deps
+        with:
+          aliases: -M:clj-kondo -M:docs-lint -M:migrate -M:test -M:test:db/h2
+
   lint:
     name: Lint
     runs-on: ubuntu-latest
+    needs: warm-deps
 
     steps:
       - uses: actions/checkout@v6
@@ -73,6 +97,7 @@ jobs:
   docs-lint:
     name: Docs Lint
     runs-on: ubuntu-latest
+    needs: warm-deps
 
     steps:
       - uses: actions/checkout@v6
@@ -117,6 +142,7 @@ jobs:
   command-smoke:
     name: Command Smoke Checks
     runs-on: ubuntu-latest
+    needs: warm-deps
 
     steps:
       - uses: actions/checkout@v6
