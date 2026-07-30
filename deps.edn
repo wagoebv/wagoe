@@ -175,8 +175,13 @@
            :clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2026.05.25"}}
                        :main-opts    ["-m" "clj-kondo.main"]
                        :extra-paths  ["src"]}
+           ;; test-resources/ holds logback-test.xml and must stay OFF the main
+           ;; :paths. Logback resolves logback-test.xml BEFORE logback.xml, so
+           ;; while it sat in resources/ it shadowed the real config everywhere —
+           ;; including inside the uberjar, where it pinned ROOT to ERROR and
+           ;; silenced production logging entirely (BOU-251).
            :test      {:main-opts   ["-m" "kaocha.runner"]
-                       :extra-paths ["test" "dev"
+                       :extra-paths ["test" "dev" "test-resources"
                                      "libs/devtools/src" "libs/devtools/test"
                                      "libs/devtools/resources"]
                        :extra-deps  {lambdaisland/kaocha           {:mvn/version "1.91.1392"}

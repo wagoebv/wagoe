@@ -134,6 +134,32 @@
             (is (string? (:message result)))
             (is (re-find #"Development environment" (:message result))))))
 
+      (testing "Uses the requested port even when a :port-range is configured"
+        ;; Regression (BOU-251). The existing "uses requested port" case above
+        ;; passes {} as config, so suggest-port-strategy defaults the range to
+        ;; {:start requested-port ...} and a scan from the range start happens to
+        ;; return the requested port anyway. The bug only appears with a REAL
+        ;; :port-range, which every shipped config has: allocation jumped
+        ;; straight to (:start port-range), so HTTP_PORT=3195 silently bound
+        ;; 3100 and anything probing 3195 found nothing listening.
+        (with-redefs [pm/port-available? (constantly true)
+                      pm/find-available-port (constantly 3100)]
+          (let [config {:port-range {:start 3100 :end 3199}}
+                result (pm/allocate-port 3195 config)]
+            (is (= 3195 (:port result))
+                "an available requested port must win over the range start")
+            (is (not (re-find #"resolved conflict" (:message result)))
+                "reporting a conflict that did not happen is its own bug"))))
+
+      (testing "A string port from #env is coerced, not passed through"
+        ;; aero's #env yields a String. While the requested port was unused this
+        ;; was invisible; the moment it reached port-available? it surfaced as a
+        ;; bare ClassCastException. Configs now carry #long, and this pins the
+        ;; defensive coercion so a missing tag cannot crash startup again.
+        (with-redefs [pm/port-available? (constantly true)]
+          (let [result (pm/allocate-port "3195" {:port-range {:start 3100 :end 3199}})]
+            (is (= 3195 (:port result))))))
+
       (testing "Falls back to range when requested port occupied"
         (with-redefs [pm/port-available? (fn [port]
                                            (if (= port 3000)

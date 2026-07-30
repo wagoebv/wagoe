@@ -126,7 +126,15 @@
    Returns:
      Map with :port (allocated port) and :message (allocation info)"
   [requested-port config]
-  (let [strategy-info (suggest-port-strategy requested-port config)
+  ;; Coerce defensively: aero's #env yields a STRING, so a config missing the
+  ;; #long tag hands a string down here. That went unnoticed for as long as the
+  ;; requested port was never actually used — the moment it was, it surfaced as
+  ;; a bare ClassCastException from port-available? (BOU-251). The configs are
+  ;; fixed too; this keeps any other caller from reintroducing it silently.
+  (let [requested-port (if (string? requested-port)
+                         (parse-long requested-port)
+                         requested-port)
+        strategy-info (suggest-port-strategy requested-port config)
         {:keys [strategy port-range message]} strategy-info]
 
     (log/debug "Port allocation strategy" {:strategy strategy :range port-range})
@@ -142,7 +150,16 @@
                          :suggestion "Use different port or stop conflicting process"})))
 
       :range-search
-      (let [allocated-port (find-available-port (:start port-range) (:end port-range))]
+      ;; Try the REQUESTED port first, and only fall back to scanning the range
+      ;; if it is genuinely taken. Previously this went straight to
+      ;; find-available-port from (:start port-range), so with a :port-range
+      ;; configured an explicit HTTP_PORT was silently ignored — a request for
+      ;; 3195 landed on 3100 and the "port conflict resolved" warning was false,
+      ;; because nothing was in conflict. Anything probing the requested port
+      ;; then found nothing listening (BOU-251).
+      (let [allocated-port (if (port-available? requested-port)
+                             requested-port
+                             (find-available-port (:start port-range) (:end port-range)))]
         {:port allocated-port
          :message (str message (when (not= allocated-port requested-port)
                                  (format " - resolved conflict, using port %d" allocated-port)))}))))
