@@ -32,9 +32,28 @@ runs:
     # trips a Maven DefaultModelValidator concurrency bug (HashMap$Node cannot be
     # cast to TreeNode). -Sthreads 1 serialises resolution; -P prepares without
     # running, warming .cpcache/.m2 deterministically.
+    # Retries exist because Maven Central rate-limits GitHub runners: a cold
+    # resolution intermittently returns 429 (or 403) mid-download and fails the
+    # whole job before a single test runs. The failure then names an innocent
+    # library, so it reads as "that lib's tests are broken" (BOU-250). Backoff is
+    # exponential; only the transient HTTP statuses are worth retrying, but
+    # tools.deps exits 1 for every error, so we retry on any failure and let the
+    # last attempt surface the real message.
     - name: Prefetch deps (serial — avoids Maven concurrent-resolution crash)
       shell: bash
       run: |
+        set -o pipefail
         for alias in ${{ inputs.aliases }}; do
-          clojure -Sthreads 1 -P "$alias"
+          for attempt in 1 2 3 4; do
+            if clojure -Sthreads 1 -P "$alias"; then
+              break
+            fi
+            if [ "$attempt" -eq 4 ]; then
+              echo "::error::dependency resolution failed for $alias after 4 attempts"
+              exit 1
+            fi
+            delay=$((attempt * attempt * 10))
+            echo "::warning::resolution failed for $alias (attempt $attempt/4) — retrying in ${delay}s"
+            sleep "$delay"
+          done
         done
