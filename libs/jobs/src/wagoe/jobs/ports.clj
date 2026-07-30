@@ -296,3 +296,60 @@
 
     Returns:
       Vector of recent jobs with results"))
+
+;; =============================================================================
+;; Transactional enqueue — a capability, not a base requirement
+;; =============================================================================
+;;
+;; Deliberately a SEPARATE protocol rather than another method on IJobQueue.
+;;
+;; Enqueueing inside the caller's business transaction is only meaningful when
+;; the queue lives in the same database as the business data — true for the DB
+;; adapter, impossible for Redis and in-memory. Putting it on IJobQueue would
+;; force every implementation to declare a method most of them cannot honour,
+;; and the honest implementations would be `throw`s that callers discover at
+;; runtime.
+;;
+;; As a capability protocol, `satisfies?` answers the question up front:
+;;
+;;   (if (ports/transactional-queue? q)
+;;     (jdbc/with-transaction [tx ds]
+;;       (orders/create! tx order)
+;;       (ports/enqueue-in-tx! q tx :emails receipt-job))
+;;     (do (orders/create! ds order)
+;;         (ports/enqueue-job! q :emails receipt-job)))   ; accepts the dual-write window
+;;
+;; This also keeps callers on the port: reaching for the concrete adapter
+;; namespace to get at a transactional enqueue would couple application code to
+;; one implementation, which the hexagonal rules exist to prevent.
+
+(defprotocol ITransactionalJobQueue
+  "Optional capability: enqueue a job inside a caller-managed transaction.
+
+   Implemented only by queues backed by the same database as the business data.
+   Use `transactional-queue?` to check before calling."
+
+  (enqueue-in-tx! [this tx queue-name job]
+    "Enqueue a job within the caller's open transaction, so the job commits
+     atomically with the business change (outbox semantics: rollback leaves no
+     orphan job; commit means a worker will pick it up).
+
+    Args:
+      tx         - an OPEN next.jdbc transaction, not a datasource
+      queue-name - Queue name
+      job        - Job map
+
+    Returns:
+      Job ID (UUID)
+
+    Throws:
+      ex-info {:type :validation-error} when `tx` is not an open transaction —
+      passing a datasource would autocommit and silently reintroduce the
+      dual-write window this exists to close."))
+
+(defn transactional-queue?
+  "True when `q` supports `enqueue-in-tx!` (i.e. the queue is co-located with the
+   business database). Lets callers branch instead of discovering the limitation
+   as a runtime error."
+  [q]
+  (satisfies? ITransactionalJobQueue q))

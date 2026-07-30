@@ -129,7 +129,7 @@
       (jdbc/execute! ds ["CREATE TABLE orders (id UUID PRIMARY KEY)"])
       (jdbc/with-transaction [tx ds]
         (jdbc/execute! tx ["INSERT INTO orders (id) VALUES (?)" order-id])
-        (db/enqueue-in-tx! tx :default job))
+        (ports/enqueue-in-tx! q tx :default job))
       (is (= 1 (count (jdbc/execute! ds ["SELECT id FROM orders"]))) "business write committed")
       (is (= (:id job) (:id (ports/dequeue-job! q :default "w"))) "job committed in the same tx"))))
 
@@ -141,10 +141,42 @@
       (jdbc/execute! ds ["CREATE TABLE orders (id UUID PRIMARY KEY)"])
       (jdbc/with-transaction [tx ds {:rollback-only true}]
         (jdbc/execute! tx ["INSERT INTO orders (id) VALUES (?)" (random-uuid)])
-        (db/enqueue-in-tx! tx :default job))
+        (ports/enqueue-in-tx! q tx :default job))
       (is (zero? (count (jdbc/execute! ds ["SELECT id FROM orders"]))) "business write rolled back")
       (is (zero? (ports/queue-size q :default)) "no orphan job on the queue")
       (is (nil? (ports/dequeue-job! q :default "w"))))))
+
+(deftest ^:integration enqueue-in-tx-rejects-a-datasource
+  (testing "passing a datasource throws instead of silently autocommitting"
+    ;; The regression this guards: a datasource does not FAIL, it SUCCEEDS —
+    ;; autocommitting the job independently of the business change and silently
+    ;; restoring the dual-write window. Before the guard this test would have
+    ;; passed the insert and left a job on the queue (BOU-252).
+    (let [q  (fresh-queue)
+          ds (:ds q)]
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"requires an open transaction"
+                            (ports/enqueue-in-tx! q ds :default (mk-job))))
+      (is (zero? (ports/queue-size q :default))
+          "nothing was enqueued by the rejected call"))))
+
+(deftest ^:unit db-queue-advertises-the-transactional-capability
+  (testing "callers can ask before calling, instead of hitting a runtime error"
+    (is (ports/transactional-queue? (fresh-queue)))))
+
+(deftest ^:integration deprecated-adapter-fn-still-works-and-still-guards
+  (testing "the pre-BOU-252 adapter entry point keeps working for existing callers"
+    ;; Deliberately exercises the deprecated path: it is kept for back-compat, so
+    ;; it needs coverage, and it must carry the same datasource guard as the port.
+    (let [q   (fresh-queue)
+          ds  (:ds q)
+          job (mk-job)]
+      #_{:clj-kondo/ignore [:deprecated-var]}
+      (jdbc/with-transaction [tx ds]
+        (db/enqueue-in-tx! tx :default job))
+      (is (= (:id job) (:id (ports/dequeue-job! q :default "w"))))
+      #_{:clj-kondo/ignore [:deprecated-var]}
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"requires an open transaction"
+                            (db/enqueue-in-tx! ds :default (mk-job)))))))
 
 (deftest ^:integration peek-delete-and-list-queues
   (let [q (fresh-queue)
