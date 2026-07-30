@@ -962,12 +962,52 @@ jobs:
           retention-days: 7
 
   # =============================================================================
+  # Uberjar build — the deployable artifact
+  #
+  # Nothing in CI built a jar, so `clojure -T:build uber` was broken on macOS
+  # (grpc-netty-shaded ships META-INF/license/ as a DIRECTORY while ~38 other
+  # jars ship META-INF/LICENSE as a FILE; identical paths on a case-insensitive
+  # filesystem) and the Docker builder produced `wagoe-1.2.null-standalone.jar`
+  # because .git is dockerignored. Neither was detectable from a green CI run.
+  # This job builds the artifact and asserts it is named and runnable.
+  # =============================================================================
+  build-uberjar:
+    name: Build Uberjar
+    runs-on: ubuntu-latest
+    needs: lint
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Clojure + warm deps
+        uses: ./.github/actions/clojure-deps
+        with:
+          aliases: -M:test
+
+      - name: Build uberjar
+        run: clojure -T:build uber
+
+      - name: Assert the artifact is versioned and runnable
+        run: |
+          set -euo pipefail
+          version=$(sed -n 's/^(def version *"\(.*\)")/\1/p' libs/core/build.clj)
+          jar="target/wagoe-${version}-standalone.jar"
+          echo "expecting $jar"
+          test -f "$jar" || { echo "::error::missing $jar"; ls -1 target/*.jar || true; exit 1; }
+          case "$version" in
+            *null*|"") echo "::error::version did not resolve: '$version'"; exit 1 ;;
+          esac
+          unzip -p "$jar" META-INF/MANIFEST.MF | grep -q 'Main-Class: wagoe.main'
+          java -jar "$jar" --help >/dev/null 2>&1 || true
+          echo "ok: $jar"
+
+  # =============================================================================
   # Summary job
   # =============================================================================
   test-summary:
     name: All Tests Passed
     runs-on: ubuntu-latest
-    needs: [build-ui-assets, docs-lint, agents-links, command-smoke, config-doctor, i18n-scan, check-fcis, check-placeholder-tests, check-test-meta, check-test-tags, check-deps, check-ports, check-hygiene, check-poms, check-agents, check-no-boundary, example-smoke, test-i18n, test-core, test-observability, test-platform, test-user, test-admin, test-ui-style, test-storage, test-cache, test-jobs, test-tenant, test-email, test-realtime, test-workflow, test-search, test-scaffolder, test-external, test-payments, test-push, test-calendar, test-reports, test-geo, test-ai, test-mcp, test-wagoe-cli, test-shared-ui]
+    needs: [build-ui-assets, docs-lint, agents-links, command-smoke, config-doctor, i18n-scan, check-fcis, check-placeholder-tests, check-test-meta, check-test-tags, check-deps, check-ports, check-hygiene, check-poms, check-agents, check-no-boundary, build-uberjar, example-smoke, test-i18n, test-core, test-observability, test-platform, test-user, test-admin, test-ui-style, test-storage, test-cache, test-jobs, test-tenant, test-email, test-realtime, test-workflow, test-search, test-scaffolder, test-external, test-payments, test-push, test-calendar, test-reports, test-geo, test-ai, test-mcp, test-wagoe-cli, test-shared-ui]
 
     steps:
       - name: Summary
@@ -1013,4 +1053,5 @@ jobs:
           echo "  - check:poms (published POMs carry inter-Wagoe deps)"
           echo "  - check:agents (AGENTS.md in sync with the generator)"
           echo "  - check:no-boundary (no residual boundary tokens)"
+          echo "  - build-uberjar (deployable artifact builds and is versioned)"
           echo "  - example-smoke (examples/todo runs)"

@@ -1,9 +1,29 @@
 (ns build
-  (:require [clojure.string :as str]
+  (:require [clojure.java.io :as io]
+            [clojure.string :as str]
             [clojure.tools.build.api :as b]))
 
 (def lib 'wagoe/wagoe)
-(def version (format "1.2.%s" (b/git-count-revs nil)))
+
+(defn- suite-version
+  "The published library-suite version, read from libs/core/build.clj — the same
+   value every lib pins.
+
+   Previously this was `(format \"1.2.%s\" (b/git-count-revs nil))`, which was
+   wrong twice: the `1.2.N` scheme contradicts the suite's actual `1.0.0-beta-1`,
+   and `.git` is in .dockerignore, so inside the Docker builder git-count-revs
+   returned nil and the artifact was named `wagoe-1.2.null-standalone.jar`.
+
+   Reading libs/core rather than restating the literal keeps this from becoming
+   yet another copy that drifts (BOU-250)."
+  []
+  (let [f (io/file "libs" "core" "build.clj")]
+    (or (when (.exists f)
+          (second (re-find #"\(def version\s+\"([^\"]+)\"" (slurp f))))
+        (throw (ex-info "cannot determine version: libs/core/build.clj unreadable"
+                        {:path (.getPath f)})))))
+
+(def version (suite-version))
 (def class-dir "target/classes")
 
 ;; Include database drivers in the uberjar basis
@@ -47,14 +67,28 @@
                   :ns-compile '[wagoe.main]
                   :java-opts ["-Dclojure.compiler.direct-linking=true"]})
 
-  ;; Build uberjar
-  ;; Some dependency jars ship LICENSE as a file, others as a directory —
-  ;; b/uber cannot merge the two, so keep license/notice files out of the jar.
+  ;; Build uberjar.
+  ;;
+  ;; Some dependency jars ship LICENSE/NOTICE as a file, others as a directory,
+  ;; and b/uber cannot merge the two — it explodes every jar onto one tree, so
+  ;; whichever lands first wins and the other errors with "parent dir is a file
+  ;; from another lib".
+  ;;
+  ;; Both the top-level and META-INF variants must be excluded, and the META-INF
+  ;; ones case-insensitively: grpc-netty-shaded ships `META-INF/license/` as a
+  ;; DIRECTORY while ~38 other jars (jackson, httpclient, guava, pdfbox, poi,
+  ;; batik, postgresql, …) ship `META-INF/LICENSE` as a FILE. On a case-sensitive
+  ;; filesystem those are distinct paths and the build succeeds — which is why
+  ;; this only failed on macOS while Linux and the Docker build were fine.
+  ;; Excluding them makes the build behave identically on both.
   (b/uber {:class-dir class-dir
            :uber-file uber-file
            :basis basis
            :main 'wagoe.main
-           :exclude ["^LICENSE(/.*)?$" "^NOTICE(/.*)?$"]})
+           :exclude ["^LICENSE(/.*)?$"
+                     "^NOTICE(/.*)?$"
+                     "(?i)^META-INF/LICENSE(/.*|\\.[^/]*)?$"
+                     "(?i)^META-INF/NOTICE(/.*|\\.[^/]*)?$"]})
 
   (println (str "✓ Uberjar built successfully: " uber-file))
   (println)
