@@ -962,6 +962,34 @@ jobs:
           retention-days: 7
 
   # =============================================================================
+  # Babashka-only test surfaces (libs/tools + the AGENTS.md generator)
+  #
+  # Neither ran in CI. libs/tools is pure Babashka and libs/tools/test is on no
+  # kaocha suite, so its 107 tests — which cover the quality-gate checkers
+  # themselves, including the all-checks/CI lockstep test — were verified only
+  # when someone ran `bb test:tools` by hand. Same for the generator tests.
+  # `bb test:all` runs these locally; these jobs make CI agree (BOU-246).
+  # =============================================================================
+  test-tools:
+    name: Test wagoe/tools
+    runs-on: ubuntu-latest
+    needs: warm-deps
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Babashka
+        uses: DeLaGuardo/setup-clojure@13.6.1
+        with:
+          bb: latest
+
+      - name: Run wagoe-tools unit tests
+        run: bb test:tools
+
+      - name: Run AGENTS.md generator tests
+        run: bb test:agents
+
+  # =============================================================================
   # Uberjar build — the deployable artifact
   #
   # Nothing in CI built a jar, so `clojure -T:build uber` was broken on macOS
@@ -1032,7 +1060,7 @@ jobs:
   test-summary:
     name: All Tests Passed
     runs-on: ubuntu-latest
-    needs: [build-ui-assets, docs-lint, agents-links, command-smoke, config-doctor, i18n-scan, check-fcis, check-placeholder-tests, check-test-meta, check-test-tags, check-deps, check-ports, check-hygiene, check-poms, check-agents, check-no-boundary, build-uberjar, example-smoke, test-i18n, test-core, test-observability, test-platform, test-user, test-admin, test-ui-style, test-storage, test-cache, test-jobs, test-tenant, test-email, test-realtime, test-workflow, test-search, test-scaffolder, test-external, test-payments, test-push, test-calendar, test-reports, test-geo, test-ai, test-mcp, test-wagoe-cli, test-shared-ui]
+    needs: [build-ui-assets, docs-lint, agents-links, command-smoke, config-doctor, i18n-scan, check-fcis, check-placeholder-tests, check-test-meta, check-test-tags, check-deps, check-ports, check-hygiene, check-poms, check-agents, check-no-boundary, build-uberjar, test-tools, example-smoke, test-i18n, test-core, test-observability, test-platform, test-user, test-admin, test-ui-style, test-storage, test-cache, test-jobs, test-tenant, test-email, test-realtime, test-workflow, test-search, test-scaffolder, test-external, test-payments, test-push, test-calendar, test-reports, test-geo, test-ai, test-mcp, test-wagoe-cli, test-shared-ui]
 
     steps:
       - name: Summary
@@ -1079,4 +1107,5 @@ jobs:
           echo "  - check:agents (AGENTS.md in sync with the generator)"
           echo "  - check:no-boundary (no residual boundary tokens)"
           echo "  - build-uberjar (deployable artifact builds and is versioned)"
+          echo "  - test-tools (libs/tools + AGENTS.md generator tests)"
           echo "  - example-smoke (examples/todo runs)"
