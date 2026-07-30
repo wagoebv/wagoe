@@ -70,6 +70,12 @@
    {:id    :agents
     :label "AGENTS.md drift"
     :cmd   ["bb" "check:agents"]}
+   {:id    :poms
+    :label "POM dependency completeness"
+    :cmd   ["bb" "check:poms"]}
+   {:id    :no-boundary
+    :label "Rename gate (no residual boundary tokens)"
+    :cmd   ["bb" "check:no-boundary"]}
    {:id    :linting
     :label "Linting"
     :cmd   (linting-cmd)}

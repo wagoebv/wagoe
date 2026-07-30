@@ -302,6 +302,44 @@ jobs:
         run: bb check:poms
 
   # =============================================================================
+  # AGENTS.md generator drift (Babashka — fast, no JVM)
+  # =============================================================================
+  check-agents:
+    name: AGENTS.md Drift Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Babashka
+        uses: DeLaGuardo/setup-clojure@13.6.1
+        with:
+          bb: latest
+
+      - name: Check AGENTS files are in sync with the generator
+        run: bb check:agents
+
+  # =============================================================================
+  # Rename gate — no residual boundary tokens (Babashka — fast, no JVM)
+  # =============================================================================
+  check-no-boundary:
+    name: Rename Gate (no residual boundary tokens)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Babashka
+        uses: DeLaGuardo/setup-clojure@13.6.1
+        with:
+          bb: latest
+
+      # git grep needs the full history-free worktree only, but the gate reads
+      # tracked files via `git ls-files`/`git grep`, so a plain checkout is enough.
+      - name: Check for residual boundary namespaces, keys, coords, env and URLs
+        run: bb check:no-boundary
+
+  # =============================================================================
   # In-repo runnable example must actually run (examples/todo)
   # =============================================================================
   example-smoke:
@@ -903,7 +941,7 @@ jobs:
   test-summary:
     name: All Tests Passed
     runs-on: ubuntu-latest
-    needs: [build-ui-assets, docs-lint, agents-links, command-smoke, config-doctor, i18n-scan, check-fcis, check-placeholder-tests, check-test-meta, check-test-tags, check-deps, check-ports, check-hygiene, check-poms, example-smoke, test-i18n, test-core, test-observability, test-platform, test-user, test-admin, test-ui-style, test-storage, test-cache, test-jobs, test-tenant, test-email, test-realtime, test-workflow, test-search, test-scaffolder, test-external, test-payments, test-push, test-calendar, test-reports, test-geo, test-ai, test-mcp, test-wagoe-cli, test-shared-ui]
+    needs: [build-ui-assets, docs-lint, agents-links, command-smoke, config-doctor, i18n-scan, check-fcis, check-placeholder-tests, check-test-meta, check-test-tags, check-deps, check-ports, check-hygiene, check-poms, check-agents, check-no-boundary, example-smoke, test-i18n, test-core, test-observability, test-platform, test-user, test-admin, test-ui-style, test-storage, test-cache, test-jobs, test-tenant, test-email, test-realtime, test-workflow, test-search, test-scaffolder, test-external, test-payments, test-push, test-calendar, test-reports, test-geo, test-ai, test-mcp, test-wagoe-cli, test-shared-ui]
 
     steps:
       - name: Summary
@@ -947,4 +985,6 @@ jobs:
           echo "  - check:ports (no hexagonal boundary violations)"
           echo "  - check:hygiene (no tracked backup/cruft files)"
           echo "  - check:poms (published POMs carry inter-Wagoe deps)"
+          echo "  - check:agents (AGENTS.md in sync with the generator)"
+          echo "  - check:no-boundary (no residual boundary tokens)"
           echo "  - example-smoke (examples/todo runs)"
