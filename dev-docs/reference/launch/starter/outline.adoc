@@ -92,4 +92,9 @@ curl -X POST http://localhost:3000/api/auth/login -d '{"email":"user@example.com
 
 Out-of-the-box Defaults - SQLite dev, H2 test, Postgres prod - Ports/Core/Shell separation enforced by scaffolder and conventions - SSR/HTMX patterns with admin UI - Interceptor-based observability
 
+NOTE: This outline is retained as a design record. The separate starter repo was
+not built — BOU-224 was cancelled as deprecated, and project creation is served by
+`wagoe new` from the CLI instead. The GitHub URL below is the intended location if
+the plan is ever revived; it does not exist today.
+
 Next Steps - Publish starter to GitHub: https://github.com/wagoebv/wagoe-starter - Record demo using this repo - Iterate based on soft launch feedback

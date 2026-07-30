@@ -27,9 +27,8 @@ wagoe/
 └── tests.edn              ← Kaocha test suite definitions
 ----
 
-The starter template and example applications live in separate repositories:
+Example applications live in a separate repository:
 
-* https://github.com/wagoebv/wagoe-starter[wagoe-starter] — project scaffolding wizard
 * https://github.com/wagoebv/wagoe-examples[wagoe-examples] — reference applications (ecommerce-api, blog-app, and more)
 
 == Library structure
