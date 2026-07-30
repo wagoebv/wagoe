@@ -3,7 +3,7 @@ services:
     image: postgres:18
     container_name: my-app-db
     environment:
-      POSTGRES_DB: boundary_dev
+      POSTGRES_DB: wagoe_dev
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     ports:

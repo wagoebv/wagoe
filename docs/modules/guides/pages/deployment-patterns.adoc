@@ -141,8 +141,8 @@ Reference file: `resources/deploy/cloud/fly.toml`
 fly launch --copy-config
 
 # 3. Create database
-fly postgres create --name my-boundary-app-db
-fly postgres attach my-boundary-app-db
+fly postgres create --name my-wagoe-app-db
+fly postgres attach my-wagoe-app-db
 
 # 4. Set secrets
 fly secrets set JWT_SECRET="your-secret-32-chars-min" POSTGRES_PASSWORD="..."

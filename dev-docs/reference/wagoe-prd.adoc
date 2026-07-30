@@ -1915,14 +1915,14 @@ config/
                           :staging #long #env "DB_PORT"
                           :production #long #env "DB_PORT"
                           :test 5432}
-           :name #profile {:development "boundary_dev"
+           :name #profile {:development "wagoe_dev"
                           :staging #env "DB_NAME"
                           :production #env "DB_NAME"
-                          :test "boundary_test"}
-           :username #profile {:development "boundary_dev"
+                          :test "wagoe_test"}
+           :username #profile {:development "wagoe_dev"
                               :staging #env "DB_USERNAME"
                               :production #env "DB_USERNAME"
-                              :test "boundary_test"}
+                              :test "wagoe_test"}
            :password #profile {:development "dev_password"
                               :staging #env "DB_PASSWORD"
                               :production #env "DB_PASSWORD"
@@ -3700,7 +3700,7 @@ COMMENT ON COLUMN users.deleted_at IS 'Soft delete timestamp - NULL means active
 (def test-db-container
   (tc/create {:image "postgres:15-alpine"
               :exposed-ports [5432]
-              :env {"POSTGRES_DB" "boundary_test"
+              :env {"POSTGRES_DB" "wagoe_test"
                    "POSTGRES_USER" "test"
                    "POSTGRES_PASSWORD" "test"}}))
 
@@ -3710,7 +3710,7 @@ COMMENT ON COLUMN users.deleted_at IS 'Soft delete timestamp - NULL means active
   (let [datasource (persistence/create-connection-pool
                    {:host (tc/host test-db-container)
                     :port (tc/mapped-port test-db-container 5432)
-                    :name "boundary_test"
+                    :name "wagoe_test"
                     :username "test"
                     :password "test"
                     :pool {:minimum-idle 1 :maximum-pool-size 2}})]
@@ -5036,8 +5036,8 @@ $ boundary system config
 ╠══════════════════╪════════════════════════╪════════════════════════════════╣
 ║ database         │ host                   │ localhost                      ║
 ║                  │ port                   │ 5432                           ║
-║                  │ name                   │ boundary_prod                     ║
-║                  │ username               │ boundary_user                     ║
+║                  │ name                   │ wagoe_prod                     ║
+║                  │ username               │ wagoe_user                     ║
 ║                  │ password               │ ************                   ║
 ║ email            │ host                   │ smtp.example.com               ║
 ║                  │ port                   │ 587                            ║

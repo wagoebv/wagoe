@@ -811,7 +811,7 @@ DELETE /admin/tenants/:id        ; Delete tenant (soft delete)
 (def datasource
   (jdbc/get-datasource
     {:dbtype "postgresql"
-     :dbname "boundary_production"
+     :dbname "wagoe_production"
      :host "localhost"
      :port 5432
      :maximum-pool-size 50      ; Shared across all tenants
@@ -901,7 +901,7 @@ ORDER BY sum(pg_total_relation_size(schemaname||'.'||tablename)) DESC;
 [source,bash]
 ----
 # Backup all tenants (includes public schema + all tenant schemas)
-pg_dump -Fc boundary_production > backup_all_tenants.dump
+pg_dump -Fc wagoe_production > backup_all_tenants.dump
 ----
 
 *Per-Tenant Backup:*
@@ -909,7 +909,7 @@ pg_dump -Fc boundary_production > backup_all_tenants.dump
 [source,bash]
 ----
 # Backup single tenant schema
-pg_dump -Fc --schema=tenant_acme_corp boundary_production > tenant_acme_corp.dump
+pg_dump -Fc --schema=tenant_acme_corp wagoe_production > tenant_acme_corp.dump
 ----
 
 *Restore Tenant:*
@@ -917,7 +917,7 @@ pg_dump -Fc --schema=tenant_acme_corp boundary_production > tenant_acme_corp.dum
 [source,bash]
 ----
 # Restore tenant to new database
-pg_restore -d boundary_production --schema=tenant_acme_corp tenant_acme_corp.dump
+pg_restore -d wagoe_production --schema=tenant_acme_corp tenant_acme_corp.dump
 ----
 
 ==== Tenant Lifecycle

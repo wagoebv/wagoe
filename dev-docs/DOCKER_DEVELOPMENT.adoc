@@ -182,7 +182,7 @@ POSTGRES_PORT=5432
 DOCS_PORT=8080
 
 # Database settings
-POSTGRES_DB=boundary_dev
+POSTGRES_DB=wagoe_dev
 POSTGRES_USER=postgres  
 POSTGRES_PASSWORD=postgres
 
@@ -233,7 +233,7 @@ clojure -M:dev:repl
 ./scripts/docker-dev.sh shell db
 
 # Inside container
-psql -U postgres -d boundary_dev
+psql -U postgres -d wagoe_dev
 ----
 
 ==== Live Development
@@ -460,7 +460,7 @@ All services run as non-root users:
 
 ==== Network Isolation
 
-* *Custom network*: Services communicate via `boundary-network`
+* *Custom network*: Services communicate via `wagoe-network`
 * *No host networking*: All port mappings explicit
 * *Internal communication*: Services use container names
 

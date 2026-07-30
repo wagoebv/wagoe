@@ -20,7 +20,7 @@
 
 (def ^:private default-application-name
   "Default application name for PostgreSQL connections."
-  "boundary-app")
+  "wagoe-app")
 
 (def ^:private default-statement-timeout-ms
   "Default statement timeout in milliseconds (30 seconds)."

@@ -37,7 +37,7 @@
     :multi true
     :default []
     :update-fn conj]
-   [nil "--base-ns NS" "Base namespace + path for the module (default: boundary)"]
+   [nil "--base-ns NS" "Base namespace + path for the module (default: wagoe)"]
    [nil "--http" "Enable HTTP (REST API) interface (default: true)"
     :default true]
    [nil "--cli" "Enable CLI interface (default: true)"

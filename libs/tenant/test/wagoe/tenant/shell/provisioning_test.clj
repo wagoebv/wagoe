@@ -566,7 +566,7 @@
      (let [ctx (db-factory/db-context {:adapter :postgresql
                                        :host \"localhost\"
                                        :port 5432
-                                       :database \"boundary_test\"
+                                       :database \"wagoe_test\"
                                        :username \"postgres\"
                                        :password \"postgres\"
                                        :pool {:maximum-pool-size 5}})]

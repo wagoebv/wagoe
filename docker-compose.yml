@@ -7,9 +7,9 @@ services:
   # PostgreSQL Database
   db:
     image: postgres:18
-    container_name: boundary-db
+    container_name: wagoe-db
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-boundary_dev}
+      POSTGRES_DB: ${POSTGRES_DB:-wagoe_dev}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
@@ -18,16 +18,16 @@ services:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       # For PostgreSQL 18+, store data in pg_ctlcluster-compatible directory
-      - boundary_pgdata:/var/lib/postgresql/data/pgdata
+      - wagoe_pgdata:/var/lib/postgresql/data/pgdata
       # Optional: Custom init scripts
       - ./resources/db/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-boundary_dev}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-wagoe_dev}"]
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
-      - boundary-network
+      - wagoe-network
 
   # Main Application
   app:
@@ -35,8 +35,8 @@ services:
       context: .
       dockerfile: resources/conf/dev/Dockerfile
       target: ${BUILD_TARGET:-runtime}
-    image: boundary-app:${VERSION:-dev}
-    container_name: boundary-app
+    image: wagoe-app:${VERSION:-dev}
+    container_name: wagoe-app
     depends_on:
       db:
         condition: service_healthy
@@ -44,7 +44,7 @@ services:
       # Database connection
       - POSTGRES_HOST=db
       - POSTGRES_PORT=5432
-      - POSTGRES_DB=${POSTGRES_DB:-boundary_dev}
+      - POSTGRES_DB=${POSTGRES_DB:-wagoe_dev}
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
       
@@ -56,7 +56,7 @@ services:
       
       # Docker environment markers
       - DOCKER_CONTAINER=true
-      - CONTAINER_NAME=boundary-app
+      - CONTAINER_NAME=wagoe-app
       
       # JVM tuning for containers
       - JAVA_OPTS=${JAVA_OPTS:--Xmx512m -Xms128m -XX:+UseG1GC -XX:+UseContainerSupport}
@@ -73,7 +73,7 @@ services:
       - ./src:/app/src:ro
       - ./resources:/app/resources:ro
       # Logs directory
-      - boundary_logs:/app/logs
+      - wagoe_logs:/app/logs
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:${HTTP_PORT:-3000}/health || exit 1"]
       interval: 30s
@@ -81,13 +81,13 @@ services:
       retries: 3
       start_period: 60s
     networks:
-      - boundary-network
+      - wagoe-network
     restart: unless-stopped
 
   # Documentation Server (Optional)
   docs:
     image: node:18-alpine
-    container_name: boundary-docs
+    container_name: wagoe-docs
     working_dir: /app
     command: sh -c "npm install && npm run build-docs && npm run serve-docs"
     environment:
@@ -101,7 +101,7 @@ services:
       - /app/node_modules
       - boundary_docs:/app/resources/public/docs
     networks:
-      - boundary-network
+      - wagoe-network
     profiles:
       - docs
       - full
@@ -115,7 +115,7 @@ services:
     environment:
       - POSTGRES_HOST=db
       - POSTGRES_PORT=5432
-      - POSTGRES_DB=${POSTGRES_DB:-boundary_dev}
+      - POSTGRES_DB=${POSTGRES_DB:-wagoe_dev}
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
     volumes:
@@ -123,24 +123,24 @@ services:
       - boundary_m2_cache:/root/.m2
       - boundary_clj_cache:/root/.clojure
     networks:
-      - boundary-network
+      - wagoe-network
     profiles:
       - dev
       - full
 
 # Networks
 networks:
-  boundary-network:
+  wagoe-network:
     driver: bridge
-    name: boundary-network
+    name: wagoe-network
 
 # Volumes
 volumes:
-  boundary_pgdata:
-    name: boundary_pgdata
+  wagoe_pgdata:
+    name: wagoe_pgdata
     driver: local
-  boundary_logs:
-    name: boundary_logs
+  wagoe_logs:
+    name: wagoe_logs
     driver: local
   boundary_docs:
     name: boundary_docs

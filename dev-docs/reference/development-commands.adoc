@@ -518,7 +518,7 @@ clj-nrepl-eval -p 7888 "(require '[integrant.repl :as ig-repl]) (ig-repl/reset)"
 
 |`POSTGRES_DB`
 |PostgreSQL database name
-|`boundary_dev`
+|`wagoe_dev`
 
 |`POSTGRES_USER`
 |PostgreSQL user

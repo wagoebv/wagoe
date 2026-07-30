@@ -64,8 +64,8 @@ A Dockerfile is included in the starter:
 
 [source,bash]
 ----
-docker build -t my-boundary-app .
-docker run -e JWT_SECRET="..." -e WAG_ENV=production -p 3000:3000 my-boundary-app
+docker build -t my-wagoe-app .
+docker run -e JWT_SECRET="..." -e WAG_ENV=production -p 3000:3000 my-wagoe-app
 ----
 
 == Configuration per environment

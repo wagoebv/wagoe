@@ -10,7 +10,7 @@
 apiVersion: v1
 kind: Secret
 metadata:
-  name: boundary-secrets
+  name: wagoe-secrets
 type: Opaque
 stringData:
   # Replace with real values (or source from your secret manager / sealed-secrets).
@@ -21,14 +21,14 @@ stringData:
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: boundary-config
+  name: wagoe-config
 data:
   WAG_ENV: "prod"
   HTTP_PORT: "3000"
   # Rate limiting in :prod requires an active Redis cache (the app refuses to
   # boot with rate limiting enabled and no cache — see BOU-173). Point these at
   # your Redis and enable it once it is reachable.
-  REDIS_HOST: "boundary-redis"
+  REDIS_HOST: "wagoe-redis"
   REDIS_PORT: "6379"
   HTTP_RATE_LIMIT_ENABLED: "false"
 ---
@@ -52,8 +52,8 @@ spec:
           ports:
             - containerPort: 3000
           envFrom:
-            - configMapRef: { name: boundary-config }
-            - secretRef: { name: boundary-secrets }
+            - configMapRef: { name: wagoe-config }
+            - secretRef: { name: wagoe-secrets }
           # Kubernetes-native probes (the app already serves these endpoints).
           livenessProbe:
             httpGet: { path: /health/live, port: 3000 }
@@ -102,8 +102,8 @@ spec:
           # Same image, worker mode — no HTTP listener, so no HTTP probes.
           args: ["worker"]
           envFrom:
-            - configMapRef: { name: boundary-config }
-            - secretRef: { name: boundary-secrets }
+            - configMapRef: { name: wagoe-config }
+            - secretRef: { name: wagoe-secrets }
           resources:
             requests: { cpu: "250m", memory: "512Mi" }
             limits: { memory: "768Mi" }

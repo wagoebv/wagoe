@@ -73,7 +73,7 @@ check_database() {
     if [[ -n "$POSTGRES_HOST" ]]; then
         local db_host="${POSTGRES_HOST:-localhost}"
         local db_port="${POSTGRES_PORT:-5432}"
-        local db_name="${POSTGRES_DB:-boundary_dev}"
+        local db_name="${POSTGRES_DB:-wagoe_dev}"
         local db_user="${POSTGRES_USER:-postgres}"
         
         log_info "🗄️  Database configuration:"

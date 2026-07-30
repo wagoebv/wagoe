@@ -95,7 +95,7 @@
   :wagoe/postgresql
   {:host          "localhost"
    :port          5432
-   :dbname        "boundary_test"
+   :dbname        "wagoe_test"
    :user          "test_user"
    :password      "test_password"
    :auto-commit   true
@@ -106,7 +106,7 @@
   :wagoe/mysql
   {:host          "localhost"
    :port          3306
-   :dbname        "boundary_test"
+   :dbname        "wagoe_test"
    :user          "test_user"
    :password      "test_password"
    :pool          {:minimum-idle 1

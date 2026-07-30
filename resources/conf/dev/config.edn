@@ -43,7 +43,7 @@
   :wagoe/postgresql
   {:host        #or [#env POSTGRES_HOST "localhost"]
    :port        #or [#long #or [#env POSTGRES_PORT 5432] 5432]
-   :dbname      #or [#env POSTGRES_DB "boundary_dev"]
+   :dbname      #or [#env POSTGRES_DB "wagoe_dev"]
    :user        #or [#env POSTGRES_USER "postgres"]
    :password    #or [#env POSTGRES_PASSWORD "postgres"]
    :auto-commit true

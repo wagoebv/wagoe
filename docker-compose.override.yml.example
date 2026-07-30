@@ -23,11 +23,11 @@ services:
   # Example: Redis for caching
   # redis:
   #   image: redis:7-alpine
-  #   container_name: boundary-redis
+  #   container_name: wagoe-redis
   #   ports:
   #     - "6379:6379"
   #   networks:
-  #     - boundary-network
+  #     - wagoe-network
 
   # Example: Custom database configuration
   db:

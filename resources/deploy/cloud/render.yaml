@@ -5,7 +5,7 @@
 
 services:
   - type: web
-    name: boundary-app
+    name: wagoe-app
     runtime: docker
     dockerfilePath: resources/conf/dev/Dockerfile
     region: frankfurt
@@ -20,27 +20,27 @@ services:
         generateValue: true
       - key: POSTGRES_HOST
         fromDatabase:
-          name: boundary-db
+          name: wagoe-db
           property: host
       - key: POSTGRES_PORT
         fromDatabase:
-          name: boundary-db
+          name: wagoe-db
           property: port
       - key: POSTGRES_DB
         fromDatabase:
-          name: boundary-db
+          name: wagoe-db
           property: database
       - key: POSTGRES_USER
         fromDatabase:
-          name: boundary-db
+          name: wagoe-db
           property: user
       - key: POSTGRES_PASSWORD
         fromDatabase:
-          name: boundary-db
+          name: wagoe-db
           property: password
 
 databases:
-  - name: boundary-db
+  - name: wagoe-db
     plan: standard
     region: frankfurt
     postgresMajorVersion: "16"

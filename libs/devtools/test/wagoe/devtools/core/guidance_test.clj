@@ -17,7 +17,7 @@
     (let [result (guidance/format-startup-dashboard
                   {:components     12
                    :errors         0
-                   :database       "PostgreSQL @ localhost:5432/boundary_dev"
+                   :database       "PostgreSQL @ localhost:5432/wagoe_dev"
                    :web-url        "http://localhost:3000"
                    :admin-url      "http://localhost:3000/admin"
                    :nrepl-port     7888
