@@ -115,12 +115,30 @@
   (and (instance? java.sql.Connection connectable)
        (not (.getAutoCommit ^java.sql.Connection connectable))))
 
-(defn insert-job!
-  "INSERT a job row using the given `connectable` — a datasource, a connection,
-   or (the point of this fn) an open `next.jdbc` transaction. Returns the job id.
+(defn- assert-open-transaction!
+  "Throw unless `tx` is an open transaction. Single definition on purpose: the
+   port method and the deprecated adapter fn both need it, and two copies of a
+   safety check drift — the first version of this PR already had them throwing
+   different ex-data, leaving the deprecated path with nothing actionable."
+  [tx queue-name]
+  (when-not (open-transaction? tx)
+    (throw (ex-info "enqueue-in-tx! requires an open transaction, not a datasource"
+                    {:type       :validation-error
+                     :queue-name queue-name
+                     :hint       (str "pass the tx bound by jdbc/with-transaction; "
+                                      "a datasource would autocommit and reopen the "
+                                      "dual-write window")}))))
 
-   Used by `enqueue-job!` (autocommit via the adapter's datasource) and by
-   `enqueue-in-tx!` (the caller's transaction, for a transactional enqueue)."
+(defn- insert-job!
+  "INSERT a job row using the given `connectable` — a datasource, a connection,
+   or an open `next.jdbc` transaction. Returns the job id.
+
+   PRIVATE on purpose. It accepts a datasource because `enqueue-job!` legitimately
+   passes one (autocommit is correct for a non-transactional enqueue), so the
+   transaction guard cannot live here. Public, it would be a third entry point
+   that skips the guard entirely: `insert-job!` with a datasource reproduces the
+   exact silent dual-write this change exists to prevent. Callers use
+   `ports/enqueue-in-tx!`."
   [connectable queue-name job]
   (let [job-id     (:id job)
         scheduled? (some? (:execute-at job))]
@@ -142,13 +160,7 @@
   ports/ITransactionalJobQueue
 
   (enqueue-in-tx! [_ tx queue-name job]
-    (when-not (open-transaction? tx)
-      (throw (ex-info "enqueue-in-tx! requires an open transaction, not a datasource"
-                      {:type       :validation-error
-                       :queue-name queue-name
-                       :hint       (str "pass the tx bound by jdbc/with-transaction; "
-                                        "a datasource would autocommit and reopen the "
-                                        "dual-write window")})))
+    (assert-open-transaction! tx queue-name)
     (let [job-id (insert-job! tx queue-name job)]
       (log/info "Enqueued job in caller transaction"
                 {:job-id job-id :queue queue-name})
@@ -251,9 +263,7 @@
    lives on `ports/ITransactionalJobQueue`, so callers can stay on the port and
    ask `ports/transactional-queue?` instead of knowing which adapter they have."
   [tx queue-name job]
-  (when-not (open-transaction? tx)
-    (throw (ex-info "enqueue-in-tx! requires an open transaction, not a datasource"
-                    {:type :validation-error})))
+  (assert-open-transaction! tx queue-name)
   (insert-job! tx queue-name job))
 
 (defn create-db-job-queue

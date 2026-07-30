@@ -5,7 +5,8 @@
   (:require [clojure.test :refer [deftest testing is]]
             [next.jdbc :as jdbc]
             [wagoe.jobs.ports :as ports]
-            [wagoe.jobs.shell.adapters.db :as db])
+            [wagoe.jobs.shell.adapters.db :as db]
+            [wagoe.jobs.shell.adapters.in-memory :as mem])
   (:import [java.time Instant]))
 
 (defn- fresh-queue
@@ -159,9 +160,17 @@
       (is (zero? (ports/queue-size q :default))
           "nothing was enqueued by the rejected call"))))
 
-(deftest ^:unit db-queue-advertises-the-transactional-capability
-  (testing "callers can ask before calling, instead of hitting a runtime error"
-    (is (ports/transactional-queue? (fresh-queue)))))
+(deftest ^:unit transactional-capability-is-advertised-only-where-it-can-be-honoured
+  (testing "the DB queue advertises it — the queue lives in the business database"
+    (is (ports/transactional-queue? (fresh-queue))))
+
+  (testing "the in-memory queue does NOT — it cannot join the caller's DB transaction"
+    ;; The negative case is the whole point of a capability protocol. Without
+    ;; this, extending ITransactionalJobQueue to an adapter that cannot honour it
+    ;; would go unnoticed, and callers branching on transactional-queue? would
+    ;; silently take the unsafe path believing it was safe (BOU-252 review).
+    (is (not (ports/transactional-queue? (mem/create-in-memory-job-queue)))
+        "outbox semantics require the queue to share the business database")))
 
 (deftest ^:integration deprecated-adapter-fn-still-works-and-still-guards
   (testing "the pre-BOU-252 adapter entry point keeps working for existing callers"
