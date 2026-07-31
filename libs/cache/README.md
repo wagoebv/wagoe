@@ -3,7 +3,7 @@
 [![Status](https://img.shields.io/badge/status-stable-brightgreen)]()
 [![Clojure](https://img.shields.io/badge/clojure-1.12+-blue)]()
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
-[![Clojars Project](https://img.shields.io/clojars/v/org.wagoe/wagoe-cache.svg)](https://clojars.org/org.wagoe/wagoe-cache)
+[![Clojars Project](https://img.shields.io/clojars/v/com.wagoe/wagoe-cache.svg)](https://clojars.org/com.wagoe/wagoe-cache)
 
 Distributed caching for the Wagoe Framework — Redis and in-memory backends with TTL, atomic operations, and pattern matching.
 

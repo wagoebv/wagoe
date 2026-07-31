@@ -17,8 +17,8 @@
 ;;   ns      boundary.<seg> -> wagoe.<seg>  (code + edn) + git mv of the
 ;;           `boundary` namespace-root dirs to `wagoe`
 ;;   keys    :boundary/ -> :wagoe/
-;;   coords  org.boundary-app/boundary-<lib> -> org.wagoe/wagoe-<lib>,
-;;           then org.boundary-app -> org.wagoe
+;;   coords  org.boundary-app/boundary-<lib> -> com.wagoe/wagoe-<lib>,
+;;           then org.boundary-app -> com.wagoe
 ;;   env     BND_ -> WAG_
 ;;   dirs    libs/boundary-cli|mcp -> libs/wagoe-cli|mcp (+ content refs)
 ;;   urls    external refs -> Wagoe homes
@@ -100,9 +100,9 @@
              :moves boundary-name-dirs}
    "keys"   {:desc "keys :boundary/ -> :wagoe/"
              :subs [[#":boundary/" ":wagoe/"]]}
-   "coords" {:desc "org.boundary-app/boundary-<lib> -> org.wagoe/wagoe-<lib>"
-             :subs [[#"org\.boundary-app/boundary-" "org.wagoe/wagoe-"]
-                    [#"org\.boundary-app" "org.wagoe"]]}
+   "coords" {:desc "org.boundary-app/boundary-<lib> -> com.wagoe/wagoe-<lib>"
+             :subs [[#"org\.boundary-app/boundary-" "com.wagoe/wagoe-"]
+                    [#"org\.boundary-app" "com.wagoe"]]}
    "env"    {:desc "BND_ -> WAG_"
              :subs [[#"BND_" "WAG_"]]}
    "dirs"   {:desc  "boundary-cli|mcp -> wagoe-cli|mcp (content + git mv)"

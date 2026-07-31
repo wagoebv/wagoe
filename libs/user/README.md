@@ -3,7 +3,7 @@
 [![Status](https://img.shields.io/badge/status-stable-brightgreen)]()
 [![Clojure](https://img.shields.io/badge/clojure-1.12+-blue)]()
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
-[![Clojars Project](https://img.shields.io/clojars/v/org.wagoe/wagoe-user.svg)](https://clojars.org/org.wagoe/wagoe-user)
+[![Clojars Project](https://img.shields.io/clojars/v/com.wagoe/wagoe-user.svg)](https://clojars.org/com.wagoe/wagoe-user)
 
 Complete user management and authentication system with MFA support, session management, and pre-built web UI.
 
@@ -11,12 +11,12 @@ Complete user management and authentication system with MFA support, session man
 
 **deps.edn** (recommended):
 ```clojure
-{:deps {org.wagoe/wagoe-user {:mvn/version "1.0.0-beta-1"}}}
+{:deps {com.wagoe/wagoe-user {:mvn/version "1.0.0-beta-1"}}}
 ```
 
 **Leiningen**:
 ```clojure
-[org.wagoe/wagoe-user "1.0.0-beta-1"]
+[com.wagoe/wagoe-user "1.0.0-beta-1"]
 ```
 
 ## Features

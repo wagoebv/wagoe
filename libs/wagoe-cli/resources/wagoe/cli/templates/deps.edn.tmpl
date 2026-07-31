@@ -1,18 +1,18 @@
 {:paths ["src" "resources"]
- :deps  {org.wagoe/wagoe-core         {:mvn/version "{{core-version}}"}
-         org.wagoe/wagoe-observability {:mvn/version "{{observability-version}}"}
-         org.wagoe/wagoe-platform      {:mvn/version "{{platform-version}}"}
-         org.wagoe/wagoe-user          {:mvn/version "{{user-version}}"}
+ :deps  {com.wagoe/wagoe-core         {:mvn/version "{{core-version}}"}
+         com.wagoe/wagoe-observability {:mvn/version "{{observability-version}}"}
+         com.wagoe/wagoe-platform      {:mvn/version "{{platform-version}}"}
+         com.wagoe/wagoe-user          {:mvn/version "{{user-version}}"}
          ;; Required by wagoe-platform's system wiring (unconditional module loads)
-         org.wagoe/wagoe-cache         {:mvn/version "{{cache-version}}"}
-         org.wagoe/wagoe-admin         {:mvn/version "{{admin-version}}"}
-         org.wagoe/wagoe-ui-style      {:mvn/version "{{ui-style-version}}"}
-         org.wagoe/wagoe-tenant        {:mvn/version "{{tenant-version}}"}
-         org.wagoe/wagoe-workflow      {:mvn/version "{{workflow-version}}"}
-         org.wagoe/wagoe-search        {:mvn/version "{{search-version}}"}
-         org.wagoe/wagoe-external      {:mvn/version "{{external-version}}"}
-         org.wagoe/wagoe-payments      {:mvn/version "{{payments-version}}"}
-         org.wagoe/wagoe-i18n          {:mvn/version "{{i18n-version}}"}
+         com.wagoe/wagoe-cache         {:mvn/version "{{cache-version}}"}
+         com.wagoe/wagoe-admin         {:mvn/version "{{admin-version}}"}
+         com.wagoe/wagoe-ui-style      {:mvn/version "{{ui-style-version}}"}
+         com.wagoe/wagoe-tenant        {:mvn/version "{{tenant-version}}"}
+         com.wagoe/wagoe-workflow      {:mvn/version "{{workflow-version}}"}
+         com.wagoe/wagoe-search        {:mvn/version "{{search-version}}"}
+         com.wagoe/wagoe-external      {:mvn/version "{{external-version}}"}
+         com.wagoe/wagoe-payments      {:mvn/version "{{payments-version}}"}
+         com.wagoe/wagoe-i18n          {:mvn/version "{{i18n-version}}"}
          com.h2database/h2                       {:mvn/version "2.4.240"}}
  :aliases
  {:repl     {:extra-paths ["dev"]
@@ -40,11 +40,11 @@
   ;; devtools), so once alpha-43+ poms are published this can be reduced to just
   ;; wagoe-mcp. The closure is enumerated explicitly for now so `-M:mcp` also
   ;; resolves against the current published poms.
-  :mcp      {:extra-deps {org.wagoe/wagoe-mcp        {:mvn/version "{{wagoe-mcp-version}}"}
-                          org.wagoe/wagoe-ai         {:mvn/version "{{wagoe-mcp-version}}"}
-                          org.wagoe/wagoe-devtools   {:mvn/version "{{wagoe-mcp-version}}"}
-                          org.wagoe/wagoe-scaffolder {:mvn/version "{{wagoe-mcp-version}}"}
-                          org.wagoe/wagoe-tools      {:mvn/version "{{wagoe-mcp-version}}"}
-                          org.wagoe/wagoe-jobs       {:mvn/version "{{wagoe-mcp-version}}"}}
+  :mcp      {:extra-deps {com.wagoe/wagoe-mcp        {:mvn/version "{{wagoe-mcp-version}}"}
+                          com.wagoe/wagoe-ai         {:mvn/version "{{wagoe-mcp-version}}"}
+                          com.wagoe/wagoe-devtools   {:mvn/version "{{wagoe-mcp-version}}"}
+                          com.wagoe/wagoe-scaffolder {:mvn/version "{{wagoe-mcp-version}}"}
+                          com.wagoe/wagoe-tools      {:mvn/version "{{wagoe-mcp-version}}"}
+                          com.wagoe/wagoe-jobs       {:mvn/version "{{wagoe-mcp-version}}"}}
              :main-opts  ["-m" "wagoe.mcp.shell.server"]}}}
 

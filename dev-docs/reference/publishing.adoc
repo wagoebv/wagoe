@@ -41,34 +41,34 @@ Add these to your shell profile (`~/.zshrc` or `~/.bashrc`) for convenience.
 
 == Library overview
 
-All 22 libraries are published to the `org.wagoe` group on Clojars, in dependency order:
+All 22 libraries are published to the `com.wagoe` group on Clojars, in dependency order:
 
 [cols="1,2,2",options="header"]
 |===
 |Library |Artifact ID |Depends on
 
-|*core*         |`org.wagoe/wagoe-core`          |—
-|*observability*|`org.wagoe/wagoe-observability` |core
-|*platform*     |`org.wagoe/wagoe-platform`      |core, observability
-|*i18n*         |`org.wagoe/wagoe-i18n`          |—
-|*user*         |`org.wagoe/wagoe-user`          |platform
-|*storage*      |`org.wagoe/wagoe-storage`       |platform
-|*scaffolder*   |`org.wagoe/wagoe-scaffolder`    |core
-|*cache*        |`org.wagoe/wagoe-cache`         |platform
-|*jobs*         |`org.wagoe/wagoe-jobs`          |platform
-|*realtime*     |`org.wagoe/wagoe-realtime`      |platform
-|*email*        |`org.wagoe/wagoe-email`         |platform
-|*tenant*       |`org.wagoe/wagoe-tenant`        |platform, user
-|*workflow*     |`org.wagoe/wagoe-workflow`      |platform
-|*search*       |`org.wagoe/wagoe-search`        |platform
-|*external*     |`org.wagoe/wagoe-external`      |platform
-|*payments*     |`org.wagoe/wagoe-payments`      |—
-|*geo*          |`org.wagoe/wagoe-geo`           |platform
-|*reports*      |`org.wagoe/wagoe-reports`       |platform
-|*calendar*     |`org.wagoe/wagoe-calendar`      |platform
-|*ai*           |`org.wagoe/wagoe-ai`            |platform
-|*ui-style*     |`org.wagoe/wagoe-ui-style`      |—
-|*admin*        |`org.wagoe/wagoe-admin`         |platform, user, ui-style
+|*core*         |`com.wagoe/wagoe-core`          |—
+|*observability*|`com.wagoe/wagoe-observability` |core
+|*platform*     |`com.wagoe/wagoe-platform`      |core, observability
+|*i18n*         |`com.wagoe/wagoe-i18n`          |—
+|*user*         |`com.wagoe/wagoe-user`          |platform
+|*storage*      |`com.wagoe/wagoe-storage`       |platform
+|*scaffolder*   |`com.wagoe/wagoe-scaffolder`    |core
+|*cache*        |`com.wagoe/wagoe-cache`         |platform
+|*jobs*         |`com.wagoe/wagoe-jobs`          |platform
+|*realtime*     |`com.wagoe/wagoe-realtime`      |platform
+|*email*        |`com.wagoe/wagoe-email`         |platform
+|*tenant*       |`com.wagoe/wagoe-tenant`        |platform, user
+|*workflow*     |`com.wagoe/wagoe-workflow`      |platform
+|*search*       |`com.wagoe/wagoe-search`        |platform
+|*external*     |`com.wagoe/wagoe-external`      |platform
+|*payments*     |`com.wagoe/wagoe-payments`      |—
+|*geo*          |`com.wagoe/wagoe-geo`           |platform
+|*reports*      |`com.wagoe/wagoe-reports`       |platform
+|*calendar*     |`com.wagoe/wagoe-calendar`      |platform
+|*ai*           |`com.wagoe/wagoe-ai`            |platform
+|*ui-style*     |`com.wagoe/wagoe-ui-style`      |—
+|*admin*        |`com.wagoe/wagoe-admin`         |platform, user, ui-style
 |===
 
 ---
@@ -158,7 +158,7 @@ After deploying, check that the artifacts are visible on Clojars:
 bb deploy --missing   # libraries not yet published will be listed
 ----
 
-Or open in a browser: https://clojars.org/org.wagoe/wagoe-core
+Or open in a browser: https://clojars.org/com.wagoe/wagoe-core
 
 ---
 
@@ -263,10 +263,10 @@ The CI log masks any set value as `***` — even an empty string.
 Verify both secrets exist and are non-empty:
 *GitHub → Settings → Secrets and variables → Actions*
 
-==== 3. Group `org.wagoe` not verified
+==== 3. Group `com.wagoe` not verified
 
 Clojars requires proof of domain ownership for groups outside `io.github.*` / `com.github.*`.
-For `org.wagoe`, add a DNS TXT record for `framework.wagoe.com` as described at
+For `com.wagoe`, add a DNS TXT record for `framework.wagoe.com` as described at
 https://github.com/clojars/clojars-web/wiki/Verified-Group-Names[Clojars: Verified Group Names].
 
 === Version already exists
@@ -283,13 +283,13 @@ Deleting an existing version on Clojars is only possible within 24 hours of uplo
 
 [source]
 ----
-Could not find artifact org.wagoe/wagoe-core:jar:1.0.1-alpha-14
+Could not find artifact com.wagoe/wagoe-core:jar:1.0.1-alpha-14
 ----
 
-. Check that the library was actually published: open `https://clojars.org/org.wagoe/wagoe-core`
+. Check that the library was actually published: open `https://clojars.org/com.wagoe/wagoe-core`
 . Wait 1–2 minutes for Clojars to finish indexing
 . Clear your local Maven cache: +
-  `rm -rf ~/.m2/repository/org/wagoe/`
+  `rm -rf ~/.m2/repository/com/wagoe/`
 
 === CSS not included in ui-style jar
 
@@ -310,7 +310,7 @@ In CI this is handled automatically by the workflow's *Build shared UI CSS bundl
 ----
 cd libs/core
 clojure -T:build clean && clojure -T:build jar
-cat target/classes/META-INF/maven/org.wagoe/wagoe-core/pom.xml
+cat target/classes/META-INF/maven/com.wagoe/wagoe-core/pom.xml
 ----
 
 ---

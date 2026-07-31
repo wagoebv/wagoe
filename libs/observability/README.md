@@ -3,7 +3,7 @@
 [![Status](https://img.shields.io/badge/status-stable-brightgreen)]()
 [![Clojure](https://img.shields.io/badge/clojure-1.12+-blue)]()
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
-[![Clojars Project](https://img.shields.io/clojars/v/org.wagoe/wagoe-observability.svg)](https://clojars.org/org.wagoe/wagoe-observability)
+[![Clojars Project](https://img.shields.io/clojars/v/com.wagoe/wagoe-observability.svg)](https://clojars.org/com.wagoe/wagoe-observability)
 
 Unified observability stack with pluggable adapters for logging, metrics, and error reporting.
 
@@ -11,12 +11,12 @@ Unified observability stack with pluggable adapters for logging, metrics, and er
 
 **deps.edn** (recommended):
 ```clojure
-{:deps {org.wagoe/wagoe-observability {:mvn/version "1.0.0-beta-1"}}}
+{:deps {com.wagoe/wagoe-observability {:mvn/version "1.0.0-beta-1"}}}
 ```
 
 **Leiningen**:
 ```clojure
-[org.wagoe/wagoe-observability "1.0.0-beta-1"]
+[com.wagoe/wagoe-observability "1.0.0-beta-1"]
 ```
 
 ## Features

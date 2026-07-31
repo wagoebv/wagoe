@@ -212,7 +212,7 @@ Components: `event-badge`, `day-cell`, `month-view`, `week-view`, `mini-calendar
 ----
 libs/calendar/
 ├── deps.edn                              ; ical4j 4.x, Malli, kaocha test alias
-├── build.clj                             ; Maven publish: org.wagoe/wagoe-calendar
+├── build.clj                             ; Maven publish: com.wagoe/wagoe-calendar
 ├── src/wagoe/calendar/
 │   ├── schema.clj                        ; EventData, EventDef, OccurrenceResult, ConflictResult
 │   ├── ports.clj                         ; CalendarAdapterProtocol
@@ -323,7 +323,7 @@ must call it in an `:each` fixture.  Documented prominently in AGENTS.md.
 === Phase 1: Library scaffold ✅
 
 - [x] `libs/calendar/deps.edn` with `org.mnode.ical4j/ical4j 4.0.3`
-- [x] `libs/calendar/build.clj` — `org.wagoe/wagoe-calendar`
+- [x] `libs/calendar/build.clj` — `com.wagoe/wagoe-calendar`
 - [x] Root `deps.edn` — add calendar source/test paths and ical4j dep
 - [x] Root `tests.edn` — add `:calendar` test suite
 

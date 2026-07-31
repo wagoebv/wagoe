@@ -3,7 +3,7 @@
 [![Status](https://img.shields.io/badge/status-stable-brightgreen)]()
 [![Clojure](https://img.shields.io/badge/clojure-1.12+-blue)]()
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
-[![Clojars Project](https://img.shields.io/clojars/v/org.wagoe/wagoe-reports.svg)](https://clojars.org/org.wagoe/wagoe-reports)
+[![Clojars Project](https://img.shields.io/clojars/v/com.wagoe/wagoe-reports.svg)](https://clojars.org/com.wagoe/wagoe-reports)
 
 Report generation library for the Wagoe Framework — produce PDF, Excel, and Word (DOCX) documents from a single declarative definition.
 
@@ -11,12 +11,12 @@ Report generation library for the Wagoe Framework — produce PDF, Excel, and Wo
 
 **deps.edn** (recommended):
 ```clojure
-{:deps {org.wagoe/wagoe-reports {:mvn/version "1.0.0-beta-1"}}}
+{:deps {com.wagoe/wagoe-reports {:mvn/version "1.0.0-beta-1"}}}
 ```
 
 **Leiningen**:
 ```clojure
-[org.wagoe/wagoe-reports "1.0.0-beta-1"]
+[com.wagoe/wagoe-reports "1.0.0-beta-1"]
 ```
 
 ## Features

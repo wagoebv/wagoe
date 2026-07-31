@@ -25,7 +25,7 @@ under a stable version, so no deprecation window is provided.
 |---|---|---|
 | Namespaces | `boundary.<seg>.…` | `wagoe.<seg>.…` |
 | Integrant / config keys | `:boundary/http-server` | `:wagoe/http-server` |
-| Maven / Clojars coords | `org.boundary-app/boundary-<lib>` | `org.wagoe/wagoe-<lib>` |
+| Maven / Clojars coords | `org.boundary-app/boundary-<lib>` | `com.wagoe/wagoe-<lib>` |
 | deps.edn local aliases | `boundary/<lib>` | `wagoe/<lib>` |
 | Environment variables | `BND_*`, `BOUNDARY_*` | `WAG_*` |
 | CLI binary | `boundary <cmd>` | `wagoe <cmd>` |

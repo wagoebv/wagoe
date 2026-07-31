@@ -115,7 +115,7 @@ jobs:
             All libraries published to Clojars.
 
             ```clojure
-            org.wagoe/wagoe-platform {:mvn/version "${{ steps.version.outputs.version }}"}
+            com.wagoe/wagoe-platform {:mvn/version "${{ steps.version.outputs.version }}"}
             ```
 
             See [CHANGELOG.md](https://github.com/wagoebv/wagoe/blob/main/CHANGELOG.md) for details.

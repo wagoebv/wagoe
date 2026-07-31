@@ -1,6 +1,6 @@
 # wagoe-i18n — Internationalisation Library
 
-`org.wagoe/wagoe-i18n` — ADR-013 marker-based i18n for Wagoe framework apps.
+`com.wagoe/wagoe-i18n` — ADR-013 marker-based i18n for Wagoe framework apps.
 
 ---
 

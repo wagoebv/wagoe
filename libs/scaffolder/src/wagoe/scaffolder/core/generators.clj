@@ -820,7 +820,7 @@ CREATE INDEX IF NOT EXISTS idx_%s_created_at ON %s(created_at);
 
   :migrate
   {:main-opts  [\"-m\" \"wagoe.platform.shell.database.cli-migrations\"]
-   :extra-deps {org.wagoe/wagoe-platform {:mvn/version \"1.0.0-beta-1\"}
+   :extra-deps {com.wagoe/wagoe-platform {:mvn/version \"1.0.0-beta-1\"}
                 org.xerial/sqlite-jdbc             {:mvn/version \"3.51.0.0\"}
                 org.postgresql/postgresql          {:mvn/version \"42.7.12\"}
                 com.h2database/h2                  {:mvn/version \"2.4.240\"}
@@ -844,7 +844,7 @@ CREATE INDEX IF NOT EXISTS idx_%s_created_at ON %s(created_at);
   [_name]
   (str ";; bb.edn — Babashka task runner for this Wagoe project\n"
        ";; All tasks are provided by wagoe-tools; no local scripts needed.\n"
-       "{:deps {org.wagoe/wagoe-tools {:mvn/version \"" wagoe-tools-version "\"}}\n"
+       "{:deps {com.wagoe/wagoe-tools {:mvn/version \"" wagoe-tools-version "\"}}\n"
        "\n"
        " :tasks\n"
        " {:requires ([wagoe.tools.scaffold    :as scaffold]\n

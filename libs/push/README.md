@@ -3,7 +3,7 @@
 [![Status](https://img.shields.io/badge/status-alpha-orange)]()
 [![Clojure](https://img.shields.io/badge/clojure-1.12+-blue)]()
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
-[![Clojars Project](https://img.shields.io/clojars/v/org.wagoe/wagoe-push.svg)](https://clojars.org/org.wagoe/wagoe-push)
+[![Clojars Project](https://img.shields.io/clojars/v/com.wagoe/wagoe-push.svg)](https://clojars.org/com.wagoe/wagoe-push)
 
 > Multi-platform push notifications for the Wagoe framework — FCM (Firebase) and APNs (Apple) with device token management, job-based async delivery, and HMAC-secured analytics callbacks.
 
@@ -13,7 +13,7 @@
 
 ```clojure
 ;; deps.edn
-{:deps {org.wagoe/wagoe-push {:mvn/version "1.0.0-beta-1"}}}
+{:deps {com.wagoe/wagoe-push {:mvn/version "1.0.0-beta-1"}}}
 ```
 
 ```clojure

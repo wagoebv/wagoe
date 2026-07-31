@@ -11,13 +11,14 @@
 ;;   ns     boundary.<seg>  namespaces / require aliases (code files only)
 ;;   keys   :boundary/...   Integrant + config keywords
 ;;   coords org.boundary-app Maven/Clojars group
+;;   group  org.wagoe       WRONG Wagoe Clojars group (must be com.wagoe)
 ;;   env    BND_...         environment-variable prefix
 ;;   dirs   boundary-cli / boundary-mcp  library directory names
 ;;   urls   boundary-app.org / thijs-creemers/boundary  external references
 ;;   prose  the word "boundary" (case-insensitive) in docs — REPORT ONLY,
 ;;          never fails (it is also a real FC/IS / hexagonal architecture term)
 ;;
-;; No args  -> all HARD groups (ns keys coords env dirs urls); prose excluded.
+;; No args  -> all HARD groups (ns keys coords group env dirs urls); prose excluded.
 ;; `all`    -> hard groups + prose (prose still report-only).
 ;;
 ;; Allowlist: paths in .wagoe/check-no-boundary.edn `:allow-paths` (prefix
@@ -43,7 +44,7 @@
 (defn- ansi-red    [s] (esc "31" s))
 (defn- ansi-yellow [s] (esc "33" s))
 
-(def ^:private hard-groups [:ns :keys :coords :env :dirs :urls])
+(def ^:private hard-groups [:ns :keys :coords :group :env :dirs :urls])
 
 (def ^:private token-defs
   "Each group: :desc human label, :grep git-grep args (before the pathspec),
@@ -86,6 +87,22 @@
             ;; BOUNDARY_TENANT_ID, BOUNDARY_USER_ID — while the gate reported
             ;; env clean. Assume a token family has more than one spelling.
             :grep  ["-nIE" "(BND|BOUNDARY)_[A-Z0-9_]+"]
+            :hard? true}
+   :group  {:desc  "org.wagoe — wrong Clojars group (dot + path form)"
+            ;; NOT a Boundary residual: org.wagoe was the rename's own mistake.
+            ;; Clojars verifies a reverse-domain group against the matching
+            ;; domain, so org.wagoe requires wagoe.org — which we do not own and
+            ;; will not buy. We operate from wagoe.com, so the group is
+            ;; com.wagoe. Phase 3 produced org.wagoe by swapping the second
+            ;; segment of org.boundary-app and keeping the org. prefix, instead
+            ;; of re-deriving the prefix from the new domain (BOU-213).
+            ;;
+            ;; Same dot-OR-path alternation as :coords, for the same reason: the
+            ;; Clojars verification URL carries the group in path form
+            ;; (clojars.org/repo/com/wagoe/...), and a sweep that only rewrote
+            ;; the coord form would leave it pointing at a group that does not
+            ;; exist — every artifact then reports as unpublished.
+            :grep  ["-nIE" "org[./]wagoe"]
             :hard? true}
    :dirs   {:desc  "boundary-cli / boundary-mcp dir names"
             :grep  ["-nIE" "boundary-(cli|mcp)"]

@@ -3,7 +3,7 @@
 [![Status](https://img.shields.io/badge/status-stable-brightgreen)]()
 [![Clojure](https://img.shields.io/badge/clojure-1.12+-blue)]()
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
-[![Clojars Project](https://img.shields.io/clojars/v/org.wagoe/wagoe-cli.svg)](https://clojars.org/org.wagoe/wagoe-cli)
+[![Clojars Project](https://img.shields.io/clojars/v/com.wagoe/wagoe-cli.svg)](https://clojars.org/com.wagoe/wagoe-cli)
 
 Standalone project bootstrapper and module installer for the Wagoe framework. Creates new projects (`wagoe new`) and adds framework modules to an existing project (`wagoe add`).
 
@@ -15,7 +15,7 @@ One-liner (installs the `wagoe` command via [bbin](https://github.com/babashka/b
 curl -fsSL https://raw.githubusercontent.com/wagoebv/wagoe/main/scripts/install.sh | bash
 ```
 
-Requires [Babashka](https://babashka.org) and [bbin](https://github.com/babashka/bbin). The artifact is also published to Clojars as `org.wagoe/wagoe-cli`.
+Requires [Babashka](https://babashka.org) and [bbin](https://github.com/babashka/bbin). The artifact is also published to Clojars as `com.wagoe/wagoe-cli`.
 
 ## Commands
 
@@ -52,7 +52,7 @@ The CLI renders a set of templates (`resources/wagoe/cli/templates/*.tmpl`)
 against a project name, and drives module installation from a shared
 **module catalogue** (`resources/wagoe/cli/modules-catalogue.edn`) that lists
 each module, its published version, and its dependencies. `wagoe add` uses
-that catalogue to wire the right `org.wagoe/wagoe-<module>` coordinate
+that catalogue to wire the right `com.wagoe/wagoe-<module>` coordinate
 and config into the target project.
 
 ## Development

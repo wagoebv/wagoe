@@ -113,7 +113,7 @@
 
 (defn artifact-name
   "Clojars artifact id for a lib, read from its build.clj coordinate
-   `(def lib 'org.wagoe/<artifact>)`. Reading the coordinate (rather than
+   `(def lib 'com.wagoe/<artifact>)`. Reading the coordinate (rather than
    string-prefixing) avoids a double `wagoe-` for libs whose dir already starts
    with it (e.g. wagoe-cli → wagoe-cli, not wagoe-wagoe-cli). Falls
    back to `wagoe-<lib>` when build.clj is unreadable."
@@ -130,14 +130,14 @@
 
 (defn pom-url
   "Clojars repo URL of a lib's published pom. Note the group appears here in
-   PATH form (org/wagoe), not coord form (org.wagoe) — a rename that only
+   PATH form (com/wagoe), not coord form (com.wagoe) — a rename that only
    rewrites the coord form leaves this pointing at the old group, and every
    artifact then reports as unpublished (BOU-213). Extracted so the group is
    assertable without a network call."
   [lib]
   (let [version  (read-version lib)
         artifact (artifact-name lib)]
-    (format "https://clojars.org/repo/org/wagoe/%s/%s/%s-%s.pom"
+    (format "https://clojars.org/repo/com/wagoe/%s/%s/%s-%s.pom"
             artifact version artifact version)))
 
 (defn published? [lib]

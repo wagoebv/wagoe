@@ -9,7 +9,7 @@
 
 (defn- rewrite-wagoe-deps
   "Rewrite wagoe/<artifact> :local/root deps to their published
-   org.wagoe/wagoe-<artifact> :mvn/version coordinates.
+   com.wagoe/wagoe-<artifact> :mvn/version coordinates.
 
    tools.build's write-pom omits :local/root deps from the generated pom, so
    without this a published lib's pom lists none of its inter-Wagoe deps and
@@ -20,7 +20,7 @@
      (if (and (map? coord)
               (contains? coord :local/root)
               (= "wagoe" (namespace dep)))
-       (assoc m (symbol "org.wagoe" (str "wagoe-" (name dep)))
+       (assoc m (symbol "com.wagoe" (str "wagoe-" (name dep)))
               {:mvn/version version})
        (assoc m dep coord)))
    {}

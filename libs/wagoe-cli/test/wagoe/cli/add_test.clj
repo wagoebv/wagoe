@@ -9,7 +9,7 @@
   (io/make-parents (io/file dir "resources/conf/dev/config.edn"))
   (io/make-parents (io/file dir "resources/conf/test/config.edn"))
   (spit (io/file dir "deps.edn")
-        "{:deps {org.wagoe/wagoe-core {:mvn/version \"1.0.0\"}}}")
+        "{:deps {com.wagoe/wagoe-core {:mvn/version \"1.0.0\"}}}")
   (spit (io/file dir "resources/conf/dev/config.edn")
         "{\n :active\n {\n }\n\n :inactive\n {}\n}")
   (spit (io/file dir "resources/conf/test/config.edn")
@@ -38,13 +38,13 @@
     (try
       (make-wagoe-project! tmp)
       (testing "adds module coordinate to deps.edn"
-        (add/patch-deps! tmp {:clojars 'org.wagoe/wagoe-payments :version "1.0.0"})
+        (add/patch-deps! tmp {:clojars 'com.wagoe/wagoe-payments :version "1.0.0"})
         (let [content (slurp (io/file tmp "deps.edn"))]
           (is (str/includes? content "wagoe-payments"))
           (is (map? (clojure.edn/read-string (slurp (io/file tmp "deps.edn")))) "deps.edn must remain valid EDN after patching")))
 
       (testing "is idempotent — does not duplicate if already present"
-        (add/patch-deps! tmp {:clojars 'org.wagoe/wagoe-payments :version "1.0.0"})
+        (add/patch-deps! tmp {:clojars 'com.wagoe/wagoe-payments :version "1.0.0"})
         (let [content (slurp (io/file tmp "deps.edn"))]
           (is (= 1 (count (re-seq #"wagoe-payments" content))))))
       (finally

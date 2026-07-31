@@ -3,7 +3,7 @@
 [![Status](https://img.shields.io/badge/status-stable-brightgreen)]()
 [![Clojure](https://img.shields.io/badge/clojure-1.12+-blue)]()
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
-[![Clojars Project](https://img.shields.io/clojars/v/org.wagoe/wagoe-email.svg)](https://clojars.org/org.wagoe/wagoe-email)
+[![Clojars Project](https://img.shields.io/clojars/v/com.wagoe/wagoe-email.svg)](https://clojars.org/com.wagoe/wagoe-email)
 
 **Email sending for Wagoe Framework**
 
@@ -40,7 +40,7 @@ Simple, robust email delivery with:
 
 ```clojure
 ;; deps.edn
-{:deps {org.wagoe/wagoe-email {:mvn/version "1.0.0-beta-1"}}}
+{:deps {com.wagoe/wagoe-email {:mvn/version "1.0.0-beta-1"}}}
 ```
 
 ### 2. Create SMTP Sender
@@ -460,8 +460,8 @@ For high-volume email sending with automatic retries and monitoring, integrate w
 
 ```clojure
 ;; deps.edn
-{:deps {org.wagoe/wagoe-email {:mvn/version "1.0.0-beta-1"}
-        org.wagoe/wagoe-jobs {:mvn/version "1.0.0-beta-1"}
+{:deps {com.wagoe/wagoe-email {:mvn/version "1.0.0-beta-1"}
+        com.wagoe/wagoe-jobs {:mvn/version "1.0.0-beta-1"}
         redis.clients/jedis {:mvn/version "5.2.0"}}}
 ```
 

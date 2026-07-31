@@ -7,11 +7,11 @@
 ;; ─── Project detection ────────────────────────────────────────────────────────
 
 (defn wagoe-project?
-  "True if dir contains a deps.edn referencing org.wagoe."
+  "True if dir contains a deps.edn referencing com.wagoe."
   [dir]
   (let [f (io/file dir "deps.edn")]
     (and (.exists f)
-         (str/includes? (slurp f) "org.wagoe"))))
+         (str/includes? (slurp f) "com.wagoe"))))
 
 ;; ─── deps.edn patching ───────────────────────────────────────────────────────
 

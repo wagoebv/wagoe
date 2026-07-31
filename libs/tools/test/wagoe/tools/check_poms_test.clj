@@ -18,9 +18,9 @@
 ;; ---------------------------------------------------------------------------
 
 (deftest ^:unit wagoe-dep->coord-maps-to-published-artifact
-  (is (= 'org.wagoe/wagoe-user (poms/wagoe-dep->coord 'wagoe/user)))
-  (is (= 'org.wagoe/wagoe-ui-style (poms/wagoe-dep->coord 'wagoe/ui-style)))
-  (is (= 'org.wagoe/wagoe-shared-ui (poms/wagoe-dep->coord 'wagoe/shared-ui))))
+  (is (= 'com.wagoe/wagoe-user (poms/wagoe-dep->coord 'wagoe/user)))
+  (is (= 'com.wagoe/wagoe-ui-style (poms/wagoe-dep->coord 'wagoe/ui-style)))
+  (is (= 'com.wagoe/wagoe-shared-ui (poms/wagoe-dep->coord 'wagoe/shared-ui))))
 
 ;; ---------------------------------------------------------------------------
 ;; wagoe-local-deps — only :local/root boundary deps, as {:dir :coord}
@@ -32,11 +32,11 @@
                (pr-str {:deps {'wagoe/core     {:local/root "../core"}
                                'wagoe/platform {:local/root "../platform"}
                                ;; already-published wagoe coord — not local/root, ignored
-                               'org.wagoe/wagoe-i18n {:mvn/version "1.0.0"}
+                               'com.wagoe/wagoe-i18n {:mvn/version "1.0.0"}
                                ;; third-party mvn dep — ignored
                                'ring/ring-core    {:mvn/version "1.15.4"}}}))
-    (is (= [{:dir "core"     :coord 'org.wagoe/wagoe-core}
-            {:dir "platform" :coord 'org.wagoe/wagoe-platform}]
+    (is (= [{:dir "core"     :coord 'com.wagoe/wagoe-core}
+            {:dir "platform" :coord 'com.wagoe/wagoe-platform}]
            (poms/wagoe-local-deps dir)))))
 
 (deftest ^:unit wagoe-local-deps-dir-tracks-local-root-target-not-dep-symbol
@@ -44,7 +44,7 @@
     (let [dir (tmp-dir)]
       (spit-file dir "deps.edn"
                  (pr-str {:deps {'wagoe/shared-ui {:local/root "../shared-ui"}}}))
-      (is (= [{:dir "shared-ui" :coord 'org.wagoe/wagoe-shared-ui}]
+      (is (= [{:dir "shared-ui" :coord 'com.wagoe/wagoe-shared-ui}]
              (poms/wagoe-local-deps dir))))))
 
 (deftest ^:unit wagoe-local-deps-empty-when-no-deps-file
@@ -100,7 +100,7 @@
       (is (:publishable? r))
       (is (:uses-pom-basis? r))
       (is (not (:violation? r)))
-      (is (= [{:dir "core" :coord 'org.wagoe/wagoe-core}]
+      (is (= [{:dir "core" :coord 'com.wagoe/wagoe-core}]
              (:wagoe-deps r))))))
 
 (deftest ^:unit check-lib-exempts-non-publishable-lib
@@ -120,8 +120,8 @@
   (let [dir (tmp-dir)
         f   (spit-file dir "build_shared.clj"
                        "(defn pom-basis [version]
-                          ;; rewrites wagoe/<x> :local/root -> org.wagoe coords
-                          (symbol \"org.wagoe\" ...))")]
+                          ;; rewrites wagoe/<x> :local/root -> com.wagoe coords
+                          (symbol \"com.wagoe\" ...))")]
     (is (empty? (poms/check-build-shared f)))))
 
 (deftest ^:unit check-build-shared-flags-missing-file
@@ -147,7 +147,7 @@
   (testing "the shared-ui failure: user's POM references wagoe-shared-ui but shared-ui has no build.clj"
     (let [results [{:lib "user" :publishable? true :wagoe-deps [(dep-entry 'wagoe/shared-ui)]}
                    {:lib "shared-ui" :publishable? false :wagoe-deps []}]]
-      (is (= [{:lib "user" :dep 'org.wagoe/wagoe-shared-ui}]
+      (is (= [{:lib "user" :dep 'com.wagoe/wagoe-shared-ui}]
              (poms/unpublishable-deps results))))))
 
 (deftest ^:unit unpublishable-deps-passes-when-all-deps-publishable

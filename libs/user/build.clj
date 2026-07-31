@@ -1,7 +1,7 @@
 (ns build
   (:require [clojure.tools.build.api :as b]))
 
-(def lib 'org.wagoe/wagoe-user)
+(def lib 'com.wagoe/wagoe-user)
 (def version "1.0.0-beta-1")
 (def class-dir "target/classes")
 (load-file "../build_shared.clj")

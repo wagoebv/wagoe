@@ -1,8 +1,8 @@
 # Wagoe Framework
 
 [![CI](https://github.com/wagoebv/wagoe/actions/workflows/ci.yml/badge.svg)](https://github.com/wagoebv/wagoe/actions/workflows/ci.yml)
-[![Clojars Project](https://img.shields.io/clojars/v/org.wagoe/wagoe-core.svg)](https://clojars.org/org.wagoe/wagoe-core)
-[![cljdoc](https://cljdoc.org/badge/org.wagoe/wagoe-core)](https://cljdoc.org/d/org.wagoe/wagoe-core)
+[![Clojars Project](https://img.shields.io/clojars/v/com.wagoe/wagoe-core.svg)](https://clojars.org/com.wagoe/wagoe-core)
+[![cljdoc](https://cljdoc.org/badge/com.wagoe/wagoe-core)](https://cljdoc.org/d/com.wagoe/wagoe-core)
 [![License: EPL-2.0](https://img.shields.io/badge/License-EPL_2.0-blue.svg)](https://www.eclipse.org/legal/epl-2.0/)
 
 **Wagoe** is a batteries-included Clojure web framework that enforces the **Functional Core / Imperative Shell (FC/IS)** pattern: pure business logic in `core/`, side effects in `shell/`, and clean interfaces through `ports.clj` protocols.
@@ -309,12 +309,12 @@ bb deploy --all
 
 ```clojure
 ;; Validation utilities only
-{:deps {org.wagoe/wagoe-core {:mvn/version "1.0.0-beta-1"}}}
+{:deps {com.wagoe/wagoe-core {:mvn/version "1.0.0-beta-1"}}}
 
 ;; Full web application stack
-{:deps {org.wagoe/wagoe-platform {:mvn/version "1.0.0-beta-1"}
-        org.wagoe/wagoe-user     {:mvn/version "1.0.0-beta-1"}
-        org.wagoe/wagoe-admin    {:mvn/version "1.0.0-beta-1"}}}
+{:deps {com.wagoe/wagoe-platform {:mvn/version "1.0.0-beta-1"}
+        com.wagoe/wagoe-user     {:mvn/version "1.0.0-beta-1"}
+        com.wagoe/wagoe-admin    {:mvn/version "1.0.0-beta-1"}}}
 ```
 
 ---

@@ -3,7 +3,7 @@
 [![Status](https://img.shields.io/badge/status-stable-brightgreen)]()
 [![Clojure](https://img.shields.io/badge/clojure-1.12+-blue)]()
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
-[![Clojars Project](https://img.shields.io/clojars/v/org.wagoe/wagoe-ai.svg)](https://clojars.org/org.wagoe/wagoe-ai)
+[![Clojars Project](https://img.shields.io/clojars/v/com.wagoe/wagoe-ai.svg)](https://clojars.org/com.wagoe/wagoe-ai)
 
 Framework-aware AI tooling for Wagoe applications — offline-first via Ollama, with cloud fallback to Anthropic Claude or OpenAI.
 
@@ -11,12 +11,12 @@ Framework-aware AI tooling for Wagoe applications — offline-first via Ollama, 
 
 **deps.edn** (recommended):
 ```clojure
-{:deps {org.wagoe/wagoe-ai {:mvn/version "1.0.0-beta-1"}}}
+{:deps {com.wagoe/wagoe-ai {:mvn/version "1.0.0-beta-1"}}}
 ```
 
 **Leiningen**:
 ```clojure
-[org.wagoe/wagoe-ai "1.0.0-beta-1"]
+[com.wagoe/wagoe-ai "1.0.0-beta-1"]
 ```
 
 ## Features

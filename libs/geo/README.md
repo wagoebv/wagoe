@@ -3,7 +3,7 @@
 [![Status](https://img.shields.io/badge/status-stable-brightgreen)]()
 [![Clojure](https://img.shields.io/badge/clojure-1.12+-blue)]()
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
-[![Clojars Project](https://img.shields.io/clojars/v/org.wagoe/wagoe-geo.svg)](https://clojars.org/org.wagoe/wagoe-geo)
+[![Clojars Project](https://img.shields.io/clojars/v/com.wagoe/wagoe-geo.svg)](https://clojars.org/com.wagoe/wagoe-geo)
 
 > Multi-provider geocoding for the Wagoe framework — addresses to coordinates, coordinates to addresses, and distance calculations. Batteries included: rate limiting, DB-backed caching, and a provider fallback chain.
 
@@ -13,7 +13,7 @@
 
 ```clojure
 ;; deps.edn
-{:deps {org.wagoe/wagoe-geo {:mvn/version "1.0.0-beta-1"}}}
+{:deps {com.wagoe/wagoe-geo {:mvn/version "1.0.0-beta-1"}}}
 ```
 
 ```clojure

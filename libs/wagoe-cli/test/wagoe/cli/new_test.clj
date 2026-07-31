@@ -97,7 +97,7 @@
       (testing "deps.edn has an :mcp alias with a resolved version"
         (let [content (slurp (io/file tmp "deps.edn"))]
           (is (str/includes? content ":mcp"))
-          (is (str/includes? content "org.wagoe/wagoe-mcp"))
+          (is (str/includes? content "com.wagoe/wagoe-mcp"))
           (is (not (str/includes? content "{{wagoe-mcp-version}}")))))
 
       (testing ":mcp alias lists mcp's full wagoe closure"
@@ -108,7 +108,7 @@
         (let [content (slurp (io/file tmp "deps.edn"))]
           (doseq [lib ["wagoe-ai" "wagoe-devtools" "wagoe-scaffolder"
                        "wagoe-tools" "wagoe-jobs"]]
-            (is (str/includes? content (str "org.wagoe/" lib))
+            (is (str/includes? content (str "com.wagoe/" lib))
                 (str "Missing from :mcp closure: " lib)))))
 
       (testing "pre-commit hook is executable"

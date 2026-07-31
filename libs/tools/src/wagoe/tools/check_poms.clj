@@ -7,7 +7,7 @@
 ;; tools.build's `write-pom` omits `:local/root` deps from the generated pom, so
 ;; each lib's build.clj must feed write-pom a *rewritten* basis (produced by
 ;; `build-shared/pom-basis`) that translates `wagoe/<x> {:local/root ...}`
-;; into the published `org.wagoe/wagoe-<x> {:mvn/version ...}` coord.
+;; into the published `com.wagoe/wagoe-<x> {:mvn/version ...}` coord.
 ;;
 ;; Without that rewrite a published lib's pom lists none of its wagoe deps and
 ;; downstream consumers must hand-enumerate the whole closure (BOU-202).
@@ -43,7 +43,7 @@
   "Published Maven coordinate symbol for a `wagoe/<x>` dep symbol, mirroring
    `build-shared/rewrite-wagoe-deps`."
   [dep]
-  (symbol "org.wagoe" (str "wagoe-" (name dep))))
+  (symbol "com.wagoe" (str "wagoe-" (name dep))))
 
 (defn wagoe-local-deps
   "For every `wagoe/<x> {:local/root ...}` dep in a lib's deps.edn, a map
@@ -80,7 +80,7 @@
 
      (let [src (slurp f)]
        (not (and (str/includes? src "pom-basis")
-                 (str/includes? src "org.wagoe")
+                 (str/includes? src "com.wagoe")
                  (str/includes? src ":local/root"))))
      [{:type :build-shared-no-rewrite}]
 

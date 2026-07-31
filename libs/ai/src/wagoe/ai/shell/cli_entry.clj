@@ -165,7 +165,7 @@
                                  ["clojure" "-M" "-m" "wagoe.scaffolder.shell.cli-entry"]
                                  ["clojure"
                                   "-Sdeps"
-                                  (str "{:deps {org.wagoe/wagoe-scaffolder "
+                                  (str "{:deps {com.wagoe/wagoe-scaffolder "
                                        "{:mvn/version \"" scaffolder-version "\"}}}")
                                   "-M" "-m" "wagoe.scaffolder.shell.cli-entry"])
                   {:keys [exit out err]} (apply sh/sh (concat base-cmd cli-args))]
