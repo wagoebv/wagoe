@@ -10,7 +10,7 @@
    value every lib pins.
 
    Previously this was `(format \"1.2.%s\" (b/git-count-revs nil))`, which was
-   wrong twice: the `1.2.N` scheme contradicts the suite's actual `1.0.0-beta-1`,
+   wrong twice: the `1.2.N` scheme contradicts the suite's actual `1.0.0-beta-2`,
    and `.git` is in .dockerignore, so inside the Docker builder git-count-revs
    returned nil and the artifact was named `wagoe-1.2.null-standalone.jar`.
 
