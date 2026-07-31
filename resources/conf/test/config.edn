@@ -31,7 +31,7 @@
   ;; HTTP Server configuration (used by `bb run-e2e-server` for Playwright/spel e2e runs).
   ;; Port defaults to 3100 to avoid clashing with a dev server on 3000; override via HTTP_PORT.
   :wagoe/http
-  {:port       #or [#env HTTP_PORT 3100]
+  {:port       #long #or [#env HTTP_PORT 3100]
    :host       #or [#env HTTP_HOST "0.0.0.0"]
    :join?      false
    :port-range {:start 3100 :end 3199}

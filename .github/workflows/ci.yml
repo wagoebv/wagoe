@@ -1046,6 +1046,50 @@ jobs:
 
           echo "ok: $jar"
 
+      # The artifact building and booting does not mean it SERVES. Until BOU-251
+      # nothing in CI ever requested a URL from the built jar, which is how a
+      # shadowed logback config (silencing all logs) and a port allocator that
+      # ignored HTTP_PORT both survived: the server came up on the wrong port,
+      # said nothing about it, and every gate stayed green.
+      - name: Smoke test — the jar actually serves HTTP
+        env:
+          WAG_ENV: test
+          HTTP_PORT: "3195"
+          JWT_SECRET: ci-test-secret-minimum-32-characters
+        run: |
+          set -euo pipefail
+          jar=$(clojure -T:build print-uber-file)
+          java -jar "$jar" server > /tmp/server.log 2>&1 &
+          pid=$!
+          trap 'kill $pid 2>/dev/null || true' EXIT
+
+          for i in $(seq 1 40); do
+            # NB: curl already prints 000 on connection failure, so `|| echo 000`
+            # would append a SECOND 000 and yield "000000" — which compares
+            # unequal to "000" and breaks the loop on the first pass with a
+            # meaningless value. Use `|| true` purely to survive `set -e`.
+            code=$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:${HTTP_PORT}/web/login" || true)
+            [ "$code" != "000" ] && [ -n "$code" ] && break
+            # Fail fast if the process died rather than waiting out the loop.
+            kill -0 $pid 2>/dev/null || { echo "::error::server exited during startup"; cat /tmp/server.log; exit 1; }
+            sleep 3
+          done
+
+          echo "GET /web/login -> $code"
+          case "$code" in
+            2*|3*) ;;
+            *) echo "::error::jar did not serve on the requested port ${HTTP_PORT} (got $code)"
+               cat /tmp/server.log
+               exit 1 ;;
+          esac
+
+          # The port is asserted explicitly: binding SOMEWHERE is not the
+          # contract, binding where it was told to is.
+          grep -q "started on requested port" /tmp/server.log \
+            || { echo "::error::server did not bind the requested port"; cat /tmp/server.log; exit 1; }
+
+          echo "ok: served $code on ${HTTP_PORT}"
+
       - name: Upload the uberjar
         uses: actions/upload-artifact@v4
         with:
