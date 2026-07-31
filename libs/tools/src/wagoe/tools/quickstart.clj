@@ -143,7 +143,12 @@
   (println (bold "━━━ Wagoe Quickstart ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"))
   (println)
   (println "  This will set up a complete Wagoe development environment.")
-  (println "  Steps: check environment, configure, scaffold, migrate, start.")
+  ;; Says "verify", not "start". Quickstart does not launch the app — it ends
+  ;; by telling you to run `clojure -M:repl` and eval (go). Claiming "start"
+  ;; left users expecting a running server after 8/8 Done, and looking for a
+  ;; failure that had not happened.
+  (println "  Steps: check environment, configure, scaffold, migrate, verify.")
+  (println "  It does not start the app — the final step tells you how.")
   (println))
 
 (defn- print-success []
