@@ -13,7 +13,7 @@
 
 ```clojure
 ;; deps.edn
-{:deps {com.wagoe/wagoe-push {:mvn/version "1.0.0-beta-2"}}}
+{:deps {com.wagoe/wagoe-push {:mvn/version "1.0.0-beta-3"}}}
 ```
 
 ```clojure
