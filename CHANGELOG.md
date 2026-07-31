@@ -115,10 +115,10 @@ under a stable version, so no deprecation window is provided.
 | Redis pub/sub channel | `boundary:realtime:bus` | `wagoe:realtime:bus` |
 | Logger name (logback) | `boundary` | `wagoe` |
 | Repositories | `thijs-creemers/boundary{,-examples}` | `wagoebv/wagoe{,-examples}` |
-| Sites | `boundary-app.org`, `get.boundary-app.org` | `framework.wagoe.com`, `get.wagoe.com` |
+| Sites | `boundary-app.org`, `get.boundary-app.org` | `wagoe.org`, `get.wagoe.org` |
 
 `docs.boundary-app.org` is retired; the documentation is folded into
-`framework.wagoe.com/docs`. The GitHub repository transfers preserve history
+`wagoe.org/docs`. The GitHub repository transfers preserve history
 and leave redirects in place, so existing clones keep working until you update
 the remote.
 

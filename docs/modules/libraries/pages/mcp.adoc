@@ -1,0 +1,174 @@
+= mcp
+:description: An MCP server that lets an AI coding agent work inside a Wagoe project — read, generate and execute, gated by environment, with a closed verify loop for generated code.
+
+An MCP server that exposes the Wagoe framework's knowledge and code-generation
+tools as capabilities a model can call directly: analyse errors, lint, scaffold
+whole FC/IS modules, run tests, query the database.
+
+Unlike a general-purpose coding agent, it works *inside* the project. Every call
+is gated by what the current environment allows, and code generation runs
+through a closed verify loop so the agent self-corrects without a human in the
+loop.
+
+`wagoe-mcp` ships with the standard scaffold — `wagoe new` writes an `:mcp`
+alias and a `.mcp.json` into every new project.
+
+NOTE: Tier 0 and Tier 1 are implemented, as is Tier 2. Some live-introspection
+resources and the read-only database datasource report `:unavailable` pending an
+nREPL bridge.
+
+== Three tiers, gated by environment
+
+Capability is decided by the environment, not by the caller. The same server is
+safe in CI and useful in local development.
+
+[cols="1,2,2",options="header"]
+|===
+| Tier | What it can do | Where it is available
+
+| *0 — read & analyse*
+| Inspect, explain, lint, validate. No writes.
+| Everywhere, including CI
+
+| *1 — generate*
+| Write source, tests and migrations, behind the verify loop.
+| Denied in CI and read-only environments
+
+| *2 — execute*
+| Run tests, evaluate code, apply migrations, read the database.
+| Local development only (`:full`)
+|===
+
+== Tools
+
+*Tier 0 — read & analyse*
+
+[cols="1,2",options="header"]
+|===
+| Tool | What you ask it for
+
+| `explain-error`
+| Paste a stack trace → summary plus the matching rule, principle and fix
+
+| `lint`
+| clj-kondo findings (file / row / col / level / message) for given paths
+
+| `validate-schema`
+| Check a value against a Malli schema → humanized errors
+
+| `describe-module`
+| A module's deps, ports and libraries — from the live project, not from docs
+
+| `sql-preview`
+| Natural language → HoneySQL plus raw SQL. Generated, never run. Needs an AI provider
+|===
+
+*Tier 1 — generate (with the verify loop)*
+
+[cols="1,2",options="header"]
+|===
+| Tool | What it does
+
+| `scaffold-module`
+| A full FC/IS module — schema, ports, core, shell, tests, migration — from a spec
+
+| `add-field`
+| Add a field to an existing entity → migration plus schema updates
+
+| `gen-tests`
+| Generate a test namespace for a source file. Needs an AI provider
+
+| `gen-migration`
+| A SQL migration for an entity's table
+|===
+
+*Tier 2 — execute*
+
+[cols="1,2",options="header"]
+|===
+| Tool | What it does
+
+| `run-tests`
+| Run a module's Kaocha suite → structured pass/fail
+
+| `eval`
+| Evaluate Clojure code → value plus captured stdout. This is the RCE surface
+
+| `run-migration`
+| Apply (`up`) or report (`status`). Destructive rollbacks are deliberately not exposed
+
+| `query-db`
+| One read-only, row-limited SQL query. Needs a read-only datasource
+|===
+
+== The verify loop
+
+Generated code is not returned and hoped for. After a Tier 1 tool writes files,
+the server lints and tests what it produced and feeds the result back, so the
+agent corrects its own output before you ever see it. That is the difference
+between an assistant that suggests a module and one that delivers a module which
+compiles and passes its tests.
+
+== Running the server
+
+IMPORTANT: The working directory matters. The in-process adapter reflects *cwd* —
+tool paths, `lint` targets and the reflective resources (`wagoe://conventions`,
+`wagoe://module-graph`, …) all resolve against the directory the server runs in.
+Run it from the root of the Wagoe project you want the agent to work on, or those
+resources come back `:unavailable`.
+
+[source,bash]
+----
+# from the Wagoe project root
+WAG_ENV=dev clojure -Sdeps '{:deps {wagoe/mcp {:local/root "libs/wagoe-mcp"}}}' \
+  -M -m wagoe.mcp.shell.server
+----
+
+An application consuming Wagoe as a dependency adds `com.wagoe/wagoe-mcp` to its
+own `deps.edn` instead of using `:local/root`.
+
+== Wiring it into a coding agent
+
+Register it as an MCP server whose `cwd` is your project root. With the Claude
+Code CLI, from that root:
+
+[source,bash]
+----
+claude mcp add wagoe --env WAG_ENV=dev -- \
+  clojure -Sdeps '{:deps {wagoe/mcp {:local/root "libs/wagoe-mcp"}}}' \
+  -M -m wagoe.mcp.shell.server
+----
+
+Or by hand, in `.mcp.json`:
+
+[source,json]
+----
+{
+  "mcpServers": {
+    "wagoe": {
+      "command": "clojure",
+      "args": ["-Sdeps", "{:deps {wagoe/mcp {:local/root \"libs/wagoe-mcp\"}}}",
+               "-M", "-m", "wagoe.mcp.shell.server"],
+      "cwd": "/absolute/path/to/your/wagoe/project",
+      "env": { "WAG_ENV": "dev" }
+    }
+  }
+}
+----
+
+== Resources
+
+Beyond tools, the server exposes framework knowledge as MCP resources under the
+`wagoe://` scheme — conventions, the module graph and related project
+introspection. An agent can read these to ground itself in the project's actual
+shape instead of guessing from file names.
+
+== Architecture
+
+`wagoe-mcp` follows the same FC/IS split as every other library: protocol
+definitions in `ports.clj` (`Transport`, `AuditLog`, `SystemSource`), pure
+request handling in `core/`, and all I/O — transport, process execution,
+filesystem — in `shell/`. Adding a tool or a resource means registering it in the
+shell and keeping the decision logic pure.
+
+Every call is written to the audit log, including the ones that are denied.
