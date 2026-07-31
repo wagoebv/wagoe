@@ -24,3 +24,4 @@
 ** xref:libraries:ai.adoc[ai]
 ** xref:libraries:devtools.adoc[devtools]
 ** xref:libraries:tools.adoc[tools]
+** xref:libraries:mcp.adoc[mcp]

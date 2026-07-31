@@ -40,7 +40,7 @@ pure business logic in `core/`, side effects in `shell/`, and clean interfaces t
 [source,bash]
 ----
 # Install Wagoe (JVM, Clojure CLI, Babashka, bbin, wagoe CLI)
-curl -fsSL https://get.wagoe.com | bash
+curl -fsSL https://get.wagoe.org | bash
 
 # Start a new project
 wagoe new my-app

@@ -26,10 +26,10 @@
 Install the Wagoe CLI — it handles all prerequisites (JVM, Clojure CLI, Babashka, bbin) automatically:
 
 ```bash
-curl -fsSL https://get.wagoe.com | bash
+curl -fsSL https://get.wagoe.org | bash
 ```
 
-Fallback if `get.wagoe.com` is unavailable:
+Fallback if `get.wagoe.org` is unavailable:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/wagoebv/wagoe/main/scripts/install.sh | bash
@@ -345,7 +345,7 @@ See the [Deployment Patterns guide](./docs/modules/guides/pages/deployment-patte
 
 ## Website
 
-https://framework.wagoe.com
+https://wagoe.org
 
 ---
 ## License

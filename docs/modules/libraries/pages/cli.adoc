@@ -9,13 +9,13 @@ NOTE: Not published to Clojars. Installed via bbin from the GitHub repository.
 
 [source,bash]
 ----
-curl -fsSL https://get.wagoe.com | bash
+curl -fsSL https://get.wagoe.org | bash
 ----
 
 The installer handles all prerequisites: JVM, Clojure CLI, Babashka, bbin, and the `wagoe` command itself.
 Supports macOS, Debian/Ubuntu, Arch Linux, and WSL2.
 
-Fallback if `get.wagoe.com` is unavailable:
+Fallback if `get.wagoe.org` is unavailable:
 
 [source,bash]
 ----

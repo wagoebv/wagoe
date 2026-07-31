@@ -301,7 +301,9 @@ Verify both secrets exist and are non-empty:
 ==== 3. Group `com.wagoe` not verified
 
 Clojars requires proof of domain ownership for groups outside `io.github.*` / `com.github.*`.
-For `com.wagoe`, add a DNS TXT record for `framework.wagoe.com` as described at
+The group is the reverse of a domain you control, so `com.wagoe` is proved with
+a TXT record on `wagoe.com` itself — not on a subdomain, and not on the docs
+site's `wagoe.org`. Add `clojars <your-clojars-username>` there as described at
 https://github.com/clojars/clojars-web/wiki/Verified-Group-Names[Clojars: Verified Group Names].
 
 === Version already exists
