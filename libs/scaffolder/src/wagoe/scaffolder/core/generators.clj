@@ -7,7 +7,7 @@
             [wagoe.scaffolder.core.template :as template]))
 
 ;; When bumping the wagoe-tools release, update this version and redeploy
-;; libs/tools to Clojars before cutting a new boundary-starters release.
+;; libs/tools to Clojars before cutting a new release.
 (def wagoe-tools-version "1.0.0-beta-1")
 
 ;; =============================================================================

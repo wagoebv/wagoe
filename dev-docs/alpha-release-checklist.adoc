@@ -37,25 +37,26 @@ The goal is to deliver a stable, approachable, minimal-but-complete version of W
 - [ ] Generated tests run and pass out of the box.
 
 === 2.3 Integration
-- [ ] Scaffolder output integrates cleanly into the starter template.
+- [ ] Scaffolder output integrates cleanly into a `wagoe new` project.
 - [ ] Update AGENTS.md or equivalent with scaffolder usage instructions.
 
-== 3. Starter Template
+== 3. Project Creation (`wagoe new`)
 
-=== 3.1 Project Structure
-- [ ] Create `wagoe-starter` GitHub repository.
-- [ ] Include User + Inventory modules.
-- [ ] Include login/logout functionality.
-- [ ] Include a minimal CRUD flow (HTMX UI is enough).
+The separate `wagoe-starter` repository was dropped — project creation is served
+by the CLI, so there is no second repo to keep in step with the framework.
 
-=== 3.2 Developer Experience
-- [ ] One-command startup (`clojure -M:dev`).
-- [ ] One-command test (`clojure -M:test`).
+=== 3.1 Generated Project
+- [ ] `wagoe new my-app` produces a project that boots with no further config.
+- [ ] Includes login/logout and a minimal CRUD flow (HTMX UI is enough).
 - [ ] Default dev configuration fully working.
 - [ ] Provide seed data OR a short guide to creating first records.
 
-=== 3.3 Documentation in Repo
-- [ ] README with clear “Getting Started” steps.
+=== 3.2 Developer Experience
+- [ ] One-command startup (`clojure -M:run`).
+- [ ] One-command test (`clojure -M:test`).
+
+=== 3.3 Documentation in Generated Repo
+- [ ] README with clear "Getting Started" steps.
 - [ ] Architecture overview (very short).
 - [ ] Link to full Wagoe docs site.
 
@@ -93,8 +94,8 @@ The goal is to deliver a stable, approachable, minimal-but-complete version of W
 - [ ] Validate HTTP error responses follow RFC 7807.
 
 === 5.3 Cross-DB Test (optional but recommended)
-- [ ] Run starter project with SQLite.
-- [ ] Run starter project with PostgreSQL.
+- [ ] Run a generated project with SQLite.
+- [ ] Run a generated project with PostgreSQL.
 
 == 6. Packaging & Release Infrastructure
 
@@ -108,7 +109,6 @@ The goal is to deliver a stable, approachable, minimal-but-complete version of W
 === 6.2 Clojars
 - [ ] Publish Wagoe core.
 - [ ] Publish Wagoe scaffolder.
-- [ ] Publish Wagoe starter template (if applicable).
 
 === 6.3 Versioning
 - [ ] Tag version: `v0.1.0-alpha`.
@@ -147,7 +147,7 @@ Alpha is ready to try today.
 
 Wagoe Alpha is considered *successfully released* when:
 
-- [ ] Developers can clone the starter template and build a working CRUD app in under 10 minutes.
+- [ ] Developers can run `wagoe new` and build a working CRUD app in under 10 minutes.
 - [ ] Scaffolder produces fully functional modules with normalized routing.
 - [ ] Documentation is sufficient for a newcomer to understand and build basic features.
 - [ ] Public visibility has been achieved through Slack, Reddit, and GitHub.
