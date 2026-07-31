@@ -26,10 +26,24 @@ permissions:
 jobs:
   publish:
     name: Publish Libraries to Clojars
-    # Only the repo owner may publish: blocks any future collaborator (or a
-    # compromised account with write access) from triggering a Clojars deploy
-    # via tag push or manual dispatch.
-    if: github.actor == 'thijs-creemers'
+    # Publishing is gated by the `release` environment, which requires a
+    # maintainer to approve the run before any step executes (BOU-248).
+    #
+    # This replaces `if: github.actor == 'thijs-creemers'`. That guard held the
+    # right property — only a trusted human publishes — but expressed it as a
+    # hardcoded personal login: no second maintainer could ever release, and it
+    # would fail silently (job skipped, no error) if the account were renamed.
+    #
+    # Note what this is NOT: `github.repository_owner == 'wagoebv'` is always
+    # true here, so it would read as a gate while gating nothing, handing
+    # publish rights to anyone with write access. The environment keeps the
+    # human-approval property while surviving renames and admitting more than
+    # one maintainer.
+    #
+    # The Clojars credentials should live as *environment* secrets on `release`
+    # rather than repository secrets, so no other workflow or branch can read
+    # them. See the note in dev-docs/reference/publishing.adoc.
+    environment: release
     runs-on: ubuntu-latest
 
     steps:
