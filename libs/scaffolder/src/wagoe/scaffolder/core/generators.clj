@@ -8,7 +8,7 @@
 
 ;; When bumping the wagoe-tools release, update this version and redeploy
 ;; libs/tools to Clojars before cutting a new release.
-(def wagoe-tools-version "1.0.0-beta-2")
+(def wagoe-tools-version "1.0.0-beta-3")
 
 ;; =============================================================================
 ;; Schema File Generator
@@ -820,7 +820,7 @@ CREATE INDEX IF NOT EXISTS idx_%s_created_at ON %s(created_at);
 
   :migrate
   {:main-opts  [\"-m\" \"wagoe.platform.shell.database.cli-migrations\"]
-   :extra-deps {com.wagoe/wagoe-platform {:mvn/version \"1.0.0-beta-2\"}
+   :extra-deps {com.wagoe/wagoe-platform {:mvn/version \"1.0.0-beta-3\"}
                 org.xerial/sqlite-jdbc             {:mvn/version \"3.51.0.0\"}
                 org.postgresql/postgresql          {:mvn/version \"42.7.12\"}
                 com.h2database/h2                  {:mvn/version \"2.4.240\"}

@@ -11,12 +11,12 @@ Unified observability stack with pluggable adapters for logging, metrics, and er
 
 **deps.edn** (recommended):
 ```clojure
-{:deps {com.wagoe/wagoe-observability {:mvn/version "1.0.0-beta-2"}}}
+{:deps {com.wagoe/wagoe-observability {:mvn/version "1.0.0-beta-3"}}}
 ```
 
 **Leiningen**:
 ```clojure
-[com.wagoe/wagoe-observability "1.0.0-beta-2"]
+[com.wagoe/wagoe-observability "1.0.0-beta-3"]
 ```
 
 ## Features
@@ -161,7 +161,7 @@ libs/observability/src/wagoe/observability/
 
 | Dependency | Version | Purpose |
 |------------|---------|---------|
-| `wagoe/core` | 1.0.0-beta-2 | Foundation utilities |
+| `wagoe/core` | 1.0.0-beta-3 | Foundation utilities |
 | `org.clojure/tools.logging` | 1.3.1 | Logging abstraction |
 | `ch.qos.logback/logback-classic` | 1.5.23 | SLF4J implementation |
 | `io.sentry/sentry-clj` | 8.29.238 | Sentry integration |
