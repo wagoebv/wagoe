@@ -1,11 +1,11 @@
-{:cli-version       "1.0.0-beta-2"
- :catalogue-version "1.0.0-beta-2"
+{:cli-version       "1.0.0-beta-3"
+ :catalogue-version "1.0.0-beta-3"
  :modules
  [;; ─── Core (always included) ───────────────────────────────────────────────
   {:name                "core"
    :description         "Pure validation, case conversion, interceptor pipeline, feature flags"
    :clojars             com.wagoe/wagoe-core
-   :version             "1.0.0-beta-2"
+   :version             "1.0.0-beta-3"
    :category            :core
    :config-snippet      ""
    :test-config-snippet ""
@@ -15,7 +15,7 @@
   {:name                "observability"
    :description         "Interceptor-based metrics, logging, and error reporting"
    :clojars             com.wagoe/wagoe-observability
-   :version             "1.0.0-beta-2"
+   :version             "1.0.0-beta-3"
    :category            :core
    :config-snippet      "  :wagoe/metrics\n  {:provider :no-op}\n\n  :wagoe/error-reporting\n  {:provider :no-op}\n"
    :test-config-snippet "  :wagoe/metrics\n  {:provider :no-op}\n\n  :wagoe/error-reporting\n  {:provider :no-op}\n"
@@ -25,7 +25,7 @@
   {:name                "platform"
    :description         "HTTP server, Reitit router, Ring middleware pipeline"
    :clojars             com.wagoe/wagoe-platform
-   :version             "1.0.0-beta-2"
+   :version             "1.0.0-beta-3"
    :category            :core
    :config-snippet      "  :wagoe/http\n  {:port #or [#env HTTP_PORT 3000] :host \"0.0.0.0\" :join? false}\n\n  :wagoe/router\n  {:adapter :reitit :coercion :malli :middleware []}\n"
    :test-config-snippet ""
@@ -35,7 +35,7 @@
   {:name                "user"
    :description         "Authentication, JWT, MFA, user management"
    :clojars             com.wagoe/wagoe-user
-   :version             "1.0.0-beta-2"
+   :version             "1.0.0-beta-3"
    :category            :core
    :config-snippet      ""
    :test-config-snippet ""
@@ -46,7 +46,7 @@
   {:name                "payments"
    :description         "PSP abstraction — Mollie, Stripe, Mock checkout and webhook verification"
    :clojars             com.wagoe/wagoe-payments
-   :version             "1.0.0-beta-2"
+   :version             "1.0.0-beta-3"
    :category            :optional
    :config-snippet      "  :wagoe/payment-provider\n  {:provider :mock}\n"
    :test-config-snippet "  :wagoe/payment-provider\n  {:provider :mock}\n"
@@ -56,7 +56,7 @@
   {:name                "storage"
    :description         "File storage — local filesystem and S3, image processing"
    :clojars             com.wagoe/wagoe-storage
-   :version             "1.0.0-beta-2"
+   :version             "1.0.0-beta-3"
    :category            :optional
    :config-snippet      "  :wagoe/storage\n  {:provider :local :root \"uploads\"}\n"
    :test-config-snippet "  :wagoe/storage\n  {:provider :local :root \"/tmp/boundary-test-uploads\"}\n"
@@ -66,7 +66,7 @@
   {:name                "jobs"
    :description         "Background job processing with retry logic"
    :clojars             com.wagoe/wagoe-jobs
-   :version             "1.0.0-beta-2"
+   :version             "1.0.0-beta-3"
    :category            :optional
    :config-snippet      "  :wagoe/jobs\n  {:provider :in-memory}\n"
    :test-config-snippet "  :wagoe/jobs\n  {:provider :in-memory}\n"
@@ -76,7 +76,7 @@
   {:name                "email"
    :description         "SMTP email sending, async and queued modes"
    :clojars             com.wagoe/wagoe-email
-   :version             "1.0.0-beta-2"
+   :version             "1.0.0-beta-3"
    :category            :optional
    :config-snippet      "  :wagoe.external/smtp\n  {:host #or [#env SMTP_HOST \"localhost\"] :port 1025 :tls? false :from \"no-reply@localhost\"}\n"
    :test-config-snippet "  :wagoe.external/smtp\n  {:host \"localhost\" :port 1025 :tls? false :from \"test@localhost\"}\n"
@@ -86,7 +86,7 @@
   {:name                "cache"
    :description         "Distributed caching — Redis or in-memory, TTL, atomic ops"
    :clojars             com.wagoe/wagoe-cache
-   :version             "1.0.0-beta-2"
+   :version             "1.0.0-beta-3"
    :category            :optional
    :config-snippet      "  :wagoe/cache\n  {:provider :in-memory :default-ttl 300}\n"
    :test-config-snippet "  :wagoe/cache\n  {:provider :in-memory :default-ttl 300}\n"
@@ -96,7 +96,7 @@
   {:name                "search"
    :description         "Full-text search"
    :clojars             com.wagoe/wagoe-search
-   :version             "1.0.0-beta-2"
+   :version             "1.0.0-beta-3"
    :category            :optional
    :config-snippet      "  :wagoe/search\n  {:provider :in-memory}\n"
    :test-config-snippet "  :wagoe/search\n  {:provider :in-memory}\n"
@@ -106,7 +106,7 @@
   {:name                "realtime"
    :description         "WebSocket pub/sub messaging"
    :clojars             com.wagoe/wagoe-realtime
-   :version             "1.0.0-beta-2"
+   :version             "1.0.0-beta-3"
    :category            :optional
    :config-snippet      "  :wagoe/realtime\n  {:provider :in-memory}\n"
    :test-config-snippet "  :wagoe/realtime\n  {:provider :in-memory}\n"
@@ -116,7 +116,7 @@
   {:name                "tenant"
    :description         "Multi-tenancy with schema-per-tenant isolation"
    :clojars             com.wagoe/wagoe-tenant
-   :version             "1.0.0-beta-2"
+   :version             "1.0.0-beta-3"
    :category            :optional
    :config-snippet      "  :wagoe/tenant\n  {:strategy :schema-per-tenant}\n"
    :test-config-snippet "  :wagoe/tenant\n  {:strategy :schema-per-tenant}\n"
@@ -126,7 +126,7 @@
   {:name                "ai"
    :description         "Multi-provider AI — Ollama, Anthropic Claude, OpenAI"
    :clojars             com.wagoe/wagoe-ai
-   :version             "1.0.0-beta-2"
+   :version             "1.0.0-beta-3"
    :category            :optional
    :config-snippet      "  :wagoe/ai-service\n  {:provider :ollama :model #or [#env AI_MODEL \"qwen2.5-coder:7b\"] :base-url #or [#env OLLAMA_URL \"http://localhost:11434\"]}\n"
    :test-config-snippet "  :wagoe/ai-service\n  {:provider :no-op}\n"
@@ -136,7 +136,7 @@
   {:name                "external"
    :description         "External service adapters — Twilio, SMTP, IMAP"
    :clojars             com.wagoe/wagoe-external
-   :version             "1.0.0-beta-2"
+   :version             "1.0.0-beta-3"
    :category            :optional
    :config-snippet      ""
    :test-config-snippet ""
@@ -146,7 +146,7 @@
   {:name                "workflow"
    :description         "Workflow orchestration with state machines"
    :clojars             com.wagoe/wagoe-workflow
-   :version             "1.0.0-beta-2"
+   :version             "1.0.0-beta-3"
    :category            :optional
    :config-snippet      "  :wagoe/workflow\n  {:provider :in-memory}\n"
    :test-config-snippet "  :wagoe/workflow\n  {:provider :in-memory}\n"
@@ -156,7 +156,7 @@
   {:name                "reports"
    :description         "PDF/CSV export and scheduled report generation"
    :clojars             com.wagoe/wagoe-reports
-   :version             "1.0.0-beta-2"
+   :version             "1.0.0-beta-3"
    :category            :optional
    :config-snippet      "  :wagoe/reports\n  {:provider :in-memory}\n"
    :test-config-snippet "  :wagoe/reports\n  {:provider :in-memory}\n"
@@ -166,7 +166,7 @@
   {:name                "calendar"
    :description         "iCal, RRULE recurrence, conflict detection, Hiccup UI"
    :clojars             com.wagoe/wagoe-calendar
-   :version             "1.0.0-beta-2"
+   :version             "1.0.0-beta-3"
    :category            :optional
    :config-snippet      "  :wagoe/calendar\n  {:provider :in-memory}\n"
    :test-config-snippet "  :wagoe/calendar\n  {:provider :in-memory}\n"
@@ -176,7 +176,7 @@
   {:name                "geo"
    :description         "Multi-provider geocoding (OSM/Google/Mapbox), Haversine distance"
    :clojars             com.wagoe/wagoe-geo
-   :version             "1.0.0-beta-2"
+   :version             "1.0.0-beta-3"
    :category            :optional
    :config-snippet      "  :wagoe/geo-service\n  {:provider :openstreetmap}\n"
    :test-config-snippet "  :wagoe/geo-service\n  {:provider :openstreetmap}\n"
@@ -186,7 +186,7 @@
   {:name                "i18n"
    :description         "Marker-based i18n, translation catalogues, locale chains"
    :clojars             com.wagoe/wagoe-i18n
-   :version             "1.0.0-beta-2"
+   :version             "1.0.0-beta-3"
    :category            :optional
    :config-snippet      "  :wagoe/i18n\n  {:default-locale :en}\n"
    :test-config-snippet "  :wagoe/i18n\n  {:default-locale :en}\n"
@@ -196,7 +196,7 @@
   {:name                "push"
    :description         "Multi-platform push notifications — FCM (Firebase) + APNs (Apple)"
    :clojars             com.wagoe/wagoe-push
-   :version             "1.0.0-beta-2"
+   :version             "1.0.0-beta-3"
    :category            :optional
    :config-snippet      "  :wagoe/push\n  {:fcm-credentials #env WAG_FCM_CREDENTIALS\n   :apns-credentials {:key-file #env WAG_APNS_KEY_FILE\n                      :team-id #env WAG_APNS_TEAM_ID\n                      :key-id #env WAG_APNS_KEY_ID\n                      :bundle-id #env WAG_APNS_BUNDLE_ID}}\n"
    :test-config-snippet "  :wagoe/push\n  {:provider :mock}\n"
@@ -206,7 +206,7 @@
   {:name                "audience"
    :description         "Rule-based audience segmentation with SQL + predicate pipeline"
    :clojars             com.wagoe/wagoe-audience
-   :version             "1.0.0-beta-2"
+   :version             "1.0.0-beta-3"
    :category            :optional
    :config-snippet      "  :wagoe/audience\n  {:db-ctx #ig/ref :wagoe/db-context\n   :cache-service #ig/ref :wagoe/cache\n   :user-data-source #ig/ref :wagoe/user-data-source}\n"
    :test-config-snippet "  :wagoe/audience\n  {:db-ctx #ig/ref :wagoe/db-context}\n"
@@ -216,7 +216,7 @@
   {:name                "admin"
    :description         "Admin UI with entity config, HTMX forms"
    :clojars             com.wagoe/wagoe-admin
-   :version             "1.0.0-beta-2"
+   :version             "1.0.0-beta-3"
    :category            :optional
    :config-snippet      "  :wagoe/admin\n  {:enabled? true :base-path \"/web/admin\" :require-role :admin}\n"
    :test-config-snippet "  :wagoe/admin\n  {:enabled? true :base-path \"/web/admin\" :require-role :admin}\n"
@@ -226,7 +226,7 @@
   {:name                "ui-style"
    :description         "Shared CSS/JS style bundles — :base, :pilot, :admin-pilot"
    :clojars             com.wagoe/wagoe-ui-style
-   :version             "1.0.0-beta-2"
+   :version             "1.0.0-beta-3"
    :category            :optional
    :config-snippet      "  :wagoe/ui-style\n  {:bundle :base}\n"
    :test-config-snippet ""

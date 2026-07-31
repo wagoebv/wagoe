@@ -5,7 +5,7 @@
          ;; Wagoe core — pulled straight from this repository via :local/root,
          ;; so the example runs against the checked-out source with no publish
          ;; step. In a real project you would use the published coordinate:
-         ;;   com.wagoe/wagoe-core {:mvn/version "1.0.0-beta-2"}
+         ;;   com.wagoe/wagoe-core {:mvn/version "1.0.0-beta-3"}
          com.wagoe/wagoe-core    {:local/root "../../libs/core"}
 
          ;; H2 (in-memory) + next.jdbc for the persistence shell.

@@ -12,6 +12,85 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0-beta-3] — 2026-07-31
+
+The release that makes the documented install path true. `1.0.0-beta-2`
+advertised a first-run flow that did not work on a machine with nothing
+installed; every failure below was measured in a clean `ubuntu:24.04`
+container, not inferred.
+
+### Changed
+
+- **New projects default to SQLite** (previously H2). SQLite needs no server
+  and, unlike in-memory H2, the data survives a restart. `org.xerial/sqlite-jdbc`
+  now ships in a generated project's `deps.edn`, and the generated config reader
+  gained the `:wagoe/sqlite` branch it previously lacked.
+- `bb setup` defaults to SQLite on **all three** entry points — interactive menu,
+  `bb setup ai`, and flag invocations such as `bb setup --payment mock`.
+- `bb quickstart` no longer runs the configuration wizard over a config that
+  `wagoe new` has just written. Pass `--preset <name>` to reconfigure deliberately.
+- `bb quickstart`'s banner says it will *verify* rather than *start*; it never
+  started the app, and claiming otherwise sent people hunting for a failure that
+  had not happened.
+
+### Fixed
+
+- **`install.sh` failed three separate ways on clean Linux** (BOU-226):
+  - no prerequisite check, so a bare image died in ~1s on sdkman's own
+    "Please install unzip" — an error about a tool the user never asked for,
+    printed under a screenful of sdkman ASCII art, never naming Wagoe. Now
+    checks `curl`/`git`/`unzip`/`zip` up front and prints the exact command for
+    the detected OS.
+  - sourcing sdkman's init script under `set -euo pipefail` aborted with
+    `SDKMAN_CANDIDATES_API: unbound variable` *immediately after* sdkman printed
+    "All done!". The source and `sdk install` now run under `set +u`.
+  - `sudo` was assumed to exist, which it does not in containers or minimal
+    images. Worse, the steps were written `sudo ./installer && rm installer`, and
+    `set -e` exempts the failure of any command in an `&&` list except the last —
+    so a failed install fell through and printed `✓ Clojure CLI installed` having
+    installed nothing. Adds `as_root()` and reachable `|| fail` handling.
+- **A new project could not complete its own quickstart** (BOU-228). The setup
+  wizard listed PostgreSQL first and defaulted to it, so both a non-interactive
+  run and a user pressing Enter selected a database server that was not installed
+  and whose driver was not on the classpath. Migration died on
+  `ClassNotFoundException: org.postgresql.Driver` and nothing ever served.
+- The generated config used `:database-path` where the platform's config reader
+  looks for `:db`, yielding `database-path nil` and a Malli validation abort at
+  migration time.
+
+### Known gaps
+
+- `/admin` returns 404 in a new project — `com.wagoe/wagoe-admin` ships in
+  `deps.edn` but `:wagoe/admin` is not wired into the generated config (BOU-229).
+- Generated projects have no `:run` alias, `-main`, or `:build` alias, so the app
+  can only be started from a REPL via `(go)` (BOU-254).
+
+## [1.0.0-beta-2] — 2026-07-31
+
+First release under the Wagoe name, on the **`com.wagoe`** Clojars group.
+
+### Changed
+
+- **Clojars coordinates are now `com.wagoe/wagoe-<lib>`** (previously
+  `org.boundary-app/boundary-<lib>`). The group matches `wagoe.com`; `org.wagoe`
+  was never claimable, since Clojars verifies a reverse-domain group against its
+  matching domain and `wagoe.org` was not owned at the time.
+- Website moved to `framework.wagoe.com`, and subsequently to `wagoe.org` with the
+  older hostnames kept as permanent redirects.
+
+### Security
+
+- PostgreSQL JDBC driver bumped to 42.7.12 (GHSA-j92g-9f8w-j867, high), and a
+  stale root `pom.xml` carrying a vulnerable pin was removed.
+
+### Fixed
+
+- Three bugs that let the built jar start silently without serving (BOU-251), plus
+  a smoke test that proves the artifact actually serves.
+- Transactional job enqueue hardened: the transaction contract is guarded, a lost
+  log field restored, and the capability moved onto a port (BOU-252).
+- The uberjar build was repaired and its artifact version pinned to the suite.
+
 ### Renamed — Boundary is now Wagoe (BOU-209 … BOU-217)
 
 The framework is renamed from **Boundary** to **Wagoe** ahead of the first

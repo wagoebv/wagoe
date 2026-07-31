@@ -11,12 +11,12 @@ File storage abstraction with local filesystem and S3 backends, including upload
 
 **deps.edn** (recommended):
 ```clojure
-{:deps {com.wagoe/wagoe-storage {:mvn/version "1.0.0-beta-2"}}}
+{:deps {com.wagoe/wagoe-storage {:mvn/version "1.0.0-beta-3"}}}
 ```
 
 **Leiningen**:
 ```clojure
-[com.wagoe/wagoe-storage "1.0.0-beta-2"]
+[com.wagoe/wagoe-storage "1.0.0-beta-3"]
 ```
 
 ## Features
@@ -227,7 +227,7 @@ libs/storage/src/wagoe/storage/
 
 | Dependency | Version | Purpose |
 |------------|---------|---------|
-| `wagoe/platform` | 1.0.0-beta-2 | Configuration, database |
+| `wagoe/platform` | 1.0.0-beta-3 | Configuration, database |
 | `aws-sdk/s3` | 2.39.5 | S3 client |
 | `aws-sdk/s3-transfer-manager` | 2.39.5 | Efficient uploads |
 
