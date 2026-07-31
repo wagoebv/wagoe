@@ -354,9 +354,15 @@
                            s
                            (do (println (red "  Must be kebab-case")) (recur)))))
 
+        ;; SQLite leads deliberately. This list is what a newcomer meets on
+        ;; their first run, and whatever sits first is what Enter (and a
+        ;; non-interactive/EOF stdin) selects. With postgresql first, the
+        ;; default path wrote a config needing a database server that is not
+        ;; installed, and the run died on ClassNotFoundException:
+        ;; org.postgresql.Driver (BOU-228). The default must boot unaided.
         database (select-option "Database"
-                                [[:postgresql "Production-ready relational database"]
-                                 [:sqlite     "Lightweight file-based database"]
+                                [[:sqlite     "File-based, zero setup — recommended to start"]
+                                 [:postgresql "Production-ready relational database"]
                                  [:h2         "In-memory database (testing/prototyping)"]
                                  [:mysql      "MySQL/MariaDB"]])
 
@@ -451,7 +457,9 @@
                     (str/replace #"\s*```$" ""))
           data  (json/parse-string clean)]
       {:project-name (or (get data "project-name") "my-app")
-       :database     (keyword (or (get data "database") "postgresql"))
+       ;; Fall back to sqlite, not postgresql: an unparsed/absent choice must
+       ;; still yield a project that boots without a database server (BOU-228).
+       :database     (keyword (or (get data "database") "sqlite"))
        :ai-provider  (keyword (or (get data "ai-provider") "none"))
        :payment      (keyword (or (get data "payment") "none"))
        :cache        (keyword (or (get data "cache") "none"))
