@@ -317,6 +317,5 @@ cat target/classes/META-INF/maven/org.wagoe/wagoe-core/pom.xml
 
 == See also
 
-* link:../guides/security-setup.md[Security Setup] — Clojars access control and token rotation
-* link:../guides/operations.adoc[Operations Guide] — Production deployment after publishing
-* link:../guides/testing.md[Testing Guide] — Running tests before publishing
+* link:../../docs/modules/guides/pages/deployment.adoc[Deployment Guide] — Production deployment after publishing
+* link:../../docs/modules/guides/pages/testing.adoc[Testing Guide] — Running tests before publishing

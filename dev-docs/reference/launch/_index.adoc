@@ -1,7 +1,7 @@
 ---
 title: "Launch Kit (Archive)"
 weight: 90
-description: "Draft launch materials: announcements, demo script, and starter repo outline."
+description: "Draft launch materials: announcements and demo script."
 ---
 
 = Launch Kit (Archive)
@@ -12,14 +12,10 @@ These documents are intended as templates (you can copy/paste and adapt them for
 
 == Announcements
 
-* link:announcements/slack.md[Slack announcement draft]
-* link:announcements/clojureverse.md[ClojureVerse announcement draft]
-* link:announcements/reddit.md[Reddit post draft]
+* link:announcements/slack.adoc[Slack announcement draft]
+* link:announcements/clojureverse.adoc[ClojureVerse announcement draft]
+* link:announcements/reddit.adoc[Reddit post draft]
 
 == Demo
 
-* link:demo/script.md[Demo script (10–15 minutes)]
-
-== Starter repo
-
-* link:starter/outline.md[Starter repository outline]
+* link:demo/script.adoc[Demo script (10–15 minutes)]
