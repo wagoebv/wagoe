@@ -114,14 +114,14 @@ These libraries are not published to Clojars — they are part of the monorepo a
 
 == Clojars coordinates
 
-All libraries share the `org.wagoe` group:
+All libraries share the `com.wagoe` group:
 
 [source,clojure]
 ----
-{org.wagoe/wagoe-core      {:mvn/version "1.0.1-alpha-26"}
- org.wagoe/wagoe-user      {:mvn/version "1.0.1-alpha-26"}
- org.wagoe/wagoe-admin     {:mvn/version "1.0.1-alpha-26"}
- org.wagoe/wagoe-platform  {:mvn/version "1.0.1-alpha-26"}
+{com.wagoe/wagoe-core      {:mvn/version "1.0.1-alpha-26"}
+ com.wagoe/wagoe-user      {:mvn/version "1.0.1-alpha-26"}
+ com.wagoe/wagoe-admin     {:mvn/version "1.0.1-alpha-26"}
+ com.wagoe/wagoe-platform  {:mvn/version "1.0.1-alpha-26"}
  ;; etc.
  }
 ----

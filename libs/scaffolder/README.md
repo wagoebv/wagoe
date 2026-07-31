@@ -3,7 +3,7 @@
 [![Status](https://img.shields.io/badge/status-stable-brightgreen)]()
 [![Clojure](https://img.shields.io/badge/clojure-1.12+-blue)]()
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
-[![Clojars Project](https://img.shields.io/clojars/v/org.wagoe/wagoe-scaffolder.svg)](https://clojars.org/org.wagoe/wagoe-scaffolder)
+[![Clojars Project](https://img.shields.io/clojars/v/com.wagoe/wagoe-scaffolder.svg)](https://clojars.org/com.wagoe/wagoe-scaffolder)
 
 Code generation tool for creating new Wagoe modules following the Functional Core / Imperative Shell architecture.
 
@@ -12,7 +12,7 @@ Code generation tool for creating new Wagoe modules following the Functional Cor
 **deps.edn** (as dev dependency):
 ```clojure
 {:aliases
- {:dev {:extra-deps {org.wagoe/wagoe-scaffolder {:mvn/version "1.0.0-beta-1"}}}}}
+ {:dev {:extra-deps {com.wagoe/wagoe-scaffolder {:mvn/version "1.0.0-beta-1"}}}}}
 ```
 
 ## Features

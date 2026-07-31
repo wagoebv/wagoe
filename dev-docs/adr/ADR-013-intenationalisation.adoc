@@ -30,7 +30,7 @@ Requirements for a Wagoe i18n solution:
 7. **Framework alignment** — pure functions in `core/`, I/O in `shell/`,
    catalogues live in EDN files; no macro magic; no code generation.
 8. **Independently publishable** — the library must be releasable as
-   `org.wagoe/wagoe-i18n`.
+   `com.wagoe/wagoe-i18n`.
 
 === Current state
 

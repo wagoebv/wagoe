@@ -225,14 +225,14 @@ Development (monorepo, local `deps.edn`):
 [source,clojure]
 ----
 ;; :dev-local alias in application deps.edn
-org.wagoe/wagoe-payments {:local/root "../wagoe/libs/payments"}
+com.wagoe/wagoe-payments {:local/root "../wagoe/libs/payments"}
 ----
 
 Production (published on Clojars):
 
 [source,clojure]
 ----
-org.wagoe/wagoe-payments {:mvn/version "0.x.x"}
+com.wagoe/wagoe-payments {:mvn/version "0.x.x"}
 ----
 
 === Considered alternatives

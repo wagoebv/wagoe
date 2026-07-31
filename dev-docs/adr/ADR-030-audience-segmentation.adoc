@@ -316,7 +316,7 @@ tenants, or databases).
 ----
 libs/audience/
 ├── deps.edn
-├── build.clj                               ; org.wagoe/wagoe-audience
+├── build.clj                               ; com.wagoe/wagoe-audience
 ├── AGENTS.md
 ├── src/wagoe/audience/
 │   ├── schema.clj                          ; AudienceDefinition, FilterDef, SegmentResult
@@ -490,7 +490,7 @@ CLJS is progressive enhancement, not a hard dependency for core functionality.
 === Phase 1: Library Scaffold
 
 - [ ] `libs/audience/deps.edn` with wagoe-core, malli, honeysql
-- [ ] `libs/audience/build.clj` — `org.wagoe/wagoe-audience`
+- [ ] `libs/audience/build.clj` — `com.wagoe/wagoe-audience`
 - [ ] Root `deps.edn` — add audience source/test paths
 - [ ] Root `tests.edn` — add `:audience` test suite
 - [ ] `.clj-kondo/config.edn` — `defaudience` lint-as registration

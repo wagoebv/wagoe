@@ -1,7 +1,7 @@
 # Upgrading Wagoe
 
 Migration notes for projects built on the Wagoe framework (generated with
-`wagoe new` or hand-wired against the published `org.wagoe/*`
+`wagoe new` or hand-wired against the published `com.wagoe/*`
 artifacts). Steps are ordered by impact; each names the change, the failure
 mode you'd see without it, and the fix.
 
@@ -79,14 +79,14 @@ Function names and signatures are unchanged (`wrap-multi-tenant`,
 ### 4. Shared UI moved to its own artifact (BOU-193/194, BOU-202)
 
 `wagoe.shared.ui.*` namespaces moved from the admin lib into a new
-`org.wagoe/wagoe-shared-ui` artifact. The namespaces themselves are
+`com.wagoe/wagoe-shared-ui` artifact. The namespaces themselves are
 unchanged, and since alpha-42 the published POMs declare their inter-Wagoe
 dependencies, so `wagoe-user`/`wagoe-admin`/etc. pull `shared-ui` in
 transitively.
 
 **Action:** usually none. If your deps.edn hand-enumerates the Wagoe
 closure (pre-alpha-42 template style), you can either add
-`org.wagoe/wagoe-shared-ui` or — better — trim the list to the
+`com.wagoe/wagoe-shared-ui` or — better — trim the list to the
 modules you directly use and let the POMs resolve the rest.
 
 ### 5. User-route authorization hardening (BOU-190/191/197)

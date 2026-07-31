@@ -31,7 +31,7 @@
        "<!-- /wagoe:available-modules -->\n"
        "<!-- wagoe:installed-modules -->\n"
        "- core\n"
-       "- payments (`org.wagoe/wagoe-payments`) — [docs](https://x)\n"
+       "- payments (`com.wagoe/wagoe-payments`) — [docs](https://x)\n"
        "<!-- /wagoe:installed-modules -->\n"))
 
 (def ^:private substitutions {:project-name "shop" :project-ns "shop"})
@@ -52,7 +52,7 @@
     (testing "text outside markers is untouched"
       (is (str/includes? content "## My custom team notes\ndo not lose this")))
     (testing "installed-modules block is project state — never synced from template"
-      (is (str/includes? content "- payments (`org.wagoe/wagoe-payments`)")))
+      (is (str/includes? content "- payments (`com.wagoe/wagoe-payments`)")))
     (testing "installed modules are re-removed from the refreshed available table"
       (is (not (str/includes? content "| payments")))
       (is (str/includes? content "wagoe add search")))
