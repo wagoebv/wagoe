@@ -10,4 +10,4 @@ Tagline: Batteries included, boundaries enforced
 
 Highlights - SSR via Hiccup {plus} HTMX (no build step) - Admin UI {plus} MFA included - FC/IS {plus} Integrant, Malli validation - Interceptor‑based observability
 
-Start here: /getting-started/quickstart/ Links: Starter (https://github.com/wagoebv/wagoe-starter) · Demo (TODO:demo-video-url)
+Start here: /getting-started/quickstart/ Links: Create a project (`wagoe new my-app`) · Demo (TODO:demo-video-url)

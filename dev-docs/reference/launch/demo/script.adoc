@@ -8,24 +8,24 @@ description: "Draft demo script for a 10–15 minute Wagoe walkthrough."
 
 Audience - Clojure teams building internal tools/SaaS backends - Goal: show speed {plus} structure (FC/IS), security (MFA), SSR/HTMX, and observability
 
-Prereqs (on screen briefly) - Java 17{plus}, Clojure CLI installed - Repo cloned: https://github.com/wagoebv/wagoe-starter - Env: BND++_++ENV=development, JWT++_++SECRET set
+Prereqs (on screen briefly) - Java 17{plus}, Clojure CLI, Babashka installed - Project created with `wagoe new my-app` - Env: WAG++_++ENV=development, JWT++_++SECRET set
 
-Structure - 00:00–01:00 — Hook & value prop - 01:00–04:00 — Run starter, tour architecture (FC/IS) - 04:00–09:00 — Scaffold a module, migrate, admin UI in action - 09:00–12:00 — MFA enable/login flow - 12:00–14:00 — Observability and error handling - 14:00–15:00 — Build/deploy {plus} recap
+Structure - 00:00–01:00 — Hook & value prop - 01:00–04:00 — Run the generated app, tour architecture (FC/IS) - 04:00–09:00 — Scaffold a module, migrate, admin UI in action - 09:00–12:00 — MFA enable/login flow - 12:00–14:00 — Observability and error handling - 14:00–15:00 — Deploy {plus} recap
 
 Script
 
 00:00–01:00 — Hook & value prop - "`Wagoe helps teams ship secure, observable Clojure apps fast — with clean architecture and no frontend build step. Batteries included, boundaries enforced.`" - Show README tagline {plus} quickstart briefly.
 
-01:00–04:00 — Run starter, tour architecture - Terminal: `clojure -M:repl-clj`, in REPL: `(require '++[++integrant.repl :as ig-repl++]++) (ig-repl/go)` - Browser: open `http://localhost:3000` (home page) - Explain module layout: `src/wagoe/++{++module}/core/`, `shell/`, `ports.clj`, `schema.clj` - Reinforce FC/IS: core = pure; shell = I/O/validation/adapters; ports = protocols.
+01:00–04:00 — Run the generated app, tour architecture - Terminal: `bb repl`, in REPL: `(require '++[++integrant.repl :as ig-repl++]++) (ig-repl/go)` - Browser: open `http://localhost:3000` (home page) - Explain module layout: `src/my-app/core/`, `src/my-app/shell/`, `ports.clj`, `schema.clj` - Reinforce FC/IS: core = pure; shell = I/O/validation/adapters; ports = protocols.
 
-04:00–09:00 — Scaffold a module - Terminal: scaffold - `clojure -M -m wagoe.scaffolder.shell.cli-entry generate ++\++` - `--module-name product ++\++` - `--entity Product ++\++` - `--field name:string:required ++\++` - `--field sku:string:required:unique ++\++` - `--field price:decimal:required` - Terminal: `clojure -M:migrate up` - REPL: `(ig-repl/reset)` - Browser: Admin UI → products listed, create/edit/delete - Call out validation: Malli schemas, snapshot tests; show `clojure -M:test:db/h2 --focus-meta :unit`
+04:00–09:00 — Scaffold a module - Terminal: scaffold - `bb scaffold generate ++\++` - `--module-name product ++\++` - `--entity Product ++\++` - `--field name:string:required ++\++` - `--field sku:string:required:unique ++\++` - `--field price:decimal:required` - Terminal: `bb scaffold integrate product` (wires deps.edn, tests.edn, wiring.clj) - Terminal: `bb migrate up` - REPL: `(ig-repl/reset)` - Browser: Admin UI → products listed, create/edit/delete - Call out validation: Malli schemas, snapshot tests; show `bb test --focus-meta :unit`
 
 09:00–12:00 — MFA enable/login - Terminal: setup {plus} enable - `curl -X POST http://localhost:3000/api/auth/mfa/setup -H "Authorization: Bearer ++<++token++>++"` - `curl -X POST http://localhost:3000/api/auth/mfa/enable -H "Authorization: Bearer ++<++token++>++" -d '++{++"secret":"...","verificationCode":"123456"}'` - Terminal: login with MFA - `curl -X POST http://localhost:3000/api/auth/login -d '++{++"email":"user@example.com","password":"...","mfa-code":"123456"}'` - Explain where teams enforce MFA, and that it’s production-ready out of the box.
 
 12:00–14:00 — Observability - Explain interceptor pattern: service/persistence operations wrap logging/metrics/error reporting. - Show a simple service call and a typed error propagating with an operation name. - Mention providers: dev no-op, Datadog, Sentry plug-ins; swap per env without code churn.
 
-14:00–15:00 — Build/deploy {plus} recap - Terminal: `clojure -T:build clean && clojure -T:build uber` then `java -jar target/wagoe-++*++.jar server` - Optional Dockerfile snippet - Recap: "`Batteries included, boundaries enforced — FC/IS, SSR/HTMX, admin {plus} MFA, and observability ready from day one.`"
+14:00–15:00 — Deploy {plus} recap - Terminal: `bb check` (FC/IS, deps, lint, doctor) — the gates that ship with every project - Talk through deployment rather than demoing it: `wagoe new` does not generate a build alias or Dockerfile, so packaging follows the framework deployment guide - Recap: "`Batteries included, boundaries enforced — FC/IS, SSR/HTMX, admin {plus} MFA, and observability ready from day one.`"
 
-Recording tips - Keep terminal font large, dark theme. - Pre-seed a JWT token or mock for MFA. - Use two browser windows: app and admin. - Have migrations and scaffolder ready to avoid delays.
+Recording tips - Keep terminal font large, dark theme. - Pre-seed a JWT token or mock for MFA. - Use two browser windows: app and admin. - Run `wagoe new my-app` before recording so the demo starts from a ready project. - Have migrations and scaffolder ready to avoid delays.
 
-Follow-ups (links to include in description) - Quickstart: /getting-started/quickstart/ - Starter repo: https://github.com/wagoebv/wagoe-starter - Docs home: /
+Follow-ups (links to include in description) - Quickstart: /getting-started/quickstart/ - Create a project: `wagoe new my-app` - Docs home: /

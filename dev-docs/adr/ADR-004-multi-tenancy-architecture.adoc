@@ -1179,10 +1179,9 @@ ecosystems
 
 === References
 
-==== Research
+==== Wagoe docs
 
-* link:../research/multi-tenancy-patterns.md[Multi-Tenancy Patterns
-Research] - Comprehensive analysis of all patterns
+* link:../../docs/modules/guides/pages/multi-tenancy.adoc[Multi-Tenancy Guide] — using the tenant library
 
 ==== External Resources
 

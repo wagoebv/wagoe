@@ -14,6 +14,6 @@ What’s in the box - FC/IS architecture with Integrant lifecycle - Server-side 
 
 Why it matters - Opinionated defaults reduce weeks of glue work - Typed errors and interceptors make failures actionable - SSR keeps complexity low and performance high
 
-Get started - Quickstart: /getting-started/quickstart/ - Starter repo: https://github.com/wagoebv/wagoe-starter - 10–15 min demo: TODO:demo-video-url
+Get started - Quickstart: /getting-started/quickstart/ - Create a project: `wagoe new my-app` - 10–15 min demo: TODO:demo-video-url
 
 We’d love feedback from folks building SaaS backends and internal tools. What would you want to see next?
