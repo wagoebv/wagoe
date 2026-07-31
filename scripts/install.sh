@@ -41,6 +41,47 @@ if [[ "$OS" == "macos" ]]; then
   fi
 fi
 
+# ── System prerequisites ─────────────────────────────────────
+# Check these BEFORE reaching for sdkman/brew. sdkman needs unzip (and zip for
+# some operations); the CLI install below clones with git. On a bare Ubuntu
+# image none of them are present, and without this check the first failure is
+# sdkman's own "Please install unzip" — printed under a screenful of sdkman
+# ASCII art, naming a tool the user never asked for and never naming Wagoe.
+missing=()
+for tool in curl git unzip zip; do
+  command -v "$tool" &>/dev/null || missing+=("$tool")
+done
+if (( ${#missing[@]} > 0 )); then
+  case "$OS" in
+    macos)      hint="brew install ${missing[*]}" ;;
+    debian|wsl) hint="sudo apt-get update && sudo apt-get install -y ${missing[*]}" ;;
+    arch)       hint="sudo pacman -S --noconfirm ${missing[*]}" ;;
+    *)          hint="install them with your package manager" ;;
+  esac
+  fail "Missing required tool(s): ${missing[*]}
+
+  Install them, then re-run this installer:
+    $hint"
+fi
+ok "System prerequisites present"
+
+# ── Privilege escalation ──────────────────────────────────────
+# Run a command as root, but only escalate when we actually need to. Calling
+# `sudo` unconditionally broke every containerised/minimal Linux install:
+# images commonly run as root and ship no sudo at all, so the install steps
+# died with "sudo: command not found".
+as_root() {
+  if [[ "$EUID" -eq 0 ]]; then
+    "$@"
+  elif command -v sudo &>/dev/null; then
+    sudo "$@"
+  else
+    fail "Need root to run: $*
+
+  Either re-run this installer as root, or install sudo first."
+  fi
+}
+
 # ── JVM ──────────────────────────────────────────────────────
 if java -version 2>&1 | grep -q "version"; then
   ok "JVM already installed"
@@ -52,12 +93,21 @@ else
     if ! command -v sdk &>/dev/null; then
       info "Installing sdkman..."
       curl -s "https://get.sdkman.io" | bash
-      # shellcheck disable=SC1090
-      source "$HOME/.sdkman/bin/sdkman-init.sh"
     fi
+    # `set +u` is required, not defensive: sdkman-init.sh reads
+    # SDKMAN_CANDIDATES_API unguarded, so sourcing it under our `set -u` aborts
+    # with "unbound variable" immediately after sdkman prints "All done!" — the
+    # installer dies right after reporting success. The `sdk` function itself is
+    # not -u clean either, so the relaxation covers `sdk install` too.
+    set +u
+    # shellcheck disable=SC1090,SC1091
+    source "$HOME/.sdkman/bin/sdkman-init.sh" \
+      || fail "sdkman installed but its init script could not be sourced.
+  Open a new terminal and re-run this installer."
     sdk install java || fail "Failed to install JVM via sdkman"
+    set -u
   elif [[ "$OS" == "arch" ]]; then
-    sudo pacman -S --noconfirm jdk-openjdk || fail "Failed to install JVM via pacman"
+    as_root pacman -S --noconfirm jdk-openjdk || fail "Failed to install JVM via pacman"
   fi
   ok "JVM installed"
 fi
@@ -72,7 +122,12 @@ else
   else
     curl -L -O https://github.com/clojure/brew-install/releases/latest/download/linux-install.sh
     chmod +x linux-install.sh
-    sudo ./linux-install.sh && rm linux-install.sh
+    # `|| fail` is load-bearing. This was `as_root ./… && rm …`, and `set -e`
+    # exempts the failure of any command in an && list except the last, so a
+    # failed install fell through to the ok "installed" line below and reported
+    # success. Keep the install and the cleanup as separate statements.
+    as_root ./linux-install.sh || fail "Failed to install the Clojure CLI"
+    rm -f linux-install.sh
   fi
   ok "Clojure CLI installed"
 fi
@@ -87,7 +142,9 @@ else
   else
     curl -sLO https://raw.githubusercontent.com/babashka/babashka/master/install
     chmod +x install
-    sudo ./install && rm install
+    # Same && / set -e trap as the Clojure CLI step above — see the note there.
+    as_root ./install || fail "Failed to install Babashka"
+    rm -f install
   fi
   ok "Babashka installed"
 fi
@@ -95,7 +152,7 @@ fi
 # ── bbin ─────────────────────────────────────────────────────
 install_bbin() {
   bb -e "(babashka.deps/add-deps {:deps '{io.github.babashka/bbin {:git/url \"https://github.com/babashka/bbin\" :git/sha \"HEAD\"}}}) (require 'bbin.cli) (bbin.cli/install! \"bbin\")" 2>/dev/null \
-    || { curl -fsSL https://raw.githubusercontent.com/babashka/bbin/master/bbin > /tmp/bbin && chmod +x /tmp/bbin && sudo mv /tmp/bbin /usr/local/bin/bbin; } \
+    || { curl -fsSL https://raw.githubusercontent.com/babashka/bbin/master/bbin > /tmp/bbin && chmod +x /tmp/bbin && as_root mv /tmp/bbin /usr/local/bin/bbin; } \
     || fail "Failed to install bbin"
 }
 

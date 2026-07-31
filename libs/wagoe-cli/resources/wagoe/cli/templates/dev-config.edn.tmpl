@@ -10,9 +10,16 @@
      :secure-cookies?  false
      :features         {}}
 
-   :wagoe/h2
-   {:memory true
-    :pool   {:minimum-idle 1 :maximum-pool-size 10}}
+   ;; SQLite by default: no server to install, and unlike in-memory H2 the
+   ;; data survives a restart, so the first app you build still has its rows
+   ;; the next morning. Swap in :wagoe/postgresql when you need one.
+   ;; Key is :db — that is what the platform's config reader looks for
+   ;; (adapters/database/config.clj). :database-path is the *adapter* key it
+   ;; derives, not the config key; using it here yields database-path nil and
+   ;; a Malli "Invalid database configuration" failure at migrate time.
+   :wagoe/sqlite
+   {:db   "{{project-name}}-dev.db"
+    :pool {:minimum-idle 1 :maximum-pool-size 10}}
 
    :wagoe/http
    {:port       #or [#env HTTP_PORT 3000]

@@ -112,6 +112,12 @@
 ;; Step runner
 ;; =============================================================================
 
+(defn- existing-dev-config?
+  "True when the project already has a dev config written by `wagoe new`.
+   Used to skip the setup wizard rather than overwrite working configuration."
+  []
+  (.exists (io/file "resources/conf/dev/config.edn")))
+
 (defn- run-step
   "Run a named step. Returns true if successful."
   [step-num total description cmd & {:keys [continue?]}]
@@ -137,7 +143,12 @@
   (println (bold "━━━ Wagoe Quickstart ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"))
   (println)
   (println "  This will set up a complete Wagoe development environment.")
-  (println "  Steps: check environment, configure, scaffold, migrate, start.")
+  ;; Says "verify", not "start". Quickstart does not launch the app — it ends
+  ;; by telling you to run `clojure -M:repl` and eval (go). Claiming "start"
+  ;; left users expecting a running server after 8/8 Done, and looking for a
+  ;; failure that had not happened.
+  (println "  Steps: check environment, configure, scaffold, migrate, verify.")
+  (println "  It does not start the app — the final step tells you how.")
   (println))
 
 (defn- print-success []
@@ -174,11 +185,29 @@
     (run-step 1 8 "Checking development environment"
               ["bb" "doctor:env" "--ci"])
 
-    ;; Step 2: Run setup
-    (if preset
+    ;; Step 2: Run setup — but never over a config that already works.
+    ;;
+    ;; `wagoe new` writes a valid dev config, and re-running the wizard on top
+    ;; of it could only make a first run worse: the wizard rewrites
+    ;; resources/conf/dev/config.edn, and an EOF stdin (CI, `</dev/null`) or a
+    ;; user pressing Enter took its first option. That turned a working project
+    ;; into one pointing at a database server nobody had installed, and the
+    ;; migration step then died on ClassNotFoundException (BOU-228).
+    ;;
+    ;; An explicit --preset still runs setup: asking for a preset is asking to
+    ;; change the config.
+    (cond
+      preset
       (do (println (dim (str "\n  Using preset: " preset-name " (" (:description preset) ")")))
           (run-step 2 8 "Running configuration setup"
                     ["bb" "setup" "--database" (:database preset)]))
+
+      (existing-dev-config?)
+      (println (str "\n" (bold "[2/8] Running configuration setup") "\n"
+                    (dim "  Existing config found at resources/conf/dev/config.edn — keeping it.")
+                    "\n" (dim "  Re-run with `bb quickstart --preset <name>` to reconfigure.")))
+
+      :else
       (run-step 2 8 "Running configuration setup"
                 ["bb" "setup"]))
 

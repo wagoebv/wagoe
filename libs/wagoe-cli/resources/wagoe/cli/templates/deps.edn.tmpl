@@ -13,6 +13,10 @@
          com.wagoe/wagoe-external      {:mvn/version "{{external-version}}"}
          com.wagoe/wagoe-payments      {:mvn/version "{{payments-version}}"}
          com.wagoe/wagoe-i18n          {:mvn/version "{{i18n-version}}"}
+         ;; SQLite drives the default dev config; H2 backs the test profile.
+         ;; Both ship by default so a fresh project boots and tests with no
+         ;; external database server.
+         org.xerial/sqlite-jdbc                  {:mvn/version "3.53.0.0"}
          com.h2database/h2                       {:mvn/version "2.4.240"}}
  :aliases
  {:repl     {:extra-paths ["dev"]
