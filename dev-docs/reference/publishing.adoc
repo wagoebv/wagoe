@@ -199,8 +199,9 @@ git push origin v1.0.1-alpha-14
 
 GitHub Actions will:
 
+. **Wait for approval** — see <<approval-gate>> below; nothing runs until a maintainer approves
 . Build the Tailwind CSS bundle (required for the `ui-style` jar)
-. Run `bb deploy --all` with the repository secrets as credentials
+. Run `bb deploy --all` with the Clojars credentials
 . Create a GitHub Release marked as pre-release for alpha/beta versions
 
 === Trigger: manual dispatch
@@ -210,6 +211,40 @@ For deploying without a tag (e.g. re-running after a partial failure):
 . Go to *GitHub → Actions → Publish to Clojars*
 . Click *Run workflow*
 . Optionally enter a version label for the release notes
+
+[#approval-gate]
+=== The approval gate
+
+The `publish` job declares `environment: release`, a GitHub Environment with a
+required reviewer. **Pushing a tag does not publish on its own** — the run stops
+before its first step and waits.
+
+To release, after pushing the tag:
+
+. Go to *GitHub → Actions → Publish to Clojars* and open the pending run
+. Click *Review deployments*, tick `release`, then *Approve and deploy*
+
+A run left unapproved shows as waiting, not failed. If a tag push seems to have
+done nothing, check for a pending approval before debugging anything else.
+
+.Why an environment rather than an actor check
+[NOTE]
+====
+This replaced `if: github.actor == 'thijs-creemers'` (BOU-248). That guard held
+the right property — only a trusted human publishes — but expressed it as one
+hardcoded login: no second maintainer could release, and it would fail *silently*
+(job skipped, no error) if the account were renamed.
+
+The tempting one-line fix, `github.repository_owner == 'wagoebv'`, is always true
+for this repository. It would read as a gate while gating nothing, handing
+publish rights to anyone with write access.
+====
+
+The Clojars credentials (`CLOJARS_USERNAME`, `CLOJARS_PASSWORD`) should be
+*environment* secrets on `release` rather than repository secrets, so that no
+other workflow or branch can read them. Environment secrets shadow repository
+secrets of the same name, so the move is: set them on the environment, confirm a
+release still works, then delete the repository-level copies.
 
 ---
 
