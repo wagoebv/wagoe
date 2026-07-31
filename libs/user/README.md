@@ -11,12 +11,12 @@ Complete user management and authentication system with MFA support, session man
 
 **deps.edn** (recommended):
 ```clojure
-{:deps {com.wagoe/wagoe-user {:mvn/version "1.0.0-beta-1"}}}
+{:deps {com.wagoe/wagoe-user {:mvn/version "1.0.0-beta-2"}}}
 ```
 
 **Leiningen**:
 ```clojure
-[com.wagoe/wagoe-user "1.0.0-beta-1"]
+[com.wagoe/wagoe-user "1.0.0-beta-2"]
 ```
 
 ## Features
@@ -178,7 +178,7 @@ libs/user/src/wagoe/user/
 
 | Dependency | Version | Purpose |
 |------------|---------|---------|
-| `wagoe/platform` | 1.0.0-beta-1 | HTTP, database |
+| `wagoe/platform` | 1.0.0-beta-2 | HTTP, database |
 | `buddy-hashers` | 2.0.167 | Password hashing |
 | `buddy-sign` | 3.6.1-359 | JWT tokens |
 | `one-time` | 0.8.0 | TOTP generation |

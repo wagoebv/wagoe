@@ -116,7 +116,7 @@
 
 ;; Must match libs/tools/build.clj version and libs/scaffolder/build.clj version.
 ;; Update all three together on each release.
-(def ^:private scaffolder-version "1.0.0-beta-1")
+(def ^:private scaffolder-version "1.0.0-beta-2")
 
 (defn run-clojure!
   "Shell out to the Clojure scaffolder CLI with given args. Streams output to terminal.

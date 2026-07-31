@@ -11,12 +11,12 @@ Framework-aware AI tooling for Wagoe applications — offline-first via Ollama, 
 
 **deps.edn** (recommended):
 ```clojure
-{:deps {com.wagoe/wagoe-ai {:mvn/version "1.0.0-beta-1"}}}
+{:deps {com.wagoe/wagoe-ai {:mvn/version "1.0.0-beta-2"}}}
 ```
 
 **Leiningen**:
 ```clojure
-[com.wagoe/wagoe-ai "1.0.0-beta-1"]
+[com.wagoe/wagoe-ai "1.0.0-beta-2"]
 ```
 
 ## Features

@@ -263,8 +263,8 @@ Version appears in 26+ files — use these steps to bump consistently.
 **1. Replace the version string everywhere (all .clj, .edn, and .md files):**
 
 ```bash
-OLD="1.0.0-beta-1"
-NEW="1.0.0-beta-1"   # example
+OLD="1.0.0-beta-2"
+NEW="1.0.0-beta-2"   # example
 
 # Source and config files
 find . \( -name "*.clj" -o -name "*.edn" \) \
@@ -309,12 +309,12 @@ bb deploy --all
 
 ```clojure
 ;; Validation utilities only
-{:deps {com.wagoe/wagoe-core {:mvn/version "1.0.0-beta-1"}}}
+{:deps {com.wagoe/wagoe-core {:mvn/version "1.0.0-beta-2"}}}
 
 ;; Full web application stack
-{:deps {com.wagoe/wagoe-platform {:mvn/version "1.0.0-beta-1"}
-        com.wagoe/wagoe-user     {:mvn/version "1.0.0-beta-1"}
-        com.wagoe/wagoe-admin    {:mvn/version "1.0.0-beta-1"}}}
+{:deps {com.wagoe/wagoe-platform {:mvn/version "1.0.0-beta-2"}
+        com.wagoe/wagoe-user     {:mvn/version "1.0.0-beta-2"}
+        com.wagoe/wagoe-admin    {:mvn/version "1.0.0-beta-2"}}}
 ```
 
 ---
