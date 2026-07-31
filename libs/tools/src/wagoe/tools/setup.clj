@@ -523,7 +523,13 @@
 
 (defn from-flags [opts]
   (let [spec {:project-name (or (:project-name opts) "my-app")
-              :database     (keyword (or (:database opts) "postgresql"))
+              ;; sqlite, matching the interactive menu and the AI path — all
+              ;; three entry points must agree. Any `bb setup --<flag>` lands
+              ;; here, so `bb setup --payment mock` (no --database) took this
+              ;; default; with postgresql it wrote a config whose driver is not
+              ;; even on a generated project's classpath, which now ships only
+              ;; sqlite and h2. Same clean-start failure as BOU-228.
+              :database     (keyword (or (:database opts) "sqlite"))
               :ai-provider  (keyword (or (:ai-provider opts) "none"))
               :payment      (keyword (or (:payment opts) "none"))
               :cache        (keyword (or (:cache opts) "none"))
