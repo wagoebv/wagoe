@@ -117,9 +117,9 @@
    ;; repo landed as wagoebv/wagoe-examples, NOT wagoebv/examples as planned.
    ;; docs.boundary-app.org is retired — docs are folded into the main site.
    "urls"   {:desc "external refs -> Wagoe homes"
-             :subs [[#"get\.boundary-app\.org" "get.wagoe.com"]
-                    [#"docs\.boundary-app\.org" "framework.wagoe.com/docs"]
-                    [#"boundary-app\.org" "framework.wagoe.com"]
+             :subs [[#"get\.boundary-app\.org" "get.wagoe.org"]
+                    [#"docs\.boundary-app\.org" "wagoe.org/docs"]
+                    [#"boundary-app\.org" "wagoe.org"]
                     [#"thijs-creemers/boundary-examples" "wagoebv/wagoe-examples"]
                     [#"tcbv/boundary-examples" "wagoebv/wagoe-examples"]
                     [#"thijs-creemers/boundary" "wagoebv/wagoe"]

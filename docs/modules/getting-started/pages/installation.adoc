@@ -7,10 +7,10 @@ The Wagoe installer handles all prerequisites automatically:
 
 [source,bash]
 ----
-curl -fsSL https://get.wagoe.com | bash
+curl -fsSL https://get.wagoe.org | bash
 ----
 
-Fallback if `get.wagoe.com` is unavailable:
+Fallback if `get.wagoe.org` is unavailable:
 
 [source,bash]
 ----

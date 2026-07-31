@@ -5,11 +5,11 @@
 
 [source,bash]
 ----
-curl -fsSL https://get.wagoe.com | bash
+curl -fsSL https://get.wagoe.org | bash
 ----
 
 This installs all prerequisites (JVM, Clojure CLI, Babashka, bbin) and the `wagoe` command. +
-Fallback if `get.wagoe.com` is unavailable:
+Fallback if `get.wagoe.org` is unavailable:
 
 [source,bash]
 ----

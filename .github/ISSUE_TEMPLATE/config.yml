@@ -1,7 +1,7 @@
 blank_issues_enabled: false
 contact_links:
   - name: Documentation
-    url: https://framework.wagoe.com/docs
+    url: https://wagoe.org/docs
     about: Getting-started guides, per-library references, and architecture docs.
   - name: Clojurians Slack
     url: https://clojurians.slack.com
