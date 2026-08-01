@@ -1,0 +1,99 @@
+name: Brand canary
+
+# Report-only counterpart to `bb check:no-boundary` (BOU-250).
+#
+# The gate matches a fixed set of token shapes. That is the right trade for a
+# blocking check — a loose pattern would flag the architectural sense of the
+# word on every PR — but it means the gate is blind by construction to any
+# spelling nobody thought of. During the rename the gate reported clean while a
+# plain case-insensitive sweep found ~900 leftovers: tokens inside regex
+# literals, the Maven group in path form, BOUNDARY_ alongside BND_, and whole
+# file types no glob covered (.tmpl, .sh, .yml, .service).
+#
+# This job runs the loose sweep on a schedule and NEVER fails. It exists so the
+# difference between "no hard tokens" and "no brand residue" stays visible
+# instead of being rediscovered by the next person to grep by hand.
+#
+# It is deliberately not part of CI: on a pull request a report nobody can act
+# on is noise, and making it blocking would re-introduce the false positives
+# the narrow patterns exist to avoid.
+
+on:
+  schedule:
+    # Mondays, 06:00 UTC. Drift is measured in weeks, not commits.
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sweep:
+    name: Case-insensitive brand sweep (report only)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Babashka
+        uses: DeLaGuardo/setup-clojure@13.6.1
+        with:
+          bb: latest
+
+      - name: Hard token groups (what the blocking gate sees)
+        continue-on-error: true
+        run: bb check:no-boundary
+
+      - name: Loose sweep (what the gate cannot see)
+        shell: bash
+        run: |
+          # Every tracked file, case-insensitive, no extension filter. Excludes
+          # the paths the gate legitimately exempts, so the output is only the
+          # residue nobody has classified yet.
+          hits=$(git grep -In -i -E 'boundary' -- \
+                   ':!CHANGELOG.md' \
+                   ':!docs/superpowers/' \
+                   ':!.wagoe/' \
+                   ':!scripts/rename_wagoe.clj' \
+                   ':!scripts/check_no_boundary.clj' \
+                   ':!dev-docs/LINK_ISSUES.adoc' \
+                   ':!dev/wagoe/tools/docs_lint.clj' \
+                   ':!libs/tools/src/wagoe/tools/relocate.clj' \
+                   ':!libs/tools/test/wagoe/tools/relocate_test.clj' \
+                   ':!dev-docs/reference/publishing.adoc' \
+                 || true)
+
+          count=$(printf '%s' "$hits" | grep -c . || true)
+          files=$(printf '%s' "$hits" | cut -d: -f1 | sort -u | grep -c . || true)
+
+          {
+            echo "## Brand canary"
+            echo
+            echo "Case-insensitive sweep for the old brand across every tracked file,"
+            echo "minus the paths the blocking gate exempts."
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Matches | $count |"
+            echo "| Files | $files |"
+            echo
+            if [ "$count" -eq 0 ]; then
+              echo "Nothing found. The narrow gate and the loose sweep agree."
+            else
+              echo "Most of these are expected — \"boundary\" is also the architectural"
+              echo "term this framework is built on. The signal to look for is a match"
+              echo "that is clearly a *name*: a namespace, a coordinate, an env var, a"
+              echo "URL. If one turns up, the blocking gate has a blind spot worth"
+              echo "closing rather than allowlisting."
+              echo
+              echo "<details><summary>Files by match count</summary>"
+              echo
+              echo '```'
+              printf '%s' "$hits" | cut -d: -f1 | sort | uniq -c | sort -rn | head -40
+              echo '```'
+              echo
+              echo "</details>"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          echo "Brand canary: $count matches across $files files (report only)."

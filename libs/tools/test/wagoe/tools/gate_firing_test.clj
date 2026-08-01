@@ -22,6 +22,8 @@
             [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.string :as str]
+            [babashka.process :as process]
+            [check-no-boundary]
             [wagoe.tools.check :as check]
             [wagoe.tools.check-deps :as check-deps]
             [wagoe.tools.check-fcis :as check-fcis]
@@ -391,6 +393,68 @@
         (is (.exists (io/file p)) (str p " does not exist"))))))
 
 ;; =============================================================================
+;; check:no-boundary — against a throwaway repo
+;; =============================================================================
+
+(defn- git! [dir & args]
+  (apply process/shell {:dir (str dir) :out :string :err :string} "git" args))
+
+;; Split so this source file contains no literal the rename gate would flag.
+;; See the probe map below for why that matters.
+(def ^:private brand (str "bound" "ary"))
+(def ^:private new-brand (str "wag" "oe"))
+
+(deftest ^:unit no-boundary-gate-fires-test
+  ;; The only gate that needs a real git repo: it works by `git grep` over
+  ;; tracked files, so nothing can be planted for it without one. That was the
+  ;; reason it was the last gate left unproven.
+  (let [root (temp-dir "noboundary" 1)]
+    (try
+      (git! root "init" "-q")
+      (git! root "config" "user.email" "t@example.com")
+      (git! root "config" "user.name" "t")
+      (spit-file! root "src/app/clean.clj" "(ns app.clean)\n(defn go [] :ok)\n")
+      (git! root "add" "-A")
+      (git! root "commit" "-q" "-m" "clean")
+
+      (binding [check-no-boundary/*repo-dir* root]
+        (testing "a clean tree yields no hits"
+          (is (empty? (check-no-boundary/all-hit-paths))))
+
+        (testing "each hard group detects its own token family"
+          ;; One planted violation per group, so a group whose pattern rots
+          ;; cannot hide behind another group's hit.
+          ;;
+          ;; The probes are ASSEMBLED rather than written as literals. Spelled
+          ;; out, this file would carry one residual of every kind and the gate
+          ;; would flag its own test fixtures — seven hits, in the namespace
+          ;; that exists to prove the gate works. Allowlisting the file was the
+          ;; obvious way out and the wrong one: it would switch the gate off
+          ;; for everything else here too. What lands on disk is identical.
+          (doseq [[group content] {:ns     (str "(ns app.x (:require [" brand ".core :as c]))")
+                                   :keys   (str "{:" brand "/user-service {}}")
+                                   :coords (str "{:deps {org." brand "-app/" brand "-core {}}}")
+                                   :env    (str "(System/getenv \"" (str/upper-case brand) "_TENANT_ID\")")
+                                   :group  (str "{:deps {org." new-brand "/" new-brand "-core {}}}")
+                                   :dirs   (str ";; see libs/" brand "-cli/src")
+                                   :urls   (str ";; https://" brand "-app.org/docs")}]
+            (let [f (str "src/app/" (name group) "_probe.clj")]
+              (spit-file! root f content)
+              (git! root "add" "-A")
+              (let [hits (check-no-boundary/grep-group
+                          (check-no-boundary/token-defs group) #{})]
+                (is (seq hits)
+                    (str "group " group " no longer matches its own token"))))))
+
+        (testing "the allowlist suppresses a planted hit"
+          (let [before (count (check-no-boundary/all-hit-paths))]
+            (is (pos? before))
+            (is (empty? (check-no-boundary/grep-group
+                         (check-no-boundary/token-defs :ns) #{"src/"}))
+                "an allowlist prefix covering the file must silence it"))))
+      (finally (delete-tree! root)))))
+
+;; =============================================================================
 ;; Allowlists — every exemption must still be load-bearing
 ;; =============================================================================
 ;;
@@ -452,20 +516,16 @@
    That is the point: a gate nobody can prove fires is indistinguishable from
    one that does not run."
   #{:hygiene :deps :fcis :placeholder-tests :docs-lint
-    :test-meta :test-tags :ports :poms :agents :doctor :linting})
+    :test-meta :test-tags :ports :poms :agents :doctor :linting :no-boundary})
 
 (def gates-without-firing-tests
   "Gates that cannot yet be proven to fire, each with the reason.
 
-   This is a to-do list with a test attached, not an exemption: entries move to
-   `gates-with-firing-tests` as seams are added. Listing them here keeps the
-   count honest — the alternative is a green suite that implies coverage the
-   repo does not have."
-  {:no-boundary "-main shells out to `git grep` against the real work tree and
-                 exits; proving it fires needs a throwaway git repo as a
-                 fixture, which no other gate here requires. Its detection was
-                 verified by hand (a probe file with a residual token turns it
-                 red), but by hand is exactly what this test set replaces."})
+   Empty as of BOU-250 — every gate in `all-checks` is now proven. Kept rather
+   than deleted because it is the honest place for the next gate that arrives
+   without a seam: the alternative is quietly leaving it out of both lists,
+   which the test below forbids. An entry here is a to-do, not an exemption."
+  {})
 
 (deftest ^:unit every-gate-is-accounted-for-test
   (let [declared (set (map :id check/all-checks))

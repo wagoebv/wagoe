@@ -45,9 +45,9 @@
 (defn- ansi-red    [s] (esc "31" s))
 (defn- ansi-yellow [s] (esc "33" s))
 
-(def ^:private hard-groups [:ns :keys :coords :group :env :dirs :urls])
+(def hard-groups [:ns :keys :coords :group :env :dirs :urls])
 
-(def ^:private token-defs
+(def token-defs
   "Each group: :desc human label, :grep git-grep args (before the pathspec),
    :paths optional pathspec limiting the search, :hard? counts toward failure."
   {:ns     {:desc  "boundary.<ns> namespaces"
@@ -139,14 +139,22 @@
 (defn- allowed? [allow path]
   (some #(str/starts-with? path %) allow))
 
-(defn- grep-group
+(def ^:dynamic *repo-dir*
+  "Work tree to scan. nil means the process's own directory, which is what
+   every real run wants. A test binds it to a throwaway git repo so the gate
+   can be pointed at a planted violation — without it, `git grep` only ever
+   sees this repository and the gate cannot be proven to fire (BOU-250)."
+  nil)
+
+(defn grep-group
   "Returns [path ...] of git-grep hit lines for a group, allowlist-filtered.
    Each element is the raw `path:line:content` string."
   [{:keys [grep paths]} allow]
   (let [args (concat ["git" "grep" "--no-color"] grep
                      (when (seq paths) (cons "--" paths)))
-        {:keys [exit out]} (apply process/shell
-                                  {:out :string :err :string :continue true} args)]
+        opts (cond-> {:out :string :err :string :continue true}
+               *repo-dir* (assoc :dir (str *repo-dir*)))
+        {:keys [exit out]} (apply process/shell opts args)]
     ;; git grep exits 1 when there are no matches — that is success here.
     (if (#{0 1} exit)
       (->> (str/split-lines out)
