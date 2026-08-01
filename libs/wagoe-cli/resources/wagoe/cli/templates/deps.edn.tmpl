@@ -27,6 +27,12 @@
   :test     {:extra-paths ["test"]
              :extra-deps  {lambdaisland/kaocha {:mvn/version "1.91.1392"}}
              :main-opts   ["-m" "kaocha.runner"]}
+  ;; Foreground start — no REPL. What a container, a systemd unit or a smoke
+  ;; test uses; `clojure -M:repl` + (go) remains the development path.
+  :run      {:main-opts ["-m" "{{project-ns}}.main"]}
+  ;; Uberjar. `clojure -T:build uber` -> target/{{project-name}}-<version>.jar
+  :build    {:extra-deps {io.github.clojure/tools.build {:mvn/version "0.10.9"}}
+             :ns-default build}
   :migrate  {:main-opts ["-m" "wagoe.platform.shell.database.cli-migrations"]}
   ;; Backs `bb db:seed`. Separate alias rather than a flag on :migrate — seeding
   ;; is data, migrations are schema, and conflating them makes it too easy to
