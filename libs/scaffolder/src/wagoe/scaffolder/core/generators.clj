@@ -386,8 +386,27 @@ CREATE INDEX IF NOT EXISTS idx_%s_created_at ON %s(created_at);
             field-sqls
             table-name
             table-name)))
+
+(defn generate-migration-down-file
+  "Generate the rollback SQL matching `generate-migration-file`.
+
+   migratus pairs `<id>-<name>.up.sql` with `<id>-<name>.down.sql`; without the
+   down file a migration cannot be rolled back. Dropping the table also removes
+   its index, so the index needs no separate statement.
+
+   Pure: true"
+  [ctx]
+  (let [entity     (first (:entities ctx))
+        table-name (:entity-table entity)]
+    (format "-- Rollback: drop the %s table
+
+DROP TABLE IF EXISTS %s;
+"
+            table-name
+            table-name)))
+
 ;; =============================================================================
-;; UI File Generator  
+;; UI File Generator
 ;; =============================================================================
 
 (defn generate-ui-file
