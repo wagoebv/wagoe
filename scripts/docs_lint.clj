@@ -3,10 +3,12 @@
 ;;
 ;; Babashka entry point for the documentation drift linter.
 ;;
-;; Usage:
-;;   bb scripts/docs_lint.clj
+;; Usage — `bb docs:lint` is the shorter form of the same thing:
+;;   bb docs:lint
 ;;   bb scripts/docs_lint.clj --verbose
 ;;   bb scripts/docs_lint.clj --out-dir build/docs-lint
+;;
+;; It also runs as part of `bb check`.
 ;;
 ;; The implementation lives in dev/wagoe/tools/docs_lint.clj — the copy CI runs
 ;; via `clojure -M:docs-lint`. This file used to be a ~500-line duplicate of it,

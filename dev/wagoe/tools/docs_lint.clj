@@ -385,6 +385,22 @@
         :file file-path
         :message (str "Error reading file: " (.getMessage e))}])))
 
+(defn failing-warnings
+  "The findings in `report` that make this a failing run, as opposed to a
+   report of pre-existing debt.
+
+   Only `:unknown-alias` qualifies. It is objectively decidable — the alias is
+   in deps.edn or it is not — so there are no false positives to argue with,
+   and its failure mode is silent: `clojure -M:test:db/h2` on a dropped alias
+   does not error, it warns and skips every test. That is how 264 documented
+   commands stayed broken for months (BOU-257). Broken links and unknown
+   namespaces stay warn-only; that debt is BOU-253's.
+
+   Exposed separately from `run-lint` so a caller can decide what to do about
+   a failure — exit, aggregate, or ignore — without `run-lint` deciding for it."
+  [report]
+  (filter #(= :unknown-alias (:type %)) (:warnings report)))
+
 (defn run-lint []
   (println "Wagoe Docs Lint")
   (println "==================")
@@ -491,7 +507,7 @@
       ;; alias does not error, it warns and skips every test. That is how 264
       ;; documented commands stayed broken for months (BOU-257). A warning in a
       ;; report nobody opens was not enough.
-      (let [failing (filter #(= :unknown-alias (:type %)) warnings)]
+      (let [failing (failing-warnings report)]
         (when (seq failing)
           (println)
           (println (str "FAIL: " (count failing)
@@ -500,9 +516,12 @@
             (println (str "  " (:file w) (when (:line w) (str ":" (:line w)))
                           " — " (:message w))))
           (println)
-          (println "Fix the command, or add the alias to deps.edn.")
-          (System/exit 1)))
+          (println "Fix the command, or add the alias to deps.edn.")))
 
+      ;; Returns the report and leaves the process alone. Exiting from here
+      ;; would tear down the JVM under any programmatic caller — a REPL
+      ;; session, or `bb check`, which runs this alongside eleven other checks
+      ;; and needs to report all of them. `-main` owns the exit code.
       report)))
 
 ;; =============================================================================
@@ -524,6 +543,8 @@
   (let [opts (parse-args args)]
     (binding [*verbose* (:verbose opts false)
               *out-dir* (:out-dir opts "build/docs-lint")]
-      (run-lint)
-      ;; Explicit exit to ensure clean shutdown
-      (shutdown-agents))))
+      (let [report (run-lint)]
+        ;; Explicit exit to ensure clean shutdown
+        (shutdown-agents)
+        (when (seq (failing-warnings report))
+          (System/exit 1))))))

@@ -18,6 +18,7 @@
              [wagoe.tools.admin       :as admin]
              [wagoe.tools.deploy      :as deploy]
              [wagoe.tools.relocate    :as relocate]
+             [wagoe.tools.docs-lint   :as docs-lint]
              [wagoe.tools.dev         :as dev]
              [wagoe.tools.doctor      :as doctor]
              [wagoe.tools.setup       :as setup]
@@ -114,6 +115,8 @@
                  :task (check-hygiene/-main)}
   check:no-boundary {:doc "Rename gate: scan for residual boundary tokens (ns/keys/coords/env/dirs/urls); args select groups (bb check:no-boundary)"
                      :task (apply check-no-boundary/-main *command-line-args*)}
+  docs:lint     {:doc "Documentation drift: fails when a documented command names a deps.edn alias that does not exist; reports broken links + unknown namespaces (bb docs:lint)"
+                 :task (apply docs-lint/-main *command-line-args*)}
   ;; Namespaces are DISCOVERED, not listed. The previous version kept two
   ;; parallel hardcoded lists — one to `require`, one to `run-tests` — so adding
   ;; a test namespace to only one silently loaded it without running it. Same
