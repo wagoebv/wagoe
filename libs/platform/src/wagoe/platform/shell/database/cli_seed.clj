@@ -34,10 +34,30 @@
     (println "      [:tasks [{:title \"Owned by that user\" :user-id 1}]]]"))
   (println))
 
-(defn -main
-  [& args]
-  (let [path   (or (first args) seed/default-seed-path)
-        result (seed/run-seed! path)]
+(def ^:private seedable-envs
+  "Environments where inserting seed data is safe by default.
+
+   An allowlist, not a denylist. `bb db:reset` refuses a fixed set of names
+   (prod/acc/production), which lets an unrecognised environment like
+   \"staging\" through. Seeding writes rows into whatever database the active
+   config resolves to, so anything not known to be disposable is refused."
+  #{"dev" "development" "test" "local"})
+
+(defn- refuse-environment
+  [env]
+  (println)
+  (println "❌ Refusing to seed the" env "environment")
+  (println)
+  (println "   Seeding inserts rows into the database the active config resolves")
+  (println "   to. In" env "that is not a disposable database.")
+  (println)
+  (println "   If this is genuinely intended, be explicit:")
+  (println "     clojure -M:seed <path-to-seed-file> --force")
+  (println))
+
+(defn- seed-and-report
+  [path]
+  (let [result (seed/run-seed! path)]
     (if-let [err (:error result)]
       (do (print-error err)
           (System/exit 1))
@@ -48,3 +68,18 @@
           (println (str "   " table ": " rows)))
         (println)
         (System/exit 0)))))
+
+(defn -main
+  [& args]
+  (let [force?  (some #{"--force"} args)
+        path    (or (first (remove #{"--force"} args)) seed/default-seed-path)
+        env     (or (System/getenv "WAG_ENV") "dev")]
+    ;; Guard here rather than only in `bb db:seed`: this entry point is reachable
+    ;; directly via `clojure -M:seed`, which bypasses the bb task entirely.
+    (when-not (or force? (contains? seedable-envs env))
+      (refuse-environment env)
+      (System/exit 1))
+    (when (and force? (not (contains? seedable-envs env)))
+      (println)
+      (println "⚠  --force given: seeding the" env "environment on purpose."))
+    (seed-and-report path)))

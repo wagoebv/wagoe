@@ -64,8 +64,8 @@
                      :task (db/-main "status")}
   db:reset          {:doc "Drop and recreate the database with all migrations"
                      :task (db/-main "reset")}
-  db:seed           {:doc "Seed database from resources/seeds/dev.edn"
-                     :task (db/-main "seed")}
+  db:seed           {:doc "Seed database from resources/seeds/dev.edn (dev-like envs only; --force to override)"
+                     :task (apply db/-main "seed" *command-line-args*)}
 
   ;; Onboarding
   quickstart        {:doc "Zero-to-running-app setup: check env, configure, scaffold, migrate, start"
