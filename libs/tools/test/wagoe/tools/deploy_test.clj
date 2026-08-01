@@ -4,7 +4,6 @@
    'version ahead of source' stale-artifact class), and a post-deploy check that
    every artifact actually landed on Clojars."
   (:require [clojure.test :refer [deftest is testing]]
-            [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.string :as str]
             [wagoe.tools.deploy :as deploy]))
@@ -86,11 +85,15 @@
         (is (< (idx dep) (idx lib))
             (str dep " must be published before " lib))))))
 
-(deftest ^:unit deploy-registries-share-the-same-membership
-  (testing "scripts/deploy.clj all-libs set == canonical (prevents membership drift)"
-    ;; The two registries duplicate the membership vector; order is derived, but
-    ;; the SET must stay in lockstep (BOU-202/203).
-    (let [src   (slurp (io/file (System/getProperty "user.dir") "scripts" "deploy.clj"))
-          form  (edn/read-string (subs src (str/index-of src "(def all-libs")))
-          mirror (nth form 2)]
-      (is (= (set deploy/all-libs) (set mirror))))))
+(deftest ^:unit deploy-has-one-registry
+  (testing "scripts/deploy.clj holds no registry of its own"
+    ;; It used to carry a second all-libs vector, kept in step by a test that
+    ;; compared the two SETS — while the behaviour around them drifted in both
+    ;; directions unnoticed: the mirror alone requested cljdoc builds, the
+    ;; canonical alone had --check-versions and --verify (BOU-250). It is now a
+    ;; shim over this namespace, so there is nothing left to keep in sync.
+    (let [src (slurp (io/file (System/getProperty "user.dir") "scripts" "deploy.clj"))]
+      (is (not (str/includes? src "(def all-libs"))
+          "scripts/deploy.clj has grown a registry again — it should delegate")
+      (is (str/includes? src "wagoe.tools.deploy")
+          "scripts/deploy.clj should delegate to the canonical namespace"))))

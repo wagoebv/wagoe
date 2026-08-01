@@ -96,13 +96,12 @@
           (is (some #{"wagoe-mcp"} all-libs)
               "wagoe-mcp missing from wagoe.tools.deploy all-libs"))
 
-        (testing "the two deploy registries stay in sync"
-          ;; scripts/deploy.clj mirrors the canonical libs/tools registry; both
-          ;; must list the same libs in the same order, or a `bb scripts/deploy.clj`
-          ;; run would publish a different (drifted) set.
-          (let [scripts-libs (parse-deploy-all-libs "scripts/deploy.clj")]
-            (is (= all-libs scripts-libs)
-                "scripts/deploy.clj all-libs has drifted from libs/tools/.../deploy.clj")))
+        ;; The "two deploy registries stay in sync" check that lived here is
+        ;; gone: scripts/deploy.clj is a shim over the canonical namespace as of
+        ;; BOU-250, so there is only one registry. Keeping a comparison against
+        ;; a file that no longer has an all-libs vector would be a check that
+        ;; cannot fail — see wagoe.tools.deploy-test/deploy-has-one-registry,
+        ;; which asserts the shim stays a shim.
 
         (testing "i18n and payments are present in all-libs"
           (is (some #{"i18n"}    all-libs) "i18n missing from deploy all-libs")

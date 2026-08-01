@@ -191,6 +191,28 @@
           (println (green (str "  Catalogue updated: " lib-name " → " new-version))))
       (println (dim (str "  Catalogue: no entry for " lib-name " (skipping)"))))))
 
+(defn request-cljdoc-build!
+  "Ask cljdoc to build docs for a freshly-published artifact. Fire-and-forget:
+   cljdoc clones the repo at the pom's <scm><tag> (build.clj emits the bare
+   version, which must match the pushed git tag) and renders API docs + source
+   links. Non-fatal on failure — the release already succeeded.
+
+   Lived only in scripts/deploy.clj until this was deduplicated, so the path CI
+   actually runs never triggered a build. cljdoc polls Clojars and gets there
+   on its own eventually, which is why nothing looked broken; asking directly
+   just means the docs are current when the release is announced rather than
+   whenever the poller comes round."
+  [lib version]
+  (let [artifact (str "com.wagoe/" (artifact-name lib))
+        resp     (http/post "https://cljdoc.org/api/request-build2"
+                            {:form-params {:project artifact :version version}
+                             :throw       false})]
+    (if (#{200 303} (:status resp))
+      (println (green (str "  cljdoc build requested: " artifact " " version)))
+      (println (yellow (str "  cljdoc build request failed (HTTP " (:status resp)
+                            ") — trigger manually at https://cljdoc.org/d/"
+                            artifact "/" version))))))
+
 (defn deploy-lib! [lib]
   (let [dir     (lib-dir lib)
         version (read-version lib)]
@@ -201,7 +223,8 @@
     (p/shell {:dir dir} "clojure" "-T:build" "clean")
     (p/shell {:dir dir} "clojure" "-T:build" "deploy")
     (println (green (str "✓ " (artifact-name lib) " " version " deployed")))
-    (patch-catalogue-version! lib version)))
+    (patch-catalogue-version! lib version)
+    (request-cljdoc-build! lib version)))
 
 (defn deploy-sequence! [libs]
   (doseq [[i lib] (map-indexed vector libs)]
