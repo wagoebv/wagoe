@@ -118,11 +118,14 @@
 ;; Cycle detection (DFS)
 ;; ---------------------------------------------------------------------------
 
-(defn- find-all-cycles
+(defn find-all-cycles
   "DFS cycle detection on a graph. Returns all distinct cycles found as a
    seq of vectors (each vector is a cycle path), or empty seq if acyclic.
    Cycles are deduplicated by their set of directed edges so that two cycles
-   over the same nodes but with different edge patterns are both reported."
+   over the same nodes but with different edge patterns are both reported.
+
+   Public so a test can feed it a graph that must trip it. `-main` exits the
+   process, so it cannot be used to prove this gate still detects anything."
   [graph]
   (let [visited (atom #{})
         path    (atom [])
@@ -153,8 +156,10 @@
 ;; Validation
 ;; ---------------------------------------------------------------------------
 
-(defn- check-core-independence
-  "Verify that the 'core' library has zero wagoe library dependencies."
+(defn check-core-independence
+  "Verify that the 'core' library has zero wagoe library dependencies.
+
+   Public for the same reason as `find-all-cycles`."
   [declared-graph actual-graph]
   (let [declared-deps (get declared-graph "core" #{})
         actual-deps   (get actual-graph "core" #{})]

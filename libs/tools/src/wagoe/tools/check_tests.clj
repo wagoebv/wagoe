@@ -84,14 +84,17 @@
   [content offset]
   (inc (count (filter #(= \newline %) (subs content 0 (min offset (count content)))))))
 
-(defn- scan-file
-  "Scan a file for placeholder assertions in executable code.
-   Comments and string contents are stripped first so that docstrings
-   and comment text like ';; changed from (is true)' are not flagged.
-   Returns seq of match maps."
-  [file]
-  (let [raw     (slurp file)
-        cleaned (parsing/strip-comments-and-strings raw)]
+(defn scan-content
+  "Scan `raw` source for placeholder assertions in executable code, reporting
+   `file` as the location. Comments and string contents are stripped first so
+   that docstrings and comment text like ';; changed from (is true)' are not
+   flagged. Returns seq of match maps.
+
+   Split out of `scan-file` and made public so a test can prove this gate
+   still detects a placeholder (BOU-250). `-main` exits the process, so it
+   cannot serve as the seam."
+  [file raw]
+  (let [cleaned (parsing/strip-comments-and-strings raw)]
     (->> placeholder-patterns
          (mapcat (fn [pat]
                    (let [matcher (re-matcher pat cleaned)]
@@ -103,6 +106,11 @@
                                        :content (str/trim (str/replace (.group matcher) #"\s+" " "))}))
                          matches)))))
          (distinct))))
+
+(defn- scan-file
+  "Scan a file on disk for placeholder assertions."
+  [file]
+  (scan-content file (slurp file)))
 
 ;; ---------------------------------------------------------------------------
 ;; Misplaced deftest metadata (BOU-184)
