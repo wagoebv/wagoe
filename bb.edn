@@ -64,7 +64,7 @@
                     :task (apply deps/-main *command-line-args*)}
   deploy        {:doc "Deploy Wagoe libraries to Clojars (bb deploy --help for usage)"
                  :task (apply deploy/-main *command-line-args*)}
-  relocate      {:doc "Publish org.boundary-app relocation stubs pointing at com.wagoe (bb relocate --help for usage)"
+  relocate      {:doc "Publish relocation stubs for the retired Clojars group, pointing at com.wagoe (bb relocate --help for usage)"
                  :task (apply relocate/-main *command-line-args*)}
   migrate       {:doc "Run database migrations via the standard Wagoe migrate CLI (bb migrate [up|status|rollback|create ...])"
                  :task (apply dev/migrate *command-line-args*)}
