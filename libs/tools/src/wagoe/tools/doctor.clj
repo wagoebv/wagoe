@@ -348,6 +348,10 @@
     (when (.exists f)
       (slurp f))))
 
+(def ^:private last-parse-error
+  "Message from the most recent failed config parse, for check-config-loadable."
+  (atom nil))
+
 (defn- parse-config-minimal
   "Parse config.edn with a minimal reader that replaces Aero tags with placeholders.
    Returns the parsed EDN map."
@@ -366,9 +370,12 @@
                  'profile  (fn [v] v)}]
     (try
       (edn/read-string {:readers readers} config-text)
+      ;; Returns nil on failure; `check-config-loadable` turns that into a
+      ;; reported error. It used to println a warning here and return nil,
+      ;; which never reached the summary — so an unparseable config produced
+      ;; "8 passed, 0 warnings, 0 errors" and exit 0, including under --ci.
       (catch Exception e
-        (println (yellow (str "  Warning: could not parse config.edn: " (.getMessage e))))
-        (println (dim "  Some checks (providers, jwt-secret, wiring) will be skipped."))
+        (reset! last-parse-error (.getMessage e))
         nil))))
 
 (defn- list-admin-files [env]
@@ -430,6 +437,32 @@
                       (recur (inc i)
                              (case c \{ (inc depth) \} (dec depth) depth))))))))))
 
+(defn- check-config-loadable
+  "The config must parse and contain a non-empty :active section.
+
+   Without this, both failures were invisible: `parse-config-minimal` returns
+   nil on a parse error and the caller does `(or (:active parsed) {})`, so a
+   broken file and a misspelled `:active` key both collapse to an empty map.
+   Every downstream check then finds nothing to complain about and reports a
+   pass, while the application cannot boot at all — `bb doctor --ci`, a CI
+   gate, exited 0 on a config that fails with `No active database configured`."
+  [parsed]
+  (cond
+    (nil? parsed)
+    [{:id :config-loadable :level :error
+      :msg (str "config.edn could not be parsed"
+                (when-let [e @last-parse-error] (str ": " e)))
+      :fix "Fix the syntax — `clj-paren-repair resources/conf/<env>/config.edn` reports the position."}]
+
+    (empty? (:active parsed))
+    [{:id :config-loadable :level :error
+      :msg "config.edn has no :active section, or it is empty"
+      :fix "Every module the app needs is keyed under :active — check for a typo in the key itself."}]
+
+    :else
+    [{:id :config-loadable :level :pass
+      :msg (str "config.edn parses, " (count (:active parsed)) " active key(s)")}]))
+
 (defn run-checks
   "Run all doctor checks for a given environment.
    Returns a seq of check result maps."
@@ -446,6 +479,7 @@
           dev-admin    (or (list-admin-files "dev") [])
           test-admin   (or (list-admin-files "test") [])]
       (concat
+       (check-config-loadable parsed)
        (check-env-refs active-text env-map)
        (check-providers active)
        (check-jwt-secret active env-map)
