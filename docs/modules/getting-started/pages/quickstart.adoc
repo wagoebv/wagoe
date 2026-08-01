@@ -50,12 +50,12 @@ clojure -M:migrate up
 [source,bash]
 ----
 source .env          # wagoe new already generated this with a real JWT_SECRET
-clojure -M:repl-clj
+clojure -M:repl
 ----
 
 NOTE: `wagoe new` writes a `.env` (git-ignored) containing a generated `JWT_SECRET` — no need to export one by hand. `source .env` (or `direnv allow`) loads it into the shell.
 
-`clojure -M:repl-clj` starts a headless nREPL server on port 7888. Connect your editor
+`clojure -M:repl` starts a headless nREPL server on port 7888. Connect your editor
 (or the Wagoe MCP server) to it, then eval:
 
 [source,clojure]
