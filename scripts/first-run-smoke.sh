@@ -1,0 +1,156 @@
+#!/usr/bin/env bash
+# First-run smoke test (BOU-231).
+#
+# Walks the documented path a newcomer takes — install.sh, wagoe new,
+# bb quickstart, start the app — inside a *bare* container, and asserts on the
+# result rather than on exit codes.
+#
+# Run locally exactly as CI does:
+#   scripts/first-run-smoke.sh
+#
+# Two properties make this test worth having, and both are easy to lose:
+#
+#   1. It runs in a container with nothing installed. Every install.sh defect
+#      found in BOU-226 needed an environment with no Java, no unzip, no sudo —
+#      conditions no maintainer's laptop and no GitHub runner reproduces. Run
+#      this on the runner directly and it silently proves nothing.
+#
+#   2. It tests THIS checkout, not the last release. install.sh installs the
+#      CLI from the published tag, and generated projects pin
+#      com.wagoe/wagoe-tools from Clojars — so a naive run exercises shipped
+#      code and passes while the branch is broken. The :local/root rewrites
+#      below are what make it a test of the working tree.
+#
+# Asserting on exit codes is not enough: `bb quickstart` reported 8/8 Done and
+# exit 0 while the app was not running (BOU-226) and while the sample module's
+# table did not exist (BOU-256). Only the HTTP and migration assertions caught
+# those.
+set -euo pipefail
+
+IMAGE="${SMOKE_IMAGE:-ubuntu:24.04}"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+echo "── First-run smoke test"
+echo "   image: $IMAGE"
+echo "   repo:  $REPO_ROOT"
+echo
+
+docker run --rm \
+  -v "$REPO_ROOT:/repo:ro" \
+  -e REPO=/repo \
+  "$IMAGE" bash -euo pipefail -c '
+fail() { echo; echo "SMOKE FAILURE: $*"; exit 1; }
+ok()   { echo "  ok — $*"; }
+
+export DEBIAN_FRONTEND=noninteractive
+apt-get update -qq >/dev/null 2>&1
+apt-get install -y -qq curl ca-certificates >/dev/null 2>&1
+
+# ── 1. bare image: prerequisites must be reported, not delegated ────────────
+echo "[1/6] prerequisite detection on a bare image"
+set +e
+PREREQ_OUT="$(bash /repo/scripts/install.sh 2>&1)"
+PREREQ_RC=$?
+set -e
+[ "$PREREQ_RC" -eq 0 ] && fail "installer succeeded on a bare image; it cannot have checked prerequisites"
+grep -qi "missing required tool" <<<"$PREREQ_OUT" \
+  || fail "no actionable prerequisite message. Got: $(tail -3 <<<"$PREREQ_OUT")"
+grep -qi "apt-get install" <<<"$PREREQ_OUT" \
+  || fail "prerequisite message names no install command"
+ok "names the missing tools and the command to install them"
+
+# ── 2. install ──────────────────────────────────────────────────────────────
+echo "[2/6] install.sh"
+apt-get install -y -qq git unzip zip >/dev/null 2>&1
+T0=$(date +%s)
+bash /repo/scripts/install.sh >/tmp/install.log 2>&1 || {
+  tail -20 /tmp/install.log; fail "install.sh exited non-zero"; }
+for t in java clojure bb wagoe; do
+  bash -ic "command -v $t" >/dev/null 2>&1 || fail "$t not on PATH after install"
+done
+ok "installed; java, clojure, bb, wagoe all resolve"
+
+# ── 3. generate a project from THIS checkout ────────────────────────────────
+echo "[3/6] wagoe new"
+cp -r /repo /work
+cd /root
+bash -ic "bb --config /work/bb.edn -e \"(require (quote wagoe.cli.main)) (wagoe.cli.main/-main \\\"new\\\" \\\"demo\\\")\"" \
+  >/tmp/new.log 2>&1 || { tail -20 /tmp/new.log; fail "wagoe new failed"; }
+cd /root/demo
+grep -vE "^\s*;;" resources/conf/dev/config.edn | grep -q ":wagoe/sqlite" \
+  || fail "generated project does not default to sqlite (BOU-228)"
+ok "project generated, defaults to sqlite"
+
+# Point EVERY com.wagoe dep at this checkout. Overriding only a couple is not
+# enough and fails quietly: the first version of this script rewrote platform
+# and tools, and the run still exercised the *published* scaffolder, so a fixed
+# migration-naming bug appeared unfixed.
+#
+# Artifact id maps to a directory under libs/: wagoe-core -> libs/core,
+# wagoe-tools -> libs/tools, but wagoe-cli -> libs/wagoe-cli. Try the stripped
+# name first, then the full one, and leave the pin alone if neither exists.
+for d in /work/libs/*/; do
+  name=$(basename "$d")
+  case "$name" in
+    wagoe-*) art="$name" ;;
+    *)       art="wagoe-$name" ;;
+  esac
+  sed -E -i "s|com\.wagoe/${art}([[:space:]]+)\{:mvn/version \"[^\"]+\"\}|com.wagoe/${art}\1{:local/root \"${d%/}\"}|g" \
+    deps.edn bb.edn
+done
+
+for f in deps.edn bb.edn; do
+  if grep -q "com\.wagoe/" "$f"; then
+    grep -q ":local/root" "$f" \
+      || fail "$f still pins published com.wagoe artifacts — this run would test the release, not the branch"
+  fi
+done
+LEFT=$(grep -c ":mvn/version" deps.edn || true)
+ok "every com.wagoe dep points at the checkout ($LEFT third-party pins untouched)"
+
+# ── 4. quickstart ───────────────────────────────────────────────────────────
+echo "[4/6] bb quickstart"
+set -a; . ./.env 2>/dev/null || true; set +a
+# The scaffolder is injected via -Sdeps at a hardcoded version rather than read
+# from deps.edn, so the :local/root rewrite above cannot reach it. Without this
+# the scaffolding step silently runs the released scaffolder.
+export WAGOE_SCAFFOLDER_ROOT=/work/libs/scaffolder
+bash -ic "bb quickstart" </dev/null >/tmp/quickstart.log 2>&1 \
+  || { tail -25 /tmp/quickstart.log; fail "bb quickstart exited non-zero"; }
+grep -vE "^\s*;;" resources/conf/dev/config.edn | grep -q ":wagoe/sqlite" \
+  || fail "quickstart overwrote the working config (BOU-228)"
+ok "completed without clobbering the config"
+
+# ── 5. the scaffolded migration must actually apply ─────────────────────────
+# `bb quickstart` reports 8/8 Done even when zero migrations run, which is how
+# BOU-256 stayed hidden: the sample module had no table.
+echo "[5/6] scaffolded migration applied"
+if ls migrations/*.sql >/dev/null 2>&1; then
+  STATUS="$(bash -ic "bb migrate status" 2>&1 || true)"
+  APPLIED="$(grep -oE "Applied migrations: [0-9]+" <<<"$STATUS" | grep -oE "[0-9]+" | tail -1)"
+  [ "${APPLIED:-0}" -ge 1 ] \
+    || fail "migrations/ has files but migratus applied ${APPLIED:-0} (BOU-256: filename must be <id>-<name>.up.sql)"
+  ok "migratus applied ${APPLIED} migration(s)"
+else
+  fail "quickstart scaffolded no migration at all"
+fi
+
+# ── 6. does it actually serve? ──────────────────────────────────────────────
+echo "[6/6] app serves HTTP"
+bash -ic "cd /root/demo && set -a && . ./.env && set +a && clojure -M:repl" >/tmp/repl.log 2>&1 &
+for _ in $(seq 1 90); do (echo > /dev/tcp/127.0.0.1/7888) 2>/dev/null && break; sleep 2; done
+(echo > /dev/tcp/127.0.0.1/7888) 2>/dev/null || { tail -25 /tmp/repl.log; fail "nREPL never came up"; }
+bash -ic "clj-nrepl-eval -p 7888 \"(go)\"" >/tmp/go.log 2>&1 || { tail -15 /tmp/go.log; fail "(go) failed"; }
+CODE=000
+for _ in $(seq 1 45); do
+  CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 3 http://localhost:3000/api-docs/ || echo 000)
+  [ "$CODE" != "000" ] && break
+  sleep 2
+done
+[ "$CODE" = "200" ] || { tail -25 /tmp/repl.log; fail "/api-docs/ returned $CODE, expected 200"; }
+T1=$(date +%s)
+ok "/api-docs/ returned 200"
+
+echo
+echo "First-run smoke passed in $((T1-T0))s (install to serving app)."
+'
