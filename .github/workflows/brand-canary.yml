@@ -47,21 +47,26 @@ jobs:
       - name: Loose sweep (what the gate cannot see)
         shell: bash
         run: |
-          # Every tracked file, case-insensitive, no extension filter. Excludes
-          # the paths the gate legitimately exempts, so the output is only the
-          # residue nobody has classified yet.
-          hits=$(git grep -In -i -E 'boundary' -- \
-                   ':!CHANGELOG.md' \
-                   ':!docs/superpowers/' \
-                   ':!.wagoe/' \
-                   ':!scripts/rename_wagoe.clj' \
-                   ':!scripts/check_no_boundary.clj' \
-                   ':!dev-docs/LINK_ISSUES.adoc' \
-                   ':!dev/wagoe/tools/docs_lint.clj' \
-                   ':!libs/tools/src/wagoe/tools/relocate.clj' \
-                   ':!libs/tools/test/wagoe/tools/relocate_test.clj' \
-                   ':!dev-docs/reference/publishing.adoc' \
-                 || true)
+          # Exclusions come FROM the gate, not from a copy of its list here.
+          # The first draft of this job hardcoded the allowlist — a second
+          # registry to drift, which is the very mechanism BOU-250 catalogues.
+          # It also tripped the gate on itself: one exempt path is a filename
+          # ending in the old brand plus ".clj", which reads as a namespace
+          # reference.
+          # while-read rather than mapfile: mapfile needs bash 4, so this could
+          # not be verified on a macOS dev box (bash 3.2). A step that only runs
+          # correctly on the runner is a step nobody checks before pushing.
+          excludes=()
+          while IFS= read -r p; do
+            [ -n "$p" ] && excludes+=(":!$p")
+          done < <(bb -e "(require 'check-no-boundary) \
+            (run! println (check-no-boundary/allow-paths))")
+
+          echo "Excluding ${#excludes[@]} allowlisted paths (read from the gate)."
+
+          # Every tracked file, case-insensitive, no extension filter, so the
+          # output is only residue nobody has classified yet.
+          hits=$(git grep -In -i -E 'boundary' -- "${excludes[@]}" || true)
 
           count=$(printf '%s' "$hits" | grep -c . || true)
           files=$(printf '%s' "$hits" | cut -d: -f1 | sort -u | grep -c . || true)
@@ -80,8 +85,9 @@ jobs:
             if [ "$count" -eq 0 ]; then
               echo "Nothing found. The narrow gate and the loose sweep agree."
             else
-              echo "Most of these are expected — \"boundary\" is also the architectural"
-              echo "term this framework is built on. The signal to look for is a match"
+              echo "Most of these are expected: the old brand name is also the"
+              echo "architectural term this framework is built on. The signal to look"
+              echo "for is a match"
               echo "that is clearly a *name*: a namespace, a coordinate, an env var, a"
               echo "URL. If one turns up, the blocking gate has a blind spot worth"
               echo "closing rather than allowlisting."

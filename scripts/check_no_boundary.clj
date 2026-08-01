@@ -130,7 +130,13 @@
    "scripts/rename_wagoe.clj"
    "scripts/check_no_boundary.clj"])
 
-(defn- load-allow-paths []
+(defn allow-paths
+  "Every exempt path prefix: the baked-in defaults plus the config.
+
+   Public so the report-only canary can exclude exactly what the gate excludes,
+   instead of carrying its own copy of the list — a second registry to drift
+   is what BOU-250 mechanism 3 is about, and the canary had one."
+  []
   (let [f ".wagoe/check-no-boundary.edn"]
     (into default-allow-paths
           (when (fs/exists? f)
@@ -245,7 +251,7 @@
                    (some #{"all"} args) (conj hard-groups :prose)
                    (seq args)           (map keyword args)
                    :else                hard-groups)
-        allow    (load-allow-paths)
+        allow    (allow-paths)
         results  (for [g selected
                        :let [def (token-defs g)]
                        :when def]
