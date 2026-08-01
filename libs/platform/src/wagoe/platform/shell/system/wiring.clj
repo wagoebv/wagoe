@@ -251,9 +251,21 @@
                                                                       :has-middleware (contains? result :middleware)
                                                                       :result-keys (keys result)})
                                                            result))
-                                                       admin-web-routes)]
+                                                       admin-web-routes)
+                                     ;; The admin module's root route is "/", which the prefix above
+                                     ;; turns into "/web/admin/" — so the un-slashed "/web/admin" that
+                                     ;; people actually type matched nothing and 404'd on a feature
+                                     ;; that works. Redirect it to the canonical path (BOU-229).
+                                     ;; 302 rather than 301: browsers cache permanent redirects hard,
+                                     ;; and this mount point is configurable via :base-path.
+                                     slash-redirect {:path    "/web/admin"
+                                                     :no-doc  true
+                                                     :methods {:get {:handler (fn [_]
+                                                                                {:status  302
+                                                                                 :headers {"Location" "/web/admin/"}
+                                                                                 :body    ""})}}}]
                                  (log/info "Total admin web routes transformed" {:count (count transformed)})
-                                 transformed))
+                                 (conj transformed slash-redirect)))
         admin-normalized-api (when (seq admin-api-routes) admin-api-routes)
 
         ;; Extract tenant module routes (normalized format)

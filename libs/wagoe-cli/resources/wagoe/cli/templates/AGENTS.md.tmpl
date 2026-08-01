@@ -30,6 +30,12 @@ clojure -M:test --focus-meta :integration # integration tests
 # Database
 clojure -M:migrate up    # run pending migrations
 
+# Users
+bb create-admin          # create the first admin account (interactive)
+# A new project has no users. Anything behind :require-role — the admin UI at
+# /web/admin/ in particular — redirects to a login you cannot pass until this
+# has been run at least once.
+
 # Modules
 wagoe add <module>          # add an optional module
 wagoe list modules          # human-readable module list
