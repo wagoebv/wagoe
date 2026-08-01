@@ -373,3 +373,27 @@
       (let [f (first (:files (ports/add-adapter svc (assoc req :base-ns "myapp"))))]
         (is (= "src/myapp/notifications/shell/adapters/slack.clj" (:path f)))
         (is (str/includes? (:content f) "(ns myapp.notifications.shell.adapters.slack"))))))
+
+(deftest ^:unit migration-ids-do-not-collide-within-a-second
+  ;; Second-precision ids are not unique on their own: two scaffold operations
+  ;; in the same second produce different filenames sharing one id, and migratus
+  ;; throws "Multiple migrations with id N" — which fails the entire migration
+  ;; run, not just the offending pair.
+  (let [next-id #'service/next-migration-id]
+
+    (testing "a free timestamp is used as-is"
+      (is (= "20260801120000" (next-id #{} "20260801120000"))))
+
+    (testing "a taken timestamp steps to the next free second"
+      (is (= "20260801120001" (next-id #{"20260801120000"} "20260801120000"))))
+
+    (testing "consecutive collisions keep stepping"
+      (is (= "20260801120003"
+             (next-id #{"20260801120000" "20260801120001" "20260801120002"}
+                      "20260801120000"))))
+
+    (testing "ids stay 14 digits — a longer id would sort after every existing migration forever"
+      (is (= 14 (count (next-id #{"20260801120000"} "20260801120000")))))
+
+    (testing "unrelated ids do not push the timestamp forward"
+      (is (= "20260801120000" (next-id #{"19990101000000" "20250101000000"} "20260801120000"))))))

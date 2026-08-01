@@ -10,24 +10,56 @@
             [clojure.string :as str]
             [malli.core :as m]))
 
+(defn- existing-migration-ids
+  "Numeric ids already used by migration files, as strings.
+
+   Checks both layouts this repo has: generated projects keep migrations in
+   `migrations/`, the monorepo in `resources/migrations/`."
+  []
+  (into #{}
+        (for [dir   ["migrations" "resources/migrations"]
+              :let  [d (io/file dir)]
+              :when (.isDirectory d)
+              f     (.listFiles d)
+              :let  [m (re-find #"^(\d+)-" (.getName f))]
+              :when m]
+          (second m))))
+
+(defn- next-migration-id
+  "First id at or after `now` that is not in `used`, as a string.
+
+   Second precision alone is not unique: two scaffold operations within the
+   same second produce different filenames sharing one id, and migratus throws
+   \"Multiple migrations with id N\" — which fails the entire migration run, not
+   just the offending pair. So step forward until the id is free.
+
+   Stepping into the next second rather than adding sub-second precision is
+   deliberate. Every id already in this repo, and every id `migratus create`
+   generates, is 14 digits; a 17-digit id is ~1000x larger numerically, so it
+   would sort after all 14-digit ones forever and any later hand-made migration
+   would sort before it. That trades a rare collision for a permanent ordering
+   hazard.
+
+   Pure: takes the used set and the current timestamp rather than reading either."
+  [used now]
+  (loop [id (Long/parseLong now)]
+    (if (contains? used (str id))
+      (recur (inc id))
+      (str id))))
+
 (defn- get-next-migration-number
   "Timestamp id for a new migration, e.g. 20260801120000.
 
    Replaces a sequential \"%03d\" counter that produced ids migratus could not
-   use and that could not be made collision-free anyway (BOU-256):
-
-   * it scanned `resources/migrations` while migrations are written to
-     `migrations/`, so it counted nothing and always returned 001;
-   * it parsed ids with `Integer/parseInt`, which overflows on the
-     14-digit timestamps every existing migration already uses, sending the
-     whole function into its catch branch;
-   * two modules scaffolded independently both got 001.
-
-   A UTC timestamp needs no directory scan, matches the ids already in the
-   repo, and orders correctly across modules."
+   use and could not have made collision-free anyway (BOU-256): it scanned
+   `resources/migrations` while writing to `migrations/`, so it counted nothing
+   and always returned 001, and it parsed ids with `Integer/parseInt`, which
+   overflows on 14-digit timestamps and sent the function into its catch
+   branch."
   []
-  (.format (java.time.LocalDateTime/now java.time.ZoneOffset/UTC)
-           (java.time.format.DateTimeFormatter/ofPattern "yyyyMMddHHmmss")))
+  (next-migration-id (existing-migration-ids)
+                     (.format (java.time.LocalDateTime/now java.time.ZoneOffset/UTC)
+                              (java.time.format.DateTimeFormatter/ofPattern "yyyyMMddHHmmss"))))
 
 (def ^:private module-generation-request-validator (m/validator schema/ModuleGenerationRequest))
 (def ^:private module-generation-request-explainer (m/explainer schema/ModuleGenerationRequest))

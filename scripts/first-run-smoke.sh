@@ -143,7 +143,11 @@ for _ in $(seq 1 90); do (echo > /dev/tcp/127.0.0.1/7888) 2>/dev/null && break; 
 bash -ic "clj-nrepl-eval -p 7888 \"(go)\"" >/tmp/go.log 2>&1 || { tail -15 /tmp/go.log; fail "(go) failed"; }
 CODE=000
 for _ in $(seq 1 45); do
-  CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 3 http://localhost:3000/api-docs/ || echo 000)
+  # `|| true`, not `|| echo 000`: on connection refused curl already prints 000
+  # via -w AND exits non-zero, so `|| echo 000` yields "000000" — which is not
+  # equal to "000", breaking the retry loop on the first attempt and failing
+  # with a nonsense status.
+  CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 3 http://localhost:3000/api-docs/ || true)
   [ "$CODE" != "000" ] && break
   sleep 2
 done
