@@ -12,6 +12,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0-beta-4] — 2026-08-01
+
+Everything a new project touches. `1.0.0-beta-3` shipped a scaffolder whose
+migrations were never applied, so the sample module `bb quickstart` creates had
+no database table — and reported success while doing it.
+
+### Fixed
+
+- **Scaffolded migrations are now applied.** The scaffolder emitted
+  `001_create_tasks.sql`; migratus discovers `<id>-<name>.up.sql`, so the file
+  sat on disk and `bb migrate status` reported "0 pending" while
+  `bb quickstart` reported 8/8 Done — running zero migrations succeeds. Also
+  fixes the id: the counter scanned `resources/migrations` while writing to
+  `migrations/` and parsed ids with `Integer/parseInt`, which overflows on
+  14-digit timestamps, so every module got `001`. Ids are now UTC timestamps
+  that step forward on collision, and each migration gets a matching
+  `.down.sql`. `wagoe scaffold field` had the same defect.
+- **`bb doctor` no longer passes configs the application cannot load.** An
+  unparseable `config.edn`, or `:active` misspelled, both left every check
+  inspecting an empty map and reporting a pass — `bb doctor --ci`, a CI gate,
+  exited 0 on a config that fails at runtime with `No active database
+  configured`.
+- **`install.sh` supports Fedora and the RHEL family.** Previously
+  "Unsupported OS" with no path forward. `which` also joins the prerequisite
+  check: babashka's installer calls it and minimal Fedora images do not ship
+  it, so the run died inside a third-party script.
+- The admin UI is reachable at `/web/admin` without the trailing slash, and
+  `wagoe add admin` now says that `bb create-admin` is needed to log in.
+
+### Added
+
+- **`bb db:seed`.** Previously advertised in `bb.edn` and printed "not yet
+  implemented". Seed files are EDN — a map of table → rows, or a vector of
+  `[table rows]` pairs when order matters. Inserts run in one transaction, and
+  seeding refuses outside development environments unless `--force` is given.
+- **A production build path for generated projects**: `src/<ns>/main.clj`,
+  a `:run` alias for foreground start, a `:build` alias producing an uberjar,
+  and a Dockerfile. Previously a generated project could only be started from
+  an editor-connected REPL, so it could not be containerised or supervised.
+  Shutdown is graceful — a container stop drains the server and closes the
+  pool.
+- A first-run smoke test in CI that walks install → `wagoe new` →
+  `bb quickstart` → serving app inside a bare container, asserting on HTTP
+  rather than exit codes.
+
+### Changed
+
+- The published quickstart told newcomers to run `clojure -M:repl-clj` and
+  `export WAG_ENV="development"`. Neither works in a generated project: the
+  alias exists only in the monorepo, and there is no `conf/development`
+  profile. Corrected across the getting-started, index, repl-workflow and
+  monorepo pages.
+
 ## [1.0.0-beta-3] — 2026-07-31
 
 The release that makes the documented install path true. `1.0.0-beta-2`

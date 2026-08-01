@@ -8,7 +8,7 @@
 
 ;; When bumping the wagoe-tools release, update this version and redeploy
 ;; libs/tools to Clojars before cutting a new release.
-(def wagoe-tools-version "1.0.0-beta-3")
+(def wagoe-tools-version "1.0.0-beta-4")
 
 ;; =============================================================================
 ;; Schema File Generator
@@ -845,7 +845,7 @@ DROP TABLE IF EXISTS %s;
 
   :migrate
   {:main-opts  [\"-m\" \"wagoe.platform.shell.database.cli-migrations\"]
-   :extra-deps {com.wagoe/wagoe-platform {:mvn/version \"1.0.0-beta-3\"}
+   :extra-deps {com.wagoe/wagoe-platform {:mvn/version \"1.0.0-beta-4\"}
                 org.xerial/sqlite-jdbc             {:mvn/version \"3.51.0.0\"}
                 org.postgresql/postgresql          {:mvn/version \"42.7.12\"}
                 com.h2database/h2                  {:mvn/version \"2.4.240\"}
@@ -855,7 +855,7 @@ DROP TABLE IF EXISTS %s;
   ;; as :migrate — seeding opens the same database.
   :seed
   {:main-opts  [\"-m\" \"wagoe.platform.shell.database.cli-seed\"]
-   :extra-deps {com.wagoe/wagoe-platform {:mvn/version \"1.0.0-beta-3\"}
+   :extra-deps {com.wagoe/wagoe-platform {:mvn/version \"1.0.0-beta-4\"}
                 org.xerial/sqlite-jdbc             {:mvn/version \"3.51.0.0\"}
                 org.postgresql/postgresql          {:mvn/version \"42.7.12\"}
                 com.h2database/h2                  {:mvn/version \"2.4.240\"}

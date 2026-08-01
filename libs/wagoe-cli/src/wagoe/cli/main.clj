@@ -25,7 +25,7 @@
                       ((resolve 'wagoe.cli.agents-update/-main) (rest rest-args)))
                   (do (println "Usage: wagoe agents update [--check]")
                       (System/exit 1)))
-      "version" (println "wagoe CLI version 1.0.0-beta-3")
+      "version" (println "wagoe CLI version 1.0.0-beta-4")
       (do (when cmd (println (str "Unknown command: " cmd "\n")))
           (usage)
           (System/exit (if cmd 1 0))))))

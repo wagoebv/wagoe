@@ -116,7 +116,7 @@
 
 ;; Must match libs/tools/build.clj version and libs/scaffolder/build.clj version.
 ;; Update all three together on each release.
-(def ^:private scaffolder-version "1.0.0-beta-3")
+(def ^:private scaffolder-version "1.0.0-beta-4")
 
 (defn- scaffolder-deps
   "The -Sdeps argument used to make the scaffolder namespace resolvable.

@@ -11,12 +11,12 @@ Report generation library for the Wagoe Framework — produce PDF, Excel, and Wo
 
 **deps.edn** (recommended):
 ```clojure
-{:deps {com.wagoe/wagoe-reports {:mvn/version "1.0.0-beta-3"}}}
+{:deps {com.wagoe/wagoe-reports {:mvn/version "1.0.0-beta-4"}}}
 ```
 
 **Leiningen**:
 ```clojure
-[com.wagoe/wagoe-reports "1.0.0-beta-3"]
+[com.wagoe/wagoe-reports "1.0.0-beta-4"]
 ```
 
 ## Features

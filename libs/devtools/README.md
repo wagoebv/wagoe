@@ -18,7 +18,7 @@ Add as a **`:dev` alias** extra-dep so it never reaches production:
 {:aliases
  {:dev
   {:extra-deps
-   {com.wagoe/wagoe-devtools {:mvn/version "1.0.0-beta-3"}}}}}
+   {com.wagoe/wagoe-devtools {:mvn/version "1.0.0-beta-4"}}}}}
 ```
 
 ## Features

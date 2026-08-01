@@ -2,7 +2,7 @@
   (:require [clojure.tools.build.api :as b]))
 
 (def lib 'com.wagoe/wagoe-external)
-(def version "1.0.0-beta-3")
+(def version "1.0.0-beta-4")
 (def class-dir "target/classes")
 (load-file "../build_shared.clj")
 (def basis (build-shared/pom-basis version))
