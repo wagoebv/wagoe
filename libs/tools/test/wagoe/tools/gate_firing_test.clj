@@ -49,17 +49,22 @@
    exercises the missing-ports case at all.
 
    So any existing directory is removed first, and both the removal and the
-   creation are asserted. A fixture helper that silently proceeds on a
-   half-deleted tree is the same failure this namespace exists to catch."
+   creation are checked. A fixture helper that silently proceeds on a
+   half-deleted tree is the same failure this namespace exists to catch.
+
+   `throw` rather than `assert`: assertions compile away when *assert* is
+   false, and a precondition that can be switched off is not a precondition —
+   which is the whole subject of this namespace."
   [label n]
   (let [d (io/file (System/getProperty "java.io.tmpdir")
                    (str "wagoe-gate-" label "-" n))]
     (when (.exists d)
       (delete-tree! d))
-    (assert (not (.exists d))
-            (str "could not clear stale fixture dir " d))
-    (assert (.mkdirs d)
-            (str "could not create fixture dir " d))
+    (when (.exists d)
+      (throw (ex-info "could not clear stale fixture dir; the test would run against leftovers"
+                      {:dir (str d)})))
+    (when-not (.mkdirs d)
+      (throw (ex-info "could not create fixture dir" {:dir (str d)})))
     d))
 
 (defn- spit-file!
