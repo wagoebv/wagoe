@@ -123,17 +123,36 @@
     (let [result (doctor/check-jwt-secret {:wagoe/settings {:name "test"}} {})]
       (is (= :pass (:level (first result))))))
 
-  (testing "passes when user module active and JWT_SECRET set"
+  (testing "passes when user module active and JWT_SECRET is long enough"
     (let [result (doctor/check-jwt-secret
                   {:wagoe/user-auth {:enabled? true}}
-                  {"JWT_SECRET" "secret-key"})]
+                  {"JWT_SECRET" "ci-test-secret-minimum-32-characters"})]
       (is (= :pass (:level (first result))))))
 
   (testing "errors when user module active but JWT_SECRET missing"
     (let [result (doctor/check-jwt-secret
                   {:wagoe/user-auth {:enabled? true}}
                   {})]
-      (is (= :error (:level (first result)))))))
+      (is (= :error (:level (first result))))))
+
+  (testing "errors when JWT_SECRET is set but shorter than the runtime minimum"
+    ;; This case previously passed: the check only asked whether the variable
+    ;; was set. "secret-key" is 10 characters, so `bb doctor` went green and the
+    ;; app then refused to boot with "JWT_SECRET must be at least 32
+    ;; characters". BOU-250.
+    (let [result (doctor/check-jwt-secret
+                  {:wagoe/user-auth {:enabled? true}}
+                  {"JWT_SECRET" "secret-key"})]
+      (is (= :error (:level (first result))))
+      (is (re-find #"10 characters" (:msg (first result)))
+          "the message should say how short it actually is")))
+
+  (testing "the suggested fix is itself long enough to be valid"
+    ;; The old suggestion was `your-32-char-secret` — 19 characters, i.e. a
+    ;; value this very check would reject.
+    (let [fix (:fix (first (doctor/check-jwt-secret
+                            {:wagoe/user-auth {:enabled? true}} {})))]
+      (is (not (re-find #"your-32-char-secret" fix))))))
 
 ;; =============================================================================
 ;; check-admin-parity

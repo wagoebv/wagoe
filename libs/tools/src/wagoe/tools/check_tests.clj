@@ -84,14 +84,17 @@
   [content offset]
   (inc (count (filter #(= \newline %) (subs content 0 (min offset (count content)))))))
 
-(defn- scan-file
-  "Scan a file for placeholder assertions in executable code.
-   Comments and string contents are stripped first so that docstrings
-   and comment text like ';; changed from (is true)' are not flagged.
-   Returns seq of match maps."
-  [file]
-  (let [raw     (slurp file)
-        cleaned (parsing/strip-comments-and-strings raw)]
+(defn scan-content
+  "Scan `raw` source for placeholder assertions in executable code, reporting
+   `file` as the location. Comments and string contents are stripped first so
+   that docstrings and comment text like ';; changed from (is true)' are not
+   flagged. Returns seq of match maps.
+
+   Split out of `scan-file` and made public so a test can prove this gate
+   still detects a placeholder (BOU-250). `-main` exits the process, so it
+   cannot serve as the seam."
+  [file raw]
+  (let [cleaned (parsing/strip-comments-and-strings raw)]
     (->> placeholder-patterns
          (mapcat (fn [pat]
                    (let [matcher (re-matcher pat cleaned)]
@@ -103,6 +106,11 @@
                                        :content (str/trim (str/replace (.group matcher) #"\s+" " "))}))
                          matches)))))
          (distinct))))
+
+(defn- scan-file
+  "Scan a file on disk for placeholder assertions."
+  [file]
+  (scan-content file (slurp file)))
 
 ;; ---------------------------------------------------------------------------
 ;; Misplaced deftest metadata (BOU-184)
@@ -120,11 +128,14 @@
    `^:keyword` and `^{...}` metadata forms."
   #"(?s)\(\s*deftest\s+([^\s()^]+)\s+\^[:{]")
 
-(defn- scan-file-meta
-  "Return match maps for deftest forms with metadata placed after the name."
-  [file]
-  (let [raw     (slurp file)
-        cleaned (parsing/strip-comments-and-strings raw)
+(defn scan-content-meta
+  "Return match maps for deftest forms in `raw` with metadata placed after the
+   name, reporting `file` as the location.
+
+   Public seam for the firing test (BOU-250) — `check-deftest-metadata` exits
+   the process, so it cannot be called from a test."
+  [file raw]
+  (let [cleaned (parsing/strip-comments-and-strings raw)
         matcher (re-matcher misplaced-meta-pattern cleaned)]
     (loop [matches []]
       (if (.find matcher)
@@ -132,6 +143,11 @@
                               :line (offset->line-number raw (.start matcher))
                               :name (.group matcher 1)}))
         matches))))
+
+(defn- scan-file-meta
+  "Scan a file on disk for misplaced deftest metadata."
+  [file]
+  (scan-content-meta file (slurp file)))
 
 ;; ---------------------------------------------------------------------------
 ;; Entry points
@@ -219,12 +235,14 @@
   (let [rel (relative-path file)]
     (some #(str/starts-with? rel %) allow)))
 
-(defn- scan-file-tags
-  "Return {:file :line :name :count} for each deftest whose pyramid-tag count is
-   not exactly 1."
-  [file]
-  (let [raw     (slurp file)
-        cleaned (parsing/strip-comments-and-strings raw)
+(defn scan-content-tags
+  "Return {:file :line :name :count} for each deftest in `raw` whose pyramid-tag
+   count is not exactly 1, reporting `file` as the location.
+
+   Public seam for the firing test (BOU-250) — `check-test-tags` exits the
+   process, so it cannot be called from a test."
+  [file raw]
+  (let [cleaned (parsing/strip-comments-and-strings raw)
         matcher (re-matcher deftest-meta-pattern cleaned)]
     (loop [violations []]
       (if (.find matcher)
@@ -237,6 +255,11 @@
                                      :name  (.group matcher 2)
                                      :count n}))))
         violations))))
+
+(defn- scan-file-tags
+  "Scan a file on disk for deftests without exactly one pyramid tag."
+  [file]
+  (scan-content-tags file (slurp file)))
 
 (defn check-test-tags
   "Enforce exactly one pyramid tag (^:unit / ^:integration / ^:contract) per
