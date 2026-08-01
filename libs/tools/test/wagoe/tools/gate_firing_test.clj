@@ -25,8 +25,12 @@
             [wagoe.tools.check-deps :as check-deps]
             [wagoe.tools.check-fcis :as check-fcis]
             [wagoe.tools.check-hygiene :as check-hygiene]
+            [wagoe.tools.check-poms :as check-poms]
+            [wagoe.tools.check-ports :as check-ports]
             [wagoe.tools.check-tests :as check-tests]
-            [wagoe.tools.docs-lint :as docs-lint]))
+            [wagoe.tools.docs-lint :as docs-lint]
+            [wagoe.tools.doctor :as doctor]
+            [agents-gen :as agents-gen]))
 
 ;; =============================================================================
 ;; Fixture helpers
@@ -198,6 +202,173 @@
           "nested keys inside an alias body are not aliases"))))
 
 ;; =============================================================================
+;; check:test-meta
+;; =============================================================================
+
+(deftest ^:unit test-meta-gate-fires-test
+  (testing "metadata after the deftest name is detected"
+    ;; The reader attaches it to the body form, not the var, so --focus-meta
+    ;; silently skips the test — green, and never run. BOU-184.
+    (is (seq (check-tests/scan-content-meta
+              "t.clj" "(deftest thing-test\n  ^:unit\n  (is (= 1 1)))\n"))))
+
+  (testing "metadata before the name is correct and not flagged"
+    (is (empty? (check-tests/scan-content-meta
+                 "t.clj" "(deftest ^:unit thing-test\n  (is (= 1 1)))\n")))))
+
+;; =============================================================================
+;; check:test-tags
+;; =============================================================================
+
+(deftest ^:unit test-tags-gate-fires-test
+  (testing "a deftest with no pyramid tag is reported"
+    (is (seq (check-tests/scan-content-tags
+              "t.clj" "(deftest ^:slow thing-test\n  (is (= 1 1)))\n"))))
+
+  (testing "a deftest with two pyramid tags is reported"
+    (is (seq (check-tests/scan-content-tags
+              "t.clj" "(deftest ^:unit ^:integration thing-test\n  (is (= 1 1)))\n"))))
+
+  (testing "exactly one pyramid tag passes"
+    (is (empty? (check-tests/scan-content-tags
+                 "t.clj" "(deftest ^:unit thing-test\n  (is (= 1 1)))\n")))))
+
+;; =============================================================================
+;; check:ports — discovery AND detection, against a real tree
+;; =============================================================================
+
+(deftest ^:unit ports-gate-fires-test
+  (let [root   (temp-dir "ports" 1)
+        config {:allow-missing-ports #{} :allow-direct #{}}]
+    (try
+      ;; A module is core/ + shell/. This one has no ports.clj.
+      (spit-file! root "libs/demo/src/wagoe/demo/core/logic.clj"
+                  "(ns wagoe.demo.core.logic)\n")
+      (spit-file! root "libs/demo/src/wagoe/demo/shell/service.clj"
+                  "(ns wagoe.demo.shell.service)\n")
+
+      (let [roots [(io/file root "libs/demo/src")]]
+        (testing "the fixture module is discovered"
+          ;; collect-violations returns {:modules n :violations [...]}, not a
+          ;; seq. Asserting on the map itself is always truthy — the first
+          ;; version of this test did exactly that and would have passed with
+          ;; zero violations.
+          (is (= 1 (:modules (check-ports/collect-violations config roots)))))
+
+        (testing "a module without ports.clj is reported"
+          (is (seq (:violations (check-ports/collect-violations config roots)))
+              "missing ports.clj is the gate's core rule"))
+
+        (testing "adding ports.clj clears it"
+          (spit-file! root "libs/demo/src/wagoe/demo/ports.clj"
+                      "(ns wagoe.demo.ports)\n(defprotocol Demo (do-it [this]))\n")
+          (is (empty? (:violations (check-ports/collect-violations config roots))))))
+      (finally (delete-tree! root)))))
+
+;; =============================================================================
+;; check:poms
+;; =============================================================================
+
+(deftest ^:unit poms-gate-fires-test
+  (let [root (temp-dir "poms" 1)]
+    (try
+      (testing "a publishable build.clj that skips pom-basis is reported"
+        (let [dir (io/file root "bad")]
+          (spit-file! root "bad/build.clj"
+                      (str "(ns build)\n"
+                           "(def lib 'com.wagoe/wagoe-bad)\n"
+                           "(defn jar [_]\n"
+                           "  (b/write-pom {:basis basis :lib lib}))\n"))
+          (spit-file! root "bad/deps.edn"
+                      "{:deps {wagoe/core {:local/root \"../core\"}}}\n")
+          (is (:violation? (check-poms/check-lib ["bad" dir]))
+              "write-pom without build-shared/pom-basis drops inter-Wagoe deps")))
+
+      (testing "a build.clj using pom-basis is not reported"
+        (let [dir (io/file root "good")]
+          (spit-file! root "good/build.clj"
+                      (str "(ns build)\n"
+                           "(def lib 'com.wagoe/wagoe-good)\n"
+                           "(load-file \"../build_shared.clj\")\n"
+                           "(def basis (build-shared/pom-basis version))\n"
+                           "(defn jar [_]\n"
+                           "  (b/write-pom {:basis basis :lib lib}))\n"))
+          (spit-file! root "good/deps.edn"
+                      "{:deps {wagoe/core {:local/root \"../core\"}}}\n")
+          (is (not (:violation? (check-poms/check-lib ["good" dir]))))))
+      (finally (delete-tree! root)))))
+
+;; =============================================================================
+;; check:agents
+;; =============================================================================
+
+(deftest ^:unit agents-gate-fires-test
+  (testing "a target whose content differs from the render is reported as drifted"
+    (is (= ["AGENTS.md"]
+           (agents-gen/drifted-files
+            [{:file "AGENTS.md" :current "stale" :rendered "fresh"}
+             {:file "libs/core/AGENTS.md" :current "same" :rendered "same"}]))))
+
+  (testing "identical content is not drift"
+    (is (empty? (agents-gen/drifted-files
+                 [{:file "AGENTS.md" :current "x" :rendered "x"}])))))
+
+;; =============================================================================
+;; check:doctor
+;; =============================================================================
+
+(defn- levels
+  "The :level values of a doctor check's results.
+
+   doctor returns a result per check including passes, so `(seq results)` is
+   always truthy — the first version of this test asserted exactly that and
+   would have passed no matter what the check decided."
+  [results]
+  (set (map :level results)))
+
+(deftest ^:unit doctor-gate-fires-test
+  (let [user-active {:wagoe/user-service {}}]
+    (testing "a JWT_SECRET below the 32-character minimum is an error"
+      (is (contains? (levels (doctor/check-jwt-secret user-active {"JWT_SECRET" "too-short"}))
+                     :error)
+          "a 9-character secret must not pass"))
+
+    (testing "a missing JWT_SECRET is an error"
+      (is (contains? (levels (doctor/check-jwt-secret user-active {})) :error)))
+
+    (testing "a long enough secret passes"
+      (is (= #{:pass}
+             (levels (doctor/check-jwt-secret
+                      user-active
+                      {"JWT_SECRET" "ci-test-secret-minimum-32-characters"})))))))
+
+;; =============================================================================
+;; Linting — the invocation, not clj-kondo itself
+;; =============================================================================
+
+(deftest ^:unit linting-gate-lints-the-libs-test
+  ;; clj-kondo's own detection is not ours to test. What can rot is the path
+  ;; list: if lib discovery returns nothing, the gate still runs and still
+  ;; passes, having linted only src and test. That is this gate's silent-pass
+  ;; mode, so it is what the test pins.
+  (let [cmd (check/linting-cmd)]
+    (testing "the command lints the monorepo roots"
+      (is (some #{"src"} cmd))
+      (is (some #{"test"} cmd)))
+
+    (testing "library source paths are included"
+      (let [lib-paths (filter #(str/starts-with? % "libs/") cmd)]
+        (is (seq lib-paths) "no libs/ paths means the gate lints almost nothing")
+        (is (some #(str/ends-with? % "/src") lib-paths))
+        (is (some #(str/ends-with? % "/test") lib-paths))))
+
+    (testing "every path handed to clj-kondo exists"
+      ;; A non-existent path makes clj-kondo error rather than lint, which
+      ;; reads as a gate failure for the wrong reason.
+      (doseq [p (filter #(str/starts-with? % "libs/") cmd)]
+        (is (.exists (io/file p)) (str p " does not exist"))))))
+
+;; =============================================================================
 ;; The meta-gate: every gate must be represented above
 ;; =============================================================================
 
@@ -207,7 +378,8 @@
    Adding a gate to `all-checks` without adding it here fails the test below.
    That is the point: a gate nobody can prove fires is indistinguishable from
    one that does not run."
-  #{:hygiene :deps :fcis :placeholder-tests :docs-lint})
+  #{:hygiene :deps :fcis :placeholder-tests :docs-lint
+    :test-meta :test-tags :ports :poms :agents :doctor :linting})
 
 (def gates-without-firing-tests
   "Gates that cannot yet be proven to fire, each with the reason.
@@ -216,14 +388,11 @@
    `gates-with-firing-tests` as seams are added. Listing them here keeps the
    count honest — the alternative is a green suite that implies coverage the
    repo does not have."
-  {:ports             "collect-violations is public; needs a fixture tree like the fcis test"
-   :test-meta         "check-deftest-metadata prints and exits; no verdict seam"
-   :test-tags         "check-test-tags prints and exits; no verdict seam"
-   :agents            "agents-gen --check compares generated sections only; seam unclear"
-   :poms              "check-lib is public but needs a fixture lib tree"
-   :no-boundary       "shells out to git grep; needs a fixture repo"
-   :linting           "clj-kondo is third-party; firing is its own concern"
-   :doctor            "validates config; needs a fixture config tree"})
+  {:no-boundary "-main shells out to `git grep` against the real work tree and
+                 exits; proving it fires needs a throwaway git repo as a
+                 fixture, which no other gate here requires. Its detection was
+                 verified by hand (a probe file with a residual token turns it
+                 red), but by hand is exactly what this test set replaces."})
 
 (deftest ^:unit every-gate-is-accounted-for-test
   (let [declared (set (map :id check/all-checks))

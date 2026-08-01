@@ -131,26 +131,50 @@
         :level :pass
         :msg   "All provider values are known"}])))
 
+(def jwt-secret-min-length
+  "Minimum JWT_SECRET length, mirroring the runtime guard in
+   `wagoe.user.shell.auth/validate-jwt-secret*` (HMAC key strength)."
+  32)
+
+(def ^:private jwt-secret-fix
+  ;; Long enough to be valid. The previous suggestion, "your-32-char-secret",
+  ;; is 19 characters — the gate was handing out a value the runtime rejects.
+  "export JWT_SECRET=\"$(openssl rand -base64 32)\"")
+
 (defn check-jwt-secret
-  "Check that JWT_SECRET is set when user module is active."
+  "Check that JWT_SECRET is set and long enough when the user module is active.
+
+   Length matters: the runtime refuses to boot on a secret under
+   `jwt-secret-min-length`, so a presence-only check passes configurations that
+   fail at startup — a shorter secret got a green `bb doctor` and then died
+   with `JWT_SECRET must be at least 32 characters` (BOU-250)."
   [active-config env-map]
   (let [user-active? (some (fn [k]
                              (and (keyword? k)
                                   (str/starts-with? (name k) "user")
                                   (= (namespace k) "wagoe")))
-                           (keys active-config))]
+                           (keys active-config))
+        secret       (get env-map "JWT_SECRET")]
     (cond
       (not user-active?)
       [{:id :jwt-secret :level :pass :msg "User module not active, JWT_SECRET not required"}]
 
-      (get env-map "JWT_SECRET")
-      [{:id :jwt-secret :level :pass :msg "JWT_SECRET is set"}]
-
-      :else
+      (str/blank? secret)
       [{:id    :jwt-secret
         :level :error
         :msg   "JWT_SECRET not set (required by user module)"
-        :fix   "export JWT_SECRET=\"your-32-char-secret\""}])))
+        :fix   jwt-secret-fix}]
+
+      (< (count secret) jwt-secret-min-length)
+      [{:id    :jwt-secret
+        :level :error
+        :msg   (str "JWT_SECRET is " (count secret) " characters; the user module "
+                    "requires at least " jwt-secret-min-length
+                    " and will refuse to start")
+        :fix   jwt-secret-fix}]
+
+      :else
+      [{:id :jwt-secret :level :pass :msg "JWT_SECRET is set"}])))
 
 (defn check-admin-parity
   "Check that admin entity config files exist in both dev and test."
