@@ -168,9 +168,11 @@ The workflow is defined in `.github/workflows/publish.yml`.
 
 === One-time setup: GitHub secrets
 
-Add the following secrets to the GitHub repository:
+The credentials live on the *`release` environment*, not on the repository —
+the `publish` job declares `environment: release` (see <<approval-gate>>), so
+repository-level secrets of the same name would not be what the job reads.
 
-*GitHub → Settings → Secrets and variables → Actions → New repository secret*
+*GitHub → Settings → Environments → `release` → Environment secrets*
 
 [cols="1,2",options="header"]
 |===
@@ -178,6 +180,30 @@ Add the following secrets to the GitHub repository:
 |`CLOJARS_USERNAME` |Your Clojars username (not email)
 |`CLOJARS_PASSWORD` |Your Clojars deploy token (from clojars.org/tokens)
 |===
+
+Or from the CLI — the value is read from stdin and never echoed:
+
+[source,bash]
+----
+gh secret set CLOJARS_PASSWORD --repo wagoebv/wagoe --env release
+----
+
+.Rotating the token
+[NOTE]
+====
+Update the `release` environment secret *before* revoking the old token on
+clojars.org, so no release can fail in between. Check where copies live first —
+`gh api repos/wagoebv/wagoe/environments/<env>/secrets` lists names and
+timestamps without exposing values.
+
+Never echo a token to verify it is set. Use a presence test that cannot expand
+the value:
+
+[source,bash]
+----
+[ -n "$CLOJARS_PASSWORD" ] && echo set || echo "not set"
+----
+====
 
 === Trigger: push a version tag
 
@@ -349,6 +375,67 @@ cd libs/core
 clojure -T:build clean && clojure -T:build jar
 cat target/classes/META-INF/maven/com.wagoe/wagoe-core/pom.xml
 ----
+
+---
+
+== Retired coordinates: org.boundary-app
+
+Before the rename the suite published as `org.boundary-app/boundary-<lib>`.
+That group is *dormant*: it still exists, nothing is maintained there, and no
+further real releases are made from it. It is deliberately not deleted —
+deleting it would break every build still pinning an old coordinate and remove
+the signpost pointing at the new one.
+
+`bb relocate` publishes one Maven relocation stub per retired artifact:
+
+[source,bash]
+----
+bb relocate --generate   # write the 29 stub poms to target/relocation/
+bb relocate --deploy     # generate, skip already-published, push to Clojars
+bb relocate --verify     # check every stub is live
+----
+
+Each stub is a `packaging: pom` artifact with no jar, published at
+`org.boundary-app/boundary-<lib>` `1.0.1`, relocating to
+`com.wagoe/wagoe-<lib>` at the current suite version.
+
+=== Why version 1.0.1
+
+A stub only surfaces if it becomes the group's newest version. The highest
+version already in `org.boundary-app` is `1.0.1-alpha-42` — *not* the
+`1.0.0-beta-1` that the Clojars API reports as `latest_release`, since that
+field tracks push order while Maven orders `1.0.1` above `1.0.0`. A
+qualifier-less `1.0.1` sorts above all of its own alphas, so it is the lowest
+version that still wins.
+
+=== What a relocation does not do
+
+[WARNING]
+====
+Two limits, both measured. Do not expect this to redirect existing consumers.
+
+*Released poms can never gain a relocation.* Clojars refuses to redeploy a
+release, so `1.0.0-beta-1` and `1.0.1-alpha-42` keep resolving the old jars
+forever. That is not fixable, only outlived.
+
+*tools.deps ignores `<relocation>` entirely.* Verified against MySQL's official
+relocation-only pom (`mysql/mysql-connector-java 8.0.33`, no jar published):
+
+[source,text]
+----
+Error building classpath. Could not find artifact
+mysql:mysql-connector-java:jar:8.0.33 in central
+----
+
+The Clojure CLI demands a jar at the original coordinate rather than following
+the redirect, so for `deps.edn` consumers a relocation buys nothing functional.
+Maven consumers do get the real redirect.
+====
+
+What the stub does buy is the *Clojars page*: it becomes the newest version, so
+every retired artifact displays the deprecation notice and the new coordinate.
+Since Clojars renders the latest version's description, publishing a stub is
+the only way to change what those pages say.
 
 ---
 

@@ -17,4 +17,16 @@
   ;; the (still boundary-era) docs it lints. Renames with the docs in Phase 4
   ;; (BOU-214); exempt until then. Two copies: scripts/ (bb) + dev/ (repl).
   "scripts/docs_lint.clj"
-  "dev/wagoe/tools/docs_lint.clj"]}
+  "dev/wagoe/tools/docs_lint.clj"
+  ;; Clojars relocation tooling (BOU-218). Same category as the rename tooling
+  ;; above: the retired org.boundary-app coordinates and the boundary-cli /
+  ;; boundary-mcp artifact ids are its SUBJECT, not residue. It publishes the
+  ;; stubs that point those coordinates at com.wagoe, so it cannot name them
+  ;; any other way. Permanent — the retired group stays dormant, not deleted.
+  "libs/tools/src/wagoe/tools/relocate.clj"
+  "libs/tools/test/wagoe/tools/relocate_test.clj"
+  ;; Publishing guide: its "Retired coordinates" section documents the same
+  ;; relocation. Whole-file exemption because the allowlist matches on path
+  ;; prefix only — when editing the rest of this file, note the gate is blind
+  ;; to it and check old coordinates by hand.
+  "dev-docs/reference/publishing.adoc"]}
