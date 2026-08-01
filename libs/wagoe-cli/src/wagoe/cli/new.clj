@@ -79,6 +79,13 @@
                      "src/wagoe/config.clj"             "config.clj.tmpl"
                      "dev/user.clj"                        "user.clj.tmpl"
                      (str "src/" project-ns "/system.clj") "system.clj.tmpl"
+                     ;; Non-REPL entry point + the build path that uses it.
+                     ;; Without these a generated project could only be started
+                     ;; from an editor-connected REPL, so it could not be
+                     ;; containerised, supervised, or smoke-tested (BOU-254).
+                     (str "src/" project-ns "/main.clj")   "main.clj.tmpl"
+                     "build.clj"                           "build.clj.tmpl"
+                     "Dockerfile"                          "Dockerfile.tmpl"
                      ".mcp.json"                           "mcp.json.tmpl"
                      ".vscode/extensions.json"             "vscode-extensions.json.tmpl"
                      ".githooks/pre-commit"                "githook-pre-commit.tmpl"}]

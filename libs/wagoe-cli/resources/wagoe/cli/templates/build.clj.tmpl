@@ -1,0 +1,40 @@
+(ns build
+  "Uberjar build for {{project-name}}.
+
+   Usage:
+     clojure -T:build clean
+     clojure -T:build uber      ; -> target/{{project-name}}-<version>.jar
+     java -jar target/{{project-name}}-0.1.0.jar
+
+   AOT-compiles {{project-ns}}.main, which is the same entry point
+   `clojure -M:run` and the Dockerfile use."
+  (:require [clojure.tools.build.api :as b]))
+
+(def lib '{{project-name}}/{{project-name}})
+(def version "0.1.0")
+(def class-dir "target/classes")
+(def uber-file (format "target/%s-%s.jar" (name lib) version))
+
+(defn- basis []
+  (b/create-basis {:project "deps.edn"}))
+
+(defn clean [_]
+  (b/delete {:path "target"})
+  (println "Cleaned target/"))
+
+(defn uber [_]
+  (clean nil)
+  (b/copy-dir {:src-dirs   ["src" "resources"]
+               :target-dir class-dir})
+  (b/compile-clj {:basis      (basis)
+                  :ns-compile '[{{project-ns}}.main]
+                  :class-dir  class-dir})
+  (b/uber {:class-dir class-dir
+           :uber-file uber-file
+           :basis     (basis)
+           :main      '{{project-ns}}.main
+           ;; Several transitive dependencies ship signed jars and overlapping
+           ;; META-INF entries; without this the uber step fails on duplicate
+           ;; or invalid signature files.
+           :exclude   ["META-INF/.*\\.SF" "META-INF/.*\\.DSA" "META-INF/.*\\.RSA"]})
+  (println "Built" uber-file))

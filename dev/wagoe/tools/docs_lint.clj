@@ -154,7 +154,12 @@
 ;; everything under :db/*" is what let BOU-257 through.
 (def external-aliases
   {:deps "built into the Clojure CLI itself (clojure -X:deps find-versions)"
-   :nvd  "third-party CVE scanner the security checklist tells readers to add to THEIR project"})
+   :nvd  "third-party CVE scanner the security checklist tells readers to add to THEIR project"
+   :repl "alias of a GENERATED project, not this monorepo — `wagoe new` writes
+          :repl into the project's deps.edn while the monorepo uses :repl-clj.
+          The getting-started and repl-workflow pages document the generated
+          project, so they must say :repl. deps.edn.tmpl cannot be parsed for
+          this because it contains {{placeholders}} and is not valid EDN."})
 
 (def ^:private project-template-path
   "libs/wagoe-cli/resources/wagoe/cli/templates/deps.edn.tmpl")

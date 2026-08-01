@@ -326,3 +326,29 @@
   (testing "new tenant-lib ns does not trip the relocated check"
     (is (= [:pass] (map :level (doctor/check-upgrade-wiring
                                 "(:require [wagoe.tenant.shell.tenant-middleware :as mw])"))))))
+
+(deftest ^:unit config-loadable-catches-configs-that-cannot-boot
+  ;; `bb doctor --ci` is a CI gate. Before this check it exited 0 on a config
+  ;; the application could not load at all: parse-config-minimal returns nil on
+  ;; a syntax error, the caller does `(or (:active parsed) {})`, and every
+  ;; downstream check then inspects an empty map and reports a pass.
+  (let [check #'doctor/check-config-loadable
+        level (fn [parsed] (:level (first (check parsed))))]
+
+    (testing "a healthy config passes"
+      (is (= :pass (level {:active {:wagoe/sqlite {:db "x.db"}}}))))
+
+    (testing "an unparseable config is an error, not a swallowed warning"
+      (is (= :error (level nil))))
+
+    (testing "a missing :active section is an error"
+      ;; The observed case: `:active` misspelled as `:actve`. The file parses,
+      ;; so nil-checking the parse result is not enough.
+      (is (= :error (level {:actve {:wagoe/sqlite {:db "x.db"}}}))))
+
+    (testing "an empty :active section is an error"
+      (is (= :error (level {:active {}}))))
+
+    (testing "the error names a fix"
+      (is (some? (:fix (first (check nil)))))
+      (is (some? (:fix (first (check {:active {}}))))))))
