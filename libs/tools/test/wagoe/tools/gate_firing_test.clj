@@ -475,6 +475,38 @@
 ;; matching brand tokens by regex. Not worth an exemption: allowlisting this
 ;; file would switch the gate off for the whole test namespace.
 
+(deftest ^:unit allowlist-audit-is-order-independent-test
+  ;; Allowlist matching is a prefix test over the whole list, so "would removing
+  ;; this entry expose a hit" cannot depend on where the entry sits. The first
+  ;; version of the audit accumulated claims left-to-right and therefore called
+  ;; a specific entry load-bearing whenever a BROADER one happened to come
+  ;; after it — a redundant entry that would sit there forever.
+  ;; Entries must exist on disk (the audit checks that first), so these are real
+  ;; repo paths with the hit set mocked around them.
+  (with-redefs [check-no-boundary/all-hit-paths
+                (fn [] #{"libs/tools/deps.edn" "libs/tools/build.clj"})]
+    (testing "a nested entry is redundant whether the broader one precedes or follows"
+      (doseq [order [["libs/tools/deps.edn" "libs/"] ["libs/" "libs/tools/deps.edn"]]]
+        (let [{:keys [load-bearing redundant]} (check-no-boundary/audit-allowlist order)]
+          (is (= ["libs/"] load-bearing)
+              (str "order " (pr-str order) ": only the broader entry earns its place"))
+          (is (= ["libs/tools/deps.edn"] (mapv first redundant))
+              (str "order " (pr-str order) ": the nested entry is redundant either way")))))
+
+    (testing "an exact duplicate is reported once, not twice"
+      ;; Under the order-independent test each copy is covered by the other, so
+      ;; a naive implementation flags both and neither can be removed without
+      ;; the verdict flipping. The first occurrence keeps its place.
+      (let [{:keys [load-bearing redundant]}
+            (check-no-boundary/audit-allowlist ["libs/" "libs/"])]
+        (is (= ["libs/"] load-bearing))
+        (is (= 1 (count redundant)))))
+
+    (testing "entries covering disjoint hits are all load-bearing"
+      (is (= ["libs/tools/deps.edn" "libs/tools/build.clj"]
+             (:load-bearing (check-no-boundary/audit-allowlist
+                             ["libs/tools/deps.edn" "libs/tools/build.clj"])))))))
+
 (deftest ^:unit ports-allowlist-is-load-bearing-test
   (testing "wagoe.platform genuinely still has no ports.clj"
     ;; The builtin allowlist exempts it. If platform ever gains ports.clj the

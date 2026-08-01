@@ -216,35 +216,43 @@
    Returns a map of those four keys to vectors of entries; :redundant holds
    [entry covering-entry] pairs."
   [entries]
-  (let [hits    (all-hit-paths)
-        indexed (map-indexed vector entries)]
-    (:acc
-     (reduce
-      (fn [{:keys [acc claimed]} [i path]]
-        (let [covers (set (filter #(str/starts-with? % path) hits))
-              unique (set/difference covers claimed)]
-          (cond
-            (not (fs/exists? path))
-            {:acc (update acc :missing conj path) :claimed claimed}
-
-            (empty? covers)
-            {:acc (update acc :inert conj path) :claimed claimed}
-
-            (empty? unique)
-            ;; Which earlier entry already covers it. Indexed rather than
-            ;; `take-while (not= path)`: duplicates are identical strings, so
-            ;; that would stop at the entry itself and report no cause.
-            (let [by (->> (take i entries)
-                          (filter (fn [e] (some #(str/starts-with? % e) covers)))
-                          first)]
-              {:acc (update acc :redundant conj [path by]) :claimed claimed})
-
-            :else
-            {:acc     (update acc :load-bearing conj path)
-             :claimed (set/union claimed unique)})))
-      {:acc {:load-bearing [] :redundant [] :inert [] :missing []}
-       :claimed #{}}
-      indexed))))
+  (let [hits     (all-hit-paths)
+        covers   (fn [path] (set (filter #(str/starts-with? % path) hits)))
+        ;; Exact duplicates are handled first and by position: under the
+        ;; order-independent test below each copy is covered by the other, so
+        ;; both would be flagged and neither could be removed without the
+        ;; report changing its mind. Keep the first, report the rest.
+        seen     (volatile! #{})
+        tagged   (for [path entries
+                       :let [dup? (contains? @seen path)]]
+                   (do (vswap! seen conj path)
+                       [path dup?]))
+        unique-e (distinct entries)]
+    (reduce
+     (fn [acc [path dup?]]
+       (let [mine (covers path)
+             ;; Everything the OTHER entries cover. Order-independent on
+             ;; purpose: allowlist matching is a prefix test over the whole
+             ;; list, so "would removing this one expose a hit" cannot depend
+             ;; on where it sits. An earlier-only comparison called
+             ;; foo/bar.clj load-bearing when a later foo/ already covered it.
+             others (->> unique-e
+                         (remove #(= % path))
+                         (mapcat covers)
+                         set)]
+         (cond
+           dup?                     (update acc :redundant conj [path path])
+           (not (fs/exists? path))  (update acc :missing conj path)
+           (empty? mine)            (update acc :inert conj path)
+           (empty? (set/difference mine others))
+           (let [by (->> unique-e
+                         (remove #(= % path))
+                         (filter (fn [e] (seq (set/intersection mine (covers e)))))
+                         first)]
+             (update acc :redundant conj [path by]))
+           :else                    (update acc :load-bearing conj path))))
+     {:load-bearing [] :redundant [] :inert [] :missing []}
+     tagged)))
 
 (defn -main [& args]
   (let [selected (cond
