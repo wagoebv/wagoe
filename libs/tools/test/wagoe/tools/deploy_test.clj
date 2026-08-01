@@ -6,6 +6,7 @@
   (:require [clojure.test :refer [deftest is testing]]
             [clojure.java.io :as io]
             [clojure.string :as str]
+            [babashka.http-client]
             [wagoe.tools.deploy :as deploy]))
 
 (deftest ^:unit artifact-name-test
@@ -84,6 +85,34 @@
               :when (idx dep)] ; only deps that are themselves published
         (is (< (idx dep) (idx lib))
             (str dep " must be published before " lib))))))
+
+(deftest ^:unit cljdoc-request-never-aborts-a-release
+  ;; The docs trigger runs after the artifact is already on Clojars, inside the
+  ;; doseq that publishes the rest. Anything it throws takes the remaining
+  ;; artifacts with it — a cljdoc outage halting a 29-artifact release halfway.
+  ;;
+  ;; `:throw false` is not enough on its own: it suppresses non-2xx RESPONSES,
+  ;; while DNS failures, refused connections and timeouts throw regardless
+  ;; because there is no response to inspect.
+  (with-redefs [deploy/artifact-name (constantly "wagoe-core")]
+    (testing "a transport failure is caught, not propagated"
+      (with-redefs [babashka.http-client/post
+                    (fn [& _] (throw (java.net.ConnectException. "Connection refused")))]
+        (let [out (with-out-str (deploy/request-cljdoc-build! "core" "1.0.0"))]
+          (is (str/includes? out "Connection refused")
+              "the reason should reach the operator")
+          (is (str/includes? out "trigger manually")
+              "and so should the recovery step"))))
+
+    (testing "a non-2xx response warns rather than throwing"
+      (with-redefs [babashka.http-client/post (constantly {:status 500})]
+        (is (str/includes? (with-out-str (deploy/request-cljdoc-build! "core" "1.0.0"))
+                           "HTTP 500"))))
+
+    (testing "a successful request is reported as such"
+      (with-redefs [babashka.http-client/post (constantly {:status 200})]
+        (is (str/includes? (with-out-str (deploy/request-cljdoc-build! "core" "1.0.0"))
+                           "cljdoc build requested"))))))
 
 (deftest ^:unit deploy-has-one-registry
   (testing "scripts/deploy.clj holds no registry of its own"
