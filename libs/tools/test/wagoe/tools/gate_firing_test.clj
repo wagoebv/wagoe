@@ -36,14 +36,30 @@
 ;; Fixture helpers
 ;; =============================================================================
 
+(declare delete-tree!)
+
 (defn- temp-dir
-  "A fresh directory under the system temp dir. Named from `label` and the
-   caller-supplied `n` rather than a random value, so a leftover directory can
-   be traced back to the test that made it."
+  "A guaranteed-empty directory under the system temp dir.
+
+   Named from `label` and `n` rather than randomly, so a leftover directory can
+   be traced back to the test that made it — but the name is only useful if it
+   cannot also carry state between runs. A run interrupted before its `finally`
+   leaves the tree behind, and the next run would then start against those
+   files: a stale ports.clj, for instance, means the ports test no longer
+   exercises the missing-ports case at all.
+
+   So any existing directory is removed first, and both the removal and the
+   creation are asserted. A fixture helper that silently proceeds on a
+   half-deleted tree is the same failure this namespace exists to catch."
   [label n]
   (let [d (io/file (System/getProperty "java.io.tmpdir")
                    (str "wagoe-gate-" label "-" n))]
-    (.mkdirs d)
+    (when (.exists d)
+      (delete-tree! d))
+    (assert (not (.exists d))
+            (str "could not clear stale fixture dir " d))
+    (assert (.mkdirs d)
+            (str "could not create fixture dir " d))
     d))
 
 (defn- spit-file!
