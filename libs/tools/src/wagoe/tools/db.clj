@@ -166,12 +166,44 @@
         (println (dim "  Aborted."))
         (println)))))
 
+(def ^:private seedable-envs
+  "Environments where seeding is safe by default. Allowlist, not denylist:
+   db-reset names prod/acc/production explicitly, which lets an unrecognised
+   environment such as \"staging\" through. Seeding writes rows into whatever
+   database the active config resolves to, so refuse anything not known to be
+   disposable."
+  #{"dev" "development" "test" "local"})
+
 (defn db-seed
-  "Seed the database from the dev seed file."
-  []
+  "Seed the database from the dev seed file.
+
+   Refuses outside a development-like environment: the seed path defaults to
+   resources/seeds/dev.edn while the *database* comes from the active config,
+   so without this a WAG_ENV=prod shell would insert demo rows into
+   production. Pass --force to override deliberately."
+  [& args]
   (println)
   (println (bold "Wagoe Database Seed"))
   (println)
+  ;; Advisory only. libs/tools is Babashka in its own process, so it cannot see
+  ;; the -Denv JVM property the :prod/:dev aliases set — meaning it cannot fully
+  ;; reproduce the platform's detect-environment. The authoritative guard lives
+  ;; in wagoe.platform.shell.database.cli-seed, which runs in the same JVM as
+  ;; the database connection and uses detect-environment directly. This check
+  ;; exists to fail fast with a friendly message in the common case.
+  (let [force? (boolean (some #{"--force"} args))
+        env    (or (System/getenv "WAG_ENV")
+                   (System/getenv "ENV")
+                   (System/getenv "ENVIRONMENT")
+                   "dev")]
+    (when-not (or force? (contains? seedable-envs env))
+      (println (red (str "  REFUSED: bb db:seed cannot run in the " env " environment.")))
+      (println (dim "  Seeding inserts rows into the database the active config resolves to."))
+      (println)
+      (println (dim "  If this is genuinely intended:"))
+      (println (dim (str "    clojure -M:seed " (seed-path) " --force")))
+      (println)
+      (System/exit 1)))
   (let [seed-file (io/file (seed-path))]
     (if-not (.exists seed-file)
       (do
@@ -182,15 +214,18 @@
         (println)
         (println (dim "  Example content:"))
         (println (dim "    {:users [{:email \"admin@example.com\" :name \"Admin\"}]}"))
+        (println)
+        (println (dim "  Tables insert in the order written — list parents first."))
+        (println (dim "  Past 8 tables, use the ordered form: [[:users [...]] [:tasks [...]]]"))
         (println))
-      (do
-        (println (yellow "  Seed file found but seeding is not yet implemented."))
-        (println (dim (str "  File: " (seed-path))))
-        (println)
-        (println (dim "  This feature will be added in a future release."))
-        (println (dim "  For now, load seed data manually via the REPL."))
-        (println)
-        (System/exit 1)))))
+      ;; Pass through to the JVM side. libs/tools is pure Babashka with no
+      ;; Maven deps at runtime, so it cannot open a JDBC connection itself —
+      ;; the same reason `bb migrate` shells out to `clojure -M:migrate`.
+      (let [{:keys [exit]} (apply process/shell
+                                 {:out :inherit :err :inherit :continue true}
+                                 "clojure" "-M:seed" (seed-path) args)]
+        (when-not (zero? exit)
+          (System/exit exit))))))
 
 ;; =============================================================================
 ;; Help
@@ -210,11 +245,11 @@
 ;; =============================================================================
 
 (defn -main [& args]
-  (let [[subcmd & _rest-args] args]
+  (let [[subcmd & rest-args] args]
     (case subcmd
       "status" (db-status)
       "reset"  (db-reset)
-      "seed"   (db-seed)
+      "seed"   (apply db-seed rest-args)
       (print-help))))
 
 ;; Run when executed directly (not via bb.edn task)

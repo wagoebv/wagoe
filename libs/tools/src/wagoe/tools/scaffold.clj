@@ -118,6 +118,21 @@
 ;; Update all three together on each release.
 (def ^:private scaffolder-version "1.0.0-beta-3")
 
+(defn- scaffolder-deps
+  "The -Sdeps argument used to make the scaffolder namespace resolvable.
+
+   Normally pins the published artifact. `WAGOE_SCAFFOLDER_ROOT` overrides that
+   with a local checkout, which is the only way to exercise unreleased
+   scaffolder code from a generated project: this dependency is injected here
+   rather than read from the project's deps.edn, so a `:local/root` rewrite of
+   that file has no effect. The first-run smoke test (scripts/first-run-smoke.sh)
+   relies on this, and it is equally useful when developing the scaffolder
+   against a real generated project."
+  []
+  (if-let [root (System/getenv "WAGOE_SCAFFOLDER_ROOT")]
+    (str "{:deps {com.wagoe/wagoe-scaffolder {:local/root \"" root "\"}}}")
+    (str "{:deps {com.wagoe/wagoe-scaffolder {:mvn/version \"" scaffolder-version "\"}}}")))
+
 (defn run-clojure!
   "Shell out to the Clojure scaffolder CLI with given args. Streams output to terminal.
 
@@ -135,7 +150,7 @@
                          ["clojure" "-M" "-m" "wagoe.scaffolder.shell.cli-entry"]
                          ["clojure"
                           "-Sdeps"
-                          (str "{:deps {com.wagoe/wagoe-scaffolder {:mvn/version \"" scaffolder-version "\"}}}")
+                          (scaffolder-deps)
                           "-M" "-m" "wagoe.scaffolder.shell.cli-entry"])]
       (apply shell (concat base-cmd args)))
     (catch Exception e

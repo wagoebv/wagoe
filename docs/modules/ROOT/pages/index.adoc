@@ -51,9 +51,8 @@ wagoe add payments
 wagoe list modules
 
 # REPL-driven development (headless nREPL on port 7888 — connect your editor)
-export JWT_SECRET="change-me-dev-secret-min-32-chars"
-export WAG_ENV="development"
-clojure -M:repl-clj
+source .env      # wagoe new generated this, with a real JWT_SECRET
+clojure -M:repl
 
 # Scaffold a new module (interactive)
 bb scaffold

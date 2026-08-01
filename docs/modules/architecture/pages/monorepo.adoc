@@ -136,7 +136,7 @@ The active environment is controlled by the `WAG_ENV` environment variable.
 
 [source,bash]
 ----
-export WAG_ENV=development   # loads resources/conf/dev/config.edn
+export WAG_ENV=dev           # loads resources/conf/dev/config.edn
 export WAG_ENV=test          # loads resources/conf/test/config.edn
 export WAG_ENV=production    # loads resources/conf/prod/config.edn
 ----

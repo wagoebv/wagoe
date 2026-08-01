@@ -1101,10 +1101,28 @@ jobs:
   # =============================================================================
   # Summary job
   # =============================================================================
+  # =============================================================================
+  # First-run smoke — the documented newcomer path, in a bare container
+  # =============================================================================
+  first-run-smoke:
+    name: First-Run Smoke
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      # Deliberately no Clojure/Java setup: the test runs inside a bare
+      # ubuntu:24.04 container and installs everything via scripts/install.sh.
+      # Running it on the runner would hide exactly the defects it exists to
+      # catch — the runner already has java, git, unzip and sudo, so install.sh
+      # never takes the branch where BOU-226's three blockers lived.
+      - name: Run first-run smoke test
+        run: ./scripts/first-run-smoke.sh
+
   test-summary:
     name: All Tests Passed
     runs-on: ubuntu-latest
-    needs: [build-ui-assets, docs-lint, agents-links, command-smoke, config-doctor, i18n-scan, check-fcis, check-placeholder-tests, check-test-meta, check-test-tags, check-deps, check-ports, check-hygiene, check-poms, check-agents, check-no-boundary, build-uberjar, test-tools, example-smoke, test-i18n, test-core, test-observability, test-platform, test-user, test-admin, test-ui-style, test-storage, test-cache, test-jobs, test-tenant, test-email, test-realtime, test-workflow, test-search, test-scaffolder, test-external, test-payments, test-push, test-calendar, test-reports, test-geo, test-ai, test-mcp, test-wagoe-cli, test-shared-ui]
+    needs: [first-run-smoke, build-ui-assets, docs-lint, agents-links, command-smoke, config-doctor, i18n-scan, check-fcis, check-placeholder-tests, check-test-meta, check-test-tags, check-deps, check-ports, check-hygiene, check-poms, check-agents, check-no-boundary, build-uberjar, test-tools, example-smoke, test-i18n, test-core, test-observability, test-platform, test-user, test-admin, test-ui-style, test-storage, test-cache, test-jobs, test-tenant, test-email, test-realtime, test-workflow, test-search, test-scaffolder, test-external, test-payments, test-push, test-calendar, test-reports, test-geo, test-ai, test-mcp, test-wagoe-cli, test-shared-ui]
 
     steps:
       - name: Summary

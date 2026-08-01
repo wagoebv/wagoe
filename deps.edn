@@ -211,6 +211,11 @@
                                     org.postgresql/postgresql   {:mvn/version "42.7.12"}
                                     com.h2database/h2           {:mvn/version "2.4.240"}
                                     com.mysql/mysql-connector-j {:mvn/version "9.7.0"}}}
+           :seed      {:main-opts  ["-m" "wagoe.platform.shell.database.cli-seed"]
+                       :extra-deps {org.xerial/sqlite-jdbc      {:mvn/version "3.53.2.0"}
+                                    org.postgresql/postgresql   {:mvn/version "42.7.12"}
+                                    com.h2database/h2           {:mvn/version "2.4.240"}
+                                    com.mysql/mysql-connector-j {:mvn/version "9.7.0"}}}
            :bench     {:extra-paths ["dev"]
                        :extra-deps  {criterium/criterium {:mvn/version "0.4.6"}}
                        :main-opts   ["-m" "wagoe.bench.core"]}

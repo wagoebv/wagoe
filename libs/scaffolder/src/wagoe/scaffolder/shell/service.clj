@@ -10,20 +10,56 @@
             [clojure.string :as str]
             [malli.core :as m]))
 
-(defn- get-next-migration-number
-  "Get the next migration number based on existing migrations."
+(defn- existing-migration-ids
+  "Numeric ids already used by migration files, as strings.
+
+   Checks both layouts this repo has: generated projects keep migrations in
+   `migrations/`, the monorepo in `resources/migrations/`."
   []
-  (try
-    (let [migrations-dir (io/file "resources/migrations")
-          files (when (.exists migrations-dir)
-                  (map #(.getName %) (.listFiles migrations-dir)))
-          numbers (keep #(when-let [m (re-find #"^(\d+)" %)]
-                           (Integer/parseInt (second m)))
-                        (or files []))
-          max-num (if (seq numbers) (apply max numbers) 0)]
-      (format "%03d" (inc max-num)))
-    (catch Exception _
-      "006")))
+  (into #{}
+        (for [dir   ["migrations" "resources/migrations"]
+              :let  [d (io/file dir)]
+              :when (.isDirectory d)
+              f     (.listFiles d)
+              :let  [m (re-find #"^(\d+)-" (.getName f))]
+              :when m]
+          (second m))))
+
+(defn- next-migration-id
+  "First id at or after `now` that is not in `used`, as a string.
+
+   Second precision alone is not unique: two scaffold operations within the
+   same second produce different filenames sharing one id, and migratus throws
+   \"Multiple migrations with id N\" — which fails the entire migration run, not
+   just the offending pair. So step forward until the id is free.
+
+   Stepping into the next second rather than adding sub-second precision is
+   deliberate. Every id already in this repo, and every id `migratus create`
+   generates, is 14 digits; a 17-digit id is ~1000x larger numerically, so it
+   would sort after all 14-digit ones forever and any later hand-made migration
+   would sort before it. That trades a rare collision for a permanent ordering
+   hazard.
+
+   Pure: takes the used set and the current timestamp rather than reading either."
+  [used now]
+  (loop [id (Long/parseLong now)]
+    (if (contains? used (str id))
+      (recur (inc id))
+      (str id))))
+
+(defn- get-next-migration-number
+  "Timestamp id for a new migration, e.g. 20260801120000.
+
+   Replaces a sequential \"%03d\" counter that produced ids migratus could not
+   use and could not have made collision-free anyway (BOU-256): it scanned
+   `resources/migrations` while writing to `migrations/`, so it counted nothing
+   and always returned 001, and it parsed ids with `Integer/parseInt`, which
+   overflows on 14-digit timestamps and sent the function into its catch
+   branch."
+  []
+  (next-migration-id (existing-migration-ids)
+                     (.format (java.time.LocalDateTime/now java.time.ZoneOffset/UTC)
+                              (java.time.format.DateTimeFormatter/ofPattern "yyyyMMddHHmmss"))))
 
 (def ^:private module-generation-request-validator (m/validator schema/ModuleGenerationRequest))
 (def ^:private module-generation-request-explainer (m/explainer schema/ModuleGenerationRequest))
@@ -47,8 +83,7 @@
             entity-kebab (:entity-kebab entity)
             dry-run? (:dry-run request false)
 
-            ;; Next migration number from resources/migrations (not a hardcoded
-            ;; "005"), so generated migrations don't collide across modules.
+            ;; UTC timestamp id — see get-next-migration-number.
             migration-number (get-next-migration-number)
 
             ;; Generate source file contents
@@ -92,8 +127,17 @@
                    {:path (format "src/%s/%s/shell/web_handlers.clj" base-ns-path module-name)
                     :content web-handlers-content
                     :action :create}
-                   {:path (format "migrations/%s_create_%s.sql" migration-number (:entity-plural-snake entity))
+                   ;; migratus discovers `<id>-<name>.up.sql` / `.down.sql`. The old
+                   ;; `%s_create_%s.sql` shape was invisible to it, so scaffolded
+                   ;; tables were never created and `bb migrate status` reported
+                   ;; 0 pending while the file sat on disk (BOU-256).
+                   {:path (format "migrations/%s-create-%s.up.sql"
+                                  migration-number (:entity-plural entity))
                     :content migration-content
+                    :action :create}
+                   {:path (format "migrations/%s-create-%s.down.sql"
+                                  migration-number (:entity-plural entity))
+                    :content (generators/generate-migration-down-file ctx)
                     :action :create}
                    {:path (format "test/%s/%s/core/%s_test.clj" base-ns-path module-name entity-kebab)
                     :content core-test-content
@@ -142,20 +186,33 @@
 
             ;; Define files
             field-name-snake (template/kebab->snake (name (:name field)))
+            field-name-kebab (name (:name field))
             table-name (template/kebab->snake (template/pluralize (str/lower-case entity)))
-            files [{:path (format "migrations/%s_add_%s_to_%s.sql"
-                                  migration-number field-name-snake table-name)
+            ;; `<id>-<name>.up.sql` + `.down.sql` — same migratus discovery
+            ;; requirement as module generation above (BOU-256).
+            files [{:path (format "migrations/%s-add-%s-to-%s.up.sql"
+                                  migration-number field-name-kebab
+                                  (template/pluralize (str/lower-case entity)))
                     :content migration-content
+                    :action :create}
+                   {:path (format "migrations/%s-add-%s-to-%s.down.sql"
+                                  migration-number field-name-kebab
+                                  (template/pluralize (str/lower-case entity)))
+                    :content (format "-- Rollback: drop %s from %s\n\nALTER TABLE %s DROP COLUMN %s;\n"
+                                     field-name-snake table-name table-name field-name-snake)
                     :action :create}
                    {:path (format "src/%s/%s/schema.clj" base-ns-path module-name)
                     :content schema-instructions
                     :action :update}]]
 
-        ;; Write migration file (unless dry-run)
+        ;; Write migration files (unless dry-run). Both up and down — writing
+        ;; only the first would leave an un-rollbackable migration.
         (when-not dry-run
-          (let [file (io/file (:path (first files)))]
-            (.mkdirs (.getParentFile file))
-            (spit file (:content (first files)))))
+          (doseq [{:keys [path content action]} files
+                  :when (= action :create)]
+            (let [file (io/file path)]
+              (.mkdirs (.getParentFile file))
+              (spit file content))))
 
         {:success true
          :module-name module-name
