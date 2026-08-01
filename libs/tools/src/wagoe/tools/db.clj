@@ -182,6 +182,9 @@
         (println)
         (println (dim "  Example content:"))
         (println (dim "    {:users [{:email \"admin@example.com\" :name \"Admin\"}]}"))
+        (println)
+        (println (dim "  Tables insert in the order written — list parents first."))
+        (println (dim "  Past 8 tables, use the ordered form: [[:users [...]] [:tasks [...]]]"))
         (println))
       ;; Pass through to the JVM side. libs/tools is pure Babashka with no
       ;; Maven deps at runtime, so it cannot open a JDBC connection itself —

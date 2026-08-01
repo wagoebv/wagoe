@@ -24,7 +24,14 @@
     (println "              {:title \"Read AGENTS.md\"   :done true}]}")
     (println)
     (println "   Table and column names are kebab-case; they are converted to")
-    (println "   snake_case on the way into the database."))
+    (println "   snake_case on the way into the database.")
+    (println)
+    (println "   Tables are inserted in the order written, so list parents first.")
+    (println "   Past 8 tables an EDN map stops preserving that order — use the")
+    (println "   ordered form for anything larger:")
+    (println)
+    (println "     [[:users [{:email \"admin@example.com\"}]]")
+    (println "      [:tasks [{:title \"Owned by that user\" :user-id 1}]]]"))
   (println))
 
 (defn -main

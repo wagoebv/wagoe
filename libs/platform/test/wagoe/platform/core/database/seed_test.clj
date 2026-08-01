@@ -42,6 +42,40 @@
     (is (= "audit_logs" (seed/table->name :audit-logs)))
     (is (= "tasks" (seed/table->name :tasks)))))
 
+(deftest ^:unit ordered-vector-form-is-accepted-and-kept-in-order
+  (testing "a vector of [table rows] pairs validates"
+    (let [data [[:users [{:email "a@b.c"}]]
+                [:tasks [{:title "t" :user-id 1}]]]]
+      (is (= {:ok data} (seed/validate-seed data)))
+      (is (= ["users" "tasks"] (mapv :table (seed/seed-plan data))))))
+
+  (testing "pairs must be pairs"
+    (is (= :validation-error
+           (get-in (seed/validate-seed [[:users]]) [:error :type])))))
+
+(deftest ^:unit large-maps-are-rejected-rather-than-silently-reordered
+  ;; Clojure reads =<8 pairs as a PersistentArrayMap (insertion order) and 9+ as
+  ;; a PersistentHashMap (hash order). A seed file that crosses that line would
+  ;; otherwise start inserting children before parents with no warning.
+  (let [rows  [{:a 1}]
+        mk    (fn [n] (into {} (for [i (range n)] [(keyword (format "t%02d" i)) rows])))]
+    (testing "8 tables still round-trips in order"
+      (let [data (mk 8)]
+        (is (nil? (:error (seed/validate-seed data))))
+        (is (= (mapv (comp seed/table->name key) data)
+               (mapv :table (seed/seed-plan data))))))
+
+    (testing "9 tables is refused, with the ordered form named in the message"
+      (let [result (seed/validate-seed (mk 9))]
+        (is (= :validation-error (get-in result [:error :type])))
+        (is (re-find #"do not keep their written order" (get-in result [:error :message])))
+        (is (re-find #"\[\[:users" (get-in result [:error :message])))))
+
+    (testing "the same 9 tables are fine in the ordered form"
+      (let [data (mapv (fn [i] [(keyword (format "t%02d" i)) rows]) (range 9))]
+        (is (nil? (:error (seed/validate-seed data))))
+        (is (= 9 (count (seed/seed-plan data))))))))
+
 (deftest ^:unit seed-plan-preserves-file-order
   (testing "parents can be listed before children, and that order is kept"
     (let [plan (seed/seed-plan (array-map :users [{:email "a@b.c"}]
