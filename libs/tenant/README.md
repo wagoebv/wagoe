@@ -432,12 +432,12 @@ CREATE INDEX idx_tenants_status ON tenants(status);
 
 ```bash
 # All tenant module tests
-clojure -M:test:db/h2 --focus wagoe.tenant.*
+clojure -M:test --focus wagoe.tenant.*
 
 # Specific test suites
-clojure -M:test:db/h2 --focus wagoe.tenant.core.tenant-test         # Unit tests
-clojure -M:test:db/h2 --focus wagoe.tenant.shell.service-test       # Service tests
-clojure -M:test:db/h2 --focus wagoe.tenant.shell.provisioning-test  # Provisioning tests
+clojure -M:test --focus wagoe.tenant.core.tenant-test         # Unit tests
+clojure -M:test --focus wagoe.tenant.shell.service-test       # Service tests
+clojure -M:test --focus wagoe.tenant.shell.provisioning-test  # Provisioning tests
 ```
 
 ### Test Coverage

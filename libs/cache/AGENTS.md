@@ -147,7 +147,7 @@ rate-limiting and the user service session/user caches).
 ## Testing
 
 ```bash
-clojure -M:test:db/h2 :cache
+clojure -M:test :cache
 ```
 
 Redis adapter tests self-skip when no Redis is reachable; in-memory and

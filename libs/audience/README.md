@@ -158,8 +158,8 @@ CREATE TABLE audience_memberships (
 ## Tests
 
 ```bash
-clojure -M:test:db/h2 :audience
-clojure -M:test:db/h2 --focus-meta :unit :audience
+clojure -M:test :audience
+clojure -M:test --focus-meta :unit :audience
 ```
 
 See [AGENTS.md](AGENTS.md) for full developer guide, common pitfalls, and composition examples.

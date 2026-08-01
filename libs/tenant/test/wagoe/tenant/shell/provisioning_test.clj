@@ -597,16 +597,16 @@
   "Run tests:
    
    # Unit tests only (fast, no database)
-   clojure -M:test:db/h2 --focus-meta :unit --focus wagoe.tenant.shell.provisioning-test
+   clojure -M:test --focus-meta :unit --focus wagoe.tenant.shell.provisioning-test
    
    # Integration tests (H2 database)
-   clojure -M:test:db/h2 --focus-meta :integration --focus wagoe.tenant.shell.provisioning-test
+   clojure -M:test --focus-meta :integration --focus wagoe.tenant.shell.provisioning-test
    
    # Contract tests (requires PostgreSQL)
-   clojure -M:test:db/h2 --focus-meta :contract --focus wagoe.tenant.shell.provisioning-test
+   clojure -M:test --focus-meta :contract --focus wagoe.tenant.shell.provisioning-test
    
    # All tests
-   clojure -M:test:db/h2 --focus wagoe.tenant.shell.provisioning-test")
+   clojure -M:test --focus wagoe.tenant.shell.provisioning-test")
 
 ;; =============================================================================
 ;; tenant-scoped-tables membership (ZZP-86)

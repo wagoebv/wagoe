@@ -386,13 +386,13 @@ Always send the raw token to the user and discard it after.
 [source,bash]
 ----
 # Full tenant test suite
-clojure -M:test:db/h2 :tenant
+clojure -M:test :tenant
 
 # Focused suites
-clojure -M:test:db/h2 --focus wagoe.tenant.core.membership-test
-clojure -M:test:db/h2 --focus wagoe.tenant.shell.membership-service-test
-clojure -M:test:db/h2 --focus wagoe.tenant.shell.invite-service-test
-clojure -M:test:db/h2 --focus wagoe.tenant.integration-test
+clojure -M:test --focus wagoe.tenant.core.membership-test
+clojure -M:test --focus wagoe.tenant.shell.membership-service-test
+clojure -M:test --focus wagoe.tenant.shell.invite-service-test
+clojure -M:test --focus wagoe.tenant.integration-test
 ----
 
 See `libs/tenant/AGENTS.md` for the full library reference.

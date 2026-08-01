@@ -28,44 +28,44 @@ bb test:all                                              # main + tools + agents
 bb test:all --list                                       # show the surfaces, and what is deliberately excluded
 
 # Testing - main suite only (does NOT cover the standalone libs — see below)
-clojure -M:test:db/h2                                    # tests.edn suites (default test profile uses H2 in-memory)
-JWT_SECRET="dev-secret-at-least-32-characters-long" WAG_ENV=test clojure -M:test:db/h2  # With JWT secret
+clojure -M:test                                    # tests.edn suites (default test profile uses H2 in-memory)
+JWT_SECRET="dev-secret-at-least-32-characters-long" WAG_ENV=test clojure -M:test  # With JWT secret
 
 # Testing - Per-library test suites
-clojure -M:test:db/h2 :core                              # Core library tests
-clojure -M:test:db/h2 :observability                     # Observability library tests
-clojure -M:test:db/h2 :platform                          # Platform library tests
-clojure -M:test:db/h2 :user                              # User library tests
-clojure -M:test:db/h2 :admin                             # Admin library tests
-clojure -M:test:db/h2 :storage                           # Storage library tests
-clojure -M:test:db/h2 :scaffolder                        # Scaffolder library tests
-clojure -M:test:db/h2 :cache                             # Cache library tests
-clojure -M:test:db/h2 :jobs                              # Jobs library tests
-clojure -M:test:db/h2 :email                             # Email library tests
-clojure -M:test:db/h2 :tenant                            # Tenant library tests
-clojure -M:test:db/h2 :realtime                          # Realtime library tests
-clojure -M:test:db/h2 :workflow                          # Workflow library tests
-clojure -M:test:db/h2 :search                            # Search library tests
-clojure -M:test:db/h2 :external                          # External adapters tests
-clojure -M:test:db/h2 :payments                          # Payments library tests
-clojure -M:test:db/h2 :reports                           # Reports library tests
-clojure -M:test:db/h2 :calendar                          # Calendar library tests
-clojure -M:test:db/h2 :geo                               # Geo library tests
-clojure -M:test:db/h2 :ai                                # AI library tests
-clojure -M:test:db/h2 :ui-style                          # UI style library tests
-clojure -M:test:db/h2 :i18n                              # i18n library tests
+clojure -M:test :core                              # Core library tests
+clojure -M:test :observability                     # Observability library tests
+clojure -M:test :platform                          # Platform library tests
+clojure -M:test :user                              # User library tests
+clojure -M:test :admin                             # Admin library tests
+clojure -M:test :storage                           # Storage library tests
+clojure -M:test :scaffolder                        # Scaffolder library tests
+clojure -M:test :cache                             # Cache library tests
+clojure -M:test :jobs                              # Jobs library tests
+clojure -M:test :email                             # Email library tests
+clojure -M:test :tenant                            # Tenant library tests
+clojure -M:test :realtime                          # Realtime library tests
+clojure -M:test :workflow                          # Workflow library tests
+clojure -M:test :search                            # Search library tests
+clojure -M:test :external                          # External adapters tests
+clojure -M:test :payments                          # Payments library tests
+clojure -M:test :reports                           # Reports library tests
+clojure -M:test :calendar                          # Calendar library tests
+clojure -M:test :geo                               # Geo library tests
+clojure -M:test :ai                                # AI library tests
+clojure -M:test :ui-style                          # UI style library tests
+clojure -M:test :i18n                              # i18n library tests
 
 # Testing - By metadata category
-clojure -M:test:db/h2 --focus-meta :unit                 # Unit tests only
-clojure -M:test:db/h2 --focus-meta :integration          # Integration tests
-clojure -M:test:db/h2 --focus-meta :contract             # Database contract tests
+clojure -M:test --focus-meta :unit                 # Unit tests only
+clojure -M:test --focus-meta :integration          # Integration tests
+clojure -M:test --focus-meta :contract             # Database contract tests
 
 # Testing - Watch mode and specific namespaces
-clojure -M:test:db/h2 --watch :core                      # Watch core library tests
-clojure -M:test:db/h2 --focus validation-test            # Single namespace
+clojure -M:test --watch :core                      # Watch core library tests
+clojure -M:test --focus validation-test            # Single namespace
 
 # Update validation snapshots
-UPDATE_SNAPSHOTS=true clojure -M:test:db/h2 --focus user-validation-snapshot-test
+UPDATE_SNAPSHOTS=true clojure -M:test --focus user-validation-snapshot-test
 
 # Code Quality
 clojure -M:clj-kondo --lint src test libs/*/src libs/*/test  # Lint all code
@@ -121,7 +121,7 @@ bb check:placeholder-tests                         # Detect (is true) placeholde
 bb check:deps                                      # Verify library dependency direction + cycle detection
 bb check:ports                                     # Hexagonal: modules must define ports.clj; shell/web must not bypass protocols
 bb check:poms                                      # Published POMs must carry inter-Wagoe deps (build-shared rewrite + pom-basis)
-clojure -M:test:db/h2 --focus-meta :security             # Security-focused tests (error mapping, CSRF, XSS, SQL)
+clojure -M:test --focus-meta :security             # Security-focused tests (error mapping, CSRF, XSS, SQL)
 ```
 
 ### AI Assistant Helpers
@@ -258,7 +258,7 @@ bb scaffold integrate invoice
 ```bash
 bb check:fcis      # Verify FC/IS boundaries
 bb check:deps      # Check dependency direction
-clojure -M:test:db/h2 --watch :{module-name}  # Watch tests
+clojure -M:test --watch :{module-name}  # Watch tests
 ```
 
 ### When NOT to Manually Write Code
@@ -391,10 +391,10 @@ If you cannot use the scaffolder (rare edge cases), follow this checklist:
 
 ```bash
 # Watch mode while developing
-clojure -M:test:db/h2 --watch --focus-meta :unit
+clojure -M:test --watch --focus-meta :unit
 
 # Watch specific library
-clojure -M:test:db/h2 --watch :core
+clojure -M:test --watch :core
 
 # Full test suite before committing — every surface, not just tests.edn
 bb test:all
@@ -405,7 +405,7 @@ clojure -M:clj-kondo --lint src test libs/*/src libs/*/test
 
 ### Test surfaces — why `bb test:all` exists
 
-`clojure -M:test:db/h2` runs the kaocha suites declared in `tests.edn`, which
+`clojure -M:test` runs the kaocha suites declared in `tests.edn`, which
 cover the libraries on the app classpath. Three surfaces are **not** on that
 classpath and are invisible to it:
 
@@ -420,7 +420,7 @@ During the Wagoe rename this hid real failures three times — 8 in `wagoe-mcp`,
 1 in `wagoe-cli`, 5 in `tools` (including a silently-broken FC/IS gate) — each
 found only by remembering to run an extra command.
 
-**So a green `clojure -M:test:db/h2` does not mean the codebase is green.**
+**So a green `clojure -M:test` does not mean the codebase is green.**
 `bb test:all` runs all of them, prints a per-surface summary, and exits non-zero
 if any fails. `bb test:all --list` shows the set, including what is deliberately
 excluded (`e2e`, which needs a running server — use `bb e2e`).
@@ -452,7 +452,7 @@ To do a complete run against PostgreSQL:
 
 ```bash
 WAG_ENV=test JWT_SECRET="dev-secret-at-least-32-characters-long" clojure -M:migrate up
-WAG_ENV=test JWT_SECRET="dev-secret-at-least-32-characters-long" clojure -M:test:db/h2
+WAG_ENV=test JWT_SECRET="dev-secret-at-least-32-characters-long" clojure -M:test
 ```
 
 4. Revert `resources/conf/test/config.edn` afterwards so normal local and CI
@@ -877,7 +877,7 @@ Seven automated safeguards run in CI (and `check:fcis` + `check:ports` in pre-co
 | **Dependency direction** | `bb check:deps` | Core independence violations, circular deps between libraries | Yes (cycles/core); warn (undeclared) |
 | **Ports / hexagonal** | `bb check:ports` | Modules missing `ports.clj`; shell coupling to another module's `shell.persistence`/`shell.service`; web/HTTP requiring `shell.persistence` directly | Yes |
 | **POM dep completeness** | `bb check:poms` | Published POMs dropping inter-Wagoe deps: `build_shared` losing the `:local/root`→mvn rewrite, a publishable `build.clj` bypassing `pom-basis`, or a referenced wagoe dep that is not itself publishable | Yes |
-| **Security tests** | `clojure -M:test:db/h2 --focus-meta :security` | Error→HTTP mapping, CSRF routing, XSS escaping, SQL injection, sensitive field leaks | Yes (test failure) |
+| **Security tests** | `clojure -M:test --focus-meta :security` | Error→HTTP mapping, CSRF routing, XSS escaping, SQL injection, sensitive field leaks | Yes (test failure) |
 | **clj-kondo lint** | `clojure -M:clj-kondo --lint ...` | Static analysis (existing gate) | Yes |
 | **Config doctor** | `bb doctor --env dev --ci` | Configuration errors (existing gate) | Yes |
 
@@ -931,7 +931,7 @@ Seven automated safeguards run in CI (and `check:fcis` + `check:ports` in pre-co
 When a new library is added under `libs/`, update **`.github/workflows/ci.yml`** in three places:
 
 1. **Lint step** — add `libs/{name}/src` to the `clojure -M:clj-kondo --lint \` path list.
-2. **New test job** — copy an existing `test-*` job block; set `needs: lint` (or add a dependency if the lib depends on another wagoe lib); run `clojure -M:test:db/h2 :{name}`.
+2. **New test job** — copy an existing `test-*` job block; set `needs: lint` (or add a dependency if the lib depends on another wagoe lib); run `clojure -M:test :{name}`.
 3. **`test-summary` job** — add `test-{name}` to the `needs:` array and add an echo line.
 
 Also add the lib's `:id` test suite to `tests.edn` and its source/test paths to the root `deps.edn`.

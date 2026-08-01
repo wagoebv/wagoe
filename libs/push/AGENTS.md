@@ -295,8 +295,8 @@ Require `wagoe.push.shell.module-wiring` at system start to load the `defmethod`
 ## Testing
 
 ```bash
-clojure -M:test:db/h2 :push                              # All
-clojure -M:test:db/h2 :push --focus-meta :unit            # Unit
-clojure -M:test:db/h2 :push --focus-meta :contract        # Contract (H2)
-clojure -M:test:db/h2 :push --focus-meta :integration     # Integration
+clojure -M:test :push                              # All
+clojure -M:test :push --focus-meta :unit            # Unit
+clojure -M:test :push --focus-meta :contract        # Contract (H2)
+clojure -M:test :push --focus-meta :integration     # Integration
 ```

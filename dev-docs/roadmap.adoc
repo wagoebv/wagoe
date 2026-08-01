@@ -124,7 +124,7 @@ Wagoe is a module-centric Clojure framework implementing Functional Core / Imper
 
 === Test Health
 
-As of April 2026: **3044 tests, 15742 assertions, 0 failures** across all 22 libraries (`clojure -M:test:db/h2`). CI runs per-library jobs plus a whole-suite gate, lint, docs-lint, and AGENTS link checks on every push.
+As of April 2026: **3044 tests, 15742 assertions, 0 failures** across all 22 libraries (`clojure -M:test`). CI runs per-library jobs plus a whole-suite gate, lint, docs-lint, and AGENTS link checks on every push.
 
 == Strategic Notes
 

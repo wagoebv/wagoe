@@ -128,13 +128,13 @@ docker run -d -p 1025:1025 -p 8025:8025 mailhog/mailhog
 
 ```bash
 # All external tests
-clojure -M:test:db/h2 :external
+clojure -M:test :external
 
 # Unit tests only (pure functions, no I/O)
-clojure -M:test:db/h2 --focus-meta :unit
+clojure -M:test --focus-meta :unit
 
 # Integration tests (validates parsing; no real services needed)
-clojure -M:test:db/h2 --focus-meta :integration
+clojure -M:test --focus-meta :integration
 ```
 
 ## Links

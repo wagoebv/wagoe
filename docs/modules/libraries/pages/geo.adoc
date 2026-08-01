@@ -107,5 +107,5 @@ Migration file: `resources/wagoe/geo/migrations/001-geo-cache.sql`
 
 [source,bash]
 ----
-clojure -M:test:db/h2 :geo
+clojure -M:test :geo
 ----

@@ -15,7 +15,7 @@ brew install openjdk clojure/tools/clojure  # macOS
 # Clone and setup
 git clone <repo-url> wagoe
 cd wagoe
-clojure -M:test:db/h2                      # Verify setup (includes H2 database)
+clojure -M:test                      # Verify setup (includes H2 database)
 clojure -M:repl-clj                        # Start development REPL
 ```
 
@@ -81,7 +81,7 @@ When adding new functionality:
 - **Core Functions**: Pure unit tests, no mocks required
 - **Shell Services**: Integration tests with mock adapters
 - **Adapters**: Contract tests against actual external systems
-- All tests must pass: `clojure -M:test:db/h2`
+- All tests must pass: `clojure -M:test`
 
 ## Development Workflow
 
@@ -100,7 +100,7 @@ user=> (ig-repl/go)                          # Start system
 user=> (ig-repl/reset)                       # Reload and restart system
 
 # Run tests
-clojure -M:test:db/h2
+clojure -M:test
 
 # Lint code
 clojure -M:clj-kondo --lint src test libs/*/src libs/*/test
@@ -234,7 +234,7 @@ Reviewers will check for:
 **Build Problems**: 
 ```zsh
 rm -rf .cpcache target
-clojure -M:test:db/h2
+clojure -M:test
 ```
 
 **REPL Issues**:

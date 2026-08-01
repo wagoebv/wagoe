@@ -73,5 +73,5 @@ Use observability ports from services/adapters:
 
 [source,bash]
 ----
-clojure -M:test:db/h2 :observability
+clojure -M:test :observability
 ----

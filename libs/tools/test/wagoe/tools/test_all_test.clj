@@ -4,7 +4,7 @@
    `bb test:all` is only worth trusting if its list of surfaces keeps up with the
    repo. A standalone library added later, with its own deps.edn `:test` alias
    and no kaocha suite in tests.edn, would otherwise be invisible to both
-   `clojure -M:test:db/h2` AND `bb test:all` — the same silent gap the task was
+   `clojure -M:test` AND `bb test:all` — the same silent gap the task was
    created to close, one level up (BOU-246 / BOU-250)."
   (:require [clojure.test :refer [deftest is testing]]
             [clojure.java.io :as io]

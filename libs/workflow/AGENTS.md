@@ -242,7 +242,7 @@ CREATE TABLE workflow_audit (
 ## Testing
 
 ```bash
-clojure -M:test:db/h2 :workflow
+clojure -M:test :workflow
 ```
 
 Test fixture pattern:

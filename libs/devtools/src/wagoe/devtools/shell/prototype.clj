@@ -84,7 +84,7 @@
     (println (format "  1. Review schema:  libs/%s/src/wagoe/%s/schema.clj" module-name module-name))
     (println (format "  2. Wire module:    bb scaffold integrate %s" module-name))
     (println (format "  3. Add migration:  bb migrate create add-%s-table" module-name))
-    (println (format "  4. Run tests:      clojure -M:test:db/h2 :%s" module-name))
+    (println (format "  4. Run tests:      clojure -M:test :%s" module-name))
     files))
 
 (defn prototype!

@@ -84,5 +84,5 @@ wagoe-email (application layer)  →  wagoe-external (transport layer)
 
 [source,bash]
 ----
-clojure -M:test:db/h2 :email
+clojure -M:test :email
 ----

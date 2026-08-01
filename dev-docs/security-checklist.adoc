@@ -227,7 +227,7 @@ Run these before every production deployment:
 bb doctor --env prod --ci
 
 # 2. Full test suite
-JWT_SECRET="your-secret" clojure -M:test:db/h2
+JWT_SECRET="your-secret" clojure -M:test
 
 # 3. Linting
 clojure -M:clj-kondo --lint src test libs/*/src libs/*/test

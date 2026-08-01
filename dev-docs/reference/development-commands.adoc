@@ -51,14 +51,14 @@ Wagoe uses https://github.com/lambdaisland/kaocha[Kaocha] for testing with H2 in
 
 [source,bash]
 ----
-clojure -M:test:db/h2
+clojure -M:test
 ----
 
 With JWT secret (required for auth tests):
 
 [source,bash]
 ----
-JWT_SECRET="dev-secret-at-least-32-characters-long" clojure -M:test:db/h2
+JWT_SECRET="dev-secret-at-least-32-characters-long" clojure -M:test
 ----
 
 [[test-library]]
@@ -66,26 +66,26 @@ JWT_SECRET="dev-secret-at-least-32-characters-long" clojure -M:test:db/h2
 
 [source,bash]
 ----
-clojure -M:test:db/h2 :core           # Core library tests
-clojure -M:test:db/h2 :observability  # Observability library tests
-clojure -M:test:db/h2 :platform       # Platform library tests
-clojure -M:test:db/h2 :user           # User library tests
-clojure -M:test:db/h2 :admin          # Admin library tests
-clojure -M:test:db/h2 :storage        # Storage library tests
-clojure -M:test:db/h2 :scaffolder     # Scaffolder library tests
-clojure -M:test:db/h2 :cache          # Cache library tests
-clojure -M:test:db/h2 :jobs           # Jobs library tests
-clojure -M:test:db/h2 :email          # Email library tests
-clojure -M:test:db/h2 :realtime       # Realtime library tests
-clojure -M:test:db/h2 :tenant         # Tenant library tests
-clojure -M:test:db/h2 :external       # External adapters tests
-clojure -M:test:db/h2 :payments       # Payments library tests
-clojure -M:test:db/h2 :workflow       # Workflow library tests
-clojure -M:test:db/h2 :search         # Search library tests
-clojure -M:test:db/h2 :reports        # Reports library tests
-clojure -M:test:db/h2 :calendar       # Calendar library tests
-clojure -M:test:db/h2 :geo            # Geo library tests
-clojure -M:test:db/h2 :ai             # AI library tests
+clojure -M:test :core           # Core library tests
+clojure -M:test :observability  # Observability library tests
+clojure -M:test :platform       # Platform library tests
+clojure -M:test :user           # User library tests
+clojure -M:test :admin          # Admin library tests
+clojure -M:test :storage        # Storage library tests
+clojure -M:test :scaffolder     # Scaffolder library tests
+clojure -M:test :cache          # Cache library tests
+clojure -M:test :jobs           # Jobs library tests
+clojure -M:test :email          # Email library tests
+clojure -M:test :realtime       # Realtime library tests
+clojure -M:test :tenant         # Tenant library tests
+clojure -M:test :external       # External adapters tests
+clojure -M:test :payments       # Payments library tests
+clojure -M:test :workflow       # Workflow library tests
+clojure -M:test :search         # Search library tests
+clojure -M:test :reports        # Reports library tests
+clojure -M:test :calendar       # Calendar library tests
+clojure -M:test :geo            # Geo library tests
+clojure -M:test :ai             # AI library tests
 ----
 
 [[test-metadata]]
@@ -93,9 +93,9 @@ clojure -M:test:db/h2 :ai             # AI library tests
 
 [source,bash]
 ----
-clojure -M:test:db/h2 --focus-meta :unit         # Unit tests only
-clojure -M:test:db/h2 --focus-meta :integration  # Integration tests
-clojure -M:test:db/h2 --focus-meta :contract     # Database contract tests
+clojure -M:test --focus-meta :unit         # Unit tests only
+clojure -M:test --focus-meta :integration  # Integration tests
+clojure -M:test --focus-meta :contract     # Database contract tests
 ----
 
 [[test-namespace]]
@@ -103,8 +103,8 @@ clojure -M:test:db/h2 --focus-meta :contract     # Database contract tests
 
 [source,bash]
 ----
-clojure -M:test:db/h2 --focus wagoe.user.core.user-test
-clojure -M:test:db/h2 --focus wagoe.admin.core.entity-test
+clojure -M:test --focus wagoe.user.core.user-test
+clojure -M:test --focus wagoe.admin.core.entity-test
 ----
 
 [[test-watch]]
@@ -112,10 +112,10 @@ clojure -M:test:db/h2 --focus wagoe.admin.core.entity-test
 
 [source,bash]
 ----
-clojure -M:test:db/h2 --watch                           # Watch all tests
-clojure -M:test:db/h2 --watch :core                     # Watch core library
-clojure -M:test:db/h2 --watch --focus-meta :unit        # Watch unit tests
-clojure -M:test:db/h2 --watch --focus wagoe.user.core.user-test  # Watch specific namespace
+clojure -M:test --watch                           # Watch all tests
+clojure -M:test --watch :core                     # Watch core library
+clojure -M:test --watch --focus-meta :unit        # Watch unit tests
+clojure -M:test --watch --focus wagoe.user.core.user-test  # Watch specific namespace
 ----
 
 [[test-snapshots]]
@@ -123,7 +123,7 @@ clojure -M:test:db/h2 --watch --focus wagoe.user.core.user-test  # Watch specifi
 
 [source,bash]
 ----
-UPDATE_SNAPSHOTS=true clojure -M:test:db/h2 \
+UPDATE_SNAPSHOTS=true clojure -M:test \
   --focus wagoe.user.core.user-validation-snapshot-test
 ----
 
@@ -437,7 +437,7 @@ Always use `clj-paren-repair` to fix parenthesis issues. Never manually repair -
 [source,bash]
 ----
 # Start watch mode for your focus area
-clojure -M:test:db/h2 --watch --focus wagoe.user.core.user-test
+clojure -M:test --watch --focus wagoe.user.core.user-test
 
 # Edit code, save, tests run automatically
 # Ctrl+C to exit
@@ -449,7 +449,7 @@ clojure -M:test:db/h2 --watch --focus wagoe.user.core.user-test
 [source,bash]
 ----
 # Run all tests
-clojure -M:test:db/h2
+clojure -M:test
 
 # Lint all code
 clojure -M:clj-kondo --lint src test libs/*/src libs/*/test

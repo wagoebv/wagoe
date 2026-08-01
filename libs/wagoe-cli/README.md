@@ -39,7 +39,7 @@ wagoe add tenant
 
 # Boot it (JWT_SECRET is generated into .env by `wagoe new`)
 source .env
-clojure -M:repl
+clojure -M:repl-clj
 ```
 
 Projects created with `wagoe new` are agent-ready out of the box: they ship a

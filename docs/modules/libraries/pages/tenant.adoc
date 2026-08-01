@@ -95,5 +95,5 @@ DELETE /api/tenants/:slug            # Soft delete
 
 [source,bash]
 ----
-clojure -M:test:db/h2 :tenant
+clojure -M:test :tenant
 ----

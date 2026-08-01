@@ -9,26 +9,26 @@ This guide covers the day-to-day commands and patterns.
 [source,bash]
 ----
 # All tests
-clojure -M:test:db/h2
+clojure -M:test
 
 # Single library
-clojure -M:test:db/h2 :core
-clojure -M:test:db/h2 :user
+clojure -M:test :core
+clojure -M:test :user
 
 # By tag
-clojure -M:test:db/h2 --focus-meta :unit
-clojure -M:test:db/h2 --focus-meta :integration
-clojure -M:test:db/h2 --focus-meta :contract
+clojure -M:test --focus-meta :unit
+clojure -M:test --focus-meta :integration
+clojure -M:test --focus-meta :contract
 
 # Single namespace
-clojure -M:test:db/h2 --focus user-property-test
+clojure -M:test --focus user-property-test
 
 # Watch mode
-clojure -M:test:db/h2 --watch :core
-clojure -M:test:db/h2 --watch --focus-meta :unit
+clojure -M:test --watch :core
+clojure -M:test --watch --focus-meta :unit
 
 # Auth tests (JWT secret required)
-JWT_SECRET="dev-secret-at-least-32-characters-long" clojure -M:test:db/h2 :user
+JWT_SECRET="dev-secret-at-least-32-characters-long" clojure -M:test :user
 ----
 
 == Writing unit tests

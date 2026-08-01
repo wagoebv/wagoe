@@ -193,7 +193,7 @@ Jobs dequeued by priority: critical > high > normal > low.
 ## Testing
 
 ```bash
-clojure -M:test:db/h2 :jobs
+clojure -M:test :jobs
 ```
 
 Test fixture pattern:

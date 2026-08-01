@@ -136,5 +136,5 @@ and the unauthenticated (login) pre-session token.
 
 [source,bash]
 ----
-clojure -M:test:db/h2 :platform
+clojure -M:test :platform
 ----

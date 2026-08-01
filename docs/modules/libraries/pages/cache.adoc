@@ -79,5 +79,5 @@ Provides in-memory (development/tests) and Redis (production) backends.
 
 [source,bash]
 ----
-clojure -M:test:db/h2 :cache
+clojure -M:test :cache
 ----

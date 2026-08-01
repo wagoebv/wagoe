@@ -32,7 +32,7 @@ jobs:
       - name: Setup Clojure + warm deps
         uses: ./.github/actions/clojure-deps
         with:
-          aliases: -M:clj-kondo -M:docs-lint -M:migrate -M:test -M:test:db/h2
+          aliases: -M:clj-kondo -M:docs-lint -M:migrate -M:test
 
   lint:
     name: Lint
@@ -843,12 +843,12 @@ jobs:
       - name: Setup Clojure + warm deps
         uses: ./.github/actions/clojure-deps
         with:
-          aliases: -M:test:db/h2
+          aliases: -M:test
 
       - name: Run tests
         env:
           JWT_SECRET: "ci-test-secret-minimum-32-characters"
-        run: clojure -M:test:db/h2 :push
+        run: clojure -M:test :push
 
   # =============================================================================
   # i18n scan gate — fails if any UI file still has unexternalised string literals

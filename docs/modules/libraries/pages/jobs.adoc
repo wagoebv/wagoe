@@ -96,5 +96,5 @@ Stats are stored as Redis keys: `stats:global:*` and `+stats:queue:{name}:*+`.
 
 [source,bash]
 ----
-clojure -M:test:db/h2 :jobs
+clojure -M:test :jobs
 ----

@@ -271,16 +271,16 @@ Works with existing database infrastructure:
 
 ```bash
 # Unit tests (pure functions)
-clojure -M:test:db/h2 --focus-meta :unit --focus-meta :admin
+clojure -M:test --focus-meta :unit --focus-meta :admin
 
 # Integration tests (with H2 database)
-clojure -M:test:db/h2 --focus-meta :integration --focus-meta :admin
+clojure -M:test --focus-meta :integration --focus-meta :admin
 
 # Contract tests (HTTP endpoints)
-clojure -M:test:db/h2 --focus-meta :contract --focus-meta :admin
+clojure -M:test --focus-meta :contract --focus-meta :admin
 
 # All admin tests
-clojure -M:test:db/h2 --focus wagoe.admin
+clojure -M:test --focus wagoe.admin
 ```
 
 ### Test Coverage

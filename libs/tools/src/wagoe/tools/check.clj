@@ -76,6 +76,13 @@
    {:id    :no-boundary
     :label "Rename gate (no residual boundary tokens)"
     :cmd   ["bb" "check:no-boundary"]}
+   ;; Fails only on a documented command naming a deps.edn alias that does not
+   ;; exist; broken links and unknown namespaces are reported but do not fail.
+   ;; Added because CI was the only place this ran, so a dead alias survived
+   ;; every local `bb check` (BOU-257).
+   {:id    :docs-lint
+    :label "Docs drift (commands name real aliases)"
+    :cmd   ["bb" "docs:lint"]}
    {:id    :linting
     :label "Linting"
     :cmd   (linting-cmd)}

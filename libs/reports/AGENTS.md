@@ -230,13 +230,13 @@ Set the matching CSS `@page { size: A4 landscape; }` in your custom CSS string.
 
 ```bash
 # All reports tests
-clojure -M:test:db/h2 :reports
+clojure -M:test :reports
 
 # Unit tests only (no backend required)
-clojure -M:test:db/h2 --focus-meta :unit
+clojure -M:test --focus-meta :unit
 
 # Integration tests (real PDF/Excel generation)
-clojure -M:test:db/h2 --focus-meta :integration
+clojure -M:test --focus-meta :integration
 
 # Lint
 clojure -M:clj-kondo --lint libs/reports/src libs/reports/test

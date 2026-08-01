@@ -542,7 +542,7 @@ Comprehensive tests verify tenant isolation:
 
 ```bash
 # Run tenant-cache integration tests
-clojure -M:test:db/h2 --focus wagoe.cache.shell.tenant-cache-test
+clojure -M:test --focus wagoe.cache.shell.tenant-cache-test
 
 # Results: 20 tests, 182 assertions, 0 failures
 ```

@@ -79,7 +79,7 @@
        "1. Review schema:  libs/" module-name "/src/wagoe/" module-name "/schema.clj\n"
        "2. Wire module:    bb scaffold integrate " module-name "\n"
        "3. Add migration:  bb migrate create add-" module-name "-table\n"
-       "4. Run tests:      clojure -M:test:db/h2 :" module-name))
+       "4. Run tests:      clojure -M:test :" module-name))
 
 ;; =============================================================================
 ;; Contextual tips

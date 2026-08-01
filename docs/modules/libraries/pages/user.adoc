@@ -83,9 +83,9 @@ curl -X DELETE http://localhost:3000/api/auth/sessions/{session-id} \
 
 [source,bash]
 ----
-JWT_SECRET="dev-secret-at-least-32-characters-long" clojure -M:test:db/h2 :user
+JWT_SECRET="dev-secret-at-least-32-characters-long" clojure -M:test :user
 
 # Update validation snapshots
-UPDATE_SNAPSHOTS=true clojure -M:test:db/h2 \
+UPDATE_SNAPSHOTS=true clojure -M:test \
   --focus user-validation-snapshot-test
 ----

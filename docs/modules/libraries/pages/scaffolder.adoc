@@ -88,5 +88,5 @@ For a module with three fields:
 
 [source,bash]
 ----
-clojure -M:test:db/h2 :scaffolder
+clojure -M:test :scaffolder
 ----

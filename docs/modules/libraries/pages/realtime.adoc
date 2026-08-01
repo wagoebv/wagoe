@@ -93,5 +93,5 @@ message routing, and topic-based pub/sub.
 
 [source,bash]
 ----
-clojure -M:test:db/h2 :realtime
+clojure -M:test :realtime
 ----
