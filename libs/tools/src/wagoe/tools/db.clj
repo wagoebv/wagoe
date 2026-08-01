@@ -183,14 +183,13 @@
         (println (dim "  Example content:"))
         (println (dim "    {:users [{:email \"admin@example.com\" :name \"Admin\"}]}"))
         (println))
-      (do
-        (println (yellow "  Seed file found but seeding is not yet implemented."))
-        (println (dim (str "  File: " (seed-path))))
-        (println)
-        (println (dim "  This feature will be added in a future release."))
-        (println (dim "  For now, load seed data manually via the REPL."))
-        (println)
-        (System/exit 1)))))
+      ;; Pass through to the JVM side. libs/tools is pure Babashka with no
+      ;; Maven deps at runtime, so it cannot open a JDBC connection itself —
+      ;; the same reason `bb migrate` shells out to `clojure -M:migrate`.
+      (let [{:keys [exit]} (process/shell {:out :inherit :err :inherit :continue true}
+                                          "clojure" "-M:seed" (seed-path))]
+        (when-not (zero? exit)
+          (System/exit exit))))))
 
 ;; =============================================================================
 ;; Help
