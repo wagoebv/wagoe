@@ -23,8 +23,14 @@ elif [[ -f /etc/debian_version ]]; then
   OS="debian"
 elif [[ -f /etc/arch-release ]]; then
   OS="arch"
+# Fedora and the RHEL family (RHEL, Rocky, Alma, CentOS Stream) all ship
+# /etc/redhat-release and dnf. Nothing below is genuinely Debian-specific — the
+# JVM comes from sdkman and the Clojure CLI, bb and bbin all use their own
+# generic installers — so supporting these costs a detection branch and a hint.
+elif [[ -f /etc/fedora-release || -f /etc/redhat-release ]]; then
+  OS="fedora"
 else
-  fail "Unsupported OS. Wagoe supports macOS, Debian/Ubuntu, Arch, and WSL2.
+  fail "Unsupported OS. Wagoe supports macOS, Debian/Ubuntu, Fedora/RHEL, Arch, and WSL2.
   Windows users: install WSL2 first — https://learn.microsoft.com/en-us/windows/wsl/install"
 fi
 ok "Detected OS: $OS"
@@ -48,7 +54,12 @@ fi
 # sdkman's own "Please install unzip" — printed under a screenful of sdkman
 # ASCII art, naming a tool the user never asked for and never naming Wagoe.
 missing=()
-for tool in curl git unzip zip; do
+# `which` is here because babashka's own installer calls it. Minimal Fedora and
+# RHEL images do not ship it, and without this the run dies as
+# "./install: line 155: which: command not found" — a third-party script's
+# error about a tool the user never chose, which is the failure mode this whole
+# check exists to prevent.
+for tool in curl git unzip zip which; do
   command -v "$tool" &>/dev/null || missing+=("$tool")
 done
 if (( ${#missing[@]} > 0 )); then
@@ -56,6 +67,7 @@ if (( ${#missing[@]} > 0 )); then
     macos)      hint="brew install ${missing[*]}" ;;
     debian|wsl) hint="sudo apt-get update && sudo apt-get install -y ${missing[*]}" ;;
     arch)       hint="sudo pacman -S --noconfirm ${missing[*]}" ;;
+    fedora)     hint="sudo dnf install -y ${missing[*]}" ;;
     *)          hint="install them with your package manager" ;;
   esac
   fail "Missing required tool(s): ${missing[*]}
@@ -89,7 +101,7 @@ else
   info "Installing JVM..."
   if [[ "$OS" == "macos" ]]; then
     brew install --cask temurin 2>/dev/null || fail "Failed to install JVM via brew"
-  elif [[ "$OS" == "debian" || "$OS" == "wsl" ]]; then
+  elif [[ "$OS" == "debian" || "$OS" == "wsl" || "$OS" == "fedora" ]]; then
     if ! command -v sdk &>/dev/null; then
       info "Installing sdkman..."
       curl -s "https://get.sdkman.io" | bash

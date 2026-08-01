@@ -17,7 +17,7 @@ Fallback if `get.wagoe.org` is unavailable:
 curl -fsSL https://raw.githubusercontent.com/wagoebv/wagoe/main/scripts/install.sh | bash
 ----
 
-Supports macOS, Debian/Ubuntu, Arch Linux, and WSL2.
+Supports macOS, Debian/Ubuntu, Fedora/RHEL, Arch Linux, and WSL2.
 
 After installation, proceed to xref:getting-started:quickstart.adoc[Quickstart].
 
