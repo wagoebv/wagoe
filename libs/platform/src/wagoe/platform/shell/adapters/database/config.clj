@@ -84,6 +84,28 @@
       (getenv "ENVIRONMENT")
       *default-environment*))
 
+(def disposable-envs
+  "Environments whose database may be destroyed or filled with demo data.
+
+   An allowlist, deliberately. A denylist naming prod/acc/production lets an
+   unrecognised name — staging, uat, qa, preprod, a typo'd prd — through to a
+   drop or an insert. Anything not known to be disposable is refused.
+
+   Single definition on purpose: `bb db:seed` and `bb db:reset` both gate on
+   this, and two copies of a destructive-operation allowlist is exactly the
+   drift this codebase keeps paying for."
+  #{"dev" "development" "test" "local"})
+
+(defn disposable-environment?
+  "True when `env` names a database that is safe to destroy or seed.
+
+   Callers must pass the environment resolved by `detect-environment`, not a
+   direct read of WAG_ENV — the connection uses the full precedence chain
+   (-Denv > WAG_ENV > ENV > ENVIRONMENT), and a guard that asks a narrower
+   question than the connection is not a guard."
+  [env]
+  (contains? disposable-envs env))
+
 (defn with-environment
   "Execute function with specific environment context"
   [env f]

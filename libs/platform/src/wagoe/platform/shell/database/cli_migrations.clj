@@ -12,6 +12,7 @@
      reset           - Reset database (rollback all and reapply)
      init            - Initialize migration system"
   (:require [wagoe.platform.shell.database.migrations :as migrations]
+            [wagoe.platform.shell.adapters.database.config :as db-config]
             [clojure.tools.cli :as cli]
             [clojure.string :as str])
   (:gen-class))
@@ -96,14 +97,35 @@
         1))))
 
 (defn cmd-reset
-  "Resets the database (WARNING: destructive operation)."
+  "Resets the database (WARNING: destructive operation).
+
+   Refuses outside a disposable environment. This is the authoritative guard:
+   it runs in the same JVM as the connection and resolves the environment with
+   `detect-environment`, the same function the connection uses. `bb db:reset`
+   shells out to here, so a check only in libs/tools could be bypassed by
+   calling `clojure -M:migrate reset` directly — which previously had no
+   environment check of any kind (BOU-258)."
   [opts]
-  (println "\n⚠️  WARNING: This will rollback ALL migrations and reapply them!")
-  (println "This is a DESTRUCTIVE operation and will delete all data.")
-  (print "\nAre you sure? Type 'yes' to continue: ")
-  (flush)
-  (let [confirmation (read-line)]
-    (if (= "yes" confirmation)
+  (let [env (db-config/detect-environment)]
+    (when-not (db-config/disposable-environment? env)
+      (println (str "\n❌ Refusing to reset the " env " environment"))
+      (println "\n   This drops every table and reapplies migrations. In"
+               env "that is")
+      (println "   not a disposable database.")
+      (println "\n   Disposable environments:"
+               (str/join ", " (sort db-config/disposable-envs)))
+      (println)
+      (System/exit 1))
+    (println "\n⚠️  WARNING: This will rollback ALL migrations and reapply them!")
+    (println (str "Environment: " env "   (resolved from -Denv / WAG_ENV / ENV / ENVIRONMENT)"))
+    (println "This is a DESTRUCTIVE operation and will delete all data.")
+    ;; Type the environment name, not "yes". The operator has to have read the
+    ;; line above — the previous prompt hardcoded "dev" in its wording while
+    ;; potentially pointing at another database.
+    (print (str "\nType '" env "' to continue: "))
+    (flush)
+    (let [confirmation (read-line)]
+      (if (= env confirmation)
       (try
         (println "\n🔄 Resetting database...")
         (migrations/reset)
@@ -115,9 +137,9 @@
           (when (:verbose opts)
             (.printStackTrace e))
           1))
-      (do
-        (println "\n❌ Reset cancelled")
-        0))))
+        (do
+          (println "\n❌ Reset cancelled")
+          0)))))
 
 (defn cmd-init
   "Initializes the migration system."

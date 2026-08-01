@@ -1,6 +1,7 @@
 (ns wagoe.platform.shell.database.cli-migrations-test
   (:require [wagoe.platform.shell.database.cli-migrations :as sut]
             [wagoe.platform.shell.database.migrations :as migrations]
+            [wagoe.platform.shell.adapters.database.config :as db-config]
             [clojure.test :refer [deftest is testing]]
             [clojure.tools.cli :as cli]))
 
@@ -16,7 +17,7 @@
                                                     :directory "migrations/"})
                     migrations/reset (fn [] (swap! calls conj :reset))
                     migrations/init (fn [] (swap! calls conj :init))
-                    read-line (fn [] "yes")]
+                    read-line (fn [] (db-config/detect-environment))]
         (is (= 0 (sut/cmd-migrate {})))
         (is (= 0 (sut/cmd-rollback {})))
         (is (= 0 (sut/cmd-status {})))
@@ -45,7 +46,7 @@
                   wagoe.platform.shell.database.migrations/create-migration (fn [_] (throw (ex-info "create boom" {})))
                   wagoe.platform.shell.database.migrations/reset (fn [] (throw (ex-info "reset boom" {})))
                   wagoe.platform.shell.database.migrations/init (fn [] (throw (ex-info "init boom" {})))
-                  read-line (fn [] "yes")]
+                  read-line (fn [] (db-config/detect-environment))]
       (is (= 1 (sut/cmd-migrate {})))
       (is (= 1 (sut/cmd-rollback {})))
       (is (= 1 (sut/cmd-status {})))
