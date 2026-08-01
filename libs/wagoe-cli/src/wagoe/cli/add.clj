@@ -137,4 +137,9 @@
               (patch-config! dir "resources/conf/test/config.edn" (:test-config-snippet module))
               (patch-agents-md! dir module)
               (println (str "\n" module-name " added"))
+              ;; Module-specific next steps, from the catalogue rather than
+              ;; special-cased here, so any module can carry them.
+              (when-let [lines (seq (:post-install module))]
+                (println)
+                (doseq [line lines] (println (str "  " line))))
               (println (str "\nDocs: " (:docs-url module))))))))))

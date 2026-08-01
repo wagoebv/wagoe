@@ -221,6 +221,15 @@
    :config-snippet      "  :wagoe/admin\n  {:enabled? true :base-path \"/web/admin\" :require-role :admin}\n"
    :test-config-snippet "  :wagoe/admin\n  {:enabled? true :base-path \"/web/admin\" :require-role :admin}\n"
    :add-command         "wagoe add admin"
+   ;; Admin mounts behind :require-role :admin, so a fresh install lands on a
+   ;; login form with no account to use it. Say so at the moment it matters —
+   ;; `bb create-admin` already exists but was documented nowhere (BOU-229).
+   :post-install        ["Admin is mounted at /web/admin/ (note the trailing slash)."
+                         ""
+                         "It requires a signed-in admin, and a new project has no users yet:"
+                         "  bb create-admin      # create your first admin account"
+                         ""
+                         "Then restart the system and open http://localhost:3000/web/admin/"]
    :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/admin/AGENTS.md"}
 
   {:name                "ui-style"
