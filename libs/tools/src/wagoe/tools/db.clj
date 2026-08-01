@@ -127,22 +127,50 @@
 
         (println)))))
 
+(def ^:private disposable-envs
+  "Environments whose database may be destroyed or seeded. Allowlist, not denylist:
+   db-reset names prod/acc/production explicitly, which lets an unrecognised
+   environment such as \"staging\" through. Seeding writes rows into whatever
+   database the active config resolves to, and db:reset drops every table, so
+   refuse anything not known to be disposable.
+
+   Mirrors wagoe.platform.shell.adapters.database.config/disposable-envs — that
+   one is authoritative; this copy exists because Babashka cannot load it."
+  #{"dev" "development" "test" "local"})
+
 (defn db-reset
   "Drop and recreate the database after confirmation.
-   Only operates on the dev environment."
+
+   Refuses outside a disposable environment (dev/development/test/local).
+
+   Advisory only, like the db:seed check: Babashka runs in its own process and
+   cannot see the -Denv JVM property, so it cannot reproduce the platform's
+   detect-environment. The authoritative guard is in
+   wagoe.platform.shell.database.cli-migrations/cmd-reset, which runs in the
+   same JVM as the connection. This exists to fail fast with a friendly
+   message in the common case."
   []
-  (let [env (or (System/getenv "WAG_ENV") "dev")]
-    (when (contains? #{"prod" "acc" "production"} env)
-      (println (red (str "  REFUSED: bb db:reset cannot run in " env " environment.")))
-      (println (dim "  This command is only for development use."))
-      (System/exit 1)))
-  (println)
-  (println (bold "Wagoe Database Reset"))
-  (println (dim "  Environment: dev"))
-  (println)
-  (println (yellow "  WARNING: This will DROP and recreate the dev database."))
-  (println (yellow "  All data will be lost."))
-  (println)
+  (let [env (or (System/getenv "WAG_ENV")
+                (System/getenv "ENV")
+                (System/getenv "ENVIRONMENT")
+                "dev")]
+    ;; Allowlist, not a denylist. The previous check named prod/acc/production
+    ;; explicitly, which let staging, uat, qa and a typo'd prd straight through
+    ;; to a drop (BOU-258).
+    (when-not (contains? disposable-envs env)
+      (println (red (str "  REFUSED: bb db:reset cannot run in the " env " environment.")))
+      (println (dim "  This drops every table. Disposable environments: dev, development, test, local."))
+      (System/exit 1))
+    (println)
+    (println (bold "Wagoe Database Reset"))
+    ;; The DETECTED environment. This line used to be the literal string "dev",
+    ;; so a run against another database told the operator it was dev — the one
+    ;; screen whose job is to make them stop and check.
+    (println (dim (str "  Environment: " env)))
+    (println)
+    (println (yellow (str "  WARNING: This will DROP and recreate the " env " database.")))
+    (println (yellow "  All data will be lost."))
+    (println))
   (print "  Continue? [y/N] ")
   (flush)
   (let [answer (str/trim (or (read-line) ""))]
@@ -166,14 +194,6 @@
         (println (dim "  Aborted."))
         (println)))))
 
-(def ^:private seedable-envs
-  "Environments where seeding is safe by default. Allowlist, not denylist:
-   db-reset names prod/acc/production explicitly, which lets an unrecognised
-   environment such as \"staging\" through. Seeding writes rows into whatever
-   database the active config resolves to, so refuse anything not known to be
-   disposable."
-  #{"dev" "development" "test" "local"})
-
 (defn db-seed
   "Seed the database from the dev seed file.
 
@@ -196,7 +216,7 @@
                    (System/getenv "ENV")
                    (System/getenv "ENVIRONMENT")
                    "dev")]
-    (when-not (or force? (contains? seedable-envs env))
+    (when-not (or force? (contains? disposable-envs env))
       (println (red (str "  REFUSED: bb db:seed cannot run in the " env " environment.")))
       (println (dim "  Seeding inserts rows into the database the active config resolves to."))
       (println)

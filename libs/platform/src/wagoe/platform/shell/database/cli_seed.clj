@@ -38,11 +38,11 @@
 (def ^:private seedable-envs
   "Environments where inserting seed data is safe by default.
 
-   An allowlist, not a denylist. `bb db:reset` refuses a fixed set of names
-   (prod/acc/production), which lets an unrecognised environment like
-   \"staging\" through. Seeding writes rows into whatever database the active
-   config resolves to, so anything not known to be disposable is refused."
-  #{"dev" "development" "test" "local"})
+   Delegates to the shared allowlist beside `detect-environment`, so seeding
+   and `bb db:reset` cannot drift apart on which environments are disposable
+   (BOU-258 — reset used a denylist that let \"staging\" through while seeding
+   used an allowlist)."
+  db-config/disposable-envs)
 
 (defn seedable?
   "True when seeding may proceed in `env`.
