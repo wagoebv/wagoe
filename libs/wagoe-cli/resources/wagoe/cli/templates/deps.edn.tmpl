@@ -28,6 +28,10 @@
              :extra-deps  {lambdaisland/kaocha {:mvn/version "1.91.1392"}}
              :main-opts   ["-m" "kaocha.runner"]}
   :migrate  {:main-opts ["-m" "wagoe.platform.shell.database.cli-migrations"]}
+  ;; Backs `bb db:seed`. Separate alias rather than a flag on :migrate — seeding
+  ;; is data, migrations are schema, and conflating them makes it too easy to
+  ;; ship demo rows to production.
+  :seed     {:main-opts ["-m" "wagoe.platform.shell.database.cli-seed"]}
   ;; clj-kondo static analysis. Isolated via :replace-deps so it pulls only the
   ;; linter, not the project's deps. Used by the .githooks/pre-commit gate.
   :clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2026.04.15"}}
