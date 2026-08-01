@@ -19,6 +19,7 @@
    gate needs a seam that returns a verdict — adding one is part of bringing a
    gate under this test."
   (:require [clojure.test :refer [deftest is testing]]
+            [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.string :as str]
             [wagoe.tools.check :as check]
@@ -388,6 +389,57 @@
       ;; reads as a gate failure for the wrong reason.
       (doseq [p (filter #(str/starts-with? % "libs/") cmd)]
         (is (.exists (io/file p)) (str p " does not exist"))))))
+
+;; =============================================================================
+;; Allowlists — every exemption must still be load-bearing
+;; =============================================================================
+;;
+;; The rename gate's path allowlist audits itself on every run. The two
+;; hardcoded singletons cannot: they live in source, so a stale one would just
+;; sit there exempting nothing. These tests are their audit.
+;;
+;; The other three allowlists are empty by design and stay that way under the
+;; check below, so emptiness cannot rot into "someone added an entry and moved
+;; on": the fcis config (:allow-throw, :allow-mutable-state — real exceptions
+;; live inline as ns metadata), the test-tags config (:allow-untagged, BOU-166
+;; complete), and check-fcis's allowed-fq-violations.
+;;
+;; Those configs are named by path in the test bodies rather than spelled out
+;; here, because the rename gate's namespace pattern — the old brand followed
+;; by a dot and a letter — matches its own config FILENAME, which ends in
+;; "-<brand>.edn" and so reads as a namespace reference. A limitation of
+;; matching brand tokens by regex. Not worth an exemption: allowlisting this
+;; file would switch the gate off for the whole test namespace.
+
+(deftest ^:unit ports-allowlist-is-load-bearing-test
+  (testing "wagoe.platform genuinely still has no ports.clj"
+    ;; The builtin allowlist exempts it. If platform ever gains ports.clj the
+    ;; entry becomes inert and should be deleted — but nothing would say so,
+    ;; because an exemption for a module that no longer violates is silent.
+    (is (not (.exists (io/file "libs/platform/src/wagoe/platform/ports.clj")))
+        (str "libs/platform now has ports.clj — remove \"wagoe.platform\" from "
+             "builtin-allow-missing-ports in check_ports.clj"))))
+
+(deftest ^:unit deps-allowlist-is-load-bearing-test
+  (testing "platform genuinely still does not declare external"
+    ;; Same reasoning. The entry exists because declaring it would create a
+    ;; circular :local/root that tools.deps rejects; once the external->platform
+    ;; coupling is broken the exemption must go.
+    (let [deps (slurp "libs/platform/deps.edn")]
+      (is (not (str/includes? deps "wagoe/external"))
+          (str "libs/platform/deps.edn now declares external — remove "
+               "[\"platform\" \"external\"] from allowed-undeclared-deps")))))
+
+(deftest ^:unit empty-allowlists-stay-empty-test
+  (testing "the allowlists that are complete carry no entries"
+    (doseq [[file ks] {".wagoe/check-fcis.edn"      [:allow-throw :allow-mutable-state]
+                       ".wagoe/check-test-tags.edn" [:allow-untagged]}]
+      (let [cfg (edn/read-string (slurp file))]
+        (doseq [k ks]
+          (is (empty? (get cfg k))
+              (str file " " k " gained an entry. That may be correct — but it is "
+                   "debt, so it needs a ticket and a removal plan, not just a line "
+                   "in a file.")))))))
 
 ;; =============================================================================
 ;; The meta-gate: every gate must be represented above

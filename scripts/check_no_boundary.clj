@@ -158,6 +158,56 @@
 (defn- files-of [hits]
   (->> hits (map #(first (str/split % #":" 2))) distinct sort))
 
+;; =============================================================================
+;; Allowlist audit — is every exemption still load-bearing?
+;; =============================================================================
+
+(defn entry-hit-count
+  "How many hard-group hits the allowlist entry `path` is currently suppressing.
+
+   Runs the real group patterns limited to that pathspec, so this is the gate's
+   own definition of a residual token, not a second opinion that could drift
+   from it."
+  [path]
+  (reduce
+   (fn [total g]
+     (let [{:keys [grep]} (token-defs g)
+           args (concat ["git" "grep" "--no-color"] grep ["--" path])
+           {:keys [exit out]} (apply process/shell
+                                     {:out :string :err :string :continue true} args)]
+       (if (#{0 1} exit)
+         (+ total (count (remove str/blank? (str/split-lines out))))
+         total)))
+   0
+   hard-groups))
+
+(defn audit-allowlist
+  "Classify every allowlist entry as load-bearing, inert, or missing.
+
+   Two ways an exemption rots, both silent because a non-matching prefix simply
+   never fires:
+
+   - the path stops existing, or never existed. The Wagoe rename swept this
+     very file and turned `scripts/check_no_boundary.clj` into
+     `scripts/check_no_wagoe.clj`, a path that has never existed. The real file
+     stayed guarded only because it is also in `default-allow-paths` — luck,
+     not design.
+   - the path exists but no longer contains anything the gate would flag, so
+     the exemption suppresses nothing while still switching off the gate for
+     that file. `scripts/docs_lint.clj` became a 27-line shim in #344 and has
+     been in this state since.
+
+   Returns {:load-bearing [...] :inert [...] :missing [...]}."
+  [entries]
+  (reduce
+   (fn [acc path]
+     (cond
+       (not (fs/exists? path)) (update acc :missing conj path)
+       (zero? (entry-hit-count path)) (update acc :inert conj path)
+       :else (update acc :load-bearing conj path)))
+   {:load-bearing [] :inert [] :missing []}
+   entries))
+
 (defn -main [& args]
   (let [selected (cond
                    (some #{"all"} args) (conj hard-groups :prose)
@@ -185,11 +235,36 @@
           (when (> (count files) 8)
             (println (str "      … +" (- (count files) 8) " more files"))))))
     (println)
-    (if (pos? hard-fail)
-      (do (println (ansi-red (format "%d residual hard-token hit(s) remain." hard-fail)))
-          (System/exit 1))
-      (do (println (ansi-green "No residual hard boundary tokens."))
-          (System/exit 0)))))
+
+    ;; The allowlist is audited on every run rather than on request. An
+    ;; exemption that stopped matching is invisible by construction — nothing
+    ;; fails, the gate just quietly covers less than its config claims.
+    (let [{:keys [inert missing]} (audit-allowlist allow)
+          rot (+ (count inert) (count missing))]
+      (when (pos? rot)
+        (println (ansi-yellow "Allowlist entries that no longer exempt anything:"))
+        (doseq [p missing]
+          (println (str "  " p "  — path does not exist")))
+        (doseq [p inert]
+          (println (str "  " p "  — exists, but the gate finds nothing there to exempt")))
+        (println)
+        (println (str "Remove them from .wagoe/check-no-boundary.edn (or default-allow-paths). "
+                      "A stale entry switches the gate off for a path that no longer needs it."))
+        (println))
+
+      (cond
+        (pos? hard-fail)
+        (do (println (ansi-red (format "%d residual hard-token hit(s) remain." hard-fail)))
+            (System/exit 1))
+
+        (pos? rot)
+        (do (println (ansi-red (format "%d stale allowlist entr%s."
+                                       rot (if (= 1 rot) "y" "ies"))))
+            (System/exit 1))
+
+        :else
+        (do (println (ansi-green "No residual hard boundary tokens; allowlist is fully load-bearing."))
+            (System/exit 0))))))
 
 (when (= *file* (System/getProperty "babashka.file"))
   (apply -main *command-line-args*))

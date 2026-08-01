@@ -4,6 +4,11 @@
 ;; legitimately keep "boundary" tokens: history, planning docs, and the rename
 ;; tooling itself. Extend as genuine exceptions surface during the rename; do
 ;; NOT add real source here to silence the gate.
+;;
+;; Every entry needs a reason, and every entry must still be load-bearing: the
+;; gate audits this list on each run and fails on an entry whose path is gone
+;; or that no longer suppresses anything. A prefix that matches nothing is
+;; silent by construction — it cannot announce that it stopped working.
 {:allow-paths
  ["CHANGELOG.md"
   "docs/superpowers/"
@@ -12,11 +17,9 @@
   "dev-docs/LINK_ISSUES.adoc"
   ".wagoe/"
   "scripts/rename_wagoe.clj"
-  "scripts/check_no_wagoe.clj"
   ;; Doc-drift linter: its #"boundary\.<ns>" pattern matches ns references in
-  ;; the (still boundary-era) docs it lints. Renames with the docs in Phase 4
-  ;; (BOU-214); exempt until then. Two copies: scripts/ (bb) + dev/ (repl).
-  "scripts/docs_lint.clj"
+  ;; the docs it lints. Only the dev/ copy carries the pattern — scripts/
+  ;; became a thin shim over this namespace in #344 and needs no exemption.
   "dev/wagoe/tools/docs_lint.clj"
   ;; Clojars relocation tooling (BOU-218). Same category as the rename tooling
   ;; above: the retired org.boundary-app coordinates and the boundary-cli /
