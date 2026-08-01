@@ -1,7 +1,7 @@
 # wagoe-tools
 
 **Location:** `libs/tools`
-**Version:** `1.0.0-beta-3`
+**Version:** `1.0.0-beta-4`
 **Distribution:** Part of the Wagoe monorepo — not published to Clojars. Wired directly into `bb.edn` as a local dependency.
 
 Developer tooling for the Wagoe framework: scaffolding, AI assistance, config management, i18n management, deployment, and development utilities — available out of the box in every Wagoe project.

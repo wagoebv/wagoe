@@ -42,8 +42,8 @@ JWT-authenticated WebSocket support with:
 
 ```clojure
 ;; deps.edn
-{:deps {com.wagoe/wagoe-realtime {:mvn/version "1.0.0-beta-3"}
-        com.wagoe/wagoe-user {:mvn/version "1.0.0-beta-3"}}}
+{:deps {com.wagoe/wagoe-realtime {:mvn/version "1.0.0-beta-4"}
+        com.wagoe/wagoe-user {:mvn/version "1.0.0-beta-4"}}}
 ```
 
 ### 2. Create Realtime Service
@@ -1015,7 +1015,7 @@ clojure -M:test
 | `malli` | 0.20.0 | Schema validation |
 | `cheshire` | 6.1.0 | JSON encoding/decoding |
 | `tools.logging` | 1.3.1 | Logging |
-| `wagoe/user` | 1.0.0-beta-3 | JWT authentication (optional) |
+| `wagoe/user` | 1.0.0-beta-4 | JWT authentication (optional) |
 
 ---
 
@@ -1049,5 +1049,5 @@ Distributed under the Eclipse Public License version 2.0.
 ---
 
 **Last Updated**: 2026-02-04  
-**Version**: 1.0.0-beta-3  
+**Version**: 1.0.0-beta-4  
 **Status**: Production Ready (Single-Server)
