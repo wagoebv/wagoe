@@ -156,12 +156,47 @@
   {:deps "built into the Clojure CLI itself (clojure -X:deps find-versions)"
    :nvd  "third-party CVE scanner the security checklist tells readers to add to THEIR project"})
 
+(def ^:private project-template-path
+  "libs/wagoe-cli/resources/wagoe/cli/templates/deps.edn.tmpl")
+
+(defn discover-template-aliases
+  "Aliases a `wagoe new` project gets.
+
+   Most of docs/modules/getting-started and docs/modules/ROOT walk the reader
+   through a GENERATED project, not this monorepo — `wagoe new my-app`, `cd
+   my-app`, `source .env`. Those commands run against the template's deps.edn,
+   which is a different alias set: it defines `:repl` (nREPL on 7888) and has
+   no `:repl-clj`. Validating that documentation against the monorepo's aliases
+   alone reports correct commands as broken, and 'fixing' them breaks the
+   quickstart for every new user.
+
+   The {{version}} placeholders are not valid EDN, so they are substituted with
+   a dummy before parsing. Parsing beats scraping keys with a regex here: the
+   alias map nests :extra-deps, :extra-paths and friends, and a pattern loose
+   enough to catch the alias keys also catches those — which would then count
+   as valid aliases and defeat the check."
+  []
+  (try
+    (let [f (io/file (System/getProperty "user.dir") project-template-path)]
+      (if-not (.exists f)
+        #{}
+        (-> (slurp f)
+            (str/replace #"\{\{[^}]*\}\}" "0.0.0")
+            edn/read-string
+            :aliases
+            keys
+            set)))
+    (catch Exception e
+      (println "Warning: could not read project template aliases:" (.getMessage e))
+      #{})))
+
 (defn discover-aliases []
   (try
     (let [deps-file (io/file (System/getProperty "user.dir") "deps.edn")
           content (slurp deps-file)
           deps (edn/read-string content)]
-      (into (set (keys (:aliases deps))) (keys external-aliases)))
+      (into (into (set (keys (:aliases deps))) (keys external-aliases))
+            (discover-template-aliases)))
     (catch Exception e
       (println "Warning: could not parse deps.edn:" (.getMessage e))
       #{})))
