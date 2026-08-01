@@ -5,18 +5,19 @@
 ;; tooling itself. Extend as genuine exceptions surface during the rename; do
 ;; NOT add real source here to silence the gate.
 ;;
-;; Every entry needs a reason, and every entry must still be load-bearing: the
-;; gate audits this list on each run and fails on an entry whose path is gone
-;; or that no longer suppresses anything. A prefix that matches nothing is
-;; silent by construction — it cannot announce that it stopped working.
+;; Every entry needs a reason, and every entry must be individually
+;; load-bearing: the gate audits this list on each run and fails on an entry
+;; whose path is gone, that suppresses nothing, or that is already covered by
+;; another entry. A prefix that matches nothing is silent by construction — it
+;; cannot announce that it stopped working.
+;;
+;; CHANGELOG.md, docs/superpowers/, .wagoe/ and scripts/rename_wagoe.clj are
+;; deliberately absent: they are baked into `default-allow-paths` in the gate
+;; itself. Repeating them here changed nothing and the audit now says so.
 {:allow-paths
- ["CHANGELOG.md"
-  "docs/superpowers/"
-  ;; Historical issue log: it REPORTS a stale docs/boundary.prd.adoc path.
+ [;; Historical issue log: it REPORTS a stale docs/<brand>.prd.adoc path.
   ;; Rewriting it would falsify the record. Same category as CHANGELOG.
   "dev-docs/LINK_ISSUES.adoc"
-  ".wagoe/"
-  "scripts/rename_wagoe.clj"
   ;; Doc-drift linter: its #"boundary\.<ns>" pattern matches ns references in
   ;; the docs it lints. Only the dev/ copy carries the pattern — scripts/
   ;; became a thin shim over this namespace in #344 and needs no exemption.

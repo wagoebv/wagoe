@@ -31,6 +31,7 @@
 ;; renamed tree — and allowlisted in the driver — makes it self-stable.
 (ns check-no-boundary
   (:require [clojure.string :as str]
+            [clojure.set :as set]
             [clojure.edn :as edn]
             [babashka.fs :as fs]
             [babashka.process :as process]))
@@ -162,51 +163,74 @@
 ;; Allowlist audit — is every exemption still load-bearing?
 ;; =============================================================================
 
-(defn entry-hit-count
-  "How many hard-group hits the allowlist entry `path` is currently suppressing.
+(defn all-hit-paths
+  "Every path the hard groups match with NO allowlist applied.
 
-   Runs the real group patterns limited to that pathspec, so this is the gate's
-   own definition of a residual token, not a second opinion that could drift
-   from it."
-  [path]
-  (reduce
-   (fn [total g]
-     (let [{:keys [grep]} (token-defs g)
-           args (concat ["git" "grep" "--no-color"] grep ["--" path])
-           {:keys [exit out]} (apply process/shell
-                                     {:out :string :err :string :continue true} args)]
-       (if (#{0 1} exit)
-         (+ total (count (remove str/blank? (str/split-lines out))))
-         total)))
-   0
-   hard-groups))
+   One unfiltered pass, so each entry can be judged against what the gate would
+   actually flag without it."
+  []
+  (->> hard-groups
+       (mapcat (fn [g] (grep-group (token-defs g) #{})))
+       (map #(first (str/split % #":" 2)))
+       distinct
+       set))
 
 (defn audit-allowlist
-  "Classify every allowlist entry as load-bearing, inert, or missing.
+  "Classify every allowlist entry as load-bearing, redundant, inert or missing.
 
-   Two ways an exemption rots, both silent because a non-matching prefix simply
-   never fires:
+   The question is not `does this path contain a residual token` — that is
+   answered by any overlapping entry and says nothing about this one. It is
+   `would removing THIS entry expose a hit that nothing else covers`. Entries
+   are walked in order (baked-in defaults first, then config), and one is
+   load-bearing only when it is the first to cover some hit path.
 
-   - the path stops existing, or never existed. The Wagoe rename swept this
-     very file and turned `scripts/check_no_boundary.clj` into
-     `scripts/check_no_wagoe.clj`, a path that has never existed. The real file
-     stayed guarded only because it is also in `default-allow-paths` — luck,
-     not design.
-   - the path exists but no longer contains anything the gate would flag, so
-     the exemption suppresses nothing while still switching off the gate for
-     that file. `scripts/docs_lint.clj` became a 27-line shim in #344 and has
-     been in this state since.
+   That distinction is not academic: four config entries duplicate a default
+   verbatim. Under the weaker question all four looked load-bearing, because
+   the paths do contain tokens — while deleting any of them would change
+   nothing. The audit would have been reporting a property it never tested,
+   which is the failure this whole ticket is about.
 
-   Returns {:load-bearing [...] :inert [...] :missing [...]}."
+   Four outcomes:
+   - :missing      the path is gone, or never existed. The Wagoe rename swept
+                   this very file and turned scripts/check_no_boundary.clj into
+                   scripts/check_no_wagoe.clj, a path that has never existed.
+   - :inert        exists, but the gate finds nothing there to exempt.
+   - :redundant    covers hits, but every one is already covered by an earlier
+                   entry — a duplicate or a nested prefix.
+   - :load-bearing removing it would expose at least one hit.
+
+   Returns a map of those four keys to vectors of entries; :redundant holds
+   [entry covering-entry] pairs."
   [entries]
-  (reduce
-   (fn [acc path]
-     (cond
-       (not (fs/exists? path)) (update acc :missing conj path)
-       (zero? (entry-hit-count path)) (update acc :inert conj path)
-       :else (update acc :load-bearing conj path)))
-   {:load-bearing [] :inert [] :missing []}
-   entries))
+  (let [hits    (all-hit-paths)
+        indexed (map-indexed vector entries)]
+    (:acc
+     (reduce
+      (fn [{:keys [acc claimed]} [i path]]
+        (let [covers (set (filter #(str/starts-with? % path) hits))
+              unique (set/difference covers claimed)]
+          (cond
+            (not (fs/exists? path))
+            {:acc (update acc :missing conj path) :claimed claimed}
+
+            (empty? covers)
+            {:acc (update acc :inert conj path) :claimed claimed}
+
+            (empty? unique)
+            ;; Which earlier entry already covers it. Indexed rather than
+            ;; `take-while (not= path)`: duplicates are identical strings, so
+            ;; that would stop at the entry itself and report no cause.
+            (let [by (->> (take i entries)
+                          (filter (fn [e] (some #(str/starts-with? % e) covers)))
+                          first)]
+              {:acc (update acc :redundant conj [path by]) :claimed claimed})
+
+            :else
+            {:acc     (update acc :load-bearing conj path)
+             :claimed (set/union claimed unique)})))
+      {:acc {:load-bearing [] :redundant [] :inert [] :missing []}
+       :claimed #{}}
+      indexed))))
 
 (defn -main [& args]
   (let [selected (cond
@@ -239,17 +263,23 @@
     ;; The allowlist is audited on every run rather than on request. An
     ;; exemption that stopped matching is invisible by construction — nothing
     ;; fails, the gate just quietly covers less than its config claims.
-    (let [{:keys [inert missing]} (audit-allowlist allow)
-          rot (+ (count inert) (count missing))]
+    (let [{:keys [inert missing redundant]} (audit-allowlist allow)
+          rot (+ (count inert) (count missing) (count redundant))]
       (when (pos? rot)
-        (println (ansi-yellow "Allowlist entries that no longer exempt anything:"))
+        (println (ansi-yellow "Allowlist entries that suppress nothing of their own:"))
         (doseq [p missing]
           (println (str "  " p "  — path does not exist")))
         (doseq [p inert]
           (println (str "  " p "  — exists, but the gate finds nothing there to exempt")))
+        (doseq [[p by] redundant]
+          (println (str "  " p "  — "
+                        (cond
+                          (= p by) "duplicates an earlier entry with the same path"
+                          by       (str "nested under " by ", which already covers it")
+                          :else    "every path it covers is already covered earlier"))))
         (println)
-        (println (str "Remove them from .wagoe/check-no-boundary.edn (or default-allow-paths). "
-                      "A stale entry switches the gate off for a path that no longer needs it."))
+        (println (str "Remove them from the allowlist config (or default-allow-paths). "
+                      "A stale entry switches the gate off for a path that does not need it."))
         (println))
 
       (cond
