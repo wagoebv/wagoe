@@ -776,7 +776,13 @@ DROP TABLE IF EXISTS %s;
 ;; =============================================================================
 
 (defn generate-project-deps
-  "Generate deps.edn for a new project.
+  "DUPLICATE OF libs/wagoe-cli/resources/wagoe/cli/templates/deps.edn.tmpl.
+   Both produce a generated project's deps.edn, by different routes:
+   this one via `scaffolder generate-project`, the template via `wagoe new`.
+   They have drifted before — the :seed alias landed in the template and not
+   here, so `bb db:seed` failed in projects made this way. Change both.
+
+   Generate deps.edn for a new project.
    
    Args:
      name - Project name
@@ -839,6 +845,16 @@ DROP TABLE IF EXISTS %s;
 
   :migrate
   {:main-opts  [\"-m\" \"wagoe.platform.shell.database.cli-migrations\"]
+   :extra-deps {com.wagoe/wagoe-platform {:mvn/version \"1.0.0-beta-3\"}
+                org.xerial/sqlite-jdbc             {:mvn/version \"3.51.0.0\"}
+                org.postgresql/postgresql          {:mvn/version \"42.7.12\"}
+                com.h2database/h2                  {:mvn/version \"2.4.240\"}
+                com.mysql/mysql-connector-j        {:mvn/version \"9.6.0\"}}}
+
+  ;; Backs `bb db:seed`, which shells out to `clojure -M:seed`. Same driver set
+  ;; as :migrate — seeding opens the same database.
+  :seed
+  {:main-opts  [\"-m\" \"wagoe.platform.shell.database.cli-seed\"]
    :extra-deps {com.wagoe/wagoe-platform {:mvn/version \"1.0.0-beta-3\"}
                 org.xerial/sqlite-jdbc             {:mvn/version \"3.51.0.0\"}
                 org.postgresql/postgresql          {:mvn/version \"42.7.12\"}
@@ -923,8 +939,8 @@ DROP TABLE IF EXISTS %s;
                      :task (db/-main \"status\")}
   db:reset          {:doc \"Drop and recreate the database with all migrations\"
                      :task (db/-main \"reset\")}
-  db:seed           {:doc \"Seed database from resources/seeds/dev.edn\"
-                     :task (db/-main \"seed\")}
+  db:seed           {:doc \"Seed database from resources/seeds/dev.edn (dev-like envs only; --force to override)\"
+                     :task (apply db/-main \"seed\" *command-line-args*)}
 
   ;; Onboarding
   quickstart        {:doc \"Zero-to-running-app setup: check env, configure, scaffold, migrate, start\"

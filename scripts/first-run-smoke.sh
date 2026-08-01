@@ -99,14 +99,18 @@ for d in /work/libs/*/; do
     deps.edn bb.edn
 done
 
+# Assert on what is LEFT, not on what is present. Checking merely that some
+# :local/root exists would pass with one com.wagoe artifact still pinned to a
+# published version — and that single pin is enough to test released code while
+# the run reports success, which is the whole failure mode this guards against.
 for f in deps.edn bb.edn; do
-  if grep -q "com\.wagoe/" "$f"; then
-    grep -q ":local/root" "$f" \
-      || fail "$f still pins published com.wagoe artifacts — this run would test the release, not the branch"
-  fi
+  STILL_PINNED=$(grep -oE "com\.wagoe/[a-z0-9-]+[[:space:]]*\{:mvn/version" "$f" || true)
+  [ -z "$STILL_PINNED" ] \
+    || fail "$f still pins published com.wagoe artifacts, so this run would test the release:
+$STILL_PINNED"
 done
 LEFT=$(grep -c ":mvn/version" deps.edn || true)
-ok "every com.wagoe dep points at the checkout ($LEFT third-party pins untouched)"
+ok "no com.wagoe dep left on a published version ($LEFT third-party pins untouched)"
 
 # ── 4. quickstart ───────────────────────────────────────────────────────────
 echo "[4/6] bb quickstart"
