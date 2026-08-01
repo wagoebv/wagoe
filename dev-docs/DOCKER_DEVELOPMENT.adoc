@@ -222,7 +222,7 @@ services:
 ./scripts/docker-dev.sh shell dev-tools
 
 # Inside container - start REPL
-clojure -M:dev:repl
+clojure -M:dev:repl-clj
 ----
 
 ==== Database Development

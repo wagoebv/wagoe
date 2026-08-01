@@ -174,9 +174,9 @@ CREATE TABLE IF NOT EXISTS push_analytics_events (
 ## Tests
 
 ```bash
-clojure -M:test:db/h2 :push
-clojure -M:test:db/h2 :push --focus-meta :unit
-clojure -M:test:db/h2 :push --focus-meta :contract
+clojure -M:test :push
+clojure -M:test :push --focus-meta :unit
+clojure -M:test :push --focus-meta :contract
 ```
 
 See [AGENTS.md](AGENTS.md) for full developer guide, gotchas, and REPL smoke checks.

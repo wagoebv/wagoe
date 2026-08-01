@@ -1,4 +1,6 @@
 {:paths ["scripts"                    ; still needed for docs_lint.clj + verify_doc_links.clj
+         "dev"                         ; wagoe.tools.docs-lint — the single docs-lint
+                                       ; implementation, shared with `clojure -M:docs-lint`
          "libs/tools/src"              ; wagoe-tools — pure bb, no Maven deps needed at runtime
          "libs/devtools/resources"     ; shared error catalogue EDN (wagoe/devtools/core/error_catalog.edn)
          "libs/wagoe-cli/src"       ; bbin installs via --deps-root repo-root, so root bb.edn :paths must include CLI src

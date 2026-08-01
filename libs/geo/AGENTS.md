@@ -186,16 +186,16 @@ For single-instance deployments and development, the current atom-based approach
 
 ```bash
 # All geo tests
-clojure -M:test:db/h2 :geo
+clojure -M:test :geo
 
 # Unit tests only (pure core functions)
-clojure -M:test:db/h2 --focus-meta :unit :geo
+clojure -M:test --focus-meta :unit :geo
 
 # Integration tests (mock provider + atom cache)
-clojure -M:test:db/h2 --focus-meta :integration :geo
+clojure -M:test --focus-meta :integration :geo
 
 # Contract tests (DbGeoCache against H2)
-clojure -M:test:db/h2 --focus-meta :contract :geo
+clojure -M:test --focus-meta :contract :geo
 
 # Lint
 clojure -M:clj-kondo --lint libs/geo/src libs/geo/test

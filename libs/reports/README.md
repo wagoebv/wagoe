@@ -213,7 +213,7 @@ Apache POI XWPF (Word) is included as a transitive dependency of docjure — no 
 
 ```bash
 # Run all reports tests
-clojure -M:test:db/h2 :reports
+clojure -M:test :reports
 
 # Lint
 clojure -M:clj-kondo --lint libs/reports/src libs/reports/test

@@ -275,8 +275,8 @@ Always verify the signature before processing:
 ## Testing
 
 ```bash
-clojure -M:test:db/h2 :payments        # All payments tests
-clojure -M:test:db/h2 --focus-meta :unit  # Pure core functions only
+clojure -M:test :payments        # All payments tests
+clojure -M:test --focus-meta :unit  # Pure core functions only
 ```
 
 Use the `:mock` provider in all tests — no PSP credentials required.

@@ -6,7 +6,7 @@
    under test/snapshots/validation/ for easy review.
    
    To update snapshots:
-     UPDATE_SNAPSHOTS=true clojure -M:test:db/h2 --focus wagoe.user.core.user-validation-snapshot-test
+     UPDATE_SNAPSHOTS=true clojure -M:test --focus wagoe.user.core.user-validation-snapshot-test
    
    See: src/wagoe/shared/core/validation/snapshot.clj for snapshot utilities"
   (:require [clojure.test :refer [deftest testing]]

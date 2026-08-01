@@ -143,7 +143,7 @@ See [ADR-035](../../dev-docs/adr/ADR-035-realtime-redis-scaling.adoc) for the fu
 ## Testing
 
 ```bash
-clojure -M:test:db/h2 :realtime
+clojure -M:test :realtime
 ```
 
 ## Links

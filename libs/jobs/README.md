@@ -356,7 +356,7 @@ Comprehensive tests verify tenant isolation:
 
 ```bash
 # Run tenant-context integration tests
-clojure -M:test:db/h2 --focus wagoe.jobs.shell.tenant-context-test
+clojure -M:test --focus wagoe.jobs.shell.tenant-context-test
 
 # Results: 10 tests, 80 assertions, 0 failures
 ```

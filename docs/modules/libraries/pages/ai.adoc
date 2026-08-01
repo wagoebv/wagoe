@@ -132,5 +132,5 @@ CLI provider resolution order: `ANTHROPIC_API_KEY` → `OPENAI_API_KEY` → `OLL
 
 [source,bash]
 ----
-clojure -M:test:db/h2 :ai
+clojure -M:test :ai
 ----

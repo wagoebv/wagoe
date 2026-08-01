@@ -163,13 +163,13 @@ interceptor metadata.
 
 ```bash
 # All core tests (pure/unit — no DB, fast)
-clojure -M:test:db/h2 :core
+clojure -M:test :core
 
 # Unit metadata filter (all core tests are :unit)
-clojure -M:test:db/h2 :core --focus-meta :unit
+clojure -M:test :core --focus-meta :unit
 
 # Update validation snapshots when intended output changes
-UPDATE_SNAPSHOTS=true clojure -M:test:db/h2 \
+UPDATE_SNAPSHOTS=true clojure -M:test \
   --focus wagoe.core.validation.snapshot-test
 ```
 

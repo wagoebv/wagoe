@@ -131,8 +131,8 @@ bb i18n:unused
 
 [source,bash]
 ----
-clojure -M:test:db/h2 :i18n
+clojure -M:test :i18n
 
 # Unit tests only
-clojure -M:test:db/h2 :i18n --focus-meta :unit
+clojure -M:test :i18n --focus-meta :unit
 ----

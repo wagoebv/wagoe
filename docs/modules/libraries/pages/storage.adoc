@@ -94,5 +94,5 @@ Includes file validation, image processing, and signed URL generation.
 
 [source,bash]
 ----
-clojure -M:test:db/h2 :storage
+clojure -M:test :storage
 ----

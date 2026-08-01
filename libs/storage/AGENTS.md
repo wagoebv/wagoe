@@ -238,7 +238,7 @@ Errors are emitted as RFC-7807 problem details via
 ## Testing
 
 ```bash
-clojure -M:test:db/h2 :storage
+clojure -M:test :storage
 ```
 
 Adapter tests are tagged `^:integration`. The local-adapter suite writes to the

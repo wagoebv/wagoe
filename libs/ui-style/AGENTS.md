@@ -124,7 +124,7 @@ and `:paths ["src" "resources"]` so the assets travel with the jar.
 ## Testing
 
 ```bash
-clojure -M:test:db/h2 :ui-style
+clojure -M:test :ui-style
 ```
 
 Tests live in `test/wagoe/ui_style_test.clj` (tagged `^:unit`) and cover

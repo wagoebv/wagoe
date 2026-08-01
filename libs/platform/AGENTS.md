@@ -368,9 +368,9 @@ Client identity is resolved as user id → `x-api-key` header → remote address
 ## Testing
 
 ```bash
-clojure -M:test:db/h2 :platform
-clojure -M:test:db/h2 :platform --focus-meta :unit
-clojure -M:test:db/h2 :platform --focus-meta :integration
+clojure -M:test :platform
+clojure -M:test :platform --focus-meta :unit
+clojure -M:test :platform --focus-meta :integration
 ```
 
 ---

@@ -139,13 +139,13 @@ bb i18n:unused
 
 ```bash
 # All i18n tests
-clojure -M:test:db/h2 :i18n
+clojure -M:test :i18n
 
 # Unit tests only
-clojure -M:test:db/h2 :i18n --focus-meta :unit
+clojure -M:test :i18n --focus-meta :unit
 
 # Contract tests only (requires classpath i18n catalogues)
-clojure -M:test:db/h2 :i18n --focus-meta :contract
+clojure -M:test :i18n --focus-meta :contract
 
 # Linting
 clojure -M:clj-kondo --lint libs/i18n/src libs/i18n/test

@@ -69,7 +69,7 @@
      :msg   (str (+ (or fail 0) (or error 0)) " test failure"
                  (when (> (+ (or fail 0) (or error 0)) 1) "s")
                  " (" total " total)")
-     :fix   "  clojure -M:test:db/h2"}))
+     :fix   "  clojure -M:test"}))
 
 (defn analyze-lint
   "Analyze lint state.

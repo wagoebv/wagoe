@@ -207,7 +207,7 @@ docker run -d -p 1025:1025 -p 8025:8025 mailhog/mailhog
 ## Testing
 
 ```bash
-clojure -M:test:db/h2 :email
+clojure -M:test :email
 ```
 
 Tests: `core/email_test.clj` (pure functions), `schema_test.clj` (Malli), and

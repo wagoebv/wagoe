@@ -105,6 +105,6 @@ The interceptor system supports enter/leave/error phases, used by both HTTP and 
 
 [source,bash]
 ----
-clojure -M:test:db/h2 :core
-clojure -M:test:db/h2 --focus-meta :unit   # All core tests are :unit
+clojure -M:test :core
+clojure -M:test --focus-meta :unit   # All core tests are :unit
 ----

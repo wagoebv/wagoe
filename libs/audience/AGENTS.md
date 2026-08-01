@@ -273,16 +273,16 @@ The `:wagoe/audience` component returns `{:store <IAudienceRepository> :resolver
 
 ```bash
 # All audience tests
-clojure -M:test:db/h2 :audience
+clojure -M:test :audience
 
 # Unit tests only
-clojure -M:test:db/h2 --focus-meta :unit :audience
+clojure -M:test --focus-meta :unit :audience
 
 # Single namespace
-clojure -M:test:db/h2 --focus wagoe.audience.core.filter-test
+clojure -M:test --focus wagoe.audience.core.filter-test
 
 # Security-tagged tests
-clojure -M:test:db/h2 --focus-meta :security :audience
+clojure -M:test --focus-meta :security :audience
 
 # Lint
 clojure -M:clj-kondo --lint libs/audience/src libs/audience/test

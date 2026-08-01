@@ -317,16 +317,16 @@ The wizard accepts `--env dev|test|acc|prod` to pick the Aero config profile and
 
 ```bash
 # Run user library tests
-clojure -M:test:db/h2 :user
+clojure -M:test :user
 
 # JWT secret required for auth tests
-JWT_SECRET="dev-secret-at-least-32-characters-long" clojure -M:test:db/h2 :user
+JWT_SECRET="dev-secret-at-least-32-characters-long" clojure -M:test :user
 
 # Unit tests only (fast, no DB)
-clojure -M:test:db/h2 :user --focus-meta :unit
+clojure -M:test :user --focus-meta :unit
 
 # Update validation snapshots
-UPDATE_SNAPSHOTS=true clojure -M:test:db/h2 \
+UPDATE_SNAPSHOTS=true clojure -M:test \
   --focus wagoe.user.core.user-validation-snapshot-test
 ```
 

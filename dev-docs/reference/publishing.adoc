@@ -293,7 +293,7 @@ Total CI time is approximately 15–20 minutes (23 artifacts × 30s indexing pau
 
 Before pushing a release tag:
 
-* [ ] All tests pass: `clojure -M:test:db/h2`
+* [ ] All tests pass: `clojure -M:test`
 * [ ] No lint errors: `clojure -M:clj-kondo --lint src test libs/*/src libs/*/test`
 * [ ] `CHANGELOG.md` updated
 * [ ] Version bumped in all relevant `build.clj` files, including `libs/tools/build.clj` for a full tagged release

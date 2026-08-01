@@ -3,7 +3,7 @@
 ;;
 ;; `bb test:all` — run EVERY test surface and fail if any of them fails.
 ;;
-;; Why this exists: `clojure -M:test:db/h2` is not the whole suite. It runs the
+;; Why this exists: `clojure -M:test` is not the whole suite. It runs the
 ;; kaocha suites declared in tests.edn, which covers libs/<lib> that sit on the
 ;; app classpath — but wagoe-cli, wagoe-mcp and libs/tools are standalone
 ;; (their own deps.edn + :test alias) and are invisible to it. During the Wagoe
@@ -11,7 +11,7 @@
 ;; and 5 in tools, including a silently-broken FC/IS gate. Each was found only
 ;; by remembering to run an extra command.
 ;;
-;; A green `clojure -M:test:db/h2` therefore does NOT mean the codebase is
+;; A green `clojure -M:test` therefore does NOT mean the codebase is
 ;; green. `bb test:all` is the command that does mean that.
 ;;
 ;; Usage:
@@ -42,7 +42,7 @@
   [{:id    :main
     :label "main suite (tests.edn — all app-classpath libs)"
     :dir   "."
-    :cmd   ["clojure" "-M:test:db/h2"]}
+    :cmd   ["clojure" "-M:test"]}
    {:id    :tools
     :label "wagoe-tools unit tests"
     :dir   "."

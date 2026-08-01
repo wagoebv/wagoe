@@ -90,5 +90,5 @@ resources/conf/dev/
 
 [source,bash]
 ----
-clojure -M:test:db/h2 :admin
+clojure -M:test :admin
 ----

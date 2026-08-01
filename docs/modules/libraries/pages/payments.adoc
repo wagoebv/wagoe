@@ -72,7 +72,7 @@ Configure `:wagoe/payment-provider` in `config.edn`:
 
 [source,bash]
 ----
-clojure -M:test:db/h2 :payments
+clojure -M:test :payments
 ----
 
 See xref:guides:payments.adoc[Payments Guide] for the full integration walkthrough.

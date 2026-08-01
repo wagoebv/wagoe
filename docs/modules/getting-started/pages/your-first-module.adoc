@@ -141,7 +141,7 @@ If you only changed pure logic, run the unit suite:
 clojure -M:test :unit
 ----
 
-NOTE: `clojure -M:test:db/h2 :product` is the *monorepo* form — inside this framework repository, where each library has its own Kaocha suite id and the `:db/h2` alias selects the in-memory database. Generated projects use the plain `:test` alias shown above.
+NOTE: `clojure -M:test :product` is the *monorepo* form — inside this framework repository, where each library has its own Kaocha suite id. The `:test` alias already carries all four JDBC drivers, so no separate database alias is needed; which one is used comes from the test config. Generated projects use the plain `:test` alias shown above.
 
 == Next steps
 

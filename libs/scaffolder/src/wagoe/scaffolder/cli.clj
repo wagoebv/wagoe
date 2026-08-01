@@ -220,7 +220,7 @@
        "  1. Review the generated files\n"
        "  2. Add module to config: [:active :wagoe/settings :modules]\n"
        "  3. Wire module into Integrant system configuration\n"
-       "  4. Run tests: clojure -M:test:db/h2 --focus-meta :" (:module-name result)))
+       "  4. Run tests: clojure -M:test --focus-meta :" (:module-name result)))
 
 (defn format-error-text
   "Format error result as text."

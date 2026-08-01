@@ -202,13 +202,13 @@ See `resources/migrations/20260312000000-search-filters.up.sql`.
 
 ```bash
 # Search library only
-clojure -M:test:db/h2 :search
+clojure -M:test :search
 
 # Unit tests only
-clojure -M:test:db/h2 --focus-meta :unit
+clojure -M:test --focus-meta :unit
 
 # Full suite
-clojure -M:test:db/h2
+clojure -M:test
 ```
 
 H2 integration tests (`persistence_test.clj`) create their own in-memory database

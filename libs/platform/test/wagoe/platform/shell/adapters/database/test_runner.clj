@@ -149,7 +149,7 @@
     (println (str "  Available: " (:available @results)))
     (println (str "  Missing: " (:missing @results)))
     (println "\nNote: Missing drivers are expected with conditional dependency system.")
-    (println "Use appropriate aliases (e.g., :db/h2, :db/mysql) to load needed drivers.")
+    (println "The :test alias already carries all four JDBC drivers; outside tests, use :db.")
     @results))
 
 ;; =============================================================================

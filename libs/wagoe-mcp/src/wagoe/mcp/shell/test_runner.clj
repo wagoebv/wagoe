@@ -16,7 +16,7 @@
 
 (def ^:private default-command
   "Argv template; `%s` is replaced with the Kaocha suite id (the module name)."
-  ["clojure" "-M:test:db/h2" ":%s"])
+  ["clojure" "-M:test" ":%s"])
 
 (def ^:private summary-re
   ;; e.g. "12 tests, 34 assertions, 1 errors, 2 failures."

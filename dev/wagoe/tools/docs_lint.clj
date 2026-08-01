@@ -31,30 +31,43 @@
   #{"ROOT" "architecture" "getting-started" "guides" "libraries"})
 
 ;; Files/directories to scan
+;; Hand-listing individual lib READMEs left most of the documentation
+;; unwatched: `dev-docs/`, CONTRIBUTING.md and 20-odd libs/*/AGENTS.md were
+;; never scanned, so the :db/h2 drift (BOU-257) could not have been caught here
+;; even with the alias check working. "libs" covers every lib doc as they are
+;; added; exclude-patterns still drops READMEs that sit inside code trees.
 (def include-patterns
   ["README.md"
    "README.adoc"
    "AGENTS.md"
+   "CONTRIBUTING.md"
    "docs"
+   "dev-docs"
    "examples"
-   "libs/core/README.md"
-   "libs/observability/README.md"
-   "libs/platform/README.md"
-   "libs/user/README.md"
-   "libs/admin/README.md"
-   "libs/storage/README.md"
-   "libs/scaffolder/README.md"
-   "libs/external/README.md"])
+   "libs"])
 
 ;; Patterns to exclude (even if matched by includes)
 (def exclude-patterns
   [#".*/src/.*/README.*"   ;; module READMEs inside code trees
    #"^build/.*"
-   #"^target/.*"
+   #".*(^|/)target/.*"     ;; build output, anywhere — was anchored at the repo
+                           ;; root only, so libs/*/target/classes/** (stale,
+                           ;; pre-rename copies of real docs) was being linted
+   #"libs/scaffolder/existing-dir/.*"  ;; scaffolder test fixture, not docs
    #"^\.cpcache/.*"
    #"^\.git/.*"
    #"^node_modules/.*"
-   #"^docs/archive/.*"])   ;; archived/deprecated docs
+   #"^docs/archive/.*"     ;; archived/deprecated docs
+   #"^docs/superpowers/.*"    ;; dated plans/specs — a record of what was true
+                              ;; then, not instructions to follow now. Linting
+                              ;; them would either falsify the record or hold
+                              ;; the gate permanently red. Same treatment as
+                              ;; CHANGELOG.md in .wagoe/check-no-boundary.edn.
+   #"^dev-docs/adr/.*"])      ;; ADRs record decisions, including Proposed ones
+                              ;; whose commands do not exist yet by design —
+                              ;; ADR-004 documents `clojure -M:backup` under a
+                              ;; "Status: Proposed" heading. Flagging that as
+                              ;; drift would punish the ADR for being a proposal.
 
 ;; Known stale/pre-split path patterns to warn about.
 ;; NOTE: these keep the pre-rename `boundary` spelling on purpose. They detect
@@ -136,12 +149,19 @@
 ;; deps.edn Alias Discovery
 ;; =============================================================================
 
+;; Aliases that are legitimately absent from deps.edn. Kept as a short, named
+;; list with a reason each — NOT as a namespace-wide skip. A blanket "ignore
+;; everything under :db/*" is what let BOU-257 through.
+(def external-aliases
+  {:deps "built into the Clojure CLI itself (clojure -X:deps find-versions)"
+   :nvd  "third-party CVE scanner the security checklist tells readers to add to THEIR project"})
+
 (defn discover-aliases []
   (try
     (let [deps-file (io/file (System/getProperty "user.dir") "deps.edn")
           content (slurp deps-file)
           deps (edn/read-string content)]
-      (set (keys (:aliases deps))))
+      (into (set (keys (:aliases deps))) (keys external-aliases)))
     (catch Exception e
       (println "Warning: could not parse deps.edn:" (.getMessage e))
       #{})))
@@ -317,8 +337,16 @@
                    (let [aliases (parse-aliases-from-command alias-str)]
                      (->> aliases
                           (remove #(contains? known-aliases %))
-                          ;; Special case: :db/h2 style aliases (namespace is "db")
-                          (remove #(= (namespace %) "db"))
+                          ;; NOTE no blanket exemption for namespaced aliases.
+                          ;; This used to skip everything under the "db"
+                          ;; namespace, which is precisely the family that broke
+                          ;; (BOU-257): deps.edn dropped :db/h2 and friends for a
+                          ;; single :db, and 264 documented commands kept naming
+                          ;; the dead alias for months. `clojure -M:test:db/h2`
+                          ;; does not fail — it warns and skips every test — so
+                          ;; nothing else was going to catch it. A namespaced
+                          ;; alias is checkable like any other; if one is
+                          ;; genuinely dynamic, exempt that alias by name.
                           ;; Library keywords like :core, :user etc
                           (remove #(contains? known-libs %))
                           ;; Aliases belonging to external example projects (not this repo)
@@ -453,7 +481,28 @@
       (println "  - report.edn")
       (println "  - report.txt")
 
-      ;; Always exit 0 (warn-only)
+      ;; Most findings are warn-only: broken links and stale paths are real but
+      ;; pre-existing debt (BOU-253 owns them), and failing on those would just
+      ;; hold CI red without anyone able to act on it in passing.
+      ;;
+      ;; `unknown-alias` fails. It is objectively decidable — the alias is in
+      ;; deps.edn or it is not — so there are no false positives to argue with,
+      ;; and its failure mode is silent: `clojure -M:test:db/h2` on a dropped
+      ;; alias does not error, it warns and skips every test. That is how 264
+      ;; documented commands stayed broken for months (BOU-257). A warning in a
+      ;; report nobody opens was not enough.
+      (let [failing (filter #(= :unknown-alias (:type %)) warnings)]
+        (when (seq failing)
+          (println)
+          (println (str "FAIL: " (count failing)
+                        " documented command(s) name a deps.edn alias that does not exist:"))
+          (doseq [w failing]
+            (println (str "  " (:file w) (when (:line w) (str ":" (:line w)))
+                          " — " (:message w))))
+          (println)
+          (println "Fix the command, or add the alias to deps.edn.")
+          (System/exit 1)))
+
       report)))
 
 ;; =============================================================================

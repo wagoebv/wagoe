@@ -261,7 +261,7 @@ clojure -M:migrate up
 ### 6. Run the Tests
 
 ```bash
-clojure -M:test:db/h2 :product
+clojure -M:test :product
 ```
 
 ---
@@ -316,7 +316,7 @@ Configure the provider via environment variables: `ANTHROPIC_API_KEY`, `OPENAI_A
 ## Testing
 
 ```bash
-clojure -M:test:db/h2 :scaffolder
+clojure -M:test :scaffolder
 ```
 
 ---

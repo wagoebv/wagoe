@@ -257,13 +257,13 @@ The system includes comprehensive tests for all databases:
 
 ```bash
 # Run basic tests (SQLite and H2 only, no external dependencies)
-clojure -M:test:db/h2 wagoe.platform.shell.adapters.database.multi-db-test/run-basic-tests
+clojure -M:test wagoe.platform.shell.adapters.database.multi-db-test/run-basic-tests
 
 # Run integration tests (requires PostgreSQL and MySQL servers)
-clojure -M:test:db/h2 wagoe.platform.shell.adapters.database.multi-db-test/run-integration-tests
+clojure -M:test wagoe.platform.shell.adapters.database.multi-db-test/run-integration-tests
 
 # Run performance tests
-clojure -M:test:db/h2 wagoe.platform.shell.adapters.database.multi-db-test/run-performance-tests
+clojure -M:test wagoe.platform.shell.adapters.database.multi-db-test/run-performance-tests
 ```
 
 ## Troubleshooting
@@ -316,11 +316,11 @@ docker run -d --name test-postgres -e POSTGRES_PASSWORD=test -p 5432:5432 postgr
 docker run -d --name test-mysql -e MYSQL_ROOT_PASSWORD=test -p 3306:3306 mysql:8
 
 # Run all tests
-clojure -M:test:db/h2
+clojure -M:test
 
 # Run specific database tests
-clojure -M:test:db/h2 -i :integration  # PostgreSQL/MySQL tests
-clojure -M:test:db/h2 -e :integration  # SQLite/H2 tests only
+clojure -M:test -i :integration  # PostgreSQL/MySQL tests
+clojure -M:test -e :integration  # SQLite/H2 tests only
 ```
 
 ## License

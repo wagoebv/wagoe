@@ -109,5 +109,5 @@ clj-paren-repair <file-with-issue>
 *Fix*:
 [source,bash]
 ----
-JWT_SECRET="dev-secret-at-least-32-characters-long" clojure -M:test:db/h2 :user
+JWT_SECRET="dev-secret-at-least-32-characters-long" clojure -M:test :user
 ----

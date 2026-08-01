@@ -94,5 +94,5 @@ Supports sync generation and optional async via `wagoe-jobs`.
 
 [source,bash]
 ----
-clojure -M:test:db/h2 :reports
+clojure -M:test :reports
 ----

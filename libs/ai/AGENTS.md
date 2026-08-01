@@ -207,16 +207,16 @@ The setup parser returns a map with string keys (e.g., `{"database" "postgresql"
 
 ```bash
 # All AI tests
-clojure -M:test:db/h2 :ai
+clojure -M:test :ai
 
 # Unit tests only (pure core functions — fast, no providers)
-clojure -M:test:db/h2 --focus-meta :unit :ai
+clojure -M:test --focus-meta :unit :ai
 
 # Integration tests (mock providers)
-clojure -M:test:db/h2 --focus-meta :integration :ai
+clojure -M:test --focus-meta :integration :ai
 
 # Contract tests (live Ollama — requires OLLAMA_URL)
-OLLAMA_URL=http://localhost:11434 clojure -M:test:db/h2 --focus-meta :contract :ai
+OLLAMA_URL=http://localhost:11434 clojure -M:test --focus-meta :contract :ai
 
 # Lint
 clojure -M:clj-kondo --lint libs/ai/src libs/ai/test

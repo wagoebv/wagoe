@@ -91,5 +91,5 @@ GET  /api/workflows/:id/audit      # Get audit trail
 
 [source,bash]
 ----
-clojure -M:test:db/h2 :workflow
+clojure -M:test :workflow
 ----

@@ -241,16 +241,16 @@ Always use `(use-fixtures :each (fn [f] (registry/clear-registry!) (f) (registry
 
 ```bash
 # All calendar tests
-clojure -M:test:db/h2 :calendar
+clojure -M:test :calendar
 
 # Unit tests only
-clojure -M:test:db/h2 --focus-meta :unit :calendar
+clojure -M:test --focus-meta :unit :calendar
 
 # DST edge cases specifically
-clojure -M:test:db/h2 --focus wagoe.calendar.core.recurrence-test
+clojure -M:test --focus wagoe.calendar.core.recurrence-test
 
 # iCal round-trip integration tests
-clojure -M:test:db/h2 --focus-meta :integration :calendar
+clojure -M:test --focus-meta :integration :calendar
 
 # Lint
 clojure -M:clj-kondo --lint libs/calendar/src libs/calendar/test

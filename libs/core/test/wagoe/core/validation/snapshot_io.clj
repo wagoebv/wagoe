@@ -11,10 +11,10 @@
     (check-snapshot! actual {:ns *ns* :test 'email-required :case 'missing})
 
     ;; Update snapshots mode
-    UPDATE_SNAPSHOTS=true clojure -M:test:db/h2
+    UPDATE_SNAPSHOTS=true clojure -M:test
 
     ;; Disable validation devex (snapshots pass through)
-    WAG_DEVEX_VALIDATION=false clojure -M:test:db/h2"
+    WAG_DEVEX_VALIDATION=false clojure -M:test"
   (:require [wagoe.core.validation.snapshot :as snapshot]
             [clojure.java.io :as io]
             [clojure.test :as t]
@@ -185,7 +185,7 @@
               (t/is false (str "Snapshot mismatch for " file-path "\n"
                                diff-msg
                                "\n\nTo update snapshots, run:\n"
-                               "  UPDATE_SNAPSHOTS=true clojure -M:test:db/h2"))
+                               "  UPDATE_SNAPSHOTS=true clojure -M:test"))
               false)))))))
 
 ;; -----------------------------------------------------------------------------

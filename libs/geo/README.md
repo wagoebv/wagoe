@@ -124,8 +124,8 @@ CREATE TABLE geo_cache (
 ## Tests
 
 ```bash
-clojure -M:test:db/h2 :geo
-clojure -M:test:db/h2 --focus-meta :unit :geo
+clojure -M:test :geo
+clojure -M:test --focus-meta :unit :geo
 ```
 
 See [AGENTS.md](AGENTS.md) for full developer guide, common pitfalls, and REPL smoke checks.
