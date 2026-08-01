@@ -39,10 +39,24 @@
                             (map #(.getPath ^java.io.File %))))]
         (into (vec (sub-dirs "src")) (sub-dirs "test"))))))
 
+(def ^:private top-level-lint-paths
+  "Non-lib source roots to lint, matching the ci.yml lint job.
+
+   `dev` and `scripts` are not optional extras. Leaving them out made this
+   check lint *less* than CI: a var defined in dev/ looked unresolved from a
+   test that uses it, so `bb check` reported a warning CI did not — and, worse,
+   a genuine error in dev/, scripts/ or examples/ would pass locally and only
+   surface in CI. ci.yml's own comment records that this exact gap once hid a
+   dev/ arity error.
+
+   Keep this in step with the `--lint` paths in .github/workflows/ci.yml."
+  ["src" "test" "dev" "scripts" "examples/todo/src"])
+
 (defn linting-cmd
   "Build the clj-kondo lint command with concrete, existing source paths."
   []
-  (into ["clojure" "-M:clj-kondo" "--lint" "src" "test"]
+  (into (into ["clojure" "-M:clj-kondo" "--lint"]
+              (filter #(.exists (io/file %)) top-level-lint-paths))
         (lib-lint-paths)))
 
 (def all-checks
