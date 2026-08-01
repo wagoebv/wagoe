@@ -55,7 +55,7 @@
       ;; Check result structure
       (is (true? (:success result)))
       (is (= "customer" (:module-name result)))
-      (is (= 12 (count (:files result))))
+      (is (= 13 (count (:files result))))
 
       ;; Check files are listed in result
       (is (some #(str/ends-with? (:path %) "schema.clj") (:files result)))
@@ -66,7 +66,12 @@
       (is (some #(str/ends-with? (:path %) "persistence.clj") (:files result)))
       (is (some #(str/ends-with? (:path %) "http.clj") (:files result)))
       (is (some #(str/ends-with? (:path %) "web_handlers.clj") (:files result)))
-      (is (some #(str/includes? (:path %) "create_customers.sql") (:files result)))
+      (is (some #(str/includes? (:path %) "-create-customers.up.sql") (:files result)))
+      ;; migratus only discovers `<id>-<name>.up.sql` / `.down.sql`; the old
+      ;; `create_customers.sql` shape was silently never applied (BOU-256).
+      (is (some #(str/includes? (:path %) "-create-customers.down.sql") (:files result)))
+      (is (every? #(re-find #"migrations/\d{14}-" (:path %))
+                  (filter #(str/includes? (:path %) "migrations/") (:files result))))
 
       ;; Check schema file content
       (let [schema-file (first (filter #(str/ends-with? (:path %) "schema.clj") (:files result)))]
@@ -89,7 +94,7 @@
         (is (str/includes? (:content core-file) "(defn apply-customer-update")))
 
       ;; Check migration file content
-      (let [migration-file (first (filter #(str/includes? (:path %) "create_customers.sql") (:files result)))]
+      (let [migration-file (first (filter #(str/includes? (:path %) "-create-customers.up.sql") (:files result)))]
         (is (some? migration-file))
         (is (str/includes? (:content migration-file) "CREATE TABLE IF NOT EXISTS customers"))
         (is (str/includes? (:content migration-file) "name VARCHAR(255) NOT NULL"))
@@ -111,7 +116,7 @@
 
       ;; Check result
       (is (true? (:success result)))
-      (is (= 12 (count (:files result))))
+      (is (= 13 (count (:files result))))
       (is (some #(str/includes? % "Dry run") (:warnings result))))))
 
 (deftest ^:unit generate-module-validation-test
@@ -147,13 +152,13 @@
 
       (is (true? (:success result)))
       (is (= "product" (:module-name result)))
-      (is (= 2 (count (:files result))))
+      (is (= 3 (count (:files result))))
 
       ;; Check migration file information
       (let [migration-file (first (filter #(str/starts-with? (:path %) "migrations/")
                                           (:files result)))]
         (is (some? migration-file))
-        (is (str/includes? (:path migration-file) "add_description_to_products.sql"))
+        (is (str/includes? (:path migration-file) "-add-description-to-products.up.sql"))
         (is (str/includes? (:content migration-file) "ALTER TABLE"))
         (is (str/includes? (:content migration-file) "ADD COLUMN description"))))))
 
