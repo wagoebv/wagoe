@@ -185,8 +185,17 @@
   (println)
   (println (bold "Wagoe Database Seed"))
   (println)
+  ;; Advisory only. libs/tools is Babashka in its own process, so it cannot see
+  ;; the -Denv JVM property the :prod/:dev aliases set — meaning it cannot fully
+  ;; reproduce the platform's detect-environment. The authoritative guard lives
+  ;; in wagoe.platform.shell.database.cli-seed, which runs in the same JVM as
+  ;; the database connection and uses detect-environment directly. This check
+  ;; exists to fail fast with a friendly message in the common case.
   (let [force? (boolean (some #{"--force"} args))
-        env    (or (System/getenv "WAG_ENV") "dev")]
+        env    (or (System/getenv "WAG_ENV")
+                   (System/getenv "ENV")
+                   (System/getenv "ENVIRONMENT")
+                   "dev")]
     (when-not (or force? (contains? seedable-envs env))
       (println (red (str "  REFUSED: bb db:seed cannot run in the " env " environment.")))
       (println (dim "  Seeding inserts rows into the database the active config resolves to."))
