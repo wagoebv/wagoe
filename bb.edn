@@ -6,8 +6,8 @@
  :tasks
  {:requires ([babashka.http-client       :as http]
              [babashka.process          :as process]
-            [babashka.fs               :as fs]
-            [clojure.string            :as str]
+             [babashka.fs               :as fs]
+             [clojure.string            :as str]
              [wagoe.tools.scaffold    :as scaffold]
              [wagoe.tools.ai          :as ai]
              [wagoe.tools.deps        :as deps]
@@ -15,6 +15,7 @@
              [wagoe.tools.i18n        :as i18n]
              [wagoe.tools.admin       :as admin]
              [wagoe.tools.deploy      :as deploy]
+             [wagoe.tools.relocate    :as relocate]
              [wagoe.tools.dev         :as dev]
              [wagoe.tools.doctor      :as doctor]
              [wagoe.tools.setup       :as setup]
@@ -63,6 +64,8 @@
                     :task (apply deps/-main *command-line-args*)}
   deploy        {:doc "Deploy Wagoe libraries to Clojars (bb deploy --help for usage)"
                  :task (apply deploy/-main *command-line-args*)}
+  relocate      {:doc "Publish org.boundary-app relocation stubs pointing at com.wagoe (bb relocate --help for usage)"
+                 :task (apply relocate/-main *command-line-args*)}
   migrate       {:doc "Run database migrations via the standard Wagoe migrate CLI (bb migrate [up|status|rollback|create ...])"
                  :task (apply dev/migrate *command-line-args*)}
   coverage      {:doc "Run Cloverage coverage with the monorepo Wagoe test/classpath setup"
