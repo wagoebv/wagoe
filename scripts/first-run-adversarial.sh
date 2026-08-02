@@ -45,23 +45,47 @@ ok()    { echo "  ok   — $*"; }
 head_() { echo; echo "$*"; }
 
 export DEBIAN_FRONTEND=noninteractive
+# The package LIST is per manager, not shared. Two of these names differ on
+# Arch — procps is procps-ng there, and python3 is python — so a shared list
+# aborts setup before a single adversarial case runs, and the Arch knob silently
+# tests nothing. (The python3 *binary* does exist on Arch once `python` is
+# installed; it is a symlink. Only the package name differs.)
 if command -v apt-get >/dev/null 2>&1; then
   apt-get update -qq >/tmp/pkg.log 2>&1 || { tail -5 /tmp/pkg.log; echo "apt-get update failed"; exit 1; }
   pkg_install() { apt-get install -y -qq "$@" >/tmp/pkg.log 2>&1 || { tail -5 /tmp/pkg.log; echo "apt-get install $* failed"; exit 1; }; }
+  PKGS="curl ca-certificates git unzip zip which procps python3 fish"
 elif command -v dnf >/dev/null 2>&1; then
   pkg_install() { dnf install -y -q "$@" >/tmp/pkg.log 2>&1 || { tail -5 /tmp/pkg.log; echo "dnf install $* failed"; exit 1; }; }
+  PKGS="curl ca-certificates git unzip zip which procps-ng python3 fish"
 elif command -v pacman >/dev/null 2>&1; then
   # See first-run-smoke.sh: pacman needs --disable-sandbox under qemu emulation.
   PAC_FLAGS="--noconfirm --disable-sandbox"
   pacman -Sy $PAC_FLAGS >/tmp/pkg.log 2>&1 || { tail -5 /tmp/pkg.log; echo "pacman -Sy failed"; exit 1; }
   pkg_install() { pacman -S $PAC_FLAGS --needed "$@" >/tmp/pkg.log 2>&1 || { tail -5 /tmp/pkg.log; echo "pacman -S $* failed"; exit 1; }; }
+  PKGS="curl ca-certificates git unzip zip which procps-ng python fish"
 else
   echo "no supported package manager"; exit 1
 fi
 # python3 is for the port squatter in case 5, and it is not optional: ubuntu:24.04
 # ships without it, so the first run of case 5 silently failed to bind and
 # reported "case not exercised" — a gap that reads like a result.
-pkg_install curl ca-certificates git unzip zip which procps python3 fish
+pkg_install $PKGS
+
+# Fail here, loudly, rather than three cases later on a confusing symptom.
+for t in curl git unzip zip which python3 fish; do
+  command -v "$t" >/dev/null 2>&1 \
+    || { echo "setup: $t missing after installing: $PKGS"; exit 1; }
+done
+
+if command -v pacman >/dev/null 2>&1; then
+  # Same exclusion as first-run-smoke.sh: install.sh:122 installs the JVM with a
+  # plain `pacman -S`, which cannot sandbox in a container (seccomp under qemu,
+  # Landlock on ARM-native Arch). Without this the setup install.sh dies and no
+  # case runs at all. Pre-satisfying java lets every case below be exercised.
+  echo "  NOTE: pre-installing the JVM; install.sh skips its pacman JVM step,"
+  echo "        so that one step is NOT under test on this image."
+  pkg_install jdk-openjdk
+fi
 
 # ── setup: install once ─────────────────────────────────────────────────────
 echo "[setup] install.sh"

@@ -350,8 +350,11 @@ SMOKE_IMAGE=archlinux:latest SMOKE_PLATFORM=linux/amd64 \
   ./scripts/first-run-smoke.sh                                  # x86 hosts
 
 # Adversarial cases — existing dir, bad names, occupied port, re-run, fish PATH
-./scripts/first-run-adversarial.sh
+./scripts/first-run-adversarial.sh                                 # ubuntu:24.04
 ADV_IMAGE=fedora:41 ./scripts/first-run-adversarial.sh
+ADV_IMAGE=menci/archlinuxarm:base ./scripts/first-run-adversarial.sh   # ARM hosts
+ADV_IMAGE=archlinux:latest ADV_PLATFORM=linux/amd64 \
+  ./scripts/first-run-adversarial.sh                               # x86 hosts
 ----
 
 Both exit non-zero on failure, so they can be chained in a release script.
