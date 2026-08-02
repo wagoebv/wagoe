@@ -234,58 +234,85 @@
    `Your application jar is not published to Clojars` is true and must stay."
   #"(?i)\b(?:librar(?:y|ies)|libs?|artifacts?|modules?)\b")
 
+(def ^:private clause-separator
+  "Sentence and clause boundaries within a documentation line.
+
+   The lookbehind on `[.;:]` requires trailing whitespace so `libs/e2e/README.md`
+   and `1.0.0-beta-4` stay in one piece."
+  #"(?<=[.;:])\s+|\s+[—–]\s+|\s+--\s+")
+
+(defn claim-text
+  "The clause(s) of `line` that carry the unpublished claim.
+
+   Attribution reads this rather than the whole line, because a line often says
+   two things. `libs/e2e/README.md` opens with \"End-to-end … test suite for the
+   Wagoe platform. **Test code only** — this library … is **not published to
+   Clojars**\": `platform` is published and on that line, but it is not what the
+   claim is about. Scoping to the claim's own clause is what separates naming a
+   library *as the subject of the claim* from mentioning one in passing.
+
+   Falls back to the whole line if no single clause carries the phrase, so a
+   claim split across a boundary is still read rather than silently dropped."
+  [line]
+  (let [clauses (->> (str/split line clause-separator)
+                     (filter (fn [c] (some #(re-find % c) unpublished-patterns))))]
+    (if (seq clauses) (str/join " " clauses) line)))
+
 (defn publishing-findings
   "Lines in `text` claiming something unpublished when it is published.
 
-   A document that is *about* one library decides the question for that file:
-   `libs/e2e/README.md` saying \"not published to Clojars\" is correct, and must
-   stay correct even though the sentence happens to contain the word `platform`.
-   Attribution by mention alone got that wrong — the subject outranks anything
-   named in passing.
+   Attribution runs per claim, not per file. An earlier version returned early
+   for any document whose subject is unpublished, which is too blunt: it made
+   `libs/e2e/README.md` unreadable in full, so a sentence there calling
+   `wagoe-tools` unpublished would have passed. Only the file's claim *about
+   itself* is exempt.
 
-   Where a file has no single subject — root `README.md`, the library index —
-   two things make a claim actionable. Naming a published library is the obvious
-   one; that caught \"`libs/tools` is not published to Clojars\" in the root
-   AGENTS.md.
+   Four questions, in order, against `claim-text` rather than the whole line:
 
-   The other is saying *libraries* without naming any. `docs/.../libraries/
-   pages/index.adoc` carried \"These libraries are not published to Clojars\"
-   above the devtools/tools/cli/mcp table — no name on the line, no subject for
-   the page, and four published libraries mislabelled by one sentence. Requiring
-   a name would let that exact regression back in, so the discriminator is what
-   the sentence says is unpublished, not whether it spells out which.
-
-   `unpublished-libs` names the directories under `libs/` that genuinely are not
-   published — `e2e`. A line that mentions one is describing it, and is left
-   alone however it is phrased: `libs/e2e is the only directory under libs/ that
-   is not published` is both true and, without this, a generic-claim match."
+   1. Does the claim name a library that genuinely is not published? Then it is
+      describing it, and is true however it is phrased — `libs/e2e is the only
+      directory under libs/ that is not published` needs no exemption.
+   2. Does it name a published library? Then it is actionable, whatever the file
+      is about. That caught \"`libs/tools` is not published to Clojars\" in the
+      root AGENTS.md, and is what makes an unpublished-subject file readable.
+   3. Otherwise the claim has no named subject, so it inherits the file's. If
+      that subject is genuinely unpublished the claim is true and is left alone.
+   4. With no subject either, saying *libraries* is enough. `docs/.../libraries/
+      pages/index.adoc` carried \"These libraries are not published to Clojars\"
+      above the devtools/tools/cli/mcp table — no name, no page subject, four
+      published libraries mislabelled by one sentence. Requiring a name would
+      let that exact regression back in."
   ([path text published-libs]
    (publishing-findings path text published-libs #{}))
   ([path text published-libs unpublished-libs]
-   (let [subject (subject-lib path)]
-     (if (and subject (not (published? published-libs subject)))
-      ;; The file documents something genuinely unpublished. Its claim is true.
-       []
-       (->> (str/split-lines text)
-            (map-indexed vector)
-            (keep (fn [[idx line]]
-                    (when (some #(re-find % line) unpublished-patterns)
-                      (let [named       (->> published-libs
-                                             (filter #(names-lib? line %))
-                                             sort
-                                             seq)
-                            describes-  (some #(names-lib? line %) unpublished-libs)
-                            generic     (and (not describes-)
-                                             (re-find library-noun-pattern line))]
-                        (when (and (not describes-)
-                                   (or named subject generic))
-                          {:rule    :publishing
-                           :path    path
-                           :line    (inc idx)
-                           :libs    (cond subject [subject]
-                                          named   named
-                                          :else   ["libraries (unnamed)"])
-                           :context (str/trim line)}))))))))))
+   (let [subject      (subject-lib path)
+         own-subject? (boolean (and subject (not (published? published-libs subject))))
+         ;; A published subject still outranks anything named in its own file:
+         ;; `libs/tools/AGENTS.md` reports `tools`, not every artifact listed.
+         subject-wins (and subject (not own-subject?))]
+     (->> (str/split-lines text)
+          (map-indexed vector)
+          (keep (fn [[idx line]]
+                  (when (some #(re-find % line) unpublished-patterns)
+                    (let [claim      (claim-text line)
+                          describes- (some #(names-lib? claim %) unpublished-libs)
+                          named      (->> published-libs
+                                          (filter #(names-lib? claim %))
+                                          sort
+                                          seq)
+                          libs       (cond
+                                       describes-   nil
+                                       named        (if subject-wins [subject] named)
+                                       own-subject? nil
+                                       subject      [subject]
+                                       (re-find library-noun-pattern claim)
+                                       ["libraries (unnamed)"])]
+                      (when libs
+                        {:rule    :publishing
+                         :path    path
+                         :line    (inc idx)
+                         :libs    libs
+                         :context (str/trim line)})))))))))
 
 ;; =============================================================================
 ;; Allowlist

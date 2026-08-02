@@ -294,7 +294,24 @@
     (is (empty? (sut/publishing-findings
                  "docs/modules/guides/pages/deployment.adoc"
                  "Your application jar is not published to Clojars."
-                 published)))))
+                 published))))
+
+  (testing "but an unpublished subject does not exempt the rest of the file"
+    ;; The suppression above is about the file's *own* claim. Skipping the file
+    ;; wholesale — the first implementation — meant `libs/e2e/README.md` could
+    ;; say anything at all about any other library and never be read.
+    (let [[f :as fs] (sut/publishing-findings
+                      "libs/e2e/README.md"
+                      "`wagoe-tools` is not published to Clojars."
+                      published)]
+      (is (= 1 (count fs)))
+      (is (= ["wagoe-tools"] (:libs f))
+          "the claim names a published library as its subject — attribute it there"))
+
+    (is (seq (sut/publishing-findings
+              "libs/e2e/README.md"
+              "Unlike `core`, which is not published to Clojars, this suite runs in-repo."
+              published)))))
 
 (deftest ^:unit subject-lib-test
   (is (= "tools" (sut/subject-lib "libs/tools/AGENTS.md")))
