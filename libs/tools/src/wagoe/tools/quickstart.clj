@@ -18,7 +18,10 @@
 ;; =============================================================================
 
 (def presets
-  {"minimal"  {:database "h2"         :description "H2 in-memory, no extras"}
+  ;; H2 is file-backed in dev. It was in-memory until BOU-265, which made this
+  ;; preset unable to produce a working app: migrate, create-admin and the
+  ;; server are separate JVMs, and an in-memory H2 is private to each.
+  {"minimal"  {:database "h2"         :description "H2 file-based, no extras"}
    "standard" {:database "postgresql" :description "PostgreSQL, recommended for production"}
    "sqlite"   {:database "sqlite"     :description "SQLite file-based, zero-config"}
    "mysql"    {:database "mysql"      :description "MySQL/MariaDB"}})

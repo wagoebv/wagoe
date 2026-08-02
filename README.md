@@ -64,7 +64,7 @@ Connect your editor (or the Wagoe MCP server) to the nREPL port, then eval:
 (halt)  ; stop the system
 ```
 
-You get: H2 in-memory database (zero-config), HTTP server on port 3000, a complete Integrant system, and REPL-driven development.
+You get: SQLite database (zero-config, and your data survives a restart), HTTP server on port 3000, a complete Integrant system, and REPL-driven development.
 
 ---
 

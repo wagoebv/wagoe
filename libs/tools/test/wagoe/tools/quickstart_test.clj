@@ -22,8 +22,13 @@
 
 (deftest ^:unit resolve-preset-returns-preset-map
   (testing "known presets resolve to maps"
-    (is (= {:database "h2" :description "H2 in-memory, no extras"}
-           (#'quickstart/resolve-preset "minimal")))
+    ;; Assert the database, not the description. This line used to pin the
+    ;; exact copy ("H2 in-memory, no extras"), so correcting that description
+    ;; when BOU-265 made dev H2 file-backed failed a test that had nothing to
+    ;; do with the change. The three lines below it only ever checked
+    ;; :database; presets-have-required-fields already covers the description
+    ;; being present.
+    (is (= "h2" (:database (#'quickstart/resolve-preset "minimal"))))
     (is (= "postgresql" (:database (#'quickstart/resolve-preset "standard"))))
     (is (= "sqlite" (:database (#'quickstart/resolve-preset "sqlite"))))
     (is (= "mysql" (:database (#'quickstart/resolve-preset "mysql")))))

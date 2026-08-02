@@ -46,6 +46,18 @@ for what is public API, what is internal, and how deprecations are announced.
   shelled out to it, so the hexagonal gate BOU-80 requires — and that the
   generated `AGENTS.md` documents — could not run in a new project. Found
   while reconciling the two generators.
+- **H2 is now file-backed in dev** (BOU-265). `bb setup --database h2` wrote
+  `:memory true` for every environment, and an in-memory H2 database is private
+  to the JVM that opened it. `bb migrate up`, `bb create-admin` and the app are
+  three separate processes, so each got its own empty database: migrations
+  applied nowhere, the admin user was written nowhere, and the app booted
+  unmigrated — with every step exiting 0. `bb quickstart --preset minimal`, the
+  first-listed preset, could not produce a working app. Dev and other non-test
+  environments now use `./<env>-h2-database`; the test profile keeps in-memory
+  H2, which is correct for a single JVM. The path is explicitly relative
+  because H2 2.x rejects an implicitly-relative one.
+- The root README said a new project gets "H2 in-memory database
+  (zero-config)". It gets SQLite, and has since before the rename.
 
 ## [1.0.0-beta-4] — 2026-08-01
 

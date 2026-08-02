@@ -107,7 +107,23 @@
          "              :maximum-pool-size     10\n"
          "              :connection-timeout-ms 30000}}\n")))
 
-(defn- h2-template [env]
+(defn- h2-template
+  "H2 config. In-memory for test, file-backed everywhere else.
+
+   An in-memory H2 database is private to the JVM that opened it, and the
+   first-run funnel spans three of them: `bb migrate up`, `bb create-admin` and
+   the app each shell out separately. With :memory true in dev, migrations
+   applied to a database that died with the migrate process, the admin user was
+   written to another, and the app booted on a third — empty and unmigrated,
+   with every step exiting 0 (BOU-265).
+
+   The test profile runs in a single JVM, so in-memory is both correct and
+   faster there.
+
+   The path must start with ./ — H2 2.x rejects an implicitly-relative path
+   (\"[90011-240]\"), and the adapter builds the URL as (str \"jdbc:h2:\" path)
+   so a bare name would fail at connection time, not at config time."
+  [env]
   (if (= env "test")
     (str "  :wagoe/h2\n"
          "  {:memory true\n"
@@ -115,9 +131,9 @@
          "            :maximum-pool-size 5\n"
          "            :connection-timeout-ms 5000}}\n")
     (str "  :wagoe/h2\n"
-         "  {:memory true\n"
-         "   :pool   {:minimum-idle      1\n"
-         "            :maximum-pool-size 10}}\n")))
+         "  {:db   \"./" env "-h2-database\"\n"
+         "   :pool {:minimum-idle      1\n"
+         "          :maximum-pool-size 10}}\n")))
 
 (defn- http-template [_env]
   (str "  :wagoe/http\n"
@@ -363,7 +379,7 @@
         database (select-option "Database"
                                 [[:sqlite     "File-based, zero setup — recommended to start"]
                                  [:postgresql "Production-ready relational database"]
-                                 [:h2         "In-memory database (testing/prototyping)"]
+                                 [:h2         "H2 file-based (in-memory for the test profile)"]
                                  [:mysql      "MySQL/MariaDB"]])
 
         ai-provider (select-option "AI provider"

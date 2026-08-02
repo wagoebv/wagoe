@@ -56,6 +56,53 @@
       (is (not (str/includes? config ":wagoe/router"))))))
 
 ;; =============================================================================
+;; H2 — in-memory for test, file-backed for dev (BOU-265)
+;; =============================================================================
+
+;; An in-memory H2 database is private to the JVM that opened it. The first-run
+;; funnel spans three: `bb migrate up`, `bb create-admin`, and the app. With
+;; :memory true in dev, each got its own empty database while every step exited
+;; 0 — migrations applied nowhere, the admin user was written nowhere, and the
+;; app booted unmigrated. Verified against H2 2.4.240 directly:
+;;
+;;   process-1 wrote users, rowcount: 1
+;;   process-2 CANNOT see it: Table "users" not found (this database is empty)
+;;
+;; The test profile is a single JVM, so in-memory is correct there.
+
+(def ^:private h2-spec (assoc minimal-spec :database :h2))
+
+(deftest ^:unit h2-dev-config-is-file-backed
+  (testing "dev H2 is a file, so separate processes share one database"
+    (let [config (setup/build-config h2-spec "dev")]
+      (is (str/includes? config ":wagoe/h2"))
+      (is (not (str/includes? config ":memory true"))
+          "in-memory H2 in dev is invisible to bb migrate / bb create-admin")
+      (is (str/includes? config ":db")
+          "dev H2 must name a database file")))
+
+  (testing "the path is explicitly relative"
+    ;; H2 2.x rejects a bare relative path outright:
+    ;;   \"A file path that is implicitly relative to the current working
+    ;;    directory is not allowed in the database URL ... Use an absolute
+    ;;    path, ~/name, ./name, or the baseDir setting instead. [90011-240]\"
+    ;; The adapter builds the URL as (str \"jdbc:h2:\" database-path ...), so a
+    ;; bare name would fail at connection time rather than at config time.
+    (let [config (setup/build-config h2-spec "dev")]
+      (is (re-find #":db\s+\"\./" config)
+          "H2 file path must start with ./ or the JDBC URL is rejected")))
+
+  (testing "test env keeps in-memory H2 — one JVM, and it should stay fast"
+    (let [config (setup/build-config h2-spec "test")]
+      (is (str/includes? config ":wagoe/h2"))
+      (is (str/includes? config ":memory true"))))
+
+  (testing "a non-H2 choice still gets in-memory H2 for the test profile"
+    ;; build-config maps every database to h2-template for "test"
+    (let [config (setup/build-config minimal-spec "test")]
+      (is (str/includes? config ":memory true")))))
+
+;; =============================================================================
 ;; build-config — with all providers enabled
 ;; =============================================================================
 
