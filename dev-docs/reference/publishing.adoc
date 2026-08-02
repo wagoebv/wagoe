@@ -135,14 +135,14 @@ Always bump the version before deploying — you cannot re-deploy the same versi
 
 == Deploying locally
 
-=== All 22 artifacts in one command
+=== All 29 artifacts in one command
 
 [source,bash]
 ----
 bb deploy --all
 ----
 
-This deploys all 22 publishable artifacts in dependency
+This deploys all 29 publishable artifacts in dependency
 order with a 30-second pause between artifacts to allow Clojars indexing.
 
 === Only libraries not yet on Clojars
@@ -303,11 +303,12 @@ release still works, then delete the repository-level copies.
 - Setup Clojure + Babashka       # DeLaGuardo/setup-clojure with bb: latest
 - Cache ~/.m2 and ~/.gitlibs     # Speeds up subsequent runs
 - npm ci + npm run build:css:admin  # Builds Tailwind CSS for ui-style jar
-- bb deploy --all                # Deploys all 23 artifacts in order, 30s between each
+- bb deploy --all                # Deploys all 29 artifacts in order, 30s between each
 - Create GitHub Release          # Only on tag pushes; pre-release for alpha/beta
 ----
 
-Total CI time is approximately 15–20 minutes (23 artifacts × 30s indexing pause + build time).
+The indexing pauses alone account for roughly 15 minutes (29 artifacts × 30s), so
+budget approximately 20–25 minutes in total once the build is included.
 
 ---
 

@@ -341,11 +341,11 @@ Run database migrations first: `clojure -M:migrate up`
 
 ### `bb deploy` — Deploy to Clojars
 
-Deploys the 22 published Wagoe libraries to Clojars. `wagoe-tools` itself is not published — it is a monorepo-internal tool.
+Deploys the 29 published Wagoe libraries to Clojars — `wagoe-tools` among them, as `com.wagoe/wagoe-tools`.
 
 ```bash
 bb deploy --help                    # Show help
-bb deploy --all                     # Deploy all 22 published artifacts
+bb deploy --all                     # Deploy all 29 published artifacts
 bb deploy --missing                 # Deploy only unpublished artifacts
 bb deploy core platform user        # Deploy specific libraries
 ```
@@ -355,7 +355,7 @@ Required environment variables:
 - `CLOJARS_PASSWORD` — your Clojars deploy token
 
 Important release note:
-- `bb deploy --all` publishes every artifact listed in `wagoe.tools.deploy/all-libs`. `wagoe-tools` is excluded from this list.
+- `bb deploy --all` publishes every artifact listed in `wagoe.tools.deploy/all-libs`. `wagoe-tools` is the first entry in that list, not an exclusion. The only directory under `libs/` that `all-libs` omits is `e2e`, which is a test harness rather than a library.
 - A Git tag only triggers the GitHub Actions workflow; actual artifact versions still come from each artifact's `build.clj`.
 - For a tagged full release, bump every included artifact to an unpublished version first, otherwise the workflow will fail on the first duplicate version.
 
@@ -420,7 +420,7 @@ Translation files live in `libs/i18n/resources/wagoe/i18n/translations/`.
 | `wagoe.tools.admin_entity` | Admin Entity Generator — Babashka wrapper for AI admin entity generation |
 | `wagoe.tools.i18n` | i18n catalogue management (find/scan/missing/unused) |
 | `wagoe.tools.admin` | First admin user creation wizard |
-| `wagoe.tools.deploy` | Clojars deployment for all 22 published Wagoe artifacts |
+| `wagoe.tools.deploy` | Clojars deployment for all 29 published Wagoe artifacts |
 | `wagoe.tools.dev` | migrate + check-links + smoke-check + install-hooks |
 
 ---
