@@ -62,7 +62,17 @@ jobs:
           done < <(bb -e "(require 'check-no-boundary) \
             (run! println (check-no-boundary/allow-paths))")
 
-          echo "Excluding ${#excludes[@]} allowlisted paths (read from the gate)."
+          # Plus this file. It cannot avoid the token: it invokes the gate by
+          # name, reads the gate's namespace, and greps for the brand — six
+          # self-hits that would show up in the report as findings.
+          #
+          # The blind spot that creates is covered elsewhere: the BLOCKING gate
+          # still scans this workflow (it is not in the allowlist), so a real
+          # residual introduced here fails CI rather than hiding behind this
+          # exclusion.
+          excludes+=(":!.github/workflows/brand-canary.yml")
+
+          echo "Excluding ${#excludes[@]} paths: the gate's allowlist plus this workflow."
 
           # Every tracked file, case-insensitive, no extension filter, so the
           # output is only residue nobody has classified yet.
