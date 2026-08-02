@@ -78,11 +78,13 @@ needs. The supported surface is the seam, not the implementation behind it.
 | Surface | Where | Supported?
 
 | *Protocols*
-| `wagoe.<lib>.ports` — every module defines one, enforced by `bb check:ports`
+| `wagoe.<lib>.ports`, or the library's documented equivalent — see the
+  exceptions below. Presence is enforced by `bb check:ports`.
 | ✅ Yes — this is the contract
 
 | *Schemas*
-| `wagoe.<lib>.schema` — Malli schemas for entities and inputs
+| `wagoe.<lib>.schema` — Malli schemas for entities and inputs, where the
+  library defines them
 | ✅ Yes
 
 | *Integrant keys*
@@ -111,6 +113,40 @@ Integrant key or a config key, it is supported.* If you are calling into
 `core/` or `shell/` directly, you are using an implementation detail, and
 `bb check:ports` exists precisely to stop the framework's own code from doing
 that.
+
+=== Where the seam is not a single `ports.clj`
+
+Most libraries put their protocols in one `wagoe.<lib>.ports`. Four deviate by
+design, and the rule above still applies — only the file layout differs.
+
+[cols="1,3",options="header"]
+|===
+| Library | Where its contract lives
+
+| `platform`
+| `wagoe.platform.ports.*` — a directory rather than one file. Today it holds
+  `ports.http` (`IRouter`, `IHttpServer`, `IRouteValidator`). Its `DBAdapter`
+  and `IFileSystemAdapter` protocols currently sit under
+  `shell.adapters.*.protocols`; they are supported surface despite the
+  location, and moving them under `ports` is tracked work
+
+| `observability`
+| One `ports.clj` per concern: `wagoe.observability.{metrics,tracing,errors,logging}.ports`
+
+| `cache`
+| Has no `core/` at all — a thin adapter library, so `ports` plus `shell` is the
+  whole of it
+
+| `shared-ui`
+| Has *no* ports and no schema. It is a library of pure Hiccup primitives, so
+  the public surface is the functions in `wagoe.shared.ui.core.*` themselves.
+  Treat those the way you would a port; they do not follow the "`core/` is
+  internal" rule, because for this library there is nothing else.
+|===
+
+`wagoe-mcp` is a fifth deviation, but only in naming: its sources live under
+`wagoe/mcp/` (namespaces `wagoe.mcp.*`) while the directory is `libs/wagoe-mcp`.
+Its `ports` namespace is where you would expect.
 
 This is not a hypothetical distinction. `wagoe-user` dropped five protocols from
 its `ports.clj` in one release, and `wagoe-jobs` moved a transactional-enqueue

@@ -23,6 +23,9 @@ Every library follows the same FC/IS structure, making the codebase instantly fa
 | xref:ui-style.adoc[ui-style]
 | Shared UI contract: centralized CSS/JS bundles, tokens, and reusable style conventions across libraries.
 
+| xref:shared-ui.adoc[shared-ui]
+| Shared Hiccup primitives: form controls, tables, layouts, modals, icons. Pure functions, no ports — extracted to dissolve the admin↔user dependency cycle.
+
 | xref:i18n.adoc[i18n]
 | Internationalisation: marker-based translation, locale chain resolution, EDN catalogues, Ring middleware, and Babashka tooling.
 |===
@@ -113,6 +116,12 @@ from application code.
 
 | xref:tools.adoc[tools]
 | Dev-only: deploy to Clojars, config doctor, setup wizard, scaffolder integration, quality checks, i18n management.
+
+| xref:cli.adoc[wagoe-cli]
+| The `wagoe` command: `wagoe new` to create a project, `wagoe add` to wire in an optional module, `wagoe list modules`.
+
+| xref:mcp.adoc[wagoe-mcp]
+| MCP server over stdio: exposes the framework's tools and resources to editor agents via JSON-RPC.
 |===
 
 == Clojars coordinates
@@ -121,10 +130,10 @@ All libraries share the `com.wagoe` group:
 
 [source,clojure]
 ----
-{com.wagoe/wagoe-core      {:mvn/version "1.0.1-alpha-26"}
- com.wagoe/wagoe-user      {:mvn/version "1.0.1-alpha-26"}
- com.wagoe/wagoe-admin     {:mvn/version "1.0.1-alpha-26"}
- com.wagoe/wagoe-platform  {:mvn/version "1.0.1-alpha-26"}
+{com.wagoe/wagoe-core      {:mvn/version "1.0.0-beta-4"}
+ com.wagoe/wagoe-user      {:mvn/version "1.0.0-beta-4"}
+ com.wagoe/wagoe-admin     {:mvn/version "1.0.0-beta-4"}
+ com.wagoe/wagoe-platform  {:mvn/version "1.0.0-beta-4"}
  ;; etc.
  }
 ----
