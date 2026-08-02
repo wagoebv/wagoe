@@ -1,0 +1,115 @@
+name: Brand canary
+
+# Report-only counterpart to `bb check:no-boundary` (BOU-250).
+#
+# The gate matches a fixed set of token shapes. That is the right trade for a
+# blocking check — a loose pattern would flag the architectural sense of the
+# word on every PR — but it means the gate is blind by construction to any
+# spelling nobody thought of. During the rename the gate reported clean while a
+# plain case-insensitive sweep found ~900 leftovers: tokens inside regex
+# literals, the Maven group in path form, BOUNDARY_ alongside BND_, and whole
+# file types no glob covered (.tmpl, .sh, .yml, .service).
+#
+# This job runs the loose sweep on a schedule and NEVER fails. It exists so the
+# difference between "no hard tokens" and "no brand residue" stays visible
+# instead of being rediscovered by the next person to grep by hand.
+#
+# It is deliberately not part of CI: on a pull request a report nobody can act
+# on is noise, and making it blocking would re-introduce the false positives
+# the narrow patterns exist to avoid.
+
+on:
+  schedule:
+    # Mondays, 06:00 UTC. Drift is measured in weeks, not commits.
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sweep:
+    name: Case-insensitive brand sweep (report only)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Babashka
+        uses: DeLaGuardo/setup-clojure@13.6.1
+        with:
+          bb: latest
+
+      - name: Hard token groups (what the blocking gate sees)
+        continue-on-error: true
+        run: bb check:no-boundary
+
+      - name: Loose sweep (what the gate cannot see)
+        shell: bash
+        run: |
+          # Exclusions come FROM the gate, not from a copy of its list here.
+          # The first draft of this job hardcoded the allowlist — a second
+          # registry to drift, which is the very mechanism BOU-250 catalogues.
+          # It also tripped the gate on itself: one exempt path is a filename
+          # ending in the old brand plus ".clj", which reads as a namespace
+          # reference.
+          # while-read rather than mapfile: mapfile needs bash 4, so this could
+          # not be verified on a macOS dev box (bash 3.2). A step that only runs
+          # correctly on the runner is a step nobody checks before pushing.
+          excludes=()
+          while IFS= read -r p; do
+            [ -n "$p" ] && excludes+=(":!$p")
+          done < <(bb -e "(require 'check-no-boundary) \
+            (run! println (check-no-boundary/allow-paths))")
+
+          # Plus this file. It cannot avoid the token: it invokes the gate by
+          # name, reads the gate's namespace, and greps for the brand — six
+          # self-hits that would show up in the report as findings.
+          #
+          # The blind spot that creates is covered elsewhere: the BLOCKING gate
+          # still scans this workflow (it is not in the allowlist), so a real
+          # residual introduced here fails CI rather than hiding behind this
+          # exclusion.
+          excludes+=(":!.github/workflows/brand-canary.yml")
+
+          echo "Excluding ${#excludes[@]} paths: the gate's allowlist plus this workflow."
+
+          # Every tracked file, case-insensitive, no extension filter, so the
+          # output is only residue nobody has classified yet.
+          hits=$(git grep -In -i -E 'boundary' -- "${excludes[@]}" || true)
+
+          count=$(printf '%s' "$hits" | grep -c . || true)
+          files=$(printf '%s' "$hits" | cut -d: -f1 | sort -u | grep -c . || true)
+
+          {
+            echo "## Brand canary"
+            echo
+            echo "Case-insensitive sweep for the old brand across every tracked file,"
+            echo "minus the paths the blocking gate exempts."
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Matches | $count |"
+            echo "| Files | $files |"
+            echo
+            if [ "$count" -eq 0 ]; then
+              echo "Nothing found. The narrow gate and the loose sweep agree."
+            else
+              echo "Most of these are expected: the old brand name is also the"
+              echo "architectural term this framework is built on. The signal to look"
+              echo "for is a match"
+              echo "that is clearly a *name*: a namespace, a coordinate, an env var, a"
+              echo "URL. If one turns up, the blocking gate has a blind spot worth"
+              echo "closing rather than allowlisting."
+              echo
+              echo "<details><summary>Files by match count</summary>"
+              echo
+              echo '```'
+              printf '%s' "$hits" | cut -d: -f1 | sort | uniq -c | sort -rn | head -40
+              echo '```'
+              echo
+              echo "</details>"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          echo "Brand canary: $count matches across $files files (report only)."

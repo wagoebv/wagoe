@@ -19,8 +19,11 @@
    gate needs a seam that returns a verdict — adding one is part of bringing a
    gate under this test."
   (:require [clojure.test :refer [deftest is testing]]
+            [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.string :as str]
+            [babashka.process :as process]
+            [check-no-boundary]
             [wagoe.tools.check :as check]
             [wagoe.tools.check-deps :as check-deps]
             [wagoe.tools.check-fcis :as check-fcis]
@@ -390,6 +393,151 @@
         (is (.exists (io/file p)) (str p " does not exist"))))))
 
 ;; =============================================================================
+;; check:no-boundary — against a throwaway repo
+;; =============================================================================
+
+(defn- git! [dir & args]
+  (apply process/shell {:dir (str dir) :out :string :err :string} "git" args))
+
+;; Split so this source file contains no literal the rename gate would flag.
+;; See the probe map below for why that matters.
+(def ^:private brand (str "bound" "ary"))
+(def ^:private new-brand (str "wag" "oe"))
+
+(deftest ^:unit no-boundary-gate-fires-test
+  ;; The only gate that needs a real git repo: it works by `git grep` over
+  ;; tracked files, so nothing can be planted for it without one. That was the
+  ;; reason it was the last gate left unproven.
+  (let [root (temp-dir "noboundary" 1)]
+    (try
+      (git! root "init" "-q")
+      (git! root "config" "user.email" "t@example.com")
+      (git! root "config" "user.name" "t")
+      (spit-file! root "src/app/clean.clj" "(ns app.clean)\n(defn go [] :ok)\n")
+      (git! root "add" "-A")
+      (git! root "commit" "-q" "-m" "clean")
+
+      (binding [check-no-boundary/*repo-dir* root]
+        (testing "a clean tree yields no hits"
+          (is (empty? (check-no-boundary/all-hit-paths))))
+
+        (testing "each hard group detects its own token family"
+          ;; One planted violation per group, so a group whose pattern rots
+          ;; cannot hide behind another group's hit.
+          ;;
+          ;; The probes are ASSEMBLED rather than written as literals. Spelled
+          ;; out, this file would carry one residual of every kind and the gate
+          ;; would flag its own test fixtures — seven hits, in the namespace
+          ;; that exists to prove the gate works. Allowlisting the file was the
+          ;; obvious way out and the wrong one: it would switch the gate off
+          ;; for everything else here too. What lands on disk is identical.
+          (doseq [[group content] {:ns     (str "(ns app.x (:require [" brand ".core :as c]))")
+                                   :keys   (str "{:" brand "/user-service {}}")
+                                   :coords (str "{:deps {org." brand "-app/" brand "-core {}}}")
+                                   :env    (str "(System/getenv \"" (str/upper-case brand) "_TENANT_ID\")")
+                                   :group  (str "{:deps {org." new-brand "/" new-brand "-core {}}}")
+                                   :dirs   (str ";; see libs/" brand "-cli/src")
+                                   :urls   (str ";; https://" brand "-app.org/docs")}]
+            (let [f (str "src/app/" (name group) "_probe.clj")]
+              (spit-file! root f content)
+              (git! root "add" "-A")
+              (let [hits (check-no-boundary/grep-group
+                          (check-no-boundary/token-defs group) #{})]
+                (is (seq hits)
+                    (str "group " group " no longer matches its own token"))))))
+
+        (testing "the allowlist suppresses a planted hit"
+          (let [before (count (check-no-boundary/all-hit-paths))]
+            (is (pos? before))
+            (is (empty? (check-no-boundary/grep-group
+                         (check-no-boundary/token-defs :ns) #{"src/"}))
+                "an allowlist prefix covering the file must silence it"))))
+      (finally (delete-tree! root)))))
+
+;; =============================================================================
+;; Allowlists — every exemption must still be load-bearing
+;; =============================================================================
+;;
+;; The rename gate's path allowlist audits itself on every run. The two
+;; hardcoded singletons cannot: they live in source, so a stale one would just
+;; sit there exempting nothing. These tests are their audit.
+;;
+;; The other three allowlists are empty by design and stay that way under the
+;; check below, so emptiness cannot rot into "someone added an entry and moved
+;; on": the fcis config (:allow-throw, :allow-mutable-state — real exceptions
+;; live inline as ns metadata), the test-tags config (:allow-untagged, BOU-166
+;; complete), and check-fcis's allowed-fq-violations.
+;;
+;; Those configs are named by path in the test bodies rather than spelled out
+;; here, because the rename gate's namespace pattern — the old brand followed
+;; by a dot and a letter — matches its own config FILENAME, which ends in
+;; "-<brand>.edn" and so reads as a namespace reference. A limitation of
+;; matching brand tokens by regex. Not worth an exemption: allowlisting this
+;; file would switch the gate off for the whole test namespace.
+
+(deftest ^:unit allowlist-audit-is-order-independent-test
+  ;; Allowlist matching is a prefix test over the whole list, so "would removing
+  ;; this entry expose a hit" cannot depend on where the entry sits. The first
+  ;; version of the audit accumulated claims left-to-right and therefore called
+  ;; a specific entry load-bearing whenever a BROADER one happened to come
+  ;; after it — a redundant entry that would sit there forever.
+  ;; Entries must exist on disk (the audit checks that first), so these are real
+  ;; repo paths with the hit set mocked around them.
+  (with-redefs [check-no-boundary/all-hit-paths
+                (fn [] #{"libs/tools/deps.edn" "libs/tools/build.clj"})]
+    (testing "a nested entry is redundant whether the broader one precedes or follows"
+      (doseq [order [["libs/tools/deps.edn" "libs/"] ["libs/" "libs/tools/deps.edn"]]]
+        (let [{:keys [load-bearing redundant]} (check-no-boundary/audit-allowlist order)]
+          (is (= ["libs/"] load-bearing)
+              (str "order " (pr-str order) ": only the broader entry earns its place"))
+          (is (= ["libs/tools/deps.edn"] (mapv first redundant))
+              (str "order " (pr-str order) ": the nested entry is redundant either way")))))
+
+    (testing "an exact duplicate is reported once, not twice"
+      ;; Under the order-independent test each copy is covered by the other, so
+      ;; a naive implementation flags both and neither can be removed without
+      ;; the verdict flipping. The first occurrence keeps its place.
+      (let [{:keys [load-bearing redundant]}
+            (check-no-boundary/audit-allowlist ["libs/" "libs/"])]
+        (is (= ["libs/"] load-bearing))
+        (is (= 1 (count redundant)))))
+
+    (testing "entries covering disjoint hits are all load-bearing"
+      (is (= ["libs/tools/deps.edn" "libs/tools/build.clj"]
+             (:load-bearing (check-no-boundary/audit-allowlist
+                             ["libs/tools/deps.edn" "libs/tools/build.clj"])))))))
+
+(deftest ^:unit ports-allowlist-is-load-bearing-test
+  (testing "wagoe.platform genuinely still has no ports.clj"
+    ;; The builtin allowlist exempts it. If platform ever gains ports.clj the
+    ;; entry becomes inert and should be deleted — but nothing would say so,
+    ;; because an exemption for a module that no longer violates is silent.
+    (is (not (.exists (io/file "libs/platform/src/wagoe/platform/ports.clj")))
+        (str "libs/platform now has ports.clj — remove \"wagoe.platform\" from "
+             "builtin-allow-missing-ports in check_ports.clj"))))
+
+(deftest ^:unit deps-allowlist-is-load-bearing-test
+  (testing "platform genuinely still does not declare external"
+    ;; Same reasoning. The entry exists because declaring it would create a
+    ;; circular :local/root that tools.deps rejects; once the external->platform
+    ;; coupling is broken the exemption must go.
+    (let [deps (slurp "libs/platform/deps.edn")]
+      (is (not (str/includes? deps "wagoe/external"))
+          (str "libs/platform/deps.edn now declares external — remove "
+               "[\"platform\" \"external\"] from allowed-undeclared-deps")))))
+
+(deftest ^:unit empty-allowlists-stay-empty-test
+  (testing "the allowlists that are complete carry no entries"
+    (doseq [[file ks] {".wagoe/check-fcis.edn"      [:allow-throw :allow-mutable-state]
+                       ".wagoe/check-test-tags.edn" [:allow-untagged]}]
+      (let [cfg (edn/read-string (slurp file))]
+        (doseq [k ks]
+          (is (empty? (get cfg k))
+              (str file " " k " gained an entry. That may be correct — but it is "
+                   "debt, so it needs a ticket and a removal plan, not just a line "
+                   "in a file.")))))))
+
+;; =============================================================================
 ;; The meta-gate: every gate must be represented above
 ;; =============================================================================
 
@@ -400,20 +548,16 @@
    That is the point: a gate nobody can prove fires is indistinguishable from
    one that does not run."
   #{:hygiene :deps :fcis :placeholder-tests :docs-lint
-    :test-meta :test-tags :ports :poms :agents :doctor :linting})
+    :test-meta :test-tags :ports :poms :agents :doctor :linting :no-boundary})
 
 (def gates-without-firing-tests
   "Gates that cannot yet be proven to fire, each with the reason.
 
-   This is a to-do list with a test attached, not an exemption: entries move to
-   `gates-with-firing-tests` as seams are added. Listing them here keeps the
-   count honest — the alternative is a green suite that implies coverage the
-   repo does not have."
-  {:no-boundary "-main shells out to `git grep` against the real work tree and
-                 exits; proving it fires needs a throwaway git repo as a
-                 fixture, which no other gate here requires. Its detection was
-                 verified by hand (a probe file with a residual token turns it
-                 red), but by hand is exactly what this test set replaces."})
+   Empty as of BOU-250 — every gate in `all-checks` is now proven. Kept rather
+   than deleted because it is the honest place for the next gate that arrives
+   without a seam: the alternative is quietly leaving it out of both lists,
+   which the test below forbids. An entry here is a to-do, not an exemption."
+  {})
 
 (deftest ^:unit every-gate-is-accounted-for-test
   (let [declared (set (map :id check/all-checks))

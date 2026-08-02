@@ -4,9 +4,9 @@
    'version ahead of source' stale-artifact class), and a post-deploy check that
    every artifact actually landed on Clojars."
   (:require [clojure.test :refer [deftest is testing]]
-            [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.string :as str]
+            [babashka.http-client]
             [wagoe.tools.deploy :as deploy]))
 
 (deftest ^:unit artifact-name-test
@@ -86,11 +86,43 @@
         (is (< (idx dep) (idx lib))
             (str dep " must be published before " lib))))))
 
-(deftest ^:unit deploy-registries-share-the-same-membership
-  (testing "scripts/deploy.clj all-libs set == canonical (prevents membership drift)"
-    ;; The two registries duplicate the membership vector; order is derived, but
-    ;; the SET must stay in lockstep (BOU-202/203).
-    (let [src   (slurp (io/file (System/getProperty "user.dir") "scripts" "deploy.clj"))
-          form  (edn/read-string (subs src (str/index-of src "(def all-libs")))
-          mirror (nth form 2)]
-      (is (= (set deploy/all-libs) (set mirror))))))
+(deftest ^:unit cljdoc-request-never-aborts-a-release
+  ;; The docs trigger runs after the artifact is already on Clojars, inside the
+  ;; doseq that publishes the rest. Anything it throws takes the remaining
+  ;; artifacts with it — a cljdoc outage halting a 29-artifact release halfway.
+  ;;
+  ;; `:throw false` is not enough on its own: it suppresses non-2xx RESPONSES,
+  ;; while DNS failures, refused connections and timeouts throw regardless
+  ;; because there is no response to inspect.
+  (with-redefs [deploy/artifact-name (constantly "wagoe-core")]
+    (testing "a transport failure is caught, not propagated"
+      (with-redefs [babashka.http-client/post
+                    (fn [& _] (throw (java.net.ConnectException. "Connection refused")))]
+        (let [out (with-out-str (deploy/request-cljdoc-build! "core" "1.0.0"))]
+          (is (str/includes? out "Connection refused")
+              "the reason should reach the operator")
+          (is (str/includes? out "trigger manually")
+              "and so should the recovery step"))))
+
+    (testing "a non-2xx response warns rather than throwing"
+      (with-redefs [babashka.http-client/post (constantly {:status 500})]
+        (is (str/includes? (with-out-str (deploy/request-cljdoc-build! "core" "1.0.0"))
+                           "HTTP 500"))))
+
+    (testing "a successful request is reported as such"
+      (with-redefs [babashka.http-client/post (constantly {:status 200})]
+        (is (str/includes? (with-out-str (deploy/request-cljdoc-build! "core" "1.0.0"))
+                           "cljdoc build requested"))))))
+
+(deftest ^:unit deploy-has-one-registry
+  (testing "scripts/deploy.clj holds no registry of its own"
+    ;; It used to carry a second all-libs vector, kept in step by a test that
+    ;; compared the two SETS — while the behaviour around them drifted in both
+    ;; directions unnoticed: the mirror alone requested cljdoc builds, the
+    ;; canonical alone had --check-versions and --verify (BOU-250). It is now a
+    ;; shim over this namespace, so there is nothing left to keep in sync.
+    (let [src (slurp (io/file (System/getProperty "user.dir") "scripts" "deploy.clj"))]
+      (is (not (str/includes? src "(def all-libs"))
+          "scripts/deploy.clj has grown a registry again — it should delegate")
+      (is (str/includes? src "wagoe.tools.deploy")
+          "scripts/deploy.clj should delegate to the canonical namespace"))))
