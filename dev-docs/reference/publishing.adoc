@@ -318,7 +318,10 @@ Before pushing a release tag:
 
 * [ ] All tests pass: `bb test:all` (not just `clojure -M:test` — see AGENTS.md on test surfaces)
 * [ ] No lint errors: `clojure -M:clj-kondo --lint src test libs/*/src libs/*/test`
-* [ ] All quality gates pass: `bb check`
+* [ ] All quality gates pass: `bb check --ci` — the `--ci` is load-bearing.
+  Without it, `wagoe.tools.check/-main` prints the failures and still exits 0
+  (`libs/tools/src/wagoe/tools/check.clj:225`), so a release script gating on
+  exit status sails past failing gates
 * [ ] `CHANGELOG.md` updated
 * [ ] Version bumped in all relevant `build.clj` files, including `libs/tools/build.clj` for a full tagged release
 * [ ] Changes committed and pushed to `main`

@@ -182,6 +182,15 @@ fi
 # the laptop path reachable here; without it this case silently tests the wrong
 # branch and reports on behaviour no newcomer will meet.
 head_ "[5] boot with port 3000 already bound"
+# Case 4 generates alpha, and `fail` only counts — it does not stop. So if that
+# generation failed, an unguarded `cd /root/alpha` here trips set -e and kills
+# the container mid-suite: cases 6 and 7 never run and no summary is printed,
+# which reads as a crash rather than as one failed case. Same silent-abort shape
+# that killed cases 5-6 earlier and that swallowed the Arch pacman error.
+if [ ! -d /root/alpha ]; then
+  echo "  SKIP — case 4 did not produce /root/alpha, so there is nothing to boot."
+  SKIPPED=$((SKIPPED+1))
+else
 if [ -f /.dockerenv ]; then
   rm -f /.dockerenv
   echo "       removed /.dockerenv so the dev auto-find branch is the one under test"
@@ -232,6 +241,7 @@ else
   fail "could not occupy port 3000 — case not exercised"
 fi
 kill $SQUATTER 2>/dev/null || true
+fi  # /root/alpha exists
 
 # ── 6. read-only working directory ──────────────────────────────────────────
 # Generating into a directory you cannot write is a permissions message, not a
