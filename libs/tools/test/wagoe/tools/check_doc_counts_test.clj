@@ -131,6 +131,87 @@
       (is (seq (sut/publishing-findings "libs/tools/AGENTS.md" line published))
           (str "not detected: " line)))))
 
+(deftest ^:unit publishing-findings-detects-generic-claims-with-no-subject-test
+  ;; The regression this gate exists to prevent, in the file it was found in.
+  ;; docs/.../libraries/pages/index.adoc carried exactly this sentence above the
+  ;; devtools/tools/cli/mcp table. It names no library and the page has no single
+  ;; subject, so attribution by name or by subject both miss it.
+  (testing "a plural claim about libraries is caught even with nothing named"
+    (is (seq (sut/publishing-findings
+              "docs/modules/libraries/pages/index.adoc"
+              "These libraries are not published to Clojars — they are part of the monorepo."
+              published))))
+
+  (testing "the same claim in any index-like document is caught"
+    (is (seq (sut/publishing-findings
+              "README.md" "The dev libs are not published to Clojars." published))))
+
+  (testing "a claim about something that is not a library is still left alone"
+    (doseq [line ["Your application jar is not published to Clojars."
+                  "The generated project is not published to Clojars."
+                  "Build output is not published to Clojars."]]
+      (is (empty? (sut/publishing-findings
+                   "docs/modules/guides/pages/deployment.adoc" line published))
+          (str "false positive: " line))))
+
+  (testing "a true statement naming a genuinely unpublished library is left alone"
+    ;; Found by running the generic rule against the tree: this line is correct,
+    ;; and mentions `libs/` so the library-noun test alone flagged it.
+    (is (empty? (sut/publishing-findings
+                 "dev-docs/reference/publishing.adoc"
+                 "`libs/e2e` is the only directory under `libs/` that is not published — it is an in-repo test harness."
+                 published
+                 #{"e2e"})))
+
+    (testing "and the same sentence IS flagged once that library becomes published"
+      ;; Guards the escape hatch: it must key off all-libs, not off the wording.
+      (is (seq (sut/publishing-findings
+                "dev-docs/reference/publishing.adoc"
+                "`libs/e2e` is the only directory under `libs/` that is not published — it is an in-repo test harness."
+                published
+                #{}))))))
+
+(deftest ^:unit names-lib-matches-words-not-substrings-test
+  ;; Found by injecting the real regression: the finding said "calls ai
+  ;; unpublished" because `ai` sits inside `available`.
+  (testing "a library name inside another word is not a mention"
+    (is (not (sut/names-lib? "they are available automatically" "ai")))
+    (is (not (sut/names-lib? "the maintenance window" "ai")))
+    (is (not (sut/names-lib? "admin-ui-style-tokens.css" "ui-style"))))
+
+  (testing "a real mention still matches, in the punctuation docs actually use"
+    (doseq [line ["the ai library" "`ai`" "libs/ai/" "(ai)" "ai."]]
+      (is (sut/names-lib? line "ai") (str "missed mention in: " line))))
+
+  (testing "the artifact form matches its own entry, not the bare directory name"
+    ;; `wagoe-ai` is not a mention of `ai` — the hyphen binds them into one
+    ;; token. Nothing is lost: both spellings are in published-libs, so the line
+    ;; is still attributed, to the more specific of the two.
+    (is (not (sut/names-lib? "com.wagoe/wagoe-ai" "ai")))
+    (is (sut/names-lib? "com.wagoe/wagoe-ai" "wagoe-ai")))
+
+  (testing "hyphenated names match as a unit"
+    (is (sut/names-lib? "see `wagoe-cli` for details" "wagoe-cli"))
+    (is (sut/names-lib? "the shared-ui primitives" "shared-ui"))))
+
+(deftest ^:unit publishing-findings-attributes-to-the-right-library-test
+  (testing "the generic claim reports libraries, not a word that contains one"
+    (let [[f] (sut/publishing-findings
+               "docs/modules/libraries/pages/index.adoc"
+               "These libraries are not published to Clojars — they are part of the monorepo and available automatically."
+               (conj published "ai"))]
+      (is (some? f))
+      (is (not= ["ai"] (:libs f))
+          "`ai` appears only inside `available`; attributing to it misdirects the fix"))))
+
+(deftest ^:unit unpublished-lib-dirs-is-derived-from-all-libs-test
+  (testing "the unpublished set comes from disk, so a new library needs no edit here"
+    (let [dirs (sut/unpublished-lib-dirs)]
+      (is (contains? dirs "e2e")
+          "libs/e2e is a test harness, not a published library")
+      (is (not-any? (set dirs) ["core" "platform" "tools" "wagoe-cli"])
+          "nothing in all-libs may appear as unpublished"))))
+
 (deftest ^:unit publishing-findings-uses-the-documents-subject-test
   (testing "a claim with no library named is attributed to the file's subject"
     (is (seq (sut/publishing-findings

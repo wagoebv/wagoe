@@ -33,6 +33,7 @@
 (ns wagoe.tools.check-doc-counts
   (:require [clojure.edn :as edn]
             [clojure.java.io :as io]
+            [clojure.set]
             [clojure.string :as str]
             [babashka.process :as process]
             [wagoe.tools.ansi :as ansi]
@@ -165,6 +166,28 @@
                 (or (contains? published-libs lib-ish)
                     (contains? published-libs (str "wagoe-" lib-ish))))))
 
+(defn names-lib?
+  "True when `line` mentions `lib` as a word, not as a substring.
+
+   Plain `includes?` attributes \"These libraries are not published ... and
+   available automatically\" to the `ai` library, because `ai` is inside
+   `available`. A finding that names the wrong library sends whoever fixes it to
+   the wrong file. Hyphens count as word characters here so `ui-style` does not
+   match inside `admin-ui-style-tokens`."
+  [line lib]
+  (boolean (re-find (re-pattern (str "(?i)(?<![a-z0-9-])" (java.util.regex.Pattern/quote lib)
+                                     "(?![a-z0-9-])"))
+                    line)))
+
+(def library-noun-pattern
+  "Marks a claim as being *about libraries*, rather than about something else
+   that is legitimately not on Clojars.
+
+   This is what makes a generic claim actionable. `These libraries are not
+   published to Clojars` says which kind of thing it means without naming one;
+   `Your application jar is not published to Clojars` is true and must stay."
+  #"(?i)\b(?:librar(?:y|ies)|libs?|artifacts?|modules?)\b")
+
 (defn publishing-findings
   "Lines in `text` claiming something unpublished when it is published.
 
@@ -174,28 +197,49 @@
    Attribution by mention alone got that wrong — the subject outranks anything
    named in passing.
 
-   Only where a file has no single subject — root `README.md`, root `AGENTS.md`
-   — does naming a published library become the signal. That is the case that
-   caught \"`libs/tools` is not published to Clojars\" in the root AGENTS.md."
-  [path text published-libs]
-  (let [subject (subject-lib path)]
-    (if (and subject (not (published? published-libs subject)))
+   Where a file has no single subject — root `README.md`, the library index —
+   two things make a claim actionable. Naming a published library is the obvious
+   one; that caught \"`libs/tools` is not published to Clojars\" in the root
+   AGENTS.md.
+
+   The other is saying *libraries* without naming any. `docs/.../libraries/
+   pages/index.adoc` carried \"These libraries are not published to Clojars\"
+   above the devtools/tools/cli/mcp table — no name on the line, no subject for
+   the page, and four published libraries mislabelled by one sentence. Requiring
+   a name would let that exact regression back in, so the discriminator is what
+   the sentence says is unpublished, not whether it spells out which.
+
+   `unpublished-libs` names the directories under `libs/` that genuinely are not
+   published — `e2e`. A line that mentions one is describing it, and is left
+   alone however it is phrased: `libs/e2e is the only directory under libs/ that
+   is not published` is both true and, without this, a generic-claim match."
+  ([path text published-libs]
+   (publishing-findings path text published-libs #{}))
+  ([path text published-libs unpublished-libs]
+   (let [subject (subject-lib path)]
+     (if (and subject (not (published? published-libs subject)))
       ;; The file documents something genuinely unpublished. Its claim is true.
-      []
-      (->> (str/split-lines text)
-           (map-indexed vector)
-           (keep (fn [[idx line]]
-                   (when (some #(re-find % line) unpublished-patterns)
-                     (let [named (->> published-libs
-                                      (filter #(str/includes? line %))
-                                      sort
-                                      seq)]
-                       (when (or named subject)
-                         {:rule    :publishing
-                          :path    path
-                          :line    (inc idx)
-                          :libs    (if subject [subject] named)
-                          :context (str/trim line)})))))))))
+       []
+       (->> (str/split-lines text)
+            (map-indexed vector)
+            (keep (fn [[idx line]]
+                    (when (some #(re-find % line) unpublished-patterns)
+                      (let [named       (->> published-libs
+                                             (filter #(names-lib? line %))
+                                             sort
+                                             seq)
+                            describes-  (some #(names-lib? line %) unpublished-libs)
+                            generic     (and (not describes-)
+                                             (re-find library-noun-pattern line))]
+                        (when (and (not describes-)
+                                   (or named subject generic))
+                          {:rule    :publishing
+                           :path    path
+                           :line    (inc idx)
+                           :libs    (cond subject [subject]
+                                          named   named
+                                          :else   ["libraries (unnamed)"])
+                           :context (str/trim line)}))))))))))
 
 ;; =============================================================================
 ;; Allowlist
@@ -249,13 +293,13 @@
   "All findings across `paths`, allowlist applied.
 
    `read-file` is injected so tests can scan in-memory content."
-  [paths {:keys [expected published-libs allow read-file]
-          :or   {allow #{} read-file slurp}}]
+  [paths {:keys [expected published-libs unpublished-libs allow read-file]
+          :or   {allow #{} unpublished-libs #{} read-file slurp}}]
   (->> paths
        (mapcat (fn [path]
                  (let [text (read-file path)]
                    (concat (count-findings path text expected)
-                           (publishing-findings path text published-libs)))))
+                           (publishing-findings path text published-libs unpublished-libs)))))
        (remove #(allowed? allow %))
        (sort-by (juxt :path :line))))
 
@@ -275,13 +319,39 @@
                 " unpublished, but it is in deploy/all-libs"))
   (println (str "    " (ansi/dim context))))
 
+(defn unpublished-lib-dirs
+  "Directories under `libs/` that are not in `all-libs`.
+
+   Derived rather than listed, so a library added to the monorepo but not yet to
+   `all-libs` is treated as unpublished automatically — and so this gate cannot
+   drift the way the prose it checks did."
+  []
+  (let [libs-dir (io/file "libs")]
+    (if (.isDirectory libs-dir)
+      (let [dirs (->> (.listFiles libs-dir)
+                      (filter #(.isDirectory ^java.io.File %))
+                      (map #(.getName ^java.io.File %))
+                      set)]
+        (clojure.set/difference dirs (set deploy/all-libs)))
+      #{})))
+
+(defn scan-opts
+  "The options `-main` scans with, derived from `all-libs`.
+
+   Public so the gate-firing test scans exactly what CI scans. Having the test
+   build its own copy of this map is the same two-copies-of-one-fact problem
+   this gate exists to catch — the first version did, and went green while the
+   real run was failing on an option the test did not pass."
+  []
+  (let [published (set (map deploy/artifact-name deploy/all-libs))]
+    {:expected         (count deploy/all-libs)
+     :published-libs   (into published (set deploy/all-libs))
+     :unpublished-libs (unpublished-lib-dirs)
+     :allow            (or (read-allowlist) #{})}))
+
 (defn -main [& _args]
-  (let [expected  (count deploy/all-libs)
-        published (set (map deploy/artifact-name deploy/all-libs))
-        libs      (into published (set deploy/all-libs))
-        findings  (scan (tracked-docs) {:expected        expected
-                                        :published-libs  libs
-                                        :allow           (read-allowlist)})
+  (let [{:keys [expected]} (scan-opts)
+        findings  (scan (tracked-docs) (scan-opts))
         {counts :count pubs :publishing} (group-by :rule findings)]
     (if (seq findings)
       (do

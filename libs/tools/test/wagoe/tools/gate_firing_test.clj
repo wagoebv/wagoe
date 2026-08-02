@@ -29,7 +29,6 @@
             [wagoe.tools.check-fcis :as check-fcis]
             [wagoe.tools.check-hygiene :as check-hygiene]
             [wagoe.tools.check-doc-counts :as check-doc-counts]
-            [wagoe.tools.deploy :as deploy]
             [wagoe.tools.check-poms :as check-poms]
             [wagoe.tools.check-ports :as check-ports]
             [wagoe.tools.check-tests :as check-tests]
@@ -144,12 +143,11 @@
   (testing "the repository currently satisfies the gate"
     ;; Belt and braces: the assertions above prove detection on synthetic input.
     ;; This proves the real tree is clean, so a regression shows up here too.
-    (is (empty? (check-doc-counts/scan
-                 (check-doc-counts/tracked-docs)
-                 {:expected       (count deploy/all-libs)
-                  :published-libs (into (set (map deploy/artifact-name deploy/all-libs))
-                                        (set deploy/all-libs))
-                  :allow          (or (check-doc-counts/read-allowlist) #{})})))))
+    ;; scan-opts, not a hand-built copy of it — a test that assembles its own
+    ;; options can pass while the real run fails on one it forgot to set, which
+    ;; is how this assertion first went green against a failing gate.
+    (is (empty? (check-doc-counts/scan (check-doc-counts/tracked-docs)
+                                       (check-doc-counts/scan-opts))))))
 
 ;; =============================================================================
 ;; check:deps
