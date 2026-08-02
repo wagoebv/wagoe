@@ -61,7 +61,7 @@ fi
 # python3 is for the port squatter in case 5, and it is not optional: ubuntu:24.04
 # ships without it, so the first run of case 5 silently failed to bind and
 # reported "case not exercised" — a gap that reads like a result.
-pkg_install curl ca-certificates git unzip zip which procps python3
+pkg_install curl ca-certificates git unzip zip which procps python3 fish
 
 # ── setup: install once ─────────────────────────────────────────────────────
 echo "[setup] install.sh"
@@ -258,6 +258,44 @@ else
     fail "unclear outcome. Got: $(tail -3 <<<"$OUT")"
   fi
   chmod 700 ~/ro
+fi
+
+# ── 7. the PATH line lands where the user9s shell reads it ──────────────────
+# The install can report success and still leave the toolchain unreachable, if
+# the PATH line goes to a file the shell never loads. That is invisible to a
+# bash-only test, which is why it survived until the shell matrix (BOU-261).
+head_ "[7] PATH is set for the shell the user actually runs"
+if command -v fish >/dev/null 2>&1; then
+  rm -f "$HOME/.config/fish/config.fish"
+  SHELL=$(command -v fish) bash /repo/scripts/install.sh >/tmp/install-fish.log 2>&1 \
+    || fail "install.sh exited non-zero under fish"
+  FISH_RC="$HOME/.config/fish/config.fish"
+  if [ -f "$FISH_RC" ]; then
+    ok "wrote $FISH_RC, the file fish reads"
+  else
+    fail "no fish config written; PATH line went somewhere fish never loads"
+  fi
+  # Syntax matters as much as location: `export PATH=...` is not fish.
+  if grep -q "fish_add_path\|set -gx PATH" "$FISH_RC" 2>/dev/null; then
+    ok "used fish syntax"
+  else
+    fail "wrote non-fish syntax into a fish config: $(head -1 "$FISH_RC" 2>/dev/null)"
+  fi
+  if fish -c "type -q wagoe" 2>/dev/null; then
+    ok "wagoe resolves in a fresh fish session"
+  else
+    fail "wagoe still not on PATH in a fresh fish session"
+  fi
+  # Re-run under fish too — the idempotency guard has to hold per shell.
+  BEFORE=$(grep -c "babashka/bbin/bin" "$FISH_RC" 2>/dev/null || echo 0)
+  SHELL=$(command -v fish) bash /repo/scripts/install.sh >/dev/null 2>&1 || true
+  AFTER=$(grep -c "babashka/bbin/bin" "$FISH_RC" 2>/dev/null || echo 0)
+  [ "$AFTER" -gt "$BEFORE" ] \
+    && fail "fish config gained a duplicate PATH line on re-run ($BEFORE -> $AFTER)" \
+    || ok "no duplicate in the fish config on re-run"
+else
+  echo "  SKIP — fish not installed in this image."
+  SKIPPED=$((SKIPPED+1))
 fi
 
 echo
