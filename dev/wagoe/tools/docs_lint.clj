@@ -53,7 +53,6 @@
    #".*(^|/)target/.*"     ;; build output, anywhere — was anchored at the repo
                            ;; root only, so libs/*/target/classes/** (stale,
                            ;; pre-rename copies of real docs) was being linted
-   #"libs/scaffolder/existing-dir/.*"  ;; scaffolder test fixture, not docs
    #"^\.cpcache/.*"
    #"^\.git/.*"
    #"^node_modules/.*"

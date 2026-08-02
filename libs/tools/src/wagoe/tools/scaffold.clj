@@ -7,7 +7,6 @@
 ;;   bb scaffold                     -- show help
 ;;   bb scaffold generate            -- interactive wizard
 ;;   bb scaffold generate [args...]  -- non-interactive passthrough
-;;   bb scaffold new                 -- interactive wizard
 ;;   bb scaffold field               -- interactive wizard
 ;;   bb scaffold endpoint            -- interactive wizard
 ;;   bb scaffold adapter             -- interactive wizard
@@ -240,29 +239,25 @@
       (run-clojure! args)
       (println "Aborted."))))
 
-(defn wizard-new []
+;; BOU-259: `bb scaffold new` had its own project generator, independent of the
+;; `wagoe new` templates it was supposed to mirror. It drifted until it no longer
+;; emitted a Wagoe project at all \u2014 no com.wagoe deps, no main.clj/system.clj, no
+;; build.clj, no tests.edn, no .env. Rather than keep two generators in sync, the
+;; route is gone and this points at the one that works. A bare "unknown command"
+;; would leave anyone following the old docs stuck (BOU-261/262).
+(defn print-new-removed []
   (println)
-  (println (bold "\u2746 Wagoe Scaffolder \u2014 New Project"))
+  (println (yellow "`bb scaffold new` has been removed."))
   (println)
-
-  (let [name-val (loop []
-                   (let [s (prompt "Project name (kebab-case)")]
-                     (cond
-                       (empty? s)            (do (println (red "Project name is required")) (recur))
-                       (not (valid-kebab? s)) (do (println (red "Must be kebab-case, e.g. my-project")) (recur))
-                       :else s)))
-        output-dir (prompt "Output directory" ".")
-        dry-run    (confirm "Dry run (preview only)?" false)
-        args       (cond-> ["new" "--name" name-val "--output-dir" output-dir]
-                     dry-run (conj "--dry-run"))]
-
-    (println)
-    (println (dim (str "Command: clojure -M -m wagoe.scaffolder.shell.cli-entry "
-                       (str/join " " args))))
-    (println)
-    (if (confirm "Proceed?" true)
-      (run-clojure! args)
-      (println "Aborted."))))
+  (println "Projects are created with the Wagoe CLI:")
+  (println)
+  (println (str "  " (bold "wagoe new my-app")))
+  (println)
+  (println (str "Don't have it?  " (cyan "curl -fsSL https://wagoe.org/install.sh | bash")))
+  (println)
+  (println (dim (str "`bb scaffold` still handles modules, fields, endpoints and "
+                     "adapters inside an existing project.")))
+  (println))
 
 (defn wizard-field []
   (println)
@@ -440,12 +435,14 @@
        "Usage:\n"
        "  bb scaffold                     Show this help\n"
        "  bb scaffold generate            Interactive wizard for module generation\n"
-       "  bb scaffold new                 Interactive wizard for new project\n"
        "  bb scaffold field               Interactive wizard for adding a field\n"
        "  bb scaffold endpoint            Interactive wizard for adding an endpoint\n"
        "  bb scaffold adapter             Interactive wizard for adding an adapter\n"
        "  bb scaffold ai <description> [--yes]    AI-powered module generation from NL description\n"
        "  bb scaffold integrate <module> [--base-ns NS]  Guide integration of a scaffolded module\n"
+       "\n"
+       "`bb scaffold` works inside an existing project. To create a new one:\n"
+       "  wagoe new my-app                (install: curl -fsSL https://wagoe.org/install.sh | bash)\n"
        "\n"
        "Non-interactive passthrough (when args are provided directly):\n"
        "  bb scaffold generate --module-name foo --entity Foo --field bar:string\n"
@@ -478,10 +475,9 @@
         (run-clojure! (into ["generate"] rest-args))
         (wizard-generate))
 
+      ;; Redirects with or without args — BOU-259 removed the generator behind it.
       (= sub "new")
-      (if (seq rest-args)
-        (run-clojure! (into ["new"] rest-args))
-        (wizard-new))
+      (print-new-removed)
 
       (= sub "field")
       (if (seq rest-args)

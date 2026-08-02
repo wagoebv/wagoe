@@ -173,7 +173,6 @@ clojure -M:repl-clj
 ```bash
 bb scaffold                          # Show help
 bb scaffold generate                 # Interactive module generation wizard
-bb scaffold new                      # Interactive new project wizard
 bb scaffold field                    # Interactive add-field wizard
 bb scaffold endpoint                 # Interactive add-endpoint wizard
 bb scaffold adapter                  # Interactive add-adapter wizard
@@ -185,6 +184,10 @@ bb scaffold integrate <module>       # Wire scaffolded module into project (see 
 bb scaffold generate --module-name foo --entity Foo --field name:string:required
 bb scaffold field --module-name foo --entity Foo --name price --type decimal
 ```
+
+`bb scaffold` works inside an existing project. To create a new one, use the
+Wagoe CLI: `wagoe new my-app`. (`bb scaffold new` was removed in BOU-259 — it
+had a duplicate, drifted copy of the project templates.)
 
 ---
 

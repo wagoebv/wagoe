@@ -41,6 +41,11 @@
                    "src/wagoe/config.clj"
                    "dev/user.clj"
                    "src/test_proj/system.clj"
+                   ;; The non-REPL entry point and the build path that uses it
+                   ;; (BOU-254). Generated but unasserted until BOU-259.
+                   "src/test_proj/main.clj"
+                   "build.clj"
+                   "Dockerfile"
                    ".mcp.json"
                    ".vscode/extensions.json"
                    ".githooks/pre-commit"]]
@@ -80,6 +85,37 @@
           (is (str/includes? content "bb scaffold"))
           (is (str/includes? content "name: wagoe"))
           (is (not (str/includes? content "{{")))))
+
+      ;; BOU-259: these assertions came from the scaffolder's duplicate project
+      ;; generator, which is gone. The AGENTS.md architecture contract now has
+      ;; exactly one source — AGENTS.md.tmpl — so it is asserted here.
+      (testing "AGENTS.md documents the FC/IS + ports architecture (BOU-80)"
+        (let [content (slurp (io/file tmp "AGENTS.md"))]
+          (is (str/includes? content "Functional Core"))
+          (is (str/includes? content "Imperative Shell"))
+          (is (str/includes? content "ports.clj"))
+          ;; ports.clj is mandatory, not optional (BOU-80). Asserted on the
+          ;; literal sentence rather than a loose /required/ match, so softening
+          ;; the rule to "should" fails here.
+          (is (str/includes? content "Every module MUST define `ports.clj`.")
+              "AGENTS.md must state that ports.clj is mandatory")
+          ;; web/HTTP layers must never require shell.persistence directly
+          (is (str/includes? content "shell.persistence"))
+          (is (str/includes? content "bb scaffold")
+              "AGENTS.md must name bb scaffold as the module generator")))
+
+      (testing "CLAUDE.md delegates the architecture rules to AGENTS.md"
+        ;; Unlike the removed scaffolder copy, this template does not repeat the
+        ;; rules — it imports them. The import is what must not be lost.
+        (let [content (slurp (io/file tmp "CLAUDE.md"))]
+          (is (str/includes? content "@AGENTS.md")
+              "CLAUDE.md must import AGENTS.md, else Claude Code loses the FC/IS rules")))
+
+      (testing "bb.edn wires the quality gates AGENTS.md tells developers to run"
+        (let [content (slurp (io/file tmp "bb.edn"))]
+          (is (str/includes? content "com.wagoe/wagoe-tools"))
+          (is (str/includes? content "check:ports"))
+          (is (str/includes? content "check:fcis"))))
 
       (testing "sentinel comments are present in AGENTS.md"
         (let [content (slurp (io/file tmp "AGENTS.md"))]

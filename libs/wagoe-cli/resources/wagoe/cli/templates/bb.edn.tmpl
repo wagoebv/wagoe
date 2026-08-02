@@ -17,6 +17,7 @@
              [wagoe.tools.check-fcis  :as check-fcis]
              [wagoe.tools.check-tests :as check-tests]
              [wagoe.tools.check-deps  :as check-deps]
+             [wagoe.tools.check-ports :as check-ports]
              [wagoe.tools.db          :as db]
              [wagoe.tools.quickstart  :as quickstart]
              [wagoe.tools.help        :as help]
@@ -49,6 +50,12 @@
                            :task (check-tests/-main)}
   check:deps        {:doc "Verify library dependency direction and detect cycles"
                      :task (check-deps/-main)}
+  ;; BOU-80 requires every module to define ports.clj, and AGENTS.md says so.
+  ;; The task was missing here while the scaffolder's duplicate bb.edn generator
+  ;; had it, so `bb check` — which shells out to `bb check:ports` — hit an
+  ;; undefined task in every generated project (found via BOU-259).
+  check:ports       {:doc "Hexagonal enforcement: modules must define ports.clj; shell/web must not bypass protocols"
+                     :task (check-ports/-main)}
 
   ;; Development
   repl              {:doc "Start the nREPL server on port 7888 (clojure -M:repl)"

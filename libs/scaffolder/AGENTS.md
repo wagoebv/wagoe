@@ -58,12 +58,18 @@ bb scaffold generate --module-name product --entity Product \
   --field name:string:required --dry-run
 ```
 
-### `new` — Bootstrap a New Project
+### Creating a new project — not this library
+
+The scaffolder works inside an existing project. New projects come from the
+Wagoe CLI:
 
 ```bash
-bb scaffold new --name my-app --output-dir ./my-app
-bb scaffold new --name my-app --dry-run
+wagoe new my-app
 ```
+
+`bb scaffold new` was removed in BOU-259: it generated projects from its own
+copy of the templates, which had drifted until the result carried no
+`com.wagoe` dependencies and no entry point. Supersedes ADR-002.
 
 ### `field` — Add a Field to an Existing Entity
 
