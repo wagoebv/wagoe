@@ -7,9 +7,11 @@
 Developer Babashka tooling for the Wagoe framework — scaffolding, AI assistance,
 config management, i18n, deployment, and the CI quality gates.
 
-This library is **dev-only**: it is **not published to Clojars**. It ships as part of
-the Wagoe monorepo and is consumed via a `:local/root` dependency in the root
-`bb.edn`, so every `bb ...` task below is available out of the box:
+This library is **dev-only** in the sense that applications do not depend on it at
+runtime — but it **is published to Clojars**, as `com.wagoe/wagoe-tools`, in
+lockstep with the rest of the suite. Inside this monorepo it is consumed via a
+`:local/root` dependency in the root `bb.edn`, so every `bb ...` task below is
+available out of the box:
 
 ```clojure
 ;; bb.edn

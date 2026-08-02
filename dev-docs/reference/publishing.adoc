@@ -41,42 +41,62 @@ Add these to your shell profile (`~/.zshrc` or `~/.bashrc`) for convenience.
 
 == Library overview
 
-All 22 libraries are published to the `com.wagoe` group on Clojars, in dependency order:
+All 29 libraries are published to the `com.wagoe` group on Clojars. The order
+below is `bb deploy`'s publish order — a topological sort of `all-libs` by each
+library's `deps.edn` Wagoe dependencies, so every library appears after
+everything it depends on.
+
+NOTE: This table is derived from `wagoe.tools.deploy/all-libs` and
+`publish-order`. Those are the source of truth; if they disagree with this page,
+the code is right. A previous version of this table listed 22 libraries and gave
+`platform` two dependencies instead of six.
 
 [cols="1,2,2",options="header"]
 |===
 |Library |Artifact ID |Depends on
 
-|*core*         |`com.wagoe/wagoe-core`          |—
-|*observability*|`com.wagoe/wagoe-observability` |core
-|*platform*     |`com.wagoe/wagoe-platform`      |core, observability
-|*i18n*         |`com.wagoe/wagoe-i18n`          |—
-|*user*         |`com.wagoe/wagoe-user`          |platform
-|*storage*      |`com.wagoe/wagoe-storage`       |platform
-|*scaffolder*   |`com.wagoe/wagoe-scaffolder`    |core
-|*cache*        |`com.wagoe/wagoe-cache`         |platform
-|*jobs*         |`com.wagoe/wagoe-jobs`          |platform
-|*realtime*     |`com.wagoe/wagoe-realtime`      |platform
-|*email*        |`com.wagoe/wagoe-email`         |platform
-|*tenant*       |`com.wagoe/wagoe-tenant`        |platform, user
-|*workflow*     |`com.wagoe/wagoe-workflow`      |platform
-|*search*       |`com.wagoe/wagoe-search`        |platform
-|*external*     |`com.wagoe/wagoe-external`      |platform
-|*payments*     |`com.wagoe/wagoe-payments`      |—
-|*geo*          |`com.wagoe/wagoe-geo`           |platform
-|*reports*      |`com.wagoe/wagoe-reports`       |platform
-|*calendar*     |`com.wagoe/wagoe-calendar`      |platform
-|*ai*           |`com.wagoe/wagoe-ai`            |platform
-|*ui-style*     |`com.wagoe/wagoe-ui-style`      |—
-|*admin*        |`com.wagoe/wagoe-admin`         |platform, user, ui-style
+|*tools*         |`com.wagoe/wagoe-tools`         |—
+|*core*          |`com.wagoe/wagoe-core`          |—
+|*observability* |`com.wagoe/wagoe-observability` |core
+|*audience*      |`com.wagoe/wagoe-audience`      |—
+|*i18n*          |`com.wagoe/wagoe-i18n`          |—
+|*scaffolder*    |`com.wagoe/wagoe-scaffolder`    |core
+|*cache*         |`com.wagoe/wagoe-cache`         |—
+|*realtime*      |`com.wagoe/wagoe-realtime`      |—
+|*payments*      |`com.wagoe/wagoe-payments`      |—
+|*platform*      |`com.wagoe/wagoe-platform`      |cache, core, i18n, observability, payments, realtime
+|*storage*       |`com.wagoe/wagoe-storage`       |observability, platform
+|*tenant*        |`com.wagoe/wagoe-tenant`        |core, platform
+|*jobs*          |`com.wagoe/wagoe-jobs`          |observability, tenant
+|*push*          |`com.wagoe/wagoe-push`          |core, jobs
+|*external*      |`com.wagoe/wagoe-external`      |platform
+|*email*         |`com.wagoe/wagoe-email`         |external
+|*geo*           |`com.wagoe/wagoe-geo`           |—
+|*reports*       |`com.wagoe/wagoe-reports`       |—
+|*ai*            |`com.wagoe/wagoe-ai`            |—
+|*ui-style*      |`com.wagoe/wagoe-ui-style`      |—
+|*shared-ui*     |`com.wagoe/wagoe-shared-ui`     |platform, ui-style
+|*user*          |`com.wagoe/wagoe-user`          |cache, core, email, external, i18n, observability, platform, shared-ui, tenant
+|*calendar*      |`com.wagoe/wagoe-calendar`      |shared-ui
+|*admin*         |`com.wagoe/wagoe-admin`         |core, i18n, platform, shared-ui, ui-style, user
+|*workflow*      |`com.wagoe/wagoe-workflow`      |admin, i18n, platform, shared-ui, user
+|*search*        |`com.wagoe/wagoe-search`        |admin, i18n, platform, shared-ui
+|*wagoe-cli*     |`com.wagoe/wagoe-cli`           |—
+|*devtools*      |`com.wagoe/wagoe-devtools`      |core, jobs, platform, scaffolder, ui-style, user
+|*wagoe-mcp*     |`com.wagoe/wagoe-mcp`           |ai, devtools, scaffolder, tools
 |===
+
+`libs/e2e` is the only directory under `libs/` that is not published — it is an
+in-repo end-to-end test harness, not a library.
 
 ---
 
 == Version management
 
 Each publishable artifact has a `(def version "…")` in its own `build.clj`.
-This includes the 22 libraries under `libs/*` (excluding `libs/tools`, which is not published to Clojars).
+This includes all 29 libraries under `libs/*` — `libs/tools` among them. It is
+dev-only in the sense that applications do not depend on it at runtime, but it
+is published like everything else, as `com.wagoe/wagoe-tools`.
 
 The Git tag does not define the artifact versions.  It only triggers the
 workflow.  Clojars versions are read from each artifact's `build.clj` at
@@ -86,9 +106,11 @@ publish time.
 
 [source,bash]
 ----
-# From the repository root — update all publishable library build.clj files
-# (libs/tools is excluded — it is not published to Clojars)
-sed -i '' 's/(def version "OLD")/(def version "NEW")/' libs/{core,observability,platform,i18n,user,storage,scaffolder,cache,jobs,realtime,email,tenant,workflow,search,external,payments,geo,reports,calendar,ai,ui-style,admin}/build.clj
+# From the repository root — update every build.clj under libs/.
+# Do not hand-maintain a list of library names here: the previous version of
+# this command named 22 of them and would have left 7 artifacts on the old
+# version, silently.
+sed -i '' 's/(def version "OLD")/(def version "NEW")/' libs/*/build.clj
 
 # Verify
 grep "^(def version" libs/*/build.clj

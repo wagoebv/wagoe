@@ -105,7 +105,7 @@ This document is the **canonical reference** for repository structure and paths 
 |CSS/JS assets, design tokens, Tailwind/DaisyUI builds (`:base`, `:pilot`, `:admin-pilot`)
 
 |`libs/tools/`
-|Babashka developer tooling (not published to Clojars)
+|Babashka developer tooling (published as `com.wagoe/wagoe-tools`)
 |Scaffolding, AI CLI, config doctor, setup wizard, deploy, i18n tools
 |===
 
@@ -194,7 +194,7 @@ libs/user/
 [source]
 ----
 wagoe/
-├── libs/                        # All 21 library modules
+├── libs/                        # All 29 publishable libraries (+ e2e, an in-repo test harness)
 │   ├── core/                    # Foundation utilities, validation
 │   ├── observability/           # Logging, metrics, error reporting
 │   ├── platform/                # HTTP, database, CLI infrastructure
@@ -217,7 +217,7 @@ wagoe/
 │   ├── ai/                      # Multi-provider AI tooling
 │   ├── i18n/                    # Internationalisation
 │   └── ui-style/                # Shared UI style bundles
-│   └── tools/                   # Babashka developer tooling (bb tasks, not published to Clojars)
+│   └── tools/                   # Babashka developer tooling (bb tasks; published as wagoe-tools)
 │       ├── src/wagoe/tools/  # scaffold, ai, doctor, setup, deploy, etc.
 │       └── test/wagoe/tools/ # Unit tests (bb test:tools)
 ├── resources/

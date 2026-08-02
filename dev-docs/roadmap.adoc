@@ -5,6 +5,20 @@
 
 Wagoe is a module-centric Clojure framework implementing Functional Core / Imperative Shell. This roadmap tracks progress toward 1.0 and beyond. Updated April 2026.
 
+[IMPORTANT]
+====
+*This document is stale and superseded.* It was last updated in April 2026 and
+records the state as of then — including the claim that Phase 2 ("v1.0") is
+complete, which it is not: the suite ships `1.0.0-beta-4`. Its library counts
+predate several libraries, and `push` and `audience` are listed as remaining
+though both shipped.
+
+The current, maintained roadmap is the public one:
+`docs/modules/ROOT/pages/roadmap.adoc`, published at
+https://wagoe.org/docs/roadmap.html. Read that instead. This file is kept for
+the historical phase breakdown and the strategic notes at the end.
+====
+
 == Phase 0 — Alpha icon:check-circle[] *COMPLETE*
 *Goal: Make Wagoe usable for early adopters with minimal friction.*
 
@@ -50,7 +64,7 @@ Wagoe is a module-centric Clojure framework implementing Functional Core / Imper
 - Improve operational and security guidance
 
 === Delivered
-- [x] `libs/tools`: scaffolding, AI, i18n, deploy, dev utilities (dev tooling, not published to Clojars)
+- [x] `libs/tools`: scaffolding, AI, i18n, deploy, dev utilities (dev tooling; published as `com.wagoe/wagoe-tools`)
 - [x] Config Doctor (`bb doctor`): validates env refs, providers, JWT, admin parity, wiring
 - [x] Config Setup Wizard (`bb setup`): interactive + AI-powered config generation
 - [x] Module Integration (`bb scaffold integrate`): wires scaffolded modules into deps/tests/wiring

@@ -111,7 +111,7 @@ Each library also has its own `AGENTS.md` with library-specific documentation.
 
 ## Libraries
 
-Wagoe is a monorepo of **23 independently publishable libraries** plus development tooling:
+Wagoe is a monorepo of **29 independently publishable libraries**, application and development tooling alike:
 
 | Library | Description |
 |---------|-------------|

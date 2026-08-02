@@ -43,7 +43,7 @@ bb ai admin-entity "products with name, price, status"  # Generate admin entity 
 
 [source,bash]
 ----
-bb deploy --all              # Deploy all 24 libraries to Clojars
+bb deploy --all              # Deploy all 29 libraries to Clojars
 bb deploy --missing          # Deploy only unpublished versions
 bb deploy core platform user # Deploy specific libraries
 ----

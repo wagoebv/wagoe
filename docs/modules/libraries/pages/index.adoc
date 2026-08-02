@@ -1,7 +1,8 @@
 = Library Overview
-:description: All 23 independently publishable Wagoe libraries plus developer tooling.
+:description: All 29 independently publishable Wagoe libraries, application and tooling alike.
 
-Wagoe is a monorepo of 24 libraries publishable to Clojars, plus developer tooling.
+Wagoe is a monorepo of 29 libraries published to Clojars under the `com.wagoe`
+group.
 Every library follows the same FC/IS structure, making the codebase instantly familiar across libraries.
 
 == Foundation
@@ -99,7 +100,9 @@ Every library follows the same FC/IS structure, making the codebase instantly fa
 
 == Developer Tooling
 
-These libraries are not published to Clojars — they are part of the monorepo and available automatically.
+These are published to Clojars like the rest — they are listed separately
+because you reach for them at development time rather than depending on them
+from application code.
 
 [cols="1,3",options="header"]
 |===

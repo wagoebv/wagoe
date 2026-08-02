@@ -205,7 +205,7 @@ clj-paren-repair --help
 | ├── ui-style/      # Shared UI style bundles, tokens, and CSS assets contract
 | └── i18n/          # Marker-based internationalisation, translation catalogues, locale chains
 | 
-| ├── tools/         # Developer tooling: scaffolding, AI, i18n, deploy, dev utilities (not published to Clojars)
+| ├── tools/         # Developer tooling: scaffolding, AI, i18n, deploy, dev utilities
 | ```
 
 ---
@@ -972,7 +972,7 @@ Clojure's `{:or {limit 20 offset 0}}` destructuring only fires for **absent** ke
 {:deps {com.wagoe/wagoe-tools {:local/root "libs/tools"}}}
 ```
 
-> **Note:** `libs/tools` is not published to Clojars. It is a dev-only dependency and is not included in `bb deploy --all`.
+> **Note:** the monorepo consumes `libs/tools` through the `:local/root` dep above, not from Clojars — but it *is* published, as `com.wagoe/wagoe-tools`, and `bb deploy --all` includes it along with the other 28. "Dev-only" describes when you use it, not whether it ships.
 
 ### Namespaces
 

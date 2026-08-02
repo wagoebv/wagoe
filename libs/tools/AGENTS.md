@@ -2,7 +2,7 @@
 
 **Location:** `libs/tools`
 **Version:** `1.0.0-beta-4`
-**Distribution:** Part of the Wagoe monorepo — not published to Clojars. Wired directly into `bb.edn` as a local dependency.
+**Distribution:** Published to Clojars as `com.wagoe/wagoe-tools`, in lockstep with the rest of the suite. Inside this monorepo it is wired into `bb.edn` as a `:local/root` dependency, so local edits take effect without a release.
 
 Developer tooling for the Wagoe framework: scaffolding, AI assistance, config management, i18n management, deployment, and development utilities — available out of the box in every Wagoe project.
 
@@ -427,4 +427,4 @@ Translation files live in `libs/i18n/resources/wagoe/i18n/translations/`.
 
 ## Releasing wagoe-tools
 
-`wagoe-tools` is not published to Clojars. It is distributed as part of the Wagoe monorepo. To update it, commit and push changes to `libs/tools` — consumers pick up changes by pulling the repository.
+`wagoe-tools` is published to Clojars as `com.wagoe/wagoe-tools`, on the same lockstep version as every other library, and `bb deploy --all` includes it. Inside this monorepo, consumers read it through the `:local/root` dep in `bb.edn`, so a change to `libs/tools` takes effect on the next `bb` invocation without waiting for a release.
