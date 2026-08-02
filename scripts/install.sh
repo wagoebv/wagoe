@@ -104,7 +104,32 @@ else
   elif [[ "$OS" == "debian" || "$OS" == "wsl" || "$OS" == "fedora" ]]; then
     if ! command -v sdk &>/dev/null; then
       info "Installing sdkman..."
-      curl -s "https://get.sdkman.io" | bash
+      # Guarded and retried, unlike every other install step here, this one was
+      # not: a transient 503 from sdkman.io aborted the whole installer showing
+      # raw curl output and nothing from Wagoe (BOU-262). That is the failure
+      # mode the prerequisite check above exists to prevent, one step later.
+      #
+      # -fsS, not -s: `-s` hides the server error too, so the one line that says
+      # what went wrong is suppressed on the path where it matters most.
+      sdkman_installed=false
+      for attempt in 1 2 3; do
+        if curl -fsSL "https://get.sdkman.io" | bash; then
+          sdkman_installed=true
+          break
+        fi
+        [[ $attempt -lt 3 ]] && {
+          info "sdkman install failed (attempt $attempt/3) — retrying in $((attempt * 3))s..."
+          sleep $((attempt * 3))
+        }
+      done
+      [[ "$sdkman_installed" == true ]] || fail "Could not install sdkman after 3 attempts.
+
+  sdkman.io provides the JVM for this platform, and it did not respond.
+  This is usually temporary — check https://status.sdkman.io and re-run:
+    curl -fsSL https://get.wagoe.org | bash
+
+  Or install a JDK 21+ yourself and re-run; this installer skips the JVM
+  step when java is already on PATH."
     fi
     # `set +u` is required, not defensive: sdkman-init.sh reads
     # SDKMAN_CANDIDATES_API unguarded, so sourcing it under our `set -u` aborts
@@ -182,12 +207,42 @@ fi
 
 # ── PATH ─────────────────────────────────────────────────────
 BBIN_BIN="$HOME/.babashka/bbin/bin"
-SHELL_RC="$HOME/.zshrc"
-[[ "${SHELL:-}" == *"bash"* ]] && SHELL_RC="$HOME/.bashrc"
 
-if [[ ":$PATH:" != *":$BBIN_BIN:"* ]]; then
-  echo "export PATH=\"$BBIN_BIN:\$PATH\"" >> "$SHELL_RC"
+# Pick the file the user's shell actually reads, and the syntax it actually
+# understands. Defaulting every non-bash shell to ~/.zshrc sent fish users'
+# PATH line to a file fish never loads, in a syntax fish cannot parse: the
+# install reported success and `wagoe` was still not found (BOU-261).
+case "${SHELL:-}" in
+  *fish*)
+    SHELL_RC="$HOME/.config/fish/config.fish"
+    PATH_LINE="fish_add_path \"$BBIN_BIN\""
+    mkdir -p "$(dirname "$SHELL_RC")"
+    ;;
+  *bash*)
+    SHELL_RC="$HOME/.bashrc"
+    PATH_LINE="export PATH=\"$BBIN_BIN:\$PATH\""
+    ;;
+  *zsh*)
+    SHELL_RC="$HOME/.zshrc"
+    PATH_LINE="export PATH=\"$BBIN_BIN:\$PATH\""
+    ;;
+  *)
+    # Unknown shell: ~/.profile is the widest-read POSIX location. Better a
+    # file the shell probably reads than one it definitely does not.
+    SHELL_RC="$HOME/.profile"
+    PATH_LINE="export PATH=\"$BBIN_BIN:\$PATH\""
+    ;;
+esac
+
+# Check the FILE, not just $PATH. The old guard tested the current process
+# environment, which in a fresh non-interactive shell never has the entry — so
+# every re-run appended another copy, and N runs left N lines (BOU-263).
+if ! grep -qF "$BBIN_BIN" "$SHELL_RC" 2>/dev/null; then
+  echo "$PATH_LINE" >> "$SHELL_RC"
   ok "Added $BBIN_BIN to PATH in $SHELL_RC"
+  info "Run: source $SHELL_RC   (or open a new terminal)"
+elif [[ ":$PATH:" != *":$BBIN_BIN:"* ]]; then
+  ok "$SHELL_RC already sets the PATH entry"
   info "Run: source $SHELL_RC   (or open a new terminal)"
 fi
 

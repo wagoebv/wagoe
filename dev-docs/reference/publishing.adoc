@@ -316,12 +316,64 @@ budget approximately 20–25 minutes in total once the build is included.
 
 Before pushing a release tag:
 
-* [ ] All tests pass: `clojure -M:test`
+* [ ] All tests pass: `bb test:all` (not just `clojure -M:test` — see AGENTS.md on test surfaces)
 * [ ] No lint errors: `clojure -M:clj-kondo --lint src test libs/*/src libs/*/test`
+* [ ] All quality gates pass: `bb check --ci` — the `--ci` is load-bearing.
+  Without it, `wagoe.tools.check/-main` prints the failures and still exits 0
+  (`libs/tools/src/wagoe/tools/check.clj:225`), so a release script gating on
+  exit status sails past failing gates
 * [ ] `CHANGELOG.md` updated
 * [ ] Version bumped in all relevant `build.clj` files, including `libs/tools/build.clj` for a full tagged release
 * [ ] Changes committed and pushed to `main`
 * [ ] Local deploy works: `bb deploy core` (quick smoke check)
+* [ ] *First-run matrix passes* — see below
+
+[#first-run-matrix]
+=== First-run matrix (pre-release gate)
+
+CI runs `scripts/first-run-smoke.sh` on every push, but only on `ubuntu:24.04`.
+Three of the defects found in BOU-232 were invisible to a single image and to
+the happy path: a shell the test never used, a network failure the test never
+provoked, and a re-run the test never performed.
+
+These two scripts are the broader pass. They are *not* in CI — roughly four
+minutes per cell, and they pull whole base images — so they run before a
+release, deliberately by hand:
+
+[source,bash]
+----
+# Environment matrix — each ends in a serving app, or fails loudly
+./scripts/first-run-smoke.sh                                    # ubuntu:24.04  (~80s)
+SMOKE_IMAGE=fedora:41 ./scripts/first-run-smoke.sh              # ~76s
+SMOKE_IMAGE=menci/archlinuxarm:base ./scripts/first-run-smoke.sh   # ~50s, ARM hosts
+SMOKE_IMAGE=archlinux:latest SMOKE_PLATFORM=linux/amd64 \
+  ./scripts/first-run-smoke.sh                                  # x86 hosts
+
+# Adversarial cases — existing dir, bad names, occupied port, re-run, fish PATH
+./scripts/first-run-adversarial.sh                                 # ubuntu:24.04
+ADV_IMAGE=fedora:41 ./scripts/first-run-adversarial.sh
+ADV_IMAGE=menci/archlinuxarm:base ./scripts/first-run-adversarial.sh   # ARM hosts
+ADV_IMAGE=archlinux:latest ADV_PLATFORM=linux/amd64 \
+  ./scripts/first-run-adversarial.sh                               # x86 hosts
+----
+
+Both exit non-zero on failure, so they can be chained in a release script.
+
+Two results need reading rather than glancing at:
+
+* *SKIPPED is not passed.* The read-only-directory case cannot run as root,
+  where permission bits are ignored. It reports SKIP and is counted separately;
+  the summary line says so. Treat a skip as a gap, not a green.
+* *Arch omits one step.* `install.sh` installs the JVM there with a plain
+  `pacman -S`, and pacman cannot sandbox inside a container — under qemu,
+  `restricting syscalls via seccomp: 22`; on ARM-native Arch, `Landlock is not
+  supported by the kernel`. Neither happens on real Arch hardware. The harness
+  pre-satisfies the JVM and prints that the step is excluded.
+
+The port cases delete `/.dockerenv` before running. That is load-bearing:
+`port_manager/suggest-port-strategy` checks `docker?` before `dev?`, so a
+containerised test otherwise takes the Docker exact-or-fail branch and never
+exercises the dev auto-find path a user is actually on.
 
 ---
 

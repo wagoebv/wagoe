@@ -30,21 +30,54 @@ set -euo pipefail
 IMAGE="${SMOKE_IMAGE:-ubuntu:24.04}"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+# The archlinux image publishes amd64 only, so covering Arch from an Apple
+# Silicon machine needs emulation. Opt-in rather than automatic: an emulated run
+# is several times slower and would silently distort the timing this test
+# reports.
+PLATFORM_ARG=()
+[ -n "${SMOKE_PLATFORM:-}" ] && PLATFORM_ARG=(--platform "$SMOKE_PLATFORM")
+
 echo "── First-run smoke test"
-echo "   image: $IMAGE"
+echo "   image: $IMAGE${SMOKE_PLATFORM:+  (platform: $SMOKE_PLATFORM)}"
 echo "   repo:  $REPO_ROOT"
 echo
 
 docker run --rm \
+  ${PLATFORM_ARG[@]+"${PLATFORM_ARG[@]}"} \
   -v "$REPO_ROOT:/repo:ro" \
   -e REPO=/repo \
   "$IMAGE" bash -euo pipefail -c '
 fail() { echo; echo "SMOKE FAILURE: $*"; exit 1; }
 ok()   { echo "  ok — $*"; }
 
+# ── 0. package manager ──────────────────────────────────────────────────────
+# SMOKE_IMAGE has always been a parameter, but the body hardcoded apt-get, so
+# pointing it at Fedora failed on packaging rather than on a defect — the matrix
+# cell would look broken without telling you anything. Detect instead, and pin
+# the *expected* prerequisite hint to the same detection, because that hint is
+# what step 1 asserts on.
 export DEBIAN_FRONTEND=noninteractive
-apt-get update -qq >/dev/null 2>&1
-apt-get install -y -qq curl ca-certificates >/dev/null 2>&1
+if command -v apt-get >/dev/null 2>&1; then
+  PKG=apt; EXPECT_HINT="apt-get install"
+  apt-get update -qq >/tmp/pkg.log 2>&1 || { tail -5 /tmp/pkg.log; fail "apt-get update failed"; }
+  pkg_install() { apt-get install -y -qq "$@" >/tmp/pkg.log 2>&1 || { tail -5 /tmp/pkg.log; fail "apt-get install $* failed"; }; }
+elif command -v dnf >/dev/null 2>&1; then
+  PKG=dnf; EXPECT_HINT="dnf install"
+  pkg_install() { dnf install -y -q "$@" >/tmp/pkg.log 2>&1 || { tail -5 /tmp/pkg.log; fail "dnf install $* failed"; }; }
+elif command -v pacman >/dev/null 2>&1; then
+  PKG=pacman; EXPECT_HINT="pacman -S"
+  # --disable-sandbox: pacman cannot initialise its seccomp sandbox under qemu
+  # emulation ("error restricting syscalls via seccomp: 22"), which is how Arch
+  # is reached from an Apple Silicon host. Without it every pacman call fails.
+  PAC_FLAGS="--noconfirm --disable-sandbox"
+  pacman -Sy $PAC_FLAGS >/tmp/pkg.log 2>&1 \
+    || { tail -5 /tmp/pkg.log; fail "pacman -Sy failed"; }
+  pkg_install() { pacman -S $PAC_FLAGS --needed "$@" >/tmp/pkg.log 2>&1 || { tail -5 /tmp/pkg.log; fail "pacman -S $* failed"; }; }
+else
+  fail "no supported package manager (apt-get/dnf/pacman) in this image"
+fi
+echo "     package manager: $PKG"
+pkg_install curl ca-certificates
 
 # ── 1. bare image: prerequisites must be reported, not delegated ────────────
 echo "[1/6] prerequisite detection on a bare image"
@@ -55,13 +88,29 @@ set -e
 [ "$PREREQ_RC" -eq 0 ] && fail "installer succeeded on a bare image; it cannot have checked prerequisites"
 grep -qi "missing required tool" <<<"$PREREQ_OUT" \
   || fail "no actionable prerequisite message. Got: $(tail -3 <<<"$PREREQ_OUT")"
-grep -qi "apt-get install" <<<"$PREREQ_OUT" \
-  || fail "prerequisite message names no install command"
-ok "names the missing tools and the command to install them"
+# Distro-specific on purpose: telling a Fedora user to run apt-get is a dead
+# end, and asserting on any-install-command-at-all would not catch it.
+grep -qi -- "$EXPECT_HINT" <<<"$PREREQ_OUT" \
+  || fail "prerequisite message does not name a $PKG install command (expected: $EXPECT_HINT). Got: $(tail -3 <<<"$PREREQ_OUT")"
+ok "names the missing tools and the $PKG command to install them"
 
 # ── 2. install ──────────────────────────────────────────────────────────────
 echo "[2/6] install.sh"
-apt-get install -y -qq git unzip zip >/dev/null 2>&1
+pkg_install git unzip zip which
+if [ "$PKG" = pacman ]; then
+  # install.sh:122 installs the JVM with a plain `pacman -S`, and pacman cannot
+  # sandbox inside this container: under qemu it fails with "restricting
+  # syscalls via seccomp: 22", and on an ARM-native Arch image with "Landlock is
+  # not supported by the kernel". Both are Docker-environment limits, not Wagoe
+  # defects — a real Arch box has neither.
+  #
+  # Pre-satisfying java lets the REST of the Arch path be tested (OS detection,
+  # prerequisite hint, Clojure CLI, bb, bbin, the CLI itself, and the whole
+  # project funnel), all of which use generic installers rather than pacman.
+  echo "     NOTE: pre-installing the JVM, so install.sh skips its pacman JVM"
+  echo "           step. That single step is NOT under test on this image."
+  pkg_install jdk-openjdk
+fi
 T0=$(date +%s)
 bash /repo/scripts/install.sh >/tmp/install.log 2>&1 || {
   tail -20 /tmp/install.log; fail "install.sh exited non-zero"; }
