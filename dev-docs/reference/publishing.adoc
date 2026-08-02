@@ -418,9 +418,15 @@ bb relocate --deploy     # generate, skip already-published, push to Clojars
 bb relocate --verify     # check every stub is live
 ----
 
-Each stub is a `packaging: pom` artifact with no jar, published at
-`org.boundary-app/boundary-<lib>` `1.0.1`, relocating to
-`com.wagoe/wagoe-<lib>` at the current suite version.
+Each stub is a `packaging: pom` artifact with no jar, published under
+`org.boundary-app` at `1.0.1`, relocating to the library's `com.wagoe`
+coordinate at the current suite version.
+
+Both ids are derived, not listed: `relocate/old-artifact-name` takes
+`deploy/artifact-name` — which reads the `(def lib …)` coordinate from
+`build.clj` — and swaps the `wagoe-` prefix for `boundary-`. So `wagoe-cli`
+relocates from `org.boundary-app/boundary-cli`, with no double prefix on either
+side.
 
 === Why version 1.0.1
 

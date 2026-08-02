@@ -3,7 +3,9 @@
 
 Babashka-powered developer tooling for the Wagoe framework. Available out of the box in every Wagoe project via `bb.edn` — no separate install needed.
 
-NOTE: Not published to Clojars. Part of the monorepo at `libs/tools`.
+NOTE: Published to Clojars as `com.wagoe/wagoe-tools`, in lockstep with the rest
+of the suite. Dev-only describes when you use it — inside this monorepo it is
+consumed through the `:local/root` dep in `bb.edn` at `libs/tools`.
 
 == Commands
 
