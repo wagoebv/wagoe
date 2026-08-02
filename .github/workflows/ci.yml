@@ -310,6 +310,24 @@ jobs:
         run: bb check:hygiene
 
   # =============================================================================
+  # Documented library counts vs deploy/all-libs (Babashka — fast, no JVM)
+  # =============================================================================
+  check-doc-counts:
+    name: Documented Library Count Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Babashka
+        uses: DeLaGuardo/setup-clojure@13.6.1
+        with:
+          bb: latest
+
+      - name: Check documented library counts and publishing claims
+        run: bb check:doc-counts
+
+  # =============================================================================
   # POM dependency completeness (Babashka — fast, no JVM)
   # =============================================================================
   check-poms:
@@ -1122,7 +1140,7 @@ jobs:
   test-summary:
     name: All Tests Passed
     runs-on: ubuntu-latest
-    needs: [first-run-smoke, build-ui-assets, docs-lint, agents-links, command-smoke, config-doctor, i18n-scan, check-fcis, check-placeholder-tests, check-test-meta, check-test-tags, check-deps, check-ports, check-hygiene, check-poms, check-agents, check-no-boundary, build-uberjar, test-tools, example-smoke, test-i18n, test-core, test-observability, test-platform, test-user, test-admin, test-ui-style, test-storage, test-cache, test-jobs, test-tenant, test-email, test-realtime, test-workflow, test-search, test-scaffolder, test-external, test-payments, test-push, test-calendar, test-reports, test-geo, test-ai, test-mcp, test-wagoe-cli, test-shared-ui]
+    needs: [first-run-smoke, build-ui-assets, docs-lint, agents-links, command-smoke, config-doctor, i18n-scan, check-fcis, check-placeholder-tests, check-test-meta, check-test-tags, check-deps, check-ports, check-hygiene, check-doc-counts, check-poms, check-agents, check-no-boundary, build-uberjar, test-tools, example-smoke, test-i18n, test-core, test-observability, test-platform, test-user, test-admin, test-ui-style, test-storage, test-cache, test-jobs, test-tenant, test-email, test-realtime, test-workflow, test-search, test-scaffolder, test-external, test-payments, test-push, test-calendar, test-reports, test-geo, test-ai, test-mcp, test-wagoe-cli, test-shared-ui]
 
     steps:
       - name: Summary
@@ -1165,6 +1183,7 @@ jobs:
           echo "  - check:deps (no dependency direction violations)"
           echo "  - check:ports (no hexagonal boundary violations)"
           echo "  - check:hygiene (no tracked backup/cruft files)"
+          echo "  - check:doc-counts (documented library counts match all-libs)"
           echo "  - check:poms (published POMs carry inter-Wagoe deps)"
           echo "  - check:agents (AGENTS.md in sync with the generator)"
           echo "  - check:no-boundary (no residual boundary tokens)"

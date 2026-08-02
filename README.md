@@ -11,7 +11,7 @@
 
 ## Why Wagoe?
 
-**For developers:** 23 independently-publishable libraries on Clojars — use just `wagoe-core` for validation utilities, or go full-stack with JWT + MFA auth, auto-generated CRUD UIs, background jobs, multi-tenancy, real-time WebSockets, and more. Every library follows the same FC/IS structure, making any Wagoe codebase instantly familiar.
+**For developers:** 29 independently-publishable libraries on Clojars — use just `wagoe-core` for validation utilities, or go full-stack with JWT + MFA auth, auto-generated CRUD UIs, background jobs, multi-tenancy, real-time WebSockets, and more. Every library follows the same FC/IS structure, making any Wagoe codebase instantly familiar.
 
 **Ship faster:** The scaffolder generates fully structured modules (entity + routes + tests) in seconds. The admin UI auto-generates CRUD interfaces from your schema — no manual forms. Built-in observability, RFC 5988 pagination, and declarative interceptors mean you write business logic, not plumbing. AI tooling (`bb scaffold ai`, `bb ai gen-tests`, `bb ai sql`) handles the repetitive parts.
 
@@ -111,7 +111,7 @@ Each library also has its own `AGENTS.md` with library-specific documentation.
 
 ## Libraries
 
-Wagoe is a monorepo of **23 independently publishable libraries** plus development tooling:
+Wagoe is a monorepo of **29 independently publishable libraries**, application and development tooling alike:
 
 | Library | Description |
 |---------|-------------|
@@ -139,8 +139,11 @@ Wagoe is a monorepo of **23 independently publishable libraries** plus developme
 | [push](libs/push/) | Multi-platform push notifications: FCM (Firebase) + APNs (Apple) |
 | [audience](libs/audience/) | Rule-based audience segmentation with SQL + predicate pipeline |
 | [ui-style](libs/ui-style/) | Shared UI style bundles, design tokens, CSS/JS assets |
+| [shared-ui](libs/shared-ui/) | Shared Hiccup primitives: forms, tables, layouts, modals, icons |
 | [devtools](libs/devtools/) | Dev-only: error pipeline, dev dashboard, REPL power tools, guidance engine |
 | [tools](libs/tools/) | Dev-only: deploy, doctor, setup, scaffolder integration, quality checks |
+| [wagoe-cli](libs/wagoe-cli/) | The `wagoe` command: `new`, `add`, `list modules` |
+| [wagoe-mcp](libs/wagoe-mcp/) | MCP server over stdio for editor agents |
 
 ---
 

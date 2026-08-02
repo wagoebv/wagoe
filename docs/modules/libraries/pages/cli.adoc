@@ -3,7 +3,9 @@
 
 Standalone CLI tool for bootstrapping new Wagoe projects and adding optional modules. Installed via bbin — does not require the monorepo. Generated projects are fully self-contained.
 
-NOTE: Not published to Clojars. Installed via bbin from the GitHub repository.
+NOTE: Published to Clojars as `com.wagoe/wagoe-cli`, in lockstep with the rest of
+the suite. As a CLI you normally install it with bbin rather than declaring it as
+a dependency.
 
 == Install
 

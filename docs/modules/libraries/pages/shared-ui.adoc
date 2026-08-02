@@ -1,0 +1,75 @@
+= shared-ui
+:description: Shared Hiccup UI primitives — forms, tables, layouts, modals and icons used across the Wagoe web and admin interfaces.
+
+`com.wagoe/wagoe-shared-ui` holds the Hiccup building blocks that more than one
+library renders with. It was extracted so `admin` and `user` could stop
+depending on each other's UI code — that mutual dependency was a genuine cycle
+until this library broke it.
+
+== What it is
+
+A library of *pure functions returning Hiccup*. No I/O, no state, no ports.
+
+That last part is deliberate and worth stating, because it makes `shared-ui` the
+one exception to Wagoe's usual public-API rule. Elsewhere `core/` is an
+implementation detail and you depend on `ports.clj`; here there is no port,
+because there is nothing to abstract over — a function that turns arguments into
+a vector has no adapter to swap. The functions under `wagoe.shared.ui.core.*`
+*are* the public surface, and xref:ROOT:stability.adoc[the stability policy]
+covers them as such.
+
+== Namespaces
+
+[cols="1,3",options="header"]
+|===
+| Namespace | Contains
+
+| `wagoe.shared.ui.core.components`
+| Form controls and inline feedback: `text-input`, `email-input`,
+  `password-input`, `textarea`, `select-field`, `checkbox`, `form-field`,
+  `button`, `submit-button`, `link-button`, `badge`, `success-message`,
+  `error-message`
+
+| `wagoe.shared.ui.core.layout`
+| Page scaffolding: `page-layout`, `pilot-page-layout`,
+  `admin-pilot-page-layout`, `error-layout`, `main-navigation`, `sidebar`,
+  `breadcrumbs`, `modal`, `card`, `render-error-page`
+
+| `wagoe.shared.ui.core.table`
+| `data-table` and `table-wrapper`
+
+| `wagoe.shared.ui.core.validation`
+| Turning Malli explain output into per-field messages: `explain->field-errors`,
+  `has-errors?`, `field-error`
+
+| `wagoe.shared.ui.core.icons`
+| Inline SVG icon set
+
+| `wagoe.shared.ui.core.alpine`
+| Alpine.js attribute helpers for HTMX-driven interactions
+|===
+
+== Relationship to ui-style
+
+`shared-ui` produces *markup*; xref:ui-style.adoc[`ui-style`] ships the *CSS and
+JS* that markup expects. The class names the components emit are the contract
+between them, which is why the two are versioned in lockstep like everything
+else.
+
+== Usage
+
+[source,clojure]
+----
+(require '[wagoe.shared.ui.core.components :as ui]
+         '[wagoe.shared.ui.core.layout :as layout])
+
+(layout/page-layout
+  {:title "Products"}
+  [:div
+   (ui/text-input {:name "name" :label "Product name" :value ""})
+   (ui/submit-button {:label "Save"})])
+----
+
+Because every function is pure, they are straightforward to test — call one and
+assert on the Hiccup vector it returns, with no rendering step and no system to
+start.

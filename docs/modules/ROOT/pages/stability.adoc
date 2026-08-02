@@ -1,0 +1,245 @@
+= Stability & Versioning
+:description: What Wagoe promises about API stability, how versions are numbered, and how breaking changes are announced.
+
+This page states what you can rely on, what you cannot, and how a change that
+breaks you will reach you. It describes the framework as it is today — Wagoe is
+in beta, and the honest summary is that *no API is frozen yet*.
+
+== Current status
+
+[cols="1,3",options="header"]
+|===
+| |
+
+| Current version
+| `1.0.0-beta-4`
+
+| Stability
+| Beta — breaking changes are permitted between beta releases
+
+| Artifacts
+| 29 libraries on Clojars, all in the `com.wagoe` group. Artifact ids are
+  `wagoe-` followed by the library name — `wagoe-core`, `wagoe-platform` — except
+  where the library name already begins with `wagoe-`, which is not doubled:
+  `libs/wagoe-cli` publishes as `com.wagoe/wagoe-cli`, not `wagoe-wagoe-cli`, and
+  likewise for `wagoe-mcp`. The authoritative id is the `(def lib …)` coordinate
+  in each library's `build.clj`, which is what `bb deploy` reads.
+
+| Versioning
+| Lockstep — every library carries the same version and is released together
+|===
+
+Lockstep versioning means you never have to work out which `wagoe-user` goes
+with which `wagoe-platform`: matching version strings are always compatible with
+each other. It also means a library gets a version bump when it has not changed,
+because something else in the suite did.
+
+== The version scheme
+
+Releases are `1.0.0-beta-N`, incrementing `N` per release. This replaced the
+older `1.0.1-alpha-N` scheme.
+
+.The alpha → beta transition
+[cols="1,1,2",options="header"]
+|===
+| Last alpha | First beta | Date
+
+| `1.0.1-alpha-42`
+| `1.0.0-beta-1`
+| 2026-07-19 → 2026-07-23
+|===
+
+[WARNING]
+====
+*The version number went down.* Under Maven ordering `1.0.0` sorts below
+`1.0.1`, so `1.0.0-beta-1` compares as *older* than `1.0.1-alpha-42` even though
+it shipped four days later.
+
+If you use a version range or any tool that resolves "newest", it will prefer the
+last alpha over every beta. *Pin exact versions.* The `1.0.1-alpha-*` line is
+discontinued and receives no fixes.
+====
+
+The old scheme was wrong in a way worth naming, since it is the reason for the
+change: `1.0.1-alpha-41` reads as a patch release of a shipped `1.0`. Nothing
+called `1.0` had ever been released. `1.0.0-beta-N` says what is true — work
+leading up to a first `1.0.0`.
+
+[NOTE]
+====
+`CHANGELOG.md` has no separate `1.0.0-beta-1` entry. Its changes were still
+sitting in `[Unreleased]` when `1.0.0-beta-2` shipped eight days later, so they
+are recorded under the `1.0.0-beta-2` heading. Nothing is missing; it is filed
+one heading down.
+====
+
+== What counts as public API
+
+Wagoe is hexagonal, and the architecture already draws the line this policy
+needs. The supported surface is the seam, not the implementation behind it.
+
+[cols="1,2,2",options="header"]
+|===
+| Surface | Where | Supported?
+
+| *Protocols*
+| `wagoe.<lib>.ports`, or the library's documented equivalent — see the
+  exceptions below. Presence is enforced by `bb check:ports`.
+| ✅ Yes — this is the contract
+
+| *Schemas*
+| `wagoe.<lib>.schema` — Malli schemas for entities and inputs, where the
+  library defines them
+| ✅ Yes
+
+| *Integrant keys*
+| `:wagoe/*` component keys and their init options
+| ✅ Yes
+
+| *Configuration*
+| Keys read from `resources/conf/<env>/config.edn` and their environment variables
+| ✅ Yes
+
+| *CLI + Babashka commands*
+| `wagoe …`, and the `bb` tasks documented on this site
+| ✅ Yes
+
+| *Functional core*
+| `wagoe.<lib>.core.*`
+| ❌ No — internal, may change in any release
+
+| *Imperative shell*
+| `wagoe.<lib>.shell.*`, including every adapter
+| ❌ No — internal; depend on the port, not the adapter
+|===
+
+The practical rule: *if you can reach it through a protocol, a schema, an
+Integrant key or a config key, it is supported.* If you are calling into
+`core/` or `shell/` directly, you are using an implementation detail, and
+`bb check:ports` exists precisely to stop the framework's own code from doing
+that.
+
+=== Where the seam is not a single `ports.clj`
+
+Most libraries put their protocols in one `wagoe.<lib>.ports`. Four deviate by
+design, and the rule above still applies — only the file layout differs.
+
+[cols="1,3",options="header"]
+|===
+| Library | Where its contract lives
+
+| `platform`
+| `wagoe.platform.ports.*` — a directory rather than one file. Today it holds
+  `ports.http` (`IRouter`, `IHttpServer`, `IRouteValidator`). Its `DBAdapter`
+  and `IFileSystemAdapter` protocols currently sit under
+  `shell.adapters.*.protocols`; they are supported surface despite the
+  location, and moving them under `ports` is tracked work
+
+| `observability`
+| One `ports.clj` per concern: `wagoe.observability.{metrics,tracing,errors,logging}.ports`
+
+| `cache`
+| Has no `core/` at all — a thin adapter library, so `ports` plus `shell` is the
+  whole of it
+
+| `shared-ui`
+| Has *no* ports and no schema. It is a library of pure Hiccup primitives, so
+  the public surface is the functions in `wagoe.shared.ui.core.*` themselves.
+  Treat those the way you would a port; they do not follow the "`core/` is
+  internal" rule, because for this library there is nothing else.
+|===
+
+`wagoe-mcp` is a fifth deviation, but only in naming: its sources live under
+`wagoe/mcp/` (namespaces `wagoe.mcp.*`) while the directory is `libs/wagoe-mcp`.
+Its `ports` namespace is where you would expect.
+
+This is not a hypothetical distinction. `wagoe-user` dropped five protocols from
+its `ports.clj` in one release, and `wagoe-jobs` moved a transactional-enqueue
+capability from a namespace function onto a port in another. Both were breaking
+changes to the supported surface — which is exactly why they belong in a policy
+rather than a commit message.
+
+== What we promise, and when
+
+=== Now (beta)
+
+* *Nothing is frozen.* Any release may change any API, including protocols.
+* Breaking changes are announced in `CHANGELOG.md` under a `### Breaking`
+  heading, naming the affected library and the migration.
+* Deprecations are announced under `### Deprecated`.
+* We will not remove something in the same release that first deprecates it,
+  unless it is broken enough that leaving it in place is worse. That case is
+  called out explicitly.
+
+=== From 1.0.0
+
+* *Semantic Versioning*, applied to the public surface defined above.
+* A breaking change requires a major version.
+* Anything removed in a major version must have been deprecated in a prior
+  minor version, and must have been deprecated for at least *one minor release
+  and 90 days*, whichever is longer.
+* Deprecated vars carry `^:deprecated` metadata with a pointer to the
+  replacement, so your editor and `clj-kondo` can flag them.
+
+=== What is not covered
+
+* `wagoe-tools`, `wagoe-devtools`, `wagoe-cli` and `wagoe-mcp` are development
+  tooling. They are versioned in lockstep and published to Clojars, but their
+  internal namespaces are not an API — the commands are.
+* Generated code. The scaffolder's output becomes yours; we change the
+  generator, not your files.
+* Database schemas of the framework's own tables, other than through migrations
+  we ship.
+
+== Deprecation, in practice
+
+A deprecation is three things, and it is not a deprecation without all three:
+
+. `^:deprecated` metadata on the var, protocol or method, with a docstring line
+  naming the replacement.
+. A `### Deprecated` entry in `CHANGELOG.md` for the release that introduced it.
+. A replacement that exists and is documented at the time of the announcement.
+
+[source,clojure]
+----
+(defn ^:deprecated enqueue-in-tx!
+  "DEPRECATED: use the ITransactionalQueue port instead.
+   Removed no earlier than the next major release."
+  [& args]
+  ...)
+----
+
+[NOTE]
+====
+This convention is new as of this page, and the codebase does not yet meet it
+everywhere — at the time of writing exactly one var carries `^:deprecated`, and
+`CHANGELOG.md` has never used a `### Deprecated` heading. Breaking changes
+during the Framework Quality work shipped without one. Bringing the existing
+surface up to this standard is part of the road to `1.0.0`.
+====
+
+== HTTP API versioning is a separate thing
+
+Do not confuse *library* stability with the *HTTP API versioning* your
+application exposes to its own clients. Those are different axes and Wagoe
+handles them separately.
+
+For your endpoints, the platform ships version lifecycle support — deprecated
+version sets, sunset dates, and an `X-API-Deprecated` response header — in
+`wagoe.platform.shell.http.versioning`. Routes are mounted under `/api/v1` by
+default. That machinery governs the contract between *your* app and *its*
+clients; this page governs the contract between Wagoe and you.
+
+== Reporting a break
+
+If a release breaks you and the break is not in `CHANGELOG.md`, that is a bug in
+this policy as much as in the code. Open an issue on
+https://github.com/wagoebv/wagoe[GitHub] with the two versions and the failure —
+an unannounced break gets a fix or a revert, not a workaround.
+
+== See also
+
+* xref:roadmap.adoc[Roadmap] — what is left before `1.0.0`
+* xref:architecture:fc-is.adoc[Functional Core / Imperative Shell] — why the
+  `core/` ↔ `shell/` split is the stability boundary
+* https://github.com/wagoebv/wagoe/blob/main/CHANGELOG.md[CHANGELOG]

@@ -28,6 +28,7 @@
             [wagoe.tools.check-deps :as check-deps]
             [wagoe.tools.check-fcis :as check-fcis]
             [wagoe.tools.check-hygiene :as check-hygiene]
+            [wagoe.tools.check-doc-counts :as check-doc-counts]
             [wagoe.tools.check-poms :as check-poms]
             [wagoe.tools.check-ports :as check-ports]
             [wagoe.tools.check-tests :as check-tests]
@@ -112,6 +113,41 @@
     ;; A disabled test is intentional, not cruft. Asserted so a future widening
     ;; of the pattern cannot silently start rejecting it.
     (is (empty? (check-hygiene/cruft-files ["test/wagoe/slow_test.clj.skip"])))))
+
+;; =============================================================================
+;; check:doc-counts
+;; =============================================================================
+
+(deftest ^:unit doc-counts-gate-fires-test
+  (testing "a stale count is detected"
+    (is (seq (check-doc-counts/count-findings
+              "README.md" "Wagoe is a monorepo of 23 independently publishable libraries" 29))))
+
+  (testing "a stale publishing claim is detected"
+    (is (seq (check-doc-counts/publishing-findings
+              "libs/tools/AGENTS.md"
+              "`wagoe-tools` itself is not published — it is a monorepo-internal tool."
+              #{"tools" "wagoe-tools"}))))
+
+  (testing "the gate discovers real documentation, not an empty file list"
+    ;; The failure this guards against is the gate scanning nothing and
+    ;; reporting clean — docs-lint's alias check was live for months while its
+    ;; file list omitted most of the repo (BOU-250).
+    (let [docs (check-doc-counts/tracked-docs)]
+      (is (< 20 (count docs))
+          "expected the repo's documentation, so a passing run means something")
+      (is (some #(= "README.md" %) docs))
+      (is (not-any? #(= "CHANGELOG.md" %) docs)
+          "historical counts must stay out of scope")))
+
+  (testing "the repository currently satisfies the gate"
+    ;; Belt and braces: the assertions above prove detection on synthetic input.
+    ;; This proves the real tree is clean, so a regression shows up here too.
+    ;; scan-opts, not a hand-built copy of it — a test that assembles its own
+    ;; options can pass while the real run fails on one it forgot to set, which
+    ;; is how this assertion first went green against a failing gate.
+    (is (empty? (check-doc-counts/scan (check-doc-counts/tracked-docs)
+                                       (check-doc-counts/scan-opts))))))
 
 ;; =============================================================================
 ;; check:deps
@@ -548,7 +584,8 @@
    That is the point: a gate nobody can prove fires is indistinguishable from
    one that does not run."
   #{:hygiene :deps :fcis :placeholder-tests :docs-lint
-    :test-meta :test-tags :ports :poms :agents :doctor :linting :no-boundary})
+    :test-meta :test-tags :ports :poms :agents :doctor :linting :no-boundary
+    :doc-counts})
 
 (def gates-without-firing-tests
   "Gates that cannot yet be proven to fire, each with the reason.

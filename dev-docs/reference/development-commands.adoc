@@ -385,7 +385,7 @@ bb create-admin --dir examples/ecommerce-api               # Target a sub-projec
 
 [source,bash]
 ----
-bb deploy --all                  # Deploy all 21+ libraries to Clojars
+bb deploy --all                  # Deploy all 29 libraries to Clojars
 bb deploy --missing              # Deploy only libraries not yet on Clojars
 bb deploy core platform user     # Deploy specific libraries
 ----

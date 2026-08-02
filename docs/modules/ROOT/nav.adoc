@@ -1,1 +1,3 @@
 * xref:index.adoc[Home]
+* xref:stability.adoc[Stability & Versioning]
+* xref:roadmap.adoc[Roadmap]

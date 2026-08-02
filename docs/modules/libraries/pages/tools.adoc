@@ -3,7 +3,9 @@
 
 Babashka-powered developer tooling for the Wagoe framework. Available out of the box in every Wagoe project via `bb.edn` — no separate install needed.
 
-NOTE: Not published to Clojars. Part of the monorepo at `libs/tools`.
+NOTE: Published to Clojars as `com.wagoe/wagoe-tools`, in lockstep with the rest
+of the suite. Dev-only describes when you use it — inside this monorepo it is
+consumed through the `:local/root` dep in `bb.edn` at `libs/tools`.
 
 == Commands
 
@@ -43,7 +45,7 @@ bb ai admin-entity "products with name, price, status"  # Generate admin entity 
 
 [source,bash]
 ----
-bb deploy --all              # Deploy all 24 libraries to Clojars
+bb deploy --all              # Deploy all 29 libraries to Clojars
 bb deploy --missing          # Deploy only unpublished versions
 bb deploy core platform user # Deploy specific libraries
 ----
@@ -107,7 +109,7 @@ bb install-hooks             # Configure git hooks path to .githooks
 | Module Integration — wire into deps/tests/wiring
 
 | `wagoe.tools.deploy`
-| Clojars deployment for all 24 published artifacts
+| Clojars deployment for all 29 published artifacts
 
 | `wagoe.tools.i18n`
 | i18n catalogue management (find/scan/missing/unused)

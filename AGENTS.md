@@ -205,7 +205,7 @@ clj-paren-repair --help
 | ├── ui-style/      # Shared UI style bundles, tokens, and CSS assets contract
 | └── i18n/          # Marker-based internationalisation, translation catalogues, locale chains
 | 
-| ├── tools/         # Developer tooling: scaffolding, AI, i18n, deploy, dev utilities (not published to Clojars)
+| ├── tools/         # Developer tooling: scaffolding, AI, i18n, deploy, dev utilities
 | ```
 
 ---
@@ -868,7 +868,7 @@ separate and unchanged.
 
 ## Quality Gates
 
-Seven automated safeguards run in CI (and `check:fcis` + `check:ports` in pre-commit) to prevent regressions caught during QA review (PRs #108–#116).
+Automated safeguards run in CI (and `check:fcis` + `check:ports` in pre-commit) to prevent regressions caught during QA review (PRs #108–#116). `bb check` runs the full set — currently 14 — and `wagoe.tools.check/all-checks` is its registry; the table below covers the ones with non-obvious rules.
 
 | Gate | Command | What it catches | Hard fail? |
 |------|---------|-----------------|------------|
@@ -877,13 +877,16 @@ Seven automated safeguards run in CI (and `check:fcis` + `check:ports` in pre-co
 | **Dependency direction** | `bb check:deps` | Core independence violations, circular deps between libraries | Yes (cycles/core); warn (undeclared) |
 | **Ports / hexagonal** | `bb check:ports` | Modules missing `ports.clj`; shell coupling to another module's `shell.persistence`/`shell.service`; web/HTTP requiring `shell.persistence` directly | Yes |
 | **POM dep completeness** | `bb check:poms` | Published POMs dropping inter-Wagoe deps: `build_shared` losing the `:local/root`→mvn rewrite, a publishable `build.clj` bypassing `pom-basis`, or a referenced wagoe dep that is not itself publishable | Yes |
+| **Documented library counts** | `bb check:doc-counts` | Prose disagreeing with `wagoe.tools.deploy/all-libs`: a documented library/artifact count that is not the real number, or a document calling a published library unpublished | Yes |
 | **Security tests** | `clojure -M:test --focus-meta :security` | Error→HTTP mapping, CSRF routing, XSS escaping, SQL injection, sensitive field leaks | Yes (test failure) |
 | **clj-kondo lint** | `clojure -M:clj-kondo --lint ...` | Static analysis (existing gate) | Yes |
 | **Config doctor** | `bb doctor --env dev --ci` | Configuration errors (existing gate) | Yes |
 
 **`check:ports` escape hatch (for legitimate exceptions / gradual adoption):** add `^:wagoe/allow-direct` metadata to a namespace to exempt it from the coupling rules, or list `:allow-missing-ports` (module ns prefixes) / `:allow-direct` (namespaces) in a `.wagoe/check-ports.edn` at the repo root.
 
-**Scripts location:** `libs/tools/src/wagoe/tools/check_{fcis,tests,deps,ports,poms}.clj`
+**`check:doc-counts` escape hatch:** add an entry to `.wagoe/check-doc-counts.edn`. Every entry must carry a `:why` — the gate throws on one without it. Prefer the alternatives first: a historical document (changelog, ADR, delivered talk) belongs in `excluded-paths`, and a number that is not a library count (`HTTP 200 for each library`) belongs in `gap-disqualifiers`, so the same shape never needs allowlisting twice.
+
+**Scripts location:** `libs/tools/src/wagoe/tools/check_{fcis,tests,deps,ports,poms,doc_counts}.clj`
 **Security tests:** `libs/platform/test/wagoe/platform/shell/security_test.clj` (tagged `^:security ^:unit`)
 **Handler test helpers:** `test/support/handler_test_helpers.clj` (Ring request builders, response assertions)
 **ADRs:** `dev-docs/adr/ADR-021-fcis-boundary-rules.adoc`, `ADR-022-error-handling-conventions.adoc`
@@ -972,7 +975,7 @@ Clojure's `{:or {limit 20 offset 0}}` destructuring only fires for **absent** ke
 {:deps {com.wagoe/wagoe-tools {:local/root "libs/tools"}}}
 ```
 
-> **Note:** `libs/tools` is not published to Clojars. It is a dev-only dependency and is not included in `bb deploy --all`.
+> **Note:** the monorepo consumes `libs/tools` through the `:local/root` dep above, not from Clojars — but it *is* published, as `com.wagoe/wagoe-tools`, and `bb deploy --all` includes it along with the other 28. "Dev-only" describes when you use it, not whether it ships.
 
 ### Namespaces
 
@@ -985,7 +988,7 @@ Clojure's `{:or {limit 20 offset 0}}` destructuring only fires for **absent** ke
 | `wagoe.tools.integrate` | `bb scaffold integrate` — guide module integration (Integrant config + wiring) |
 | `wagoe.tools.i18n` | `bb i18n:find/scan/missing/unused` |
 | `wagoe.tools.admin` | `bb create-admin` |
-| `wagoe.tools.deploy` | `bb deploy` (handles all 24 libs) |
+| `wagoe.tools.deploy` | `bb deploy` (handles all 29 libs) |
 | `wagoe.tools.dev` | `bb migrate`, `bb check-links`, `bb smoke-check`, `bb install-hooks` |
 | `wagoe.tools.check-fcis` | `bb check:fcis` — FC/IS boundary enforcement (ADR-021) |
 | `wagoe.tools.check-tests` | `bb check:placeholder-tests` — placeholder assertion detection |

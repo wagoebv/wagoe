@@ -57,6 +57,7 @@ existing-dir/
 !.wagoe/check-fcis.edn
 !.wagoe/check-ports.edn
 !.wagoe/check-test-tags.edn
+!.wagoe/check-doc-counts.edn
 
 # Claude Code local settings
 .claude/settings.local.json

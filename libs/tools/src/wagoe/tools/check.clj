@@ -81,6 +81,14 @@
    {:id    :hygiene
     :label "Repo hygiene (no backup files)"
     :cmd   ["bb" "check:hygiene"]}
+   ;; Documented library counts and publishing claims, locked to
+   ;; wagoe.tools.deploy/all-libs. Added because a single review pass found the
+   ;; count written five different ways and `libs/tools` called unpublished in
+   ;; six places while it was on Clojars — drift a human sweep took three
+   ;; attempts to clear (PR #351).
+   {:id    :doc-counts
+    :label "Documented library counts"
+    :cmd   ["bb" "check:doc-counts"]}
    {:id    :agents
     :label "AGENTS.md drift"
     :cmd   ["bb" "check:agents"]}

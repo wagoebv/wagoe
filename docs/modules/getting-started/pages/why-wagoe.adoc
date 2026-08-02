@@ -11,7 +11,7 @@ Then they reinvent the same things again: authentication, pagination, validation
 
 Wagoe packages those decisions into one coherent framework, so you do not have to rebuild the same foundation every time. The rule is to keep the Functional Core / Imperative Shell pattern visible everywhere, not just in the README.
 
-=== For developers: 24 composable libraries
+=== For developers: 29 composable libraries
 
 Use just `wagoe-core` for validation utilities in an existing app, or compose the full stack with JWT + MFA auth, auto-generated CRUD UIs, background jobs, multi-tenancy, real-time WebSockets, and more.
 
@@ -71,7 +71,7 @@ That gives you business logic that is:
 | No
 
 | Library granularity
-| 24 independent libs
+| 29 independent libs
 | Monolithic
 | Template-based
 

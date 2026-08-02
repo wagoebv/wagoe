@@ -1,0 +1,157 @@
+= Roadmap
+:description: Where Wagoe is today, what stands between here and 1.0.0, and what comes after.
+
+Wagoe is at `1.0.0-beta-4`. This page is the public view of what is built, what
+is left before a stable `1.0.0`, and what we intend to build after it.
+
+It is a statement of intent, not a delivery commitment. Dates are deliberately
+absent — the ordering is the useful part.
+
+== Where we are
+
+Twenty-nine libraries are published on Clojars under `com.wagoe`, versioned in
+lockstep. The framework is feature-complete for the applications it targets; the
+remaining work before `1.0.0` is about trust rather than capability.
+
+.Built and shipping
+[cols="1,3",options="header"]
+|===
+| Area | What exists
+
+| Architecture
+| Functional Core / Imperative Shell throughout, with `ports.clj` protocols per
+  module, enforced in CI by dedicated boundary, dependency-direction and
+  hexagonal-layering gates
+
+| Code generation
+| Scaffolder for modules, fields and endpoints — interactive, flag-driven, or
+  from a natural-language description
+
+| Web + admin
+| Reitit routing with normalized route maps, HTMX + Hiccup UI, and an auto-CRUD
+  admin interface generated from entity configuration
+
+| Identity
+| Authentication, JWT, MFA, sessions, and role-based authorization
+
+| Data
+| next.jdbc with PostgreSQL, H2 and SQLite; migrations; multi-tenancy by
+  schema-per-tenant; full-text search
+
+| Async
+| Background jobs over Redis or a durable database-backed queue, with
+  transactional enqueue; WebSocket real-time messaging
+
+| Integrations
+| Payments (Mollie, Stripe, Mock), file storage (local, S3, GCS), email over
+  SMTP, SMS/WhatsApp, IMAP, geocoding, push notifications (FCM, APNs)
+
+| Domain libraries
+| Workflow state machines, reports with PDF/Excel/DOCX export, calendar with
+  RRULE recurrence and iCal, audience segmentation
+
+| Observability
+| Interceptor-based metrics, logging and error reporting, with Prometheus, OTLP
+  and Datadog providers, plus distributed tracing spans
+
+| Internationalisation
+| Marker-based i18n with translation catalogues and locale chains; the admin UI
+  is fully translatable
+
+| Tooling
+| `wagoe` CLI, a Babashka task suite (config doctor, setup wizard, migrations,
+  i18n scanning, deploy), framework-aware AI helpers, and an MCP server for
+  editor agents
+|===
+
+== The road to 1.0.0
+
+`1.0.0` means the API is one we are willing to be held to. Everything below is
+about earning that, not adding surface.
+
+=== 1. First-run experience
+
+The bulk of this has landed: `install.sh` with prerequisite detection, a
+`wagoe new` scaffold that produces a project which boots, a setup wizard needing
+no external services, automatic migrations, seed data, a production build path,
+and a CI smoke test that walks install → new project → serving app inside a bare
+container and asserts on HTTP rather than exit codes.
+
+What remains is deliberate QA: the same path exercised across an environment
+matrix and by people who did not write it. A framework gets one first
+impression.
+
+=== 2. API stability
+
+The xref:stability.adoc[stability policy] now defines what is public, what is
+internal, and how deprecations work. Bringing the existing surface up to that
+standard is the work — auditing protocols for changes we would not want to make
+after `1.0.0`, and adding the `^:deprecated` metadata and changelog headings the
+policy requires.
+
+=== 3. Architectural loose ends
+
+A small number of module dependency cycles are still tolerated by an allowlist
+rather than resolved. Module wiring and platform system wiring are more coupled
+than they should be — several optional libraries are effectively mandatory
+dependencies of the platform. Both are the kind of thing that is cheap to fix
+before a stability promise and expensive after.
+
+=== 4. Assistant tooling
+
+Wagoe has strong conventions, which makes it well suited to coding assistants
+that know them. Planned: guided skills for project setup, scaffolding,
+migrations, configuration preflight and debugging, so an assistant follows the
+framework's own workflow instead of guessing at it.
+
+=== 5. Showing rather than telling
+
+A showcase application built on the framework, and a migration guide for people
+arriving from Kit or Luminus. Then the community launch — announcements, a chat
+channel, and a demo.
+
+== After 1.0.0
+
+=== Scaling out
+
+Wagoe already scales vertically through configuration, and the `ports.clj` seam
+is what makes scaling out tractable: swap an in-process adapter for a distributed
+one without touching business logic. Cache, jobs, auth and tenancy are already
+replica-safe. The remaining pieces:
+
+* A generic remote-port adapter and RPC envelope, so a module can be moved out
+  of the monolith without rewriting its callers
+* A service launch mode that boots a named subset of modules as its own service
+* An event bus adapter over Redis Streams or Kafka
+* Reference deployment topologies for Docker Compose and Kubernetes
+
+See xref:architecture:scaling.adoc[Sizing & Scaling] for the current readiness
+matrix.
+
+=== More libraries
+
+* A forms library — dynamic form definitions, validation and rendering
+* Datomic and XTDB as alternative persistence backends
+
+=== Faster starts
+
+* Application templates: API-only, admin dashboard, and a SaaS preset wiring
+  login, storage, admin and payments together
+* A plugin or extension mechanism, so third-party modules install the way the
+  first-party ones do
+
+== How this page is maintained
+
+This roadmap is reviewed alongside each beta release. Work is tracked publicly
+on https://github.com/wagoebv/wagoe[GitHub]; the shipped detail of every release
+is in https://github.com/wagoebv/wagoe/blob/main/CHANGELOG.md[CHANGELOG.md].
+
+If something here matters to you, saying so is the most effective way to move it
+up the list.
+
+== See also
+
+* xref:stability.adoc[Stability & Versioning] — what `1.0.0` will actually
+  promise
+* xref:getting-started:index.adoc[Getting Started] — try the current beta
+* xref:architecture:scaling.adoc[Sizing & Scaling] — what scales today
