@@ -114,6 +114,53 @@
       (is (seq (sut/count-findings "doc.md" line 29))
           (str "disqualifier too broad, lost: " line)))))
 
+(deftest ^:unit count-findings-reads-spelled-out-counts-test
+  ;; `docs/modules/ROOT/pages/roadmap.adoc` opens with "Twenty-nine libraries
+  ;; are published on Clojars" — a live, public count the digit-only pattern
+  ;; could not see. A gate that misses the sentence a document leads with is not
+  ;; guarding that document.
+  (testing "a word-form count that disagrees is caught"
+    (doseq [line ["Twenty-nine libraries are published on Clojars under `com.wagoe`"
+                  "Twenty-two libraries are published on Clojars"
+                  "The suite is thirteen libraries today"
+                  "All twenty-four artifacts ship together"
+                  "Fifteen independently publishable libraries"]]
+      (is (seq (sut/count-findings "doc.md" line 30))
+          (str "not detected: " line))))
+
+  (testing "a word-form count that agrees passes"
+    (doseq [line ["Twenty-nine libraries are published on Clojars under `com.wagoe`"
+                  "All twenty-nine artifacts ship together"]]
+      (is (empty? (sut/count-findings "doc.md" line 29))
+          (str "false positive: " line))))
+
+  (testing "the subset rule applies whichever form the numbers take"
+    (is (empty? (sut/count-findings "doc.md" "one of twenty-two libraries is stale" 29)))
+    (is (empty? (sut/count-findings "doc.md" "6 of twenty-two libraries are stale" 29))))
+
+  (testing "small spelled-out numbers are prose, not totals"
+    ;; `docs/modules/architecture/pages/scaling.adoc:67` says "Two libraries
+    ;; already ship both adapters" — true, and a subset. English spells out
+    ;; small numbers in ordinary sentences, so a units-word before a library
+    ;; noun is almost never the suite total; the digit form still catches any
+    ;; count, including a single-digit one.
+    (doseq [line ["Two libraries already ship both adapters"
+                  "Three libraries depend on `platform`"
+                  "This scaffolds four core libs"
+                  "One library has no shell layer"]]
+      (is (empty? (sut/count-findings "doc.md" line 29))
+          (str "false positive on subset prose: " line)))))
+
+(deftest ^:unit parse-count-reads-both-forms-test
+  (testing "digits and English number words resolve to the same integer"
+    (is (= 29 (sut/parse-count "29")))
+    (is (= 29 (sut/parse-count "twenty-nine")))
+    (is (= 29 (sut/parse-count "Twenty-Nine")))
+    (is (= 29 (sut/parse-count "twenty nine")))
+    (is (= 20 (sut/parse-count "twenty")))
+    (is (= 13 (sut/parse-count "thirteen")))
+    (is (nil? (sut/parse-count "several")))))
+
 ;; =============================================================================
 ;; Rule 2 — publishing claims
 ;; =============================================================================

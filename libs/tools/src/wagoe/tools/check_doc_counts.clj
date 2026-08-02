@@ -71,6 +71,34 @@
 ;; Rule 1 — documented counts must equal (count all-libs)
 ;; =============================================================================
 
+(def number-words
+  "English number words this gate reads as a possible library total.
+
+   Deliberately starts at ten. Prose spells out small numbers as a matter of
+   style, and at that magnitude the number is almost always a subset rather than
+   the suite: `docs/modules/architecture/pages/scaling.adoc` says \"Two
+   libraries already ship both adapters\", which is true and must stay. Nothing
+   is lost by the omission — the digit form still catches any count, including a
+   single-digit one, should the suite ever shrink that far."
+  (let [tens  {"ten" 10 "eleven" 11 "twelve" 12 "thirteen" 13 "fourteen" 14
+               "fifteen" 15 "sixteen" 16 "seventeen" 17 "eighteen" 18
+               "nineteen" 19}
+        units {"one" 1 "two" 2 "three" 3 "four" 4 "five" 5
+               "six" 6 "seven" 7 "eight" 8 "nine" 9}
+        round {"twenty" 20 "thirty" 30 "forty" 40 "fifty" 50 "sixty" 60
+               "seventy" 70 "eighty" 80 "ninety" 90}]
+    (merge tens round
+           (into {} (for [[t tv] round [u uv] units
+                          sep    ["-" " "]]
+                      [(str t sep u) (+ tv uv)])))))
+
+(def ^:private number-word-alternation
+  ;; Longest first, so `twenty-nine` never matches as bare `twenty`.
+  (->> (keys number-words)
+       (sort-by (comp - count))
+       (map #(java.util.regex.Pattern/quote %))
+       (str/join "|")))
+
 (def count-pattern
   "A number followed by up to three words and then a library/artifact noun.
 
@@ -81,14 +109,31 @@
    `Publish the 22 Clojars artifacts`, `all 21+ libraries`. The three-word
    window covers each without reaching into an unrelated clause.
 
+   The number may be spelled out. `docs/modules/ROOT/pages/roadmap.adoc` opens
+   with `Twenty-nine libraries are published on Clojars` — a public count that a
+   digit-only pattern leaves outside the gate entirely, which is how a document
+   ends up guarded everywhere except the sentence it leads with. See
+   `number-words` for why the vocabulary starts at ten.
+
    The leading lookbehind drops `6 of 9 libraries`, where the second number is a
    subset. It requires a *digit* before the `of`, because `of` alone is not the
    signal: `a monorepo of 23 libraries` is a total, and an earlier version of
    this pattern that excluded every `of N` went blind to exactly the phrasing
-   the README had been getting wrong.
+   the README had been getting wrong. The lookbehind lists the unit words too,
+   so `one of twenty-two libraries` is read as a subset for the same reason `6
+   of 9` is — it is the same rule, not a second one.
 
    `across all 22 libraries` still matches on purpose — that is a total too."
-  #"(?i)(?<!\d\sof\s)\b(\d{1,3})\+?\s+((?:[a-z][a-z-]*\s+){0,3}?)(librar(?:y|ies)|artifacts?|libs)\b")
+  (re-pattern (str "(?i)(?<!(?:\\d|one|two|three|four|five|six|seven|eight|nine)\\sof\\s)"
+                   "\\b(\\d{1,3}|" number-word-alternation ")"
+                   "\\+?\\s+((?:[a-z][a-z-]*\\s+){0,3}?)"
+                   "(librar(?:y|ies)|artifacts?|libs)\\b")))
+
+(defn parse-count
+  "`\"29\"` and `\"Twenty-nine\"` both as 29; nil when neither."
+  [s]
+  (or (parse-long s)
+      (get number-words (str/lower-case s))))
 
 (def gap-disqualifiers
   "Words that, between the number and the noun, mean the number is not a count
@@ -119,8 +164,9 @@
        (map-indexed vector)
        (mapcat (fn [[idx line]]
                  (for [[matched found-str gap noun] (re-seq count-pattern line)
-                       :let [found (parse-long found-str)]
-                       :when (and (not= found expected)
+                       :let [found (parse-count found-str)]
+                       :when (and found
+                                  (not= found expected)
                                   (counts-libraries? gap))]
                    {:rule    :count
                     :path    path
