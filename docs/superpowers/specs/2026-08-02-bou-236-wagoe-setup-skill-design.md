@@ -29,7 +29,7 @@ The skill owns the two ends and delegates the middle. It does not reimplement
 | Ending | Start the app, poll until it answers 200, leave it running | The only reading of "nothing → running app" that is literally true. |
 | Admin password | Generate, pipe on stdin, print once | `create-admin` accepts a piped password; no interactive step. The secret lands in the transcript — acceptable for a local dev account on a SQLite file, and stated as such in the output. |
 | Implementation | Skill file only, no new runtime code | Every step is an existing command. Adding a `bb first-run` task would duplicate `quickstart` and still could not cover the install step. |
-| Database | Ask; offer SQLite (default) and PostgreSQL only | H2 cannot work in this flow (see below). MySQL is mentioned, not offered. |
+| Database | Ask; offer SQLite (default) and PostgreSQL only | Two options a newcomer can actually choose between. H2 and MySQL are mentioned, not offered (see below). |
 
 ## Flow
 
@@ -37,7 +37,7 @@ The skill owns the two ends and delegates the middle. It does not reimplement
 | --- | --- | --- | --- |
 | 0 | Refuse wrong context | `deps.edn` containing `com.wagoe/` → stop, point at `bb quickstart` | — |
 | 1 | Detect toolchain | `command -v java clojure bb wagoe` | — |
-| 2 | Offer install | show it, ask, then `curl -fsSL https://wagoe.org/install.sh \| bash` | stop, show output |
+| 2 | Offer install | show it, ask, then `curl -fsSL https://raw.githubusercontent.com/wagoebv/wagoe/main/scripts/install.sh \| bash` | stop, show output |
 | 3 | Fix PATH | `export PATH="$HOME/.babashka/bbin/bin:$PATH"` on **every** later command | — |
 | 4 | Ask project name | validate kebab-case before calling anything | reject with the rule stated |
 | 5 | Ask database | SQLite (default) or PostgreSQL | — |
@@ -58,9 +58,9 @@ file, so without an explicit export every command after the install fails with
 `command not found` — on exactly the fresh machines this skill exists to serve.
 
 **Step 8 — no `--preset` for SQLite.** `bb quickstart` skips reconfiguration
-only when no preset is given (the BOU-228 fix). Passing one rewrites the
-generated config. That is correct when the user asked for PostgreSQL, and wrong
-otherwise: `--preset minimal` is H2 in-memory, which silently breaks the flow.
+only when no preset is given (the BOU-228 fix). Passing one rewrites the config
+`wagoe new` just wrote correctly. That is what the user asked for when they
+chose PostgreSQL, and not what they asked for otherwise.
 
 **Step 12 — poll for 200, not for a live process.** A process that is up is not
 a process that serves. BOU-251 exists because nothing proved the built artifact
@@ -83,18 +83,18 @@ the template defaults to `localhost:5432`, user `postgres`, database
 
 The skill does not orchestrate Docker. It prints the command.
 
-H2 is not offered. `bb setup --database h2` writes `:memory true` for dev, and
-in-memory H2 is private to one JVM — verified:
+H2 is not offered — but no longer because it is broken.
 
-```
-process-1 wrote users, rowcount: 1
-process-2 CANNOT see it: Table "users" not found (this database is empty)
-```
+The original reason was that `bb setup --database h2` wrote `:memory true` for
+dev, and in-memory H2 is private to one JVM, so `migrate`, `create-admin` and
+the server each got their own empty database while every step exited 0. That is
+fixed: [BOU-265](https://linear.app/boundary-app/issue/BOU-265) landed in #355
+and dev H2 is now file-backed.
 
-`migrate`, `create-admin` and the server are three separate JVMs, so each would
-get its own empty database while every step exits 0. Tracked as
-[BOU-265](https://linear.app/boundary-app/issue/BOU-265); independent of this
-skill.
+It stays off the menu on different grounds. Post-fix, H2 is a second
+file-backed embedded database sitting beside SQLite, and a newcomer has no basis
+on which to choose between them. A third option buys a harder question, not more
+capability. `bb setup --database h2` remains available for anyone who wants it.
 
 ## Error handling
 

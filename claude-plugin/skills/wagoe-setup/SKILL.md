@@ -32,7 +32,7 @@ If anything is missing, show the user this command, say what it does, and ask
 before running it:
 
 ```
-curl -fsSL https://wagoe.org/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/wagoebv/wagoe/main/scripts/install.sh | bash
 ```
 
 It installs a JVM (via sdkman), Clojure, Babashka and the `wagoe` CLI, and adds
@@ -43,16 +43,30 @@ On failure: stop, show the actual output, do not continue.
 
 ## Step 3 — put the new tools on PATH
 
-`install.sh` writes binaries to `~/.babashka/bbin/bin` and appends a PATH line
-to the shell rc file. A non-interactive shell never sources that file, so
-**every** command from here on must carry:
+`install.sh` leaves the toolchain reachable only through the shell rc file, and
+a non-interactive shell never sources it. **Every** command from here on must
+carry both lines:
 
 ```bash
 export PATH="$HOME/.babashka/bbin/bin:$PATH"
+set +u; [ -s "$HOME/.sdkman/bin/sdkman-init.sh" ] && . "$HOME/.sdkman/bin/sdkman-init.sh"; set -u
 ```
 
-Skip this and every later command fails with `command not found`, on exactly
-the fresh machines this skill exists for.
+Two separate mechanisms, and both are needed:
+
+- `~/.babashka/bbin/bin` holds `wagoe`, `bb` and `clojure`. Without it every
+  command fails with `command not found`.
+- The JVM comes from **sdkman**, which puts `java` on PATH only via its init
+  script. Without it `wagoe new` succeeds and then `bb quickstart` dies with
+  `Couldn't find 'java'. Please set JAVA_HOME.` — the tools resolve, so the
+  failure looks like a Wagoe bug rather than a missing shell setup.
+
+`set +u` around the sourcing is required, not defensive: `sdkman-init.sh` reads
+unset variables and aborts under `set -u`. `install.sh` does the same thing for
+the same reason.
+
+Verified in a bare Ubuntu container: without these, `command -v wagoe` fails in
+a non-interactive shell; with them it resolves and the rest of the flow runs.
 
 ## Step 4 — ask for a project name
 
@@ -158,18 +172,23 @@ If that yields nothing, probe 3000–3099 for one that answers.
 
 ## Step 12 — prove it serves
 
-Poll until it returns 200, up to 60 seconds:
+Poll until the server answers, up to 60 seconds:
 
 ```bash
 for i in $(seq 1 60); do
-  code=$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:$PORT/" || true)
-  [ "$code" = "200" ] && break
+  code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 "http://localhost:$PORT/" || true)
+  [ -n "$code" ] && [ "$code" != "000" ] && break
   sleep 1
 done
 ```
 
-**Check for the 200, not for the pid.** A process that is up is not a process
+**Check the HTTP response, not the pid.** A process that is up is not a process
 that serves.
+
+Do **not** require 200 from `/`. A fresh app redirects it — `/` returns 302,
+which is the server answering correctly. `000` is curl reporting that it never
+connected, and that is the only failure. If you want a 200 to point the user at,
+`/api-docs/` serves the Swagger UI.
 
 On timeout: say so, leave the process running, and show the last 30 lines of
 the log. Do not report success.
@@ -178,8 +197,8 @@ the log. Do not report success.
 
 ```
 Your app is running:
-  http://localhost:PORT
-  http://localhost:PORT/web/admin/
+  http://localhost:PORT           (redirects to /web/login)
+  http://localhost:PORT/api-docs/ Swagger UI
 
 Sign in with:
   admin@<name>.test
@@ -191,8 +210,14 @@ Change or remove it before this project goes anywhere real.
 Stop it with:   kill <pid>
 Start it again: clojure -M:run
 Next:           bb scaffold ai "..."   add a module
+                wagoe add admin        the auto-CRUD admin UI
                 bb guide next          what to do next
 ```
+
+Do **not** print `/web/admin/` as a link. The admin module is optional —
+`wagoe new` wires `core`, `observability`, `platform` and `user`, so that path
+returns 404 in a default project until the user runs `wagoe add admin`.
+Verified in a container. `/web/login` is where `/` actually lands.
 
 ## Rules
 
