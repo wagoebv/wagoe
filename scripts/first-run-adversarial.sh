@@ -46,13 +46,15 @@ head_() { echo; echo "$*"; }
 
 export DEBIAN_FRONTEND=noninteractive
 if command -v apt-get >/dev/null 2>&1; then
-  apt-get update -qq >/dev/null 2>&1
-  pkg_install() { apt-get install -y -qq "$@" >/dev/null 2>&1; }
+  apt-get update -qq >/tmp/pkg.log 2>&1 || { tail -5 /tmp/pkg.log; echo "apt-get update failed"; exit 1; }
+  pkg_install() { apt-get install -y -qq "$@" >/tmp/pkg.log 2>&1 || { tail -5 /tmp/pkg.log; echo "apt-get install $* failed"; exit 1; }; }
 elif command -v dnf >/dev/null 2>&1; then
-  pkg_install() { dnf install -y -q "$@" >/dev/null 2>&1; }
+  pkg_install() { dnf install -y -q "$@" >/tmp/pkg.log 2>&1 || { tail -5 /tmp/pkg.log; echo "dnf install $* failed"; exit 1; }; }
 elif command -v pacman >/dev/null 2>&1; then
-  pacman -Sy --noconfirm >/dev/null 2>&1
-  pkg_install() { pacman -S --noconfirm --needed "$@" >/dev/null 2>&1; }
+  # See first-run-smoke.sh: pacman needs --disable-sandbox under qemu emulation.
+  PAC_FLAGS="--noconfirm --disable-sandbox"
+  pacman -Sy $PAC_FLAGS >/tmp/pkg.log 2>&1 || { tail -5 /tmp/pkg.log; echo "pacman -Sy failed"; exit 1; }
+  pkg_install() { pacman -S $PAC_FLAGS --needed "$@" >/tmp/pkg.log 2>&1 || { tail -5 /tmp/pkg.log; echo "pacman -S $* failed"; exit 1; }; }
 else
   echo "no supported package manager"; exit 1
 fi

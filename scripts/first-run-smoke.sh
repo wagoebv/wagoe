@@ -59,15 +59,20 @@ ok()   { echo "  ok — $*"; }
 export DEBIAN_FRONTEND=noninteractive
 if command -v apt-get >/dev/null 2>&1; then
   PKG=apt; EXPECT_HINT="apt-get install"
-  apt-get update -qq >/dev/null 2>&1
-  pkg_install() { apt-get install -y -qq "$@" >/dev/null 2>&1; }
+  apt-get update -qq >/tmp/pkg.log 2>&1 || { tail -5 /tmp/pkg.log; fail "apt-get update failed"; }
+  pkg_install() { apt-get install -y -qq "$@" >/tmp/pkg.log 2>&1 || { tail -5 /tmp/pkg.log; fail "apt-get install $* failed"; }; }
 elif command -v dnf >/dev/null 2>&1; then
   PKG=dnf; EXPECT_HINT="dnf install"
-  pkg_install() { dnf install -y -q "$@" >/dev/null 2>&1; }
+  pkg_install() { dnf install -y -q "$@" >/tmp/pkg.log 2>&1 || { tail -5 /tmp/pkg.log; fail "dnf install $* failed"; }; }
 elif command -v pacman >/dev/null 2>&1; then
   PKG=pacman; EXPECT_HINT="pacman -S"
-  pacman -Sy --noconfirm >/dev/null 2>&1
-  pkg_install() { pacman -S --noconfirm --needed "$@" >/dev/null 2>&1; }
+  # --disable-sandbox: pacman cannot initialise its seccomp sandbox under qemu
+  # emulation ("error restricting syscalls via seccomp: 22"), which is how Arch
+  # is reached from an Apple Silicon host. Without it every pacman call fails.
+  PAC_FLAGS="--noconfirm --disable-sandbox"
+  pacman -Sy $PAC_FLAGS >/tmp/pkg.log 2>&1 \
+    || { tail -5 /tmp/pkg.log; fail "pacman -Sy failed"; }
+  pkg_install() { pacman -S $PAC_FLAGS --needed "$@" >/tmp/pkg.log 2>&1 || { tail -5 /tmp/pkg.log; fail "pacman -S $* failed"; }; }
 else
   fail "no supported package manager (apt-get/dnf/pacman) in this image"
 fi
@@ -92,6 +97,20 @@ ok "names the missing tools and the $PKG command to install them"
 # ── 2. install ──────────────────────────────────────────────────────────────
 echo "[2/6] install.sh"
 pkg_install git unzip zip which
+if [ "$PKG" = pacman ]; then
+  # install.sh:122 installs the JVM with a plain `pacman -S`, and pacman cannot
+  # sandbox inside this container: under qemu it fails with "restricting
+  # syscalls via seccomp: 22", and on an ARM-native Arch image with "Landlock is
+  # not supported by the kernel". Both are Docker-environment limits, not Wagoe
+  # defects — a real Arch box has neither.
+  #
+  # Pre-satisfying java lets the REST of the Arch path be tested (OS detection,
+  # prerequisite hint, Clojure CLI, bb, bbin, the CLI itself, and the whole
+  # project funnel), all of which use generic installers rather than pacman.
+  echo "     NOTE: pre-installing the JVM, so install.sh skips its pacman JVM"
+  echo "           step. That single step is NOT under test on this image."
+  pkg_install jdk-openjdk
+fi
 T0=$(date +%s)
 bash /repo/scripts/install.sh >/tmp/install.log 2>&1 || {
   tail -20 /tmp/install.log; fail "install.sh exited non-zero"; }
