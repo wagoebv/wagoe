@@ -71,7 +71,7 @@ That gives you business logic that is:
 | No
 
 | Library granularity
-| 24 independent libs
+| 29 independent libs
 | Monolithic
 | Template-based
 

@@ -1,0 +1,311 @@
+#!/usr/bin/env bb
+;; libs/tools/src/wagoe/tools/check_doc_counts.clj
+;;
+;; Locks two documented facts to the code that decides them:
+;;
+;;   1. how many libraries Wagoe publishes, and
+;;   2. which of them are published at all.
+;;
+;; Both are stated in prose across README.md, AGENTS.md, the Antora site and
+;; dev-docs, and both drifted badly. A single review pass over PR #351 found the
+;; count written as 21, 22, 23, 24 and 25 in different files while the real
+;; number was 29, and found `libs/tools` described as "not published to Clojars"
+;; in six places while `com.wagoe/wagoe-tools` was serving POMs from Clojars.
+;;
+;; Neither is the kind of drift a human sweep catches reliably. It took three
+;; passes, because each pass grepped for the wording of the last one — "N
+;; libraries" misses "all 22 artifacts", and "not published to Clojars" misses
+;; "a monorepo-internal tool" and "excluded from this list". A regex that a
+;; person tunes by hand converges slowly; a gate that reads the answer out of
+;; `wagoe.tools.deploy/all-libs` does not have to converge at all.
+;;
+;; This is the same shape as the `all-checks` <-> ci.yml lockstep test added in
+;; PR #327: two hand-maintained copies of one fact, so make the code the source
+;; of truth and fail when prose disagrees.
+;;
+;; Historical documents are out of scope by design — a CHANGELOG entry saying
+;; "all 25 libraries bumped" was true at that release, and rewriting it would be
+;; a lie about the past. See `excluded-paths`.
+;;
+;; Escape hatch: `.wagoe/check-doc-counts.edn`, which requires a justification
+;; per entry (BOU-250 — an allowlist without a stated reason is where bugs hide).
+
+(ns wagoe.tools.check-doc-counts
+  (:require [clojure.edn :as edn]
+            [clojure.java.io :as io]
+            [clojure.string :as str]
+            [babashka.process :as process]
+            [wagoe.tools.ansi :as ansi]
+            [wagoe.tools.deploy :as deploy]))
+
+;; =============================================================================
+;; Scope
+;; =============================================================================
+
+(def excluded-paths
+  "Path prefixes whose counts are historical and must NOT be rewritten.
+
+   CHANGELOG entries and ADRs record what was true when written. dev-docs/
+   roadmap.adoc is explicitly marked stale and superseded by the published
+   roadmap. docs/superpowers/ holds dated design records. dev-docs/presentations/
+   holds delivered talks — `fc-is-hexagonal-nl.adoc` carries `:revdate:
+   2026-03-07` and said 13 libraries, which was true when it was given; a talk
+   is not edited after the fact."
+  ["CHANGELOG.md"
+   "dev-docs/adr/"
+   "dev-docs/roadmap.adoc"
+   "dev-docs/presentations/"
+   "dev-docs/reference/historical-docs-triage.adoc"
+   "docs/superpowers/"])
+
+(defn in-scope?
+  "True when `path` is a live documentation file this gate governs."
+  [path]
+  (and (or (str/ends-with? path ".md")
+           (str/ends-with? path ".adoc"))
+       (not (str/includes? path "/target/"))
+       (not-any? #(str/starts-with? path %) excluded-paths)))
+
+;; =============================================================================
+;; Rule 1 — documented counts must equal (count all-libs)
+;; =============================================================================
+
+(def count-pattern
+  "A number followed by up to three words and then a library/artifact noun.
+
+   Deliberately matches the *shape* rather than any particular phrasing. Every
+   miss in the PR #351 sweep was a paraphrase the previous regex had not
+   anticipated: `23 independently publishable libraries`, `All 22 artifacts`,
+   `Deploy all 24 libraries`, `24 composable libraries`, `handles all 29 libs`,
+   `Publish the 22 Clojars artifacts`, `all 21+ libraries`. The three-word
+   window covers each without reaching into an unrelated clause.
+
+   The leading lookbehind drops `6 of 9 libraries`, where the second number is a
+   subset. It requires a *digit* before the `of`, because `of` alone is not the
+   signal: `a monorepo of 23 libraries` is a total, and an earlier version of
+   this pattern that excluded every `of N` went blind to exactly the phrasing
+   the README had been getting wrong.
+
+   `across all 22 libraries` still matches on purpose — that is a total too."
+  #"(?i)(?<!\d\sof\s)\b(\d{1,3})\+?\s+((?:[a-z][a-z-]*\s+){0,3}?)(librar(?:y|ies)|artifacts?|libs)\b")
+
+(def gap-disqualifiers
+  "Words that, between the number and the noun, mean the number is not a count
+   of libraries.
+
+   Without this the pattern reads `expects HTTP 200 for each library` as a claim
+   that there are 200 libraries. A preposition turns the phrase from `N
+   <adjectives> libraries` into something about each library individually, or
+   about a subset — `6 of 9 libraries done`. Adjectives never do that, which is
+   why the real phrasings (`independently publishable`, `composable`,
+   `published`, `Clojars`, `onafhankelijk publiceerbare`) all survive."
+  #{"for" "of" "in" "per" "to" "on" "from" "with" "at" "by" "across"})
+
+(defn- counts-libraries?
+  "False when the words between number and noun disqualify the match."
+  [gap]
+  (->> (str/split (str/lower-case (str/trim gap)) #"\s+")
+       (remove str/blank?)
+       (not-any? gap-disqualifiers)))
+
+(defn count-findings
+  "Documented counts in `text` that disagree with `expected`.
+
+   Pure, and public so a test can prove the gate still detects what it claims.
+   Testing `-main` is not an option — it exits the process."
+  [path text expected]
+  (->> (str/split-lines text)
+       (map-indexed vector)
+       (mapcat (fn [[idx line]]
+                 (for [[matched found-str gap noun] (re-seq count-pattern line)
+                       :let [found (parse-long found-str)]
+                       :when (and (not= found expected)
+                                  (counts-libraries? gap))]
+                   {:rule    :count
+                    :path    path
+                    :line    (inc idx)
+                    :found   found
+                    :noun    noun
+                    :excerpt (str/trim matched)
+                    :context (str/trim line)})))))
+
+;; =============================================================================
+;; Rule 2 — no document may call a published library unpublished
+;; =============================================================================
+
+(def unpublished-patterns
+  "Phrasings that assert a library is not on Clojars.
+
+   Each of these appeared verbatim in the repo while the library in question was
+   published. Matching one phrasing only is what let the claim survive three
+   correction passes."
+  [#"(?i)not\s+published\s+to\s+clojars"
+   #"(?i)is\s+not\s+published"
+   #"(?i)itself\s+is\s+not\s+published"
+   #"(?i)monorepo-internal\s+tool"
+   #"(?i)excluded\s+from\s+(?:this\s+list|all-libs)"
+   #"(?i)not\s+included\s+in\s+`?bb\s+deploy\s+--all`?"])
+
+(defn subject-lib
+  "The library a documentation file is *about*, or nil.
+
+   `libs/<lib>/…` is the direct case. The Antora library pages are named after
+   the artifact minus its `wagoe-` prefix, so `cli.adoc` documents `wagoe-cli`;
+   both spellings are returned for the caller to test against `all-libs`."
+  [path]
+  (or (second (re-find #"^libs/([^/]+)/" path))
+      (when-let [page (second (re-find #"^docs/modules/libraries/pages/([^/]+)\.adoc$" path))]
+        (when-not (= page "index") page))))
+
+(defn published?
+  "True when `lib-ish` names something in `published-libs`, allowing for the
+   Antora pages that drop the `wagoe-` prefix from the directory name."
+  [published-libs lib-ish]
+  (boolean (and lib-ish
+                (or (contains? published-libs lib-ish)
+                    (contains? published-libs (str "wagoe-" lib-ish))))))
+
+(defn publishing-findings
+  "Lines in `text` claiming something unpublished when it is published.
+
+   A document that is *about* one library decides the question for that file:
+   `libs/e2e/README.md` saying \"not published to Clojars\" is correct, and must
+   stay correct even though the sentence happens to contain the word `platform`.
+   Attribution by mention alone got that wrong — the subject outranks anything
+   named in passing.
+
+   Only where a file has no single subject — root `README.md`, root `AGENTS.md`
+   — does naming a published library become the signal. That is the case that
+   caught \"`libs/tools` is not published to Clojars\" in the root AGENTS.md."
+  [path text published-libs]
+  (let [subject (subject-lib path)]
+    (if (and subject (not (published? published-libs subject)))
+      ;; The file documents something genuinely unpublished. Its claim is true.
+      []
+      (->> (str/split-lines text)
+           (map-indexed vector)
+           (keep (fn [[idx line]]
+                   (when (some #(re-find % line) unpublished-patterns)
+                     (let [named (->> published-libs
+                                      (filter #(str/includes? line %))
+                                      sort
+                                      seq)]
+                       (when (or named subject)
+                         {:rule    :publishing
+                          :path    path
+                          :line    (inc idx)
+                          :libs    (if subject [subject] named)
+                          :context (str/trim line)})))))))))
+
+;; =============================================================================
+;; Allowlist
+;; =============================================================================
+
+(def allowlist-path ".wagoe/check-doc-counts.edn")
+
+(defn read-allowlist
+  "Allowlist entries as `{[path line-or-:any] justification}`.
+
+   Every entry must carry a non-blank `:why`. An allowlist entry without a
+   stated reason is indistinguishable from an unfixed bug (BOU-250), so one is
+   rejected loudly rather than honoured."
+  ([] (read-allowlist (io/file allowlist-path)))
+  ([^java.io.File f]
+   (when (.exists f)
+     (let [entries (:allow (edn/read-string (slurp f)))]
+       (doseq [{:keys [path why]} entries]
+         (when (str/blank? why)
+           (throw (ex-info (str "Allowlist entry for " path " has no :why. "
+                                "Every exemption must say why it is legitimate.")
+                           {:path path}))))
+       (set (map (juxt :path #(get % :line :any)) entries))))))
+
+(defn allowed?
+  [allow {:keys [path line]}]
+  (boolean (or (contains? allow [path :any])
+               (contains? allow [path line]))))
+
+;; =============================================================================
+;; Scanning
+;; =============================================================================
+
+(defn tracked-docs
+  "Tracked .md/.adoc files in scope.
+
+   Throws when git fails. Returning [] on a bad exit would make this gate report
+   clean because it could not look — the exact failure BOU-250 exists to stop."
+  []
+  (let [{:keys [exit out err]} (process/shell {:out :string :err :string :continue true}
+                                              "git" "ls-files")]
+    (when-not (zero? exit)
+      (throw (ex-info (str "git ls-files failed (exit " exit ") — cannot determine "
+                           "tracked files, so this gate cannot report a verdict")
+                      {:exit exit :err (str/trim (or err ""))})))
+    (->> (str/split-lines out)
+         (remove str/blank?)
+         (filter in-scope?))))
+
+(defn scan
+  "All findings across `paths`, allowlist applied.
+
+   `read-file` is injected so tests can scan in-memory content."
+  [paths {:keys [expected published-libs allow read-file]
+          :or   {allow #{} read-file slurp}}]
+  (->> paths
+       (mapcat (fn [path]
+                 (let [text (read-file path)]
+                   (concat (count-findings path text expected)
+                           (publishing-findings path text published-libs)))))
+       (remove #(allowed? allow %))
+       (sort-by (juxt :path :line))))
+
+;; =============================================================================
+;; Entry point
+;; =============================================================================
+
+(defn- report-count [{:keys [path line found noun excerpt]} expected]
+  (println (str "  " (ansi/bold path) ":" line))
+  (println (str "    says " (ansi/red (str found " " noun))
+                " — expected " (ansi/green (str expected))))
+  (println (str "    " (ansi/dim excerpt))))
+
+(defn- report-publishing [{:keys [path line libs context]}]
+  (println (str "  " (ansi/bold path) ":" line))
+  (println (str "    calls " (ansi/red (str/join ", " libs))
+                " unpublished, but it is in deploy/all-libs"))
+  (println (str "    " (ansi/dim context))))
+
+(defn -main [& _args]
+  (let [expected  (count deploy/all-libs)
+        published (set (map deploy/artifact-name deploy/all-libs))
+        libs      (into published (set deploy/all-libs))
+        findings  (scan (tracked-docs) {:expected        expected
+                                        :published-libs  libs
+                                        :allow           (read-allowlist)})
+        {counts :count pubs :publishing} (group-by :rule findings)]
+    (if (seq findings)
+      (do
+        (when (seq counts)
+          (println (ansi/red (str "Documented library counts disagree with "
+                                  "wagoe.tools.deploy/all-libs (" expected "):")))
+          (println)
+          (doseq [f counts] (report-count f expected))
+          (println))
+        (when (seq pubs)
+          (println (ansi/red "Documents calling a published library unpublished:"))
+          (println)
+          (doseq [f pubs] (report-publishing f))
+          (println))
+        (println (str (count findings) " finding(s). all-libs is the source of "
+                      "truth — update the prose, not the code."))
+        (println (ansi/dim (str "Historical files are already out of scope; for a "
+                                "genuine exception add an entry with a :why to "
+                                allowlist-path ".")))
+        (System/exit 1))
+      (do
+        (println (ansi/green (str "Documented library counts and publishing claims "
+                                  "match all-libs (" expected ").")))
+        (System/exit 0)))))
+
+(when (= *file* (System/getProperty "babashka.file"))
+  (apply -main *command-line-args*))

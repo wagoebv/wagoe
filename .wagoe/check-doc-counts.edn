@@ -1,0 +1,34 @@
+;; Exemptions for `bb check:doc-counts`.
+;;
+;; Every entry MUST carry a `:why`. The gate rejects one without it rather than
+;; honouring it: an allowlist entry with no stated reason is indistinguishable
+;; from an unfixed bug, which is the failure mode BOU-250 catalogued.
+;;
+;; Before adding an entry, check the alternatives — they are usually right:
+;;
+;;   * A historical document (changelog, ADR, delivered talk, dated design doc)
+;;     should be in `excluded-paths` in check_doc_counts.clj, not here. Those
+;;     record what was true when written.
+;;   * A number that is not a count of libraries — `HTTP 200 for each library`,
+;;     `6 of 9 libraries done` — should be handled by `gap-disqualifiers`, so
+;;     the same shape never needs allowlisting twice.
+;;
+;; This file is for the remaining case: live prose that deliberately quotes a
+;; number known to be wrong.
+;;
+;; `:line` is optional; omit it to exempt the whole file.
+
+{:allow
+ [{:path "dev-docs/reference/publishing.adoc"
+   :line 51
+   :why  "Quotes the old wrong count on purpose. The note explains that a previous
+          version of this table listed 22 libraries and gave platform two
+          dependencies instead of six, so a reader who remembers the old table
+          knows it was replaced rather than that they misread it."}
+
+  {:path "dev-docs/reference/publishing.adoc"
+   :line 111
+   :why  "Quotes the old wrong count on purpose. The comment above the bump command
+          records that the previous version hardcoded 22 library names and would
+          have left 7 artifacts on the old version silently — the reason the
+          command now globs libs/*/build.clj instead of listing names."}]}
