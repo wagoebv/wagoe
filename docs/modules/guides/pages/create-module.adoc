@@ -88,10 +88,12 @@ This generates a new migration and updates schema.clj and persistence.clj.
 
 [source,bash]
 ----
-bb scaffold new         # Bootstrap a new Wagoe project
 bb scaffold endpoint    # Add an endpoint to an existing module
 bb scaffold adapter     # Generate a new adapter implementation
 bb scaffold             # Show all commands and help
 ----
+
+To create a *new project* (rather than a module inside this one), use the Wagoe
+CLI: `wagoe new my-app`.
 
 See xref:libraries:scaffolder.adoc[Scaffolder library] for the full reference.

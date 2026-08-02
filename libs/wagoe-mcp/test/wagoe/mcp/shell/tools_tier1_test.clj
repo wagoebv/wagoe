@@ -49,8 +49,7 @@
        :files [{:path "migrations/007_add_x.sql" :content "ALTER TABLE things ADD COLUMN x;" :action :create}]
        :warnings ["Manual schema update required"]})
     (add-endpoint [_ _] {:success true :files []})
-    (add-adapter [_ _] {:success true :files []})
-    (generate-project [_ _] {:success true :files []})))
+    (add-adapter [_ _] {:success true :files []})))
 
 (def ^:private passing-runner (fn [_m] {:status :passed :passed 1 :failed 0}))
 

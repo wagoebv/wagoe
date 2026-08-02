@@ -56,21 +56,6 @@
     :default false]])
 
 ;; =============================================================================
-;; New Command Options (bootstrap new project)
-;; =============================================================================
-
-(def new-options
-  [[nil "--name NAME" "Project name (lowercase, kebab-case) (required)"
-    :validate [#(re-matches #"^[a-z][a-z0-9-]*$" %)
-               "Must be lowercase with hyphens only"]]
-   [nil "--output-dir DIR" "Output directory (default: current directory)"
-    :default "."]
-   [nil "--force" "Overwrite existing files"
-    :default false]
-   [nil "--dry-run" "Show what would be generated without creating files"
-    :default false]])
-
-;; =============================================================================
 ;; Field Command Options (add field to existing entity)
 ;; =============================================================================
 
@@ -334,32 +319,6 @@
                [])]
     {:name name-str :args (vec args)}))
 
-(defn validate-new-options
-  "Validate required options for new command."
-  [opts]
-  (let [errors (cond-> []
-                 (not (:name opts))
-                 (conj "Missing required option: --name"))]
-    [(empty? errors) errors]))
-
-(defn execute-new
-  "Execute new project command."
-  [service opts]
-  (let [[valid? errors] (validate-new-options opts)]
-    (if-not valid?
-      {:status 1
-       :errors errors}
-      (let [request {:name (:name opts)
-                     :output-dir (:output-dir opts)
-                     :force (:force opts)
-                     :dry-run (:dry-run opts)}
-            result (ports/generate-project service request)]
-        (if (:success result)
-          {:status 0
-           :result result}
-          {:status 1
-           :errors (:errors result)})))))
-
 (defn execute-generate
   "Execute generate command."
   [service opts]
@@ -463,16 +422,15 @@
   "Dispatch command to appropriate executor.
   
    Args:
-     verb: :generate, :new, :field, :endpoint, :adapter, :help
+     verb: :generate, :field, :endpoint, :adapter, :help
      opts: Parsed command options
      service: Scaffolder service instance
-     
+
    Returns:
      Map with :status, :result, or :errors"
   [verb opts service]
   (case verb
     :generate (execute-generate service opts)
-    :new (execute-new service opts)
     :field (execute-field service opts)
     :endpoint (execute-endpoint service opts)
     :adapter (execute-adapter service opts)
@@ -490,19 +448,21 @@
 Usage: wagoe scaffolder <command> [options]
 
 Commands:
-  new         Bootstrap a new Wagoe project
   generate    Generate a new module with full FC/IS structure
   field       Add a field to an existing entity (creates migration)
   endpoint    Add an endpoint to an existing module (shows instructions)
   adapter     Generate a new adapter implementation
+
+The scaffolder works inside an existing project. To create a new one, use the
+Wagoe CLI:
+
+  wagoe new my-app
 
 Global Options:
   -f, --format FORMAT  Output format: text (default) or json
   -h, --help           Show help
 
 Examples:
-  wagoe scaffolder new --name my-app
-
   wagoe scaffolder generate --module-name product --entity Product \\
     --field name:string:required \\
     --field sku:string:required:unique \\
@@ -520,28 +480,21 @@ Examples:
 For command-specific help:
   wagoe scaffolder <command> --help")
 
-(def new-help
-  "Bootstrap New Project Command
+;; BOU-259: `scaffolder new` had its own project generator, separate from the
+;; `wagoe new` templates. It drifted until it produced a project with no
+;; com.wagoe deps and no entry point. The verb is kept only to say where to go —
+;; an "unknown command" would strand anyone following the old docs.
+(def new-removed-help
+  "`wagoe scaffolder new` has been removed.
 
-Usage: wagoe scaffolder new [options]
+Projects are created with the Wagoe CLI:
 
-Bootstraps a new Wagoe project following the Functional Core / Imperative Shell
-architecture.
+  wagoe new my-app
 
-Required Options:
-  --name NAME          Project name (lowercase, kebab-case)
+Don't have it?  curl -fsSL https://wagoe.org/install.sh | bash
 
-Other Options:
-  --output-dir DIR     Output directory (default: current directory)
-  --force              Overwrite existing files
-  --dry-run            Show what would be generated without creating files
-
-Examples:
-  # Bootstrap a new project in the current directory
-  wagoe scaffolder new --name my-awesome-app
-
-  # Bootstrap a new project in a specific directory
-  wagoe scaffolder new --name my-app --output-dir ./projects/my-app")
+The scaffolder still handles modules, fields, endpoints and adapters inside an
+existing project.")
 
 (def generate-help
   "Generate Module Command
@@ -771,12 +724,14 @@ Examples:
           (println root-help)
           0)
 
-        ;; Command-specific help
-        (and (= verb :new) has-help-flag?)
+        ;; Removed command — redirect rather than "unknown command", and fail
+        ;; so a script that invokes it does not read silence as success.
+        (= verb :new)
         (do
-          (println new-help)
-          0)
+          (println new-removed-help)
+          1)
 
+        ;; Command-specific help
         (and (= verb :generate) has-help-flag?)
         (do
           (println generate-help)
@@ -804,7 +759,6 @@ Examples:
 
               ;; Get command-specific options
               cmd-options (case verb
-                            :new new-options
                             :generate generate-options
                             :field field-options
                             :endpoint endpoint-options

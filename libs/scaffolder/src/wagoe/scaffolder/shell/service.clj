@@ -288,70 +288,7 @@
         {:success false
          :module-name (:module-name request)
          :files []
-         :errors [(str "Add adapter failed: " (.getMessage e))]})))
-
-  (generate-project [_this request]
-    (try
-      (let [{:keys [name output-dir force dry-run]} request
-            project-root (if (= output-dir ".") name (str output-dir "/" name))
-
-            ;; Generate file contents
-            deps-content   (generators/generate-project-deps name)
-            bb-edn-content (generators/generate-project-bb-edn name)
-            readme-content (generators/generate-project-readme name)
-            agents-content (generators/generate-project-agents-md name)
-            claude-content (generators/generate-project-claude-md name)
-            config-content (generators/generate-project-config name)
-            main-content   (generators/generate-project-main name)
-
-            files [{:path (str project-root "/deps.edn")
-                    :content deps-content
-                    :action :create}
-                   {:path (str project-root "/bb.edn")
-                    :content bb-edn-content
-                    :action :create}
-                   {:path (str project-root "/README.md")
-                    :content readme-content
-                    :action :create}
-                   {:path (str project-root "/AGENTS.md")
-                    :content agents-content
-                    :action :create}
-                   {:path (str project-root "/CLAUDE.md")
-                    :content claude-content
-                    :action :create}
-                   {:path (str project-root "/resources/conf/dev/config.edn")
-                    :content config-content
-                    :action :create}
-                   {:path (format "%s/src/%s/app.clj"
-                                  project-root (str/replace name "-" "/"))
-                    :content main-content
-                    :action :create}]]
-
-        ;; Check for existing directory if not forcing
-        (when (and (not force)
-                   (not dry-run)
-                   (.exists (io/file project-root)))
-          (throw (ex-info (str "Directory already exists: " project-root)
-                          {:type :conflict :path project-root})))
-
-        ;; Write files (unless dry-run)
-        (when-not dry-run
-          (doseq [{:keys [path content]} files]
-            (let [file (io/file path)]
-              (.mkdirs (.getParentFile file))
-              (spit file content))))
-
-        {:success true
-         :name name
-         :files files
-         :warnings (if dry-run
-                     ["Dry run - no files were written"]
-                     [])})
-      (catch Exception e
-        {:success false
-         :name (:name request)
-         :files []
-         :errors [(str "Project generation failed: " (.getMessage e))]}))))
+         :errors [(str "Add adapter failed: " (.getMessage e))]}))))
 
 (defn create-scaffolder-service
   "Create a new scaffolder service.

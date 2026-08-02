@@ -1,8 +1,23 @@
 == ADR-002: Implement `wagoe new` Command in Scaffolder
 
-*Status:* Proposed +
+*Status:* Superseded (2026-08-02, BOU-259) +
 *Date:* 2026-01-26 +
 *Context:* Project Bootstrapping
+
+[IMPORTANT]
+====
+*Superseded.* This ADR chose to build project bootstrapping into
+`wagoe.scaffolder.cli` (Option 2 below). Project generation later moved to the
+standalone `libs/wagoe-cli` and its `resources/wagoe/cli/templates/*.tmpl`, but
+the scaffolder implementation was left in place. The two then drifted: by
+2026-08 a project generated through the scaffolder had no `com.wagoe`
+dependencies, no `main.clj`/`system.clj`, no `build.clj`, no `tests.edn` and no
+`.env` — 7 files against the CLI's 20 — so it could not boot, test or build.
+
+BOU-259 removed the scaffolder route. `wagoe new` (libs/wagoe-cli) is the only
+project generator; the scaffolder generates only what goes *inside* an existing
+project. The decision below is kept for the record.
+====
 
 '''''
 

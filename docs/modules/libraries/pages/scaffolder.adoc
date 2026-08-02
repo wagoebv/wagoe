@@ -9,11 +9,22 @@ Generates new Wagoe modules with FC/IS structure, tests, and migrations.
 ----
 bb scaffold           # Show help and all commands
 bb scaffold generate  # Generate a new module (interactive wizard)
-bb scaffold new       # Bootstrap a new Wagoe project
 bb scaffold field     # Add a field to an existing entity
 bb scaffold endpoint  # Add an endpoint to an existing module
 bb scaffold adapter   # Generate a new adapter implementation
 ----
+
+The scaffolder works *inside* an existing project. To create a new project, use
+the Wagoe CLI:
+
+[source,bash]
+----
+wagoe new my-app
+----
+
+NOTE: `bb scaffold new` was removed. It had its own project generator, separate
+from the `wagoe new` templates, and the two drifted until it emitted a project
+with no Wagoe dependencies and no entry point.
 
 == Generating a module
 

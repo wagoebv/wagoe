@@ -80,20 +80,10 @@
        Map with :success, :files (adapter file), :errors
        
       Example:
-        (add-adapter service {:module-name \"cache\" :port \"ICache\" ...})")
+        (add-adapter service {:module-name \"cache\" :port \"ICache\" ...})"))
 
-  (generate-project [this request]
-    "Generate a complete new project from template.
-     
-     Args:
-       request: Map with:
-                {:name \"my-app\"
-                 :output-dir \".\"
-                 :force false
-                 :dry-run false}
-     
-     Returns:
-       Map with :success, :name, :files, :errors
-       
-     Example:
-       (generate-project service {:name \"my-app\"})"))
+;; BOU-259: `generate-project` used to live here. It was a second implementation
+;; of the `wagoe new` project templates (libs/wagoe-cli/resources/wagoe/cli/
+;; templates/) and drifted until it emitted a project with no com.wagoe deps and
+;; no entry point. New projects come from the `wagoe` CLI; the scaffolder only
+;; works inside an existing one. Supersedes ADR-002.
