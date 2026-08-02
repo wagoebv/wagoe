@@ -8,7 +8,24 @@ All notable changes to the Wagoe Framework will be documented in this file.
 > shipped under those names.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
+from `1.0.0` onwards. Until then, breaking changes are permitted between beta
+releases — see the [Stability & Versioning policy](https://wagoe.org/docs/stability.html)
+for what is public API, what is internal, and how deprecations are announced.
+
+> **Note — the version scheme changed, and the number went down.** Releases were
+> `1.0.1-alpha-N` up to `1.0.1-alpha-42` (2026-07-19); they are `1.0.0-beta-N`
+> from `1.0.0-beta-1` (2026-07-23). The old scheme read as a patch release of a
+> shipped `1.0`, which had never happened.
+>
+> Because Maven sorts `1.0.0` below `1.0.1`, every beta compares as *older* than
+> the last alpha. Anything resolving "newest" will pick `1.0.1-alpha-42` over the
+> current release — **pin exact versions**. The `1.0.1-alpha-*` line is
+> discontinued and receives no fixes.
+>
+> There is no separate `1.0.0-beta-1` entry below. Its changes were still in
+> `[Unreleased]` when `1.0.0-beta-2` shipped eight days later, so they are
+> recorded under the `1.0.0-beta-2` heading.
 
 ## [Unreleased]
 

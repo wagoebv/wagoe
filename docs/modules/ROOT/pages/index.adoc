@@ -33,6 +33,12 @@ pure business logic in `core/`, side effects in `shell/`, and clean interfaces t
 
 | Browse all 24 libraries
 | xref:libraries:index.adoc[Library Overview]
+
+| Know what I can rely on
+| xref:stability.adoc[Stability & Versioning]
+
+| See what is coming
+| xref:roadmap.adoc[Roadmap]
 |===
 
 == Essential commands
