@@ -23,6 +23,37 @@
   (flush)
   (str/trim (or (read-line) "")))
 
+(defn- read-password-once
+  "Read one password. Echoes nothing when given a console; falls back to
+   read-line when `console` is nil.
+
+   That fallback is load-bearing, not incidental: `bb create-admin` is driven
+   non-interactively by the wagoe-setup skill, which pipes the password on
+   stdin (BOU-236). Pinned by admin_test.clj — do not make a console mandatory.
+
+   The console is a parameter rather than a `System/console` lookup so the
+   no-console branch is reachable in a test regardless of whether the test JVM
+   happens to be attached to a terminal. Looking it up inline made the test
+   pass under CI and block on a real console locally."
+  [label console]
+  (if console
+    (String. (.readPassword console (str label ": ") (into-array Object [])))
+    (do (print (str label ": ")) (flush) (str/trim (or (read-line) "")))))
+
+(defn- read-confirmed-password
+  "Prompt for a password twice and validate. Re-prompts until the two entries
+   match, are non-blank, and are at least 8 characters. Returns the password."
+  ([] (read-confirmed-password (System/console)))
+  ([console]
+   (loop []
+     (let [p       (read-password-once "Password" console)
+           confirm (read-password-once "Confirm password" console)]
+       (cond
+         (str/blank? p)   (do (println (red "  Password cannot be empty.")) (recur))
+         (not= p confirm) (do (println (red "  Passwords do not match.")) (recur))
+         (< (count p) 8)  (do (println (red "  Password must be at least 8 characters.")) (recur))
+         :else p)))))
+
 (defn- valid-email? [s]
   (boolean (re-matches #"^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$" s)))
 
@@ -107,18 +138,7 @@
         (println (str "  Dir    : " (cyan dir))))
       (println)
 
-      (let [password (loop []
-                       (let [read-pw  (fn [label]
-                                        (if-let [c (System/console)]
-                                          (String. (.readPassword c (str label ": ") (into-array Object [])))
-                                          (do (print (str label ": ")) (flush) (str/trim (or (read-line) "")))))
-                             p        (read-pw "Password")
-                             confirm  (read-pw "Confirm password")]
-                         (cond
-                           (str/blank? p)   (do (println (red "  Password cannot be empty.")) (recur))
-                           (not= p confirm) (do (println (red "  Passwords do not match.")) (recur))
-                           (< (count p) 8)  (do (println (red "  Password must be at least 8 characters.")) (recur))
-                           :else p)))
+      (let [password (read-confirmed-password)
 
             shell-opts (cond-> {:continue true
                                 :in (str password "\n")
