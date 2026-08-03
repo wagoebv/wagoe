@@ -719,18 +719,23 @@ Examples:
             (println (format-error :text global-errors)))
           1)
 
+        ;; Removed command — redirect rather than "unknown command", and fail
+        ;; so a script that invokes it does not read silence as success.
+        ;;
+        ;; Must precede the global-help branch: with `new --help`, has-help-flag?
+        ;; is true, so root help was printed with exit 0 while every other form
+        ;; of `new` exited 1. Anything probing `--help` to decide whether a
+        ;; command exists concluded it still did.
+        (= verb :new)
+        (do
+          (println new-removed-help)
+          1)
+
         ;; Global --help or no command
         (or has-help-flag? (nil? verb))
         (do
           (println root-help)
           0)
-
-        ;; Removed command — redirect rather than "unknown command", and fail
-        ;; so a script that invokes it does not read silence as success.
-        (= verb :new)
-        (do
-          (println new-removed-help)
-          1)
 
         ;; Command-specific help
         (and (= verb :generate) has-help-flag?)
