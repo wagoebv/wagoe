@@ -146,16 +146,26 @@
                (migrations/create-migration "add-users")))
         (is (nil? (migrations/reset)))
         (is (nil? (migrations/init)))
+        ;; Every read operation gets the discovered config verbatim. `create` is
+        ;; the exception: migratus/create casts :migration-dir to String, so it
+        ;; receives the narrowed config instead.
+        ;;
+        ;; This assertion previously expected `[:create config …]` — the vector
+        ;; — so it pinned the ClassCastException in place as though it were the
+        ;; intended behaviour (BOU-271). A test can hold a bug still as firmly
+        ;; as it can catch one.
         (is (= [[:migrate config]
                 [:rollback config]
                 [:rollback-until config 20260325010101]
                 [:pending-list config]
                 [:completed-list config]
                 [:pending-list config]
-                [:create config "add-users"]
+                [:create (migrations/create-config config) "add-users"]
                 [:reset config]
                 [:init config]]
-               @calls))))))
+               @calls))
+        (is (string? (:migration-dir (second (first (filter #(= :create (first %)) @calls)))))
+            "create must receive a directory string, not the discovered vector")))))
 
 (deftest ^:unit migration-operations-wrap-failures-consistently
   (testing "migration operations keep useful ex-data on failure"
@@ -234,3 +244,48 @@
     (with-redefs [migrations/migration-status (fn []
                                                 (throw (ex-info "auto boom" {})))]
       (is (false? (migrations/auto-migrate))))))
+
+;; =============================================================================
+;; create-config — the shape migratus/create actually receives (BOU-271)
+;; =============================================================================
+
+;; `bb migrate create <name>` threw for every user who followed `bb migrate
+;; --help`:
+;;
+;;   java.lang.ClassCastException: class clojure.lang.PersistentVector cannot be
+;;   cast to class java.lang.String
+;;
+;; get-migration-config sets :migration-dir to the discovered *vector* of every
+;; migration directory on the classpath. up, status and rollback accept that;
+;; migratus/create casts it to String. So the defect was in the value handed to
+;; one call site, not in building the config — and a test that only exercised
+;; get-migration-config would pass while create stayed broken, which is what
+;; happened.
+
+(deftest ^:unit create-config-gives-migratus-a-single-directory-string
+  (testing "the vector the read config carries is narrowed to one string"
+    (let [read-config {:store :database
+                       :migration-dir ["migrations/" "wagoe/user/migrations/"]
+                       :db {:datasource ::fake}}
+          created     (migrations/create-config read-config)]
+      (is (string? (:migration-dir created))
+          "migratus/create casts :migration-dir to String — a vector throws")
+      (is (= migrations/project-migration-dir (:migration-dir created))
+          "new migrations belong in the project, not in a library directory")))
+
+  (testing "everything else is carried through untouched"
+    (let [read-config {:store :database
+                       :migration-dir ["migrations/"]
+                       :migration-table-name "schema_migrations"
+                       :db {:datasource ::fake}}
+          created     (migrations/create-config read-config)]
+      (is (= (dissoc read-config :migration-dir)
+             (dissoc created :migration-dir))
+          "create-config must only narrow the directory, not reshape the config")))
+
+  (testing "the project directory does not depend on discovery order"
+    ;; A dependency contributing a migration directory must not change where a
+    ;; user's own migration is written.
+    (is (= migrations/project-migration-dir
+           (:migration-dir (migrations/create-config
+                            {:migration-dir ["some/library/migrations/" "migrations/"]}))))))

@@ -68,6 +68,15 @@
                          "/")))
              distinct)))))
 
+(def project-migration-dir
+  "Where new migrations are written.
+
+   Library-contributed directories are read from, never written to: a migration
+   you author belongs to your project, not to a dependency. Kept as a single
+   string because Migratus wants one directory when creating, and because
+   `create-migration` must not be handed the whole discovered vector (BOU-271)."
+  "migrations/")
+
 (defn discover-migration-dirs
   "Return the complete set of migration directories visible to the application.
 
@@ -76,7 +85,7 @@
    `wagoe/migration-paths.edn` resource on the classpath."
   []
   (let [library-dirs (mapcat parse-migration-manifest (manifest-urls))
-        migration-dirs (->> (concat ["migrations/"] library-dirs)
+        migration-dirs (->> (concat [project-migration-dir] library-dirs)
                             distinct
                             vec)]
     (log/info "Discovered migration directories"
@@ -105,6 +114,21 @@
    :init-in-transaction? false
    :migration-table-name "schema_migrations"
    :db                   {:datasource (:datasource db-config)}})
+
+(defn create-config
+  "Narrow a read config to one suitable for *creating* a migration.
+
+   `:migration-dir` must be a single directory string here. The read config
+   carries the discovered vector of every directory on the classpath, which
+   `up`, `status` and `rollback` accept — but `migratus/create` casts it to
+   String, so `bb migrate create` died with a ClassCastException and a stack
+   trace for everyone who followed `bb migrate --help` (BOU-271).
+
+   The override is the project directory rather than the first element of the
+   discovered list: a migration you author belongs to your project, and a
+   dependency reordering that list must not decide where your files land."
+  [read-config]
+  (assoc read-config :migration-dir project-migration-dir))
 
 (defn get-migration-config
   "Gets migration configuration for the active database.
@@ -244,7 +268,7 @@
   [name]
   (log/info "Creating new migration" {:name name})
   (try
-    (let [config (get-migration-config)]
+    (let [config (create-config (get-migration-config))]
       (migratus/create config name)
       (log/info "Migration files created" {:name name})
       {:success true
