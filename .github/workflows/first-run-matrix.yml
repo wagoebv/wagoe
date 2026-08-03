@@ -1,0 +1,101 @@
+name: First-Run Matrix (nightly)
+
+# The broad first-run coverage from BOU-232: several distros, plus the paths a
+# newcomer takes by accident. Deliberately NOT part of the per-push CI.
+#
+# `First-Run Smoke` in ci.yml already gates every push on one image, one happy
+# path, and is fast enough to belong there. This is the slow half — roughly four
+# minutes per cell, most of it install.sh downloading a JVM — so it runs nightly
+# and on demand instead of on every commit.
+#
+# workflow_dispatch is not an afterthought: it is how this doubles as the
+# pre-release gate. Run it by hand before cutting a release rather than trusting
+# that last night's run still describes today's tree.
+#
+# NOTE on failure visibility: a scheduled workflow that fails only shows up in
+# the Actions tab and in GitHub's notification to the repo owner. A nightly gate
+# nobody reads is a gate that has stopped checking (BOU-250). If these start
+# being ignored, wire the failure to somewhere it will be seen.
+
+on:
+  schedule:
+    # 03:17 UTC — off the hour, because everything on the hour queues behind
+    # everyone else's cron. Scheduled runs only ever use the default branch.
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Why this run (e.g. pre-release check for 1.0.0-beta-5)'
+        required: false
+        default: 'manual'
+
+concurrency:
+  group: first-run-matrix
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    name: Smoke — ${{ matrix.image }}
+    runs-on: ubuntu-latest
+    # One distro failing must not hide the others. The whole point of a matrix
+    # is knowing which cells are red, not that some cell was.
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - ubuntu:24.04
+          - fedora:41
+          # amd64-only, which is why running this from Apple Silicon needs
+          # SMOKE_PLATFORM and emulation. GitHub runners are x86_64, so here it
+          # is native and cheap — the one thing CI does better than a laptop.
+          - archlinux:latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      # No Clojure/Java setup on purpose. The test runs inside a bare container
+      # and installs everything through scripts/install.sh; running it on the
+      # runner would skip the branches where BOU-226's blockers lived, and pass
+      # while proving nothing.
+      - name: First-run smoke
+        env:
+          SMOKE_IMAGE: ${{ matrix.image }}
+        run: ./scripts/first-run-smoke.sh
+
+  adversarial:
+    name: Adversarial — ${{ matrix.image }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Ubuntu and Fedora produce identical output here, which is what makes
+        # any difference an install.sh defect rather than a distro quirk. Arch
+        # is excluded: its pacman JVM step cannot run sandboxed in a container,
+        # so the smoke job above pre-satisfies the JVM, and these cases are
+        # about post-install behaviour anyway.
+        image:
+          - ubuntu:24.04
+          - fedora:41
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: First-run adversarial cases
+        env:
+          ADV_IMAGE: ${{ matrix.image }}
+        run: ./scripts/first-run-adversarial.sh
+
+  matrix-summary:
+    name: First-Run Matrix Passed
+    runs-on: ubuntu-latest
+    needs: [smoke, adversarial]
+    steps:
+      - name: Summary
+        run: |
+          echo "First-run matrix passed."
+          echo "  smoke:       ubuntu:24.04, fedora:41, archlinux:latest"
+          echo "  adversarial: ubuntu:24.04, fedora:41"
+          echo
+          echo "Not covered here, and not claimed to be: macOS, WSL2, a"
+          echo "corporate proxy, offline install, and real-user observation."
+          echo "Those need machines and people this matrix does not have."
