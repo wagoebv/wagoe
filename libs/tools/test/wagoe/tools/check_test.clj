@@ -137,3 +137,52 @@
 
   (testing "parses --help flag"
     (is (true? (:help (#'check/parse-args ["--help"]))))))
+
+;; =============================================================================
+;; Scope — which checks can run outside this repo (BOU-264)
+;; =============================================================================
+
+;; `bb check` runs each check as a subprocess (`bb check:fcis`, ...). Five of
+;; them only make sense in the Wagoe repo: doc-counts and poms compare against
+;; wagoe.tools.deploy/all-libs, agents diffs resources/agents/knowledge.edn,
+;; no-boundary is a rename gate for our own history, and docs:lint lives on the
+;; dev/ path. In a generated project those tasks do not exist, so `bb check`
+;; invoked them, bb exited 1 on "File does not exist", and run-check reported
+;; eight violations the user could do nothing about.
+
+(deftest ^:unit every-check-declares-a-scope
+  (testing "scope is explicit, so a new check has to decide"
+    (doseq [{:keys [id scope]} check/all-checks]
+      (is (contains? #{:any :monorepo} scope)
+          (str id " must declare :scope :any or :monorepo")))))
+
+(deftest ^:unit monorepo-only-checks-are-the-expected-set
+  (testing "the framework-only checks are exactly these"
+    ;; Pinned deliberately: promoting one to :any means a generated project
+    ;; will invoke it, so the task must exist in bb.edn.tmpl first — which the
+    ;; test below enforces.
+    (is (= #{:doc-counts :agents :poms :no-boundary :docs-lint}
+           (set (map :id (remove #(= :any (:scope %)) check/all-checks)))))))
+
+(deftest ^:unit portable-checks-exist-as-tasks-in-generated-projects
+  (testing "every :any check names a bb task the project template defines"
+    ;; This is the guard that was missing. The registry ships in wagoe-tools,
+    ;; which every generated project depends on, while the task list lives in
+    ;; a template in another library — two places, nothing comparing them.
+    (let [tmpl (io/file "libs/wagoe-cli/resources/wagoe/cli/templates/bb.edn.tmpl")]
+      (if-not (.exists tmpl)
+        (is (not (.exists tmpl))
+            "skipped: template not reachable from this working directory")
+        (let [content   (slurp tmpl)
+              ;; task keys look like `  check:fcis        {:doc ...`
+              task-names (set (map second (re-seq #"(?m)^\s{2}([a-z][a-z0-9:_-]*)\s+\{" content)))
+              portable   (filter #(= :any (:scope %)) check/all-checks)]
+          (doseq [{:keys [id cmd]} portable]
+            ;; Only subprocess checks that shell out to `bb <task>` are checked;
+            ;; :linting runs clojure -M:clj-kondo, which is a deps.edn alias.
+            (when (= "bb" (first cmd))
+              (let [task (second cmd)]
+                (is (contains? task-names task)
+                    (str "check " id " runs `bb " task
+                         "`, which bb.edn.tmpl does not define — "
+                         "`bb check` would fail on it in a generated project"))))))))))
