@@ -253,7 +253,11 @@
   (println)
   (println (str "  " (bold "wagoe new my-app")))
   (println)
-  (println (str "Don't have it?  " (cyan "curl -fsSL https://wagoe.org/install.sh | bash")))
+  ;; The raw.githubusercontent URL, not a wagoe.org short form: wagoe.org does
+  ;; not serve install.sh (404), and this message exists to get an unstuck user
+  ;; unstuck. Same URL as README.md and the quickstart page.
+  (println (str "Don't have it?  "
+                (cyan "curl -fsSL https://raw.githubusercontent.com/wagoebv/wagoe/main/scripts/install.sh | bash")))
   (println)
   (println (dim (str "`bb scaffold` still handles modules, fields, endpoints and "
                      "adapters inside an existing project.")))
@@ -442,7 +446,8 @@
        "  bb scaffold integrate <module> [--base-ns NS]  Guide integration of a scaffolded module\n"
        "\n"
        "`bb scaffold` works inside an existing project. To create a new one:\n"
-       "  wagoe new my-app                (install: curl -fsSL https://wagoe.org/install.sh | bash)\n"
+       "  wagoe new my-app\n"
+       "  install: curl -fsSL https://raw.githubusercontent.com/wagoebv/wagoe/main/scripts/install.sh | bash\n"
        "\n"
        "Non-interactive passthrough (when args are provided directly):\n"
        "  bb scaffold generate --module-name foo --entity Foo --field bar:string\n"

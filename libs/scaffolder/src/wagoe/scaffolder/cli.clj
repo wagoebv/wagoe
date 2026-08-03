@@ -491,7 +491,8 @@ Projects are created with the Wagoe CLI:
 
   wagoe new my-app
 
-Don't have it?  curl -fsSL https://wagoe.org/install.sh | bash
+Don't have it?
+  curl -fsSL https://raw.githubusercontent.com/wagoebv/wagoe/main/scripts/install.sh | bash
 
 The scaffolder still handles modules, fields, endpoints and adapters inside an
 existing project.")

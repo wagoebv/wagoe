@@ -21,6 +21,23 @@ See xref:getting-started:installation.adoc[Installation] for manual setup.
 
 == Bootstrap a new project
 
+[TIP]
+====
+This page is the *manual* path. If you use Claude Code (or a compatible agentic
+CLI), the `wagoe-setup` skill runs every step on this page for you — install
+check, project creation, database config, migrations, admin user, and starting
+the app — and finishes by handing you the URL and admin credentials.
+
+[source]
+----
+/plugin marketplace add wagoebv/wagoe
+/plugin install wagoe@wagoe
+----
+
+Then ask it to set up a new Wagoe project from an empty directory. Both paths
+run the same commands; keep them in step when either changes.
+====
+
 [source,bash]
 ----
 wagoe new my-app
