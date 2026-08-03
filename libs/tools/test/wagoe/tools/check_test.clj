@@ -186,3 +186,45 @@
                     (str "check " id " runs `bb " task
                          "`, which bb.edn.tmpl does not define — "
                          "`bb check` would fail on it in a generated project"))))))))))
+
+;; =============================================================================
+;; Registry commands must be able to fail (BOU-270)
+;; =============================================================================
+
+;; `bb check` judges each check by its subprocess exit code. A checker that
+;; reports problems and still exits 0 therefore produces a row that can never go
+;; red. That is what happened to Config doctor: `bb doctor` prints its ✗ lines
+;; and exits 0 — only `--ci` makes it exit non-zero — and the registry invoked
+;; it bare. With a config.edn that did not parse:
+;;
+;;   $ bb check --ci
+;;     ✓ Config doctor          (0.1s)
+;;   Summary: 9 passed, 0 failed        (exit 0)
+;;
+;; gate_firing_test has a doctor-gate-fires-test, but it calls
+;; doctor/check-jwt-secret directly and asserts it returns :error. That proves
+;; the check *detects*; it cannot prove the gate *fails*, because the defect was
+;; a missing flag on the command line rather than logic in the checker. Testing
+;; a function cannot catch a wrong invocation — the same shape as BOU-266.
+;;
+;; So this asserts the command, not the checker.
+
+(def ^:private ci-required-tools
+  "Tools that report problems on stdout but exit 0 unless told otherwise.
+   Invoking one of these without its flag yields a gate that cannot fail."
+  {["bb" "doctor"] "--ci"})
+
+(deftest ^:unit registry-commands-can-signal-failure
+  (testing "no check shells a tool that would exit 0 on its own findings"
+    (doseq [{:keys [id cmd]} check/all-checks]
+      (when-let [flag (get ci-required-tools (vec (take 2 cmd)))]
+        (is (some #{flag} cmd)
+            (str "check " id " runs `" (str/join " " cmd) "`, which exits 0 even "
+                 "when it reports errors — it needs " flag
+                 ", or this row can never fail"))))))
+
+(deftest ^:unit doctor-check-passes-ci
+  (testing "the doctor entry specifically"
+    (let [doctor (first (filter #(= :doctor (:id %)) check/all-checks))]
+      (is (some? doctor) "the registry no longer has a :doctor check")
+      (is (= ["bb" "doctor" "--ci"] (:cmd doctor))))))

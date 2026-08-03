@@ -55,6 +55,12 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **`bb check`'s Config doctor gate could never fail** (BOU-270). It invoked
+  `bb doctor` without `--ci`, and doctor prints its errors but exits 0 unless
+  that flag is set — so the row reported `✓` for every config, including one
+  that did not parse. It now passes `--ci`. Every other checker in the registry
+  already exits non-zero on violations; doctor was the only flag-gated one.
+
 - **Scaffolded modules now pass `bb check`** (BOU-267). Generated source
   produced 36 clj-kondo warnings, and clj-kondo exits non-zero on warnings, so
   `bb check` failed the moment a user scaffolded their first module. Two of

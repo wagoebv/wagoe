@@ -121,10 +121,15 @@
     :scope :any
     :label "Linting"
     :cmd   (linting-cmd)}
+   ;; --ci is not optional here. `bb doctor` prints its ✗ lines and exits 0;
+   ;; only --ci makes it exit non-zero. Without it this row reported ✓ for a
+   ;; config.edn that did not even parse, so the gate had never failed for any
+   ;; config, valid or not (BOU-270). Every other checker in this registry exits
+   ;; 1 on violations unconditionally — doctor is the one that needs the flag.
    {:id    :doctor
     :scope :any
     :label "Config doctor"
-    :cmd   ["bb" "doctor"]}])
+    :cmd   ["bb" "doctor" "--ci"]}])
 
 (def quick-check-ids
   "Check IDs included in --quick mode."
