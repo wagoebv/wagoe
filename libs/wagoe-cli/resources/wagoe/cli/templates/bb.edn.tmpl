@@ -18,6 +18,7 @@
              [wagoe.tools.check-tests :as check-tests]
              [wagoe.tools.check-deps  :as check-deps]
              [wagoe.tools.check-ports :as check-ports]
+             [wagoe.tools.check-hygiene :as check-hygiene]
              [wagoe.tools.db          :as db]
              [wagoe.tools.quickstart  :as quickstart]
              [wagoe.tools.help        :as help]
@@ -56,6 +57,15 @@
   ;; undefined task in every generated project (found via BOU-259).
   check:ports       {:doc "Hexagonal enforcement: modules must define ports.clj; shell/web must not bypass protocols"
                      :task (check-ports/-main)}
+  ;; `bb check` shells out to each of these. They were missing here while the
+  ;; registry in wagoe-tools still listed them, so `bb check` reported them as
+  ;; failures in every generated project (BOU-264).
+  check:test-meta   {:doc "Detect deftest metadata placed after the name (breaks --focus-meta)"
+                     :task (check-tests/check-deftest-metadata)}
+  check:test-tags   {:doc "Enforce exactly one pyramid tag (^:unit/^:integration/^:contract) per deftest"
+                     :task (check-tests/check-test-tags)}
+  check:hygiene     {:doc "Reject tracked backup/cruft files (*.bak, *.backup, *.orig, *~)"
+                     :task (check-hygiene/-main)}
 
   ;; Development
   repl              {:doc "Start the nREPL server on port 7888 (clojure -M:repl)"

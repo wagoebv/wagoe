@@ -296,3 +296,45 @@
   (testing "a dotted base-ns keeps its dots in the namespace"
     (is (str/includes? (gen/generate-schema-file (assoc base-ctx :base-ns "com.acme"))
                        "(ns com.acme.product.schema"))))
+
+;; =============================================================================
+;; Generated tests must pass the gates the generated project runs (BOU-264)
+;; =============================================================================
+
+;; `bb check` runs check:test-tags and check:placeholder-tests in generated
+;; projects. The scaffolder emitted untagged deftests and an `(is true)`, so
+;; `bb check` failed the moment a user scaffolded their first module — while
+;; AGENTS.md claimed the scaffolder "auto-generates unit test skeletons with
+;; correct metadata". Nothing here asserted it, so nothing caught it.
+
+(def ^:private generated-test-files
+  [["core"        gen/generate-core-test-file]
+   ["service"     gen/generate-service-test-file]
+   ["persistence" gen/generate-persistence-test-file]])
+
+(deftest ^:unit generated-tests-carry-exactly-one-pyramid-tag
+  (doseq [[label f] generated-test-files]
+    (testing (str label " test file")
+      (let [output (f base-ctx)
+            deftests (re-seq #"\(deftest\s+([^\s]+)" output)
+            tags     (re-seq #"\^:(unit|integration|contract)\b" output)]
+        (is (seq deftests) (str label ": generated no deftest at all"))
+        (is (= (count deftests) (count tags))
+            (str label ": " (count deftests) " deftest(s) but " (count tags)
+                 " pyramid tag(s) — check:test-tags requires exactly one each"))))))
+
+(deftest ^:unit generated-tests-contain-no-placeholder-assertions
+  (doseq [[label f] generated-test-files]
+    (testing (str label " test file")
+      (let [output (f base-ctx)]
+        (is (not (re-find #"\(is\s+true\s*\)" output))
+            (str label ": emits (is true), which check:placeholder-tests rejects"))))))
+
+(deftest ^:unit generated-tests-use-what-they-require
+  (testing "persistence test asserts through both of its requires"
+    ;; It required persistence and ports and then asserted (is true), so
+    ;; clj-kondo flagged both as unused — a warning, and `bb check` fails the
+    ;; linting step on warnings.
+    (let [output (gen/generate-persistence-test-file base-ctx)]
+      (is (re-find #"persistence/" output))
+      (is (re-find #"ports/" output)))))
