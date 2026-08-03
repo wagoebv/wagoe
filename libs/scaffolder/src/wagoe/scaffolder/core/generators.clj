@@ -710,7 +710,12 @@ DROP TABLE IF EXISTS %s;
          "  (:import [java.time Instant]\n"
          "           [java.util UUID]))\n"
          "\n"
-         "(deftest prepare-new-" entity-lower "-test\n"
+         ;; Pyramid tag is required, not decorative: `bb check:test-tags`
+         ;; enforces exactly one per deftest, and it runs in generated projects.
+         ;; Untagged output made `bb check` fail the moment a user scaffolded a
+         ;; module, while AGENTS.md claimed the scaffolder emits correct test
+         ;; metadata (BOU-264 review).
+         "(deftest ^:unit prepare-new-" entity-lower "-test\n"
          "  (testing \"prepares " entity-lower " for creation\"\n"
          "    (let [data {:name \"Test\"}\n"
          "          " entity-lower "-id (UUID/fromString \"11111111-1111-1111-1111-111111111111\")\n"
@@ -741,7 +746,8 @@ DROP TABLE IF EXISTS %s;
          "            [" base-ns "." module-name ".shell.service :as service]\n"
          "            [" base-ns "." module-name ".ports :as ports]))\n"
          "\n"
-         "(deftest create-" entity-lower "-test\n"
+         ;; ^:unit — the repository is a reify'd stub, so no database is touched.
+         "(deftest ^:unit create-" entity-lower "-test\n"
          "  (testing \"creates " entity-lower " via service\"\n"
          "    (let [mock-repo (reify ports/I" entity-name "Repository\n"
          "                      (create [_ entity] entity))\n"
@@ -770,10 +776,22 @@ DROP TABLE IF EXISTS %s;
          "            [" base-ns "." module-name ".shell.persistence :as persistence]\n"
          "            [" base-ns "." module-name ".ports :as ports]))\n"
          "\n"
-         "(deftest create-" entity-lower "-test\n"
-         "  (testing \"creates " entity-lower " in database\"\n"
-         "    ;; Test requires database context\n"
-         "    (is true)))\n")))
+         ;; Was `(is true)` with a \"requires database context\" comment, which
+         ;; `bb check:placeholder-tests` rejects — and that check runs in
+         ;; generated projects, so scaffolding a module broke `bb check`.
+         ;;
+         ;; Asserting the wiring instead is both real and database-free: it
+         ;; fails if the repository stops implementing its port, which is the
+         ;; mistake this file can actually catch before a database exists.
+         ;; ^:integration because the exercises you add next need one.
+         "(deftest ^:integration create-" entity-lower "-test\n"
+         "  (testing \"the repository implements its persistence port\"\n"
+         "    (is (satisfies? ports/I" entity-name "Repository\n"
+         "                    (persistence/create-repository nil))))\n"
+         "  (testing \"creating a " entity-lower " round-trips through the database\"\n"
+         "    ;; Add a database context and assert on a real create here.\n"
+         "    ;; See the module README for wiring a test db-ctx.\n"
+         "    ))\n")))
 
 ;; =============================================================================
 ;; Incremental Generators - Add Field

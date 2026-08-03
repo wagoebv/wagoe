@@ -63,6 +63,17 @@ for what is public API, what is internal, and how deprecations are announced.
   container was root, because `chmod` does not restrict uid 0. It now uses a
   read-only bind mount, which the kernel enforces for every uid, so the whole
   suite runs with nothing skipped for the first time.
+- **`bb check` reported failures a user could not act on** (BOU-264). It runs
+  each check as a subprocess (`bb check:fcis`, …), but five of them only mean
+  something in the Wagoe repository — `doc-counts` and `poms` compare against
+  the published library set, `agents` diffs `knowledge.edn`, `no-boundary` is a
+  rename gate for this repo's history, and `docs:lint` lives on the `dev/` path.
+  Generated projects define none of those tasks, so `bb` exited 1 on "File does
+  not exist" and they were reported as violations. Checks now declare a scope
+  and the framework-only ones are skipped outside this repo — and **named** in
+  the output, because a silently shorter list reads as a clean run. Generated
+  projects also gain `check:test-meta`, `check:test-tags` and `check:hygiene`,
+  which were monorepo-only despite being useful anywhere.
 
 - **`bb create-admin` could not create a user at all** (BOU-266). The
   `:user-cli` alias ran the CLI through `-e` reading `*command-line-args*`, and

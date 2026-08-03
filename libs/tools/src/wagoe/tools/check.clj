@@ -61,24 +61,31 @@
 
 (def all-checks
   [{:id    :fcis
+    :scope :any
     :label "FC/IS boundaries"
     :cmd   ["bb" "check:fcis"]}
    {:id    :deps
+    :scope :any
     :label "Dependency direction"
     :cmd   ["bb" "check:deps"]}
    {:id    :ports
+    :scope :any
     :label "Ports / hexagonal"
     :cmd   ["bb" "check:ports"]}
    {:id    :placeholder-tests
+    :scope :any
     :label "Placeholder tests"
     :cmd   ["bb" "check:placeholder-tests"]}
    {:id    :test-meta
+    :scope :any
     :label "Deftest metadata placement"
     :cmd   ["bb" "check:test-meta"]}
    {:id    :test-tags
+    :scope :any
     :label "Deftest pyramid tags"
     :cmd   ["bb" "check:test-tags"]}
    {:id    :hygiene
+    :scope :any
     :label "Repo hygiene (no backup files)"
     :cmd   ["bb" "check:hygiene"]}
    ;; Documented library counts and publishing claims, locked to
@@ -87,15 +94,19 @@
    ;; six places while it was on Clojars — drift a human sweep took three
    ;; attempts to clear (PR #351).
    {:id    :doc-counts
+    :scope :monorepo
     :label "Documented library counts"
     :cmd   ["bb" "check:doc-counts"]}
    {:id    :agents
+    :scope :monorepo
     :label "AGENTS.md drift"
     :cmd   ["bb" "check:agents"]}
    {:id    :poms
+    :scope :monorepo
     :label "POM dependency completeness"
     :cmd   ["bb" "check:poms"]}
    {:id    :no-boundary
+    :scope :monorepo
     :label "Rename gate (no residual boundary tokens)"
     :cmd   ["bb" "check:no-boundary"]}
    ;; Fails only on a documented command naming a deps.edn alias that does not
@@ -103,18 +114,46 @@
    ;; Added because CI was the only place this ran, so a dead alias survived
    ;; every local `bb check` (BOU-257).
    {:id    :docs-lint
+    :scope :monorepo
     :label "Docs drift (commands name real aliases)"
     :cmd   ["bb" "docs:lint"]}
    {:id    :linting
+    :scope :any
     :label "Linting"
     :cmd   (linting-cmd)}
    {:id    :doctor
+    :scope :any
     :label "Config doctor"
     :cmd   ["bb" "doctor"]}])
 
 (def quick-check-ids
   "Check IDs included in --quick mode."
   #{:fcis :deps :ports})
+
+(defn framework-repo?
+  "True when running inside the Wagoe monorepo rather than a generated project.
+
+   Five checks only mean something here: doc-counts and poms compare against
+   wagoe.tools.deploy/all-libs, agents diffs resources/agents/knowledge.edn,
+   no-boundary is a rename gate for this repo's own history, and docs:lint runs
+   from the dev/ path. Generated projects define none of those bb tasks, so
+   `bb check` used to invoke them, bb exited 1 on \"File does not exist\", and
+   run-check reported them as violations the user could not act on (BOU-264).
+
+   Keyed on deploy.clj because that is the file the framework-only checks are
+   ultimately about — the registry of published libraries."
+  []
+  (.exists (io/file "libs/tools/src/wagoe/tools/deploy.clj")))
+
+(defn applicable-checks
+  "The checks to run, given whether this is the framework repo. Returns
+   [to-run skipped] so the caller can name what it left out — a silently
+   shorter list reads as a clean run."
+  [checks framework?]
+  (if framework?
+    [checks []]
+    [(filter #(= :any (:scope %)) checks)
+     (remove #(= :any (:scope %)) checks)]))
 
 ;; =============================================================================
 ;; Check execution
@@ -200,9 +239,10 @@
     (when (:help opts)
       (print-help)
       (System/exit 0))
-    (let [checks  (if (:quick opts)
-                    (filter #(contains? quick-check-ids (:id %)) all-checks)
-                    all-checks)
+    (let [selected (if (:quick opts)
+                     (filter #(contains? quick-check-ids (:id %)) all-checks)
+                     all-checks)
+          [checks skipped] (applicable-checks selected (framework-repo?))
           _       (do (println)
                       (println (bold "Wagoe Quality Check"))
                       (println (dim "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"))
@@ -221,6 +261,15 @@
       (println (str "Summary: " (green (str passed " passed"))
                     ", " (red (str failed " failed"))
                     " (" total " total)"))
+      ;; Name the skipped checks. A shorter list with no explanation is
+      ;; indistinguishable from a clean run, which is how a gate stops being a
+      ;; gate without anyone noticing.
+      (when (seq skipped)
+        (println)
+        (println (dim (str "Skipped " (count skipped) " framework-only check(s): "
+                           (str/join ", " (map (comp name :id) skipped)))))
+        (println (dim "  These check the Wagoe repository itself — its published"))
+        (println (dim "  library set, AGENTS.md sync and rename history — not your project.")))
       (println)
       (when (and (:ci opts) (pos? failed))
         (System/exit 1)))))
