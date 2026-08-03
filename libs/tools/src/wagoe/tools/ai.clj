@@ -25,6 +25,9 @@
 ;; libs/wagoe-cli/src/wagoe/cli/new.clj.
 (def ^:private ai-version "1.0.0-beta-4")
 
+;; Match libs/ai/deps.edn and the monorepo's own pin.
+(def ^:private tools-cli-version "1.4.256")
+
 (defn- ai-deps
   "The -Sdeps argument that makes wagoe.ai.shell.cli-entry resolvable.
 
@@ -43,9 +46,18 @@
    testable only by whatever the test runner happened to have set."
   ([] (ai-deps (System/getenv "WAGOE_AI_ROOT")))
   ([root]
-   (if root
-     (str "{:deps {com.wagoe/wagoe-ai {:local/root \"" root "\"}}}")
-     (str "{:deps {com.wagoe/wagoe-ai {:mvn/version \"" ai-version "\"}}}"))))
+   ;; tools.cli is named explicitly as well as being declared by libs/ai. The
+   ;; library declaration is the real fix, but it only reaches users on the next
+   ;; release — the already-published version this pins has a POM without it, so
+   ;; injecting wagoe-ai alone still failed with
+   ;;   Could not locate clojure/tools/cli
+   ;; Naming it here makes `bb ai` work against the currently published
+   ;; artifact, and is harmless once the POM carries it.
+   (let [ai-coord (if root
+                    (str "{:local/root \"" root "\"}")
+                    (str "{:mvn/version \"" ai-version "\"}"))]
+     (str "{:deps {com.wagoe/wagoe-ai " ai-coord " "
+          "org.clojure/tools.cli {:mvn/version \"" tools-cli-version "\"}}}"))))
 
 (defn- run-clojure!
   "Shell out to the Clojure AI CLI with given args. Streams output to terminal.

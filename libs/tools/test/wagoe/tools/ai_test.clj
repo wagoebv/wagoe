@@ -25,18 +25,46 @@
       (is (str/includes? deps ":mvn/version"))
       (is (not (str/includes? deps ":local/root"))))))
 
+(deftest ^:unit ai-deps-carries-the-cli-parser
+  ;; The first version of this fix injected wagoe-ai alone. That still failed,
+  ;; because wagoe.ai.shell.cli-entry requires clojure.tools.cli and the
+  ;; published wagoe-ai POM does not carry it:
+  ;;
+  ;;   Could not locate clojure/tools/cli__init.class …
+  ;;
+  ;; libs/ai now declares tools.cli, which fixes the POM from the next release.
+  ;; Naming it here as well is what makes `bb ai` work against the version this
+  ;; currently pins.
+  (testing "tools.cli travels with the injected dependency"
+    (doseq [[label deps] [["published pin" (#'ai/ai-deps nil)]
+                          ["local root"    (#'ai/ai-deps "/tmp/ai")]]]
+      (is (str/includes? deps "org.clojure/tools.cli")
+          (str label ": cli-entry cannot load without tools.cli"))))
+
+  (testing "and the library itself declares what it requires"
+    ;; Injecting is a workaround for one call site; anything else resolving
+    ;; wagoe-ai needs the POM to be honest.
+    (let [ai-deps-edn (slurp "libs/ai/deps.edn")]
+      (is (str/includes? ai-deps-edn "org.clojure/tools.cli")
+          "libs/ai requires clojure.tools.cli, so it must declare it"))))
+
 (deftest ^:unit ai-deps-honours-the-local-override
   (testing "a root swaps the pin for a local checkout"
     ;; Passing the root rather than stubbing ai-deps: an earlier version of this
     ;; test with-redef'd the function to return a canned string and then
     ;; asserted on that string, which exercised nothing.
-    (let [deps (#'ai/ai-deps "/tmp/ai")]
-      (is (str/includes? deps ":local/root"))
-      (is (str/includes? deps "/tmp/ai"))
-      (is (not (str/includes? deps ":mvn/version")))))
+    ;; Assert the wagoe-ai coordinate specifically. Checking that the whole
+    ;; string lacks :mvn/version broke as soon as tools.cli joined it — and it
+    ;; was testing the wrong thing anyway.
+    (let [coord (get-in (read-string (#'ai/ai-deps "/tmp/ai"))
+                        [:deps 'com.wagoe/wagoe-ai])]
+      (is (= {:local/root "/tmp/ai"} coord))))
 
   (testing "no root falls back to the published pin"
-    (is (str/includes? (#'ai/ai-deps nil) ":mvn/version"))))
+    (let [coord (get-in (read-string (#'ai/ai-deps nil))
+                        [:deps 'com.wagoe/wagoe-ai])]
+      (is (contains? coord :mvn/version))
+      (is (not (contains? coord :local/root))))))
 
 (deftest ^:unit ai-deps-is-readable-edn
   (testing "the injected -Sdeps argument parses"

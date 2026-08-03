@@ -1,6 +1,12 @@
 {:paths ["src" "resources"]
 
  :deps {org.clojure/clojure          {:mvn/version "1.12.5"}
+        ;; wagoe.ai.shell.cli-entry requires clojure.tools.cli. It was never
+        ;; declared, so the published POM did not carry it and anything
+        ;; resolving wagoe-ai on its own failed to load the CLI entrypoint
+        ;; (BOU-272). It only appeared to work inside a full project, where a
+        ;; sibling library drags tools.cli in transitively.
+        org.clojure/tools.cli        {:mvn/version "1.4.256"}
         metosin/malli {:mvn/version "0.20.1"}
         clj-http/clj-http {:mvn/version "3.13.1"}
         cheshire/cheshire {:mvn/version "6.2.0"}
