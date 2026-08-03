@@ -55,6 +55,15 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **`bb migrate create` threw a ClassCastException** (BOU-271). The migration
+  config carries `:migration-dir` as the discovered *vector* of every directory
+  on the classpath; `up`, `status` and `rollback` accept that, but
+  `migratus/create` casts it to String. So the documented way to add a
+  migration failed for everyone, pushing people onto hand-written files — the
+  exact path BOU-256 was filed against, because that filename format is easy to
+  get wrong and silently invisible to migratus. Creation now receives the
+  project's own `migrations/` as a string.
+
 - **`bb check`'s Config doctor gate could never fail** (BOU-270). It invoked
   `bb doctor` without `--ci`, and doctor prints its errors but exits 0 unless
   that flag is set — so the row reported `✓` for every config, including one
