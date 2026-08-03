@@ -13,17 +13,55 @@
 
 (ns wagoe.tools.ai
   (:require [wagoe.tools.ansi :refer [bold red]]
+            [clojure.java.io :as io]
             [babashka.process :refer [shell]]))
 
 ;; =============================================================================
 ;; Run Clojure AI CLI
 ;; =============================================================================
 
+;; Must match libs/tools/build.clj and libs/ai/build.clj. Update with the other
+;; release pins — scaffolder-version in scaffold.clj, and the two in
+;; libs/wagoe-cli/src/wagoe/cli/new.clj.
+(def ^:private ai-version "1.0.0-beta-4")
+
+(defn- ai-deps
+  "The -Sdeps argument that makes wagoe.ai.shell.cli-entry resolvable.
+
+   Generated projects carry com.wagoe/wagoe-ai only in their :mcp alias, never
+   in :deps, so a plain `clojure -M` could not find it and every `bb ai`
+   subcommand died with a FileNotFoundException (BOU-272). Injecting the
+   dependency here rather than expecting it in deps.edn matches what
+   wagoe.tools.scaffold already does.
+
+   WAGOE_AI_ROOT overrides the pin with a local checkout — the only way to
+   exercise unreleased AI code from a generated project, since this dependency
+   is injected here and a :local/root rewrite of deps.edn has no effect on it.
+
+   The root is a parameter as well as an env lookup so a test can reach both
+   branches; reading the environment inline would leave the override arm
+   testable only by whatever the test runner happened to have set."
+  ([] (ai-deps (System/getenv "WAGOE_AI_ROOT")))
+  ([root]
+   (if root
+     (str "{:deps {com.wagoe/wagoe-ai {:local/root \"" root "\"}}}")
+     (str "{:deps {com.wagoe/wagoe-ai {:mvn/version \"" ai-version "\"}}}"))))
+
 (defn- run-clojure!
-  "Shell out to the Clojure AI CLI with given args. Streams output to terminal."
+  "Shell out to the Clojure AI CLI with given args. Streams output to terminal.
+
+   In generated projects (no libs/ai directory) the dependency is injected via
+   -Sdeps. In the monorepo libs/ai/src is already on the classpath, so -Sdeps is
+   skipped to avoid forcing Maven resolution of an artifact that may not yet be
+   published."
   [args]
   (try
-    (apply shell "clojure" "-M" "-m" "wagoe.ai.shell.cli-entry" args)
+    (let [in-monorepo? (.exists (io/file "libs/ai"))
+          base-cmd     (if in-monorepo?
+                         ["clojure" "-M" "-m" "wagoe.ai.shell.cli-entry"]
+                         ["clojure" "-Sdeps" (ai-deps)
+                          "-M" "-m" "wagoe.ai.shell.cli-entry"])]
+      (apply shell (concat base-cmd args)))
     (catch Exception e
       (println (red (str "AI CLI exited with error: " (.getMessage e))))
       (System/exit 1))))

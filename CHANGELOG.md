@@ -55,6 +55,16 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Every `bb ai` subcommand failed in a generated project** (BOU-272).
+  `wagoe.tools.ai` shelled a plain `clojure -M -m wagoe.ai.shell.cli-entry`,
+  but generated projects carry `com.wagoe/wagoe-ai` only in their `:mcp` alias,
+  never in `:deps` — so `explain`, `gen-tests`, `sql`, `docs` and
+  `admin-entity` all died with a FileNotFoundException. All five are listed in
+  the generated `bb.edn`, the generated `AGENTS.md`, and the shipped `wagoe`
+  Claude Code skill. The dependency is now injected via `-Sdeps`, matching what
+  `bb scaffold` has always done, with a `WAGOE_AI_ROOT` override for exercising
+  unreleased AI code from a generated project.
+
 - **`bb migrate create` threw a ClassCastException** (BOU-271). The migration
   config carries `:migration-dir` as the discovered *vector* of every directory
   on the classpath; `up`, `status` and `rollback` accept that, but
