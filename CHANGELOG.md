@@ -46,6 +46,14 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **`bb create-admin` could not create a user at all** (BOU-266). The
+  `:user-cli` alias ran the CLI through `-e` reading `*command-line-args*`, and
+  `clojure.main` takes the first non-option argument as a script path — so the
+  `create` verb was dropped and the CLI rejected `--email` as an unknown global
+  option. Without an admin user the admin UI redirects to a login nobody can
+  pass. The alias now uses `-m` against a new `-main` on
+  `wagoe.user.shell.cli-entry`. Existing generated projects pick this up when
+  they move to a release containing it.
 - Generated projects were missing the `check:ports` bb task while `bb check`
   shelled out to it, so the hexagonal gate BOU-80 requires — and that the
   generated `AGENTS.md` documents — could not run in a new project. Found

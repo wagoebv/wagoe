@@ -46,7 +46,11 @@
                           org.postgresql/postgresql   {:mvn/version "42.7.12"}
                           com.h2database/h2           {:mvn/version "2.4.240"}
                           com.mysql/mysql-connector-j {:mvn/version "9.6.0"}}
-             :main-opts  ["-e" "(require '[wagoe.user.shell.cli-entry :as e]) (System/exit (e/run-cli! (vec *command-line-args*)))"]}
+             ;; -m, not -e: with -e the first non-option argument is taken as a
+             ;; script path and *command-line-args* holds only what follows, so
+             ;; `create` in `bb create-admin` was dropped and the CLI rejected
+             ;; --email as an unknown global option (BOU-266).
+             :main-opts  ["-m" "wagoe.user.shell.cli-entry"]}
   ;; Wagoe MCP server for editor agents (Claude Code / Cursor). Kept in an
   ;; alias — NOT in :deps — so the app runtime never pulls the MCP server.
   ;; Launched by .mcp.json via `clojure -M:mcp`. wagoe-mcp's pom now declares

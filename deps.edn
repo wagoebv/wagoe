@@ -325,14 +325,20 @@
 
            ;; Direct entrypoint into the user module CLI; used by bb create-admin so that
            ;; generated projects (which do not have wagoe.cli on the classpath) can still
-           ;; run the user CLI via -M:user-cli. Uses -e to call run-cli! directly so this
-           ;; works with any published wagoe-user without requiring a -main entrypoint.
+           ;; run the user CLI via -M:user-cli.
            ;; Must include all JDBC drivers because db-factory resolves the driver at runtime.
+           ;;
+           ;; -m, not -e. This used to call run-cli! from an -e expression reading
+           ;; *command-line-args*, to avoid requiring a -main entrypoint. That is what
+           ;; broke it: with -e, clojure.main takes the first non-option argument as a
+           ;; script path and binds *command-line-args* to what follows, so `create` was
+           ;; dropped and the CLI rejected --email as an unknown global option. Nothing
+           ;; could create an admin user (BOU-266).
            :user-cli  {:extra-deps {org.xerial/sqlite-jdbc      {:mvn/version "3.53.2.0"}
                                     org.postgresql/postgresql   {:mvn/version "42.7.12"}
                                     com.h2database/h2           {:mvn/version "2.4.240"}
                                     com.mysql/mysql-connector-j {:mvn/version "9.7.0"}}
-                       :main-opts  ["-e" "(require '[wagoe.user.shell.cli-entry :as e]) (System/exit (e/run-cli! (vec *command-line-args*)))"]}
+                       :main-opts  ["-m" "wagoe.user.shell.cli-entry"]}
 
            ;; =============================================================================
            ;; HTTP server entrypoint (invokes wagoe.main/-main in server mode).

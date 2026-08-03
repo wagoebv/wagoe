@@ -80,7 +80,7 @@ echo "     package manager: $PKG"
 pkg_install curl ca-certificates
 
 # ── 1. bare image: prerequisites must be reported, not delegated ────────────
-echo "[1/6] prerequisite detection on a bare image"
+echo "[1/7] prerequisite detection on a bare image"
 set +e
 PREREQ_OUT="$(bash /repo/scripts/install.sh 2>&1)"
 PREREQ_RC=$?
@@ -95,7 +95,7 @@ grep -qi -- "$EXPECT_HINT" <<<"$PREREQ_OUT" \
 ok "names the missing tools and the $PKG command to install them"
 
 # ── 2. install ──────────────────────────────────────────────────────────────
-echo "[2/6] install.sh"
+echo "[2/7] install.sh"
 pkg_install git unzip zip which
 if [ "$PKG" = pacman ]; then
   # install.sh:122 installs the JVM with a plain `pacman -S`, and pacman cannot
@@ -120,7 +120,7 @@ done
 ok "installed; java, clojure, bb, wagoe all resolve"
 
 # ── 3. generate a project from THIS checkout ────────────────────────────────
-echo "[3/6] wagoe new"
+echo "[3/7] wagoe new"
 cp -r /repo /work
 cd /root
 bash -ic "bb --config /work/bb.edn -e \"(require (quote wagoe.cli.main)) (wagoe.cli.main/-main \\\"new\\\" \\\"demo\\\")\"" \
@@ -162,7 +162,7 @@ LEFT=$(grep -c ":mvn/version" deps.edn || true)
 ok "no com.wagoe dep left on a published version ($LEFT third-party pins untouched)"
 
 # ── 4. quickstart ───────────────────────────────────────────────────────────
-echo "[4/6] bb quickstart"
+echo "[4/7] bb quickstart"
 set -a; . ./.env 2>/dev/null || true; set +a
 # The scaffolder is injected via -Sdeps at a hardcoded version rather than read
 # from deps.edn, so the :local/root rewrite above cannot reach it. Without this
@@ -177,7 +177,7 @@ ok "completed without clobbering the config"
 # ── 5. the scaffolded migration must actually apply ─────────────────────────
 # `bb quickstart` reports 8/8 Done even when zero migrations run, which is how
 # BOU-256 stayed hidden: the sample module had no table.
-echo "[5/6] scaffolded migration applied"
+echo "[5/7] scaffolded migration applied"
 if ls migrations/*.sql >/dev/null 2>&1; then
   STATUS="$(bash -ic "bb migrate status" 2>&1 || true)"
   APPLIED="$(grep -oE "Applied migrations: [0-9]+" <<<"$STATUS" | grep -oE "[0-9]+" | tail -1)"
@@ -188,8 +188,38 @@ else
   fail "quickstart scaffolded no migration at all"
 fi
 
-# ── 6. does it actually serve? ──────────────────────────────────────────────
-echo "[6/6] app serves HTTP"
+# ── 6. can you create the admin user you are told to create? ────────────────
+# Added after BOU-266: `bb create-admin` could not create a user at all — the
+# :user-cli alias ran the CLI through -e, so clojure.main swallowed the `create`
+# verb and the CLI rejected --email as an unknown global option. Nothing caught
+# it, because this script stopped at "app serves HTTP" and the tests for the
+# user CLI call run-cli! directly with a well-formed vector, which is precisely
+# the step the alias got wrong. Assert on the outcome, not the exit code.
+# (No apostrophes below: this whole body is a single-quoted docker argument.)
+echo "[6/7] bb create-admin"
+ADMIN_PW="Str0ng-Dev-Pass-x9"
+set +e
+printf "%s\n%s\n" "$ADMIN_PW" "$ADMIN_PW" \
+  | bash -ic "cd /root/demo && set -a && . ./.env && set +a && bb create-admin --email admin@demo.test --name Admin" \
+    >/tmp/admin.log 2>&1
+ADMIN_RC=$?
+set -e
+# Exit code AND the exact success line. Neither alone is enough: the first
+# version of this check grepped case-insensitively for "created successfully",
+# which matches a DDL log line the user CLI emits while initialising the schema
+# — so it passed with the BOU-266 bug still present, printing "Failed to create
+# admin user." two lines above its own ok. Assert on what the command reports
+# about itself, not on words that appear somewhere in its output.
+[ "$ADMIN_RC" -eq 0 ] \
+  || { grep -iE "^Error:|^Details:|Failed to create" /tmp/admin.log | head -3
+       fail "bb create-admin exited $ADMIN_RC (BOU-266: the :user-cli alias must pass the verb through)"; }
+grep -q "Admin user created successfully" /tmp/admin.log \
+  || { tail -5 /tmp/admin.log
+       fail "bb create-admin exited 0 without reporting that it created the user"; }
+ok "admin user created"
+
+# ── 7. does it actually serve? ──────────────────────────────────────────────
+echo "[7/7] app serves HTTP"
 bash -ic "cd /root/demo && set -a && . ./.env && set +a && clojure -M:repl" >/tmp/repl.log 2>&1 &
 for _ in $(seq 1 90); do (echo > /dev/tcp/127.0.0.1/7888) 2>/dev/null && break; sleep 2; done
 (echo > /dev/tcp/127.0.0.1/7888) 2>/dev/null || { tail -25 /tmp/repl.log; fail "nREPL never came up"; }
