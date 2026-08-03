@@ -196,13 +196,25 @@ fi
 # `(is true)`, 36 lint warnings, a protocol method declared twice, and a service
 # calling a repository method that did not exist (BOU-267).
 echo "[6/8] bb check on the scaffolded module"
+# --ci is load-bearing. Without it `bb check` prints its ✗ lines and still exits
+# 0 — it only calls System/exit on failure when :ci is set (check.clj). The
+# first version of this step omitted it and was therefore a gate that could
+# never fail; measured on a project with two real violations:
+#   bb check      -> exit 0, "7 passed, 2 failed"
+#   bb check --ci -> exit 1, "7 passed, 2 failed"
 set +e
-bash -ic "cd /root/demo && bb check" >/tmp/check.log 2>&1
+bash -ic "cd /root/demo && bb check --ci" >/tmp/check.log 2>&1
 CHECK_RC=$?
 set -e
 [ "$CHECK_RC" -eq 0 ] \
   || { grep -E "✗|Summary" /tmp/check.log | head -12
        fail "bb check failed on a freshly scaffolded module (BOU-267)"; }
+# Assert the summary too, not only the exit code. One exit code is exactly what
+# hid this, and a future change to when --ci exits would silently disarm the
+# step again.
+grep -qE "Summary: .*0 failed" /tmp/check.log \
+  || { grep -E "Summary" /tmp/check.log | head -3
+       fail "bb check exited 0 but its summary does not say 0 failed"; }
 grep -q "Skipped .* framework-only" /tmp/check.log \
   || fail "bb check did not report the framework-only checks it skipped (BOU-264)"
 ok "gates pass, and the skipped framework-only checks are named"
