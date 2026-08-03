@@ -338,3 +338,64 @@
     (let [output (gen/generate-persistence-test-file base-ctx)]
       (is (re-find #"persistence/" output))
       (is (re-find #"ports/" output)))))
+
+;; =============================================================================
+;; Generated source must satisfy the gates the generated project runs (BOU-267)
+;; =============================================================================
+
+(deftest ^:unit ports-file-declares-each-method-name-once
+  ;; defprotocol interns its methods as vars in the namespace, so two protocols
+  ;; in one ns cannot share a method name — the second silently wins. The
+  ;; repository declared `update-<entity>` and so did the service, leaving
+  ;; ports/update-<entity> with the service arity [this id data]. Loading the
+  ;; generated module said so out loud:
+  ;;   Warning: protocol #'…/IProductService is overwriting method
+  ;;   update-product of protocol IProductRepository
+  (testing "no method name appears in both protocols"
+    (let [output  (gen/generate-ports-file base-ctx)
+          methods (map second (re-seq #"(?m)^\s{2}\((\S+)\s+\[this" output))
+          dupes   (->> methods frequencies (filter #(> (val %) 1)) (map key))]
+      (is (seq methods) "generated no protocol methods at all")
+      (is (empty? dupes)
+          (str "method name(s) declared in more than one protocol: "
+               (vec dupes) " — the later defprotocol overwrites the earlier")))))
+
+(defn- repository-protocol-methods
+  "Method names declared by the *repository* protocol only.
+
+   Scoping matters: ports.clj holds both protocols, and the first version of
+   this test compared against every method in the file. `list-<plural>` is
+   declared there — by the service protocol — so the service calling it on the
+   repository looked legitimate and the test passed with the bug present."
+  [ports-out]
+  (let [repo-block (-> ports-out
+                       (str/split #"(?m)^;; Service Ports")
+                       first)]
+    (set (map second (re-seq #"(?m)^\s{2}\((\S+)\s+\[this" repo-block)))))
+
+(deftest ^:unit service-calls-methods-the-repository-port-declares
+  (testing "the service implementation only calls repository methods that exist"
+    ;; It called (.list-<plural> repository opts), but the repository port has
+    ;; find-all — so listing blew up at runtime the first time anyone tried it.
+    (let [declared (repository-protocol-methods (gen/generate-ports-file base-ctx))
+          called   (set (map second (re-seq #"\(\.(\S+)\s+repository"
+                                            (gen/generate-service-file base-ctx))))
+          missing  (remove declared called)]
+      (is (seq called) "the service calls nothing on its repository")
+      (is (contains? declared "find-all")
+          "sanity: the repository block should contain find-all — if not, the
+           block-splitting above has drifted and this test proves nothing")
+      (is (empty? missing)
+          (str "service calls " (vec missing)
+               " on the repository, which its port does not declare")))))
+
+(deftest ^:unit generated-source-has-no-unused-this-bindings
+  (testing "record method bodies that ignore `this` name it `_this`"
+    ;; clj-kondo warns on unused bindings and exits non-zero on warnings, so
+    ;; `bb check` fails its linting step in the generated project.
+    (doseq [[label f] [["service"     gen/generate-service-file]
+                       ["persistence" gen/generate-persistence-file]]]
+      (let [output (f base-ctx)]
+        (is (not (re-find #"\(\S+\s+\[this[\s\]]" output))
+            (str label ": has a method binding `this` that its body never uses; "
+                 "name it _this"))))))

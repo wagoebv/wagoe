@@ -171,7 +171,13 @@
   (create [this entity]
     \"Create new %s.\")
 
-  (update-%s [this entity]
+  ;; `update-entity`, not `update-<entity>`: the service protocol below declares
+  ;; `update-<entity>` too, and defprotocol interns its methods as vars in this
+  ;; namespace — so the second silently overwrote the first, leaving
+  ;; ports/update-<entity> with the service arity [this id data]. Nor `update`,
+  ;; which would shadow clojure.core/update. The repository's other methods are
+  ;; already generic (create, delete), so this matches its own family. (BOU-267)
+  (update-entity [this entity]
     \"Update existing %s.\")
 
   (delete [this id]
@@ -207,7 +213,8 @@
             entity-lower
             entity-lower
             entity-lower
-            entity-lower  ; update-%s
+            ;; `update-entity` is now a literal, so the method-name arg that
+            ;; used to sit here is gone; only its docstring %s remains.
             entity-lower
             entity-lower
             entity-name
@@ -435,7 +442,7 @@ DROP TABLE IF EXISTS %s;
          "\n"
          "(defn " entity-lower "-list-page\n"
          "  \"Generate " entity-lower " listing page.\"\n"
-         "  [" entity-plural " opts]\n"
+         "  [" entity-plural " _opts]\n"
          "  [:div.page\n"
          "   [:h1 \"" (str/capitalize entity-plural) "\"]\n"
          "   [:div.items\n"
@@ -479,16 +486,22 @@ DROP TABLE IF EXISTS %s;
          "\n"
          "(defrecord " entity-name "Service [repository]\n"
          "  ports/I" entity-name "Service\n"
-         "  (create-" entity-lower " [this data]\n"
+         ;; _this everywhere: none of these bodies use it, and an unused binding
+         ;; is a clj-kondo warning — which fails `bb check` in the generated
+         ;; project, since kondo exits non-zero on warnings (BOU-267).
+         "  (create-" entity-lower " [_this data]\n"
          "    (let [prepared (core/prepare-new-" entity-lower " data (generate-" entity-lower "-id) (current-time))]\n"
          "      (.create repository prepared)))\n"
-         "  (get-" entity-lower " [this id]\n"
+         "  (get-" entity-lower " [_this id]\n"
          "    (.find-by-id repository id))\n"
-         "  (list-" (template/pluralize entity-lower) " [this opts]\n"
-         "    (.list-" (template/pluralize entity-lower) " repository opts))\n"
-         "  (update-" entity-lower " [this id data]\n"
-         "    (.update-" entity-lower " repository (assoc data :id id)))\n"
-         "  (delete-" entity-lower " [this id]\n"
+         ;; find-all, not list-<plural>: the repository port has no
+         ;; list-<plural> method, so this called something that does not exist
+         ;; and blew up at runtime the first time anyone listed anything.
+         "  (list-" (template/pluralize entity-lower) " [_this opts]\n"
+         "    (.find-all repository opts))\n"
+         "  (update-" entity-lower " [_this id data]\n"
+         "    (.update-entity repository (assoc data :id id)))\n"
+         "  (delete-" entity-lower " [_this id]\n"
          "    (.delete repository id)))\n"
          "\n"
          "(defn create-service [repository]\n"
@@ -513,7 +526,9 @@ DROP TABLE IF EXISTS %s;
         module-name (:module-name ctx)
         entity (first (:entities ctx))
         entity-name (:entity-name entity)
-        entity-lower (str/lower-case entity-name)
+        ;; entity-lower was only used to build the repository's
+        ;; `update-<entity>` method name, which is now the literal
+        ;; `update-entity` (BOU-267).
         table-name (template/pluralize (template/kebab->snake entity-name))]
     (str "(ns " base-ns "." module-name ".shell.persistence\n"
          "  \"Persistence layer for " module-name " module.\"\n"
@@ -523,28 +538,28 @@ DROP TABLE IF EXISTS %s;
          "\n"
          "(defrecord Database" entity-name "Repository [db-ctx]\n"
          "  ports/I" entity-name "Repository\n"
-         "  (create [this entity]\n"
+         "  (create [_this entity]\n"
          "    (db/execute-one! db-ctx\n"
          "      (sql/format {:insert-into :" table-name "\n"
          "                   :values [entity]\n"
          "                   :returning [:*]})))\n"
-         "  (find-by-id [this id]\n"
+         "  (find-by-id [_this id]\n"
          "    (db/execute-one! db-ctx\n"
          "      (sql/format {:select [:*]\n"
          "                   :from [:" table-name "]\n"
          "                   :where [:= :id id]})))\n"
-         "  (find-all [this opts]\n"
+         "  (find-all [_this opts]\n"
          "    (db/execute-query! db-ctx\n"
          "      (sql/format {:select [:*]\n"
          "                   :from [:" table-name "]\n"
          "                   :limit (:limit opts 20)})))\n"
-         "  (update-" entity-lower " [this entity]\n"
+         "  (update-entity [_this entity]\n"
          "    (db/execute-one! db-ctx\n"
          "      (sql/format {:update :" table-name "\n"
          "                   :set (dissoc entity :id)\n"
          "                   :where [:= :id (:id entity)]\n"
          "                   :returning [:*]})))\n"
-         "  (delete [this id]\n"
+         "  (delete [_this id]\n"
          "    (db/execute-one! db-ctx\n"
          "      (sql/format {:delete-from :" table-name "\n"
          "                   :where [:= :id id]}))))\n"
@@ -573,23 +588,30 @@ DROP TABLE IF EXISTS %s;
         entity-name (:entity-name entity)
         entity-lower (str/lower-case entity-name)
         entity-plural (template/pluralize entity-lower)]
+    ;; No :require at all. The handlers below are stubs that call nothing, so
+    ;; requiring ports here was an unused require — a clj-kondo warning, and
+    ;; `bb check` fails on warnings in the generated project (BOU-267). The
+    ;; comment says what to add back when the stubs get bodies.
     (str "(ns " base-ns "." module-name ".shell.http\n"
-         "  \"HTTP routes for " module-name " module.\"\n"
-         "  (:require [" base-ns "." module-name ".ports :as ports]))\n"
+         "  \"HTTP routes for " module-name " module.\")\n"
+         "\n"
+         ";; The handlers below are stubs that return canned responses. When you\n"
+         ";; wire them to the service, add to the ns form above:\n"
+         ";;   (:require [" base-ns "." module-name ".ports :as ports])\n"
          "\n"
          ";; =============================================================================\n"
          ";; Legacy Reitit Routes\n"
          ";; =============================================================================\n"
          "\n"
-         "(defn api-routes [service]\n"
-         "  [[\"/api/" entity-plural "\" {:get {:handler (fn [req] {:status 200 :body []})}\n"
-         "                          :post {:handler (fn [req] {:status 201 :body {}})}}]\n"
-         "   [\"/api/" entity-plural "/:id\" {:get {:handler (fn [req] {:status 200 :body {}})}\n"
-         "                                :put {:handler (fn [req] {:status 200 :body {}})}\n"
-         "                                :delete {:handler (fn [req] {:status 204})}}]])\n"
+         "(defn api-routes [_service]\n"
+         "  [[\"/api/" entity-plural "\" {:get {:handler (fn [_req] {:status 200 :body []})}\n"
+         "                          :post {:handler (fn [_req] {:status 201 :body {}})}}]\n"
+         "   [\"/api/" entity-plural "/:id\" {:get {:handler (fn [_req] {:status 200 :body {}})}\n"
+         "                                :put {:handler (fn [_req] {:status 200 :body {}})}\n"
+         "                                :delete {:handler (fn [_req] {:status 204})}}]])\n"
          "\n"
-         "(defn web-routes [service config]\n"
-         "  [[\"/web/" entity-plural "\" {:get {:handler (fn [req] {:status 200 :body \"<html><body>Web UI</body></html>\"})}}]])\n"
+         "(defn web-routes [_service _config]\n"
+         "  [[\"/web/" entity-plural "\" {:get {:handler (fn [_req] {:status 200 :body \"<html><body>Web UI</body></html>\"})}}]])\n"
          "\n"
          "(defn routes [service config]\n"
          "  (vec (concat (api-routes service) (web-routes service config))))\n"
@@ -606,14 +628,14 @@ DROP TABLE IF EXISTS %s;
          "     \n"
          "   Returns:\n"
          "     Vector of normalized route maps\"\n"
-         "  [service]\n"
+         "  [_service]\n"
          "  [{:path \"/" entity-plural "\"\n"
-         "    :methods {:get {:handler (fn [req] {:status 200 :body []})}\n"
-         "              :post {:handler (fn [req] {:status 201 :body {}})}}}\n"
+         "    :methods {:get {:handler (fn [_req] {:status 200 :body []})}\n"
+         "              :post {:handler (fn [_req] {:status 201 :body {}})}}}\n"
          "   {:path \"/" entity-plural "/:id\"\n"
-         "    :methods {:get {:handler (fn [req] {:status 200 :body {}})}\n"
-         "              :put {:handler (fn [req] {:status 200 :body {}})}\n"
-         "              :delete {:handler (fn [req] {:status 204})}}}])\n"
+         "    :methods {:get {:handler (fn [_req] {:status 200 :body {}})}\n"
+         "              :put {:handler (fn [_req] {:status 200 :body {}})}\n"
+         "              :delete {:handler (fn [_req] {:status 204})}}}])\n"
          "\n"
          "(defn normalized-web-routes\n"
          "  \"Define web UI routes in normalized format (WITHOUT /web prefix).\n"
@@ -627,9 +649,9 @@ DROP TABLE IF EXISTS %s;
          "     \n"
          "   Returns:\n"
          "     Vector of normalized route maps\"\n"
-         "  [service config]\n"
+         "  [_service _config]\n"
          "  [{:path \"/" entity-plural "\"\n"
-         "    :methods {:get {:handler (fn [req] {:status 200 :body \"<html><body>Web UI</body></html>\"})}}}])\n"
+         "    :methods {:get {:handler (fn [_req] {:status 200 :body \"<html><body>Web UI</body></html>\"})}}}])\n"
          "\n"
          "(defn " module-name "-routes-normalized\n"
          "  \"Define " module-name " module routes in normalized format for top-level composition.\n"
@@ -677,8 +699,8 @@ DROP TABLE IF EXISTS %s;
          "  (:require [" base-ns "." module-name ".core.ui :as ui]\n"
          "            [" base-ns "." module-name ".ports :as ports]))\n"
          "\n"
-         "(defn " entity-lower "-list-handler [service config]\n"
-         "  (fn [request]\n"
+         "(defn " entity-lower "-list-handler [service _config]\n"
+         "  (fn [_request]\n"
          "    (let [items (ports/list-" entity-plural " service {})]\n"
          "      {:status 200\n"
          "       :headers {\"Content-Type\" \"text/html\"}\n"
@@ -749,8 +771,16 @@ DROP TABLE IF EXISTS %s;
          ;; ^:unit — the repository is a reify'd stub, so no database is touched.
          "(deftest ^:unit create-" entity-lower "-test\n"
          "  (testing \"creates " entity-lower " via service\"\n"
+         ;; Every method, not just create: reify'ing a protocol partially is a
+         ;; clj-kondo warning, and `bb check` fails on warnings in the generated
+         ;; project. It also makes the stub usable as you add tests, instead of
+         ;; blowing up the first time one calls find-all (BOU-267).
          "    (let [mock-repo (reify ports/I" entity-name "Repository\n"
-         "                      (create [_ entity] entity))\n"
+         "                      (create [_ entity] entity)\n"
+         "                      (find-by-id [_ _id] nil)\n"
+         "                      (find-all [_ _opts] [])\n"
+         "                      (update-entity [_ entity] entity)\n"
+         "                      (delete [_ _id] nil))\n"
          "          svc (service/create-service mock-repo)\n"
          "          result (ports/create-" entity-lower " svc {:name \"Test\"})]\n"
          "      (is (some? result)))))\n")))
