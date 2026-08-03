@@ -55,6 +55,19 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Scaffolded modules now pass `bb check`** (BOU-267). Generated source
+  produced 36 clj-kondo warnings, and clj-kondo exits non-zero on warnings, so
+  `bb check` failed the moment a user scaffolded their first module. Two of
+  those were real defects rather than lint noise: `update-<entity>` was
+  declared in *both* the repository and service protocols in one namespace, so
+  the second silently overwrote the first and `ports/update-<entity>` carried
+  the wrong arity; and the generated service called `.list-<plural>` on its
+  repository, which only declares `find-all`, so listing failed at runtime. The
+  repository method is now `update-entity`, the service calls `find-all`, and
+  the remaining warnings — unused `this`/`req`/`config` bindings, an unused
+  require, a partially-reified protocol — are gone. `bb check` on a freshly
+  scaffolded module is 9/9.
+
 - **`wagoe new` into a directory you cannot write surfaced a stack trace**
   instead of a permissions message (BOU-232). The pre-flight directory check
   cannot catch it — the target does not exist yet, so the failure comes out of
