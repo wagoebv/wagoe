@@ -1,6 +1,7 @@
 (ns wagoe.cli.new-test
   (:require [clojure.test :refer [deftest is testing]]
             [clojure.java.io :as io]
+            [clojure.edn :as edn]
             [clojure.string :as str]
             [wagoe.cli.new :as new]))
 
@@ -129,6 +130,25 @@
           (is (str/includes? content "\"-M:mcp\""))
           (is (str/includes? content "\"wagoe\""))
           (is (not (str/includes? content "{{")))))
+
+      ;; BOU-266: the :user-cli alias used
+      ;;   ["-e" "(require ...) (System/exit (e/run-cli! (vec *command-line-args*)))"]
+      ;; so `clojure -M:user-cli create --email ...` became
+      ;;   clojure.main -e "<expr>" create --email ...
+      ;; clojure.main treats the first non-option argument as a script path and
+      ;; binds *command-line-args* to what follows, so `create` was swallowed and
+      ;; run-cli! got a vector starting with --email, which it rejected as an
+      ;; unknown global option. `bb create-admin` could not create a user at all.
+      ;; -m passes arguments to -main intact.
+      (testing "the :user-cli alias uses -m, so the verb reaches the CLI"
+        ;; Read the EDN rather than grep the text: the first version of this
+        ;; assertion searched the alias slice for "*command-line-args*" and
+        ;; tripped over the explanatory comment sitting above the alias.
+        (let [deps      (edn/read-string (slurp (io/file tmp "deps.edn")))
+              main-opts (get-in deps [:aliases :user-cli :main-opts])]
+          (is (= ["-m" "wagoe.user.shell.cli-entry"] main-opts)
+              ":user-cli must invoke -main via -m; with -e, clojure.main takes the
+               first non-option argument as a script path and the verb is lost")))
 
       (testing "deps.edn has an :mcp alias with a resolved version"
         (let [content (slurp (io/file tmp "deps.edn"))]

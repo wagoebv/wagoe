@@ -18,6 +18,11 @@
             [wagoe.observability.errors.shell.adapters.no-op :as no-op-error-reporting]
             [clojure.tools.logging :as log]))
 
+(def ^:dynamic *exit!*
+  "Terminates the process with `code`. Indirection so tests can observe the exit
+   code -main asks for instead of killing the test JVM."
+  (fn [code] (System/exit code)))
+
 (defn run-cli!
   "Run the user module CLI for the given command-line arguments.
 
@@ -88,3 +93,15 @@
           (println "Fatal error:" (.getMessage e)))
         (reset! exit-status 1)))
     @exit-status))
+
+(defn -main
+  "CLI main entry point for the user module. Exits with the returned status.
+
+   Invoked via `-m` (the :user-cli alias), NOT via `-e` with
+   *command-line-args*. With -e, clojure.main treats the first non-option
+   argument as a script path and binds *command-line-args* to what follows, so
+   the verb — `create` in `bb create-admin` — was silently dropped and the CLI
+   rejected the next argument as an unknown global option (BOU-266). -m passes
+   arguments to -main intact."
+  [& args]
+  (*exit!* (run-cli! (vec args))))
