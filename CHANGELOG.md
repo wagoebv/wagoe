@@ -44,8 +44,25 @@ for what is public API, what is internal, and how deprecations are announced.
   making the removed command look available to anything probing for it.
   Supersedes ADR-002.
 
+### Added
+
+- **Nightly first-run matrix** (BOU-232). The broad first-run coverage —
+  Ubuntu, Fedora and Arch for the install-to-serving-app path, plus the
+  adversarial cases on Ubuntu and Fedora — now runs on a schedule and on
+  demand, rather than only when someone remembers. The fast single-image smoke
+  test stays on every push. `workflow_dispatch` makes the same matrix the
+  pre-release gate.
+
 ### Fixed
 
+- **`wagoe new` into a directory you cannot write surfaced a stack trace**
+  instead of a permissions message (BOU-232). The pre-flight directory check
+  cannot catch it — the target does not exist yet, so the failure comes out of
+  `clojure.java.io/writer` partway through generating. Found by the adversarial
+  suite's read-only case, which had never actually run: it skipped whenever the
+  container was root, because `chmod` does not restrict uid 0. It now uses a
+  read-only bind mount, which the kernel enforces for every uid, so the whole
+  suite runs with nothing skipped for the first time.
 - **`bb check` reported failures a user could not act on** (BOU-264). It runs
   each check as a subprocess (`bb check:fcis`, …), but five of them only mean
   something in the Wagoe repository — `doc-counts` and `poms` compare against

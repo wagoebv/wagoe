@@ -28,6 +28,14 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PLATFORM_ARG=()
 [ -n "${ADV_PLATFORM:-}" ] && PLATFORM_ARG=(--platform "$ADV_PLATFORM")
 
+# An empty directory bind-mounted read-only, for case 6. A read-only *mount* is
+# enforced by the kernel for every uid, unlike permission bits, which root
+# ignores — so this is what lets that case actually run in a container whose
+# processes are root. Before this it always SKIPped, which meant the case had
+# never run anywhere.
+RO_DIR="$(mktemp -d)"
+trap 'rmdir "$RO_DIR" 2>/dev/null || true' EXIT
+
 echo "── First-run adversarial cases"
 echo "   image: $IMAGE${ADV_PLATFORM:+  (platform: $ADV_PLATFORM)}"
 echo "   repo:  $REPO_ROOT"
@@ -36,6 +44,7 @@ echo
 docker run --rm \
   ${PLATFORM_ARG[@]+"${PLATFORM_ARG[@]}"} \
   -v "$REPO_ROOT:/repo:ro" \
+  -v "$RO_DIR:/ro:ro" \
   -e REPO=/repo \
   "$IMAGE" bash -euo pipefail -c '
 FAILED=0
@@ -271,16 +280,25 @@ fi  # /root/alpha exists
 # Generating into a directory you cannot write is a permissions message, not a
 # stack trace.
 head_ "[6] wagoe new into a read-only directory"
-# Root ignores the permission bits, so `chmod 500` restricts nothing here and
-# the generator happily succeeds. The first version of this case reported that
-# success as a product FAIL ("unclear outcome") when the truth is the case never
-# ran. Skipping loudly beats a fabricated verdict in either direction.
-if [ "$(id -u)" -eq 0 ]; then
-  echo "  SKIP — running as root (uid 0): chmod cannot make a directory unwritable."
-  echo "         Covering this needs the suite run as a non-root user, or a"
-  echo "         read-only mount. Not exercised, not passed."
-  SKIPPED=$((SKIPPED+1))
-else
+# Root ignores permission bits, so `chmod 500` restricts nothing when the
+# container runs as uid 0 — the generator happily succeeded and this case used
+# to SKIP, meaning it had never run anywhere. A read-only bind mount is enforced
+# by the kernel for every uid, so /ro (mounted -v ...:ro by the host side of
+# this script) is genuinely unwritable and the case can run as root.
+#
+# The chmod path is kept for a non-root run, where it is the more faithful
+# reproduction of what a user hits.
+if [ -d /ro ]; then
+  cd /ro
+  OUT="$(new_project blocked || true)"
+  if grep -qiE "permission|read-only|cannot (write|create)|not writable" <<<"$OUT"; then
+    ok "reports a permissions problem on a read-only mount"
+  elif grep -qiE "Exception|at clojure\.|java\.io" <<<"$OUT"; then
+    fail "surfaces a raw stack trace instead of a permissions message"
+  else
+    fail "unclear outcome. Got: $(tail -3 <<<"$OUT")"
+  fi
+elif [ "$(id -u)" -ne 0 ]; then
   mkdir -p ~/ro && chmod 500 ~/ro
   cd ~/ro
   OUT="$(new_project blocked || true)"
@@ -292,6 +310,10 @@ else
     fail "unclear outcome. Got: $(tail -3 <<<"$OUT")"
   fi
   chmod 700 ~/ro
+else
+  echo "  SKIP — running as root with no read-only mount available."
+  echo "         Not exercised, not passed."
+  SKIPPED=$((SKIPPED+1))
 fi
 
 # ── 7. the PATH line lands where the user9s shell reads it ──────────────────

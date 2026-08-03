@@ -155,7 +155,22 @@
         :empty-exists nil
         :ok nil)
       (println (str "Creating " project-name "/..."))
-      (generate! dir project-name {})
+      ;; A directory the user cannot write to is a permissions problem, not a
+      ;; stack trace. check-directory above cannot catch it: the target does not
+      ;; exist yet, so the failure surfaces from clojure.java.io/writer partway
+      ;; through generate!. Found by the read-only case in
+      ;; scripts/first-run-adversarial.sh, which could only run once that case
+      ;; stopped skipping (BOU-232).
+      (try
+        (generate! dir project-name {})
+        (catch java.io.IOException e
+          (println)
+          (println (str "Error: cannot write to " dir))
+          (println (str "  " (.getMessage e)))
+          (println)
+          (println "The directory is not writable. Pick a location you own, or")
+          (println "check the permissions on the parent directory.")
+          (System/exit 1)))
       (cond
         skip-git?     nil
         pre-existing? (println (str "  ⚠ Skipped git init: " project-name
