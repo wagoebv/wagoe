@@ -38,7 +38,11 @@ for what is public API, what is internal, and how deprecations are announced.
   CLI's 20, with no `com.wagoe` dependencies, no `main.clj`/`system.clj`, no
   `build.clj`, no `tests.edn` and no `.env`, so the result could not boot, test
   or build. Both commands now print the replacement (`wagoe new my-app`) rather
-  than failing as an unknown command. Supersedes ADR-002.
+  than failing as an unknown command, and both exit non-zero so a script that
+  still calls them cannot read the redirect as a generated project — including
+  `--help`, which the scaffolder CLI briefly answered with root help and exit 0,
+  making the removed command look available to anything probing for it.
+  Supersedes ADR-002.
 
 ### Fixed
 

@@ -19,6 +19,15 @@
             [babashka.process :refer [shell]]))
 
 ;; =============================================================================
+;; Process exit
+;; =============================================================================
+
+(def ^:dynamic *exit!*
+  "Terminates the process with `code`. Indirection so tests can observe the exit
+   code of a command instead of killing the test JVM."
+  (fn [code] (System/exit code)))
+
+;; =============================================================================
 ;; Validation helpers
 ;; =============================================================================
 
@@ -154,7 +163,7 @@
       (apply shell (concat base-cmd args)))
     (catch Exception e
       (println (red (str "Scaffolder exited with error: " (.getMessage e))))
-      (System/exit 1))))
+      (*exit!* 1))))
 
 ;; =============================================================================
 ;; Summary display
@@ -423,7 +432,7 @@
       (shell "clojure" "-M" "-m" "wagoe.ai.shell.cli-entry" "scaffold-ai" description))
     (catch Exception e
       (println (red (str "AI scaffolder exited with error: " (.getMessage e))))
-      (System/exit 1))))
+      (*exit!* 1))))
 
 ;; =============================================================================
 ;; Help text
@@ -476,8 +485,12 @@
         (wizard-generate))
 
       ;; Redirects with or without args — BOU-259 removed the generator behind it.
+      ;; `bb scaffold new --name x` used to be a non-interactive passthrough that
+      ;; generated a project, so a script can still be invoking it; exit non-zero
+      ;; (like the scaffolder CLI does) rather than let silence read as success.
       (= sub "new")
-      (print-new-removed)
+      (do (print-new-removed)
+          (*exit!* 1))
 
       (= sub "field")
       (if (seq rest-args)
