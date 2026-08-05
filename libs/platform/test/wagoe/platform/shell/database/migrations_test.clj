@@ -3,7 +3,9 @@
             [wagoe.platform.shell.adapters.database.config :as db-config]
             [clojure.java.io :as io]
             [clojure.test :refer [deftest is testing]]
-            [migratus.core :as migratus]))
+            [migratus.core :as migratus]
+            [migratus.utils :as migratus-utils]
+            [migratus.protocols]))
 
 (defn- with-temp-dir [f]
   (let [dir (.toFile (java.nio.file.Files/createTempDirectory "wagoe-migrations-test"
@@ -140,10 +142,15 @@
                 :pending ["20260325010101-example"]
                 :total-pending 1}
                (migrations/migration-status)))
+        ;; resource-dir-wins? is pinned false: this repository keeps its
+        ;; migrations under resources/, so without it :directory reports that
+        ;; instead — correctly, but it would make this assertion depend on the
+        ;; layout of whatever tree the suite happens to run in.
         (is (= {:success true
                 :message "Created migration files for: add-users"
                 :directory "migrations/"}
-               (migrations/create-migration "add-users")))
+               (with-redefs [migrations/resolved-migration-dir (fn [& _] (io/file migrations/project-migration-dir))]
+                 (migrations/create-migration "add-users"))))
         (is (nil? (migrations/reset)))
         (is (nil? (migrations/init)))
         ;; Every read operation gets the discovered config verbatim. `create` is
@@ -289,3 +296,317 @@
     (is (= migrations/project-migration-dir
            (:migration-dir (migrations/create-config
                             {:migration-dir ["some/library/migrations/" "migrations/"]}))))))
+
+;; BOU-274: migrations in two directories, only one of them read.
+;;
+;; `:migration-dir` is a name, not a path, and both reading and creating resolve
+;; it through the classpath first, where `resources/` is a root. So whenever
+;; `resources/migrations` exists it captures the name, and anything under
+;; `migrations/` goes nowhere — measured in a generated project, `migrate up`
+;; exited 0, `status` reported no pending migrations, and the table was never
+;; created.
+;;
+;; Existence is the trigger, not contents. An earlier version of this fix keyed
+;; on SQL files and an empty `resources/migrations` walked straight through it,
+;; still shadowing a populated `migrations/`. The same empty directory also
+;; captured `bb migrate create`, which wrote there while printing "Migration
+;; files created in: migrations/".
+;;
+;; Nothing failed, so no test could have caught this by asserting on a return
+;; value. These assert the two halves of the fix instead: creation refuses to
+;; add to a split, and a split that already exists stops the run.
+
+(defn- touch-migration! [dir filename]
+  (.mkdirs (io/file dir))
+  (spit (io/file dir filename) "SELECT 1;"))
+
+(deftest ^:unit shadowed-migration-dirs-detects-the-split
+  ;; The second argument is what migratus resolved the name to, not a directory
+  ;; to go looking in. Earlier versions of this guard took a candidate path and
+  ;; decided for themselves whether it won, and were wrong three times: on an
+  ;; empty directory, on nested files, and on a jar.
+  (testing "a directory that is not the project one captures everything"
+    (with-temp-dir
+      (fn [root]
+        (let [project  (io/file root "migrations")
+              resource (io/file root "resources/migrations")]
+          (touch-migration! project "20260101000000-in-project.up.sql")
+          (touch-migration! resource "20260202000000-in-resources.up.sql")
+          (let [conflict (migrations/shadowed-migration-dirs project resource)]
+            (is (some? conflict))
+            (is (= ["20260101000000-in-project.up.sql"] (:root conflict)))
+            (is (= ["20260202000000-in-resources.up.sql"] (:resources conflict))
+                "naming what won lets the user see which set is live")
+            (is (re-find #"resources" (:read-from conflict))))))))
+
+  (testing "resolving to the project directory is the safe case"
+    (with-temp-dir
+      (fn [root]
+        (let [project (io/file root "migrations")]
+          (touch-migration! project "20260101000000-in-project.up.sql")
+          (is (nil? (migrations/shadowed-migration-dirs project project))
+              "the directory being read is the one holding the migrations")))))
+
+  (testing "resolving to nothing is the safe case"
+    ;; find-migration-dir returns nil when no candidate exists at all.
+    (with-temp-dir
+      (fn [root]
+        (let [project (io/file root "migrations")]
+          (touch-migration! project "20260101000000-in-project.up.sql")
+          (is (nil? (migrations/shadowed-migration-dirs project nil)))))))
+
+  (testing "an EMPTY winning directory still shadows the project directory"
+    ;; The case a content-based check missed. Measured end to end: with this
+    ;; layout `migrate up` exited 0 and the project migration's table was never
+    ;; created, because the empty directory is what the name resolves to.
+    (with-temp-dir
+      (fn [root]
+        (let [project  (io/file root "migrations")
+              resource (io/file root "resources/migrations")]
+          (touch-migration! project "20260101000000-in-project.up.sql")
+          (.mkdirs resource)
+          (let [conflict (migrations/shadowed-migration-dirs project resource)]
+            (is (some? conflict)
+                "an empty directory captures the name just as a full one does")
+            (is (= ["20260101000000-in-project.up.sql"] (:root conflict)))
+            (is (= [] (:resources conflict))
+                "nothing to list on the winning side, which is the whole problem"))))))
+
+  (testing "a jar on the classpath shadows the project directory"
+    ;; Measured: with a jar containing migrations/ on the classpath and no
+    ;; resources/migrations on disk, migratus/find-migration-dir returned the
+    ;; JarFile — so an on-disk migrations/ was skipped while a check that looked
+    ;; only for a resources/migrations directory saw nothing wrong. This is the
+    ;; uberjar case: the code is packaged, the migrations directory is not.
+    (with-temp-dir
+      (fn [root]
+        (let [project (io/file root "migrations")
+              jar     (io/file root "app.jar")]
+          (touch-migration! project "20260101000000-in-project.up.sql")
+          (with-open [out (java.util.jar.JarOutputStream.
+                           (io/output-stream jar))]
+            (.putNextEntry out (java.util.jar.JarEntry. "migrations/"))
+            (.closeEntry out))
+          (with-open [jf (java.util.jar.JarFile. jar)]
+            (let [conflict (migrations/shadowed-migration-dirs project jf)]
+              (is (some? conflict) "a jar captures the name like any other source")
+              (is (= ["20260101000000-in-project.up.sql"] (:root conflict)))
+              (is (re-find #"app\.jar" (:read-from conflict))
+                  "the user cannot act on this without being told it is the jar")
+              (is (nil? (:resources conflict))
+                  "there is no directory to list files from")))))))
+
+  (testing "nested SQL under migrations/ is shadowed too, and reported by path"
+    ;; migratus reads migration directories with file-seq, so a migration in a
+    ;; subdirectory is applied like any other — measured: migrations/tenant/…
+    ;; created its table with no resources/ present, and silently did not with
+    ;; an empty resources/migrations there. A .listFiles version of this guard
+    ;; returned nil for exactly that layout.
+    (with-temp-dir
+      (fn [root]
+        (let [project  (io/file root "migrations")
+              resource (io/file root "resources/migrations")
+              nested   (io/file project "tenant" "v2")]
+          (.mkdirs nested)
+          (spit (io/file nested "20260101000000-nested.up.sql") "SELECT 1;")
+          (.mkdirs resource)
+          (let [conflict (migrations/shadowed-migration-dirs project resource)]
+            (is (some? conflict) "a nested migration is still a migration")
+            (is (= [(str "tenant" java.io.File/separator "v2"
+                         java.io.File/separator "20260101000000-nested.up.sql")]
+                   (:root conflict))
+                "reported by path — the bare filename would not locate it"))))))
+
+  (testing "EDN migrations are shadowed like SQL ones"
+    ;; migratus reads both: proto/get-all-supported-extensions returns
+    ;; ["sql" "edn"]. A hardcoded ".sql" filter found no files here, so the
+    ;; guard stayed silent and the EDN migration was skipped anyway — the exact
+    ;; failure this check exists to stop, in the one file type it did not cover.
+    (with-temp-dir
+      (fn [root]
+        (let [project  (io/file root "migrations")
+              resource (io/file root "resources/migrations")]
+          (touch-migration! project "20260101000000-in-project.edn")
+          (.mkdirs resource)
+          (let [conflict (migrations/shadowed-migration-dirs project resource)]
+            (is (some? conflict) "an EDN migration is a migration")
+            (is (= ["20260101000000-in-project.edn"] (:root conflict))))))))
+
+  (testing "files that only look like migrations are not reported"
+    ;; parse-name rejects these, an extension test would not. Reporting
+    ;; 'notes.sql' as a shadowed migration sends the user hunting for a problem
+    ;; that does not exist.
+    (with-temp-dir
+      (fn [root]
+        (let [project  (io/file root "migrations")
+              resource (io/file root "resources/migrations")]
+          (.mkdirs resource)
+          (.mkdirs project)
+          (doseq [n ["README.md" "notes.sql" "scratch.edn"]]
+            (spit (io/file project n) "not a migration"))
+          (is (nil? (migrations/shadowed-migration-dirs project resource))
+              "nothing here has a migration id, so nothing is being skipped")))))
+
+  (testing "the file types come from migratus, not from a list of our own"
+    ;; If migratus gains a type, this guard has to cover it without an edit
+    ;; here — the previous version silently did not.
+    (is (= #{"sql" "edn"} (set (migratus.protocols/get-all-supported-extensions)))
+        "if this changes, the guard follows automatically via parse-name")))
+
+(deftest ^:unit resolved-migration-dir-delegates-to-migratus
+  ;; Not reimplemented: find-migration-dir tries the system classloader, the
+  ;; context classloader, resources/migrations (its default-migration-parent is
+  ;; "resources/") and finally migrations/. Every version of this guard that
+  ;; picked one of those four and hardcoded it was wrong.
+  (testing "the resolver is migratus's own"
+    (is (= (migratus-utils/find-migration-dir "migrations/")
+           (migrations/resolved-migration-dir "migrations/")))))
+
+(deftest ^:unit get-migration-config-refuses-a-split
+  (testing "the conflict stops the run before any database work"
+    ;; db-config/get-active-db-config is redefined to throw: if the check ran
+    ;; after it, this test would see that exception instead, so this also pins
+    ;; the ordering.
+    (with-redefs [migrations/shadowed-migration-dirs
+                  (fn ([] {:root ["a.up.sql"] :resources ["b.up.sql"]})
+                    ([_ _] {:root ["a.up.sql"] :resources ["b.up.sql"]}))
+                  db-config/get-active-db-config
+                  (fn [] (throw (ex-info "should not be reached" {})))]
+      (let [ex (is (thrown? clojure.lang.ExceptionInfo
+                            (migrations/get-migration-config)))]
+        (is (= :migration-dir-conflict (:type (ex-data ex))))
+        (is (re-find #"never read" (ex-message ex))
+            "the message has to say what went wrong, since nothing else will")
+        (is (re-find #"a\.up\.sql" (ex-message ex))
+            "and name the files, so the user can act on it")
+        (is (not= "Migration configuration failed" (ex-message ex))
+            "the generic wrapper would demote the message into ex-data")))))
+
+(deftest ^:unit conflicts-survive-the-operation-error-wrappers
+  (testing "migrate reports the conflict rather than 'Migration failed'"
+    ;; The operation handlers log a stack trace and rewrap their cause. Applied
+    ;; to this error that reproduces the original complaint: the user is told
+    ;; something failed but not that their migrations are in two places.
+    (with-redefs [migrations/get-migration-config
+                  (fn [] (throw (ex-info "Migrations exist in two directories, and only one is read."
+                                         {:type :migration-dir-conflict})))]
+      (doseq [[label op] [["migrate"  migrations/migrate]
+                          ["rollback" migrations/rollback]]]
+        (let [ex (is (thrown? clojure.lang.ExceptionInfo (op)) label)]
+          (is (= :migration-dir-conflict (:type (ex-data ex)))
+              (str label ": the conflict type must survive"))
+          (is (re-find #"two directories" (ex-message ex))
+              (str label ": and so must the message"))))))
+
+  (testing "unrelated failures are still wrapped as before"
+    ;; The passthrough must be narrow: everything else keeps the existing
+    ;; handling, which the surrounding tests already pin.
+    (with-redefs [migrations/get-migration-config
+                  (fn [] (throw (ex-info "connection refused" {:type :db-error})))]
+      (let [ex (is (thrown? clojure.lang.ExceptionInfo (migrations/migrate)))]
+        (is (= "Migration failed" (ex-message ex)))
+        (is (= "connection refused" (:error (ex-data ex))))))))
+
+(deftest ^:unit ensure-project-migration-dir-creates-the-target
+  (testing "the directory exists afterwards"
+    ;; migratus resolves the directory name against the filesystem only when it
+    ;; already exists, so creating it is what decides where `bb migrate create`
+    ;; writes. Verified end to end in a generated project: before this, the
+    ;; first migration landed in resources/ while the CLI printed "Edit the
+    ;; generated SQL files in migrations/".
+    (with-temp-dir
+      (fn [root]
+        (let [target (io/file root "migrations")]
+          (is (not (.exists target)) "precondition: a fresh project has no migrations/")
+          (migrations/ensure-project-migration-dir! target)
+          (is (.isDirectory target)
+              "migratus writes to the filesystem only when the directory exists")))))
+
+  (testing "an existing directory with migrations in it is left alone"
+    (with-temp-dir
+      (fn [root]
+        (let [target (io/file root "migrations")]
+          (touch-migration! target "20260101000000-existing.up.sql")
+          (migrations/ensure-project-migration-dir! target)
+          (is (= ["20260101000000-existing.up.sql"]
+                 (mapv #(.getName %) (.listFiles target)))
+              "creating the directory must never disturb what is in it")))))
+
+  (testing "the default is the directory the CLI tells the user to edit"
+    (is (= "migrations/" migrations/project-migration-dir))))
+
+(deftest ^:unit create-migration-reports-where-it-actually-wrote
+  ;; The reviewed version of this fix refused to create at all when
+  ;; resources/migrations existed. That would have broken this repository, which
+  ;; keeps all 12 of its migrations there with an empty migrations/ — a working
+  ;; layout, because the directory that captures the name is the one being read.
+  ;;
+  ;; Measured in a generated project with resources/migrations populated and
+  ;; migrations/ empty: create exited 0 and wrote both files to resources/, so
+  ;; no split was produced. What was wrong is that it printed "Migration files
+  ;; created in: migrations/" and told the user to edit files that were not
+  ;; there.
+  (testing "resources/migrations wins, and is what gets reported"
+    (let [calls (atom [])]
+      (with-redefs [migrations/resolved-migration-dir (fn [& _] (io/file "resources/migrations"))
+                    migrations/get-migration-config (fn [] {:migration-dir ["migrations/"]})
+                    migrations/ensure-project-migration-dir!
+                    (fn [& _] (swap! calls conj :made-dir))
+                    migratus/create (fn [& _] (swap! calls conj :created))]
+        (let [result (migrations/create-migration "add-widgets")]
+          (is (:success result))
+          (is (= "resources/migrations/" (:directory result))
+              "the CLI prints this and points the user at it")
+          (is (= [:created] @calls)
+              "no empty migrations/ beside a resources layout that already works")))))
+
+  (testing "without a resources directory the project directory is used and reported"
+    (let [calls (atom [])]
+      (with-redefs [migrations/resolved-migration-dir (fn [& _] (io/file migrations/project-migration-dir))
+                    migrations/get-migration-config (fn [] {:migration-dir ["migrations/"]})
+                    migrations/ensure-project-migration-dir!
+                    (fn [& _] (swap! calls conj :made-dir))
+                    migratus/create (fn [config n] (swap! calls conj [:created (:migration-dir config) n]))]
+        (let [result (migrations/create-migration "add-widgets")]
+          (is (= "migrations/" (:directory result)))
+          (is (= [:made-dir [:created "migrations/" "add-widgets"]] @calls)
+              "the directory must exist before migratus resolves the name to it")))))
+
+  (testing "an existing split refuses before anything is written"
+    ;; This is the case the review was aiming at. It is caught by the read
+    ;; guard, which create goes through: migratus/create throws here, so if the
+    ;; refusal did not happen first this test would report that instead.
+    (with-redefs [migrations/resolved-migration-dir (fn [& _] (io/file "resources/migrations"))
+                  migrations/shadowed-migration-dirs
+                  (fn ([] {:root ["a.up.sql"] :resources []})
+                    ([_ _] {:root ["a.up.sql"] :resources []}))
+                  migratus/create (fn [& _] (throw (ex-info "must not write" {})))]
+      (let [ex (is (thrown? clojure.lang.ExceptionInfo
+                            (migrations/create-migration "add-widgets")))]
+        (is (= :migration-dir-conflict (:type (ex-data ex)))
+            "creating must not add to a set of migrations nothing will read"))))
+
+  (testing "create-destination reports the resolved source, not a fixed string"
+    (with-temp-dir
+      (fn [root]
+        (let [resource (io/file root "resources/migrations")]
+          (is (= "migrations/" (migrations/create-destination nil))
+              "nothing resolved: the project directory is used and reported")
+          (.mkdirs resource)
+          ;; Canonical: readable-path canonicalises, and on macOS the temp
+          ;; directory is reached through a /var -> /private/var symlink.
+          (is (= (str (.getCanonicalPath resource) "/")
+                 (migrations/create-destination resource))
+              "a directory that wins is where the files actually land")))))
+
+  (testing "a jar cannot be written to, so the project directory is reported"
+    ;; migratus/create fails on its own here; what matters is that this does not
+    ;; hand the CLI a jar path to tell the user to go and edit.
+    (with-temp-dir
+      (fn [root]
+        (let [jar (io/file root "app.jar")]
+          (with-open [out (java.util.jar.JarOutputStream. (io/output-stream jar))]
+            (.putNextEntry out (java.util.jar.JarEntry. "migrations/"))
+            (.closeEntry out))
+          (with-open [jf (java.util.jar.JarFile. jar)]
+            (is (= "migrations/" (migrations/create-destination jf)))))))))

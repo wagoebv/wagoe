@@ -36,54 +36,54 @@ rollback  →  Applied 0, Pending 1
 
 ## Keep every migration in one directory
 
-Two directories can hold migrations, and **only one of them is ever read**:
+`:migration-dir` is a **name**, not a path, and it resolves to exactly one
+place. Migratus tries, in order: the system classloader, the context
+classloader, `resources/migrations` (its `default-migration-parent` is
+`"resources/"`), then `migrations/`. Only the last is the project directory —
+so a `resources/migrations` directory, or a jar carrying `migrations/`, takes
+the name instead.
 
-| Writer | Writes to |
-|---|---|
-| `bb migrate create` | `migrations/` if it exists, otherwise `resources/migrations/` |
-| `bb scaffold generate` | always `migrations/` |
+When that happens, everything in `migrations/` is skipped: not applied, not
+listed as pending, not counted. **This used to be silent** — `bb migrate up`
+exited 0, `status` showed no pending migrations, and the table simply did not
+exist (BOU-274).
 
-The code always sets `:migration-dir "migrations/"` — a single name, never a
-path. Migratus resolves that name at run time: to the filesystem directory when
-one exists, and otherwise to the classpath, where `resources/` is a root. That
-is why files appear under `resources/migrations/` in a fresh project even though
-nothing in the configuration mentions `resources`. Reading the config alone
-predicts the wrong directory; the table above is what actually happens.
-
-The same resolution has a sharper consequence. It picks **one** location, and
-the classpath wins. So when **both** exist, `resources/migrations/` is used and
-everything in the project-root `migrations/` is silently ignored. Measured:
+It is not silent any more. Every migration command now refuses:
 
 ```
-migrations/…-from-root.up.sql            CREATE TABLE from_root
-resources/migrations/…-from-resources.up.sql   CREATE TABLE from_resources
-
-$ bb migrate up          # exits 0
-$ bb migrate status
-Applied migrations: 1
-Pending migrations: 0    # two files, one applied, nothing pending
-
-$ sqlite3 app-dev.db "SELECT name FROM sqlite_master WHERE type='table'"
-from_resources
-schema_migrations        # from_root was never created
+$ bb migrate up
+❌ Migration failed: These migrations are never read:
+  migrations/20260101000000-add-widgets.down.sql
+  migrations/20260101000000-add-widgets.up.sql
+':migration-dir' is a name, not a path, and it resolved to
+'resources/migrations' (which is empty) — so everything above is skipped: not
+applied, and not reported as pending.
+Keep migrations in one place. 'migrations/' is the conventional home; if you
+keep 'resources/migrations', it must hold all of them.
 ```
 
-Note what the status line does *not* say. The root migration is not reported as
-pending, not reported as failed, and not counted anywhere — so a green
-`bb migrate up` and a clean `status` are both consistent with a table that does
-not exist.
+Exit status is 1, and `status` refuses the same way rather than reporting a
+false clean.
 
-`discover-migration-dirs` does list `migrations/`, which makes the code read as
-though both are covered. It is a single *name*, resolved once — not two paths.
+What this means in practice:
 
-The reachable version of this: run `bb migrate create` in a fresh project (which
-creates `resources/migrations/`), then scaffold a module (which writes to
-`migrations/`). The module's table is never created, every command exits 0, and
-nothing warns. That is BOU-256 again by a different route.
+- **You do not have to reason about which directory wins.** If the layout is
+  ambiguous, you are told, with the files named. If nothing complains, the
+  migrations you have are the migrations that run.
+- **`bb migrate create` reports where it actually wrote**, which is not always
+  `migrations/`. Read the path it prints; both the summary line and the
+  "Edit the generated SQL files in …" line now name the same real directory.
+- **Fix a reported conflict by moving files, not by guessing.** `migrations/`
+  is the conventional home. A `resources/migrations`-only layout also works —
+  this framework repository uses one — but it has to hold all of them.
 
-So: pick one directory and keep everything there. After anything writes a
-migration — you, the scaffolder, or `bb migrate create` — run `bb migrate
-status` and confirm it appears.
+The guard covers an empty capturing directory, migrations nested in
+subdirectories, jars on the classpath, and EDN migrations as well as SQL. It
+decides none of that itself: it asks migratus where the name resolves
+(`find-migration-dir`) and what counts as a migration (`parse-name`).
+
+After anything writes a migration — you, the scaffolder, or `bb migrate
+create` — run `bb migrate status` and confirm it appears.
 
 ## Adding a field takes three changes, not one
 
