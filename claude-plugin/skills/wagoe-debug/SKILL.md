@@ -57,14 +57,34 @@ Do not debug through the whole stack. Find the innermost layer that is wrong:
 Reload with `(reset)`. After changing a `defrecord`, `(reset)` is not enough —
 it reuses the old instances. Use `(halt)` then `(go)`.
 
-## Logs
+## Logs — check where they actually go first
+
+**A generated project ships no logback config**, so there is no log file to
+tail. Logback falls back to console, which means the stack trace is in the
+terminal running `clojure -M:run` or in the REPL — not on disk. Looking for a
+file and finding none is not evidence that nothing was logged.
 
 ```bash
-tail -100 logs/app.log | grep -A 10 "ERROR"
+find . -name "logback*.xml"     # nothing? then logs are on the console
 ```
 
-Errors are logged with stack traces. `println` goes to the REPL's stdout, not
-the log file — and should come out before committing.
+In the Wagoe framework repository itself, `resources/logback.xml` writes to:
+
+| | |
+|---|---|
+| `logs/wagoe.log` | application, including stack traces |
+| `logs/audit.log` | audit trail |
+| `logs/security.log` | security events |
+
+```bash
+tail -100 logs/wagoe.log | grep -A 10 "ERROR"
+```
+
+If a project has added its own logback config, read that file for the path
+rather than guessing.
+
+`println` goes to stdout, not to any log file — and should come out before
+committing.
 
 ## `bb ai explain`
 

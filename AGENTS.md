@@ -481,8 +481,11 @@ When encountering 500 errors or unexpected behavior:
 
 1. **Check logs first** - Errors are logged with stack traces:
    ```bash
-   tail -100 logs/app.log | grep -A 10 "ERROR"
+   tail -100 logs/wagoe.log | grep -A 10 "ERROR"
    ```
+   `resources/logback.xml` writes `logs/wagoe.log`, plus `logs/audit.log` and
+   `logs/security.log`. Generated projects ship no logback config, so their
+   logs go to the console rather than to a file.
 
 2. **Add temporary logging** - Use `println` for quick debugging:
    ```clojure

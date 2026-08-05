@@ -58,8 +58,14 @@ means it was not checked, not that it is fine.
 2. For each `✗`, read its `Fix:` line and apply it. Re-run.
 3. For each `⚠`, decide whether it is relevant to what the user is doing before
    raising it.
-4. Confirm with `bb doctor --ci` and check the exit code, so "fixed" is a
+4. Confirm with `bb doctor --all --ci` and check the exit code, so "fixed" is a
    measurement rather than an impression.
+
+   Verify the same surface you asked about. `bb doctor --ci` alone checks
+   *config only* — an agent that started from `--all`, fixed a missing tool or
+   an occupied port, and then confirmed with `bb doctor --ci` would report
+   success while the environment failure stood. `--all --ci` runs
+   `bb doctor:env --ci` too and exits non-zero if either half fails.
 
 ## Other environments
 

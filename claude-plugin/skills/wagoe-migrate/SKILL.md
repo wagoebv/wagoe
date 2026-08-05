@@ -34,13 +34,36 @@ up        →  Applied 1, Pending 0
 rollback  →  Applied 0, Pending 1
 ```
 
-## Where the files land
+## Keep every migration in one directory
 
-`bb migrate create` writes into `migrations/` when that directory exists, and
-falls back to `resources/migrations/` when it does not — both are on the
-discovery path, so both work. Scaffolded modules put theirs in `migrations/`.
-If you cannot find what you just created, look in the other one rather than
-creating it again.
+Two directories can hold migrations, and **only one of them is ever read**:
+
+| Writer | Writes to |
+|---|---|
+| `bb migrate create` | `migrations/` if it exists, otherwise `resources/migrations/` |
+| `bb scaffold generate` | always `migrations/` |
+
+Migratus resolves the name `migrations/` to a single location — the classpath
+resource wins. So when **both** exist, `resources/migrations/` is used and
+everything in the project-root `migrations/` is silently ignored. Measured:
+
+```
+migrations/20260805060000-root-one.up.sql          ← invisible
+resources/migrations/20260805060001-res-one.up.sql ← the only one seen
+
+$ bb migrate status
+Pending migrations: 1
+  ○ res-one
+```
+
+The reachable version of this: run `bb migrate create` in a fresh project (which
+creates `resources/migrations/`), then scaffold a module (which writes to
+`migrations/`). The module's table is never created, every command exits 0, and
+nothing warns. That is BOU-256 again by a different route.
+
+So: pick one directory and keep everything there. After anything writes a
+migration — you, the scaffolder, or `bb migrate create` — run `bb migrate
+status` and confirm it appears.
 
 ## Adding a field takes three changes, not one
 
