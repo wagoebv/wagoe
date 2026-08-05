@@ -55,13 +55,26 @@ the classpath wins. So when **both** exist, `resources/migrations/` is used and
 everything in the project-root `migrations/` is silently ignored. Measured:
 
 ```
-migrations/20260805060000-root-one.up.sql          ← invisible
-resources/migrations/20260805060001-res-one.up.sql ← the only one seen
+migrations/…-from-root.up.sql            CREATE TABLE from_root
+resources/migrations/…-from-resources.up.sql   CREATE TABLE from_resources
 
+$ bb migrate up          # exits 0
 $ bb migrate status
-Pending migrations: 1
-  ○ res-one
+Applied migrations: 1
+Pending migrations: 0    # two files, one applied, nothing pending
+
+$ sqlite3 app-dev.db "SELECT name FROM sqlite_master WHERE type='table'"
+from_resources
+schema_migrations        # from_root was never created
 ```
+
+Note what the status line does *not* say. The root migration is not reported as
+pending, not reported as failed, and not counted anywhere — so a green
+`bb migrate up` and a clean `status` are both consistent with a table that does
+not exist.
+
+`discover-migration-dirs` does list `migrations/`, which makes the code read as
+though both are covered. It is a single *name*, resolved once — not two paths.
 
 The reachable version of this: run `bb migrate create` in a fresh project (which
 creates `resources/migrations/`), then scaffold a module (which writes to
