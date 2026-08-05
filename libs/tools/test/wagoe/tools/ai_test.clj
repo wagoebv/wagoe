@@ -20,7 +20,11 @@
 
 (deftest ^:unit ai-deps-pins-the-published-artifact
   (testing "without an override, the injected dep names wagoe-ai at a version"
-    (let [deps (#'ai/ai-deps)]
+    ;; Explicit nil, not the zero-arity: that reads WAGOE_AI_ROOT, so this test
+    ;; failed for anyone who had set the very override this patch added. A test
+    ;; that consults the ambient environment asserts whatever the developer
+    ;; happens to have exported.
+    (let [deps (#'ai/ai-deps nil)]
       (is (str/includes? deps "com.wagoe/wagoe-ai"))
       (is (str/includes? deps ":mvn/version"))
       (is (not (str/includes? deps ":local/root"))))))
@@ -70,7 +74,7 @@
   (testing "the injected -Sdeps argument parses"
     ;; A malformed string here fails at the clojure CLI with a message about
     ;; EDN, several layers from the cause.
-    (let [parsed (read-string (#'ai/ai-deps))]
+    (let [parsed (read-string (#'ai/ai-deps nil))]
       (is (map? parsed))
       (is (contains? (:deps parsed) 'com.wagoe/wagoe-ai)))))
 
