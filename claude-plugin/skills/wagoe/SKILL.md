@@ -38,9 +38,12 @@ Field spec format: `name:type[:required][:unique]` with types
 
 1. NEVER hand-write a new module skeleton. Scaffold it first, then edit the
    generated code.
-2. After `bb scaffold generate`, run `bb scaffold integrate <module>` to wire
-   deps.edn, tests.edn, and the Integrant wiring. Then run
-   `clojure -M:migrate up` and the module's tests.
+2. After `bb scaffold generate`, run `bb scaffold integrate <module>`. It
+   writes nothing — it prints the Integrant registration you must add by hand.
+   `deps.edn` and `tests.edn` need no changes; the generated paths cover them.
+   Then run `clojure -M:migrate up` and the module's tests.
+   `bb scaffold field` likewise only writes the migration: add the field to
+   schema.clj and to both persistence transforms yourself.
 3. Run `bb check` before committing — FC/IS violations (`core/` importing
    shell, doing I/O, or logging) fail CI.
 4. AI commands (`bb scaffold ai`, `bb ai *`, `bb setup ai`) need a provider:

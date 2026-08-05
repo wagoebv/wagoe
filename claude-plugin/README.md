@@ -20,7 +20,17 @@ In Claude Code:
 
 ## What it provides
 
-Two skills, split by whether a project exists yet.
+Six skills. `wagoe` routes a request to the right command; the rest each own a
+workflow, run it, and check the result.
+
+| Skill | Use for |
+|---|---|
+| `wagoe` | Finding the right command for a request |
+| `wagoe-setup` | Nothing → a running app |
+| `wagoe-scaffold` | Adding a module, field, endpoint or adapter |
+| `wagoe-migrate` | Creating, applying and rolling back migrations |
+| `wagoe-doctor` | Config and environment preflight |
+| `wagoe-debug` | Diagnosing a failure |
 
 ### `wagoe` — working inside a project
 
@@ -38,6 +48,18 @@ the URL and working credentials.
 
 Invoke it from an empty directory. It refuses to run inside an existing Wagoe
 project and points at `bb quickstart` instead.
+
+### `wagoe-scaffold`, `wagoe-migrate`, `wagoe-doctor`, `wagoe-debug`
+
+The dev-workflow skills. Each wraps commands the `wagoe` decision table already
+names, but adds the part a lookup table cannot: what to run afterwards, how to
+tell whether it worked, and which failure modes are known.
+
+They were written by running the commands rather than reading them, which
+turned up three defects in the tooling they wrap — `bb doctor`'s exit code
+inside `bb check`, `bb migrate create` throwing, and every `bb ai` subcommand
+being unreachable in a generated project. Each skill records the behaviour that
+was actually observed, including the parts that are unhelpful.
 
 ## Keeping in sync
 
