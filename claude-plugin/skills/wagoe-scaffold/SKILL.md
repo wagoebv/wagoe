@@ -24,7 +24,22 @@ bb scaffold ai "product module with name, price, stock" --yes    # needs an AI p
 Field spec: `name:type[:required][:unique]`, types `string text integer decimal
 boolean email uuid enum date datetime json`.
 
-Add `--dry-run` to any of them to see the file list without writing.
+`--dry-run` works on `generate`, `field`, `endpoint` and `adapter` — it lists
+the files and writes none.
+
+**It does not work on `bb scaffold ai`.** That path forwards everything except
+`--yes`/`-y` to the AI CLI, whose options are only `--root`, `--yes` and
+`--help`. An unknown flag lands in the parser's `:errors`, which the command
+never reads, so `--dry-run` is silently discarded:
+
+```
+arguments: [product module with name]
+errors:    [Unknown option: "--dry-run"]      ← ignored
+```
+
+`bb scaffold ai "…" --yes --dry-run` therefore **generates files**, which is the
+opposite of what the flag suggests. To preview an AI-scaffolded module, run it
+without `--yes` and read the confirmation prompt instead.
 
 ## Run it from the project root
 

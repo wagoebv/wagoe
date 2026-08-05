@@ -43,8 +43,15 @@ Two directories can hold migrations, and **only one of them is ever read**:
 | `bb migrate create` | `migrations/` if it exists, otherwise `resources/migrations/` |
 | `bb scaffold generate` | always `migrations/` |
 
-Migratus resolves the name `migrations/` to a single location — the classpath
-resource wins. So when **both** exist, `resources/migrations/` is used and
+The code always sets `:migration-dir "migrations/"` — a single name, never a
+path. Migratus resolves that name at run time: to the filesystem directory when
+one exists, and otherwise to the classpath, where `resources/` is a root. That
+is why files appear under `resources/migrations/` in a fresh project even though
+nothing in the configuration mentions `resources`. Reading the config alone
+predicts the wrong directory; the table above is what actually happens.
+
+The same resolution has a sharper consequence. It picks **one** location, and
+the classpath wins. So when **both** exist, `resources/migrations/` is used and
 everything in the project-root `migrations/` is silently ignored. Measured:
 
 ```
