@@ -122,11 +122,16 @@ bb migrate up && bb migrate rollback && bb migrate up
 
 1. `bb migrate status` first — know the starting point.
 2. `bb migrate create <name>`, then write both `.up.sql` and `.down.sql`.
-3. `bb migrate status` — confirm it appears as **Pending**. If it does not, the
-   filename is wrong.
+3. `bb migrate status` — confirm it appears as **Pending**. If it does not,
+   there are two causes, and both are silent:
+   - the filename does not match `<id>-<name>.up.sql` / `.down.sql`
+   - the file is in the ignored directory. Check both `migrations/` and
+     `resources/migrations/`; if each holds `.sql` files, only
+     `resources/migrations/` is read and everything in the other is invisible.
 4. `bb migrate up`, then `status` again to confirm it applied.
-5. If it is a new field, make the other two changes (schema, persistence) and
-   run the module's tests.
+5. If it is a new field, make the other two changes yourself — `schema.clj` and
+   both directions of the persistence transform. `bb scaffold field` writes
+   only the migration, whatever its output says. Then run the module's tests.
 6. Exercise the rollback path once.
 
 ## What this does not cover

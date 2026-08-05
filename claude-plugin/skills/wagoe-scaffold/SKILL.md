@@ -92,8 +92,13 @@ wagoe new my-app
 2. Ask only what you cannot infer: module name, entity name, fields and types.
    Default the rest.
 3. Preview with `--dry-run` when the shape is unobvious.
-4. Generate, then `integrate`, then `migrate up`.
-5. Run `bb check --ci` and the tests; report both.
+4. Generate. Then run `integrate` and **carry out the steps it prints** — it
+   writes nothing, so the module is not registered until you edit
+   `resources/conf/dev/config.edn` (and `test`) and add the module wiring it
+   names. Then `migrate up`.
+5. Run `bb check --ci` and the tests; report both. Note that neither proves the
+   module is wired — a module missing its Integrant registration still
+   compiles, lints and passes its own tests. Confirm the config entry exists.
 6. Point at the generated files and say what to edit — business logic goes in
    `core/`, everything with side effects in `shell/`.
 
