@@ -45,14 +45,31 @@ something, because `bb check` rejects both untagged deftests and `(is true)`.
 ## After generating
 
 ```bash
-bb scaffold integrate <module>   # deps.edn, tests.edn, Integrant wiring
+bb scaffold integrate <module>   # prints the wiring steps — writes nothing
 bb migrate up                    # the generated migration
 bb check --ci                    # the gates
 clojure -M:test                  # the generated tests
 ```
 
-`integrate` is not optional — generation writes files, it does not wire them
-into the running system.
+**`integrate` is advisory. It does not modify a single file.** It reports what
+it found and prints the steps for you to carry out:
+
+```
+✓ On the classpath — src/ and test/ are already on the project paths;
+  the module's tests run with clojure -M:test (no deps.edn/tests.edn changes).
+
+Register the module's Integrant components:
+  1. Add config to resources/conf/dev/config.edn (and test)
+  2. This module has no shell/module_wiring.clj yet — add one …
+```
+
+So `deps.edn` and `tests.edn` need nothing — the generated paths already cover
+them. What *is* outstanding is the Integrant registration, and **you have to do
+it**. Running `integrate` and moving on leaves the module on disk, compiling,
+passing the gates, and never started by the application.
+
+Confirm with `git status` that you know what changed, rather than trusting the
+command name.
 
 `--ci` on `bb check` matters: without it the command reports failures and still
 exits 0, so a script or an agent reads a broken project as fine.

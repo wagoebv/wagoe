@@ -74,8 +74,28 @@ The most common migration bug is doing one third of the job. A new field needs:
 3. **Persistence transform** — `shell/persistence.clj`, both directions
 
 Miss the schema and validation rejects the field. Miss the persistence
-transform and it reads back `nil` with no error anywhere. `bb scaffold field`
-does all three; doing it by hand means doing all three by hand.
+transform and it reads back `nil` with no error anywhere.
+
+**`bb scaffold field` does not do all three.** Measured — it writes the
+migration pair and nothing else:
+
+```
+$ bb scaffold field --module-name order --entity Order --name status --type string
+  :create: migrations/…-add-status-to-orders.up.sql
+  :create: migrations/…-add-status-to-orders.down.sql
+  :update: src/wagoe/order/schema.clj        ← reported, but not written
+
+$ git status --porcelain
+?? migrations/…-add-status-to-orders.down.sql
+?? migrations/…-add-status-to-orders.up.sql
+```
+
+The schema file is untouched despite the `:update:` line, and `persistence.clj`
+is never mentioned. So after running it you still have to edit both by hand,
+and the command's own output will tell you otherwise.
+
+Check with `git status` after running it, then add the field to `schema.clj`
+and to both directions of the persistence transform yourself.
 
 Remember the case boundary: kebab-case in Clojure, snake_case only in SQL.
 `:created-at` in the entity, `created_at` in the column.
