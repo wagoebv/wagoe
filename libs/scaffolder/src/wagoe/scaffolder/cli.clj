@@ -185,27 +185,62 @@
 ;; =============================================================================
 
 (defn format-file-list
-  "Format generated files as text list."
+  "Format the touched files as a text list.
+
+   `:note` is printed where present. A bare `skip: …/schema.clj` says something
+   did not happen without saying what to do instead, which is barely better
+   than the false `update:` it replaced."
   [files]
   (str/join "\n"
-            (map (fn [{:keys [path action]}]
-                   (format "  %s: %s" action path))
+            (map (fn [{:keys [path action note]}]
+                   (if note
+                     (format "  %s: %s — %s" action path note)
+                     (format "  %s: %s" action path)))
                  files)))
 
+(def ^:private module-next-steps
+  ["Review the generated files"
+   "Add module to config: [:active :wagoe/settings :modules]"
+   "Wire module into Integrant system configuration"])
+
+(defn- numbered [steps]
+  (str/join "\n" (map-indexed #(format "  %d. %s" (inc %1) %2) steps)))
+
 (defn format-success-text
-  "Format successful generation result as text."
+  "Format a successful result as text.
+
+   The heading and the next steps come from the result, not from a constant.
+   Every command shared one block of module-generation wording, so `bb scaffold
+   field` announced \"Successfully generated module\" and then told the user to
+   register a module in Integrant — advice for a different command, printed
+   after adding a column (BOU-275)."
   [result]
-  (str "✓ Successfully generated module: " (:module-name result) "\n"
-       "\n"
-       "Generated files:\n"
-       (format-file-list (:files result))
-       "\n"
-       "\n"
-       "Next steps:\n"
-       "  1. Review the generated files\n"
-       "  2. Add module to config: [:active :wagoe/settings :modules]\n"
-       "  3. Wire module into Integrant system configuration\n"
-       "  4. Run tests: clojure -M:test --focus-meta :" (:module-name result)))
+  (let [field?   (= :field (:command result))
+        heading  (if field?
+                   (str "✓ Added field to " (:module-name result))
+                   (str "✓ Successfully generated module: " (:module-name result)))
+        steps    (or (seq (:next-steps result))
+                     ;; Fallback only. Every command that knows its own
+                     ;; namespace supplies :next-steps; this is what remains for
+                     ;; one that does not, and deliberately says nothing it
+                     ;; cannot know — the module namespace depends on --base-ns.
+                     module-next-steps)
+        warnings (seq (:warnings result))]
+    (str heading "\n"
+         "\n"
+         (if field? "Files:\n" "Generated files:\n")
+         (format-file-list (:files result))
+         "\n"
+         ;; Warnings were built by the service and then dropped on the floor
+         ;; here — including "Dry run - no files were written", which is the one
+         ;; line a dry run exists to print.
+         (when warnings
+           (str "\nWarnings:\n"
+                (str/join "\n" (map #(str "  ! " %) warnings))
+                "\n"))
+         "\n"
+         "Next steps:\n"
+         (numbered steps))))
 
 (defn format-error-text
   "Format error result as text."

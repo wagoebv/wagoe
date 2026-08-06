@@ -860,6 +860,111 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s;
             not-null
             unique-clause)))
 
+(defn schema-field-entry
+  "The Malli entry line for `field`, without indentation.
+
+   Required fields are plain; optional ones carry `{:optional true}`, matching
+   what module generation emits for the same field definition."
+  [field]
+  (let [field-ctx  (template/build-field-context field)
+        field-name (keyword (:field-name-kebab field-ctx))
+        malli-type (:malli-type field-ctx)]
+    (if (:field-required field-ctx)
+      (format "[%s %s]" field-name malli-type)
+      (format "[%s {:optional true} %s]" field-name malli-type))))
+
+(defn- def-form-range
+  "The [start end] line indices of `(def <schema-name> …)`, or nil.
+
+   `end` is the line closing the form. These defs all end with `])` on the same
+   line as their last entry, which is what `insert-schema-entry` relies on."
+  [lines schema-name]
+  (let [pattern (re-pattern (str "^\\(def " (java.util.regex.Pattern/quote schema-name) "\\b"))
+        start   (first (keep-indexed (fn [i line] (when (re-find pattern line) i)) lines))]
+    (when start
+      (when-let [end (first (keep-indexed
+                             (fn [i line] (when (and (>= i start)
+                                                     (re-find #"\]\)\s*$" line))
+                                            i))
+                             lines))]
+        [start end]))))
+
+(defn insert-schema-entry
+  "Add `entry` to the Malli map in `(def schema-name …)` within `source`.
+
+   Returns the new source, or nil when the shape is not the one this
+   understands — a hand-edited file, a renamed schema, a form that does not end
+   in `])`. Returning nil rather than guessing is deliberate: the caller reports
+   a skip, and a skip the user can see beats a mangled schema file they
+   discover later.
+
+   Also returns nil when the field is already there, so re-running is a no-op.
+
+   The closing `])` moves onto the new entry:
+
+     [:total :double]])        ->  [:total :double]
+                                   [:status {:optional true} :string]])"
+  [source schema-name entry]
+  (let [lines (str/split-lines source)]
+    (when-let [[start end] (def-form-range lines schema-name)]
+      (let [block      (subvec (vec lines) start (inc end))
+            entry-key  (second (re-find #"^\[(\S+)" entry))
+            ;; Presence is checked per block, not per file: the same field may
+            ;; legitimately appear in the entity schema and not yet in the
+            ;; request schemas.
+            present?   (some #(re-find (re-pattern (str "\\[" (java.util.regex.Pattern/quote entry-key) "[\\s\\]]"))
+                                       %)
+                             block)
+            closing    (nth lines end)
+            ;; From the last entry line, not the first: the first is `[:map …`,
+            ;; which sits one level out and produced misaligned insertions.
+            indent     (or (last (keep #(second (re-find #"^(\s+)\[:\S" %)) block)) "   ")]
+        (when (and (not present?) (str/ends-with? (str/trimr closing) "])"))
+          ;; Drop exactly the two closing characters — `]` for the map, `)` for
+          ;; the def — and re-emit them after the new entry. Anything before
+          ;; them belongs to the previous entry and must be left alone; the
+          ;; last line here is typically `[:x {:optional true} [:maybe inst?]]])`,
+          ;; where three of those four brackets are not ours to touch.
+          (let [trimmed (subs (str/trimr closing) 0 (- (count (str/trimr closing)) 2))
+                joined  (str/join "\n"
+                                  (concat (take end lines)
+                                          [trimmed (str indent entry "])")]
+                                          (drop (inc end) lines)))]
+            ;; `split-lines` discards the final newline, so rebuilding without
+            ;; this rewrote the last line of every file it touched — a spurious
+            ;; hunk at the bottom of the diff, on a line the change never
+            ;; concerned.
+            (cond-> joined
+              (str/ends-with? source "\n") (str "\n"))))))))
+
+(defn add-field-to-schema
+  "Add `field` to the entity and request schemas in `source`.
+
+   Returns {:status :updated :content <new source> :schemas [names]} when at
+   least one schema was changed, or {:status :skipped :reason …} when none were.
+
+   All three are edited because that is what the tool has always told users to
+   do — the instruction comment it printed said to add the field to the entity
+   schema \"and then to Create…Request and Update…Request as well\". Doing two
+   of the three would leave the same half-finished state the instruction warns
+   about."
+  [source entity field]
+  (let [entry   (schema-field-entry field)
+        targets [entity (str "Create" entity "Request") (str "Update" entity "Request")]
+        [content changed]
+        (reduce (fn [[src changed] schema-name]
+                  (if-let [updated (insert-schema-entry src schema-name entry)]
+                    [updated (conj changed schema-name)]
+                    [src changed]))
+                [source []]
+                targets)]
+    (if (seq changed)
+      {:status :updated :content content :schemas changed}
+      {:status :skipped
+       :reason (if (str/includes? source (str "[" (str/replace entry #"^\[(\S+).*" "$1")))
+                 :already-present
+                 :unrecognised-shape)})))
+
 (defn generate-add-field-schema-comment
   "Generate schema addition comment/instructions for adding a field.
    

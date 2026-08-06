@@ -3,7 +3,8 @@
             [clojure.string :as str]
             [wagoe.scaffolder.shell.service :as service]
             [wagoe.scaffolder.ports :as ports]
-            [clojure.java.io :as io]))
+            [clojure.java.io :as io]
+            [clojure.set]))
 
 (def test-output-dir ".test-output")
 
@@ -305,3 +306,141 @@
 
     (testing "unrelated ids do not push the timestamp forward"
       (is (= "20260801120000" (next-id #{"19990101000000" "20250101000000"} "20260801120000"))))))
+
+;; =============================================================================
+;; BOU-275: the report has to match what happened
+;; =============================================================================
+;;
+;; `bb scaffold field` listed `:update: src/…/schema.clj` and never opened the
+;; file. The entry was appended to `:files` unconditionally while the write loop
+;; only handled `:action :create`, so the report was composed independently of
+;; the work — which is how it drifted, and how it stayed wrong.
+;;
+;; Every test above passes `:dry-run true` ("Always dry-run in tests"), so
+;; nothing here ever wrote a file, and nothing ever compared the report to the
+;; filesystem. That is the gap these close: they write for real, into a temp
+;; directory, and diff the two.
+
+(defn- temp-dir []
+  (.toFile (java.nio.file.Files/createTempDirectory
+            "wagoe-scaffolder-test"
+            (make-array java.nio.file.attribute.FileAttribute 0))))
+
+(defn- delete-tree! [dir]
+  (doseq [f (reverse (file-seq dir))] (.delete f)))
+
+(defn- relative-to
+  "Path of `f` relative to `dir`.
+
+   nio relativize on canonical paths, not string arithmetic on lengths: an
+   earlier version subtracted a prefix length and produced \"own.sql\" for
+   .../add-colour-to-widgets.down.sql, because macOS reaches the temp directory
+   through a /var -> /private/var symlink and the two paths did not share the
+   prefix it assumed."
+  [dir f]
+  (str (.relativize (.toPath (io/file (.getCanonicalPath dir)))
+                    (.toPath (io/file (.getCanonicalPath f))))))
+
+(defn- files-on-disk
+  "Every file under `dir`, as paths relative to it."
+  [dir]
+  (set (for [f (file-seq dir) :when (.isFile f)] (relative-to dir f))))
+
+(defn- reported
+  "Reported paths for `action`, relative to `dir`."
+  [result dir action]
+  (set (for [e (:files result) :when (= action (:action e))]
+         (relative-to dir (io/file (:path e))))))
+
+(deftest ^:unit generated-report-matches-the-filesystem
+  (testing "every file reported as created exists, and every file created is reported"
+    (let [dir (temp-dir)]
+      (try
+        (let [svc    (service/create-scaffolder-service)
+              result (ports/generate-module
+                      svc
+                      {:module-name "widget"
+                       :entities [{:name "Widget"
+                                   :fields [{:name :label :type :string :required true}]}]
+                       :interfaces {:http true :cli true :web true}
+                       :features {:audit true :pagination true}
+                       :output-dir (.getPath dir)
+                       :dry-run false})]
+          (is (true? (:success result)))
+          (is (= (files-on-disk dir) (reported result dir :create))
+              "the report and the working tree must not be able to disagree"))
+        (finally (delete-tree! dir))))))
+
+(deftest ^:unit add-field-report-matches-the-filesystem
+  (testing "the schema file is reported as updated only when it was updated"
+    (let [dir (temp-dir)]
+      (try
+        (let [svc (service/create-scaffolder-service)
+              _   (ports/generate-module
+                   svc {:module-name "widget"
+                        :entities [{:name "Widget"
+                                    :fields [{:name :label :type :string :required true}]}]
+                        :interfaces {:http true :cli true :web true}
+                        :features {:audit true :pagination true}
+                        :output-dir (.getPath dir) :dry-run false})
+              before (files-on-disk dir)
+              result (ports/add-field
+                      svc {:module-name "widget" :entity "Widget"
+                           :field {:name :colour :type :string :required false :unique false}
+                           :output-dir (.getPath dir) :dry-run false})
+              after  (files-on-disk dir)
+              schema (first (filter #(str/ends-with? (:path %) "schema.clj") (:files result)))]
+          (is (true? (:success result)))
+          (is (= :update (:action schema))
+              "this said :update while never opening the file — the whole bug")
+          (is (= (reported result dir :create) (clojure.set/difference after before))
+              "new files on disk are exactly the ones reported as created")
+          (is (str/includes? (slurp (io/file (:path schema))) "[:colour {:optional true} :string]")
+              "and :update has to mean the field is actually in the file"))
+        (finally (delete-tree! dir))))))
+
+(deftest ^:unit add-field-dry-run-claims-nothing
+  (testing "a dry run reports no file as created or updated, and writes none"
+    (let [dir (temp-dir)]
+      (try
+        (let [svc (service/create-scaffolder-service)
+              _   (ports/generate-module
+                   svc {:module-name "widget"
+                        :entities [{:name "Widget"
+                                    :fields [{:name :label :type :string :required true}]}]
+                        :interfaces {:http true :cli true :web true}
+                        :features {:audit true :pagination true}
+                        :output-dir (.getPath dir) :dry-run false})
+              before (files-on-disk dir)
+              result (ports/add-field
+                      svc {:module-name "widget" :entity "Widget"
+                           :field {:name :colour :type :string :required false :unique false}
+                           :output-dir (.getPath dir) :dry-run true})]
+          ;; The dry-run path had the same defect one branch over: it printed
+          ;; ":create: migrations/…up.sql" for two files it deliberately did
+          ;; not write.
+          (is (empty? (filter #(#{:create :update} (:action %)) (:files result)))
+              "nothing was written, so nothing may be reported as written")
+          (is (= before (files-on-disk dir)) "a dry run must not touch the tree")
+          (is (some #(str/includes? % "Dry run") (:warnings result))))
+        (finally (delete-tree! dir))))))
+
+(deftest ^:unit output-dir-is-honoured
+  (testing "files land in --output-dir, not in the working directory"
+    ;; The CLI accepted --output-dir and passed it; the service ignored it and
+    ;; wrote into the current project instead. Measured before the fix:
+    ;; 0 files in the target directory, a full module in the cwd.
+    (let [dir (temp-dir)]
+      (try
+        (let [svc    (service/create-scaffolder-service)
+              result (ports/generate-module
+                      svc {:module-name "widget"
+                           :entities [{:name "Widget"
+                                       :fields [{:name :label :type :string :required true}]}]
+                           :interfaces {:http true :cli true :web true}
+                           :features {:audit true :pagination true}
+                           :output-dir (.getPath dir) :dry-run false})]
+          (is (seq (files-on-disk dir)) "the target directory received the module")
+          (is (every? #(str/starts-with? (:path %) (.getPath dir)) (:files result))
+              "and the report names where they actually are"))
+        (finally (delete-tree! dir))))))

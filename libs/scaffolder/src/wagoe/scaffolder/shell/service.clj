@@ -61,6 +61,22 @@
                      (.format (java.time.LocalDateTime/now java.time.ZoneOffset/UTC)
                               (java.time.format.DateTimeFormatter/ofPattern "yyyyMMddHHmmss"))))
 
+(defn- resolve-path
+  "Where a reported path actually lands, given `output-dir`.
+
+   The CLI has always accepted `--output-dir DIR` and passed it in the request,
+   and the service ignored it: every write went to `(io/file path)`, relative to
+   the working directory. `--output-dir /tmp/x` wrote nothing to /tmp/x and a
+   full module into the current project (BOU-275, same root cause — an
+   affordance decoupled from what the code does).
+
+   \".\" and nil resolve to the plain relative path, so default behaviour and
+   every existing report are unchanged."
+  [output-dir path]
+  (if (or (str/blank? output-dir) (= "." output-dir))
+    (io/file path)
+    (io/file output-dir path)))
+
 (def ^:private module-generation-request-validator (m/validator schema/ModuleGenerationRequest))
 (def ^:private module-generation-request-explainer (m/explainer schema/ModuleGenerationRequest))
 
@@ -82,6 +98,7 @@
             entity (first (:entities ctx))
             entity-kebab (:entity-kebab entity)
             dry-run? (:dry-run request false)
+            output-dir (:output-dir request ".")
 
             ;; UTC timestamp id — see get-next-migration-number.
             migration-number (get-next-migration-number)
@@ -147,19 +164,31 @@
                     :action :create}
                    {:path (format "test/%s/%s/shell/service_test.clj" base-ns-path module-name)
                     :content service-test-content
-                    :action :create}]]
+                    :action :create}]
 
-        ;; Write files (unless dry-run)
-        (when-not dry-run?
-          (doseq [{:keys [path content]} files]
-            (let [file (io/file path)]
-              (.mkdirs (.getParentFile file))
-              (spit file content))))
-
-        ;; Return result
+            ;; Rebound to what was actually done, so the report cannot drift
+            ;; from the filesystem.
+            files (if dry-run?
+                    (mapv #(assoc % :action :skip
+                                  :note "dry run — would be created")
+                          files)
+                    (mapv (fn [{:keys [path content] :as entry}]
+                            (let [file (resolve-path output-dir path)]
+                              (.mkdirs (.getParentFile file))
+                              (spit file content)
+                              (assoc entry :action :create :path (.getPath file))))
+                          files))]
         {:success true
          :module-name module-name
          :files files
+         ;; Supplied here rather than in the CLI so the namespace follows
+         ;; --base-ns. The CLI cannot know it, and a hardcoded "wagoe." would
+         ;; be one more instruction that does not run.
+         :next-steps ["Review the generated files"
+                      "Add module to config: [:active :wagoe/settings :modules]"
+                      "Wire module into Integrant system configuration"
+                      (format "Run tests: clojure -M:test --focus %s.%s.core.%s-test"
+                              (str/replace base-ns-path "/" ".") module-name module-name)]
          :warnings (if dry-run?
                      ["Dry run - no files were written"]
                      [])})
@@ -174,15 +203,12 @@
     (try
       (let [{:keys [module-name entity field dry-run]} request
             base-ns-path (str/replace (or (:base-ns request) "wagoe") "." "/")
+            output-dir (:output-dir request ".")
             migration-number (get-next-migration-number)
 
             ;; Generate migration content
             migration-content (generators/generate-add-field-migration
                                module-name entity field migration-number)
-
-            ;; Generate schema instructions
-            schema-instructions (generators/generate-add-field-schema-comment
-                                 module-name entity field)
 
             ;; Define files
             field-name-snake (template/kebab->snake (name (:name field)))
@@ -200,27 +226,90 @@
                                   (template/pluralize (str/lower-case entity)))
                     :content (format "-- Rollback: drop %s from %s\n\nALTER TABLE %s DROP COLUMN %s;\n"
                                      field-name-snake table-name table-name field-name-snake)
-                    :action :create}
-                   {:path (format "src/%s/%s/schema.clj" base-ns-path module-name)
-                    :content schema-instructions
-                    :action :update}]]
+                    :action :create}]
+            schema-path (format "src/%s/%s/schema.clj" base-ns-path module-name)
 
-        ;; Write migration files (unless dry-run). Both up and down — writing
+            ;; Write migration files (unless dry-run). Both up and down — writing
         ;; only the first would leave an un-rollbackable migration.
-        (when-not dry-run
-          (doseq [{:keys [path content action]} files
-                  :when (= action :create)]
-            (let [file (io/file path)]
-              (.mkdirs (.getParentFile file))
-              (spit file content))))
+        ;;
+        ;; `files` is rebound to what was actually done. Reporting the planned
+        ;; action regardless is the defect this ticket is about, and a dry run
+        ;; hit it too: it printed ":create: migrations/…up.sql" for two files it
+        ;; had deliberately not written.
+        ;;
+        ;; The schema edit, and its report, are one operation. That entry used
+        ;; to be appended to `files` as `:action :update` regardless — the write
+        ;; loop skipped anything that was not `:create`, so the command reported
+        ;; a file it had never opened (BOU-275). A user who reads
+        ;; ":update: …/schema.clj" reasonably stops looking, and then ships a
+        ;; field that fails validation with the migration already applied.
+            written       (if dry-run
+                            (mapv #(assoc % :action :skip
+                                          :note "dry run — would be created")
+                                  files)
+                            (mapv (fn [{:keys [path content] :as entry}]
+                                    (let [file (resolve-path output-dir path)]
+                                      (.mkdirs (.getParentFile file))
+                                      (spit file content)
+                                      (assoc entry :action :create :path (.getPath file))))
+                                  files))
+            schema-file   (resolve-path output-dir schema-path)
+            existing      (when (.isFile schema-file) (slurp schema-file))
+            edit          (when existing
+                            (generators/add-field-to-schema existing entity field))
+            schema-entry
+            (cond
+              (nil? existing)
+              {:path (.getPath schema-file) :action :skip :manual? true
+               :note (str "not found — add " (generators/schema-field-entry field)
+                          " to the schema by hand")}
+
+              dry-run
+              {:path (.getPath schema-file) :action :skip
+               :note "dry run — would add the field to the entity and request schemas"}
+
+              (= :updated (:status edit))
+              (do (spit schema-file (:content edit))
+                  {:path (.getPath schema-file) :action :update
+                   :note (str "added " (generators/schema-field-entry field) " to "
+                              (str/join ", " (:schemas edit)))})
+
+                ;; Not :manual? — nothing is left for the user to do, so
+                ;; telling them to "finish the schema edit" would send them to
+                ;; a file that is already correct. Re-running must be a no-op
+                ;; in the output as well as on disk.
+              (= :already-present (:reason edit))
+              {:path (.getPath schema-file) :action :skip
+               :note "field is already in the schema"}
+
+              :else
+              {:path (.getPath schema-file) :action :skip :manual? true
+               :note (str "could not place the field automatically — add "
+                          (generators/schema-field-entry field) " by hand")})
+            all-files (conj (vec written) schema-entry)]
 
         {:success true
          :module-name module-name
-         :files files
-         :warnings (if dry-run
-                     ["Dry run - no files were written"
-                      "Manual schema update required - see instructions in output"]
-                     ["Manual schema update required - see instructions above"])})
+         :command :field
+         :files all-files
+           ;; Named, not implied. Adding a field needs three changes in step —
+           ;; schema, column, persistence transforms — and the third cannot be
+           ;; generated, because those transforms are hand-written per module.
+           ;; Leaving it unsaid is how a field reads back nil with no error
+           ;; anywhere (AGENTS.md pitfall 6).
+         :next-steps (cond-> [(format "Add the field to both transforms in src/%s/%s/shell/persistence.clj (entity->db and db->entity)"
+                                      base-ns-path module-name)
+                              "Run the migration: clojure -M:migrate up"
+                                ;; --focus, not --focus-meta: generated tests carry ^:unit, never a
+                                ;; per-module tag, so `--focus-meta :order` printed
+                                ;; "No tests found with metadata key :order" and ran
+                                ;; everything. Advice that does not work is the same
+                                ;; defect as a file report that is not true.
+                              (format "Run the tests: clojure -M:test --focus %s.%s.core.%s-test"
+                                      (str/replace base-ns-path "/" ".") module-name module-name)]
+                       (:manual? schema-entry)
+                       (into [(str "Finish the schema edit yourself: " (:note schema-entry))]))
+         :warnings (when dry-run ["Dry run - no files were written"])})
 
       (catch Exception e
         {:success false
