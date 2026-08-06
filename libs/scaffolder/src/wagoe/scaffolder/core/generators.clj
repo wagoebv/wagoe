@@ -4,6 +4,9 @@
    Each generator function takes a template context and returns
    file content as a string. All functions are pure and deterministic."
   (:require [clojure.string :as str]
+            [clojure.edn :as edn]
+            [rewrite-clj.zip :as z]
+            [rewrite-clj.node :as n]
             [wagoe.scaffolder.core.template :as template]))
 
 ;; BOU-259: the project generators (deps.edn, bb.edn, README, config, main,
@@ -888,33 +891,64 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s;
        (format "[%s %s]" field-name malli-type)
        (format "[%s {:optional true} %s]" field-name malli-type)))))
 
-(defn- def-form-range
-  "The [start end] line indices of `(def <schema-name> …)`, or nil.
+(defn- schema-map-zloc
+  "Zipper at the `[:map …]` vector inside `(def schema-name …)`, or nil.
 
-   `end` is the line closing the form. These defs all end with `])` on the same
-   line as their last entry, which is what `insert-schema-entry` relies on.
+   Parsed, not scanned. The line-based predecessor looked for the first line
+   ending `])` at or after the `def`, with no upper bound: a def it could not
+   recognise — one ending `]))` — handed back the *next* def's closing line, and
+   the field was written into the following schema and reported as inserted.
+   A zipper cannot leave the form it is standing in."
+  [source schema-name]
+  (try
+    (let [wanted (symbol schema-name)]
+      (loop [loc (z/of-string source {:track-position? true})]
+        (cond
+          (or (nil? loc) (z/end? loc)) nil
 
-   The search stops at the next top-level form. Without that bound it ran on
-   past a def it did not recognise — one ending `]))` rather than `])` — and
-   returned the *next* def's closing line. Measured: asked to add a field to a
-   hand-restructured `CreateItemRequest`, it wrote the entry into
-   `UpdateItemRequest` and reported `:inserted`. That put the field in the wrong
-   schema, in the required form, in the one schema that must not have it."
-  [lines schema-name]
-  (let [pattern (re-pattern (str "^\\(def " (java.util.regex.Pattern/quote schema-name) "\\b"))
-        start   (first (keep-indexed (fn [i line] (when (re-find pattern line) i)) lines))]
-    (when start
-      (let [limit (or (first (keep-indexed (fn [i line]
-                                             (when (and (> i start) (str/starts-with? line "("))
-                                               i))
-                                           lines))
-                      (count lines))]
-        (when-let [end (first (keep-indexed
-                               (fn [i line] (when (and (>= i start) (< i limit)
-                                                       (re-find #"\]\)\s*$" line))
-                                              i))
-                               lines))]
-          [start end])))))
+          (and (= :list (z/tag loc))
+               (= (quote def) (some-> loc z/down z/sexpr))
+               (= wanted (some-> loc z/down z/right z/sexpr)))
+          ;; The Malli map, which is not necessarily the third child — a
+          ;; docstring may sit between. Anything that is not a plain [:map …]
+          ;; vector (say `(m/schema [:map …])`) is left alone deliberately.
+          (loop [child (some-> loc z/down z/right z/right)]
+            (cond
+              (nil? child) nil
+              (and (= :vector (z/tag child))
+                   (= :map (first (z/sexpr child)))) child
+              :else (recur (z/right child))))
+
+          :else (recur (z/right loc)))))
+    (catch Exception _
+      ;; Unparseable source. Refusing beats guessing at it with regexes.
+      nil)))
+
+(defn- entry-key-of
+  "The keyword a Malli entry is for, e.g. `[:sku …]` -> :sku."
+  [entry]
+  (try (first (edn/read-string entry)) (catch Exception _ nil)))
+
+(defn- existing-entry
+  "The zipper of the entry for `k` inside `map-zloc`, or nil."
+  [map-zloc k]
+  (loop [child (z/down map-zloc)]
+    (cond
+      (nil? child) nil
+      (and (= :vector (z/tag child))
+           (= k (first (z/sexpr child)))) child
+      :else (recur (z/right child)))))
+
+(defn- entry-indent
+  "Column the existing entries sit at, as a count. Defaults to 3."
+  [map-zloc]
+  (or (loop [child (z/down map-zloc)]
+        (cond
+          (nil? child) nil
+          (and (= :vector (z/tag child))
+               (keyword? (first (z/sexpr child)))) (dec (second (z/position child)))
+          :else (recur (z/right child))))
+      3))
 
 (defn insert-schema-entry
   "Add `entry` to the Malli map in `(def schema-name …)` within `source`.
@@ -922,7 +956,7 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s;
    Returns one of:
 
      {:status :inserted :content <new source>}
-     {:status :present}       the field is already in this schema
+     {:status :present :entry <the entry already there>}
      {:status :unrecognised}  a shape this cannot place the field in safely
 
    The last two are kept apart rather than collapsed into one falsey value: the
@@ -930,59 +964,30 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s;
    second as the first is how the request schemas ended up without the field
    while the output said the work was finished.
 
-   :unrecognised covers a hand-edited file, a renamed schema, or a form that
-   does not end in `])`. Refusing rather than guessing is deliberate — a skip
-   the user can see beats a mangled schema file they discover later.
+   `:present` carries the entry that is already there, because its shape
+   matters — a required entry in an update request is not nothing-to-do.
 
-   The closing `])` moves onto the new entry:
+   :unrecognised covers a hand-edited file, a renamed schema, or a `def` whose
+   value is not a literal `[:map …]`. Refusing rather than guessing is
+   deliberate: a skip the user can see beats a mangled schema file they discover
+   later.
 
-     [:total :double]])        ->  [:total :double]
-                                   [:status {:optional true} :string]])"
+   Everything outside the inserted entry round-trips byte for byte, including
+   the trailing newline — rewrite-clj preserves whitespace and comments, so the
+   diff is the one line added."
   [source schema-name entry]
-  (let [lines (str/split-lines source)]
-    (if-let [[start end] (def-form-range lines schema-name)]
-      (let [block      (subvec (vec lines) start (inc end))
-            entry-key  (second (re-find #"^\[(\S+)" entry))
-            ;; Presence is checked per block, not per file: the same field may
-            ;; legitimately appear in the entity schema and not yet in the
-            ;; request schemas.
-            key-pattern (re-pattern (str "\\[" (java.util.regex.Pattern/quote entry-key) "[\\s\\]]"))
-            ;; The line carrying the field, so the caller can look at the entry
-            ;; that is already there and not only at whether one exists. A
-            ;; key-only check treated a required entry in an update request as
-            ;; nothing-to-do.
-            present-line (first (filter #(re-find key-pattern %) block))
-            closing    (nth lines end)
-            ;; From the last entry line, not the first: the first is `[:map …`,
-            ;; which sits one level out and produced misaligned insertions.
-            indent     (or (last (keep #(second (re-find #"^(\s+)\[:\S" %)) block)) "   ")]
-        (cond
-          present-line
-          {:status :present
-           :entry  (str/trim present-line)}
-
-          (not (str/ends-with? (str/trimr closing) "])"))
-          {:status :unrecognised}
-
-          :else
-          ;; Drop exactly the two closing characters — `]` for the map, `)` for
-          ;; the def — and re-emit them after the new entry. Anything before
-          ;; them belongs to the previous entry and must be left alone; the
-          ;; last line here is typically `[:x {:optional true} [:maybe inst?]]])`,
-          ;; where three of those four brackets are not ours to touch.
-          (let [trimmed (subs (str/trimr closing) 0 (- (count (str/trimr closing)) 2))
-                joined  (str/join "\n"
-                                  (concat (take end lines)
-                                          [trimmed (str indent entry "])")]
-                                          (drop (inc end) lines)))]
-            ;; `split-lines` discards the final newline, so rebuilding without
-            ;; this rewrote the last line of every file it touched — a spurious
-            ;; hunk at the bottom of the diff, on a line the change never
-            ;; concerned.
-            {:status  :inserted
-             :content (cond-> joined
-                        (str/ends-with? source "\n") (str "\n"))})))
-      {:status :unrecognised})))
+  (if-let [map-zloc (schema-map-zloc source schema-name)]
+    (let [k (entry-key-of entry)]
+      (if-let [found (and k (existing-entry map-zloc k))]
+        {:status :present :entry (z/string found)}
+        (let [indent (entry-indent map-zloc)]
+          {:status  :inserted
+           :content (-> map-zloc
+                        (z/append-child* (n/newlines 1))
+                        (z/append-child* (n/spaces indent))
+                        (z/append-child* (n/coerce (edn/read-string entry)))
+                        z/root-string)})))
+    {:status :unrecognised}))
 
 (defn add-field-to-schema
   "Add `field` to the entity and request schemas in `source`.
@@ -1025,37 +1030,50 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s;
                           (and (= schema-name update-schema)
                                found
                                (not (str/includes? found "{:optional true}"))))
-        {:keys [content changed present unreachable wrong-shape]}
+        ;; One outcome per target, in target order. This used to be four
+        ;; parallel vectors, and every caller re-derived what it needed from
+        ;; whichever of them it happened to consult — which is how a mixed
+        ;; state got half-reported. There is one thing to read now, and the
+        ;; vectors below are views of it.
+        {:keys [content outcomes]}
         (reduce (fn [acc schema-name]
-                  (let [r (insert-schema-entry (:content acc) schema-name
-                                               (entry-for schema-name))]
-                    (case (:status r)
-                      :inserted (-> acc
-                                    (assoc :content (:content r))
-                                    (update :changed conj schema-name))
-                      :present  (if (needs-optional? schema-name (:entry r))
-                                  (update acc :wrong-shape conj schema-name)
-                                  (update acc :present conj schema-name))
-                      (update acc :unreachable conj schema-name))))
-                {:content source :changed [] :present [] :unreachable [] :wrong-shape []}
-                targets)]
+                  (let [r      (insert-schema-entry (:content acc) schema-name
+                                                    (entry-for schema-name))
+                        status (case (:status r)
+                                 :inserted :inserted
+                                 :present  (if (needs-optional? schema-name (:entry r))
+                                             :needs-optional
+                                             :present)
+                                 :unreachable)]
+                    (-> acc
+                        (cond-> (= :inserted status) (assoc :content (:content r)))
+                        (update :outcomes conj (cond-> {:schema schema-name :status status}
+                                                 (:entry r) (assoc :entry (:entry r)))))))
+                {:content source :outcomes []}
+                targets)
+        of-status     (fn [st] (mapv :schema (filter #(= st (:status %)) outcomes)))
+        changed       (of-status :inserted)
+        present       (of-status :present)
+        unreachable   (of-status :unreachable)
+        wrong-shape   (of-status :needs-optional)]
     (cond
       (seq changed)
-      {:status :updated :content content :schemas changed
+      {:status :updated :content content :outcomes outcomes :schemas changed
        :unreachable unreachable :wrong-shape wrong-shape}
 
       ;; Only when every target already carries it, in a shape that works.
       ;; Anything short of that leaves the caller something to do, and has to
       ;; say so.
       (= (count present) (count targets))
-      {:status :skipped :reason :already-present :unreachable [] :wrong-shape []}
+      {:status :skipped :reason :already-present :outcomes outcomes
+       :unreachable [] :wrong-shape []}
 
       (seq wrong-shape)
-      {:status :skipped :reason :requires-optional
+      {:status :skipped :reason :requires-optional :outcomes outcomes
        :unreachable unreachable :wrong-shape wrong-shape}
 
       :else
-      {:status :skipped :reason :unrecognised-shape
+      {:status :skipped :reason :unrecognised-shape :outcomes outcomes
        :unreachable unreachable :wrong-shape wrong-shape})))
 
 (defn generate-add-field-schema-comment

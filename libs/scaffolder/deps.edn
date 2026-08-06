@@ -2,7 +2,12 @@
 
  :deps  {org.clojure/clojure   {:mvn/version "1.12.5"}
          wagoe/core         {:local/root "../core"}
-         org.clojure/tools.cli {:mvn/version "1.4.256"}}
+         org.clojure/tools.cli {:mvn/version "1.4.256"}
+         ;; Schema editing parses the file instead of matching lines. The
+         ;; line-based version wrote a field into the *next* def when it could
+         ;; not recognise the one it was asked to edit — you cannot run past the
+         ;; end of a form you are holding as a form. Brings only tools.reader.
+         rewrite-clj/rewrite-clj {:mvn/version "1.2.55"}}
 
  :aliases
  {:test      {:extra-paths ["test"]

@@ -631,3 +631,67 @@
           "unplaceable, and the user has to be told")
       (is (= ["UpdateItemRequest"] (:wrong-shape r))
           "present but required, and the user has to be told that too"))))
+
+;; =============================================================================
+;; The schema edit parses the file rather than matching lines
+;; =============================================================================
+;;
+;; The line-based inserter scanned for a closing `])` and could run past the def
+;; it was asked to edit. These pin the properties that switching to rewrite-clj
+;; makes structural rather than incidental.
+
+(deftest ^:unit schema-edits-preserve-everything-they-do-not-touch
+  (let [src (str "(ns app.item.schema)\n\n"
+                 ";; A comment above the entity.\n"
+                 "(def Item\n  \"Schema for Item entity.\"\n"
+                 "  [:map {:title \"Item\"}\n"
+                 "   ;; a comment inside the map\n"
+                 "   [:id :uuid]   ; and a trailing one\n"
+                 "   [:name :string]])\n")
+        r   (gen/insert-schema-entry src "Item" "[:sku {:optional true} :string]")]
+
+    (testing "comments survive"
+      (is (str/includes? (:content r) ";; A comment above the entity."))
+      (is (str/includes? (:content r) ";; a comment inside the map"))
+      (is (str/includes? (:content r) "; and a trailing one")))
+
+    (testing "the trailing newline survives"
+      (is (str/ends-with? (:content r) "\n")))
+
+    (testing "exactly one line is added"
+      (is (= (inc (count (str/split-lines src)))
+             (count (str/split-lines (:content r))))))
+
+    (testing "the schema gains the entry and changes in no other way"
+      ;; Semantic, not textual: the closing bracket legitimately moves onto the
+      ;; new line, so the old last line is not present verbatim and should not
+      ;; be asserted to be.
+      (let [schema-of (fn [source]
+                        (->> (read-string (str "[" source "]"))
+                             (filter #(and (seq? %) (= (quote def) (first %))))
+                             (filter #(= (quote Item) (second %)))
+                             first last))]
+        (is (= (conj (schema-of src) [:sku {:optional true} :string])
+               (schema-of (:content r))))))))
+
+(deftest ^:unit outcomes-are-one-collection
+  ;; The four parallel vectors are views over a single per-target result, so
+  ;; they cannot disagree about what happened to a schema.
+  (let [src (str "(ns app.item.schema)\n\n"
+                 "(def Item\n  [:map {:title \"Item\"}\n   [:id :uuid]])\n\n"
+                 "(def CreateItemRequest\n  \"hand-restructured\"\n  (m/schema [:map [:id :uuid]]))\n\n"
+                 "(def UpdateItemRequest\n  [:map {:title \"Update Item Request\"}\n   [:id :uuid]\n   [:sku :string]])\n")
+        r   (gen/add-field-to-schema src "Item" required-field)]
+    (testing "every target appears exactly once, in order"
+      (is (= ["Item" "CreateItemRequest" "UpdateItemRequest"]
+             (mapv :schema (:outcomes r))))
+      (is (= [:inserted :unreachable :needs-optional]
+             (mapv :status (:outcomes r)))))
+
+    (testing "the reported vectors are derived from it"
+      (is (= (mapv :schema (filter #(= :unreachable (:status %)) (:outcomes r)))
+             (:unreachable r)))
+      (is (= (mapv :schema (filter #(= :needs-optional (:status %)) (:outcomes r)))
+             (:wrong-shape r)))
+      (is (= (mapv :schema (filter #(= :inserted (:status %)) (:outcomes r)))
+             (:schemas r))))))
