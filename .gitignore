@@ -7,9 +7,18 @@ test/reports
 # Clojure cache
 .cpcache/
 .nrepl-port
-# Ignore only the clj-kondo analysis cache; keep config.edn, hooks/, imports/
-# tracked (a blanket **/.clj-kondo/ previously swallowed committed hooks).
+# clj-kondo: keep config.edn and hooks/ tracked — both are hand-written, and a
+# blanket **/.clj-kondo/ previously swallowed committed hooks.
+#
+# .cache/ and imports/ are generated and are not. imports/ holds configs kondo
+# copies out of dependency jars: it has never been tracked, it is regenerated on
+# demand, and it changes with every dependency upgrade with nobody maintaining
+# it. Measured on the full source tree, present or absent, it changes no lint
+# result — so tracking it would add churn and a permanently dirty `git status`
+# for no signal. CI never generates it either, so ignoring it is also what keeps
+# local and CI linting the same inputs.
 **/.clj-kondo/.cache/
+**/.clj-kondo/imports/
 .lsp
 
 # IDE
