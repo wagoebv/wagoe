@@ -711,3 +711,49 @@
           entry  (first (filter #(str/ends-with? (:path %) "schema.clj") (:files result)))]
       (is (= "src/wagoe/nonexistent-module/schema.clj" (:path entry)))
       (is (str/includes? (:manual-note entry) "src/wagoe/nonexistent-module/schema.clj")))))
+
+(deftest ^:unit next-steps-point-at-the-generated-project
+  ;; The migrations and the schema edit went under --output-dir while the
+  ;; persistence step named a path relative to the working directory, and the
+  ;; two commands would have run against whichever project the shell was in.
+  ;; Persistence transforms are the one part of a field change that cannot be
+  ;; generated, so sending the user to the wrong file is how the field ends up
+  ;; reading back nil with nothing reporting a problem.
+  (testing "with an output dir, every step names it"
+    (let [dir (temp-dir)]
+      (try
+        (let [svc (service/create-scaffolder-service)
+              _   (ports/generate-module
+                   svc {:module-name "item"
+                        :entities [{:name "Item"
+                                    :fields [{:name :name :type :string :required true}]}]
+                        :interfaces {:http true :cli true :web true}
+                        :features {:audit true :pagination true}
+                        :output-dir (.getPath dir) :dry-run false})
+              result (ports/add-field
+                      svc {:module-name "item" :entity "Item"
+                           :field {:name :sku :type :string :required false :unique false}
+                           :output-dir (.getPath dir) :dry-run false})
+              steps  (:next-steps result)
+              persistence (first (filter #(str/includes? % "persistence.clj") steps))]
+          (is (str/includes? persistence (.getPath dir))
+              "the file the user has to edit by hand must be the generated one")
+          ;; The step is a sentence; pull the path out of it and check something
+          ;; is actually there. A path nothing is at is no better than a wrong one.
+          (let [path (second (re-find #"transforms in (\S+)" persistence))]
+            (is (.isFile (io/file path)) (str "no file at " path)))
+          (doseq [cmd (filter #(str/includes? % "clojure -M:") steps)]
+            (is (str/includes? cmd (.getPath dir))
+                (str "command runs against the wrong project: " cmd))))
+        (finally (delete-tree! dir)))))
+
+  (testing "without one, the steps stay relative"
+    (let [svc    (service/create-scaffolder-service)
+          result (ports/add-field
+                  svc {:module-name "widget" :entity "Widget"
+                       :field {:name :sku :type :string :required false :unique false}
+                       :dry-run true})
+          steps  (:next-steps result)]
+      (is (some #(str/includes? % "src/wagoe/widget/shell/persistence.clj") steps))
+      (is (not-any? #(str/includes? % "(from ") steps)
+          "no directory suffix when there is no directory to name"))))

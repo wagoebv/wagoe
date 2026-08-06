@@ -277,6 +277,11 @@
             ;; /tmp/app/src/…/schema.clj while the instruction below said
             ;; src/…/schema.clj, sending the reader to the current project.
             schema-display (.getPath schema-file)
+            ;; Suffix for steps that are commands rather than paths: they act on
+            ;; whichever project the shell is in.
+            in-project    (fn [] (if (or (str/blank? output-dir) (= "." output-dir))
+                                   ""
+                                   (str " (from " output-dir ")")))
             existing      (when (.isFile schema-file) (slurp schema-file))
             edit          (when existing
                             (generators/add-field-to-schema existing entity field))
@@ -389,16 +394,27 @@
            ;; generated, because those transforms are hand-written per module.
            ;; Leaving it unsaid is how a field reads back nil with no error
            ;; anywhere (AGENTS.md pitfall 6).
-         :next-steps (cond-> [(format "Add the field to both transforms in src/%s/%s/shell/persistence.clj (entity->db and db->entity)"
-                                      base-ns-path module-name)
-                              "Run the migration: clojure -M:migrate up"
+         ;; Resolved like every other path in this report. The persistence
+         ;; file was named relative to the working directory while the
+         ;; migrations and the schema edit were written under --output-dir, so
+         ;; the one step the user cannot skip pointed at a different project.
+         :next-steps (cond-> [(format "Add the field to both transforms in %s (entity->db and db->entity)"
+                                      (.getPath (resolve-path
+                                                 output-dir
+                                                 (format "src/%s/%s/shell/persistence.clj"
+                                                         base-ns-path module-name))))
+                              ;; And the commands run against whatever project
+                              ;; the shell is in, which is not the generated one
+                              ;; when --output-dir points elsewhere.
+                              (str "Run the migration: clojure -M:migrate up" (in-project))
                                 ;; --focus, not --focus-meta: generated tests carry ^:unit, never a
                                 ;; per-module tag, so `--focus-meta :order` printed
                                 ;; "No tests found with metadata key :order" and ran
                                 ;; everything. Advice that does not work is the same
                                 ;; defect as a file report that is not true.
-                              (format "Run the tests: clojure -M:test --focus %s.%s.core.%s-test"
-                                      (str/replace base-ns-path "/" ".") module-name module-name)]
+                              (str (format "Run the tests: clojure -M:test --focus %s.%s.core.%s-test"
+                                           (str/replace base-ns-path "/" ".") module-name module-name)
+                                   (in-project))]
                        (:manual? schema-entry)
                        (into [(:manual-note schema-entry)]))
          :warnings (when dry-run ["Dry run - no files were written"])})
