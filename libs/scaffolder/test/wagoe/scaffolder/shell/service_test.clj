@@ -495,3 +495,70 @@
               "a preview that names the wrong directory is worse than none")
           (is (empty? (files-on-disk dir)) "and it still must not write anything"))
         (finally (delete-tree! dir))))))
+
+(deftest ^:unit dry-run-schema-note-follows-the-real-outcome
+  ;; A dedicated dry-run arm short-circuited ahead of the computed edit and
+  ;; always said it "would add the field to the entity and request schemas".
+  ;; Against a hand-restructured schema the real run then reported it could not,
+  ;; and added a manual step the preview never mentioned — a preview
+  ;; contradicting the run it previews, which is the false-success report this
+  ;; ticket exists to remove.
+  (testing "an unplaceable schema is previewed as unplaceable, not as a success"
+    (let [dir (temp-dir)]
+      (try
+        (let [svc (service/create-scaffolder-service)
+              _   (ports/generate-module
+                   svc {:module-name "box"
+                        :entities [{:name "Box"
+                                    :fields [{:name :w :type :string :required true}]}]
+                        :interfaces {:http true :cli true :web true}
+                        :features {:audit true :pagination true}
+                        :output-dir (.getPath dir) :dry-run false})
+              schema (io/file dir "src/wagoe/box/schema.clj")
+              ;; Restructure the request schemas beyond what the inserter reads.
+              _   (spit schema (str/replace (slurp schema)
+                                            #"\(def (Create|Update)BoxRequest\n[^\n]*\n  \[:map \{:title \"[^\"]+\"\}\n   \[:w :string\]\]\)"
+                                            "(def $1BoxRequest\n  \"hand-restructured\"\n  (m/schema [:map [:w :string]]))"))
+              req {:module-name "box" :entity "Box"
+                   :field {:name :h :type :string :required false :unique false}
+                   :output-dir (.getPath dir)}
+              preview (ports/add-field svc (assoc req :dry-run true))
+              real    (ports/add-field svc (assoc req :dry-run false))
+              entry-of #(first (filter (fn [f] (str/ends-with? (:path f) "schema.clj")) (:files %)))
+              p (entry-of preview)
+              r (entry-of real)]
+          (is (= (:manual? p) (:manual? r))
+              "the preview must agree with the run about whether work remains")
+          (is (= (:manual-note p) (:manual-note r))
+              "and about what that work is")
+          (is (str/includes? (:note p) "could not place")
+              "not 'would add the field to the entity and request schemas'")
+          (is (str/starts-with? (:note p) "dry run — ")
+              "while still being marked as a preview"))
+        (finally (delete-tree! dir))))))
+
+(deftest ^:unit dry-run-previews-a-successful-schema-edit-as-such
+  (testing "a healthy schema is previewed as an edit that would happen"
+    (let [dir (temp-dir)]
+      (try
+        (let [svc (service/create-scaffolder-service)
+              _   (ports/generate-module
+                   svc {:module-name "box"
+                        :entities [{:name "Box"
+                                    :fields [{:name :w :type :string :required true}]}]
+                        :interfaces {:http true :cli true :web true}
+                        :features {:audit true :pagination true}
+                        :output-dir (.getPath dir) :dry-run false})
+              before (slurp (io/file dir "src/wagoe/box/schema.clj"))
+              result (ports/add-field
+                      svc {:module-name "box" :entity "Box"
+                           :field {:name :h :type :string :required false :unique false}
+                           :output-dir (.getPath dir) :dry-run true})
+              entry  (first (filter #(str/ends-with? (:path %) "schema.clj") (:files result)))]
+          (is (= :skip (:action entry)) "a preview writes nothing")
+          (is (str/includes? (:note entry) "would add") "and says what it would do")
+          (is (str/includes? (:note entry) "CreateBoxRequest"))
+          (is (nil? (:manual? entry)) "nothing would be left over")
+          (is (= before (slurp (io/file dir "src/wagoe/box/schema.clj")))
+              "and the file is untouched"))
+        (finally (delete-tree! dir))))))

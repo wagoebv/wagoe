@@ -77,6 +77,12 @@
     :default false]
    [nil "--unique" "Field must be unique"
     :default false]
+   ;; `generate` has always offered this, and `field` writes migrations and
+   ;; edits schema.clj just as it does. Without it the service's output-dir
+   ;; support was unreachable from the command users actually run, and
+   ;; `--output-dir` failed with "Unknown option".
+   [nil "--output-dir DIR" "Output directory (default: current directory)"
+    :default "."]
    [nil "--dry-run" "Show what would be generated without creating files"
     :default false]])
 
@@ -400,6 +406,7 @@
                              :type field-type
                              :required (:required opts false)
                              :unique (:unique opts false)}
+                     :output-dir (:output-dir opts)
                      :dry-run (:dry-run opts)}
             result (ports/add-field service request)]
         (if (:success result)

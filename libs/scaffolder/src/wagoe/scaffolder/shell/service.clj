@@ -275,56 +275,62 @@
             existing      (when (.isFile schema-file) (slurp schema-file))
             edit          (when existing
                             (generators/add-field-to-schema existing entity field))
+            ;; Every arm consults `edit`, which is pure and is computed for a
+            ;; dry run too. A dedicated dry-run arm short-circuited ahead of it
+            ;; and promised "would add the field to the entity and request
+            ;; schemas" for a file the real run then refused to touch — a
+            ;; preview contradicting the run it previews, which is the
+            ;; false-success report this ticket is about.
+            entry-text    (generators/schema-field-entry field)
+            manual-in     (fn [schemas]
+                            (str "add " entry-text " to " (str/join " and " schemas)
+                                 " in " schema-path))
             schema-entry
             (cond
               (nil? existing)
               {:path (.getPath schema-file) :action :skip :manual? true
                :note "not found"
-               :manual-note (str "add " (generators/schema-field-entry field)
-                                 " to " schema-path " by hand")}
-
-              dry-run
-              {:path (.getPath schema-file) :action :skip
-               :note "dry run — would add the field to the entity and request schemas"}
+               :manual-note (str "add " entry-text " to " schema-path " by hand")}
 
               ;; A partial success is still a partial success. Editing two of
               ;; the three schemas and reporting only the two is how the Malli
               ;; set ends up unsynchronised while the output reads as done.
               (= :updated (:status edit))
-              (do (spit schema-file (:content edit))
-                  (cond-> {:path (.getPath schema-file) :action :update
-                           :note (str "added " (generators/schema-field-entry field) " to "
-                                      (str/join ", " (:schemas edit)))}
-                    (seq (:unreachable edit))
-                    (assoc :manual? true
-                           :note (str "added " (generators/schema-field-entry field) " to "
-                                      (str/join ", " (:schemas edit))
-                                      "; could not place it in "
-                                      (str/join ", " (:unreachable edit)))
-                           ;; Only the part that is left. Repeating what
-                           ;; succeeded in an instruction makes the user re-read
-                           ;; it to work out what to do.
-                           :manual-note (str "add " (generators/schema-field-entry field)
-                                             " to " (str/join " and " (:unreachable edit))
-                                             " in " schema-path))))
+              (do
+                (when-not dry-run (spit schema-file (:content edit)))
+                (cond-> {:path (.getPath schema-file)
+                         :action (if dry-run :skip :update)
+                         :note (str (when dry-run "dry run — ")
+                                    (if dry-run "would add " "added ")
+                                    entry-text " to " (str/join ", " (:schemas edit)))}
+                  (seq (:unreachable edit))
+                  (assoc :manual? true
+                         :note (str (when dry-run "dry run — ")
+                                    (if dry-run "would add " "added ")
+                                    entry-text " to " (str/join ", " (:schemas edit))
+                                    "; could not place it in "
+                                    (str/join ", " (:unreachable edit)))
+                         ;; Only the part that is left. Repeating what
+                         ;; succeeded in an instruction makes the user re-read
+                         ;; it to work out what to do.
+                         :manual-note (manual-in (:unreachable edit)))))
 
-                ;; Not :manual? — nothing is left for the user to do, so
-                ;; telling them to "finish the schema edit" would send them to
-                ;; a file that is already correct. Re-running must be a no-op
-                ;; in the output as well as on disk. This arm requires *every*
-                ;; target to already carry the field; one of them answering for
-                ;; the others is the defect above.
+              ;; Not :manual? — nothing is left for the user to do, so telling
+              ;; them to finish the schema edit would send them to a file that
+              ;; is already correct. Re-running must be a no-op in the output as
+              ;; well as on disk. This arm requires *every* target to already
+              ;; carry the field; one of them answering for the others was the
+              ;; defect above.
               (= :already-present (:reason edit))
               {:path (.getPath schema-file) :action :skip
                :note "field is already in every schema"}
 
               :else
               {:path (.getPath schema-file) :action :skip :manual? true
-               :note (str "could not place the field in "
+               :note (str (when dry-run "dry run — ")
+                          "could not place the field in "
                           (str/join ", " (:unreachable edit)))
-               :manual-note (str "add " (generators/schema-field-entry field)
-                                 " to " (str/join " and " (:unreachable edit))
-                                 " in " schema-path)})
+               :manual-note (manual-in (:unreachable edit))})
             all-files (conj (vec written) schema-entry)]
 
         {:success true
