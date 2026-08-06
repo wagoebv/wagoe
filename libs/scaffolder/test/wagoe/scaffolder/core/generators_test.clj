@@ -3,6 +3,7 @@
    Asserts that generated file content contains expected strings."
   (:require [clojure.test :refer [deftest testing is]]
             [clojure.string :as str]
+            [wagoe.scaffolder.core.template :as template]
             [wagoe.scaffolder.core.generators :as gen]))
 
 ;; =============================================================================
@@ -484,3 +485,61 @@
       (is (= :unrecognised
              (:status (gen/insert-schema-entry generated-schema "NoSuchSchema" entry)))
           "cannot be done — which is not the same as nothing to do"))))
+
+;; =============================================================================
+;; BOU-275: update requests are partials
+;; =============================================================================
+;;
+;; A required field belongs in the entity and create schemas. In
+;; Update<Entity>Request it means every caller doing a partial update must now
+;; send the new field or fail validation — for a field that did not exist a
+;; moment ago. libs/scaffolder/AGENTS.md documents update requests as marking
+;; every field optional.
+;;
+;; Both commands got this wrong the same way: module generation interpolated one
+;; field list into all three schemas, and `add-field` applied one entry to all
+;; three targets.
+
+(def ^:private required-field {:name :sku :type :string :required true})
+
+(deftest ^:unit required-fields-stay-optional-in-update-requests
+  (testing "add-field: required in the entity and create schemas, optional in update"
+    (let [r   (gen/add-field-to-schema generated-schema "Widget" required-field)
+          out (:content r)
+          entry-in (fn [schema-name]
+                     (let [block (re-find (re-pattern (str "(?s)\\(def " schema-name "\\n.*?\\]\\)")) out)]
+                       ;; Non-greedy: a greedy match ran on to the map's closing bracket.
+                       (second (re-find #"(\[:sku.*?\])" block))))]
+      (is (= :updated (:status r)))
+      (is (= "[:sku :string]" (entry-in "Widget"))
+          "the entity really does require it")
+      (is (= "[:sku :string]" (entry-in "CreateWidgetRequest"))
+          "and so does creation")
+      (is (= "[:sku {:optional true} :string]" (entry-in "UpdateWidgetRequest"))
+          "but an update is a partial — requiring it here breaks every existing caller")))
+
+  (testing "generate-field-schema: the same rule at module generation"
+    (let [ctx (template/build-field-context required-field)]
+      (is (= "   [:sku :string]" (gen/generate-field-schema ctx)))
+      (is (= "   [:sku {:optional true} :string]" (gen/generate-field-schema ctx true)))))
+
+  (testing "an already-optional field is unaffected either way"
+    (let [ctx (template/build-field-context {:name :note :type :string :required false})]
+      (is (= (gen/generate-field-schema ctx) (gen/generate-field-schema ctx true))))))
+
+(deftest ^:unit generated-update-schema-marks-fields-optional
+  (testing "a generated module's update request accepts a partial"
+    ;; The same `field-schemas` string was interpolated into the entity, create
+    ;; and update schemas, so `--field name:string:required` produced a required
+    ;; entry in UpdateXRequest.
+    (let [src (gen/generate-schema-file
+               {:base-ns "app"
+                :module-name "widget"
+                :entities [{:entity-name "Widget"
+                            :fields [(template/build-field-context required-field)]}]})
+          update-block (re-find #"(?s)\(def UpdateWidgetRequest\n.*?\]\)" src)
+          create-block (re-find #"(?s)\(def CreateWidgetRequest\n.*?\]\)" src)]
+      (is (str/includes? create-block "[:sku :string]")
+          "creation requires it")
+      (is (str/includes? update-block "[:sku {:optional true} :string]")
+          "updating does not"))))

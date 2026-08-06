@@ -516,8 +516,11 @@
                         :output-dir (.getPath dir) :dry-run false})
               schema (io/file dir "src/wagoe/box/schema.clj")
               ;; Restructure the request schemas beyond what the inserter reads.
+              ;; Matches whatever the entry looks like — the update schema now
+              ;; carries {:optional true}, and a regex pinned to the old shape
+              ;; silently restructured only one of the two.
               _   (spit schema (str/replace (slurp schema)
-                                            #"\(def (Create|Update)BoxRequest\n[^\n]*\n  \[:map \{:title \"[^\"]+\"\}\n   \[:w :string\]\]\)"
+                                            #"\(def (Create|Update)BoxRequest\n[^\n]*\n  \[:map \{:title \"[^\"]+\"\}\n   \[:w [^\n]*\]\]\)"
                                             "(def $1BoxRequest\n  \"hand-restructured\"\n  (m/schema [:map [:w :string]]))"))
               req {:module-name "box" :entity "Box"
                    :field {:name :h :type :string :required false :unique false}
