@@ -565,3 +565,76 @@
           (is (= before (slurp (io/file dir "src/wagoe/box/schema.clj")))
               "and the file is untouched"))
         (finally (delete-tree! dir))))))
+
+(deftest ^:unit manual-instructions-keep-update-requests-optional
+  ;; The manual note reused one entry string for every target, so a --required
+  ;; field produced "add [:sku :string] to UpdateItemRequest". That note is the
+  ;; only instruction the user gets, and following it makes the field mandatory
+  ;; on every partial update — the tool causing, by instruction, the breakage
+  ;; the file edit was changed to avoid.
+  (testing "an unplaceable update schema is quoted in its optional form"
+    (let [dir (temp-dir)]
+      (try
+        (let [svc (service/create-scaffolder-service)
+              _   (ports/generate-module
+                   svc {:module-name "item"
+                        :entities [{:name "Item"
+                                    :fields [{:name :name :type :string :required true}]}]
+                        :interfaces {:http true :cli true :web true}
+                        :features {:audit true :pagination true}
+                        :output-dir (.getPath dir) :dry-run false})
+              schema (io/file dir "src/wagoe/item/schema.clj")
+              _   (spit schema (str/replace (slurp schema)
+                                            #"\(def UpdateItemRequest\n[^\n]*\n  \[:map \{:title \"[^\"]+\"\}\n   \[:name[^\n]*\]\]\)"
+                                            "(def UpdateItemRequest\n  \"hand-restructured\"\n  (m/schema [:map [:name {:optional true} :string]]))"))
+              result (ports/add-field
+                      svc {:module-name "item" :entity "Item"
+                           :field {:name :sku :type :string :required true :unique false}
+                           :output-dir (.getPath dir) :dry-run false})
+              entry  (first (filter #(str/ends-with? (:path %) "schema.clj") (:files result)))]
+          (is (:manual? entry))
+          (is (str/includes? (:manual-note entry) "[:sku {:optional true} :string]")
+              "the update request must be quoted optional")
+          (is (not (str/includes? (:manual-note entry) "add [:sku :string] to UpdateItemRequest"))
+              "following the required form here breaks every partial update"))
+        (finally (delete-tree! dir)))))
+
+  (testing "a missing schema file names each target with the form it needs"
+    (let [dir (temp-dir)]
+      (try
+        (let [svc    (service/create-scaffolder-service)
+              result (ports/add-field
+                      svc {:module-name "ghost" :entity "Ghost"
+                           :field {:name :sku :type :string :required true :unique false}
+                           :output-dir (.getPath dir) :dry-run false})
+              entry  (first (filter #(str/ends-with? (:path %) "schema.clj") (:files result)))
+              note   (:manual-note entry)]
+          (is (:manual? entry))
+          (is (str/includes? note "[:sku :string] to Ghost and CreateGhostRequest"))
+          (is (str/includes? note "[:sku {:optional true} :string] to UpdateGhostRequest")))
+        (finally (delete-tree! dir)))))
+
+  (testing "the description of what was written is per target too"
+    (let [dir (temp-dir)]
+      (try
+        (let [svc (service/create-scaffolder-service)
+              _   (ports/generate-module
+                   svc {:module-name "tag"
+                        :entities [{:name "Tag"
+                                    :fields [{:name :label :type :string :required true}]}]
+                        :interfaces {:http true :cli true :web true}
+                        :features {:audit true :pagination true}
+                        :output-dir (.getPath dir) :dry-run false})
+              result (ports/add-field
+                      svc {:module-name "tag" :entity "Tag"
+                           :field {:name :slug :type :string :required true :unique false}
+                           :output-dir (.getPath dir) :dry-run false})
+              entry  (first (filter #(str/ends-with? (:path %) "schema.clj") (:files result)))
+              file   (slurp (io/file dir "src/wagoe/tag/schema.clj"))]
+          ;; The note claimed one form for all three schemas while the file
+          ;; held two — a report that does not match the edit it describes.
+          (is (str/includes? (:note entry) "[:slug :string] to Tag and CreateTagRequest"))
+          (is (str/includes? (:note entry) "[:slug {:optional true} :string] to UpdateTagRequest"))
+          (is (str/includes? file "[:slug {:optional true} :string]")
+              "and the file agrees"))
+        (finally (delete-tree! dir))))))

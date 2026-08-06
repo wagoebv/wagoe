@@ -281,16 +281,32 @@
             ;; schemas" for a file the real run then refused to touch — a
             ;; preview contradicting the run it previews, which is the
             ;; false-success report this ticket is about.
-            entry-text    (generators/schema-field-entry field)
-            manual-in     (fn [schemas]
-                            (str "add " entry-text " to " (str/join " and " schemas)
-                                 " in " schema-path))
+            update-schema (str "Update" entity "Request")
+            ;; Per target, not one string reused for all of them. The update
+            ;; request takes the optional form: telling the user to add
+            ;; `[:sku :string]` to Update<Entity>Request makes the field
+            ;; mandatory on every partial update, and this note is the only
+            ;; instruction they get — following it is the expected outcome, not
+            ;; a mistake on their part.
+            entry-for     #(generators/schema-field-entry field (= % update-schema))
+            ;; "<entry> to A and B; <other entry> to C" — grouped by the form
+            ;; each schema needs, so both the description of what happened and
+            ;; the instruction for what is left name the right entry per target.
+            by-form       (fn [schemas]
+                            (str/join "; "
+                                      (for [entry (distinct (map entry-for schemas))]
+                                        (str entry " to "
+                                             (str/join " and "
+                                                       (filter #(= entry (entry-for %)) schemas))))))
+            manual-in     (fn [schemas] (str "add " (by-form schemas) " in " schema-path))
             schema-entry
             (cond
               (nil? existing)
               {:path (.getPath schema-file) :action :skip :manual? true
                :note "not found"
-               :manual-note (str "add " entry-text " to " schema-path " by hand")}
+               ;; All three targets, each with the form it needs — the file is
+               ;; absent, so none of them has the field.
+               :manual-note (manual-in [entity (str "Create" entity "Request") update-schema])}
 
               ;; A partial success is still a partial success. Editing two of
               ;; the three schemas and reporting only the two is how the Malli
@@ -302,13 +318,13 @@
                          :action (if dry-run :skip :update)
                          :note (str (when dry-run "dry run — ")
                                     (if dry-run "would add " "added ")
-                                    entry-text " to " (str/join ", " (:schemas edit)))}
+                                    (by-form (:schemas edit)))}
                   (seq (:unreachable edit))
                   (assoc :manual? true
                          :note (str (when dry-run "dry run — ")
                                     (if dry-run "would add " "added ")
-                                    entry-text " to " (str/join ", " (:schemas edit))
-                                    "; could not place it in "
+                                    (by-form (:schemas edit))
+                                    " — could not place it in "
                                     (str/join ", " (:unreachable edit)))
                          ;; Only the part that is left. Repeating what
                          ;; succeeded in an instruction makes the user re-read
