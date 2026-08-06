@@ -87,7 +87,10 @@
         (println "✅" (:message result))
         (println (format "\nMigration files created in: %s" (:directory result)))
         (println "\nNext steps:")
-        (println "1. Edit the generated SQL files in migrations/")
+        ;; The same directory as the line above, not a hardcoded "migrations/".
+        ;; In a resources-backed layout those two lines disagreed, and this one
+        ;; sent the user to a directory the files were not in (BOU-274).
+        (println (format "1. Edit the generated SQL files in %s" (:directory result)))
         (println "2. Run: clojure -M -m wagoe.platform.shell.database.cli-migrations migrate")
         0)
       (catch Exception e
@@ -126,17 +129,17 @@
     (flush)
     (let [confirmation (read-line)]
       (if (= env confirmation)
-      (try
-        (println "\n🔄 Resetting database...")
-        (migrations/reset)
-        (println "✅ Database reset completed\n")
-        (migrations/print-status)
-        0
-        (catch Exception e
-          (println "❌ Reset failed:" (.getMessage e))
-          (when (:verbose opts)
-            (.printStackTrace e))
-          1))
+        (try
+          (println "\n🔄 Resetting database...")
+          (migrations/reset)
+          (println "✅ Database reset completed\n")
+          (migrations/print-status)
+          0
+          (catch Exception e
+            (println "❌ Reset failed:" (.getMessage e))
+            (when (:verbose opts)
+              (.printStackTrace e))
+            1))
         (do
           (println "\n❌ Reset cancelled")
           0)))))

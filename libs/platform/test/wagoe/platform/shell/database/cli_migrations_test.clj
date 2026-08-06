@@ -75,3 +75,23 @@
             (catch clojure.lang.ExceptionInfo ex
               (is (= "exit" (ex-message ex))))))
         (is (= [0 1 1 7 9 1] @exits))))))
+
+(deftest ^:unit create-tells-the-user-one-directory
+  ;; BOU-274: the summary line printed (:directory result) while the next-steps
+  ;; line hardcoded "migrations/". In a resources-backed layout those two lines
+  ;; contradicted each other, and the one the user acts on — "Edit the generated
+  ;; SQL files in …" — was the wrong one.
+  (testing "both lines name the directory the files were written to"
+    (doseq [dir ["migrations/" "resources/migrations/"]]
+      (with-redefs [migrations/create-migration
+                    (fn [n] {:success true
+                             :message (str "Created migration files for: " n)
+                             :directory dir})]
+        (let [out    (with-out-str (sut/cmd-create "add-users" {}))
+              quoted (java.util.regex.Pattern/quote dir)]
+          (is (re-find (re-pattern (str "created in: " quoted)) out))
+          (is (re-find (re-pattern (str "Edit the generated SQL files in " quoted)) out)
+              (str dir ": the instruction has to point at the files that exist"))
+          (when (= "resources/migrations/" dir)
+            (is (not (re-find #"SQL files in migrations/" out))
+                "the hardcoded project directory must not survive here")))))))
