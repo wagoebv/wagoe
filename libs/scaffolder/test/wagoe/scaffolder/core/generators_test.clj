@@ -399,3 +399,88 @@
         (is (not (re-find #"\(\S+\s+\[this[\s\]]" output))
             (str label ": has a method binding `this` that its body never uses; "
                  "name it _this"))))))
+
+;; =============================================================================
+;; BOU-275: every target schema is checked, not the file as a whole
+;; =============================================================================
+;;
+;; `:already-present` was decided by searching the whole source for the field
+;; name, so one schema could answer for the others: with the field in the entity
+;; schema and a hand-restructured CreateXRequest, this reported that nothing
+;; remained to be done while both request schemas still lacked it — the
+;; unsynchronised Malli set of AGENTS.md pitfall 6, reported as success.
+
+(def ^:private generated-schema
+  "(ns app.widget.schema)
+
+(def Widget
+  [:map {:title \"Widget\"}
+   [:id :uuid]])
+
+(def CreateWidgetRequest
+  [:map {:title \"Create Widget Request\"}
+   [:id :uuid]])
+
+(def UpdateWidgetRequest
+  [:map {:title \"Update Widget Request\"}
+   [:id :uuid]])
+")
+
+(def ^:private colour {:name :colour :type :string :required false})
+
+(defn- hand-restructure
+  "Rewrite one def into a shape the inserter cannot place a field in."
+  [source schema-name]
+  (str/replace source
+               (re-pattern (str "\\(def " schema-name "\\n  \\[:map \\{:title \"[^\"]+\"\\}\\n   \\[:id :uuid\\]\\]\\)"))
+               (str "(def " schema-name "\n  (m/schema [:map [:id :uuid]]))")))
+
+(deftest ^:unit add-field-to-schema-covers-every-target
+  (testing "all three schemas are edited, and nothing is left unreachable"
+    (let [r (gen/add-field-to-schema generated-schema "Widget" colour)]
+      (is (= :updated (:status r)))
+      (is (= ["Widget" "CreateWidgetRequest" "UpdateWidgetRequest"] (:schemas r)))
+      (is (empty? (:unreachable r)))))
+
+  (testing "re-running is a no-op only when every target already has the field"
+    (let [once  (gen/add-field-to-schema generated-schema "Widget" colour)
+          twice (gen/add-field-to-schema (:content once) "Widget" colour)]
+      (is (= :already-present (:reason twice)))
+      (is (empty? (:unreachable twice)))))
+
+  (testing "a target that cannot be edited is named, even when others succeeded"
+    ;; Partial success is still partial: two of three schemas updated is a set
+    ;; that does not agree with itself, and the caller has to be told.
+    (let [src (hand-restructure generated-schema "UpdateWidgetRequest")
+          r   (gen/add-field-to-schema src "Widget" colour)]
+      (is (= :updated (:status r)))
+      (is (= ["Widget" "CreateWidgetRequest"] (:schemas r)))
+      (is (= ["UpdateWidgetRequest"] (:unreachable r))
+          "silence here leaves the request schema without the field")))
+
+  (testing "the field being in one schema does not answer for the others"
+    ;; The reported case: entity has it, request schemas are unreachable.
+    ;; A file-wide search found the field and reported :already-present.
+    (let [src (-> generated-schema
+                  (hand-restructure "CreateWidgetRequest")
+                  (hand-restructure "UpdateWidgetRequest")
+                  (str/replace "[:map {:title \"Widget\"}\n   [:id :uuid]])"
+                               "[:map {:title \"Widget\"}\n   [:id :uuid]\n   [:colour {:optional true} :string]])"))
+          r   (gen/add-field-to-schema src "Widget" colour)]
+      (is (= :skipped (:status r)))
+      (is (= :unrecognised-shape (:reason r))
+          "not :already-present — the request schemas still lack the field")
+      (is (= ["CreateWidgetRequest" "UpdateWidgetRequest"] (:unreachable r))))))
+
+(deftest ^:unit insert-schema-entry-distinguishes-its-outcomes
+  (testing "inserted, present and unrecognised are three different answers"
+    (let [entry "[:colour {:optional true} :string]"]
+      (is (= :inserted (:status (gen/insert-schema-entry generated-schema "Widget" entry))))
+      (is (= :present
+             (:status (gen/insert-schema-entry
+                       (:content (gen/insert-schema-entry generated-schema "Widget" entry))
+                       "Widget" entry)))
+          "already there — nothing to do")
+      (is (= :unrecognised
+             (:status (gen/insert-schema-entry generated-schema "NoSuchSchema" entry)))
+          "cannot be done — which is not the same as nothing to do"))))

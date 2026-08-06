@@ -279,31 +279,52 @@
             (cond
               (nil? existing)
               {:path (.getPath schema-file) :action :skip :manual? true
-               :note (str "not found — add " (generators/schema-field-entry field)
-                          " to the schema by hand")}
+               :note "not found"
+               :manual-note (str "add " (generators/schema-field-entry field)
+                                 " to " schema-path " by hand")}
 
               dry-run
               {:path (.getPath schema-file) :action :skip
                :note "dry run — would add the field to the entity and request schemas"}
 
+              ;; A partial success is still a partial success. Editing two of
+              ;; the three schemas and reporting only the two is how the Malli
+              ;; set ends up unsynchronised while the output reads as done.
               (= :updated (:status edit))
               (do (spit schema-file (:content edit))
-                  {:path (.getPath schema-file) :action :update
-                   :note (str "added " (generators/schema-field-entry field) " to "
-                              (str/join ", " (:schemas edit)))})
+                  (cond-> {:path (.getPath schema-file) :action :update
+                           :note (str "added " (generators/schema-field-entry field) " to "
+                                      (str/join ", " (:schemas edit)))}
+                    (seq (:unreachable edit))
+                    (assoc :manual? true
+                           :note (str "added " (generators/schema-field-entry field) " to "
+                                      (str/join ", " (:schemas edit))
+                                      "; could not place it in "
+                                      (str/join ", " (:unreachable edit)))
+                           ;; Only the part that is left. Repeating what
+                           ;; succeeded in an instruction makes the user re-read
+                           ;; it to work out what to do.
+                           :manual-note (str "add " (generators/schema-field-entry field)
+                                             " to " (str/join " and " (:unreachable edit))
+                                             " in " schema-path))))
 
                 ;; Not :manual? — nothing is left for the user to do, so
                 ;; telling them to "finish the schema edit" would send them to
                 ;; a file that is already correct. Re-running must be a no-op
-                ;; in the output as well as on disk.
+                ;; in the output as well as on disk. This arm requires *every*
+                ;; target to already carry the field; one of them answering for
+                ;; the others is the defect above.
               (= :already-present (:reason edit))
               {:path (.getPath schema-file) :action :skip
-               :note "field is already in the schema"}
+               :note "field is already in every schema"}
 
               :else
               {:path (.getPath schema-file) :action :skip :manual? true
-               :note (str "could not place the field automatically — add "
-                          (generators/schema-field-entry field) " by hand")})
+               :note (str "could not place the field in "
+                          (str/join ", " (:unreachable edit)))
+               :manual-note (str "add " (generators/schema-field-entry field)
+                                 " to " (str/join " and " (:unreachable edit))
+                                 " in " schema-path)})
             all-files (conj (vec written) schema-entry)]
 
         {:success true
@@ -326,7 +347,7 @@
                               (format "Run the tests: clojure -M:test --focus %s.%s.core.%s-test"
                                       (str/replace base-ns-path "/" ".") module-name module-name)]
                        (:manual? schema-entry)
-                       (into [(str "Finish the schema edit yourself: " (:note schema-entry))]))
+                       (into [(:manual-note schema-entry)]))
          :warnings (when dry-run ["Dry run - no files were written"])})
 
       (catch Exception e

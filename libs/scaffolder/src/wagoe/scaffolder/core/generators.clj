@@ -892,13 +892,20 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s;
 (defn insert-schema-entry
   "Add `entry` to the Malli map in `(def schema-name …)` within `source`.
 
-   Returns the new source, or nil when the shape is not the one this
-   understands — a hand-edited file, a renamed schema, a form that does not end
-   in `])`. Returning nil rather than guessing is deliberate: the caller reports
-   a skip, and a skip the user can see beats a mangled schema file they
-   discover later.
+   Returns one of:
 
-   Also returns nil when the field is already there, so re-running is a no-op.
+     {:status :inserted :content <new source>}
+     {:status :present}       the field is already in this schema
+     {:status :unrecognised}  a shape this cannot place the field in safely
+
+   The last two are kept apart rather than collapsed into one falsey value: the
+   caller has to distinguish nothing-to-do from could-not-do-it. Reporting the
+   second as the first is how the request schemas ended up without the field
+   while the output said the work was finished.
+
+   :unrecognised covers a hand-edited file, a renamed schema, or a form that
+   does not end in `])`. Refusing rather than guessing is deliberate — a skip
+   the user can see beats a mangled schema file they discover later.
 
    The closing `])` moves onto the new entry:
 
@@ -906,7 +913,7 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s;
                                    [:status {:optional true} :string]])"
   [source schema-name entry]
   (let [lines (str/split-lines source)]
-    (when-let [[start end] (def-form-range lines schema-name)]
+    (if-let [[start end] (def-form-range lines schema-name)]
       (let [block      (subvec (vec lines) start (inc end))
             entry-key  (second (re-find #"^\[(\S+)" entry))
             ;; Presence is checked per block, not per file: the same field may
@@ -919,7 +926,14 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s;
             ;; From the last entry line, not the first: the first is `[:map …`,
             ;; which sits one level out and produced misaligned insertions.
             indent     (or (last (keep #(second (re-find #"^(\s+)\[:\S" %)) block)) "   ")]
-        (when (and (not present?) (str/ends-with? (str/trimr closing) "])"))
+        (cond
+          present?
+          {:status :present}
+
+          (not (str/ends-with? (str/trimr closing) "])"))
+          {:status :unrecognised}
+
+          :else
           ;; Drop exactly the two closing characters — `]` for the map, `)` for
           ;; the def — and re-emit them after the new entry. Anything before
           ;; them belongs to the previous entry and must be left alone; the
@@ -934,36 +948,59 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s;
             ;; this rewrote the last line of every file it touched — a spurious
             ;; hunk at the bottom of the diff, on a line the change never
             ;; concerned.
-            (cond-> joined
-              (str/ends-with? source "\n") (str "\n"))))))))
+            {:status  :inserted
+             :content (cond-> joined
+                        (str/ends-with? source "\n") (str "\n"))})))
+      {:status :unrecognised})))
 
 (defn add-field-to-schema
   "Add `field` to the entity and request schemas in `source`.
 
-   Returns {:status :updated :content <new source> :schemas [names]} when at
-   least one schema was changed, or {:status :skipped :reason …} when none were.
+   Returns {:status :updated :content <new source> :schemas [changed]
+            :unreachable [names]} when at least one schema changed, or
+   {:status :skipped :reason :already-present|:unrecognised-shape
+            :unreachable [names]} when none did.
 
-   All three are edited because that is what the tool has always told users to
-   do — the instruction comment it printed said to add the field to the entity
-   schema \"and then to Create…Request and Update…Request as well\". Doing two
-   of the three would leave the same half-finished state the instruction warns
-   about."
+   `:unreachable` names the target schemas the field could not be placed in. It
+   is what tells the caller that manual work remains, and it is reported on a
+   successful edit too — two of three schemas updated is still a schema set that
+   does not agree with itself.
+
+   All three targets are edited because that is what the tool has always told
+   users to do: the instruction comment it used to print said to add the field
+   to the entity schema and then to the Create and Update request schemas as
+   well.
+
+   Each target is tracked separately. Deciding `:already-present` by searching
+   the whole file let one schema answer for the others — with the field in the
+   entity schema and a hand-restructured `CreateXRequest`, this reported that
+   nothing remained to be done while both request schemas still lacked it. That
+   is the unsynchronised Malli set of AGENTS.md pitfall 6, reported as success."
   [source entity field]
   (let [entry   (schema-field-entry field)
         targets [entity (str "Create" entity "Request") (str "Update" entity "Request")]
-        [content changed]
-        (reduce (fn [[src changed] schema-name]
-                  (if-let [updated (insert-schema-entry src schema-name entry)]
-                    [updated (conj changed schema-name)]
-                    [src changed]))
-                [source []]
+        {:keys [content changed present unreachable]}
+        (reduce (fn [acc schema-name]
+                  (let [r (insert-schema-entry (:content acc) schema-name entry)]
+                    (case (:status r)
+                      :inserted (-> acc
+                                    (assoc :content (:content r))
+                                    (update :changed conj schema-name))
+                      :present  (update acc :present conj schema-name)
+                      (update acc :unreachable conj schema-name))))
+                {:content source :changed [] :present [] :unreachable []}
                 targets)]
-    (if (seq changed)
-      {:status :updated :content content :schemas changed}
-      {:status :skipped
-       :reason (if (str/includes? source (str "[" (str/replace entry #"^\[(\S+).*" "$1")))
-                 :already-present
-                 :unrecognised-shape)})))
+    (cond
+      (seq changed)
+      {:status :updated :content content :schemas changed :unreachable unreachable}
+
+      ;; Only when every target already carries it. Anything short of that
+      ;; leaves the caller something to do, and has to say so.
+      (= (count present) (count targets))
+      {:status :skipped :reason :already-present :unreachable []}
+
+      :else
+      {:status :skipped :reason :unrecognised-shape :unreachable unreachable})))
 
 (defn generate-add-field-schema-comment
   "Generate schema addition comment/instructions for adding a field.
