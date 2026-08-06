@@ -299,6 +299,12 @@
                                              (str/join " and "
                                                        (filter #(= entry (entry-for %)) schemas))))))
             manual-in     (fn [schemas] (str "add " (by-form schemas) " in " schema-path))
+            ;; A different instruction: the entry exists, it is the optionality
+            ;; that is wrong, so "add …" would read as though it were missing.
+            make-optional (fn [schemas]
+                            (str "in " (str/join " and " schemas)
+                                 ", change the entry to " (entry-for update-schema)
+                                 " — " schema-path))
             schema-entry
             (cond
               (nil? existing)
@@ -319,6 +325,15 @@
                          :note (str (when dry-run "dry run — ")
                                     (if dry-run "would add " "added ")
                                     (by-form (:schemas edit)))}
+                  (seq (:wrong-shape edit))
+                  (assoc :manual? true
+                         :note (str (when dry-run "dry run — ")
+                                    (if dry-run "would add " "added ")
+                                    (by-form (:schemas edit))
+                                    " — " (str/join ", " (:wrong-shape edit))
+                                    " already has it, but not as optional")
+                         :manual-note (make-optional (:wrong-shape edit)))
+
                   (seq (:unreachable edit))
                   (assoc :manual? true
                          :note (str (when dry-run "dry run — ")
@@ -340,6 +355,16 @@
               (= :already-present (:reason edit))
               {:path (.getPath schema-file) :action :skip
                :note "field is already in every schema"}
+
+              ;; Present, but required where it has to be optional. Reporting
+              ;; this as already-present is what left partial updates broken in
+              ;; a project generated before update requests became partials.
+              (= :requires-optional (:reason edit))
+              {:path (.getPath schema-file) :action :skip :manual? true
+               :note (str (when dry-run "dry run — ")
+                          (str/join ", " (:wrong-shape edit))
+                          " already has the field, but not as optional")
+               :manual-note (make-optional (:wrong-shape edit))}
 
               :else
               {:path (.getPath schema-file) :action :skip :manual? true

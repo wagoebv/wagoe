@@ -934,16 +934,20 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s;
             ;; Presence is checked per block, not per file: the same field may
             ;; legitimately appear in the entity schema and not yet in the
             ;; request schemas.
-            present?   (some #(re-find (re-pattern (str "\\[" (java.util.regex.Pattern/quote entry-key) "[\\s\\]]"))
-                                       %)
-                             block)
+            key-pattern (re-pattern (str "\\[" (java.util.regex.Pattern/quote entry-key) "[\\s\\]]"))
+            ;; The line carrying the field, so the caller can look at the entry
+            ;; that is already there and not only at whether one exists. A
+            ;; key-only check treated a required entry in an update request as
+            ;; nothing-to-do.
+            present-line (first (filter #(re-find key-pattern %) block))
             closing    (nth lines end)
             ;; From the last entry line, not the first: the first is `[:map …`,
             ;; which sits one level out and produced misaligned insertions.
             indent     (or (last (keep #(second (re-find #"^(\s+)\[:\S" %)) block)) "   ")]
         (cond
-          present?
-          {:status :present}
+          present-line
+          {:status :present
+           :entry  (str/trim present-line)}
 
           (not (str/ends-with? (str/trimr closing) "])"))
           {:status :unrecognised}
@@ -999,7 +1003,17 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s;
         ;; schemas made `--required` mandatory on update.
         entry-for     #(schema-field-entry field (= % update-schema))
         targets       [entity (str "Create" entity "Request") update-schema]
-        {:keys [content changed present unreachable]}
+        ;; An entry that is present but not optional, in the update request
+        ;; only. Scoped that narrowly on purpose: a project generated before
+        ;; update requests were made partial carries the required form there,
+        ;; and a rerun reported "already in every schema" while partial updates
+        ;; stayed broken. Differences anywhere else — a tightened type on the
+        ;; entity, say — are the user's business and are left alone.
+        needs-optional? (fn [schema-name found]
+                          (and (= schema-name update-schema)
+                               found
+                               (not (str/includes? found "{:optional true}"))))
+        {:keys [content changed present unreachable wrong-shape]}
         (reduce (fn [acc schema-name]
                   (let [r (insert-schema-entry (:content acc) schema-name
                                                (entry-for schema-name))]
@@ -1007,21 +1021,30 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s;
                       :inserted (-> acc
                                     (assoc :content (:content r))
                                     (update :changed conj schema-name))
-                      :present  (update acc :present conj schema-name)
+                      :present  (if (needs-optional? schema-name (:entry r))
+                                  (update acc :wrong-shape conj schema-name)
+                                  (update acc :present conj schema-name))
                       (update acc :unreachable conj schema-name))))
-                {:content source :changed [] :present [] :unreachable []}
+                {:content source :changed [] :present [] :unreachable [] :wrong-shape []}
                 targets)]
     (cond
       (seq changed)
-      {:status :updated :content content :schemas changed :unreachable unreachable}
+      {:status :updated :content content :schemas changed
+       :unreachable unreachable :wrong-shape wrong-shape}
 
-      ;; Only when every target already carries it. Anything short of that
-      ;; leaves the caller something to do, and has to say so.
+      ;; Only when every target already carries it, in a shape that works.
+      ;; Anything short of that leaves the caller something to do, and has to
+      ;; say so.
       (= (count present) (count targets))
-      {:status :skipped :reason :already-present :unreachable []}
+      {:status :skipped :reason :already-present :unreachable [] :wrong-shape []}
+
+      (seq wrong-shape)
+      {:status :skipped :reason :requires-optional
+       :unreachable unreachable :wrong-shape wrong-shape}
 
       :else
-      {:status :skipped :reason :unrecognised-shape :unreachable unreachable})))
+      {:status :skipped :reason :unrecognised-shape
+       :unreachable unreachable :wrong-shape wrong-shape})))
 
 (defn generate-add-field-schema-comment
   "Generate schema addition comment/instructions for adding a field.

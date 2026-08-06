@@ -543,3 +543,50 @@
           "creation requires it")
       (is (str/includes? update-block "[:sku {:optional true} :string]")
           "updating does not"))))
+
+(deftest ^:unit a-required-entry-in-the-update-schema-is-not-done
+  ;; Presence was checked by key alone, so an entry that exists in the wrong
+  ;; shape counted as nothing-to-do. A project generated before update requests
+  ;; became partials carries the required form there; rerunning
+  ;; `bb scaffold field --required` reported "field is already in every schema"
+  ;; and left partial updates requiring the field.
+  (let [required-entry "[:sku :string]"
+        optional-entry "[:sku {:optional true} :string]"
+        with-sku (fn [update-entry]
+                   (-> generated-schema
+                       (str/replace "(def Widget\n  [:map {:title \"Widget\"}\n   [:id :uuid]])"
+                                    (str "(def Widget\n  [:map {:title \"Widget\"}\n   [:id :uuid]\n   " required-entry "])"))
+                       (str/replace "(def CreateWidgetRequest\n  [:map {:title \"Create Widget Request\"}\n   [:id :uuid]])"
+                                    (str "(def CreateWidgetRequest\n  [:map {:title \"Create Widget Request\"}\n   [:id :uuid]\n   " required-entry "])"))
+                       (str/replace "(def UpdateWidgetRequest\n  [:map {:title \"Update Widget Request\"}\n   [:id :uuid]])"
+                                    (str "(def UpdateWidgetRequest\n  [:map {:title \"Update Widget Request\"}\n   [:id :uuid]\n   " update-entry "])"))))]
+
+    (testing "the required form in the update schema is reported as work remaining"
+      (let [r (gen/add-field-to-schema (with-sku required-entry) "Widget" required-field)]
+        (is (= :skipped (:status r)))
+        (is (= :requires-optional (:reason r))
+            "not :already-present — partial updates are still broken")
+        (is (= ["UpdateWidgetRequest"] (:wrong-shape r)))))
+
+    (testing "the optional form is genuinely done"
+      (let [r (gen/add-field-to-schema (with-sku optional-entry) "Widget" required-field)]
+        (is (= :already-present (:reason r)))
+        (is (empty? (:wrong-shape r)))))
+
+    (testing "only the update schema is judged on optionality"
+      ;; A tightened type or a hand-chosen optionality elsewhere is the user's
+      ;; business. Flagging every difference would nag about customisation this
+      ;; tool has no opinion on.
+      (let [src (-> (with-sku optional-entry)
+                    (str/replace "(def Widget\n  [:map {:title \"Widget\"}\n   [:id :uuid]\n   [:sku :string]])"
+                                 "(def Widget\n  [:map {:title \"Widget\"}\n   [:id :uuid]\n   [:sku {:optional true} [:string {:min 3}]]])"))
+            r   (gen/add-field-to-schema src "Widget" required-field)]
+        (is (= :already-present (:reason r))
+            "a customised entity entry is not this tool's concern")))
+
+    (testing "an optional field is never flagged"
+      ;; Nothing to enforce: the desired update entry is optional either way.
+      (let [optional-field {:name :sku :type :string :required false}
+            r (gen/add-field-to-schema (with-sku optional-entry) "Widget" optional-field)]
+        (is (= :already-present (:reason r)))
+        (is (empty? (:wrong-shape r)))))))
