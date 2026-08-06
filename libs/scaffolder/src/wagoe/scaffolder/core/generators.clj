@@ -892,17 +892,29 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s;
   "The [start end] line indices of `(def <schema-name> …)`, or nil.
 
    `end` is the line closing the form. These defs all end with `])` on the same
-   line as their last entry, which is what `insert-schema-entry` relies on."
+   line as their last entry, which is what `insert-schema-entry` relies on.
+
+   The search stops at the next top-level form. Without that bound it ran on
+   past a def it did not recognise — one ending `]))` rather than `])` — and
+   returned the *next* def's closing line. Measured: asked to add a field to a
+   hand-restructured `CreateItemRequest`, it wrote the entry into
+   `UpdateItemRequest` and reported `:inserted`. That put the field in the wrong
+   schema, in the required form, in the one schema that must not have it."
   [lines schema-name]
   (let [pattern (re-pattern (str "^\\(def " (java.util.regex.Pattern/quote schema-name) "\\b"))
         start   (first (keep-indexed (fn [i line] (when (re-find pattern line) i)) lines))]
     (when start
-      (when-let [end (first (keep-indexed
-                             (fn [i line] (when (and (>= i start)
-                                                     (re-find #"\]\)\s*$" line))
-                                            i))
-                             lines))]
-        [start end]))))
+      (let [limit (or (first (keep-indexed (fn [i line]
+                                             (when (and (> i start) (str/starts-with? line "("))
+                                               i))
+                                           lines))
+                      (count lines))]
+        (when-let [end (first (keep-indexed
+                               (fn [i line] (when (and (>= i start) (< i limit)
+                                                       (re-find #"\]\)\s*$" line))
+                                              i))
+                               lines))]
+          [start end])))))
 
 (defn insert-schema-entry
   "Add `entry` to the Malli map in `(def schema-name …)` within `source`.

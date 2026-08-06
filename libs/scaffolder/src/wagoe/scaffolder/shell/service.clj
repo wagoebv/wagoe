@@ -298,13 +298,36 @@
                                         (str entry " to "
                                              (str/join " and "
                                                        (filter #(= entry (entry-for %)) schemas))))))
-            manual-in     (fn [schemas] (str "add " (by-form schemas) " in " schema-path))
+            ;; The two ways a target can still need attention. Kept as
+            ;; clause builders without the path so several can be joined and
+            ;; the path named once.
+            add-clause    (fn [schemas] (str "add " (by-form schemas)))
             ;; A different instruction: the entry exists, it is the optionality
             ;; that is wrong, so "add …" would read as though it were missing.
-            make-optional (fn [schemas]
-                            (str "in " (str/join " and " schemas)
-                                 ", change the entry to " (entry-for update-schema)
-                                 " — " schema-path))
+            optional-clause (fn [schemas]
+                              (str "in " (str/join " and " schemas)
+                                   ", change the entry to " (entry-for update-schema)))
+            ;; Both categories, always. Two `assoc` clauses used to write
+            ;; :manual-note in turn, so a run that could not edit one schema and
+            ;; found another still required told the user about only one of
+            ;; them — and the skipped arm dropped the unreachable list entirely.
+            ;; Following those instructions left the schema set unsynchronised,
+            ;; which is the state this whole path exists to prevent.
+            remaining-note (fn [{:keys [unreachable wrong-shape]}]
+                             (let [clauses (cond-> []
+                                             (seq unreachable) (conj (add-clause unreachable))
+                                             (seq wrong-shape) (conj (optional-clause wrong-shape)))]
+                               (when (seq clauses)
+                                 (str (str/join "; " clauses) " — " schema-path))))
+            problem-desc   (fn [{:keys [unreachable wrong-shape]}]
+                             (str/join "; "
+                                       (cond-> []
+                                         (seq unreachable)
+                                         (conj (str "could not place it in "
+                                                    (str/join ", " unreachable)))
+                                         (seq wrong-shape)
+                                         (conj (str (str/join ", " wrong-shape)
+                                                    " already has it, but not as optional")))))
             schema-entry
             (cond
               (nil? existing)
@@ -312,7 +335,8 @@
                :note "not found"
                ;; All three targets, each with the form it needs — the file is
                ;; absent, so none of them has the field.
-               :manual-note (manual-in [entity (str "Create" entity "Request") update-schema])}
+               :manual-note (str (add-clause [entity (str "Create" entity "Request") update-schema])
+                                 " — " schema-path)}
 
               ;; A partial success is still a partial success. Editing two of
               ;; the three schemas and reporting only the two is how the Malli
@@ -320,58 +344,31 @@
               (= :updated (:status edit))
               (do
                 (when-not dry-run (spit schema-file (:content edit)))
-                (cond-> {:path (.getPath schema-file)
-                         :action (if dry-run :skip :update)
-                         :note (str (when dry-run "dry run — ")
-                                    (if dry-run "would add " "added ")
-                                    (by-form (:schemas edit)))}
-                  (seq (:wrong-shape edit))
-                  (assoc :manual? true
-                         :note (str (when dry-run "dry run — ")
-                                    (if dry-run "would add " "added ")
-                                    (by-form (:schemas edit))
-                                    " — " (str/join ", " (:wrong-shape edit))
-                                    " already has it, but not as optional")
-                         :manual-note (make-optional (:wrong-shape edit)))
-
-                  (seq (:unreachable edit))
-                  (assoc :manual? true
-                         :note (str (when dry-run "dry run — ")
-                                    (if dry-run "would add " "added ")
-                                    (by-form (:schemas edit))
-                                    " — could not place it in "
-                                    (str/join ", " (:unreachable edit)))
-                         ;; Only the part that is left. Repeating what
-                         ;; succeeded in an instruction makes the user re-read
-                         ;; it to work out what to do.
-                         :manual-note (manual-in (:unreachable edit)))))
+                (let [remaining (remaining-note edit)]
+                  (cond-> {:path (.getPath schema-file)
+                           :action (if dry-run :skip :update)
+                           :note (str (when dry-run "dry run — ")
+                                      (if dry-run "would add " "added ")
+                                      (by-form (:schemas edit))
+                                      (when remaining (str " — " (problem-desc edit))))}
+                    remaining (assoc :manual? true :manual-note remaining))))
 
               ;; Not :manual? — nothing is left for the user to do, so telling
               ;; them to finish the schema edit would send them to a file that
               ;; is already correct. Re-running must be a no-op in the output as
               ;; well as on disk. This arm requires *every* target to already
-              ;; carry the field; one of them answering for the others was the
-              ;; defect above.
+              ;; carry the field, in a shape that works.
               (= :already-present (:reason edit))
               {:path (.getPath schema-file) :action :skip
                :note "field is already in every schema"}
 
-              ;; Present, but required where it has to be optional. Reporting
-              ;; this as already-present is what left partial updates broken in
-              ;; a project generated before update requests became partials.
-              (= :requires-optional (:reason edit))
-              {:path (.getPath schema-file) :action :skip :manual? true
-               :note (str (when dry-run "dry run — ")
-                          (str/join ", " (:wrong-shape edit))
-                          " already has the field, but not as optional")
-               :manual-note (make-optional (:wrong-shape edit))}
-
+              ;; Nothing was written and something is left: unplaceable
+              ;; schemas, an update request still carrying the required form,
+              ;; or both. One arm, because the mix is what went unreported.
               :else
               {:path (.getPath schema-file) :action :skip :manual? true
-               :note (str (when dry-run "dry run — ")
-                          "could not place the field in "
-                          (str/join ", " (:unreachable edit)))
-               :manual-note (manual-in (:unreachable edit))})
+               :note (str (when dry-run "dry run — ") (problem-desc edit))
+               :manual-note (remaining-note edit)})
             all-files (conj (vec written) schema-entry)]
 
         {:success true

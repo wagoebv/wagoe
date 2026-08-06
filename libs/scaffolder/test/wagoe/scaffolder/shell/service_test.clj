@@ -638,3 +638,46 @@
           (is (str/includes? file "[:slug {:optional true} :string]")
               "and the file agrees"))
         (finally (delete-tree! dir))))))
+
+(deftest ^:unit mixed-remaining-work-is-reported-in-full
+  ;; A run that inserts into one schema, cannot edit another, and finds the
+  ;; update request still required must name both problems. The two `assoc`
+  ;; clauses that built :manual-note overwrote each other, so only the later
+  ;; one survived.
+  (testing "the instruction covers unplaceable and wrongly-shaped targets"
+    (let [dir (temp-dir)]
+      (try
+        (let [svc (service/create-scaffolder-service)
+              _   (ports/generate-module
+                   svc {:module-name "item"
+                        :entities [{:name "Item"
+                                    :fields [{:name :name :type :string :required true}]}]
+                        :interfaces {:http true :cli true :web true}
+                        :features {:audit true :pagination true}
+                        :output-dir (.getPath dir) :dry-run false})
+              schema (io/file dir "src/wagoe/item/schema.clj")
+              _   (spit schema
+                        (-> (slurp schema)
+                            ;; Create becomes unplaceable …
+                            (str/replace #"\(def CreateItemRequest\n[^\n]*\n  \[:map \{:title \"[^\"]+\"\}\n   \[:name[^\n]*\]\]\)"
+                                         "(def CreateItemRequest\n  \"hand-restructured\"\n  (m/schema [:map [:name :string]]))")
+                            ;; … and Update already carries the required form.
+                            (str/replace "   [:name {:optional true} :string]])"
+                                         "   [:name {:optional true} :string]\n   [:sku :string]])")))
+              result (ports/add-field
+                      svc {:module-name "item" :entity "Item"
+                           :field {:name :sku :type :string :required true :unique false}
+                           :output-dir (.getPath dir) :dry-run false})
+              entry  (first (filter #(str/ends-with? (:path %) "schema.clj") (:files result)))
+              note   (:manual-note entry)]
+          (is (:manual? entry))
+          (is (str/includes? note "CreateItemRequest")
+              "the unplaceable schema must not be dropped")
+          (is (str/includes? note "UpdateItemRequest")
+              "nor the one that has it in the wrong shape")
+          (is (str/includes? note "[:sku {:optional true} :string]")
+              "and the update request is quoted optional")
+          (is (str/includes? (:note entry) "CreateItemRequest")
+              "the description names both problems too")
+          (is (str/includes? (:note entry) "not as optional")))
+        (finally (delete-tree! dir))))))

@@ -590,3 +590,44 @@
             r (gen/add-field-to-schema (with-sku optional-entry) "Widget" optional-field)]
         (is (= :already-present (:reason r)))
         (is (empty? (:wrong-shape r)))))))
+
+(deftest ^:unit def-form-range-stops-at-the-next-form
+  ;; The scan for the closing line had no upper bound, so a def it could not
+  ;; recognise — one ending `]))` rather than `])` — handed back the *next*
+  ;; def's closing line. Asked to add a field to a hand-restructured
+  ;; CreateItemRequest, it wrote the entry into UpdateItemRequest and reported
+  ;; :inserted: the wrong schema, in the required form, in the one schema that
+  ;; must not have it.
+  (let [src (str "(ns app.item.schema)\n\n"
+                 "(def CreateItemRequest\n  \"hand-restructured\"\n  (m/schema [:map [:name :string]]))\n\n"
+                 "(def UpdateItemRequest\n  [:map {:title \"Update Item Request\"}\n   [:name {:optional true} :string]])\n")]
+
+    (testing "an unrecognised def does not borrow the next one's closing line"
+      (is (= {:status :unrecognised}
+             (gen/insert-schema-entry src "CreateItemRequest" "[:sku :string]"))))
+
+    (testing "and the following schema is left alone"
+      (is (nil? (:content (gen/insert-schema-entry src "CreateItemRequest" "[:sku :string]")))
+          "returning content here meant a write into UpdateItemRequest"))
+
+    (testing "the last def in a file still resolves"
+      ;; The bound is the next top-level form, so the final def has none.
+      (is (= :inserted
+             (:status (gen/insert-schema-entry src "UpdateItemRequest"
+                                               "[:sku {:optional true} :string]")))))))
+
+(deftest ^:unit mixed-schema-states-report-every-remaining-target
+  ;; One schema unplaceable and another carrying the required form is the case
+  ;; that went half-reported: two `assoc` clauses wrote :manual-note in turn, so
+  ;; the second overwrote the first, and the skipped arm dropped the unreachable
+  ;; list entirely. Following those instructions left the set unsynchronised.
+  (let [src (str "(ns app.item.schema)\n\n"
+                 "(def Item\n  [:map {:title \"Item\"}\n   [:id :uuid]])\n\n"
+                 "(def CreateItemRequest\n  \"hand-restructured\"\n  (m/schema [:map [:id :uuid]]))\n\n"
+                 "(def UpdateItemRequest\n  [:map {:title \"Update Item Request\"}\n   [:id :uuid]\n   [:sku :string]])\n")
+        r   (gen/add-field-to-schema src "Item" required-field)]
+    (testing "both categories survive into the result"
+      (is (= ["CreateItemRequest"] (:unreachable r))
+          "unplaceable, and the user has to be told")
+      (is (= ["UpdateItemRequest"] (:wrong-shape r))
+          "present but required, and the user has to be told that too"))))
