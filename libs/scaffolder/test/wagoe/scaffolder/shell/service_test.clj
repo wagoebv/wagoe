@@ -610,7 +610,7 @@
               entry  (first (filter #(str/ends-with? (:path %) "schema.clj") (:files result)))
               note   (:manual-note entry)]
           (is (:manual? entry))
-          (is (str/includes? note "[:sku :string] to Ghost and CreateGhostRequest"))
+          (is (str/includes? note "[:sku :string] to Ghost, CreateGhostRequest"))
           (is (str/includes? note "[:sku {:optional true} :string] to UpdateGhostRequest")))
         (finally (delete-tree! dir)))))
 
@@ -633,7 +633,7 @@
               file   (slurp (io/file dir "src/wagoe/tag/schema.clj"))]
           ;; The note claimed one form for all three schemas while the file
           ;; held two — a report that does not match the edit it describes.
-          (is (str/includes? (:note entry) "[:slug :string] to Tag and CreateTagRequest"))
+          (is (str/includes? (:note entry) "[:slug :string] to Tag, CreateTagRequest"))
           (is (str/includes? (:note entry) "[:slug {:optional true} :string] to UpdateTagRequest"))
           (is (str/includes? file "[:slug {:optional true} :string]")
               "and the file agrees"))
@@ -681,3 +681,33 @@
               "the description names both problems too")
           (is (str/includes? (:note entry) "not as optional")))
         (finally (delete-tree! dir))))))
+
+(deftest ^:unit manual-instructions-name-the-output-dir-path
+  ;; The file list resolved through --output-dir while the instruction appended
+  ;; the cwd-relative path, so the two lines named different files and the one
+  ;; the user acts on pointed at the current project.
+  (testing "the instruction names the same file as the report"
+    (let [dir (temp-dir)]
+      (try
+        (let [svc    (service/create-scaffolder-service)
+              result (ports/add-field
+                      svc {:module-name "item" :entity "Item"
+                           :field {:name :sku :type :string :required true :unique false}
+                           :output-dir (.getPath dir) :dry-run false})
+              entry  (first (filter #(str/ends-with? (:path %) "schema.clj") (:files result)))]
+          (is (:manual? entry) "no schema file there, so there is manual work")
+          (is (str/starts-with? (:path entry) (.getPath dir)))
+          (is (str/includes? (:manual-note entry) (:path entry))
+              "the instruction has to point at the file the report names"))
+        (finally (delete-tree! dir)))))
+
+  (testing "without an output dir the path stays relative"
+    ;; Absolute paths everywhere would be correct but noisy for the common case.
+    (let [svc    (service/create-scaffolder-service)
+          result (ports/add-field
+                  svc {:module-name "nonexistent-module" :entity "Nope"
+                       :field {:name :sku :type :string :required false :unique false}
+                       :dry-run true})
+          entry  (first (filter #(str/ends-with? (:path %) "schema.clj") (:files result)))]
+      (is (= "src/wagoe/nonexistent-module/schema.clj" (:path entry)))
+      (is (str/includes? (:manual-note entry) "src/wagoe/nonexistent-module/schema.clj")))))

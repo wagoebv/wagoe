@@ -272,6 +272,11 @@
                                       (assoc entry :action :create :path (.getPath file))))
                                   files))
             schema-file   (resolve-path output-dir schema-path)
+            ;; The path the user has to open, which is not `schema-path` once
+            ;; --output-dir is in play: the file list named
+            ;; /tmp/app/src/…/schema.clj while the instruction below said
+            ;; src/…/schema.clj, sending the reader to the current project.
+            schema-display (.getPath schema-file)
             existing      (when (.isFile schema-file) (slurp schema-file))
             edit          (when existing
                             (generators/add-field-to-schema existing entity field))
@@ -295,8 +300,12 @@
             by-form       (fn [schemas]
                             (str/join "; "
                                       (for [entry (distinct (map entry-for schemas))]
+                                        ;; Commas, not repeated "and": a field
+                                        ;; that takes the same form everywhere
+                                        ;; grouped all three targets into
+                                        ;; "A and B and C".
                                         (str entry " to "
-                                             (str/join " and "
+                                             (str/join ", "
                                                        (filter #(= entry (entry-for %)) schemas))))))
             ;; The two ways a target can still need attention. Kept as
             ;; clause builders without the path so several can be joined and
@@ -318,7 +327,7 @@
                                              (seq unreachable) (conj (add-clause unreachable))
                                              (seq wrong-shape) (conj (optional-clause wrong-shape)))]
                                (when (seq clauses)
-                                 (str (str/join "; " clauses) " — " schema-path))))
+                                 (str (str/join "; " clauses) " — " schema-display))))
             problem-desc   (fn [{:keys [unreachable wrong-shape]}]
                              (str/join "; "
                                        (cond-> []
@@ -336,7 +345,7 @@
                ;; All three targets, each with the form it needs — the file is
                ;; absent, so none of them has the field.
                :manual-note (str (add-clause [entity (str "Create" entity "Request") update-schema])
-                                 " — " schema-path)}
+                                 " — " schema-display)}
 
               ;; A partial success is still a partial success. Editing two of
               ;; the three schemas and reporting only the two is how the Malli
