@@ -444,3 +444,54 @@
           (is (every? #(str/starts-with? (:path %) (.getPath dir)) (:files result))
               "and the report names where they actually are"))
         (finally (delete-tree! dir))))))
+
+(deftest ^:unit migration-ids-are-unique-within-the-output-dir
+  ;; The collision guard scanned `migrations/` and `resources/migrations/` in
+  ;; the working directory only, so --output-dir defeated it: two runs into the
+  ;; same directory inside one second saw no existing ids, took the same
+  ;; timestamp, and wrote two different migrations under one id. migratus then
+  ;; refuses the whole run, which is BOU-256's failure mode again:
+  ;;
+  ;;   Multiple migrations with id 20260806060706 ("create-betas" "create-alphas")
+  (testing "consecutive generates into one directory get distinct ids"
+    (let [dir (temp-dir)]
+      (try
+        (let [svc (service/create-scaffolder-service)
+              gen (fn [n]
+                    (ports/generate-module
+                     svc {:module-name n
+                          :entities [{:name (str/capitalize n)
+                                      :fields [{:name :x :type :string :required true}]}]
+                          :interfaces {:http true :cli true :web true}
+                          :features {:audit true :pagination true}
+                          :output-dir (.getPath dir) :dry-run false}))
+              _   (dorun (map gen ["alpha" "beta" "gamma"]))
+              ids (->> (files-on-disk dir)
+                       (filter #(str/starts-with? % "migrations/"))
+                       (keep #(second (re-find #"migrations/(\d+)-" %)))
+                       set)]
+          (is (= 3 (count ids))
+              "three modules, three ids — sharing one makes migratus reject every migration"))
+        (finally (delete-tree! dir))))))
+
+(deftest ^:unit dry-run-previews-the-output-dir
+  ;; The dry-run branch kept the original relative paths while the write branch
+  ;; reported resolved ones, so `--dry-run --output-dir /tmp/x` previewed a run
+  ;; into the working directory — a description of something that would not
+  ;; happen, which is the same class of defect as the false :update this ticket
+  ;; is about.
+  (testing "previewed paths point where the files would actually be written"
+    (let [dir (temp-dir)]
+      (try
+        (let [svc    (service/create-scaffolder-service)
+              result (ports/generate-module
+                      svc {:module-name "widget"
+                           :entities [{:name "Widget"
+                                       :fields [{:name :label :type :string :required true}]}]
+                           :interfaces {:http true :cli true :web true}
+                           :features {:audit true :pagination true}
+                           :output-dir (.getPath dir) :dry-run true})]
+          (is (every? #(str/starts-with? (:path %) (.getPath dir)) (:files result))
+              "a preview that names the wrong directory is worse than none")
+          (is (empty? (files-on-disk dir)) "and it still must not write anything"))
+        (finally (delete-tree! dir))))))

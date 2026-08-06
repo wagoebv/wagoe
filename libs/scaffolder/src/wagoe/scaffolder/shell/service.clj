@@ -10,20 +10,47 @@
             [clojure.string :as str]
             [malli.core :as m]))
 
+(defn- resolve-path
+  "Where a reported path actually lands, given `output-dir`.
+
+   The CLI has always accepted `--output-dir DIR` and passed it in the request,
+   and the service ignored it: every write went to `(io/file path)`, relative to
+   the working directory. `--output-dir /tmp/x` wrote nothing to /tmp/x and a
+   full module into the current project (BOU-275, same root cause — an
+   affordance decoupled from what the code does).
+
+   \".\" and nil resolve to the plain relative path, so default behaviour and
+   every existing report are unchanged."
+  [output-dir path]
+  (if (or (str/blank? output-dir) (= "." output-dir))
+    (io/file path)
+    (io/file output-dir path)))
+
 (defn- existing-migration-ids
   "Numeric ids already used by migration files, as strings.
 
    Checks both layouts this repo has: generated projects keep migrations in
-   `migrations/`, the monorepo in `resources/migrations/`."
-  []
-  (into #{}
-        (for [dir   ["migrations" "resources/migrations"]
-              :let  [d (io/file dir)]
-              :when (.isDirectory d)
-              f     (.listFiles d)
-              :let  [m (re-find #"^(\d+)-" (.getName f))]
-              :when m]
-          (second m))))
+   `migrations/`, the monorepo in `resources/migrations/`.
+
+   And under `output-dir`, not only the working directory. Scanning the cwd
+   alone made the collision guard below useless exactly where collisions are
+   likeliest: two scaffold runs into the same `--output-dir` inside one second
+   saw no existing ids, took the same timestamp, and produced two different
+   migrations sharing one 14-digit id. Measured — migratus then refuses the
+   entire run:
+
+     Multiple migrations with id 20260806060706 (\"create-betas\" \"create-alphas\")"
+  ([] (existing-migration-ids "."))
+  ([output-dir]
+   (into #{}
+         (for [root  (distinct [(or output-dir ".") "."])
+               dir   ["migrations" "resources/migrations"]
+               :let  [d (resolve-path root dir)]
+               :when (.isDirectory d)
+               f     (.listFiles d)
+               :let  [m (re-find #"^(\d+)-" (.getName f))]
+               :when m]
+           (second m)))))
 
 (defn- next-migration-id
   "First id at or after `now` that is not in `used`, as a string.
@@ -56,26 +83,11 @@
    and always returned 001, and it parsed ids with `Integer/parseInt`, which
    overflows on 14-digit timestamps and sent the function into its catch
    branch."
-  []
-  (next-migration-id (existing-migration-ids)
-                     (.format (java.time.LocalDateTime/now java.time.ZoneOffset/UTC)
-                              (java.time.format.DateTimeFormatter/ofPattern "yyyyMMddHHmmss"))))
-
-(defn- resolve-path
-  "Where a reported path actually lands, given `output-dir`.
-
-   The CLI has always accepted `--output-dir DIR` and passed it in the request,
-   and the service ignored it: every write went to `(io/file path)`, relative to
-   the working directory. `--output-dir /tmp/x` wrote nothing to /tmp/x and a
-   full module into the current project (BOU-275, same root cause — an
-   affordance decoupled from what the code does).
-
-   \".\" and nil resolve to the plain relative path, so default behaviour and
-   every existing report are unchanged."
-  [output-dir path]
-  (if (or (str/blank? output-dir) (= "." output-dir))
-    (io/file path)
-    (io/file output-dir path)))
+  ([] (get-next-migration-number "."))
+  ([output-dir]
+   (next-migration-id (existing-migration-ids output-dir)
+                      (.format (java.time.LocalDateTime/now java.time.ZoneOffset/UTC)
+                               (java.time.format.DateTimeFormatter/ofPattern "yyyyMMddHHmmss")))))
 
 (def ^:private module-generation-request-validator (m/validator schema/ModuleGenerationRequest))
 (def ^:private module-generation-request-explainer (m/explainer schema/ModuleGenerationRequest))
@@ -100,8 +112,9 @@
             dry-run? (:dry-run request false)
             output-dir (:output-dir request ".")
 
-            ;; UTC timestamp id — see get-next-migration-number.
-            migration-number (get-next-migration-number)
+;; UTC timestamp id — see get-next-migration-number. Scoped to
+            ;; output-dir so ids stay unique in the directory being written to.
+            migration-number (get-next-migration-number output-dir)
 
             ;; Generate source file contents
             schema-content (generators/generate-schema-file ctx)
@@ -169,7 +182,11 @@
             ;; Rebound to what was actually done, so the report cannot drift
             ;; from the filesystem.
             files (if dry-run?
+                    ;; Resolved, like the write branch below. A preview that
+                    ;; printed cwd-relative paths while --output-dir pointed
+                    ;; elsewhere described a run that would not happen.
                     (mapv #(assoc % :action :skip
+                                  :path (.getPath (resolve-path output-dir (:path %)))
                                   :note "dry run — would be created")
                           files)
                     (mapv (fn [{:keys [path content] :as entry}]
@@ -204,7 +221,7 @@
       (let [{:keys [module-name entity field dry-run]} request
             base-ns-path (str/replace (or (:base-ns request) "wagoe") "." "/")
             output-dir (:output-dir request ".")
-            migration-number (get-next-migration-number)
+            migration-number (get-next-migration-number output-dir)
 
             ;; Generate migration content
             migration-content (generators/generate-add-field-migration
@@ -245,6 +262,7 @@
         ;; field that fails validation with the migration already applied.
             written       (if dry-run
                             (mapv #(assoc % :action :skip
+                                          :path (.getPath (resolve-path output-dir (:path %)))
                                           :note "dry run — would be created")
                                   files)
                             (mapv (fn [{:keys [path content] :as entry}]
