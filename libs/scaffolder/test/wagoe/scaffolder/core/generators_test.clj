@@ -695,3 +695,54 @@
              (:wrong-shape r)))
       (is (= (mapv :schema (filter #(= :inserted (:status %)) (:outcomes r)))
              (:schemas r))))))
+
+(deftest ^:unit every-supported-field-type-can-be-inserted
+  ;; The parser rewrite read entries with clojure.edn, which has no dispatch
+  ;; macro for #"…". :email renders [:re {…} #"…"], so `bb scaffold field
+  ;; --type email` threw `No dispatch macro for: "` — after the migration pair
+  ;; had been written, leaving the column added and the schema untouched.
+  ;;
+  ;; Driven off the CLI's own validation set rather than a list here, so a type
+  ;; added there cannot quietly go unexercised.
+  (let [cli-types ["string" "text" "integer" "int" "decimal" "boolean"
+                   "email" "uuid" "enum" "date" "datetime" "inst" "json"]
+        type-mapping {"integer" :int "int" :int "date" :inst
+                      "datetime" :inst "text" :text "json" :json}]
+    (doseq [t cli-types
+            :let [field {:name :probe
+                         :type (get type-mapping t (keyword t))
+                         :required false}
+                  r (gen/add-field-to-schema generated-schema "Widget" field)]]
+      (testing (str "--type " t)
+        (is (= :updated (:status r)) (str t ": the schema edit must not throw"))
+        (is (= 3 (count (:schemas r))))
+        (is (str/includes? (:content r) ":probe"))))))
+
+(deftest ^:unit regex-backed-entries-round-trip
+  ;; :email is the type that exposed this; the entry has to survive insertion
+  ;; and be found again on a rerun.
+  (let [email {:name :contact :type :email :required false}
+        once  (gen/add-field-to-schema generated-schema "Widget" email)]
+
+    (testing "the regex is written verbatim"
+      (is (str/includes? (:content once) "#\"^[a-zA-Z0-9._%+-]+@")))
+
+    (testing "the result is readable Clojure, regex included"
+      (let [forms  (read-string (str "[" (:content once) "]"))
+            before (read-string (str "[" generated-schema "]"))]
+        (is (= (count before) (count forms))
+            "insertion adds an entry, never a top-level form")
+        (is (some #(instance? java.util.regex.Pattern %)
+                  (tree-seq coll? seq forms))
+            "a mangled regex would come back as a string or fail to read")))
+
+    (testing "a rerun finds it rather than adding it twice"
+      ;; Presence detection reads the entry's first child only, so nothing else
+      ;; in it has to be interpretable as a value.
+      (let [twice (gen/add-field-to-schema (:content once) "Widget" email)]
+        (is (= :already-present (:reason twice)))))
+
+    (testing "a plain field can still be added alongside it"
+      (let [after (gen/add-field-to-schema (:content once) "Widget"
+                                           {:name :nick :type :string :required false})]
+        (is (= :updated (:status after)))))))

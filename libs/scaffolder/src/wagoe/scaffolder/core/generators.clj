@@ -4,7 +4,6 @@
    Each generator function takes a template context and returns
    file content as a string. All functions are pure and deterministic."
   (:require [clojure.string :as str]
-            [clojure.edn :as edn]
             [rewrite-clj.zip :as z]
             [rewrite-clj.node :as n]
             [wagoe.scaffolder.core.template :as template]))
@@ -924,10 +923,24 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s;
       ;; Unparseable source. Refusing beats guessing at it with regexes.
       nil)))
 
-(defn- entry-key-of
-  "The keyword a Malli entry is for, e.g. `[:sku …]` -> :sku."
+(defn- entry-node
+  "Parse `entry` into a node, preserving its text exactly.
+
+   rewrite-clj's reader, not clojure.edn: EDN has no dispatch macro for `#\"`,
+   so an entry for a regex-backed type — :email and :date both render
+   `[:re {…} #\"…\"]` — threw `No dispatch macro for: \"`. That happened after
+   the migration pair had been written, leaving the column added and the schema
+   untouched."
   [entry]
-  (try (first (edn/read-string entry)) (catch Exception _ nil)))
+  (z/node (z/of-string entry)))
+
+(defn- entry-key-of
+  "The keyword a Malli entry is for, e.g. `[:sku …]` -> :sku.
+
+   Reads only the first child, so nothing else in the entry has to be
+   interpretable as a value."
+  [entry]
+  (try (-> (z/of-string entry) z/down z/sexpr) (catch Exception _ nil)))
 
 (defn- existing-entry
   "The zipper of the entry for `k` inside `map-zloc`, or nil."
@@ -985,7 +998,7 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s;
            :content (-> map-zloc
                         (z/append-child* (n/newlines 1))
                         (z/append-child* (n/spaces indent))
-                        (z/append-child* (n/coerce (edn/read-string entry)))
+                        (z/append-child* (entry-node entry))
                         z/root-string)})))
     {:status :unrecognised}))
 
