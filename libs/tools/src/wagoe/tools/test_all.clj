@@ -38,30 +38,24 @@
 ;; whose coverage depends on someone remembering to extend a list is the exact
 ;; failure this task exists to remove (BOU-250).
 
-(defn main-suite-aliases
+(def main-suite-aliases
   "Aliases the root suite needs, as one `-M:...` argument.
 
-   The heavy test dependencies live in narrow aliases so the 27 per-library CI
-   jobs do not resolve them (BOU-260). The root suite runs everything, so it
-   needs them all back.
+   `:test/all` composes the heavy dependencies that moved out of `:test` so the
+   27 per-library CI jobs stop resolving ~106 MB they never use (BOU-260). It is
+   the same alias AGENTS.md documents for a full local run — one definition
+   rather than a list assembled here that could drift from it.
 
-   `:test/pg-mac` is added only on macOS. It is the embedded-postgres binary for
-   Apple Silicon — 61.8 MB — and every CI runner is ubuntu-latest, so including
-   it unconditionally would put it back on all 52 jobs for a platform none of
-   them run.
-
-   Takes os-name so a test can drive both arms rather than asserting whatever
-   the runner happens to be."
-  ([] (main-suite-aliases (System/getProperty "os.name")))
-  ([os-name]
-   (str "-M:test:test/pg:test/otel:test/http"
-        (when (and os-name (str/starts-with? os-name "Mac")) ":test/pg-mac"))))
+   It includes the macOS PostgreSQL binary, which is right for a local run and
+   wrong for CI. CI never uses this: its jobs request `:test/pg`, `:test/otel`
+   or `:test/http` individually."
+  "-M:test:test/all")
 
 (def surfaces
   [{:id    :main
     :label "main suite (tests.edn — all app-classpath libs)"
     :dir   "."
-    :cmd   ["clojure" (main-suite-aliases)]}
+    :cmd   ["clojure" main-suite-aliases]}
    {:id    :tools
     :label "wagoe-tools unit tests"
     :dir   "."

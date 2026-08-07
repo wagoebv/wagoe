@@ -28,15 +28,22 @@ bb test:all                                              # main + tools + agents
 bb test:all --list                                       # show the surfaces, and what is deliberately excluded
 
 # Testing - main suite only (does NOT cover the standalone libs — see below)
-clojure -M:test                                    # tests.edn suites (default test profile uses H2 in-memory)
-# The heavy test deps live in narrow aliases so the per-library CI jobs do not
-# resolve ~106 MB they never use (BOU-260). Add them when running those suites:
-#   :test/pg    admin, platform, tenant   (embedded PostgreSQL)
-#   :test/otel  observability             (OpenTelemetry in-memory exporters)
-#   :test/http  devtools                  (clj-http-lite)
+clojure -M:test:test/all                           # every tests.edn suite (H2 in-memory by default)
+JWT_SECRET="dev-secret-at-least-32-characters-long" WAG_ENV=test clojure -M:test:test/all  # With JWT secret
+
+# Why `:test/all`. The heavy test dependencies — embedded PostgreSQL's two
+# platform binaries (90 MB), the OpenTelemetry in-memory exporters, clj-http-lite
+# — used to sit in `:test`, which all 27 per-library CI jobs resolve. One flaky
+# artifact there failed them all under an innocent library's name (BOU-260).
+# They now live in narrow aliases, and `:test/all` composes them for a full local
+# run. Bare `clojure -M:test` runs the lean set: fine for a suite that needs
+# nothing extra, and it fails on ClassNotFoundException for one that does.
+#
+#   :test/pg      admin, platform, tenant   (embedded PostgreSQL, Linux binary)
 #   :test/pg-mac  local runs on Apple Silicon — CI is ubuntu-only
-clojure -M:test:test/pg :admin                     # a suite that needs one
-JWT_SECRET="dev-secret-at-least-32-characters-long" WAG_ENV=test clojure -M:test  # With JWT secret
+#   :test/otel    observability             (OpenTelemetry in-memory exporters)
+#   :test/http    devtools                  (clj-http-lite)
+clojure -M:test:test/pg :admin                     # one suite, only what it needs
 
 # Testing - Per-library test suites
 clojure -M:test :core                              # Core library tests

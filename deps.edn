@@ -228,6 +228,24 @@
 
            ;; HTTP client for the devtools dashboard server test only.
            :test/http {:extra-deps {org.clj-commons/clj-http-lite {:mvn/version "1.0.13"}}}
+
+           ;; Everything the root suite needs, for running it in one command.
+           ;;
+           ;; `clojure -M:test` alone runs kaocha's default, which discovers
+           ;; every suite — including the ones whose dependencies moved out of
+           ;; :test — so it fails on ClassNotFoundException before a single
+           ;; test runs. Splitting the alias without this made the documented
+           ;; main command unusable.
+           ;;
+           ;; The macOS binary is included: this alias is for local runs, where
+           ;; the download happens once into ~/.m2. CI never uses it — the
+           ;; per-library jobs request only what they need, which is the whole
+           ;; point of the split (BOU-260).
+           :test/all  {:extra-deps {io.zonky.test/embedded-postgres {:mvn/version "2.2.2"}
+                                    io.zonky.test.postgres/embedded-postgres-binaries-linux-amd64 {:mvn/version "18.4.0"}
+                                    io.zonky.test.postgres/embedded-postgres-binaries-darwin-arm64v8 {:mvn/version "18.4.0"}
+                                    io.opentelemetry/opentelemetry-sdk-testing {:mvn/version "1.45.0"}
+                                    org.clj-commons/clj-http-lite {:mvn/version "1.0.13"}}}
            :outdated  {:extra-deps {olical/depot {:mvn/version "2.4.1"}}
                        :main-opts  ["-m" "depot.outdated.main"]}
            :build     {:main-opts  ["-m" "build"]

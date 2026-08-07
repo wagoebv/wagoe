@@ -3,7 +3,8 @@
             [clojure.test :refer [deftest is testing]]
             [clojure.java.io :as io]
             [clojure.string :as str]
-            [wagoe.tools.check :as check]))
+            [wagoe.tools.check :as check]
+            [wagoe.tools.test-all :as test-all]))
 
 ;; =============================================================================
 ;; Check definitions
@@ -425,3 +426,47 @@
               :when (not (#{"admin" "platform" "tenant" "observability" "devtools"} s))]
         (is (= "-M:test" alias)
             (str s " requests " alias " but needs nothing beyond :test"))))))
+
+(defn- deps-edn []
+  (let [cwd (System/getProperty "user.dir")]
+    (if-let [f (some (fn [^java.io.File f] (when (.exists f) f))
+                     [(io/file cwd "deps.edn") (io/file cwd ".." ".." "deps.edn")])]
+      (edn/read-string (slurp f))
+      (throw (ex-info "deps.edn not found" {:cwd cwd})))))
+
+(deftest ^:unit the-composed-alias-covers-every-split-alias
+  ;; Splitting :test broke the documented main command: kaocha's default run
+  ;; discovers every suite, so it hit ClassNotFoundException before a test ran.
+  ;; `:test/all` composes the split aliases back for a full local run, and this
+  ;; asserts it stays complete — a new narrow alias that nobody adds here would
+  ;; break that command again, in the same way and just as silently.
+  (let [aliases (:aliases (deps-edn))
+        split   (filter #(str/starts-with? (str (symbol %)) "test/") (keys aliases))
+        all     (set (keys (:extra-deps (:test/all aliases))))]
+
+    (testing "the split aliases are discoverable"
+      (is (<= 4 (count split))
+          "expected :test/pg, :test/pg-mac, :test/otel, :test/http"))
+
+    (testing "every dependency in a split alias is in :test/all"
+      (doseq [a split
+              :when (not= :test/all a)
+              d (keys (:extra-deps (get aliases a)))]
+        (is (contains? all d)
+            (str d " is in " a " but missing from :test/all, so the documented "
+                 "full-suite command would fail on it"))))
+
+    (testing "and :test/all adds nothing that no suite asks for"
+      ;; Otherwise it becomes a second place heavy deps accumulate, which is
+      ;; how :test got this way.
+      (let [in-split (set (mapcat #(keys (:extra-deps (get aliases %)))
+                                  (remove #{:test/all} split)))]
+        (is (empty? (remove in-split all))
+            (str "in :test/all but in no narrow alias: "
+                 (pr-str (sort (remove in-split all)))))))))
+
+(deftest ^:unit test-all-uses-the-documented-alias
+  ;; `bb test:all` and AGENTS.md must name the same thing. Assembling the list
+  ;; separately in each is how they drift.
+  (testing "the main surface runs the composed alias"
+    (is (= "-M:test:test/all" test-all/main-suite-aliases))))
