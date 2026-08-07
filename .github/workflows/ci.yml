@@ -346,6 +346,34 @@ jobs:
         run: bb check:poms
 
   # =============================================================================
+  # Branch protection vs the job names CI emits (Babashka — fast, no JVM)
+  # =============================================================================
+  # BOU-277: main required 13 contexts that were the job *keys* from this file,
+  # while GitHub reports each job's `name:`. They could never be satisfied, and
+  # while an admin override absorbed them they could never fail either.
+  #
+  # Reading branch protection needs a token with admin scope. GITHUB_TOKEN does
+  # not have it, so this skips cleanly on a fork or without the secret rather
+  # than failing — a checker that cannot see its input must say so, not draw a
+  # conclusion from it. Set BRANCH_PROTECTION_TOKEN to make it binding.
+  branch-protection:
+    name: Branch Protection Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Babashka
+        uses: DeLaGuardo/setup-clojure@13.6.1
+        with:
+          bb: latest
+
+      - name: Required status checks must name jobs CI emits
+        env:
+          GH_TOKEN: ${{ secrets.BRANCH_PROTECTION_TOKEN || github.token }}
+        run: bb check:branch-protection
+
+  # =============================================================================
   # AGENTS.md generator drift (Babashka — fast, no JVM)
   # =============================================================================
   check-agents:

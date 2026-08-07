@@ -19,6 +19,8 @@
    gate needs a seam that returns a verdict — adding one is part of bringing a
    gate under this test."
   (:require [clojure.test :refer [deftest is testing]]
+            [clj-yaml.core :as yaml]
+            [wagoe.tools.check-branch-protection :as check-bp]
             [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.string :as str]
@@ -577,6 +579,36 @@
 ;; The meta-gate: every gate must be represented above
 ;; =============================================================================
 
+(deftest ^:unit branch-protection-gate-fires-test
+  (testing "a required context no job emits is detected"
+    ;; The state main was in on 2026-08-07: the required set held job *keys*
+    ;; from ci.yml while GitHub reports each job's `name:`.
+    (let [emitted {"Lint" #{"ci.yml"} "Test wagoe/core" #{"ci.yml"}}
+          {:keys [phantom]} (check-bp/reconcile #{"lint" "test-core"} emitted)]
+      (is (= ["lint" "test-core"] phantom))))
+
+  (testing "a nightly workflow contributes nothing to require against"
+    ;; Requiring a context from a scheduled workflow is the same defect by
+    ;; another route: it never appears on a PR, so it can never be satisfied.
+    (is (empty? (check-bp/workflow-contexts
+                 (yaml/parse-string
+                  "on:\n  schedule:\n    - cron: '0 3 * * *'\njobs:\n  a:\n    name: A\n")))))
+
+  (testing "the gate reads real workflows, not an empty file list"
+    ;; The failure this guards against is the one BOU-250 found in docs-lint:
+    ;; a live check scanning nothing and reporting clean.
+    (let [emitted (check-bp/emitted-contexts)]
+      (is (< 40 (count emitted))
+          "expected ci.yml's jobs, so a passing run means something")
+      (is (contains? emitted "All Tests Passed"))))
+
+  (testing "the repository currently satisfies the gate"
+    (let [required (check-bp/required-contexts)]
+      (if (= :unavailable required)
+        (is (= :unavailable required)
+            "no admin-scoped token here; the synthetic assertions above still ran")
+        (is (empty? (:phantom (check-bp/reconcile required (check-bp/emitted-contexts)))))))))
+
 (def gates-with-firing-tests
   "Gate ids from `check/all-checks` that this namespace proves can still fire.
 
@@ -585,7 +617,7 @@
    one that does not run."
   #{:hygiene :deps :fcis :placeholder-tests :docs-lint
     :test-meta :test-tags :ports :poms :agents :doctor :linting :no-boundary
-    :doc-counts})
+    :doc-counts :branch-protection})
 
 (def gates-without-firing-tests
   "Gates that cannot yet be proven to fire, each with the reason.

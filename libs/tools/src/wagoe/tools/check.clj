@@ -105,6 +105,13 @@
     :scope :monorepo
     :label "POM dependency completeness"
     :cmd   ["bb" "check:poms"]}
+   ;; Reads branch protection via `gh`, so it needs an admin-scoped token and
+   ;; skips cleanly without one. :monorepo because a generated project has no
+   ;; wagoebv/wagoe to reconcile against.
+   {:id    :branch-protection
+    :scope :monorepo
+    :label "Branch protection vs CI job names"
+    :cmd   ["bb" "check:branch-protection"]}
    {:id    :no-boundary
     :scope :monorepo
     :label "Rename gate (no residual boundary tokens)"
