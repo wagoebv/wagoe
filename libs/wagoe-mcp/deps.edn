@@ -19,7 +19,8 @@
         ;; closed verify loop reuses. Both are dev tooling — the MCP server is
         ;; itself dev tooling, so the coupling is acceptable.
         wagoe/scaffolder       {:local/root "../scaffolder"}
-        wagoe/tools            {:local/root "../tools"}}
+        wagoe/tools            {:local/root "../tools"}
+        metosin/malli {:mvn/version "0.20.1"}}
 
  :aliases
  {;; Launch the stdio MCP server (editor integration).

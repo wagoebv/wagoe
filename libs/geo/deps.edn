@@ -1,6 +1,7 @@
 {:paths ["src" "resources"]
 
  :deps  {org.clojure/clojure               {:mvn/version "1.12.5"}
+         integrant/integrant {:mvn/version "1.0.1"}
          metosin/malli                     {:mvn/version "0.20.1"}
          clj-http/clj-http                 {:mvn/version "3.13.1"}
          cheshire/cheshire                 {:mvn/version "6.2.0"}
