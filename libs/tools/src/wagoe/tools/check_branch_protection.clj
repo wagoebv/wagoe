@@ -37,10 +37,15 @@
    be satisfied, which is the defect this gate exists to catch — reintroduced
    by requiring something from a nightly workflow.
 
-   `on: push` with no filter, or any `pull_request`, qualifies. A push filtered
-   to tags does not: publish.yml runs on release tags, never on a PR branch.
-   `schedule` and `workflow_dispatch` do not either — brand-canary.yml and
-   first-run-matrix.yml are nightly.
+   `on: push` with no filter, or any `pull_request`, qualifies. These do not:
+
+   - a push filtered to tags — publish.yml runs on release tags
+   - a push filtered to named branches — branch-protection.yml runs on main
+     only, so a PR branch never triggers it. That filter is what keeps its
+     admin-scoped token away from branch-controlled code, and treating it as
+     PR-visible would have made this gate demand a context that PRs never see.
+   - `schedule` and `workflow_dispatch` — brand-canary.yml and
+     first-run-matrix.yml are nightly
 
    That last point settles what looked like the hard case here. The matrix
    workflow generates job names per axis (`Smoke — ${{ matrix.image }}`), which
@@ -60,7 +65,14 @@
          (and (contains? on :push)
               (let [push (:push on)]
                 (or (nil? push)
-                    (and (map? push) (not (:tags push))))))))))
+                    (and (map? push)
+                         (not (:tags push))
+                         ;; A named-branch filter cannot match a PR branch.
+                         ;; `branches: ['**']` and the like would, but nothing
+                         ;; here uses one; a wildcard is treated as visible.
+                         (let [bs (:branches push)]
+                           (or (nil? bs)
+                               (some #(str/includes? % "*") bs)))))))))))
 
 ;; ---------------------------------------------------------------------------
 ;; Contexts a workflow emits
