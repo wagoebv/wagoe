@@ -217,3 +217,43 @@
   (testing "both namespaces resolve to the hiccup artifact"
     (is (= 'hiccup/hiccup (sut/provider-of "hiccup.core")))
     (is (= 'hiccup/hiccup (sut/provider-of "hiccup2.core")))))
+
+(deftest ^:unit clojure-contrib-is-third-party
+  ;; The predicate exempted the whole `clojure.` prefix apart from
+  ;; `clojure.tools.*`, so a library could require clojure.data.csv or
+  ;; clojure.core.async and ship a POM without org.clojure/data.csv — the exact
+  ;; defect this gate exists to catch, reintroduced through the exemption.
+  ;;
+  ;; A prefix rule cannot express this: clojure.data is stdlib and
+  ;; clojure.data.csv is contrib; clojure.java.io is stdlib and
+  ;; clojure.java.jdbc is contrib. The set is exact, taken from the jar.
+  (testing "contrib namespaces are reported"
+    (doseq [n ["clojure.data.csv" "clojure.core.async" "clojure.java.jdbc"
+               "clojure.data.json" "clojure.math.combinatorics"]]
+      (let [dir (temp-lib "{:deps {org.clojure/clojure {:mvn/version \"1.12.5\"}}}" n)]
+        (try
+          (is (seq (sut/unmapped-third-party-namespaces [["probe" dir]]))
+              (str n " is its own artifact, not standard library"))
+          (finally (delete-tree! dir))))))
+
+  (testing "genuine standard library namespaces are not"
+    ;; Including the ones whose contrib siblings share their first two
+    ;; segments — that pairing is why the check is a set and not a prefix.
+    (doseq [n ["clojure.data" "clojure.java.io" "clojure.core.protocols"
+               "clojure.core.reducers" "clojure.string" "clojure.set"
+               "clojure.edn" "clojure.walk" "clojure.test" "clojure.pprint"
+               "clojure.stacktrace" "clojure.java.shell" "clojure.zip"]]
+      (let [dir (temp-lib "{:deps {org.clojure/clojure {:mvn/version \"1.12.5\"}}}" n)]
+        (try
+          (is (empty? (sut/unmapped-third-party-namespaces [["probe" dir]]))
+              (str n " ships inside the clojure jar"))
+          (is (empty? (sut/third-party-gaps [["probe" dir]])) n)
+          (finally (delete-tree! dir))))))
+
+  (testing "clojure.tools.* stays checked, as before"
+    (let [dir (temp-lib "{:deps {org.clojure/clojure {:mvn/version \"1.12.5\"}}}"
+                        "clojure.tools.cli")]
+      (try
+        (is (= [["probe" "org.clojure/tools.cli"]]
+               (map (juxt :lib (comp str :artifact)) (sut/third-party-gaps [["probe" dir]]))))
+        (finally (delete-tree! dir))))))

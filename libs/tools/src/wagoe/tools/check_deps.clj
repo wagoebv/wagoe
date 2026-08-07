@@ -278,6 +278,40 @@
        first
        second))
 
+(def ^:private clojure-stdlib-namespaces
+  "Namespaces shipped inside the org.clojure/clojure jar.
+
+   An exact set, not a `clojure.` prefix rule. Most of what lives under that
+   prefix is contrib, published as its own artifact: clojure.data is stdlib
+   while clojure.data.csv is org.clojure/data.csv, and clojure.java.io is
+   stdlib while clojure.java.jdbc is org.clojure/java.jdbc. Exempting the
+   prefix would have let a library require either contrib namespace and ship a
+   POM without it — the defect this gate exists to catch, reintroduced through
+   the exemption.
+
+   Regenerate with:
+     unzip -l \"$(find ~/.m2 -name 'clojure-1.12*.jar' | grep -v sources | head -1)\" \\
+       | grep -oE 'clojure/[a-zA-Z_/-]+[.]clj$' \\
+       | sed 's|^clojure/||;s|[.]clj$||' | tr '/' '.' | sed 's|_|-|g;s|^|clojure.|' | sort -u"
+  #{
+   "clojure.core" "clojure.core-deftype" "clojure.core-print"
+   "clojure.core-proxy" "clojure.core.protocols" "clojure.core.reducers"
+   "clojure.core.server" "clojure.data" "clojure.datafy"
+   "clojure.edn" "clojure.genclass" "clojure.gvec"
+   "clojure.inspector" "clojure.instant" "clojure.java.basis"
+   "clojure.java.basis.impl" "clojure.java.browse" "clojure.java.browse-ui"
+   "clojure.java.io" "clojure.java.javadoc" "clojure.java.process"
+   "clojure.java.shell" "clojure.main" "clojure.math"
+   "clojure.parallel" "clojure.pprint" "clojure.pprint.cl-format"
+   "clojure.pprint.column-writer" "clojure.pprint.dispatch" "clojure.pprint.pprint-base"
+   "clojure.pprint.pretty-writer" "clojure.pprint.print-table" "clojure.pprint.utilities"
+   "clojure.reflect" "clojure.reflect.java" "clojure.repl"
+   "clojure.repl.deps" "clojure.set" "clojure.stacktrace"
+   "clojure.string" "clojure.template" "clojure.test"
+   "clojure.test.junit" "clojure.test.tap" "clojure.tools.deps.interop"
+   "clojure.uuid" "clojure.walk" "clojure.xml"
+   "clojure.zip"})
+
 (def ^:private runtime-provided-prefixes
   "Namespace prefixes supplied by the runtime, not by a Maven artifact.
 
@@ -290,13 +324,13 @@
   "Whether `ns-str` is a namespace some artifact has to provide.
 
    Excludes Wagoe's own namespaces, the Clojure standard library, and
-   runtime-provided prefixes. `clojure.tools.*` is deliberately *not* excluded:
-   tools.cli and tools.logging are separate artifacts, and treating them as
-   standard library is what this ticket is about."
+   runtime-provided prefixes. Everything else is something an artifact has to
+   provide — including the rest of `clojure.*`, which is contrib: tools.cli,
+   tools.logging, data.csv and core.async are each their own dependency, and
+   treating the prefix as standard library is what this ticket is about."
   [ns-str]
   (and (not (str/starts-with? ns-str "wagoe."))
-       (not (and (str/starts-with? ns-str "clojure.")
-                 (not (str/starts-with? ns-str "clojure.tools."))))
+       (not (contains? clojure-stdlib-namespaces ns-str))
        (not (some #(or (= ns-str %) (str/starts-with? ns-str (str % ".")))
                   runtime-provided-prefixes))))
 
