@@ -192,14 +192,18 @@
             "but still undeclared")
         (finally (delete-tree! dir)))))
 
-  (testing "runtime-provided namespaces are neither mapped nor reported"
-    ;; libs/tools is pure Babashka; bb bundles these, so declaring them as
-    ;; Maven deps would be wrong rather than merely redundant.
+  (testing "babashka namespaces are exempt only for the libraries bb runs"
+    ;; The exemption was global while its justification is per-library: bb
+    ;; supplies these to code it runs, and libs/tools is the only such library.
+    ;; Any other library requiring babashka.fs needs babashka/fs in its POM, and
+    ;; a blanket prefix rule would have let it ship without one.
     (doseq [n ["babashka.fs" "babashka.process" "babashka.http-client"]]
       (let [dir (temp-lib "{:deps {org.clojure/clojure {:mvn/version \"1.12.5\"}}}" n)]
         (try
-          (is (empty? (sut/unmapped-third-party-namespaces [["probe" dir]])) n)
-          (is (empty? (sut/third-party-gaps [["probe" dir]])) n)
+          (is (empty? (sut/unmapped-third-party-namespaces [["tools" dir]]))
+              (str n " is bundled by bb, and libs/tools runs under bb"))
+          (is (seq (sut/unmapped-third-party-namespaces [["push" dir]]))
+              (str n " in a JVM library is a real dependency"))
           (finally (delete-tree! dir)))))))
 
 (deftest ^:unit every-namespace-this-repository-requires-is-covered

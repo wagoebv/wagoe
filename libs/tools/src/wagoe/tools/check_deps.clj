@@ -312,27 +312,37 @@
    "clojure.uuid" "clojure.walk" "clojure.xml"
    "clojure.zip"})
 
-(def ^:private runtime-provided-prefixes
-  "Namespace prefixes supplied by the runtime, not by a Maven artifact.
+(def ^:private babashka-runtime-libs
+  "Libraries that run under Babashka, which bundles the babashka.* namespaces.
 
-   libs/tools is pure Babashka — `bb` bundles babashka.fs, babashka.process and
-   babashka.http-client — so declaring them as dependencies would be wrong, not
-   merely redundant."
+   Scoped per library, not globally. `bb` supplies these only to code it runs:
+   libs/tools is pure Babashka (every entrypoint carries a bb shebang), so
+   declaring babashka/fs there would be wrong rather than merely redundant. For
+   any other library the same require is a real Maven dependency, and a global
+   exemption would have let it ship a POM without one — the blind spot this gate
+   exists to close.
+
+   A library added here needs the same justification: `bb` runs it."
+  #{"tools"})
+
+(def ^:private runtime-provided-prefixes
+  "Namespace prefixes the Babashka runtime supplies, for the libraries above."
   #{"babashka"})
 
 (defn- third-party-ns?
   "Whether `ns-str` is a namespace some artifact has to provide.
 
-   Excludes Wagoe's own namespaces, the Clojure standard library, and
-   runtime-provided prefixes. Everything else is something an artifact has to
+   Excludes Wagoe's own namespaces, the Clojure standard library, and — for
+   Babashka-run libraries only — the namespaces `bb` bundles. Everything else is something an artifact has to
    provide — including the rest of `clojure.*`, which is contrib: tools.cli,
    tools.logging, data.csv and core.async are each their own dependency, and
    treating the prefix as standard library is what this ticket is about."
-  [ns-str]
+  [lib-name ns-str]
   (and (not (str/starts-with? ns-str "wagoe."))
        (not (contains? clojure-stdlib-namespaces ns-str))
-       (not (some #(or (= ns-str %) (str/starts-with? ns-str (str % ".")))
-                  runtime-provided-prefixes))))
+       (not (and (contains? babashka-runtime-libs lib-name)
+                 (some #(or (= ns-str %) (str/starts-with? ns-str (str % ".")))
+                       runtime-provided-prefixes)))))
 
 (defn unmapped-third-party-namespaces
   "Third-party namespaces required by a library that `ns-prefix->artifact` does
@@ -351,7 +361,7 @@
    (for [[lib-name lib-dir] lib-entries
          f      (source-files lib-dir)
          ns-str (extract-required-ns (parsing/read-ns-form f))
-         :when  (and (third-party-ns? ns-str) (nil? (provider-of ns-str)))]
+         :when  (and (third-party-ns? lib-name ns-str) (nil? (provider-of ns-str)))]
      {:lib lib-name :ns ns-str})))
 
 (defn declared-artifacts
@@ -588,8 +598,8 @@
             :unmapped-ns
             (println (str "  VIOLATION: " (:lib v) " requires " (ansi/red (:ns v))
                           " which maps to no artifact — add it to"
-                          " ns-prefix->artifact, or to runtime-provided-prefixes"
-                          " if the runtime supplies it"))))
+                          " ns-prefix->artifact, or add the library to"
+                          " babashka-runtime-libs if bb runs it"))))
         (println)
         (println (str (count hard-failures) " violation(s) found."))
         (System/exit 1))
