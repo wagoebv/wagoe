@@ -1168,7 +1168,7 @@ jobs:
   test-summary:
     name: All Tests Passed
     runs-on: ubuntu-latest
-    needs: [first-run-smoke, build-ui-assets, docs-lint, agents-links, command-smoke, config-doctor, i18n-scan, check-fcis, check-placeholder-tests, check-test-meta, check-test-tags, check-deps, check-ports, check-hygiene, check-doc-counts, check-poms, check-agents, check-no-boundary, build-uberjar, test-tools, example-smoke, test-i18n, test-core, test-observability, test-platform, test-user, test-admin, test-ui-style, test-storage, test-cache, test-jobs, test-tenant, test-email, test-realtime, test-workflow, test-search, test-scaffolder, test-external, test-payments, test-push, test-calendar, test-reports, test-geo, test-ai, test-mcp, test-wagoe-cli, test-shared-ui]
+    needs: [first-run-smoke, build-ui-assets, docs-lint, branch-protection, agents-links, command-smoke, config-doctor, i18n-scan, check-fcis, check-placeholder-tests, check-test-meta, check-test-tags, check-deps, check-ports, check-hygiene, check-doc-counts, check-poms, check-agents, check-no-boundary, build-uberjar, test-tools, example-smoke, test-i18n, test-core, test-observability, test-platform, test-user, test-admin, test-ui-style, test-storage, test-cache, test-jobs, test-tenant, test-email, test-realtime, test-workflow, test-search, test-scaffolder, test-external, test-payments, test-push, test-calendar, test-reports, test-geo, test-ai, test-mcp, test-wagoe-cli, test-shared-ui]
 
     steps:
       - name: Summary

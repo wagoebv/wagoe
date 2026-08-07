@@ -96,6 +96,52 @@
         (is (contains? ci gate)
             (str "check:" gate " (" id ") is in all-checks but no CI job runs it"))))))
 
+(defn- summary-needs
+  "Job ids in the `All Tests Passed` summary's `needs:` list."
+  [yaml]
+  (some->> (re-find #"(?s)name: All Tests Passed.*?needs:\s*\[([^\]]+)\]" yaml)
+           second
+           (#(str/split % #",\s*"))
+           (map str/trim)
+           set))
+
+(defn- gate-job-ids
+  "Job ids whose step runs a `bb check:<gate>` command.
+
+   The job id is the last `^  <id>:` line before the run step."
+  [yaml]
+  (let [lines (str/split-lines yaml)]
+    (loop [[l & more] lines, current nil, found #{}]
+      (if (nil? l)
+        found
+        (let [id (second (re-find #"^  ([a-z][a-z0-9-]*):\s*$" l))
+              hit (re-find #"run:\s+bb\s+check:[a-z-]+" l)]
+          (recur more (or id current) (if (and hit current) (conj found current) found)))))))
+
+(deftest ^:unit every-gate-job-blocks-the-summary
+  ;; A gate job that CI runs but the summary does not `needs:` can fail while
+  ;; `All Tests Passed` still goes green — and that summary is what branch
+  ;; protection requires. The job exists, the gate runs, the failure is visible
+  ;; in the checks list, and nothing stops the merge.
+  ;;
+  ;; BOU-277 shipped exactly that: a gate built to catch unenforceable gates,
+  ;; itself unenforceable. `every-aggregate-check-also-runs-in-ci` above did not
+  ;; catch it, because a job existing is not the same as a job blocking.
+  (testing "the summary is discoverable — guards the assertion below"
+    (let [needs (summary-needs (ci-workflow))]
+      (is (seq needs) "found no `needs:` on All Tests Passed; the check below would pass vacuously")
+      (is (< 40 (count needs)) "expected the full job list")))
+
+  (testing "every job that runs a gate is in the summary's needs"
+    (let [yaml  (ci-workflow)
+          needs (summary-needs yaml)
+          gates (gate-job-ids yaml)]
+      (is (seq gates) "found no gate jobs; this would pass vacuously")
+      (doseq [g (sort gates)]
+        (is (contains? needs g)
+            (str "job `" g "` runs a gate but is not in All Tests Passed needs — "
+                 "it can fail without blocking a merge"))))))
+
 (deftest ^:unit every-ci-gate-is-also-in-the-aggregate-check
   (testing "each check:<gate> CI runs is reachable from `bb check`"
     (let [aggregate (->> check/all-checks
