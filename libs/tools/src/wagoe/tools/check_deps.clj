@@ -32,7 +32,12 @@
    Returns a set of library name strings (empty set if file is missing)."
   [deps-file]
   (if (.exists deps-file)
-    (let [deps (edn/read-string (slurp deps-file))
+    (let [deps (try (edn/read-string (slurp deps-file))
+                    ;; Unreadable is reported by `unreadable-deps-files` as its
+                    ;; own violation. Throwing here surfaced as a bare
+                    ;; "EOF while reading" with no file named, because babashka
+                    ;; prints the root cause.
+                    (catch Exception _ nil))
           all-deps (merge (:deps deps) {})]
       (->> (vals all-deps)
            (filter map?)
@@ -50,6 +55,15 @@
     (when (.exists src-dir)
       (->> (file-seq src-dir)
            (filter #(and (.isFile %) (str/ends-with? (.getName %) ".clj")))))))
+
+(defn library-entries
+  "[lib-name lib-dir] for every library under libs/.
+
+   Public wrapper over `lib-dirs` so a test can assert against the real tree —
+   the guard that every namespace this repository requires is covered by the
+   artifact map has to run on the repository, not a fixture."
+  []
+  (lib-dirs))
 
 (defn- extract-required-ns
   "Extract required namespace symbols from a ns form."
@@ -183,6 +197,297 @@
                                 :dep  dep}))))))))
 
 ;; ---------------------------------------------------------------------------
+;; Third-party dependency declaration
+;; ---------------------------------------------------------------------------
+;;
+;; `check:poms` verifies that published POMs carry their inter-Wagoe deps
+;; (BOU-202), and the graph above covers wagoe -> wagoe. Neither looks at
+;; third-party requires, so a library could use tools.cli, cheshire or anything
+;; else without declaring it and both gates stayed green. That is how
+;; wagoe-ai shipped a POM without tools.cli and every `bb ai` subcommand died in
+;; a generated project (BOU-272), and how platform and user came to resolve
+;; tools.cli only through migratus, at 1.0.219 rather than the pinned 1.4.256
+;; (BOU-273).
+
+(def ^:private ns-prefix->artifact
+  "Namespace prefix -> the artifact that provides it.
+
+   Several of these families are split across artifacts, and one entry per
+   family gets the gate wrong: `buddy.sign.jwt` comes from buddy/buddy-sign,
+   not buddy/buddy-core, so mapping all of `buddy` to buddy-core meant removing
+   buddy-sign from a deps.edn went unreported — the coarser gap was already
+   allowlisted and absorbed it. Same for `integrant.repl` (integrant/repl, a
+   separate artifact from integrant/integrant) and for reitit, which this
+   repository consumes as four modules rather than the bundle.
+
+   Longest prefix wins, so `buddy.core` is checked before `buddy`. Entries are
+   added only for namespaces a Wagoe library actually requires: a prefix absent
+   here is not checked, which makes this map the gate's coverage."
+  {"aero"                   'aero/aero
+   "buddy.core"             'buddy/buddy-core
+   "buddy.hashers"          'buddy/buddy-hashers
+   "buddy.sign"             'buddy/buddy-sign
+   "cheshire"               'cheshire/cheshire
+   "clj-http"               'clj-http/clj-http
+   "clj-kondo"              'clj-kondo/clj-kondo
+   "hiccup"                 'hiccup/hiccup
+   ;; hiccup 2.x moved the API here, and "hiccup" is not a prefix of
+   ;; "hiccup2.core" — the family looked covered while every hiccup2 user went
+   ;; unchecked.
+   "hiccup2"                'hiccup/hiccup
+   "honey.sql"              'com.github.seancorfield/honeysql
+   "integrant.core"         'integrant/integrant
+   "integrant.repl"         'integrant/repl
+   "malli"                  'metosin/malli
+   "migratus"               'migratus/migratus
+   "muuntaja"               'metosin/muuntaja
+   "next.jdbc"              'com.github.seancorfield/next.jdbc
+   "reitit.coercion.malli"  'metosin/reitit-malli
+   "reitit.core"            'metosin/reitit-core
+   "reitit.ring.middleware" 'metosin/reitit-middleware
+   "reitit.ring"            'metosin/reitit-ring
+   "reitit.swagger-ui"      'metosin/reitit-swagger-ui
+   "reitit.swagger"         'metosin/reitit-swagger
+   "rewrite-clj"            'rewrite-clj/rewrite-clj
+   "ring.adapter.jetty"     'ring/ring-jetty-adapter
+   "ring.middleware"        'ring/ring-core
+   "ring.util"              'ring/ring-core
+   "ring.websocket"         'ring/ring-core
+   "sentry-clj"             'io.sentry/sentry-clj
+   "taoensso.nippy"         'com.taoensso/nippy
+   "one-time"               'one-time/one-time
+   "dk.ative.docjure"       'dk.ative/docjure
+   "clojure.tools.cli"      'org.clojure/tools.cli
+   "clojure.tools.logging"  'org.clojure/tools.logging})
+
+(defn provider-of
+  "The artifact providing `ns-str`, or nil when no prefix matches.
+
+   Longest match wins. `some` over the map picked an arbitrary one where
+   prefixes overlap — hash-map order is not insertion order past eight entries
+   — so `reitit.ring.middleware.muuntaja` could have resolved to reitit-ring or
+   reitit-middleware depending on nothing the caller controls.
+
+   Public so a test can drive the overlapping cases directly."
+  [ns-str]
+  (->> ns-prefix->artifact
+       (filter (fn [[prefix _]]
+                 (or (= ns-str prefix)
+                     (str/starts-with? ns-str (str prefix ".")))))
+       (sort-by (comp - count first))
+       first
+       second))
+
+(def ^:private clojure-stdlib-namespaces
+  "Namespaces shipped inside the org.clojure/clojure jar.
+
+   An exact set, not a `clojure.` prefix rule. Most of what lives under that
+   prefix is contrib, published as its own artifact: clojure.data is stdlib
+   while clojure.data.csv is org.clojure/data.csv, and clojure.java.io is
+   stdlib while clojure.java.jdbc is org.clojure/java.jdbc. Exempting the
+   prefix would have let a library require either contrib namespace and ship a
+   POM without it — the defect this gate exists to catch, reintroduced through
+   the exemption.
+
+   Regenerate with:
+     unzip -l \"$(find ~/.m2 -name 'clojure-1.12*.jar' | grep -v sources | head -1)\" \\
+       | grep -oE 'clojure/[a-zA-Z_/-]+[.]clj$' \\
+       | sed 's|^clojure/||;s|[.]clj$||' | tr '/' '.' | sed 's|_|-|g;s|^|clojure.|' | sort -u"
+  #{
+   "clojure.core" "clojure.core-deftype" "clojure.core-print"
+   "clojure.core-proxy" "clojure.core.protocols" "clojure.core.reducers"
+   "clojure.core.server" "clojure.data" "clojure.datafy"
+   "clojure.edn" "clojure.genclass" "clojure.gvec"
+   "clojure.inspector" "clojure.instant" "clojure.java.basis"
+   "clojure.java.basis.impl" "clojure.java.browse" "clojure.java.browse-ui"
+   "clojure.java.io" "clojure.java.javadoc" "clojure.java.process"
+   "clojure.java.shell" "clojure.main" "clojure.math"
+   "clojure.parallel" "clojure.pprint" "clojure.pprint.cl-format"
+   "clojure.pprint.column-writer" "clojure.pprint.dispatch" "clojure.pprint.pprint-base"
+   "clojure.pprint.pretty-writer" "clojure.pprint.print-table" "clojure.pprint.utilities"
+   "clojure.reflect" "clojure.reflect.java" "clojure.repl"
+   "clojure.repl.deps" "clojure.set" "clojure.stacktrace"
+   "clojure.string" "clojure.template" "clojure.test"
+   "clojure.test.junit" "clojure.test.tap" "clojure.tools.deps.interop"
+   "clojure.uuid" "clojure.walk" "clojure.xml"
+   "clojure.zip"})
+
+(def ^:private babashka-runtime-libs
+  "Libraries that run under Babashka, which bundles the babashka.* namespaces.
+
+   Scoped per library, not globally. `bb` supplies these only to code it runs:
+   libs/tools is pure Babashka (every entrypoint carries a bb shebang), so
+   declaring babashka/fs there would be wrong rather than merely redundant. For
+   any other library the same require is a real Maven dependency, and a global
+   exemption would have let it ship a POM without one — the blind spot this gate
+   exists to close.
+
+   A library added here needs the same justification: `bb` runs it."
+  #{"tools"})
+
+(def ^:private runtime-provided-prefixes
+  "Namespace prefixes the Babashka runtime supplies, for the libraries above."
+  #{"babashka"})
+
+(defn- third-party-ns?
+  "Whether `ns-str` is a namespace some artifact has to provide.
+
+   Excludes Wagoe's own namespaces, the Clojure standard library, and — for
+   Babashka-run libraries only — the namespaces `bb` bundles. Everything else is something an artifact has to
+   provide — including the rest of `clojure.*`, which is contrib: tools.cli,
+   tools.logging, data.csv and core.async are each their own dependency, and
+   treating the prefix as standard library is what this ticket is about."
+  [lib-name ns-str]
+  (and (not (str/starts-with? ns-str "wagoe."))
+       (not (contains? clojure-stdlib-namespaces ns-str))
+       (not (and (contains? babashka-runtime-libs lib-name)
+                 (some #(or (= ns-str %) (str/starts-with? ns-str (str % ".")))
+                       runtime-provided-prefixes)))))
+
+(defn unmapped-third-party-namespaces
+  "Third-party namespaces required by a library that `ns-prefix->artifact` does
+   not cover, as [{:lib :ns}].
+
+   Reported as a failure rather than ignored. The map is the gate's coverage,
+   and a namespace missing from it is checked by nothing — `provider-of`
+   returns nil and the require passes silently, which is the same
+   looks-covered-but-is-not failure the gate exists to catch. Anything genuinely
+   not from an artifact belongs in `runtime-provided-prefixes`, where the reason
+   is written down.
+
+   Public so a test can drive it; `-main` exits the process."
+  [lib-entries]
+  (distinct
+   (for [[lib-name lib-dir] lib-entries
+         f      (source-files lib-dir)
+         ns-str (extract-required-ns (parsing/read-ns-form f))
+         :when  (and (third-party-ns? lib-name ns-str) (nil? (provider-of ns-str)))]
+     {:lib lib-name :ns ns-str})))
+
+(defn declared-artifacts
+  "Artifact coordinates declared in a library's deps.edn, as strings, or
+   `:unreadable` when the file exists but does not parse.
+
+   `:unreadable` rather than an empty set or a thrown exception. An empty set
+   would make every namespace in that library look undeclared — a wall of
+   violations pointing at the wrong thing. A throw was worse in practice:
+   babashka prints the root cause, so `EOF while reading` reached the terminal
+   with no indication of which file. It is reported as its own violation
+   instead.
+
+   Public so a test can drive it; `-main` exits the process."
+  [lib-dir]
+  (let [deps-file (io/file lib-dir "deps.edn")]
+    (if (.exists deps-file)
+      (try
+        (set (map str (keys (:deps (edn/read-string (slurp deps-file))))))
+        (catch Exception _ :unreadable))
+      #{})))
+
+(defn third-party-gaps
+  "[{:lib :ns :artifact}] for third-party namespaces a library requires
+   without declaring the artifact that provides them.
+
+   Only *direct* declaration counts. Resolving through a transitive works until
+   the dependency in between drops it, and it picks up whatever version that
+   dependency pins — which is how platform got tools.cli 1.0.219 while the
+   monorepo pinned 1.4.256.
+
+   Public so a test can drive it; `-main` exits the process."
+  [lib-entries]
+  (for [[lib-name lib-dir] lib-entries
+        ;; Read eagerly, and let a malformed deps.edn throw. This used to be
+        ;; inside the lazy `for`, so an unreadable file surfaced nowhere: the
+        ;; exception was never realised and the gate printed "0 violations" and
+        ;; exited 0. A checker that passes when it cannot read its input is
+        ;; worse than no checker.
+        :let [declared (declared-artifacts lib-dir)]
+        :when (set? declared)
+        f    (source-files lib-dir)
+        ns-str (extract-required-ns (parsing/read-ns-form f))
+        :let [artifact (provider-of ns-str)]
+        :when (and artifact (not (contains? declared (str artifact))))]
+    {:lib lib-name :ns ns-str :artifact artifact}))
+
+(defn unreadable-deps-files
+  "Libraries whose deps.edn exists but does not parse.
+
+   Checked separately because a checker that cannot read its input must say so
+   rather than draw a conclusion from it — the first version of this gate
+   swallowed the read error inside a lazy sequence and printed
+   \"0 violations\"."
+  [lib-entries]
+  (for [[lib-name lib-dir] lib-entries
+        :when (= :unreadable (declared-artifacts lib-dir))]
+    {:lib lib-name :file (.getPath (io/file lib-dir "deps.edn"))}))
+
+(def ^:private allowed-third-party-gaps
+  "Pre-existing [lib artifact] pairs. Every one of these resolves today through
+   a Wagoe sibling or another dependency, so nothing is broken — but each is a
+   version the library does not control and a transitive it does not own.
+
+   Remove entries as deps.edn files are updated. The point of the allowlist is
+   that a *new* gap fails: the three fixed under BOU-273 are deliberately absent."
+  #{["admin" "integrant/integrant"]
+    ["admin" "metosin/malli"]
+    ["admin" "org.clojure/tools.logging"]
+    ["admin" "ring/ring-core"]
+    ["audience" "integrant/integrant"]
+    ["cache" "integrant/integrant"]
+    ["devtools" "cheshire/cheshire"]
+    ["devtools" "integrant/integrant"]
+    ["devtools" "integrant/repl"]
+    ["devtools" "metosin/malli"]
+    ["devtools" "metosin/muuntaja"]
+    ["devtools" "metosin/reitit-core"]
+    ["devtools" "metosin/reitit-ring"]
+    ["devtools" "org.clojure/tools.logging"]
+    ["devtools" "ring/ring-core"]
+    ["external" "integrant/integrant"]
+    ["geo" "integrant/integrant"]
+    ["i18n" "integrant/integrant"]
+    ["i18n" "org.clojure/tools.logging"]
+    ["observability" "cheshire/cheshire"]
+    ["observability" "metosin/malli"]
+    ["platform" "metosin/malli"]
+    ["platform" "org.clojure/tools.logging"]
+    ["realtime" "integrant/integrant"]
+    ["scaffolder" "cheshire/cheshire"]
+    ["scaffolder" "metosin/malli"]
+    ["scaffolder" "org.clojure/tools.logging"]
+    ["search" "cheshire/cheshire"]
+    ["search" "com.github.seancorfield/honeysql"]
+    ["search" "com.github.seancorfield/next.jdbc"]
+    ["search" "integrant/integrant"]
+    ["search" "org.clojure/tools.logging"]
+    ["shared-ui" "metosin/malli"]
+    ["storage" "integrant/integrant"]
+    ["storage" "metosin/malli"]
+    ["storage" "org.clojure/tools.logging"]
+    ["tenant" "integrant/integrant"]
+    ["tenant" "metosin/malli"]
+    ["tenant" "migratus/migratus"]
+    ["tenant" "org.clojure/tools.logging"]
+    ["tools" "cheshire/cheshire"]
+    ["user" "buddy/buddy-core"]
+    ["user" "cheshire/cheshire"]
+    ["user" "com.github.seancorfield/next.jdbc"]
+    ["user" "integrant/integrant"]
+    ["user" "metosin/malli"]
+    ["user" "org.clojure/tools.logging"]
+    ["user" "ring/ring-core"]
+    ["wagoe-mcp" "metosin/malli"]
+    ["workflow" "com.github.seancorfield/honeysql"]
+    ["workflow" "com.github.seancorfield/next.jdbc"]
+    ["workflow" "integrant/integrant"]
+    ["workflow" "metosin/malli"]
+    ["workflow" "org.clojure/tools.logging"]})
+
+(defn- allowed-third-party-gap?
+  [{:keys [lib artifact]}]
+  (contains? allowed-third-party-gaps [lib (str artifact)]))
+
+;; ---------------------------------------------------------------------------
 ;; Known cycle allowlist
 ;; ---------------------------------------------------------------------------
 
@@ -232,14 +537,29 @@
         new-actual         (remove allowed-cycle? actual-cycles)
         allowed-undeclared  (filter allowed-undeclared? undeclared)
         new-undeclared      (remove allowed-undeclared? undeclared)
+        tp-gaps             (distinct (map #(select-keys % [:lib :artifact])
+                                           (third-party-gaps entries)))
+        allowed-tp          (filter allowed-third-party-gap? tp-gaps)
+        new-tp              (remove allowed-third-party-gap? tp-gaps)
+        unreadable          (unreadable-deps-files entries)
+        unmapped            (unmapped-third-party-namespaces entries)
         ;; Hard failures: core violations, any declared cycle, any non-allowlisted actual cycle,
         ;; any NEW undeclared direct dependency
         hard-failures  (concat core-issues
                                (map (fn [p] {:type :declared-cycle :path p}) declared-cycles)
                                (map (fn [p] {:type :actual-cycle :path p}) new-actual)
-                               new-undeclared)
+                               new-undeclared
+                               (map #(assoc % :type :undeclared-third-party) new-tp)
+                               (map #(assoc % :type :unreadable-deps) unreadable)
+                               (map #(assoc % :type :unmapped-ns) unmapped))
         ;; Soft warnings: allowlisted undeclared deps (pre-existing, acknowledged)
         warnings       allowed-undeclared]
+    (when (seq allowed-tp)
+      (println (ansi/yellow "Third-party dependencies used but not declared (allowlisted):"))
+      (doseq [v (sort-by (juxt :lib (comp str :artifact)) allowed-tp)]
+        (println (str "  " (:lib v) " uses " (:artifact v) " (resolved transitively)")))
+      (println (str (count allowed-tp) " allowlisted. Each is a version the library does not control."))
+      (println))
     ;; Print allowlisted actual cycles as informational
     (when (seq allowed-actual)
       (println (ansi/yellow "Known source-level cycle(s) (allowlisted):"))
@@ -268,7 +588,18 @@
             :actual-cycle
             (println (str "  VIOLATION: circular dependency in source requires: " (ansi/red (str/join " -> " (:path v)))))
             :undeclared-dep
-            (println (str "  VIOLATION: " (:lib v) " requires " (ansi/red (:dep v)) " but it is not declared in deps.edn"))))
+            (println (str "  VIOLATION: " (:lib v) " requires " (ansi/red (:dep v)) " but it is not declared in deps.edn"))
+            :undeclared-third-party
+            (println (str "  VIOLATION: " (:lib v) " uses " (ansi/red (str (:artifact v)))
+                          " but does not declare it — the published POM would omit it"))
+            :unreadable-deps
+            (println (str "  VIOLATION: cannot parse " (ansi/red (:file v))
+                          " — dependency checks for " (:lib v) " cannot run"))
+            :unmapped-ns
+            (println (str "  VIOLATION: " (:lib v) " requires " (ansi/red (:ns v))
+                          " which maps to no artifact — add it to"
+                          " ns-prefix->artifact, or add the library to"
+                          " babashka-runtime-libs if bb runs it"))))
         (println)
         (println (str (count hard-failures) " violation(s) found."))
         (System/exit 1))

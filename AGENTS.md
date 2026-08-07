@@ -118,7 +118,7 @@ bb scripts/docs_lint.clj                           # Run documentation drift lin
 # Quality Gates (all run in CI + check:fcis/check:ports run in pre-commit)
 bb check:fcis                                      # FC/IS enforcement: core/ must not import shell/IO/logging/DB, throw, or hold mutable state
 bb check:placeholder-tests                         # Detect (is true) placeholder assertions in tests
-bb check:deps                                      # Verify library dependency direction + cycle detection
+bb check:deps                                      # Dependency direction + cycles + undeclared third-party deps
 bb check:ports                                     # Hexagonal: modules must define ports.clj; shell/web must not bypass protocols
 bb check:poms                                      # Published POMs must carry inter-Wagoe deps (build-shared rewrite + pom-basis)
 clojure -M:test --focus-meta :security             # Security-focused tests (error mapping, CSRF, XSS, SQL)
@@ -877,7 +877,7 @@ Automated safeguards run in CI (and `check:fcis` + `check:ports` in pre-commit) 
 |------|---------|-----------------|------------|
 | **FC/IS enforcement** | `bb check:fcis` | Core namespaces importing shell, I/O, logging, or DB code; throwing; or holding mutable state (defonce/atom/swap!/reset!) | Yes |
 | **Placeholder tests** | `bb check:placeholder-tests` | `(is true)` / `(is (= true true))` masking missing coverage | Yes |
-| **Dependency direction** | `bb check:deps` | Core independence violations, circular deps between libraries | Yes (cycles/core); warn (undeclared) |
+| **Dependency direction** | `bb check:deps` | Core independence violations, circular deps between libraries, third-party namespaces required but not declared (so the published POM would omit them), requires no artifact mapping covers, unparseable `deps.edn` | Yes (cycles/core/new undeclared/unmapped); warn (allowlisted) |
 | **Ports / hexagonal** | `bb check:ports` | Modules missing `ports.clj`; shell coupling to another module's `shell.persistence`/`shell.service`; web/HTTP requiring `shell.persistence` directly | Yes |
 | **POM dep completeness** | `bb check:poms` | Published POMs dropping inter-Wagoe deps: `build_shared` losing the `:local/root`→mvn rewrite, a publishable `build.clj` bypassing `pom-basis`, or a referenced wagoe dep that is not itself publishable | Yes |
 | **Documented library counts** | `bb check:doc-counts` | Prose disagreeing with `wagoe.tools.deploy/all-libs`: a documented library/artifact count that is not the real number, or a document calling a published library unpublished | Yes |
@@ -995,7 +995,7 @@ Clojure's `{:or {limit 20 offset 0}}` destructuring only fires for **absent** ke
 | `wagoe.tools.dev` | `bb migrate`, `bb check-links`, `bb smoke-check`, `bb install-hooks` |
 | `wagoe.tools.check-fcis` | `bb check:fcis` — FC/IS boundary enforcement (ADR-021) |
 | `wagoe.tools.check-tests` | `bb check:placeholder-tests` — placeholder assertion detection |
-| `wagoe.tools.check-deps` | `bb check:deps` — dependency direction linting + cycle detection |
+| `wagoe.tools.check-deps` | `bb check:deps` — dependency direction linting, cycle detection, third-party declaration completeness |
 | `wagoe.tools.check-ports` | `bb check:ports` — hexagonal boundary enforcement (ports.clj presence + protocol usage) |
 | `wagoe.tools.check-poms` | `bb check:poms` — published-POM dependency completeness (build-shared rewrite + pom-basis usage + publishable deps) |
 | `wagoe.tools.parsing` | Shared source-parsing utilities for quality-gate checkers |
