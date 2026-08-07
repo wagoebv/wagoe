@@ -38,11 +38,30 @@
 ;; whose coverage depends on someone remembering to extend a list is the exact
 ;; failure this task exists to remove (BOU-250).
 
+(defn main-suite-aliases
+  "Aliases the root suite needs, as one `-M:...` argument.
+
+   The heavy test dependencies live in narrow aliases so the 27 per-library CI
+   jobs do not resolve them (BOU-260). The root suite runs everything, so it
+   needs them all back.
+
+   `:test/pg-mac` is added only on macOS. It is the embedded-postgres binary for
+   Apple Silicon — 61.8 MB — and every CI runner is ubuntu-latest, so including
+   it unconditionally would put it back on all 52 jobs for a platform none of
+   them run.
+
+   Takes os-name so a test can drive both arms rather than asserting whatever
+   the runner happens to be."
+  ([] (main-suite-aliases (System/getProperty "os.name")))
+  ([os-name]
+   (str "-M:test:test/pg:test/otel:test/http"
+        (when (and os-name (str/starts-with? os-name "Mac")) ":test/pg-mac"))))
+
 (def surfaces
   [{:id    :main
     :label "main suite (tests.edn — all app-classpath libs)"
     :dir   "."
-    :cmd   ["clojure" "-M:test"]}
+    :cmd   ["clojure" (main-suite-aliases)]}
    {:id    :tools
     :label "wagoe-tools unit tests"
     :dir   "."

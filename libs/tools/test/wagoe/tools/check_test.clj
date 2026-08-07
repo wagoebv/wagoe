@@ -1,5 +1,6 @@
 (ns wagoe.tools.check-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [clojure.edn :as edn]
+            [clojure.test :refer [deftest is testing]]
             [clojure.java.io :as io]
             [clojure.string :as str]
             [wagoe.tools.check :as check]))
@@ -353,3 +354,74 @@
     (let [doctor (first (filter #(= :doctor (:id %)) check/all-checks))]
       (is (some? doctor) "the registry no longer has a :doctor check")
       (is (= ["bb" "doctor" "--ci"] (:cmd doctor))))))
+
+(defn- tests-edn
+  "The kaocha suite registry."
+  []
+  (let [cwd (System/getProperty "user.dir")]
+    (if-let [f (some (fn [^java.io.File f] (when (.exists f) f))
+                     [(io/file cwd "tests.edn") (io/file cwd ".." ".." "tests.edn")])]
+      (edn/read-string {:readers {'kaocha/v1 identity}} (slurp f))
+      (throw (ex-info "tests.edn not found — cannot verify the suite/CI lockstep" {:cwd cwd})))))
+
+(defn- declared-suites
+  "Suite ids in tests.edn, excluding the aggregate `:unit`."
+  []
+  (->> (:tests (tests-edn)) (map :id) (remove #{:unit}) (map name) set))
+
+(defn- ci-run-suites
+  "{suite-name alias-string} for each `clojure -M:test… :<suite>` CI runs."
+  [yaml]
+  (into {} (for [[_ alias suite] (re-seq #"run: clojure (-M:test[^ ]*) :([a-z0-9-]+)" yaml)]
+             [suite alias])))
+
+(deftest ^:unit every-suite-has-a-ci-job
+  ;; A suite nobody runs is a test file nobody executes. `audience` and
+  ;; `devtools` were in tests.edn with no CI job at all — found while splitting
+  ;; the shared :test alias (BOU-260), because that work meant enumerating every
+  ;; suite and running it.
+  (let [declared (declared-suites)
+        in-ci    (ci-run-suites (ci-workflow))]
+
+    (testing "the registry and the workflow are both discoverable"
+      (is (< 20 (count declared)) "found no suites; the assertions below would pass vacuously")
+      (is (seq in-ci) "found no `clojure -M:test … :<suite>` lines"))
+
+    (testing "every declared suite is run by CI"
+      (is (empty? (remove in-ci declared))
+          (str "suites with no CI job: " (pr-str (sort (remove in-ci declared))))))
+
+    (testing "CI does not run a suite that no longer exists"
+      (is (empty? (remove declared (keys in-ci)))
+          (str "CI runs suites absent from tests.edn: "
+               (pr-str (sort (remove declared (keys in-ci)))))))))
+
+(deftest ^:unit suites-needing-heavy-deps-request-them
+  ;; The heavy test dependencies moved out of the shared :test alias so 25
+  ;; per-library jobs stop resolving ~106 MB they do not use (BOU-260). A suite
+  ;; that needs one and does not ask for it fails on a missing class, under its
+  ;; own name — better than the old failure, but still avoidable.
+  ;;
+  ;; Pinned by suite rather than derived: which suite touches embedded-postgres
+  ;; is not greppable — platform and tenant reach it through the shared
+  ;; test/support/embedded_pg.clj, not a direct import, which is how a first
+  ;; pass missed both.
+  (let [in-ci (ci-run-suites (ci-workflow))]
+    (testing "embedded-postgres"
+      (doseq [s ["admin" "platform" "tenant"]]
+        (is (str/includes? (get in-ci s "") ":test/pg")
+            (str s " uses EmbeddedPostgres and must request :test/pg"))))
+
+    (testing "opentelemetry in-memory exporters"
+      (is (str/includes? (get in-ci "observability" "") ":test/otel")))
+
+    (testing "clj-http-lite"
+      (is (str/includes? (get in-ci "devtools" "") ":test/http")))
+
+    (testing "and nothing else pays for them"
+      ;; The whole point: a suite that does not need the heavy deps must not
+      ;; resolve them.
+      (doseq [[s alias] in-ci
+              :when (not (#{"admin" "platform" "tenant" "observability" "devtools"} s))]
+        (is (= "-M:test" alias)
+            (str s " requests " alias " but needs nothing beyond :test"))))))

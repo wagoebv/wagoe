@@ -29,6 +29,13 @@ bb test:all --list                                       # show the surfaces, an
 
 # Testing - main suite only (does NOT cover the standalone libs — see below)
 clojure -M:test                                    # tests.edn suites (default test profile uses H2 in-memory)
+# The heavy test deps live in narrow aliases so the per-library CI jobs do not
+# resolve ~106 MB they never use (BOU-260). Add them when running those suites:
+#   :test/pg    admin, platform, tenant   (embedded PostgreSQL)
+#   :test/otel  observability             (OpenTelemetry in-memory exporters)
+#   :test/http  devtools                  (clj-http-lite)
+#   :test/pg-mac  local runs on Apple Silicon — CI is ubuntu-only
+clojure -M:test:test/pg :admin                     # a suite that needs one
 JWT_SECRET="dev-secret-at-least-32-characters-long" WAG_ENV=test clojure -M:test  # With JWT secret
 
 # Testing - Per-library test suites
