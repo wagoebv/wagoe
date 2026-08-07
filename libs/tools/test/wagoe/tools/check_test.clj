@@ -74,6 +74,31 @@
         (throw (ex-info "ci.yml not found — cannot verify all-checks/CI lockstep"
                         {:cwd cwd :tried (mapv str candidates)})))))
 
+(defn- workflows-dir
+  "The .github/workflows directory, wherever the test is run from."
+  []
+  (let [cwd (System/getProperty "user.dir")]
+    (or (some (fn [f] (when (.isDirectory ^java.io.File f) f))
+              [(io/file cwd ".github" "workflows")
+               (io/file cwd ".." ".." ".github" "workflows")])
+        (throw (ex-info "no .github/workflows — cannot verify the CI lockstep"
+                        {:cwd cwd})))))
+
+(defn- all-workflow-sources
+  "Every workflow file's source, concatenated.
+
+   All of them, not just ci.yml: a gate can legitimately live elsewhere.
+   check:branch-protection does, because reading branch protection needs an
+   admin-scoped token and ci.yml runs `on: push` — which on a same-repository
+   branch executes that branch's workflow with secrets available. Scanning only
+   ci.yml would have reported the gate as having no CI job at all."
+  []
+  (->> (.listFiles (workflows-dir))
+       (filter #(and (.isFile ^java.io.File %)
+                     (re-find #"\.ya?ml$" (.getName ^java.io.File %))))
+       (map slurp)
+       (str/join "\n")))
+
 (defn- ci-invoked-gates
   "Gate names CI runs directly, from `run: bb check:<gate>` lines."
   [yaml]
@@ -88,13 +113,111 @@
 
 (deftest ^:unit every-aggregate-check-also-runs-in-ci
   (testing "each bb check:<gate> in all-checks has a CI job invoking it"
-    (let [ci (ci-invoked-gates (ci-workflow))]
+    (let [ci (ci-invoked-gates (all-workflow-sources))]
       (doseq [{:keys [id cmd]} check/all-checks
               :when (and (= "bb" (first cmd))
                          (str/starts-with? (second cmd) "check:"))
               :let [gate (subs (second cmd) (count "check:"))]]
         (is (contains? ci gate)
             (str "check:" gate " (" id ") is in all-checks but no CI job runs it"))))))
+
+(defn- summary-needs
+  "Job ids in the `All Tests Passed` summary's `needs:` list."
+  [yaml]
+  (some->> (re-find #"(?s)name: All Tests Passed.*?needs:\s*\[([^\]]+)\]" yaml)
+           second
+           (#(str/split % #",\s*"))
+           (map str/trim)
+           set))
+
+(defn- gate-job-ids
+  "Job ids whose step runs a `bb check:<gate>` command.
+
+   The job id is the last `^  <id>:` line before the run step."
+  [yaml]
+  (let [lines (str/split-lines yaml)]
+    (loop [[l & more] lines, current nil, found #{}]
+      (if (nil? l)
+        found
+        (let [id (second (re-find #"^  ([a-z][a-z0-9-]*):\s*$" l))
+              hit (re-find #"run:\s+bb\s+check:[a-z-]+" l)]
+          (recur more (or id current) (if (and hit current) (conj found current) found)))))))
+
+(deftest ^:unit no-secret-is-exposed-to-branch-controlled-workflows
+  ;; ci.yml runs `on: push`. For a same-repository branch, GitHub executes *that
+  ;; branch's* copy of the workflow with secrets available — so a contributor
+  ;; who can push a branch could rewrite a step and exfiltrate whatever it
+  ;; holds. BOU-277 first shipped BRANCH_PROTECTION_TOKEN, an admin-scoped
+  ;; credential, in exactly that position.
+  ;;
+  ;; A workflow may use secrets only when every trigger runs trusted code:
+  ;; pushes filtered to main, schedule, or workflow_dispatch.
+  (testing "workflows that can run branch code reference no secrets"
+    ;; Two ways a caller reaches a non-main copy of a workflow, and both were
+    ;; hit in turn while building this: an unfiltered `push`, and
+    ;; `workflow_dispatch`, which lets the caller pick any ref. Filtering the
+    ;; push and leaving dispatch in place reopened the same path.
+    (doseq [f (->> (.listFiles (workflows-dir))
+                   (filter #(and (.isFile ^java.io.File %)
+                                 (re-find #"\.ya?ml$" (.getName ^java.io.File %)))))
+            :let [src  (slurp f)
+                  name (.getName ^java.io.File f)
+                  unfiltered-push?
+                  (and (re-find #"(?m)^\s+push:" src)
+                       (not (re-find #"(?s)push:\s*\n\s+branches:" src))
+                       (not (re-find #"(?s)push:\s*\n\s+tags:" src)))
+                  ;; Match a real trigger key, not the word in a comment.
+                  ref-selectable?
+                  (boolean (re-find #"(?m)^\s{2}workflow_(dispatch|call):" src))
+                  runs-branch-code? (or unfiltered-push? ref-selectable?)
+                  uses-secret? (boolean (re-find #"secrets\." src))
+                  ;; A deployment environment is the standard mitigation: the
+                  ;; job does not start until a required reviewer approves, so
+                  ;; branch code cannot reach the secret unattended. publish.yml
+                  ;; needs workflow_dispatch to cut a release and pins
+                  ;; `environment: release`, which carries required_reviewers —
+                  ;; verified against the API, not assumed.
+                  gated? (boolean (re-find #"(?m)^\s+environment:" src))]]
+      (is (not (and runs-branch-code? uses-secret? (not gated?)))
+          (str name " can run a non-main copy of itself (unfiltered push: "
+               unfiltered-push? ", ref-selectable: " ref-selectable?
+               ") and references a secret with no `environment:` gate — branch "
+               "code would run with that credential available"))))
+
+  (testing "the branch-protection workflow is push-restricted to main"
+    ;; Its token is admin-scoped, so this is the property that keeps it away
+    ;; from branch contents.
+    (let [src (slurp (io/file (workflows-dir) "branch-protection.yml"))]
+      (is (re-find #"(?s)push:\s*\n\s+branches:\s*\[main\]" src)
+          "must not run on arbitrary branches")
+      (is (not (re-find #"(?m)^\s{2}workflow_(dispatch|call):" src))
+          "dispatch lets the caller choose a ref, so branch code would run with the token")
+      (is (re-find #"secrets\.BRANCH_PROTECTION_TOKEN" src)
+          "guards against the token being silently dropped, leaving a gate that always skips"))))
+
+(deftest ^:unit every-gate-job-blocks-the-summary
+  ;; A gate job that CI runs but the summary does not `needs:` can fail while
+  ;; `All Tests Passed` still goes green — and that summary is what branch
+  ;; protection requires. The job exists, the gate runs, the failure is visible
+  ;; in the checks list, and nothing stops the merge.
+  ;;
+  ;; BOU-277 shipped exactly that: a gate built to catch unenforceable gates,
+  ;; itself unenforceable. `every-aggregate-check-also-runs-in-ci` above did not
+  ;; catch it, because a job existing is not the same as a job blocking.
+  (testing "the summary is discoverable — guards the assertion below"
+    (let [needs (summary-needs (ci-workflow))]
+      (is (seq needs) "found no `needs:` on All Tests Passed; the check below would pass vacuously")
+      (is (< 40 (count needs)) "expected the full job list")))
+
+  (testing "every job that runs a gate is in the summary's needs"
+    (let [yaml  (ci-workflow)
+          needs (summary-needs yaml)
+          gates (gate-job-ids yaml)]
+      (is (seq gates) "found no gate jobs; this would pass vacuously")
+      (doseq [g (sort gates)]
+        (is (contains? needs g)
+            (str "job `" g "` runs a gate but is not in All Tests Passed needs — "
+                 "it can fail without blocking a merge"))))))
 
 (deftest ^:unit every-ci-gate-is-also-in-the-aggregate-check
   (testing "each check:<gate> CI runs is reachable from `bb check`"
@@ -104,7 +227,10 @@
                                        (str/starts-with? (second %) "check:")))
                          (map #(subs (second %) (count "check:")))
                          set)]
-      (doseq [gate (ci-invoked-gates (ci-workflow))]
+      ;; Every workflow, matching the direction above. Reading only ci.yml
+      ;; would miss a gate added elsewhere and never registered in all-checks —
+      ;; it would run in CI while `bb check` knew nothing about it.
+      (doseq [gate (ci-invoked-gates (all-workflow-sources))]
         (is (contains? aggregate gate)
             (str "check:" gate " runs in CI but is missing from all-checks, so "
                  "`bb check --ci` passes without it"))))))
@@ -161,7 +287,7 @@
     ;; Pinned deliberately: promoting one to :any means a generated project
     ;; will invoke it, so the task must exist in bb.edn.tmpl first — which the
     ;; test below enforces.
-    (is (= #{:doc-counts :agents :poms :no-boundary :docs-lint}
+    (is (= #{:doc-counts :agents :poms :no-boundary :docs-lint :branch-protection}
            (set (map :id (remove #(= :any (:scope %)) check/all-checks)))))))
 
 (deftest ^:unit portable-checks-exist-as-tasks-in-generated-projects

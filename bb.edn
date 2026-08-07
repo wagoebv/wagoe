@@ -28,6 +28,7 @@
              [wagoe.tools.check-deps  :as check-deps]
              [wagoe.tools.check-ports :as check-ports]
              [wagoe.tools.check-poms  :as check-poms]
+             [wagoe.tools.check-branch-protection :as check-bp]
              [wagoe.tools.check-hygiene :as check-hygiene]
              [wagoe.tools.check-doc-counts :as check-doc-counts]
              [check-no-boundary :as check-no-boundary]  ; lives under scripts/, outside the renamed tree
@@ -112,6 +113,8 @@
                :task (check-ports/-main)}
   check:poms {:doc "POM dependency completeness — published POMs must carry inter-Wagoe deps via build-shared/pom-basis (bb check:poms)"
               :task (check-poms/-main)}
+  check:branch-protection {:doc "Required status checks must name jobs CI actually emits (bb check:branch-protection)"
+                           :task (check-bp/-main)}
   check:hygiene {:doc "Reject tracked backup/cruft files (*.bak, *.backup, *.orig, *~) (bb check:hygiene)"
                  :task (check-hygiene/-main)}
   check:doc-counts {:doc "Documented library counts + publishing claims must match wagoe.tools.deploy/all-libs (bb check:doc-counts)"

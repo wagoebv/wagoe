@@ -1,0 +1,85 @@
+name: Branch Protection
+
+# Reconciles main's required status checks against the job names CI emits.
+# See BOU-277: the required set held job *keys* from ci.yml while GitHub reports
+# each job's `name:`, so 13 contexts could never be satisfied — and, while an
+# admin override absorbed them, could never fail either.
+#
+# This lives outside ci.yml deliberately. Reading branch protection needs an
+# admin-scoped token, and ci.yml runs `on: push`, which for a same-repository
+# branch executes *that branch's* workflow with secrets available. Anyone able
+# to push a branch could rewrite the step and exfiltrate the token. Every
+# trigger below runs only code that is already on main, so branch contents never
+# see the credential.
+#
+# The cost is timeliness: a job renamed in a PR is caught when it merges rather
+# than before. The pre-merge half — that every gate job is wired into the
+# summary — is covered by `every-gate-job-blocks-the-summary` in
+# libs/tools/test, which needs no token and runs in `bb test:tools`.
+#
+# BRANCH_PROTECTION_TOKEN needs `administration: read` on this repository and
+# nothing else. Without it the workflow fails rather than reporting a false pass.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/**'
+      - 'libs/tools/src/wagoe/tools/check_branch_protection.clj'
+  schedule:
+    # Daily, so a change made directly in the GitHub UI is caught too — that is
+    # how the original drift arrived, and no push would have revealed it.
+    # Scheduled runs always execute the default branch's workflow file.
+    - cron: '0 4 * * *'
+
+# Deliberately no workflow_dispatch, and no workflow_call. Both let the caller
+# choose a ref, and GitHub then runs *that ref's* copy of this file with
+# repository secrets available — so a branch author could push a modified
+# version and dispatch it against their own branch, which is the exfiltration
+# path the `branches: [main]` filter above exists to close. Every trigger here
+# must run code that is already on main.
+#
+# To run this on demand, run `bb check:branch-protection` locally: it reads
+# protection through your own `gh` credentials, so no repository secret is
+# involved at all.
+
+permissions:
+  contents: read
+
+jobs:
+  branch-protection:
+    name: Branch Protection Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Babashka
+        uses: DeLaGuardo/setup-clojure@13.6.1
+        with:
+          bb: latest
+
+      # Fails before the gate runs, so a missing secret reads as a missing
+      # secret rather than as a passing check. Without this the whole workflow
+      # went green having read nothing — the gate this ticket exists to build,
+      # exhibiting the defect it exists to catch.
+      - name: BRANCH_PROTECTION_TOKEN must be configured
+        env:
+          TOKEN: ${{ secrets.BRANCH_PROTECTION_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "::error::BRANCH_PROTECTION_TOKEN is not set. This gate cannot"
+            echo "::error::read branch protection without it, and a skip here"
+            echo "::error::would be indistinguishable from a clean run."
+            echo '::error::Create a fine-grained PAT with administration:read scope'
+            echo "::error::on this repository and nothing else."
+            exit 1
+          fi
+
+      - name: Required status checks must name jobs CI emits
+        env:
+          GH_TOKEN: ${{ secrets.BRANCH_PROTECTION_TOKEN }}
+          # Belt and braces: if the token is present but lacks the scope, the
+          # API read still fails and strict mode turns that into a failure too.
+          BRANCH_PROTECTION_STRICT: "1"
+        run: bb check:branch-protection

@@ -326,8 +326,12 @@
   #{"tools"})
 
 (def ^:private runtime-provided-prefixes
-  "Namespace prefixes the Babashka runtime supplies, for the libraries above."
-  #{"babashka"})
+  "Namespace prefixes the Babashka runtime supplies, for the libraries above.
+
+   clj-yaml is bundled by bb like babashka.* is — it is declared in no deps.edn
+   and resolves at runtime. `check-branch-protection` parses workflow YAML with
+   it."
+  #{"babashka" "clj-yaml"})
 
 (defn- third-party-ns?
   "Whether `ns-str` is a namespace some artifact has to provide.

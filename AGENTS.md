@@ -871,7 +871,7 @@ separate and unchanged.
 
 ## Quality Gates
 
-Automated safeguards run in CI (and `check:fcis` + `check:ports` in pre-commit) to prevent regressions caught during QA review (PRs #108–#116). `bb check` runs the full set — currently 14 — and `wagoe.tools.check/all-checks` is its registry; the table below covers the ones with non-obvious rules.
+Automated safeguards run in CI (and `check:fcis` + `check:ports` in pre-commit) to prevent regressions caught during QA review (PRs #108–#116). `bb check` runs the full set — currently 15 — and `wagoe.tools.check/all-checks` is its registry; the table below covers the ones with non-obvious rules.
 
 | Gate | Command | What it catches | Hard fail? |
 |------|---------|-----------------|------------|
@@ -880,6 +880,7 @@ Automated safeguards run in CI (and `check:fcis` + `check:ports` in pre-commit) 
 | **Dependency direction** | `bb check:deps` | Core independence violations, circular deps between libraries, third-party namespaces required but not declared (so the published POM would omit them), requires no artifact mapping covers, unparseable `deps.edn` | Yes (cycles/core/new undeclared/unmapped); warn (allowlisted) |
 | **Ports / hexagonal** | `bb check:ports` | Modules missing `ports.clj`; shell coupling to another module's `shell.persistence`/`shell.service`; web/HTTP requiring `shell.persistence` directly | Yes |
 | **POM dep completeness** | `bb check:poms` | Published POMs dropping inter-Wagoe deps: `build_shared` losing the `:local/root`→mvn rewrite, a publishable `build.clj` bypassing `pom-basis`, or a referenced wagoe dep that is not itself publishable | Yes |
+| **Branch protection** | `bb check:branch-protection` | Required status checks naming jobs CI never emits — a gate that can neither be satisfied nor fail. Runs from `.github/workflows/branch-protection.yml` (main + nightly only, so its admin-scoped token is never exposed to branch code), not from `ci.yml`. Skips when `gh` has no admin-scoped token | Yes (phantom contexts); note (test jobs not required) |
 | **Documented library counts** | `bb check:doc-counts` | Prose disagreeing with `wagoe.tools.deploy/all-libs`: a documented library/artifact count that is not the real number, or a document calling a published library unpublished | Yes |
 | **Security tests** | `clojure -M:test --focus-meta :security` | Error→HTTP mapping, CSRF routing, XSS escaping, SQL injection, sensitive field leaks | Yes (test failure) |
 | **clj-kondo lint** | `clojure -M:clj-kondo --lint ...` | Static analysis (existing gate) | Yes |
@@ -889,7 +890,7 @@ Automated safeguards run in CI (and `check:fcis` + `check:ports` in pre-commit) 
 
 **`check:doc-counts` escape hatch:** add an entry to `.wagoe/check-doc-counts.edn`. Every entry must carry a `:why` — the gate throws on one without it. Prefer the alternatives first: a historical document (changelog, ADR, delivered talk) belongs in `excluded-paths`, and a number that is not a library count (`HTTP 200 for each library`) belongs in `gap-disqualifiers`, so the same shape never needs allowlisting twice.
 
-**Scripts location:** `libs/tools/src/wagoe/tools/check_{fcis,tests,deps,ports,poms,doc_counts}.clj`
+**Scripts location:** `libs/tools/src/wagoe/tools/check_{fcis,tests,deps,ports,poms,doc_counts,branch_protection}.clj`
 **Security tests:** `libs/platform/test/wagoe/platform/shell/security_test.clj` (tagged `^:security ^:unit`)
 **Handler test helpers:** `test/support/handler_test_helpers.clj` (Ring request builders, response assertions)
 **ADRs:** `dev-docs/adr/ADR-021-fcis-boundary-rules.adoc`, `ADR-022-error-handling-conventions.adoc`
@@ -998,6 +999,7 @@ Clojure's `{:or {limit 20 offset 0}}` destructuring only fires for **absent** ke
 | `wagoe.tools.check-deps` | `bb check:deps` — dependency direction linting, cycle detection, third-party declaration completeness |
 | `wagoe.tools.check-ports` | `bb check:ports` — hexagonal boundary enforcement (ports.clj presence + protocol usage) |
 | `wagoe.tools.check-poms` | `bb check:poms` — published-POM dependency completeness (build-shared rewrite + pom-basis usage + publishable deps) |
+| `wagoe.tools.check-branch-protection` | `bb check:branch-protection` — required status checks vs the job names CI emits |
 | `wagoe.tools.parsing` | Shared source-parsing utilities for quality-gate checkers |
 
 See `libs/tools/AGENTS.md` for the full command reference.
