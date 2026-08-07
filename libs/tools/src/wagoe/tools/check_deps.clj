@@ -203,35 +203,58 @@
 (def ^:private ns-prefix->artifact
   "Namespace prefix -> the artifact that provides it.
 
-   Only entries a Wagoe library actually requires. A prefix absent here is not
-   checked, so this map is the gate's coverage: adding a library that requires
-   something new means adding it here, and `unmapped-prefixes` below reports
-   what is missing rather than letting it pass silently."
-  {"aero"           'aero/aero
-   "buddy"          'buddy/buddy-core
-   "cheshire"       'cheshire/cheshire
-   "clj-http"       'clj-http/clj-http
-   "clj-kondo"      'clj-kondo/clj-kondo
-   "hiccup"         'hiccup/hiccup
-   "honey.sql"      'com.github.seancorfield/honeysql
-   "integrant"      'integrant/integrant
-   "malli"          'metosin/malli
-   "migratus"       'migratus/migratus
-   "muuntaja"       'metosin/muuntaja
-   "next.jdbc"      'com.github.seancorfield/next.jdbc
-   "reitit"         'metosin/reitit
-   "rewrite-clj"    'rewrite-clj/rewrite-clj
-   "clojure.tools.cli"     'org.clojure/tools.cli
-   "clojure.tools.logging" 'org.clojure/tools.logging})
+   Several of these families are split across artifacts, and one entry per
+   family gets the gate wrong: `buddy.sign.jwt` comes from buddy/buddy-sign,
+   not buddy/buddy-core, so mapping all of `buddy` to buddy-core meant removing
+   buddy-sign from a deps.edn went unreported — the coarser gap was already
+   allowlisted and absorbed it. Same for `integrant.repl` (integrant/repl, a
+   separate artifact from integrant/integrant) and for reitit, which this
+   repository consumes as four modules rather than the bundle.
 
-(defn- provider-of
-  "The artifact providing `ns-str`, or nil when the prefix is not mapped."
+   Longest prefix wins, so `buddy.core` is checked before `buddy`. Entries are
+   added only for namespaces a Wagoe library actually requires: a prefix absent
+   here is not checked, which makes this map the gate's coverage."
+  {"aero"                   'aero/aero
+   "buddy.core"             'buddy/buddy-core
+   "buddy.hashers"          'buddy/buddy-hashers
+   "buddy.sign"             'buddy/buddy-sign
+   "cheshire"               'cheshire/cheshire
+   "clj-http"               'clj-http/clj-http
+   "clj-kondo"              'clj-kondo/clj-kondo
+   "hiccup"                 'hiccup/hiccup
+   "honey.sql"              'com.github.seancorfield/honeysql
+   "integrant.core"         'integrant/integrant
+   "integrant.repl"         'integrant/repl
+   "malli"                  'metosin/malli
+   "migratus"               'migratus/migratus
+   "muuntaja"               'metosin/muuntaja
+   "next.jdbc"              'com.github.seancorfield/next.jdbc
+   "reitit.coercion.malli"  'metosin/reitit-malli
+   "reitit.core"            'metosin/reitit-core
+   "reitit.ring.middleware" 'metosin/reitit-middleware
+   "reitit.ring"            'metosin/reitit-ring
+   "reitit.swagger"         'metosin/reitit-swagger
+   "rewrite-clj"            'rewrite-clj/rewrite-clj
+   "clojure.tools.cli"      'org.clojure/tools.cli
+   "clojure.tools.logging"  'org.clojure/tools.logging})
+
+(defn provider-of
+  "The artifact providing `ns-str`, or nil when no prefix matches.
+
+   Longest match wins. `some` over the map picked an arbitrary one where
+   prefixes overlap — hash-map order is not insertion order past eight entries
+   — so `reitit.ring.middleware.muuntaja` could have resolved to reitit-ring or
+   reitit-middleware depending on nothing the caller controls.
+
+   Public so a test can drive the overlapping cases directly."
   [ns-str]
-  (some (fn [[prefix artifact]]
-          (when (or (= ns-str prefix)
-                    (str/starts-with? ns-str (str prefix ".")))
-            artifact))
-        ns-prefix->artifact))
+  (->> ns-prefix->artifact
+       (filter (fn [[prefix _]]
+                 (or (= ns-str prefix)
+                     (str/starts-with? ns-str (str prefix ".")))))
+       (sort-by (comp - count first))
+       first
+       second))
 
 (defn declared-artifacts
   "Artifact coordinates declared in a library's deps.edn, as strings, or
@@ -304,9 +327,11 @@
     ["cache" "integrant/integrant"]
     ["devtools" "cheshire/cheshire"]
     ["devtools" "integrant/integrant"]
+    ["devtools" "integrant/repl"]
     ["devtools" "metosin/malli"]
     ["devtools" "metosin/muuntaja"]
-    ["devtools" "metosin/reitit"]
+    ["devtools" "metosin/reitit-core"]
+    ["devtools" "metosin/reitit-ring"]
     ["devtools" "org.clojure/tools.logging"]
     ["external" "integrant/integrant"]
     ["geo" "integrant/integrant"]
@@ -315,7 +340,6 @@
     ["observability" "cheshire/cheshire"]
     ["observability" "metosin/malli"]
     ["platform" "metosin/malli"]
-    ["platform" "metosin/reitit"]
     ["platform" "org.clojure/tools.logging"]
     ["realtime" "integrant/integrant"]
     ["scaffolder" "cheshire/cheshire"]

@@ -107,3 +107,47 @@
       (let [deps (slurp (str "libs/" lib "/deps.edn"))]
         (is (str/includes? deps "org.clojure/tools.cli")
             (str lib " requires clojure.tools.cli, so its POM must carry it"))))))
+
+(deftest ^:unit split-artifact-families-map-to-their-real-artifact
+  ;; buddy, integrant and reitit are each several artifacts. One entry per
+  ;; family made the gate blind inside it: every buddy.* namespace mapped to
+  ;; buddy/buddy-core, so removing buddy/buddy-sign from a deps.edn produced no
+  ;; violation — the coarse buddy-core gap was already allowlisted and absorbed
+  ;; it.
+  (testing "buddy namespaces resolve to their own artifacts"
+    (is (= 'buddy/buddy-core    (sut/provider-of "buddy.core.codecs")))
+    (is (= 'buddy/buddy-hashers (sut/provider-of "buddy.hashers")))
+    (is (= 'buddy/buddy-sign    (sut/provider-of "buddy.sign.jwt"))))
+
+  (testing "integrant.repl is a different artifact from integrant"
+    (is (= 'integrant/integrant (sut/provider-of "integrant.core")))
+    (is (= 'integrant/repl      (sut/provider-of "integrant.repl")))
+    (is (= 'integrant/repl      (sut/provider-of "integrant.repl.state"))))
+
+  (testing "reitit is consumed as modules, not the bundle"
+    (is (= 'metosin/reitit-core       (sut/provider-of "reitit.core")))
+    (is (= 'metosin/reitit-ring       (sut/provider-of "reitit.ring")))
+    (is (= 'metosin/reitit-malli      (sut/provider-of "reitit.coercion.malli")))
+    (is (= 'metosin/reitit-swagger    (sut/provider-of "reitit.swagger")))
+    (is (= 'metosin/reitit-middleware (sut/provider-of "reitit.ring.middleware.muuntaja"))
+        "the longer prefix has to win over reitit.ring"))
+
+  (testing "the longest prefix wins, not whichever the map yields first"
+    ;; `some` over a map picked an arbitrary match where prefixes overlap:
+    ;; hash-map order is not insertion order past eight entries, so
+    ;; reitit.ring.middleware.* could have resolved either way depending on
+    ;; nothing the caller controls.
+    (doseq [[ns-str expected] {"reitit.ring.middleware.exception" 'metosin/reitit-middleware
+                               "reitit.ring.coercion"             'metosin/reitit-ring
+                               "buddy.core.nonce"                 'buddy/buddy-core}]
+      (is (= expected (sut/provider-of ns-str)) ns-str)))
+
+  (testing "a gap inside a family is reported against the right artifact"
+    (let [dir (temp-lib (str "{:deps {org.clojure/clojure {:mvn/version \"1.12.5\"}\n"
+                             "        buddy/buddy-core {:mvn/version \"1.12.0-430\"}}}")
+                        "buddy.sign.jwt")]
+      (try
+        (is (= [["probe" "buddy/buddy-sign"]]
+               (map (juxt :lib (comp str :artifact)) (sut/third-party-gaps [["probe" dir]])))
+            "declaring buddy-core must not answer for buddy-sign")
+        (finally (delete-tree! dir))))))
