@@ -56,6 +56,15 @@
       (->> (file-seq src-dir)
            (filter #(and (.isFile %) (str/ends-with? (.getName %) ".clj")))))))
 
+(defn library-entries
+  "[lib-name lib-dir] for every library under libs/.
+
+   Public wrapper over `lib-dirs` so a test can assert against the real tree —
+   the guard that every namespace this repository requires is covered by the
+   artifact map has to run on the repository, not a fixture."
+  []
+  (lib-dirs))
+
 (defn- extract-required-ns
   "Extract required namespace symbols from a ns form."
   [ns-form]
@@ -222,6 +231,10 @@
    "clj-http"               'clj-http/clj-http
    "clj-kondo"              'clj-kondo/clj-kondo
    "hiccup"                 'hiccup/hiccup
+   ;; hiccup 2.x moved the API here, and "hiccup" is not a prefix of
+   ;; "hiccup2.core" — the family looked covered while every hiccup2 user went
+   ;; unchecked.
+   "hiccup2"                'hiccup/hiccup
    "honey.sql"              'com.github.seancorfield/honeysql
    "integrant.core"         'integrant/integrant
    "integrant.repl"         'integrant/repl
@@ -233,8 +246,17 @@
    "reitit.core"            'metosin/reitit-core
    "reitit.ring.middleware" 'metosin/reitit-middleware
    "reitit.ring"            'metosin/reitit-ring
+   "reitit.swagger-ui"      'metosin/reitit-swagger-ui
    "reitit.swagger"         'metosin/reitit-swagger
    "rewrite-clj"            'rewrite-clj/rewrite-clj
+   "ring.adapter.jetty"     'ring/ring-jetty-adapter
+   "ring.middleware"        'ring/ring-core
+   "ring.util"              'ring/ring-core
+   "ring.websocket"         'ring/ring-core
+   "sentry-clj"             'io.sentry/sentry-clj
+   "taoensso.nippy"         'com.taoensso/nippy
+   "one-time"               'one-time/one-time
+   "dk.ative.docjure"       'dk.ative/docjure
    "clojure.tools.cli"      'org.clojure/tools.cli
    "clojure.tools.logging"  'org.clojure/tools.logging})
 
@@ -255,6 +277,48 @@
        (sort-by (comp - count first))
        first
        second))
+
+(def ^:private runtime-provided-prefixes
+  "Namespace prefixes supplied by the runtime, not by a Maven artifact.
+
+   libs/tools is pure Babashka — `bb` bundles babashka.fs, babashka.process and
+   babashka.http-client — so declaring them as dependencies would be wrong, not
+   merely redundant."
+  #{"babashka"})
+
+(defn- third-party-ns?
+  "Whether `ns-str` is a namespace some artifact has to provide.
+
+   Excludes Wagoe's own namespaces, the Clojure standard library, and
+   runtime-provided prefixes. `clojure.tools.*` is deliberately *not* excluded:
+   tools.cli and tools.logging are separate artifacts, and treating them as
+   standard library is what this ticket is about."
+  [ns-str]
+  (and (not (str/starts-with? ns-str "wagoe."))
+       (not (and (str/starts-with? ns-str "clojure.")
+                 (not (str/starts-with? ns-str "clojure.tools."))))
+       (not (some #(or (= ns-str %) (str/starts-with? ns-str (str % ".")))
+                  runtime-provided-prefixes))))
+
+(defn unmapped-third-party-namespaces
+  "Third-party namespaces required by a library that `ns-prefix->artifact` does
+   not cover, as [{:lib :ns}].
+
+   Reported as a failure rather than ignored. The map is the gate's coverage,
+   and a namespace missing from it is checked by nothing — `provider-of`
+   returns nil and the require passes silently, which is the same
+   looks-covered-but-is-not failure the gate exists to catch. Anything genuinely
+   not from an artifact belongs in `runtime-provided-prefixes`, where the reason
+   is written down.
+
+   Public so a test can drive it; `-main` exits the process."
+  [lib-entries]
+  (distinct
+   (for [[lib-name lib-dir] lib-entries
+         f      (source-files lib-dir)
+         ns-str (extract-required-ns (parsing/read-ns-form f))
+         :when  (and (third-party-ns? ns-str) (nil? (provider-of ns-str)))]
+     {:lib lib-name :ns ns-str})))
 
 (defn declared-artifacts
   "Artifact coordinates declared in a library's deps.edn, as strings, or
@@ -323,6 +387,7 @@
   #{["admin" "integrant/integrant"]
     ["admin" "metosin/malli"]
     ["admin" "org.clojure/tools.logging"]
+    ["admin" "ring/ring-core"]
     ["audience" "integrant/integrant"]
     ["cache" "integrant/integrant"]
     ["devtools" "cheshire/cheshire"]
@@ -333,6 +398,7 @@
     ["devtools" "metosin/reitit-core"]
     ["devtools" "metosin/reitit-ring"]
     ["devtools" "org.clojure/tools.logging"]
+    ["devtools" "ring/ring-core"]
     ["external" "integrant/integrant"]
     ["geo" "integrant/integrant"]
     ["i18n" "integrant/integrant"]
@@ -365,6 +431,7 @@
     ["user" "integrant/integrant"]
     ["user" "metosin/malli"]
     ["user" "org.clojure/tools.logging"]
+    ["user" "ring/ring-core"]
     ["wagoe-mcp" "metosin/malli"]
     ["workflow" "com.github.seancorfield/honeysql"]
     ["workflow" "com.github.seancorfield/next.jdbc"]
@@ -431,6 +498,7 @@
         allowed-tp          (filter allowed-third-party-gap? tp-gaps)
         new-tp              (remove allowed-third-party-gap? tp-gaps)
         unreadable          (unreadable-deps-files entries)
+        unmapped            (unmapped-third-party-namespaces entries)
         ;; Hard failures: core violations, any declared cycle, any non-allowlisted actual cycle,
         ;; any NEW undeclared direct dependency
         hard-failures  (concat core-issues
@@ -438,7 +506,8 @@
                                (map (fn [p] {:type :actual-cycle :path p}) new-actual)
                                new-undeclared
                                (map #(assoc % :type :undeclared-third-party) new-tp)
-                               (map #(assoc % :type :unreadable-deps) unreadable))
+                               (map #(assoc % :type :unreadable-deps) unreadable)
+                               (map #(assoc % :type :unmapped-ns) unmapped))
         ;; Soft warnings: allowlisted undeclared deps (pre-existing, acknowledged)
         warnings       allowed-undeclared]
     (when (seq allowed-tp)
@@ -481,7 +550,12 @@
                           " but does not declare it — the published POM would omit it"))
             :unreadable-deps
             (println (str "  VIOLATION: cannot parse " (ansi/red (:file v))
-                          " — dependency checks for " (:lib v) " cannot run"))))
+                          " — dependency checks for " (:lib v) " cannot run"))
+            :unmapped-ns
+            (println (str "  VIOLATION: " (:lib v) " requires " (ansi/red (:ns v))
+                          " which maps to no artifact — add it to"
+                          " ns-prefix->artifact, or to runtime-provided-prefixes"
+                          " if the runtime supplies it"))))
         (println)
         (println (str (count hard-failures) " violation(s) found."))
         (System/exit 1))

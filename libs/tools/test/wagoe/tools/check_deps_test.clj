@@ -151,3 +151,69 @@
                (map (juxt :lib (comp str :artifact)) (sut/third-party-gaps [["probe" dir]])))
             "declaring buddy-core must not answer for buddy-sign")
         (finally (delete-tree! dir))))))
+
+(deftest ^:unit an-unmapped-namespace-is-a-violation-not-a-pass
+  ;; The map is the gate's coverage, and it was silently incomplete:
+  ;; ring.util.response, ring.adapter.jetty, hiccup2.core and a dozen more
+  ;; resolved to nil, so removing ring/ring-core from a deps.edn passed. A gate
+  ;; that under-covers without saying so is the failure it exists to catch.
+  (testing "a namespace no prefix covers is reported"
+    (let [dir (temp-lib "{:deps {org.clojure/clojure {:mvn/version \"1.12.5\"}}}"
+                        "some.brand.new.library")]
+      (try
+        (is (= [["probe" "some.brand.new.library"]]
+               (map (juxt :lib :ns) (sut/unmapped-third-party-namespaces [["probe" dir]])))
+            "adding a dependency must not quietly widen what goes unchecked")
+        (finally (delete-tree! dir)))))
+
+  (testing "a mapped namespace is not reported as unmapped"
+    (let [dir (temp-lib "{:deps {org.clojure/clojure {:mvn/version \"1.12.5\"}}}"
+                        "ring.util.response")]
+      (try
+        (is (empty? (sut/unmapped-third-party-namespaces [["probe" dir]])))
+        (finally (delete-tree! dir)))))
+
+  (testing "Wagoe's own namespaces and the Clojure standard library are not third-party"
+    (doseq [n ["wagoe.core.validation" "clojure.string" "clojure.java.io"]]
+      (let [dir (temp-lib "{:deps {org.clojure/clojure {:mvn/version \"1.12.5\"}}}" n)]
+        (try
+          (is (empty? (sut/unmapped-third-party-namespaces [["probe" dir]])) n)
+          (finally (delete-tree! dir))))))
+
+  (testing "clojure.tools.* is third-party, whatever its name suggests"
+    ;; tools.cli and tools.logging are separate artifacts. Treating the
+    ;; clojure. prefix as standard library is the whole of BOU-273.
+    (let [dir (temp-lib "{:deps {org.clojure/clojure {:mvn/version \"1.12.5\"}}}"
+                        "clojure.tools.cli")]
+      (try
+        (is (empty? (sut/unmapped-third-party-namespaces [["probe" dir]]))
+            "mapped, so not unmapped")
+        (is (seq (sut/third-party-gaps [["probe" dir]]))
+            "but still undeclared")
+        (finally (delete-tree! dir)))))
+
+  (testing "runtime-provided namespaces are neither mapped nor reported"
+    ;; libs/tools is pure Babashka; bb bundles these, so declaring them as
+    ;; Maven deps would be wrong rather than merely redundant.
+    (doseq [n ["babashka.fs" "babashka.process" "babashka.http-client"]]
+      (let [dir (temp-lib "{:deps {org.clojure/clojure {:mvn/version \"1.12.5\"}}}" n)]
+        (try
+          (is (empty? (sut/unmapped-third-party-namespaces [["probe" dir]])) n)
+          (is (empty? (sut/third-party-gaps [["probe" dir]])) n)
+          (finally (delete-tree! dir)))))))
+
+(deftest ^:unit every-namespace-this-repository-requires-is-covered
+  ;; The guard that keeps the map honest as libraries are added. If this fails,
+  ;; the fix is a map entry, not an allowlist entry.
+  (testing "no library requires a third-party namespace the map does not know"
+    (let [unmapped (sut/unmapped-third-party-namespaces (sut/library-entries))]
+      (is (empty? unmapped)
+          (str "unmapped: " (pr-str (map (juxt :lib :ns) unmapped)))))))
+
+(deftest ^:unit hiccup2-is-covered-by-the-hiccup-family
+  ;; hiccup 2.x moved the API to hiccup2.core, and "hiccup" is not a prefix of
+  ;; "hiccup2.core" — so the family looked covered while every hiccup2 user in
+  ;; the repository went unchecked.
+  (testing "both namespaces resolve to the hiccup artifact"
+    (is (= 'hiccup/hiccup (sut/provider-of "hiccup.core")))
+    (is (= 'hiccup/hiccup (sut/provider-of "hiccup2.core")))))
