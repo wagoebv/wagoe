@@ -2,6 +2,9 @@
 
  :deps  {org.clojure/clojure   {:mvn/version "1.12.5"}
          wagoe/core         {:local/root "../core"}
+         metosin/malli {:mvn/version "0.20.1"}
+         org.clojure/tools.logging {:mvn/version "1.3.1"}
+         cheshire/cheshire {:mvn/version "6.2.0"}
          org.clojure/tools.cli {:mvn/version "1.4.256"}
          ;; Schema editing parses the file instead of matching lines. The
          ;; line-based version wrote a field into the *next* def when it could

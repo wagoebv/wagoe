@@ -3,6 +3,7 @@
  :deps  {org.clojure/clojure {:mvn/version "1.12.5"}
          wagoe/platform   {:local/root "../platform"}
          wagoe/ui-style   {:local/root "../ui-style"}
+         metosin/malli {:mvn/version "0.20.1"}
          hiccup/hiccup       {:mvn/version "2.0.0"}}
 
  :aliases

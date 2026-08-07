@@ -7,6 +7,15 @@
          wagoe/scaffolder     {:local/root "../scaffolder"}
          wagoe/jobs           {:local/root "../jobs"}
          wagoe/user           {:local/root "../user"}
+         integrant/integrant {:mvn/version "1.0.1"}
+         metosin/malli {:mvn/version "0.20.1"}
+         org.clojure/tools.logging {:mvn/version "1.3.1"}
+         cheshire/cheshire {:mvn/version "6.2.0"}
+         ring/ring-core {:mvn/version "1.15.4"}
+         metosin/muuntaja {:mvn/version "0.6.11"}
+         metosin/reitit-ring {:mvn/version "0.10.1"}
+         metosin/reitit-core {:mvn/version "0.10.1"}
+         integrant/repl {:mvn/version "0.5.1"}
          hiccup/hiccup           {:mvn/version "2.0.0"}
          ring/ring-jetty-adapter {:mvn/version "1.15.4"}}
 

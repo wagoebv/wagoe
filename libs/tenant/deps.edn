@@ -3,6 +3,10 @@
  :deps  {org.clojure/clojure {:mvn/version "1.12.5"}
          wagoe/platform   {:local/root "../platform"}
          wagoe/core       {:local/root "../core"}
+         integrant/integrant {:mvn/version "1.0.1"}
+         metosin/malli {:mvn/version "0.20.1"}
+         org.clojure/tools.logging {:mvn/version "1.3.1"}
+         migratus/migratus {:mvn/version "1.6.6"}
 
          cheshire/cheshire   {:mvn/version "6.2.0"}}
 

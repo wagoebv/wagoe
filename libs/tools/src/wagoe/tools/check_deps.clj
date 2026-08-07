@@ -426,66 +426,15 @@
     {:lib lib-name :file (.getPath (io/file lib-dir "deps.edn"))}))
 
 (def ^:private allowed-third-party-gaps
-  "Pre-existing [lib artifact] pairs. Every one of these resolves today through
-   a Wagoe sibling or another dependency, so nothing is broken — but each is a
-   version the library does not control and a transitive it does not own.
+  "Pre-existing [lib artifact] pairs where a library requires a namespace
+   without declaring the artifact that provides it.
 
-   Remove entries as deps.edn files are updated. The point of the allowlist is
-   that a *new* gap fails: the three fixed under BOU-273 are deliberately absent."
-  #{["admin" "integrant/integrant"]
-    ["admin" "metosin/malli"]
-    ["admin" "org.clojure/tools.logging"]
-    ["admin" "ring/ring-core"]
-    ["audience" "integrant/integrant"]
-    ["cache" "integrant/integrant"]
-    ["devtools" "cheshire/cheshire"]
-    ["devtools" "integrant/integrant"]
-    ["devtools" "integrant/repl"]
-    ["devtools" "metosin/malli"]
-    ["devtools" "metosin/muuntaja"]
-    ["devtools" "metosin/reitit-core"]
-    ["devtools" "metosin/reitit-ring"]
-    ["devtools" "org.clojure/tools.logging"]
-    ["devtools" "ring/ring-core"]
-    ["external" "integrant/integrant"]
-    ["geo" "integrant/integrant"]
-    ["i18n" "integrant/integrant"]
-    ["i18n" "org.clojure/tools.logging"]
-    ["observability" "cheshire/cheshire"]
-    ["observability" "metosin/malli"]
-    ["platform" "metosin/malli"]
-    ["platform" "org.clojure/tools.logging"]
-    ["realtime" "integrant/integrant"]
-    ["scaffolder" "cheshire/cheshire"]
-    ["scaffolder" "metosin/malli"]
-    ["scaffolder" "org.clojure/tools.logging"]
-    ["search" "cheshire/cheshire"]
-    ["search" "com.github.seancorfield/honeysql"]
-    ["search" "com.github.seancorfield/next.jdbc"]
-    ["search" "integrant/integrant"]
-    ["search" "org.clojure/tools.logging"]
-    ["shared-ui" "metosin/malli"]
-    ["storage" "integrant/integrant"]
-    ["storage" "metosin/malli"]
-    ["storage" "org.clojure/tools.logging"]
-    ["tenant" "integrant/integrant"]
-    ["tenant" "metosin/malli"]
-    ["tenant" "migratus/migratus"]
-    ["tenant" "org.clojure/tools.logging"]
-    ["tools" "cheshire/cheshire"]
-    ["user" "buddy/buddy-core"]
-    ["user" "cheshire/cheshire"]
-    ["user" "com.github.seancorfield/next.jdbc"]
-    ["user" "integrant/integrant"]
-    ["user" "metosin/malli"]
-    ["user" "org.clojure/tools.logging"]
-    ["user" "ring/ring-core"]
-    ["wagoe-mcp" "metosin/malli"]
-    ["workflow" "com.github.seancorfield/honeysql"]
-    ["workflow" "com.github.seancorfield/next.jdbc"]
-    ["workflow" "integrant/integrant"]
-    ["workflow" "metosin/malli"]
-    ["workflow" "org.clojure/tools.logging"]})
+   Empty as of BOU-276: all 54 are declared. Kept rather than deleted because it
+   is the honest place for a gap that genuinely cannot be closed yet — the
+   alternative is loosening `third-party-gaps` or the artifact map, which
+   weakens the gate everywhere instead of recording one exception. An entry here
+   is a to-do, not an exemption, and needs the reason with it."
+  #{})
 
 (defn- allowed-third-party-gap?
   [{:keys [lib artifact]}]
