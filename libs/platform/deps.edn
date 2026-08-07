@@ -1,6 +1,11 @@
 {:paths ["src" "resources"]
 
  :deps  {org.clojure/clojure               {:mvn/version "1.12.5"}
+         ;; wagoe.platform.shell.database.cli-migrations requires this — it is
+         ;; what `bb migrate` runs. It resolved only through migratus, which
+         ;; happens to depend on it, at 1.0.219 rather than the pinned version
+         ;; (BOU-273). A transitive that a dependency could drop at any time.
+         org.clojure/tools.cli             {:mvn/version "1.4.256"}
          wagoe/observability            {:local/root "../observability"}
          wagoe/cache                    {:local/root "../cache"}
          wagoe/i18n                     {:local/root "../i18n"}

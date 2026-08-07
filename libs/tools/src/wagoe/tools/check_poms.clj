@@ -54,7 +54,14 @@
   [lib-dir]
   (let [deps-file (io/file lib-dir "deps.edn")]
     (if (.exists deps-file)
-      (->> (:deps (edn/read-string (slurp deps-file)))
+      ;; The docstring's "or unreadable" was not true: there was no try, so a
+      ;; malformed deps.edn escaped as a bare "EOF while reading" naming this
+      ;; function rather than the file. `wagoe.tools.deploy` calls this at
+      ;; namespace load time to build `publish-order`, and bb.edn requires that
+      ;; namespace for every task — so one unparseable deps.edn took down every
+      ;; `bb` command with an error pointing here (BOU-273).
+      (->> (:deps (try (edn/read-string (slurp deps-file))
+                       (catch Exception _ nil)))
            (keep (fn [[dep coord]]
                    (when (and (map? coord)
                               (contains? coord :local/root)
