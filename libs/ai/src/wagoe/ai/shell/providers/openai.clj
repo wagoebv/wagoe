@@ -75,7 +75,8 @@
            :provider :openai
            :model    effective-model})
         (catch Exception e
-          (log/warn e "openai complete failed" {:model effective-model})
+          (log/warn (str "openai complete failed: " (.getMessage e))
+                    {:model effective-model})
           {:error    (.getMessage e)
            :provider :openai
            :model    effective-model}))))

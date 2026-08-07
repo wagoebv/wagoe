@@ -43,6 +43,66 @@
 ;; Service bootstrap
 ;; =============================================================================
 
+(defn parse-or-exit!
+  "Parse `args` against `opts`, or print the errors and exit 1.
+
+   Every subcommand destructured `parse-opts` as `{:keys [options arguments]}`
+   and never read `:errors`, so tools.cli collected unknown options and invalid
+   values and they were discarded. A typo one keystroke from a real flag —
+   `--fil` for `--file` — was dropped, its value became a positional argument
+   nothing reads, and the command failed complaining about missing input
+   (BOU-279). The message pointed away from the mistake, which was on the same
+   line.
+
+   Public so a test can drive it. Returns the parsed map; `-main` exits."
+  [args opts usage]
+  (let [{:keys [errors] :as parsed} (cli/parse-opts args opts)]
+    (when (seq errors)
+      (doseq [e errors] (println (red e)))
+      (println)
+      (println usage)
+      (System/exit 1))
+    parsed))
+
+(defn explain-provider-error
+  "Turn a provider's terse `:error` string into something actionable.
+
+   The providers already catch transport failures and return
+   `{:error (.getMessage e)}`, which every subcommand prints. For the common
+   case that message is `Connection refused` — accurate and useless. A fresh
+   project has no provider configured, `make-service-from-env` falls back to
+   Ollama on localhost, and nothing is listening, so a first `bb ai` command
+   reports a refused connection to a service the user never chose (BOU-280).
+
+   Connection refused reaches here from that fallback, so it means `no provider`
+   rather than `Ollama is down` — unless OLLAMA_URL was set deliberately, which
+   this distinguishes.
+
+   Returns the original when it has nothing better to say: replacing an
+   unrecognised message with a friendlier guess would hide the real one.
+
+   Public so a test can drive each arm without a live provider."
+  [error]
+  (let [e (str error)]
+    (cond
+      (str/includes? e "Connection refused")
+      (if-let [url (System/getenv "OLLAMA_URL")]
+        (str "Cannot reach Ollama at " url ". Is it running?")
+        (str "No AI provider is configured, and the default (Ollama on "
+             "localhost:11434) is not running.\n"
+             "  Set one of:\n"
+             "    ANTHROPIC_API_KEY   Anthropic (Claude)\n"
+             "    OPENAI_API_KEY      OpenAI\n"
+             "    OLLAMA_URL          a running Ollama, if it is not on localhost"))
+
+      (str/includes? e "status 401")
+      "The AI provider rejected the API key. Check the key for the provider you configured."
+
+      (str/includes? e "status 429")
+      "The AI provider is rate-limiting. Wait and retry."
+
+      :else e)))
+
 (defn- make-service-from-env
   "Fall-back when no :wagoe/ai-service is present in active config.
    Checks ANTHROPIC_API_KEY, OPENAI_BASE_URL, OPENAI_API_KEY, OLLAMA_URL in that order.
@@ -131,7 +191,7 @@
     (or (empty? input) (= input "y") (= input "yes"))))
 
 (defn cmd-scaffold-ai [args]
-  (let [{:keys [options arguments]} (cli/parse-opts args scaffold-ai-opts)
+  (let [{:keys [options arguments]} (parse-or-exit! args scaffold-ai-opts "Usage: bb scaffold ai <description> [--yes] [--dry-run]")
         description (str/join " " arguments)]
     (when (or (:help options) (str/blank? description))
       (println "Usage: bb scaffold ai <description>")
@@ -144,7 +204,7 @@
     (let [service (make-service-from-config)
           result  (svc/scaffold-from-description service description (:root options))]
       (if (:error result)
-        (do (println (red (str "Error: " (:error result)))) (System/exit 1))
+        (do (println (red (explain-provider-error (:error result)))) (System/exit 1))
         (do
           (println (cyan "\u250c\u2500 Preview \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510"))
           (println (str (cyan "\u2502") " Module:  " (bold (:module-name result))))
@@ -184,7 +244,7 @@
    ["-h" "--help"]])
 
 (defn cmd-explain [args]
-  (let [{:keys [options]} (cli/parse-opts args explain-opts)
+  (let [{:keys [options]} (parse-or-exit! args explain-opts "Usage: bb ai explain [--file <path>]")
         stacktrace (if (:file options)
                      (slurp (:file options))
                      (slurp *in*))]
@@ -194,7 +254,7 @@
     (let [service (make-service-from-config)
           result  (svc/explain-error service stacktrace (:root options))]
       (if (:error result)
-        (do (println (red (str "Error: " (:error result)))) (System/exit 1))
+        (do (println (red (explain-provider-error (:error result)))) (System/exit 1))
         (do
           (println)
           (println (bold "=== AI Error Explanation ==="))
@@ -213,7 +273,7 @@
    ["-h" "--help"]])
 
 (defn cmd-gen-tests [args]
-  (let [{:keys [options arguments]} (cli/parse-opts args gen-tests-opts)
+  (let [{:keys [options arguments]} (parse-or-exit! args gen-tests-opts "Usage: bb ai gen-tests <source-file> [-o <output>]")
         source-path (first arguments)]
     (when (or (:help options) (nil? source-path))
       (println "Usage: bb ai gen-tests <source-file>")
@@ -224,7 +284,7 @@
     (let [service (make-service-from-config)
           result  (svc/generate-tests service source-path)]
       (if (:error result)
-        (do (println (red (str "Error: " (:error result)))) (System/exit 1))
+        (do (println (red (explain-provider-error (:error result)))) (System/exit 1))
         (let [test-src (:text result)]
           (if (:output options)
             (do (spit (:output options) test-src)
@@ -240,7 +300,7 @@
    ["-h" "--help"]])
 
 (defn cmd-sql [args]
-  (let [{:keys [options arguments]} (cli/parse-opts args sql-opts)
+  (let [{:keys [options arguments]} (parse-or-exit! args sql-opts "Usage: bb ai sql <description>")
         description (str/join " " arguments)]
     (when (or (:help options) (str/blank? description))
       (println "Usage: bb ai sql <description>")
@@ -248,7 +308,7 @@
     (let [service (make-service-from-config)
           result  (svc/sql-from-description service description (:root options))]
       (if (:error result)
-        (do (println (red (str "Error: " (:error result)))) (System/exit 1))
+        (do (println (red (explain-provider-error (:error result)))) (System/exit 1))
         (do
           (println)
           (println (bold "=== HoneySQL ==="))
@@ -271,7 +331,7 @@
    ["-h" "--help"]])
 
 (defn cmd-docs [args]
-  (let [{:keys [options]} (cli/parse-opts args docs-opts)]
+  (let [{:keys [options]} (parse-or-exit! args docs-opts "Usage: bb ai docs --module <path> [--type agents|openapi|readme]")]
     (when (or (:help options) (nil? (:module options)))
       (println "Usage: bb ai docs --module <path> [--type agents|openapi|readme]")
       (System/exit 0))
@@ -285,7 +345,7 @@
         (println)
         (let [result (svc/generate-docs service module-path doc-type)]
           (if (:error result)
-            (println (red (str "Error: " (:error result))))
+            (println (red (explain-provider-error (:error result))))
             (if (:output options)
               (let [fname (str (:output options)
                                (when (> (count doc-types) 1)
@@ -304,7 +364,7 @@
    ["-h" "--help"]])
 
 (defn cmd-admin-entity [args]
-  (let [{:keys [options arguments]} (cli/parse-opts args admin-entity-opts)
+  (let [{:keys [options arguments]} (parse-or-exit! args admin-entity-opts "Usage: bb ai admin-entity <description>")
         description (str/join " " arguments)]
     (when (or (:help options) (str/blank? description))
       (println "Usage: bb ai admin-entity <description>")
@@ -317,7 +377,7 @@
     (let [service (make-service-from-config)
           result  (svc/generate-admin-entity service description (:root options))]
       (if (:error result)
-        (do (println (red (str "Error: " (:error result))))
+        (do (println (red (explain-provider-error (:error result))))
             (when (:raw-text result)
               (println)
               (println (dim "Raw AI output:"))
@@ -355,7 +415,7 @@
   [["-h" "--help"]])
 
 (defn cmd-setup-parse [args]
-  (let [{:keys [options arguments]} (cli/parse-opts args setup-parse-opts)
+  (let [{:keys [options arguments]} (parse-or-exit! args setup-parse-opts "Usage: bb ai setup-parse <description>")
         description (str/join " " arguments)]
     (when (or (:help options) (str/blank? description))
       (println "Usage: bb ai setup-parse <description>")
@@ -363,7 +423,7 @@
     (let [service (make-service-from-config)
           result  (svc/parse-setup-description service description)]
       (if (:error result)
-        (do (println (red (str "Error: " (:error result)))) (System/exit 1))
+        (do (println (red (explain-provider-error (:error result)))) (System/exit 1))
         ;; Output the JSON data to stdout for the Babashka setup wizard to consume
         (let [data   (:data result)
               output {"project-name" (get data "project-name" "my-app")

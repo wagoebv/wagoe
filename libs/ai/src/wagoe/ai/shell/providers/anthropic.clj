@@ -68,7 +68,8 @@
            :provider :anthropic
            :model    effective-model})
         (catch Exception e
-          (log/warn e "anthropic complete failed" {:model effective-model})
+          (log/warn (str "anthropic complete failed: " (.getMessage e))
+                    {:model effective-model})
           {:error    (.getMessage e)
            :provider :anthropic
            :model    effective-model}))))

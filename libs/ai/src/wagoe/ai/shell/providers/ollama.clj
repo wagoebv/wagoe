@@ -65,7 +65,8 @@
            :provider :ollama
            :model    effective-model})
         (catch Exception e
-          (log/warn e "ollama complete failed" {:model effective-model})
+          (log/warn (str "ollama complete failed: " (.getMessage e))
+                    {:model effective-model})
           {:error    (.getMessage e)
            :provider :ollama
            :model    effective-model}))))
