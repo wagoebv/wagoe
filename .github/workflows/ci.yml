@@ -463,12 +463,12 @@ jobs:
       - name: Setup Clojure + warm deps
         uses: ./.github/actions/clojure-deps
         with:
-          aliases: -M:test
+          aliases: -M:test:test/otel
 
       - name: Run tests
         env:
           JWT_SECRET: "ci-test-secret-minimum-32-characters"
-        run: clojure -M:test :observability
+        run: clojure -M:test:test/otel :observability
 
   test-platform:
     name: Test wagoe/platform
@@ -481,12 +481,12 @@ jobs:
       - name: Setup Clojure + warm deps
         uses: ./.github/actions/clojure-deps
         with:
-          aliases: -M:test
+          aliases: -M:test:test/pg
 
       - name: Run tests
         env:
           JWT_SECRET: "ci-test-secret-minimum-32-characters"
-        run: clojure -M:test :platform
+        run: clojure -M:test:test/pg :platform
 
   test-user:
     name: Test wagoe/user
@@ -517,12 +517,12 @@ jobs:
       - name: Setup Clojure + warm deps
         uses: ./.github/actions/clojure-deps
         with:
-          aliases: -M:test
+          aliases: -M:test:test/pg
 
       - name: Run tests
         env:
           JWT_SECRET: "ci-test-secret-minimum-32-characters"
-        run: clojure -M:test :admin
+        run: clojure -M:test:test/pg :admin
 
   test-ui-style:
     name: Test wagoe/ui-style
@@ -625,12 +625,48 @@ jobs:
       - name: Setup Clojure + warm deps
         uses: ./.github/actions/clojure-deps
         with:
+          aliases: -M:test:test/pg
+
+      - name: Run tests
+        env:
+          JWT_SECRET: "ci-test-secret-minimum-32-characters"
+        run: clojure -M:test:test/pg :tenant
+
+  test-audience:
+    name: Test wagoe/audience
+    runs-on: ubuntu-latest
+    needs: [lint, test-platform]
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Clojure + warm deps
+        uses: ./.github/actions/clojure-deps
+        with:
           aliases: -M:test
 
       - name: Run tests
         env:
           JWT_SECRET: "ci-test-secret-minimum-32-characters"
-        run: clojure -M:test :tenant
+        run: clojure -M:test :audience
+
+  test-devtools:
+    name: Test wagoe/devtools
+    runs-on: ubuntu-latest
+    needs: [lint, test-platform]
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Clojure + warm deps
+        uses: ./.github/actions/clojure-deps
+        with:
+          aliases: -M:test:test/http
+
+      - name: Run tests
+        env:
+          JWT_SECRET: "ci-test-secret-minimum-32-characters"
+        run: clojure -M:test:test/http :devtools
 
   test-email:
     name: Test wagoe/email
@@ -1166,7 +1202,7 @@ jobs:
   test-summary:
     name: All Tests Passed
     runs-on: ubuntu-latest
-    needs: [lint, branch-protection, first-run-smoke, build-ui-assets, docs-lint, agents-links, command-smoke, config-doctor, i18n-scan, check-fcis, check-placeholder-tests, check-test-meta, check-test-tags, check-deps, check-ports, check-hygiene, check-doc-counts, check-poms, check-agents, check-no-boundary, build-uberjar, test-tools, example-smoke, test-i18n, test-core, test-observability, test-platform, test-user, test-admin, test-ui-style, test-storage, test-cache, test-jobs, test-tenant, test-email, test-realtime, test-workflow, test-search, test-scaffolder, test-external, test-payments, test-push, test-calendar, test-reports, test-geo, test-ai, test-mcp, test-wagoe-cli, test-shared-ui]
+    needs: [lint, branch-protection, first-run-smoke, build-ui-assets, docs-lint, agents-links, command-smoke, config-doctor, i18n-scan, check-fcis, check-placeholder-tests, check-test-meta, check-test-tags, check-deps, check-ports, check-hygiene, check-doc-counts, check-poms, check-agents, check-no-boundary, build-uberjar, test-tools, example-smoke, test-i18n, test-core, test-observability, test-platform, test-user, test-admin, test-ui-style, test-storage, test-cache, test-jobs, test-tenant, test-audience, test-devtools, test-email, test-realtime, test-workflow, test-search, test-scaffolder, test-external, test-payments, test-push, test-calendar, test-reports, test-geo, test-ai, test-mcp, test-wagoe-cli, test-shared-ui]
 
     steps:
       - name: Summary

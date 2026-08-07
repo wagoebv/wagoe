@@ -38,11 +38,24 @@
 ;; whose coverage depends on someone remembering to extend a list is the exact
 ;; failure this task exists to remove (BOU-250).
 
+(def main-suite-aliases
+  "Aliases the root suite needs, as one `-M:...` argument.
+
+   `:test/all` composes the heavy dependencies that moved out of `:test` so the
+   27 per-library CI jobs stop resolving ~106 MB they never use (BOU-260). It is
+   the same alias AGENTS.md documents for a full local run — one definition
+   rather than a list assembled here that could drift from it.
+
+   It includes the macOS PostgreSQL binary, which is right for a local run and
+   wrong for CI. CI never uses this: its jobs request `:test/pg`, `:test/otel`
+   or `:test/http` individually."
+  "-M:test:test/all")
+
 (def surfaces
   [{:id    :main
     :label "main suite (tests.edn — all app-classpath libs)"
     :dir   "."
-    :cmd   ["clojure" "-M:test"]}
+    :cmd   ["clojure" main-suite-aliases]}
    {:id    :tools
     :label "wagoe-tools unit tests"
     :dir   "."
