@@ -178,14 +178,41 @@
                             (filter #(str/starts-with? % "Test wagoe/")
                                     (keys emitted))))})
 
+(defn strict?
+  "Whether an unreadable protection API is a failure rather than a skip.
+
+   Set by CI. Locally a developer without an admin token should get a skip —
+   the gate is not their business and failing would make `bb check` unusable.
+   In CI the whole point is enforcement, so the same skip is the defect this
+   ticket is about: `BRANCH_PROTECTION_TOKEN` had not been created when this
+   workflow was written, so the gate would have gone green without ever reading
+   branch protection.
+
+   Reads the environment through a parameter as well, so a test can drive both
+   arms rather than asserting whatever the runner happens to export."
+  ([] (strict? (System/getenv "BRANCH_PROTECTION_STRICT")))
+  ([v] (= "1" v)))
+
 (defn -main [& _args]
   (let [emitted  (emitted-contexts)
         required (required-contexts)]
     (when (= :unavailable required)
-      (println (ansi/yellow "Cannot read branch protection for") (str repo "#" branch))
-      (println "  `gh` needs a token with admin scope. Skipping — a checker that")
-      (println "  cannot see its input must say so rather than draw a conclusion.")
-      (System/exit 0))
+      (if (strict?)
+        (do
+          (println (ansi/red "Cannot read branch protection for") (str repo "#" branch))
+          (println)
+          (println "  BRANCH_PROTECTION_STRICT is set, so this is a failure rather than")
+          (println "  a skip: a gate that cannot read its input has not checked anything,")
+          (println "  and reporting success would be indistinguishable from a clean run.")
+          (println)
+          (println "  Set BRANCH_PROTECTION_TOKEN to a fine-grained PAT with")
+          (println "  `administration: read` on this repository and nothing else.")
+          (System/exit 1))
+        (do
+          (println (ansi/yellow "Cannot read branch protection for") (str repo "#" branch))
+          (println "  `gh` needs a token with admin scope. Skipping — a checker that")
+          (println "  cannot see its input must say so rather than draw a conclusion.")
+          (System/exit 0))))
 
     (let [{:keys [phantom unguarded]} (reconcile required emitted)]
       (when (seq unguarded)

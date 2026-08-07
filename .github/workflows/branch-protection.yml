@@ -48,7 +48,27 @@ jobs:
         with:
           bb: latest
 
+      # Fails before the gate runs, so a missing secret reads as a missing
+      # secret rather than as a passing check. Without this the whole workflow
+      # went green having read nothing — the gate this ticket exists to build,
+      # exhibiting the defect it exists to catch.
+      - name: BRANCH_PROTECTION_TOKEN must be configured
+        env:
+          TOKEN: ${{ secrets.BRANCH_PROTECTION_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "::error::BRANCH_PROTECTION_TOKEN is not set. This gate cannot"
+            echo "::error::read branch protection without it, and a skip here"
+            echo "::error::would be indistinguishable from a clean run."
+            echo '::error::Create a fine-grained PAT with administration:read scope'
+            echo "::error::on this repository and nothing else."
+            exit 1
+          fi
+
       - name: Required status checks must name jobs CI emits
         env:
           GH_TOKEN: ${{ secrets.BRANCH_PROTECTION_TOKEN }}
+          # Belt and braces: if the token is present but lacks the scope, the
+          # API read still fails and strict mode turns that into a failure too.
+          BRANCH_PROTECTION_STRICT: "1"
         run: bb check:branch-protection

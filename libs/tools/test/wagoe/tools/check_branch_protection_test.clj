@@ -11,6 +11,7 @@
    `enforce_admins` was off, the owner's override absorbed 13 permanently
    pending checks on every merge. Nothing failed; nothing said anything."
   (:require [clojure.test :refer [deftest is testing]]
+            [clojure.java.io :as io]
             [clj-yaml.core :as yaml]
             [wagoe.tools.check-branch-protection :as sut]))
 
@@ -122,6 +123,39 @@
         (let [{:keys [phantom]} (sut/reconcile required (sut/emitted-contexts))]
           (is (empty? phantom)
               (str "required but never reported: " (pr-str phantom))))))))
+
+(deftest ^:unit an-unreadable-api-fails-in-ci-and-skips-locally
+  ;; The gate exits 0 on :unavailable so a developer without an admin token can
+  ;; still run `bb check`. In CI that same skip means the workflow goes green
+  ;; having read nothing — and BRANCH_PROTECTION_TOKEN did not exist when this
+  ;; workflow was written, so it would have done exactly that from the first
+  ;; run. A gate that cannot see its input has not checked anything.
+  (testing "strict mode is off by default and on when CI asks for it"
+    ;; Driven by parameter, never by the ambient environment: a test that reads
+    ;; whatever the runner exported asserts nothing repeatable.
+    (is (not (sut/strict? nil)))
+    (is (not (sut/strict? "")))
+    (is (not (sut/strict? "0")))
+    (is (sut/strict? "1"))))
+
+(deftest ^:unit the-workflow-refuses-to-run-without-its-token
+  (let [src (slurp (io/file ".github" "workflows" "branch-protection.yml"))]
+    (testing "a missing secret fails before the gate runs"
+      (is (re-find #"if \[ -z \"\$TOKEN\" \]" src)
+          "without this the workflow passes having read nothing"))
+
+    (testing "and the gate itself runs in strict mode"
+      ;; Covers the case the shell guard cannot: a token that exists but lacks
+      ;; `administration: read`, where the API read fails rather than the
+      ;; variable being empty.
+      (is (re-find #"BRANCH_PROTECTION_STRICT: \"1\"" src)))
+
+    (testing "the guard message survives the shell"
+      ;; Backticks inside double quotes are command substitution — the first
+      ;; version of this message ran `administration: read` and printed a
+      ;; mangled line with a stray \"command not found\" beside it.
+      (is (not (re-find #"echo \"[^\"\n]*`" src))
+          "backticks inside a double-quoted echo would be executed"))))
 
 (deftest ^:unit ci-yml-is-the-only-source-of-pr-checks
   ;; Measured against PR #368: ci.yml declared 51 jobs and GitHub reported 51
