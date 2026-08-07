@@ -580,34 +580,38 @@
 ;; =============================================================================
 
 (deftest ^:unit branch-protection-gate-fires-test
-  (testing "a required context no job emits is detected"
-    ;; The state main was in on 2026-08-07: the required set held job *keys*
-    ;; from ci.yml while GitHub reports each job's `name:`.
-    (let [emitted {"Lint" #{"ci.yml"} "Test wagoe/core" #{"ci.yml"}}
-          {:keys [phantom]} (check-bp/reconcile #{"lint" "test-core"} emitted)]
-      (is (= ["lint" "test-core"] phantom))))
+  (testing "a job the summary does not reach is detected"
+    ;; Branch protection requires one context, `All Tests Passed`. A job
+    ;; outside its `needs:` can fail while that context goes green.
+    (let [{:keys [missing]}
+          (check-bp/summary-covers
+           (yaml/parse-string
+            (str "jobs:\n"
+                 "  test-summary:\n    name: All Tests Passed\n    needs: [a]\n"
+                 "  a:\n    name: A\n"
+                 "  orphan:\n    name: Orphan\n")))]
+      (is (= ["orphan"] missing))))
 
-  (testing "a nightly workflow contributes nothing to require against"
-    ;; Requiring a context from a scheduled workflow is the same defect by
-    ;; another route: it never appears on a PR, so it can never be satisfied.
-    (is (empty? (check-bp/workflow-contexts
-                 (yaml/parse-string
-                  "on:\n  schedule:\n    - cron: '0 3 * * *'\njobs:\n  a:\n    name: A\n")))))
+  (testing "a renamed summary job is detected"
+    ;; Renaming it without changing protection recreates the original defect:
+    ;; a required context nothing reports.
+    (let [{:keys [summary-name]}
+          (check-bp/summary-covers
+           (yaml/parse-string
+            "jobs:\n  test-summary:\n    name: Renamed\n    needs: [a]\n  a:\n    name: A\n"))]
+      (is (not= check-bp/summary-job-name summary-name))))
 
-  (testing "the gate reads real workflows, not an empty file list"
+  (testing "the gate reads the real workflow, not an empty job map"
     ;; The failure this guards against is the one BOU-250 found in docs-lint:
     ;; a live check scanning nothing and reporting clean.
-    (let [emitted (check-bp/emitted-contexts)]
-      (is (< 40 (count emitted))
-          "expected ci.yml's jobs, so a passing run means something")
-      (is (contains? emitted "All Tests Passed"))))
+    (let [wf (check-bp/ci-workflow)]
+      (is (< 40 (count (:jobs wf)))
+          "expected ci.yml's jobs, so a passing run means something")))
 
   (testing "the repository currently satisfies the gate"
-    (let [required (check-bp/required-contexts)]
-      (if (= :unavailable required)
-        (is (= :unavailable required)
-            "no admin-scoped token here; the synthetic assertions above still ran")
-        (is (empty? (:phantom (check-bp/reconcile required (check-bp/emitted-contexts)))))))))
+    (let [{:keys [missing summary-name]} (check-bp/summary-covers (check-bp/ci-workflow))]
+      (is (= check-bp/summary-job-name summary-name))
+      (is (empty? missing)))))
 
 (def gates-with-firing-tests
   "Gate ids from `check/all-checks` that this namespace proves can still fire.

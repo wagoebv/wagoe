@@ -184,16 +184,15 @@
                ") and references a secret with no `environment:` gate — branch "
                "code would run with that credential available"))))
 
-  (testing "the branch-protection workflow is push-restricted to main"
-    ;; Its token is admin-scoped, so this is the property that keeps it away
-    ;; from branch contents.
-    (let [src (slurp (io/file (workflows-dir) "branch-protection.yml"))]
-      (is (re-find #"(?s)push:\s*\n\s+branches:\s*\[main\]" src)
-          "must not run on arbitrary branches")
-      (is (not (re-find #"(?m)^\s{2}workflow_(dispatch|call):" src))
-          "dispatch lets the caller choose a ref, so branch code would run with the token")
-      (is (re-find #"secrets\.BRANCH_PROTECTION_TOKEN" src)
-          "guards against the token being silently dropped, leaving a gate that always skips"))))
+  (testing "no workflow needs a repository secret to run a gate"
+    ;; The branch-protection gate briefly used an admin-scoped token to read
+    ;; protection over the API. Requiring one context instead of fourteen
+    ;; removed the need for it: the check now reads ci.yml, which needs no
+    ;; credential at all. Kept as an assertion because reintroducing an API
+    ;; read is the obvious way to "improve" this gate later, and it would bring
+    ;; the credential back with it.
+    (is (not (.exists (io/file (workflows-dir) "branch-protection.yml")))
+        "the secret-bearing workflow is gone; the gate runs inside ci.yml")))
 
 (deftest ^:unit every-gate-job-blocks-the-summary
   ;; A gate job that CI runs but the summary does not `needs:` can fail while

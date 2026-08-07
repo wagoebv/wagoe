@@ -346,6 +346,32 @@ jobs:
         run: bb check:poms
 
   # =============================================================================
+  # Branch protection coverage (Babashka — fast, no JVM)
+  # =============================================================================
+  # BOU-277: protection required 13 contexts that were the job *keys* from this
+  # file, while GitHub reports each job's `name:`. They could never be
+  # satisfied, and while an admin override absorbed them, could never fail.
+  #
+  # It now requires exactly one context — `All Tests Passed` — and this job
+  # checks that the summary transitively depends on everything that can run. No
+  # API and no token: the earlier version read branch protection directly, which
+  # meant an admin-scoped credential living in the repository.
+  branch-protection:
+    name: Branch Protection Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Babashka
+        uses: DeLaGuardo/setup-clojure@13.6.1
+        with:
+          bb: latest
+
+      - name: The one required context must cover every job
+        run: bb check:branch-protection
+
+  # =============================================================================
   # AGENTS.md generator drift (Babashka — fast, no JVM)
   # =============================================================================
   check-agents:
@@ -1140,7 +1166,7 @@ jobs:
   test-summary:
     name: All Tests Passed
     runs-on: ubuntu-latest
-    needs: [first-run-smoke, build-ui-assets, docs-lint, agents-links, command-smoke, config-doctor, i18n-scan, check-fcis, check-placeholder-tests, check-test-meta, check-test-tags, check-deps, check-ports, check-hygiene, check-doc-counts, check-poms, check-agents, check-no-boundary, build-uberjar, test-tools, example-smoke, test-i18n, test-core, test-observability, test-platform, test-user, test-admin, test-ui-style, test-storage, test-cache, test-jobs, test-tenant, test-email, test-realtime, test-workflow, test-search, test-scaffolder, test-external, test-payments, test-push, test-calendar, test-reports, test-geo, test-ai, test-mcp, test-wagoe-cli, test-shared-ui]
+    needs: [lint, branch-protection, first-run-smoke, build-ui-assets, docs-lint, agents-links, command-smoke, config-doctor, i18n-scan, check-fcis, check-placeholder-tests, check-test-meta, check-test-tags, check-deps, check-ports, check-hygiene, check-doc-counts, check-poms, check-agents, check-no-boundary, build-uberjar, test-tools, example-smoke, test-i18n, test-core, test-observability, test-platform, test-user, test-admin, test-ui-style, test-storage, test-cache, test-jobs, test-tenant, test-email, test-realtime, test-workflow, test-search, test-scaffolder, test-external, test-payments, test-push, test-calendar, test-reports, test-geo, test-ai, test-mcp, test-wagoe-cli, test-shared-ui]
 
     steps:
       - name: Summary
