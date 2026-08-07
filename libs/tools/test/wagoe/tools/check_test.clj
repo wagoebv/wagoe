@@ -152,22 +152,37 @@
   ;;
   ;; A workflow may use secrets only when every trigger runs trusted code:
   ;; pushes filtered to main, schedule, or workflow_dispatch.
-  (testing "workflows that branch pushes can trigger reference no secrets"
+  (testing "workflows that can run branch code reference no secrets"
+    ;; Two ways a caller reaches a non-main copy of a workflow, and both were
+    ;; hit in turn while building this: an unfiltered `push`, and
+    ;; `workflow_dispatch`, which lets the caller pick any ref. Filtering the
+    ;; push and leaving dispatch in place reopened the same path.
     (doseq [f (->> (.listFiles (workflows-dir))
                    (filter #(and (.isFile ^java.io.File %)
                                  (re-find #"\.ya?ml$" (.getName ^java.io.File %)))))
             :let [src  (slurp f)
                   name (.getName ^java.io.File f)
-                  ;; Approximate but conservative: a push with no branch filter
-                  ;; is branch-triggerable.
-                  branch-triggerable?
+                  unfiltered-push?
                   (and (re-find #"(?m)^\s+push:" src)
                        (not (re-find #"(?s)push:\s*\n\s+branches:" src))
                        (not (re-find #"(?s)push:\s*\n\s+tags:" src)))
-                  uses-secret? (re-find #"secrets\." src)]]
-      (is (not (and branch-triggerable? uses-secret?))
-          (str name " can be triggered by a push to any branch and references a "
-               "secret — branch code would run with that credential available"))))
+                  ;; Match a real trigger key, not the word in a comment.
+                  ref-selectable?
+                  (boolean (re-find #"(?m)^\s{2}workflow_(dispatch|call):" src))
+                  runs-branch-code? (or unfiltered-push? ref-selectable?)
+                  uses-secret? (boolean (re-find #"secrets\." src))
+                  ;; A deployment environment is the standard mitigation: the
+                  ;; job does not start until a required reviewer approves, so
+                  ;; branch code cannot reach the secret unattended. publish.yml
+                  ;; needs workflow_dispatch to cut a release and pins
+                  ;; `environment: release`, which carries required_reviewers —
+                  ;; verified against the API, not assumed.
+                  gated? (boolean (re-find #"(?m)^\s+environment:" src))]]
+      (is (not (and runs-branch-code? uses-secret? (not gated?)))
+          (str name " can run a non-main copy of itself (unfiltered push: "
+               unfiltered-push? ", ref-selectable: " ref-selectable?
+               ") and references a secret with no `environment:` gate — branch "
+               "code would run with that credential available"))))
 
   (testing "the branch-protection workflow is push-restricted to main"
     ;; Its token is admin-scoped, so this is the property that keeps it away
@@ -175,6 +190,8 @@
     (let [src (slurp (io/file (workflows-dir) "branch-protection.yml"))]
       (is (re-find #"(?s)push:\s*\n\s+branches:\s*\[main\]" src)
           "must not run on arbitrary branches")
+      (is (not (re-find #"(?m)^\s{2}workflow_(dispatch|call):" src))
+          "dispatch lets the caller choose a ref, so branch code would run with the token")
       (is (re-find #"secrets\.BRANCH_PROTECTION_TOKEN" src)
           "guards against the token being silently dropped, leaving a gate that always skips"))))
 

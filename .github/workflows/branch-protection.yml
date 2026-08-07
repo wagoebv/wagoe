@@ -18,7 +18,7 @@ name: Branch Protection
 # libs/tools/test, which needs no token and runs in `bb test:tools`.
 #
 # BRANCH_PROTECTION_TOKEN needs `administration: read` on this repository and
-# nothing else. Without it the check skips rather than reporting a false pass.
+# nothing else. Without it the workflow fails rather than reporting a false pass.
 
 on:
   push:
@@ -29,8 +29,19 @@ on:
   schedule:
     # Daily, so a change made directly in the GitHub UI is caught too — that is
     # how the original drift arrived, and no push would have revealed it.
+    # Scheduled runs always execute the default branch's workflow file.
     - cron: '0 4 * * *'
-  workflow_dispatch:
+
+# Deliberately no workflow_dispatch, and no workflow_call. Both let the caller
+# choose a ref, and GitHub then runs *that ref's* copy of this file with
+# repository secrets available — so a branch author could push a modified
+# version and dispatch it against their own branch, which is the exfiltration
+# path the `branches: [main]` filter above exists to close. Every trigger here
+# must run code that is already on main.
+#
+# To run this on demand, run `bb check:branch-protection` locally: it reads
+# protection through your own `gh` credentials, so no repository secret is
+# involved at all.
 
 permissions:
   contents: read
