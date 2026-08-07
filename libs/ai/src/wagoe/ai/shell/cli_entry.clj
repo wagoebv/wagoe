@@ -65,43 +65,62 @@
     parsed))
 
 (defn explain-provider-error
-  "Turn a provider's terse `:error` string into something actionable.
+  "Turn a provider's error result into something actionable.
 
-   The providers already catch transport failures and return
-   `{:error (.getMessage e)}`, which every subcommand prints. For the common
-   case that message is `Connection refused` — accurate and useless. A fresh
-   project has no provider configured, `make-service-from-env` falls back to
-   Ollama on localhost, and nothing is listening, so a first `bb ai` command
-   reports a refused connection to a service the user never chose (BOU-280).
+   Takes the whole result, not just `:error`, because every provider tags its
+   failure with `:provider` — the ground truth of which backend actually ran.
+   An earlier version inferred that from environment variables and got it wrong
+   for a configured one: `OPENAI_BASE_URL` pointing at a local OpenAI-compatible
+   server (oMLX, LM Studio) that is down returns `Connection refused`, and the
+   message told the user no provider was configured and talked about Ollama.
 
-   Connection refused reaches here from that fallback, so it means `no provider`
-   rather than `Ollama is down` — unless OLLAMA_URL was set deliberately, which
-   this distinguishes.
+   `env` is a parameter so the arms are testable. Reading `System/getenv` inside
+   made the no-provider assertion depend on whether the developer happened to
+   have OLLAMA_URL exported — the same ambient-environment fault this function
+   exists to explain.
 
-   Returns the original when it has nothing better to say: replacing an
-   unrecognised message with a friendlier guess would hide the real one.
+   Returns the original message when it has nothing better to say: replacing an
+   unrecognised one with a friendlier guess would hide it."
+  ([result] (explain-provider-error result {"OLLAMA_URL"      (System/getenv "OLLAMA_URL")
+                                            "OPENAI_BASE_URL" (System/getenv "OPENAI_BASE_URL")}))
+  ([result env]
+   (let [msg      (str (:error result))
+         provider (:provider result)
+         refused? (str/includes? msg "Connection refused")]
+     (cond
+       ;; Ollama is also the fallback when nothing is configured, so it is the
+       ;; only provider where a refused connection may mean "no provider".
+       (and refused? (= :ollama provider) (not (get env "OLLAMA_URL")))
+       (str "No AI provider is configured, and the default (Ollama on "
+            "localhost:11434) is not running.\n"
+            "  Set one of:\n"
+            "    ANTHROPIC_API_KEY   Anthropic (Claude)\n"
+            "    OPENAI_API_KEY      OpenAI\n"
+            "    OPENAI_BASE_URL     an OpenAI-compatible endpoint\n"
+            "    OLLAMA_URL          a running Ollama, if it is not on localhost")
 
-   Public so a test can drive each arm without a live provider."
-  [error]
-  (let [e (str error)]
-    (cond
-      (str/includes? e "Connection refused")
-      (if-let [url (System/getenv "OLLAMA_URL")]
-        (str "Cannot reach Ollama at " url ". Is it running?")
-        (str "No AI provider is configured, and the default (Ollama on "
-             "localhost:11434) is not running.\n"
-             "  Set one of:\n"
-             "    ANTHROPIC_API_KEY   Anthropic (Claude)\n"
-             "    OPENAI_API_KEY      OpenAI\n"
-             "    OLLAMA_URL          a running Ollama, if it is not on localhost"))
+       (and refused? (= :ollama provider))
+       (str "Cannot reach Ollama at " (get env "OLLAMA_URL") ". Is it running?")
 
-      (str/includes? e "status 401")
-      "The AI provider rejected the API key. Check the key for the provider you configured."
+       ;; A configured endpoint that is down — the user chose this one, so the
+       ;; fix is to start it, not to configure something.
+       (and refused? (= :openai provider) (get env "OPENAI_BASE_URL"))
+       (str "Cannot reach the OpenAI-compatible endpoint at "
+            (get env "OPENAI_BASE_URL") ". Is it running?")
 
-      (str/includes? e "status 429")
-      "The AI provider is rate-limiting. Wait and retry."
+       refused?
+       (str "Cannot reach the configured AI provider"
+            (when provider (str " (" (name provider) ")")) ".")
 
-      :else e)))
+       (str/includes? msg "status 401")
+       (str "The AI provider"
+            (when provider (str " (" (name provider) ")"))
+            " rejected the API key.")
+
+       (str/includes? msg "status 429")
+       "The AI provider is rate-limiting. Wait and retry."
+
+       :else msg))))
 
 (defn- make-service-from-env
   "Fall-back when no :wagoe/ai-service is present in active config.
@@ -204,7 +223,7 @@
     (let [service (make-service-from-config)
           result  (svc/scaffold-from-description service description (:root options))]
       (if (:error result)
-        (do (println (red (explain-provider-error (:error result)))) (System/exit 1))
+        (do (println (red (explain-provider-error result))) (System/exit 1))
         (do
           (println (cyan "\u250c\u2500 Preview \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510"))
           (println (str (cyan "\u2502") " Module:  " (bold (:module-name result))))
@@ -254,7 +273,7 @@
     (let [service (make-service-from-config)
           result  (svc/explain-error service stacktrace (:root options))]
       (if (:error result)
-        (do (println (red (explain-provider-error (:error result)))) (System/exit 1))
+        (do (println (red (explain-provider-error result))) (System/exit 1))
         (do
           (println)
           (println (bold "=== AI Error Explanation ==="))
@@ -284,7 +303,7 @@
     (let [service (make-service-from-config)
           result  (svc/generate-tests service source-path)]
       (if (:error result)
-        (do (println (red (explain-provider-error (:error result)))) (System/exit 1))
+        (do (println (red (explain-provider-error result))) (System/exit 1))
         (let [test-src (:text result)]
           (if (:output options)
             (do (spit (:output options) test-src)
@@ -308,7 +327,7 @@
     (let [service (make-service-from-config)
           result  (svc/sql-from-description service description (:root options))]
       (if (:error result)
-        (do (println (red (explain-provider-error (:error result)))) (System/exit 1))
+        (do (println (red (explain-provider-error result))) (System/exit 1))
         (do
           (println)
           (println (bold "=== HoneySQL ==="))
@@ -345,7 +364,7 @@
         (println)
         (let [result (svc/generate-docs service module-path doc-type)]
           (if (:error result)
-            (println (red (explain-provider-error (:error result))))
+            (println (red (explain-provider-error result)))
             (if (:output options)
               (let [fname (str (:output options)
                                (when (> (count doc-types) 1)
@@ -377,7 +396,7 @@
     (let [service (make-service-from-config)
           result  (svc/generate-admin-entity service description (:root options))]
       (if (:error result)
-        (do (println (red (explain-provider-error (:error result))))
+        (do (println (red (explain-provider-error result)))
             (when (:raw-text result)
               (println)
               (println (dim "Raw AI output:"))
@@ -423,7 +442,7 @@
     (let [service (make-service-from-config)
           result  (svc/parse-setup-description service description)]
       (if (:error result)
-        (do (println (red (explain-provider-error (:error result)))) (System/exit 1))
+        (do (println (red (explain-provider-error result))) (System/exit 1))
         ;; Output the JSON data to stdout for the Babashka setup wizard to consume
         (let [data   (:data result)
               output {"project-name" (get data "project-name" "my-app")

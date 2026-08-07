@@ -33,39 +33,75 @@
         (throw (ex-info "cli_entry.clj not found — cannot verify the wiring"
                         {:cwd (System/getProperty "user.dir") :tried candidates})))))
 
-(deftest ^:unit connection-refused-names-the-real-problem
-  (testing "with no provider configured, it says so and names the variables"
-    (let [msg (sut/explain-provider-error "Connection refused")]
+(def ^:private no-env
+  "No provider variables set. Passed explicitly: reading the ambient
+   environment made these assertions depend on whether the developer happened to
+   have OLLAMA_URL exported, which is the very fault the function explains."
+  {"OLLAMA_URL" nil "OPENAI_BASE_URL" nil})
+
+(deftest ^:unit a-refused-ollama-fallback-means-no-provider
+  ;; Ollama is the fallback when nothing is configured, so a refused connection
+  ;; there is the one case that means "configure something".
+  (let [msg (sut/explain-provider-error
+             {:error "Connection refused" :provider :ollama} no-env)]
+    (testing "it says so and names every variable that would fix it"
       (is (str/includes? msg "No AI provider is configured"))
-      (is (str/includes? msg "ANTHROPIC_API_KEY"))
-      (is (str/includes? msg "OPENAI_API_KEY"))
-      (is (str/includes? msg "OLLAMA_URL"))
-      (is (not (str/includes? msg "Connection refused"))
-          "the raw message is what sent people looking at the wrong thing"))))
+      (doseq [v ["ANTHROPIC_API_KEY" "OPENAI_API_KEY" "OPENAI_BASE_URL" "OLLAMA_URL"]]
+        (is (str/includes? msg v) (str v " is a supported path and must be listed"))))
+
+    (testing "and drops the raw message that sent people to the wrong thing"
+      (is (not (str/includes? msg "Connection refused"))))))
+
+(deftest ^:unit a-configured-provider-that-is-down-is-not-a-missing-provider
+  ;; The distinction the first version got wrong: someone who set
+  ;; OPENAI_BASE_URL to a local endpoint has configured a provider. Telling them
+  ;; to configure one sends them to the wrong fix.
+  (testing "an OpenAI-compatible endpoint that is down names that endpoint"
+    (let [msg (sut/explain-provider-error
+               {:error "Connection refused" :provider :openai}
+               {"OPENAI_BASE_URL" "http://localhost:8080" "OLLAMA_URL" nil})]
+      (is (str/includes? msg "http://localhost:8080"))
+      (is (not (str/includes? msg "No AI provider is configured")))))
+
+  (testing "a deliberately configured Ollama names its URL"
+    (let [msg (sut/explain-provider-error
+               {:error "Connection refused" :provider :ollama}
+               {"OLLAMA_URL" "http://box:11434" "OPENAI_BASE_URL" nil})]
+      (is (str/includes? msg "http://box:11434"))
+      (is (not (str/includes? msg "No AI provider is configured")))))
+
+  (testing "any other provider refusing is reported as unreachable, not unconfigured"
+    (let [msg (sut/explain-provider-error
+               {:error "Connection refused" :provider :anthropic} no-env)]
+      (is (str/includes? msg "Cannot reach"))
+      (is (str/includes? msg "anthropic"))
+      (is (not (str/includes? msg "No AI provider is configured"))))))
 
 (deftest ^:unit a-rejected-key-is-reported-without-the-request
-  ;; The 401 previously arrived as the whole clj-http map — request options,
-  ;; the http-client object, and every response header including CF-RAY — for
-  ;; what is a one-line configuration problem.
+  ;; The 401 previously arrived as the whole clj-http map — request options, the
+  ;; client object, and every response header including CF-RAY — for what is a
+  ;; one-line configuration problem.
   (let [raw (str "clj-http: status 401 {:cached nil, :http-client #object[...], "
                  ":headers {\"Server\" \"cloudflare\", \"CF-RAY\" \"a2788333ba861cb6-AMS\"}}")
-        msg (sut/explain-provider-error raw)]
-    (testing "it says the key was rejected"
-      (is (str/includes? msg "rejected the API key")))
+        msg (sut/explain-provider-error {:error raw :provider :anthropic} no-env)]
+    (testing "it says the key was rejected, and by whom"
+      (is (str/includes? msg "rejected the API key"))
+      (is (str/includes? msg "anthropic")))
 
     (testing "and carries none of the request detail"
       (doseq [leak ["CF-RAY" "http-client" "cloudflare" ":headers"]]
         (is (not (str/includes? msg leak)) (str leak " leaked into the message"))))))
 
 (deftest ^:unit rate-limiting-is-distinguished
-  (is (str/includes? (sut/explain-provider-error "clj-http: status 429 {...}")
+  (is (str/includes? (sut/explain-provider-error
+                      {:error "clj-http: status 429 {...}" :provider :openai} no-env)
                      "rate-limiting")))
 
 (deftest ^:unit an-unrecognised-error-is-passed-through
   ;; Replacing a message this does not understand with a friendlier guess would
   ;; hide the real one — the failure mode the whole change is about.
   (let [raw "Cannot read source file: nope.clj"]
-    (is (= raw (sut/explain-provider-error raw)))))
+    (is (= raw (sut/explain-provider-error {:error raw :provider :ollama} no-env)))))
 
 (deftest ^:unit unknown-options-are-reported-rather-than-dropped
   ;; parse-or-exit! exits the process on a bad flag, so the assertion is on
@@ -99,15 +135,12 @@
       (is (not (str/includes? src "(str \"Error: \" (:error result))"))
           "found a subcommand printing the provider's message unchanged"))
 
-    (testing "every printed :error goes through the translator"
-      ;; Scoped to prints of a provider result. An earlier version matched any
-      ;; `(println (red (…`, which flagged the unknown-subcommand message —
-      ;; correct as it is, and nothing to do with a provider.
-      (let [error-prints (re-seq #"\(println \(red \(([a-z-]+)[^)]*\(:error " src)]
-        (is (seq error-prints) "found no :error prints; this would pass vacuously")
-        (doseq [[_ f] error-prints]
-          (is (= "explain-provider-error" f)
-              (str "an :error is printed through " f " rather than the translator")))))))
+    (testing "every subcommand prints its result through the translator"
+      ;; Counted rather than pattern-matched per site: the formatter now takes
+      ;; the whole result, so there is no `(:error …)` in the call to anchor on.
+      (let [sites (re-seq #"\(explain-provider-error result\)" src)]
+        (is (<= 7 (count sites))
+            (str "expected every subcommand to translate; found " (count sites)))))))
 
 (deftest ^:unit every-subcommand-checks-parse-errors
   ;; Same reasoning: `parse-or-exit!` is only useful where it is called. Six
