@@ -67,3 +67,35 @@
         "help must no longer offer `bb scaffold new` as a project bootstrapper")
     (is (str/includes? scaffold/help-text "wagoe new")
         "help must name the real project generator")))
+
+(deftest ^:unit scaffolder-deps-carries-the-source-rewriter
+  ;; The scaffolder edits schema.clj with rewrite-clj. Injecting the scaffolder
+  ;; alone would fail with `Could not locate rewrite_clj/zip` the moment the
+  ;; next release lands, because the POM this pins predates the dependency —
+  ;; the same shape as BOU-272, where tools.cli was missing from wagoe-ai's POM
+  ;; and every `bb ai` subcommand died in a generated project.
+  (testing "rewrite-clj travels with the injected dependency"
+    ;; Explicit nil and an explicit root, never the zero-arity: that reads
+    ;; WAGOE_SCAFFOLDER_ROOT, so the test would assert whatever the developer
+    ;; happens to have exported.
+    (doseq [[label deps] [["published pin" (#'scaffold/scaffolder-deps nil)]
+                          ["local root"    (#'scaffold/scaffolder-deps "/tmp/scaffolder")]]]
+      (is (str/includes? deps "rewrite-clj/rewrite-clj")
+          (str label ": the schema editor cannot load without it"))))
+
+  (testing "and the library itself declares what it requires"
+    (let [declared (slurp "libs/scaffolder/deps.edn")]
+      (is (str/includes? declared "rewrite-clj/rewrite-clj")
+          "libs/scaffolder requires rewrite-clj, so it must declare it")))
+
+  (testing "the injected argument is readable EDN"
+    (let [parsed (read-string (#'scaffold/scaffolder-deps nil))]
+      (is (contains? (:deps parsed) 'com.wagoe/wagoe-scaffolder))
+      (is (contains? (:deps parsed) 'rewrite-clj/rewrite-clj))))
+
+  (testing "the pin matches what the library declares"
+    (let [declared (:mvn/version (get (:deps (read-string (slurp "libs/scaffolder/deps.edn")))
+                                      'rewrite-clj/rewrite-clj))
+          injected (:mvn/version (get (:deps (read-string (#'scaffold/scaffolder-deps nil)))
+                                      'rewrite-clj/rewrite-clj))]
+      (is (= declared injected) "a drifted pin resolves two versions"))))

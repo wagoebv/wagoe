@@ -126,6 +126,9 @@
 ;; Update all three together on each release.
 (def ^:private scaffolder-version "1.0.0-beta-4")
 
+;; Match libs/scaffolder/deps.edn and the monorepo's own pin.
+(def ^:private rewrite-clj-version "1.2.55")
+
 (defn- scaffolder-deps
   "The -Sdeps argument used to make the scaffolder namespace resolvable.
 
@@ -136,10 +139,21 @@
    that file has no effect. The first-run smoke test (scripts/first-run-smoke.sh)
    relies on this, and it is equally useful when developing the scaffolder
    against a real generated project."
-  []
-  (if-let [root (System/getenv "WAGOE_SCAFFOLDER_ROOT")]
-    (str "{:deps {com.wagoe/wagoe-scaffolder {:local/root \"" root "\"}}}")
-    (str "{:deps {com.wagoe/wagoe-scaffolder {:mvn/version \"" scaffolder-version "\"}}}")))
+  ([] (scaffolder-deps (System/getenv "WAGOE_SCAFFOLDER_ROOT")))
+  ([root]
+   ;; rewrite-clj is named here as well as declared by libs/scaffolder. The
+   ;; library declaration is the real fix, but it only reaches users on the next
+   ;; release — the already-published version this pins has a POM without it, so
+   ;; injecting the scaffolder alone would fail with
+   ;;   Could not locate rewrite_clj/zip
+   ;; the moment that release lands. Exactly the shape of BOU-272, where
+   ;; tools.cli was missing from wagoe-ai's POM and every `bb ai` subcommand
+   ;; died in a generated project. Harmless once the POM carries it.
+   (let [coord (if root
+                 (str "{:local/root \"" root "\"}")
+                 (str "{:mvn/version \"" scaffolder-version "\"}"))]
+     (str "{:deps {com.wagoe/wagoe-scaffolder " coord " "
+          "rewrite-clj/rewrite-clj {:mvn/version \"" rewrite-clj-version "\"}}}"))))
 
 (defn run-clojure!
   "Shell out to the Clojure scaffolder CLI with given args. Streams output to terminal.

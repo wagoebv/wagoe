@@ -4,6 +4,8 @@
    Each generator function takes a template context and returns
    file content as a string. All functions are pure and deterministic."
   (:require [clojure.string :as str]
+            [rewrite-clj.zip :as z]
+            [rewrite-clj.node :as n]
             [wagoe.scaffolder.core.template :as template]))
 
 ;; BOU-259: the project generators (deps.edn, bb.edn, README, config, main,
@@ -28,13 +30,14 @@
      String representation of Malli schema
    
    Pure: true"
-  [field-ctx]
-  (let [required (:field-required field-ctx)
-        malli-type (:malli-type field-ctx)
-        field-name (keyword (:field-name-kebab field-ctx))]
-    (if required
-      (format "   [%s %s]" field-name malli-type)
-      (format "   [%s {:optional true} %s]" field-name malli-type))))
+  ([field-ctx] (generate-field-schema field-ctx false))
+  ([field-ctx force-optional?]
+   (let [required   (and (:field-required field-ctx) (not force-optional?))
+         malli-type (:malli-type field-ctx)
+         field-name (keyword (:field-name-kebab field-ctx))]
+     (if required
+       (format "   [%s %s]" field-name malli-type)
+       (format "   [%s {:optional true} %s]" field-name malli-type)))))
 
 (defn generate-schema-file
   "Generate schema.clj file content.
@@ -52,7 +55,14 @@
         entity (first (:entities ctx))
         entity-name (:entity-name entity)
         fields (:fields entity)
-        field-schemas (str/join "\n" (map generate-field-schema fields))]
+        field-schemas (str/join "\n" (map generate-field-schema fields))
+        ;; Every field optional, whatever it is on the entity. An update
+        ;; request is a partial: one required field in this schema means every
+        ;; caller doing a partial update has to send it. The same
+        ;; `field-schemas` string used to be interpolated into all three
+        ;; schemas, so `--field name:string:required` made `name` mandatory on
+        ;; update — against the convention in libs/scaffolder/AGENTS.md.
+        update-field-schemas (str/join "\n" (map #(generate-field-schema % true) fields))]
     (format "(ns %s.%s.schema
   \"Schema definitions for %s module.\"
   (:require [malli.core :as m]))
@@ -115,7 +125,7 @@
             entity-name
             (str/lower-case entity-name)
             entity-name
-            field-schemas
+            update-field-schemas
             (str/lower-case entity-name)
             entity-name
             (str/lower-case entity-name)
@@ -859,6 +869,225 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s;
             sql-type
             not-null
             unique-clause)))
+
+(defn schema-field-entry
+  "The Malli entry line for `field`, without indentation.
+
+   Required fields are plain; optional ones carry `{:optional true}`, matching
+   what module generation emits for the same field definition.
+
+   `force-optional?` produces the optional form regardless. Update request
+   schemas take that one: an update is a partial, so a required entry there
+   means every existing caller doing a partial update has to start sending the
+   new field or fail validation. See `libs/scaffolder/AGENTS.md`, and
+   `generate-field-schema`, which applies the same rule at module generation."
+  ([field] (schema-field-entry field false))
+  ([field force-optional?]
+   (let [field-ctx  (template/build-field-context field)
+         field-name (keyword (:field-name-kebab field-ctx))
+         malli-type (:malli-type field-ctx)]
+     (if (and (:field-required field-ctx) (not force-optional?))
+       (format "[%s %s]" field-name malli-type)
+       (format "[%s {:optional true} %s]" field-name malli-type)))))
+
+(defn- schema-map-zloc
+  "Zipper at the `[:map …]` vector inside `(def schema-name …)`, or nil.
+
+   Parsed, not scanned. The line-based predecessor looked for the first line
+   ending `])` at or after the `def`, with no upper bound: a def it could not
+   recognise — one ending `]))` — handed back the *next* def's closing line, and
+   the field was written into the following schema and reported as inserted.
+   A zipper cannot leave the form it is standing in."
+  [source schema-name]
+  (try
+    (let [wanted (symbol schema-name)]
+      (loop [loc (z/of-string source {:track-position? true})]
+        (cond
+          (or (nil? loc) (z/end? loc)) nil
+
+          (and (= :list (z/tag loc))
+               (= (quote def) (some-> loc z/down z/sexpr))
+               (= wanted (some-> loc z/down z/right z/sexpr)))
+          ;; The Malli map, which is not necessarily the third child — a
+          ;; docstring may sit between. Anything that is not a plain [:map …]
+          ;; vector (say `(m/schema [:map …])`) is left alone deliberately.
+          (loop [child (some-> loc z/down z/right z/right)]
+            (cond
+              (nil? child) nil
+              (and (= :vector (z/tag child))
+                   (= :map (first (z/sexpr child)))) child
+              :else (recur (z/right child))))
+
+          :else (recur (z/right loc)))))
+    (catch Exception _
+      ;; Unparseable source. Refusing beats guessing at it with regexes.
+      nil)))
+
+(defn- entry-node
+  "Parse `entry` into a node, preserving its text exactly.
+
+   rewrite-clj's reader, not clojure.edn: EDN has no dispatch macro for `#\"`,
+   so an entry for a regex-backed type — :email and :date both render
+   `[:re {…} #\"…\"]` — threw `No dispatch macro for: \"`. That happened after
+   the migration pair had been written, leaving the column added and the schema
+   untouched."
+  [entry]
+  (z/node (z/of-string entry)))
+
+(defn- entry-key-of
+  "The keyword a Malli entry is for, e.g. `[:sku …]` -> :sku.
+
+   Reads only the first child, so nothing else in the entry has to be
+   interpretable as a value."
+  [entry]
+  (try (-> (z/of-string entry) z/down z/sexpr) (catch Exception _ nil)))
+
+(defn- existing-entry
+  "The zipper of the entry for `k` inside `map-zloc`, or nil."
+  [map-zloc k]
+  (loop [child (z/down map-zloc)]
+    (cond
+      (nil? child) nil
+      (and (= :vector (z/tag child))
+           (= k (first (z/sexpr child)))) child
+      :else (recur (z/right child)))))
+
+(defn- entry-indent
+  "Column the existing entries sit at, as a count. Defaults to 3."
+  [map-zloc]
+  (or (loop [child (z/down map-zloc)]
+        (cond
+          (nil? child) nil
+          (and (= :vector (z/tag child))
+               (keyword? (first (z/sexpr child)))) (dec (second (z/position child)))
+          :else (recur (z/right child))))
+      3))
+
+(defn insert-schema-entry
+  "Add `entry` to the Malli map in `(def schema-name …)` within `source`.
+
+   Returns one of:
+
+     {:status :inserted :content <new source>}
+     {:status :present :entry <the entry already there>}
+     {:status :unrecognised}  a shape this cannot place the field in safely
+
+   The last two are kept apart rather than collapsed into one falsey value: the
+   caller has to distinguish nothing-to-do from could-not-do-it. Reporting the
+   second as the first is how the request schemas ended up without the field
+   while the output said the work was finished.
+
+   `:present` carries the entry that is already there, because its shape
+   matters — a required entry in an update request is not nothing-to-do.
+
+   :unrecognised covers a hand-edited file, a renamed schema, or a `def` whose
+   value is not a literal `[:map …]`. Refusing rather than guessing is
+   deliberate: a skip the user can see beats a mangled schema file they discover
+   later.
+
+   Everything outside the inserted entry round-trips byte for byte, including
+   the trailing newline — rewrite-clj preserves whitespace and comments, so the
+   diff is the one line added."
+  [source schema-name entry]
+  (if-let [map-zloc (schema-map-zloc source schema-name)]
+    (let [k (entry-key-of entry)]
+      (if-let [found (and k (existing-entry map-zloc k))]
+        {:status :present :entry (z/string found)}
+        (let [indent (entry-indent map-zloc)]
+          {:status  :inserted
+           :content (-> map-zloc
+                        (z/append-child* (n/newlines 1))
+                        (z/append-child* (n/spaces indent))
+                        (z/append-child* (entry-node entry))
+                        z/root-string)})))
+    {:status :unrecognised}))
+
+(defn add-field-to-schema
+  "Add `field` to the entity and request schemas in `source`.
+
+   Returns {:status :updated :content <new source> :schemas [changed]
+            :unreachable [names]} when at least one schema changed, or
+   {:status :skipped :reason :already-present|:unrecognised-shape
+            :unreachable [names]} when none did.
+
+   `:unreachable` names the target schemas the field could not be placed in. It
+   is what tells the caller that manual work remains, and it is reported on a
+   successful edit too — two of three schemas updated is still a schema set that
+   does not agree with itself.
+
+   All three targets are edited because that is what the tool has always told
+   users to do: the instruction comment it used to print said to add the field
+   to the entity schema and then to the Create and Update request schemas as
+   well.
+
+   Each target is tracked separately. Deciding `:already-present` by searching
+   the whole file let one schema answer for the others — with the field in the
+   entity schema and a hand-restructured `CreateXRequest`, this reported that
+   nothing remained to be done while both request schemas still lacked it. That
+   is the unsynchronised Malli set of AGENTS.md pitfall 6, reported as success."
+  [source entity field]
+  (let [update-schema (str "Update" entity "Request")
+        ;; The update request gets the optional form even for a required field:
+        ;; an update is a partial, so a required entry there breaks every
+        ;; caller that was sending a subset. Applying one entry to all three
+        ;; schemas made `--required` mandatory on update.
+        entry-for     #(schema-field-entry field (= % update-schema))
+        targets       [entity (str "Create" entity "Request") update-schema]
+        ;; An entry that is present but not optional, in the update request
+        ;; only. Scoped that narrowly on purpose: a project generated before
+        ;; update requests were made partial carries the required form there,
+        ;; and a rerun reported "already in every schema" while partial updates
+        ;; stayed broken. Differences anywhere else — a tightened type on the
+        ;; entity, say — are the user's business and are left alone.
+        needs-optional? (fn [schema-name found]
+                          (and (= schema-name update-schema)
+                               found
+                               (not (str/includes? found "{:optional true}"))))
+        ;; One outcome per target, in target order. This used to be four
+        ;; parallel vectors, and every caller re-derived what it needed from
+        ;; whichever of them it happened to consult — which is how a mixed
+        ;; state got half-reported. There is one thing to read now, and the
+        ;; vectors below are views of it.
+        {:keys [content outcomes]}
+        (reduce (fn [acc schema-name]
+                  (let [r      (insert-schema-entry (:content acc) schema-name
+                                                    (entry-for schema-name))
+                        status (case (:status r)
+                                 :inserted :inserted
+                                 :present  (if (needs-optional? schema-name (:entry r))
+                                             :needs-optional
+                                             :present)
+                                 :unreachable)]
+                    (-> acc
+                        (cond-> (= :inserted status) (assoc :content (:content r)))
+                        (update :outcomes conj (cond-> {:schema schema-name :status status}
+                                                 (:entry r) (assoc :entry (:entry r)))))))
+                {:content source :outcomes []}
+                targets)
+        of-status     (fn [st] (mapv :schema (filter #(= st (:status %)) outcomes)))
+        changed       (of-status :inserted)
+        present       (of-status :present)
+        unreachable   (of-status :unreachable)
+        wrong-shape   (of-status :needs-optional)]
+    (cond
+      (seq changed)
+      {:status :updated :content content :outcomes outcomes :schemas changed
+       :unreachable unreachable :wrong-shape wrong-shape}
+
+      ;; Only when every target already carries it, in a shape that works.
+      ;; Anything short of that leaves the caller something to do, and has to
+      ;; say so.
+      (= (count present) (count targets))
+      {:status :skipped :reason :already-present :outcomes outcomes
+       :unreachable [] :wrong-shape []}
+
+      (seq wrong-shape)
+      {:status :skipped :reason :requires-optional :outcomes outcomes
+       :unreachable unreachable :wrong-shape wrong-shape}
+
+      :else
+      {:status :skipped :reason :unrecognised-shape :outcomes outcomes
+       :unreachable unreachable :wrong-shape wrong-shape})))
 
 (defn generate-add-field-schema-comment
   "Generate schema addition comment/instructions for adding a field.

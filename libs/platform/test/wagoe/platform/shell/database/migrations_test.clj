@@ -106,7 +106,15 @@
 
 (deftest ^:unit get-migration-config-wraps-config-loading-errors
   (testing "configuration failures are rethrown with migration context"
-    (with-redefs [db-config/get-active-db-config
+    ;; shadowed-migration-dirs is stubbed because it reads the working
+    ;; directory, and this test is about error wrapping. Without the stub it
+    ;; asserts on the state of whatever tree the suite runs in: a stray
+    ;; migrations/ in the repo root — a scaffolder run from the wrong directory
+    ;; leaves one — makes the conflict guard fire first and this fail with a
+    ;; message about migration directories. That happened twice, and cost more
+    ;; to diagnose than the stub costs to keep.
+    (with-redefs [migrations/shadowed-migration-dirs (fn ([] nil) ([_ _] nil))
+                  db-config/get-active-db-config
                   (fn []
                     (throw (ex-info "db config boom" {:type :config-error})))]
       (let [ex (is (thrown? clojure.lang.ExceptionInfo

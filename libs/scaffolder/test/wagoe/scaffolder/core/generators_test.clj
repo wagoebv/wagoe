@@ -3,6 +3,7 @@
    Asserts that generated file content contains expected strings."
   (:require [clojure.test :refer [deftest testing is]]
             [clojure.string :as str]
+            [wagoe.scaffolder.core.template :as template]
             [wagoe.scaffolder.core.generators :as gen]))
 
 ;; =============================================================================
@@ -399,3 +400,349 @@
         (is (not (re-find #"\(\S+\s+\[this[\s\]]" output))
             (str label ": has a method binding `this` that its body never uses; "
                  "name it _this"))))))
+
+;; =============================================================================
+;; BOU-275: every target schema is checked, not the file as a whole
+;; =============================================================================
+;;
+;; `:already-present` was decided by searching the whole source for the field
+;; name, so one schema could answer for the others: with the field in the entity
+;; schema and a hand-restructured CreateXRequest, this reported that nothing
+;; remained to be done while both request schemas still lacked it — the
+;; unsynchronised Malli set of AGENTS.md pitfall 6, reported as success.
+
+(def ^:private generated-schema
+  "(ns app.widget.schema)
+
+(def Widget
+  [:map {:title \"Widget\"}
+   [:id :uuid]])
+
+(def CreateWidgetRequest
+  [:map {:title \"Create Widget Request\"}
+   [:id :uuid]])
+
+(def UpdateWidgetRequest
+  [:map {:title \"Update Widget Request\"}
+   [:id :uuid]])
+")
+
+(def ^:private colour {:name :colour :type :string :required false})
+
+(defn- hand-restructure
+  "Rewrite one def into a shape the inserter cannot place a field in."
+  [source schema-name]
+  (str/replace source
+               (re-pattern (str "\\(def " schema-name "\\n  \\[:map \\{:title \"[^\"]+\"\\}\\n   \\[:id :uuid\\]\\]\\)"))
+               (str "(def " schema-name "\n  (m/schema [:map [:id :uuid]]))")))
+
+(deftest ^:unit add-field-to-schema-covers-every-target
+  (testing "all three schemas are edited, and nothing is left unreachable"
+    (let [r (gen/add-field-to-schema generated-schema "Widget" colour)]
+      (is (= :updated (:status r)))
+      (is (= ["Widget" "CreateWidgetRequest" "UpdateWidgetRequest"] (:schemas r)))
+      (is (empty? (:unreachable r)))))
+
+  (testing "re-running is a no-op only when every target already has the field"
+    (let [once  (gen/add-field-to-schema generated-schema "Widget" colour)
+          twice (gen/add-field-to-schema (:content once) "Widget" colour)]
+      (is (= :already-present (:reason twice)))
+      (is (empty? (:unreachable twice)))))
+
+  (testing "a target that cannot be edited is named, even when others succeeded"
+    ;; Partial success is still partial: two of three schemas updated is a set
+    ;; that does not agree with itself, and the caller has to be told.
+    (let [src (hand-restructure generated-schema "UpdateWidgetRequest")
+          r   (gen/add-field-to-schema src "Widget" colour)]
+      (is (= :updated (:status r)))
+      (is (= ["Widget" "CreateWidgetRequest"] (:schemas r)))
+      (is (= ["UpdateWidgetRequest"] (:unreachable r))
+          "silence here leaves the request schema without the field")))
+
+  (testing "the field being in one schema does not answer for the others"
+    ;; The reported case: entity has it, request schemas are unreachable.
+    ;; A file-wide search found the field and reported :already-present.
+    (let [src (-> generated-schema
+                  (hand-restructure "CreateWidgetRequest")
+                  (hand-restructure "UpdateWidgetRequest")
+                  (str/replace "[:map {:title \"Widget\"}\n   [:id :uuid]])"
+                               "[:map {:title \"Widget\"}\n   [:id :uuid]\n   [:colour {:optional true} :string]])"))
+          r   (gen/add-field-to-schema src "Widget" colour)]
+      (is (= :skipped (:status r)))
+      (is (= :unrecognised-shape (:reason r))
+          "not :already-present — the request schemas still lack the field")
+      (is (= ["CreateWidgetRequest" "UpdateWidgetRequest"] (:unreachable r))))))
+
+(deftest ^:unit insert-schema-entry-distinguishes-its-outcomes
+  (testing "inserted, present and unrecognised are three different answers"
+    (let [entry "[:colour {:optional true} :string]"]
+      (is (= :inserted (:status (gen/insert-schema-entry generated-schema "Widget" entry))))
+      (is (= :present
+             (:status (gen/insert-schema-entry
+                       (:content (gen/insert-schema-entry generated-schema "Widget" entry))
+                       "Widget" entry)))
+          "already there — nothing to do")
+      (is (= :unrecognised
+             (:status (gen/insert-schema-entry generated-schema "NoSuchSchema" entry)))
+          "cannot be done — which is not the same as nothing to do"))))
+
+;; =============================================================================
+;; BOU-275: update requests are partials
+;; =============================================================================
+;;
+;; A required field belongs in the entity and create schemas. In
+;; Update<Entity>Request it means every caller doing a partial update must now
+;; send the new field or fail validation — for a field that did not exist a
+;; moment ago. libs/scaffolder/AGENTS.md documents update requests as marking
+;; every field optional.
+;;
+;; Both commands got this wrong the same way: module generation interpolated one
+;; field list into all three schemas, and `add-field` applied one entry to all
+;; three targets.
+
+(def ^:private required-field {:name :sku :type :string :required true})
+
+(deftest ^:unit required-fields-stay-optional-in-update-requests
+  (testing "add-field: required in the entity and create schemas, optional in update"
+    (let [r   (gen/add-field-to-schema generated-schema "Widget" required-field)
+          out (:content r)
+          entry-in (fn [schema-name]
+                     (let [block (re-find (re-pattern (str "(?s)\\(def " schema-name "\\n.*?\\]\\)")) out)]
+                       ;; Non-greedy: a greedy match ran on to the map's closing bracket.
+                       (second (re-find #"(\[:sku.*?\])" block))))]
+      (is (= :updated (:status r)))
+      (is (= "[:sku :string]" (entry-in "Widget"))
+          "the entity really does require it")
+      (is (= "[:sku :string]" (entry-in "CreateWidgetRequest"))
+          "and so does creation")
+      (is (= "[:sku {:optional true} :string]" (entry-in "UpdateWidgetRequest"))
+          "but an update is a partial — requiring it here breaks every existing caller")))
+
+  (testing "generate-field-schema: the same rule at module generation"
+    (let [ctx (template/build-field-context required-field)]
+      (is (= "   [:sku :string]" (gen/generate-field-schema ctx)))
+      (is (= "   [:sku {:optional true} :string]" (gen/generate-field-schema ctx true)))))
+
+  (testing "an already-optional field is unaffected either way"
+    (let [ctx (template/build-field-context {:name :note :type :string :required false})]
+      (is (= (gen/generate-field-schema ctx) (gen/generate-field-schema ctx true))))))
+
+(deftest ^:unit generated-update-schema-marks-fields-optional
+  (testing "a generated module's update request accepts a partial"
+    ;; The same `field-schemas` string was interpolated into the entity, create
+    ;; and update schemas, so `--field name:string:required` produced a required
+    ;; entry in UpdateXRequest.
+    (let [src (gen/generate-schema-file
+               {:base-ns "app"
+                :module-name "widget"
+                :entities [{:entity-name "Widget"
+                            :fields [(template/build-field-context required-field)]}]})
+          update-block (re-find #"(?s)\(def UpdateWidgetRequest\n.*?\]\)" src)
+          create-block (re-find #"(?s)\(def CreateWidgetRequest\n.*?\]\)" src)]
+      (is (str/includes? create-block "[:sku :string]")
+          "creation requires it")
+      (is (str/includes? update-block "[:sku {:optional true} :string]")
+          "updating does not"))))
+
+(deftest ^:unit a-required-entry-in-the-update-schema-is-not-done
+  ;; Presence was checked by key alone, so an entry that exists in the wrong
+  ;; shape counted as nothing-to-do. A project generated before update requests
+  ;; became partials carries the required form there; rerunning
+  ;; `bb scaffold field --required` reported "field is already in every schema"
+  ;; and left partial updates requiring the field.
+  (let [required-entry "[:sku :string]"
+        optional-entry "[:sku {:optional true} :string]"
+        with-sku (fn [update-entry]
+                   (-> generated-schema
+                       (str/replace "(def Widget\n  [:map {:title \"Widget\"}\n   [:id :uuid]])"
+                                    (str "(def Widget\n  [:map {:title \"Widget\"}\n   [:id :uuid]\n   " required-entry "])"))
+                       (str/replace "(def CreateWidgetRequest\n  [:map {:title \"Create Widget Request\"}\n   [:id :uuid]])"
+                                    (str "(def CreateWidgetRequest\n  [:map {:title \"Create Widget Request\"}\n   [:id :uuid]\n   " required-entry "])"))
+                       (str/replace "(def UpdateWidgetRequest\n  [:map {:title \"Update Widget Request\"}\n   [:id :uuid]])"
+                                    (str "(def UpdateWidgetRequest\n  [:map {:title \"Update Widget Request\"}\n   [:id :uuid]\n   " update-entry "])"))))]
+
+    (testing "the required form in the update schema is reported as work remaining"
+      (let [r (gen/add-field-to-schema (with-sku required-entry) "Widget" required-field)]
+        (is (= :skipped (:status r)))
+        (is (= :requires-optional (:reason r))
+            "not :already-present — partial updates are still broken")
+        (is (= ["UpdateWidgetRequest"] (:wrong-shape r)))))
+
+    (testing "the optional form is genuinely done"
+      (let [r (gen/add-field-to-schema (with-sku optional-entry) "Widget" required-field)]
+        (is (= :already-present (:reason r)))
+        (is (empty? (:wrong-shape r)))))
+
+    (testing "only the update schema is judged on optionality"
+      ;; A tightened type or a hand-chosen optionality elsewhere is the user's
+      ;; business. Flagging every difference would nag about customisation this
+      ;; tool has no opinion on.
+      (let [src (-> (with-sku optional-entry)
+                    (str/replace "(def Widget\n  [:map {:title \"Widget\"}\n   [:id :uuid]\n   [:sku :string]])"
+                                 "(def Widget\n  [:map {:title \"Widget\"}\n   [:id :uuid]\n   [:sku {:optional true} [:string {:min 3}]]])"))
+            r   (gen/add-field-to-schema src "Widget" required-field)]
+        (is (= :already-present (:reason r))
+            "a customised entity entry is not this tool's concern")))
+
+    (testing "an optional field is never flagged"
+      ;; Nothing to enforce: the desired update entry is optional either way.
+      (let [optional-field {:name :sku :type :string :required false}
+            r (gen/add-field-to-schema (with-sku optional-entry) "Widget" optional-field)]
+        (is (= :already-present (:reason r)))
+        (is (empty? (:wrong-shape r)))))))
+
+(deftest ^:unit def-form-range-stops-at-the-next-form
+  ;; The scan for the closing line had no upper bound, so a def it could not
+  ;; recognise — one ending `]))` rather than `])` — handed back the *next*
+  ;; def's closing line. Asked to add a field to a hand-restructured
+  ;; CreateItemRequest, it wrote the entry into UpdateItemRequest and reported
+  ;; :inserted: the wrong schema, in the required form, in the one schema that
+  ;; must not have it.
+  (let [src (str "(ns app.item.schema)\n\n"
+                 "(def CreateItemRequest\n  \"hand-restructured\"\n  (m/schema [:map [:name :string]]))\n\n"
+                 "(def UpdateItemRequest\n  [:map {:title \"Update Item Request\"}\n   [:name {:optional true} :string]])\n")]
+
+    (testing "an unrecognised def does not borrow the next one's closing line"
+      (is (= {:status :unrecognised}
+             (gen/insert-schema-entry src "CreateItemRequest" "[:sku :string]"))))
+
+    (testing "and the following schema is left alone"
+      (is (nil? (:content (gen/insert-schema-entry src "CreateItemRequest" "[:sku :string]")))
+          "returning content here meant a write into UpdateItemRequest"))
+
+    (testing "the last def in a file still resolves"
+      ;; The bound is the next top-level form, so the final def has none.
+      (is (= :inserted
+             (:status (gen/insert-schema-entry src "UpdateItemRequest"
+                                               "[:sku {:optional true} :string]")))))))
+
+(deftest ^:unit mixed-schema-states-report-every-remaining-target
+  ;; One schema unplaceable and another carrying the required form is the case
+  ;; that went half-reported: two `assoc` clauses wrote :manual-note in turn, so
+  ;; the second overwrote the first, and the skipped arm dropped the unreachable
+  ;; list entirely. Following those instructions left the set unsynchronised.
+  (let [src (str "(ns app.item.schema)\n\n"
+                 "(def Item\n  [:map {:title \"Item\"}\n   [:id :uuid]])\n\n"
+                 "(def CreateItemRequest\n  \"hand-restructured\"\n  (m/schema [:map [:id :uuid]]))\n\n"
+                 "(def UpdateItemRequest\n  [:map {:title \"Update Item Request\"}\n   [:id :uuid]\n   [:sku :string]])\n")
+        r   (gen/add-field-to-schema src "Item" required-field)]
+    (testing "both categories survive into the result"
+      (is (= ["CreateItemRequest"] (:unreachable r))
+          "unplaceable, and the user has to be told")
+      (is (= ["UpdateItemRequest"] (:wrong-shape r))
+          "present but required, and the user has to be told that too"))))
+
+;; =============================================================================
+;; The schema edit parses the file rather than matching lines
+;; =============================================================================
+;;
+;; The line-based inserter scanned for a closing `])` and could run past the def
+;; it was asked to edit. These pin the properties that switching to rewrite-clj
+;; makes structural rather than incidental.
+
+(deftest ^:unit schema-edits-preserve-everything-they-do-not-touch
+  (let [src (str "(ns app.item.schema)\n\n"
+                 ";; A comment above the entity.\n"
+                 "(def Item\n  \"Schema for Item entity.\"\n"
+                 "  [:map {:title \"Item\"}\n"
+                 "   ;; a comment inside the map\n"
+                 "   [:id :uuid]   ; and a trailing one\n"
+                 "   [:name :string]])\n")
+        r   (gen/insert-schema-entry src "Item" "[:sku {:optional true} :string]")]
+
+    (testing "comments survive"
+      (is (str/includes? (:content r) ";; A comment above the entity."))
+      (is (str/includes? (:content r) ";; a comment inside the map"))
+      (is (str/includes? (:content r) "; and a trailing one")))
+
+    (testing "the trailing newline survives"
+      (is (str/ends-with? (:content r) "\n")))
+
+    (testing "exactly one line is added"
+      (is (= (inc (count (str/split-lines src)))
+             (count (str/split-lines (:content r))))))
+
+    (testing "the schema gains the entry and changes in no other way"
+      ;; Semantic, not textual: the closing bracket legitimately moves onto the
+      ;; new line, so the old last line is not present verbatim and should not
+      ;; be asserted to be.
+      (let [schema-of (fn [source]
+                        (->> (read-string (str "[" source "]"))
+                             (filter #(and (seq? %) (= (quote def) (first %))))
+                             (filter #(= (quote Item) (second %)))
+                             first last))]
+        (is (= (conj (schema-of src) [:sku {:optional true} :string])
+               (schema-of (:content r))))))))
+
+(deftest ^:unit outcomes-are-one-collection
+  ;; The four parallel vectors are views over a single per-target result, so
+  ;; they cannot disagree about what happened to a schema.
+  (let [src (str "(ns app.item.schema)\n\n"
+                 "(def Item\n  [:map {:title \"Item\"}\n   [:id :uuid]])\n\n"
+                 "(def CreateItemRequest\n  \"hand-restructured\"\n  (m/schema [:map [:id :uuid]]))\n\n"
+                 "(def UpdateItemRequest\n  [:map {:title \"Update Item Request\"}\n   [:id :uuid]\n   [:sku :string]])\n")
+        r   (gen/add-field-to-schema src "Item" required-field)]
+    (testing "every target appears exactly once, in order"
+      (is (= ["Item" "CreateItemRequest" "UpdateItemRequest"]
+             (mapv :schema (:outcomes r))))
+      (is (= [:inserted :unreachable :needs-optional]
+             (mapv :status (:outcomes r)))))
+
+    (testing "the reported vectors are derived from it"
+      (is (= (mapv :schema (filter #(= :unreachable (:status %)) (:outcomes r)))
+             (:unreachable r)))
+      (is (= (mapv :schema (filter #(= :needs-optional (:status %)) (:outcomes r)))
+             (:wrong-shape r)))
+      (is (= (mapv :schema (filter #(= :inserted (:status %)) (:outcomes r)))
+             (:schemas r))))))
+
+(deftest ^:unit every-supported-field-type-can-be-inserted
+  ;; The parser rewrite read entries with clojure.edn, which has no dispatch
+  ;; macro for #"…". :email renders [:re {…} #"…"], so `bb scaffold field
+  ;; --type email` threw `No dispatch macro for: "` — after the migration pair
+  ;; had been written, leaving the column added and the schema untouched.
+  ;;
+  ;; Driven off the CLI's own validation set rather than a list here, so a type
+  ;; added there cannot quietly go unexercised.
+  (let [cli-types ["string" "text" "integer" "int" "decimal" "boolean"
+                   "email" "uuid" "enum" "date" "datetime" "inst" "json"]
+        type-mapping {"integer" :int "int" :int "date" :inst
+                      "datetime" :inst "text" :text "json" :json}]
+    (doseq [t cli-types
+            :let [field {:name :probe
+                         :type (get type-mapping t (keyword t))
+                         :required false}
+                  r (gen/add-field-to-schema generated-schema "Widget" field)]]
+      (testing (str "--type " t)
+        (is (= :updated (:status r)) (str t ": the schema edit must not throw"))
+        (is (= 3 (count (:schemas r))))
+        (is (str/includes? (:content r) ":probe"))))))
+
+(deftest ^:unit regex-backed-entries-round-trip
+  ;; :email is the type that exposed this; the entry has to survive insertion
+  ;; and be found again on a rerun.
+  (let [email {:name :contact :type :email :required false}
+        once  (gen/add-field-to-schema generated-schema "Widget" email)]
+
+    (testing "the regex is written verbatim"
+      (is (str/includes? (:content once) "#\"^[a-zA-Z0-9._%+-]+@")))
+
+    (testing "the result is readable Clojure, regex included"
+      (let [forms  (read-string (str "[" (:content once) "]"))
+            before (read-string (str "[" generated-schema "]"))]
+        (is (= (count before) (count forms))
+            "insertion adds an entry, never a top-level form")
+        (is (some #(instance? java.util.regex.Pattern %)
+                  (tree-seq coll? seq forms))
+            "a mangled regex would come back as a string or fail to read")))
+
+    (testing "a rerun finds it rather than adding it twice"
+      ;; Presence detection reads the entry's first child only, so nothing else
+      ;; in it has to be interpretable as a value.
+      (let [twice (gen/add-field-to-schema (:content once) "Widget" email)]
+        (is (= :already-present (:reason twice)))))
+
+    (testing "a plain field can still be added alongside it"
+      (let [after (gen/add-field-to-schema (:content once) "Widget"
+                                           {:name :nick :type :string :required false})]
+        (is (= :updated (:status after)))))))
