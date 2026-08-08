@@ -126,6 +126,7 @@
             {:text     (output->text (:output resp))
              ;; Replicate reports no token usage on this endpoint.
              :tokens   0
+             :base-url base-url
              :provider :replicate
              :model    effective-model}
             ;; A prediction can fail after a 2xx — the HTTP call succeeded, the
@@ -133,6 +134,7 @@
             ;; report a parse failure for what is a provider error.
             {:error    (or (some-> (:error resp) str)
                            (str "Replicate prediction " (or status "did not succeed")))
+             :base-url base-url
              :provider :replicate
              :model    effective-model}))
         (catch Exception e
@@ -144,6 +146,7 @@
              ;; caller can tell a rejected token from an exhausted balance.
              :status   (:status data)
              :body     (some-> (:body data) str (->> (take 300) (apply str)))
+             :base-url base-url
              :provider :replicate
              :model    effective-model})))))
 

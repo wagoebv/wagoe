@@ -73,6 +73,7 @@
               tokens (get-in resp [:usage :total_tokens] 0)]
           {:text     text
            :tokens   tokens
+           :base-url base-url
            :provider :openai
            :model    effective-model})
         (catch Exception e
@@ -85,6 +86,7 @@
            ;; Truncated — the caller needs the error type, not the payload.
            :status   (:status (ex-data e))
            :body     (some-> (ex-data e) :body str (->> (take 300) (apply str)))
+           :base-url base-url
            :provider :openai
            :model    effective-model}))))
 
