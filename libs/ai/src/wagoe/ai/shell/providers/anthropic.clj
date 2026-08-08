@@ -5,7 +5,8 @@
    Requires an API key in the configuration.
 
    API docs: https://docs.anthropic.com/en/api/messages"
-  (:require [wagoe.ai.ports :as ports]
+  (:require [wagoe.ai.core.parsing :as parsing]
+            [wagoe.ai.ports :as ports]
             [cheshire.core :as json]
             [clj-http.client :as http]
             [clojure.tools.logging :as log]))
@@ -87,16 +88,11 @@
           result (ports/complete this msgs-with-hint opts)]
       (if (:error result)
         result
-        (let [parsed (try
-                       (json/parse-string (:text result) true)
-                       (catch Exception _
-                         (let [json-str (re-find #"(?s)\{.*\}" (:text result))]
-                           (when json-str
-                             (try (json/parse-string json-str true)
-                                  (catch Exception _ nil))))))]
-          (if parsed
-            (assoc result :data parsed)
-            (assoc result :error "Anthropic response was not valid JSON" :raw (:text result)))))))
+        ;; The shared core parser, rather than a copy of it.
+        (let [parsed (parsing/parse-json-response (:text result))]
+          (if (or (nil? parsed) (:error parsed))
+            (assoc result :error "Anthropic response was not valid JSON" :raw (:text result))
+            (assoc result :data parsed))))))
 
   (provider-name [_] :anthropic))
 

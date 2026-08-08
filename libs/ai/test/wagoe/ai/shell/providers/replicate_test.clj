@@ -7,6 +7,7 @@
    The shaping is pure and driven directly; the wiring is asserted separately,
    because a provider that is never dispatched to would pass every test below."
   (:require [cheshire.core :as json]
+            [clojure.java.io :as io]
             [clj-http.client :as http]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
@@ -167,3 +168,23 @@
   (is (str/includes? sut/default-model "/")
       "a Replicate model is owner/name")
   (is (= sut/default-model (:model (sut/create-replicate-provider {:api-key "t"})))))
+
+(deftest ^:unit no-provider-carries-its-own-json-parser
+  ;; wagoe.ai.core.parsing/parse-json-response exists for this, and every
+  ;; provider had reimplemented it — four copies of the same try/catch around
+  ;; a `{.*}` regex. The behaviour was identical, so this is deduplication
+  ;; rather than a fix, and the value is that it stays one copy (BOU-281).
+  (let [dir (or (some #(when (.isDirectory (io/file %)) (io/file %))
+                      ["libs/ai/src/wagoe/ai/shell/providers"
+                       "src/wagoe/ai/shell/providers"])
+                (throw (ex-info "providers dir not found — cannot check" {})))
+        clj (filter #(str/ends-with? (.getName %) ".clj") (file-seq dir))]
+
+    (testing "the sources were found — otherwise this passes vacuously"
+      (is (<= 4 (count clj))))
+
+    (doseq [f clj
+            :let [src (slurp f)]]
+      (testing (str (.getName f) " delegates JSON extraction")
+        (is (not (str/includes? src "(re-find #\"(?s)\\{.*\\}\""))
+            "re-implements the shared parser's object extraction")))))
