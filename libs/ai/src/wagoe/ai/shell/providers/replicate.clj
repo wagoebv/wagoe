@@ -69,10 +69,20 @@
 
    A 422 names the field it rejected — `input.max_tokens: Must be greater than
    or equal to 1024` — which is worth surfacing, because the constraint varies
-   per model and is not something the caller could have known from the API."
+   per model and is not something the caller could have known from the API.
+
+   Takes a map as readily as a string. The request uses `:as :json`, and while
+   clj-http's default `:coerce :unexceptional` leaves error bodies as strings —
+   measured against a real 422 — that is a default, not a guarantee. Running
+   `(str m)` over a map and parsing the result as JSON yields nil, which would
+   silently drop the detail this exists to surface."
   [body]
-  (let [parsed (try (json/parse-string (str body) true) (catch Exception _ nil))]
-    (some-> (or (:detail parsed) (:title parsed)) str/trim not-empty)))
+  (let [parsed (cond
+                 (map? body) body
+                 (nil? body) nil
+                 :else       (try (json/parse-string (str body) true)
+                                  (catch Exception _ nil)))]
+    (some-> (or (:detail parsed) (:title parsed)) str str/trim not-empty)))
 
 ;; =============================================================================
 ;; HTTP

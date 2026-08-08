@@ -7,6 +7,7 @@
    The shaping is pure and driven directly; the wiring is asserted separately,
    because a provider that is never dispatched to would pass every test below."
   (:require [cheshire.core :as json]
+            [clojure.set :as set]
             [clojure.java.io :as io]
             [clj-http.client :as http]
             [clojure.string :as str]
@@ -64,8 +65,23 @@
       (is (= "- input.max_tokens: Must be greater than or equal to 1024"
              (sut/failure-detail body)))))
 
+  (testing "an already-parsed body works too"
+    ;; The request uses :as :json. clj-http's default :coerce :unexceptional
+    ;; leaves error bodies as strings — measured against a real 422 — but that
+    ;; is a default, not a guarantee, and `(str m)` on a map parses as nil,
+    ;; silently dropping the detail. The earlier test only passed a string, so
+    ;; it could not have caught this.
+    (is (= "- input.max_tokens: Must be greater than or equal to 1024"
+           (sut/failure-detail
+            {:detail "- input.max_tokens: Must be greater than or equal to 1024\n"
+             :status 422 :title "Input validation failed"}))))
+
+  (testing "a parsed body with only a title falls back to it"
+    (is (= "Input validation failed" (sut/failure-detail {:title "Input validation failed"}))))
+
   (testing "a body with nothing useful yields nil, so the caller keeps its own message"
     (is (nil? (sut/failure-detail "{\"status\":500}")))
+    (is (nil? (sut/failure-detail {:status 500})))
     (is (nil? (sut/failure-detail "not json at all")))
     (is (nil? (sut/failure-detail nil)))))
 
@@ -188,3 +204,39 @@
       (testing (str (.getName f) " delegates JSON extraction")
         (is (not (str/includes? src "(re-find #\"(?s)\\{.*\\}\""))
             "re-implements the shared parser's object extraction")))))
+
+(deftest ^:unit every-provider-registry-agrees
+  ;; Adding :replicate needed three edits in three places, and I found the
+  ;; third only from review: build-provider dispatches, bb doctor validates
+  ;; config values, and wagoe.ai.schema is the public contract projects
+  ;; validate against. A config could initialise successfully and still fail
+  ;; schema validation (BOU-281).
+  (let [read-first (fn [& paths]
+                     (or (some #(when (.exists (io/file %)) (slurp %)) paths)
+                         (throw (ex-info "source not found — cannot compare registries"
+                                         {:tried paths
+                                          :cwd (System/getProperty "user.dir")}))))
+        wiring (read-first "libs/ai/src/wagoe/ai/shell/module_wiring.clj"
+                           "src/wagoe/ai/shell/module_wiring.clj")
+        schema (read-first "libs/ai/src/wagoe/ai/schema.clj"
+                           "src/wagoe/ai/schema.clj")
+        dispatched (set (map (comp keyword second)
+                             (re-seq #"(?m)^\s+:([a-z-]+)\s+\([a-z-]+/create-" wiring)))
+        ;; Only the provider enums. schema.clj holds several others, and
+        ;; matching every :enum made this compare unrelated ones.
+        enums      (->> (re-seq #"\[:enum ([^\]]+)\]" schema)
+                        (map (comp str/trim second))
+                        (filter #(str/includes? % ":ollama"))
+                        (map (fn [body] (set (re-seq #"(?<=:)[a-z-]+" body)))))]
+
+    (testing "the sources parsed — otherwise this passes vacuously"
+      (is (<= 5 (count dispatched)) (str "found only " (pr-str dispatched)))
+      (is (= 2 (count enums)) "expected AIConfig and ProviderConfig enums"))
+
+    (testing "every provider enum matches what build-provider can build"
+      (let [disp-names (set (map name dispatched))]
+        (doseq [enum-names enums]
+          (is (= disp-names enum-names)
+              (str "schema accepts " (pr-str (set/difference enum-names disp-names))
+                   " that cannot be built, and is missing "
+                   (pr-str (set/difference disp-names enum-names)))))))))
