@@ -49,7 +49,7 @@
 (def ProviderConfig
   "Configuration for a single AI provider."
   [:map
-   [:provider  [:enum :ollama :anthropic :openai :no-op]]
+   [:provider  [:enum :ollama :anthropic :openai :replicate :no-op]]
    [:model     {:optional true} :string]
    [:base-url  {:optional true} :string]
    [:api-key   {:optional true} [:maybe :string]]
@@ -62,7 +62,7 @@
 (def AIConfig
   "Top-level AI module configuration."
   [:map
-   [:provider  [:enum :ollama :anthropic :openai :no-op]]
+   [:provider  [:enum :ollama :anthropic :openai :replicate :no-op]]
    [:model     {:optional true} :string]
    [:base-url  {:optional true} :string]
    [:api-key   {:optional true} [:maybe :string]]

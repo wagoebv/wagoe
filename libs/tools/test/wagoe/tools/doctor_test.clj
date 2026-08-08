@@ -1,5 +1,7 @@
 (ns wagoe.tools.doctor-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [clojure.java.io :as io]
+            [clojure.set :as set]
+            [clojure.test :refer [deftest is testing]]
             [wagoe.tools.doctor :as doctor]))
 
 ;; =============================================================================
@@ -371,3 +373,32 @@
     (testing "the error names a fix"
       (is (some? (:fix (first (check nil)))))
       (is (some? (:fix (first (check {:active {}}))))))))
+
+(deftest ^:unit doctor-knows-every-ai-provider-the-code-dispatches-on
+  ;; doctor keeps its own provider list because it is Babashka and cannot load
+  ;; the Clojure lib. A copy drifts: adding :replicate to build-provider left
+  ;; doctor reporting "unknown provider :replicate" for a provider that worked,
+  ;; turning a passing config into a CI failure (BOU-281).
+  (let [src (or (some #(when (.exists (io/file %)) (slurp %))
+                      ["libs/ai/src/wagoe/ai/shell/module_wiring.clj"
+                       "../ai/src/wagoe/ai/shell/module_wiring.clj"])
+                (throw (ex-info "module_wiring.clj not found — cannot compare"
+                                {:cwd (System/getProperty "user.dir")})))
+        ;; The case arms of build-provider, which is the real registry.
+        dispatched (set (map (comp keyword second)
+                             (re-seq #"(?m)^\s+:([a-z-]+)\s+\([a-z-]+/create-" src)))
+        known      (get doctor/known-providers :wagoe/ai-service)]
+
+    (testing "the source parsed — otherwise this passes vacuously"
+      (is (<= 4 (count dispatched))
+          (str "only found " (pr-str dispatched) " in build-provider")))
+
+    (testing "doctor accepts every provider the code can build"
+      (is (empty? (set/difference dispatched known))
+          (str "build-provider handles " (pr-str (set/difference dispatched known))
+               " but doctor would reject them")))
+
+    (testing "and claims no provider the code cannot build"
+      (is (empty? (set/difference known dispatched))
+          (str "doctor accepts " (pr-str (set/difference known dispatched))
+               " but build-provider would throw")))))

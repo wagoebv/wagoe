@@ -3,7 +3,8 @@
 
    Implements IAIProvider against the OpenAI Chat Completions API.
    Requires an API key in the configuration."
-  (:require [wagoe.ai.ports :as ports]
+  (:require [wagoe.ai.core.parsing :as parsing]
+            [wagoe.ai.ports :as ports]
             [cheshire.core :as json]
             [clj-http.client :as http]
             [clojure.string :as str]
@@ -72,6 +73,7 @@
               tokens (get-in resp [:usage :total_tokens] 0)]
           {:text     text
            :tokens   tokens
+           :base-url base-url
            :provider :openai
            :model    effective-model})
         (catch Exception e
@@ -84,6 +86,7 @@
            ;; Truncated — the caller needs the error type, not the payload.
            :status   (:status (ex-data e))
            :body     (some-> (ex-data e) :body str (->> (take 300) (apply str)))
+           :base-url base-url
            :provider :openai
            :model    effective-model}))))
 
@@ -92,16 +95,13 @@
           result    (ports/complete this messages json-opts)]
       (if (:error result)
         result
-        (let [parsed (try
-                       (json/parse-string (:text result) true)
-                       (catch Exception _
-                         (let [json-str (re-find #"(?s)\{.*\}" (:text result))]
-                           (when json-str
-                             (try (json/parse-string json-str true)
-                                  (catch Exception _ nil))))))]
-          (if parsed
-            (assoc result :data parsed)
-            (assoc result :error "OpenAI response was not valid JSON" :raw (:text result)))))))
+        ;; The shared core parser, rather than a copy of it. Three providers
+        ;; each carried their own; the behaviour is identical, so this is
+        ;; deduplication and not a fix.
+        (let [parsed (parsing/parse-json-response (:text result))]
+          (if (or (nil? parsed) (:error parsed))
+            (assoc result :error "OpenAI response was not valid JSON" :raw (:text result))
+            (assoc result :data parsed))))))
 
   (provider-name [_] :openai))
 

@@ -82,6 +82,21 @@
       (is (str/includes? msg "http://127.0.0.1:9"))
       (is (not (str/includes? msg "No AI provider is configured")))))
 
+  (testing "with a fallback configured, the endpoint reported is the one that ran"
+    ;; service.clj retries on :fallback and returns *its* result, so the result
+    ;; may describe a different provider than the service's primary. Reading
+    ;; the URL from the service named the primary's endpoint and sent the user
+    ;; to debug a service that was never the one that failed.
+    (let [primary-is-ollama {:configured? true
+                             :provider {:base-url "http://127.0.0.1:11434"}}
+          fallback-result   {:error "Connection refused" :provider :openai
+                             :base-url "http://127.0.0.1:8080"}
+          msg (sut/explain-provider-error fallback-result primary-is-ollama no-env)]
+      (is (str/includes? msg "http://127.0.0.1:8080")
+          "must name the fallback, which is what actually refused")
+      (is (not (str/includes? msg "11434"))
+          "naming the primary sends the user to the wrong service")))
+
   (testing "an OpenAI-compatible endpoint that is down names that endpoint"
     (let [msg (sut/explain-provider-error
                {:error "Connection refused" :provider :openai} configured
