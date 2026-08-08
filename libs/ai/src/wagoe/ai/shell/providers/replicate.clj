@@ -88,22 +88,76 @@
 ;; HTTP
 ;; =============================================================================
 
+(def terminal-statuses
+  "Statuses that mean the prediction is over, one way or another.
+
+   Anything else — `starting`, `processing` — means it is still running and the
+   result is not there yet."
+  #{"succeeded" "failed" "canceled"})
+
+(defn terminal?
+  "Whether a prediction response needs no further waiting.
+
+   An unrecognised status counts as terminal: looping on a status this does not
+   understand would hang until the timeout rather than reporting it."
+  [resp]
+  (let [s (:status resp)]
+    (or (nil? s) (contains? terminal-statuses s))))
+
+(def ^:private poll-interval-ms 1000)
+
+(defn- get-prediction!
+  [url api-token timeout]
+  (:body (http/get url {:as                 :json
+                        :headers            {"Authorization" (str "Bearer " api-token)}
+                        :socket-timeout     timeout
+                        :connection-timeout 10000
+                        :throw-exceptions   true})))
+
+(defn- await-terminal!
+  "Poll `urls.get` until the prediction finishes or `deadline` passes.
+
+   `Prefer: wait` holds the connection open for a bounded window — around a
+   minute — and returns whatever state the prediction is in when that expires.
+   For a long generation that is `processing`, not a result. Treating it as a
+   failure meant a prompt that merely took a while reported an error while the
+   prediction was still running and would have succeeded."
+  [resp api-token timeout deadline]
+  (loop [resp resp]
+    (cond
+      (terminal? resp) resp
+
+      (>= (System/currentTimeMillis) deadline)
+      (assoc resp :wagoe/timed-out? true)
+
+      :else
+      (if-let [url (get-in resp [:urls :get])]
+        (do (Thread/sleep poll-interval-ms)
+            (recur (get-prediction! url api-token timeout)))
+        ;; Nothing to poll: report the non-terminal status rather than looping
+        ;; on a response that can never change.
+        resp))))
+
 (defn- prediction-request!
-  "POST a prediction and return the parsed body, waiting for it to finish."
+  "POST a prediction and return its terminal body, or the last state seen.
+
+   `Prefer: wait` makes the common case synchronous — no polling at all for a
+   short prompt — and `await-terminal!` covers the case where the model takes
+   longer than that window."
   [base-url api-token model input timeout]
-  (let [url  (str (str/replace (or base-url default-base-url) #"/+$" "")
-                  "/v1/models/" model "/predictions")
-        resp (http/post url
-                        {:body               (json/generate-string {:input input})
-                         :content-type       :json
-                         :as                 :json
-                         :headers            {"Authorization" (str "Bearer " api-token)
-                                              ;; Synchronous, so no polling loop.
-                                              "Prefer"        "wait"}
-                         :socket-timeout     timeout
-                         :connection-timeout 10000
-                         :throw-exceptions   true})]
-    (:body resp)))
+  (let [url      (str (str/replace (or base-url default-base-url) #"/+$" "")
+                      "/v1/models/" model "/predictions")
+        deadline (+ (System/currentTimeMillis) timeout)
+        resp     (:body (http/post url
+                                   {:body               (json/generate-string {:input input})
+                                    :content-type       :json
+                                    :as                 :json
+                                    :headers            {"Authorization" (str "Bearer " api-token)
+                                                         "Prefer"        "wait"}
+                                    :socket-timeout     timeout
+                                    :connection-timeout 10000
+                                    :throw-exceptions   true}))]
+    (await-terminal! resp api-token timeout deadline)))
 
 ;; =============================================================================
 ;; Provider
@@ -132,8 +186,20 @@
             ;; A prediction can fail after a 2xx — the HTTP call succeeded, the
             ;; run did not. Without this the caller would read :text as nil and
             ;; report a parse failure for what is a provider error.
-            {:error    (or (some-> (:error resp) str)
-                           (str "Replicate prediction " (or status "did not succeed")))
+            ;;
+            ;; A timeout is reported as such rather than as a failed run: the
+            ;; prediction is still going, and "raise :timeout" is different
+            ;; advice from "the model errored".
+            {:error    (cond
+                         (:wagoe/timed-out? resp)
+                         (str "Replicate did not finish within " (or (:timeout opts) 60000)
+                              "ms (status " (or status "unknown")
+                              "). Raise :timeout for long prompts.")
+
+                         (:error resp) (str (:error resp))
+
+                         :else
+                         (str "Replicate prediction " (or status "did not succeed")))
              :base-url base-url
              :provider :replicate
              :model    effective-model}))

@@ -147,24 +147,21 @@
   {:provider :mock}
 
   ;; AI tooling — powers `bb ai` and `bb scaffold ai`.
-  ;; Move to :inactive to disable.
   ;;
-  ;; :provider must be one of :anthropic :openai :ollama :no-op — the set
-  ;; wagoe.ai.shell.module-wiring/build-provider dispatches on. Anything else
-  ;; throws "Unknown AI provider" at startup.
+  ;; Offline-first by design: Ollama runs locally, so no prompt leaves the
+  ;; machine unless the developer opts in (libs/ai/AGENTS.md). A hosted
+  ;; provider here would make a fresh checkout fail on a missing token, and
+  ;; would send source code to a third party by default.
   ;;
-  ;; This is Aero-read EDN, so only its readers are evaluated (#env, #or,
-  ;; #join). A bare (str ...) stays a list and reaches the provider as one.
+  ;; To use a hosted provider, export one of ANTHROPIC_API_KEY,
+  ;; OPENAI_API_KEY, OPENAI_BASE_URL or REPLICATE_API_TOKEN — the env chain in
+  ;; wagoe.ai.shell.cli-entry takes precedence over this block, so opting in
+  ;; needs no config edit. Or replace :provider below; the supported set is
+  ;; :ollama :anthropic :openai :replicate :no-op.
   :wagoe/ai-service
-  {:provider :replicate
-   ;; Hosted, so no local GPU or model download. ~5s per call against ~34s for
-   ;; a 27B model on this machine, which also needed 15GB resident.
-   ;; Model is owner/name; availability is per-model, not universal.
-   :model    #or [#env AI_MODEL "anthropic/claude-4.5-haiku"]
-   ;; Defaulted, not bare: a bare #env makes dev config unloadable for anyone
-   ;; without the variable, including CI, which is what bb doctor caught. The
-   ;; placeholder fails at the API with a clear auth error rather than at load.
-   :api-key  #or [#env REPLICATE_API_TOKEN "no-token"]}
+  {:provider :ollama
+   :base-url #or [#env OLLAMA_URL "http://localhost:11434"]
+   :model    #or [#env AI_MODEL "qwen2.5-coder:7b"]}
 
   ;; Developer dashboard — live system introspection UI (dev only)
   :wagoe/dashboard {:port 9999}}

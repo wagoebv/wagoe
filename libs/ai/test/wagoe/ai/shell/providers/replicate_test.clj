@@ -116,6 +116,51 @@
           (is (= "Hello" (:text r)))
           (is (nil? (:error r))))))))
 
+(deftest ^:unit a-pending-prediction-is-polled-not-failed
+  ;; `Prefer: wait` holds the connection for a bounded window — about a minute —
+  ;; and returns whatever state the prediction is in when it expires. For a long
+  ;; generation that is `processing`, not a result, and reporting it as a failure
+  ;; meant a prompt that merely took a while errored while the prediction was
+  ;; still running and would have succeeded.
+  (let [p (sut/create-replicate-provider {:api-key "t"})]
+
+    (testing "a non-terminal status is polled through to its result"
+      (let [gets (atom 0)]
+        (with-redefs [http/post (fn [_ _] {:body {:status "processing"
+                                                  :urls {:get "https://x/predictions/1"}}})
+                      http/get  (fn [_ _]
+                                  (swap! gets inc)
+                                  {:body (if (< @gets 2)
+                                           {:status "starting" :urls {:get "https://x/predictions/1"}}
+                                           {:status "succeeded" :output ["done"]})})]
+          (let [r (ports/complete p [{:role :user :content "x"}] {})]
+            (is (= "done" (:text r)))
+            (is (nil? (:error r)))
+            (is (= 2 @gets) "polled until terminal, no further")))))
+
+    (testing "a status that never settles reports a timeout, not a failed run"
+      ;; Distinct advice: raise the timeout, rather than debug the model.
+      (with-redefs [http/post (fn [_ _] {:body {:status "processing"
+                                                :urls {:get "https://x/predictions/1"}}})
+                    http/get  (fn [_ _] {:body {:status "processing"
+                                                :urls {:get "https://x/predictions/1"}}})]
+        (let [r (ports/complete p [{:role :user :content "x"}] {:timeout 1200})]
+          (is (str/includes? (:error r) "did not finish"))
+          (is (str/includes? (:error r) ":timeout")
+              "the message must say what to change"))))
+
+    (testing "a pending response with nothing to poll is not looped on"
+      (with-redefs [http/post (fn [_ _] {:body {:status "processing"}})
+                    http/get  (fn [_ _] (throw (AssertionError. "must not poll without urls.get")))]
+        (is (str/includes? (:error (ports/complete p [{:role :user :content "x"}] {}))
+                           "processing"))))
+
+    (testing "an unrecognised status is terminal, rather than polled forever"
+      (with-redefs [http/post (fn [_ _] {:body {:status "something-new"}})
+                    http/get  (fn [_ _] (throw (AssertionError. "must not poll an unknown status")))]
+        (is (str/includes? (:error (ports/complete p [{:role :user :content "x"}] {}))
+                           "something-new"))))))
+
 (deftest ^:unit json-is-extracted-from-prose
   ;; Replicate has no JSON mode, so models wrap the object in prose or fences
   ;; despite the instruction.
