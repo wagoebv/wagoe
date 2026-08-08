@@ -39,40 +39,54 @@
    have OLLAMA_URL exported, which is the very fault the function explains."
   {"OLLAMA_URL" nil "OPENAI_BASE_URL" nil})
 
-(deftest ^:unit a-refused-ollama-fallback-means-no-provider
-  ;; Ollama is the fallback when nothing is configured, so a refused connection
-  ;; there is the one case that means "configure something".
+(def ^:private unconfigured
+  "The env fallback nobody asked for — no variable, no config entry."
+  {:configured? false})
+
+(def ^:private configured
+  "A provider the user chose, however they chose it."
+  {:configured? true})
+
+(deftest ^:unit only-the-unasked-for-fallback-reports-no-provider
   (let [msg (sut/explain-provider-error
-             {:error "Connection refused" :provider :ollama} no-env)]
-    (testing "it says so and names every variable that would fix it"
+             {:error "Connection refused" :provider :ollama} unconfigured no-env)]
+    (testing "it says so and names every path that would fix it"
       (is (str/includes? msg "No AI provider is configured"))
       (doseq [v ["ANTHROPIC_API_KEY" "OPENAI_API_KEY" "OPENAI_BASE_URL" "OLLAMA_URL"]]
-        (is (str/includes? msg v) (str v " is a supported path and must be listed"))))
+        (is (str/includes? msg v) (str v " is a supported path and must be listed")))
+      (is (str/includes? msg "config.edn")
+          "configuring :wagoe/ai-service is a supported path too"))
 
     (testing "and drops the raw message that sent people to the wrong thing"
       (is (not (str/includes? msg "Connection refused"))))))
 
-(deftest ^:unit a-configured-provider-that-is-down-is-not-a-missing-provider
-  ;; The distinction the first version got wrong: someone who set
-  ;; OPENAI_BASE_URL to a local endpoint has configured a provider. Telling them
-  ;; to configure one sends them to the wrong fix.
+(deftest ^:unit a-provider-the-user-chose-is-never-called-unconfigured
+  ;; Three bases for this judgement have now been wrong. Ollama configured in
+  ;; config.edn is the case that survived the previous two fixes: the provider
+  ;; keyword is :ollama and no OLLAMA_URL is set, so both earlier versions told
+  ;; the user to configure a provider they had already configured.
+  (testing "Ollama from config.edn, with no OLLAMA_URL"
+    (let [msg (sut/explain-provider-error
+               {:error "Connection refused" :provider :ollama} configured no-env)]
+      (is (not (str/includes? msg "No AI provider is configured")))
+      (is (str/includes? msg "Cannot reach Ollama"))))
+
   (testing "an OpenAI-compatible endpoint that is down names that endpoint"
     (let [msg (sut/explain-provider-error
-               {:error "Connection refused" :provider :openai}
+               {:error "Connection refused" :provider :openai} configured
                {"OPENAI_BASE_URL" "http://localhost:8080" "OLLAMA_URL" nil})]
       (is (str/includes? msg "http://localhost:8080"))
       (is (not (str/includes? msg "No AI provider is configured")))))
 
   (testing "a deliberately configured Ollama names its URL"
     (let [msg (sut/explain-provider-error
-               {:error "Connection refused" :provider :ollama}
+               {:error "Connection refused" :provider :ollama} configured
                {"OLLAMA_URL" "http://box:11434" "OPENAI_BASE_URL" nil})]
-      (is (str/includes? msg "http://box:11434"))
-      (is (not (str/includes? msg "No AI provider is configured")))))
+      (is (str/includes? msg "http://box:11434"))))
 
-  (testing "any other provider refusing is reported as unreachable, not unconfigured"
+  (testing "any other provider refusing is unreachable, not unconfigured"
     (let [msg (sut/explain-provider-error
-               {:error "Connection refused" :provider :anthropic} no-env)]
+               {:error "Connection refused" :provider :anthropic} configured no-env)]
       (is (str/includes? msg "Cannot reach"))
       (is (str/includes? msg "anthropic"))
       (is (not (str/includes? msg "No AI provider is configured"))))))
@@ -83,7 +97,7 @@
   ;; one-line configuration problem.
   (let [raw (str "clj-http: status 401 {:cached nil, :http-client #object[...], "
                  ":headers {\"Server\" \"cloudflare\", \"CF-RAY\" \"a2788333ba861cb6-AMS\"}}")
-        msg (sut/explain-provider-error {:error raw :provider :anthropic} no-env)]
+        msg (sut/explain-provider-error {:error raw :provider :anthropic} configured no-env)]
     (testing "it says the key was rejected, and by whom"
       (is (str/includes? msg "rejected the API key"))
       (is (str/includes? msg "anthropic")))
@@ -94,14 +108,31 @@
 
 (deftest ^:unit rate-limiting-is-distinguished
   (is (str/includes? (sut/explain-provider-error
-                      {:error "clj-http: status 429 {...}" :provider :openai} no-env)
+                      {:error "clj-http: status 429 {...}" :provider :openai} configured no-env)
                      "rate-limiting")))
 
 (deftest ^:unit an-unrecognised-error-is-passed-through
   ;; Replacing a message this does not understand with a friendlier guess would
   ;; hide the real one — the failure mode the whole change is about.
   (let [raw "Cannot read source file: nope.clj"]
-    (is (= raw (sut/explain-provider-error {:error raw :provider :ollama} no-env)))))
+    (is (= raw (sut/explain-provider-error {:error raw :provider :ollama} configured no-env)))))
+
+(deftest ^:unit the-service-records-whether-a-provider-was-chosen
+  ;; The wiring for the fact above. Deriving it downstream has been wrong three
+  ;; times, so it is set where the service is built and asserted here.
+  (let [src (cli-entry-source)]
+    (testing "an env-configured provider is marked chosen"
+      (is (<= 3 (count ;; Pattern/quote rather than an inline literal: `?` is a regex
+          ;; quantifier, and escaping it through two layers of tooling is how
+          ;; this assertion first matched nothing and passed as zero.
+          (re-seq (re-pattern (java.util.regex.Pattern/quote ":configured? true")) src)))
+          "expected the anthropic, openai-base-url and openai-key branches"))
+
+    (testing "config.edn counts as chosen"
+      (is (str/includes? src "(assoc (ig/init-key :wagoe/ai-service ai-cfg) :configured? true)")))
+
+    (testing "and the bare fallback is only chosen when OLLAMA_URL says so"
+      (is (str/includes? src ":configured? (boolean (System/getenv \"OLLAMA_URL\"))")))))
 
 (deftest ^:unit unknown-options-are-reported-rather-than-dropped
   ;; parse-or-exit! exits the process on a bad flag, so the assertion is on
@@ -138,7 +169,7 @@
     (testing "every subcommand prints its result through the translator"
       ;; Counted rather than pattern-matched per site: the formatter now takes
       ;; the whole result, so there is no `(:error …)` in the call to anchor on.
-      (let [sites (re-seq #"\(explain-provider-error result\)" src)]
+      (let [sites (re-seq #"\(explain-provider-error result service\)" src)]
         (is (<= 7 (count sites))
             (str "expected every subcommand to translate; found " (count sites)))))))
 

@@ -67,43 +67,49 @@
 (defn explain-provider-error
   "Turn a provider's error result into something actionable.
 
-   Takes the whole result, not just `:error`, because every provider tags its
-   failure with `:provider` — the ground truth of which backend actually ran.
-   An earlier version inferred that from environment variables and got it wrong
-   for a configured one: `OPENAI_BASE_URL` pointing at a local OpenAI-compatible
-   server (oMLX, LM Studio) that is down returns `Connection refused`, and the
-   message told the user no provider was configured and talked about Ollama.
+   Takes the service alongside the result. `:configured?` is set where the
+   service is built — the only place that knows whether the user chose a
+   provider — and every other basis for that judgement has been wrong:
+
+   - environment variables alone misreported a configured OPENAI_BASE_URL
+     pointing at a local endpoint that was down
+   - the `:provider` keyword misreported Ollama configured in
+     resources/conf/<env>/config.edn, which is a supported path
+
+   Only the env fallback with no variable set is unconfigured. Anything else —
+   an env var, or `:wagoe/ai-service` in config — is a deliberate choice, and
+   telling that user to configure a provider sends them to the wrong fix.
 
    `env` is a parameter so the arms are testable. Reading `System/getenv` inside
-   made the no-provider assertion depend on whether the developer happened to
-   have OLLAMA_URL exported — the same ambient-environment fault this function
-   exists to explain.
+   made the assertions depend on whether the developer happened to have
+   OLLAMA_URL exported — the ambient-environment fault this function explains.
 
    Returns the original message when it has nothing better to say: replacing an
    unrecognised one with a friendlier guess would hide it."
-  ([result] (explain-provider-error result {"OLLAMA_URL"      (System/getenv "OLLAMA_URL")
-                                            "OPENAI_BASE_URL" (System/getenv "OPENAI_BASE_URL")}))
-  ([result env]
+  ([result service]
+   (explain-provider-error result service
+                           {"OLLAMA_URL"      (System/getenv "OLLAMA_URL")
+                            "OPENAI_BASE_URL" (System/getenv "OPENAI_BASE_URL")}))
+  ([result service env]
    (let [msg      (str (:error result))
          provider (:provider result)
          refused? (str/includes? msg "Connection refused")]
      (cond
-       ;; Ollama is also the fallback when nothing is configured, so it is the
-       ;; only provider where a refused connection may mean "no provider".
-       (and refused? (= :ollama provider) (not (get env "OLLAMA_URL")))
+       (and refused? (not (:configured? service)))
        (str "No AI provider is configured, and the default (Ollama on "
             "localhost:11434) is not running.\n"
             "  Set one of:\n"
             "    ANTHROPIC_API_KEY   Anthropic (Claude)\n"
             "    OPENAI_API_KEY      OpenAI\n"
             "    OPENAI_BASE_URL     an OpenAI-compatible endpoint\n"
-            "    OLLAMA_URL          a running Ollama, if it is not on localhost")
+            "    OLLAMA_URL          a running Ollama, if it is not on localhost\n"
+            "  or :wagoe/ai-service in resources/conf/<env>/config.edn")
 
        (and refused? (= :ollama provider))
-       (str "Cannot reach Ollama at " (get env "OLLAMA_URL") ". Is it running?")
+       (str "Cannot reach Ollama"
+            (when-let [u (get env "OLLAMA_URL")] (str " at " u))
+            ". Is it running?")
 
-       ;; A configured endpoint that is down — the user chose this one, so the
-       ;; fix is to start it, not to configure something.
        (and refused? (= :openai provider) (get env "OPENAI_BASE_URL"))
        (str "Cannot reach the OpenAI-compatible endpoint at "
             (get env "OPENAI_BASE_URL") ". Is it running?")
@@ -130,25 +136,35 @@
   []
   (cond
     (System/getenv "ANTHROPIC_API_KEY")
-    {:provider (anthropic/create-anthropic-provider
-                {:api-key (System/getenv "ANTHROPIC_API_KEY")
-                 :model   (or (System/getenv "AI_MODEL") "claude-haiku-4-5-20251001")})}
+    {:provider    (anthropic/create-anthropic-provider
+                   {:api-key (System/getenv "ANTHROPIC_API_KEY")
+                    :model   (or (System/getenv "AI_MODEL") "claude-haiku-4-5-20251001")})
+     :configured? true}
 
     (System/getenv "OPENAI_BASE_URL")
-    {:provider (openai/create-openai-provider
-                {:base-url (System/getenv "OPENAI_BASE_URL")
-                 :api-key  (or (System/getenv "OPENAI_API_KEY") "no-key")
-                 :model    (or (System/getenv "AI_MODEL") "gpt-4o-mini")})}
+    {:provider    (openai/create-openai-provider
+                   {:base-url (System/getenv "OPENAI_BASE_URL")
+                    :api-key  (or (System/getenv "OPENAI_API_KEY") "no-key")
+                    :model    (or (System/getenv "AI_MODEL") "gpt-4o-mini")})
+     :configured? true}
 
     (System/getenv "OPENAI_API_KEY")
-    {:provider (openai/create-openai-provider
-                {:api-key (System/getenv "OPENAI_API_KEY")
-                 :model   (or (System/getenv "AI_MODEL") "gpt-4o-mini")})}
+    {:provider    (openai/create-openai-provider
+                   {:api-key (System/getenv "OPENAI_API_KEY")
+                    :model   (or (System/getenv "AI_MODEL") "gpt-4o-mini")})
+     :configured? true}
 
     :else
-    {:provider (ollama/create-ollama-provider
-                {:base-url (or (System/getenv "OLLAMA_URL") "http://localhost:11434")
-                 :model    (or (System/getenv "AI_MODEL") "qwen2.5-coder:7b")})}))
+    ;; `:configured?` records whether the user chose anything, at the only point
+    ;; that knows. Re-deriving it downstream got this wrong twice: first from
+    ;; env vars, which misreported a configured OPENAI_BASE_URL, then from the
+    ;; provider keyword, which misreported Ollama configured in config.edn
+    ;; (BOU-280). OLLAMA_URL alone means deliberate; no variable at all means
+    ;; this is the fallback nobody asked for.
+    {:provider    (ollama/create-ollama-provider
+                   {:base-url (or (System/getenv "OLLAMA_URL") "http://localhost:11434")
+                    :model    (or (System/getenv "AI_MODEL") "qwen2.5-coder:7b")})
+     :configured? (boolean (System/getenv "OLLAMA_URL"))}))
 
 (defn- provider-env-vars-set?
   "Returns true when the developer has explicitly configured a provider via
@@ -189,7 +205,9 @@
                                    (throw e))))
               ai-cfg      (when config (get-in config [:active :wagoe/ai-service]))]
           (if (and ai-cfg (not= (:provider ai-cfg) :no-op))
-            (ig/init-key :wagoe/ai-service ai-cfg)
+            ;; Chosen in resources/conf/<env>/config.edn — a supported path, and
+            ;; as deliberate as an environment variable.
+            (assoc (ig/init-key :wagoe/ai-service ai-cfg) :configured? true)
             (make-service-from-env)))))))
 
 ;; =============================================================================
@@ -223,7 +241,7 @@
     (let [service (make-service-from-config)
           result  (svc/scaffold-from-description service description (:root options))]
       (if (:error result)
-        (do (println (red (explain-provider-error result))) (System/exit 1))
+        (do (println (red (explain-provider-error result service))) (System/exit 1))
         (do
           (println (cyan "\u250c\u2500 Preview \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510"))
           (println (str (cyan "\u2502") " Module:  " (bold (:module-name result))))
@@ -273,7 +291,7 @@
     (let [service (make-service-from-config)
           result  (svc/explain-error service stacktrace (:root options))]
       (if (:error result)
-        (do (println (red (explain-provider-error result))) (System/exit 1))
+        (do (println (red (explain-provider-error result service))) (System/exit 1))
         (do
           (println)
           (println (bold "=== AI Error Explanation ==="))
@@ -303,7 +321,7 @@
     (let [service (make-service-from-config)
           result  (svc/generate-tests service source-path)]
       (if (:error result)
-        (do (println (red (explain-provider-error result))) (System/exit 1))
+        (do (println (red (explain-provider-error result service))) (System/exit 1))
         (let [test-src (:text result)]
           (if (:output options)
             (do (spit (:output options) test-src)
@@ -327,7 +345,7 @@
     (let [service (make-service-from-config)
           result  (svc/sql-from-description service description (:root options))]
       (if (:error result)
-        (do (println (red (explain-provider-error result))) (System/exit 1))
+        (do (println (red (explain-provider-error result service))) (System/exit 1))
         (do
           (println)
           (println (bold "=== HoneySQL ==="))
@@ -364,7 +382,7 @@
         (println)
         (let [result (svc/generate-docs service module-path doc-type)]
           (if (:error result)
-            (println (red (explain-provider-error result)))
+            (println (red (explain-provider-error result service)))
             (if (:output options)
               (let [fname (str (:output options)
                                (when (> (count doc-types) 1)
@@ -396,7 +414,7 @@
     (let [service (make-service-from-config)
           result  (svc/generate-admin-entity service description (:root options))]
       (if (:error result)
-        (do (println (red (explain-provider-error result)))
+        (do (println (red (explain-provider-error result service)))
             (when (:raw-text result)
               (println)
               (println (dim "Raw AI output:"))
@@ -442,7 +460,7 @@
     (let [service (make-service-from-config)
           result  (svc/parse-setup-description service description)]
       (if (:error result)
-        (do (println (red (explain-provider-error result))) (System/exit 1))
+        (do (println (red (explain-provider-error result service))) (System/exit 1))
         ;; Output the JSON data to stdout for the Babashka setup wizard to consume
         (let [data   (:data result)
               output {"project-name" (get data "project-name" "my-app")
