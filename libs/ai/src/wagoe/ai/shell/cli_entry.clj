@@ -93,6 +93,8 @@
   ([result service env]
    (let [msg      (str (:error result))
          provider (:provider result)
+         status   (:status result)
+         body     (str (:body result))
          refused? (str/includes? msg "Connection refused")]
      (cond
        (and refused? (not (:configured? service)))
@@ -118,12 +120,28 @@
        (str "Cannot reach the configured AI provider"
             (when provider (str " (" (name provider) ")")) ".")
 
-       (str/includes? msg "status 401")
+       (or (= 401 status) (str/includes? msg "status 401"))
        (str "The AI provider"
             (when provider (str " (" (name provider) ")"))
             " rejected the API key.")
 
-       (str/includes? msg "status 429")
+       ;; Both arrive as 429, and the advice is opposite. Quota exhaustion is
+       ;; permanent until you add credits — telling someone to wait and retry
+       ;; sends them to do nothing, indefinitely. The provider's body text is
+       ;; carried in the message, so the two are distinguishable.
+       ;; Both arrive as 429 and need opposite advice. Quota exhaustion lasts
+       ;; until you add credit, so "wait and retry" sends the user to do nothing
+       ;; indefinitely. The two are only distinguishable from the response body,
+       ;; which the message does not carry.
+       (and (= 429 status)
+            (or (str/includes? body "insufficient_quota")
+                (str/includes? body "credit_balance_exhausted")
+                (str/includes? body "billing")))
+       (str "The AI provider"
+            (when provider (str " (" (name provider) ")"))
+            " accepted the key, but the account has no credit left.")
+
+       (or (= 429 status) (str/includes? msg "status 429"))
        "The AI provider is rate-limiting. Wait and retry."
 
        :else msg))))

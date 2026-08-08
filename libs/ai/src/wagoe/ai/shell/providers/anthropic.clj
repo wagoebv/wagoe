@@ -71,6 +71,12 @@
           (log/warn (str "anthropic complete failed: " (.getMessage e))
                     {:model effective-model})
           {:error    (.getMessage e)
+           ;; Status and body come from ex-data, not the message: a 429 for
+           ;; rate-limiting and a 429 for an exhausted balance need opposite
+           ;; advice, and (.getMessage e) is "clj-http: status 429" for both.
+           ;; Truncated — the caller needs the error type, not the payload.
+           :status   (:status (ex-data e))
+           :body     (some-> (ex-data e) :body str (->> (take 300) (apply str)))
            :provider :anthropic
            :model    effective-model}))))
 

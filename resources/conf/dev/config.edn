@@ -146,16 +146,23 @@
   :wagoe/payment-provider
   {:provider :mock}
 
-  ;; AI tooling — offline-first via oMLX (OpenAI-compatible), with OpenAI cloud fallback
-  ;; Move to :inactive to disable. Set OPENAI_API_KEY to enable cloud fallback.
+  ;; AI tooling — powers `bb ai` and `bb scaffold ai`.
+  ;; Move to :inactive to disable.
+  ;;
+  ;; :provider must be one of :anthropic :openai :ollama :no-op — the set
+  ;; wagoe.ai.shell.module-wiring/build-provider dispatches on. Anything else
+  ;; throws "Unknown AI provider" at startup.
+  ;;
+  ;; This is Aero-read EDN, so only its readers are evaluated (#env, #or,
+  ;; #join). A bare (str ...) stays a list and reaches the provider as one.
   :wagoe/ai-service
   {:provider :openai
-   :model    #or [#env AI_MODEL "gemma-4-26b-a4b-it-4bit"]
-   :base-url #or [#env OPENAI_BASE_URL "http://localhost:8000"]
-   :api-key  #or [#env OPENAI_API_KEY "omlx-9999"]
-   :fallback {:provider :openai
-              :model    "gpt-5.4-mini"
-              :api-key  #env OPENAI_API_KEY}}
+   :model    #or [#env AI_MODEL "gpt-4o-mini"]
+   :api-key  #env OPENAI_API_KEY
+   ;; Only needed for an OpenAI-compatible endpoint that is not OpenAI itself
+   ;; (oMLX, LM Studio, a proxy). The adapter appends /v1/chat/completions, so
+   ;; this must be a host — not a path to a model or a completions endpoint.
+   :base-url #or [#env OPENAI_BASE_URL "https://api.openai.com"]}
 
   ;; Developer dashboard — live system introspection UI (dev only)
   :wagoe/dashboard {:port 9999}}

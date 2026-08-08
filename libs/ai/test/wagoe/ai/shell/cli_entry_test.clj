@@ -106,10 +106,35 @@
       (doseq [leak ["CF-RAY" "http-client" "cloudflare" ":headers"]]
         (is (not (str/includes? msg leak)) (str leak " leaked into the message"))))))
 
-(deftest ^:unit rate-limiting-is-distinguished
-  (is (str/includes? (sut/explain-provider-error
-                      {:error "clj-http: status 429 {...}" :provider :openai} configured no-env)
-                     "rate-limiting")))
+(deftest ^:unit the-two-kinds-of-429-give-opposite-advice
+  ;; A real key with no credit returns 429 `insufficient_quota`, and telling
+  ;; that user to wait and retry sends them to do nothing indefinitely. The two
+  ;; are only distinguishable from the response body, which `(.getMessage e)`
+  ;; does not carry — hence :status and :body on the error result.
+  (testing "an exhausted balance says so"
+    (let [msg (sut/explain-provider-error
+               {:error "clj-http: status 429" :status 429 :provider :openai
+                :body  "{\"error\":{\"type\":\"insufficient_quota\",\"code\":\"credit_balance_exhausted\"}}"}
+               configured no-env)]
+      (is (str/includes? msg "no credit left"))
+      (is (not (str/includes? msg "retry"))
+          "retrying will never help, so it must not be suggested")))
+
+  (testing "an actual rate limit still says retry"
+    (let [msg (sut/explain-provider-error
+               {:error "clj-http: status 429" :status 429 :provider :openai
+                :body  "{\"error\":{\"type\":\"rate_limit_exceeded\"}}"}
+               configured no-env)]
+      (is (str/includes? msg "rate-limiting"))
+      (is (str/includes? msg "retry"))))
+
+  (testing "a 429 with no body falls back to rate limiting"
+    ;; The safer default: suggesting a retry when the cause is unknown wastes a
+    ;; minute; claiming an empty wallet when it is a burst is simply wrong.
+    (is (str/includes? (sut/explain-provider-error
+                        {:error "clj-http: status 429" :status 429 :provider :openai}
+                        configured no-env)
+                       "rate-limiting"))))
 
 (deftest ^:unit an-unrecognised-error-is-passed-through
   ;; Replacing a message this does not understand with a friendlier guess would
