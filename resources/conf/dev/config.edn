@@ -161,7 +161,10 @@
    ;; a 27B model on this machine, which also needed 15GB resident.
    ;; Model is owner/name; availability is per-model, not universal.
    :model    #or [#env AI_MODEL "anthropic/claude-4.5-haiku"]
-   :api-key  #env REPLICATE_API_TOKEN}
+   ;; Defaulted, not bare: a bare #env makes dev config unloadable for anyone
+   ;; without the variable, including CI, which is what bb doctor caught. The
+   ;; placeholder fails at the API with a clear auth error rather than at load.
+   :api-key  #or [#env REPLICATE_API_TOKEN "no-token"]}
 
   ;; Developer dashboard — live system introspection UI (dev only)
   :wagoe/dashboard {:port 9999}}
