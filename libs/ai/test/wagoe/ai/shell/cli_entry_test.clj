@@ -71,6 +71,17 @@
       (is (not (str/includes? msg "No AI provider is configured")))
       (is (str/includes? msg "Cannot reach Ollama"))))
 
+  (testing "an endpoint configured in config.edn is named, not just env ones"
+    ;; The URL comes from the provider record, so a base-url set in
+    ;; resources/conf/<env>/config.edn is reported like an env-var one. Reading
+    ;; only OLLAMA_URL left a config-file user with a message naming no address.
+    (let [msg (sut/explain-provider-error
+               {:error "Connection refused" :provider :ollama}
+               {:configured? true :provider {:base-url "http://127.0.0.1:9"}}
+               no-env)]
+      (is (str/includes? msg "http://127.0.0.1:9"))
+      (is (not (str/includes? msg "No AI provider is configured")))))
+
   (testing "an OpenAI-compatible endpoint that is down names that endpoint"
     (let [msg (sut/explain-provider-error
                {:error "Connection refused" :provider :openai} configured

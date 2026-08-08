@@ -95,6 +95,13 @@
          provider (:provider result)
          status   (:status result)
          body     (str (:body result))
+         ;; The endpoint that actually failed. Both provider records carry
+         ;; base-url, so a URL from resources/conf/<env>/config.edn is named
+         ;; just like one from the environment — reading only the env var left
+         ;; a config-file user with a message that named no address at all.
+         url      (or (:base-url (:provider service))
+                      (get env "OLLAMA_URL")
+                      (get env "OPENAI_BASE_URL"))
          refused? (str/includes? msg "Connection refused")]
      (cond
        (and refused? (not (:configured? service)))
@@ -108,13 +115,11 @@
             "  or :wagoe/ai-service in resources/conf/<env>/config.edn")
 
        (and refused? (= :ollama provider))
-       (str "Cannot reach Ollama"
-            (when-let [u (get env "OLLAMA_URL")] (str " at " u))
-            ". Is it running?")
+       (str "Cannot reach Ollama" (when url (str " at " url)) ". Is it running?")
 
-       (and refused? (= :openai provider) (get env "OPENAI_BASE_URL"))
-       (str "Cannot reach the OpenAI-compatible endpoint at "
-            (get env "OPENAI_BASE_URL") ". Is it running?")
+       (and refused? (= :openai provider) url)
+       (str "Cannot reach the OpenAI-compatible endpoint at " url
+            ". Is it running?")
 
        refused?
        (str "Cannot reach the configured AI provider"

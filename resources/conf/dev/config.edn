@@ -157,12 +157,13 @@
   ;; #join). A bare (str ...) stays a list and reaches the provider as one.
   :wagoe/ai-service
   {:provider :openai
-   :model    #or [#env AI_MODEL "gpt-4o-mini"]
-   :api-key  #env OPENAI_API_KEY
-   ;; Only needed for an OpenAI-compatible endpoint that is not OpenAI itself
-   ;; (oMLX, LM Studio, a proxy). The adapter appends /v1/chat/completions, so
-   ;; this must be a host — not a path to a model or a completions endpoint.
-   :base-url #or [#env OPENAI_BASE_URL "https://api.openai.com"]}
+   ;; oMLX — a local OpenAI-compatible server for Apple Silicon. The :openai
+   ;; adapter drives any such endpoint; only :base-url distinguishes them.
+   ;; It appends /v1/chat/completions, so this is a host, not a full path.
+   :base-url #or [#env OPENAI_BASE_URL "http://127.0.0.1:8000"]
+   :model    #or [#env AI_MODEL "Qwen3.5-27B-Claude-4.6-Opus-Distilled-MLX-4bit"]
+   ;; oMLX enables key auth by default; the key lives in ~/.omlx/settings.json.
+   :api-key  #or [#env OPENAI_API_KEY "no-key"]}
 
   ;; Developer dashboard — live system introspection UI (dev only)
   :wagoe/dashboard {:port 9999}}
