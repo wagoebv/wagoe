@@ -97,45 +97,92 @@
   #{'org.xerial/sqlite-jdbc 'org.postgresql/postgresql
     'com.h2database/h2 'com.mysql/mysql-connector-j})
 
-(defn- boots-the-system?
+(defn app-main-ns
+  "The application's main namespace, read from the source tree.
+
+   `src/wagoe/main.clj` here, `src/<project>/main.clj` in a generated project.
+   Found rather than guessed: matching any `-m …\\.main` also caught
+   `clj-kondo.main` and `depot.outdated.main`, which are tools that never touch
+   a database.
+
+   Returns the namespace string, or nil when there is no src/*/main.clj."
+  [dir]
+  (let [src (io/file dir "src")]
+    (when (.isDirectory src)
+      (some (fn [^java.io.File child]
+              (when (and (.isDirectory child)
+                         (.exists (io/file child "main.clj")))
+                (str (str/replace (.getName child) "_" "-") ".main")))
+            (sort (.listFiles src))))))
+
+(defn boots-the-system?
   "Whether running this alias can build `:wagoe/db-context`.
 
-   Derived from the alias itself rather than listed by hand — a hand-kept list
-   is one edit away from omitting the alias that breaks."
-  [[_ alias-map]]
-  (let [main  (str/join " " (:main-opts alias-map))
-        paths (set (:extra-paths alias-map))]
-    (or ;; Starts the app directly.
-     (str/includes? main "wagoe.main")
-        ;; Or exposes `(go)`, which lives in dev/repl/user.clj. An nREPL
-        ;; without that path cannot build the system — :repl-cljs is a
-        ;; ClojureScript REPL and needs no driver.
-     (contains? paths "dev/repl"))))
+   Derived from the alias rather than listed by hand — a hand-kept list is one
+   edit away from omitting the alias that breaks.
+
+   Two shapes, because the monorepo and a generated project name things
+   differently: an alias that runs the app's own `-main`, or an nREPL, where
+   `(go)` is the documented way to start the system. A ClojureScript nREPL is
+   excluded — piggieback drives a browser REPL, not the Integrant system."
+  [main-ns [_ alias-map]]
+  (let [main (str/join " " (:main-opts alias-map))]
+    (and (or (and main-ns (re-find (re-pattern (str "-m\\s+"
+                                                    (java.util.regex.Pattern/quote main-ns)
+                                                    "(\\s|$)"))
+                                   main))
+             (str/includes? main "nrepl.cmdline"))
+         (not (str/includes? main "piggieback"))
+         (not (str/includes? main "cljs")))))
+
+(defn drivers-on-base-classpath?
+  "Whether the root `:deps` already provides a JDBC driver.
+
+   Generated projects declare theirs there, so every alias inherits one and
+   asking each alias separately is the wrong question. The monorepo declares
+   them per alias."
+  [deps]
+  (boolean (some jdbc-drivers (keys (:deps deps)))))
+
+(defn aliases-missing-drivers
+  "System-booting aliases in `deps` that declare no JDBC driver.
+
+   Returns nil when the question does not apply because the base classpath
+   already carries one."
+  [deps main-ns]
+  (when-not (drivers-on-base-classpath? deps)
+    (->> (:aliases deps)
+         (filter (partial boots-the-system? main-ns))
+         (remove (fn [[_ m]] (some jdbc-drivers (keys (:extra-deps m)))))
+         (mapv first))))
 
 (defn- check-system-aliases-have-drivers
-  "Every alias that can start the system must carry a JDBC driver.
+  "Every alias that can start the system must reach a JDBC driver.
 
-   `:repl-clj` did not. The documented REPL workflow — `clojure -M:repl-clj`
+   `:repl-clj` could not. The documented REPL workflow — `clojure -M:repl-clj`
    then `(go)` — died with `ClassNotFoundException: org.h2.Driver` for every
    profile, and nothing noticed, because the alias existed and that was all
    anything checked."
   []
   (println "[smoke] Verifying system-booting aliases carry a JDBC driver")
-  (let [aliases (:aliases (edn/read-string (slurp (io/file root-dir "deps.edn"))))
-        booting (filter boots-the-system? aliases)
-        broken  (remove (fn [[_ m]]
-                          (some jdbc-drivers (keys (:extra-deps m))))
-                        booting)]
-    (when (empty? booting)
-      (binding [*out* *err*]
-        (println "[smoke] Found no system-booting aliases — the check is not looking at anything"))
-      (System/exit 1))
-    (if (seq broken)
-      (do (binding [*out* *err*]
-            (doseq [[a _] broken]
-              (println (str "[smoke] Alias " a " can start the system but declares no JDBC driver"))))
+  (let [deps    (edn/read-string (slurp (io/file root-dir "deps.edn")))
+        main-ns (app-main-ns root-dir)]
+    (if (drivers-on-base-classpath? deps)
+      (println "[smoke] OK drivers are on the base classpath — every alias inherits one")
+      (let [booting (filter (partial boots-the-system? main-ns) (:aliases deps))
+            broken  (aliases-missing-drivers deps main-ns)]
+        ;; No matches means the derivation stopped recognising this project's
+        ;; layout, which is silence rather than a pass.
+        (when (empty? booting)
+          (binding [*out* *err*]
+            (println "[smoke] Found no system-booting aliases and no base driver — the check is not looking at anything"))
           (System/exit 1))
-      (println (str "[smoke] OK " (count booting) " system-booting alias(es) carry a driver")))))
+        (if (seq broken)
+          (do (binding [*out* *err*]
+                (doseq [a broken]
+                  (println (str "[smoke] Alias " a " can start the system but reaches no JDBC driver"))))
+              (System/exit 1))
+          (println (str "[smoke] OK " (count booting) " system-booting alias(es) carry a driver")))))))
 
 (defn- check-aliases []
   (println "[smoke] Verifying required aliases exist in deps.edn")
