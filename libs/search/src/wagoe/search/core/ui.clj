@@ -35,7 +35,7 @@
                   (:a :A) :success
                   (:b :B) :info
                   :neutral)]
-    (ui/badge (str "Weight-" (str/upper-case (name weight)))
+    (ui/badge [:t :search/badge-weight {:weight (str/upper-case (name weight))}]
               {:variant variant
                :class "status-badge"})))
 
@@ -161,7 +161,7 @@
     (layout/admin-pilot-page-layout
      [:t :search/page-detail-title {:index-name index-name}]
      [:div {:style "padding: 1.5rem;"}
-      [:nav {:aria-label "Breadcrumb"
+      [:nav {:aria-label [:t :common/aria-breadcrumb]
              :style "margin-bottom: 1rem; font-size: 0.9em;"}
        [:a {:href "/web/admin/search"} [:t :search/breadcrumb-indices]]
        " / "

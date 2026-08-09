@@ -20,7 +20,7 @@ In Claude Code:
 
 ## What it provides
 
-Seven skills. `wagoe` routes a request to the right command; the rest each own
+Eight skills. `wagoe` routes a request to the right command; the rest each own
 a workflow, run it, and check the result.
 
 | Skill | Use for |
@@ -30,6 +30,7 @@ a workflow, run it, and check the result.
 | `wagoe-scaffold` | Adding a module, field, endpoint or adapter |
 | `wagoe-migrate` | Creating, applying and rolling back migrations |
 | `wagoe-gen-tests` | Tests for a namespace that has none |
+| `wagoe-i18n` | Externalising strings and keeping locales in parity |
 | `wagoe-doctor` | Config and environment preflight |
 | `wagoe-debug` | Diagnosing a failure |
 
@@ -50,7 +51,7 @@ the URL and working credentials.
 Invoke it from an empty directory. It refuses to run inside an existing Wagoe
 project and points at `bb quickstart` instead.
 
-### `wagoe-scaffold`, `wagoe-migrate`, `wagoe-gen-tests`, `wagoe-doctor`, `wagoe-debug`
+### `wagoe-scaffold`, `wagoe-migrate`, `wagoe-gen-tests`, `wagoe-i18n`, `wagoe-doctor`, `wagoe-debug`
 
 The dev-workflow skills. Each wraps commands the `wagoe` decision table already
 names, but adds the part a lookup table cannot: what to run afterwards, how to
@@ -59,10 +60,11 @@ tell whether it worked, and which failure modes are known.
 They were written by running the commands rather than reading them, which keeps
 turning up defects in the tooling they wrap — `bb doctor`'s exit code inside
 `bb check`, `bb migrate create` throwing, every `bb ai` subcommand being
-unreachable in a generated project, and, while writing `wagoe-gen-tests`, a
-test generator whose output carried none of the metadata Kaocha selects on and
-would not compile. Each skill records the behaviour that was actually observed,
-including the parts that are unhelpful.
+unreachable in a generated project, a test generator whose output carried none
+of the metadata Kaocha selects on and would not compile, and an i18n scan that
+had been a required CI job for months while unable to report anything at all.
+Each skill records the behaviour that was actually observed, including the
+parts that are unhelpful.
 
 ## Keeping in sync
 
