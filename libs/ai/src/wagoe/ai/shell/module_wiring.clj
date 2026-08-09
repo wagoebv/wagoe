@@ -30,6 +30,7 @@
             [wagoe.ai.shell.providers.no-op :as no-op]
             [wagoe.ai.shell.providers.ollama :as ollama]
             [wagoe.ai.shell.providers.openai :as openai]
+            [wagoe.ai.shell.providers.replicate :as replicate-provider]
             [clojure.tools.logging :as log]
             [integrant.core :as ig]))
 
@@ -51,6 +52,7 @@
     :anthropic (anthropic/create-anthropic-provider config)
     :openai    (openai/create-openai-provider config)
     :no-op     (no-op/create-no-op-provider config)
+    :replicate (replicate-provider/create-replicate-provider config)
     (throw (ex-info "Unknown AI provider" {:provider provider}))))
 
 ;; =============================================================================

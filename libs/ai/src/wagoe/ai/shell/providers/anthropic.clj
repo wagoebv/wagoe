@@ -5,7 +5,8 @@
    Requires an API key in the configuration.
 
    API docs: https://docs.anthropic.com/en/api/messages"
-  (:require [wagoe.ai.ports :as ports]
+  (:require [wagoe.ai.core.parsing :as parsing]
+            [wagoe.ai.ports :as ports]
             [cheshire.core :as json]
             [clj-http.client :as http]
             [clojure.tools.logging :as log]))
@@ -53,14 +54,15 @@
 ;; AnthropicProvider record
 ;; =============================================================================
 
-(defrecord AnthropicProvider [api-key model]
+(defrecord AnthropicProvider [api-key model timeout]
   ports/IAIProvider
 
   (complete [_ messages opts]
     (let [effective-model (or (:model opts) model "claude-haiku-4-5-20251001")]
       (try
         (log/debug "anthropic complete" {:model effective-model :messages (count messages)})
-        (let [resp   (messages-request! api-key effective-model messages opts)
+        (let [resp   (messages-request! api-key effective-model messages
+                                 (update opts :timeout #(or % timeout)))
               text   (get-in resp [:content 0 :text])
               tokens (get-in resp [:usage :output_tokens] 0)]
           {:text     text
@@ -87,16 +89,11 @@
           result (ports/complete this msgs-with-hint opts)]
       (if (:error result)
         result
-        (let [parsed (try
-                       (json/parse-string (:text result) true)
-                       (catch Exception _
-                         (let [json-str (re-find #"(?s)\{.*\}" (:text result))]
-                           (when json-str
-                             (try (json/parse-string json-str true)
-                                  (catch Exception _ nil))))))]
-          (if parsed
-            (assoc result :data parsed)
-            (assoc result :error "Anthropic response was not valid JSON" :raw (:text result)))))))
+        ;; The shared core parser, rather than a copy of it.
+        (let [parsed (parsing/parse-json-response (:text result))]
+          (if (or (nil? parsed) (:error parsed))
+            (assoc result :error "Anthropic response was not valid JSON" :raw (:text result))
+            (assoc result :data parsed))))))
 
   (provider-name [_] :anthropic))
 
@@ -114,7 +111,8 @@
 
    Returns:
      AnthropicProvider record."
-  [{:keys [api-key model]}]
+  [{:keys [api-key model timeout]}]
   (->AnthropicProvider
    api-key
-   (or model "claude-haiku-4-5-20251001")))
+   (or model "claude-haiku-4-5-20251001")
+   timeout))

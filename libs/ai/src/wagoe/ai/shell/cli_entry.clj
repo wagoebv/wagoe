@@ -15,6 +15,7 @@
             [wagoe.ai.shell.providers.anthropic :as anthropic]
             [wagoe.ai.shell.providers.ollama :as ollama]
             [wagoe.ai.shell.providers.openai :as openai]
+            [wagoe.ai.shell.providers.replicate :as replicate-provider]
             [wagoe.ai.shell.service :as svc]
             [cheshire.core :as json]
             [clojure.java.io :as io]
@@ -95,11 +96,17 @@
          provider (:provider result)
          status   (:status result)
          body     (str (:body result))
-         ;; The endpoint that actually failed. Both provider records carry
-         ;; base-url, so a URL from resources/conf/<env>/config.edn is named
-         ;; just like one from the environment — reading only the env var left
-         ;; a config-file user with a message that named no address at all.
-         url      (or (:base-url (:provider service))
+         ;; The endpoint that actually failed, reported by the provider that
+         ;; ran. `(:provider service)` is the *primary*, and a configured
+         ;; :fallback means the result may describe a different provider
+         ;; entirely — service.clj retries on the fallback and returns its
+         ;; result — so reading the URL from the service would name the wrong
+         ;; service and send the user to debug it.
+         ;;
+         ;; The env vars remain as a last resort: the anthropic provider has no
+         ;; base-url to report, its endpoint being fixed.
+         url      (or (:base-url result)
+                      (:base-url (:provider service))
                       (get env "OLLAMA_URL")
                       (get env "OPENAI_BASE_URL"))
          refused? (str/includes? msg "Connection refused")]
@@ -111,6 +118,7 @@
             "    ANTHROPIC_API_KEY   Anthropic (Claude)\n"
             "    OPENAI_API_KEY      OpenAI\n"
             "    OPENAI_BASE_URL     an OpenAI-compatible endpoint\n"
+            "    REPLICATE_API_TOKEN Replicate-hosted models\n"
             "    OLLAMA_URL          a running Ollama, if it is not on localhost\n"
             "  or :wagoe/ai-service in resources/conf/<env>/config.edn")
 
@@ -177,6 +185,15 @@
                     :model   (or (System/getenv "AI_MODEL") "gpt-4o-mini")})
      :configured? true}
 
+    ;; Hosted models without a local GPU or an OpenAI account. REPLICATE_API_TOKEN
+    ;; is the name Replicate's own tooling uses, so it is likely already set.
+    (System/getenv "REPLICATE_API_TOKEN")
+    {:provider    (replicate-provider/create-replicate-provider
+                   {:api-key (System/getenv "REPLICATE_API_TOKEN")
+                    :model   (or (System/getenv "AI_MODEL")
+                                 replicate-provider/default-model)})
+     :configured? true}
+
     :else
     ;; `:configured?` records whether the user chose anything, at the only point
     ;; that knows. Re-deriving it downstream got this wrong twice: first from
@@ -195,7 +212,8 @@
   []
   (or (System/getenv "ANTHROPIC_API_KEY")
       (System/getenv "OPENAI_BASE_URL")
-      (System/getenv "OPENAI_API_KEY")))
+      (System/getenv "OPENAI_API_KEY")
+      (System/getenv "REPLICATE_API_TOKEN")))
 
 (defn- make-service-from-config
   "Build an AI service from the Aero config file (resources/conf/{env}/config.edn).

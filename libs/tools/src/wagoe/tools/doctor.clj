@@ -27,7 +27,11 @@
    :wagoe/metrics          #{:no-op :prometheus :datadog-statsd}
    :wagoe/error-reporting  #{:no-op :sentry}
    :wagoe/payment-provider #{:mock :mollie :stripe}
-   :wagoe/ai-service       #{:ollama :anthropic :openai :no-op}
+   ;; Mirrors wagoe.ai.shell.module-wiring/build-provider. doctor is Babashka
+   ;; and cannot load the Clojure lib to read it, so this is a copy — and a copy
+   ;; drifts: adding :replicate there left doctor rejecting a provider that
+   ;; worked. A test pins the two together (BOU-281).
+   :wagoe/ai-service       #{:ollama :anthropic :openai :replicate :no-op}
    :wagoe/cache            #{:redis :in-memory}})
 
 ;; =============================================================================
