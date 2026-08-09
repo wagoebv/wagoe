@@ -322,9 +322,9 @@
                      nil)
       (ui/form-field :role [:t :common/label-role]
                      (ui/select-field :role
-                                      [[:admin "Admin"]
-                                       [:user "User"]
-                                       [:viewer "Viewer"]]
+                                      [[:admin [:t :common/role-admin]]
+                                       [:user [:t :common/role-user]]
+                                       [:viewer [:t :common/role-viewer]]]
                                       (:role user))
                      nil)
       (ui/form-field :active [:t :user/field-active]
@@ -390,9 +390,9 @@
            [:p err])])]
      (ui/form-field :role [:t :common/label-role]
                     (ui/select-field :role
-                                     [[:user "User"]
-                                      [:admin "Admin"]
-                                      [:viewer "Viewer"]]
+                                     [[:user [:t :common/role-user]]
+                                      [:admin [:t :common/role-admin]]
+                                      [:viewer [:t :common/role-viewer]]]
                                      (:role data))
                     (:role errors))
      (ui/form-field :send-welcome [:t :user/checkbox-send-welcome]
@@ -432,13 +432,13 @@
         [:p [:t :user/page-created-details-intro]]
         [:div.user-created-details
          [:div.user-created-row
-          [:span.user-created-label "Email:"]
+          [:span.user-created-label [:t :user/created-label-email]]
           [:span (:email user)]]
          [:div.user-created-row
-          [:span.user-created-label "Name:"]
+          [:span.user-created-label [:t :user/created-label-name]]
           [:span (:name user)]]
          [:div.user-created-row
-          [:span.user-created-label "Status:"]
+          [:span.user-created-label [:t :user/created-label-status]]
           [:span.user-created-status (if active? [:t :user/badge-active] [:t :user/badge-inactive])]]]]
        [:div.user-created-actions
         [:p [:t :user/page-created-signin-prompt]]
@@ -459,7 +459,7 @@
     [:h3 [:t :user/message-updated]]
     [:p [:t :user/message-updated-details {:name (:name user) :email (:email user)}]]
     [:div.user-details
-     [:p "Role: " (str/upper-case (name (:role user)))]]
+     [:p [:t :user/updated-role {:role (str/upper-case (name (:role user)))}]]]
     [:a.button {:href (str "/web/users/" (:id user))} [:t :user/button-view-user]]]))
 (defn user-deleted-success
   "Generate success message for user deletion.
@@ -542,7 +542,7 @@
            [:option {:value "role-user"} [:t :user/bulk-action-role-user]]]
           [:button#bulk-action-btn.icon-button.danger
            {:disabled true
-            :title "Apply action to selected users"
+            :title [:t :user/bulk-action-apply-title]
             :onclick "const action = document.getElementById('bulk-action-select').value; const count = document.querySelectorAll('input[name=\"user-ids\"]:checked').length; if(confirm(`Are you sure you want to ${action} ${count} selected user(s)?`)) { document.getElementById('bulk-action-form').submit(); }"}
            [:t :user/button-apply-bulk]]]
            ;; Inline compact search/filter with overlay
@@ -561,7 +561,7 @@
              [:button.close-button
               {:type "button"
                :onclick "document.getElementById('search-filter-details').open = false;"
-               :aria-label "Close"}
+               :aria-label [:t :common/button-close]}
               "×"]]
             [:input {:type        "search"
                      :name        "q"
@@ -592,7 +592,7 @@
   (let [current-user (:user opts)
         is-admin? (= :admin (:role current-user))]
     (page-layout
-     (str "User: " (:name user))
+     [:t :user/detail-page-title {:name (:name user)}]
      [:div.user-detail-page
       [:div.page-header
        [:h1 (:name user)]
@@ -838,7 +838,7 @@
                      (:email errors))
        ;; Password field with validation feedback
       [:div {:class "form-field"}
-       [:label {:for "password"} "Password"]
+       [:label {:for "password"} [:t :user/field-password]]
        (ui/password-input :password "" {:required true})
         ;; Show password requirements if policy provided
        (when policy
@@ -907,28 +907,38 @@
 
 (defn parse-user-agent
   "Extract browser and device information from user-agent string.
-   
+
    Args:
      user-agent - user-agent string
-     
+
    Returns:
-     String like 'Chrome on Desktop' or 'Safari on Mobile'
-     
+     A translation marker rendering as 'Chrome on Desktop' or 'Safari on
+     Mobile', or nil for no user-agent.
+
+     A marker rather than a string: word order differs between languages, so
+     the browser and device names are passed as parameters and the sentence
+     lives in the catalogue. The parameters are themselves markers — the
+     renderer resolves those first, so each name is translated before the
+     sentence is assembled.
+
+     The :user/browser-* and :user/device-* keys already existed in the
+     catalogue, unreferenced. They were added for this and never wired up.
+
    Pure: true"
   [user-agent]
   (when user-agent
     (let [ua (str user-agent)
           browser (cond
-                    (re-find #"Chrome" ua) "Chrome"
-                    (re-find #"Safari" ua) "Safari"
-                    (re-find #"Firefox" ua) "Firefox"
-                    (re-find #"Edge" ua) "Edge"
-                    :else "Unknown Browser")
+                    (re-find #"Chrome" ua)  :user/browser-chrome
+                    (re-find #"Safari" ua)  :user/browser-safari
+                    (re-find #"Firefox" ua) :user/browser-firefox
+                    (re-find #"Edge" ua)    :user/browser-edge
+                    :else                   :user/browser-unknown)
           device (cond
-                   (re-find #"Mobile|Android|iPhone" ua) "Mobile"
-                   (re-find #"Tablet|iPad" ua) "Tablet"
-                   :else "Desktop")]
-      (str browser " on " device))))
+                   (re-find #"Mobile|Android|iPhone" ua) :user/device-mobile
+                   (re-find #"Tablet|iPad" ua)           :user/device-tablet
+                   :else                                 :user/device-desktop)]
+      [:t :user/session-device {:browser [:t browser] :device [:t device]}])))
 
 (defn session-row
   "Single row in the sessions table.
@@ -949,7 +959,7 @@
       [:strong (parse-user-agent (:user-agent session))]
       (when is-current?
         [:span.badge.current " Current Session"])]
-     [:td (or (:ip-address session) "Unknown")]
+     [:td (or (:ip-address session) [:t :common/unknown])]
      [:td (format-relative-time* (:last-accessed-at session) current-time zone-id)]
      [:td (format-relative-time* (:created-at session) current-time zone-id)]
      [:td
@@ -963,7 +973,7 @@
          [:button.button.secondary.small
           {:type "submit"
            :onclick "return confirm('Revoke this session? The device will need to sign in again.');"}
-          "Revoke"]])]]))
+          [:t :user/button-revoke]]])]]))
 
 (defn sessions-list
   "Table displaying all user sessions.
@@ -1115,16 +1125,16 @@
     [:tr
      [:td (format-audit-timestamp created-at)]
      [:td (action-badge action)]
-     [:td (or (:actor-email audit-log) [:em "System"])]
+     [:td (or (:actor-email audit-log) [:em [:t :user/audit-actor-system]])]
      [:td (or (:target-user-email audit-log) "-")]
      [:td (result-badge result)]
      [:td (or (:ip-address audit-log) "-")]
      [:td
       [:button.button.small.secondary.audit-detail-trigger
        {:type "button"
-        :title "View details"
+        :title [:t :user/audit-view-details]
         :data-action (name action)
-        :data-actor (or (:actor-email audit-log) "System")
+        :data-actor (or (:actor-email audit-log) [:t :user/audit-actor-system])
         :data-target (or (:target-user-email audit-log) "-")
         :data-ip (or (:ip-address audit-log) "-")
         :data-user-agent (or (:user-agent audit-log) "-")

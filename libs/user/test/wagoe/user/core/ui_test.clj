@@ -145,6 +145,29 @@
       (is (re-find #"abc/def\+ghi==" row-html))
       (is (re-find #"2 hours ago" row-html)))))
 
+(deftest ^:unit parse-user-agent-test
+  (testing "browser and device are markers, not English"
+    ;; This used to return the string "Chrome on Desktop", which no locale
+    ;; could change. The keys it now emits were already in the catalogue,
+    ;; unreferenced — added for this and never wired up.
+    (is (= [:t :user/session-device {:browser [:t :user/browser-chrome]
+                                     :device  [:t :user/device-desktop]}]
+           (ui/parse-user-agent "Mozilla/5.0 Chrome"))))
+
+  (testing "device is detected independently of browser"
+    (is (= [:t :user/device-mobile]
+           (:device (nth (ui/parse-user-agent "Mozilla/5.0 Firefox Android") 2))))
+    (is (= [:t :user/browser-firefox]
+           (:browser (nth (ui/parse-user-agent "Mozilla/5.0 Firefox Android") 2)))))
+
+  (testing "an unrecognised agent still yields markers"
+    (is (= [:t :user/session-device {:browser [:t :user/browser-unknown]
+                                     :device  [:t :user/device-desktop]}]
+           (ui/parse-user-agent "curl/8.0"))))
+
+  (testing "no user-agent yields nil rather than a marker for nothing"
+    (is (nil? (ui/parse-user-agent nil)))))
+
 (deftest ^:unit format-relative-time-explicit-zone-test
   (testing "long-range relative formatting uses explicit zone id"
     (let [result (ui/format-relative-time* (java.time.Instant/parse "2026-03-01T08:00:00Z")
@@ -333,7 +356,10 @@
     (let [page (ui/user-detail-page sample-user)]
       (is (vector? page))
       (let [content (str page)]
-        (is (re-find #"User: John Doe" content))
+        ;; The title is a marker now, not "User: John Doe" — core emits
+        ;; markers and the shell resolves them, so the name travels as a
+        ;; parameter and the sentence lives in the catalogue.
+        (is (re-find #":user/detail-page-title" content))
         (is (re-find #"John Doe" content))
         (is (re-find #"button-back-to-users" content)))))
 

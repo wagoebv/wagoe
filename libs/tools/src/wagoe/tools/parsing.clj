@@ -34,6 +34,94 @@
       (str/replace #";[^\n]*" (fn [m] (apply str (repeat (count m) \space))))))
 
 ;; ---------------------------------------------------------------------------
+;; String literal extraction
+;; ---------------------------------------------------------------------------
+
+(defn string-literals
+  "Every string literal in `content`, with the code that precedes it.
+
+   Line-based regex cannot answer the questions a literal raises. Whether it is
+   a docstring depends on the form it sits in, which may start on an earlier
+   line; whether it is a regex depends on a `#` that a per-line match discards;
+   and a multi-line string is several lines that are one token. The i18n scan
+   asked all three per line and got them wrong — its docstring test was
+   `(not (str/includes? line \"\\\"\"))`, which no line holding a string literal
+   can satisfy, so the gate never reported anything.
+
+   Args:
+     content - Clojure source string
+
+   Returns:
+     Seq of {:text str :line int :regex? bool :preceding-code str}, in order.
+     `:text` excludes the surrounding quotes. `:preceding-code` is the code
+     before the literal with comments and other strings blanked, so a caller
+     can match against the enclosing form without re-solving quoting."
+  [content]
+  (let [n (count content)]
+    (loop [i        0
+           line     1
+           code     (StringBuilder.)   ; content so far, non-code blanked
+           acc      (transient [])]
+      (if (>= i n)
+        (persistent! acc)
+        (let [c (.charAt ^String content i)]
+          (cond
+            ;; Character literal: \" and \; are one token, not a quote or a
+            ;; comment. Must be tested before both.
+            (= c \\)
+            (do (.append code "  ")
+                (recur (+ i 2) (if (= \newline (when (< (inc i) n) (.charAt ^String content (inc i))))
+                                 (inc line) line)
+                       code acc))
+
+            (= c \;)
+            (let [nl (.indexOf ^String content "\n" (int i))
+                  to (if (neg? nl) n nl)]
+              (dotimes [_ (- to i)] (.append code " "))
+              (recur to line code acc))
+
+            (= c \")
+            (let [start-line line
+                  regex?     (and (pos? i) (= \# (.charAt ^String content (dec i))))
+                  before     (str code)
+                  end        (loop [j (inc i)]
+                               (if (>= j n)
+                                 j
+                                 (let [ch (.charAt ^String content j)]
+                                   (cond
+                                     (= ch \\) (recur (+ j 2))
+                                     (= ch \") (inc j)
+                                     :else     (recur (inc j))))))
+                  text       (subs content (inc i) (max (inc i) (dec (min end n))))
+                  newlines   (count (re-seq #"\n" (subs content i (min end n))))]
+              (dotimes [_ (- (min end n) i)] (.append code " "))
+              (recur end (+ line newlines) code
+                     (conj! acc {:text            text
+                                 :line            start-line
+                                 :regex?          regex?
+                                 :preceding-code  before})))
+
+            :else
+            (do (.append code c)
+                (recur (inc i) (if (= c \newline) (inc line) line) code acc))))))))
+
+(def ^:private docstring-position
+  "Code that can only be followed by a docstring.
+
+   `(defn name`, `(defn name [args]`, `(ns name` — anything else before a
+   string means the string is a value.
+
+   `def` is deliberately absent. `(def x \"doc\" v)` is legal and rare;
+   `(def title \"Users\")` is common, and treating the second as a docstring
+   would hide exactly the literal a scan is looking for."
+  #"\((?:defn|defmacro|defprotocol|definterface|ns)-?\s+(?:\^\S+\s+)*[^\s()\[\]{}]+\s*(?:\[[^\]]*\]\s*)?$")
+
+(defn docstring?
+  "Whether a `string-literals` entry sits in a docstring position."
+  [{:keys [preceding-code]}]
+  (boolean (re-find docstring-position (str preceding-code))))
+
+;; ---------------------------------------------------------------------------
 ;; ns form parsing
 ;; ---------------------------------------------------------------------------
 

@@ -285,7 +285,7 @@
      [:t :workflow/page-detail-title {:name wf-name}]
      [:div.workflow-page
       ;; Breadcrumb
-      [:nav {:aria-label "Breadcrumb"
+      [:nav {:aria-label [:t :common/aria-breadcrumb]
              :style "margin-bottom: 1rem; font-size: 0.9em;"}
        [:a {:href "/web/admin/workflows"} [:t :workflow/breadcrumb-instances]]
        " / "

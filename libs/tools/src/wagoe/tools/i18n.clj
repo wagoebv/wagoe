@@ -15,7 +15,8 @@
             [babashka.process :as proc]
             [clojure.edn :as edn]
             [clojure.set :as set]
-            [clojure.string :as str]))
+            [clojure.string :as str]
+            [wagoe.tools.parsing :as parsing]))
 
 ;; =============================================================================
 ;; Helpers
@@ -34,11 +35,11 @@
 (defn- ui-src-dirs []
   (let [wagoe-root (detect-wagoe-root)
         wagoe-dirs (when wagoe-root
-                        [(str wagoe-root "/libs/user/src")
-                         (str wagoe-root "/libs/admin/src")
-                         (str wagoe-root "/libs/search/src")
-                         (str wagoe-root "/libs/calendar/src")
-                         (str wagoe-root "/libs/workflow/src")])]
+                     [(str wagoe-root "/libs/user/src")
+                      (str wagoe-root "/libs/admin/src")
+                      (str wagoe-root "/libs/search/src")
+                      (str wagoe-root "/libs/calendar/src")
+                      (str wagoe-root "/libs/workflow/src")])]
     (->> (concat ["src"] wagoe-dirs)
          distinct
          (filter fs/exists?))))
@@ -87,39 +88,60 @@
 ;; scan — find unexternalised string literals in core/ui.clj files
 ;; =============================================================================
 
+(def user-visible-text
+  "What counts as translatable prose.
+
+   Starts with a capital and continues with letters or spaces, so CSS classes,
+   keywords, paths and identifiers are not swept up. Deliberately blind to
+   lowercase fragments: `(str \" hour\" \" ago\")` is unexternalised English too,
+   but matching lowercase turns every map key and option name into a finding."
+  #"^[A-Z][A-Za-z ]{3,}")
+
+(def ^:private pattern-arg
+  "Calls whose string argument is a machine pattern, not prose.
+
+   A date format and a regex read as capitalised text and are not translated
+   through the catalogue."
+  #"(?:ofPattern|re-pattern|re-find|re-matches|re-seq)\s+$")
+
+(defn scan-violations
+  "Unexternalised user-visible literals in `content`.
+
+   Pure, so the rules are testable without a source tree. `lines` is used only
+   to skip interpolation arguments — `[:t :k {:name \"Alice\"}]` is already
+   externalised and its argument is data.
+
+   Returns a seq of {:line int :text str}."
+  [content]
+  (let [lines (vec (str/split-lines content))]
+    (for [lit  (parsing/string-literals content)
+          :when (re-find user-visible-text (:text lit))
+          :when (not (:regex? lit))
+          :when (not (parsing/docstring? lit))
+          :when (not (re-find pattern-arg (:preceding-code lit)))
+          :when (not (str/includes? (get lines (dec (:line lit)) "") "[:t "))]
+      {:line (:line lit) :text (:text lit)})))
+
 (defn scan
   "Scan core/ui.clj files for hardcoded English string literals.
    Exits 1 if any are found (suitable as a CI gate).
 
-   Heuristic: strings that start with an uppercase letter and are at least 4
-   chars long, in Hiccup position (not attribute values or CSS classes)."
+   Only `**/core/ui.clj` is covered — Hiccup elsewhere (shell/web_handlers,
+   admin views) is not scanned, so a clean run is not proof the whole codebase
+   is externalised."
   []
-  (let [ui-files (mapcat #(fs/glob % "**/core/ui.clj") (ui-src-dirs))
-        ;; Pattern: string literals starting with uppercase, min 4 chars,
-        ;; that look like user-visible text (not CSS classes or :keywords)
-        ;; Exclude strings that are all-caps (constants) or contain slashes (paths)
-        pattern "\"[A-Z][A-Za-z ]{3,}[^\"]*\""
-        violations (atom [])]
-    (doseq [f ui-files]
-      (let [content (slurp (str f))
-            lines   (str/split-lines content)]
-        (doseq [[i line] (map-indexed vector lines)
-                :when (re-find (re-pattern pattern) line)
-                ;; Skip lines that are pure comments
-                :when (not (str/starts-with? (str/trim line) ";"))
-                ;; Skip lines that look like they already have [:t ...]
-                :when (not (str/includes? line "[:t "))
-                ;; Skip docstrings (line before contains defn/defmethod)
-                :when (not (str/includes? line "\""))
-                :let [match (re-find (re-pattern pattern) line)]]
-          (swap! violations conj {:file (str f) :line (inc i) :text match}))))
-    (if (seq @violations)
+  (let [ui-files   (mapcat #(fs/glob % "**/core/ui.clj") (ui-src-dirs))
+        violations (for [f ui-files
+                         v (scan-violations (slurp (str f)))]
+                     (assoc v :file (str f)))]
+    (if (seq violations)
       (do
         (println "FAIL: Unexternalised string literals found in core/ui.clj files:")
-        (doseq [{:keys [file line text]} @violations]
-          (println (format "  %s:%d  %s" file line text)))
+        (doseq [{:keys [file line text]} violations]
+          (println (format "  %s:%d  \"%s\"" file line text)))
         (System/exit 1))
-      (println "OK: No unexternalised string literals found."))))
+      (println (format "OK: No unexternalised string literals found in %d core/ui.clj file(s)."
+                       (count ui-files))))))
 
 ;; =============================================================================
 ;; missing — report keys present in en.edn but absent from other locales

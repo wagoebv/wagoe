@@ -155,3 +155,29 @@
       (wrapped request)
       (is (= "Actief" @result)
           "resolve-t-fn should use Dutch locale from :user added by auth middleware"))))
+
+;; =============================================================================
+;; Nested markers
+;; =============================================================================
+
+(deftest ^:integration nested-markers-in-params-resolve-before-the-sentence
+  ;; `parse-user-agent` returns [:t :user/session-device {:browser [:t …]
+  ;; :device [:t …]}] because word order differs between languages. That only
+  ;; works if the renderer resolves the parameters first — asserted here
+  ;; against the real catalogue rather than inferred from the implementation.
+  (let [cat    (catalogue/load-catalogue "wagoe/i18n/translations")
+        marker [:t :user/session-device {:browser [:t :user/browser-chrome]
+                                         :device  [:t :user/device-desktop]}]]
+    (testing "English assembles the sentence from translated parts"
+      (is (re-find #"Chrome on Desktop"
+                   (render/render [:span marker] (make-t-fn cat [:en])))))
+
+    (testing "Dutch changes the connecting word, not the product names"
+      (let [html (render/render [:span marker] (make-t-fn cat [:nl :en]))]
+        (is (re-find #"Chrome op Desktop" html))
+        (is (not (re-find #"Chrome on Desktop" html)))))
+
+    (testing "an unresolved parameter would show as a marker, not silently"
+      ;; Guards the failure mode this replaced: a raw vector reaching the HTML.
+      (is (not (re-find #"\[:t "
+                        (render/render [:span marker] (make-t-fn cat [:en]))))))))
