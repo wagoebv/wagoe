@@ -51,14 +51,15 @@
 ;; OllamaProvider record
 ;; =============================================================================
 
-(defrecord OllamaProvider [base-url model]
+(defrecord OllamaProvider [base-url model timeout]
   ports/IAIProvider
 
   (complete [_ messages opts]
     (let [effective-model (or (:model opts) model "qwen2.5-coder:7b")]
       (try
         (log/debug "ollama complete" {:model effective-model :messages (count messages)})
-        (let [resp  (chat-request! base-url effective-model messages opts)
+        (let [resp  (chat-request! base-url effective-model messages
+                             (update opts :timeout #(or % timeout)))
               text  (get-in resp [:message :content])
               tokens (get-in resp [:usage :total_tokens] 0)]
           {:text     text
@@ -109,7 +110,8 @@
 
    Returns:
      OllamaProvider record."
-  [{:keys [base-url model]}]
+  [{:keys [base-url model timeout]}]
   (->OllamaProvider
    (or base-url "http://localhost:11434")
-   (or model "qwen2.5-coder:7b")))
+   (or model "qwen2.5-coder:7b")
+   timeout))

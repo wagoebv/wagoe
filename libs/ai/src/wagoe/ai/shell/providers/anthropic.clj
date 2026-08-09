@@ -54,14 +54,15 @@
 ;; AnthropicProvider record
 ;; =============================================================================
 
-(defrecord AnthropicProvider [api-key model]
+(defrecord AnthropicProvider [api-key model timeout]
   ports/IAIProvider
 
   (complete [_ messages opts]
     (let [effective-model (or (:model opts) model "claude-haiku-4-5-20251001")]
       (try
         (log/debug "anthropic complete" {:model effective-model :messages (count messages)})
-        (let [resp   (messages-request! api-key effective-model messages opts)
+        (let [resp   (messages-request! api-key effective-model messages
+                                 (update opts :timeout #(or % timeout)))
               text   (get-in resp [:content 0 :text])
               tokens (get-in resp [:usage :output_tokens] 0)]
           {:text     text
@@ -110,7 +111,8 @@
 
    Returns:
      AnthropicProvider record."
-  [{:keys [api-key model]}]
+  [{:keys [api-key model timeout]}]
   (->AnthropicProvider
    api-key
-   (or model "claude-haiku-4-5-20251001")))
+   (or model "claude-haiku-4-5-20251001")
+   timeout))

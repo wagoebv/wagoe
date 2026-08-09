@@ -15,6 +15,9 @@
             [wagoe.ai.ports :as ports]
             [integrant.core :as ig]
             [wagoe.ai.shell.module-wiring]
+            [wagoe.ai.shell.providers.anthropic :as anthropic]
+            [wagoe.ai.shell.providers.ollama :as ollama]
+            [wagoe.ai.shell.providers.openai :as openai]
             [wagoe.ai.shell.providers.replicate :as sut]))
 
 (deftest ^:unit a-conversation-becomes-a-flat-prompt
@@ -285,3 +288,44 @@
               (str "schema accepts " (pr-str (set/difference enum-names disp-names))
                    " that cannot be built, and is missing "
                    (pr-str (set/difference disp-names enum-names)))))))))
+
+(deftest ^:unit a-configured-timeout-is-honoured
+  ;; :timeout is in ProviderConfig and AIConfig, so config.edn may set it — and
+  ;; every provider discarded it, falling back to a hardcoded default. A long
+  ;; prompt timed out at 60s however the knob was set, while the error message
+  ;; advised raising the knob that was being ignored (BOU-281).
+  (testing "each provider keeps the configured value"
+    (doseq [[nm p] [["replicate" (sut/create-replicate-provider {:api-key "t" :timeout 300000})]
+                    ["openai"    (openai/create-openai-provider {:api-key "t" :timeout 300000})]
+                    ["ollama"    (ollama/create-ollama-provider {:timeout 300000})]
+                    ["anthropic" (anthropic/create-anthropic-provider {:api-key "t" :timeout 300000})]]]
+      (is (= 300000 (:timeout p)) (str nm " discarded its configured timeout"))))
+
+  (testing "the configured value reaches the request"
+    (let [seen (atom nil)
+          p    (sut/create-replicate-provider {:api-key "t" :timeout 300000})]
+      (with-redefs [http/post (fn [_ opts]
+                                (reset! seen (:socket-timeout opts))
+                                {:body {:status "succeeded" :output ["ok"]}})]
+        (ports/complete p [{:role :user :content "x"}] {}))
+      (is (= 300000 @seen))))
+
+  (testing "a per-call timeout still wins over the configured one"
+    (let [seen (atom nil)
+          p    (sut/create-replicate-provider {:api-key "t" :timeout 300000})]
+      (with-redefs [http/post (fn [_ opts]
+                                (reset! seen (:socket-timeout opts))
+                                {:body {:status "succeeded" :output ["ok"]}})]
+        (ports/complete p [{:role :user :content "x"}] {:timeout 5000}))
+      (is (= 5000 @seen))))
+
+  (testing "the timeout message reports the value actually applied"
+    ;; Reporting a different number than the one used would send someone to
+    ;; raise a limit that was never in force.
+    (let [p (sut/create-replicate-provider {:api-key "t" :timeout 1200})]
+      (with-redefs [http/post (fn [_ _] {:body {:status "processing"
+                                                :urls {:get "https://x/1"}}})
+                    http/get  (fn [_ _] {:body {:status "processing"
+                                                :urls {:get "https://x/1"}}})]
+        (is (str/includes? (:error (ports/complete p [{:role :user :content "x"}] {}))
+                           "1200"))))))

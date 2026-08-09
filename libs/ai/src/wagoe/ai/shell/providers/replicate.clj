@@ -106,6 +106,10 @@
 
 (def ^:private poll-interval-ms 1000)
 
+(def ^:private default-timeout-ms
+  "Used only when neither the call nor the provider config sets one."
+  60000)
+
 (defn- get-prediction!
   [url api-token timeout]
   (:body (http/get url {:as                 :json
@@ -163,18 +167,22 @@
 ;; Provider
 ;; =============================================================================
 
-(defrecord ReplicateProvider [base-url api-key model]
+(defrecord ReplicateProvider [base-url api-key model timeout]
   ports/IAIProvider
 
   (complete [_ messages opts]
     (let [effective-model (or (:model opts) model default-model)
+          ;; Per-call, then the configured :timeout, then the default. Config
+          ;; carried it in the schema and nothing read it, so a long prompt
+          ;; timed out at 60s however the knob was set.
+          effective-timeout (or (:timeout opts) timeout default-timeout-ms)
           input (cond-> (messages->input messages)
                   (:max-tokens opts)  (assoc :max_tokens (:max-tokens opts))
                   (:temperature opts) (assoc :temperature (:temperature opts)))]
       (try
         (log/debug "replicate complete" {:model effective-model :messages (count messages)})
         (let [resp   (prediction-request! base-url api-key effective-model input
-                                          (or (:timeout opts) 60000))
+                                          effective-timeout)
               status (:status resp)]
           (if (= "succeeded" status)
             {:text     (output->text (:output resp))
@@ -192,7 +200,7 @@
             ;; advice from "the model errored".
             {:error    (cond
                          (:wagoe/timed-out? resp)
-                         (str "Replicate did not finish within " (or (:timeout opts) 60000)
+                         (str "Replicate did not finish within " effective-timeout
                               "ms (status " (or status "unknown")
                               "). Raise :timeout for long prompts.")
 
@@ -242,7 +250,8 @@
      :api-key  - Replicate API token (required)
      :model    - owner/name, e.g. anthropic/claude-4.5-haiku
      :base-url - override, for a proxy or a test double"
-  [{:keys [base-url api-key model]}]
+  [{:keys [base-url api-key model timeout]}]
   (->ReplicateProvider (or base-url default-base-url)
                        api-key
-                       (or model default-model)))
+                       (or model default-model)
+                       timeout))
