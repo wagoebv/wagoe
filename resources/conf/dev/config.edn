@@ -146,16 +146,22 @@
   :wagoe/payment-provider
   {:provider :mock}
 
-  ;; AI tooling — offline-first via oMLX (OpenAI-compatible), with OpenAI cloud fallback
-  ;; Move to :inactive to disable. Set OPENAI_API_KEY to enable cloud fallback.
+  ;; AI tooling — powers `bb ai` and `bb scaffold ai`.
+  ;;
+  ;; Offline-first by design: Ollama runs locally, so no prompt leaves the
+  ;; machine unless the developer opts in (libs/ai/AGENTS.md). A hosted
+  ;; provider here would make a fresh checkout fail on a missing token, and
+  ;; would send source code to a third party by default.
+  ;;
+  ;; To use a hosted provider, export one of ANTHROPIC_API_KEY,
+  ;; OPENAI_API_KEY, OPENAI_BASE_URL or REPLICATE_API_TOKEN — the env chain in
+  ;; wagoe.ai.shell.cli-entry takes precedence over this block, so opting in
+  ;; needs no config edit. Or replace :provider below; the supported set is
+  ;; :ollama :anthropic :openai :replicate :no-op.
   :wagoe/ai-service
-  {:provider :openai
-   :model    #or [#env AI_MODEL "gemma-4-26b-a4b-it-4bit"]
-   :base-url #or [#env OPENAI_BASE_URL "http://localhost:8000"]
-   :api-key  #or [#env OPENAI_API_KEY "omlx-9999"]
-   :fallback {:provider :openai
-              :model    "gpt-5.4-mini"
-              :api-key  #env OPENAI_API_KEY}}
+  {:provider :ollama
+   :base-url #or [#env OLLAMA_URL "http://localhost:11434"]
+   :model    #or [#env AI_MODEL "qwen2.5-coder:7b"]}
 
   ;; Developer dashboard — live system introspection UI (dev only)
   :wagoe/dashboard {:port 9999}}

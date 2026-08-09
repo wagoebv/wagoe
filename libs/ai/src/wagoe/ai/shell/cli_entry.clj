@@ -15,6 +15,7 @@
             [wagoe.ai.shell.providers.anthropic :as anthropic]
             [wagoe.ai.shell.providers.ollama :as ollama]
             [wagoe.ai.shell.providers.openai :as openai]
+            [wagoe.ai.shell.providers.replicate :as replicate-provider]
             [wagoe.ai.shell.service :as svc]
             [cheshire.core :as json]
             [clojure.java.io :as io]
@@ -43,6 +44,121 @@
 ;; Service bootstrap
 ;; =============================================================================
 
+(defn parse-or-exit!
+  "Parse `args` against `opts`, or print the errors and exit 1.
+
+   Every subcommand destructured `parse-opts` as `{:keys [options arguments]}`
+   and never read `:errors`, so tools.cli collected unknown options and invalid
+   values and they were discarded. A typo one keystroke from a real flag —
+   `--fil` for `--file` — was dropped, its value became a positional argument
+   nothing reads, and the command failed complaining about missing input
+   (BOU-279). The message pointed away from the mistake, which was on the same
+   line.
+
+   Public so a test can drive it. Returns the parsed map; `-main` exits."
+  [args opts usage]
+  (let [{:keys [errors] :as parsed} (cli/parse-opts args opts)]
+    (when (seq errors)
+      (doseq [e errors] (println (red e)))
+      (println)
+      (println usage)
+      (System/exit 1))
+    parsed))
+
+(defn explain-provider-error
+  "Turn a provider's error result into something actionable.
+
+   Takes the service alongside the result. `:configured?` is set where the
+   service is built — the only place that knows whether the user chose a
+   provider — and every other basis for that judgement has been wrong:
+
+   - environment variables alone misreported a configured OPENAI_BASE_URL
+     pointing at a local endpoint that was down
+   - the `:provider` keyword misreported Ollama configured in
+     resources/conf/<env>/config.edn, which is a supported path
+
+   Only the env fallback with no variable set is unconfigured. Anything else —
+   an env var, or `:wagoe/ai-service` in config — is a deliberate choice, and
+   telling that user to configure a provider sends them to the wrong fix.
+
+   `env` is a parameter so the arms are testable. Reading `System/getenv` inside
+   made the assertions depend on whether the developer happened to have
+   OLLAMA_URL exported — the ambient-environment fault this function explains.
+
+   Returns the original message when it has nothing better to say: replacing an
+   unrecognised one with a friendlier guess would hide it."
+  ([result service]
+   (explain-provider-error result service
+                           {"OLLAMA_URL"      (System/getenv "OLLAMA_URL")
+                            "OPENAI_BASE_URL" (System/getenv "OPENAI_BASE_URL")}))
+  ([result service env]
+   (let [msg      (str (:error result))
+         provider (:provider result)
+         status   (:status result)
+         body     (str (:body result))
+         ;; The endpoint that actually failed, reported by the provider that
+         ;; ran. `(:provider service)` is the *primary*, and a configured
+         ;; :fallback means the result may describe a different provider
+         ;; entirely — service.clj retries on the fallback and returns its
+         ;; result — so reading the URL from the service would name the wrong
+         ;; service and send the user to debug it.
+         ;;
+         ;; The env vars remain as a last resort: the anthropic provider has no
+         ;; base-url to report, its endpoint being fixed.
+         url      (or (:base-url result)
+                      (:base-url (:provider service))
+                      (get env "OLLAMA_URL")
+                      (get env "OPENAI_BASE_URL"))
+         refused? (str/includes? msg "Connection refused")]
+     (cond
+       (and refused? (not (:configured? service)))
+       (str "No AI provider is configured, and the default (Ollama on "
+            "localhost:11434) is not running.\n"
+            "  Set one of:\n"
+            "    ANTHROPIC_API_KEY   Anthropic (Claude)\n"
+            "    OPENAI_API_KEY      OpenAI\n"
+            "    OPENAI_BASE_URL     an OpenAI-compatible endpoint\n"
+            "    REPLICATE_API_TOKEN Replicate-hosted models\n"
+            "    OLLAMA_URL          a running Ollama, if it is not on localhost\n"
+            "  or :wagoe/ai-service in resources/conf/<env>/config.edn")
+
+       (and refused? (= :ollama provider))
+       (str "Cannot reach Ollama" (when url (str " at " url)) ". Is it running?")
+
+       (and refused? (= :openai provider) url)
+       (str "Cannot reach the OpenAI-compatible endpoint at " url
+            ". Is it running?")
+
+       refused?
+       (str "Cannot reach the configured AI provider"
+            (when provider (str " (" (name provider) ")")) ".")
+
+       (or (= 401 status) (str/includes? msg "status 401"))
+       (str "The AI provider"
+            (when provider (str " (" (name provider) ")"))
+            " rejected the API key.")
+
+       ;; Both arrive as 429, and the advice is opposite. Quota exhaustion is
+       ;; permanent until you add credits — telling someone to wait and retry
+       ;; sends them to do nothing, indefinitely. The provider's body text is
+       ;; carried in the message, so the two are distinguishable.
+       ;; Both arrive as 429 and need opposite advice. Quota exhaustion lasts
+       ;; until you add credit, so "wait and retry" sends the user to do nothing
+       ;; indefinitely. The two are only distinguishable from the response body,
+       ;; which the message does not carry.
+       (and (= 429 status)
+            (or (str/includes? body "insufficient_quota")
+                (str/includes? body "credit_balance_exhausted")
+                (str/includes? body "billing")))
+       (str "The AI provider"
+            (when provider (str " (" (name provider) ")"))
+            " accepted the key, but the account has no credit left.")
+
+       (or (= 429 status) (str/includes? msg "status 429"))
+       "The AI provider is rate-limiting. Wait and retry."
+
+       :else msg))))
+
 (defn- make-service-from-env
   "Fall-back when no :wagoe/ai-service is present in active config.
    Checks ANTHROPIC_API_KEY, OPENAI_BASE_URL, OPENAI_API_KEY, OLLAMA_URL in that order.
@@ -51,25 +167,44 @@
   []
   (cond
     (System/getenv "ANTHROPIC_API_KEY")
-    {:provider (anthropic/create-anthropic-provider
-                {:api-key (System/getenv "ANTHROPIC_API_KEY")
-                 :model   (or (System/getenv "AI_MODEL") "claude-haiku-4-5-20251001")})}
+    {:provider    (anthropic/create-anthropic-provider
+                   {:api-key (System/getenv "ANTHROPIC_API_KEY")
+                    :model   (or (System/getenv "AI_MODEL") "claude-haiku-4-5-20251001")})
+     :configured? true}
 
     (System/getenv "OPENAI_BASE_URL")
-    {:provider (openai/create-openai-provider
-                {:base-url (System/getenv "OPENAI_BASE_URL")
-                 :api-key  (or (System/getenv "OPENAI_API_KEY") "no-key")
-                 :model    (or (System/getenv "AI_MODEL") "gpt-4o-mini")})}
+    {:provider    (openai/create-openai-provider
+                   {:base-url (System/getenv "OPENAI_BASE_URL")
+                    :api-key  (or (System/getenv "OPENAI_API_KEY") "no-key")
+                    :model    (or (System/getenv "AI_MODEL") "gpt-4o-mini")})
+     :configured? true}
 
     (System/getenv "OPENAI_API_KEY")
-    {:provider (openai/create-openai-provider
-                {:api-key (System/getenv "OPENAI_API_KEY")
-                 :model   (or (System/getenv "AI_MODEL") "gpt-4o-mini")})}
+    {:provider    (openai/create-openai-provider
+                   {:api-key (System/getenv "OPENAI_API_KEY")
+                    :model   (or (System/getenv "AI_MODEL") "gpt-4o-mini")})
+     :configured? true}
+
+    ;; Hosted models without a local GPU or an OpenAI account. REPLICATE_API_TOKEN
+    ;; is the name Replicate's own tooling uses, so it is likely already set.
+    (System/getenv "REPLICATE_API_TOKEN")
+    {:provider    (replicate-provider/create-replicate-provider
+                   {:api-key (System/getenv "REPLICATE_API_TOKEN")
+                    :model   (or (System/getenv "AI_MODEL")
+                                 replicate-provider/default-model)})
+     :configured? true}
 
     :else
-    {:provider (ollama/create-ollama-provider
-                {:base-url (or (System/getenv "OLLAMA_URL") "http://localhost:11434")
-                 :model    (or (System/getenv "AI_MODEL") "qwen2.5-coder:7b")})}))
+    ;; `:configured?` records whether the user chose anything, at the only point
+    ;; that knows. Re-deriving it downstream got this wrong twice: first from
+    ;; env vars, which misreported a configured OPENAI_BASE_URL, then from the
+    ;; provider keyword, which misreported Ollama configured in config.edn
+    ;; (BOU-280). OLLAMA_URL alone means deliberate; no variable at all means
+    ;; this is the fallback nobody asked for.
+    {:provider    (ollama/create-ollama-provider
+                   {:base-url (or (System/getenv "OLLAMA_URL") "http://localhost:11434")
+                    :model    (or (System/getenv "AI_MODEL") "qwen2.5-coder:7b")})
+     :configured? (boolean (System/getenv "OLLAMA_URL"))}))
 
 (defn- provider-env-vars-set?
   "Returns true when the developer has explicitly configured a provider via
@@ -77,7 +212,8 @@
   []
   (or (System/getenv "ANTHROPIC_API_KEY")
       (System/getenv "OPENAI_BASE_URL")
-      (System/getenv "OPENAI_API_KEY")))
+      (System/getenv "OPENAI_API_KEY")
+      (System/getenv "REPLICATE_API_TOKEN")))
 
 (defn- make-service-from-config
   "Build an AI service from the Aero config file (resources/conf/{env}/config.edn).
@@ -110,7 +246,9 @@
                                    (throw e))))
               ai-cfg      (when config (get-in config [:active :wagoe/ai-service]))]
           (if (and ai-cfg (not= (:provider ai-cfg) :no-op))
-            (ig/init-key :wagoe/ai-service ai-cfg)
+            ;; Chosen in resources/conf/<env>/config.edn — a supported path, and
+            ;; as deliberate as an environment variable.
+            (assoc (ig/init-key :wagoe/ai-service ai-cfg) :configured? true)
             (make-service-from-env)))))))
 
 ;; =============================================================================
@@ -131,7 +269,7 @@
     (or (empty? input) (= input "y") (= input "yes"))))
 
 (defn cmd-scaffold-ai [args]
-  (let [{:keys [options arguments]} (cli/parse-opts args scaffold-ai-opts)
+  (let [{:keys [options arguments]} (parse-or-exit! args scaffold-ai-opts "Usage: bb scaffold ai <description> [--yes] [--dry-run]")
         description (str/join " " arguments)]
     (when (or (:help options) (str/blank? description))
       (println "Usage: bb scaffold ai <description>")
@@ -144,7 +282,7 @@
     (let [service (make-service-from-config)
           result  (svc/scaffold-from-description service description (:root options))]
       (if (:error result)
-        (do (println (red (str "Error: " (:error result)))) (System/exit 1))
+        (do (println (red (explain-provider-error result service))) (System/exit 1))
         (do
           (println (cyan "\u250c\u2500 Preview \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510"))
           (println (str (cyan "\u2502") " Module:  " (bold (:module-name result))))
@@ -184,7 +322,7 @@
    ["-h" "--help"]])
 
 (defn cmd-explain [args]
-  (let [{:keys [options]} (cli/parse-opts args explain-opts)
+  (let [{:keys [options]} (parse-or-exit! args explain-opts "Usage: bb ai explain [--file <path>]")
         stacktrace (if (:file options)
                      (slurp (:file options))
                      (slurp *in*))]
@@ -194,7 +332,7 @@
     (let [service (make-service-from-config)
           result  (svc/explain-error service stacktrace (:root options))]
       (if (:error result)
-        (do (println (red (str "Error: " (:error result)))) (System/exit 1))
+        (do (println (red (explain-provider-error result service))) (System/exit 1))
         (do
           (println)
           (println (bold "=== AI Error Explanation ==="))
@@ -213,7 +351,7 @@
    ["-h" "--help"]])
 
 (defn cmd-gen-tests [args]
-  (let [{:keys [options arguments]} (cli/parse-opts args gen-tests-opts)
+  (let [{:keys [options arguments]} (parse-or-exit! args gen-tests-opts "Usage: bb ai gen-tests <source-file> [-o <output>]")
         source-path (first arguments)]
     (when (or (:help options) (nil? source-path))
       (println "Usage: bb ai gen-tests <source-file>")
@@ -224,7 +362,7 @@
     (let [service (make-service-from-config)
           result  (svc/generate-tests service source-path)]
       (if (:error result)
-        (do (println (red (str "Error: " (:error result)))) (System/exit 1))
+        (do (println (red (explain-provider-error result service))) (System/exit 1))
         (let [test-src (:text result)]
           (if (:output options)
             (do (spit (:output options) test-src)
@@ -240,7 +378,7 @@
    ["-h" "--help"]])
 
 (defn cmd-sql [args]
-  (let [{:keys [options arguments]} (cli/parse-opts args sql-opts)
+  (let [{:keys [options arguments]} (parse-or-exit! args sql-opts "Usage: bb ai sql <description>")
         description (str/join " " arguments)]
     (when (or (:help options) (str/blank? description))
       (println "Usage: bb ai sql <description>")
@@ -248,7 +386,7 @@
     (let [service (make-service-from-config)
           result  (svc/sql-from-description service description (:root options))]
       (if (:error result)
-        (do (println (red (str "Error: " (:error result)))) (System/exit 1))
+        (do (println (red (explain-provider-error result service))) (System/exit 1))
         (do
           (println)
           (println (bold "=== HoneySQL ==="))
@@ -271,7 +409,7 @@
    ["-h" "--help"]])
 
 (defn cmd-docs [args]
-  (let [{:keys [options]} (cli/parse-opts args docs-opts)]
+  (let [{:keys [options]} (parse-or-exit! args docs-opts "Usage: bb ai docs --module <path> [--type agents|openapi|readme]")]
     (when (or (:help options) (nil? (:module options)))
       (println "Usage: bb ai docs --module <path> [--type agents|openapi|readme]")
       (System/exit 0))
@@ -285,7 +423,7 @@
         (println)
         (let [result (svc/generate-docs service module-path doc-type)]
           (if (:error result)
-            (println (red (str "Error: " (:error result))))
+            (println (red (explain-provider-error result service)))
             (if (:output options)
               (let [fname (str (:output options)
                                (when (> (count doc-types) 1)
@@ -304,7 +442,7 @@
    ["-h" "--help"]])
 
 (defn cmd-admin-entity [args]
-  (let [{:keys [options arguments]} (cli/parse-opts args admin-entity-opts)
+  (let [{:keys [options arguments]} (parse-or-exit! args admin-entity-opts "Usage: bb ai admin-entity <description>")
         description (str/join " " arguments)]
     (when (or (:help options) (str/blank? description))
       (println "Usage: bb ai admin-entity <description>")
@@ -317,7 +455,7 @@
     (let [service (make-service-from-config)
           result  (svc/generate-admin-entity service description (:root options))]
       (if (:error result)
-        (do (println (red (str "Error: " (:error result))))
+        (do (println (red (explain-provider-error result service)))
             (when (:raw-text result)
               (println)
               (println (dim "Raw AI output:"))
@@ -355,7 +493,7 @@
   [["-h" "--help"]])
 
 (defn cmd-setup-parse [args]
-  (let [{:keys [options arguments]} (cli/parse-opts args setup-parse-opts)
+  (let [{:keys [options arguments]} (parse-or-exit! args setup-parse-opts "Usage: bb ai setup-parse <description>")
         description (str/join " " arguments)]
     (when (or (:help options) (str/blank? description))
       (println "Usage: bb ai setup-parse <description>")
@@ -363,7 +501,7 @@
     (let [service (make-service-from-config)
           result  (svc/parse-setup-description service description)]
       (if (:error result)
-        (do (println (red (str "Error: " (:error result)))) (System/exit 1))
+        (do (println (red (explain-provider-error result service))) (System/exit 1))
         ;; Output the JSON data to stdout for the Babashka setup wizard to consume
         (let [data   (:data result)
               output {"project-name" (get data "project-name" "my-app")
