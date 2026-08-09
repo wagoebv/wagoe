@@ -139,6 +139,16 @@
 ;; Feature 3: Test Generator
 ;; =============================================================================
 
+(def test-generator-max-tokens
+  "Output budget for a generated test namespace.
+
+   The providers default to 4096 or to whatever the model does; a test
+   namespace for a 250-line source ran past that and came back cut off
+   mid-form. Generous rather than tuned — the cost of a too-small budget is an
+   unusable answer, and the cost of a too-large one is nothing, since models
+   stop when they are done."
+  16384)
+
 (defn generate-tests
   "Generate a test namespace for a source file.
 
@@ -148,8 +158,11 @@
      opts        - optional completion opts
 
    Returns:
-     {:text str :tokens int :provider kw :model str}
-     where :text is the generated test namespace source,
+     {:text str :tokens int :provider kw :model str
+      :test-type kw :test-path str}
+     where :text is the generated test namespace source, :test-type the Kaocha
+     metadata applied, and :test-path where the file belongs (nil when the
+     source path follows no recognised layout),
      or {:error str} on failure."
   ([service source-path]
    (generate-tests service source-path {}))
@@ -160,10 +173,39 @@
        {:error (str "Cannot read source file: " source-path)}
        (let [test-type (ctx/determine-test-type source-path)
              messages  (prompts/test-generator-messages source-path source-code test-type)
-             result    (resolve-provider service messages opts)]
+             ;; A test namespace is several times the length of an ordinary
+             ;; answer — one run against a 250-line source stopped mid-form at
+             ;; 598 lines. The caller can still override.
+             result    (resolve-provider service messages
+                                         (update opts :max-tokens #(or % test-generator-max-tokens)))]
          (if (:error result)
            result
-           (assoc result :text (parsing/parse-generated-tests (:text result)))))))))
+           ;; The prompt asks for the metadata and the model does not reliably
+           ;; supply it, so it is applied here from the type the path already
+           ;; determined rather than hoped for. Kaocha selects suites on it: a
+           ;; namespace without it runs in no suite at all.
+           (let [test-src (-> (:text result)
+                              parsing/parse-generated-tests
+                              (parsing/ensure-test-metadata test-type)
+                              ;; Same shape of failure: the model writes
+                              ;; `str/join` in the body and leaves
+                              ;; clojure.string out of the ns form, so the
+                              ;; file dies at load with "No such namespace".
+                              parsing/ensure-standard-requires)]
+             (if (parsing/truncated? test-src)
+               ;; Reported rather than returned: the caller writes :text to a
+               ;; file, and a file that cannot be read is worse than no file.
+               {:error (str "The model's answer was cut off mid-form — "
+                            (count (str/split-lines (str test-src)))
+                            " lines, delimiters still open. "
+                            "Generate for a smaller source file, or raise :max-tokens.")
+                :provider (:provider result)
+                :model    (:model result)
+                :raw      test-src}
+               (assoc result
+                      :text      test-src
+                      :test-type test-type
+                      :test-path (ctx/derive-test-path source-path))))))))))
 
 ;; =============================================================================
 ;; Feature 4: SQL Copilot
