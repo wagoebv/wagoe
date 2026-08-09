@@ -151,15 +151,18 @@
        :fix "Install: https://github.com/clj-kondo/clj-kondo#installation or `brew install borkdude/brew/clj-kondo`"})))
 
 (def ai-provider-env-vars
-  "Environment variables that select a hosted provider, in the order
+  "Environment variables that select a provider, in the order
    `wagoe.ai.shell.cli-entry/make-service-from-env` consults them.
 
-   Kept in the same order so what this reports is what `bb ai` will use. A
-   local port is only reached when none of these is set."
+   Kept in the same order so what this reports is what `bb ai` will use.
+   `OLLAMA_URL` is last because it is: the first four short-circuit, and
+   `OLLAMA_URL` then redirects the Ollama fallback, which `bb ai` counts as a
+   deliberate choice. Probing localhost only happens when none is set."
   [["ANTHROPIC_API_KEY"   "Anthropic"]
    ["OPENAI_BASE_URL"     "an OpenAI-compatible endpoint"]
    ["OPENAI_API_KEY"      "OpenAI"]
-   ["REPLICATE_API_TOKEN" "Replicate"]])
+   ["REPLICATE_API_TOKEN" "Replicate"]
+   ["OLLAMA_URL"          "Ollama"]])
 
 (defn check-ai-providers
   "Report which AI provider `bb ai` would use. Warn level only.
@@ -167,7 +170,10 @@
    Probing localhost was the whole check, so a machine with a working
    REPLICATE_API_TOKEN was told 'No AI providers detected' while `bb ai
    gen-tests` ran fine against it — advice pointing away from a working setup.
-   Environment variables come first here because they come first there.
+   `OLLAMA_URL` pointing at a remote or non-default Ollama had the same
+   problem: `bb ai` uses that endpoint, nothing is on localhost, and the check
+   reported none. Environment variables come first here because they come
+   first there.
 
    `env` is a parameter so the test does not depend on the developer's own
    shell — a test that reads the ambient environment passes or fails by
@@ -175,11 +181,16 @@
   ([] (check-ai-providers (into {} (map (fn [[v _]] [v (System/getenv v)]))
                                 ai-provider-env-vars)))
   ([env]
-   (let [from-env   (->> ai-provider-env-vars
-                         (filter (fn [[v _]] (not (str/blank? (get env v)))))
+   (let [set?       (fn [v] (not (str/blank? (get env v))))
+         from-env   (->> ai-provider-env-vars
+                         (filter (comp set? first))
                          (map (fn [[v label]] (str label " (" v ")"))))
-         ollama-up? (port-in-use? 11434)
-         mlx-up?    (port-in-use? 8080)
+         ;; Only worth probing when nothing was chosen: with OLLAMA_URL set,
+         ;; `bb ai` talks to that endpoint whatever is on localhost, so
+         ;; reporting the local port too would name a provider it will not use.
+         probe?     (not (set? "OLLAMA_URL"))
+         ollama-up? (and probe? (port-in-use? 11434))
+         mlx-up?    (and probe? (port-in-use? 8080))
          parts      (cond-> (vec from-env)
                       ollama-up? (conj "Ollama (port 11434)")
                       mlx-up?    (conj "MLX (port 8080)"))]
@@ -189,8 +200,8 @@
        {:id :ai-providers :level :warn
         :msg "No AI provider detected (no provider env var set, nothing on 11434 or 8080)"
         :fix (str "Optional. Set one of ANTHROPIC_API_KEY, OPENAI_API_KEY, "
-                  "OPENAI_BASE_URL or REPLICATE_API_TOKEN, or start Ollama with "
-                  "`ollama serve`")}))))
+                  "OPENAI_BASE_URL, REPLICATE_API_TOKEN or OLLAMA_URL, or start "
+                  "Ollama with `ollama serve`")}))))
 
 ;; =============================================================================
 ;; Check orchestration

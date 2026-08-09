@@ -79,6 +79,15 @@
         (is (= :pass (:level result)) (str var' " was not recognised"))
         (is (str/includes? (:msg result) label)))))
 
+  (testing "a remote OLLAMA_URL counts, even with nothing on localhost"
+    ;; `bb ai` sends the request to that endpoint and treats it as configured.
+    ;; Reporting "no provider detected" sent a working setup to the wrong fix.
+    (let [result (doctor-env/check-ai-providers {"OLLAMA_URL" "http://ollama.internal:11434"})]
+      (is (= :pass (:level result)))
+      (is (str/includes? (:msg result) "OLLAMA_URL"))
+      (is (not (str/includes? (:msg result) "port 11434"))
+          "with OLLAMA_URL set, bb ai ignores localhost, so naming it would mislead")))
+
   (testing "an empty variable is not a provider"
     ;; `export ANTHROPIC_API_KEY=` is a common way to unset one.
     (let [result (doctor-env/check-ai-providers {"ANTHROPIC_API_KEY" "  "})]
@@ -103,10 +112,17 @@
                 (throw (ex-info "cli_entry.clj not found — cannot compare"
                                 {:cwd (System/getProperty "user.dir")})))
         ;; The cond arms of make-service-from-env, which is the real chain.
+        ;; Only AI_MODEL is excluded, and only because it picks the model
+        ;; rather than the provider. OLLAMA_URL used to be excluded here too,
+        ;; on the assumption that it merely redirects the fallback — but
+        ;; make-service-from-env treats it as a deliberate choice
+        ;; (`:configured? (boolean (System/getenv "OLLAMA_URL"))`), so a remote
+        ;; Ollama was a supported setup this check called missing. Pruning the
+        ;; list the guard compares against is how the guard stops guarding.
         chain (->> (re-seq #"\(System/getenv \"([A-Z_]+)\"\)" src)
                    (map second)
                    distinct
-                   (remove #{"AI_MODEL" "OLLAMA_URL"})   ; not hosted-provider selectors
+                   (remove #{"AI_MODEL"})
                    set)
         known (set (map first doctor-env/ai-provider-env-vars))]
 

@@ -275,10 +275,16 @@ bb ai docs --module libs/user --type agents  # Generate AGENTS.md only
 bb ai admin-entity "<description>"           # Generate admin entity EDN config
 ```
 
-Provider selection (first matching env var wins):
+Provider selection (first matching env var wins), in the order
+`wagoe.ai.shell.cli-entry/make-service-from-env` checks them:
 - `ANTHROPIC_API_KEY` → Anthropic (Claude)
+- `OPENAI_BASE_URL` → any OpenAI-compatible endpoint (oMLX, LM Studio, …)
 - `OPENAI_API_KEY` → OpenAI (GPT)
-- `OLLAMA_URL` → Ollama (local, default `http://localhost:11434`)
+- `REPLICATE_API_TOKEN` → Replicate-hosted models
+- `OLLAMA_URL` → Ollama at that URL (default `http://localhost:11434`)
+
+`bb doctor:env` reports which of these would be used; a test compares its list
+against the source of the chain above, so the two cannot drift.
 
 #### `bb ai admin-entity` — Admin Entity Generator
 
