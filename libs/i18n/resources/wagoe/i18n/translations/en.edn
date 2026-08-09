@@ -136,6 +136,7 @@
  :user/mfa-code-label          "Authentication Code"
  :user/button-verify           "Verify"
  :user/button-verify-loading   "Verifying..."
+ :user/button-signin-loading   "Signing in..."
  :user/mfa-lost-access         "Lost access to your authenticator app?"
  :user/mfa-backup-codes-prompt "Enter one of your backup codes instead of the 6-digit code."
 

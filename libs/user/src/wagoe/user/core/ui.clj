@@ -331,7 +331,7 @@
                      (ui/checkbox :active active?)
                      nil)
       [:div.form-actions
-       (ui/submit-button [:t :user/button-update] {:loading-text "Updating..."})
+       (ui/submit-button [:t :user/button-update] {:loading-text [:t :user/button-update-loading]})
        ;; Show appropriate action button based on active status
        (if active?
          [:button.button.danger
@@ -398,7 +398,7 @@
      (ui/form-field :send-welcome [:t :user/checkbox-send-welcome]
                     (ui/checkbox :send-welcome (get data :send-welcome true))
                     nil)
-     (ui/submit-button [:t :user/button-create] {:loading-text "Creating..."})]])
+     (ui/submit-button [:t :user/button-create] {:loading-text [:t :user/button-create-loading]})]])
   ([data errors password-violations policy]
    (create-user-form data errors password-violations policy nil))
   ([data errors]
@@ -700,7 +700,7 @@
        (ui/form-field :remember [:t :user/field-remember]
                       (ui/checkbox :remember (boolean (:remember data)))
                       nil)
-       (ui/submit-button [:t :user/link-signin] {:loading-text "Signing in..."})]
+       (ui/submit-button [:t :user/link-signin] {:loading-text [:t :user/button-signin-loading]})]
       [:div.auth-footer
        [:p [:t :user/text-no-account]]
        [:a.button.secondary {:href "/web/register"} [:t :user/button-create-account]]]]]))
@@ -778,7 +778,7 @@
                       (:mfa-code errors))
 
        [:div.mfa-login-actions
-        (ui/submit-button [:t :user/button-verify] {:loading-text "Verifying..."})
+        (ui/submit-button [:t :user/button-verify] {:loading-text [:t :user/button-verify-loading]})
         [:a.button.secondary {:href "/web/login"} [:t :common/button-cancel]]]]
       [:div.auth-footer
        [:p [:t :user/mfa-lost-access]]
@@ -848,7 +848,7 @@
          [:div.validation-errors
           (for [err (:password errors)]
             [:p err])])]
-      (ui/submit-button [:t :user/button-create-account] {:loading-text "Creating..."})]]])
+      (ui/submit-button [:t :user/button-create-account] {:loading-text [:t :user/button-create-loading]})]]])
   ([data errors]
    (register-form data errors nil {:min-length 8 :require-numbers true})))
 

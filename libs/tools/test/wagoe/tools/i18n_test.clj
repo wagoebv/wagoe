@@ -59,9 +59,13 @@
     (is (empty? (i18n/scan-violations
                  "(defn page []\n  ;; TODO Externalise This Later\n  [:div])"))))
 
-  (testing "an interpolation argument on an already-translated line is data"
+  (testing "an interpolation argument is data, not a violation"
     (is (empty? (i18n/scan-violations
                  "(defn page []\n  [:div [:t :user/hello {:name \"Alice Smith\"}]])"))))
+
+  (testing "a parameter nested inside another marker is still data"
+    (is (empty? (i18n/scan-violations
+                 "(defn page [] [:t :a {:b [:t :c {:d \"Deep Value Here\"}]}])"))))
 
   (testing "lowercase fragments are out of scope, deliberately"
     ;; `(str \" hour\" \" ago\")` is unexternalised too. Matching lowercase
@@ -71,6 +75,29 @@
 
   (testing "short and non-alphabetic strings are not prose"
     (is (empty? (i18n/scan-violations "(defn page [] [:div {:class \"Foo\"} \"-\"])")))))
+
+(deftest ^:unit scan-checks-each-literal-not-the-line
+  ;; A line-level "[:t " test suppressed every other literal sharing the line
+  ;; with a marker. Five real violations were hidden by it in the same files
+  ;; this gate had just been used to clean — all of the shape below.
+  (testing "a sibling literal beside a marker is reported"
+    (is (= [{:line 1 :text "Updating Now"}]
+           (i18n/scan-violations
+            "(ui/submit-button [:t :user/button-update] {:loading-text \"Updating Now\"})"))))
+
+  (testing "a literal after a closed marker on the same line is reported"
+    (is (= [{:line 1 :text "Trailing Text Here"}]
+           (i18n/scan-violations "(defn f [] [:div [:t :user/a] \"Trailing Text Here\"])"))))
+
+  (testing "a marker earlier in the form does not shield a later literal"
+    (is (= [{:line 4 :text "Another Literal"}]
+           (i18n/scan-violations
+            "(defn f []\n  [:div\n   [:t :user/a]\n   [:span \"Another Literal\"]])"))))
+
+  (testing "a keyword merely starting with :t is not a marker"
+    ;; `[:title "Users"]` must not read as `[:t ...]`.
+    (is (= [{:line 1 :text "Users Page"}]
+           (i18n/scan-violations "(defn f [] [:title \"Users Page\"])")))))
 
 ;; =============================================================================
 ;; A def is a value, not a docstring
@@ -113,3 +140,21 @@
 
   (testing "a quote inside a comment is not a string"
     (is (empty? (parsing/string-literals ";; a \" here\n(def x 1)")))))
+
+(deftest ^:unit unclosed-forms-reports-the-enclosing-context
+  (testing "open forms come back outermost first"
+    (is (= ["[:div [:t :k {:a " "[:t :k {:a " "{:a "]
+           (parsing/unclosed-forms "[:div [:t :k {:a "))))
+
+  (testing "a closed form is not reported"
+    ;; Only `[:div` is still open; each entry runs to the end of the input, so
+    ;; the closed marker appears inside it but not as an entry of its own.
+    (is (= ["[:div [:t :k] "] (parsing/unclosed-forms "[:div [:t :k] "))))
+
+  (testing "nothing open reports nothing"
+    (is (empty? (parsing/unclosed-forms "(def x 1)"))))
+
+  (testing "a stray closer does not throw"
+    ;; preceding-code is a prefix of a file, so it is normally unbalanced in
+    ;; one direction only — but a caller should not have to guarantee that.
+    (is (empty? (parsing/unclosed-forms ")))")))))

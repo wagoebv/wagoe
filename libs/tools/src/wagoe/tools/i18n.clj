@@ -104,23 +104,35 @@
    through the catalogue."
   #"(?:ofPattern|re-pattern|re-find|re-matches|re-seq)\s+$")
 
+(defn inside-marker?
+  "Whether the literal at this point sits inside a `[:t …]` form.
+
+   Its interpolation arguments are data — `[:t :k {:name \"Alice\"}]` is already
+   externalised — so they are not violations.
+
+   Asked of the enclosing forms rather than the line. A line-level `[:t `
+   test suppressed every other literal sharing the line with a marker, and
+   `(ui/submit-button [:t :user/button-update] {:loading-text \"Updating...\"})`
+   is the common shape: five of those were hidden in the files this gate had
+   just been used to clean."
+  [{:keys [preceding-code]}]
+  (boolean (some #(re-find #"^\[\s*:t[\s\]]" %)
+                 (parsing/unclosed-forms preceding-code))))
+
 (defn scan-violations
   "Unexternalised user-visible literals in `content`.
 
-   Pure, so the rules are testable without a source tree. `lines` is used only
-   to skip interpolation arguments — `[:t :k {:name \"Alice\"}]` is already
-   externalised and its argument is data.
+   Pure, so the rules are testable without a source tree.
 
    Returns a seq of {:line int :text str}."
   [content]
-  (let [lines (vec (str/split-lines content))]
-    (for [lit  (parsing/string-literals content)
-          :when (re-find user-visible-text (:text lit))
-          :when (not (:regex? lit))
-          :when (not (parsing/docstring? lit))
-          :when (not (re-find pattern-arg (:preceding-code lit)))
-          :when (not (str/includes? (get lines (dec (:line lit)) "") "[:t "))]
-      {:line (:line lit) :text (:text lit)})))
+  (for [lit  (parsing/string-literals content)
+        :when (re-find user-visible-text (:text lit))
+        :when (not (:regex? lit))
+        :when (not (parsing/docstring? lit))
+        :when (not (re-find pattern-arg (:preceding-code lit)))
+        :when (not (inside-marker? lit))]
+    {:line (:line lit) :text (:text lit)}))
 
 (defn scan
   "Scan core/ui.clj files for hardcoded English string literals.

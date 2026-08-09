@@ -105,6 +105,33 @@
             (do (.append code c)
                 (recur (inc i) (if (= c \newline) (inc line) line) code acc))))))))
 
+(defn unclosed-forms
+  "The forms still open at the end of `code`, innermost last.
+
+   `code` must already have strings and comments blanked — `string-literals`
+   hands back exactly that as `:preceding-code`.
+
+   Each entry is the text from the opening delimiter to the end, so a caller
+   can ask what kind of form it is. Answering that from the line the literal
+   sits on cannot work: two forms often share a line, and one form often spans
+   several.
+
+   Args:
+     code - code-only Clojure source string
+
+   Returns:
+     Vector of substrings, outermost first."
+  [code]
+  (let [n (count (str code))]
+    (loop [i 0, open []]
+      (if (>= i n)
+        (mapv #(subs code %) open)
+        (let [c (.charAt ^String code i)]
+          (cond
+            (#{\( \[ \{} c) (recur (inc i) (conj open i))
+            (#{\) \] \}} c) (recur (inc i) (cond-> open (seq open) pop))
+            :else           (recur (inc i) open)))))))
+
 (def ^:private docstring-position
   "Code that can only be followed by a docstring.
 

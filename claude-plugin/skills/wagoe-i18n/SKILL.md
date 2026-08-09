@@ -80,9 +80,19 @@ Treat a clean scan as one check passed, not as proof the UI is translated.
 
 It is a required CI job, and for a long time it could not fail: its docstring
 filter was `(not (str/includes? line "\""))`, which no line holding a string
-literal satisfies. Fixed, with tests that plant a violation. If it reports OK
-on a file you know has literals, check the file is under `core/ui.clj` before
-assuming the gate is broken again.
+literal satisfies. Fixed, with tests that plant a violation.
+
+A second false negative came from the same habit of reasoning per line rather
+than per literal — a line with a marker on it had all its *other* literals
+suppressed, which hid five real cases of
+
+```clojure
+(ui/submit-button [:t :user/button-update] {:loading-text "Updating..."})
+```
+
+Both are now decided from the enclosing form. If the scan reports OK on a file
+you know has literals, check it is under `core/ui.clj` and that the string is
+capitalised prose before assuming the gate is broken again.
 
 ## `bb i18n:unused` is a question, not an instruction
 
