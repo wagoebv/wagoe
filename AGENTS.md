@@ -86,6 +86,8 @@ clojure -M:clj-kondo --lint src test libs/*/src libs/*/test  # Lint all code
 
 # REPL Development
 clojure -M:repl-clj                                # Start REPL (nREPL on port 7888)
+# WAG_ENV selects the profile; JWT_SECRET must be set. With WAG_ENV=test the
+# system starts on in-memory H2 and needs no database running.
 # In REPL:
 (require '[integrant.repl :as ig-repl])
 (ig-repl/go)                                       # Start system
@@ -774,9 +776,25 @@ java.time.temporal.ChronoUnit/DAYS
 ## Configuration
 
 **Current Setup (Development)**:
-- **Database**: SQLite (`dev-database.db`) - no setup required
-- **HTTP**: Port 3000 (auto-find if busy: 3001-3099)
-- **Environment**: Set `WAG_ENV=development`
+- **Database**: PostgreSQL on `localhost:5432`, database `wagoe_dev` — `:wagoe/postgresql`
+  is the adapter in `:active`. SQLite and H2 are present but under `:inactive`;
+  move one into `:active` to use it. Without a reachable PostgreSQL,
+  `clojure -M:run server` fails at `:wagoe/db-context` with
+  `FATAL: database "wagoe_dev" does not exist`.
+- **HTTP**: Port 3000, auto-finding 3000–3099 when busy. The allocated port is
+  logged (`HTTP server started successfully {:port …}`) — read it rather than
+  assume 3000.
+- **Environment**: `WAG_ENV=dev` (`development` is accepted as an alias).
+
+**Running with no external services**: the `test` profile uses in-memory H2 and
+needs nothing installed:
+
+```bash
+JWT_SECRET="dev-secret-at-least-32-characters-long" WAG_ENV=test clojure -M:run server
+```
+
+It serves in about 30 seconds on port 3100 (range 3100–3199, chosen so it does
+not collide with a dev server on 3000).
 
 **Environment Variables**:
 ```bash

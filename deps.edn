@@ -125,12 +125,22 @@
            ;; Development and REPL aliases
            ;; =============================================================================
 
+           ;; JDBC drivers belong here, not only in :dev. The documented REPL
+           ;; workflow is `clojure -M:repl-clj` then `(go)`, and (go) builds
+           ;; :wagoe/db-context — without a driver it died with
+           ;; ClassNotFoundException: org.h2.Driver, for every profile. The
+           ;; same four are already in :dev, :db, :test, :run and seven others,
+           ;; so this adds no new artifact to resolve.
            :repl-clj  {:extra-paths ["dev" "dev/repl"
                                      "libs/devtools/src"
                                      "libs/devtools/resources"]
-                       :extra-deps  {nrepl/nrepl             {:mvn/version "1.7.0"}
-                                     cider/cider-nrepl       {:mvn/version "0.59.0"}
-                                     ring/ring-jetty-adapter {:mvn/version "1.15.4"}}
+                       :extra-deps  {nrepl/nrepl                 {:mvn/version "1.7.0"}
+                                     cider/cider-nrepl           {:mvn/version "0.59.0"}
+                                     ring/ring-jetty-adapter     {:mvn/version "1.15.4"}
+                                     org.xerial/sqlite-jdbc      {:mvn/version "3.53.2.0"}
+                                     org.postgresql/postgresql   {:mvn/version "42.7.12"}
+                                     com.h2database/h2           {:mvn/version "2.4.240"}
+                                     com.mysql/mysql-connector-j {:mvn/version "9.7.0"}}
                        :main-opts   ["-m" "nrepl.cmdline" "--port" "7888" "--middleware" "[cider.nrepl/cider-middleware]"]}
            :repl-cljs {:extra-deps {org.clojure/clojurescript {:mvn/version "1.12.145"}
                                     cider/cider-nrepl         {:mvn/version "0.59.0"}

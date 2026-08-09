@@ -92,6 +92,51 @@
         deps (edn/read-string content)]
     (set (keys (:aliases deps)))))
 
+(def ^:private jdbc-drivers
+  "Artifacts that register a JDBC driver."
+  #{'org.xerial/sqlite-jdbc 'org.postgresql/postgresql
+    'com.h2database/h2 'com.mysql/mysql-connector-j})
+
+(defn- boots-the-system?
+  "Whether running this alias can build `:wagoe/db-context`.
+
+   Derived from the alias itself rather than listed by hand — a hand-kept list
+   is one edit away from omitting the alias that breaks."
+  [[_ alias-map]]
+  (let [main  (str/join " " (:main-opts alias-map))
+        paths (set (:extra-paths alias-map))]
+    (or ;; Starts the app directly.
+     (str/includes? main "wagoe.main")
+        ;; Or exposes `(go)`, which lives in dev/repl/user.clj. An nREPL
+        ;; without that path cannot build the system — :repl-cljs is a
+        ;; ClojureScript REPL and needs no driver.
+     (contains? paths "dev/repl"))))
+
+(defn- check-system-aliases-have-drivers
+  "Every alias that can start the system must carry a JDBC driver.
+
+   `:repl-clj` did not. The documented REPL workflow — `clojure -M:repl-clj`
+   then `(go)` — died with `ClassNotFoundException: org.h2.Driver` for every
+   profile, and nothing noticed, because the alias existed and that was all
+   anything checked."
+  []
+  (println "[smoke] Verifying system-booting aliases carry a JDBC driver")
+  (let [aliases (:aliases (edn/read-string (slurp (io/file root-dir "deps.edn"))))
+        booting (filter boots-the-system? aliases)
+        broken  (remove (fn [[_ m]]
+                          (some jdbc-drivers (keys (:extra-deps m))))
+                        booting)]
+    (when (empty? booting)
+      (binding [*out* *err*]
+        (println "[smoke] Found no system-booting aliases — the check is not looking at anything"))
+      (System/exit 1))
+    (if (seq broken)
+      (do (binding [*out* *err*]
+            (doseq [[a _] broken]
+              (println (str "[smoke] Alias " a " can start the system but declares no JDBC driver"))))
+          (System/exit 1))
+      (println (str "[smoke] OK " (count booting) " system-booting alias(es) carry a driver")))))
+
 (defn- check-aliases []
   (println "[smoke] Verifying required aliases exist in deps.edn")
   (let [known (load-deps-aliases)]
@@ -117,6 +162,7 @@
   "Verify deps.edn aliases and key tool entrypoints. Exits non-zero on failure."
   []
   (check-aliases)
+  (check-system-aliases-have-drivers)
   (run-check "Checking migrate CLI entrypoint" "clojure" "-M:migrate" "--help")
   (run-check "Checking test runner entrypoint" "clojure" "-M:test" "--help")
   (run-check "Running AGENTS link check" "bb" "check-links")
