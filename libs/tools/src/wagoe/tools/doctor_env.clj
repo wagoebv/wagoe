@@ -150,20 +150,58 @@
        :msg "clj-kondo not found (linting will not work)"
        :fix "Install: https://github.com/clj-kondo/clj-kondo#installation or `brew install borkdude/brew/clj-kondo`"})))
 
+(def ai-provider-env-vars
+  "Environment variables that select a provider, in the order
+   `wagoe.ai.shell.cli-entry/make-service-from-env` consults them.
+
+   Kept in the same order so what this reports is what `bb ai` will use.
+   `OLLAMA_URL` is last because it is: the first four short-circuit, and
+   `OLLAMA_URL` then redirects the Ollama fallback, which `bb ai` counts as a
+   deliberate choice. Probing localhost only happens when none is set."
+  [["ANTHROPIC_API_KEY"   "Anthropic"]
+   ["OPENAI_BASE_URL"     "an OpenAI-compatible endpoint"]
+   ["OPENAI_API_KEY"      "OpenAI"]
+   ["REPLICATE_API_TOKEN" "Replicate"]
+   ["OLLAMA_URL"          "Ollama"]])
+
 (defn check-ai-providers
-  "Check if AI providers (Ollama, MLX) are running. Warn level only."
-  []
-  (let [ollama-up? (port-in-use? 11434)
-        mlx-up?    (port-in-use? 8080)
-        parts      (cond-> []
-                     ollama-up? (conj "Ollama (port 11434)")
-                     mlx-up?    (conj "MLX (port 8080)"))]
-    (if (seq parts)
-      {:id :ai-providers :level :pass
-       :msg (str "AI providers running: " (str/join ", " parts))}
-      {:id :ai-providers :level :warn
-       :msg "No AI providers detected (Ollama on 11434, MLX on 8080)"
-       :fix "Optional: start Ollama with `ollama serve` or MLX with `mlx_lm.server`"})))
+  "Report which AI provider `bb ai` would use. Warn level only.
+
+   Probing localhost was the whole check, so a machine with a working
+   REPLICATE_API_TOKEN was told 'No AI providers detected' while `bb ai
+   gen-tests` ran fine against it — advice pointing away from a working setup.
+   `OLLAMA_URL` pointing at a remote or non-default Ollama had the same
+   problem: `bb ai` uses that endpoint, nothing is on localhost, and the check
+   reported none. Environment variables come first here because they come
+   first there.
+
+   `env` is a parameter so the test does not depend on the developer's own
+   shell — a test that reads the ambient environment passes or fails by
+   accident."
+  ([] (check-ai-providers (into {} (map (fn [[v _]] [v (System/getenv v)]))
+                                ai-provider-env-vars)))
+  ([env]
+   (let [set?       (fn [v] (not (str/blank? (get env v))))
+         from-env   (->> ai-provider-env-vars
+                         (filter (comp set? first))
+                         (map (fn [[v label]] (str label " (" v ")"))))
+         ;; Only worth probing when nothing was chosen: with OLLAMA_URL set,
+         ;; `bb ai` talks to that endpoint whatever is on localhost, so
+         ;; reporting the local port too would name a provider it will not use.
+         probe?     (not (set? "OLLAMA_URL"))
+         ollama-up? (and probe? (port-in-use? 11434))
+         mlx-up?    (and probe? (port-in-use? 8080))
+         parts      (cond-> (vec from-env)
+                      ollama-up? (conj "Ollama (port 11434)")
+                      mlx-up?    (conj "MLX (port 8080)"))]
+     (if (seq parts)
+       {:id :ai-providers :level :pass
+        :msg (str "AI providers available: " (str/join ", " parts))}
+       {:id :ai-providers :level :warn
+        :msg "No AI provider detected (no provider env var set, nothing on 11434 or 8080)"
+        :fix (str "Optional. Set one of ANTHROPIC_API_KEY, OPENAI_API_KEY, "
+                  "OPENAI_BASE_URL, REPLICATE_API_TOKEN or OLLAMA_URL, or start "
+                  "Ollama with `ollama serve`")}))))
 
 ;; =============================================================================
 ;; Check orchestration
@@ -236,7 +274,7 @@
   (println "  node              Node.js installed (warn only)")
   (println "  ports             Dev ports 3000, 7888, 9999 available")
   (println "  clj-kondo         clj-kondo linter installed (warn only)")
-  (println "  ai-providers      Ollama / MLX running (warn only)"))
+  (println "  ai-providers      A provider env var is set, or Ollama / MLX is running (warn only)"))
 
 ;; =============================================================================
 ;; Main entry point

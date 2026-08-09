@@ -10,7 +10,8 @@
      gen-tests <source-file>                   -- test generator
      sql <description>                         -- SQL copilot
      docs --module <path> --type <type>        -- documentation wizard"
-  (:require [wagoe.ai.core.parsing :as parsing]
+  (:require [wagoe.ai.core.context :as ctx]
+            [wagoe.ai.core.parsing :as parsing]
             [wagoe.ai.shell.module-wiring]
             [wagoe.ai.shell.providers.anthropic :as anthropic]
             [wagoe.ai.shell.providers.ollama :as ollama]
@@ -347,27 +348,53 @@
 ;; =============================================================================
 
 (def gen-tests-opts
-  [["-o" "--output FILE" "Write to file instead of stdout"]
+  [["-o" "--output FILE" "Write to this file instead of stdout"]
+   ["-w" "--write" "Write to the conventional test path for the source file"]
+   ["-f" "--force" "With --write, overwrite an existing test file"]
    ["-h" "--help"]])
 
 (defn cmd-gen-tests [args]
-  (let [{:keys [options arguments]} (parse-or-exit! args gen-tests-opts "Usage: bb ai gen-tests <source-file> [-o <output>]")
+  (let [{:keys [options arguments]} (parse-or-exit! args gen-tests-opts "Usage: bb ai gen-tests <source-file> [-o <output> | --write]")
         source-path (first arguments)]
     (when (or (:help options) (nil? source-path))
-      (println "Usage: bb ai gen-tests <source-file>")
+      (println "Usage: bb ai gen-tests <source-file> [-o <output> | --write]")
       (System/exit 0))
     (println (bold "\u2746 Wagoe AI Test Generator"))
     (println (dim (str "Source: " source-path)))
     (println)
-    (let [service (make-service-from-config)
-          result  (svc/generate-tests service source-path)]
-      (if (:error result)
-        (do (println (red (explain-provider-error result service))) (System/exit 1))
-        (let [test-src (:text result)]
-          (if (:output options)
-            (do (spit (:output options) test-src)
-                (println (green (str "\u2713 Tests written to " (:output options)))))
-            (println test-src)))))))
+    ;; Both refusals are settled before the provider call: generation costs a
+    ;; request and several seconds, and paying for it only to decline to write
+    ;; the answer wastes both.
+    ;;
+    ;; --write derives the destination; -o names it outright, and an explicit
+    ;; path wins.
+    (let [dest (or (:output options)
+                   (when (:write options) (ctx/derive-test-path source-path)))]
+      (when (and (:write options) (not (:output options)) (nil? dest))
+        (println (red (str "Cannot derive a test path for " source-path
+                           " \u2014 it has no src/ path segment.")))
+        (println (dim "Use -o <file> to name the destination."))
+        (System/exit 1))
+      ;; Overwriting a hand-written test namespace with generated output is not
+      ;; recoverable from the CLI, so it takes an explicit --force whichever way
+      ;; the destination was chosen.
+      (when (and dest (.exists (io/file dest)) (not (:force options)))
+        (println (red (str "Test file already exists: " dest)))
+        (println (dim "Re-run with --force to overwrite, or choose another path with -o."))
+        (System/exit 1))
+
+      (let [service (make-service-from-config)
+            result  (svc/generate-tests service source-path)]
+        (if (:error result)
+          (do (println (red (explain-provider-error result service))) (System/exit 1))
+          (if dest
+            (do (io/make-parents dest)
+                (spit dest (:text result))
+                (println (green (str "\u2713 Tests written to " dest)))
+                (println (dim (str "Metadata: ^:" (name (:test-type result))
+                                   " \u2014 run with: clojure -M:test --focus-meta :"
+                                   (name (:test-type result))))))
+            (println (:text result))))))))
 
 ;; =============================================================================
 ;; Subcommand: sql
@@ -522,7 +549,7 @@
        "\n"
        "Usage:\n"
        "  bb ai explain [--file path]                  Error explainer (also: stdin)\n"
-       "  bb ai gen-tests <file>                       Test generator\n"
+       "  bb ai gen-tests <file> [--write]             Test generator\n"
        "  bb ai sql <description>                      SQL copilot (HoneySQL)\n"
        "  bb ai docs --module <path> [--type t]        Documentation wizard\n"
        "  bb ai admin-entity <description>             Admin entity EDN generator\n"

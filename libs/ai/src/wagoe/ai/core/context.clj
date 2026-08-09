@@ -109,6 +109,31 @@
       (str/replace #"/" ".")
       (str/replace #"_" "-")))
 
+(defn derive-test-path
+  "Derive the file path a generated test namespace belongs at.
+
+   Example:
+     'libs/user/src/wagoe/user/core/validation.clj'
+     => 'libs/user/test/wagoe/user/core/validation_test.clj'
+
+   Both monorepo layouts (`libs/<lib>/src/...`) and generated-project layouts
+   (`src/...`) work: the first `src` path *segment* becomes `test`. Matching a
+   segment rather than a substring keeps a directory such as `srcgen/` or a
+   namespace containing `src` from being rewritten.
+
+   Args:
+     source-path - file path string
+
+   Returns:
+     Test file path string, or nil when `source-path` has no src segment —
+     there is no convention to apply, and guessing one would put the file
+     somewhere Kaocha does not look."
+  [source-path]
+  (when (and source-path (re-find #"(?:^|/)src/" source-path))
+    (-> source-path
+        (str/replace-first #"(^|/)src/" "$1test/")
+        (str/replace #"\.clj$" "_test.clj"))))
+
 ;; =============================================================================
 ;; Schema context — table/field discovery
 ;; =============================================================================

@@ -20,8 +20,8 @@ In Claude Code:
 
 ## What it provides
 
-Six skills. `wagoe` routes a request to the right command; the rest each own a
-workflow, run it, and check the result.
+Seven skills. `wagoe` routes a request to the right command; the rest each own
+a workflow, run it, and check the result.
 
 | Skill | Use for |
 |---|---|
@@ -29,6 +29,7 @@ workflow, run it, and check the result.
 | `wagoe-setup` | Nothing → a running app |
 | `wagoe-scaffold` | Adding a module, field, endpoint or adapter |
 | `wagoe-migrate` | Creating, applying and rolling back migrations |
+| `wagoe-gen-tests` | Tests for a namespace that has none |
 | `wagoe-doctor` | Config and environment preflight |
 | `wagoe-debug` | Diagnosing a failure |
 
@@ -49,17 +50,19 @@ the URL and working credentials.
 Invoke it from an empty directory. It refuses to run inside an existing Wagoe
 project and points at `bb quickstart` instead.
 
-### `wagoe-scaffold`, `wagoe-migrate`, `wagoe-doctor`, `wagoe-debug`
+### `wagoe-scaffold`, `wagoe-migrate`, `wagoe-gen-tests`, `wagoe-doctor`, `wagoe-debug`
 
 The dev-workflow skills. Each wraps commands the `wagoe` decision table already
 names, but adds the part a lookup table cannot: what to run afterwards, how to
 tell whether it worked, and which failure modes are known.
 
-They were written by running the commands rather than reading them, which
-turned up three defects in the tooling they wrap — `bb doctor`'s exit code
-inside `bb check`, `bb migrate create` throwing, and every `bb ai` subcommand
-being unreachable in a generated project. Each skill records the behaviour that
-was actually observed, including the parts that are unhelpful.
+They were written by running the commands rather than reading them, which keeps
+turning up defects in the tooling they wrap — `bb doctor`'s exit code inside
+`bb check`, `bb migrate create` throwing, every `bb ai` subcommand being
+unreachable in a generated project, and, while writing `wagoe-gen-tests`, a
+test generator whose output carried none of the metadata Kaocha selects on and
+would not compile. Each skill records the behaviour that was actually observed,
+including the parts that are unhelpful.
 
 ## Keeping in sync
 

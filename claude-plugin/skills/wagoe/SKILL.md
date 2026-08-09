@@ -22,7 +22,7 @@ consistent.
 | Add an endpoint | `bb scaffold endpoint --module-name product --path "/products/:id/publish" --method POST --handler-name publish-product-handler` |
 | Adapter for a port | `bb scaffold adapter --module-name product --port IProductNotifier --adapter-name email-product-notifier --method "notify-created:product"` |
 | Explain an error or stacktrace | `bb ai explain --file stacktrace.txt` |
-| Generate tests for a namespace | `bb ai gen-tests <path/to/file.clj>` |
+| Generate tests for a namespace | `bb ai gen-tests <path/to/file.clj> --write` |
 | SQL (HoneySQL) from a description | `bb ai sql "find active users with orders in last 7 days"` |
 | Admin entity config | `bb ai admin-entity "products with name, price, status"` |
 | Generate module docs (AGENTS.md) | `bb ai docs --module <path> --type agents` |
@@ -47,8 +47,9 @@ Field spec format: `name:type[:required][:unique]` with types
 3. Run `bb check` before committing — FC/IS violations (`core/` importing
    shell, doing I/O, or logging) fail CI.
 4. AI commands (`bb scaffold ai`, `bb ai *`, `bb setup ai`) need a provider:
-   local Ollama (`OLLAMA_URL`) or `ANTHROPIC_API_KEY` / `OPENAI_API_KEY`.
-   Verify with `bb doctor:env`. Without one, fall back to the explicit
+   local Ollama (`OLLAMA_URL`) or one of `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`,
+   `OPENAI_BASE_URL`, `REPLICATE_API_TOKEN`. Verify with `bb doctor:env`, which
+   names the one that would be used. Without any, fall back to the explicit
    `bb scaffold generate` flags — no provider required.
 
 ## Architecture invariants

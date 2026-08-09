@@ -71,6 +71,32 @@
     (is (= "wagoe.user.shell.service-test"
            (ctx/derive-test-ns "libs/user/src/wagoe/user/shell/service.clj")))))
 
+(deftest ^:unit derive-test-path-test
+  (testing "a monorepo library source file lands in that library's test tree"
+    (is (= "libs/user/test/wagoe/user/core/validation_test.clj"
+           (ctx/derive-test-path "libs/user/src/wagoe/user/core/validation.clj"))))
+
+  (testing "a generated project's top-level src/ maps to its top-level test/"
+    (is (= "test/wagoe/order/core/order_test.clj"
+           (ctx/derive-test-path "src/wagoe/order/core/order.clj"))))
+
+  (testing "underscores in the source filename are preserved"
+    (is (= "libs/core/test/wagoe/core/utils/case_conversion_test.clj"
+           (ctx/derive-test-path "libs/core/src/wagoe/core/utils/case_conversion.clj"))))
+
+  (testing "only the first src segment is rewritten"
+    ;; A namespace segment named src further down the path is part of the
+    ;; namespace, not the source root, and moving it would change the ns name.
+    (is (= "libs/a/test/wagoe/a/src/handler_test.clj"
+           (ctx/derive-test-path "libs/a/src/wagoe/a/src/handler.clj"))))
+
+  (testing "a src substring that is not a path segment is left alone"
+    (is (nil? (ctx/derive-test-path "libs/a/srcgen/wagoe/a/core/thing.clj"))))
+
+  (testing "no src segment means no convention to apply"
+    (is (nil? (ctx/derive-test-path "dev/wagoe/test/reporter.clj")))
+    (is (nil? (ctx/derive-test-path nil)))))
+
 (deftest ^:unit extract-schema-context-test
   (testing "extracts def names from schema files"
     (let [files {"schema.clj" "(def UserRecord ...) (def UserConfig ...)"}

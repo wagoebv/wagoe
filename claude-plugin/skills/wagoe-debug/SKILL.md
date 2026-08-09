@@ -93,16 +93,17 @@ bb ai explain --file stacktrace.txt
 cat stacktrace.txt | bb ai explain
 ```
 
-It needs an AI provider. Check first, because the failure modes are unhelpful:
+It needs an AI provider:
 
 ```bash
-bb doctor:env      # reports whether any provider is reachable
+bb doctor:env      # names the provider that would be used, or says none is set
 ```
 
-With no provider it reports `Error: Connection refused` from the Ollama
-fallback; with an invalid key it prints a raw HTTP stack trace. Neither says
-"no AI provider configured", so check before calling rather than interpreting
-the failure afterwards.
+The failure modes are readable now (BOU-280). With nothing configured it says
+so and lists the variables to set; a rejected key says the key was rejected
+rather than printing the request map; an exhausted balance is distinguished
+from rate-limiting, because the advice differs. If you see a raw stack trace
+from `bb ai`, that is a bug worth filing, not a configuration hint.
 
 This is an accelerator, not the method. The symptom table and layer isolation
 above work with no provider at all.

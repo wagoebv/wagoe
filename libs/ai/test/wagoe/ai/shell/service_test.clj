@@ -1,6 +1,8 @@
 (ns wagoe.ai.shell.service-test
   (:require [wagoe.ai.ports :as ports]
             [wagoe.ai.shell.service :as svc]
+            [clojure.java.io :as io]
+            [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]))
 
 ;; =============================================================================
@@ -107,6 +109,63 @@
           result  (svc/generate-tests service (.getPath tmp))]
       (.delete tmp)
       (is (string? (:text result))))))
+
+;; The three repairs below are unit-tested in wagoe.ai.core.parsing-test. What
+;; these check is that generate-tests *calls* them: measured, the model omits
+;; the metadata and the requires on almost every run, so a repair that is
+;; written but not wired leaves the tool exactly as broken as before.
+
+(defn- generate-from
+  "Run generate-tests against a throwaway source file, with `answer` as the
+   model's reply. Returns the result map."
+  [answer]
+  (let [tmp (java.io.File/createTempFile "gen" ".clj")]
+    (try
+      (spit tmp "(ns x) (defn my-fn [a] a)")
+      (svc/generate-tests (ok-service answer) (.getPath tmp))
+      (finally (.delete tmp)))))
+
+(deftest ^:integration generate-tests-applies-the-repairs
+  (testing "metadata is stamped from the path, not left to the model"
+    ;; Kaocha selects suites on it; without it the namespace runs in no suite.
+    ;; A temp path has no /core/ segment, so :integration is the right type.
+    (let [result (generate-from "(ns x-test)\n(deftest my-fn-test\n  (is (= 1 1)))")]
+      (is (= :integration (:test-type result)))
+      (is (str/includes? (:text result) "(deftest ^:integration my-fn-test"))))
+
+  (testing "a namespace used but not required is repaired"
+    (let [result (generate-from
+                  (str "(ns x-test\n  (:require [clojure.test :refer [deftest is]]))\n"
+                       "(deftest a-test (is (str/blank? \"\")))"))]
+      (is (str/includes? (:text result) "[clojure.string :as str]"))))
+
+  (testing "an answer cut off mid-form is an error, not a file to write"
+    (let [result (generate-from "(ns x-test)\n(deftest a-test\n  (is (= 1 (my-fn")]
+      (is (contains? result :error))
+      (is (str/includes? (:error result) "cut off"))
+      ;; The partial answer is kept for diagnosis but not offered as :text,
+      ;; which is what the CLI writes to disk.
+      (is (nil? (:text result)))
+      (is (string? (:raw result)))))
+
+  (testing "the conventional destination travels with the result"
+    ;; The CLI's --write has nowhere to look if the service does not report it.
+    (let [root (java.io.File/createTempFile "genroot" "")
+          src  (io/file root "libs/demo/src/wagoe/demo/core/thing.clj")]
+      (.delete root)
+      (io/make-parents src)
+      (spit src "(ns wagoe.demo.core.thing) (defn my-fn [a] a)")
+      (let [result (svc/generate-tests (ok-service "(ns t-test)\n(deftest a-test (is true))")
+                                       (.getPath src))]
+        (is (str/ends-with? (:test-path result)
+                            "libs/demo/test/wagoe/demo/core/thing_test.clj")
+            (str "got " (pr-str (:test-path result))))
+        ;; A core/ source is a unit test wherever it lives.
+        (is (= :unit (:test-type result))))))
+
+  (testing "a source path with no src segment reports no destination"
+    ;; Better than inventing one: --write refuses and asks for -o.
+    (is (nil? (:test-path (generate-from "(ns x-test)\n(deftest a-test (is true))"))))))
 
 ;; =============================================================================
 ;; sql-from-description tests
