@@ -240,31 +240,46 @@
                          (= c \\) (do (.append out "  ") (recur (+ i 2) :code))
                          :else    (do (.append out c) (recur (inc i) :code))))))))))
 
+(def ^:private closer->opener
+  {\) \( , \] \[ , \} \{})
+
 (defn delimiter-balance
-  "Net open-delimiter depth of `source`, or nil if it ever closes too far.
+  "Count of still-open delimiters in `source`, or nil if they do not nest.
 
    A generated namespace that hits the model's output limit is cut off
    mid-form — measured, one stopped at `result (s` — and writing that file
-   produces `EOF while reading` rather than anything the caller can use. Depth
-   is the cheap, provider-free way to see it: a complete file ends at 0.
+   produces `EOF while reading` rather than anything the caller can use.
+   Counting open delimiters is the cheap, provider-free way to see it: a
+   complete file ends at 0.
+
+   A count alone is not enough. `(is (= 1 1])` nets to zero and is not
+   readable, so the kind of each opener is tracked and a closer that does not
+   match the innermost one is rejected. Depth-only, all three of `(is (= 1 1])`,
+   `([)]` and `(deftest a (is [1 2)])` were reported complete.
 
    Args:
      source - Clojure source string
 
    Returns:
-     Non-negative depth (0 means balanced), or nil when a closing delimiter
-     appears with nothing open — which is damage, not truncation."
+     Number of unclosed delimiters (0 means balanced), or nil when a closer
+     appears with nothing open or with the wrong opener — which is damage
+     rather than truncation, and equally unreadable."
   [source]
   (loop [chars (seq (strip-noncode source))
-         depth 0]
+         open  '()]
     (if-not chars
-      (when (>= depth 0) depth)
+      (count open)
       (let [c (first chars)
             r (next chars)]
         (cond
-          (#{\( \[ \{} c) (recur r (inc depth))
-          (#{\) \] \}} c) (if (zero? depth) nil (recur r (dec depth)))
-          :else           (recur r depth))))))
+          (#{\( \[ \{} c)
+          (recur r (conj open c))
+
+          (contains? closer->opener c)
+          (when (= (first open) (closer->opener c))
+            (recur r (rest open)))
+
+          :else (recur r open))))))
 
 (defn truncated?
   "Whether `source` looks cut off mid-form rather than complete.

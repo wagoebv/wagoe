@@ -186,6 +186,16 @@
   (testing "a closing delimiter with nothing open is damage, not truncation"
     (is (nil? (parsing/delimiter-balance "(a)) "))))
 
+  (testing "a closer that does not match its opener is rejected"
+    ;; These net to zero. Counting alone called all three complete, and the
+    ;; CLI would have written a file Clojure cannot read.
+    (is (nil? (parsing/delimiter-balance "(is (= 1 1])")))
+    (is (nil? (parsing/delimiter-balance "([)]")))
+    (is (nil? (parsing/delimiter-balance "(deftest a-test (is [1 2)])"))))
+
+  (testing "correct nesting of all three kinds is accepted"
+    (is (= 0 (parsing/delimiter-balance "(a [b {:c 1}] #{2})"))))
+
   (testing "delimiters inside a string are text"
     (is (= 0 (parsing/delimiter-balance "(is (= \"(((\" x))"))))
 
@@ -215,7 +225,10 @@
                 "(deftest a-test\n  (testing \"x\"\n    (let [source \"y\"\n          result (s"))))
 
   (testing "a stray closing delimiter counts as truncated"
-    (is (true? (parsing/truncated? "(a))")))))
+    (is (true? (parsing/truncated? "(a))"))))
+
+  (testing "crossed delimiters count as truncated even though they net to zero"
+    (is (true? (parsing/truncated? "(deftest a-test (is [1 2)])")))))
 
 (deftest ^:unit require-clause-test
   (testing "the clause is returned whole, nested brackets included"
