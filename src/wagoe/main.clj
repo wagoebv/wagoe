@@ -82,6 +82,33 @@
     ;; Block forever (until Ctrl+C / SIGTERM)
     @(promise)))
 
+(defn root-cause
+  "The innermost cause of `e`."
+  [^Throwable e]
+  (if-let [c (.getCause e)] (recur c) e))
+
+(defn startup-failure-summary
+  "What to log when the system fails to build: the component and the reason.
+
+   Not the exception object. Integrant's ex-data carries `:value` — the config
+   map for the failing key — and logging the exception prints it. For
+   `:wagoe/db-context` that map is the database configuration, so a failed
+   production boot wrote POSTGRES_PASSWORD to stdout, twice, where container
+   logs ship it to whatever aggregates them. Measured against the prod profile
+   with a distinctive password.
+
+   A boot fails on the ordinary days too — the database not up yet during a
+   rollout, a rotated credential, a wrong host — so this is not a rare path.
+
+   Returns a message string."
+  [^Throwable e]
+  (let [key'  (:key (ex-data e))
+        cause (root-cause e)]
+    (str "Failed to start"
+         (when key' (str " — " key' " could not be built"))
+         ": " (.getMessage cause)
+         " [" (.getName (class cause)) "]")))
+
 (defn- start-server!
   "Start the full system including the HTTP server and block."
   []
@@ -89,7 +116,7 @@
   (try
     (boot-and-block! "HTTP server" (config/ig-config (config/load-config)))
     (catch Exception e
-      (log/error e "Failed to start server")
+      (log/error (startup-failure-summary e))
       (System/exit 1))))
 
 (defn- start-worker!
@@ -99,7 +126,7 @@
   (try
     (boot-and-block! "worker" (worker-ig-config (config/ig-config (config/load-config))))
     (catch Exception e
-      (log/error e "Failed to start worker")
+      (log/error (startup-failure-summary e))
       (System/exit 1))))
 
 (defn- run-cli!
