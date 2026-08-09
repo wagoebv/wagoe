@@ -335,14 +335,30 @@
                                 (recur (inc i) (dec depth)))
               :else           (recur (inc i) depth))))))))
 
+(defn- alias-bound?
+  "Whether `require-text` binds `alias` with `:as` or `:as-alias`.
+
+   The question a `str/join` in the body actually asks. Whether
+   `clojure.string` is required is a different question and answering that one
+   instead was wrong: `[clojure.string :as string]` in the ns form with
+   `str/join` in the body left the alias unbound and the namespace looking
+   satisfied, so nothing was repaired and the file failed to load."
+  [require-text alias]
+  (boolean (re-find (re-pattern (str ":as(?:-alias)?\\s+"
+                                     (java.util.regex.Pattern/quote alias)
+                                     "(?![\\w.*+!?<>=_-])"))
+                    require-text)))
+
 (defn missing-standard-requires
   "Standard namespaces `test-source` uses without requiring.
 
    Two shapes, both measured against the framework's own namespaces: an alias
-   use (`str/join` with no `[clojure.string :as str]`, which fails with
+   use (`str/join` with no alias bound to `str`, which fails with
    `No such namespace: str`) and a fully qualified use
    (`clojure.set/subset?` with no require, which fails with
-   `ClassNotFoundException: clojure.set`).
+   `ClassNotFoundException: clojure.set`). They are checked separately because
+   satisfying one does not satisfy the other — a namespace can be required
+   under a different alias, and an alias can be bound to a different namespace.
 
    Args:
      test-source - generated Clojure source string
@@ -350,7 +366,7 @@
    Returns:
      Sorted seq of {:alias str :namespace str :aliased? bool}, empty when
      nothing is missing. `:aliased?` distinguishes the two shapes so the repair
-     can add `[ns :as alias]` only where an alias is actually used."
+     can add `[ns :as alias]` only where an alias is actually needed."
   [test-source]
   (if-not test-source
     []
@@ -366,11 +382,16 @@
                               code))]
       (->> standard-aliases
            (keep (fn [[alias ns-name]]
-                   (let [by-alias (boolean (used? alias))
-                         by-name  (boolean (used? ns-name))]
-                     (when (and (or by-alias by-name)
-                                (not (str/includes? required ns-name)))
-                       {:alias alias :namespace ns-name :aliased? by-alias}))))
+                   ;; An alias already bound to something else is left alone:
+                   ;; the reference resolves, and a second binding of the same
+                   ;; alias is a compile error rather than a repair.
+                   (let [need-alias? (and (used? alias)
+                                          (not (alias-bound? required alias)))
+                         need-ns?    (and (used? ns-name)
+                                          (not (str/includes? required ns-name)))]
+                     (when (or need-alias? need-ns?)
+                       {:alias alias :namespace ns-name
+                        :aliased? (boolean need-alias?)}))))
            (sort-by :alias)))))
 
 (defn ensure-standard-requires

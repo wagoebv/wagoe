@@ -262,6 +262,34 @@
     (is (empty? (parsing/missing-standard-requires
                  "(ns foo-test (:require [clojure.string :as str]))\n(str/join \",\" x)"))))
 
+  (testing "the namespace required under a different alias still leaves str unbound"
+    ;; `[clojure.string :as string]` satisfies the namespace and not the alias.
+    ;; Treating those as one question reported nothing missing, and the file
+    ;; still failed to load with `No such namespace: str`.
+    (is (= [{:alias "str" :namespace "clojure.string" :aliased? true}]
+           (parsing/missing-standard-requires
+            "(ns foo-test (:require [clojure.string :as string]))\n(str/join \",\" x)"))))
+
+  (testing "the namespace required with no alias at all leaves str unbound"
+    (is (= [{:alias "str" :namespace "clojure.string" :aliased? true}]
+           (parsing/missing-standard-requires
+            "(ns foo-test (:require [clojure.string]))\n(str/join \",\" x)"))))
+
+  (testing "an alias bound to a different namespace is left alone"
+    ;; `str/union` resolves through `[clojure.set :as str]`. Binding the alias
+    ;; a second time would be a compile error, not a repair.
+    (is (empty? (parsing/missing-standard-requires
+                 "(ns foo-test (:require [clojure.set :as str]))\n(str/union a b)"))))
+
+  (testing ":as-alias binds the alias too"
+    (is (empty? (parsing/missing-standard-requires
+                 "(ns foo-test (:require [clojure.string :as-alias str]))\n(str/join \",\" x)"))))
+
+  (testing "a longer alias is not matched by a shorter one"
+    ;; `:as strs` must not read as a binding of `str`.
+    (is (seq (parsing/missing-standard-requires
+              "(ns foo-test (:require [clojure.string :as strs]))\n(str/join \",\" x)"))))
+
   (testing "a fully qualified call still needs the namespace required"
     ;; Measured: `clojure.set/subset?` with no require loads as
     ;; `ClassNotFoundException: clojure.set`. Reported without :as, because
@@ -323,6 +351,16 @@
       (is (= 'ns (first ns-form)))
       (is (= '([clojure.string :as str] [clojure.test :refer [deftest is]])
              requires))))
+
+  (testing "the alias is added even when the namespace is already required"
+    ;; Two aliases for one namespace is legal Clojure — verified by loading
+    ;; the result — and is the only repair that both keeps the existing alias
+    ;; working and binds the one the body uses.
+    (let [src    "(ns foo-test\n  (:require [clojure.string :as string]))\n\n(str/join \",\" x)"
+          result (parsing/ensure-standard-requires src)]
+      (is (str/includes? result "[clojure.string :as str]"))
+      (is (str/includes? result "[clojure.string :as string]")
+          "the alias the file already used must survive")))
 
   (testing "a fully qualified use is required without an alias"
     (let [src    "(ns foo-test\n  (:require [clojure.test :refer [deftest is]]))\n\n(clojure.set/subset? a b)"
