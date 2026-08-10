@@ -47,10 +47,14 @@
         (try
           (carry-correlation {:result (apply f implementation args)})
           (catch Exception e
-            (log/warn e "rpc operation threw" {:operation operation})
-            (carry-correlation
-             (rpc/transport-error :rpc/remote-error operation
-                                  (or (.getMessage e) (str (class e)))))))
+            ;; Carried, not flattened. Payment providers throw typed ex-info
+            ;; ({:type :internal-error …}) and nothing catches them — the HTTP
+            ;; boundary reads that :type and maps it to a status. Reporting
+            ;; every throw as :rpc/remote-error would lose the distinction the
+            ;; caller had in-process.
+            (log/warn e "rpc operation threw" {:operation operation
+                                               :type      (:type (ex-data e))})
+            (carry-correlation (rpc/thrown-error operation e))))
 
         (do
           (log/warn "rpc unknown operation" {:operation operation})

@@ -170,6 +170,55 @@
     java.net.NoRouteToHostException  :rpc/unavailable
     :rpc/remote-error))
 
+(declare plain-value?)
+
+(defn plain-value?
+  "Whether `v` is data a wire format can carry.
+
+   `ex-data` is written for a local reader and may hold anything — an HTTP
+   response object, a connection, another exception. Sending it unfiltered
+   would fail at encode time and turn a typed domain error into a transport
+   error, which is the opposite of preserving it."
+  [v]
+  (or (nil? v) (boolean? v) (number? v) (string? v) (keyword? v) (symbol? v)
+      (uuid? v) (inst? v)
+      (and (coll? v)
+           (every? plain-value? (if (map? v) (concat (keys v) (vals v)) v)))))
+
+(defn plain-data
+  "`data` with every entry a wire format cannot carry removed.
+
+   Dropped rather than stringified: a caller reading `:status 402` and a caller
+   reading `:status \"#object[...]\"` both branch on it, and the second looks
+   like data while being noise."
+  [data]
+  (when (map? data)
+    (into {} (filter (comp plain-value? val)) data)))
+
+(defn thrown-error
+  "The error envelope for an exception the remote implementation threw.
+
+   In-process, a protocol method that throws propagates: the platform's HTTP
+   boundary reads `:type` out of `ex-data` and maps it to a status, and logs a
+   warning when there is none. If that became a returned value across the hop,
+   a caller's `try`/`catch` would stop firing and the error map would flow on
+   into business logic as though it were a result — the failure mode this
+   adapter exists to avoid.
+
+   So the throw is carried, not flattened: `:rpc/thrown` marks it, and the
+   client raises it again on the near side. The original `:type` is kept, so
+   the same HTTP status comes out the far end."
+  [operation ^Exception e]
+  (let [data    (ex-data e)
+        type    (or (:type data) :rpc/remote-error)
+        message (or (.getMessage e) (str (class e)))
+        carried (dissoc (plain-data data) :type)]
+    {:error (cond-> {:type       type
+                     :message    message
+                     :rpc/thrown true}
+              operation    (assoc :operation (keyword (name operation)))
+              (seq carried) (assoc :data carried))}))
+
 (defn revive-error
   "Restore the keywords JSON flattened to strings.
 

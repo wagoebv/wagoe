@@ -243,11 +243,17 @@
                (verify-webhook-signature [_ _ _] false))]
     (with-service boom
       (fn [url]
-        (testing "a remote exception reaches the caller with its message and operation"
-          (let [r (client/call! url :create-checkout-session [{}] {:retries 0})]
-            (is (= :rpc/remote-error (get-in r [:error :type])))
-            (is (= "psp refused the card" (get-in r [:error :message])))
-            (is (= :create-checkout-session (get-in r [:error :operation])))))
+        (testing "a remote exception reaches the caller as an exception"
+          ;; In-process this method throws, and nothing between here and the
+          ;; HTTP boundary catches it. Returning a map instead would stop the
+          ;; caller's `catch` firing and let the failure flow on as a result.
+          (let [e (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                                        #"psp refused the card"
+                                        (client/call! url :create-checkout-session
+                                                      [{}] {:retries 0})))]
+            (is (= :create-checkout-session (:rpc/operation (ex-data e))))
+            (is (true? (:rpc/remote (ex-data e)))
+                "marked as raised here, since the stack trace is this process")))
 
         (testing "a refused operation keeps its own type rather than becoming generic"
           ;; :rpc/unknown-operation means the caller and the service disagree
@@ -332,3 +338,97 @@
 
           (testing "a boolean is not stringified either"
             (is (true? (pay-ports/verify-webhook-signature remote "{}" "sig")))))))))
+
+(defprotocol ^:private ICacheLike
+  "A second protocol, to prove one adapter does not answer for another."
+  (cache-get [this k])
+  (cache-put [this k v]))
+
+(deftest ^:integration one-adapter-does-not-answer-for-another-protocol
+  ;; The obvious implementation — `extend` on a shared record type — mutates
+  ;; that class, so adapting a second protocol makes every adapter already
+  ;; built satisfy it too. A payments adapter would answer `satisfies?` for a
+  ;; cache protocol, and cache calls through it would be posted to the payments
+  ;; URL: no error, no log, just an operation the payments service has never
+  ;; heard of.
+  (let [payments (client/remote-adapter pay-ports/IPaymentProvider
+                                        "http://localhost:1" {:retries 0})
+        cache    (client/remote-adapter ICacheLike "http://localhost:2" {:retries 0})]
+
+    (testing "each adapter satisfies the protocol it was built from"
+      (is (satisfies? pay-ports/IPaymentProvider payments))
+      (is (satisfies? ICacheLike cache)))
+
+    (testing "and only that one"
+      (is (not (satisfies? ICacheLike payments)))
+      (is (not (satisfies? pay-ports/IPaymentProvider cache))))
+
+    (testing "adapting the second protocol does not redirect the first"
+      ;; Both point at dead ports, so the assertion is about which URL was
+      ;; tried, not about the answer.
+      (is (= :get-payment-status
+             (get-in (pay-ports/get-payment-status payments "id") [:error :operation]))))
+
+    (testing "two adapters for the same protocol keep their own URLs"
+      ;; A shared class carrying the URL in a closure would give both whichever
+      ;; was constructed last.
+      (let [a (client/remote-adapter pay-ports/IPaymentProvider "http://localhost:1" {:retries 0})
+            b (client/remote-adapter pay-ports/IPaymentProvider "http://localhost:2" {:retries 0})]
+        (is (not= (str a) (str b)))
+        (is (re-find #"localhost:1" (str a)))
+        (is (re-find #"localhost:2" (str b)))))))
+
+(deftest ^:integration typed-errors-keep-their-type-across-the-hop
+  ;; Payment providers throw typed ex-info — Stripe raises
+  ;; {:type :internal-error :provider-id … :status 401} on an auth failure —
+  ;; and the HTTP boundary maps that :type to a status, warning when there is
+  ;; none. Flattening every throw to :rpc/remote-error would turn a mapped
+  ;; error into a generic 500 with a warning about a missing :type.
+  (let [typed (reify pay-ports/IPaymentProvider
+                (provider-name [_] :typed)
+                (create-checkout-session [_ _]
+                  (throw (ex-info "not supported by this provider"
+                                  {:type :not-implemented :feature :setup-future-usage})))
+                (create-off-session-payment [_ _]
+                  (throw (ex-info "auth failed"
+                                  {:type :internal-error :status 401
+                                   ;; Not carryable, and must not break the rest.
+                                   :connection (Object.)})))
+                (get-payment-status [_ _] nil)
+                (expire-checkout-session [_ _] nil)
+                (process-webhook [_ _ _] nil)
+                (verify-webhook-signature [_ _ _] false))]
+    (with-service typed
+      (fn [url]
+        (let [remote (client/remote-adapter pay-ports/IPaymentProvider url {:retries 0})]
+
+          (testing "the type the implementation threw is the type the caller catches"
+            (let [e (is (thrown? clojure.lang.ExceptionInfo
+                                 (pay-ports/create-checkout-session remote {})))]
+              (is (= :not-implemented (:type (ex-data e)))
+                  "not :rpc/remote-error — this is the value the HTTP boundary maps")
+              (is (= "not supported by this provider" (ex-message e)))))
+
+          (testing "the rest of the ex-data comes with it"
+            (let [e (is (thrown? clojure.lang.ExceptionInfo
+                                 (pay-ports/create-checkout-session remote {})))]
+              (is (= :setup-future-usage (:feature (ex-data e))))))
+
+          (testing "ex-data a wire format cannot carry is dropped, not fatal"
+            ;; ex-data is written for a local reader and may hold a connection
+            ;; or a response object. Failing to encode it would turn a typed
+            ;; domain error into a transport error — the opposite of carrying it.
+            (let [e (is (thrown? clojure.lang.ExceptionInfo
+                                 (pay-ports/create-off-session-payment remote {})))]
+              (is (= :internal-error (:type (ex-data e))))
+              (is (= 401 (:status (ex-data e))))
+              (is (nil? (:connection (ex-data e)))))))))))
+
+(deftest ^:integration transport-failures-are-still-returned-not-raised
+  ;; The counterpart to the rule above. :rpc/unavailable has no in-process
+  ;; equivalent, so no caller has a `catch` for it; raising it would replace a
+  ;; decision the caller can make with one it cannot.
+  (let [dead (client/remote-adapter pay-ports/IPaymentProvider
+                                    "http://localhost:1" {:retries 0})]
+    (is (= :rpc/unavailable (get-in (pay-ports/get-payment-status dead "id")
+                                    [:error :type])))))

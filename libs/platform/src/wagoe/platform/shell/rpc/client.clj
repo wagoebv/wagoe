@@ -15,7 +15,8 @@
   (:require [wagoe.platform.core.rpc :as rpc]
             [clj-http.client :as http]
             [clojure.tools.logging :as log]
-            [muuntaja.core :as m]))
+            [muuntaja.core :as m])
+  (:import (java.lang.reflect InvocationHandler Method Proxy)))
 
 ;; =============================================================================
 ;; Wire format
@@ -107,35 +108,62 @@
       (catch Exception e
         (rpc/transport-error (rpc/classify-exception e) operation (.getMessage e))))))
 
+(defn- raise-if-thrown!
+  "Re-raise an exception the remote implementation threw; pass anything else on.
+
+   In-process a throwing protocol method propagates, and the HTTP boundary maps
+   its `:type` to a status. If the same call returned a map across the hop, a
+   caller's `try`/`catch` would stop firing and the error would flow on as
+   though it were a result — the failure this adapter exists to prevent.
+
+   Transport failures are not raised. `:rpc/unavailable` and friends have no
+   in-process equivalent, so no caller has a `catch` for them; returning them
+   as data is what leaves the decision with the caller.
+
+   `:rpc/remote true` records that it was raised here rather than thrown here —
+   the stack trace describes this process, not the one that actually failed."
+  [operation result]
+  (let [{:keys [type message data] :as error} (:error result)]
+    (when (:rpc/thrown error)
+      (throw (ex-info message (merge data
+                                     {:type          type
+                                      :rpc/remote    true
+                                      :rpc/operation (keyword (name operation))})))))
+  result)
+
 (defn call!
   "Invoke `operation` on the service at `base-url` with positional `args`.
 
    `context` supplies correlation-id / tenant / auth to propagate. Retries only
    the failures a retry can fix — see `default-opts`.
 
-   Returns whatever the remote protocol method returned, or an `{:error …}` map."
+   Returns whatever the remote protocol method returned, or an `{:error …}` map
+   for a transport failure. An exception the remote implementation threw is
+   raised again here rather than returned — see `raise-if-thrown!`."
   [base-url operation args {:keys [context] :as opts}]
   (let [opts     (merge default-opts opts)
         envelope (rpc/request-envelope operation args context)
         url      (str base-url "/rpc")]
-    (loop [attempt 0]
-      (let [result (post-envelope! url envelope opts)]
-        (cond
-          (not (and (map? result) (retryable? opts result)))
-          result
+    (raise-if-thrown!
+     operation
+     (loop [attempt 0]
+       (let [result (post-envelope! url envelope opts)]
+         (cond
+           (not (and (map? result) (retryable? opts result)))
+           result
 
-          (< attempt (:retries opts))
-          (do (log/warn "rpc retrying" {:operation operation
-                                        :attempt   (inc attempt)
+           (< attempt (:retries opts))
+           (do (log/warn "rpc retrying" {:operation operation
+                                         :attempt   (inc attempt)
+                                         :error     (get-in result [:error :type])})
+               (Thread/sleep (* (inc attempt) (:retry-delay-ms opts)))
+               (recur (inc attempt)))
+
+           :else
+           (do (log/warn "rpc gave up" {:operation operation
+                                        :attempts  (inc attempt)
                                         :error     (get-in result [:error :type])})
-              (Thread/sleep (* (inc attempt) (:retry-delay-ms opts)))
-              (recur (inc attempt)))
-
-          :else
-          (do (log/warn "rpc gave up" {:operation operation
-                                       :attempts  (inc attempt)
-                                       :error     (get-in result [:error :type])})
-              result))))))
+               result)))))))
 
 ;; =============================================================================
 ;; Protocol proxy
@@ -149,7 +177,15 @@
   [protocol]
   (->> protocol :sigs vals (map :name) (map keyword) set))
 
-(defrecord RemoteProxy [base-url opts])
+(defn- munged->operation
+  "Java method name → protocol method name.
+
+   `defprotocol` compiles each method into an interface method with the name
+   munged (`create-checkout-session` becomes `create_checkout_session`), and
+   that munged name is what arrives at the invocation handler."
+  [protocol]
+  (into {} (for [{method :name} (vals (:sigs protocol))]
+             [(munge (name method)) method])))
 
 (defn remote-adapter
   "A value implementing `protocol` by calling the service at `base-url`.
@@ -161,11 +197,14 @@
    Built from the protocol's own `:sigs` rather than written out per protocol,
    so every module's port works without a bespoke client.
 
-   The implementations read `base-url` and `opts` off `this` rather than
-   closing over them. `extend` mutates the class, so closures would mean a
-   second adapter for the same protocol silently redirecting the first — two
-   payment providers at different URLs would end up sharing whichever was
-   constructed last.
+   Each adapter is its own object implementing that protocol's interface. The
+   obvious alternative — `extend` on one shared record type — is wrong in a way
+   that shows up only once a second protocol is adapted: `extend` mutates the
+   class, so every adapter already built starts satisfying the new protocol
+   too. A payments adapter would answer `satisfies?` for `ICache`, and cache
+   calls made through it would be posted to the payments URL. Nothing would
+   report a problem until a remote service was asked for an operation it has
+   never heard of.
 
    Args:
      protocol - the protocol map, e.g. wagoe.payments.ports/IPaymentProvider
@@ -175,14 +214,22 @@
    Example:
      (remote-adapter payments-ports/IPaymentProvider \"http://payments:3001\" {})"
   [protocol base-url & [opts]]
-  ;; `extend` keys the map by KEYWORD method name; `:sigs` gives symbols.
-  ;; Passing symbols registers the class — `satisfies?` returns true — while no
-  ;; method resolves, so the failure surfaces at the first call as "No
-  ;; implementation of method", not at construction.
-  (let [impls (into {}
-                    (for [{method :name} (vals (:sigs protocol))]
-                      [(keyword method)
-                       (fn [this & args]
-                         (call! (:base-url this) method args (:opts this)))]))]
-    (extend RemoteProxy protocol impls)
-    (->RemoteProxy base-url (or opts {}))))
+  (let [^Class iface (:on-interface protocol)
+        operations   (munged->operation protocol)
+        opts         (or opts {})]
+    (Proxy/newProxyInstance
+     (.getClassLoader iface)
+     (into-array Class [iface])
+     (reify InvocationHandler
+       (invoke [_ proxy method args]
+         (if-let [operation (get operations (.getName ^Method method))]
+           (call! base-url operation (seq args) opts)
+           ;; Object's own methods reach the handler too, and a proxy that
+           ;; threw on `toString` would be unprintable — including in the
+           ;; exception messages describing what went wrong with it.
+           (case (.getName ^Method method)
+             "toString" (str "#remote-adapter[" (.getName iface) " " base-url "]")
+             "hashCode" (System/identityHashCode proxy)
+             "equals"   (identical? proxy (first args))
+             (throw (UnsupportedOperationException.
+                     (str "remote-adapter has no method " (.getName ^Method method)))))))))))

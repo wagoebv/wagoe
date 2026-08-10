@@ -126,3 +126,48 @@
   (let [e (rpc/transport-error :rpc/protocol nil "no operation")]
     (is (= :rpc/protocol (get-in e [:error :type])))
     (is (not (contains? (:error e) :operation)))))
+
+(deftest ^:unit only-carryable-data-crosses-the-wire
+  (testing "plain Clojure data is kept"
+    (is (= {:status 401 :provider :stripe :tags #{:a} :nested {:n [1 "x" :k]}}
+           (rpc/plain-data {:status 401 :provider :stripe :tags #{:a}
+                            :nested {:n [1 "x" :k]}}))))
+
+  (testing "values a wire format cannot carry are dropped"
+    ;; ex-data is written for a local reader: providers put response objects
+    ;; and connections in it. Encoding would fail on those, turning a typed
+    ;; domain error into a transport error — the opposite of preserving it.
+    (is (= {:status 401} (rpc/plain-data {:status 401 :connection (Object.)}))))
+
+  (testing "a collection is dropped if anything inside it cannot be carried"
+    (is (= {} (rpc/plain-data {:xs [1 2 (Object.)]}))))
+
+  (testing "nil and non-maps are not data"
+    (is (nil? (rpc/plain-data nil)))
+    (is (nil? (rpc/plain-data "not a map")))))
+
+(deftest ^:unit a-thrown-exception-keeps-the-type-callers-branch-on
+  (testing "a typed ex-info keeps its own type"
+    ;; Providers throw {:type :internal-error …} and the HTTP boundary maps
+    ;; that to a status. Reporting :rpc/remote-error instead would produce a
+    ;; generic 500 and a warning about a missing :type.
+    (let [e (rpc/thrown-error :create-checkout-session
+                              (ex-info "nope" {:type :not-implemented :feature :x}))]
+      (is (= :not-implemented (get-in e [:error :type])))
+      (is (= "nope" (get-in e [:error :message])))
+      (is (= :create-checkout-session (get-in e [:error :operation])))
+      (is (= {:feature :x} (get-in e [:error :data])) ":type is not repeated inside :data")
+      (is (true? (get-in e [:error :rpc/thrown])) "so the client knows to raise it again")))
+
+  (testing "an untyped exception gets one, rather than reaching the boundary without"
+    (let [e (rpc/thrown-error :op (RuntimeException. "boom"))]
+      (is (= :rpc/remote-error (get-in e [:error :type])))
+      (is (true? (get-in e [:error :rpc/thrown])))))
+
+  (testing "an exception with no message still produces one"
+    (is (string? (get-in (rpc/thrown-error :op (RuntimeException.)) [:error :message]))))
+
+  (testing "unserialisable ex-data does not sink the error"
+    (let [e (rpc/thrown-error :op (ex-info "x" {:type :internal-error :conn (Object.)}))]
+      (is (= :internal-error (get-in e [:error :type])))
+      (is (nil? (:conn (get-in e [:error :data])))))))
