@@ -260,3 +260,48 @@
             (is (seq warnings) "failed bootstrap must report warnings"))))
       (finally
         (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))
+
+;; =============================================================================
+;; Integrant keys the generated config can add must be resolvable
+;; =============================================================================
+
+(deftest ^:unit every-conditional-integrant-key-can-be-built
+  ;; config.clj.tmpl assembles the Integrant config by conditionally assoc'ing
+  ;; keys. Each one needs an `ig/init-key` method at runtime, which comes from
+  ;; one of two places: a `defmethod` in system.clj.tmpl, or a module-wiring
+  ;; namespace the template requires.
+  ;;
+  ;; `:wagoe.external/smtp` had neither. It worked only because platform
+  ;; required wagoe.external.shell.module-wiring on every app's behalf; when
+  ;; that moved to the entry point, a generated project with email enabled
+  ;; would have died at startup with "No method in multimethod 'init-key' for
+  ;; dispatch value: :wagoe.external/smtp".
+  (let [config (slurp (io/resource "wagoe/cli/templates/config.clj.tmpl"))
+        system (slurp (io/resource "wagoe/cli/templates/system.clj.tmpl"))
+        ;; Keys the config assembles conditionally: (assoc :some/key ...)
+        assoc'd  (set (map second (re-seq #"\(assoc\s+(:[a-z][a-z0-9.-]*/[a-z][a-z0-9-]*)" config)))
+        ;; Keys the generated project defines itself.
+        defined  (set (map second (re-seq #"defmethod ig/init-key\s+(:[a-z][a-z0-9.-]*/[a-z][a-z0-9-]*)" system)))
+        ;; Namespaces the config requires, statically or conditionally.
+        required (set (map second (re-seq #"'?\[?(wagoe\.[a-z0-9.-]+\.shell\.module-wiring)\]?" config)))
+        ;; A key like :wagoe.external/smtp is served by wagoe.external.*;
+        ;; :wagoe/user-service by any wagoe.<lib>.* wiring, so the namespace
+        ;; prefix is only decisive for dotted keys.
+        covered? (fn [k]
+                   (let [ns' (namespace (read-string k))]
+                     (or (contains? defined k)
+                         (if (str/includes? ns' ".")
+                           (some #(str/starts-with? % (str ns' ".")) required)
+                           (seq required)))))]
+
+    (testing "the template parsed — otherwise this passes vacuously"
+      (is (<= 8 (count assoc'd)) (str "only found " (pr-str assoc'd)))
+      (is (seq defined))
+      (is (seq required)))
+
+    (testing "every conditionally added key is defined locally or required"
+      (doseq [k (sort assoc'd)]
+        (is (covered? k)
+            (str k " is assoc'd into the Integrant config but nothing provides "
+                 "an init-key: add a defmethod to system.clj.tmpl or require "
+                 "its module-wiring in config.clj.tmpl"))))))

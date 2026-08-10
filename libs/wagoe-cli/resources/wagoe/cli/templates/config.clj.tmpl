@@ -113,6 +113,13 @@
         _         (when search?   (require 'wagoe.search.shell.module-wiring))
         _         (when ai?  (require 'wagoe.ai.shell.module-wiring))
         _         (when geo? (require 'wagoe.geo.shell.module-wiring))
+        ;; :wagoe.external/smtp is defined in the external lib, not in
+        ;; {{project-ns}}.system like the other config-only keys below. Platform
+        ;; used to require this namespace, so generated apps got it for free;
+        ;; now that the app owns its module loads, omitting it means a project
+        ;; with email enabled dies at startup with "No method in multimethod
+        ;; 'init-key' for dispatch value: :wagoe.external/smtp".
+        _         (when email? (require 'wagoe.external.shell.module-wiring))
 
         db       (db-spec config)
         http-cfg (get active :wagoe/http {:port 3000 :host "0.0.0.0" :join? false})
