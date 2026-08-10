@@ -43,11 +43,16 @@
     (.encodeToString (java.util.Base64/getUrlEncoder) bytes)))
 
 (defn generate!
-  "Generate project files into dir."
-  [dir project-name _opts]
+  "Generate project files into dir.
+
+   `opts` may carry `:with-user? false` to leave the user module out — see
+   `--no-user` in `-main`."
+  [dir project-name opts]
   (let [project-ns  (name->ns project-name)
         jwt-secret  (random-jwt-secret)
-        subs        {:project-name             project-name
+        with-user?  (not (false? (:with-user? opts)))
+        subs        {:with-user                (str with-user?)
+                     :project-name             project-name
                      :project-ns               project-ns
                      :jwt-secret               jwt-secret
                      :wagoe-tools-version   wagoe-tools-version
@@ -130,9 +135,14 @@
 (defn -main [args]
   (let [[project-name & flags] args
         force?     (boolean (some #{"--force"} flags))
-        skip-git?  (boolean (some #{"--skip-git"} flags))]
+        skip-git?  (boolean (some #{"--skip-git"} flags))
+        ;; The user module brings auth, sessions, MFA and an audit trail, and
+        ;; four tables to back them. Worth having by default and worth being
+        ;; able to decline: an app with no accounts should not carry a login
+        ;; page it never shows (BOU-234).
+        with-user? (not (boolean (some #{"--no-user"} flags)))]
     (when-not project-name
-      (println "Usage: wagoe new <project-name> [--force] [--skip-git]")
+      (println "Usage: wagoe new <project-name> [--force] [--skip-git] [--no-user]")
       (System/exit 1))
     (let [err (validate-name project-name)]
       (when err
@@ -162,7 +172,7 @@
       ;; scripts/first-run-adversarial.sh, which could only run once that case
       ;; stopped skipping (BOU-232).
       (try
-        (generate! dir project-name {})
+        (generate! dir project-name {:with-user? with-user?})
         (catch java.io.IOException e
           (println)
           (println (str "Error: cannot write to " dir))

@@ -305,3 +305,47 @@
             (str k " is assoc'd into the Integrant config but nothing provides "
                  "an init-key: add a defmethod to system.clj.tmpl or require "
                  "its module-wiring in config.clj.tmpl"))))))
+
+;; =============================================================================
+;; --no-user
+;; =============================================================================
+
+(deftest ^:unit user-module-is-opt-out
+  ;; The scaffold wired the user chain unconditionally, so every generated app
+  ;; carried auth, sessions, MFA, an audit trail and four tables whether or not
+  ;; it had accounts (BOU-234). Booting both variants: default serves
+  ;; /web/login and creates auth_users/users/user_sessions/user_audit_log;
+  ;; --no-user serves /health, 404s /web/login, creates no tables, and needs no
+  ;; JWT_SECRET.
+  (let [render (fn [opts]
+                 (let [dir (str (System/getProperty "java.io.tmpdir")
+                                "/wagoe-new-test-" (System/nanoTime))]
+                   (try
+                     (new/generate! dir "sample" opts)
+                     (slurp (io/file dir "src/wagoe/config.clj"))
+                     (finally
+                       (doseq [f (reverse (file-seq (io/file dir)))] (.delete f))))))
+        with    (render {})
+        without (render {:with-user? false})]
+
+    (testing "the flag reaches the generated config as a literal"
+      (is (str/includes? with    "user?     true"))
+      (is (str/includes? without "user?     false")))
+
+    (testing "both variants still contain the chain — it is guarded, not deleted"
+      ;; Guarding rather than templating the block out keeps the generated file
+      ;; the same shape either way, so turning user back on is editing one word.
+      (doseq [src [with without]]
+        (is (str/includes? src ":wagoe/user-service"))
+        (is (str/includes? src ":wagoe/user-db-schema"))))
+
+    (testing "the user chain is behind the flag, not in the base map"
+      ;; If it were unconditional again, `user?` would be unused and the
+      ;; components would be built regardless of the literal.
+      (is (str/includes? without "      user?\n      (assoc")))
+
+    (testing "the HTTP handler only references user components when enabled"
+      (is (str/includes? with "user?     (assoc :user-routes")))
+
+    (testing "default is user-on"
+      (is (= with (render {:with-user? true}))))))

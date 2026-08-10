@@ -105,6 +105,10 @@
         reports?  (boolean (:wagoe/reports active))
         calendar? (boolean (:wagoe/calendar active))
         ui-style? (boolean (:wagoe/ui-style active))
+        ;; The user module: auth, sessions, MFA, audit trail, and the four
+        ;; tables behind them. Set by `wagoe new` (--no-user writes false) and
+        ;; a plain literal so you can change your mind by editing this line.
+        user?     {{with-user}}
         ;; Load module wirings for enabled optional modules. Platform wiring does
         ;; NOT load these (BOU-171/192/198) — the app owns its module loads.
         _         (when tenant?   (require 'wagoe.tenant.shell.module-wiring))
@@ -130,15 +134,15 @@
 
         ;; Build HTTP handler config, injecting optional module refs as they are enabled
         http-handler-cfg (cond-> {:config          config
-                                  :user-routes     (ig/ref :wagoe/user-routes)
                                   :router          (ig/ref :wagoe/router)
                                   :logger          (ig/ref :wagoe/logging)
                                   :metrics-emitter (ig/ref :wagoe/metrics)
                                   :tracer          (ig/ref :wagoe/tracing)
                                   :error-reporter  (ig/ref :wagoe/error-reporting)
-                                  :user-service    (ig/ref :wagoe/user-service)
                                   :db-context      (ig/ref :wagoe/db-context)
                                   :i18n            (ig/ref :wagoe/i18n)}
+                           user?     (assoc :user-routes  (ig/ref :wagoe/user-routes)
+                                            :user-service (ig/ref :wagoe/user-service))
                            cache?    (assoc :cache              (ig/ref :wagoe/cache))
                            ;; Tenant middleware is built by the tenant lib's
                            ;; :wagoe/tenant-http-middleware component and injected
@@ -163,7 +167,17 @@
        :wagoe/router          router
        :wagoe/i18n            i18n-cfg
 
-       ;; User module (always wired)
+       ;; HTTP layer (always wired; optional module refs injected above)
+       :wagoe/http-handler http-handler-cfg
+       :wagoe/http-server  (merge http-cfg
+                                     {:handler (ig/ref :wagoe/http-handler)
+                                      :config  http-cfg})}
+
+      ;; User module — auth, sessions, MFA, audit trail. On unless the project
+      ;; was created with `wagoe new --no-user`. Its four tables are created by
+      ;; :wagoe/user-db-schema, so leaving it out means they never exist.
+      user?
+      (assoc
        :wagoe/user-db-schema     {:ctx (ig/ref :wagoe/db-context)}
        :wagoe/user-repository    {:ctx (ig/ref :wagoe/db-context)}
        :wagoe/session-repository {:ctx (ig/ref :wagoe/db-context)}
@@ -187,13 +201,7 @@
        :wagoe/user-routes        {:user-service (ig/ref :wagoe/user-service)
                                      :mfa-service  (ig/ref :wagoe/mfa-service)
                                      :email-sender (ig/ref :wagoe/email)
-                                     :config       config}
-
-       ;; HTTP layer (always wired; optional module refs injected above)
-       :wagoe/http-handler http-handler-cfg
-       :wagoe/http-server  (merge http-cfg
-                                     {:handler (ig/ref :wagoe/http-handler)
-                                      :config  http-cfg})}
+                                     :config       config})
 
       ;; Cache module — enabled by `wagoe add cache`
       cache?

@@ -30,11 +30,48 @@ curl -fsSL https://raw.githubusercontent.com/wagoebv/wagoe/main/scripts/install.
 
 [source,bash]
 ----
-wagoe new my-app          # Scaffold a new project
-wagoe new my-app --force  # Overwrite existing directory
+wagoe new my-app            # Scaffold a new project
+wagoe new my-app --force    # Overwrite existing directory
+wagoe new my-app --no-user  # Leave out the user module
 ----
 
 Generates a complete project with four core modules pre-wired: `core`, `observability`, `platform`, and `user`. The project is immediately runnable after `clojure -M:migrate up`.
+
+==== `--no-user`
+
+The user module brings authentication, sessions, MFA and an audit trail, and
+the four tables behind them: `users`, `auth_users`, `user_sessions` and
+`user_audit_log`. Most applications want it, so it is on by default.
+
+An application with no accounts does not, and `--no-user` leaves it out.
+Measured on two projects generated side by side:
+
+[cols="1,1,1"]
+|===
+| | default | `--no-user`
+
+| `GET /health`
+| 200
+| 200
+
+| `GET /web/login`
+| 200
+| 404
+
+| Tables created
+| `auth_users`, `users`, `user_sessions`, `user_audit_log`
+| none
+
+| `JWT_SECRET` required
+| yes
+| no
+|===
+
+The choice is a plain `user?` literal near the top of the generated
+`src/wagoe/config.clj` — turning the module back on later is editing one word,
+not regenerating the project. A database is still configured either way; if the
+application needs no persistence at all, remove `:wagoe/sqlite` from
+`resources/conf/dev/config.edn` as well.
 
 === Add a module
 
