@@ -13,9 +13,8 @@
             [clojure.test :refer [deftest is testing]]
             [muuntaja.core :as m]
             [muuntaja.middleware :as m-mw]
-            [ring.adapter.jetty :as jetty]))
-
-(def ^:private port 3811)
+            [ring.adapter.jetty :as jetty])
+  (:import (org.eclipse.jetty.server ServerConnector)))
 
 (def ^:private content-type "application/transit+json")
 
@@ -36,24 +35,35 @@
 
 (defn- decode-body [body] (m/decode m/instance content-type body))
 
+(defn- with-server
+  "Serve `app` on an ephemeral port; call `f` with its base URL.
+
+   Port 0 lets the OS pick a free one. A fixed port would make these tests fail
+   before reaching any RPC code on a machine that happens to have it bound, or
+   whenever two of them run at once — and the failure would look like the
+   adapter being broken rather than the port being taken."
+  [app f]
+  (let [server (jetty/run-jetty app {:port 0 :join? false})
+        port   (.getLocalPort ^ServerConnector (first (.getConnectors server)))]
+    (try
+      (f (str "http://localhost:" port))
+      (finally (.stop server)))))
+
 (defn- with-service
-  "Run `f` with the payments protocol served over HTTP on `port`."
+  "Run `f` with the payments protocol served over HTTP. `f` receives the URL."
   [implementation f]
-  (let [handler (wrap-format (server/rpc-handler pay-ports/IPaymentProvider implementation))
-        app     (fn [request]
-                  (if (= "/rpc" (:uri request))
-                    (handler request)
-                    {:status 404 :body "{}"}))
-        server  (jetty/run-jetty app {:port port :join? false})]
-    (try (f) (finally (.stop server)))))
+  (let [handler (wrap-format (server/rpc-handler pay-ports/IPaymentProvider implementation))]
+    (with-server (fn [request]
+                   (if (= "/rpc" (:uri request))
+                     (handler request)
+                     {:status 404 :body "{}"}))
+                 f)))
 
 (deftest ^:integration protocol-calls-cross-a-real-socket
   (let [provider (mock/make-mock-provider)]
     (with-service provider
-      (fn []
-        (let [remote (client/remote-adapter pay-ports/IPaymentProvider
-                                            (str "http://localhost:" port)
-                                            {:retries 0})]
+      (fn [url]
+        (let [remote (client/remote-adapter pay-ports/IPaymentProvider url {:retries 0})]
 
           (testing "the adapter satisfies the protocol it was built from"
             (is (satisfies? pay-ports/IPaymentProvider remote)))
@@ -75,6 +85,8 @@
               (is (re-find #"^/web/payment/mock-return" (:checkout-url remote')))))
 
           (testing "an unreachable service is an error value, not an exception"
+            ;; Port 1 is privileged and nothing binds it, so this is reliably a
+            ;; refused connection rather than a port that might be in use.
             (let [dead (client/remote-adapter pay-ports/IPaymentProvider
                                               "http://localhost:1" {:retries 0})
                   r    (pay-ports/get-payment-status dead "anything")]
@@ -99,26 +111,24 @@
                  (fn [request]
                    (reset! seen (rpc/headers->context (:headers request)))
                    ((server/rpc-handler pay-ports/IPaymentProvider recorder) request)))
-        app     (fn [r] (if (= "/rpc" (:uri r)) (handler r) {:status 404 :body "{}"}))
-        srv     (jetty/run-jetty app {:port (inc port) :join? false})]
-    (try
-      (let [remote (client/remote-adapter pay-ports/IPaymentProvider
-                                          (str "http://localhost:" (inc port))
-                                          {:retries 0
-                                           :context {:correlation-id "corr-123"
-                                                     :tenant-id      "tenant-a"
-                                                     :auth-token     "tok-xyz"}})]
-        (pay-ports/get-payment-status remote "id")
+        app     (fn [r] (if (= "/rpc" (:uri r)) (handler r) {:status 404 :body "{}"}))]
+    (with-server app
+      (fn [url]
+        (let [remote (client/remote-adapter pay-ports/IPaymentProvider url
+                                            {:retries 0
+                                             :context {:correlation-id "corr-123"
+                                                       :tenant-id      "tenant-a"
+                                                       :auth-token     "tok-xyz"}})]
+          (pay-ports/get-payment-status remote "id")
 
-        (testing "the correlation id survives the hop"
-          (is (= "corr-123" (:correlation-id @seen))))
+          (testing "the correlation id survives the hop"
+            (is (= "corr-123" (:correlation-id @seen))))
 
-        (testing "so does the tenant"
-          (is (= "tenant-a" (:tenant-id @seen))))
+          (testing "so does the tenant"
+            (is (= "tenant-a" (:tenant-id @seen))))
 
-        (testing "and the auth token, unwrapped from its Bearer scheme"
-          (is (= "tok-xyz" (:auth-token @seen)))))
-      (finally (.stop srv)))))
+          (testing "and the auth token, unwrapped from its Bearer scheme"
+            (is (= "tok-xyz" (:auth-token @seen)))))))))
 
 (deftest ^:integration unknown-operations-are-refused
   ;; The envelope names an operation. If the server invoked anything it was
@@ -173,42 +183,41 @@
                     :headers {"content-type" content-type}
                     :body    (encode-body {:error {:type    :rpc/remote-error
                                                    :message "psp down"}})})
-        srv      (jetty/run-jetty app {:port (+ port 2) :join? false})
-        url      (str "http://localhost:" (+ port 2))]
-    (try
-      (testing "a remote error is not retried by default"
-        ;; A 500 means the far side ran and refused. Re-sending it would
-        ;; re-submit a payment the PSP already rejected on its merits.
-        (reset! attempts 0)
-        (client/call! url :get-payment-status ["id"] {})
-        (is (= 1 @attempts)))
+        run      (fn [url]
+                   (testing "a remote error is not retried by default"
+                     ;; A 500 means the far side ran and refused. Re-sending it
+                     ;; would re-submit a payment the PSP already rejected on
+                     ;; its merits.
+                     (reset! attempts 0)
+                     (client/call! url :get-payment-status ["id"] {})
+                     (is (= 1 @attempts)))
 
-      (testing "opting a failure in retries it exactly :retries more times"
-        (reset! attempts 0)
-        (let [r (client/call! url :get-payment-status ["id"]
-                              {:retry-on #{:rpc/remote-error}
-                               :retries  2
-                               :retry-delay-ms 1})]
-          (is (= 3 @attempts) "one initial attempt plus two retries")
-          (testing "and the caller still gets the failure once they are spent"
-            (is (= :rpc/remote-error (get-in r [:error :type]))))))
+                   (testing "opting a failure in retries it exactly :retries more times"
+                     (reset! attempts 0)
+                     (let [r (client/call! url :get-payment-status ["id"]
+                                           {:retry-on #{:rpc/remote-error}
+                                            :retries  2
+                                            :retry-delay-ms 1})]
+                       (is (= 3 @attempts) "one initial attempt plus two retries")
+                       (testing "and the caller still gets the failure once they are spent"
+                         (is (= :rpc/remote-error (get-in r [:error :type]))))))
 
-      (testing "the decision is made on the type the server sent, not a local guess"
-        ;; JSON has no keywords, so `:type` arrives as a string. Comparing it
-        ;; against a set of keywords misses silently — the retry simply never
-        ;; happens — which is why this asserts on attempts rather than on the
-        ;; returned map.
-        (reset! attempts 0)
-        (client/call! url :get-payment-status ["id"]
-                      {:retry-on #{:rpc/unavailable} :retries 2 :retry-delay-ms 1})
-        (is (= 1 @attempts) "a remote error is not in that set, so it is not retried"))
+                   (testing "the decision is made on the type the server sent, not a local guess"
+                     ;; JSON has no keywords, so `:type` arrives as a string.
+                     ;; Comparing it against a set of keywords misses silently —
+                     ;; the retry simply never happens — which is why this
+                     ;; asserts on attempts rather than on the returned map.
+                     (reset! attempts 0)
+                     (client/call! url :get-payment-status ["id"]
+                                   {:retry-on #{:rpc/unavailable} :retries 2 :retry-delay-ms 1})
+                     (is (= 1 @attempts) "a remote error is not in that set, so it is not retried"))
 
-      (testing "retries 0 means one attempt"
-        (reset! attempts 0)
-        (client/call! url :get-payment-status ["id"]
-                      {:retry-on #{:rpc/remote-error} :retries 0})
-        (is (= 1 @attempts)))
-      (finally (.stop srv)))))
+                   (testing "retries 0 means one attempt"
+                     (reset! attempts 0)
+                     (client/call! url :get-payment-status ["id"]
+                                   {:retry-on #{:rpc/remote-error} :retries 0})
+                     (is (= 1 @attempts))))]
+    (with-server app run)))
 
 (deftest ^:integration a-timeout-is-not-retried-by-default
   ;; Explicit because it is the dangerous one: a call that timed out may have
@@ -233,23 +242,21 @@
                (process-webhook [_ _ _] nil)
                (verify-webhook-signature [_ _ _] false))]
     (with-service boom
-      (fn []
-        (let [url (str "http://localhost:" port)]
+      (fn [url]
+        (testing "a remote exception reaches the caller with its message and operation"
+          (let [r (client/call! url :create-checkout-session [{}] {:retries 0})]
+            (is (= :rpc/remote-error (get-in r [:error :type])))
+            (is (= "psp refused the card" (get-in r [:error :message])))
+            (is (= :create-checkout-session (get-in r [:error :operation])))))
 
-          (testing "a remote exception reaches the caller with its message and operation"
-            (let [r (client/call! url :create-checkout-session [{}] {:retries 0})]
-              (is (= :rpc/remote-error (get-in r [:error :type])))
-              (is (= "psp refused the card" (get-in r [:error :message])))
-              (is (= :create-checkout-session (get-in r [:error :operation])))))
-
-          (testing "a refused operation keeps its own type rather than becoming generic"
-            ;; :rpc/unknown-operation means the caller and the service disagree
-            ;; about the contract — a deploy skew. It needs a different response
-            ;; from "the payment provider is down", so it must not be flattened
-            ;; into :rpc/remote-error.
-            (let [r (client/call! url :drop-database [] {:retries 0})]
-              (is (= :rpc/unknown-operation (get-in r [:error :type])))
-              (is (re-find #"exposes no operation" (get-in r [:error :message]))))))))))
+        (testing "a refused operation keeps its own type rather than becoming generic"
+          ;; :rpc/unknown-operation means the caller and the service disagree
+          ;; about the contract — a deploy skew. It needs a different response
+          ;; from "the payment provider is down", so it must not be flattened
+          ;; into :rpc/remote-error.
+          (let [r (client/call! url :drop-database [] {:retries 0})]
+            (is (= :rpc/unknown-operation (get-in r [:error :type])))
+            (is (re-find #"exposes no operation" (get-in r [:error :message])))))))))
 
 (deftest ^:integration a-body-that-is-not-an-envelope-gets-an-answer
   ;; This endpoint is reachable by anything that can post to it. A body with no
@@ -311,10 +318,8 @@
   ;; fail, with nothing in any log to say why.
   (let [provider (mock/make-mock-provider)]
     (with-service provider
-      (fn []
-        (let [remote (client/remote-adapter pay-ports/IPaymentProvider
-                                            (str "http://localhost:" port)
-                                            {:retries 0})]
+      (fn [url]
+        (let [remote (client/remote-adapter pay-ports/IPaymentProvider url {:retries 0})]
 
           (testing "a keyword returned as the whole result is still a keyword"
             (is (= :mock (pay-ports/provider-name remote))))
