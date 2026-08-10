@@ -160,7 +160,7 @@
                          :skip-interceptors? true}}}])))
 
 (defmethod ig/init-key :wagoe/http-handler
-  [_ {:keys [user-routes admin-routes tenant-routes membership-routes workflow-routes search-routes router logger metrics-emitter tracer error-reporter config tenant-service db-context cache i18n-middleware user-service request-capture? extra-middleware]}]
+  [_ {:keys [user-routes admin-routes tenant-routes membership-routes workflow-routes search-routes router logger metrics-emitter tracer error-reporter config tenant-service db-context cache i18n i18n-middleware user-service request-capture? extra-middleware]}]
   (log/info "Initializing top-level HTTP handler with normalized routing and API versioning")
   (require 'wagoe.platform.ports.http)
   (require 'wagoe.platform.shell.interfaces.http.common)
@@ -419,6 +419,24 @@
         ;; a consumer that translates nothing need not ship the jar (BOU-131).
         ;; Kept as its own injection point rather than folded into
         ;; extra-middleware so the pipeline position does not change.
+        ;;
+        ;; `:i18n` is still accepted. An app that upgrades platform without
+        ;; regenerating its config still passes the component under that key —
+        ;; the documented input until now — and dropping it would take the
+        ;; translation middleware out of the pipeline without erroring:
+        ;; handlers read `(get request :i18n/t identity)`, so every marker would
+        ;; render as its own keyword and the page would just look wrong. The
+        ;; resolve is dynamic and only runs when an app supplied the component,
+        ;; which means it already ships the lib, so this reintroduces no static
+        ;; dependency.
+        i18n-mw (or i18n-middleware
+                    (when i18n
+                      (log/warn (str "Deprecated: :wagoe/http-handler received :i18n. "
+                                     "Wire :wagoe/i18n-http-middleware from the i18n "
+                                     "module and pass it as :i18n-middleware instead "
+                                     "(BOU-131). Building the middleware here for now."))
+                      (let [wrap (requiring-resolve 'wagoe.i18n.shell.middleware/wrap-i18n)]
+                        (fn [handler] (wrap handler i18n)))))
 
         ;; Compile routes using router adapter with system services.
         ;; `extra-middleware` is a seq of (fn [handler] ...) supplied by the app
@@ -428,7 +446,7 @@
         ;; method-override middleware, matching the previous ordering.
         router-config {:middleware (concat
                                     (or extra-middleware [])
-                                    (when i18n-middleware [i18n-middleware])
+                                    (when i18n-mw [i18n-mw])
                                     [(fn [handler]
                                        (fn [request]
                                          (if (= :post (:request-method request))

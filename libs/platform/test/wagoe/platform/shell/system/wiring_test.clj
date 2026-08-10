@@ -309,3 +309,50 @@
       (let [shells (map second (re-seq #"\[(wagoe\.(?!platform)[a-z0-9-]+\.shell\.[a-z0-9.-]+)\s" src))]
         (is (empty? shells)
             (str "platform requires another module's shell: " (pr-str shells)))))))
+
+;; =============================================================================
+;; The legacy :i18n input still works (BOU-131 upgrade path)
+;; =============================================================================
+
+(deftest ^:unit legacy-i18n-key-still-produces-middleware
+  ;; An app that upgrades platform without regenerating its config still passes
+  ;; the i18n component as :i18n — the documented input until BOU-131. Ignoring
+  ;; it would not error: handlers read `(get request :i18n/t identity)`, so
+  ;; every marker would resolve to its own keyword and the page would merely
+  ;; look wrong. Silent, and therefore worth a test.
+  (let [captured-config (atom nil)
+        compiled-handler (fn [_] {:status 200})
+        config {:active {:wagoe/settings {:name "test" :version "0.0.1"}}}
+        build (fn [extra-keys]
+                (with-redefs [wagoe.platform.ports.http/compile-routes
+                              (fn [_router _routes router-config]
+                                (reset! captured-config router-config)
+                                compiled-handler)
+                              wagoe.platform.shell.interfaces.http.common/health-check-handler
+                              (fn [_ _ _] (fn [_] {:status 200}))
+                              wagoe.platform.shell.http.versioning/apply-versioning
+                              (fn [routes _] (vec routes))
+                              wagoe.platform.shell.http.versioning/wrap-handler-with-version-headers
+                              (fn [h _] h)]
+                  (ig/init-key :wagoe/http-handler
+                               (merge {:user-routes {:api []}
+                                       :router ::router :logger ::logger
+                                       :metrics-emitter ::metrics :tracer ::tracer
+                                       :error-reporter ::error-reporter :config config
+                                       :db-context ::db-context}
+                                      extra-keys))
+                  @captured-config))]
+
+    (testing "the new :i18n-middleware key is used as given"
+      (let [mw (fn [h] h)]
+        (is (= 2 (count (:middleware (build {:i18n-middleware mw})))))))
+
+    (testing "the legacy :i18n key still contributes middleware"
+      ;; A real i18n component shape; wrap-i18n is resolved dynamically.
+      (let [component {:catalogue {} :default-locale :en :dev? false}
+            mws (:middleware (build {:i18n component}))]
+        (is (= 2 (count mws))
+            "an app passing :i18n lost its translation middleware")))
+
+    (testing "neither key means no i18n middleware, and no error"
+      (is (= 1 (count (:middleware (build {}))))))))
