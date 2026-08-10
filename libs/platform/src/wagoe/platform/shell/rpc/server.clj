@@ -8,7 +8,8 @@
 
    FC/IS: shell. The envelope contract is pure and lives in
    `wagoe.platform.core.rpc`."
-  (:require [wagoe.platform.core.rpc :as rpc]
+  (:require [wagoe.platform.core.http.problem-details :as problem-details]
+            [wagoe.platform.core.rpc :as rpc]
             [clojure.tools.logging :as log]))
 
 (defn- operation->fn
@@ -62,20 +63,34 @@
            (rpc/transport-error :rpc/unknown-operation operation
                                 (str "This service exposes no operation " operation))))))))
 
+(def ^:private malformed-request-types
+  "Error types that mean the caller sent something this service cannot use."
+  #{:rpc/protocol :rpc/unknown-operation})
+
 (defn- error->status
   "HTTP status for an error type.
 
-   A request this service could not understand is 400, not 500: an operator
-   reading the logs of a sliced-out service needs to tell a caller sending
-   nonsense from the service itself falling over, and a 500 on every failure
-   collapses that distinction. The client reads the body either way — the
-   status is for everything between the two, and for humans."
+   Three cases, and collapsing them loses information an operator needs.
+
+   A request this service could not understand is 400: reading the logs of a
+   sliced-out service, a caller sending nonsense has to be distinguishable from
+   the service itself falling over.
+
+   A typed domain error keeps the status it has in-process. The same
+   `:not-found` that answers 404 through the HTTP boundary must not answer 500
+   because it happened to cross a hop — the status is what proxies, dashboards
+   and alerting read, and a 404 counted as a server error moves an error budget
+   for something that is not an error. `default-error-mappings` is the same
+   pure data the HTTP boundary uses, so the two cannot drift.
+
+   Everything else is 500. The client reads the body either way; the status is
+   for everything between the two, and for humans."
   [error-type]
-  (case error-type
-    nil                    200
-    :rpc/protocol          400
-    :rpc/unknown-operation 400
-    500))
+  (cond
+    (nil? error-type)                             200
+    (malformed-request-types error-type)          400
+    :else (or (first (get problem-details/default-error-mappings error-type))
+              500)))
 
 (defn rpc-handler
   "A Ring handler serving `protocol` backed by `implementation`.
@@ -103,7 +118,13 @@
       :methods {:post {:handler (rpc-handler payments-ports/IPaymentProvider provider)}}}"
   [protocol implementation]
   (fn [{:keys [body-params headers] :as _request}]
-    (let [envelope (merge (rpc/headers->context headers) body-params)
+    (let [;; Only merge context onto something that can carry it. A valid
+          ;; transit body decoding to a vector or a string reaches here, and
+          ;; `merge` on one throws before `envelope-problem` can name the
+          ;; fault — turning a 400 this endpoint promises into an escaped 500.
+          envelope (if (map? body-params)
+                     (merge (rpc/headers->context headers) body-params)
+                     body-params)
           response (handle-envelope protocol implementation envelope)]
       ;; No content type: the format middleware negotiates it from the
       ;; request's Accept, and hardcoding one here would label a transit body

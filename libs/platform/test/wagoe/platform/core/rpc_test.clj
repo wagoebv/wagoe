@@ -171,3 +171,21 @@
     (let [e (rpc/thrown-error :op (ex-info "x" {:type :internal-error :conn (Object.)}))]
       (is (= :internal-error (get-in e [:error :type])))
       (is (nil? (:conn (get-in e [:error :data])))))))
+
+(deftest ^:unit an-envelope-that-is-not-a-map-is-named-as-such
+  ;; transit decodes a vector or a string happily, so these reach the handler.
+  ;; Reporting them as "no :operation" would send an operator looking for a
+  ;; missing key in a body that was never an envelope.
+  (testing "non-maps are rejected with a message that says why"
+    (is (re-find #"not a map" (rpc/envelope-problem [1 2 3])))
+    (is (re-find #"not a map" (rpc/envelope-problem "not an envelope")))
+    (is (re-find #"not a map" (rpc/envelope-problem 42))))
+
+  (testing "a two-element vector too, which `merge` would have silently accepted"
+    (is (re-find #"not a map" (rpc/envelope-problem [:operation :drop-database]))))
+
+  (testing "nil is reported, not passed through"
+    (is (some? (rpc/envelope-problem nil))))
+
+  (testing "and a map is still fine, so the guard did not reject everything"
+    (is (nil? (rpc/envelope-problem {:operation :op :args []})))))

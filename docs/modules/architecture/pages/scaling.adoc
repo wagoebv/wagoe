@@ -262,6 +262,14 @@ What it does, and what it deliberately does not:
   true` on the re-raised exception records that the stack trace describes the
   calling process, not the one that failed.
 
+| HTTP status
+| A typed error keeps the status it has in-process, read from the same
+  `default-error-mappings` the HTTP boundary uses — a `:not-found` answers 404
+  across the hop as well. The status is what proxies, dashboards and alerting
+  read, and counting a missing record as a server error moves an error budget
+  for something that is not an error. A request the service could not
+  understand is 400; everything else is 500.
+
 | Malformed requests
 | Answered, not thrown. The endpoint is reachable by anything that can post to
   it, so a body carrying no operation — or an operation that is not a name —

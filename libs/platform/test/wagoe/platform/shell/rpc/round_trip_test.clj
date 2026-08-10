@@ -432,3 +432,76 @@
                                     "http://localhost:1" {:retries 0})]
     (is (= :rpc/unavailable (get-in (pay-ports/get-payment-status dead "id")
                                     [:error :type])))))
+
+(deftest ^:integration typed-errors-keep-their-http-status-too
+  ;; The type surviving the hop is only half of it. The status is what proxies,
+  ;; dashboards and alerting read, and a :not-found answered as 500 counts a
+  ;; missing record as a server error — moving an error budget for something
+  ;; that is not an error.
+  (let [typed (fn [error-type]
+                (reify pay-ports/IPaymentProvider
+                  (provider-name [_] :typed)
+                  (create-checkout-session [_ _]
+                    (throw (ex-info "nope" {:type error-type})))
+                  (create-off-session-payment [_ _] nil)
+                  (get-payment-status [_ _] nil)
+                  (expire-checkout-session [_ _] nil)
+                  (process-webhook [_ _ _] nil)
+                  (verify-webhook-signature [_ _ _] false)))
+        status-for (fn [error-type]
+                     (let [handler (wrap-format
+                                    (server/rpc-handler pay-ports/IPaymentProvider
+                                                        (typed error-type)))]
+                       (:status (handler {:uri "/rpc" :request-method :post
+                                          :headers {"content-type" content-type
+                                                    "accept" content-type}
+                                          :body (encode-body
+                                                 {:operation :create-checkout-session
+                                                  :args      [{}]})}))))]
+
+    (testing "the platform's documented mapping applies across the hop"
+      (is (= 404 (status-for :not-found)))
+      (is (= 400 (status-for :validation-error)))
+      (is (= 401 (status-for :unauthorized)))
+      (is (= 403 (status-for :forbidden)))
+      (is (= 409 (status-for :conflict))))
+
+    (testing "and an unmapped or untyped failure is still a server error"
+      (is (= 500 (status-for :internal-error)))
+      (is (= 500 (status-for :something-nobody-mapped))))))
+
+(deftest ^:integration a-decodable-body-that-is-not-a-map-is-answered
+  ;; transit will happily decode a vector or a string. Those reached the
+  ;; handler and threw in `merge` — before `envelope-problem` could name the
+  ;; fault — so the endpoint answered 500 for a request it had promised to
+  ;; answer 400.
+  (let [provider (mock/make-mock-provider)
+        handler  (wrap-format (server/rpc-handler pay-ports/IPaymentProvider provider))
+        post     (fn [body]
+                   (handler {:uri "/rpc" :request-method :post
+                             :headers {"content-type" content-type "accept" content-type}
+                             :body (encode-body body)}))]
+
+    (testing "a vector body"
+      (let [response (post [1 2 3])]
+        (is (= 400 (:status response)))
+        (is (= :rpc/protocol (get-in (decode-body (:body response)) [:error :type])))))
+
+    (testing "a two-element vector, which merge would have accepted as a pair"
+      ;; The nastier one: `(conj {} [:operation :drop-database])` does not
+      ;; throw, it silently produces a map. The status would have been 400
+      ;; either way — via :rpc/unknown-operation — so this asserts the type,
+      ;; which is the part that says the request was never an envelope.
+      (let [response (post [:operation :drop-database])]
+        (is (= 400 (:status response)))
+        (is (= :rpc/protocol (get-in (decode-body (:body response)) [:error :type])))))
+
+    (testing "a string body"
+      (is (= 400 (:status (post "not an envelope")))))
+
+    (testing "a number body"
+      (is (= 400 (:status (post 42)))))
+
+    (testing "and the message says what was wrong"
+      (is (re-find #"not a map"
+                   (get-in (decode-body (:body (post ["x"]))) [:error :message]))))))

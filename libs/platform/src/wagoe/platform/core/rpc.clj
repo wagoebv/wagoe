@@ -125,8 +125,11 @@
    Naming the problem lets the handler answer with an error envelope; without
    this, reading `:operation` off a malformed body throws, and the caller gets
    a 500 carrying nothing that says what was wrong with their request."
-  [{:keys [operation args]}]
+  [{:keys [operation args] :as envelope}]
   (cond
+    (not (map? envelope))
+    (str "Envelope was not a map: " (pr-str (type envelope)))
+
     (nil? operation)
     "Envelope carried no :operation"
 
