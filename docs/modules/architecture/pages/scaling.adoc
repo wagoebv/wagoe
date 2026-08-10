@@ -179,12 +179,79 @@ today, but the architecture is positioned for it.
 
 === What must be built
 
-* *Generic remote-port adapter* — a `clj-http` client that implements a module's protocol, serializes via Malli, propagates correlation-id / tenant / auth, unwraps errors. None exists yet; all cross-module calls are in-process.
+* ✅ *Generic remote-port adapter* — shipped in BOU-90.
+  `wagoe.platform.shell.rpc.client/remote-adapter` returns a value implementing
+  any protocol by calling a service over HTTP, built from the protocol's own
+  `:sigs` so every module's port works without a bespoke client. The counterpart
+  `…rpc.server/rpc-handler` serves a protocol from the process that owns it.
+  correlation-id, tenant and auth ride the same headers the interceptor
+  pipeline already uses. See <<remote-port-adapter>>.
 * *Network resilience* — timeouts, retries, circuit breaker, service discovery (hardcoded URLs for MVP). External adapters use `:throw-exceptions false` but no retry/breaker.
 * *Break the allowlisted dependency cycles* — `check_deps.clj` allows `admin↔user`, `platform↔{user,tenant,admin,workflow,search}`. A cycle means two modules can't be cleanly separated; these must be broken (e.g. extract the shared auth check behind a port) before slicing.
 * *Async option* — there is no event-bus port today (the dead `IEventBus` stub in `libs/user/ports.clj` was removed in BOU-170). Event-driven decoupling needs a dedicated port plus a real adapter (Redis Streams / Kafka / RabbitMQ).
 * *Data ownership decision* — schema-per-tenant assumes co-located modules in one Postgres. Across services either share the DB (pragmatic) or give each service its own; there are no distributed transactions, so split writes become eventual-consistency.
 * *Service launch mode* — `wagoe.main` exposes only `server` and `cli`; slicing needs an entrypoint that boots a named module subset as a service.
+
+[[remote-port-adapter]]
+=== The remote-port adapter
+
+A caller depends on a protocol, never on a concrete record. So a module can move
+into its own process without its callers changing — provided something
+implements that protocol by making a network call. That is this:
+
+[source,clojure]
+----
+;; In the process that owns payments — serve the protocol
+{:path    "/rpc"
+ :methods {:post {:handler (rpc-server/rpc-handler pay-ports/IPaymentProvider provider)}}}
+
+;; In the process that consumes it — a value that satisfies IPaymentProvider
+(def payments
+  (rpc-client/remote-adapter pay-ports/IPaymentProvider "http://payments:3001"
+                             {:timeout-ms 5000
+                              :context    {:correlation-id id :tenant-id t}}))
+
+(ports/create-checkout-session payments {...})   ; unchanged at the call site
+----
+
+The adapter is built from the protocol's `:sigs`, so adding a method to a port
+carries it across the hop with no client change.
+
+What it does, and what it deliberately does not:
+
+[cols="1,3",options="header"]
+|===
+| | |
+
+| Context
+| `correlation-id`, `tenant-id` and `auth-token` ride `x-correlation-id`,
+  `x-tenant-id` and `Authorization`. A request keeps one correlation id across
+  the hop instead of starting a fresh trace on the far side.
+
+| Errors
+| Returned as data, in the `{:error {:type … :message …}}` shape adapters
+  already use, so a caller needs no new branch. The types distinguish cases
+  that need different responses: `:rpc/unavailable`, `:rpc/timeout`,
+  `:rpc/remote-error`, `:rpc/protocol`, `:rpc/unknown-operation`.
+
+| Retries
+| Only `:rpc/unavailable` by default. A timeout is *not* retried: a call that
+  timed out may well have executed, and re-sending it could charge twice.
+  Override with `:retry-on`.
+
+| Exposure
+| The server resolves an operation against the protocol's own `:sigs`. An
+  operation the protocol does not declare is refused, so the endpoint cannot
+  become a general-purpose remote eval.
+
+| Service discovery
+| Not included — the URL is configuration. Hardcoded or env-supplied for now,
+  as the MVP in this document assumes.
+
+| Circuit breaker
+| Not included. Timeouts and bounded retries are in; a breaker needs shared
+  state to be useful across replicas and is the next piece.
+|===
 
 === Sliceability by module
 
