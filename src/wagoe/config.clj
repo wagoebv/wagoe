@@ -24,6 +24,13 @@
             ;; the devtools dashboard, which resolves wagoe.config/ig-config at
             ;; runtime. The layer that emits a key registers it.
             [wagoe.external.shell.module-wiring]
+            ;; Same rule, moved here from platform (BOU-131): platform required
+            ;; these statically, so every consumer had to ship every module's
+            ;; jar whether or not it used one. These three are emitted by the
+            ;; functions below, so this is where they belong.
+            [wagoe.cache.shell.module-wiring]
+            [wagoe.payments.shell.module-wiring]
+            [wagoe.i18n.shell.module-wiring]
             [wagoe.user.schema :as user-schema]))
 
 ;; =============================================================================
@@ -338,7 +345,7 @@
                                      :tenant-service (ig/ref :wagoe/tenant-service)
                                      :db-context (ig/ref :wagoe/db-context)
                                      :extra-middleware (ig/ref :wagoe/tenant-http-middleware)
-                                     :i18n (ig/ref :wagoe/i18n)}
+                                     :i18n-middleware (ig/ref :wagoe/i18n-http-middleware)}
                               cache-enabled? (assoc :cache (ig/ref :wagoe/cache))
                               admin-enabled?
                               (assoc :admin-routes (ig/ref :wagoe/admin-routes))
@@ -561,7 +568,11 @@
   (let [i18n-cfg (get-in config [:active :wagoe/i18n]
                          {:catalogue-path "wagoe/i18n/translations"
                           :default-locale :en})]
-    {:wagoe/i18n i18n-cfg}))
+    {:wagoe/i18n i18n-cfg
+     ;; Built in the i18n lib and injected into the HTTP handler, so platform
+     ;; does not require wagoe.i18n.shell.middleware (BOU-131). Same shape as
+     ;; :wagoe/tenant-http-middleware (BOU-200).
+     :wagoe/i18n-http-middleware {:i18n (ig/ref :wagoe/i18n)}}))
 
 (defn- dashboard-module-config
   "Dashboard config — only active in dev profile.

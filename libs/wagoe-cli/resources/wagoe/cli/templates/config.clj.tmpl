@@ -140,7 +140,7 @@
                                   :tracer          (ig/ref :wagoe/tracing)
                                   :error-reporter  (ig/ref :wagoe/error-reporting)
                                   :db-context      (ig/ref :wagoe/db-context)
-                                  :i18n            (ig/ref :wagoe/i18n)}
+                                  :i18n-middleware (ig/ref :wagoe/i18n-http-middleware)}
                            user?     (assoc :user-routes  (ig/ref :wagoe/user-routes)
                                             :user-service (ig/ref :wagoe/user-service))
                            cache?    (assoc :cache              (ig/ref :wagoe/cache))
@@ -166,6 +166,9 @@
        :wagoe/email           (get active :wagoe/email {:provider :logging})
        :wagoe/router          router
        :wagoe/i18n            i18n-cfg
+       ;; Built in the i18n lib and injected, so platform does not require
+       ;; wagoe.i18n.shell.middleware (BOU-131).
+       :wagoe/i18n-http-middleware {:i18n (ig/ref :wagoe/i18n)}
 
        ;; HTTP layer (always wired; optional module refs injected above)
        :wagoe/http-handler http-handler-cfg

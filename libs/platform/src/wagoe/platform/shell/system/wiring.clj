@@ -40,8 +40,17 @@
             [wagoe.platform.shell.http.interceptors :as http-interceptors]
             [wagoe.platform.shell.http.versioning :as http-versioning]
             [wagoe.platform.shell.utils.port-manager :as port-manager]
-            ;; todo: need to find a way to decouple these dependencies an inject them in another way.
-            [wagoe.cache.shell.module-wiring] ;; Load cache module init/halt methods
+            ;; NOTE: no module-wiring is required here any more (BOU-131). Each
+            ;; was a static require, so every consumer of platform had to ship
+            ;; every module's jar whether or not it used it — a missing one is a
+            ;; FileNotFoundException at load. zzp-guard could not drop
+            ;; wagoe-payments after deleting all its payment code for exactly
+            ;; this reason.
+            ;;
+            ;; The rule is the one the rest of the codebase already follows: the
+            ;; layer that emits an Integrant key registers it. cache, payments
+            ;; and i18n are emitted by wagoe.config, which now requires them.
+            ;; realtime was emitted by nothing here at all.
             ;; NOTE: user module-wiring is loaded by the application entry point
             ;; (wagoe.main), NOT here — platform must not depend on the user
             ;; feature lib (BOU-171: dissolves the platform<->user cycle).
@@ -56,10 +65,6 @@
             ;; adapters a mandatory dependency of the framework's HTTP layer,
             ;; which is the same coupling BOU-171/192/198 removed for user and
             ;; the feature modules.
-            [wagoe.payments.shell.module-wiring] ;; Load payments module init/halt methods
-            [wagoe.i18n.shell.module-wiring] ;; Load i18n module init/halt methods
-            [wagoe.realtime.shell.module-wiring] ;; Load realtime module init/halt methods
-            [wagoe.i18n.shell.middleware :as i18n-middleware]
             [cheshire.core]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
@@ -155,7 +160,7 @@
                          :skip-interceptors? true}}}])))
 
 (defmethod ig/init-key :wagoe/http-handler
-  [_ {:keys [user-routes admin-routes tenant-routes membership-routes workflow-routes search-routes router logger metrics-emitter tracer error-reporter config tenant-service db-context cache i18n user-service request-capture? extra-middleware]}]
+  [_ {:keys [user-routes admin-routes tenant-routes membership-routes workflow-routes search-routes router logger metrics-emitter tracer error-reporter config tenant-service db-context cache i18n-middleware user-service request-capture? extra-middleware]}]
   (log/info "Initializing top-level HTTP handler with normalized routing and API versioning")
   (require 'wagoe.platform.ports.http)
   (require 'wagoe.platform.shell.interfaces.http.common)
@@ -408,10 +413,12 @@
                 :rate-limit rate-limit-config
                 :cache cache}
 
-        ;; Build i18n middleware (always present — falls back to identity t-fn if not configured)
-        i18n-middleware-fn (when i18n
-                             (fn [handler]
-                               (i18n-middleware/wrap-i18n handler i18n)))
+        ;; i18n middleware is built by the i18n lib and injected
+        ;; (:wagoe/i18n-http-middleware), the shape BOU-200 established for
+        ;; tenant. Platform no longer requires wagoe.i18n.shell.middleware, so
+        ;; a consumer that translates nothing need not ship the jar (BOU-131).
+        ;; Kept as its own injection point rather than folded into
+        ;; extra-middleware so the pipeline position does not change.
 
         ;; Compile routes using router adapter with system services.
         ;; `extra-middleware` is a seq of (fn [handler] ...) supplied by the app
@@ -421,7 +428,7 @@
         ;; method-override middleware, matching the previous ordering.
         router-config {:middleware (concat
                                     (or extra-middleware [])
-                                    (when i18n-middleware-fn [i18n-middleware-fn])
+                                    (when i18n-middleware [i18n-middleware])
                                     [(fn [handler]
                                        (fn [request]
                                          (if (= :post (:request-method request))

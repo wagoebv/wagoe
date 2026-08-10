@@ -7,11 +7,13 @@
          ;; (BOU-273). A transitive that a dependency could drop at any time.
          org.clojure/tools.cli             {:mvn/version "1.4.256"}
          wagoe/observability            {:local/root "../observability"}
+         ;; cache is a *ports* dependency: interceptors.clj uses
+         ;; wagoe.cache.ports, the protocol, not an implementation. payments,
+         ;; realtime and i18n were removed with BOU-131 — platform required
+         ;; their module-wiring only to register Integrant keys it does not
+         ;; emit, which forced every consumer to ship all three.
          wagoe/cache                    {:local/root "../cache"}
-         wagoe/i18n                     {:local/root "../i18n"}
          wagoe/core                     {:local/root "../core"}
-         wagoe/payments                 {:local/root "../payments"}
-         wagoe/realtime                 {:local/root "../realtime"}
          metosin/malli {:mvn/version "0.20.1"}
          org.clojure/tools.logging {:mvn/version "1.3.1"}
 
