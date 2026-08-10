@@ -21,6 +21,11 @@
             [wagoe.platform.shell.system.wiring]
             [wagoe.user.shell.module-wiring]
             [wagoe.email.shell.module-wiring]
+            ;; i18n is wired unconditionally below (:wagoe/i18n and the HTTP
+            ;; middleware built from it), so its init-keys are registered here.
+            ;; platform used to require this on every app's behalf; it no longer
+            ;; requires any module's wiring (BOU-131).
+            [wagoe.i18n.shell.module-wiring]
             ;; Registers :wagoe/settings init-key defined in the generated app.
             [{{project-ns}}.system]))
 
@@ -124,6 +129,9 @@
         ;; with email enabled dies at startup with "No method in multimethod
         ;; 'init-key' for dispatch value: :wagoe.external/smtp".
         _         (when email? (require 'wagoe.external.shell.module-wiring))
+        ;; Also formerly loaded by platform (BOU-131).
+        _         (when cache?    (require 'wagoe.cache.shell.module-wiring))
+        _         (when payments? (require 'wagoe.payments.shell.module-wiring))
 
         db       (db-spec config)
         http-cfg (get active :wagoe/http {:port 3000 :host "0.0.0.0" :join? false})
@@ -140,7 +148,7 @@
                                   :tracer          (ig/ref :wagoe/tracing)
                                   :error-reporter  (ig/ref :wagoe/error-reporting)
                                   :db-context      (ig/ref :wagoe/db-context)
-                                  :i18n            (ig/ref :wagoe/i18n)}
+                                  :i18n-middleware (ig/ref :wagoe/i18n-http-middleware)}
                            user?     (assoc :user-routes  (ig/ref :wagoe/user-routes)
                                             :user-service (ig/ref :wagoe/user-service))
                            cache?    (assoc :cache              (ig/ref :wagoe/cache))
@@ -166,6 +174,9 @@
        :wagoe/email           (get active :wagoe/email {:provider :logging})
        :wagoe/router          router
        :wagoe/i18n            i18n-cfg
+       ;; Built in the i18n lib and injected, so platform does not require
+       ;; wagoe.i18n.shell.middleware (BOU-131).
+       :wagoe/i18n-http-middleware {:i18n (ig/ref :wagoe/i18n)}
 
        ;; HTTP layer (always wired; optional module refs injected above)
        :wagoe/http-handler http-handler-cfg

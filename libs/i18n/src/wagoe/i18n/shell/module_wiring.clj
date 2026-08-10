@@ -13,6 +13,7 @@
      :wagoe/i18n {:catalogue-path \"wagoe/i18n/translations\"
                      :default-locale :en}"
   (:require [wagoe.i18n.shell.catalogue :as catalogue]
+            [wagoe.i18n.shell.middleware :as middleware]
             [clojure.tools.logging :as log]
             [integrant.core :as ig]))
 
@@ -40,3 +41,25 @@
   [_ _]
   (log/info "Halting i18n service")
   nil)
+
+;; =============================================================================
+;; HTTP middleware
+;; =============================================================================
+
+(defmethod ig/init-key :wagoe/i18n-http-middleware
+  [_ {:keys [i18n]}]
+  ;; Built here, in the i18n lib, and injected into platform's http-handler —
+  ;; the shape BOU-200 established for tenant. Platform used to require
+  ;; wagoe.i18n.shell.middleware directly, which made wagoe-i18n a mandatory
+  ;; dependency of every consumer of platform whether or not they translated
+  ;; anything (BOU-131).
+  ;;
+  ;; A (fn [handler] ...) applied lazily when the pipeline compiles, so an
+  ;; absent i18n component simply contributes no middleware.
+  (when i18n
+    (log/info "Adding i18n middleware to HTTP pipeline")
+    (fn [handler] (middleware/wrap-i18n handler i18n))))
+
+(defmethod ig/halt-key! :wagoe/i18n-http-middleware
+  [_ _mw]
+  (log/info "i18n HTTP middleware halted (no cleanup needed)"))

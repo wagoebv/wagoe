@@ -163,7 +163,24 @@ clojure -M:clj-kondo --lint libs/i18n/src libs/i18n/test
 ```
 
 The component exposes `{:catalogue cat :default-locale :en :dev? bool}`.
-It is injected into `:wagoe/http-handler` as `:i18n`.
+
+**Wiring it into the HTTP pipeline (BOU-131).** The middleware is now built by
+this module as `:wagoe/i18n-http-middleware` and injected into
+`:wagoe/http-handler` as `:i18n-middleware` — the shape BOU-200 established for
+tenant. Platform no longer requires `wagoe.i18n.shell.middleware`, so an app
+that translates nothing need not ship this library:
+
+```clojure
+:wagoe/i18n                 {:catalogue-path "wagoe/i18n/translations"
+                             :default-locale :en}
+:wagoe/i18n-http-middleware {:i18n (ig/ref :wagoe/i18n)}
+:wagoe/http-handler         {… :i18n-middleware (ig/ref :wagoe/i18n-http-middleware)}
+```
+
+Passing the component directly as `:i18n` still works and logs a deprecation
+warning. It is kept because dropping it would not error: handlers read
+`(get request :i18n/t identity)`, so an upgraded app would silently render every
+marker as its own keyword — `:user/sign-in` where "Sign in" belongs.
 
 ---
 

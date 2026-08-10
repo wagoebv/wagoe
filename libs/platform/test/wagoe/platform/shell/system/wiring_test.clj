@@ -4,12 +4,13 @@
             [wagoe.platform.shell.http.reitit-router]
             [wagoe.platform.shell.http.versioning]
             [wagoe.platform.shell.interfaces.http.common]
-            [wagoe.i18n.shell.middleware]
             [wagoe.observability.logging.shell.adapters.no-op]
             [wagoe.observability.metrics.shell.adapters.no-op]
             [wagoe.observability.metrics.ports :as metrics-ports]
             [wagoe.observability.tracing.ports :as tracing-ports]
             [wagoe.observability.errors.shell.adapters.no-op]
+            [clojure.java.io :as io]
+            [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [integrant.core :as ig]))
 
@@ -30,6 +31,7 @@
         ;; platform's http-handler no longer constructs it. Two stand-in wrappers.
         extra-middleware [(fn [h] (fn [request] (h (assoc request :tenant true))))
                           (fn [h] (fn [request] (h (assoc request :membership true))))]
+        i18n-middleware  (fn [h] (fn [request] (h (assoc request :i18n true))))
         handler (with-redefs [wagoe.platform.ports.http/compile-routes
                               (fn [_router routes router-config]
                                 (reset! captured-routes routes)
@@ -41,11 +43,7 @@
                               wagoe.platform.shell.http.versioning/apply-versioning
                               (fn [routes _config] (vec routes))
                               wagoe.platform.shell.http.versioning/wrap-handler-with-version-headers
-                              (fn [wrapped-handler _config] wrapped-handler)
-                              wagoe.i18n.shell.middleware/wrap-i18n
-                              (fn [wrapped-handler _i18n]
-                                (fn [request]
-                                  (wrapped-handler (assoc request :i18n true))))]
+                              (fn [wrapped-handler _config] wrapped-handler)]
                   (ig/init-key :wagoe/http-handler
                                {:user-routes {:api [{:path "/users" :methods {:get {:handler identity}}}]}
                                 :tenant-routes {:api [{:path "/tenants" :methods {:get {:handler identity}}}]}
@@ -60,7 +58,12 @@
                                 :tenant-service ::tenant-service
                                 :db-context ::db-context
                                 :extra-middleware extra-middleware
-                                :i18n ::i18n}))]
+                                ;; i18n middleware is built by the i18n lib and
+                                ;; injected, like tenant's (BOU-131). Platform
+                                ;; no longer requires wagoe.i18n.shell.middleware,
+                                ;; so there is nothing to redef above — the seam
+                                ;; is this argument.
+                                :i18n-middleware i18n-middleware}))]
     (testing "the compiled route set includes membership endpoints"
       (is (some #(= "/tenants/:tenant-id/memberships" (:path %)) @captured-routes))
       (is (some #(= "/tenants" (:path %)) @captured-routes))
@@ -270,3 +273,86 @@
         (is (nil? (metrics-ports/inc-counter! c h))))
       (is (nil? (metrics-ports/flush! c)))
       (ig/halt-key! :wagoe/metrics c))))
+
+;; =============================================================================
+;; Platform must not require any module's wiring (BOU-131)
+;; =============================================================================
+
+(deftest ^:unit platform-requires-no-module-wiring
+  ;; These were static requires, so every consumer of platform had to ship
+  ;; every module's jar whether it used one or not — a missing one is a
+  ;; FileNotFoundException at load. zzp-guard could not drop wagoe-payments
+  ;; after deleting all its payment code for exactly this reason.
+  ;;
+  ;; Measured before: requiring platform's wiring with payments, realtime or
+  ;; i18n off the classpath failed. After: all three load.
+  (let [src (or (some #(when (.exists (io/file %)) (slurp %))
+                      ["libs/platform/src/wagoe/platform/shell/system/wiring.clj"
+                       "src/wagoe/platform/shell/system/wiring.clj"])
+                (throw (ex-info "wiring.clj not found — cannot check"
+                                {:cwd (System/getProperty "user.dir")})))
+        ;; Requires only: a `[wagoe.<lib>.shell.module-wiring]` vector, not the
+        ;; word in a comment.
+        required (map second (re-seq #"(?m)^\s*\[(wagoe\.[a-z0-9-]+\.shell\.module-wiring)\]" src))]
+
+    (testing "the source was read — otherwise this passes vacuously"
+      (is (str/includes? src "wagoe/http-handler")))
+
+    (testing "no module-wiring is required"
+      (is (empty? required)
+          (str "platform requires " (pr-str required)
+               " — every consumer must then ship those jars. The layer that "
+               "emits a key registers it: put the require in wagoe.config.")))
+
+    (testing "and no module's shell namespace is reached into"
+      ;; ports are the seam and are fine; shell is not.
+      (let [shells (map second (re-seq #"\[(wagoe\.(?!platform)[a-z0-9-]+\.shell\.[a-z0-9.-]+)\s" src))]
+        (is (empty? shells)
+            (str "platform requires another module's shell: " (pr-str shells)))))))
+
+;; =============================================================================
+;; The legacy :i18n input still works (BOU-131 upgrade path)
+;; =============================================================================
+
+(deftest ^:unit legacy-i18n-key-still-produces-middleware
+  ;; An app that upgrades platform without regenerating its config still passes
+  ;; the i18n component as :i18n — the documented input until BOU-131. Ignoring
+  ;; it would not error: handlers read `(get request :i18n/t identity)`, so
+  ;; every marker would resolve to its own keyword and the page would merely
+  ;; look wrong. Silent, and therefore worth a test.
+  (let [captured-config (atom nil)
+        compiled-handler (fn [_] {:status 200})
+        config {:active {:wagoe/settings {:name "test" :version "0.0.1"}}}
+        build (fn [extra-keys]
+                (with-redefs [wagoe.platform.ports.http/compile-routes
+                              (fn [_router _routes router-config]
+                                (reset! captured-config router-config)
+                                compiled-handler)
+                              wagoe.platform.shell.interfaces.http.common/health-check-handler
+                              (fn [_ _ _] (fn [_] {:status 200}))
+                              wagoe.platform.shell.http.versioning/apply-versioning
+                              (fn [routes _] (vec routes))
+                              wagoe.platform.shell.http.versioning/wrap-handler-with-version-headers
+                              (fn [h _] h)]
+                  (ig/init-key :wagoe/http-handler
+                               (merge {:user-routes {:api []}
+                                       :router ::router :logger ::logger
+                                       :metrics-emitter ::metrics :tracer ::tracer
+                                       :error-reporter ::error-reporter :config config
+                                       :db-context ::db-context}
+                                      extra-keys))
+                  @captured-config))]
+
+    (testing "the new :i18n-middleware key is used as given"
+      (let [mw (fn [h] h)]
+        (is (= 2 (count (:middleware (build {:i18n-middleware mw})))))))
+
+    (testing "the legacy :i18n key still contributes middleware"
+      ;; A real i18n component shape; wrap-i18n is resolved dynamically.
+      (let [component {:catalogue {} :default-locale :en :dev? false}
+            mws (:middleware (build {:i18n component}))]
+        (is (= 2 (count mws))
+            "an app passing :i18n lost its translation middleware")))
+
+    (testing "neither key means no i18n middleware, and no error"
+      (is (= 1 (count (:middleware (build {}))))))))

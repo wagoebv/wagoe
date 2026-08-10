@@ -23,7 +23,16 @@
             ;; ig-config short — dev/repl/user.clj, the platform port tests, and
             ;; the devtools dashboard, which resolves wagoe.config/ig-config at
             ;; runtime. The layer that emits a key registers it.
-            [wagoe.external.shell.module-wiring]
+            ;; i18n is the only one of these that is emitted unconditionally
+            ;; (i18n-module-config falls back to defaults), so it is the only
+            ;; one that can be required statically.
+            ;;
+            ;; cache, payments and the external adapters are opt-in, and a
+            ;; static require here would recreate the problem BOU-131 removed
+            ;; from platform one layer down: loading this namespace would demand
+            ;; jars the app may not ship. They are required where the config
+            ;; decides they are active — see the module-config fns below.
+            [wagoe.i18n.shell.module-wiring]
             [wagoe.user.schema :as user-schema]))
 
 ;; =============================================================================
@@ -294,7 +303,10 @@
         error-reporting-cfg (error-reporting-config config)
         email-cfg (email-config config)
         router-cfg (get-in config [:active :wagoe/router] {:adapter :reitit})
-        cache-cfg (cache-config config)]
+        cache-cfg (cache-config config)
+        ;; Required only when the app enables it — see the ns docstring's note
+        ;; on why these are not static requires (BOU-131).
+        _         (when cache-cfg (require 'wagoe.cache.shell.module-wiring))]
     (cond-> {:wagoe/db-context db-cfg
              :wagoe/logging logging-cfg
              :wagoe/metrics metrics-cfg
@@ -338,7 +350,7 @@
                                      :tenant-service (ig/ref :wagoe/tenant-service)
                                      :db-context (ig/ref :wagoe/db-context)
                                      :extra-middleware (ig/ref :wagoe/tenant-http-middleware)
-                                     :i18n (ig/ref :wagoe/i18n)}
+                                     :i18n-middleware (ig/ref :wagoe/i18n-http-middleware)}
                               cache-enabled? (assoc :cache (ig/ref :wagoe/cache))
                               admin-enabled?
                               (assoc :admin-routes (ig/ref :wagoe/admin-routes))
@@ -536,6 +548,8 @@
    in config.edn to enable it. Returns only the keys that are present in :active."
   [config]
   (let [active (:active config)]
+    (when (some active [:wagoe.external/smtp :wagoe.external/imap :wagoe.external/twilio])
+      (require 'wagoe.external.shell.module-wiring))
     (cond-> {}
       (:wagoe.external/smtp   active) (assoc :wagoe.external/smtp   (:wagoe.external/smtp   active))
       (:wagoe.external/imap   active) (assoc :wagoe.external/imap   (:wagoe.external/imap   active))
@@ -550,6 +564,7 @@
   [config]
   (let [payments-cfg (get-in config [:active :wagoe/payment-provider])]
     (when payments-cfg
+      (require 'wagoe.payments.shell.module-wiring)
       {:wagoe/payment-provider payments-cfg})))
 
 (defn- i18n-module-config
@@ -561,7 +576,11 @@
   (let [i18n-cfg (get-in config [:active :wagoe/i18n]
                          {:catalogue-path "wagoe/i18n/translations"
                           :default-locale :en})]
-    {:wagoe/i18n i18n-cfg}))
+    {:wagoe/i18n i18n-cfg
+     ;; Built in the i18n lib and injected into the HTTP handler, so platform
+     ;; does not require wagoe.i18n.shell.middleware (BOU-131). Same shape as
+     ;; :wagoe/tenant-http-middleware (BOU-200).
+     :wagoe/i18n-http-middleware {:i18n (ig/ref :wagoe/i18n)}}))
 
 (defn- dashboard-module-config
   "Dashboard config — only active in dev profile.
