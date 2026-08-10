@@ -403,6 +403,22 @@
            ;; rather than the uberjar. Respects WAG_ENV to select the active profile.
            ;; =============================================================================
 
+           ;; =============================================================================
+           ;; MCP server (stdio)
+           ;; =============================================================================
+           ;; :replace-deps and :replace-paths, not :extra-deps. stdio MCP puts
+           ;; JSON-RPC on stdout, and this repository's own resources/logback.xml
+           ;; writes there. Worse, logback initialises during classpath startup —
+           ;; before -main runs — so no code in the server can prevent it:
+           ;; measured, `clojure -Sdeps '{...}' -M -e '(println "MARKER")'` from
+           ;; this directory printed 85 banner lines before MARKER. Replacing the
+           ;; classpath keeps resources/ off it entirely, and the mcp lib's own
+           ;; logback.xml (which targets stderr) applies.
+           :mcp       {:replace-paths []
+                       :replace-deps  {org.clojure/clojure {:mvn/version "1.12.5"}
+                                       wagoe/mcp {:local/root "libs/wagoe-mcp"}}
+                       :main-opts     ["-m" "wagoe.mcp.shell.server"]}
+
            :run       {:extra-deps {org.xerial/sqlite-jdbc      {:mvn/version "3.53.2.0"}
                                     org.postgresql/postgresql   {:mvn/version "42.7.12"}
                                     com.h2database/h2           {:mvn/version "2.4.240"}

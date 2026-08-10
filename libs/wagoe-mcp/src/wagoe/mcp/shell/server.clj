@@ -1,66 +1,47 @@
-(ns ^:wagoe/allow-direct wagoe.mcp.shell.server
-  ;; Composition root: -main wires concrete adapters (audit, system-source, the
-  ;; scaffolder service) the way an Integrant config would. Constructing another
-  ;; module's adapter here is the canonical hexagonal exception, so this ns is
-  ;; exempt from check:ports' cross-module rule (it still calls the scaffolder
-  ;; only through wagoe.scaffolder.ports thereafter).
-  "Entry point. Resolves the security context from the environment, seeds the
-   registry with the reflective resources, boots the stdio MCP server, and
-   audits startup. Run with: clojure -M:run
+(ns wagoe.mcp.shell.server
+  "Entry point for the stdio MCP server. Run with: clojure -M:run
 
-   Tool handlers added in BOU-100/101 must call
-   `wagoe.mcp.core.security/authorize` against the context and record the
-   decision via the audit log before performing any mutation."
-  (:require [wagoe.mcp.core.registry :as registry]
-            [wagoe.mcp.core.resources :as resources]
-            [wagoe.mcp.core.security :as security]
-            [wagoe.mcp.core.tools :as tools]
-            [wagoe.mcp.ports :as ports]
-            [wagoe.mcp.shell.audit :as audit]
-            [wagoe.mcp.shell.context :as context]
-            [wagoe.mcp.shell.dispatch :as dispatch]
-            [wagoe.mcp.shell.evaluator :as evaluator]
-            [wagoe.mcp.shell.migrator :as migrator]
-            [wagoe.mcp.shell.stdio :as stdio]
-            [wagoe.mcp.shell.system-source :as system-source]
-            [wagoe.mcp.shell.test-runner :as test-runner]
-            [wagoe.scaffolder.shell.service :as scaffolder]
-            [clojure.tools.logging :as log]))
+   Deliberately requires nothing. stdio MCP puts JSON-RPC on stdout, and
+   loading almost any namespace here initialises logging — logback prints its
+   configuration status to whatever System/out is at that moment, before a
+   single line of this file runs. So stdout is claimed first and the rest of
+   the server is loaded afterwards, from wagoe.mcp.shell.boot.")
 
-(defn- seed-registry
-  "Register the reflective resources (BOU-99) and Tier 0 tools (BOU-100)."
+(defn claim-stdout!
+  "Take sole ownership of stdout and return the stream the protocol must use.
+
+   stdio MCP reserves stdout for JSON-RPC, so anything else written there
+   corrupts the stream. This library ships a logback.xml targeting stderr for
+   exactly that reason, and it is not enough, because the server does not
+   control the classpath it runs on:
+
+     * Run from the Wagoe monorepo — which is what the documentation tells you
+       to do — the repository's own resources/logback.xml wins and its console
+       appender targets stdout.
+     * Two logback.xml files on one classpath is itself a configuration
+       warning, and any warning makes logback dump its whole status log. Also
+       to stdout.
+
+   Measured before this existed: 88 lines of logback output preceded the first
+   JSON-RPC response, so a client reading stdout met a banner where it expected
+   a message.
+
+   Rather than require every host project to configure logging correctly,
+   stdout is taken here and replaced with stderr. Anything that logs or
+   printlns afterwards — this server, a library, logback itself — writes to
+   stderr, which the MCP spec reserves for exactly that purpose.
+
+   Returns the original stdout, for the transport."
   []
-  (as-> registry/empty-registry r
-    (reduce registry/register-resource r resources/catalog)
-    (reduce registry/register-tool r tools/catalog)))
+  (let [protocol-out System/out]
+    (System/setOut (java.io.PrintStream. System/err true "UTF-8"))
+    (alter-var-root #'*out* (constantly (java.io.PrintWriter. System/err true)))
+    protocol-out))
 
 (defn -main
-  "Start the blocking stdio server. Returns when stdin reaches EOF."
+  "Claim stdout, then load and start the server. Returns at EOF on stdin."
   [& _args]
-  (let [ctx       (context/from-env)
-        audit-log (audit/logging-audit-log)
-        deps      {:registry      (seed-registry)
-                   :security      ctx
-                   :audit         audit-log
-                   :system-source (system-source/in-process-system-source)
-                   ;; Tier 1 generate tools (BOU-101): the scaffolder writes the
-                   ;; code; the test-runner runs the project's affected tests in
-                   ;; the closed verify loop.
-                   :scaffolder    (scaffolder/create-scaffolder-service)
-                   :test-runner   test-runner/default-test-runner
-                   ;; Tier 2 execute tools (BOU-102): all RCE-class, gated to the
-                   ;; :full context. The evaluator/migrator shell into (or run
-                   ;; in) the project; query-db needs a read-only datasource not
-                   ;; yet wired, so it returns :unavailable until one is.
-                   :evaluator     evaluator/default-evaluator
-                   :migrator      migrator/default-migrator
-                   :db-query      nil
-                   ;; sql-preview / gen-tests AI provider is config-driven; nil
-                   ;; yields a graceful :unavailable result until one is wired.
-                   :ai-provider   nil}]
-    (doseq [w (:warnings ctx)]
-      (log/warn w))
-    (ports/record! audit-log {:event    :server-start
-                              :security (security/describe ctx)
-                              :warnings (:warnings ctx)})
-    (stdio/serve (stdio/transport) (fn [msg] (dispatch/dispatch deps msg)))))
+  (let [protocol-out (claim-stdout!)]
+    ;; Loaded now, not required above: see the namespace docstring.
+    (require 'wagoe.mcp.shell.boot)
+    ((resolve 'wagoe.mcp.shell.boot/start!) protocol-out)))
