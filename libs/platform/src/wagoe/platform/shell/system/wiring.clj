@@ -49,7 +49,13 @@
             ;; is loaded by the application entry point (wagoe.main), NOT here —
             ;; platform must not statically depend on the feature libs
             ;; (BOU-192/BOU-198: dissolves the platform<->feature cycles).
-            [wagoe.external.shell.module-wiring] ;; Load external adapters init/halt methods
+            ;; NOTE: external module-wiring is loaded by the application entry
+            ;; point (wagoe.main), NOT here — platform required it without
+            ;; declaring it in deps.edn, the last entry in check:deps'
+            ;; allowlist. Loading it here also made the SMTP/IMAP/Twilio
+            ;; adapters a mandatory dependency of the framework's HTTP layer,
+            ;; which is the same coupling BOU-171/192/198 removed for user and
+            ;; the feature modules.
             [wagoe.payments.shell.module-wiring] ;; Load payments module init/halt methods
             [wagoe.i18n.shell.module-wiring] ;; Load i18n module init/halt methods
             [wagoe.realtime.shell.module-wiring] ;; Load realtime module init/halt methods

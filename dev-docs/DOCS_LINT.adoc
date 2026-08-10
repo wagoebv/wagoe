@@ -86,7 +86,7 @@ src/wagoe/user/core/user.clj
 libs/user/src/wagoe/user/core/user.clj
 ----
 
-**Reference:** See link:reference/migrations/library-split.adoc[Library Split Migration Guide]
+**Reference:** See link:adr/ADR-001-library-split.adoc[Library Split Migration Guide]
 
 === `unknown-namespace`
 
@@ -123,4 +123,4 @@ A GitHub link to the wagoe repository uses an outdated path structure.
 == Related
 
 * link:reference/repo-structure.adoc[Repository Structure] - Current wagoe repo structure
-* link:reference/migrations/library-split.adoc[Library Split Migration] - Path mapping guide
+* link:adr/ADR-001-library-split.adoc[Library Split Migration] - Path mapping guide

@@ -370,8 +370,8 @@ must call it in an `:each` fixture.  Documented prominently in AGENTS.md.
 == References
 
 * link:ADR-001-library-split.adoc[ADR-001: Library Split] — monorepo library structure
-* link:../guides/calendar.adoc[Calendar Guide] — task-oriented how-to
-* link:../api/calendar.adoc[Calendar API Reference] — function signatures
+* link:../../docs/modules/libraries/pages/calendar.adoc[Calendar Guide] — task-oriented how-to
+* link:../../docs/modules/libraries/pages/calendar.adoc[Calendar API Reference] — function signatures
 * `libs/calendar/AGENTS.md` — developer pitfalls and REPL guide
 * https://icalendar.org/RFC-Specifications/iCalendar-RFC-5545/[RFC 5545 — iCalendar specification]
 * https://www.ical4j.org/[ical4j documentation]

@@ -300,7 +300,7 @@ Generated files:
 * 3 test files (unit, integration, contract)
 * 1 migration file
 
-See link:scaffolder.adoc[Scaffolder Reference] for complete options.
+See link:../../docs/modules/libraries/pages/scaffolder.adoc[Scaffolder Reference] for complete options.
 
 [[scaffold-integrate]]
 === Integrate Scaffolded Module
@@ -607,5 +607,5 @@ clojure -M:repl-clj
 == Related Documentation
 
 * link:repo-structure.adoc[Repository Structure] - Library organization and paths
-* link:../guides/run-tests-and-watch.adoc[Run Tests in Watch Mode] - Detailed testing guide
-* link:../guides/troubleshooting.adoc[Troubleshooting Guide] - Common issues and solutions
+* link:../../docs/modules/guides/pages/testing.adoc[Run Tests in Watch Mode] - Detailed testing guide
+* link:../../docs/modules/guides/pages/debugging.adoc[Troubleshooting Guide] - Common issues and solutions

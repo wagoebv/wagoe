@@ -3,6 +3,7 @@
             [clojure.set :as set]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
+            [integrant.core :as ig]
             [wagoe.main :as main]))
 
 (deftest ^:unit worker-ig-config-drops-http-surface
@@ -94,3 +95,25 @@
 
     (testing "both server and worker report through the summary"
       (is (= 2 (count (re-seq #"\(log/error \(startup-failure-summary e\)\)" src)))))))
+
+;; =============================================================================
+;; Module wiring loaded by the entry point
+;; =============================================================================
+
+(deftest ^:unit entry-point-registers-every-module-it-owns
+  ;; platform used to require these, which made the SMTP/IMAP/Twilio adapters a
+  ;; mandatory dependency of the HTTP layer — and, for `external`, one platform
+  ;; never declared in its deps.edn (the last entry in check:deps' allowlist).
+  ;; Loading them here instead is the pattern BOU-171/192/198 established.
+  ;;
+  ;; Requiring wagoe.main is what registers them, so a key missing here means a
+  ;; project that activates that component gets "No method in multimethod
+  ;; ig/init-key" at startup rather than a running system.
+  (let [registered (set (keys (methods ig/init-key)))]
+    (testing "the external adapters are registered"
+      (doseq [k [:wagoe.external/smtp :wagoe.external/imap :wagoe.external/twilio]]
+        (is (contains? registered k) (str k " has no ig/init-key method"))))
+
+    (testing "and the feature modules the entry point owns"
+      (doseq [k [:wagoe/user-service :wagoe/admin-service]]
+        (is (contains? registered k) (str k " has no ig/init-key method"))))))

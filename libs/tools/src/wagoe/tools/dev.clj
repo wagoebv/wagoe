@@ -34,21 +34,62 @@
   (or (str/starts-with? link "http://")
       (str/starts-with? link "https://")
       (str/starts-with? link "mailto:")
-      (str/starts-with? link "#")))
+      (str/starts-with? link "#")
+      ;; Antora module-qualified xrefs — `xref:guides:create-module.adoc[]`.
+      ;; Antora resolves these through its component/module map, not the
+      ;; filesystem, so checking them as paths reports 120 false breakages.
+      ;; A leading `./` or `../` is a real relative path and is not skipped.
+      ;; Module names may be capitalised — Antora's default module is `ROOT`.
+      (re-find #"^[A-Za-z][A-Za-z0-9_-]*:" link)))
+
+(defn- link-base-dir
+  "The directory a link in `file` resolves against.
+
+   Antora's nav.adoc is the exception: its xrefs resolve against the module's
+   `pages/` directory, not against the nav file's own location. Resolving them
+   as ordinary relative paths reported every nav entry as broken."
+  [file]
+  (let [parent (.getParentFile file)]
+    (if (= "nav.adoc" (.getName file))
+      (let [pages (io/file parent "pages")]
+        (if (.isDirectory pages) pages parent))
+      parent)))
 
 (defn- resolve-target [base-file link]
   (let [target (first (str/split link #"#"))]
     (if (str/starts-with? target "/")
       (io/file root-dir (subs target 1))
-      (.getCanonicalFile (io/file (.getParentFile base-file) target)))))
+      (.getCanonicalFile (io/file (link-base-dir base-file) target)))))
+
+(defn- iter-adoc-files
+  "Every .adoc under dev-docs/ and docs/.
+
+   These were never checked: the link pattern below matched markdown only, and
+   dev-docs is 100% AsciiDoc — 591 `link:`/`xref:` macros and not one markdown
+   link, so `bb check-links` reported a clean 63 links while never opening a
+   single file there."
+  []
+  (->> [(io/file root-dir "dev-docs") (io/file root-dir "docs")]
+       (filter #(.exists %))
+       (mapcat #(file-seq %))
+       (filter #(and (.isFile %) (str/ends-with? (.getName %) ".adoc")))
+       (sort-by #(.getPath %))))
+
+(defn- doc-links
+  "Local link targets in `content`, for both markdown and AsciiDoc.
+
+   AsciiDoc writes `link:path[text]` and `xref:path[text]`; the markdown
+   pattern cannot see either."
+  [content]
+  (->> (concat (map second (re-seq #"\[[^\]]+\]\(([^)]+)\)" content))
+               (map second (re-seq #"(?:xref|link):([^\[\s]+)\[" content)))
+       (map str/trim)
+       (remove str/blank?)
+       (remove skippable?)))
 
 (defn- check-file [file]
   (let [content (slurp file)
-        link-pattern #"\[[^\]]+\]\(([^)]+)\)"
-        local-links (->> (re-seq link-pattern content)
-                         (map second)
-                         (map str/trim)
-                         (remove skippable?))
+        local-links (doc-links content)
         broken (->> local-links
                     (map (fn [link]
                            (let [target (resolve-target file link)]
@@ -59,14 +100,17 @@
      :broken broken}))
 
 (defn check-links
-  "Validate local markdown links in AGENTS.md files (root + all libs/).
+  "Validate local links in AGENTS.md files and in the AsciiDoc documentation.
    Prints a summary and exits non-zero when broken links are found."
   []
-  (let [files (vec (iter-agents-files))
+  (let [agents (vec (iter-agents-files))
+        adocs  (vec (iter-adoc-files))
+        files  (into agents adocs)
         results (map check-file files)
         total-checked (reduce + (map :checked results))
         all-broken (vec (mapcat :broken results))]
-    (println (str "AGENTS files checked: " (count files)))
+    (println (str "AGENTS files checked: " (count agents)))
+    (println (str "AsciiDoc files checked: " (count adocs)))
     (println (str "Local links checked: " total-checked))
     (println (str "Broken links: " (count all-broken)))
     (when (seq all-broken)

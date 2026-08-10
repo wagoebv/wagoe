@@ -31,6 +31,7 @@
              [wagoe.tools.check-branch-protection :as check-bp]
              [wagoe.tools.check-hygiene :as check-hygiene]
              [wagoe.tools.check-doc-counts :as check-doc-counts]
+             [wagoe.tools.check-versions :as check-versions]
              [check-no-boundary :as check-no-boundary]  ; lives under scripts/, outside the renamed tree
              [wagoe.tools.doctor-env  :as doctor-env]
              [wagoe.tools.db          :as db]
@@ -77,7 +78,9 @@
                  :task (clojure "-M:coverage:db")}
   create-admin  {:doc "Create the first admin user for a new Wagoe project (interactive wizard)"
                  :task (apply admin/-main *command-line-args*)}
-  check-links   {:doc "Validate local markdown links in AGENTS documentation"
+  check:versions {:doc "Every hard-coded suite version must agree (bb check:versions)"
+                  :task (check-versions/-main)}
+  check-links   {:doc "Validate local links in AGENTS.md and the AsciiDoc docs (dev-docs/ + docs/)"
                  :task (dev/check-links)}
   agents:gen    {:doc "Generate AGENTS.md + AGENTS.md.tmpl from resources/agents/knowledge.edn (bb agents:gen [--check])"
                  :task (apply agents-gen/-main *command-line-args*)}

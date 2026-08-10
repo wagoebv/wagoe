@@ -356,11 +356,11 @@ Test metadata tags:
 [[migration-from-old-structure]]
 == Migration from Old Structure
 
-See link:migrations/library-split.adoc[Library Split Migration Guide] for the complete mapping from pre-split paths to current paths.
+See link:../adr/ADR-001-library-split.adoc[Library Split Migration Guide] for the complete mapping from pre-split paths to current paths.
 
 [[related-documentation]]
 == Related Documentation
 
 * link:development-commands.adoc[Development Commands] - Test, lint, REPL, build commands
-* link:migrations/library-split.adoc[Library Split Migration] - Old to new path mapping
-* link:../architecture/overview.adoc[Architecture Overview] - FC/IS patterns and design
+* link:../adr/ADR-001-library-split.adoc[Library Split Migration] - Old to new path mapping
+* link:../../docs/modules/architecture/pages/fc-is.adoc[Architecture Overview] - FC/IS patterns and design

@@ -97,6 +97,10 @@
     :scope :monorepo
     :label "Documented library counts"
     :cmd   ["bb" "check:doc-counts"]}
+   {:id    :versions
+    :scope :monorepo
+    :label "Suite version consistency"
+    :cmd   ["bb" "check:versions"]}
    {:id    :agents
     :scope :monorepo
     :label "AGENTS.md drift"

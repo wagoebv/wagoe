@@ -244,7 +244,7 @@ Always index:
 - Timestamp columns used in range queries (`created_at`)
 - Composite indexes for common query patterns (`(tenant_id, status)`)
 
-The migration best practices guide covers index creation patterns: xref:migrations.adoc[].
+The migration best practices guide covers index creation patterns: link:../docs/modules/guides/pages/migrations.adoc[].
 
 === Query Optimization
 

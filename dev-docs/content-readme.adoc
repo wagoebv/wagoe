@@ -1,240 +1,88 @@
 == Wagoe Framework Documentation
 
-Welcome to the Wagoe Framework documentation. This documentation
-covers architecture, guides, API references, and implementation details
-for the Wagoe Framework - a module-centric software framework built
-on Clojure that implements the "Functional Core / Imperative Shell"
-architectural paradigm.
+Developer-facing documentation: architecture decisions, references and
+working notes. It is the counterpart to the published documentation under
+`docs/modules/`, which is the Antora source for https://wagoe.org.
 
-=== Documentation Structure
+[NOTE]
+====
+*Where to look first.* Architecture guides, getting-started material and the
+per-library documentation live in `docs/modules/` and are published on
+https://wagoe.org. This index covers `dev-docs/` only — the material that stays
+in the repository.
 
-[[books-architecture]]
-==== 📚 link:architecture/[Architecture]
+This page previously indexed an `architecture/`, `guides/` and `change-reports/`
+tree that was removed when the documentation moved to Antora. Fifty-two of its
+links pointed at files that no longer existed. `bb check-links` now reads
+AsciiDoc as well as Markdown, so a link that does not resolve fails the build
+rather than sitting here.
+====
 
-Comprehensive architectural documentation covering the core design
-principles, patterns, and technical decisions.
+=== Architecture Decision Records
 
-* link:architecture/overview.adoc[Overview] - High-level architecture
-overview
-* link:guides/functional-core-imperative-shell.adoc[Functional Core /
-Imperative Shell] - Core architectural pattern
-* link:architecture/ports-and-adapters.adoc[Ports and Adapters] -
-Hexagonal architecture implementation
-* link:architecture/clean-architecture-layers.adoc[Clean Architecture
-Layers] - Layer organization and responsibilities
-* link:architecture/components.adoc[Components] - System component
-design
-* link:architecture/configuration-and-env.adoc[Configuration and
-Environment] - Configuration management
-* link:architecture/database-adapters.adoc[Database Adapters] - Database
-abstraction layer
-* link:architecture/data-flow.adoc[Data Flow] - Request/response data
-flow patterns
-* link:architecture/error-handling-observability.adoc[Error Handling and
-Observability] - Error management strategy
-* link:architecture/integration-patterns.adoc[Integration Patterns] -
-Module integration approaches
-* link:architecture/layer-separation.adoc[Layer Separation] - Strict
-layer separation rules
-* link:architecture/middleware-architecture.adoc[Middleware
-Architecture] - Middleware design and usage
-* link:architecture/observability-integration.adoc[Observability
-Integration] - Logging, metrics, and monitoring
-* link:architecture/shared-utilities.adoc[Shared Utilities] - Common
-utility modules
+35 ADRs recording decisions and their context. Start with
+link:adr/README.adoc[the ADR index] for the current status of each.
 
-[[mortar_board-guides]]
-==== 🎓 link:guides/[Guides]
+* link:adr/ADR-001-library-split.adoc[ADR-001: Split Wagoe Monolith into Modular Libraries]
+* link:adr/ADR-002-wagoe-new-command.adoc[ADR-002: Implement `wagoe new` Command in Scaffolder]
+* link:adr/ADR-003-websocket-architecture.adoc[ADR-003: WebSocket Architecture for Real-time Module]
+* link:adr/ADR-004-multi-tenancy-architecture.adoc[ADR-004: Multi-Tenancy Architecture]
+* link:adr/ADR-005-validation-devex-foundations.adoc[ADR-005: Validation Developer Experience Foundations]
+* link:adr/ADR-006-web-ui-architecture-htmx-hiccup.adoc[ADR-006: Web UI Architecture - HTMX + Hiccup]
+* link:adr/ADR-007-routing-architecture.adoc[ADR-007: Routing Architecture - Module Composition and Path Prefixing]
+* link:adr/ADR-008-normalized-routing-abstraction.adoc[ADR-008: Normalized Routing Abstraction - Framework-Agnostic Route Definitions]
+* link:adr/ADR-009-reitit-exclusive-router.adoc[ADR-009: Reitit as Exclusive Router Implementation]
+* link:adr/ADR-010-http-interceptor-architecture.adoc[ADR-010: HTTP Interceptor Architecture]
+* link:adr/ADR-011-calendar-library.adoc[ADR-011: Calendar Library]
+* link:adr/ADR-012 user module updates.adoc[ADR-012: User Module Admin Integration — Split-Table Architecture]
+* link:adr/ADR-013-intenationalisation.adoc[ADR-013: Internationalisation (i18n) — Multi-Language Support]
+* link:adr/ADR-014-pluggable-auth.adoc[ADR-014: Pluggable User / Auth / Authorization]
+* link:adr/ADR-015-wagoe-tools.adoc[ADR-015: wagoe-tools — Distributing Developer Tooling to Starter Projects]
+* link:adr/ADR-016-tenant-user-membership.adoc[ADR-016: Tenant User Membership]
+* link:adr/ADR-017-library-migration-discovery.adoc[ADR-017: Library Migration Discovery]
+* link:adr/ADR-018-admin-belongs-to-widget.adoc[ADR-018: Admin Module — :belongs-to Widget for Foreign Key Lookups]
+* link:adr/ADR-019-shared-payments-library.adoc[ADR-019: Shared Payments Library for PSP Integrations]
+* link:adr/ADR-020-tenant-database-scope.adoc[ADR-020: PostgreSQL-Only Tenant Provisioning]
+* link:adr/ADR-021-fcis-boundary-rules.adoc[ADR-021: FC/IS Boundary Rules]
+* link:adr/ADR-022-error-handling-conventions.adoc[ADR-022: Error Handling Conventions]
+* link:adr/ADR-023-multi-database-adapter-support.adoc[ADR-023: Multi-Database Adapter Support]
+* link:adr/ADR-024-devtools-guidance-engine.adoc[ADR-024: Devtools Library & Guidance Engine]
+* link:adr/ADR-025-zero-friction-onboarding.adoc[ADR-025: Zero-Friction Onboarding]
+* link:adr/ADR-026-repl-command-center.adoc[ADR-026: REPL as Command Center]
+* link:adr/ADR-027-dev-dashboard.adoc[ADR-027: Dev Dashboard]
+* link:adr/ADR-028-error-experience.adoc[ADR-028: Error Experience & Auto-Recovery]
+* link:adr/ADR-029-discoverability-progressive-learning.adoc[ADR-029: Discoverability & Progressive Learning]
+* link:adr/ADR-030-audience-segmentation.adoc[ADR-030: Audience Segmentation Library]
+* link:adr/ADR-031-mcp-security-model.adoc[ADR-031: MCP Server Security Model — Threat Model & Capability/Context Gating]
+* link:adr/ADR-032-mcp-guardrail-error-payload.adoc[ADR-032: MCP Guardrail Error Payload — "Guardrail, Not Straitjacket"]
+* link:adr/ADR-033-mcp-reflective-resources.adoc[ADR-033: Reflective MCP Resources — Ground Truth from the Running Project]
+* link:adr/ADR-034-mcp-tier1-verify-loop.adoc[ADR-034: Tier 1 Generate Tools + Closed Verify Loop — the Moat]
+* link:adr/ADR-035-realtime-redis-scaling.adoc[ADR-035: Realtime Redis-backed Pub/Sub and Multi-Replica Scaling]
 
-Step-by-step tutorials and how-to guides for working with Wagoe
-Framework.
+=== Reference
 
-*Getting Started:*
+* link:reference/development-commands.adoc[Development Commands]
+* link:reference/docs-maintenance-checklist.adoc[Documentation Maintenance Checklist]
+* link:reference/historical-docs-triage.adoc[Historical Docs Triage (Week 5)]
+* link:reference/publishing.adoc[Publishing Libraries]
+* link:reference/repo-structure.adoc[Repository Structure]
+* link:reference/user-module-observability.adoc[User Module Observability Reference]
+* link:reference/wagoe-prd.adoc[Wagoe Framework: Product Requirements Document]
 
-* link:guides/quickstart.adoc[Quickstart] - Get up and running quickly
+Also under `reference/`: link:reference/templates/use-case-template.adoc[use-case],
+link:reference/templates/endpoint-template.adoc[endpoint] and
+link:reference/templates/acceptance-criteria-template.adoc[acceptance-criteria]
+templates, plus launch material under `reference/launch/`.
 
-*Concepts:*
+=== Working notes
 
-* link:guides/modules-and-ownership.adoc[Modules and Ownership] - Module
-organization principles
-* link:guides/ports-and-adapters.adoc[Ports and Adapters] -
-Understanding the pattern
-* link:guides/validation-system.adoc[Validation System] - Request
-validation approach
-
-*How-To Guides:*
-
-* link:guides/create-module.adoc[Create a Module] - Scaffold a new
-domain module
-* link:guides/add-entity.adoc[Add an Entity] - Add entities to existing
-modules
-* link:guides/add-rest-endpoint.adoc[Add REST Endpoint] - Expose new API
-endpoints
-* link:guides/implement-port-adapter.adoc[Implement Port/Adapter] -
-Create custom adapters
-* link:guides/configure-db.adoc[Configure Database] - Database setup and
-configuration
-* link:guides/run-tests-and-watch.adoc[Run Tests and Watch] - Testing
-workflow
-* link:guides/use-cli.adoc[Use CLI] - Command-line interface usage
-
-*Troubleshooting:*
-
-* link:guides/troubleshooting.adoc[Troubleshooting Guide] - Common
-issues and solutions
-
-[[open_book-reference]]
-==== 📖 link:reference/[Reference]
-
-Technical reference documentation for APIs, commands, and configuration.
-
-* link:reference/wagoe-prd.adoc[Product Requirements Document] - Complete 
-PRD with architecture and specifications
-* link:reference/commands.adoc[Commands] - CLI command reference
-* link:reference/cli/user-cli.adoc[User CLI Reference] - User management 
-CLI commands
-* link:reference/configuration.adoc[Configuration] - Configuration
-options and structure
-* link:reference/multi-db-usage.adoc[Multi-Database Usage] - Guide for 
-using multiple database adapters
-* link:reference/error-codes.adoc[Error Codes] - System error codes and
-meanings
-* link:reference/observability-reference.adoc[Observability Reference] - 
-Logging, metrics, and error reporting API
-* link:reference/user-module-observability.adoc[User Module Observability] - 
-Observability implementation example
-* link:reference/scaffolder.adoc[Scaffolder] - Module scaffolding tool
-reference
-* link:reference/validation-guide.adoc[Validation Guide] - Complete 
-validation system developer guide
-* link:reference/validation-patterns.adoc[Validation Patterns] -
-Validation approach and patterns
-* link:reference/docs-maintenance-checklist.adoc[Documentation Maintenance Checklist] -
-Pre-merge docs quality checks
-* link:reference/historical-docs-triage.adoc[Historical Docs Triage] -
-Deferred cleanup tracker for archived/migration-era docs
-
-[[electric_plug-api]]
-==== 🔌 link:api/[API]
-
-API documentation and examples.
-
-* link:api/index.adoc[API Overview] - API design principles
-* link:api/post-users-example.adoc[POST /users Example] - Complete
-endpoint implementation example
-
-[[classical_building-architecture-decision-records-adr]]
-==== 🏛️ link:adr/[Architecture Decision Records (ADR)]
-
-Documented architectural decisions with context and rationale.
-
-* link:adr/ADR-005-validation-devex-foundations.adoc[ADR-005: Validation
-DevEx Foundations]
-* link:adr/ADR-006-web-ui-architecture-htmx-hiccup.adoc[ADR-006: Web UI
-Architecture (HTMX {plus} Hiccup)]
-* link:adr/ADR-007-routing-architecture.adoc[ADR-007: Routing
-Architecture]
-
-[[bar_chart-diagrams]]
-==== 📊 link:diagrams/[Diagrams]
-
-PlantUML source files and generated diagrams for architecture
-visualization.
-
-* link:diagrams/README.adoc[Diagrams README] - Overview of available
-diagrams
-
-[[computer-implementation-examples]]
-==== 💻 link:implementation/[Implementation Examples]
-
-Detailed implementation examples showing complete feature
-implementations.
-
-* link:implementation/user-module-implementation.adoc[User Module
-Implementation] - Complete user module walkthrough
-
-[[pencil-change-reports]]
-==== 📝 link:change-reports/[Change Reports]
-
-Historical documentation of significant refactoring and system changes.
-
-* link:change-reports/FC-IS-COMPLIANCE-ANALYSIS.adoc[FC/IS Compliance
-Analysis]
-* link:change-reports/FC-IS-REFACTORING-COMPLETE.adoc[FC/IS Refactoring
-Complete]
-* link:change-reports/SERVICE-METHOD-RENAMING-MIGRATION.adoc[Service
-Method Renaming Migration]
-Rearchitecture Summary]
-* link:change-reports/DOCUMENTATION-UPDATE-2025-10-24.adoc[Documentation
-Update 2025-10-24]
-
-=== Additional Resources
-
-* link:DECISIONS.adoc[Decisions] - Key technical and architectural
-decisions
-* link:roadmap.adoc[Roadmap] - Project roadmap and future plans
-* link:DOCKER_DEVELOPMENT.adoc[Docker Development] - Docker-based
-development setup
-* link:guides/integrate-observability.adoc[Observability Integration] -
-Logging, metrics, and error reporting setup
-* link:DOCUMENTATION_SERVING.adoc[Documentation Serving] - How to serve
-documentation locally
-
-=== Quick Links
-
-* link:https://github.com/wagoebv/wagoe/blob/main/AGENTS.md[AGENTS.md] - Comprehensive guide for AI coding
-agents
-* link:../README.md[README.md] - Project README
-* link:../CONTRIBUTING.md[CONTRIBUTING.md] - Contribution guidelines
-* link:../PRD.adoc[PRD.adoc] - Product Requirements Document
-
-=== Development
-
-For the best development experience, refer to:
-
-[arabic]
-. *link:https://github.com/wagoebv/wagoe/blob/main/AGENTS.md[AGENTS.md]* - Complete development guide with
-commands and patterns
-. *link:guides/quickstart.adoc[Quickstart Guide]* - Get started
-developing
-. *link:architecture/overview.adoc[Architecture Overview]* - Understand
-the system design
-
-=== Documentation Philosophy
-
-This documentation follows these principles:
-
-* *Clear and Concise* - Information is easy to find and understand
-* *Example-Driven* - Real code examples for all patterns
-* *Architecture-First* - Design principles guide implementation
-* *Practical* - Focuses on real-world usage and common scenarios
-* *Maintainable* - Simple structure without build complexity
-
-=== Viewing Documentation
-
-==== On GitHub
-
-Simply browse the files directly - all documentation is readable in the
-GitHub web interface.
-
-==== Locally
-
-You can view the documentation files directly in any text editor, or
-serve them locally for a better browsing experience:
-
-[source,bash]
-----
-# Smart serving with port allocation
-npm run serve-docs
-
-# Or use Python's built-in HTTP server
-cd docs && python3 -m http.server 8080
-----
-
-Then visit http://localhost:8080 in your browser.
-
-'''''
-
-*No Build Step Required* - This documentation is designed to be browsed
-directly without any build process. All files are standard Markdown
-(.md) or AsciiDoc (.adoc) format.
+* link:README.adoc[dev-docs README] - what belongs in this directory
+* link:DECISIONS.adoc[Decisions] - decisions too small for an ADR
+* link:roadmap.adoc[Roadmap]
+* link:scaling-guide.adoc[Scaling guide] - vertical and horizontal scaling
+* link:security-checklist.adoc[Security checklist]
+* link:DOCKER_DEVELOPMENT.adoc[Docker development]
+* link:DOCS_LINT.adoc[Documentation linting]
+* link:alpha-release-checklist.adoc[Alpha release checklist]
+* link:implementation/user-module-implementation.adoc[User module implementation]
+* link:presentations/fc-is-hexagonal-nl.adoc[Voorbij MVC: Functional Core / Imperative Shell] (NL)
