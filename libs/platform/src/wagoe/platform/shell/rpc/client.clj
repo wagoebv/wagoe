@@ -41,7 +41,13 @@
 ;; =============================================================================
 
 (def default-opts
-  {:timeout-ms   5000
+  {;; Where the service mounts `rpc-handler`. Configurable because the platform
+   ;; router rewrites paths depending on the slot a module puts them in: a
+   ;; route returned under `:api` is served at `/api/v1/rpc`, one under `:web`
+   ;; at `/rpc`. A client with the wrong one gets a 404, which reads as "the
+   ;; service is not there" rather than "it is there, at another path".
+   :path         "/rpc"
+   :timeout-ms   5000
    :retries      2
    :retry-delay-ms 100
    ;; Only failures that a second attempt could plausibly fix. Retrying a
@@ -143,7 +149,7 @@
   [base-url operation args {:keys [context] :as opts}]
   (let [opts     (merge default-opts opts)
         envelope (rpc/request-envelope operation args context)
-        url      (str base-url "/rpc")]
+        url      (str base-url (:path opts))]
     (raise-if-thrown!
      operation
      (loop [attempt 0]
@@ -209,7 +215,10 @@
    Args:
      protocol - the protocol map, e.g. wagoe.payments.ports/IPaymentProvider
      base-url - service root, e.g. \"http://payments:3001\"
-     opts     - :timeout-ms :retries :retry-delay-ms :retry-on :context
+     opts     - :path :timeout-ms :retries :retry-delay-ms :retry-on :context
+
+   `:path` defaults to \"/rpc\". Set it to \"/api/v1/rpc\" if the service mounts
+   the handler as an `:api` route, since versioning rewrites those.
 
    Example:
      (remote-adapter payments-ports/IPaymentProvider \"http://payments:3001\" {})"

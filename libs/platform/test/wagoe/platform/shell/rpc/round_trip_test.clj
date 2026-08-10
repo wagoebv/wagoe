@@ -505,3 +505,76 @@
     (testing "and the message says what was wrong"
       (is (re-find #"not a map"
                    (get-in (decode-body (:body (post ["x"]))) [:error :message]))))))
+
+(deftest ^:integration the-client-posts-where-the-service-mounts
+  ;; The path is not a constant on either side. The platform router rewrites
+  ;; :api route paths with the version prefix, so a handler mounted there is
+  ;; served at /api/v1/rpc while a client using the default posts to /rpc —
+  ;; a 404 that reads as the service being down rather than being elsewhere.
+  (let [seen     (atom nil)
+        provider (mock/make-mock-provider)
+        handler  (wrap-format (server/rpc-handler pay-ports/IPaymentProvider provider))
+        app      (fn [request]
+                   (reset! seen (:uri request))
+                   (handler request))]
+    (with-server app
+      (fn [url]
+        (testing "by default it posts to /rpc"
+          (reset! seen nil)
+          (client/call! url :get-payment-status ["id"] {:retries 0})
+          (is (= "/rpc" @seen)))
+
+        (testing "and to the configured path when the service mounts elsewhere"
+          ;; The versioned case: a module that returned the handler under :api.
+          (reset! seen nil)
+          (client/call! url :get-payment-status ["id"] {:retries 0 :path "/api/v1/rpc"})
+          (is (= "/api/v1/rpc" @seen)))
+
+        (testing "the adapter passes it through too, not just call!"
+          (reset! seen nil)
+          (let [remote (client/remote-adapter pay-ports/IPaymentProvider url
+                                              {:retries 0 :path "/internal/rpc"})]
+            (pay-ports/get-payment-status remote "id")
+            (is (= "/internal/rpc" @seen))))))))
+
+(deftest ^:integration rpc-routes-mounts-where-the-default-client-looks
+  ;; The two defaults have to agree, and they live in different namespaces.
+  ;; This is the assertion that fails if either moves.
+  (let [provider (mock/make-mock-provider)
+        routes   (server/rpc-routes pay-ports/IPaymentProvider provider)
+        route    (first (:web routes))]
+
+    (testing "the routes go in the :web slot, which versioning does not rewrite"
+      (is (contains? routes :web))
+      (is (not (contains? routes :api))
+          ":api would be served at /api/v1/rpc and the default client would 404"))
+
+    (testing "at the path the client posts to by default"
+      (is (= (:path route) (:path client/default-opts))))
+
+    (testing "on POST, since that is what the client sends"
+      (is (fn? (get-in route [:methods :post :handler]))))
+
+    (testing "and kept out of the published API document"
+      ;; Service-to-service plumbing, not public surface.
+      (is (true? (get-in route [:methods :post :no-doc]))))
+
+    (testing "a service that wants it elsewhere can say so"
+      (is (= "/internal/rpc"
+             (:path (first (:web (server/rpc-routes pay-ports/IPaymentProvider
+                                                    provider "/internal/rpc")))))))))
+
+(deftest ^:integration routes-from-rpc-routes-actually-serve-the-protocol
+  ;; Without this, the two tests above would pass on a route map that no
+  ;; server can use.
+  (let [provider (mock/make-mock-provider)
+        route    (first (:web (server/rpc-routes pay-ports/IPaymentProvider provider)))
+        handler  (wrap-format (get-in route [:methods :post :handler]))
+        app      (fn [request]
+                   (if (= (:path route) (:uri request))
+                     (handler request)
+                     {:status 404 :body ""}))]
+    (with-server app
+      (fn [url]
+        (let [remote (client/remote-adapter pay-ports/IPaymentProvider url {:retries 0})]
+          (is (= :mock (pay-ports/provider-name remote))))))))

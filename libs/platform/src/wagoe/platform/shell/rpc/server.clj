@@ -95,7 +95,9 @@
 (defn rpc-handler
   "A Ring handler serving `protocol` backed by `implementation`.
 
-   Mount at `/rpc` — `…rpc.client` posts there.
+   Mount it with `rpc-routes` rather than by hand — the path the client posts
+   to depends on which route slot it lands in, and getting that wrong answers
+   404, which reads as the service being absent rather than being elsewhere.
 
    Expects the app's format middleware to have decoded the body into
    `:body-params`, and leaves encoding the response to it as well — the client
@@ -114,8 +116,7 @@
      implementation - a value satisfying it, in this process
 
    Example:
-     {:path \"/rpc\"
-      :methods {:post {:handler (rpc-handler payments-ports/IPaymentProvider provider)}}}"
+     (rpc-routes payments-ports/IPaymentProvider provider)"
   [protocol implementation]
   (fn [{:keys [body-params headers] :as _request}]
     (let [;; Only merge context onto something that can carry it. A valid
@@ -131,3 +132,34 @@
       ;; as JSON.
       {:status (error->status (get-in response [:error :type]))
        :body   response})))
+
+(def default-path
+  "Where `rpc-routes` mounts the endpoint. Matches `client/default-opts`."
+  "/rpc")
+
+(defn rpc-routes
+  "Routes serving `protocol`, for a module's `:web` slot.
+
+   `:web` and not `:api` on purpose. The platform router rewrites `:api` route
+   paths with the configured version prefix, so a handler returned there is
+   served at `/api/v1/rpc` while a client using the default `:path` posts to
+   `/rpc` and gets a 404 — a failure that reads as the service being down.
+
+   Versioning it would also be a category error: this endpoint's contract is
+   the protocol, and a protocol that changes shape breaks both processes at
+   once whatever the URL says. It is service-to-service plumbing, not public
+   API surface, and it does not belong in the published OpenAPI document.
+
+   Returns the `{:web [...]}` shape a module's route function returns, so it
+   can be merged into one.
+
+   Example, in a module's shell/http.clj:
+     (defn routes [provider]
+       (merge (rpc-server/rpc-routes ports/IPaymentProvider provider)
+              {:api [...]}))"
+  ([protocol implementation] (rpc-routes protocol implementation default-path))
+  ([protocol implementation path]
+   {:web [{:path    path
+           :methods {:post {:handler (rpc-handler protocol implementation)
+                            :summary "Internal RPC endpoint (service-to-service)"
+                            :no-doc  true}}}]}))
