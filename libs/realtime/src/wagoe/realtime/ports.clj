@@ -519,7 +519,68 @@
      may be greater than connection count.
 
      Returns:
-       Integer count of total subscriptions"))
+       Integer count of total subscriptions")
+
+  ;; ---------------------------------------------------------------------------
+  ;; Server-side subscribers
+  ;;
+  ;; Every subscriber above is a WebSocket connection, so an application that
+  ;; wants an event to reach in-process code had to run a second pub/sub — the
+  ;; notification-service example carried its own core.async bus for exactly
+  ;; that, and used realtime only to push to browsers (BOU-233).
+  ;;
+  ;; A service subscription is node-local: the handler is a function in this
+  ;; JVM, so it cannot be relayed. Registering it here means the node-local
+  ;; delivery-fn invokes it, which is the same path a socket takes — so under
+  ;; the :redis provider a handler registered on one node fires once, on that
+  ;; node, for a message published from any node.
+  ;; ---------------------------------------------------------------------------
+
+  (subscribe-service [this topic handler-fn]
+    "Subscribe an in-process handler to a topic.
+
+     `handler-fn` is called with the message map for every message published
+     to `topic`, on the node where it was registered. It runs on the delivery
+     thread, so it should be quick — hand slow work to jobs.
+
+     A handler that throws is logged and skipped; it cannot stop delivery to
+     other handlers or to sockets.
+
+     Args:
+       topic       - Topic name string, same namespace as connection subscribers
+       handler-fn  - (fn [message] ...); the return value is ignored
+
+     Returns:
+       A subscription id (UUID) for unsubscribe-service
+
+     Example:
+       (subscribe-service mgr \"order:events\"
+         (fn [msg] (create-notification! (:payload msg))))")
+
+  (unsubscribe-service [this subscription-id]
+    "Remove a service subscription.
+
+     Idempotent — an unknown id is not an error.
+
+     Args:
+       subscription-id - id returned by subscribe-service
+
+     Returns:
+       true if a subscription was removed, false if the id was unknown")
+
+  (get-topic-service-handlers [this topic]
+    "Handler functions subscribed to `topic` on this node.
+
+     Used by the delivery-fn; applications publish rather than call this.
+
+     Returns:
+       Vector of functions (may be empty)")
+
+  (service-subscription-count [this]
+    "Number of service subscriptions on this node.
+
+     Returns:
+       Integer count (>= 0)"))
 
 ;; =============================================================================
 ;; Message Bus Port (cross-instance routing transport)

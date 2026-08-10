@@ -245,3 +245,49 @@
      => false"
   [subscriptions connection-id topic]
   (contains? (get subscriptions topic #{}) connection-id))
+
+;; =============================================================================
+;; Service subscriptions (in-process handlers)
+;; =============================================================================
+;;
+;; Kept in their own map rather than mixed into `subscriptions`, which holds
+;; connection ids. A handler is a function, not an id: it cannot be serialised,
+;; relayed to another node, or compared for equality, so the two are different
+;; kinds of subscriber even though they share a topic namespace.
+;;
+;; Shape: {subscription-id {:topic str :handler fn}}
+
+(defn add-service-subscription
+  "Register `handler` for `topic` under `subscription-id` (pure).
+
+   Args:
+     services        - Current service-subscription map
+     subscription-id - UUID for this subscription
+     topic           - Topic name string
+     handler         - (fn [message] ...)
+
+   Returns:
+     Updated map"
+  [services subscription-id topic handler]
+  (assoc services subscription-id {:topic topic :handler handler}))
+
+(defn remove-service-subscription
+  "Remove `subscription-id` (pure). Unknown ids are a no-op.
+
+   Returns:
+     Updated map"
+  [services subscription-id]
+  (dissoc services subscription-id))
+
+(defn service-handlers-for
+  "Handlers subscribed to `topic` (pure).
+
+   Order is unspecified: handlers are independent, and relying on registration
+   order would make one subscriber's behaviour depend on another's startup.
+
+   Returns:
+     Vector of functions (may be empty)"
+  [services topic]
+  (into [] (comp (filter (fn [[_ sub]] (= topic (:topic sub))))
+                 (map (fn [[_ sub]] (:handler sub))))
+        services))

@@ -285,3 +285,58 @@
         ;; Both behaviors are acceptable - the important thing is that queries
         ;; return correct results
         (is (<= (ports/topic-count manager) 1))))))
+
+;; =============================================================================
+;; Both IPubSubManager implementations agree on service subscribers (BOU-233)
+;; =============================================================================
+
+(deftest ^:unit every-pubsub-implementation-supports-service-subscribers
+  ;; clj-kondo caught the Redis adapter missing these four methods after the
+  ;; atom one had them. A reflection check cannot: defrecord generates the
+  ;; interface methods whether or not the body implements them, so the class
+  ;; looks complete and the call throws AbstractMethodError at runtime. This
+  ;; therefore calls them.
+  ;;
+  ;; The Redis manager keeps service handlers in a local atom — a function
+  ;; cannot be written to a Redis set — so a nil pool is enough to exercise
+  ;; them, and no Redis server is needed here.
+  (require 'wagoe.realtime.shell.adapters.redis-pubsub)
+  (let [make-redis (resolve 'wagoe.realtime.shell.adapters.redis-pubsub/->RedisPubSubManager)]
+    (doseq [[label mgr] [["atom"  (pubsub-mgr/create-pubsub-manager)]
+                         ["redis" (make-redis nil nil (atom {}))]]]
+      (testing (str label ": a handler can be subscribed, found, counted and removed")
+        (let [seen   (atom 0)
+              sub-id (ports/subscribe-service mgr "orders" (fn [_] (swap! seen inc)))]
+          (is (uuid? sub-id) (str label " did not return a subscription id"))
+          (is (= 1 (ports/service-subscription-count mgr)))
+          (let [handlers (ports/get-topic-service-handlers mgr "orders")]
+            (is (= 1 (count handlers)))
+            ((first handlers) {:type "e" :payload {}})
+            (is (= 1 @seen) (str label " returned a handler that does not work")))
+          (is (empty? (ports/get-topic-service-handlers mgr "another")))
+          (is (true? (ports/unsubscribe-service mgr sub-id)))
+          (is (= 0 (ports/service-subscription-count mgr)))
+          (is (false? (ports/unsubscribe-service mgr sub-id))
+              (str label " did not report an unknown id as unremoved")))))))
+
+(deftest ^:unit service-subscriptions-are-counted-separately
+  (let [mgr (pubsub-mgr/create-pubsub-manager)
+        cid (java.util.UUID/randomUUID)]
+    (ports/subscribe-to-topic mgr cid "t")
+    (ports/subscribe-service mgr "t" (fn [_] nil))
+
+    (testing "a connection subscription is not a service subscription"
+      (is (= 1 (ports/subscription-count mgr)))
+      (is (= 1 (ports/service-subscription-count mgr))))
+
+    (testing "handlers are returned for their topic only"
+      (is (= 1 (count (ports/get-topic-service-handlers mgr "t"))))
+      (is (empty? (ports/get-topic-service-handlers mgr "other"))))
+
+    (testing "an invalid topic is rejected, as it is for connections"
+      (is (thrown? clojure.lang.ExceptionInfo
+                   (ports/subscribe-service mgr "" (fn [_] nil)))))
+
+    (testing "a non-function subscriber is rejected"
+      (is (thrown? clojure.lang.ExceptionInfo
+                   (ports/subscribe-service mgr "t" :not-a-fn))))))
