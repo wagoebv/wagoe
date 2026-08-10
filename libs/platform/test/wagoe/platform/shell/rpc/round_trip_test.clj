@@ -174,20 +174,21 @@
   ;; retrying a non-idempotent call too much charges a customer twice. Count
   ;; the attempts the far side actually sees.
   (let [attempts (atom 0)
-        ;; A real error envelope, as the server sends: the retry decision is
-        ;; made on the type that came off the wire, so a stub returning
-        ;; something else would test a path production never takes.
+        ;; A proxy's error page: a non-2xx whose body is not an envelope. That
+        ;; is the only failure a retry can help with, because it is the only
+        ;; one where the service may never have been reached. A stub returning
+        ;; a proper error envelope would be an *answer*, and answers are not
+        ;; retried at all — see the test below.
         app      (fn [_]
                    (swap! attempts inc)
-                   {:status  500
-                    :headers {"content-type" content-type}
-                    :body    (encode-body {:error {:type    :rpc/remote-error
-                                                   :message "psp down"}})})
+                   {:status  502
+                    :headers {"content-type" "text/html"}
+                    :body    "<html>502 Bad Gateway</html>"})
         run      (fn [url]
                    (testing "a remote error is not retried by default"
-                     ;; A 500 means the far side ran and refused. Re-sending it
-                     ;; would re-submit a payment the PSP already rejected on
-                     ;; its merits.
+                     ;; Even a failure that may not have reached the service is
+                     ;; not retried unless asked for: it may equally have run
+                     ;; and had its response lost on the way back.
                      (reset! attempts 0)
                      (client/call! url :get-payment-status ["id"] {})
                      (is (= 1 @attempts)))
@@ -578,3 +579,72 @@
       (fn [url]
         (let [remote (client/remote-adapter pay-ports/IPaymentProvider url {:retries 0})]
           (is (= :mock (pay-ports/provider-name remote))))))))
+
+(deftest ^:integration an-answer-is-never-retried-whatever-it-contains
+  ;; The dangerous case. Adapters in this codebase return {:error {:type …}} as
+  ;; an ordinary value, so a protocol method's legitimate result can be shaped
+  ;; exactly like a transport failure. If the retry policy reads the shape, a
+  ;; call that already ran gets sent again — and for create-checkout-session
+  ;; that is a second charge.
+  (let [attempts (atom 0)
+        ;; A 200 carrying a result that happens to look like a transport error.
+        ;; Contrived on purpose: the point is that the client must not be
+        ;; deciding from the shape.
+        returns-error-shaped-value
+        (reify pay-ports/IPaymentProvider
+          (provider-name [_] :error-shaped)
+          (create-checkout-session [_ _]
+            (swap! attempts inc)
+            {:error {:type :rpc/unavailable :message "a value, not a failure"}})
+          (create-off-session-payment [_ _] nil)
+          (get-payment-status [_ _] nil)
+          (expire-checkout-session [_ _] nil)
+          (process-webhook [_ _ _] nil)
+          (verify-webhook-signature [_ _ _] false))]
+    (with-service returns-error-shaped-value
+      (fn [url]
+        (testing "a returned value in the default retry set is not re-sent"
+          (reset! attempts 0)
+          (let [r (client/call! url :create-checkout-session [{}]
+                                {:retries 3 :retry-delay-ms 1})]
+            (is (= 1 @attempts) "the operation ran once and must not run again")
+            (is (= :rpc/unavailable (get-in r [:error :type]))
+                "and the caller still gets the value the method returned")))
+
+        (testing "not even when the caller has opted that type in"
+          ;; :retry-on cannot make an answer retryable — it selects among
+          ;; failures, and this is not one.
+          (reset! attempts 0)
+          (client/call! url :create-checkout-session [{}]
+                        {:retry-on #{:rpc/unavailable} :retries 3 :retry-delay-ms 1})
+          (is (= 1 @attempts)))))))
+
+(deftest ^:integration a-deliberate-error-envelope-is-an-answer-too
+  ;; The server builds one for a refused operation and for a thrown
+  ;; implementation. Both mean the request reached the service, so neither is
+  ;; retryable however :retry-on is set.
+  (let [attempts (atom 0)
+        boom     (reify pay-ports/IPaymentProvider
+                   (provider-name [_] :boom)
+                   (create-checkout-session [_ _]
+                     (swap! attempts inc)
+                     (throw (ex-info "psp refused" {:type :conflict})))
+                   (create-off-session-payment [_ _] nil)
+                   (get-payment-status [_ _] nil)
+                   (expire-checkout-session [_ _] nil)
+                   (process-webhook [_ _ _] nil)
+                   (verify-webhook-signature [_ _ _] false))]
+    (with-service boom
+      (fn [url]
+        (testing "a thrown implementation runs once, even with its type opted in"
+          (reset! attempts 0)
+          (is (thrown? clojure.lang.ExceptionInfo
+                       (client/call! url :create-checkout-session [{}]
+                                     {:retry-on #{:conflict} :retries 3 :retry-delay-ms 1})))
+          (is (= 1 @attempts)))
+
+        (testing "and a refused operation is not retried either"
+          (let [r (client/call! url :drop-database []
+                                {:retry-on #{:rpc/unknown-operation}
+                                 :retries 3 :retry-delay-ms 1})]
+            (is (= :rpc/unknown-operation (get-in r [:error :type])))))))))

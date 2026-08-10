@@ -77,7 +77,19 @@
     (catch Exception _ nil)))
 
 (defn- post-envelope!
-  "POST one envelope. Returns the parsed body, or a transport error map."
+  "POST one envelope. Returns `[:answered value]` or `[:transport {:error …}]`.
+
+   Tagged, because the two are indistinguishable once unwrapped. Adapters in
+   this codebase return `{:error {:type …}}` as an ordinary value, so a
+   protocol method's legitimate result can be shaped exactly like a transport
+   failure — and treating one as the other means re-sending a call that already
+   ran. For a non-idempotent operation that is a second charge.
+
+   `:answered` means the service produced this: a result, or an error envelope
+   it built on purpose. Retrying it is at best pointless.
+
+   `:transport` means the call may not have completed, which is the only case
+   where a retry can help."
   [url envelope opts]
   (let [operation (:operation envelope)]
     (try
@@ -97,22 +109,28 @@
             body (decode-body body)]
         (cond
           (<= 200 status 299)
-          (rpc/response->result operation body)
+          [:answered (rpc/response->result operation body)]
 
           ;; A non-2xx usually still carries an envelope the server built on
           ;; purpose: the operation is not one it exposes, or the
           ;; implementation threw and it said what. Replacing that with a
           ;; generic "status 500" throws away the only part of the response
-          ;; that says what went wrong.
+          ;; that says what went wrong — and it is an answer, so it is not
+          ;; retried however :retry-on is configured.
           (and (map? body) (:error body))
-          {:error (rpc/revive-error (:error body))}
+          [:answered {:error (rpc/revive-error (:error body))}]
 
+          ;; A non-2xx that is not an envelope: a proxy's error page, a login
+          ;; redirect. The request may never have reached the service, so a
+          ;; retry can help — but only if asked for, since it may equally have
+          ;; run and had its response lost.
           :else
-          (rpc/transport-error :rpc/remote-error operation
-                               (str "Remote returned status " status)
-                               status)))
+          [:transport (rpc/transport-error :rpc/remote-error operation
+                                           (str "Remote returned status " status)
+                                           status)]))
       (catch Exception e
-        (rpc/transport-error (rpc/classify-exception e) operation (.getMessage e))))))
+        [:transport (rpc/transport-error (rpc/classify-exception e) operation
+                                         (.getMessage e))]))))
 
 (defn- raise-if-thrown!
   "Re-raise an exception the remote implementation threw; pass anything else on.
@@ -153,9 +171,12 @@
     (raise-if-thrown!
      operation
      (loop [attempt 0]
-       (let [result (post-envelope! url envelope opts)]
+       (let [[outcome result] (post-envelope! url envelope opts)]
          (cond
-           (not (and (map? result) (retryable? opts result)))
+           ;; The service answered. Whatever the shape of that answer, the
+           ;; operation ran — re-sending it would run it a second time.
+           (or (= outcome :answered)
+               (not (and (map? result) (retryable? opts result))))
            result
 
            (< attempt (:retries opts))

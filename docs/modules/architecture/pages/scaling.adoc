@@ -286,9 +286,17 @@ What it does, and what it deliberately does not:
   failing keeps the two apart in an operator's logs.
 
 | Retries
-| Only `:rpc/unavailable` by default. A timeout is *not* retried: a call that
-  timed out may well have executed, and re-sending it could charge twice.
+| Only failures where the call may not have completed, and only
+  `:rpc/unavailable` among those by default. A timeout is *not* retried: a call
+  that timed out may well have executed, and re-sending it could charge twice.
   Override with `:retry-on`.
+
+  An *answer* is never retried, whatever `:retry-on` says — a result, or an
+  error envelope the service built on purpose. That distinction is structural
+  rather than read off the shape of the value, because adapters here return
+  `{:error {:type …}}` as an ordinary result: a protocol method's legitimate
+  return can look exactly like a transport failure, and re-sending a call that
+  already ran is a second charge.
 
 | Exposure
 | The server resolves an operation against the protocol's own `:sigs`. An
