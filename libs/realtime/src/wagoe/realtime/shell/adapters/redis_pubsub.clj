@@ -53,7 +53,7 @@
           acc
           (recur cursor acc))))))
 
-(defrecord RedisPubSubManager [^JedisPool pool prefix]
+(defrecord RedisPubSubManager [^JedisPool pool prefix services]
   ports/IPubSubManager
 
   (subscribe-to-topic [_ connection-id topic]
@@ -109,7 +109,44 @@
   (subscription-count [_]
     (with-redis pool
       (fn [^Jedis j]
-        (reduce + 0 (map #(.scard j %) (scan-keys j (topic-key-pattern prefix))))))))
+        (reduce + 0 (map #(.scard j %) (scan-keys j (topic-key-pattern prefix)))))))
+
+  ;; --- server-side subscribers -----------------------------------------------
+  ;;
+  ;; Held in a local atom, not in Redis: a handler is a function in this JVM,
+  ;; and there is nothing to write to a set. That is also the semantics we
+  ;; want — the bus fans a topic message out to every node and each node runs
+  ;; the handlers registered in it, so a handler registered once runs once.
+  ;; Connection subscriptions stay in Redis because a connection lives on one
+  ;; node and any node may need to find it.
+
+  (subscribe-service [_ topic handler-fn]
+    (when-not (schema/valid-topic? topic)
+      (throw (ex-info "Invalid topic name"
+                      {:type :validation-error
+                       :topic topic
+                       :errors (schema/explain-topic topic)})))
+    (when-not (fn? handler-fn)
+      (throw (ex-info "Service subscriber must be a function"
+                      {:type :validation-error :topic topic})))
+    (let [subscription-id (UUID/randomUUID)]
+      (swap! services assoc subscription-id {:topic topic :handler handler-fn})
+      (log/debug "Service handler subscribed to topic"
+                 {:subscription-id subscription-id :topic topic})
+      subscription-id))
+
+  (unsubscribe-service [_ subscription-id]
+    (let [existed? (contains? @services subscription-id)]
+      (swap! services dissoc subscription-id)
+      existed?))
+
+  (get-topic-service-handlers [_ topic]
+    (into [] (comp (filter (fn [[_ sub]] (= topic (:topic sub))))
+                   (map (fn [[_ sub]] (:handler sub))))
+          @services))
+
+  (service-subscription-count [_]
+    (count @services)))
 
 (defn create-redis-pubsub-manager
   "Create a Redis-backed IPubSubManager.
@@ -121,4 +158,4 @@
   ([pool]
    (create-redis-pubsub-manager pool {}))
   ([pool {:keys [prefix]}]
-   (->RedisPubSubManager pool prefix)))
+   (->RedisPubSubManager pool prefix (atom {}))))
