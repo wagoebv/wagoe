@@ -140,3 +140,44 @@
       (is (empty? missing)
           (str "emitted by ig-config but never registered: " (pr-str (sort missing))
                " — require the module-wiring namespace that defines them")))))
+
+;; =============================================================================
+;; Conditionally emitted keys must not be statically required (BOU-131)
+;; =============================================================================
+
+(deftest ^:unit config-requires-optional-module-wiring-only-when-active
+  ;; Moving platform's static requires into wagoe.config fixed nothing if they
+  ;; stayed static: loading this namespace would still demand jars the app may
+  ;; not ship — the same mandatory dependency, one layer down.
+  ;;
+  ;; A module-wiring may be required statically here only if its key is emitted
+  ;; unconditionally. Today that is email and i18n — both are in the base map of
+  ;; core-system-config with defaults. cache, payments and the external adapters
+  ;; are opt-in, and are required at the point the config decides they are
+  ;; active.
+  (let [src (or (some #(when (.exists (io/file %)) (slurp %))
+                      ["src/wagoe/config.clj" "../../src/wagoe/config.clj"])
+                (throw (ex-info "config.clj not found — cannot check"
+                                {:cwd (System/getProperty "user.dir")})))
+        ns-form  (subs src 0 (str/index-of src "(def ^:private env-aliases"))
+        static   (set (map second (re-seq #"\[(wagoe\.[a-z0-9-]+\.shell\.module-wiring)\]" ns-form)))
+        guarded  (set (map second (re-seq #"\(require '(wagoe\.[a-z0-9-]+\.shell\.module-wiring)\)" src)))]
+
+    (testing "the source parsed — otherwise this passes vacuously"
+      (is (str/includes? src "ig-config"))
+      (is (seq static) "no static requires found at all; the ns form was not read"))
+
+    (testing "only unconditionally emitted modules are required statically"
+      (is (= #{"wagoe.email.shell.module-wiring"
+               "wagoe.i18n.shell.module-wiring"} static)
+          (str "statically required: " (pr-str static)
+               " — a module whose key is emitted conditionally must be required "
+               "where that condition is evaluated, or every consumer must ship its jar")))
+
+    (testing "the opt-in modules are required, just guarded"
+      (doseq [m ["wagoe.cache.shell.module-wiring"
+                 "wagoe.payments.shell.module-wiring"
+                 "wagoe.external.shell.module-wiring"]]
+        (is (contains? guarded m)
+            (str m " is neither statically required nor required at its condition — "
+                 "its init-key would be missing when the module is active"))))))

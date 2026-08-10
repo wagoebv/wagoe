@@ -23,13 +23,15 @@
             ;; ig-config short — dev/repl/user.clj, the platform port tests, and
             ;; the devtools dashboard, which resolves wagoe.config/ig-config at
             ;; runtime. The layer that emits a key registers it.
-            [wagoe.external.shell.module-wiring]
-            ;; Same rule, moved here from platform (BOU-131): platform required
-            ;; these statically, so every consumer had to ship every module's
-            ;; jar whether or not it used one. These three are emitted by the
-            ;; functions below, so this is where they belong.
-            [wagoe.cache.shell.module-wiring]
-            [wagoe.payments.shell.module-wiring]
+            ;; i18n is the only one of these that is emitted unconditionally
+            ;; (i18n-module-config falls back to defaults), so it is the only
+            ;; one that can be required statically.
+            ;;
+            ;; cache, payments and the external adapters are opt-in, and a
+            ;; static require here would recreate the problem BOU-131 removed
+            ;; from platform one layer down: loading this namespace would demand
+            ;; jars the app may not ship. They are required where the config
+            ;; decides they are active — see the module-config fns below.
             [wagoe.i18n.shell.module-wiring]
             [wagoe.user.schema :as user-schema]))
 
@@ -301,7 +303,10 @@
         error-reporting-cfg (error-reporting-config config)
         email-cfg (email-config config)
         router-cfg (get-in config [:active :wagoe/router] {:adapter :reitit})
-        cache-cfg (cache-config config)]
+        cache-cfg (cache-config config)
+        ;; Required only when the app enables it — see the ns docstring's note
+        ;; on why these are not static requires (BOU-131).
+        _         (when cache-cfg (require 'wagoe.cache.shell.module-wiring))]
     (cond-> {:wagoe/db-context db-cfg
              :wagoe/logging logging-cfg
              :wagoe/metrics metrics-cfg
@@ -543,6 +548,8 @@
    in config.edn to enable it. Returns only the keys that are present in :active."
   [config]
   (let [active (:active config)]
+    (when (some active [:wagoe.external/smtp :wagoe.external/imap :wagoe.external/twilio])
+      (require 'wagoe.external.shell.module-wiring))
     (cond-> {}
       (:wagoe.external/smtp   active) (assoc :wagoe.external/smtp   (:wagoe.external/smtp   active))
       (:wagoe.external/imap   active) (assoc :wagoe.external/imap   (:wagoe.external/imap   active))
@@ -557,6 +564,7 @@
   [config]
   (let [payments-cfg (get-in config [:active :wagoe/payment-provider])]
     (when payments-cfg
+      (require 'wagoe.payments.shell.module-wiring)
       {:wagoe/payment-provider payments-cfg})))
 
 (defn- i18n-module-config
