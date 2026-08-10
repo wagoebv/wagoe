@@ -265,50 +265,68 @@
 ;; Integrant keys the generated config can add must be resolvable
 ;; =============================================================================
 
-(deftest ^:unit every-conditional-integrant-key-can-be-built
-  ;; config.clj.tmpl assembles the Integrant config by conditionally assoc'ing
-  ;; keys. Each one needs an `ig/init-key` method at runtime, which comes from
-  ;; one of two places: a `defmethod` in system.clj.tmpl, or a module-wiring
-  ;; namespace the template requires.
+(deftest ^:unit every-integrant-key-the-template-emits-has-a-provider
+  ;; config.clj.tmpl assembles an Integrant config. Every key in it needs an
+  ;; `ig/init-key` method at runtime, from one of two places: a `defmethod` in
+  ;; system.clj.tmpl, or a module-wiring namespace the template requires.
   ;;
-  ;; `:wagoe.external/smtp` had neither. It worked only because platform
-  ;; required wagoe.external.shell.module-wiring on every app's behalf; when
-  ;; that moved to the entry point, a generated project with email enabled
-  ;; would have died at startup with "No method in multimethod 'init-key' for
-  ;; dispatch value: :wagoe.external/smtp".
-  (let [config (slurp (io/resource "wagoe/cli/templates/config.clj.tmpl"))
-        system (slurp (io/resource "wagoe/cli/templates/system.clj.tmpl"))
-        ;; Keys the config assembles conditionally: (assoc :some/key ...)
-        assoc'd  (set (map second (re-seq #"\(assoc\s+(:[a-z][a-z0-9.-]*/[a-z][a-z0-9-]*)" config)))
+  ;; Two regressions this has now caught, both the same shape — platform used
+  ;; to require a module's wiring on every app's behalf, and when it stopped,
+  ;; the generated app lost the registration:
+  ;;
+  ;;   :wagoe.external/smtp  (BOU-92)   — caught in review
+  ;;   :wagoe/i18n           (BOU-131)  — caught by First-Run Smoke, because
+  ;;                                      the first version of this test looked
+  ;;                                      only at `(assoc :key …)` and missed
+  ;;                                      the base map, then fell back to "is
+  ;;                                      anything required at all" for keys
+  ;;                                      whose namespace has no dot.
+  ;;
+  ;; It now reads what each required wiring actually declares, rather than
+  ;; inferring a provider from the key's name — `:wagoe/payment-provider` comes
+  ;; from wagoe.payments, `:wagoe/user-db-schema` from wagoe.user, and no rule
+  ;; derives either.
+  (let [config   (slurp (io/resource "wagoe/cli/templates/config.clj.tmpl"))
+        system   (slurp (io/resource "wagoe/cli/templates/system.clj.tmpl"))
+        ;; Keys the config puts in the Integrant map: assoc'd, or in the base map.
+        emitted  (into (set (map second (re-seq #"\(assoc\s+(:[a-z][a-z0-9.-]*/[a-z][a-z0-9-]*)" config)))
+                       (map second (re-seq #"(?m)^\s+(:wagoe[a-z0-9.-]*/[a-z][a-z0-9-]*)\s+\S" config)))
         ;; Keys the generated project defines itself.
-        defined  (set (map second (re-seq #"defmethod ig/init-key\s+(:[a-z][a-z0-9.-]*/[a-z][a-z0-9-]*)" system)))
-        ;; Namespaces the config requires, statically or conditionally.
-        required (set (map second (re-seq #"'?\[?(wagoe\.[a-z0-9.-]+\.shell\.module-wiring)\]?" config)))
-        ;; A key like :wagoe.external/smtp is served by wagoe.external.*;
-        ;; :wagoe/user-service by any wagoe.<lib>.* wiring, so the namespace
-        ;; prefix is only decisive for dotted keys.
-        covered? (fn [k]
-                   (let [ns' (namespace (read-string k))]
-                     (or (contains? defined k)
-                         (if (str/includes? ns' ".")
-                           (some #(str/starts-with? % (str ns' ".")) required)
-                           (seq required)))))]
+        local    (set (map second (re-seq #"defmethod ig/init-key\s+(:[a-z][a-z0-9.-]*/[a-z][a-z0-9-]*)" system)))
+        ;; Every wagoe namespace the template requires, statically or
+        ;; conditionally — not only the *.shell.module-wiring ones. Platform's
+        ;; system wiring registers :wagoe/db-context, :wagoe/http-handler and
+        ;; the rest, and is required like any other.
+        wirings  (set (map second (re-seq #"'?\[?(wagoe\.[a-z0-9.-]+(?:\.shell\.module-wiring|\.shell\.system\.wiring))\]?" config)))
+        ;; What those namespaces actually register, read from their source.
+        provided (into #{}
+                       (mapcat (fn [ns']
+                                 ;; Run from the repo root by bb test:all and from
+                                 ;; libs/wagoe-cli by its own kaocha, so both.
+                                 (let [lib  (second (re-find #"^wagoe\.([a-z0-9-]+)\." ns'))
+                                       tail (str "/src/" (str/replace (str/replace ns' "." "/") "-" "_") ".clj")
+                                       f    (first (filter #(.exists ^java.io.File %)
+                                                           [(io/file (str "libs/" lib tail))
+                                                            (io/file (str "../" lib tail))]))]
+                                   (when f
+                                     (map second (re-seq #"defmethod ig/init-key\s+(:[a-z][a-z0-9.-]*/[a-z][a-z0-9-]*)"
+                                                         (slurp f)))))))
+                       wirings)]
 
-    (testing "the template parsed — otherwise this passes vacuously"
-      (is (<= 8 (count assoc'd)) (str "only found " (pr-str assoc'd)))
-      (is (seq defined))
-      (is (seq required)))
+    (testing "the templates and wiring sources parsed — otherwise this is vacuous"
+      (is (<= 15 (count emitted)) (str "only found " (count emitted) " emitted keys"))
+      (is (seq local))
+      (is (<= 3 (count wirings)) (str "only found " (pr-str wirings)))
+      (is (<= 10 (count provided))
+          (str "read only " (count provided) " init-keys from " (pr-str wirings)
+               " — the source paths are probably wrong, which would make this pass for the wrong reason")))
 
-    (testing "every conditionally added key is defined locally or required"
-      (doseq [k (sort assoc'd)]
-        (is (covered? k)
-            (str k " is assoc'd into the Integrant config but nothing provides "
-                 "an init-key: add a defmethod to system.clj.tmpl or require "
-                 "its module-wiring in config.clj.tmpl"))))))
-
-;; =============================================================================
-;; --no-user
-;; =============================================================================
+    (testing "every emitted key is provided by the app or by a required wiring"
+      (doseq [k (sort emitted)]
+        (is (or (contains? local k) (contains? provided k))
+            (str k " is put in the Integrant config but nothing provides an "
+                 "init-key: add a defmethod to system.clj.tmpl, or require the "
+                 "module-wiring that declares it in config.clj.tmpl"))))))
 
 (deftest ^:unit user-module-is-opt-out
   ;; The scaffold wired the user chain unconditionally, so every generated app
