@@ -81,6 +81,45 @@ message routing, and topic-based pub/sub.
 (ports/publish-to-topic service "order:123" {:type :order-updated :payload {...}})
 ----
 
+== Server-side subscribers
+
+A topic subscriber does not have to be a browser. `subscribe-service`
+registers an in-process function, so the same publish reaches connected
+clients *and* code running in the server:
+
+[source,clojure]
+----
+(def sub-id
+  (ports/subscribe-service pubsub "order:events"
+    (fn [message]
+      (create-notification! (:payload message)))))
+
+(ports/publish-to-topic service "order:events"
+                        {:type "created" :payload {:id 1}})
+;; => 4   ; three open sockets and this handler
+
+(ports/unsubscribe-service pubsub sub-id)   ; => true
+----
+
+This is what lets an application use realtime as its internal event bus rather
+than running a second pub/sub alongside it for server-to-server messages.
+
+What to know before relying on it:
+
+* **Handlers are node-local.** The function lives in one JVM and cannot be
+  relayed, so it is registered on the node that will run it. Under the
+  `:redis` provider the message is fanned out to every node and each node
+  invokes its own handlers — a handler registered once therefore runs once,
+  whichever node published.
+* **They run on the delivery thread.** Keep them quick; hand slow or failure-
+  prone work to `wagoe-jobs`.
+* **A handler that throws is logged and skipped.** It cannot stop the handlers
+  after it, and it cannot stop delivery to sockets.
+* **`publish-to-topic` counts them.** A topic with three handlers and no open
+  sockets returns 3, not 0.
+* **Order between handlers is unspecified.** If two subscribers must run in a
+  fixed order, that is one subscriber calling two things.
+
 == Connection lifecycle
 
 1. Client connects: `ws://host/ws?token=<jwt>`

@@ -18,7 +18,7 @@
 ;; Atom-Based Pub/Sub Manager
 ;; =============================================================================
 
-(defrecord AtomPubSubManager [subscriptions]
+(defrecord AtomPubSubManager [subscriptions services]
   ports/IPubSubManager
 
   (subscribe-to-topic [_this connection-id topic]
@@ -28,41 +28,41 @@
                       {:type :validation-error
                        :topic topic
                        :errors (schema/explain-topic topic)})))
-    
+
     ;; Update subscriptions (pure function wrapped in atom swap)
     (swap! subscriptions pubsub-core/subscribe connection-id topic)
-    
+
     ;; Log subscription
     (log/debug "Connection subscribed to topic"
                {:connection-id connection-id
                 :topic topic})
-    
+
     nil)
 
   (unsubscribe-from-topic [_this connection-id topic]
     ;; Update subscriptions (pure function wrapped in atom swap)
     (swap! subscriptions pubsub-core/unsubscribe connection-id topic)
-    
+
     ;; Log unsubscription
     (log/debug "Connection unsubscribed from topic"
                {:connection-id connection-id
                 :topic topic})
-    
+
     nil)
 
   (unsubscribe-from-all-topics [_this connection-id]
     ;; Get topics before unsubscribing (for logging)
     (let [topics (pubsub-core/get-connection-topics @subscriptions connection-id)]
-      
+
       ;; Update subscriptions (pure function wrapped in atom swap)
       (swap! subscriptions pubsub-core/unsubscribe-all connection-id)
-      
+
       ;; Log cleanup
       (log/debug "Connection unsubscribed from all topics"
                  {:connection-id connection-id
                   :topic-count (count topics)
                   :topics topics}))
-    
+
     nil)
 
   (get-topic-subscribers [_this topic]
@@ -79,7 +79,37 @@
 
   (subscription-count [_this]
     ;; Read-only operation
-    (pubsub-core/subscriber-count @subscriptions)))
+    (pubsub-core/subscriber-count @subscriptions))
+
+  ;; --- server-side subscribers -----------------------------------------------
+
+  (subscribe-service [_this topic handler-fn]
+    (when-not (schema/valid-topic? topic)
+      (throw (ex-info "Invalid topic name"
+                      {:type :validation-error
+                       :topic topic
+                       :errors (schema/explain-topic topic)})))
+    (when-not (fn? handler-fn)
+      (throw (ex-info "Service subscriber must be a function"
+                      {:type :validation-error :topic topic})))
+    (let [subscription-id (random-uuid)]
+      (swap! services pubsub-core/add-service-subscription subscription-id topic handler-fn)
+      (log/debug "Service handler subscribed to topic"
+                 {:subscription-id subscription-id :topic topic})
+      subscription-id))
+
+  (unsubscribe-service [_this subscription-id]
+    (let [existed? (contains? @services subscription-id)]
+      (swap! services pubsub-core/remove-service-subscription subscription-id)
+      (when existed?
+        (log/debug "Service handler unsubscribed" {:subscription-id subscription-id}))
+      existed?))
+
+  (get-topic-service-handlers [_this topic]
+    (pubsub-core/service-handlers-for @services topic))
+
+  (service-subscription-count [_this]
+    (count @services)))
 
 ;; =============================================================================
 ;; Factory Functions
@@ -98,7 +128,7 @@
      (def pubsub-mgr (create-pubsub-manager))
      (ports/subscribe-to-topic pubsub-mgr conn-id \"order:123\")"
   []
-  (->AtomPubSubManager (atom {})))
+  (->AtomPubSubManager (atom {}) (atom {})))
 
 (defn create-pubsub-manager-with-state
   "Create pub/sub manager with initial state.
@@ -117,4 +147,4 @@
          {\"order:123\" #{#uuid \"111...\" #uuid \"222...\"}}))"
   [initial-subscriptions]
   {:pre [(schema/valid-subscriptions? initial-subscriptions)]}
-  (->AtomPubSubManager (atom initial-subscriptions)))
+  (->AtomPubSubManager (atom initial-subscriptions) (atom {})))
