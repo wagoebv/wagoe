@@ -42,11 +42,17 @@
            [_ v] (re-seq (re-pattern (str "-version\\s+\"(" version-pattern ")\"")) c)]
        {:file f :version v :what "generated-project pin"})
 
-     ;; The module catalogue shipped with the CLI.
-     (for [f    ["libs/wagoe-cli/resources/wagoe/cli/modules-catalogue.edn"]
-           :let [v (find1 (read* (fs/file root-dir f)) #":catalogue-version\s+\"[^\"]+\"")]
-           :when v]
-       {:file f :version v :what "catalogue-version"})
+     ;; The module catalogue shipped with the CLI. Every version-bearing key,
+     ;; not just :catalogue-version: the file also carries :cli-version and a
+     ;; per-module :version for each addable module, and `wagoe add` pins the
+     ;; artifact from that per-module value. Reading one of 25 meant the gate
+     ;; could pass while the CLI emitted a stale dependency — the exact failure
+     ;; BOU-245 is about, in the file most likely to have it.
+     (for [f     ["libs/wagoe-cli/resources/wagoe/cli/modules-catalogue.edn"]
+           :let  [c (read* (fs/file root-dir f))]
+           [_ k v] (re-seq (re-pattern (str "(:[a-z-]*version[a-z-]*)\\s+\"("
+                                            version-pattern ")\"")) c)]
+       {:file f :version v :what k})
 
      ;; Any com.wagoe/* Maven pin, in deps.edn or bb.edn, anywhere in the tree.
      ;; This is the shape the ticket is named for: bb.edn pins are separate

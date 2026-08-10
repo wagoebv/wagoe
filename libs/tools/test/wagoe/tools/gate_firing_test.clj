@@ -653,7 +653,23 @@
 
     (testing "the real repository is discovered, not just the fixture"
       ;; Without this the gate could pass by finding nothing at all.
-      (is (<= 20 (count (check-versions/version-sources)))))))
+      (is (<= 20 (count (check-versions/version-sources)))))
+
+    (testing "every version-bearing kind is actually scanned"
+      ;; The first version of this gate read one key from the module catalogue
+      ;; and ignored the other 24 — :cli-version and a per-module :version for
+      ;; each addable module, which is what `wagoe add` pins. It could pass
+      ;; while the CLI emitted a stale dependency, which is the failure the
+      ;; gate exists for. Asserting the kinds, not a total, so adding a module
+      ;; does not need this number changed.
+      (let [kinds (set (map :what (check-versions/version-sources)))]
+        (doseq [k ["build.clj" "generated-project pin" "com.wagoe pin"
+                   ":catalogue-version" ":cli-version" ":version"]]
+          (is (contains? kinds k) (str k " is not scanned by version-sources")))))
+
+    (testing "the catalogue's per-module versions are all covered, not just one"
+      (let [n (count (filter #(= ":version" (:what %)) (check-versions/version-sources)))]
+        (is (<= 20 n) (str "only " n " per-module :version entries scanned"))))))
 
 (def gates-without-firing-tests
   "Gates that cannot yet be proven to fire, each with the reason.
