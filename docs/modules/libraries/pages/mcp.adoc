@@ -119,13 +119,30 @@ resources come back `:unavailable`.
 
 [source,bash]
 ----
-# from the Wagoe project root
-WAG_ENV=dev clojure -Sdeps '{:deps {wagoe/mcp {:local/root "libs/wagoe-mcp"}}}' \
-  -M -m wagoe.mcp.shell.server
+# from the Wagoe monorepo root
+WAG_ENV=dev clojure -M:mcp
 ----
 
-An application consuming Wagoe as a dependency adds `com.wagoe/wagoe-mcp` to its
-own `deps.edn` instead of using `:local/root`.
+An application consuming Wagoe as a dependency gets a `:mcp` alias in its
+generated `deps.edn` and runs the same command.
+
+[IMPORTANT]
+====
+Use the alias rather than `-Sdeps` from the monorepo. `-Sdeps` *merges* with the
+repository's `deps.edn`, which puts `resources/` on the classpath — including a
+`logback.xml` whose console appender writes to **stdout**, the stream stdio MCP
+reserves for JSON-RPC. Two `logback.xml` files on one classpath is also a
+configuration warning, and any warning makes logback dump its whole status log
+there as well.
+
+Measured: 88 lines of logback output preceded the first JSON-RPC response, so a
+client reading stdout met a banner where it expected a message. The `:mcp` alias
+uses `:replace-paths []` and `:replace-deps`, so `resources/` never joins the
+classpath and the library's own stderr-targeted `logback.xml` applies.
+
+This cannot be fixed inside the server: logback initialises during classpath
+startup, before `-main` runs.
+====
 
 == Wiring it into a coding agent
 
@@ -134,9 +151,7 @@ Code CLI, from that root:
 
 [source,bash]
 ----
-claude mcp add wagoe --env WAG_ENV=dev -- \
-  clojure -Sdeps '{:deps {wagoe/mcp {:local/root "libs/wagoe-mcp"}}}' \
-  -M -m wagoe.mcp.shell.server
+claude mcp add wagoe --env WAG_ENV=dev -- clojure -M:mcp
 ----
 
 Or by hand, in `.mcp.json`:
@@ -147,8 +162,7 @@ Or by hand, in `.mcp.json`:
   "mcpServers": {
     "wagoe": {
       "command": "clojure",
-      "args": ["-Sdeps", "{:deps {wagoe/mcp {:local/root \"libs/wagoe-mcp\"}}}",
-               "-M", "-m", "wagoe.mcp.shell.server"],
+      "args": ["-M:mcp"],
       "cwd": "/absolute/path/to/your/wagoe/project",
       "env": { "WAG_ENV": "dev" }
     }

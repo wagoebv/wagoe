@@ -15,7 +15,9 @@ later tools reuse.
 
 ```bash
 cd libs/wagoe-mcp
-clojure -M:run        # stdio MCP server (reads JSON-RPC from stdin)
+clojure -M:mcp        # stdio MCP server, from the monorepo root (isolated classpath)
+clojure -M:run        # same server, from libs/wagoe-mcp (cwd = the lib, so the
+                      # reflective resources report :unavailable)
 clojure -M:test       # kaocha unit tests
 ```
 
@@ -64,6 +66,35 @@ src/wagoe/mcp/
 **Core is pure** — no JSON, no I/O. The shell owns cheshire and stdin/stdout.
 stdout carries protocol messages only; all logging goes to **stderr** so it
 never corrupts the message stream.
+
+## stdout belongs to the protocol
+
+stdio MCP puts JSON-RPC on stdout, so anything else written there breaks the
+client. This library ships a `logback.xml` targeting stderr — and that is not
+enough, because the server does not control the classpath it runs on.
+
+Measured from the monorepo root with the previously documented `-Sdeps`
+command: **88 lines of logback output before the first JSON-RPC response**.
+`-Sdeps` merges with the repository's `deps.edn`, which puts `resources/` on
+the classpath, and that `logback.xml`'s console appender targets stdout. Two
+`logback.xml` files also warn, and a warning makes logback dump its whole
+status log.
+
+Two defences, because one is not sufficient:
+
+1. **`clojure -M:mcp`** uses `:replace-paths []` / `:replace-deps`, so
+   `resources/` never joins the classpath. This is the one that actually fixes
+   the monorepo case — logback initialises during classpath startup, *before*
+   `-main`, so no code in the server can prevent it.
+2. **`server/claim-stdout!`** takes stdout and points `System/out` and `*out*`
+   at stderr, so a host project whose own logging targets stdout cannot corrupt
+   the stream at runtime.
+
+`wagoe.mcp.shell.server` therefore requires **nothing**. Loading any namespace
+that logs initialises logback; the composition root lives in
+`wagoe.mcp.shell.boot` and is loaded from inside `-main`, after the claim. A
+test asserts the entry namespace has no `:require` — adding one silently brings
+the banner back.
 
 ## Protocol notes
 

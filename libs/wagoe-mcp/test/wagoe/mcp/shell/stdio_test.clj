@@ -3,6 +3,7 @@
             [wagoe.mcp.core.registry :as registry]
             [wagoe.mcp.shell.codec :as codec]
             [wagoe.mcp.shell.stdio :as stdio]
+            [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]])
   (:import (java.io StringReader StringWriter)))
@@ -45,3 +46,54 @@
     (is (= -32700 (get-in (first responses) [:error :code])))
     (is (= 5 (:id (second responses))))
     (is (= {} (:result (second responses))))))
+
+;; =============================================================================
+;; stdout belongs to the protocol (BOU-105)
+;; =============================================================================
+
+(deftest ^:unit server-claims-stdout-so-logging-cannot-corrupt-the-stream
+  ;; stdio MCP puts JSON-RPC on stdout. Measured before this existed: running
+  ;; the documented command from the monorepo produced 88 lines of logback
+  ;; output before the first response, because the repository's logback.xml
+  ;; console appender targets stdout.
+  ;;
+  ;; The library ships a logback.xml targeting stderr, but the server does not
+  ;; control the classpath it runs on, so it takes stdout for itself.
+  (require 'wagoe.mcp.shell.server)
+  (let [claim (resolve 'wagoe.mcp.shell.server/claim-stdout!)
+        real-out System/out
+        real-err System/err]
+    (try
+      (let [returned (claim)]
+        (testing "the caller is handed the original stdout, for the transport"
+          (is (identical? real-out returned)))
+
+        (testing "System/out no longer points at it"
+          (is (not (identical? real-out System/out)))))
+      (finally
+        (System/setOut real-out)
+        (System/setErr real-err)
+        (alter-var-root #'*out* (constantly (java.io.PrintWriter. real-out true)))))))
+
+(deftest ^:unit entry-namespace-requires-nothing-that-logs
+  ;; The claim only works if it runs before logging initialises, and logging
+  ;; initialises when a namespace that uses it is loaded. So the entry
+  ;; namespace must require nothing — the composition root lives in
+  ;; wagoe.mcp.shell.boot and is loaded from inside -main.
+  ;;
+  ;; This is the part that regresses silently: adding one convenient require to
+  ;; server.clj moves logback's init back before -main and the banner returns.
+  (let [src (or (some #(when (.exists (io/file %)) (slurp %))
+                      ["libs/wagoe-mcp/src/wagoe/mcp/shell/server.clj"
+                       "src/wagoe/mcp/shell/server.clj"])
+                (throw (ex-info "server.clj not found — cannot check" {})))]
+
+    (testing "the source was read — otherwise this passes vacuously"
+      (is (str/includes? src "claim-stdout!")))
+
+    (testing "the entry namespace has no :require form"
+      (is (not (str/includes? src "(:require"))
+          "server.clj requires a namespace again; loading it initialises logback before -main"))
+
+    (testing "and loads the composition root from inside -main"
+      (is (str/includes? src "(require 'wagoe.mcp.shell.boot)")))))
