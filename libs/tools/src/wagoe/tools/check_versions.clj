@@ -13,7 +13,7 @@
   "A suite version: 1.0.0-beta-4, 1.0.1-alpha-32, 2.0.0."
   #"\d+\.\d+\.\d+(?:-[a-z]+-\d+)?")
 
-(defn- version-sources
+(defn version-sources
   "Every file that hard-codes the suite version, and the version it names.
 
    Discovered by pattern rather than listed: a hand-kept list is how this
