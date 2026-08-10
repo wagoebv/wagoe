@@ -606,8 +606,8 @@ Both can be used together. Interceptors are converted to middleware by the route
 - link:ADR-006-web-ui-architecture-htmx-hiccup.adoc[ADR-006: Web UI Architecture] - HTMX integration
 - link:ADR-009-reitit-exclusive-router.adoc[ADR-009: Reitit Exclusive Router] - Decision to use Reitit only
 - link:ADR-010-http-interceptor-architecture.adoc[ADR-010: HTTP Interceptor Architecture] - Interceptor pattern
-- link:../architecture/ports-and-adapters.adoc[Ports and Adapters Pattern]
-- link:../guides/add-rest-endpoint.adoc[Guide: Add REST Endpoint]
+- link:../../docs/modules/architecture/pages/fc-is.adoc[Ports and Adapters Pattern]
+- link:../../docs/modules/guides/pages/create-module.adoc[Guide: Add REST Endpoint]
 - https://reitit.metosin.fi/[Reitit Documentation]
 
 == Approval

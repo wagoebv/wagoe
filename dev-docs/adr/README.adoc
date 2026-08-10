@@ -301,13 +301,13 @@ contextual tips, state-aware guidance, and in-REPL documentation.
 
 === Related Documentation
 
-* link:../architecture/[Architecture] - Detailed architecture
+* link:../../docs/modules/architecture/pages/[Architecture] - Detailed architecture
 documentation
-* link:../guides/[Guides] - Practical implementation guides
-* link:../change-reports/[Change Reports] - Implementation summaries and refactoring reports
+* link:../../docs/modules/guides/pages/[Guides] - Practical implementation guides
+* Change Reports - Implementation summaries and refactoring reports
 * link:../DECISIONS.adoc[DECISIONS.adoc] - Additional technical decisions
 
-*Note*: Change reports in `link:../change-reports/[change-reports/]` often document the implementation details of decisions made in ADRs. For example, `ROUTING_REARCHITECTURE_SUMMARY.md` details the implementation of ADR-007.
+*Note*: Change reports in `change-reports/` often document the implementation details of decisions made in ADRs. For example, `ROUTING_REARCHITECTURE_SUMMARY.md` details the implementation of ADR-007.
 
 === ADR Process
 

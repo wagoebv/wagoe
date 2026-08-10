@@ -37,14 +37,14 @@ Each ADR describes the context, the decision, and its consequences.
 * link:adr/ADR-019-shared-payments-library.adoc[ADR-019: Shared Payments Library]
 * link:adr/ADR-020-tenant-database-scope.adoc[ADR-020: PostgreSQL-Only Tenant Provisioning]
 
-=== link:change-reports/[Change Reports]
+=== Change Reports
 
 Post-implementation analyses and migration reports documenting completed refactoring efforts.
 
-* link:change-reports/FC-IS-COMPLIANCE-ANALYSIS.adoc[FC/IS Compliance Analysis]
-* link:change-reports/FC-IS-REFACTORING-COMPLETE.adoc[FC/IS Refactoring Complete]
-* link:change-reports/PEDESTAL_ADAPTER_ABANDONMENT.adoc[Pedestal Adapter Abandonment]
-* link:change-reports/SERVICE-METHOD-RENAMING-MIGRATION.adoc[Service Method Renaming Migration]
+* FC/IS Compliance Analysis
+* FC/IS Refactoring Complete
+* Pedestal Adapter Abandonment
+* Service Method Renaming Migration
 
 === link:presentations/[Presentations]
 
@@ -76,7 +76,6 @@ Key tools:
 * link:DECISIONS.adoc[DECISIONS] — Key project decisions log
 * link:DOCKER_DEVELOPMENT.adoc[Docker Development] — Docker-based development setup
 * link:DOCS_LINT.adoc[Docs Lint] — Documentation linting tooling and rules
-* link:LINK_ISSUES.adoc[Link Issues] — Known link/reference issues
 * link:alpha-release-checklist.adoc[Alpha Release Checklist] — Pre-release checklist
 * link:roadmap.adoc[Roadmap] — Project roadmap and planned features
 

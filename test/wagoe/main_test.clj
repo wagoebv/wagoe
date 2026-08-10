@@ -3,6 +3,8 @@
             [clojure.set :as set]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
+            [integrant.core :as ig]
+            [wagoe.config :as config]
             [wagoe.main :as main]))
 
 (deftest ^:unit worker-ig-config-drops-http-surface
@@ -94,3 +96,47 @@
 
     (testing "both server and worker report through the summary"
       (is (= 2 (count (re-seq #"\(log/error \(startup-failure-summary e\)\)" src)))))))
+
+;; =============================================================================
+;; Everything the config emits must be registered by the entry point
+;; =============================================================================
+
+(deftest ^:integration entry-point-registers-every-key-the-config-emits
+  ;; The real invariant, and the one my first attempt missed: whatever
+  ;; `ig-config` puts in the map, requiring the entry point must have
+  ;; registered an `ig/init-key` for it. Anything else fails at startup with
+  ;; "No method in multimethod 'init-key' for dispatch value: …".
+  ;;
+  ;; The earlier version of this test named three external keys by hand. That
+  ;; passes while the next module moved out of platform breaks — which is how
+  ;; :wagoe.external/smtp came to break generated projects. Comparing the two
+  ;; sets needs no list to maintain.
+  ;;
+  ;; It asserts the *entry point*, not wagoe.config: 31 of the 32 keys are
+  ;; registered by the module-wiring namespaces wagoe.main requires, not by the
+  ;; config layer. Email and external self-register in wagoe.config because
+  ;; that namespace emits them conditionally.
+  ;; The optional modules are activated deliberately. Against the plain test
+  ;; profile this test passed with the external require deleted, because that
+  ;; profile activates no external adapter, so ig-config emitted none of the
+  ;; keys the test exists to check — vacuous for its own motivating case.
+  (let [loaded  (config/load-config {:profile :test})
+        opt-in  {:wagoe.external/smtp   {:host "localhost" :port 25}
+                 :wagoe.external/imap   {:host "localhost" :port 143}
+                 :wagoe.external/twilio {:account-sid "x" :auth-token "y"}}
+        with-all (update loaded :active merge opt-in)
+        cfg        (config/ig-config with-all)
+        registered (set (keys (methods ig/init-key)))
+        missing    (remove registered (keys cfg))]
+
+    (testing "the optional keys really are emitted — otherwise this is vacuous"
+      (doseq [k (keys opt-in)]
+        (is (contains? cfg k) (str k " was not emitted; the opt-in shape has changed"))))
+
+    (testing "the config was built"
+      (is (<= 20 (count cfg)) (str "only " (count cfg) " keys emitted")))
+
+    (testing "every emitted key has an init-key method"
+      (is (empty? missing)
+          (str "emitted by ig-config but never registered: " (pr-str (sort missing))
+               " — require the module-wiring namespace that defines them")))))

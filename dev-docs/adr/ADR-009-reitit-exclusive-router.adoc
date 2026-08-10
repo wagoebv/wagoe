@@ -276,7 +276,7 @@ This decision should be revisited if:
 == References
 
 - **ADR-008**: link:ADR-008-normalized-routing-abstraction.adoc[Normalized Routing Abstraction]
-- **Analysis Document**: link:../architecture/pedestal-adapter-analysis.adoc[Pedestal Adapter Analysis]
+- **Analysis Document**: Pedestal Adapter Analysis
 - **Reitit Documentation**: https://cljdoc.org/d/metosin/reitit/
 - **Pedestal Documentation**: https://pedestal.io/
 - **Reitit Adapter**: `link:https://github.com/wagoebv/wagoe/blob/main/libs/platform/src/wagoe/platform/shell/http/reitit_router.clj`

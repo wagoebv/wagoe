@@ -601,8 +601,8 @@ Throughput impact:       ~5% reduction at high load
 
 - link:ADR-008-normalized-routing-abstraction.adoc[ADR-008: Normalized Routing Abstraction]
 - link:ADR-009-reitit-exclusive-router.adoc[ADR-009: Reitit Exclusive Router]
-- link:../architecture/multi-layer-interceptor-pattern.adoc[Multi-Layer Interceptor Pattern]
-- link:../guides/integrate-observability.adoc[Observability Integration Guide]
+- Multi-Layer Interceptor Pattern
+- link:../../docs/modules/libraries/pages/observability.adoc[Observability Integration Guide]
 - https://reitit.metosin.fi/[Reitit Documentation]
 
 == Approval

@@ -389,6 +389,6 @@ With interceptors enabled, the user service focuses purely on business logic:
 [[_see_also]]
 === link:#_see_also[]See Also
 
-* link:observability-reference.html[Observability Module Reference]
+* link:../../docs/modules/libraries/pages/observability.adoc[Observability Module Reference]
 * link:#architecture:observability-integration.adoc[Observability Integration Guide]
 * link:#architecture:error-handling-observability.adoc[Error Handling & Observability Architecture]

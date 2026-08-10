@@ -534,7 +534,7 @@ Consider Replicant for a page/module when ALL criteria apply:
 === Framework Documentation
 - link:https://github.com/wagoebv/wagoe/blob/main/AGENTS.md[Developer Guide] - Project overview and development workflow
 - link:../reference/wagoe-prd.adoc[Product Requirements Document] - Product vision and requirements
-- link:../architecture/overview.adoc[Architecture Overview] - Framework architectural principles
+- link:../../docs/modules/architecture/pages/fc-is.adoc[Architecture Overview] - Framework architectural principles
 
 ---
 

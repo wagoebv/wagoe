@@ -15,10 +15,7 @@
 ;; deliberately absent: they are baked into `default-allow-paths` in the gate
 ;; itself. Repeating them here changed nothing and the audit now says so.
 {:allow-paths
- [;; Historical issue log: it REPORTS a stale docs/<brand>.prd.adoc path.
-  ;; Rewriting it would falsify the record. Same category as CHANGELOG.
-  "dev-docs/LINK_ISSUES.adoc"
-  ;; Doc-drift linter: its #"boundary\.<ns>" pattern matches ns references in
+ [;; Doc-drift linter: its #"boundary\.<ns>" pattern matches ns references in
   ;; the docs it lints. Only the dev/ copy carries the pattern — scripts/
   ;; became a thin shim over this namespace in #344 and needs no exemption.
   "dev/wagoe/tools/docs_lint.clj"

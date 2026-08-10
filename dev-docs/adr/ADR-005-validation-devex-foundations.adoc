@@ -742,9 +742,9 @@ Coverage (user): 100.0% (6/6 rules executed)
 
 === Documentation Created in Phase 2
 
-- link:../validation-guide.adoc[Validation Developer Guide] - Complete usage guide with REPL examples, integration patterns, best practices, and troubleshooting (784 lines)
-- link:../validation-patterns.adoc[Validation Patterns and Message Style Guide] - Conventions, tone guidance, and examples  
-- link:../error-codes.adoc[Error Code Catalog] - All user module error codes with templates, suggestions, and JSON examples (1,175 lines)
+- link:../../docs/modules/guides/pages/validation.adoc[Validation Developer Guide] - Complete usage guide with REPL examples, integration patterns, best practices, and troubleshooting (784 lines)
+- link:../../docs/modules/guides/pages/validation.adoc[Validation Patterns and Message Style Guide] - Conventions, tone guidance, and examples  
+- Error Code Catalog - All user module error codes with templates, suggestions, and JSON examples (1,175 lines)
 
 === Implementation Files
 

@@ -495,7 +495,7 @@ considerations:
 
 === Related Documentation
 
-* link:../src/wagoe/shell/utils/port_manager.clj[Port Management
+* link:../libs/platform/src/wagoe/platform/shell/utils/port_manager.clj[Port Management
 System]
-* link:./DOCUMENTATION_SERVING.adoc[Documentation Serving]
+* Documentation Serving
 * link:../resources/conf/dev/config.edn[Environment Configuration]

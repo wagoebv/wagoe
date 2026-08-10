@@ -31,6 +31,7 @@
             [wagoe.tools.check-fcis :as check-fcis]
             [wagoe.tools.check-hygiene :as check-hygiene]
             [wagoe.tools.check-doc-counts :as check-doc-counts]
+            [wagoe.tools.check-versions :as check-versions]
             [wagoe.tools.check-poms :as check-poms]
             [wagoe.tools.check-ports :as check-ports]
             [wagoe.tools.check-tests :as check-tests]
@@ -621,7 +622,54 @@
    one that does not run."
   #{:hygiene :deps :fcis :placeholder-tests :docs-lint
     :test-meta :test-tags :ports :poms :agents :doctor :linting :no-boundary
-    :doc-counts :branch-protection})
+    :doc-counts :branch-protection :versions})
+
+(deftest ^:unit versions-gate-fires-test
+  ;; The shape the ticket names: a bump covers deps.edn and misses bb.edn, so
+  ;; one location lags while the rest move on.
+  (let [bumped (fn [v what file] {:file file :version v :what what})]
+
+    (testing "a lagging pin is reported against the majority"
+      (let [r (check-versions/disagreements
+               [(bumped "1.0.0-beta-4" "build.clj" "libs/core/build.clj")
+                (bumped "1.0.0-beta-4" "build.clj" "libs/user/build.clj")
+                (bumped "1.0.1-alpha-32" "com.wagoe pin" "bb.edn")])]
+        (is (= "1.0.0-beta-4" (:consensus r)))
+        (is (= ["bb.edn"] (map :file (:offenders r))))))
+
+    (testing "agreement is not a finding"
+      (is (nil? (check-versions/disagreements
+                 [(bumped "1.0.0-beta-4" "build.clj" "libs/core/build.clj")
+                  (bumped "1.0.0-beta-4" "com.wagoe pin" "bb.edn")]))))
+
+    (testing "more than one straggler is reported, sorted"
+      (let [r (check-versions/disagreements
+               [(bumped "2.0.0" "build.clj" "libs/a/build.clj")
+                (bumped "2.0.0" "build.clj" "libs/b/build.clj")
+                (bumped "2.0.0" "build.clj" "libs/c/build.clj")
+                (bumped "1.9.0" "com.wagoe pin" "z-bb.edn")
+                (bumped "1.9.0" "catalogue-version" "a-catalogue.edn")])]
+        (is (= ["a-catalogue.edn" "z-bb.edn"] (map :file (:offenders r))))))
+
+    (testing "the real repository is discovered, not just the fixture"
+      ;; Without this the gate could pass by finding nothing at all.
+      (is (<= 20 (count (check-versions/version-sources)))))
+
+    (testing "every version-bearing kind is actually scanned"
+      ;; The first version of this gate read one key from the module catalogue
+      ;; and ignored the other 24 — :cli-version and a per-module :version for
+      ;; each addable module, which is what `wagoe add` pins. It could pass
+      ;; while the CLI emitted a stale dependency, which is the failure the
+      ;; gate exists for. Asserting the kinds, not a total, so adding a module
+      ;; does not need this number changed.
+      (let [kinds (set (map :what (check-versions/version-sources)))]
+        (doseq [k ["build.clj" "generated-project pin" "com.wagoe pin"
+                   ":catalogue-version" ":cli-version" ":version"]]
+          (is (contains? kinds k) (str k " is not scanned by version-sources")))))
+
+    (testing "the catalogue's per-module versions are all covered, not just one"
+      (let [n (count (filter #(= ":version" (:what %)) (check-versions/version-sources)))]
+        (is (<= 20 n) (str "only " n " per-module :version entries scanned"))))))
 
 (def gates-without-firing-tests
   "Gates that cannot yet be proven to fire, each with the reason.

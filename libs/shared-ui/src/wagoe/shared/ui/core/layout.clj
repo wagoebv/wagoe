@@ -111,6 +111,16 @@
       (when theme-color
         [:meta {:name "theme-color" :content theme-color}])
       [:title title]
+      ;; Browsers request /favicon.ico whether or not a page links one, so the
+      ;; file exists at that path and every app got a 404 in its access log
+      ;; until it did. The PNG links are what modern browsers actually use;
+      ;; they follow the theme, which the .ico cannot.
+      [:link {:rel "icon" :sizes "any" :href "/favicon.ico"}]
+      [:link {:rel "icon" :type "image/png" :href "/assets/wagoe-light-512-icon.png"
+              :media "(prefers-color-scheme: light)"}]
+      [:link {:rel "icon" :type "image/png" :href "/assets/wagoe-dark-512-icon.png"
+              :media "(prefers-color-scheme: dark)"}]
+      [:link {:rel "apple-touch-icon" :href "/assets/wagoe-light-512.png"}]
       [:script {:src "/js/init.js"}]
       extra-head
       (for [css-file css]
