@@ -117,6 +117,25 @@
 ;; Failures
 ;; =============================================================================
 
+(defn envelope-problem
+  "Why `envelope` cannot be invoked, or nil if it can.
+
+   The server is network-facing, so it is reachable by anything that can post
+   to it — including something sending a body that is not an envelope at all.
+   Naming the problem lets the handler answer with an error envelope; without
+   this, reading `:operation` off a malformed body throws, and the caller gets
+   a 500 carrying nothing that says what was wrong with their request."
+  [{:keys [operation args]}]
+  (cond
+    (nil? operation)
+    "Envelope carried no :operation"
+
+    (not (or (string? operation) (keyword? operation) (symbol? operation)))
+    (str "Envelope :operation was not a name: " (pr-str operation))
+
+    (and (some? args) (not (sequential? args)))
+    (str "Envelope :args was not a sequence: " (pr-str args))))
+
 (defn transport-error
   "The error map for a call that did not complete.
 
@@ -127,12 +146,15 @@
      :rpc/unavailable  — could not reach the service (connect refused, DNS)
      :rpc/timeout      — reached it, no answer in time
      :rpc/remote-error — it answered with a non-2xx
-     :rpc/protocol     — it answered with something that is not an envelope"
+     :rpc/protocol     — it answered with something that is not an envelope
+
+   `operation` may be nil: a request that never named one still needs an
+   answer, and it is the one case where there is no operation to report."
   [type operation message & [status]]
-  {:error (cond-> {:type      type
-                   :message   message
-                   :operation (keyword (name operation))}
-            status (assoc :status status))})
+  {:error (cond-> {:type    type
+                   :message message}
+            operation (assoc :operation (keyword (name operation)))
+            status    (assoc :status status))})
 
 (defn classify-exception
   "Map a client exception to an `:rpc/*` type.
@@ -148,6 +170,21 @@
     java.net.NoRouteToHostException  :rpc/unavailable
     :rpc/remote-error))
 
+(defn revive-error
+  "Restore the keywords JSON flattened to strings.
+
+   Callers branch on `:type` — and so does the client's own retry policy. JSON
+   has no keywords, so a type built as `:rpc/timeout` arrives as
+   `\"rpc/timeout\"`, and every set-membership or `case` test against it misses
+   without saying so: the branch simply never fires. This is the boundary where
+   that has to be undone, because it is the last place that knows the value
+   came off a wire."
+  [error]
+  (when error
+    (cond-> error
+      (string? (:type error))      (update :type keyword)
+      (string? (:operation error)) (update :operation keyword))))
+
 (defn response->result
   "Unwrap a response envelope into what the protocol method should return.
 
@@ -160,6 +197,6 @@
     (not (map? body))     (transport-error :rpc/protocol operation
                                            "Remote returned a body that is not an envelope")
     (contains? body :result) (:result body)
-    (:error body)         {:error (:error body)}
+    (:error body)         {:error (revive-error (:error body))}
     :else                 (transport-error :rpc/protocol operation
                                            "Remote envelope had neither :result nor :error")))

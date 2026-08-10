@@ -228,11 +228,30 @@ What it does, and what it deliberately does not:
   `x-tenant-id` and `Authorization`. A request keeps one correlation id across
   the hop instead of starting a fresh trace on the far side.
 
+| Wire format
+| `application/transit+json`, negotiated by the muuntaja stack already in the
+  pipeline — so the server side needs no special decoding. Not JSON: both ends
+  are Clojure, and JSON has no keywords. Payments returns `{:status :paid}`,
+  which over JSON arrives as `{:status "paid"}`; `(= :paid (:status r))` would
+  hold in-process and silently stop holding across the hop, which is the exact
+  transparency the adapter exists to provide. Transit also preserves sets,
+  UUIDs and instants.
+
 | Errors
 | Returned as data, in the `{:error {:type … :message …}}` shape adapters
   already use, so a caller needs no new branch. The types distinguish cases
   that need different responses: `:rpc/unavailable`, `:rpc/timeout`,
-  `:rpc/remote-error`, `:rpc/protocol`, `:rpc/unknown-operation`.
+  `:rpc/remote-error`, `:rpc/protocol`, `:rpc/unknown-operation`. An error
+  envelope the server built on purpose survives its own status code — a
+  refused operation reaches the caller as `:rpc/unknown-operation`, not as a
+  generic "status 500".
+
+| Malformed requests
+| Answered, not thrown. The endpoint is reachable by anything that can post to
+  it, so a body carrying no operation — or an operation that is not a name —
+  comes back as `:rpc/protocol` with `400`. A request the service could not
+  understand is the caller's error; reserving `500` for the service actually
+  failing keeps the two apart in an operator's logs.
 
 | Retries
 | Only `:rpc/unavailable` by default. A timeout is *not* retried: a call that

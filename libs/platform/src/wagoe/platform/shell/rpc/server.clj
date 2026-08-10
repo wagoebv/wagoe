@@ -30,29 +30,60 @@
 
    Errors are returned, never thrown: the client reads status and body, and an
    exception escaping here would surface as a 500 with no operation named — the
-   caller would know something failed but not what it had asked for."
-  [protocol implementation {:keys [operation args correlation-id] :as _envelope}]
-  (if-let [f (operation->fn protocol operation)]
-    (try
-      (let [result (apply f implementation args)]
-        (cond-> {:result result}
-          correlation-id (assoc :correlation-id correlation-id)))
-      (catch Exception e
-        (log/warn e "rpc operation threw" {:operation operation})
-        (cond-> {:error {:type      :rpc/remote-error
-                         :message   (or (.getMessage e) (str (class e)))
-                         :operation (keyword (name operation))}}
-          correlation-id (assoc :correlation-id correlation-id))))
-    (do
-      (log/warn "rpc unknown operation" {:operation operation})
-      {:error {:type      :rpc/unknown-operation
-               :message   (str "This service exposes no operation " operation)
-               :operation (when operation (keyword (name operation)))}})))
+   caller would know something failed but not what it had asked for.
+
+   That includes a body that is not an envelope. This endpoint is reachable by
+   anything that can post to it, so `:operation` may be missing or may not be a
+   name at all; reading it unguarded would throw before the error map that
+   promises to describe the failure could be built."
+  [protocol implementation {:keys [operation args correlation-id] :as envelope}]
+  (let [carry-correlation #(cond-> % correlation-id (assoc :correlation-id correlation-id))]
+    (if-let [problem (rpc/envelope-problem envelope)]
+      (do
+        (log/warn "rpc malformed envelope" {:problem problem})
+        (carry-correlation (rpc/transport-error :rpc/protocol nil problem)))
+
+      (if-let [f (operation->fn protocol operation)]
+        (try
+          (carry-correlation {:result (apply f implementation args)})
+          (catch Exception e
+            (log/warn e "rpc operation threw" {:operation operation})
+            (carry-correlation
+             (rpc/transport-error :rpc/remote-error operation
+                                  (or (.getMessage e) (str (class e)))))))
+
+        (do
+          (log/warn "rpc unknown operation" {:operation operation})
+          (carry-correlation
+           (rpc/transport-error :rpc/unknown-operation operation
+                                (str "This service exposes no operation " operation))))))))
+
+(defn- error->status
+  "HTTP status for an error type.
+
+   A request this service could not understand is 400, not 500: an operator
+   reading the logs of a sliced-out service needs to tell a caller sending
+   nonsense from the service itself falling over, and a 500 on every failure
+   collapses that distinction. The client reads the body either way — the
+   status is for everything between the two, and for humans."
+  [error-type]
+  (case error-type
+    nil                    200
+    :rpc/protocol          400
+    :rpc/unknown-operation 400
+    500))
 
 (defn rpc-handler
   "A Ring handler serving `protocol` backed by `implementation`.
 
    Mount at `/rpc` — `…rpc.client` posts there.
+
+   Expects the app's format middleware to have decoded the body into
+   `:body-params`, and leaves encoding the response to it as well — the client
+   asks for `application/transit+json`, so setting a content type here would
+   override the negotiation and mislabel the body. transit rather than JSON
+   because JSON flattens every keyword to a string, and a protocol returning a
+   keyword status would answer with a string across the hop and nowhere else.
 
    The context an inbound request carries (correlation-id, tenant, auth) is
    read from the headers and merged onto the envelope, so a downstream call
@@ -70,6 +101,8 @@
   (fn [{:keys [body-params headers] :as _request}]
     (let [envelope (merge (rpc/headers->context headers) body-params)
           response (handle-envelope protocol implementation envelope)]
-      {:status  (if (:error response) 500 200)
-       :headers {"content-type" "application/json"}
-       :body    response})))
+      ;; No content type: the format middleware negotiates it from the
+      ;; request's Accept, and hardcoding one here would label a transit body
+      ;; as JSON.
+      {:status (error->status (get-in response [:error :type]))
+       :body   response})))

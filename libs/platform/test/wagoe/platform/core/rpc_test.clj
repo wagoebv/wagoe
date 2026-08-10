@@ -75,3 +75,54 @@
   (testing "anything else says the far side is not what we think it is"
     (is (= :rpc/protocol (get-in (rpc/response->result :op "<html>") [:error :type])))
     (is (= :rpc/protocol (get-in (rpc/response->result :op {:unexpected 1}) [:error :type])))))
+
+(deftest ^:unit a-request-that-cannot-be-invoked-is-named-not-thrown
+  ;; The endpoint is reachable by anything that can post to it, so the envelope
+  ;; is untrusted input. Every one of these used to throw while reading the
+  ;; operation, before the error map describing the failure could be built.
+  (testing "a well-formed envelope has no problem"
+    (is (nil? (rpc/envelope-problem {:operation :op :args []})))
+    (is (nil? (rpc/envelope-problem {:operation "op" :args nil}))
+        "absent args are legitimate — a zero-argument method"))
+
+  (testing "a missing operation is reported"
+    (is (re-find #"no :operation" (rpc/envelope-problem {:args []}))))
+
+  (testing "an operation that is not a name is reported"
+    (is (some? (rpc/envelope-problem {:operation 42 :args []})))
+    (is (some? (rpc/envelope-problem {:operation {:a 1} :args []}))))
+
+  (testing "args that cannot be applied are reported"
+    ;; Otherwise `apply` throws and the failure is attributed to the service
+    ;; rather than to the caller that sent it.
+    (is (some? (rpc/envelope-problem {:operation :op :args "not-a-sequence"})))))
+
+(deftest ^:unit error-types-are-keywords-again-after-the-wire
+  ;; JSON has no keywords. A caller — and the client's own retry policy —
+  ;; branches on :type, and comparing a string against a set of keywords misses
+  ;; without any sign that it did: the branch simply never runs.
+  (testing "a type that crossed as a string comes back a keyword"
+    (is (= :rpc/timeout (:type (rpc/revive-error {:type "rpc/timeout" :message "x"})))))
+
+  (testing "so does the operation"
+    (is (= :get-payment-status
+           (:operation (rpc/revive-error {:type "rpc/timeout" :message "x"
+                                          :operation "get-payment-status"})))))
+
+  (testing "a type that is already a keyword is left alone"
+    (is (= :rpc/timeout (:type (rpc/revive-error {:type :rpc/timeout :message "x"})))))
+
+  (testing "nil is nil"
+    (is (nil? (rpc/revive-error nil))))
+
+  (testing "and a response envelope revives its error the same way"
+    (is (= :psp/declined
+           (get-in (rpc/response->result :op {:error {:type "psp/declined" :message "no"}})
+                   [:error :type])))))
+
+(deftest ^:unit an-error-without-an-operation-is-still-an-error
+  ;; A request that never named an operation has none to report; building the
+  ;; error map must not require one.
+  (let [e (rpc/transport-error :rpc/protocol nil "no operation")]
+    (is (= :rpc/protocol (get-in e [:error :type])))
+    (is (not (contains? (:error e) :operation)))))

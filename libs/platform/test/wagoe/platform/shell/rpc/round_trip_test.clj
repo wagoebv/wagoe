@@ -10,29 +10,36 @@
             [wagoe.platform.shell.rpc.server :as server]
             [wagoe.payments.ports :as pay-ports]
             [wagoe.payments.shell.adapters.mock :as mock]
-            [cheshire.core :as json]
             [clojure.test :refer [deftest is testing]]
-            [ring.adapter.jetty :as jetty])
-  (:import (java.io ByteArrayInputStream)))
+            [muuntaja.core :as m]
+            [muuntaja.middleware :as m-mw]
+            [ring.adapter.jetty :as jetty]))
 
 (def ^:private port 3811)
 
-(defn- json-body-middleware
-  "Parse the JSON body into :body-params, as the app's muuntaja stack does.
+(def ^:private content-type "application/transit+json")
 
-   The handler under test expects :body-params; supplying it here keeps the
-   test about the RPC layer rather than about middleware configuration."
+(defn- wrap-format
+  "The app's own format middleware, not a stand-in.
+
+   `rpc-handler` reads `:body-params` and returns a Clojure map, relying on
+   muuntaja to decode and encode around it. Hand-rolling that here would test a
+   pipeline nothing runs — and would have hidden the fact that the wire format
+   determines whether keyword values survive the hop at all."
   [handler]
-  (fn [request]
-    (let [body     (some-> (:body request) slurp)
-          parsed   (when (seq body) (json/parse-string body true))
-          response (handler (assoc request :body-params parsed))]
-      (update response :body #(if (string? %) % (json/generate-string %))))))
+  (m-mw/wrap-format handler))
+
+(defn- encode-body
+  "A request body in the wire format, for driving the handler directly."
+  [data]
+  (m/encode m/instance content-type data))
+
+(defn- decode-body [body] (m/decode m/instance content-type body))
 
 (defn- with-service
   "Run `f` with the payments protocol served over HTTP on `port`."
   [implementation f]
-  (let [handler (json-body-middleware (server/rpc-handler pay-ports/IPaymentProvider implementation))
+  (let [handler (wrap-format (server/rpc-handler pay-ports/IPaymentProvider implementation))
         app     (fn [request]
                   (if (= "/rpc" (:uri request))
                     (handler request)
@@ -88,7 +95,7 @@
                    (expire-checkout-session [_ _] {:ok true})
                    (process-webhook [_ _ _] {:ok true})
                    (verify-webhook-signature [_ _ _] true))
-        handler (json-body-middleware
+        handler (wrap-format
                  (fn [request]
                    (reset! seen (rpc/headers->context (:headers request)))
                    ((server/rpc-handler pay-ports/IPaymentProvider recorder) request)))
@@ -126,8 +133,6 @@
     (testing "and the message says so rather than reporting a generic failure"
       (is (re-find #"exposes no operation" (get-in response [:error :message]))))))
 
-(defn- ->stream [s] (ByteArrayInputStream. (.getBytes ^String s "UTF-8")))
-
 (deftest ^:integration a-throwing-implementation-answers-rather-than-hanging
   (let [boom (reify pay-ports/IPaymentProvider
                (provider-name [_] :boom)
@@ -137,19 +142,21 @@
                (expire-checkout-session [_ _] nil)
                (process-webhook [_ _ _] nil)
                (verify-webhook-signature [_ _ _] false))
-        handler (json-body-middleware (server/rpc-handler pay-ports/IPaymentProvider boom))
-        request {:uri "/rpc" :request-method :post :headers {}
-                 :body (->stream (json/generate-string
-                                  {:operation "create-checkout-session" :args [{}]}))}
+        handler (wrap-format (server/rpc-handler pay-ports/IPaymentProvider boom))
+        request {:uri "/rpc" :request-method :post
+                 :headers {"content-type" content-type "accept" content-type}
+                 :body (encode-body {:operation :create-checkout-session :args [{}]})}
         response (handler request)]
 
     (testing "the failure is a response, not an escaped exception"
       (is (= 500 (:status response))))
 
     (testing "and it names the operation that failed"
-      (let [body (json/parse-string (:body response) true)]
+      (let [body (decode-body (:body response))]
         (is (= "psp down" (get-in body [:error :message])))
-        (is (= "create-checkout-session" (get-in body [:error :operation])))))))
+        ;; A keyword, not the string JSON would have left here. Callers branch
+        ;; on this.
+        (is (= :create-checkout-session (get-in body [:error :operation])))))))
 
 (deftest ^:integration retries-are-counted-not-just-configured
   ;; The retry policy is the part most likely to be wrong in a way nothing
@@ -157,9 +164,15 @@
   ;; retrying a non-idempotent call too much charges a customer twice. Count
   ;; the attempts the far side actually sees.
   (let [attempts (atom 0)
+        ;; A real error envelope, as the server sends: the retry decision is
+        ;; made on the type that came off the wire, so a stub returning
+        ;; something else would test a path production never takes.
         app      (fn [_]
                    (swap! attempts inc)
-                   {:status 500 :headers {} :body "{\"error\":{\"type\":\"boom\"}}"})
+                   {:status  500
+                    :headers {"content-type" content-type}
+                    :body    (encode-body {:error {:type    :rpc/remote-error
+                                                   :message "psp down"}})})
         srv      (jetty/run-jetty app {:port (+ port 2) :join? false})
         url      (str "http://localhost:" (+ port 2))]
     (try
@@ -180,6 +193,16 @@
           (testing "and the caller still gets the failure once they are spent"
             (is (= :rpc/remote-error (get-in r [:error :type]))))))
 
+      (testing "the decision is made on the type the server sent, not a local guess"
+        ;; JSON has no keywords, so `:type` arrives as a string. Comparing it
+        ;; against a set of keywords misses silently — the retry simply never
+        ;; happens — which is why this asserts on attempts rather than on the
+        ;; returned map.
+        (reset! attempts 0)
+        (client/call! url :get-payment-status ["id"]
+                      {:retry-on #{:rpc/unavailable} :retries 2 :retry-delay-ms 1})
+        (is (= 1 @attempts) "a remote error is not in that set, so it is not retried"))
+
       (testing "retries 0 means one attempt"
         (reset! attempts 0)
         (client/call! url :get-payment-status ["id"]
@@ -194,3 +217,113 @@
       "retrying a timed-out call risks executing it twice")
   (is (contains? (:retry-on client/default-opts) :rpc/unavailable)
       "a refused connection did not execute, so it is safe to retry"))
+
+(deftest ^:integration remote-error-envelopes-survive-the-status-code
+  ;; The server reports a refused operation and a thrown implementation in the
+  ;; body, on a non-2xx. Testing `handle-envelope` directly proves it builds
+  ;; that body; it says nothing about whether the client can still read it. A
+  ;; client that replaced it with "status 500" would pass every server-side
+  ;; test while giving callers nothing to branch on.
+  (let [boom (reify pay-ports/IPaymentProvider
+               (provider-name [_] :boom)
+               (create-checkout-session [_ _] (throw (ex-info "psp refused the card" {})))
+               (create-off-session-payment [_ _] nil)
+               (get-payment-status [_ _] nil)
+               (expire-checkout-session [_ _] nil)
+               (process-webhook [_ _ _] nil)
+               (verify-webhook-signature [_ _ _] false))]
+    (with-service boom
+      (fn []
+        (let [url (str "http://localhost:" port)]
+
+          (testing "a remote exception reaches the caller with its message and operation"
+            (let [r (client/call! url :create-checkout-session [{}] {:retries 0})]
+              (is (= :rpc/remote-error (get-in r [:error :type])))
+              (is (= "psp refused the card" (get-in r [:error :message])))
+              (is (= :create-checkout-session (get-in r [:error :operation])))))
+
+          (testing "a refused operation keeps its own type rather than becoming generic"
+            ;; :rpc/unknown-operation means the caller and the service disagree
+            ;; about the contract — a deploy skew. It needs a different response
+            ;; from "the payment provider is down", so it must not be flattened
+            ;; into :rpc/remote-error.
+            (let [r (client/call! url :drop-database [] {:retries 0})]
+              (is (= :rpc/unknown-operation (get-in r [:error :type])))
+              (is (re-find #"exposes no operation" (get-in r [:error :message]))))))))))
+
+(deftest ^:integration a-body-that-is-not-an-envelope-gets-an-answer
+  ;; This endpoint is reachable by anything that can post to it. A body with no
+  ;; :operation used to throw on `(name nil)` before the error map could be
+  ;; built, so the promise that errors are returned rather than thrown held
+  ;; only for requests that were already well-formed.
+  (let [provider (mock/make-mock-provider)
+        handler  (wrap-format (server/rpc-handler pay-ports/IPaymentProvider provider))
+        post     (fn [body-map]
+                   (handler {:uri "/rpc" :request-method :post
+                             :headers {"content-type" content-type "accept" content-type}
+                             :body (encode-body body-map)}))]
+
+    (testing "a body with no operation is answered, not thrown"
+      (let [response (post {:args []})
+            body     (decode-body (:body response))]
+        (is (= 400 (:status response)) "the caller sent something unusable, so it is their error")
+        (is (= :rpc/protocol (get-in body [:error :type])))
+        (is (re-find #"no :operation" (get-in body [:error :message])))))
+
+    (testing "an operation that is not a name is answered too"
+      (let [body (decode-body (:body (post {:operation 42 :args []})))]
+        (is (= :rpc/protocol (get-in body [:error :type])))))
+
+    (testing "args that are not a sequence are answered"
+      ;; `apply` over a non-sequence throws; catching it as :rpc/remote-error
+      ;; would blame the service for the caller's malformed request.
+      (let [body (decode-body (:body (post {:operation :get-payment-status
+                                             :args      "not-a-vector"})))]
+        (is (= :rpc/protocol (get-in body [:error :type])))))
+
+    (testing "an empty body is answered"
+      (let [response (handler {:uri "/rpc" :request-method :post
+                                :headers {"content-type" content-type "accept" content-type}
+                                :body nil})]
+        (is (= 400 (:status response)))))
+
+    (testing "a well-formed request still works, so the guard did not swallow everything"
+      ;; Without this, every assertion above would pass if the handler rejected
+      ;; all requests.
+      (let [body (decode-body
+                  (:body (post {:operation :get-payment-status :args ["pay-1"]})))]
+        (is (nil? (:error body)))
+        (is (contains? body :result))))))
+
+(deftest ^:integration a-malformed-request-is-not-retried
+  ;; :rpc/protocol means the request was wrong. Sending it again unchanged
+  ;; cannot help, and against a non-idempotent operation it is the same double
+  ;; -submission the timeout rule exists to avoid.
+  (is (not (contains? (:retry-on client/default-opts) :rpc/protocol)))
+  (is (not (contains? (:retry-on client/default-opts) :rpc/unknown-operation))))
+
+(deftest ^:integration keyword-values-survive-the-hop
+  ;; The reason the wire format is transit and not JSON. Payments returns
+  ;; keyword-valued statuses (`{:status :paid}`, `(provider-name) => :mock`);
+  ;; over JSON those arrive as strings, so `(= :paid (:status r))` holds
+  ;; in-process and silently stops holding through the adapter — a caller that
+  ;; switched to a remote payments service would see every status comparison
+  ;; fail, with nothing in any log to say why.
+  (let [provider (mock/make-mock-provider)]
+    (with-service provider
+      (fn []
+        (let [remote (client/remote-adapter pay-ports/IPaymentProvider
+                                            (str "http://localhost:" port)
+                                            {:retries 0})]
+
+          (testing "a keyword returned as the whole result is still a keyword"
+            (is (= :mock (pay-ports/provider-name remote))))
+
+          (testing "a keyword nested in a map is still a keyword"
+            (let [status (pay-ports/get-payment-status remote "pay-1")]
+              (is (= :paid (:status status)))
+              (is (= (pay-ports/get-payment-status provider "pay-1") status)
+                  "and the whole value equals what the in-process provider returned")))
+
+          (testing "a boolean is not stringified either"
+            (is (true? (pay-ports/verify-webhook-signature remote "{}" "sig")))))))))

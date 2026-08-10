@@ -13,9 +13,27 @@
    FC/IS: shell. The wire contract is pure and lives in
    `wagoe.platform.core.rpc`."
   (:require [wagoe.platform.core.rpc :as rpc]
-            [cheshire.core :as json]
             [clj-http.client :as http]
-            [clojure.tools.logging :as log]))
+            [clojure.tools.logging :as log]
+            [muuntaja.core :as m]))
+
+;; =============================================================================
+;; Wire format
+;; =============================================================================
+
+(def ^:private content-type
+  "transit+json, not JSON.
+
+   Both ends are Clojure and the protocol's values are Clojure values. JSON has
+   no keywords, so `{:status :paid}` comes back as `{:status \"paid\"}` and a
+   caller's `(= :paid (:status r))` — which held in-process — quietly stops
+   holding across the hop. That is precisely the transparency the adapter
+   exists to provide, and payments returns keyword-valued statuses today.
+
+   Transit also carries sets, UUIDs and instants, all of which JSON flattens.
+   muuntaja negotiates this format already, so the server side needs nothing:
+   the app's existing format middleware decodes it into `:body-params`."
+  "application/transit+json")
 
 ;; =============================================================================
 ;; Retry
@@ -39,6 +57,18 @@
 ;; The call
 ;; =============================================================================
 
+(defn- decode-body
+  "Decode a response body, or nil if it is not in our format.
+
+   A failing service is often fronted by something that answers in HTML — a
+   proxy's 502 page, a login redirect. Letting the decoder throw there would
+   turn 'the service is down' into a stack trace at the call site, which is the
+   one thing this adapter promises not to do."
+  [body]
+  (try
+    (when body (m/decode m/instance content-type body))
+    (catch Exception _ nil)))
+
 (defn- post-envelope!
   "POST one envelope. Returns the parsed body, or a transport error map."
   [url envelope opts]
@@ -46,18 +76,31 @@
     (try
       (let [{:keys [status body]}
             (http/post url
-                       {:body               (json/generate-string envelope)
-                        :content-type       :json
-                        :as                 :json
+                       {:body               (m/encode m/instance content-type envelope)
+                        :content-type       content-type
+                        :accept             content-type
+                        :as                 :stream
                         :headers            (rpc/context->headers envelope)
                         :socket-timeout     (:timeout-ms opts)
                         :connection-timeout (:timeout-ms opts)
                         ;; Errors as data, like every other outbound adapter
                         ;; here — a 500 from the far side is a result to
                         ;; inspect, not a stack trace to unwind.
-                        :throw-exceptions   false})]
-        (if (<= 200 status 299)
+                        :throw-exceptions   false})
+            body (decode-body body)]
+        (cond
+          (<= 200 status 299)
           (rpc/response->result operation body)
+
+          ;; A non-2xx usually still carries an envelope the server built on
+          ;; purpose: the operation is not one it exposes, or the
+          ;; implementation threw and it said what. Replacing that with a
+          ;; generic "status 500" throws away the only part of the response
+          ;; that says what went wrong.
+          (and (map? body) (:error body))
+          {:error (rpc/revive-error (:error body))}
+
+          :else
           (rpc/transport-error :rpc/remote-error operation
                                (str "Remote returned status " status)
                                status)))
