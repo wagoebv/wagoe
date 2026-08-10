@@ -16,6 +16,14 @@
             ;; config that references it self-registers the init/halt methods —
             ;; every full-system boot (app + tests) then resolves the key.
             [wagoe.email.shell.module-wiring]
+            ;; Same rule, and the reason it is a rule: external-module-config
+            ;; emits :wagoe.external/{smtp,imap,twilio} whenever they are
+            ;; active, so this namespace must register them. Requiring it from
+            ;; wagoe.main instead covered the app and left every other caller of
+            ;; ig-config short — dev/repl/user.clj, the platform port tests, and
+            ;; the devtools dashboard, which resolves wagoe.config/ig-config at
+            ;; runtime. The layer that emits a key registers it.
+            [wagoe.external.shell.module-wiring]
             [wagoe.user.schema :as user-schema]))
 
 ;; =============================================================================

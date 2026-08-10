@@ -16,7 +16,6 @@
             ;; require below; feature modules load here (app layer, not platform —
             ;; BOU-171 / BOU-192).
             [wagoe.user.shell.module-wiring]
-            [wagoe.external.shell.module-wiring]
             [wagoe.admin.shell.module-wiring]
             [wagoe.workflow.shell.module-wiring]
             [wagoe.search.shell.module-wiring]

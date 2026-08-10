@@ -4,6 +4,7 @@
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [integrant.core :as ig]
+            [wagoe.config :as config]
             [wagoe.main :as main]))
 
 (deftest ^:unit worker-ig-config-drops-http-surface
@@ -97,23 +98,45 @@
       (is (= 2 (count (re-seq #"\(log/error \(startup-failure-summary e\)\)" src)))))))
 
 ;; =============================================================================
-;; Module wiring loaded by the entry point
+;; Everything the config emits must be registered by the entry point
 ;; =============================================================================
 
-(deftest ^:unit entry-point-registers-every-module-it-owns
-  ;; platform used to require these, which made the SMTP/IMAP/Twilio adapters a
-  ;; mandatory dependency of the HTTP layer — and, for `external`, one platform
-  ;; never declared in its deps.edn (the last entry in check:deps' allowlist).
-  ;; Loading them here instead is the pattern BOU-171/192/198 established.
+(deftest ^:integration entry-point-registers-every-key-the-config-emits
+  ;; The real invariant, and the one my first attempt missed: whatever
+  ;; `ig-config` puts in the map, requiring the entry point must have
+  ;; registered an `ig/init-key` for it. Anything else fails at startup with
+  ;; "No method in multimethod 'init-key' for dispatch value: …".
   ;;
-  ;; Requiring wagoe.main is what registers them, so a key missing here means a
-  ;; project that activates that component gets "No method in multimethod
-  ;; ig/init-key" at startup rather than a running system.
-  (let [registered (set (keys (methods ig/init-key)))]
-    (testing "the external adapters are registered"
-      (doseq [k [:wagoe.external/smtp :wagoe.external/imap :wagoe.external/twilio]]
-        (is (contains? registered k) (str k " has no ig/init-key method"))))
+  ;; The earlier version of this test named three external keys by hand. That
+  ;; passes while the next module moved out of platform breaks — which is how
+  ;; :wagoe.external/smtp came to break generated projects. Comparing the two
+  ;; sets needs no list to maintain.
+  ;;
+  ;; It asserts the *entry point*, not wagoe.config: 31 of the 32 keys are
+  ;; registered by the module-wiring namespaces wagoe.main requires, not by the
+  ;; config layer. Email and external self-register in wagoe.config because
+  ;; that namespace emits them conditionally.
+  ;; The optional modules are activated deliberately. Against the plain test
+  ;; profile this test passed with the external require deleted, because that
+  ;; profile activates no external adapter, so ig-config emitted none of the
+  ;; keys the test exists to check — vacuous for its own motivating case.
+  (let [loaded  (config/load-config {:profile :test})
+        opt-in  {:wagoe.external/smtp   {:host "localhost" :port 25}
+                 :wagoe.external/imap   {:host "localhost" :port 143}
+                 :wagoe.external/twilio {:account-sid "x" :auth-token "y"}}
+        with-all (update loaded :active merge opt-in)
+        cfg        (config/ig-config with-all)
+        registered (set (keys (methods ig/init-key)))
+        missing    (remove registered (keys cfg))]
 
-    (testing "and the feature modules the entry point owns"
-      (doseq [k [:wagoe/user-service :wagoe/admin-service]]
-        (is (contains? registered k) (str k " has no ig/init-key method"))))))
+    (testing "the optional keys really are emitted — otherwise this is vacuous"
+      (doseq [k (keys opt-in)]
+        (is (contains? cfg k) (str k " was not emitted; the opt-in shape has changed"))))
+
+    (testing "the config was built"
+      (is (<= 20 (count cfg)) (str "only " (count cfg) " keys emitted")))
+
+    (testing "every emitted key has an init-key method"
+      (is (empty? missing)
+          (str "emitted by ig-config but never registered: " (pr-str (sort missing))
+               " — require the module-wiring namespace that defines them")))))
