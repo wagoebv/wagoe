@@ -79,6 +79,21 @@
    :tenant-id      "x-tenant-id"
    :auth-token     "authorization"})
 
+(def ^:private auth-scheme-pattern
+  "A leading RFC 7235 auth-scheme.
+
+   The scheme is a `token`, and `tchar` includes `-`, `.`, `+` and more — so
+   `\\w+` misses real ones. `Api-Key abc` failing this check was rewritten to
+   `Bearer Api-Key abc`, corrupting the credential of any hop using a scheme
+   that is not purely alphanumeric."
+  #"^[!#$%&'*+\-.^_`|~0-9A-Za-z]+\s")
+
+(def ^:private bearer-prefix
+  "A leading bearer scheme, in any case. RFC 7235 says schemes are matched
+   case-insensitively, and a header that arrived as `BEARER` would otherwise
+   keep its scheme and be sent on as `Bearer BEARER …`."
+  #"(?i)^bearer\s+")
+
 (defn context->headers
   "HTTP headers carrying `envelope`'s context.
 
@@ -89,7 +104,7 @@
   (reduce-kv (fn [hs k header]
                (if-let [v (get envelope k)]
                  (assoc hs header
-                        (if (and (= :auth-token k) (not (re-find #"^\w+ " v)))
+                        (if (and (= :auth-token k) (not (re-find auth-scheme-pattern v)))
                           (str "Bearer " v)
                           v))
                  hs))
@@ -107,7 +122,7 @@
     (reduce-kv (fn [ctx k header]
                  (if-let [v (get lower header)]
                    (assoc ctx k (if (= :auth-token k)
-                                  (str/replace v #"^[Bb]earer " "")
+                                  (str/replace v bearer-prefix "")
                                   v))
                    ctx))
                {}
@@ -196,18 +211,53 @@
             operation (assoc :operation (keyword (name operation)))
             status    (assoc :status status))})
 
+(def ^:private never-connected-messages
+  "`SocketException` messages that mean the connection was never established.
+
+   `SocketException` covers both ends of the call: `Network is unreachable`,
+   raised before anything is sent, and `Connection reset`, raised after the
+   request is on the wire. Only the first kind is safe to retry, so the class
+   alone cannot decide — a blanket rule would make a reset mid-payment
+   retryable and charge the customer twice.
+
+   Matching on messages is unlovely and locale-dependent, so the list is an
+   allowlist: anything unrecognised stays `:rpc/remote-error`, which is not
+   retried. Being wrong that way costs a retry that would have helped; being
+   wrong the other way costs a duplicate payment."
+  #{"network is unreachable"
+    "operation not permitted"
+    "no route to host"
+    "protocol family unavailable"
+    "address family not supported by protocol family"
+    "can't assign requested address"})
+
+(defn- never-connected?
+  [^Exception e]
+  (let [message (str/lower-case (or (.getMessage e) ""))]
+    (boolean (some #(str/includes? message %) never-connected-messages))))
+
 (defn classify-exception
   "Map a client exception to an `:rpc/*` type.
 
    A timeout and a refused connection are both 'no answer' to a naive reader,
    and they need different operator responses — one is a slow service, the
-   other a missing one."
+   other a missing one. The distinction that matters most is whether the call
+   could have executed, because that is what decides if a retry is safe.
+
+   Deliberately conservative: anything not recognised as definitely-never-sent
+   is `:rpc/remote-error`, which the default policy does not retry."
   [^Exception e]
   (condp instance? e
     java.net.SocketTimeoutException  :rpc/timeout
+    ;; These three are SocketException subclasses and must be tested first.
     java.net.ConnectException        :rpc/unavailable
-    java.net.UnknownHostException    :rpc/unavailable
     java.net.NoRouteToHostException  :rpc/unavailable
+    java.net.UnknownHostException    :rpc/unavailable
+    ;; A restricted or containerised network reports an unreachable service
+    ;; here rather than as ConnectException.
+    java.net.SocketException         (if (never-connected? e)
+                                       :rpc/unavailable
+                                       :rpc/remote-error)
     :rpc/remote-error))
 
 (declare plain-value?)

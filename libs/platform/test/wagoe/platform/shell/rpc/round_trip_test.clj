@@ -809,3 +809,21 @@
       ;; user token invoke port methods directly.
       (is (= service-key (get-in @sent [:headers "x-rpc-service-key"])))
       (is (nil? (get-in @sent [:headers "authorization"]))))))
+
+(deftest ^:integration what-gets-retried-is-what-never-executed
+  ;; Ties classification to its consequence, against the real default rather
+  ;; than a set written out in the test. A type in :retry-on must mean the call
+  ;; did not run.
+  (let [retried? #(contains? (:retry-on client/default-opts) %)]
+
+    (testing "a connection that was never established is retried"
+      (is (retried? (rpc/classify-exception (java.net.ConnectException. "refused"))))
+      (is (retried? (rpc/classify-exception
+                     (java.net.SocketException. "Network is unreachable")))
+          "including the form a restricted network raises"))
+
+    (testing "and nothing that may have executed is"
+      (is (not (retried? (rpc/classify-exception (java.net.SocketTimeoutException. "t"))))
+          "a timed-out call may well have run")
+      (is (not (retried? (rpc/classify-exception (java.net.SocketException. "Connection reset"))))
+          "a reset happens once the request is on the wire"))))

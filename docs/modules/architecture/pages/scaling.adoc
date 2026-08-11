@@ -299,6 +299,13 @@ What it does, and what it deliberately does not:
   that timed out may well have executed, and re-sending it could charge twice.
   Override with `:retry-on`.
 
+  Which failures count as never-executed is decided conservatively. A
+  `SocketException` reading `Network is unreachable` was never sent and is
+  retryable; one reading `Connection reset` happened with the request already
+  on the wire and is not, though both are the same class. An unrecognised
+  failure is treated as possibly-executed — being wrong that way costs a retry
+  that would have helped, the other way costs a duplicate payment.
+
   The HTTP client's own retry handler is disabled. Apache HttpClient resends
   low-level I/O failures before this code sees an outcome, so `:retries 0` and
   keeping `:rpc/timeout` out of `:retry-on` would not have prevented a second

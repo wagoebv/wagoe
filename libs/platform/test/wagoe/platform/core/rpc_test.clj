@@ -230,3 +230,80 @@
   (is (not= rpc/service-key-header (:auth-token rpc/context-headers)))
   (testing "and reading context back never picks the service key up"
     (is (empty? (rpc/headers->context {rpc/service-key-header "secret"})))))
+
+(deftest ^:unit a-credential-that-already-names-its-scheme-is-not-rewrapped
+  (let [scheme-of (fn [token]
+                    (get (rpc/context->headers {:auth-token token}) "authorization"))]
+
+    (testing "a raw token becomes a bearer credential"
+      (is (= "Bearer abc123" (scheme-of "abc123"))))
+
+    (testing "an alphanumeric scheme is left alone"
+      (is (= "Basic dXNlcjpwdw==" (scheme-of "Basic dXNlcjpwdw=="))))
+
+    (testing "so is a scheme containing a hyphen"
+      ;; RFC 7235 auth-scheme is a token, and tchar includes `-`. `\w+` missed
+      ;; these, so `Api-Key abc` was sent on as `Bearer Api-Key abc` — a
+      ;; corrupted credential, and one that fails at the far end for a reason
+      ;; nothing here would explain.
+      (is (= "Api-Key abc" (scheme-of "Api-Key abc"))))
+
+    (testing "and other tchar schemes"
+      (is (= "X.Auth+1 tok" (scheme-of "X.Auth+1 tok")))
+      (is (= "SIG-v4 tok" (scheme-of "SIG-v4 tok"))))
+
+    (testing "a JWT, which has dots but no space, is still wrapped"
+      ;; The check is for a scheme followed by whitespace, not for punctuation.
+      (is (= "Bearer a.b.c" (scheme-of "a.b.c"))))))
+
+(deftest ^:unit reading-a-bearer-token-back-is-case-insensitive
+  ;; RFC 7235 matches schemes case-insensitively. A header that arrived as
+  ;; BEARER kept its scheme, and was then forwarded as "Bearer BEARER …".
+  (is (= "tok" (:auth-token (rpc/headers->context {"authorization" "Bearer tok"}))))
+  (is (= "tok" (:auth-token (rpc/headers->context {"authorization" "bearer tok"}))))
+  (is (= "tok" (:auth-token (rpc/headers->context {"authorization" "BEARER tok"}))))
+
+  (testing "a non-bearer scheme is kept whole, so it can be forwarded as-is"
+    (is (= "Api-Key abc"
+           (:auth-token (rpc/headers->context {"authorization" "Api-Key abc"}))))))
+
+(deftest ^:unit a-connection-that-was-never-made-is-retryable
+  (testing "a restricted network reports it as a plain SocketException"
+    ;; Containerised and sandboxed environments raise these rather than
+    ;; ConnectException. Classified as :rpc/remote-error they were not
+    ;; retried, for a service that was never reached.
+    (is (= :rpc/unavailable
+           (rpc/classify-exception (java.net.SocketException. "Network is unreachable"))))
+    (is (= :rpc/unavailable
+           (rpc/classify-exception (java.net.SocketException. "Operation not permitted"))))
+    (is (= :rpc/unavailable
+           (rpc/classify-exception (java.net.SocketException. "Protocol family unavailable")))))
+
+  (testing "and the message is matched whatever its case"
+    (is (= :rpc/unavailable
+           (rpc/classify-exception (java.net.SocketException. "network is unreachable")))))
+
+  (testing "but a socket failure after the request was sent is NOT retryable"
+    ;; The direction that matters. `Connection reset` is also a
+    ;; SocketException, and it happens once the request is on the wire — the
+    ;; call may well have executed. Treating the whole class as unavailable
+    ;; would make a reset mid-payment retryable and charge twice.
+    (is (= :rpc/remote-error
+           (rpc/classify-exception (java.net.SocketException. "Connection reset"))))
+    (is (= :rpc/remote-error
+           (rpc/classify-exception (java.net.SocketException. "Broken pipe"))))
+    (is (= :rpc/remote-error
+           (rpc/classify-exception (java.net.SocketException. "Socket closed")))))
+
+  (testing "an unrecognised message stays on the cautious side"
+    (is (= :rpc/remote-error
+           (rpc/classify-exception (java.net.SocketException. "something new in a future JDK")))))
+
+  (testing "and the existing classifications are unchanged"
+    ;; ConnectException and NoRouteToHostException are SocketException
+    ;; subclasses; the new clause must not shadow them.
+    (is (= :rpc/unavailable (rpc/classify-exception (java.net.ConnectException. "refused"))))
+    (is (= :rpc/unavailable (rpc/classify-exception (java.net.NoRouteToHostException. "x"))))
+    (is (= :rpc/unavailable (rpc/classify-exception (java.net.UnknownHostException. "h"))))
+    (is (= :rpc/timeout (rpc/classify-exception (java.net.SocketTimeoutException. "t"))))))
+
