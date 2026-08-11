@@ -58,15 +58,16 @@
       (finally (.stop server)))))
 
 (defn- with-service
-  "Run `f` with the payments protocol served over HTTP. `f` receives the URL."
+  "Run `f` with the payments protocol served over HTTP. `f` receives the URL.
+
+   Serves `rpc-app` — the thing callers are actually given — rather than a
+   stack assembled here. A hand-built one keeps working after the shipped
+   mounting breaks, which is how two route-slot defects survived a green
+   suite."
   [implementation f]
-  (let [handler (wrap-format (server/rpc-handler pay-ports/IPaymentProvider implementation
-                                                 {:service-key service-key}))]
-    (with-server (fn [request]
-                   (if (= "/rpc" (:uri request))
-                     (handler request)
-                     {:status 404 :body "{}"}))
-      f)))
+  (with-server (server/rpc-app pay-ports/IPaymentProvider implementation
+                               {:service-key service-key})
+    f))
 
 (deftest ^:integration protocol-calls-cross-a-real-socket
   (let [provider (mock/make-mock-provider)]
@@ -556,47 +557,52 @@
             (pay-ports/get-payment-status remote "id")
             (is (= "/internal/rpc" @seen))))))))
 
-(deftest ^:integration rpc-routes-mounts-where-the-default-client-looks
-  ;; The two defaults have to agree, and they live in different namespaces.
-  ;; This is the assertion that fails if either moves.
-  (let [provider (mock/make-mock-provider)
-        routes   (server/rpc-routes pay-ports/IPaymentProvider provider {:service-key service-key})
-        route    (first (:web routes))]
+(deftest ^:integration rpc-app-serves-where-the-default-client-looks
+  ;; The two defaults live in different namespaces and have to agree. Nothing
+  ;; else would notice if one moved.
+  (is (= server/default-path (:path client/default-opts))))
 
-    (testing "the routes go in the :web slot, which versioning does not rewrite"
-      (is (contains? routes :web))
-      (is (not (contains? routes :api))
-          ":api would be served at /api/v1/rpc and the default client would 404"))
+(deftest ^:integration rpc-app-is-not-a-module-route-map
+  ;; It returns a handler, not routes, and that is the point. Both module route
+  ;; slots rewrite the path — `:api` gains the version prefix, `:web` gains
+  ;; `/web` — so a client on the default `:path` gets a 404 either way, and a
+  ;; POST under `/web` is additionally CSRF-validated with a token no
+  ;; service-to-service caller has.
+  (let [app (server/rpc-app pay-ports/IPaymentProvider (mock/make-mock-provider)
+                            {:service-key service-key})]
+    (is (fn? app))
+    (is (not (map? app)) "a route map would be merged into :api or :web and rewritten")))
 
-    (testing "at the path the client posts to by default"
-      (is (= (:path route) (:path client/default-opts))))
+(deftest ^:integration rpc-app-serves-one-endpoint-and-nothing-else
+  (let [app (server/rpc-app pay-ports/IPaymentProvider (mock/make-mock-provider)
+                            {:service-key service-key})
+        req (fn [method uri]
+              (app {:request-method method :uri uri
+                    :headers {"content-type"      content-type
+                              "accept"            content-type
+                              "x-rpc-service-key" service-key}
+                    :body (encode-body {:operation :get-payment-status :args ["id"]})}))]
 
-    (testing "on POST, since that is what the client sends"
-      (is (fn? (get-in route [:methods :post :handler]))))
+    (testing "a POST to the path is served"
+      (is (= 200 (:status (req :post "/rpc")))))
 
-    (testing "and kept out of the published API document"
-      ;; Service-to-service plumbing, not public surface.
-      (is (true? (get-in route [:methods :post :no-doc]))))
+    (testing "another path is not"
+      (is (= 404 (:status (req :post "/anything-else")))))
 
-    (testing "a service that wants it elsewhere can say so"
-      (is (= "/internal/rpc"
-             (:path (first (:web (server/rpc-routes pay-ports/IPaymentProvider provider
-                                                    {:service-key service-key}
-                                                    "/internal/rpc")))))))))
+    (testing "and neither is another method on the right path"
+      ;; This listener serves one endpoint; it should not look like it serves
+      ;; a browsable API.
+      (is (= 404 (:status (req :get "/rpc")))))))
 
-(deftest ^:integration routes-from-rpc-routes-actually-serve-the-protocol
-  ;; Without this, the two tests above would pass on a route map that no
-  ;; server can use.
-  (let [provider (mock/make-mock-provider)
-        route    (first (:web (server/rpc-routes pay-ports/IPaymentProvider provider {:service-key service-key})))
-        handler  (wrap-format (get-in route [:methods :post :handler]))
-        app      (fn [request]
-                   (if (= (:path route) (:uri request))
-                     (handler request)
-                     {:status 404 :body ""}))]
-    (with-server app
+(deftest ^:integration rpc-app-carries-its-own-format-middleware
+  ;; A handler that needed the app's muuntaja stack could not be served on a
+  ;; listener of its own, which is the only place this endpoint belongs.
+  (let [provider (mock/make-mock-provider)]
+    (with-server (server/rpc-app pay-ports/IPaymentProvider provider
+                                 {:service-key service-key} "/internal/rpc")
       (fn [url]
-        (let [remote (client/remote-adapter pay-ports/IPaymentProvider url client-opts)]
+        (let [remote (client/remote-adapter pay-ports/IPaymentProvider url
+                                            (assoc client-opts :path "/internal/rpc"))]
           (is (= :mock (pay-ports/provider-name remote))))))))
 
 (deftest ^:integration an-answer-is-never-retried-whatever-it-contains
@@ -671,9 +677,10 @@
             (is (= :rpc/unknown-operation (get-in r [:error :type])))))))))
 
 (deftest ^:security ^:integration the-endpoint-refuses-unauthenticated-callers
-  ;; This route invokes port methods. Mounted on the normal listener — which is
-  ;; what `rpc-routes` is for — an unauthenticated one hands
-  ;; create-checkout-session to anything that can reach the port. Restricting
+  ;; This endpoint invokes port methods. An unauthenticated one hands
+  ;; create-checkout-session to anything that can reach the port — and
+  ;; "internal listener" is a deployment claim, not something enforced by this
+  ;; code. Restricting
   ;; operations to the protocol's :sigs bounds what can be called, not who may
   ;; call it.
   (let [invoked  (atom 0)
@@ -752,9 +759,9 @@
                             (server/rpc-handler pay-ports/IPaymentProvider provider
                                                 {:service-key "short"}))))
 
-    (testing "and rpc-routes refuses too, since that is the documented path"
+    (testing "and rpc-app refuses too, since that is the documented path"
       (is (thrown? clojure.lang.ExceptionInfo
-                   (server/rpc-routes pay-ports/IPaymentProvider provider {}))))
+                   (server/rpc-app pay-ports/IPaymentProvider provider {}))))
 
     (testing "opting out is possible but has to be said out loud"
       ;; For a listener that is not reachable from outside. Spelled so it can

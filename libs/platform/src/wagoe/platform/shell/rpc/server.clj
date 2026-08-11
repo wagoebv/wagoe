@@ -11,7 +11,8 @@
   (:require [wagoe.platform.core.http.problem-details :as problem-details]
             [wagoe.platform.core.rpc :as rpc]
             [clojure.string]
-            [clojure.tools.logging :as log]))
+            [clojure.tools.logging :as log]
+            [muuntaja.middleware :as muuntaja-middleware]))
 
 (defn- operation->fn
   "The protocol function implementing `operation`, or nil.
@@ -106,9 +107,10 @@
 (defn rpc-handler
   "A Ring handler serving `protocol` backed by `implementation`.
 
-   Mount it with `rpc-routes` rather than by hand — the path the client posts
-   to depends on which route slot it lands in, and getting that wrong answers
-   404, which reads as the service being absent rather than being elsewhere.
+   Use `rpc-app` unless you have a reason not to — it is this handler with the
+   format middleware it needs, ready for its own listener. Do not merge this
+   into a module's `:api` or `:web` routes: the router rewrites both paths, and
+   a POST under `/web` is CSRF-validated.
 
    Expects the app's format middleware to have decoded the body into
    `:body-params`, and leaves encoding the response to it as well — the client
@@ -134,7 +136,7 @@
    start instead of coming up unprotected.
 
    Example:
-     (rpc-routes payments-ports/IPaymentProvider provider)"
+     (rpc-app payments-ports/IPaymentProvider provider {:service-key key})"
   [protocol implementation {:keys [service-key auth] :as _opts}]
   (when-not (= auth :none)
     (when-let [problem (rpc/service-key-problem service-key)]
@@ -170,44 +172,46 @@
          :body   response}))))
 
 (def default-path
-  "Where `rpc-routes` mounts the endpoint. Matches `client/default-opts`."
+  "Where `rpc-app` serves the endpoint. Matches `client/default-opts`."
   "/rpc")
 
-(defn rpc-routes
-  "Routes serving `protocol`, for a module's `:web` slot.
+(defn rpc-app
+  "A standalone Ring app serving `protocol` — for the service's own listener.
 
-   `:web` and not `:api` on purpose. The platform router rewrites `:api` route
-   paths with the configured version prefix, so a handler returned there is
-   served at `/api/v1/rpc` while a client using the default `:path` posts to
-   `/rpc` and gets a 404 — a failure that reads as the service being down.
+   Deliberately not a route map for a module's `:api` or `:web` slot. Both are
+   rewritten by the router: `:api` paths gain the version prefix and `:web`
+   paths gain `/web`, so a client on the default `:path` gets a 404 either way.
+   `:web` is worse than wrong — a POST there is CSRF-validated when CSRF is
+   enabled, so the call would be rejected 403 by a check meant for browser
+   forms, which a service-to-service caller has no token for.
 
-   Versioning it would also be a category error: this endpoint's contract is
-   the protocol, and a protocol that changes shape breaks both processes at
-   once whatever the URL says. It is service-to-service plumbing, not public
-   API surface, and it does not belong in the published OpenAPI document.
+   Underneath that: this endpoint invokes port methods, and the public listener
+   is not where it belongs. A sliced-out service should serve it on its own
+   listener, reachable only from inside the deployment — which is what the
+   service launch mode (BOU-91) will start. Until then, mounting is the
+   caller's decision to make explicitly, rather than one this namespace makes
+   look routine.
 
-   Returns the `{:web [...]}` shape a module's route function returns, so it
-   can be merged into one.
+   Format middleware is included, so this handler is complete: it decodes the
+   transit body the client sends and encodes the response.
 
-   `opts` is `{:service-key \"…\"}` — required, and at least 32 characters. This
-   endpoint invokes port methods directly, so an unauthenticated one on the
-   normal listener hands `create-checkout-session` to anyone who can reach the
-   port. Restricting operations to the protocol's `:sigs` bounds *what* can be
-   called, not *who* can call it. `{:auth :none}` opts out explicitly, for a
-   listener that is not reachable from outside; it is spelled out so it can be
-   grepped for and never happens by omission.
+   Args:
+     protocol       - the protocol map
+     implementation - a value satisfying it, in this process
+     opts           - {:service-key \"…\"}, or {:auth :none}
+     path           - defaults to `default-path`
 
-   Authentication is not a substitute for keeping the endpoint off a public
-   listener. It is the part that can be enforced here.
-
-   Example, in a module's shell/http.clj:
-     (defn routes [provider service-key]
-       (merge (rpc-server/rpc-routes ports/IPaymentProvider provider
-                                     {:service-key service-key})
-              {:api [...]}))"
-  ([protocol implementation opts] (rpc-routes protocol implementation opts default-path))
+   Example:
+     (jetty/run-jetty (rpc-app ports/IPaymentProvider provider
+                               {:service-key key})
+                      {:port 3001 :join? false})"
+  ([protocol implementation opts] (rpc-app protocol implementation opts default-path))
   ([protocol implementation opts path]
-   {:web [{:path    path
-           :methods {:post {:handler (rpc-handler protocol implementation opts)
-                            :summary "Internal RPC endpoint (service-to-service)"
-                            :no-doc  true}}}]}))
+   (let [handler (muuntaja-middleware/wrap-format (rpc-handler protocol implementation opts))]
+     (fn [request]
+       (if (and (= :post (:request-method request))
+                (= path (:uri request)))
+         (handler request)
+         ;; Anything else, including a GET on the right path: this listener
+         ;; serves one endpoint and should not look like it serves more.
+         {:status 404 :headers {} :body ""})))))

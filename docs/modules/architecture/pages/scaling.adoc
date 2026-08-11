@@ -201,11 +201,10 @@ implements that protocol by making a network call. That is this:
 
 [source,clojure]
 ----
-;; In the process that owns payments — serve the protocol, in shell/http.clj
-(defn routes [provider service-key]
-  (merge (rpc-server/rpc-routes pay-ports/IPaymentProvider provider
-                                {:service-key service-key})
-         {:api [...]}))
+;; In the process that owns payments — serve the protocol on its own listener
+(jetty/run-jetty (rpc-server/rpc-app pay-ports/IPaymentProvider provider
+                                    {:service-key service-key})
+                 {:port 3001 :join? false})
 
 ;; In the process that consumes it — a value that satisfies IPaymentProvider
 (def payments
@@ -217,12 +216,19 @@ implements that protocol by making a network call. That is this:
 (ports/create-checkout-session payments {...})   ; unchanged at the call site
 ----
 
-Use `rpc-routes` rather than writing the route map by hand. It returns a `:web`
-route, and the slot matters: the router rewrites `:api` paths with the version
-prefix, so a handler mounted there is served at `/api/v1/rpc` while a client on
-the default `:path` posts to `/rpc` and gets a 404 — a failure that reads as
-the service being down rather than being somewhere else. A service that does
-mount it under `:api`, or anywhere else, tells the client with `:path`.
+`rpc-app` is a standalone Ring handler, not a route map for a module's `:api`
+or `:web` slot, and that is deliberate. The router rewrites both: `:api` paths
+gain the version prefix and `:web` paths gain `/web`, so a client on the
+default `:path` gets a 404 either way. `:web` is worse than merely wrong — a
+POST there is CSRF-validated when CSRF is enabled, so the call is rejected 403
+by a check meant for browser forms, for which a service-to-service caller has
+no token.
+
+Underneath the mechanics: this endpoint invokes port methods, and the public
+listener is not where it belongs. A sliced-out service serves it on a listener
+reachable only from inside the deployment — which is what the service launch
+mode (BOU-91) starts. A service that serves it elsewhere tells the client with
+`:path`.
 
 The adapter is built from the protocol's `:sigs`, so adding a method to a port
 carries it across the hop with no client change. Each adapter is its own object
