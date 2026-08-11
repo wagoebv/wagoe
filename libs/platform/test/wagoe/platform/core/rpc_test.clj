@@ -189,3 +189,44 @@
 
   (testing "and a map is still fine, so the guard did not reject everything"
     (is (nil? (rpc/envelope-problem {:operation :op :args []})))))
+
+(deftest ^:security ^:unit a-service-key-must-be-worth-having
+  (testing "a key of the required length is accepted"
+    (is (nil? (rpc/service-key-problem (apply str (repeat 32 "a"))))))
+
+  (testing "a short key is refused, with the requirement in the message"
+    ;; This endpoint invokes port methods; a key someone typed by hand guards
+    ;; the ability to create payments.
+    (is (re-find #"at least 32" (rpc/service-key-problem "short"))))
+
+  (testing "a missing key is refused"
+    (is (some? (rpc/service-key-problem nil)))
+    (is (some? (rpc/service-key-problem 12345)))))
+
+(deftest ^:security ^:unit key-comparison-does-not-leak-a-prefix
+  (let [key (apply str (repeat 40 "k"))]
+    (testing "the right key matches"
+      (is (rpc/service-key-matches? key key)))
+
+    (testing "a wrong key does not"
+      (is (not (rpc/service-key-matches? key (apply str (repeat 40 "x"))))))
+
+    (testing "nor does a correct prefix"
+      ;; `=` on strings returns at the first differing character, so the time
+      ;; it takes leaks how much of a guess was right. A prefix must be as
+      ;; wrong as anything else.
+      (is (not (rpc/service-key-matches? key (subs key 0 39))))
+      (is (not (rpc/service-key-matches? key (str key "x")))))
+
+    (testing "and nothing matches a missing key"
+      (is (not (rpc/service-key-matches? key nil)))
+      (is (not (rpc/service-key-matches? nil nil)))
+      (is (not (rpc/service-key-matches? nil "anything"))))))
+
+(deftest ^:security ^:unit the-service-key-is-not-the-users-token
+  ;; One says which service is calling, the other on whose behalf. Sharing a
+  ;; header would mean any caller holding a valid user token could invoke port
+  ;; methods directly.
+  (is (not= rpc/service-key-header (:auth-token rpc/context-headers)))
+  (testing "and reading context back never picks the service key up"
+    (is (empty? (rpc/headers->context {rpc/service-key-header "secret"})))))

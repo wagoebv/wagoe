@@ -10,6 +10,7 @@
    `wagoe.platform.core.rpc`."
   (:require [wagoe.platform.core.http.problem-details :as problem-details]
             [wagoe.platform.core.rpc :as rpc]
+            [clojure.string]
             [clojure.tools.logging :as log]))
 
 (defn- operation->fn
@@ -63,6 +64,16 @@
            (rpc/transport-error :rpc/unknown-operation operation
                                 (str "This service exposes no operation " operation))))))))
 
+(defn- lower-case-headers
+  "Headers keyed by lower-case name.
+
+   Ring lower-cases inbound header names, but a handler driven directly — a
+   test, another middleware stack — may not, and missing the service key
+   because of a capital letter would reject a legitimate caller."
+  [headers]
+  (reduce-kv (fn [m k v] (assoc m (clojure.string/lower-case (name k)) v))
+             {} (or headers {})))
+
 (def ^:private malformed-request-types
   "Error types that mean the caller sent something this service cannot use."
   #{:rpc/protocol :rpc/unknown-operation})
@@ -114,24 +125,49 @@
    Args:
      protocol       - the protocol map, e.g. wagoe.payments.ports/IPaymentProvider
      implementation - a value satisfying it, in this process
+     opts           - {:service-key \"…\"}, or {:auth :none} to opt out
+
+   Callers must present the service key in the `x-rpc-service-key` header. A
+   missing or wrong one is 401 before anything reaches the implementation —
+   `:sigs` bounds which operations exist, not who may invoke them. The key is
+   validated at construction, so a service configured without one fails to
+   start instead of coming up unprotected.
 
    Example:
      (rpc-routes payments-ports/IPaymentProvider provider)"
-  [protocol implementation]
+  [protocol implementation {:keys [service-key auth] :as _opts}]
+  (when-not (= auth :none)
+    (when-let [problem (rpc/service-key-problem service-key)]
+      ;; At construction, not per request: a service that cannot authenticate
+      ;; callers must fail to start rather than come up serving port methods to
+      ;; anyone who can reach the port.
+      (throw (ex-info problem {:type :configuration-error}))))
   (fn [{:keys [body-params headers] :as _request}]
-    (let [;; Only merge context onto something that can carry it. A valid
+    (if-not (or (= auth :none)
+                (rpc/service-key-matches?
+                 service-key (get (lower-case-headers headers) rpc/service-key-header)))
+      (do
+        ;; No detail: which of "absent" and "wrong" it was is information a
+        ;; caller guessing keys would use. The correlation id is enough to find
+        ;; the request in the access log.
+        (log/warn "rpc rejected an unauthenticated call")
+        {:status 401
+         :body   {:error {:type    :unauthorized
+                          :message "This endpoint requires a service key"}}})
+
+      (let [;; Only merge context onto something that can carry it. A valid
           ;; transit body decoding to a vector or a string reaches here, and
           ;; `merge` on one throws before `envelope-problem` can name the
           ;; fault — turning a 400 this endpoint promises into an escaped 500.
-          envelope (if (map? body-params)
-                     (merge (rpc/headers->context headers) body-params)
-                     body-params)
-          response (handle-envelope protocol implementation envelope)]
-      ;; No content type: the format middleware negotiates it from the
-      ;; request's Accept, and hardcoding one here would label a transit body
-      ;; as JSON.
-      {:status (error->status (get-in response [:error :type]))
-       :body   response})))
+            envelope (if (map? body-params)
+                       (merge (rpc/headers->context headers) body-params)
+                       body-params)
+            response (handle-envelope protocol implementation envelope)]
+        ;; No content type: the format middleware negotiates it from the
+        ;; request's Accept, and hardcoding one here would label a transit body
+        ;; as JSON.
+        {:status (error->status (get-in response [:error :type]))
+         :body   response}))))
 
 (def default-path
   "Where `rpc-routes` mounts the endpoint. Matches `client/default-opts`."
@@ -153,13 +189,25 @@
    Returns the `{:web [...]}` shape a module's route function returns, so it
    can be merged into one.
 
+   `opts` is `{:service-key \"…\"}` — required, and at least 32 characters. This
+   endpoint invokes port methods directly, so an unauthenticated one on the
+   normal listener hands `create-checkout-session` to anyone who can reach the
+   port. Restricting operations to the protocol's `:sigs` bounds *what* can be
+   called, not *who* can call it. `{:auth :none}` opts out explicitly, for a
+   listener that is not reachable from outside; it is spelled out so it can be
+   grepped for and never happens by omission.
+
+   Authentication is not a substitute for keeping the endpoint off a public
+   listener. It is the part that can be enforced here.
+
    Example, in a module's shell/http.clj:
-     (defn routes [provider]
-       (merge (rpc-server/rpc-routes ports/IPaymentProvider provider)
+     (defn routes [provider service-key]
+       (merge (rpc-server/rpc-routes ports/IPaymentProvider provider
+                                     {:service-key service-key})
               {:api [...]}))"
-  ([protocol implementation] (rpc-routes protocol implementation default-path))
-  ([protocol implementation path]
+  ([protocol implementation opts] (rpc-routes protocol implementation opts default-path))
+  ([protocol implementation opts path]
    {:web [{:path    path
-           :methods {:post {:handler (rpc-handler protocol implementation)
+           :methods {:post {:handler (rpc-handler protocol implementation opts)
                             :summary "Internal RPC endpoint (service-to-service)"
                             :no-doc  true}}}]}))

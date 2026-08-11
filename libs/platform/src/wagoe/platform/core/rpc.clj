@@ -117,6 +117,43 @@
 ;; Failures
 ;; =============================================================================
 
+(def service-key-header
+  "Header carrying the *service's* credential.
+
+   Distinct from `authorization`, which carries the end user's token through
+   the hop. They authenticate different things: one says which service is
+   calling, the other says on whose behalf. Sharing a header would mean a
+   caller with a valid user token could invoke any port method directly."
+  "x-rpc-service-key")
+
+(def min-service-key-length
+  "Shortest key `rpc-handler` will accept, matching the JWT secret rule."
+  32)
+
+(defn service-key-problem
+  "Why `service-key` is unusable, or nil if it is fine."
+  [service-key]
+  (cond
+    (not (string? service-key))
+    "The RPC service key must be a string"
+
+    (< (count service-key) min-service-key-length)
+    (str "The RPC service key must be at least " min-service-key-length
+         " characters; this endpoint invokes port methods directly")))
+
+(defn service-key-matches?
+  "Whether `presented` is `expected`, compared in constant time.
+
+   `=` on strings returns as soon as two characters differ, so the time it
+   takes leaks how much of a guess was right — enough, over many attempts, to
+   recover the key a character at a time."
+  [expected presented]
+  (boolean
+   (and (string? expected) (string? presented)
+        (java.security.MessageDigest/isEqual
+         (.getBytes ^String expected "UTF-8")
+         (.getBytes ^String presented "UTF-8")))))
+
 (defn envelope-problem
   "Why `envelope` cannot be invoked, or nil if it can.
 

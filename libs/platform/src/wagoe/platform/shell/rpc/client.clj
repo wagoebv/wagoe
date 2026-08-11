@@ -99,7 +99,19 @@
                         :content-type       content-type
                         :accept             content-type
                         :as                 :stream
-                        :headers            (rpc/context->headers envelope)
+                        :headers            (cond-> (rpc/context->headers envelope)
+                                              (:service-key opts)
+                                              (assoc rpc/service-key-header
+                                                     (:service-key opts)))
+                        ;; clj-http sits on Apache HttpClient, which retries
+                        ;; low-level I/O failures on its own before this code
+                        ;; sees an outcome — so `:retries 0` and keeping
+                        ;; `:rpc/timeout` out of `:retry-on` would not actually
+                        ;; stop a checkout being submitted twice. Whether to
+                        ;; resend is a decision this adapter makes, and it
+                        ;; cannot make it if something underneath has already
+                        ;; decided.
+                        :retry-handler      (constantly false)
                         :socket-timeout     (:timeout-ms opts)
                         :connection-timeout (:timeout-ms opts)
                         ;; Errors as data, like every other outbound adapter
@@ -236,7 +248,8 @@
    Args:
      protocol - the protocol map, e.g. wagoe.payments.ports/IPaymentProvider
      base-url - service root, e.g. \"http://payments:3001\"
-     opts     - :path :timeout-ms :retries :retry-delay-ms :retry-on :context
+     opts     - :path :service-key :timeout-ms :retries :retry-delay-ms
+                :retry-on :context
 
    `:path` defaults to \"/rpc\". Set it to \"/api/v1/rpc\" if the service mounts
    the handler as an `:api` route, since versioning rewrites those.

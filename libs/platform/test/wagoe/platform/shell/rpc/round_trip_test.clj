@@ -10,6 +10,7 @@
             [wagoe.platform.shell.rpc.server :as server]
             [wagoe.payments.ports :as pay-ports]
             [wagoe.payments.shell.adapters.mock :as mock]
+            [clj-http.client :as http]
             [clojure.test :refer [deftest is testing]]
             [muuntaja.core :as m]
             [muuntaja.middleware :as m-mw]
@@ -17,6 +18,13 @@
   (:import (org.eclipse.jetty.server ServerConnector)))
 
 (def ^:private content-type "application/transit+json")
+
+(def ^:private service-key
+  "A key of the length the handler requires. Tests run the authenticated path
+   by default, because that is the only path a deployment is allowed to use."
+  "test-service-key-at-least-32-chars-long")
+
+(def ^:private client-opts {:retries 0 :service-key service-key})
 
 (defn- wrap-format
   "The app's own format middleware, not a stand-in.
@@ -52,18 +60,19 @@
 (defn- with-service
   "Run `f` with the payments protocol served over HTTP. `f` receives the URL."
   [implementation f]
-  (let [handler (wrap-format (server/rpc-handler pay-ports/IPaymentProvider implementation))]
+  (let [handler (wrap-format (server/rpc-handler pay-ports/IPaymentProvider implementation
+                                                 {:service-key service-key}))]
     (with-server (fn [request]
                    (if (= "/rpc" (:uri request))
                      (handler request)
                      {:status 404 :body "{}"}))
-                 f)))
+      f)))
 
 (deftest ^:integration protocol-calls-cross-a-real-socket
   (let [provider (mock/make-mock-provider)]
     (with-service provider
       (fn [url]
-        (let [remote (client/remote-adapter pay-ports/IPaymentProvider url {:retries 0})]
+        (let [remote (client/remote-adapter pay-ports/IPaymentProvider url client-opts)]
 
           (testing "the adapter satisfies the protocol it was built from"
             (is (satisfies? pay-ports/IPaymentProvider remote)))
@@ -88,7 +97,7 @@
             ;; Port 1 is privileged and nothing binds it, so this is reliably a
             ;; refused connection rather than a port that might be in use.
             (let [dead (client/remote-adapter pay-ports/IPaymentProvider
-                                              "http://localhost:1" {:retries 0})
+                                              "http://localhost:1" client-opts)
                   r    (pay-ports/get-payment-status dead "anything")]
               (is (= :rpc/unavailable (get-in r [:error :type])))
               (is (= :get-payment-status (get-in r [:error :operation]))))))))))
@@ -110,15 +119,15 @@
         handler (wrap-format
                  (fn [request]
                    (reset! seen (rpc/headers->context (:headers request)))
-                   ((server/rpc-handler pay-ports/IPaymentProvider recorder) request)))
+                   ((server/rpc-handler pay-ports/IPaymentProvider recorder {:service-key service-key}) request)))
         app     (fn [r] (if (= "/rpc" (:uri r)) (handler r) {:status 404 :body "{}"}))]
     (with-server app
       (fn [url]
         (let [remote (client/remote-adapter pay-ports/IPaymentProvider url
-                                            {:retries 0
-                                             :context {:correlation-id "corr-123"
-                                                       :tenant-id      "tenant-a"
-                                                       :auth-token     "tok-xyz"}})]
+                                            (assoc client-opts
+                                                   :context {:correlation-id "corr-123"
+                                                             :tenant-id      "tenant-a"
+                                                             :auth-token     "tok-xyz"}))]
           (pay-ports/get-payment-status remote "id")
 
           (testing "the correlation id survives the hop"
@@ -152,9 +161,10 @@
                (expire-checkout-session [_ _] nil)
                (process-webhook [_ _ _] nil)
                (verify-webhook-signature [_ _ _] false))
-        handler (wrap-format (server/rpc-handler pay-ports/IPaymentProvider boom))
+        handler (wrap-format (server/rpc-handler pay-ports/IPaymentProvider boom {:service-key service-key}))
         request {:uri "/rpc" :request-method :post
-                 :headers {"content-type" content-type "accept" content-type}
+                 :headers {"content-type" content-type "accept" content-type
+                           "x-rpc-service-key" service-key}
                  :body (encode-body {:operation :create-checkout-session :args [{}]})}
         response (handler request)]
 
@@ -190,15 +200,15 @@
                      ;; not retried unless asked for: it may equally have run
                      ;; and had its response lost on the way back.
                      (reset! attempts 0)
-                     (client/call! url :get-payment-status ["id"] {})
+                     (client/call! url :get-payment-status ["id"] {:service-key service-key})
                      (is (= 1 @attempts)))
 
                    (testing "opting a failure in retries it exactly :retries more times"
                      (reset! attempts 0)
                      (let [r (client/call! url :get-payment-status ["id"]
-                                           {:retry-on #{:rpc/remote-error}
-                                            :retries  2
-                                            :retry-delay-ms 1})]
+                                           (merge client-opts {:retry-on #{:rpc/remote-error}
+                                                               :retries  2
+                                                               :retry-delay-ms 1}))]
                        (is (= 3 @attempts) "one initial attempt plus two retries")
                        (testing "and the caller still gets the failure once they are spent"
                          (is (= :rpc/remote-error (get-in r [:error :type]))))))
@@ -210,13 +220,15 @@
                      ;; asserts on attempts rather than on the returned map.
                      (reset! attempts 0)
                      (client/call! url :get-payment-status ["id"]
-                                   {:retry-on #{:rpc/unavailable} :retries 2 :retry-delay-ms 1})
+                                   (merge client-opts {:retry-on       #{:rpc/unavailable}
+                                                       :retries        2
+                                                       :retry-delay-ms 1}))
                      (is (= 1 @attempts) "a remote error is not in that set, so it is not retried"))
 
                    (testing "retries 0 means one attempt"
                      (reset! attempts 0)
                      (client/call! url :get-payment-status ["id"]
-                                   {:retry-on #{:rpc/remote-error} :retries 0})
+                                   (merge client-opts {:retry-on #{:rpc/remote-error}}))
                      (is (= 1 @attempts))))]
     (with-server app run)))
 
@@ -251,7 +263,7 @@
           (let [e (is (thrown-with-msg? clojure.lang.ExceptionInfo
                                         #"psp refused the card"
                                         (client/call! url :create-checkout-session
-                                                      [{}] {:retries 0})))]
+                                                      [{}] client-opts)))]
             (is (= :create-checkout-session (:rpc/operation (ex-data e))))
             (is (true? (:rpc/remote (ex-data e)))
                 "marked as raised here, since the stack trace is this process")))
@@ -261,7 +273,7 @@
           ;; about the contract — a deploy skew. It needs a different response
           ;; from "the payment provider is down", so it must not be flattened
           ;; into :rpc/remote-error.
-          (let [r (client/call! url :drop-database [] {:retries 0})]
+          (let [r (client/call! url :drop-database [] client-opts)]
             (is (= :rpc/unknown-operation (get-in r [:error :type])))
             (is (re-find #"exposes no operation" (get-in r [:error :message])))))))))
 
@@ -271,10 +283,11 @@
   ;; built, so the promise that errors are returned rather than thrown held
   ;; only for requests that were already well-formed.
   (let [provider (mock/make-mock-provider)
-        handler  (wrap-format (server/rpc-handler pay-ports/IPaymentProvider provider))
+        handler  (wrap-format (server/rpc-handler pay-ports/IPaymentProvider provider {:service-key service-key}))
         post     (fn [body-map]
                    (handler {:uri "/rpc" :request-method :post
-                             :headers {"content-type" content-type "accept" content-type}
+                             :headers {"content-type" content-type "accept" content-type
+                                       "x-rpc-service-key" service-key}
                              :body (encode-body body-map)}))]
 
     (testing "a body with no operation is answered, not thrown"
@@ -292,13 +305,15 @@
       ;; `apply` over a non-sequence throws; catching it as :rpc/remote-error
       ;; would blame the service for the caller's malformed request.
       (let [body (decode-body (:body (post {:operation :get-payment-status
-                                             :args      "not-a-vector"})))]
+                                            :args      "not-a-vector"})))]
         (is (= :rpc/protocol (get-in body [:error :type])))))
 
     (testing "an empty body is answered"
       (let [response (handler {:uri "/rpc" :request-method :post
-                                :headers {"content-type" content-type "accept" content-type}
-                                :body nil})]
+                               :headers {"content-type"      content-type
+                                         "accept"            content-type
+                                         "x-rpc-service-key" service-key}
+                               :body nil})]
         (is (= 400 (:status response)))))
 
     (testing "a well-formed request still works, so the guard did not swallow everything"
@@ -326,7 +341,7 @@
   (let [provider (mock/make-mock-provider)]
     (with-service provider
       (fn [url]
-        (let [remote (client/remote-adapter pay-ports/IPaymentProvider url {:retries 0})]
+        (let [remote (client/remote-adapter pay-ports/IPaymentProvider url client-opts)]
 
           (testing "a keyword returned as the whole result is still a keyword"
             (is (= :mock (pay-ports/provider-name remote))))
@@ -353,8 +368,8 @@
   ;; URL: no error, no log, just an operation the payments service has never
   ;; heard of.
   (let [payments (client/remote-adapter pay-ports/IPaymentProvider
-                                        "http://localhost:1" {:retries 0})
-        cache    (client/remote-adapter ICacheLike "http://localhost:2" {:retries 0})]
+                                        "http://localhost:1" client-opts)
+        cache    (client/remote-adapter ICacheLike "http://localhost:2" client-opts)]
 
     (testing "each adapter satisfies the protocol it was built from"
       (is (satisfies? pay-ports/IPaymentProvider payments))
@@ -373,8 +388,8 @@
     (testing "two adapters for the same protocol keep their own URLs"
       ;; A shared class carrying the URL in a closure would give both whichever
       ;; was constructed last.
-      (let [a (client/remote-adapter pay-ports/IPaymentProvider "http://localhost:1" {:retries 0})
-            b (client/remote-adapter pay-ports/IPaymentProvider "http://localhost:2" {:retries 0})]
+      (let [a (client/remote-adapter pay-ports/IPaymentProvider "http://localhost:1" client-opts)
+            b (client/remote-adapter pay-ports/IPaymentProvider "http://localhost:2" client-opts)]
         (is (not= (str a) (str b)))
         (is (re-find #"localhost:1" (str a)))
         (is (re-find #"localhost:2" (str b)))))))
@@ -401,7 +416,7 @@
                 (verify-webhook-signature [_ _ _] false))]
     (with-service typed
       (fn [url]
-        (let [remote (client/remote-adapter pay-ports/IPaymentProvider url {:retries 0})]
+        (let [remote (client/remote-adapter pay-ports/IPaymentProvider url client-opts)]
 
           (testing "the type the implementation threw is the type the caller catches"
             (let [e (is (thrown? clojure.lang.ExceptionInfo
@@ -430,7 +445,7 @@
   ;; equivalent, so no caller has a `catch` for it; raising it would replace a
   ;; decision the caller can make with one it cannot.
   (let [dead (client/remote-adapter pay-ports/IPaymentProvider
-                                    "http://localhost:1" {:retries 0})]
+                                    "http://localhost:1" client-opts)]
     (is (= :rpc/unavailable (get-in (pay-ports/get-payment-status dead "id")
                                     [:error :type])))))
 
@@ -452,10 +467,12 @@
         status-for (fn [error-type]
                      (let [handler (wrap-format
                                     (server/rpc-handler pay-ports/IPaymentProvider
-                                                        (typed error-type)))]
+                                                        (typed error-type)
+                                                        {:service-key service-key}))]
                        (:status (handler {:uri "/rpc" :request-method :post
-                                          :headers {"content-type" content-type
-                                                    "accept" content-type}
+                                          :headers {"content-type"      content-type
+                                                    "accept"            content-type
+                                                    "x-rpc-service-key" service-key}
                                           :body (encode-body
                                                  {:operation :create-checkout-session
                                                   :args      [{}]})}))))]
@@ -477,10 +494,11 @@
   ;; fault — so the endpoint answered 500 for a request it had promised to
   ;; answer 400.
   (let [provider (mock/make-mock-provider)
-        handler  (wrap-format (server/rpc-handler pay-ports/IPaymentProvider provider))
+        handler  (wrap-format (server/rpc-handler pay-ports/IPaymentProvider provider {:service-key service-key}))
         post     (fn [body]
                    (handler {:uri "/rpc" :request-method :post
-                             :headers {"content-type" content-type "accept" content-type}
+                             :headers {"content-type" content-type "accept" content-type
+                                       "x-rpc-service-key" service-key}
                              :body (encode-body body)}))]
 
     (testing "a vector body"
@@ -514,7 +532,7 @@
   ;; a 404 that reads as the service being down rather than being elsewhere.
   (let [seen     (atom nil)
         provider (mock/make-mock-provider)
-        handler  (wrap-format (server/rpc-handler pay-ports/IPaymentProvider provider))
+        handler  (wrap-format (server/rpc-handler pay-ports/IPaymentProvider provider {:service-key service-key}))
         app      (fn [request]
                    (reset! seen (:uri request))
                    (handler request))]
@@ -522,19 +540,19 @@
       (fn [url]
         (testing "by default it posts to /rpc"
           (reset! seen nil)
-          (client/call! url :get-payment-status ["id"] {:retries 0})
+          (client/call! url :get-payment-status ["id"] client-opts)
           (is (= "/rpc" @seen)))
 
         (testing "and to the configured path when the service mounts elsewhere"
           ;; The versioned case: a module that returned the handler under :api.
           (reset! seen nil)
-          (client/call! url :get-payment-status ["id"] {:retries 0 :path "/api/v1/rpc"})
+          (client/call! url :get-payment-status ["id"] (assoc client-opts :path "/api/v1/rpc"))
           (is (= "/api/v1/rpc" @seen)))
 
         (testing "the adapter passes it through too, not just call!"
           (reset! seen nil)
           (let [remote (client/remote-adapter pay-ports/IPaymentProvider url
-                                              {:retries 0 :path "/internal/rpc"})]
+                                              (assoc client-opts :path "/internal/rpc"))]
             (pay-ports/get-payment-status remote "id")
             (is (= "/internal/rpc" @seen))))))))
 
@@ -542,7 +560,7 @@
   ;; The two defaults have to agree, and they live in different namespaces.
   ;; This is the assertion that fails if either moves.
   (let [provider (mock/make-mock-provider)
-        routes   (server/rpc-routes pay-ports/IPaymentProvider provider)
+        routes   (server/rpc-routes pay-ports/IPaymentProvider provider {:service-key service-key})
         route    (first (:web routes))]
 
     (testing "the routes go in the :web slot, which versioning does not rewrite"
@@ -562,14 +580,15 @@
 
     (testing "a service that wants it elsewhere can say so"
       (is (= "/internal/rpc"
-             (:path (first (:web (server/rpc-routes pay-ports/IPaymentProvider
-                                                    provider "/internal/rpc")))))))))
+             (:path (first (:web (server/rpc-routes pay-ports/IPaymentProvider provider
+                                                    {:service-key service-key}
+                                                    "/internal/rpc")))))))))
 
 (deftest ^:integration routes-from-rpc-routes-actually-serve-the-protocol
   ;; Without this, the two tests above would pass on a route map that no
   ;; server can use.
   (let [provider (mock/make-mock-provider)
-        route    (first (:web (server/rpc-routes pay-ports/IPaymentProvider provider)))
+        route    (first (:web (server/rpc-routes pay-ports/IPaymentProvider provider {:service-key service-key})))
         handler  (wrap-format (get-in route [:methods :post :handler]))
         app      (fn [request]
                    (if (= (:path route) (:uri request))
@@ -577,7 +596,7 @@
                      {:status 404 :body ""}))]
     (with-server app
       (fn [url]
-        (let [remote (client/remote-adapter pay-ports/IPaymentProvider url {:retries 0})]
+        (let [remote (client/remote-adapter pay-ports/IPaymentProvider url client-opts)]
           (is (= :mock (pay-ports/provider-name remote))))))))
 
 (deftest ^:integration an-answer-is-never-retried-whatever-it-contains
@@ -606,7 +625,7 @@
         (testing "a returned value in the default retry set is not re-sent"
           (reset! attempts 0)
           (let [r (client/call! url :create-checkout-session [{}]
-                                {:retries 3 :retry-delay-ms 1})]
+                                (merge client-opts {:retries 3 :retry-delay-ms 1}))]
             (is (= 1 @attempts) "the operation ran once and must not run again")
             (is (= :rpc/unavailable (get-in r [:error :type]))
                 "and the caller still gets the value the method returned")))
@@ -616,7 +635,8 @@
           ;; failures, and this is not one.
           (reset! attempts 0)
           (client/call! url :create-checkout-session [{}]
-                        {:retry-on #{:rpc/unavailable} :retries 3 :retry-delay-ms 1})
+                        (merge client-opts {:retry-on #{:rpc/unavailable}
+                                            :retries 3 :retry-delay-ms 1}))
           (is (= 1 @attempts)))))))
 
 (deftest ^:integration a-deliberate-error-envelope-is-an-answer-too
@@ -640,11 +660,145 @@
           (reset! attempts 0)
           (is (thrown? clojure.lang.ExceptionInfo
                        (client/call! url :create-checkout-session [{}]
-                                     {:retry-on #{:conflict} :retries 3 :retry-delay-ms 1})))
+                                     (merge client-opts {:retry-on #{:conflict}
+                                                         :retries 3 :retry-delay-ms 1}))))
           (is (= 1 @attempts)))
 
         (testing "and a refused operation is not retried either"
           (let [r (client/call! url :drop-database []
-                                {:retry-on #{:rpc/unknown-operation}
-                                 :retries 3 :retry-delay-ms 1})]
+                                (merge client-opts {:retry-on #{:rpc/unknown-operation}
+                                                    :retries 3 :retry-delay-ms 1}))]
             (is (= :rpc/unknown-operation (get-in r [:error :type])))))))))
+
+(deftest ^:security ^:integration the-endpoint-refuses-unauthenticated-callers
+  ;; This route invokes port methods. Mounted on the normal listener — which is
+  ;; what `rpc-routes` is for — an unauthenticated one hands
+  ;; create-checkout-session to anything that can reach the port. Restricting
+  ;; operations to the protocol's :sigs bounds what can be called, not who may
+  ;; call it.
+  (let [invoked  (atom 0)
+        counting (reify pay-ports/IPaymentProvider
+                   (provider-name [_] (swap! invoked inc) :counting)
+                   (create-checkout-session [_ _] (swap! invoked inc) {:ok true})
+                   (create-off-session-payment [_ _] nil)
+                   (get-payment-status [_ _] (swap! invoked inc) {:ok true})
+                   (expire-checkout-session [_ _] nil)
+                   (process-webhook [_ _ _] nil)
+                   (verify-webhook-signature [_ _ _] false))
+        handler  (wrap-format (server/rpc-handler pay-ports/IPaymentProvider counting
+                                                  {:service-key service-key}))
+        post     (fn [key-header]
+                   (handler {:uri "/rpc" :request-method :post
+                             :headers (cond-> {"content-type" content-type
+                                               "accept"       content-type}
+                                        key-header (assoc "x-rpc-service-key" key-header))
+                             :body (encode-body {:operation :create-checkout-session
+                                                 :args      [{}]})}))]
+
+    (testing "no key at all is refused"
+      (reset! invoked 0)
+      (let [response (post nil)]
+        (is (= 401 (:status response)))
+        (is (zero? @invoked) "and the implementation was never reached")))
+
+    (testing "a wrong key is refused"
+      (reset! invoked 0)
+      (is (= 401 (:status (post "wrong-key-also-at-least-32-characters"))))
+      (is (zero? @invoked)))
+
+    (testing "a prefix of the real key is refused"
+      ;; The comparison is constant-time, which also means it is not a prefix
+      ;; match.
+      (reset! invoked 0)
+      (is (= 401 (:status (post (subs service-key 0 20)))))
+      (is (zero? @invoked)))
+
+    (testing "the rejection does not say which it was"
+      ;; "no key" and "wrong key" are distinguishable only to someone guessing.
+      (is (= (decode-body (:body (post nil)))
+             (decode-body (:body (post "wrong-key-also-at-least-32-characters"))))))
+
+    (testing "and the right key gets through, so the guard is not refusing everything"
+      (reset! invoked 0)
+      (is (= 200 (:status (post service-key))))
+      (is (= 1 @invoked)))
+
+    (testing "header case does not decide authentication"
+      (is (= 200 (:status (handler {:uri "/rpc" :request-method :post
+                                    :headers {"content-type"      content-type
+                                              "accept"            content-type
+                                              "X-RPC-Service-Key" service-key}
+                                    :body (encode-body {:operation :get-payment-status
+                                                        :args      ["id"]})})))))))
+
+(deftest ^:security ^:integration a-service-cannot-start-without-a-key
+  ;; At construction rather than per request: a service configured without a
+  ;; key must fail to start, not come up serving port methods to anyone.
+  (let [provider (mock/make-mock-provider)]
+
+    (testing "no opts at all is refused"
+      (is (thrown? clojure.lang.ExceptionInfo
+                   (server/rpc-handler pay-ports/IPaymentProvider provider {}))))
+
+    (testing "a nil key is refused"
+      (is (thrown? clojure.lang.ExceptionInfo
+                   (server/rpc-handler pay-ports/IPaymentProvider provider
+                                       {:service-key nil}))))
+
+    (testing "a short key is refused"
+      ;; Same 32-character floor as the JWT secret. A key someone typed by hand
+      ;; protects an endpoint that can create payments.
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"at least 32"
+                            (server/rpc-handler pay-ports/IPaymentProvider provider
+                                                {:service-key "short"}))))
+
+    (testing "and rpc-routes refuses too, since that is the documented path"
+      (is (thrown? clojure.lang.ExceptionInfo
+                   (server/rpc-routes pay-ports/IPaymentProvider provider {}))))
+
+    (testing "opting out is possible but has to be said out loud"
+      ;; For a listener that is not reachable from outside. Spelled so it can
+      ;; be grepped for, and so it never happens by omission.
+      (is (fn? (server/rpc-handler pay-ports/IPaymentProvider provider {:auth :none}))))))
+
+(deftest ^:security ^:integration an-unauthenticated-client-sees-why-it-was-refused
+  (let [provider (mock/make-mock-provider)]
+    (with-service provider
+      (fn [url]
+        (testing "a client with no service key gets :unauthorized, not a mystery 500"
+          (let [r (client/call! url :get-payment-status ["id"] {:retries 0})]
+            (is (= :unauthorized (get-in r [:error :type])))))
+
+        (testing "and a 401 is not retried — a rejected credential stays rejected"
+          (let [r (client/call! url :get-payment-status ["id"]
+                                {:retries 3 :retry-delay-ms 1
+                                 :retry-on #{:unauthorized}})]
+            (is (= :unauthorized (get-in r [:error :type])))))))))
+
+(deftest ^:integration the-http-client-does-not-retry-behind-our-back
+  ;; clj-http sits on Apache HttpClient, which retries low-level I/O failures
+  ;; on its own before this code sees an outcome. `:retries 0` and keeping
+  ;; :rpc/timeout out of :retry-on would not stop a checkout being submitted
+  ;; twice if something underneath resent it first.
+  ;;
+  ;; Asserted on the request rather than by provoking a mid-send socket failure,
+  ;; which is timing-dependent and would be flaky in CI. What is being checked
+  ;; is that the decision is ours: the option that hands it to HttpClient is
+  ;; explicitly turned off.
+  (let [sent (atom nil)]
+    (with-redefs [http/post (fn [_url opts]
+                                         (reset! sent opts)
+                                         {:status 200 :body nil})]
+      (client/call! "http://example.invalid" :get-payment-status ["id"]
+                    {:retries 0 :service-key service-key}))
+
+    (testing "the underlying client is told not to retry"
+      (is (contains? @sent :retry-handler))
+      (is (false? ((:retry-handler @sent) (java.io.IOException. "boom") 1 nil))
+          "and the handler refuses every attempt, not just the first"))
+
+    (testing "the service key is sent, and not as the user's Authorization"
+      ;; They authenticate different things; sharing a header would let a valid
+      ;; user token invoke port methods directly.
+      (is (= service-key (get-in @sent [:headers "x-rpc-service-key"])))
+      (is (nil? (get-in @sent [:headers "authorization"]))))))
