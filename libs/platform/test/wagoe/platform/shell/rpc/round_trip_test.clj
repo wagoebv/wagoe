@@ -827,3 +827,83 @@
           "a timed-out call may well have run")
       (is (not (retried? (rpc/classify-exception (java.net.SocketException. "Connection reset"))))
           "a reset happens once the request is on the wire"))))
+
+(defprotocol ^:private IMultiArity
+  "A protocol declaring a method at two arities, which protocols allow."
+  (fetch [this k] [this k default]))
+
+(deftest ^:integration wrong-arity-is-the-callers-mistake-not-the-services
+  ;; `apply` with the wrong count throws an ArityException, and at that point
+  ;; it is indistinguishable from the implementation failing — so a caller
+  ;; error, or a client built against a different version of the protocol,
+  ;; was reported as the service breaking. Since a thrown operation is now
+  ;; re-raised on the near side, it also arrived as an exception rather than a
+  ;; value the caller could inspect.
+  (let [invoked  (atom 0)
+        counting (reify pay-ports/IPaymentProvider
+                   (provider-name [_] :counting)
+                   (create-checkout-session [_ _] (swap! invoked inc) {:ok true})
+                   (create-off-session-payment [_ _] nil)
+                   (get-payment-status [_ _] (swap! invoked inc) {:ok true})
+                   (expire-checkout-session [_ _] nil)
+                   (process-webhook [_ _ _] (swap! invoked inc) {:ok true})
+                   (verify-webhook-signature [_ _ _] false))]
+    (with-service counting
+      (fn [url]
+        (testing "too few arguments is a 400-class error, not a remote failure"
+          (reset! invoked 0)
+          (let [r (client/call! url :get-payment-status [] client-opts)]
+            (is (= :rpc/protocol (get-in r [:error :type])))
+            (is (zero? @invoked) "and the implementation was never reached")))
+
+        (testing "too many arguments likewise"
+          (reset! invoked 0)
+          (let [r (client/call! url :get-payment-status ["a" "b" "c"] client-opts)]
+            (is (= :rpc/protocol (get-in r [:error :type])))
+            (is (zero? @invoked))))
+
+        (testing "it comes back as a value, not raised"
+          ;; A thrown operation is re-raised on the near side. A caller error
+          ;; must not be, or a `catch` written for remote failures fires for a
+          ;; bug in the calling code.
+          (is (map? (client/call! url :get-payment-status [] client-opts))))
+
+        (testing "the message says what the operation actually takes"
+          (let [message (get-in (client/call! url :get-payment-status [] client-opts)
+                                [:error :message])]
+            (is (re-find #"get-payment-status" message))
+            (is (re-find #"takes 1" message))
+            (is (re-find #"got 0" message))))
+
+        (testing "and the right arity still works, so the check refuses nothing valid"
+          (reset! invoked 0)
+          (is (= {:ok true} (client/call! url :get-payment-status ["id"] client-opts)))
+          (is (= 1 @invoked)))
+
+        (testing "including a method taking more than one argument"
+          (reset! invoked 0)
+          (is (= {:ok true} (client/call! url :process-webhook [{} "sig"] client-opts)))
+          (is (= 1 @invoked)))))))
+
+(deftest ^:integration every-arity-a-protocol-declares-is-accepted
+  ;; Protocols may declare a method at several arities. Reading the allowed
+  ;; counts from :sigs rather than assuming one keeps all of them callable —
+  ;; a check that accepted only the longest would reject valid calls.
+  (let [impl (reify IMultiArity
+               (fetch [_ k] {:got k :default nil})
+               (fetch [_ k d] {:got k :default d}))]
+    (with-server (server/rpc-app IMultiArity impl {:service-key service-key})
+      (fn [url]
+        (testing "the shorter arity"
+          (is (= {:got "k" :default nil}
+                 (client/call! url :fetch ["k"] client-opts))))
+
+        (testing "the longer arity"
+          (is (= {:got "k" :default "d"}
+                 (client/call! url :fetch ["k" "d"] client-opts))))
+
+        (testing "and neither more nor fewer"
+          (is (= :rpc/protocol (get-in (client/call! url :fetch [] client-opts)
+                                       [:error :type])))
+          (is (= :rpc/protocol (get-in (client/call! url :fetch ["a" "b" "c"] client-opts)
+                                       [:error :type]))))))))

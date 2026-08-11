@@ -14,18 +14,23 @@
             [clojure.tools.logging :as log]
             [muuntaja.middleware :as muuntaja-middleware]))
 
-(defn- operation->fn
-  "The protocol function implementing `operation`, or nil.
+(defn- resolve-operation
+  "`{:f fn :arities #{n}}` for `operation`, or nil if the protocol has no such
+   method.
 
    Resolved from the protocol's `:sigs`, so an endpoint exposes exactly the
    methods its protocol declares — no more. An operation the protocol does not
    name cannot be invoked, which is what stops the envelope from becoming a
-   general-purpose remote eval."
+   general-purpose remote eval.
+
+   `:arities` counts declared arguments without `this`, which the server
+   supplies. It comes from the same `:sigs`, so a method whose signature
+   changes carries the new arity across without anything here being edited."
   [protocol operation]
-  (some (fn [{:keys [name]}]
+  (some (fn [{:keys [name arglists]}]
           (when (= (clojure.core/name operation) (clojure.core/name name))
-            (ns-resolve (-> protocol :var meta :ns)
-                        name)))
+            {:f       (ns-resolve (-> protocol :var meta :ns) name)
+             :arities (into #{} (map #(dec (count %))) arglists)}))
         (vals (:sigs protocol))))
 
 (defn handle-envelope
@@ -46,18 +51,33 @@
         (log/warn "rpc malformed envelope" {:problem problem})
         (carry-correlation (rpc/transport-error :rpc/protocol nil problem)))
 
-      (if-let [f (operation->fn protocol operation)]
-        (try
-          (carry-correlation {:result (apply f implementation args)})
-          (catch Exception e
+      (if-let [{:keys [f arities]} (resolve-operation protocol operation)]
+        (cond
+          ;; Checked before invoking, because `apply` with the wrong count
+          ;; throws an ArityException that is indistinguishable here from the
+          ;; implementation failing — so a caller's mistake, or a client built
+          ;; against a different version of the protocol, would be reported as
+          ;; the service breaking, and re-raised on the near side as one.
+          (not (contains? arities (count args)))
+          (carry-correlation
+           (rpc/transport-error
+            :rpc/protocol operation
+            (str "Operation " (clojure.core/name operation) " takes "
+                 (clojure.string/join " or " (sort arities))
+                 " argument(s), got " (count args))))
+
+          :else
+          (try
+            (carry-correlation {:result (apply f implementation args)})
+            (catch Exception e
             ;; Carried, not flattened. Payment providers throw typed ex-info
             ;; ({:type :internal-error …}) and nothing catches them — the HTTP
             ;; boundary reads that :type and maps it to a status. Reporting
             ;; every throw as :rpc/remote-error would lose the distinction the
             ;; caller had in-process.
-            (log/warn e "rpc operation threw" {:operation operation
-                                               :type      (:type (ex-data e))})
-            (carry-correlation (rpc/thrown-error operation e))))
+              (log/warn e "rpc operation threw" {:operation operation
+                                                 :type      (:type (ex-data e))})
+              (carry-correlation (rpc/thrown-error operation e)))))
 
         (do
           (log/warn "rpc unknown operation" {:operation operation})

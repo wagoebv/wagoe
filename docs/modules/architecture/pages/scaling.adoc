@@ -288,10 +288,18 @@ What it does, and what it deliberately does not:
 
 | Malformed requests
 | Answered, not thrown. The endpoint is reachable by anything that can post to
-  it, so a body carrying no operation — or an operation that is not a name —
-  comes back as `:rpc/protocol` with `400`. A request the service could not
-  understand is the caller's error; reserving `500` for the service actually
-  failing keeps the two apart in an operator's logs.
+  it, so a body carrying no operation — or an operation that is not a name, or
+  the wrong number of arguments for one — comes back as `:rpc/protocol` with
+  `400`. A request the service could not understand is the caller's error;
+  reserving `500` for the service actually failing keeps the two apart in an
+  operator's logs.
+
+  Argument count is checked against the protocol's own `:sigs` before the
+  method is invoked. Letting `apply` raise an `ArityException` would be
+  indistinguishable at that point from the implementation failing, so a client
+  built against a different version of the protocol — the case this is most
+  likely to arise from — would be reported as the service breaking, and
+  re-raised as an exception on the near side.
 
 | Retries
 | Only failures where the call may not have completed, and only
