@@ -120,6 +120,9 @@ configuration", and until BOU-89 the shipped manifests had it wrong.
   as absent, but a value that does not match the server produces an AUTH error
   naming Redis, which sends you to look at the server instead of the variable.
   The reference topologies give their bundled Redis a password and match it.
+  `:database` in the cache config is honoured whether or not there is a
+  password; it was not before BOU-89, so a passwordless deployment isolating
+  environments by Redis database was writing to DB 0.
 
 | `SENTRY_DSN`
 | Required, because error reporting defaults to `:sentry` and refuses to start

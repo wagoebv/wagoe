@@ -439,9 +439,13 @@
         password (configured-password config)
         database (or (:database config) 0)]
 
-    (if password
-      (JedisPool. pool-config host port timeout password database)
-      (JedisPool. pool-config host port timeout))))
+    ;; One constructor, always. The four-argument form takes no database, so
+    ;; branching on the password quietly moved a passwordless deployment to
+    ;; DB 0 — and `:database` is how deployments keep environments apart in one
+    ;; Redis, so the data went somewhere plausible rather than nowhere. Jedis
+    ;; skips AUTH when the password is nil, which is what makes the single form
+    ;; correct for both.
+    (JedisPool. pool-config host port timeout ^String password ^int database)))
 
 (defn create-redis-cache
   "Create Redis cache instance.
