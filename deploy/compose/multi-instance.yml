@@ -105,6 +105,13 @@ services:
     image: wagoe:latest
     command: ["worker"]
     environment: *app-env
+    # The image's HEALTHCHECK curls /health/ready, and worker mode binds no
+    # listener — so an entirely healthy worker reports unhealthy, and anything
+    # watching container health treats a working process as a failing one.
+    # There is no HTTP surface to probe instead: liveness for a worker is the
+    # process being alive, which the runtime already tracks.
+    healthcheck:
+      disable: true
     # One. Scheduled work is not yet leader-elected, so N workers run every job
     # N times — see scaling.adoc. This is the constraint, not an oversight.
     deploy:

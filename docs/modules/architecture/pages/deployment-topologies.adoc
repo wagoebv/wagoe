@@ -171,9 +171,13 @@ this there is nothing to look at.
 
 [source,bash]
 ----
+export JWT_SECRET="at-least-32-characters-............."
 export RPC_SERVICE_KEY="at-least-32-characters-............."
 docker compose -f deploy/compose/per-service.yml up -d
 ----
+
+Both are required — the compose file refuses to interpolate without them, which
+is deliberate: a secret with a default is a secret nobody sets.
 
 `service user` boots the user module and the platform it needs — 19 of 29
 components in the prod profile — and serves `IUserService` on port 3001 for the
