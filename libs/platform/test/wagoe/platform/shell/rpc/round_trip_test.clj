@@ -945,3 +945,40 @@
     (is (= :byte-array (:as @sent)))
     (is (not= :stream (:as @sent))
         "a stream would have to be closed on every branch that reads it")))
+
+(deftest ^:integration a-trailing-slash-on-the-service-root-does-not-reach-the-wire
+  ;; A root copied from an env var or a config file often ends in a slash, and
+  ;; `http://host/` + `/rpc` is `//rpc`.
+  ;;
+  ;; This asserts the URL the client builds, not the response, because the
+  ;; response cannot tell the two apart: Apache HttpClient and Jetty both
+  ;; normalise `//rpc` to `/rpc`, so a round trip succeeds either way. Relying
+  ;; on that is relying on two intermediaries we do not control — RFC 3986
+  ;; treats the paths as distinct, and a proxy or a server that does not
+  ;; normalise would 404 a healthy service. Building the right URL is the part
+  ;; that is ours.
+  (let [sent (atom nil)
+        post (fn [base opts]
+               (with-redefs [http/post (fn [url _] (reset! sent url)
+                                         {:status 200 :body nil})]
+                 (client/call! base :provider-name [] (merge client-opts opts))))]
+
+    (testing "a trailing slash is not carried into the path"
+      (post "http://payments:3001/" {})
+      (is (= "http://payments:3001/rpc" @sent)))
+
+    (testing "however many there are"
+      (post "http://payments:3001///" {})
+      (is (= "http://payments:3001/rpc" @sent)))
+
+    (testing "a path configured without its leading slash gets one"
+      (post "http://payments:3001" {:path "rpc"})
+      (is (= "http://payments:3001/rpc" @sent)))
+
+    (testing "and an ordinary root is unchanged, so normalising broke nothing"
+      (post "http://payments:3001" {})
+      (is (= "http://payments:3001/rpc" @sent)))
+
+    (testing "a service behind a path-routing proxy keeps its sub-path"
+      (post "http://gateway/payments/" {})
+      (is (= "http://gateway/payments/rpc" @sent)))))

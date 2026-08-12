@@ -307,3 +307,30 @@
     (is (= :rpc/unavailable (rpc/classify-exception (java.net.UnknownHostException. "h"))))
     (is (= :rpc/timeout (rpc/classify-exception (java.net.SocketTimeoutException. "t"))))))
 
+
+(deftest ^:unit a-service-root-joins-cleanly-however-it-was-configured
+  (testing "the ordinary case"
+    (is (= "http://payments:3001/rpc" (rpc/service-url "http://payments:3001" "/rpc"))))
+
+  (testing "a trailing slash does not become a double one"
+    ;; A root copied from an env var or config file often ends in a slash.
+    ;; `//rpc` 404s against a healthy service, and the URL looks right in every
+    ;; log that prints it.
+    (is (= "http://payments:3001/rpc" (rpc/service-url "http://payments:3001/" "/rpc")))
+    (is (= "http://payments:3001/rpc" (rpc/service-url "http://payments:3001///" "/rpc"))))
+
+  (testing "a path without a leading slash gets one"
+    (is (= "http://payments:3001/rpc" (rpc/service-url "http://payments:3001" "rpc"))))
+
+  (testing "both at once"
+    (is (= "http://payments:3001/rpc" (rpc/service-url "http://payments:3001/" "rpc"))))
+
+  (testing "a root with its own sub-path keeps it"
+    ;; Services behind a path-routing proxy are reached this way.
+    (is (= "http://gateway/payments/rpc"
+           (rpc/service-url "http://gateway/payments" "/rpc")))
+    (is (= "http://gateway/payments/rpc"
+           (rpc/service-url "http://gateway/payments/" "/rpc"))))
+
+  (testing "a nested endpoint path survives"
+    (is (= "http://h/internal/rpc" (rpc/service-url "http://h" "/internal/rpc")))))

@@ -132,6 +132,24 @@
 ;; Failures
 ;; =============================================================================
 
+(defn service-url
+  "Join a service root and an endpoint path into one URL.
+
+   `(str base-url path)` is wrong for values people actually configure. A root
+   copied from an env var or a config file often ends in a slash, and
+   `http://payments:3001/` + `/rpc` is `//rpc`, which the server does not
+   serve — the call 404s against a healthy service, and the URL looks right in
+   every log that prints it.
+
+   Normalised here rather than matched loosely on the server: an endpoint that
+   answers `/rpc`, `//rpc` and `/rpc/` alike is one an operator cannot reason
+   about from an access log, and path confusion is not a property to want on
+   something that invokes port methods."
+  [base-url path]
+  (let [root (str/replace (str base-url) #"/+$" "")
+        path (str path)]
+    (str root (if (str/starts-with? path "/") path (str "/" path)))))
+
 (def service-key-header
   "Header carrying the *service's* credential.
 

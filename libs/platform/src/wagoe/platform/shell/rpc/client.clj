@@ -191,7 +191,7 @@
   [base-url operation args {:keys [context] :as opts}]
   (let [opts     (merge default-opts opts)
         envelope (rpc/request-envelope operation args context)
-        url      (str base-url (:path opts))]
+        url      (rpc/service-url base-url (:path opts))]
     (raise-if-thrown!
      operation
      (loop [attempt 0]
