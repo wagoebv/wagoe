@@ -190,7 +190,58 @@ today, but the architecture is positioned for it.
 * *Break the allowlisted dependency cycles* — `check_deps.clj` allows `admin↔user`, `platform↔{user,tenant,admin,workflow,search}`. A cycle means two modules can't be cleanly separated; these must be broken (e.g. extract the shared auth check behind a port) before slicing.
 * *Async option* — there is no event-bus port today (the dead `IEventBus` stub in `libs/user/ports.clj` was removed in BOU-170). Event-driven decoupling needs a dedicated port plus a real adapter (Redis Streams / Kafka / RabbitMQ).
 * *Data ownership decision* — schema-per-tenant assumes co-located modules in one Postgres. Across services either share the DB (pragmatic) or give each service its own; there are no distributed transactions, so split writes become eventual-consistency.
-* *Service launch mode* — `wagoe.main` exposes only `server` and `cli`; slicing needs an entrypoint that boots a named module subset as a service.
+* ✅ *Service launch mode* — shipped in BOU-91: `java -jar wagoe.jar service <module>...` boots a named subset plus the platform, and starts that module's RPC endpoint when one is configured. See <<service-launch-mode>>.
+
+[[service-launch-mode]]
+=== Running a module as a service
+
+`service` boots only the modules named and the platform they need:
+
+[source,bash]
+----
+java -jar wagoe.jar service payments        # one module
+java -jar wagoe.jar service user tenant     # several in one process
+----
+
+In the test profile `service user` runs 19 of the application's 33 components.
+`/health` answers, `/web/login` answers, `/api/v1/tenants` is a 404 — the tenant
+module is not there to serve it.
+
+Which keys belong to which module is declared, not guessed:
+
+[source,clojure]
+----
+;; config.edn, under :active — merged over
+;; wagoe.config/default-service-catalogue, replacing an entry of the same name
+;; rather than merging into it
+:wagoe/services
+{:payments {:keys [:wagoe/payment-provider]
+            :rpc  {:protocol  'my.app.payments.ports/IPaymentProvider
+                   :component :wagoe/payment-provider}}}
+----
+
+The keys must be the ones the config actually emits. Naming a component that
+does not exist does not fail — the real component is then claimed by nobody,
+counts as platform, and runs inside every service. `wagoe.service-launch-test`
+asserts every emitted key is either claimed by a module or listed as platform,
+which is the only thing that catches it.
+
+A key no entry claims counts as platform and runs everywhere. That is the
+deliberate failure direction: a catalogue that has fallen behind boots a
+service larger than it needs to be, rather than one missing a component it
+depended on.
+
+With `:wagoe/rpc` in config, a service also starts the remote-port endpoint on
+its own port, so the rest of the deployment can call it. Without it the boot
+says so explicitly — a module running alone that nothing can reach is a process
+doing no work, and it otherwise reports itself healthy.
+
+The mechanics are in `wagoe.platform.core.system-selection`, and the one thing
+worth knowing about them: refs to unselected modules are removed *before* the
+dependency closure is taken. `:wagoe/http-handler` refers to every module, so
+following its refs first pulls the whole system back in — and the result still
+boots and still passes a health check, which is what makes the mistake worth
+naming.
 
 [[remote-port-adapter]]
 === The remote-port adapter
@@ -398,7 +449,7 @@ The architecture delivers the promise; these are the concrete pieces that make
 
 For *functional decomposition* (the bigger bet):
 
-. *Generic remote-port adapter + RPC envelope* — `clj-http` client implementing a module protocol, Malli (de)serialization, context propagation, error unwrap, retry/circuit-breaker. Pilot by extracting `payments`.
-. *Service launch mode* — `wagoe.main` entrypoint that boots a named module subset as an independent service.
+. ✅ *Generic remote-port adapter + RPC envelope* — done (BOU-90), less the circuit breaker (BOU-285). `clj-http` client implementing a module protocol over transit, context propagation, typed errors, retry bounded to calls that never executed.
+. ✅ *Service launch mode* — done (BOU-91). `wagoe.main` boots a named module subset as an independent service, with its RPC endpoint on its own port.
 . *Break allowlisted dependency cycles* — `admin↔user`, `platform↔{user,tenant,admin,workflow,search}` — prerequisite for slicing those modules.
 . *Event-bus port + adapter* — define an event-bus port and a Redis Streams / Kafka adapter for async, event-driven inter-service decoupling (no port exists today).

@@ -4,13 +4,16 @@
    Provides unified entry point that can run the application in different modes:
    - server: Start HTTP server (default)
    - worker: Start a background worker (no HTTP listener)
+   - service: Start only the named modules, as an independently deployable
+     service (BOU-91)
    - cli: Run CLI commands
 
    Usage:
-     java -jar wagoe-standalone.jar              # Start HTTP server
-     java -jar wagoe-standalone.jar server       # Start HTTP server explicitly
-     java -jar wagoe-standalone.jar worker       # Start a background worker
-     java -jar wagoe-standalone.jar cli [args]   # Run CLI commands"
+     java -jar wagoe-standalone.jar                   # Start HTTP server
+     java -jar wagoe-standalone.jar server            # Start HTTP server explicitly
+     java -jar wagoe-standalone.jar worker            # Start a background worker
+     java -jar wagoe-standalone.jar service payments  # Start one module as a service
+     java -jar wagoe-standalone.jar cli [args]        # Run CLI commands"
   (:require [wagoe.config :as config]
             [wagoe.platform.shell.system.wiring] ; Required for Integrant init functions
             ;; Load feature modules' Integrant init/halt methods at the app layer
@@ -20,6 +23,7 @@
             [wagoe.workflow.shell.module-wiring]
             [wagoe.search.shell.module-wiring]
             [wagoe.tenant.shell.module-wiring]
+            [wagoe.platform.core.system-selection :as selection]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
             [integrant.core :as ig])
@@ -36,6 +40,7 @@
   (println "Modes:")
   (println "  server  - Start HTTP server (default)")
   (println "  worker  - Start a background worker (no HTTP listener)")
+  (println "  service - Start only the named modules (e.g. service payments)")
   (println "  cli     - Run CLI commands")
   (println "  help    - Show this help message")
   (println)
@@ -48,6 +53,8 @@
   (println "  java -jar wagoe.jar")
   (println "  java -jar wagoe.jar server")
   (println "  WAG_ENV=prod java -jar wagoe.jar server")
+  (println "  java -jar wagoe.jar service payments")
+  (println "  java -jar wagoe.jar service user tenant")
   (println "  java -jar wagoe.jar cli user list"))
 
 (def http-surface-keys
@@ -119,6 +126,58 @@
       (log/error (startup-failure-summary e))
       (System/exit 1))))
 
+(defn service-ig-config
+  "The Integrant config for a process running only `service-names`.
+
+   Two steps that are easy to conflate. `selection/service-config` decides
+   which components run; `rpc-entry` adds the listener that lets the rest of
+   the deployment call them. A service without the second boots happily and is
+   unreachable, which is the state BOU-90 left payments in.
+
+   Returns `[ig-config summary]`, or throws `:configuration-error` with a
+   message meant for an operator reading a container log."
+  [config service-names]
+  (let [catalogue (config/service-catalogue config)
+        full      (config/ig-config config)]
+    (when-let [problem (selection/catalogue-problem catalogue)]
+      (throw (ex-info problem {:type :configuration-error})))
+    (when-let [problem (selection/selection-problem catalogue full service-names)]
+      (throw (ex-info problem {:type :configuration-error})))
+    (let [selected (selection/service-config full catalogue service-names)
+          rpc-cfg  (config/rpc-config config)
+          rpc      (when rpc-cfg
+                     (some (fn [service-name]
+                             (when-let [{:keys [protocol component]}
+                                        (get-in catalogue [service-name :rpc])]
+                               (when (contains? selected component)
+                                 {:wagoe/rpc-server
+                                  (merge (select-keys rpc-cfg [:port :host :service-key :auth])
+                                         {:protocol       protocol
+                                          :implementation (ig/ref component)})})))
+                           (sort service-names)))]
+      [(merge selected rpc)
+       (assoc (selection/summary full selected service-names)
+              :rpc (boolean rpc))])))
+
+(defn- start-service!
+  "Boot only the named services and block."
+  [service-names]
+  (log/info "Starting Wagoe service" {:services (vec service-names)})
+  (try
+    (let [config (config/load-config)
+          [ig-config summary] (service-ig-config config (set (map keyword service-names)))]
+      ;; Logged before the boot, not after: if a component fails, this is what
+      ;; says which subset was being started, and an operator otherwise has to
+      ;; infer it from the failure.
+      (log/info "Service composition" summary)
+      (when-not (:rpc summary)
+        (log/info (str "No RPC endpoint for this service — nothing else in the "
+                       "deployment can call it. Set :wagoe/rpc in config to expose one.")))
+      (boot-and-block! (str "service " (str/join "," (sort service-names))) ig-config))
+    (catch Exception e
+      (log/error (startup-failure-summary e))
+      (System/exit 1))))
+
 (defn- start-worker!
   "Start the system without the HTTP surface (background worker) and block."
   []
@@ -158,6 +217,14 @@
 
       "worker"
       (start-worker!)
+
+      "service"
+      (if (seq remaining-args)
+        (start-service! remaining-args)
+        (do (println "service mode needs at least one module name, e.g. `service user`")
+            (println)
+            (print-usage)
+            (System/exit 2)))
 
       "cli"
       (run-cli! remaining-args)

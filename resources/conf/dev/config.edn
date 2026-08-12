@@ -52,6 +52,27 @@
                  :connection-timeout-ms 30000}}
 
   ;; HTTP Server configuration
+  ;; Remote-port endpoint for `service` launch mode (BOU-91).
+  ;; Present only when this process runs as a module service — it serves that
+  ;; module's protocol to the rest of the deployment on its own port, and must
+  ;; not be reachable from outside it. The key is at least 32 characters; the
+  ;; endpoint refuses to start without one.
+  ;; :wagoe/rpc
+  ;; {:port        3001
+  ;;  :service-key "read from RPC_SERVICE_KEY — at least 32 characters"}
+  ;;
+  ;; Written without the #env reader macro on purpose: `bb doctor` reads this
+  ;; file as text, so a commented-out reference is still reported as an unset
+  ;; variable.
+  ;;
+  ;; Module catalogue for `service` mode — which Integrant keys each module
+  ;; owns. Merged over wagoe.config/default-service-catalogue; an entry of the
+  ;; same name replaces the framework's outright. The keys must be ones this
+  ;; config actually emits: a component nobody claims counts as platform and
+  ;; runs in every service.
+  ;; :wagoe/services
+  ;; {:my-module {:keys [:my-app/service :my-app/routes]}}
+
   :wagoe/http
   {:port       #long #or [#env HTTP_PORT 3000]
    :host       #or [#env HTTP_HOST "0.0.0.0"]

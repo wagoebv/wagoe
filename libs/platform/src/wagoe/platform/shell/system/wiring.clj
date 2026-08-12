@@ -40,6 +40,7 @@
             [wagoe.platform.shell.http.interceptors :as http-interceptors]
             [wagoe.platform.shell.http.versioning :as http-versioning]
             [wagoe.platform.shell.utils.port-manager :as port-manager]
+            [wagoe.platform.shell.rpc.server :as rpc-server]
             ;; NOTE: no module-wiring is required here any more (BOU-131). Each
             ;; was a static require, so every consumer of platform had to ship
             ;; every module's jar whether or not it used it — a missing one is a
@@ -650,6 +651,38 @@
           graceful (org.eclipse.jetty.server.handler.GracefulHandler.)]
       (.setHandler graceful existing)
       (.setHandler s graceful))))
+
+;; A listener serving one module's protocol to the rest of the deployment.
+;;
+;; Its own port, not the application's. The endpoint invokes port methods
+;; directly, so it belongs on a listener reachable from inside the deployment
+;; and nowhere else — and mounting it on the app's router is not possible
+;; anyway, since every route slot rewrites the path (BOU-90).
+;;
+;; `:protocol` is a symbol so the service catalogue stays plain data; it is
+;; resolved here, where a name that no longer exists fails the boot rather than
+;; the first call.
+(defmethod ig/init-key :wagoe/rpc-server
+  [_ {:keys [protocol implementation port host service-key auth]}]
+  (let [protocol-var (or (requiring-resolve protocol)
+                         (throw (ex-info (str "RPC protocol not found: " protocol)
+                                         {:type :configuration-error})))
+        app          (rpc-server/rpc-app @protocol-var implementation
+                                         (cond-> {}
+                                           service-key (assoc :service-key service-key)
+                                           auth        (assoc :auth auth)))
+        server       (jetty/run-jetty app {:port  port
+                                           :host  (or host "0.0.0.0")
+                                           :join? false})]
+    (log/info "RPC endpoint started"
+              {:protocol (str protocol) :port port :path rpc-server/default-path})
+    server))
+
+(defmethod ig/halt-key! :wagoe/rpc-server
+  [_ server]
+  (when server
+    (log/info "Stopping RPC endpoint")
+    (.stop server)))
 
 (defmethod ig/init-key :wagoe/http-server
   [_ {:keys [handler port host join? config drain-timeout-ms]}]
