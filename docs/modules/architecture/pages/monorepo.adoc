@@ -1,7 +1,7 @@
 = Monorepo Structure
 :description: How the Wagoe repository is organized and how libraries relate.
 
-Wagoe is a monorepo of 29 independently publishable libraries under `libs/`.
+Wagoe is a monorepo of 30 independently publishable libraries under `libs/`.
 Each library can be published to Clojars as a standalone dependency.
 
 == Top-level layout
@@ -10,7 +10,7 @@ Each library can be published to Clojars as a standalone dependency.
 ----
 wagoe/
 ├── src/                   ← Main application source tree
-├── libs/                  ← 29 independently publishable libraries
+├── libs/                  ← 30 independently publishable libraries
 │   ├── core/
 │   ├── observability/
 │   ├── platform/

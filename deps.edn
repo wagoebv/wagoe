@@ -8,6 +8,7 @@
            "libs/storage/src" "libs/storage/test"           ;; Phase 6: Storage
            "libs/scaffolder/src" "libs/scaffolder/test"     ;; Phase 8: Scaffolder
            "libs/cache/src" "libs/cache/test"               ;; Phase 9: Cache
+           "libs/events/src" "libs/events/test"             ;; Event bus (BOU-93)
            "libs/jobs/src" "libs/jobs/test"                 ;; Phase 10: Jobs
            "libs/email/src" "libs/email/test"               ;; Phase 11: Email
            "libs/tenant/src" "libs/tenant/test"             ;; Phase 7: Tenant

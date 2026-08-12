@@ -203,6 +203,16 @@
    :add-command         "wagoe add push"
    :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/push/AGENTS.md"}
 
+  {:name                "events"
+   :description         "Event bus for cross-process, asynchronous module communication \u2014 in-memory and Redis Streams"
+   :clojars             com.wagoe/wagoe-events
+   :version             "1.0.0-beta-4"
+   :category            :optional
+   :config-snippet      "  :wagoe/events\n  {:provider :redis-streams\n   :host     #env REDIS_HOST\n   :port     #long #or [#env REDIS_PORT 6379]\n   :password #env REDIS_PASSWORD\n   :group    \"my-app\"}\n"
+   :test-config-snippet "  :wagoe/events\n  {:provider :in-memory}\n"
+   :add-command         "wagoe add events"
+   :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/events/AGENTS.md"}
+
   {:name                "audience"
    :description         "Rule-based audience segmentation with SQL + predicate pipeline"
    :clojars             com.wagoe/wagoe-audience

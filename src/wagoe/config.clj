@@ -606,6 +606,18 @@
           (catch Exception _
             nil))))))
 
+(defn- events-module-config
+  "Integrant configuration for the event bus.
+
+   Emitted only when `:wagoe/events` is active, and the wiring namespace is
+   required at the same moment (BOU-131): a static require would make every
+   consumer of this namespace ship the events jar and its Jedis dependency
+   whether or not they use a bus."
+  [config]
+  (when-let [events-cfg (get-in config [:active :wagoe/events])]
+    (require 'wagoe.events.shell.module-wiring)
+    {:wagoe/events events-cfg}))
+
 (defn ig-config
   "Generate Integrant configuration map from loaded config.
 
@@ -639,6 +651,7 @@
          (search-module-config config)
          (external-module-config config)
          (payments-module-config config)
+         (events-module-config config)
          (dashboard-module-config config)))
 
 ;; =============================================================================

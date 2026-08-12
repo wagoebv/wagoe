@@ -350,11 +350,11 @@ Run database migrations first: `clojure -M:migrate up`
 
 ### `bb deploy` — Deploy to Clojars
 
-Deploys the 29 published Wagoe libraries to Clojars — `wagoe-tools` among them, as `com.wagoe/wagoe-tools`.
+Deploys the 30 published Wagoe libraries to Clojars — `wagoe-tools` among them, as `com.wagoe/wagoe-tools`.
 
 ```bash
 bb deploy --help                    # Show help
-bb deploy --all                     # Deploy all 29 published artifacts
+bb deploy --all                     # Deploy all 30 published artifacts
 bb deploy --missing                 # Deploy only unpublished artifacts
 bb deploy core platform user        # Deploy specific libraries
 ```
@@ -429,7 +429,7 @@ Translation files live in `libs/i18n/resources/wagoe/i18n/translations/`.
 | `wagoe.tools.admin_entity` | Admin Entity Generator — Babashka wrapper for AI admin entity generation |
 | `wagoe.tools.i18n` | i18n catalogue management (find/scan/missing/unused) |
 | `wagoe.tools.admin` | First admin user creation wizard |
-| `wagoe.tools.deploy` | Clojars deployment for all 29 published Wagoe artifacts |
+| `wagoe.tools.deploy` | Clojars deployment for all 30 published Wagoe artifacts |
 | `wagoe.tools.dev` | migrate + check-links + smoke-check + install-hooks |
 
 ---

@@ -41,7 +41,7 @@ Add these to your shell profile (`~/.zshrc` or `~/.bashrc`) for convenience.
 
 == Library overview
 
-All 29 libraries are published to the `com.wagoe` group on Clojars. The order
+All 30 libraries are published to the `com.wagoe` group on Clojars. The order
 below is `bb deploy`'s publish order — a topological sort of `all-libs` by each
 library's `deps.edn` Wagoe dependencies, so every library appears after
 everything it depends on.
@@ -94,7 +94,7 @@ in-repo end-to-end test harness, not a library.
 == Version management
 
 Each publishable artifact has a `(def version "…")` in its own `build.clj`.
-This includes all 29 libraries under `libs/*` — `libs/tools` among them. It is
+This includes all 30 libraries under `libs/*` — `libs/tools` among them. It is
 dev-only in the sense that applications do not depend on it at runtime, but it
 is published like everything else, as `com.wagoe/wagoe-tools`.
 
@@ -135,14 +135,14 @@ Always bump the version before deploying — you cannot re-deploy the same versi
 
 == Deploying locally
 
-=== All 29 artifacts in one command
+=== All 30 artifacts in one command
 
 [source,bash]
 ----
 bb deploy --all
 ----
 
-This deploys all 29 publishable artifacts in dependency
+This deploys all 30 publishable artifacts in dependency
 order with a 30-second pause between artifacts to allow Clojars indexing.
 
 === Only libraries not yet on Clojars
@@ -303,11 +303,11 @@ release still works, then delete the repository-level copies.
 - Setup Clojure + Babashka       # DeLaGuardo/setup-clojure with bb: latest
 - Cache ~/.m2 and ~/.gitlibs     # Speeds up subsequent runs
 - npm ci + npm run build:css:admin  # Builds Tailwind CSS for ui-style jar
-- bb deploy --all                # Deploys all 29 artifacts in order, 30s between each
+- bb deploy --all                # Deploys all 30 artifacts in order, 30s between each
 - Create GitHub Release          # Only on tag pushes; pre-release for alpha/beta
 ----
 
-The indexing pauses alone account for roughly 15 minutes (29 artifacts × 30s), so
+The indexing pauses alone account for roughly 15 minutes (30 artifacts × 30s), so
 budget approximately 20–25 minutes in total once the build is included.
 
 ---
