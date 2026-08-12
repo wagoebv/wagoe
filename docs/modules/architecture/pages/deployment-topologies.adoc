@@ -178,6 +178,27 @@ rest of the deployment. The composition is logged at start-up, including what
 was left out, so a service that quietly kept everything is visible rather than
 merely healthy.
 
+The `app` container in that file is an ordinary `server`, and still runs its own
+copy of the user module. Pointing it at the remote one means building the
+adapter in place of the local component:
+
+[source,clojure]
+----
+(rpc-client/remote-adapter user-ports/IUserService
+                          (System/getenv "USER_SERVICE_URL")
+                          {:service-key (System/getenv "RPC_SERVICE_KEY")})
+----
+
+That is a wiring decision in an application's own config — which component a key
+resolves to — not something a framework reference can make for it. The compose
+file says so rather than setting a URL that nothing reads.
+
+*One process serves one protocol.* A service naming two RPC-capable modules —
+`service user payments`, once both offer one — is refused at start-up, naming
+both. Serving the first and carrying on would leave the other reachable by
+nobody, with a healthy process and nothing in the log. Run them as separate
+services.
+
 The RPC port is published to nothing. It invokes port methods directly, so it
 belongs on the internal network:
 

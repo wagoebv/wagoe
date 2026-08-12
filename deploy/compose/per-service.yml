@@ -1,9 +1,21 @@
 # Reference topology: one module running as its own service.
 #
-# The application runs as usual; one module also runs in its own container and
-# is reached over the remote-port adapter. Nothing at the call site changes —
-# the app still calls `(ports/create-checkout-session provider ...)`, and the
-# provider it holds happens to make an HTTP request (BOU-90, BOU-91).
+# What this shows: a module booted on its own, serving its protocol to the rest
+# of the deployment over the remote-port endpoint, reachable only from inside
+# the network (BOU-90, BOU-91).
+#
+# What it does not show, and deliberately: the `app` container is an ordinary
+# `server` and still runs its own copy of the user module. Pointing it at the
+# remote one means building the adapter instead of the local component —
+#
+#   (rpc-client/remote-adapter user-ports/IUserService
+#                              (System/getenv "USER_SERVICE_URL")
+#                              {:service-key (System/getenv "RPC_SERVICE_KEY")})
+#
+# — which is a wiring decision in an application's own config, not something a
+# framework reference can make for it. An earlier version of this file set
+# USER_SERVICE_URL as though it were wired; nothing read it, so the topology
+# came up with the service idle and looked like it was doing more than it was.
 #
 #   docker build -t wagoe:latest .
 #   docker compose -f deploy/compose/per-service.yml up -d
@@ -67,11 +79,7 @@ services:
   app:
     image: wagoe:latest
     command: ["server"]
-    environment:
-      <<: *app-env
-      # Where the payments service is. The adapter appends its own path.
-      USER_SERVICE_URL: http://identity:3001
-      RPC_SERVICE_KEY: ${RPC_SERVICE_KEY:?set RPC_SERVICE_KEY to at least 32 characters}
+    environment: *app-env
     ports:
       - "${APP_PORT:-3000}:3000"
     depends_on:
