@@ -1,12 +1,12 @@
 (ns wagoe.jobs.shell.worker-test
   "Tests for background job worker."
-  (:require [clojure.test :refer [deftest is testing use-fixtures]]
+  (:require [wagoe.test.logging :refer [with-silent-logging]]
+            [clojure.test :refer [deftest is testing use-fixtures]]
             [wagoe.jobs.shell.worker :as worker]
             [wagoe.jobs.shell.adapters.in-memory :as in-memory]
             [wagoe.jobs.core.job :as job]
             [wagoe.jobs.ports :as ports]
-            [wagoe.observability.tracing.ports :as tracing-ports]
-            [clojure.tools.logging :as log])
+            [wagoe.observability.tracing.ports :as tracing-ports])
   (:import [java.util UUID]
            [java.time Instant]))
 
@@ -128,13 +128,6 @@
 
             (finally
               (ports/stop-worker! worker-instance (:id (:state worker-instance))))))))))
-
-(defmacro with-silent-logging [& body]
-  `(with-redefs [log/info (constantly nil)
-                 log/error (constantly nil)
-                 log/debug (constantly nil)
-                 log/warn (constantly nil)]
-     ~@body))
 
 (deftest ^:unit worker-handles-job-failure-test
   (with-silent-logging
