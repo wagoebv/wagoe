@@ -642,6 +642,65 @@
          (dashboard-module-config config)))
 
 ;; =============================================================================
+;; Service catalogue (BOU-91)
+;; =============================================================================
+
+(def default-service-catalogue
+  "Which Integrant keys belong to which module, for `service` launch mode.
+
+   Only the framework's own modules. A key listed nowhere here is treated as
+   platform and runs in every service — see
+   `wagoe.platform.core.system-selection/core-keys` — so the failure mode of an
+   omission is a service that is larger than it needs to be, not one missing a
+   component.
+
+   `:rpc` says which protocol a service offers to the rest of the deployment.
+   Without it a module can be booted alone but nothing can call it, which is
+   the half of BOU-90 that needed this ticket. The protocol is a symbol so the
+   catalogue stays plain data: it is resolved when the endpoint starts.
+
+   An application overrides or extends this with `:wagoe/services` in its
+   config.edn, and `service-catalogue` merges the two. Kept in code rather than
+   copied into the four profile files because a copy in each is a copy to
+   forget: the keys change when modules change, and nothing would notice."
+  {:user     {:keys [:wagoe/user-db-schema :wagoe/user-repository
+                     :wagoe/session-repository :wagoe/audit-repository
+                     :wagoe/mfa-service :wagoe/auth-service
+                     :wagoe/user-service :wagoe/user-routes]}
+
+   :tenant   {:keys [:wagoe/tenant-db-schema :wagoe/tenant-repository
+                     :wagoe/tenant-service :wagoe/tenant-routes
+                     :wagoe/tenant-http-middleware
+                     :wagoe/membership-repository :wagoe/membership-service
+                     :wagoe/membership-routes
+                     :wagoe/invite-repository :wagoe/invite-service]}
+
+   :admin    {:keys [:wagoe/admin-schema-provider :wagoe/admin-service
+                     :wagoe/admin-routes]}
+
+   :workflow {:keys [:wagoe/workflow-service :wagoe/workflow-routes]}
+
+   :search   {:keys [:wagoe/search-service :wagoe/search-routes]}
+
+   :payments {:keys [:wagoe/payment-provider]
+              :rpc  {:protocol  'wagoe.payments.ports/IPaymentProvider
+                     :component :wagoe/payment-provider}}})
+
+(defn service-catalogue
+  "The service catalogue for `config`: the framework's, plus the app's own.
+
+   An entry in config.edn replaces the default one of the same name outright
+   rather than merging into it, so an application that has taken a module apart
+   is not left with the framework's idea of its keys."
+  [config]
+  (merge default-service-catalogue (:wagoe/services config)))
+
+(defn rpc-config
+  "Settings for the RPC endpoint a service exposes, or nil if none configured."
+  [config]
+  (get-in config [:active :wagoe/rpc]))
+
+;; =============================================================================
 ;; REPL Utilities
 ;; =============================================================================
 

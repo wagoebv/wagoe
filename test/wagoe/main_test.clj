@@ -94,8 +94,11 @@
           (str "these log the exception, and its ex-data holds the config: "
                (pr-str start-sites))))
 
-    (testing "both server and worker report through the summary"
-      (is (= 2 (count (re-seq #"\(log/error \(startup-failure-summary e\)\)" src)))))))
+    (testing "every boot mode reports through the summary"
+      ;; Counted rather than named, so a mode added later has to come here and
+      ;; decide — which is what happened when `service` was added (BOU-91).
+      ;; server, worker, service.
+      (is (= 3 (count (re-seq #"\(log/error \(startup-failure-summary e\)\)" src)))))))
 
 ;; =============================================================================
 ;; Everything the config emits must be registered by the entry point
