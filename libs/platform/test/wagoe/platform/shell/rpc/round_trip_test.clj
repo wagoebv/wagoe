@@ -907,3 +907,41 @@
                                        [:error :type])))
           (is (= :rpc/protocol (get-in (client/call! url :fetch ["a" "b" "c"] client-opts)
                                        [:error :type]))))))))
+
+(deftest ^:integration sustained-traffic-does-not-exhaust-the-client
+  ;; `:as :stream` hands back an InputStream that must be closed to return its
+  ;; connection to the pool. Decoding without closing leaves connections leased
+  ;; until GC, which does not show up in a suite that makes one call per test
+  ;; and only bites a service under real traffic.
+  (let [provider (mock/make-mock-provider)
+        calls    200]
+    (with-service provider
+      (fn [url]
+        (let [remote  (client/remote-adapter pay-ports/IPaymentProvider url client-opts)
+              results (doall (repeatedly calls #(pay-ports/get-payment-status remote "pay-1")))]
+
+          (testing "every call in a long run succeeds"
+            (is (= calls (count results)))
+            (is (every? #(= :paid (:status %)) results)
+                "a leaked connection pool surfaces as later calls failing, not the first"))
+
+          (testing "and the connection is not held open afterwards"
+            ;; A leaked lease would still be outstanding here.
+            (is (= :paid (:status (pay-ports/get-payment-status remote "pay-1"))))))))))
+
+(deftest ^:integration the-response-is-read-as-bytes-not-a-stream
+  ;; The behavioural test above passes under default settings even with a leak,
+  ;; because clj-http builds a fresh connection manager per request when none
+  ;; is supplied. This asserts the property that makes the leak impossible
+  ;; rather than merely unlikely: there is no stream handed out to be left
+  ;; unclosed.
+  (let [sent (atom nil)]
+    (with-redefs [http/post (fn [_url opts]
+                              (reset! sent opts)
+                              {:status 200 :body nil})]
+      (client/call! "http://example.invalid" :get-payment-status ["id"]
+                    {:retries 0 :service-key service-key}))
+
+    (is (= :byte-array (:as @sent)))
+    (is (not= :stream (:as @sent))
+        "a stream would have to be closed on every branch that reads it")))

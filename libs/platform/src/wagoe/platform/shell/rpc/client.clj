@@ -16,7 +16,8 @@
             [clj-http.client :as http]
             [clojure.tools.logging :as log]
             [muuntaja.core :as m])
-  (:import (java.lang.reflect InvocationHandler Method Proxy)))
+  (:import (java.io ByteArrayInputStream)
+           (java.lang.reflect InvocationHandler Method Proxy)))
 
 ;; =============================================================================
 ;; Wire format
@@ -67,13 +68,21 @@
 (defn- decode-body
   "Decode a response body, or nil if it is not in our format.
 
+   Takes the bytes rather than a stream. `:as :stream` hands back an
+   InputStream that has to be closed to return its connection to the pool, and
+   under sustained traffic connections held until GC exhaust the client. Every
+   branch below would have had to remember; taking bytes means there is nothing
+   to remember. The envelopes are small, so holding one in memory costs
+   nothing.
+
    A failing service is often fronted by something that answers in HTML — a
    proxy's 502 page, a login redirect. Letting the decoder throw there would
    turn 'the service is down' into a stack trace at the call site, which is the
    one thing this adapter promises not to do."
-  [body]
+  [^bytes body]
   (try
-    (when body (m/decode m/instance content-type body))
+    (when (and body (pos? (alength body)))
+      (m/decode m/instance content-type (ByteArrayInputStream. body)))
     (catch Exception _ nil)))
 
 (defn- post-envelope!
@@ -98,7 +107,10 @@
                        {:body               (m/encode m/instance content-type envelope)
                         :content-type       content-type
                         :accept             content-type
-                        :as                 :stream
+                        ;; Not :stream — see `decode-body`. clj-http consumes
+                        ;; and releases the connection itself for a byte-array,
+                        ;; so there is no stream left leased to the pool.
+                        :as                 :byte-array
                         :headers            (cond-> (rpc/context->headers envelope)
                                               (:service-key opts)
                                               (assoc rpc/service-key-header
