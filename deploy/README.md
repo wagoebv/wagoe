@@ -1,7 +1,16 @@
 # Deploying Wagoe
 
-Production packaging for a Wagoe application: a prod Docker image and an
-example Kubernetes deployment that runs the **web/worker split**.
+Production packaging for a Wagoe application: a prod Docker image, reference
+Docker Compose topologies, and Kubernetes manifests.
+
+| What | Where |
+|---|---|
+| N replicas + Redis + load balancer | [`compose/multi-instance.yml`](compose/multi-instance.yml) |
+| One module as its own service | [`compose/per-service.yml`](compose/per-service.yml) |
+| Kubernetes (server, worker, Redis, Ingress, module-as-a-service) | [`k8s/wagoe.yaml`](k8s/wagoe.yaml) |
+
+The reasoning, the environment variables and what has actually been brought up
+locally: **[Deployment Topologies](../docs/modules/architecture/pages/deployment-topologies.adoc)**.
 
 ## Build the image
 

@@ -396,6 +396,20 @@
 ;; Factory Functions
 ;; =============================================================================
 
+(defn configured-password
+  "The Redis password to authenticate with, or nil for none.
+
+   Blank is not a password. `#env REDIS_PASSWORD` yields \"\" for a variable
+   that is set but empty — which is what a Kubernetes Secret with an empty value
+   and a compose file with a placeholder both produce — and `\"\"` is truthy, so
+   the pool authenticated against a Redis that has no password. Jedis then fails
+   with an AUTH error naming Redis, sending whoever reads it to look at the
+   server rather than at the variable."
+  [config]
+  (let [password (:password config)]
+    (when (and (string? password) (not (str/blank? password)))
+      password)))
+
 (defn create-redis-pool
   "Create a Jedis connection pool.
 
@@ -422,12 +436,16 @@
         host (or (:host config) "localhost")
         port (or (:port config) 6379)
         timeout (or (:timeout config) 2000)
-        password (:password config)
+        password (configured-password config)
         database (or (:database config) 0)]
 
-    (if password
-      (JedisPool. pool-config host port timeout password database)
-      (JedisPool. pool-config host port timeout))))
+    ;; One constructor, always. The four-argument form takes no database, so
+    ;; branching on the password quietly moved a passwordless deployment to
+    ;; DB 0 — and `:database` is how deployments keep environments apart in one
+    ;; Redis, so the data went somewhere plausible rather than nowhere. Jedis
+    ;; skips AUTH when the password is nil, which is what makes the single form
+    ;; correct for both.
+    (JedisPool. pool-config host port timeout ^String password ^int database)))
 
 (defn create-redis-cache
   "Create Redis cache instance.

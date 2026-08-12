@@ -43,7 +43,10 @@
 
   :wagoe/postgresql
   {:host #env "POSTGRES_HOST"
-   :port #env "POSTGRES_PORT"
+   ;; #long, because DBConfig requires [:port pos-int?] and #env yields a
+   ;; string — without it the prod profile cannot boot against Postgres at all,
+   ;; failing at :wagoe/db-context with "Invalid database configuration".
+   :port #long #or [#env "POSTGRES_PORT" 5432]
    :dbname #env "POSTGRES_DB"
    :user #env "POSTGRES_USER"
    :password #env "POSTGRES_PASSWORD"
@@ -52,10 +55,17 @@
           :maximum-pool-size 50
           :connection-timeout-ms 30000
           :idle-timeout-ms 600000
-          :max-lifetime-ms 1800000
-          :keepalive-time-ms 30000
-          :validation-timeout-ms 5000
-          :leak-detection-threshold-ms 60000}}
+          ;; Only these five. :keepalive-time-ms, :validation-timeout-ms and
+          ;; :leak-detection-threshold-ms used to be here; nothing applied them
+          ;; — the pool builder sets only what is listed — and DBConfig's pool
+          ;; map is :closed, so their presence made this profile fail to boot
+          ;; at :wagoe/db-context with "Invalid database configuration".
+          ;; Widening the schema instead would have legitimised settings that
+          ;; have no effect. Restore them only together with the matching
+          ;; .setKeepaliveTime / .setValidationTimeout /
+          ;; .setLeakDetectionThreshold calls in
+          ;; adapters/database/common/connection.clj.
+          :max-lifetime-ms 1800000}}
 
   ;; Production logging configuration
   :wagoe/logging
@@ -68,9 +78,28 @@
                                  :max-size 50000000 ; 50MB
                                  :pattern ".%d{yyyy-MM-dd}.%i.gz"}}]}
 
-  ;; Production error reporting configuration (Sentry)
+  ;; Remote-port endpoint, used only by `service` launch mode (BOU-91). A
+  ;; `server` or `worker` boot ignores it — the listener is added to the
+  ;; Integrant config only when a module is started as a service, and only when
+  ;; that module declares a protocol in the service catalogue.
+  ;;
+  ;; No default for the key: the endpoint invokes port methods directly, so a
+  ;; service that cannot authenticate its callers must fail to start rather
+  ;; than come up serving them to anything that reaches the port.
+  :wagoe/rpc
+  {:port        #long #or [#env "RPC_PORT" 3001]
+   :service-key #env "RPC_SERVICE_KEY"}
+
+  ;; Production error reporting configuration (Sentry).
+  ;;
+  ;; :sentry by default, and it refuses to start without a DSN — a production
+  ;; deployment that forgot to configure error reporting should fail loudly
+  ;; rather than run blind. ERROR_REPORTING_PROVIDER exists so that a
+  ;; deployment which genuinely has no Sentry can say so deliberately
+  ;; (`no-op`), instead of the choice being made by an unset variable. The
+  ;; reference topologies in deploy/compose set it; real deployments should not.
   :wagoe/error-reporting
-  {:provider :sentry
+  {:provider #keyword #or [#env "ERROR_REPORTING_PROVIDER" "sentry"]
    :dsn #env "SENTRY_DSN"
    :environment "prod"
    :release #or [#env "APP_RELEASE" #env "VERSION"]
@@ -141,7 +170,7 @@
 
   :wagoe/mysql
   {:host #env "MYSQL_HOST"
-   :port #env "MYSQL_PORT"
+   :port #long #or [#env "MYSQL_PORT" 3306]
    :dbname #env "MYSQL_DB"
    :user #env "MYSQL_USER"
    :password #env "MYSQL_PASSWORD"

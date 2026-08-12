@@ -153,7 +153,13 @@
   ;; is the two halves meeting — the module runs as its own selected subset,
   ;; and a caller holding only the protocol reaches it over HTTP.
   (let [config (-> (test-config)
-                   (assoc-in [:active :wagoe/rpc] {:port 3821
+                   ;; Port 0: the OS picks a free one and the started server is
+                   ;; asked which. A fixed port fails on a machine that happens
+                   ;; to have it bound, or when two runs overlap — and the
+                   ;; failure looks like the RPC layer being broken rather than
+                   ;; the port being taken. (Reintroduced here after being
+                   ;; fixed in BOU-90's own tests; same mistake, same fix.)
+                   (assoc-in [:active :wagoe/rpc] {:port 0
                                                    :service-key service-key}))
         [ig-config summary] (main/service-ig-config config #{:payments})]
 
@@ -164,11 +170,19 @@
              (get-in ig-config [:wagoe/rpc-server :implementation]))))
 
     (testing "and a caller with only the protocol gets an answer from it"
-      (with-system ig-config
-        (fn [_]
-          (let [payments (rpc-client/remote-adapter
+      ;; Without :wagoe/http-server. This test is about the RPC listener, and
+      ;; the application's HTTP port comes from a shared range — two suites
+      ;; running at once, or a dev server left up, and the boot fails on a port
+      ;; that has nothing to do with what is being tested. The RPC listener
+      ;; binds port 0 and is asked which it got.
+      (with-system (dissoc ig-config :wagoe/http-server)
+        (fn [system]
+          (let [port     (.getLocalPort
+                          ^org.eclipse.jetty.server.ServerConnector
+                          (first (.getConnectors (:wagoe/rpc-server system))))
+                payments (rpc-client/remote-adapter
                           pay-ports/IPaymentProvider
-                          "http://localhost:3821"
+                          (str "http://localhost:" port)
                           {:retries 0 :service-key service-key})]
             (is (satisfies? pay-ports/IPaymentProvider payments))
             (is (keyword? (pay-ports/provider-name payments))
@@ -269,3 +283,51 @@
                        (assoc-in (test-config) [:active :wagoe/services]
                                  {:user {:keys [:wagoe/user-service]}}))]
         (is (= [:wagoe/user-service] (get-in catalogue [:user :keys])))))))
+
+(deftest ^:integration two-rpc-capable-modules-in-one-process-are-refused
+  ;; One listener serves one protocol. Taking the first of several and carrying
+  ;; on leaves the rest reachable by nobody — a healthy process, nothing in the
+  ;; log, and a caller that times out against a service that is running.
+  ;;
+  ;; Reachable in practice since `user` gained an :rpc entry: `service user
+  ;; payments` is a plausible thing to type.
+  (let [config    (-> (test-config)
+                      (assoc-in [:active :wagoe/rpc] {:port 0 :service-key service-key})
+                      ;; Both offer a protocol, and both are built here.
+                      (assoc-in [:active :wagoe/services]
+                                {:alpha {:keys [:wagoe/user-service]
+                                         :rpc  {:protocol  'wagoe.user.ports/IUserService
+                                                :component :wagoe/user-service}}
+                                 :beta  {:keys [:wagoe/tenant-service]
+                                         :rpc  {:protocol  'wagoe.tenant.ports/ITenantService
+                                                :component :wagoe/tenant-service}}}))]
+
+    (testing "it is refused, naming both"
+      (let [e (is (thrown? clojure.lang.ExceptionInfo
+                           (main/service-ig-config config #{:alpha :beta})))]
+        (is (re-find #"alpha, beta" (ex-message e)))
+        (is (re-find #"one process serves one" (ex-message e)))
+        (is (= :configuration-error (:type (ex-data e))))))
+
+    (testing "and the message says what to do instead"
+      (is (re-find #"separate services"
+                   (try (main/service-ig-config config #{:alpha :beta}) ""
+                        (catch clojure.lang.ExceptionInfo e (ex-message e))))))
+
+    (testing "either one alone is fine"
+      (is (true? (:rpc (second (main/service-ig-config config #{:alpha})))))
+      (is (true? (:rpc (second (main/service-ig-config config #{:beta}))))))
+
+    (testing "and two modules where only one offers a protocol is fine"
+      ;; The ordinary co-location case must keep working: `service user tenant`
+      ;; where tenant offers nothing.
+      (let [cfg (assoc-in config [:active :wagoe/services :beta] {:keys [:wagoe/tenant-service]})
+            [ig-config summary] (main/service-ig-config cfg #{:alpha :beta})]
+        (is (true? (:rpc summary)))
+        (is (contains? ig-config :wagoe/rpc-server))))
+
+    (testing "and without :wagoe/rpc configured, two of them is not an error"
+      ;; Nothing is exposed either way, so there is nothing ambiguous to refuse.
+      (let [cfg (update config :active dissoc :wagoe/rpc)
+            [_ summary] (main/service-ig-config cfg #{:alpha :beta})]
+        (is (false? (:rpc summary)))))))

@@ -145,19 +145,34 @@
       (throw (ex-info problem {:type :configuration-error})))
     (let [selected (selection/service-config full catalogue service-names)
           rpc-cfg  (config/rpc-config config)
-          rpc      (when rpc-cfg
-                     (some (fn [service-name]
-                             (when-let [{:keys [protocol component]}
-                                        (get-in catalogue [service-name :rpc])]
-                               (when (contains? selected component)
-                                 {:wagoe/rpc-server
-                                  (merge (select-keys rpc-cfg [:port :host :service-key :auth])
-                                         {:protocol       protocol
-                                          :implementation (ig/ref component)})})))
-                           (sort service-names)))]
-      [(merge selected rpc)
-       (assoc (selection/summary full selected service-names)
-              :rpc (boolean rpc))])))
+          offered  (->> (sort service-names)
+                        (keep (fn [service-name]
+                                (when-let [{:keys [protocol component]}
+                                           (get-in catalogue [service-name :rpc])]
+                                  (when (contains? selected component)
+                                    [service-name protocol component]))))
+                        vec)]
+      ;; One listener serves one protocol. Picking the first of several and
+      ;; carrying on would leave the others reachable by nobody, with a healthy
+      ;; process and nothing in the log to say so — the failure this whole
+      ;; ticket exists to make visible.
+      (when (and rpc-cfg (< 1 (count offered)))
+        (throw (ex-info
+                (str "These services each offer a protocol over RPC, and one "
+                     "process serves one: "
+                     (str/join ", " (map (comp name first) offered))
+                     ". Run them as separate services, or drop :wagoe/rpc to "
+                     "run them together with none of them reachable.")
+                {:type :configuration-error})))
+      (let [[_ protocol component] (first offered)
+            rpc (when (and rpc-cfg protocol)
+                  {:wagoe/rpc-server
+                   (merge (select-keys rpc-cfg [:port :host :service-key :auth])
+                          {:protocol       protocol
+                           :implementation (ig/ref component)})})]
+        [(merge selected rpc)
+         (assoc (selection/summary full selected service-names)
+                :rpc (boolean rpc))]))))
 
 (defn- start-service!
   "Boot only the named services and block."

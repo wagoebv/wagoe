@@ -1,0 +1,256 @@
+= Deployment topologies
+:toc: macro
+:toclevels: 2
+
+How to run a Wagoe application as more than one process. xref:architecture:scaling.adoc[Sizing & Scaling]
+explains _what_ scales and what does not; this is the running configuration.
+
+Every topology here has been brought up locally. Where a claim is untested, it
+says so.
+
+toc::[]
+
+== The four shapes
+
+[cols="1,2,2",options="header"]
+|===
+| Topology | When | Reference
+
+| Single instance
+| Development, and production until one process is not enough.
+| The root `Dockerfile`. `docker run wagoe:latest`.
+
+| Web + worker
+| Background work must not compete with request handling, or must survive a web
+  rollout.
+| `deploy/k8s/wagoe.yaml` — two Deployments, one image.
+
+| N web replicas behind a load balancer
+| One process is not enough, or a rollout must not drop requests.
+| `deploy/compose/multi-instance.yml`, and the `wagoe-server` Deployment.
+
+| Module as its own service
+| One module needs to scale, deploy or fail separately from the rest.
+| `deploy/compose/per-service.yml`, and the `wagoe-identity` Deployment.
+|===
+
+The same image runs all of them. The container argument selects the mode:
+`server` (default), `worker`, or `service <module>...`.
+
+== Before N replicas
+
+Two things are not replica-safe by default, and both are configuration rather
+than code.
+
+*Rate limiting needs a shared cache.* A limit counted in one JVM is not a limit
+when there are three. With Redis behind it the counter is shared — verified by
+setting the limit to 5 across two replicas and sending twelve requests through
+the load balancer:
+
+[source]
+----
+/web/login 200 upstream=172.21.0.4
+/web/login 200 upstream=172.21.0.4
+/web/login 200 upstream=172.21.0.4
+/web/login 200 upstream=172.21.0.4
+/web/login 200 upstream=172.21.0.4
+/web/login 429 upstream=172.21.0.4
+...
+/web/login 429 upstream=172.21.0.6      <1>
+----
+<1> A replica that had served nothing. Per-JVM counting would have answered
+200 here; it answered 429 because the counter is in Redis.
+
+The application refuses to start with rate limiting enabled and no reachable
+cache, which is the right failure — but `:wagoe/cache` ships under `:inactive`
+in `resources/conf/prod/config.edn`. Move it to `:active` and point it at
+Redis. That is an edit to your own config file; no environment variable does
+it, which is why the compose reference deploys Redis but leaves
+`HTTP_RATE_LIMIT_ENABLED` off.
+
+*Realtime pub/sub is not replica-safe at all.* A WebSocket connected to replica
+A does not see an event published on replica B. Sticky sessions do not fix it —
+the publisher and subscriber are different connections. Until the Redis-backed
+adapter lands, either run realtime on a single replica or do not rely on it
+across them.
+
+Scheduled work is the third: N workers run every job N times. Run one worker.
+
+== Health endpoints
+
+[cols="1,3",options="header"]
+|===
+| Endpoint | Meaning
+
+| `/health/live`
+| The process is up. Liveness probes point here. It never checks a dependency —
+  a database outage should not have Kubernetes restart every pod.
+
+| `/health/ready`
+| The process can serve. Checks the database, and the cache when configured.
+  *Answers 503 when a dependency is down*, which is what takes a pod out of the
+  load balancer instead of letting it fail requests.
+
+| `/health`
+| Coarse liveness, kept for existing probes.
+|===
+
+Point readiness probes at `/health/ready` and liveness at `/health/live`. Both
+are already served; the manifests wire them.
+
+== Environment
+
+The prod profile reads these. Names matter: `POSTGRES_*`, not `DB_*` — the wrong
+name fails the boot at `:wagoe/db-context` with "Invalid database
+configuration", and until BOU-89 the shipped manifests had it wrong.
+
+[cols="1,3",options="header"]
+|===
+| Variable | Notes
+
+| `JWT_SECRET`
+| Required, at least 32 characters.
+
+| `POSTGRES_HOST` `POSTGRES_PORT` `POSTGRES_DB` `POSTGRES_USER` `POSTGRES_PASSWORD`
+| Required.
+
+| `REDIS_HOST` `REDIS_PORT` `REDIS_PASSWORD`
+| Read only when `:wagoe/cache` is `:active`. Leave `REDIS_PASSWORD` unset for a
+  Redis with no password rather than setting it empty — the adapter treats blank
+  as absent, but a value that does not match the server produces an AUTH error
+  naming Redis, which sends you to look at the server instead of the variable.
+  The reference topologies give their bundled Redis a password and match it.
+  `:database` in the cache config is honoured whether or not there is a
+  password; it was not before BOU-89, so a passwordless deployment isolating
+  environments by Redis database was writing to DB 0.
+
+| `SENTRY_DSN`
+| Required, because error reporting defaults to `:sentry` and refuses to start
+  without it — a deployment that forgot to configure it should fail loudly
+  rather than run blind. To run without Sentry deliberately, set
+  `ERROR_REPORTING_PROVIDER=no-op`.
+
+| `RPC_PORT` `RPC_SERVICE_KEY`
+| Only for a process running `service <module>`. The key is at least 32
+  characters and has no default: the endpoint invokes port methods directly, so
+  a service that cannot authenticate callers must not start.
+
+| `HTTP_DRAIN_TIMEOUT_MS`
+| How long to finish in-flight requests on `SIGTERM`. Keep the pod's
+  `terminationGracePeriodSeconds` above it.
+|===
+
+== N replicas, locally
+
+[source,bash]
+----
+docker build -t wagoe:latest .
+export JWT_SECRET="at-least-32-characters-............."
+docker compose -f deploy/compose/multi-instance.yml up -d --scale web=3
+curl -i http://localhost:8080/health/ready
+----
+
+`web` publishes no host port. The load balancer is the only way in, which is
+what stops the replicas being decorative — with a published port, `--scale`
+collides and only one instance is ever reached.
+
+To see the balancing, the load balancer logs which replica served each request:
+
+[source,bash]
+----
+docker compose -f deploy/compose/multi-instance.yml logs lb | grep -oE 'upstream=[0-9.]+:3000' | sort | uniq -c
+#   3 upstream=172.20.0.5:3000
+#   5 upstream=172.20.0.6:3000
+#   4 upstream=172.20.0.7:3000
+----
+
+The application's own access logging skips the health endpoints, so without
+this there is nothing to look at.
+
+== A module as its own service
+
+[source,bash]
+----
+export JWT_SECRET="at-least-32-characters-............."
+export RPC_SERVICE_KEY="at-least-32-characters-............."
+docker compose -f deploy/compose/per-service.yml up -d
+----
+
+Both are required — the compose file refuses to interpolate without them, which
+is deliberate: a secret with a default is a secret nobody sets.
+
+`service user` boots the user module and the platform it needs — 19 of 29
+components in the prod profile — and serves `IUserService` on port 3001 for the
+rest of the deployment. The composition is logged at start-up, including what
+was left out, so a service that quietly kept everything is visible rather than
+merely healthy.
+
+The `app` container in that file is an ordinary `server`, and still runs its own
+copy of the user module. Pointing it at the remote one means building the
+adapter in place of the local component:
+
+[source,clojure]
+----
+(rpc-client/remote-adapter user-ports/IUserService
+                          (System/getenv "USER_SERVICE_URL")
+                          {:service-key (System/getenv "RPC_SERVICE_KEY")})
+----
+
+That is a wiring decision in an application's own config — which component a key
+resolves to — not something a framework reference can make for it. The compose
+file says so rather than setting a URL that nothing reads.
+
+*One process serves one protocol.* A service naming two RPC-capable modules —
+`service user payments`, once both offer one — is refused at start-up, naming
+both. Serving the first and carrying on would leave the other reachable by
+nobody, with a healthy process and nothing in the log. Run them as separate
+services.
+
+The RPC port is published to nothing. It invokes port methods directly, so it
+belongs on the internal network:
+
+[source,bash]
+----
+# from another container on the network — no service key
+curl -X POST http://identity:3001/rpc -d '[]'                       # 401
+
+# with the key, malformed body
+curl -X POST http://identity:3001/rpc -H "x-rpc-service-key: $RPC_SERVICE_KEY" -d '[]'   # 400
+
+# from the host
+curl http://localhost:3001/rpc                                      # connection refused
+----
+
+Which modules can run this way is declared in the service catalogue — see
+xref:architecture:scaling.adoc#service-launch-mode[Running a module as a
+service]. A module that is `:inactive` in your config cannot: `service payments`
+against the stock prod profile is refused with "This configuration builds
+nothing for: payments. The module is probably disabled in config." Enable the
+module first.
+
+== Kubernetes
+
+`deploy/k8s/wagoe.yaml` is one file with the whole set: Secret, ConfigMap, the
+server Deployment and its Service, the worker Deployment, Redis, an Ingress, and
+a module-as-a-service Deployment with a ClusterIP Service on the RPC port only.
+
+[source,bash]
+----
+kubectl apply -f deploy/k8s/wagoe.yaml
+----
+
+Replace `REGISTRY/wagoe:TAG` and the Secret values. The manifests validate
+against upstream schemas (`kubeconform -strict`); they have not been applied to
+a running cluster as part of this work, so treat resource requests, the Ingress
+class and storage as starting points for your environment rather than as tested
+values.
+
+Two details worth keeping when you adapt them:
+
+* `terminationGracePeriodSeconds` is above `HTTP_DRAIN_TIMEOUT_MS`, and a
+  `preStop` sleep gives the endpoints time to remove the pod before it stops
+  accepting. Without both, a rollout drops requests that were already in flight.
+
+* `proxy-next-upstream` is `error timeout` — retry only a connection that was
+  never established. Adding `http_500` replays a POST that already reached a
+  pod, which is how a payment is taken twice.

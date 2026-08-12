@@ -254,3 +254,66 @@
        (is (map? stats))
        (is (contains? stats :hits))
        (is (contains? stats :misses))))))
+
+(deftest ^:unit a-blank-password-is-no-password
+  ;; `#env REDIS_PASSWORD` yields "" for a variable that is set but empty —
+  ;; which is what a Kubernetes Secret with an empty value, and a compose file
+  ;; with a placeholder, both produce. `""` is truthy, so the pool was built
+  ;; with a password and Jedis issued AUTH against a Redis that has none. The
+  ;; error names Redis, so it sends you to look at the server.
+  (testing "a real password is used"
+    (is (= "s3cret" (redis-adapter/configured-password {:password "s3cret"}))))
+
+  (testing "an empty string is not"
+    (is (nil? (redis-adapter/configured-password {:password ""}))))
+
+  (testing "nor is whitespace, which is what a trimmed-but-present value gives"
+    (is (nil? (redis-adapter/configured-password {:password "   "})))
+    (is (nil? (redis-adapter/configured-password {:password "\t"}))))
+
+  (testing "an absent key is not"
+    (is (nil? (redis-adapter/configured-password {})))
+    (is (nil? (redis-adapter/configured-password {:password nil}))))
+
+  (testing "and a non-string is not, rather than being handed to Jedis"
+    (is (nil? (redis-adapter/configured-password {:password 12345})))))
+
+(deftest ^:integration the-configured-database-is-the-one-used
+  ;; `:database` is how deployments keep environments apart inside one Redis.
+  ;; The pool used to be built by one of two constructors, and the
+  ;; no-password one takes no database — so a passwordless deployment wrote to
+  ;; DB 0 whatever it configured. Nothing looked wrong: every read came back,
+  ;; because the reads went to DB 0 too. This fixture has been running against
+  ;; DB 0 rather than the 15 it asks for, for the same reason.
+  (when-redis
+   (let [db     9
+         k      "database-selection-probe"
+         pool   (redis-adapter/create-redis-pool {:host "localhost" :port 6379
+                                                  :database db
+                                                  ;; Blank, as an env var that is
+                                                  ;; set but empty yields.
+                                                  :password ""})
+         cache  (redis-adapter/create-redis-cache pool {})]
+     (try
+       (ports/set-value! cache k "written-by-the-adapter" 60)
+
+       (testing "the value is in the database that was configured"
+         ;; Presence, not equality: the adapter serialises values, so a raw
+         ;; client sees the encoded form. Which database holds the key is the
+         ;; question here.
+         (with-open [j (Jedis. "localhost" 6379)]
+           (.select j (int db))
+           (is (some? (.get j k)))))
+
+       (testing "and not in DB 0, which is where dropping the database lands it"
+         ;; The assertion that fails against the old constructor. Reading back
+         ;; through the cache cannot tell the two apart.
+         (with-open [j (Jedis. "localhost" 6379)]
+           (.select j (int 0))
+           (is (nil? (.get j k)))))
+
+       (finally
+         (with-open [j (Jedis. "localhost" 6379)]
+           (.select j (int db))
+           (.del j (into-array String [k])))
+         (.close pool))))))
