@@ -179,12 +179,181 @@ today, but the architecture is positioned for it.
 
 === What must be built
 
-* *Generic remote-port adapter* — a `clj-http` client that implements a module's protocol, serializes via Malli, propagates correlation-id / tenant / auth, unwraps errors. None exists yet; all cross-module calls are in-process.
+* ✅ *Generic remote-port adapter* — shipped in BOU-90.
+  `wagoe.platform.shell.rpc.client/remote-adapter` returns a value implementing
+  any protocol by calling a service over HTTP, built from the protocol's own
+  `:sigs` so every module's port works without a bespoke client. The counterpart
+  `…rpc.server/rpc-handler` serves a protocol from the process that owns it.
+  correlation-id, tenant and auth ride the same headers the interceptor
+  pipeline already uses. See <<remote-port-adapter>>.
 * *Network resilience* — timeouts, retries, circuit breaker, service discovery (hardcoded URLs for MVP). External adapters use `:throw-exceptions false` but no retry/breaker.
 * *Break the allowlisted dependency cycles* — `check_deps.clj` allows `admin↔user`, `platform↔{user,tenant,admin,workflow,search}`. A cycle means two modules can't be cleanly separated; these must be broken (e.g. extract the shared auth check behind a port) before slicing.
 * *Async option* — there is no event-bus port today (the dead `IEventBus` stub in `libs/user/ports.clj` was removed in BOU-170). Event-driven decoupling needs a dedicated port plus a real adapter (Redis Streams / Kafka / RabbitMQ).
 * *Data ownership decision* — schema-per-tenant assumes co-located modules in one Postgres. Across services either share the DB (pragmatic) or give each service its own; there are no distributed transactions, so split writes become eventual-consistency.
 * *Service launch mode* — `wagoe.main` exposes only `server` and `cli`; slicing needs an entrypoint that boots a named module subset as a service.
+
+[[remote-port-adapter]]
+=== The remote-port adapter
+
+A caller depends on a protocol, never on a concrete record. So a module can move
+into its own process without its callers changing — provided something
+implements that protocol by making a network call. That is this:
+
+[source,clojure]
+----
+;; In the process that owns payments — serve the protocol on its own listener
+(jetty/run-jetty (rpc-server/rpc-app pay-ports/IPaymentProvider provider
+                                    {:service-key service-key})
+                 {:port 3001 :join? false})
+
+;; In the process that consumes it — a value that satisfies IPaymentProvider
+(def payments
+  (rpc-client/remote-adapter pay-ports/IPaymentProvider "http://payments:3001"
+                             {:timeout-ms  5000
+                              :service-key service-key
+                              :context     {:correlation-id id :tenant-id t}}))
+
+(ports/create-checkout-session payments {...})   ; unchanged at the call site
+----
+
+`rpc-app` is a standalone Ring handler, not a route map for a module's `:api`
+or `:web` slot, and that is deliberate. The router rewrites both: `:api` paths
+gain the version prefix and `:web` paths gain `/web`, so a client on the
+default `:path` gets a 404 either way. `:web` is worse than merely wrong — a
+POST there is CSRF-validated when CSRF is enabled, so the call is rejected 403
+by a check meant for browser forms, for which a service-to-service caller has
+no token.
+
+Underneath the mechanics: this endpoint invokes port methods, and the public
+listener is not where it belongs. A sliced-out service serves it on a listener
+reachable only from inside the deployment — which is what the service launch
+mode (BOU-91) starts. A service that serves it elsewhere tells the client with
+`:path`.
+
+The adapter is built from the protocol's `:sigs`, so adding a method to a port
+carries it across the hop with no client change. Each adapter is its own object
+implementing that protocol's interface — not a shared type extended in place,
+which would make every adapter already built satisfy each newly adapted
+protocol, so a payments adapter would answer `satisfies?` for `ICache` and send
+cache calls to the payments URL.
+
+What it does, and what it deliberately does not:
+
+[cols="1,3",options="header"]
+|===
+| | |
+
+| Context
+| `correlation-id`, `tenant-id` and `auth-token` ride `x-correlation-id`,
+  `x-tenant-id` and `Authorization`. A request keeps one correlation id across
+  the hop instead of starting a fresh trace on the far side.
+
+| Wire format
+| `application/transit+json`, negotiated by the muuntaja stack already in the
+  pipeline — so the server side needs no special decoding. Not JSON: both ends
+  are Clojure, and JSON has no keywords. Payments returns `{:status :paid}`,
+  which over JSON arrives as `{:status "paid"}`; `(= :paid (:status r))` would
+  hold in-process and silently stop holding across the hop, which is the exact
+  transparency the adapter exists to provide. Transit also preserves sets,
+  UUIDs and instants.
+
+| Transport errors
+| Returned as data, in the `{:error {:type … :message …}}` shape adapters
+  already use, so a caller needs no new branch. The types distinguish cases
+  that need different responses: `:rpc/unavailable`, `:rpc/timeout`,
+  `:rpc/remote-error`, `:rpc/protocol`, `:rpc/unknown-operation`. An error
+  envelope the server built on purpose survives its own status code — a
+  refused operation reaches the caller as `:rpc/unknown-operation`, not as a
+  generic "status 500". These are *not* raised: they have no in-process
+  equivalent, so no caller has a `catch` for them.
+
+| Thrown exceptions
+| Raised again on the near side, keeping the `:type` from the original
+  `ex-data`. Payment providers throw typed ex-info and nothing catches it —
+  the HTTP boundary reads that `:type` and maps it to a status (ADR-022). If a
+  throw became a returned map across the hop, the caller's `try`/`catch` would
+  stop firing and the error would flow on as though it were a result. Entries
+  in `ex-data` that a wire format cannot carry (a connection, a response
+  object) are dropped rather than allowed to fail the encoding; `:rpc/remote
+  true` on the re-raised exception records that the stack trace describes the
+  calling process, not the one that failed.
+
+| HTTP status
+| A typed error keeps the status it has in-process, read from the same
+  `default-error-mappings` the HTTP boundary uses — a `:not-found` answers 404
+  across the hop as well. The status is what proxies, dashboards and alerting
+  read, and counting a missing record as a server error moves an error budget
+  for something that is not an error. A request the service could not
+  understand is 400; everything else is 500.
+
+| Malformed requests
+| Answered, not thrown. The endpoint is reachable by anything that can post to
+  it, so a body carrying no operation — or an operation that is not a name, or
+  the wrong number of arguments for one — comes back as `:rpc/protocol` with
+  `400`. A request the service could not understand is the caller's error;
+  reserving `500` for the service actually failing keeps the two apart in an
+  operator's logs.
+
+  Argument count is checked against the protocol's own `:sigs` before the
+  method is invoked. Letting `apply` raise an `ArityException` would be
+  indistinguishable at that point from the implementation failing, so a client
+  built against a different version of the protocol — the case this is most
+  likely to arise from — would be reported as the service breaking, and
+  re-raised as an exception on the near side.
+
+| Retries
+| Only failures where the call may not have completed, and only
+  `:rpc/unavailable` among those by default. A timeout is *not* retried: a call
+  that timed out may well have executed, and re-sending it could charge twice.
+  Override with `:retry-on`.
+
+  Which failures count as never-executed is decided conservatively. A
+  `SocketException` reading `Network is unreachable` was never sent and is
+  retryable; one reading `Connection reset` happened with the request already
+  on the wire and is not, though both are the same class. An unrecognised
+  failure is treated as possibly-executed — being wrong that way costs a retry
+  that would have helped, the other way costs a duplicate payment.
+
+  The HTTP client's own retry handler is disabled. Apache HttpClient resends
+  low-level I/O failures before this code sees an outcome, so `:retries 0` and
+  keeping `:rpc/timeout` out of `:retry-on` would not have prevented a second
+  checkout submission — whether to resend is a decision this adapter makes, and
+  it cannot make it if something underneath has already decided.
+
+  An *answer* is never retried, whatever `:retry-on` says — a result, or an
+  error envelope the service built on purpose. That distinction is structural
+  rather than read off the shape of the value, because adapters here return
+  `{:error {:type …}}` as an ordinary result: a protocol method's legitimate
+  return can look exactly like a transport failure, and re-sending a call that
+  already ran is a second charge.
+
+| Exposure
+| The server resolves an operation against the protocol's own `:sigs`. An
+  operation the protocol does not declare is refused, so the endpoint cannot
+  become a general-purpose remote eval.
+
+| Authentication
+| A service key in `x-rpc-service-key`, required, minimum 32 characters,
+  compared in constant time. Validated when the handler is built, so a service
+  configured without one fails to start rather than coming up serving port
+  methods to anything that can reach the port. `:sigs` bounds *what* may be
+  called; this bounds *who*. Deliberately not the `Authorization` header, which
+  carries the end user's token through the hop — sharing them would let any
+  caller with a valid user token invoke ports directly. `{:auth :none}` opts
+  out explicitly, for a listener that is not externally reachable; it is
+  spelled out so it can be grepped for and never happens by omission.
+
+  This is not a substitute for keeping the endpoint off a public listener. It
+  is the part that can be enforced in code.
+
+| Service discovery
+| Not included — the URL is configuration. Hardcoded or env-supplied for now,
+  as the MVP in this document assumes.
+
+| Circuit breaker
+| Not included. Timeouts and bounded retries are in; a breaker needs shared
+  state to be useful across replicas and is the next piece.
+|===
 
 === Sliceability by module
 

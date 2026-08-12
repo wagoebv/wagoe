@@ -14,6 +14,9 @@
          ;; emit, which forced every consumer to ship all three.
          wagoe/cache                    {:local/root "../cache"}
          wagoe/core                     {:local/root "../core"}
+         ;; wagoe.platform.shell.rpc.client — the remote-port adapter (BOU-90),
+         ;; same client libs/external's outbound adapters use.
+         clj-http/clj-http              {:mvn/version "3.13.1"}
          metosin/malli {:mvn/version "0.20.1"}
          org.clojure/tools.logging {:mvn/version "1.3.1"}
 
@@ -46,8 +49,16 @@
 
  :aliases
  {:test      {:extra-paths ["test"]
+              ;; payments is here and not in :deps. The RPC round-trip tests
+              ;; need a real protocol with a real implementation to prove the
+              ;; adapter against, and IPaymentProvider is the pilot BOU-90
+              ;; names. Putting it in :deps would invert the dependency —
+              ;; infrastructure requiring a feature module — and ship payments
+              ;; and its PSP clients to every consumer of platform, which is
+              ;; what BOU-131 just finished removing.
               :extra-deps  {lambdaisland/kaocha {:mvn/version "1.91.1392"}
-                            com.h2database/h2   {:mvn/version "2.4.240"}}
+                            com.h2database/h2   {:mvn/version "2.4.240"}
+                            wagoe/payments      {:local/root "../payments"}}
               :main-opts   ["-m" "kaocha.runner"]}
 
   :clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2026.04.15"}}
