@@ -28,7 +28,13 @@ x-app-env: &app-env
   POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-wagoe}
   REDIS_HOST: redis
   REDIS_PORT: "6379"
-  REDIS_PASSWORD: ""
+  # Matches --requirepass on the redis service below. A blank value would be
+  # worse than useless: it is truthy, so the client would authenticate against
+  # a server expecting none — and the resulting AUTH error names Redis, sending
+  # you to look at the server rather than at this variable. (The adapter now
+  # treats blank as absent; the reference still sets a real password, because a
+  # passwordless Redis on a shared network is not a thing to model.)
+  REDIS_PASSWORD: ${REDIS_PASSWORD:-wagoe-redis}
   # No Sentry in a local reference. Set deliberately rather than left unset:
   # the prod profile defaults to :sentry and refuses to start without a DSN,
   # which is right — a deployment that forgot to configure error reporting
@@ -60,11 +66,14 @@ services:
 
   redis:
     image: redis:7-alpine
-    command: ["redis-server", "--appendonly", "yes"]
+    command: ["redis-server", "--appendonly", "yes",
+              "--requirepass", "${REDIS_PASSWORD:-wagoe-redis}"]
     volumes:
       - redisdata:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      # -a, or the probe fails against the password this server now requires
+      # and the stack never comes up.
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-wagoe-redis}", "ping"]
       interval: 5s
       timeout: 3s
       retries: 20

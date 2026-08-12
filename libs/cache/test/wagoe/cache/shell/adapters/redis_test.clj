@@ -254,3 +254,26 @@
        (is (map? stats))
        (is (contains? stats :hits))
        (is (contains? stats :misses))))))
+
+(deftest ^:unit a-blank-password-is-no-password
+  ;; `#env REDIS_PASSWORD` yields "" for a variable that is set but empty —
+  ;; which is what a Kubernetes Secret with an empty value, and a compose file
+  ;; with a placeholder, both produce. `""` is truthy, so the pool was built
+  ;; with a password and Jedis issued AUTH against a Redis that has none. The
+  ;; error names Redis, so it sends you to look at the server.
+  (testing "a real password is used"
+    (is (= "s3cret" (redis-adapter/configured-password {:password "s3cret"}))))
+
+  (testing "an empty string is not"
+    (is (nil? (redis-adapter/configured-password {:password ""}))))
+
+  (testing "nor is whitespace, which is what a trimmed-but-present value gives"
+    (is (nil? (redis-adapter/configured-password {:password "   "})))
+    (is (nil? (redis-adapter/configured-password {:password "\t"}))))
+
+  (testing "an absent key is not"
+    (is (nil? (redis-adapter/configured-password {})))
+    (is (nil? (redis-adapter/configured-password {:password nil}))))
+
+  (testing "and a non-string is not, rather than being handed to Jedis"
+    (is (nil? (redis-adapter/configured-password {:password 12345})))))

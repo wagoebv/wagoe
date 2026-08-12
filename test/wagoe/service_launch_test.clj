@@ -153,7 +153,13 @@
   ;; is the two halves meeting — the module runs as its own selected subset,
   ;; and a caller holding only the protocol reaches it over HTTP.
   (let [config (-> (test-config)
-                   (assoc-in [:active :wagoe/rpc] {:port 3821
+                   ;; Port 0: the OS picks a free one and the started server is
+                   ;; asked which. A fixed port fails on a machine that happens
+                   ;; to have it bound, or when two runs overlap — and the
+                   ;; failure looks like the RPC layer being broken rather than
+                   ;; the port being taken. (Reintroduced here after being
+                   ;; fixed in BOU-90's own tests; same mistake, same fix.)
+                   (assoc-in [:active :wagoe/rpc] {:port 0
                                                    :service-key service-key}))
         [ig-config summary] (main/service-ig-config config #{:payments})]
 
@@ -164,11 +170,19 @@
              (get-in ig-config [:wagoe/rpc-server :implementation]))))
 
     (testing "and a caller with only the protocol gets an answer from it"
-      (with-system ig-config
-        (fn [_]
-          (let [payments (rpc-client/remote-adapter
+      ;; Without :wagoe/http-server. This test is about the RPC listener, and
+      ;; the application's HTTP port comes from a shared range — two suites
+      ;; running at once, or a dev server left up, and the boot fails on a port
+      ;; that has nothing to do with what is being tested. The RPC listener
+      ;; binds port 0 and is asked which it got.
+      (with-system (dissoc ig-config :wagoe/http-server)
+        (fn [system]
+          (let [port     (.getLocalPort
+                          ^org.eclipse.jetty.server.ServerConnector
+                          (first (.getConnectors (:wagoe/rpc-server system))))
+                payments (rpc-client/remote-adapter
                           pay-ports/IPaymentProvider
-                          "http://localhost:3821"
+                          (str "http://localhost:" port)
                           {:retries 0 :service-key service-key})]
             (is (satisfies? pay-ports/IPaymentProvider payments))
             (is (keyword? (pay-ports/provider-name payments))

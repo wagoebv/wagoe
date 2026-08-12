@@ -43,12 +43,30 @@ Two things are not replica-safe by default, and both are configuration rather
 than code.
 
 *Rate limiting needs a shared cache.* A limit counted in one JVM is not a limit
-when there are three. The application refuses to start with rate limiting
-enabled and no reachable cache, which is the right failure — but `:wagoe/cache`
-ships under `:inactive` in `resources/conf/prod/config.edn`. Move it to
-`:active` and point it at Redis. This is an edit to your own config file; no
-environment variable does it, which is why the compose reference deploys Redis
-but leaves `HTTP_RATE_LIMIT_ENABLED` off.
+when there are three. With Redis behind it the counter is shared — verified by
+setting the limit to 5 across two replicas and sending twelve requests through
+the load balancer:
+
+[source]
+----
+/web/login 200 upstream=172.21.0.4
+/web/login 200 upstream=172.21.0.4
+/web/login 200 upstream=172.21.0.4
+/web/login 200 upstream=172.21.0.4
+/web/login 200 upstream=172.21.0.4
+/web/login 429 upstream=172.21.0.4
+...
+/web/login 429 upstream=172.21.0.6      <1>
+----
+<1> A replica that had served nothing. Per-JVM counting would have answered
+200 here; it answered 429 because the counter is in Redis.
+
+The application refuses to start with rate limiting enabled and no reachable
+cache, which is the right failure — but `:wagoe/cache` ships under `:inactive`
+in `resources/conf/prod/config.edn`. Move it to `:active` and point it at
+Redis. That is an edit to your own config file; no environment variable does
+it, which is why the compose reference deploys Redis but leaves
+`HTTP_RATE_LIMIT_ENABLED` off.
 
 *Realtime pub/sub is not replica-safe at all.* A WebSocket connected to replica
 A does not see an event published on replica B. Sticky sessions do not fix it —
@@ -97,7 +115,11 @@ configuration", and until BOU-89 the shipped manifests had it wrong.
 | Required.
 
 | `REDIS_HOST` `REDIS_PORT` `REDIS_PASSWORD`
-| Read only when `:wagoe/cache` is `:active`.
+| Read only when `:wagoe/cache` is `:active`. Leave `REDIS_PASSWORD` unset for a
+  Redis with no password rather than setting it empty — the adapter treats blank
+  as absent, but a value that does not match the server produces an AUTH error
+  naming Redis, which sends you to look at the server instead of the variable.
+  The reference topologies give their bundled Redis a password and match it.
 
 | `SENTRY_DSN`
 | Required, because error reporting defaults to `:sentry` and refuses to start
