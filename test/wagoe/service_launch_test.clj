@@ -173,3 +173,99 @@
             (is (satisfies? pay-ports/IPaymentProvider payments))
             (is (keyword? (pay-ports/provider-name payments))
                 "answered by the provider in the service process")))))))
+
+;; =============================================================================
+;; Every key the config emits must be accounted for
+;; =============================================================================
+
+(def ^:private platform-keys
+  "Components every service runs, whichever module it is.
+
+   Listed rather than derived, because \"derived\" is what went wrong: the
+   catalogue named `:wagoe/workflow-service`, the config emits `:wagoe/workflow`,
+   and an unclaimed key counts as platform — so the workflow engine ran inside
+   every service, and nothing said anything. Naming these here means a module
+   component the catalogue misses is a test failure instead of a silent
+   passenger."
+  #{:wagoe/db-context :wagoe/logging :wagoe/metrics :wagoe/tracing
+    :wagoe/error-reporting :wagoe/router :wagoe/email :wagoe/cache
+    :wagoe/i18n :wagoe/i18n-http-middleware
+    :wagoe/http-handler :wagoe/http-server :wagoe/dashboard
+    ;; Emitted only when running as a service, and by definition part of it.
+    :wagoe/rpc-server})
+
+(defn- everything-enabled-config
+  "The test profile with every optional module switched on.
+
+   Without this the check is worthless for exactly the modules that broke it:
+   workflow, search and payments are off in this profile, so their keys are
+   never emitted and a wrong name in the catalogue is invisible."
+  []
+  (-> (test-config)
+      (assoc-in [:active :wagoe/workflow] {:enabled? true})
+      (assoc-in [:active :wagoe/search] {:enabled? true})
+      (assoc-in [:active :wagoe/admin] {:enabled? true})))
+
+(deftest ^:integration no-module-component-is-mistaken-for-the-platform
+  (let [config    (everything-enabled-config)
+        full      (config/ig-config config)
+        catalogue (config/service-catalogue config)
+        claimed   (selection/owned-keys catalogue)
+        unclaimed (remove (some-fn claimed platform-keys) (keys full))]
+
+    (testing "the optional modules really are built here"
+      ;; Otherwise this passes by having nothing to check.
+      (is (contains? full :wagoe/workflow))
+      (is (contains? full :wagoe/search))
+      (is (contains? full :wagoe/admin-service)))
+
+    (testing "and every component belongs to a module or to the platform"
+      (is (empty? unclaimed)
+          (str "unclaimed components run in every service: " (pr-str (sort unclaimed)))))))
+
+(deftest ^:integration an-optional-module-does-not-follow-other-services-around
+  ;; The specific consequence of the wrong names: with workflow enabled,
+  ;; `service user` started the workflow engine too.
+  (let [config (everything-enabled-config)
+        [user-cfg _] (main/service-ig-config config #{:user})]
+    (is (not (contains? user-cfg :wagoe/workflow)))
+    (is (not (contains? user-cfg :wagoe/workflow-routes)))
+    (is (not (contains? user-cfg :wagoe/search)))
+    (is (not (contains? user-cfg :wagoe/admin-service)))
+
+    (testing "and it is still selectable in its own right"
+      (let [[wf-cfg _] (main/service-ig-config config #{:workflow})]
+        (is (contains? wf-cfg :wagoe/workflow))
+        (is (contains? wf-cfg :wagoe/workflow-routes))
+        (is (not (contains? wf-cfg :wagoe/search)))))))
+
+(deftest ^:integration a-catalogue-override-is-read-wherever-it-was-written
+  ;; Everything else in these files lives under :active, so that is where an
+  ;; application will put this. Reading only the top level meant the override
+  ;; was ignored and `service my-module` answered "unknown service", which
+  ;; reads as a typo rather than a config that was never consulted.
+  (let [entry {:my-module {:keys [:wagoe/user-service]}}]
+
+    (testing "under :active"
+      (let [catalogue (config/service-catalogue
+                       (assoc-in (test-config) [:active :wagoe/services] entry))]
+        (is (contains? catalogue :my-module))))
+
+    (testing "at the top level"
+      (let [catalogue (config/service-catalogue
+                       (assoc (test-config) :wagoe/services entry))]
+        (is (contains? catalogue :my-module))))
+
+    (testing "and either way the framework's own modules survive"
+      (let [catalogue (config/service-catalogue
+                       (assoc-in (test-config) [:active :wagoe/services] entry))]
+        (is (contains? catalogue :user))
+        (is (contains? catalogue :payments))))
+
+    (testing "an override replaces the entry of the same name outright"
+      ;; Merging into it would leave an application that split a module up with
+      ;; the framework's idea of its keys as well as its own.
+      (let [catalogue (config/service-catalogue
+                       (assoc-in (test-config) [:active :wagoe/services]
+                                 {:user {:keys [:wagoe/user-service]}}))]
+        (is (= [:wagoe/user-service] (get-in catalogue [:user :keys])))))))

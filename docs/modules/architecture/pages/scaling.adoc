@@ -211,12 +211,20 @@ Which keys belong to which module is declared, not guessed:
 
 [source,clojure]
 ----
-;; config.edn — merged over wagoe.config/default-service-catalogue
+;; config.edn, under :active — merged over
+;; wagoe.config/default-service-catalogue, replacing an entry of the same name
+;; rather than merging into it
 :wagoe/services
 {:payments {:keys [:wagoe/payment-provider]
             :rpc  {:protocol  'my.app.payments.ports/IPaymentProvider
                    :component :wagoe/payment-provider}}}
 ----
+
+The keys must be the ones the config actually emits. Naming a component that
+does not exist does not fail — the real component is then claimed by nobody,
+counts as platform, and runs inside every service. `wagoe.service-launch-test`
+asserts every emitted key is either claimed by a module or listed as platform,
+which is the only thing that catches it.
 
 A key no entry claims counts as platform and runs everywhere. That is the
 deliberate failure direction: a catalogue that has fallen behind boots a

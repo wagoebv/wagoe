@@ -678,9 +678,14 @@
    :admin    {:keys [:wagoe/admin-schema-provider :wagoe/admin-service
                      :wagoe/admin-routes]}
 
-   :workflow {:keys [:wagoe/workflow-service :wagoe/workflow-routes]}
+   ;; :wagoe/workflow and :wagoe/search, not :wagoe/*-service — the service
+   ;; component carries the bare module name here, and the invented names left
+   ;; the real components unclaimed, which meant `core-keys` counted them as
+   ;; platform and ran them in every service. `main-test` now asserts every key
+   ;; the config emits is claimed or listed as platform.
+   :workflow {:keys [:wagoe/workflow :wagoe/workflow-routes]}
 
-   :search   {:keys [:wagoe/search-service :wagoe/search-routes]}
+   :search   {:keys [:wagoe/search :wagoe/search-routes]}
 
    :payments {:keys [:wagoe/payment-provider]
               :rpc  {:protocol  'wagoe.payments.ports/IPaymentProvider
@@ -691,9 +696,17 @@
 
    An entry in config.edn replaces the default one of the same name outright
    rather than merging into it, so an application that has taken a module apart
-   is not left with the framework's idea of its keys."
+   is not left with the framework's idea of its keys.
+
+   Read from `:active` — where everything else in these files lives — and, for
+   an application that put it at the top level next to `:test/reset-endpoint-
+   enabled?`, from there too. Accepting only one placement meant a catalogue
+   written in the obvious spot was silently ignored, and the symptom was
+   `service my-module` reporting the module as unknown, which reads as a typo."
   [config]
-  (merge default-service-catalogue (:wagoe/services config)))
+  (merge default-service-catalogue
+         (:wagoe/services config)
+         (get-in config [:active :wagoe/services])))
 
 (defn rpc-config
   "Settings for the RPC endpoint a service exposes, or nil if none configured."

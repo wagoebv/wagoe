@@ -64,6 +64,14 @@
   ;; Written without the #env reader macro on purpose: `bb doctor` reads this
   ;; file as text, so a commented-out reference is still reported as an unset
   ;; variable.
+  ;;
+  ;; Module catalogue for `service` mode — which Integrant keys each module
+  ;; owns. Merged over wagoe.config/default-service-catalogue; an entry of the
+  ;; same name replaces the framework's outright. The keys must be ones this
+  ;; config actually emits: a component nobody claims counts as platform and
+  ;; runs in every service.
+  ;; :wagoe/services
+  ;; {:my-module {:keys [:my-app/service :my-app/routes]}}
 
   :wagoe/http
   {:port       #long #or [#env HTTP_PORT 3000]
