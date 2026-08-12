@@ -1,0 +1,98 @@
+# Reference topology: one module running as its own service.
+#
+# The application runs as usual; one module also runs in its own container and
+# is reached over the remote-port adapter. Nothing at the call site changes —
+# the app still calls `(ports/create-checkout-session provider ...)`, and the
+# provider it holds happens to make an HTTP request (BOU-90, BOU-91).
+#
+#   docker build -t wagoe:latest .
+#   docker compose -f deploy/compose/per-service.yml up -d
+#   curl -i http://localhost:3000/health/ready
+#
+# Worth being clear about what this demonstrates and what it does not. The
+# mechanism is complete: `service payments` boots that module and nothing else,
+# serves its protocol on its own port, and the adapter reaches it. Wiring the
+# *application* to use a remote provider instead of a local one is a config
+# change in the app, and belongs to the app rather than to this file.
+
+name: wagoe-per-service
+
+x-app-env: &app-env
+  WAG_ENV: prod
+  JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET to at least 32 characters}
+  # POSTGRES_*, not DB_* — see multi-instance.yml.
+  POSTGRES_HOST: postgres
+  POSTGRES_PORT: "5432"
+  POSTGRES_DB: wagoe
+  POSTGRES_USER: wagoe
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-wagoe}
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+  REDIS_PASSWORD: ""
+  # No Sentry in a local reference. Set deliberately rather than left unset:
+  # the prod profile defaults to :sentry and refuses to start without a DSN,
+  # which is right — a deployment that forgot to configure error reporting
+  # should fail loudly. A real deployment removes this line and sets SENTRY_DSN.
+  ERROR_REPORTING_PROVIDER: "no-op"
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: wagoe
+      POSTGRES_USER: wagoe
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-wagoe}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wagoe -d wagoe"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # The application, without the payments module.
+  app:
+    image: wagoe:latest
+    command: ["server"]
+    environment:
+      <<: *app-env
+      # Where the payments service is. The adapter appends its own path.
+      USER_SERVICE_URL: http://identity:3001
+      RPC_SERVICE_KEY: ${RPC_SERVICE_KEY:?set RPC_SERVICE_KEY to at least 32 characters}
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+  # One module, on its own. `service user` boots that module plus the platform
+  # it needs and nothing else, and serves IUserService over the remote-port
+  # endpoint.
+  #
+  # `user` rather than `payments` because payments ships :inactive in the prod
+  # profile, and a reference that does not start is not a reference. Running
+  # `service payments` against a config that has it disabled is refused with
+  # "This configuration builds nothing for: payments. The module is probably
+  # disabled in config." — enable the module in your own config.edn first.
+  identity:
+    image: wagoe:latest
+    command: ["service", "user"]
+    environment:
+      <<: *app-env
+      RPC_PORT: "3001"
+      RPC_SERVICE_KEY: ${RPC_SERVICE_KEY:?set RPC_SERVICE_KEY to at least 32 characters}
+    # No published port. The RPC endpoint invokes port methods directly, so it
+    # belongs on the internal network and nowhere else. The service key is the
+    # part that can be enforced in code; not publishing the port is the part
+    # that cannot.
+    expose:
+      - "3000"
+      - "3001"
+    depends_on:
+      postgres: { condition: service_healthy }

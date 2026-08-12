@@ -4,3 +4,4 @@
 ** xref:architecture:conventions.adoc[Conventions]
 ** xref:architecture:testing-strategy.adoc[Testing Strategy]
 ** xref:architecture:scaling.adoc[Sizing & Scaling]
+** xref:architecture:deployment-topologies.adoc[Deployment Topologies]

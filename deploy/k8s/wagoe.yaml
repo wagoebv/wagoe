@@ -15,8 +15,14 @@ type: Opaque
 stringData:
   # Replace with real values (or source from your secret manager / sealed-secrets).
   JWT_SECRET: "change-me-min-32-chars-................"
-  DB_PASSWORD: "change-me"
+  # POSTGRES_PASSWORD, not DB_PASSWORD — the prod profile reads POSTGRES_*.
+  # With the wrong name the pods fail at :wagoe/db-context with "Invalid
+  # database configuration", which is what these manifests did until BOU-89.
+  POSTGRES_PASSWORD: "change-me"
   REDIS_PASSWORD: "change-me"
+  # Only consumed by a Deployment running `service <module>`; harmless
+  # elsewhere. At least 32 characters — the endpoint refuses to start otherwise.
+  RPC_SERVICE_KEY: "change-me-min-32-chars-................"
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -25,6 +31,14 @@ metadata:
 data:
   WAG_ENV: "prod"
   HTTP_PORT: "3000"
+  POSTGRES_HOST: "wagoe-postgres"
+  POSTGRES_PORT: "5432"
+  POSTGRES_DB: "wagoe"
+  POSTGRES_USER: "wagoe"
+  # SENTRY_DSN is required when error reporting is :sentry, which is the prod
+  # default — a deployment that forgot to configure it fails loudly rather than
+  # running blind. Set the DSN, or opt out deliberately:
+  #   ERROR_REPORTING_PROVIDER: "no-op"
   # Rate limiting in :prod requires an active Redis cache (the app refuses to
   # boot with rate limiting enabled and no cache — see BOU-173). Point these at
   # your Redis and enable it once it is reachable.
@@ -108,3 +122,135 @@ spec:
             requests: { cpu: "250m", memory: "512Mi" }
             limits: { memory: "768Mi" }
       terminationGracePeriodSeconds: 45
+---
+# Redis. Needed once :wagoe/cache is moved from :inactive to :active in your
+# config.edn — which is what makes rate limiting safe across replicas, since a
+# limit counted per pod is not a limit. Single replica, no persistence: enough
+# for rate limits and sessions, not a datastore. Use a managed Redis for
+# anything you would miss.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wagoe-redis
+  labels: { app: wagoe, role: redis }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: wagoe, role: redis }
+  template:
+    metadata:
+      labels: { app: wagoe, role: redis }
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          ports:
+            - containerPort: 6379
+          readinessProbe:
+            exec: { command: ["redis-cli", "ping"] }
+            periodSeconds: 5
+          resources:
+            requests: { cpu: "50m", memory: "128Mi" }
+            limits: { memory: "256Mi" }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: wagoe-redis
+spec:
+  selector: { app: wagoe, role: redis }
+  ports:
+    - port: 6379
+      targetPort: 6379
+---
+# The way in. `wagoe` (the Service above) load-balances across the server
+# replicas; this exposes it.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: wagoe
+  annotations:
+    # Long enough for the graceful drain; shorter and the ingress cuts requests
+    # the pod is still finishing during a rollout.
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    # Retry the next pod only for a connection that was never established.
+    # Replaying a POST that already reached a pod is how a payment is taken
+    # twice.
+    nginx.ingress.kubernetes.io/proxy-next-upstream: "error timeout"
+spec:
+  rules:
+    - host: wagoe.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: wagoe
+                port: { number: 80 }
+---
+# One module as its own service (BOU-91). The same image again; `service user`
+# boots that module plus the platform it needs, and serves IUserService over the
+# remote-port endpoint on 3001.
+#
+# Two ports, two audiences. 3000 carries the health probes. 3001 is the RPC
+# endpoint, which invokes port methods directly — it is deliberately absent from
+# any Ingress, and the ClusterIP Service below is reachable only from inside the
+# cluster. The service key is the part enforced in code; not exposing the port
+# is the part that is not.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wagoe-identity
+  labels: { app: wagoe, role: identity }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: wagoe, role: identity }
+  template:
+    metadata:
+      labels: { app: wagoe, role: identity }
+    spec:
+      containers:
+        - name: wagoe
+          image: REGISTRY/wagoe:TAG
+          args: ["service", "user"]
+          ports:
+            - { name: http, containerPort: 3000 }
+            - { name: rpc, containerPort: 3001 }
+          env:
+            - name: RPC_PORT
+              value: "3001"
+          envFrom:
+            - configMapRef: { name: wagoe-config }
+            - secretRef: { name: wagoe-secrets }
+          livenessProbe:
+            httpGet: { path: /health/live, port: 3000 }
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          readinessProbe:
+            # Readiness gates RPC traffic as well: the endpoint shares the
+            # process, so a pod whose database is down must stop receiving
+            # calls from other services, not only from users.
+            httpGet: { path: /health/ready, port: 3000 }
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          lifecycle:
+            preStop:
+              exec: { command: ["sleep", "10"] }
+          resources:
+            requests: { cpu: "250m", memory: "512Mi" }
+            limits: { memory: "768Mi" }
+      terminationGracePeriodSeconds: 45
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: wagoe-identity
+spec:
+  # ClusterIP, and no Ingress rule anywhere for it. Callers reach it as
+  # http://wagoe-identity:3001 from inside the cluster.
+  type: ClusterIP
+  selector: { app: wagoe, role: identity }
+  ports:
+    - { name: rpc, port: 3001, targetPort: 3001 }

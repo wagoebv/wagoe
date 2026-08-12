@@ -195,6 +195,10 @@ today, but the architecture is positioned for it.
 [[service-launch-mode]]
 === Running a module as a service
 
+Running configuration — compose files, Kubernetes manifests, the environment
+variables and what has actually been brought up — is in
+xref:architecture:deployment-topologies.adoc[Deployment Topologies].
+
 `service` boots only the modules named and the platform they need:
 
 [source,bash]
@@ -445,7 +449,7 @@ The architecture delivers the promise; these are the concrete pieces that make
 . ✅ *Graceful connection draining* — shipped in BOU-86. Configurable shutdown grace (`:wagoe/http :drain-timeout-ms`) lets rollouts finish in-flight requests; Jetty `GracefulHandler` + `setStopTimeout` wired in `wiring.clj`.
 . ✅ *Default rate-limit wiring* — shipped in BOU-87. Config-driven `http-rate-limit-protection` is in the default pipeline; enable via `:wagoe/http :rate-limit` and it uses the Redis cache for a cross-replica limit (per-process fallback documented).
 . ✅ *Jobs hardening* — shipped in BOU-88. Missing-handler jobs are re-enqueued (bounded) instead of silently dead-lettered, an empty-registry worker warns at startup, and scheduled-job promotion is an atomic claim (`ZREM` / `swap-vals!`) so a due job runs exactly once across workers.
-. *Deploy topology reference* — compose + k8s example with N replicas, Redis, a load balancer, instance-id, and a web/worker split.
+. ✅ *Deploy topology reference* — done (BOU-89). Compose + k8s with N replicas, Redis, a load balancer, the web/worker split and a module-as-a-service, in xref:architecture:deployment-topologies.adoc[Deployment Topologies]. No instance-id variable: nothing in the codebase reads one, so adding it would have been decoration.
 
 For *functional decomposition* (the bigger bet):
 

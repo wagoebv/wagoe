@@ -1,5 +1,6 @@
 (ns wagoe.config-test
   (:require [wagoe.config :as sut]
+            [wagoe.platform.shell.adapters.database.protocols :as db-protocols]
             [clojure.test :refer [deftest is testing]]
             [integrant.core :as ig]))
 
@@ -99,3 +100,56 @@
     (testing "cache-enabled user service wiring keeps the cache dependency"
       (is (= (ig/ref :wagoe/cache)
              (get-in ig-config [:wagoe/user-service :cache]))))))
+
+;; =============================================================================
+;; Every profile's database configuration must be one the framework accepts
+;; =============================================================================
+
+(deftest ^:integration every-profile-builds-a-valid-database-config
+  ;; Found by BOU-89, by actually running the prod image: the prod and acc
+  ;; profiles could not boot at all. Two independent defects, both invisible
+  ;; without starting the thing —
+  ;;
+  ;;   * :port was `#env "POSTGRES_PORT"`, a string, against [:port pos-int?];
+  ;;   * :pool carried :keepalive-time-ms, :validation-timeout-ms and
+  ;;     :leak-detection-threshold-ms, which nothing applies and which the
+  ;;     :closed pool schema rejects.
+  ;;
+  ;; Neither is reachable from the test profile, which uses H2. This checks the
+  ;; profiles nobody runs locally.
+  (let [placeholder (fn [spec]
+                      ;; #env with no value yields nil under test, where the
+                      ;; variables are not set. Substituting representative
+                      ;; values keeps the check on the parts of the shape that
+                      ;; the config file decides — the pool, the port, the
+                      ;; adapter — rather than on the environment.
+                      (cond-> spec
+                        (nil? (:host spec))     (assoc :host "db.example")
+                        (nil? (:name spec))     (assoc :name "app")
+                        (nil? (:username spec)) (assoc :username "app")
+                        (nil? (:password spec)) (assoc :password "secret")))]
+    (doseq [profile [:dev :test :prod :acc]]
+      (testing (str "the " (name profile) " profile")
+        (let [spec (placeholder (sut/db-spec (sut/load-config {:profile profile})))]
+          (testing "the port is a number, not the string an env var yields"
+            (when (contains? spec :port)
+              (is (pos-int? (:port spec))
+                  (str profile " :port is " (pr-str (:port spec))))))
+
+          (testing "and the whole spec is one the adapter accepts"
+            (is (nil? (:errors (try (db-protocols/validate-db-config spec) nil
+                                    (catch clojure.lang.ExceptionInfo e (ex-data e)))))
+                (str profile " database configuration is rejected — this profile cannot boot"))))))))
+
+(deftest ^:integration pool-settings-that-nothing-applies-are-not-configured
+  ;; The specific shape of the second defect. A pool key the connection builder
+  ;; ignores is dead config at best; because the schema is :closed it is also
+  ;; fatal. Listing the applied set here means adding a key to a profile
+  ;; without wiring it fails loudly.
+  (let [applied #{:minimum-idle :maximum-pool-size :connection-timeout-ms
+                  :idle-timeout-ms :max-lifetime-ms}]
+    (doseq [profile [:dev :test :prod :acc]]
+      (let [pool (:pool (sut/db-spec (sut/load-config {:profile profile})))
+            extra (remove applied (keys pool))]
+        (is (empty? extra)
+            (str profile " sets pool keys nothing applies: " (pr-str extra)))))))

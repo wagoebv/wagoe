@@ -15,7 +15,8 @@
   ;; Database configuration (typically PostgreSQL in acceptance)
   :wagoe/postgresql
   {:host          #env "POSTGRES_HOST"
-   :port          #env "POSTGRES_PORT"
+   ;; #long — see the note in the prod profile.
+   :port          #long #or [#env "POSTGRES_PORT" 5432]
    :dbname        #env "POSTGRES_DB"
    :user          #env "POSTGRES_USER"
    :password      #env "POSTGRES_PASSWORD"
@@ -24,10 +25,9 @@
                    :maximum-pool-size 20
                    :connection-timeout-ms 30000
                    :idle-timeout-ms 600000
-                   :max-lifetime-ms 1800000
-                   :keepalive-time-ms 30000
-                   :validation-timeout-ms 5000
-                   :leak-detection-threshold-ms 60000}}
+                   ;; Only these five — see the note in the prod profile.
+                   :max-lifetime-ms 1800000}}
+
 
   ;; Acceptance logging configuration
   :wagoe/logging
