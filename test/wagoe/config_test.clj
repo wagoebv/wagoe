@@ -153,3 +153,30 @@
             extra (remove applied (keys pool))]
         (is (empty? extra)
             (str profile " sets pool keys nothing applies: " (pr-str extra)))))))
+
+(deftest ^:integration prod-does-not-acquire-dependencies-it-did-not-have
+  ;; A profile is a deployment contract: a component appearing in :active is a
+  ;; service every existing deployment suddenly has to provide. This pins the
+  ;; opt-in ones so a block edited near them cannot drift across the boundary —
+  ;; which is easy to do by hand, and invisible in a diff that shows only the
+  ;; lines that moved.
+  (let [prod (sut/load-config {:profile :prod})
+        active (set (keys (:active prod)))]
+
+    (testing "the cache is opt-in"
+      ;; Moving it to :active turns the prod default into a Redis dependency
+      ;; for deployments that never provisioned one.
+      (is (not (contains? active :wagoe/cache)))
+      (is (empty? (filter #(re-find #"cache" (str %))
+                          (keys (sut/ig-config prod))))
+          "and no cache component is built"))
+
+    (testing "so is every other optional module"
+      (doseq [k [:wagoe/workflow :wagoe/search :wagoe/payments :wagoe/admin]]
+        (is (not (contains? active k)) (str k " must stay opt-in in prod"))))
+
+    (testing "and the components a deployment already had are still there"
+      ;; The other half: this must fail if something was removed from :active
+      ;; as well as if something was added.
+      (doseq [k [:wagoe/postgresql :wagoe/logging :wagoe/error-reporting :wagoe/http]]
+        (is (contains? active k) (str k " disappeared from the prod profile"))))))

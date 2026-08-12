@@ -67,7 +67,6 @@
           ;; adapters/database/common/connection.clj.
           :max-lifetime-ms 1800000}}
 
-
   ;; Production logging configuration
   :wagoe/logging
   {:level :info
@@ -79,7 +78,6 @@
                                  :max-size 50000000 ; 50MB
                                  :pattern ".%d{yyyy-MM-dd}.%i.gz"}}]}
 
-  ;; Production error reporting configuration (Sentry)
   ;; Remote-port endpoint, used only by `service` launch mode (BOU-91). A
   ;; `server` or `worker` boot ignores it — the listener is added to the
   ;; Integrant config only when a module is started as a service, and only when
@@ -92,13 +90,15 @@
   {:port        #long #or [#env "RPC_PORT" 3001]
    :service-key #env "RPC_SERVICE_KEY"}
 
-  :wagoe/error-reporting
+  ;; Production error reporting configuration (Sentry).
+  ;;
   ;; :sentry by default, and it refuses to start without a DSN — a production
   ;; deployment that forgot to configure error reporting should fail loudly
   ;; rather than run blind. ERROR_REPORTING_PROVIDER exists so that a
   ;; deployment which genuinely has no Sentry can say so deliberately
   ;; (`no-op`), instead of the choice being made by an unset variable. The
   ;; reference topologies in deploy/compose set it; real deployments should not.
+  :wagoe/error-reporting
   {:provider #keyword #or [#env "ERROR_REPORTING_PROVIDER" "sentry"]
    :dsn #env "SENTRY_DSN"
    :environment "prod"
