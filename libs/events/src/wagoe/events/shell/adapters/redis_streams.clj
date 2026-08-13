@@ -44,7 +44,13 @@
    reaches. The two adapters agreed on everything except the one thing only a
    real broker exercises."
   {java.time.Instant
-   (transit/write-handler "instant" #(str (.toEpochMilli ^java.time.Instant %)))})
+   ;; ISO-8601, not epoch millis. `Instant/now` is microsecond-precision on a
+   ;; modern JVM — 2026-08-13T08:23:28.536003Z — and `.toEpochMilli` rounds
+   ;; that to .536, so every event's :published-at came back different from
+   ;; what was published, on every event rather than in some edge case. The
+   ;; in-memory adapter does not serialise, so it kept the original and the two
+   ;; disagreed. `.toString` and `Instant/parse` round-trip exactly.
+   (transit/write-handler "instant" #(.toString ^java.time.Instant %))})
 
 (def ^:private read-handlers
   "Read an Instant back as an Instant.
@@ -52,7 +58,7 @@
    Mapping it onto transit's built-in time type would hand the consumer a
    java.util.Date instead, so a round trip would change the type of a value
    nobody asked to convert."
-  {"instant" (transit/read-handler #(java.time.Instant/ofEpochMilli (Long/parseLong %)))})
+  {"instant" (transit/read-handler #(java.time.Instant/parse %))})
 
 (defn- encode
   [event]
@@ -261,14 +267,21 @@
         ;; says `subscribe!` calls the handler with each event, and the
         ;; in-memory adapter does. `:group` is for splitting work between
         ;; *processes*; within one, everybody hears everything.
-        (swap! subscriptions update stream
-               (fn [{:keys [handlers] :as existing}]
-                 (if existing
-                   (assoc existing :handlers (assoc handlers id handler))
-                   {:running  (atom true)
-                    :handlers {id handler}})))
-        (let [{:keys [running]} (get @subscriptions stream)]
-          (when (= 1 (count (:handlers (get @subscriptions stream))))
+        ;; Whether this call created the topic's entry is decided *by* the
+        ;; update, not read back afterwards. Two threads subscribing to the
+        ;; same topic at once could both see two handlers and each conclude the
+        ;; other had started the poller — leaving the topic with subscribers
+        ;; and nothing polling it, which looks like a broker that has stopped
+        ;; delivering.
+        (let [[before after] (swap-vals! subscriptions update stream
+                                         (fn [{:keys [handlers] :as existing}]
+                                           (if existing
+                                             (assoc existing :handlers (assoc handlers id handler))
+                                             {:running  (atom true)
+                                              :handlers {id handler}})))
+              first?  (nil? (get before stream))
+              running (:running (get after stream))]
+          (when first?
             (let [consumer (str (name group) "-" (subs (str (random-uuid)) 0 8))
                   fan-out  (fn [event]
                              ;; Every handler runs, then the first failure is

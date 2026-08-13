@@ -93,7 +93,10 @@
       (let [bus (make)
             topic (unique "contract")
             seen (atom nil)
-            instant (java.time.Instant/ofEpochMilli 1786500000000)
+            ;; `Instant/now`, not `ofEpochMilli`: the latter has nothing below
+            ;; the millisecond, so it cannot notice a wire format that rounds
+            ;; there — which is precisely what the Redis one did.
+            instant (java.time.Instant/now)
             payload {:status   :paid                ; keyword value
                      :tags     #{:new :urgent}      ; a set
                      :count    42
@@ -253,8 +256,7 @@
 
           (testing "a limit takes the most recent, still oldest-first"
             (is (= [3 4]
-                   (map (comp :n :payload) (ports/history bus topic {:limit 2}))
-                   )
+                   (map (comp :n :payload) (ports/history bus topic {:limit 2})))
                 (str label ": a limited read returned the wrong end of the stream")))
 
           (testing "a limit larger than the history returns all of it"
@@ -263,4 +265,72 @@
 
           (testing "and an untouched topic is empty rather than an error"
             (is (= [] (ports/history bus (unique "never-used")))))
+          (finally (stop bus)))))))
+
+(deftest ^:integration an-instant-keeps-the-precision-it-was-created-with
+  ;; `Instant/now` is microsecond-precision on a modern JVM. Encoding it as
+  ;; epoch millis rounded every event's :published-at on the way through, so
+  ;; the value a subscriber saw was never the value that was published — not an
+  ;; edge case, every event. The in-memory adapter does not serialise, so it
+  ;; kept the original and the two disagreed.
+  (doseq [[label make stop] (adapters)]
+    (testing label
+      (let [bus (make)
+            topic (unique "contract")
+            seen (atom nil)
+            ;; A value with something below the millisecond, whatever the
+            ;; platform clock happens to offer.
+            precise (.plusNanos (java.time.Instant/now) 123456)]
+        (try
+          (ports/subscribe! bus topic #(reset! seen %))
+          (Thread/sleep 400)
+          ;; Built here rather than by `emit!`, so the exact envelope that was
+          ;; published is available to compare against — no guessing about what
+          ;; the clock produced.
+          (let [sent (publisher/build :a/b :test {:at precise})]
+            (ports/publish! bus topic sent)
+            (is (wait-for #(some? @seen)))
+
+            (testing "the payload instant is unchanged"
+              (is (= precise (:at (:payload @seen)))
+                  (str label ": expected " precise
+                       " got " (:at (:payload @seen)))))
+
+            (testing "and so is the envelope's own timestamp"
+              (is (= (:published-at sent) (:published-at @seen))
+                  (str label ": :published-at changed on the way through — "
+                       (:published-at sent) " became " (:published-at @seen)))))
+          (finally (stop bus)))))))
+
+(deftest ^:integration subscribing-concurrently-to-one-topic-still-delivers
+  ;; Both threads could see two handlers and each conclude the other had
+  ;; started the poller, leaving a topic with subscribers and nothing polling
+  ;; it — indistinguishable from a broker that has stopped delivering.
+  (doseq [[label make stop] (adapters)]
+    (testing label
+      (let [bus (make)
+            topic (unique "contract")
+            received (atom 0)
+            latch (java.util.concurrent.CountDownLatch. 1)
+            subscribers (doall
+                         (for [_ (range 8)]
+                           (future
+                             ;; All eight wait, then subscribe together.
+                             (.await latch)
+                             (ports/subscribe! bus topic (fn [_] (swap! received inc))))))]
+        (try
+          (.countDown latch)
+          (doseq [f subscribers] (deref f 5000 nil))
+          (Thread/sleep 600)
+
+          (publisher/emit! bus topic :a/b :test {:n 1})
+
+          (testing "the topic is being polled at all"
+            (is (wait-for #(pos? @received))
+                (str label ": nothing polled the topic after concurrent subscribes")))
+
+          (testing "and every subscriber got it exactly once"
+            (Thread/sleep 1500)
+            (is (= 8 @received)
+                (str label ": expected 8 deliveries, got " @received)))
           (finally (stop bus)))))))
