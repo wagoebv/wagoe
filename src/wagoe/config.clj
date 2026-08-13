@@ -631,15 +631,31 @@
    2. Merging it into the final config map
    3. Ensuring the module's wiring namespace is required
 
+   The returned map is data. Initialising it needs the `init-key` methods, and
+   most of them are registered by the namespace that starts the system, not by
+   this one — `ig/init` on the result of `(ig-config (load-config))` alone fails
+   with \"No method in multimethod 'init-key'\".
+
+   Two rules, and the difference matters:
+
+   * **Conditional keys register themselves.** A module-config fn that emits a
+     key only when it is configured requires that module's wiring at the same
+     moment — see `events-module-config` below. Keeping those requires at the
+     top would force every consumer of this namespace to ship jars it may not
+     use (BOU-131).
+   * **Unconditional keys are the entry point's job.** `wagoe.main`,
+     `dev/user.clj` and the generated `config.clj` require the wiring for what
+     they always emit.
+
    Args:
      config: Configuration map from load-config
 
    Returns:
-     Integrant config map ready for integrant.core/init
+     Integrant config map — data, not a started system
 
    Example:
-     (def config (load-config))
-     (def ig-cfg (ig-config config))
+     (require 'wagoe.main)           ; registers the unconditional init-keys
+     (def ig-cfg (ig-config (load-config)))
      (integrant.core/init ig-cfg)"
   [config]
   (merge (core-system-config config)

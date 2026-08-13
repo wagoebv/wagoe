@@ -68,10 +68,13 @@
    :clojars             com.wagoe/wagoe-jobs
    :version             "1.0.0-beta-4"
    :category            :optional
-   :config-snippet      "  :wagoe/jobs\n  {:provider :in-memory}\n"
-   :test-config-snippet "  :wagoe/jobs\n  {:provider :in-memory}\n"
+   :config-snippet      ""
+   :test-config-snippet ""
    :add-command         "wagoe add jobs"
-   :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/jobs/AGENTS.md"}
+   :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/jobs/AGENTS.md"
+   :post-install        ["No Integrant key. Build a queue where you need one:"
+                         "  (require '[wagoe.jobs.shell.adapters.db :as q])"
+                         "  (q/create-db-job-queue db-ctx)"]}
 
   {:name                "email"
    :description         "SMTP email sending, async and queued modes"
@@ -158,20 +161,24 @@
    :clojars             com.wagoe/wagoe-reports
    :version             "1.0.0-beta-4"
    :category            :optional
-   :config-snippet      "  :wagoe/reports\n  {:provider :in-memory}\n"
-   :test-config-snippet "  :wagoe/reports\n  {:provider :in-memory}\n"
+   :config-snippet      ""
+   :test-config-snippet ""
    :add-command         "wagoe add reports"
-   :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/reports/AGENTS.md"}
+   :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/reports/AGENTS.md"
+   :post-install        ["No Integrant key. Register your reports at startup:"
+                         "  (require '[wagoe.reports.shell.registry :as reports])"]}
 
   {:name                "calendar"
    :description         "iCal, RRULE recurrence, conflict detection, Hiccup UI"
    :clojars             com.wagoe/wagoe-calendar
    :version             "1.0.0-beta-4"
    :category            :optional
-   :config-snippet      "  :wagoe/calendar\n  {:provider :in-memory}\n"
-   :test-config-snippet "  :wagoe/calendar\n  {:provider :in-memory}\n"
+   :config-snippet      ""
+   :test-config-snippet ""
    :add-command         "wagoe add calendar"
-   :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/calendar/AGENTS.md"}
+   :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/calendar/AGENTS.md"
+   :post-install        ["No Integrant key. Use the service directly:"
+                         "  (require '[wagoe.calendar.shell.service :as cal])"]}
 
   {:name                "geo"
    :description         "Multi-provider geocoding (OSM/Google/Mapbox), Haversine distance"
@@ -247,7 +254,9 @@
    :clojars             com.wagoe/wagoe-ui-style
    :version             "1.0.0-beta-4"
    :category            :optional
-   :config-snippet      "  :wagoe/ui-style\n  {:bundle :base}\n"
+   :config-snippet      ""
    :test-config-snippet ""
    :add-command         "wagoe add ui-style"
-   :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/ui-style/AGENTS.md"}]}
+   :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/ui-style/AGENTS.md"
+   :post-install        ["Pure data library — no config and no Integrant key."
+                         "Reference a bundle from your page templates."]}]}

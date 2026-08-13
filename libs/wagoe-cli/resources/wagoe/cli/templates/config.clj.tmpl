@@ -93,6 +93,7 @@
    - :wagoe/search       → search bundle + http-handler ref
    - :wagoe/payment-provider → payments component
    - :wagoe/events       → event bus component
+   - :wagoe/push         → push provider, stores, service and routes
    - :wagoe/audience     → audience segmentation component"
   [config]
   (let [active    (:active config)
@@ -103,6 +104,7 @@
         workflow? (boolean (:wagoe/workflow active))
         search?   (boolean (:wagoe/search active))
         events?   (boolean (:wagoe/events active))
+        push?     (boolean (:wagoe/push active))
         audience? (boolean (:wagoe/audience active))
         payments? (boolean (:wagoe/payment-provider active))
         ai?       (boolean (:wagoe/ai-service active))
@@ -137,6 +139,7 @@
         _         (when cache?    (require 'wagoe.cache.shell.module-wiring))
         _         (when payments? (require 'wagoe.payments.shell.module-wiring))
         _         (when events?   (require 'wagoe.events.shell.module-wiring))
+        _         (when push?     (require 'wagoe.push.shell.module-wiring))
         _         (when audience? (require 'wagoe.audience.shell.module-wiring))
 
         db       (db-spec config)
@@ -227,6 +230,26 @@
       ;; Event bus — enabled by `wagoe add events`
       events?
       (assoc :wagoe/events (:wagoe/events active))
+
+      ;; Push notifications — enabled by `wagoe add push`.
+      ;; :wagoe/push is a settings block, not a component: it configures the
+      ;; four :wagoe.push/* components assembled here.
+      push?
+      (merge (let [push-cfg (:wagoe/push active)]
+               {:wagoe.push/fcm-provider    {:provider    (if (:fcm-credentials push-cfg) :fcm :mock)
+                                             :credentials (:fcm-credentials push-cfg)}
+                :wagoe.push/apns-provider   (merge {:provider (if (:apns-credentials push-cfg) :apns :mock)}
+                                                   (:apns-credentials push-cfg))
+                :wagoe.push/device-store    {:db (ig/ref :wagoe/db-context)}
+                :wagoe.push/analytics-store {:db (ig/ref :wagoe/db-context)}
+                :wagoe.push/service         {:device-store    (ig/ref :wagoe.push/device-store)
+                                             :analytics-store (ig/ref :wagoe.push/analytics-store)
+                                             :fcm-provider    (ig/ref :wagoe.push/fcm-provider)
+                                             :apns-provider   (ig/ref :wagoe.push/apns-provider)
+                                             :callback-secret (:callback-secret push-cfg)}
+                :wagoe.push/routes          {:device-store    (ig/ref :wagoe.push/device-store)
+                                             :analytics-store (ig/ref :wagoe.push/analytics-store)
+                                             :callback-secret (:callback-secret push-cfg)}}))
 
       ;; Audience segmentation — enabled by `wagoe add audience`
       audience?
