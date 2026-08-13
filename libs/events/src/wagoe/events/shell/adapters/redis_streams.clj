@@ -58,7 +58,13 @@
    Mapping it onto transit's built-in time type would hand the consumer a
    java.util.Date instead, so a round trip would change the type of a value
    nobody asked to convert."
-  {"instant" (transit/read-handler #(java.time.Instant/parse %))})
+  {"instant" (transit/read-handler #(java.time.Instant/parse %))
+
+   ;; transit tags a PersistentList as "list" and its default reader hands back
+   ;; a LazySeq. The values are equal, so this is invisible to `=` — and not to
+   ;; `list?`, which a consumer that worked in development would then fail on
+   ;; in production. The tag is precise: only a PersistentList carries it.
+   "list"    (transit/read-handler #(apply list %))})
 
 (defn- encode
   [event]

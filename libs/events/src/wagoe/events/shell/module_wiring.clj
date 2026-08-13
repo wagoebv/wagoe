@@ -12,8 +12,18 @@
   (:import (redis.clients.jedis JedisPool JedisPoolConfig)))
 
 (defn- redis-pool
-  [{:keys [host port timeout password database]}]
-  (JedisPool. (JedisPoolConfig.)
+  "A pool sized for the pollers that will use it.
+
+   Each subscribed topic runs a poller that holds a connection for the length
+   of its blocking read, so the pool needs one per topic plus headroom for
+   publishing and acknowledging. Jedis defaults to 8, which is enough until an
+   application subscribes to a ninth topic and then loses events with no error
+   — the poller simply cannot get a connection. 32 is a more useful default;
+   `:max-total` overrides it."
+  [{:keys [host port timeout password database max-total]}]
+  (JedisPool. (doto (JedisPoolConfig.)
+                (.setMaxTotal (int (or max-total 32)))
+                (.setMaxIdle (int (max 8 (quot (or max-total 32) 2)))))
               (or host "localhost")
               (int (or port 6379))
               (int (or timeout 2000))

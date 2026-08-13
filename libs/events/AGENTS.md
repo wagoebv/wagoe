@@ -173,6 +173,19 @@ not optional.
 listens to the same topic. `core.event/matches-tenant?` is the check; an event
 with no `:tenant-id` is a system event and goes to everyone.
 
+**One connection per subscribed topic.** Each topic's poller holds a Redis
+connection for the length of its blocking read. The pool defaults to 32
+connections; an application subscribing to more topics than that loses events
+with no error, because the poller simply cannot get one. Raise `:max-total`.
+
+**Values survive, concrete classes mostly do.** `=` holds for everything that
+crosses the wire, and every type comes back as the class it went in as, with
+one exception: `java.math.BigInteger` returns as `clojure.lang.BigInt`, because
+transit tags them alike and the wire cannot tell them apart. Arithmetic is
+unaffected; `instance?` is not. The exception is listed in
+`adapter_surface_test.clj` with its reason, and anything not listed there is
+required to round-trip exactly.
+
 **Unbounded streams.** `:max-len` trims approximately (default 10 000 entries).
 A stream with no bound is a disk leak that appears in the longest-running
 deployment first.
@@ -209,6 +222,19 @@ clojure -M:test :events
 One of them starts a **second JVM** and has it publish, because two adapters in
 one process share a heap — they prove the wire format and the consumer group,
 and would keep passing if the whole thing depended on something process-local.
+
+Two suites run against *every* adapter:
+
+* `adapter_contract_test.clj` — behaviour that must hold regardless of backend,
+  each case added because the two adapters were once found to disagree about it.
+* `adapter_surface_test.clj` — a deliberate sweep instead of a reaction: every
+  protocol method, times every option, times every kind of value that
+  serialises differently. Anything new added to the port belongs here on the
+  way in.
+
+The second exists because the first grew one finding at a time — five
+disagreements, each found by review, each invisible in-memory. Enumerating the
+surface found the rest in one pass.
 
 ---
 
