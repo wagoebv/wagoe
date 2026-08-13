@@ -140,6 +140,11 @@ roughly half, at random.
 | `:redis-streams` | yes | yes, within stream retention | production, multi-process |
 | `:in-memory` | no | bounded buffer, dies with the process | development, tests |
 
+`history` returns oldest-first, and `{:limit n}` means the **most recent** n —
+which is what a consumer replaying after a restart wants. Both backends agree;
+they did not until BOU-93, where the Redis read returned the oldest n and so
+replayed the start of the stream while omitting everything just missed.
+
 Redis **Streams**, not Redis pub/sub. Pub/sub is fire-and-forget: a subscriber
 that is restarting when an event is published never learns it happened, and
 cannot find out afterwards. A stream keeps its entries and tracks what has not

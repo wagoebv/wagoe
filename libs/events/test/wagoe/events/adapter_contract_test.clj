@@ -228,3 +228,39 @@
                 (str label ": a throwing handler stopped its neighbours "
                      "(before=" @before " after=" @after ")")))
           (finally (stop bus)))))))
+
+(deftest ^:integration history-agrees-about-order-and-about-limit
+  ;; `:limit` means the most recent n, and the result is oldest-first. Redis
+  ;; returned the *oldest* n — XRANGE with a count counts from the beginning —
+  ;; so a consumer replaying history after a restart got the start of the
+  ;; stream and none of what it had just missed. Stale, silent, and only on one
+  ;; backend.
+  (doseq [[label make stop] (adapters)]
+    (testing label
+      (let [bus (make)
+            topic (unique "contract")]
+        (try
+          (doseq [n (range 5)]
+            (publisher/emit! bus topic (keyword "e" (str n)) :test {:n n})
+            ;; Distinct millisecond ids, so "most recent" is unambiguous rather
+            ;; than a tie broken by insertion order.
+            (Thread/sleep 5))
+          (is (wait-for #(= 5 (count (ports/history bus topic)))))
+
+          (testing "unlimited history is oldest-first"
+            (is (= [0 1 2 3 4]
+                   (map (comp :n :payload) (ports/history bus topic)))))
+
+          (testing "a limit takes the most recent, still oldest-first"
+            (is (= [3 4]
+                   (map (comp :n :payload) (ports/history bus topic {:limit 2}))
+                   )
+                (str label ": a limited read returned the wrong end of the stream")))
+
+          (testing "a limit larger than the history returns all of it"
+            (is (= [0 1 2 3 4]
+                   (map (comp :n :payload) (ports/history bus topic {:limit 50})))))
+
+          (testing "and an untouched topic is empty rather than an error"
+            (is (= [] (ports/history bus (unique "never-used")))))
+          (finally (stop bus)))))))

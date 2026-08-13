@@ -334,8 +334,16 @@
             ;; orders entries.
             start   (if since (str (inst-ms since) "-0") "-")
             stream  (stream-key prefix topic)
+            ;; A limit means the *most recent* n, as the in-memory adapter's
+            ;; `take-last` does. XRANGE with a count returns the oldest n, so
+            ;; asking for history after a restart replayed the beginning of the
+            ;; stream and omitted everything that had just happened — stale
+            ;; events, silently, and only on one backend.
+            ;;
+            ;; XREVRANGE takes them from the newest end; the result is reversed
+            ;; back so the order this returns is oldest-first either way.
             entries (if limit
-                      (.xrange jedis stream start "+" (int limit))
+                      (reverse (.xrevrange jedis stream "+" start (int limit)))
                       (.xrange jedis stream start "+"))]
         (into [] (keep (fn [^StreamEntry e]
                          (try (decode (get (.getFields e) payload-field))
