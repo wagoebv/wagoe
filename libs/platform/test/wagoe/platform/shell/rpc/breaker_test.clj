@@ -310,3 +310,49 @@
           (is (= (inc before) @received)
               (str "expected one probe, " (- @received before)
                    " calls reached the service — the breaker state expired early")))))))
+
+(deftest ^:integration a-configured-trip-policy-is-honoured
+  ;; `config-problem` accepts `:rpc/protocol` in `:trip-on`, so the client has
+  ;; to act on it. A 2xx carrying a body that is not an envelope is an answer —
+  ;; the recording used to key off that and record a success, so the breaker
+  ;; could never open for a configuration the validator had approved.
+  (let [received (atom 0)
+        cache    (cache-mem/create-in-memory-cache {})
+        cfg      {:failure-threshold 2 :open-ms 60000 :trip-on #{:rpc/protocol}}
+        app      (fn [_] (swap! received inc)
+                   {:status 200 :headers {"content-type" "text/html"}
+                    :body "<html>not an envelope</html>"})
+        server   (jetty/run-jetty app {:port 0 :join? false})
+        port     (.getLocalPort ^ServerConnector (first (.getConnectors server)))
+        url      (str "http://localhost:" port)]
+    (try
+      (testing "the malformed answers are counted"
+        (dotimes [_ 2]
+          (let [r (client/call! url :get-payment-status ["id"] (opts cache {:circuit-breaker cfg}))]
+            (is (= :rpc/protocol (get-in r [:error :type])))))
+        (is (= 2 @received)))
+
+      (testing "and the breaker opens, as the configuration asked"
+        (let [r (client/call! url :get-payment-status ["id"] (opts cache {:circuit-breaker cfg}))]
+          (is (= :rpc/circuit-open (get-in r [:error :type]))
+              "the configured trip policy was ignored")
+          (is (= 2 @received) "a call reached the service after the breaker opened")))
+      (finally (.stop server)))))
+
+(deftest ^:integration the-default-policy-still-ignores-answers
+  ;; The counterpart. Widening the rule must not make a remote error trip a
+  ;; breaker that was not configured to care.
+  (let [received (atom 0)
+        cache    (cache-mem/create-in-memory-cache {})
+        cfg      {:failure-threshold 2 :open-ms 60000}
+        app      (fn [_] (swap! received inc)
+                   {:status 200 :headers {"content-type" "text/html"} :body "<html>x</html>"})
+        server   (jetty/run-jetty app {:port 0 :join? false})
+        port     (.getLocalPort ^ServerConnector (first (.getConnectors server)))
+        url      (str "http://localhost:" port)]
+    (try
+      (dotimes [_ 5]
+        (client/call! url :get-payment-status ["id"] (opts cache {:circuit-breaker cfg})))
+      (is (= 5 @received)
+          "a protocol error tripped a breaker whose :trip-on does not name it")
+      (finally (.stop server)))))

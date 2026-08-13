@@ -217,10 +217,16 @@
        (loop [attempt 0]
          (let [[outcome result] (post-envelope! url envelope opts)
                error-type (get-in result [:error :type])]
-         ;; The service answered, or it did not. Recorded here rather than after
-         ;; the retry loop, so a call that succeeded on its third attempt still
-         ;; closes the breaker.
-           (if (and (= outcome :transport) (cb/counts-as-failure? cb-cfg error-type))
+           ;; Recorded here rather than after the retry loop, so a call that
+           ;; succeeded on its third attempt still closes the breaker.
+           ;;
+           ;; Decided on the error type alone, not on `outcome`. Whether the
+           ;; call reached the service governs *retries* — re-sending something
+           ;; that already ran is the danger there. Tripping re-runs nothing,
+           ;; so the only question is whether the caller counts this as the
+           ;; service being unusable. `:trip-on` is where they say so, and a
+           ;; policy the validator accepts has to be one the client honours.
+           (if (cb/counts-as-failure? cb-cfg error-type)
              (breaker/record-failure! cache cb-cfg base-url (now))
              (breaker/record-success! cache base-url))
            (cond

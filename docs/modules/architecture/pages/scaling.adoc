@@ -430,9 +430,16 @@ What it does, and what it deliberately does not:
   It protects the traffic *after* the burst, not the burst. Calls issued at the
   same instant all pass the check before any of them has failed.
 
-  Trips on consecutive `:rpc/unavailable` and `:rpc/timeout` — failures where
-  the call did not reach the service. A remote error does not count: the
-  service answered, so it is up. Note that `:rpc/timeout` trips the breaker
+  Trips on consecutive `:rpc/unavailable` and `:rpc/timeout` by default —
+  failures where the call did not reach the service. A remote error does not
+  count: the service answered, so it is up.
+
+  `:trip-on` overrides that, and the client counts whatever it names. Adding
+  `:rpc/protocol` is a reasonable policy — a service returning bodies that are
+  not envelopes is broken, and continuing to call it achieves nothing. Whether
+  the call reached the far side governs *retries*, where re-sending something
+  that already ran is the danger; tripping re-runs nothing, so it is not the
+  same question. Note that `:rpc/timeout` trips the breaker
   although it is never *retried*; retrying a timeout risks running a
   non-idempotent call twice, while declining to make a new call risks nothing.
 

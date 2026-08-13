@@ -14,9 +14,14 @@
 (def default-config
   {:failure-threshold 5
    :open-ms           30000
-   ;; Only failures where the call did not reach the service. A remote error
-   ;; means it answered — it is up, and refusing to call it because its answers
-   ;; are unwelcome would be a different feature.
+   ;; By default, only failures where the call did not reach the service. A
+   ;; remote error means it answered — it is up, and refusing to call it
+   ;; because its answers are unwelcome is a different policy.
+   ;;
+   ;; It is a policy a caller may want: a service returning bodies that are not
+   ;; envelopes (`:rpc/protocol`) is broken, and continuing to call it achieves
+   ;; nothing. Adding it here is supported; the client counts whatever this set
+   ;; names, whether or not the call reached the far side.
    :trip-on           #{:rpc/unavailable :rpc/timeout}})
 
 (defn ceil-seconds
