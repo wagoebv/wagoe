@@ -129,11 +129,7 @@
         ;; Known-unwired, with the reason. Not a way to make this quiet: an
         ;; entry here is a module whose `wagoe add` still does nothing, and it
         ;; has to name the ticket that will fix it.
-        known-unwired {"push" (str "config key :wagoe/push is a settings block, not a "
-                                   "component — the module registers :wagoe.push/{service,"
-                                   "device-store,fcm-provider,apns-provider}, so the "
-                                   "template has to assemble that graph rather than assoc "
-                                   "one key (BOU-286)")}
+        known-unwired {}
         ;; The Integrant keys a module's config snippet tells a project to add.
         snippet-keys (fn [m]
                        (set (re-seq #":wagoe[.a-z-]*/[a-z-]+"

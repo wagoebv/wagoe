@@ -231,15 +231,17 @@ Three migrations under `libs/push/resources/wagoe/push/migrations/`:
                                :sandbox? false}
 
 ;; Stores
-:wagoe.push/device-store    {:db #ig/ref :wagoe/db}
-:wagoe.push/analytics-store {:db #ig/ref :wagoe/db}
+:wagoe.push/device-store    {:db #ig/ref :wagoe/db-context}
+:wagoe.push/analytics-store {:db #ig/ref :wagoe/db-context}
 
 ;; Service
 :wagoe.push/service {:device-store    #ig/ref :wagoe.push/device-store
                         :analytics-store #ig/ref :wagoe.push/analytics-store
                         :fcm-provider    #ig/ref :wagoe.push/fcm-provider
                         :apns-provider   #ig/ref :wagoe.push/apns-provider
-                        :job-queue       #ig/ref :wagoe/jobs
+                        ;; Optional. wagoe-jobs has no Integrant key — pass a
+                        ;; queue you built, or omit it and enqueue yourself.
+                        :job-queue       nil
                         :callback-secret #env WAG_PUSH_CALLBACK_SECRET}
 
 ;; Job handlers — register returned map with your job dispatcher
@@ -252,6 +254,10 @@ Three migrations under `libs/push/resources/wagoe/push/migrations/`:
 ```
 
 Require `wagoe.push.shell.module-wiring` at system start to load the `defmethod` definitions.
+
+`wagoe add push` writes `:wagoe/push` into your config and the generated
+`config.clj` assembles the components above from it. `:wagoe/push` is a settings
+block, not an Integrant key.
 
 ## Gotchas
 

@@ -180,3 +180,24 @@
       ;; as well as if something was added.
       (doseq [k [:wagoe/postgresql :wagoe/logging :wagoe/error-reporting :wagoe/http]]
         (is (contains? active k) (str k " disappeared from the prod profile"))))))
+
+(deftest ^:integration conditional-keys-register-themselves
+  ;; The rule stated in `ig-config`'s docstring: a key emitted only when it is
+  ;; configured must have its wiring required at the same moment, so that a
+  ;; caller who is not the entry point still gets a usable component.
+  ;; Unconditional keys are the entry point's job — asserted separately in
+  ;; wagoe.main-test.
+  (require 'wagoe.config :reload)
+  (let [emitted    (set (keys (sut/ig-config (sut/load-config {:profile :test}))))
+        registered (set (keys (methods ig/init-key)))
+        conditional (filter emitted [:wagoe/events :wagoe/email :wagoe/cache
+                                     :wagoe/payment-provider :wagoe/i18n])]
+
+    (testing "the profile builds some conditional keys, or this proves nothing"
+      (is (seq conditional)))
+
+    (testing "each is registered by loading wagoe.config alone"
+      (doseq [k conditional]
+        (is (contains? registered k)
+            (str k " is emitted conditionally but its wiring is not required "
+                 "where it is emitted"))))))
