@@ -48,6 +48,16 @@
   (when bus
     (log/info "Stopping event bus")
     (case (:wagoe.events/provider bus)
-      :redis-streams (redis-streams/stop! bus)
-      :in-memory     (in-memory/stop! bus)
+      :redis-streams
+      (do (redis-streams/stop! bus)
+          ;; This namespace made the pool, so this namespace closes it.
+          ;; Without it every `ig-repl/reset` and every service restart leaves
+          ;; its connections open — the kind of leak that only shows up after
+          ;; the twentieth reload, or in the longest-running deployment.
+          (when-let [pool (:pool bus)]
+            (try (.close ^JedisPool pool)
+                 (catch Exception e
+                   (log/warn e "could not close the event bus Redis pool")))))
+
+      :in-memory (in-memory/stop! bus)
       nil)))

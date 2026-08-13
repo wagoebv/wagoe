@@ -156,6 +156,12 @@ the time `publish!` returns" — that silently fails against Redis.
 **Blocking in a handler.** Handlers run on the bus's thread. Work that can block
 belongs on a job queue, or one slow consumer stops the topic for that process.
 
+**A failing handler still costs its neighbours a redelivery.** Every local
+handler runs before the failure is raised, so none is skipped — but the entry
+stays unacknowledged, so handlers that already succeeded see the event again
+when it comes back. That is what at-least-once means, and why idempotency is
+not optional.
+
 **Expecting exactly-once.** No broker offers it. Build idempotency on `:id`.
 
 **Tenant leakage.** A subscriber must not see another tenant's events because it

@@ -271,15 +271,31 @@
           (when (= 1 (count (:handlers (get @subscriptions stream))))
             (let [consumer (str (name group) "-" (subs (str (random-uuid)) 0 8))
                   fan-out  (fn [event]
-                             (doseq [[_ h] (:handlers (get @subscriptions stream))]
-                               (try
-                                 (h event)
-                                 (catch Throwable t
-                                   ;; One handler must not stop the others, and
-                                   ;; must not ack the entry either — rethrown
-                                   ;; below so the event is redelivered.
-                                   (log/warn t "event handler threw" {:stream stream})
-                                   (throw t)))))]
+                             ;; Every handler runs, then the first failure is
+                             ;; raised. Throwing from inside the loop — which
+                             ;; is what this did — skipped the handlers after
+                             ;; the failing one, and the redelivery did not
+                             ;; save them: once the entry is dead-lettered they
+                             ;; have missed the event for good. A handler
+                             ;; failing is not a reason to deafen its
+                             ;; neighbours.
+                             ;;
+                             ;; The rethrow still matters: it is what leaves
+                             ;; the entry unacknowledged. Handlers that already
+                             ;; succeeded will see the event again on
+                             ;; redelivery, which is what at-least-once means
+                             ;; and why consumers are told to be idempotent.
+                             (let [failures (reduce
+                                             (fn [acc [_ h]]
+                                               (try (h event) acc
+                                                    (catch Throwable t
+                                                      (log/warn t "event handler threw"
+                                                                {:stream stream})
+                                                      (conj acc t))))
+                                             []
+                                             (:handlers (get @subscriptions stream)))]
+                               (when-let [t (first failures)]
+                                 (throw t))))]
               (.submit executor
                        ^Runnable
                        (fn []
@@ -355,7 +371,11 @@
                           (or min-idle-ms 30000)))
 
 (defn stop!
-  "Stop every subscription and release the threads."
+  "Stop every subscription and release the threads.
+
+   Does not close the pool: this takes one rather than making it, so whoever
+   created it closes it. `module-wiring` builds a pool solely for the bus and
+   closes it in `halt-key!`; a caller passing a shared pool keeps theirs."
   [{:keys [^ExecutorService executor subscriptions]}]
   (when subscriptions
     (doseq [[_ {:keys [running]}] @subscriptions]

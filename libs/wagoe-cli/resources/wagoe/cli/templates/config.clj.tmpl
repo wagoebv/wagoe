@@ -91,7 +91,9 @@
    - :wagoe/admin        → admin bundle + http-handler ref
    - :wagoe/workflow     → workflow bundle + http-handler ref
    - :wagoe/search       → search bundle + http-handler ref
-   - :wagoe/payment-provider → payments component"
+   - :wagoe/payment-provider → payments component
+   - :wagoe/events       → event bus component
+   - :wagoe/audience     → audience segmentation component"
   [config]
   (let [active    (:active config)
         ;; Optional module presence flags
@@ -100,6 +102,8 @@
         admin?    (boolean (:wagoe/admin active))
         workflow? (boolean (:wagoe/workflow active))
         search?   (boolean (:wagoe/search active))
+        events?   (boolean (:wagoe/events active))
+        audience? (boolean (:wagoe/audience active))
         payments? (boolean (:wagoe/payment-provider active))
         ai?       (boolean (:wagoe/ai-service active))
         geo?      (boolean (:wagoe/geo-service active))
@@ -132,6 +136,8 @@
         ;; Also formerly loaded by platform (BOU-131).
         _         (when cache?    (require 'wagoe.cache.shell.module-wiring))
         _         (when payments? (require 'wagoe.payments.shell.module-wiring))
+        _         (when events?   (require 'wagoe.events.shell.module-wiring))
+        _         (when audience? (require 'wagoe.audience.shell.module-wiring))
 
         db       (db-spec config)
         http-cfg (get active :wagoe/http {:port 3000 :host "0.0.0.0" :join? false})
@@ -217,6 +223,14 @@
       ;; Cache module — enabled by `wagoe add cache`
       cache?
       (assoc :wagoe/cache (:wagoe/cache active))
+
+      ;; Event bus — enabled by `wagoe add events`
+      events?
+      (assoc :wagoe/events (:wagoe/events active))
+
+      ;; Audience segmentation — enabled by `wagoe add audience`
+      audience?
+      (assoc :wagoe/audience (:wagoe/audience active))
 
       ;; Tenant module — enabled by `wagoe add tenant`
       tenant?

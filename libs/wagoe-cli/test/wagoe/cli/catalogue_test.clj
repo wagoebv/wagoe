@@ -116,3 +116,50 @@
           (let [idx #(.indexOf ^java.util.List (vec all-libs) %)]
             (is (< (idx "external") (idx "payments")) "payments must come after external")
             (is (< (idx "payments") (idx "geo"))      "payments must come before geo")))))))
+
+(deftest ^:unit every-catalogue-module-is-wired-in-the-generated-template
+  ;; `wagoe add <module>` adds the dependency and the config snippet. If
+  ;; config.clj.tmpl does not also build the Integrant key, the command
+  ;; succeeds, the config is written, and the app ignores it — no error, no
+  ;; component, and nothing to suggest where the events went.
+  ;;
+  ;; The events module shipped exactly that way: a catalogue entry, a config
+  ;; snippet, and a template that had never heard of it.
+  (let [template (slurp (io/resource "wagoe/cli/templates/config.clj.tmpl"))
+        ;; Known-unwired, with the reason. Not a way to make this quiet: an
+        ;; entry here is a module whose `wagoe add` still does nothing, and it
+        ;; has to name the ticket that will fix it.
+        known-unwired {"push" (str "config key :wagoe/push is a settings block, not a "
+                                   "component — the module registers :wagoe.push/{service,"
+                                   "device-store,fcm-provider,apns-provider}, so the "
+                                   "template has to assemble that graph rather than assoc "
+                                   "one key (BOU-286)")}
+        ;; The Integrant keys a module's config snippet tells a project to add.
+        snippet-keys (fn [m]
+                       (set (re-seq #":wagoe[.a-z-]*/[a-z-]+"
+                                    (str (:config-snippet m)))))
+        ;; Modules the template handles: it either names the key directly or
+        ;; the module is part of a bundle it assembles.
+        wired? (fn [k] (.contains ^String template k))]
+
+    (testing "the template was read — otherwise this passes vacuously"
+      (is (re-find #"defn ig-config" template))
+      (is (< 100 (count (re-seq #":wagoe" template)))))
+
+    (doseq [m (:modules (cat/load-catalogue))
+            :let [ks (snippet-keys m)
+                  ;; The primary key is the one named after the module itself.
+                  primary (first (filter #(= (str ":wagoe/" (:name m)) %) ks))]
+            :when primary]
+      (testing (str "`" (:add-command m) "` produces a working app")
+        (is (or (wired? primary) (contains? known-unwired (:name m)))
+            (str "catalogue offers " (:name m) " with config key " primary
+                 ", but config.clj.tmpl never builds it — `" (:add-command m)
+                 "` would report success and do nothing")))
+
+      (testing "and nothing is on the known-unwired list once it works"
+        ;; So the list shrinks rather than rots.
+        (when (contains? known-unwired (:name m))
+          (is (not (wired? primary))
+              (str (:name m) " is wired now — remove it from known-unwired: "
+                   (get known-unwired (:name m)))))))))

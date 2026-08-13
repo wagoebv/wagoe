@@ -202,3 +202,29 @@
             (Thread/sleep 1000)
             (is (empty? @dropped)))
           (finally (stop bus)))))))
+
+(deftest ^:integration a-failing-handler-does-not-deafen-the-others
+  ;; A handler that throws must not cost its neighbours the event. Raising from
+  ;; inside the fan-out loop skipped every handler after the failing one, and
+  ;; redelivery did not save them — once the entry is dead-lettered they have
+  ;; missed it permanently.
+  (doseq [[label make stop] (adapters)]
+    (testing label
+      (let [bus (make)
+            topic (unique "contract")
+            before (atom 0) after (atom 0)]
+        (try
+          ;; Subscription order is not guaranteed, so both a handler
+          ;; registered before and one after the failing one are checked.
+          (ports/subscribe! bus topic (fn [_] (swap! before inc)))
+          (ports/subscribe! bus topic (fn [_] (throw (ex-info "this one fails" {}))))
+          (ports/subscribe! bus topic (fn [_] (swap! after inc)))
+          (Thread/sleep 500)
+
+          (publisher/emit! bus topic :a/b :test {:n 1})
+
+          (testing "both working handlers receive it"
+            (is (wait-for #(and (pos? @before) (pos? @after)))
+                (str label ": a throwing handler stopped its neighbours "
+                     "(before=" @before " after=" @after ")")))
+          (finally (stop bus)))))))
