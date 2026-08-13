@@ -351,7 +351,13 @@
       (let [;; "-" and "+" are the stream's own sentinels for first and last;
             ;; `since` becomes a millisecond id, which is exactly how Redis
             ;; orders entries.
-            start   (if since (str (inst-ms since) "-0") "-")
+            ;; Strictly after `since`, matching the in-memory adapter's
+            ;; `(> (inst-ms published-at) (inst-ms since))`. A stream id starts
+            ;; at the millisecond, so `"<ms>-0"` is *inclusive* of everything in
+            ;; that millisecond — an event published in the same millisecond as
+            ;; the timestamp a consumer saved would be replayed. `:since` means
+            ;; "what I have not seen", so it has to exclude it.
+            start   (if since (str (inc (inst-ms since)) "-0") "-")
             stream  (stream-key prefix topic)
             ;; A limit means the *most recent* n, as the in-memory adapter's
             ;; `take-last` does. XRANGE with a count returns the oldest n, so

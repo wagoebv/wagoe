@@ -34,8 +34,15 @@
               :min-idle-ms 100})
            redis-streams/stop!])))
 
-(defn- wait-for [f & [ms]]
-  (let [deadline (+ (System/currentTimeMillis) (or ms 8000))]
+(defn- wait-for
+  "Poll until `f` is truthy, or give up.
+
+   Twenty seconds, not two: these run alongside four thousand other tests
+   against one Redis, and a delivery that is merely slow must not read as a
+   delivery that never happened. A passing run takes milliseconds; the budget
+   only matters when the machine is busy."
+  [f & [ms]]
+  (let [deadline (+ (System/currentTimeMillis) (or ms 20000))]
     (loop [] (or (f) (when (< (System/currentTimeMillis) deadline)
                        (Thread/sleep 25) (recur))))))
 
@@ -205,6 +212,21 @@
               ;; Taken after event 2 was published, so 0-2 are out and 3-4 in.
               (let [after-2 (nth @stamps 2)]
                 (is (= [3 4] (ns-of (ports/history bus topic {:since after-2}))))))
+
+            (testing ":since is exclusive, to the same millisecond"
+              ;; The boundary, stated rather than left to timing. A consumer
+              ;; saves the timestamp of the last event it handled and asks for
+              ;; what came after; if `:since` included that millisecond it
+              ;; would hand back the event it just processed. Redis stream ids
+              ;; begin at the millisecond, so "<ms>-0" is inclusive of it —
+              ;; which made this pass or fail depending on how the clock fell,
+              ;; and it fell differently on CI than locally.
+              (let [events (ports/history bus topic)
+                    third  (nth events 2)]
+                (is (= [3 4]
+                       (ns-of (ports/history bus topic
+                                             {:since (:published-at third)})))
+                    (str label ": :since included the event at that exact instant"))))
 
             (testing ":since before everything returns everything"
               (is (= [0 1 2 3 4]

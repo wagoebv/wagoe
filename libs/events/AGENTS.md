@@ -140,8 +140,11 @@ roughly half, at random.
 | `:redis-streams` | yes | yes, within stream retention | production, multi-process |
 | `:in-memory` | no | bounded buffer, dies with the process | development, tests |
 
-`history` returns oldest-first, and `{:limit n}` means the **most recent** n —
-which is what a consumer replaying after a restart wants. Both backends agree;
+`history` returns oldest-first, `{:limit n}` means the **most recent** n — which
+is what a consumer replaying after a restart wants — and `{:since t}` is
+**exclusive**, to the millisecond. A consumer saves the timestamp of the last
+event it handled and asks for what came after; an inclusive `:since` would hand
+back the event it had just processed. Both backends agree;
 they did not until BOU-93, where the Redis read returned the oldest n and so
 replayed the start of the stream while omitting everything just missed.
 

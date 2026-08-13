@@ -41,8 +41,15 @@
                     :min-idle-ms 100}))
            redis-streams/stop!])))
 
-(defn- wait-for [f & [timeout-ms]]
-  (let [deadline (+ (System/currentTimeMillis) (or timeout-ms 8000))]
+(defn- wait-for
+  "Poll until `f` is truthy, or give up.
+
+   Twenty seconds, not two: these run alongside four thousand other tests
+   against one Redis, and a delivery that is merely slow must not read as a
+   delivery that never happened. A passing run takes milliseconds; the budget
+   only matters when the machine is busy."
+  [f & [timeout-ms]]
+  (let [deadline (+ (System/currentTimeMillis) (or timeout-ms 20000))]
     (loop []
       (or (f) (when (< (System/currentTimeMillis) deadline)
                 (Thread/sleep 25) (recur))))))
