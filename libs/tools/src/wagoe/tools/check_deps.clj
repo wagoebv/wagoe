@@ -228,6 +228,7 @@
    "buddy.hashers"          'buddy/buddy-hashers
    "buddy.sign"             'buddy/buddy-sign
    "cheshire"               'cheshire/cheshire
+   "cognitect.transit" 'com.cognitect/transit-clj
    "clj-http"               'clj-http/clj-http
    "clj-kondo"              'clj-kondo/clj-kondo
    "hiccup"                 'hiccup/hiccup

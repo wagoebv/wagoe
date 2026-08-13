@@ -79,6 +79,11 @@
   {:provider :no-op}
 
   ;; Payment provider — mock adapter for tests (no external calls)
+  ;; In-memory: events do not leave the process, which is what a test wants —
+  ;; and it keeps the app suite exercising the wiring without needing Redis.
+  :wagoe/events
+  {:provider :in-memory}
+
   :wagoe/payment-provider
   {:provider :mock}}
 

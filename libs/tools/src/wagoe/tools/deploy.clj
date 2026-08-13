@@ -49,6 +49,7 @@
    "storage"
    "scaffolder"
    "cache"
+   "events"
    "jobs"
    "push"
    "realtime"

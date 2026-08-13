@@ -93,6 +93,10 @@
            :test-paths ["libs/cache/test"]
            :ns-patterns ["wagoe.cache.*-test"]}
 
+          {:id :events
+           :test-paths ["libs/events/test"]
+           :ns-patterns ["wagoe.events.*-test"]}
+
           {:id :jobs
            :test-paths ["libs/jobs/test"]
            :ns-patterns ["wagoe.jobs.*-test"]}

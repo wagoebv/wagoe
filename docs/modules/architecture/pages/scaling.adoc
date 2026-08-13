@@ -188,7 +188,7 @@ today, but the architecture is positioned for it.
   pipeline already uses. See <<remote-port-adapter>>.
 * *Network resilience* — timeouts, retries, circuit breaker, service discovery (hardcoded URLs for MVP). External adapters use `:throw-exceptions false` but no retry/breaker.
 * *Break the allowlisted dependency cycles* — `check_deps.clj` allows `admin↔user`, `platform↔{user,tenant,admin,workflow,search}`. A cycle means two modules can't be cleanly separated; these must be broken (e.g. extract the shared auth check behind a port) before slicing.
-* *Async option* — there is no event-bus port today (the dead `IEventBus` stub in `libs/user/ports.clj` was removed in BOU-170). Event-driven decoupling needs a dedicated port plus a real adapter (Redis Streams / Kafka / RabbitMQ).
+* ✅ *Async option* — shipped in BOU-93 as `libs/events`: `IEventPublisher` / `IEventSubscriber` / `IEventHistory`, with a Redis Streams adapter (at-least-once, consumer groups) and an in-memory one. A publisher does not know who is listening and is unaffected if a consumer is down — the complement to the synchronous remote-port adapter.
 * *Data ownership decision* — schema-per-tenant assumes co-located modules in one Postgres. Across services either share the DB (pragmatic) or give each service its own; there are no distributed transactions, so split writes become eventual-consistency.
 * ✅ *Service launch mode* — shipped in BOU-91: `java -jar wagoe.jar service <module>...` boots a named subset plus the platform, and starts that module's RPC endpoint when one is configured. See <<service-launch-mode>>.
 
@@ -456,4 +456,4 @@ For *functional decomposition* (the bigger bet):
 . ✅ *Generic remote-port adapter + RPC envelope* — done (BOU-90), less the circuit breaker (BOU-285). `clj-http` client implementing a module protocol over transit, context propagation, typed errors, retry bounded to calls that never executed.
 . ✅ *Service launch mode* — done (BOU-91). `wagoe.main` boots a named module subset as an independent service, with its RPC endpoint on its own port.
 . *Break allowlisted dependency cycles* — `admin↔user`, `platform↔{user,tenant,admin,workflow,search}` — prerequisite for slicing those modules.
-. *Event-bus port + adapter* — define an event-bus port and a Redis Streams / Kafka adapter for async, event-driven inter-service decoupling (no port exists today).
+. ✅ *Event-bus port + adapter* — done (BOU-93). `libs/events`, Redis Streams and in-memory. Kafka would be another adapter behind the same ports, not a change to them.

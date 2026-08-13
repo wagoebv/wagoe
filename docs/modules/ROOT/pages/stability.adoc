@@ -18,7 +18,7 @@ in beta, and the honest summary is that *no API is frozen yet*.
 | Beta — breaking changes are permitted between beta releases
 
 | Artifacts
-| 29 libraries on Clojars, all in the `com.wagoe` group. Artifact ids are
+| 30 libraries on Clojars, all in the `com.wagoe` group. Artifact ids are
   `wagoe-` followed by the library name — `wagoe-core`, `wagoe-platform` — except
   where the library name already begins with `wagoe-`, which is not doubled:
   `libs/wagoe-cli` publishes as `com.wagoe/wagoe-cli`, not `wagoe-wagoe-cli`, and

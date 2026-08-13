@@ -204,6 +204,9 @@
   #{:wagoe/db-context :wagoe/logging :wagoe/metrics :wagoe/tracing
     :wagoe/error-reporting :wagoe/router :wagoe/email :wagoe/cache
     :wagoe/i18n :wagoe/i18n-http-middleware
+    ;; The event bus is infrastructure: every service that runs needs one,
+    ;; whichever module it is running.
+    :wagoe/events
     :wagoe/http-handler :wagoe/http-server :wagoe/dashboard
     ;; Emitted only when running as a service, and by definition part of it.
     :wagoe/rpc-server})

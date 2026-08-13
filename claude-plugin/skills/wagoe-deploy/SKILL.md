@@ -8,7 +8,7 @@ description: Package and deploy a Wagoe app — uberjar, Docker image, Kubernete
 ## `bb deploy` is not this
 
 ```bash
-bb deploy --all     # publishes 29 libraries to Clojars
+bb deploy --all     # publishes 30 libraries to Clojars
 ```
 
 It publishes the **framework's own libraries**. It has nothing to do with

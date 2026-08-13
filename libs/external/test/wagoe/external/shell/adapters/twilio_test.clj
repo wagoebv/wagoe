@@ -2,23 +2,16 @@
   "Integration tests for the Twilio messaging adapter.
    Tests verify protocol satisfaction and graceful error handling against
    an invalid base-url — no real Twilio credentials required."
-  (:require [wagoe.external.ports :as ports]
+  (:require [wagoe.test.logging :refer [with-silent-logging]]
+            [wagoe.external.ports :as ports]
             [wagoe.external.shell.adapters.twilio :as twilio]
-            [clojure.test :refer [deftest is testing]]
-            [clojure.tools.logging :as log]))
+            [clojure.test :refer [deftest is testing]]))
 
 (def ^:private test-config
   {:account-sid  "ACtest0000000000000000000000000000"
    :auth-token   "test_auth_token"
    :from-number  "+15005550006"
    :base-url     "http://localhost-nonexistent.invalid:1"})
-
-(defmacro with-silent-logging [& body]
-  `(with-redefs [log/info (fn [& args#]
-                            nil)
-                 log/error (fn [& args#]
-                             nil)]
-     ~@body))
 
 (deftest ^:integration create-twilio-adapter-test
   (with-silent-logging
