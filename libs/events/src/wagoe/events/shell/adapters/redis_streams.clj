@@ -348,32 +348,35 @@
   (history [this topic] (ports/history this topic {}))
   (history [_ topic {:keys [limit since]}]
     (with-open [jedis (.getResource pool)]
-      (let [;; "-" and "+" are the stream's own sentinels for first and last;
-            ;; `since` becomes a millisecond id, which is exactly how Redis
-            ;; orders entries.
-            ;; Strictly after `since`, matching the in-memory adapter's
-            ;; `(> (inst-ms published-at) (inst-ms since))`. A stream id starts
-            ;; at the millisecond, so `"<ms>-0"` is *inclusive* of everything in
-            ;; that millisecond — an event published in the same millisecond as
-            ;; the timestamp a consumer saved would be replayed. `:since` means
-            ;; "what I have not seen", so it has to exclude it.
-            start   (if since (str (inc (inst-ms since)) "-0") "-")
-            stream  (stream-key prefix topic)
-            ;; A limit means the *most recent* n, as the in-memory adapter's
-            ;; `take-last` does. XRANGE with a count returns the oldest n, so
-            ;; asking for history after a restart replayed the beginning of the
-            ;; stream and omitted everything that had just happened — stale
-            ;; events, silently, and only on one backend.
+      (let [stream (stream-key prefix topic)
+            decode-entry (fn [^StreamEntry e]
+                           (try (decode (get (.getFields e) payload-field))
+                                (catch Exception _ nil)))
+            ;; `:since` filters on the envelope's :published-at, which is when
+            ;; the publisher created the event — the same field, and the same
+            ;; comparison, the in-memory adapter uses.
             ;;
-            ;; XREVRANGE takes them from the newest end; the result is reversed
-            ;; back so the order this returns is oldest-first either way.
-            entries (if limit
-                      (reverse (.xrevrange jedis stream "+" start (int limit)))
-                      (.xrange jedis stream start "+"))]
-        (into [] (keep (fn [^StreamEntry e]
-                         (try (decode (get (.getFields e) payload-field))
-                              (catch Exception _ nil))))
-              entries)))))
+            ;; Filtering on the stream id instead is not the same thing: Redis
+            ;; assigns that when the XADD lands, which is a different clock and
+            ;; a later instant. On a busy machine the two differ by a
+            ;; millisecond and the adapters return different events — the
+            ;; failure was "an event at exactly this instant came back", but
+            ;; the cause was comparing against the wrong field, so no amount of
+            ;; adjusting the boundary would have fixed it.
+            ;;
+            ;; The id is still used to *start* the scan: Redis assigns it at or
+            ;; after the publisher's timestamp, so nothing wanted is skipped.
+            raw     (cond
+                      since       (.xrange jedis stream (str (inst-ms since) "-0") "+")
+                      limit       (reverse (.xrevrange jedis stream "+" "-" (int limit)))
+                      :else       (.xrange jedis stream "-" "+"))
+            decoded (into [] (keep decode-entry) raw)
+            matching (if since
+                       (filterv #(> (inst-ms (:published-at %)) (inst-ms since)) decoded)
+                       decoded)]
+        ;; `:limit` is the most recent n of what is left, as in-memory's
+        ;; `take-last` gives.
+        (if limit (vec (take-last limit matching)) matching)))))
 
 (defn create-redis-streams-bus
   "An event bus backed by Redis Streams.

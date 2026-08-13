@@ -142,9 +142,11 @@ roughly half, at random.
 
 `history` returns oldest-first, `{:limit n}` means the **most recent** n — which
 is what a consumer replaying after a restart wants — and `{:since t}` is
-**exclusive**, to the millisecond. A consumer saves the timestamp of the last
-event it handled and asks for what came after; an inclusive `:since` would hand
-back the event it had just processed. Both backends agree;
+**exclusive**, and compares against the event's `:published-at` — when the
+publisher created it, not when the broker received it. A consumer saves the
+timestamp of the last event it handled and asks for what came after; comparing
+against arrival time would use a different clock, and an inclusive comparison
+would hand back the event it just processed. Both backends agree;
 they did not until BOU-93, where the Redis read returned the oldest n and so
 replayed the start of the stream while omitting everything just missed.
 

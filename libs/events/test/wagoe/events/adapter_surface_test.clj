@@ -319,3 +319,40 @@
                   (is (= sent @seen)
                       (str label "/" what ": the envelope changed on the way through"))))))
           (finally (stop bus)))))))
+
+(deftest ^:integration since-compares-against-when-the-event-was-published
+  ;; The field, not the boundary. `:since` filters on the envelope's
+  ;; :published-at — when the publisher created the event. A broker also
+  ;; stamps its own arrival time, and on Redis that is what the stream id is;
+  ;; filtering on it means a different clock and a later instant, so the two
+  ;; adapters return different events whenever the gap crosses a millisecond.
+  ;;
+  ;; That gap is normally microseconds, which is why this showed up on CI and
+  ;; not locally, and why chasing it as an off-by-one at the boundary would
+  ;; never have fixed it. Here the gap is ten seconds, so the two are
+  ;; unambiguous and the test does not depend on how fast the machine is.
+  (doseq [[label make stop] (adapters)]
+    (testing label
+      (let [bus   (make)
+            topic (unique)
+            long-ago (.minusSeconds (java.time.Instant/now) 10)
+            ;; Published now; created ten seconds ago.
+            stale (assoc (publisher/build :stale/event :test {:n :old})
+                         :published-at long-ago)]
+        (try
+          (ports/publish! bus topic stale)
+          (publisher/emit! bus topic :fresh/event :test {:n :new})
+          (is (wait-for #(= 2 (count (ports/history bus topic)))))
+
+          (testing "an event created before :since is excluded, however late it arrived"
+            (let [cutoff (.minusSeconds (java.time.Instant/now) 5)]
+              (is (= [:new]
+                     (map (comp :n :payload) (ports/history bus topic {:since cutoff})))
+                  (str label ": :since compared against arrival time, not :published-at"))))
+
+          (testing "and is included when :since precedes it"
+            (let [cutoff (.minusSeconds (java.time.Instant/now) 30)]
+              (is (= [:old :new]
+                     (map (comp :n :payload)
+                          (ports/history bus topic {:since cutoff}))))))
+          (finally (stop bus)))))))
