@@ -287,3 +287,26 @@
       (let [r (client/call! "http://localhost:1" :get-payment-status ["id"]
                             (opts cache {:circuit-breaker {:failure-threshold 2}}))]
         (is (= :rpc/unavailable (get-in r [:error :type])))))))
+
+(deftest ^:integration a-fractional-window-does-not-expire-early
+  ;; End-to-end cover for a window that is not a whole number of seconds. The
+  ;; conversion itself is pinned in circuit-breaker-test/millisecond-windows-…,
+  ;; which is the assertion that fails under flooring; this one would keep
+  ;; passing, because converting after doubling already survives 1500. It is
+  ;; here so a future change to how TTLs are derived is caught at the level
+  ;; where it is observable.
+  (let [received (atom 0)
+        cache    (cache-mem/create-in-memory-cache {})
+        cfg      {:failure-threshold 1 :open-ms 1500}]
+    (with-slow-server received
+      (fn [url]
+        (client/call! url :get-payment-status ["id"] (opts cache {:circuit-breaker cfg}))
+        ;; Past where a floored TTL would have dropped the state (2s), but well
+        ;; inside where a ceilinged one keeps it (3s).
+        (Thread/sleep 2300)
+        (let [before @received]
+          (dotimes [_ 5]
+            (client/call! url :get-payment-status ["id"] (opts cache {:circuit-breaker cfg})))
+          (is (= (inc before) @received)
+              (str "expected one probe, " (- @received before)
+                   " calls reached the service — the breaker state expired early")))))))

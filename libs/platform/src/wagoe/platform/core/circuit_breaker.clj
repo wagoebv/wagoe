@@ -19,6 +19,17 @@
    ;; are unwelcome would be a different feature.
    :trip-on           #{:rpc/unavailable :rpc/timeout}})
 
+(defn ceil-seconds
+  "`ms` as whole seconds, rounded up, never less than one.
+
+   Cache TTLs are in seconds and breaker windows are in milliseconds, so the
+   conversion has to round the right way: flooring an `:open-ms` of 1500 to one
+   second makes the stored state expire before the window it describes has
+   elapsed, and the breaker forgets an outage it is still meant to be
+   protecting against."
+  [ms]
+  (max 1 (long (Math/ceil (/ (double ms) 1000.0)))))
+
 (defn counts-as-failure?
   "Whether `error-type` is evidence the service is unreachable.
 

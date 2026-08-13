@@ -90,3 +90,23 @@
     ;; Configured, inert, and indistinguishable from working.
     (is (re-find #"no error type" (cb/config-problem {:trip-on #{:some/typo}})))
     (is (some? (cb/config-problem {:trip-on #{}})))))
+
+(deftest ^:unit millisecond-windows-round-up-to-whole-seconds
+  ;; Cache TTLs are seconds, breaker windows milliseconds. Flooring makes the
+  ;; stored state expire before the window it describes has elapsed, so the
+  ;; breaker forgets an outage it is still meant to be protecting against.
+  (testing "a fractional second rounds up"
+    (is (= 2 (cb/ceil-seconds 1500)))
+    (is (= 2 (cb/ceil-seconds 1001)))
+    (is (= 4 (cb/ceil-seconds 3500))))
+
+  (testing "an exact second is itself"
+    (is (= 1 (cb/ceil-seconds 1000)))
+    (is (= 30 (cb/ceil-seconds 30000))))
+
+  (testing "and anything smaller is still a second, never zero"
+    ;; A zero TTL means "no expiry" in some cache adapters and "already
+    ;; expired" in others — neither is what a sub-second window means.
+    (is (= 1 (cb/ceil-seconds 1)))
+    (is (= 1 (cb/ceil-seconds 999)))
+    (is (= 1 (cb/ceil-seconds 0)))))

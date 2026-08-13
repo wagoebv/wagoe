@@ -195,7 +195,12 @@
         envelope (rpc/request-envelope operation args context)
         url      (rpc/service-url base-url (:path opts))
         cache    (:cache opts)
-        cb-cfg   (merge cb/default-config (:circuit-breaker opts))
+        cb-cfg   (merge cb/default-config
+                        ;; The probe lease must outlive a probe, and only the
+                        ;; client knows how long one may take.
+                        {:probe-lease-ms (* (inc (:retries opts 0))
+                                            (:timeout-ms opts 0))}
+                        (:circuit-breaker opts))
         _        (when-let [problem (and (:circuit-breaker opts) (cb/config-problem cb-cfg))]
                    ;; A misconfigured breaker is inert or wrong, and either way
                    ;; looks like a working one. `:trip-on #{:rpc/unavailble}`

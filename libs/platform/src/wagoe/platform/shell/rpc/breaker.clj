@@ -24,11 +24,23 @@
 (defn- window-seconds
   "How long breaker state outlives the window it describes.
 
-   Twice the open window: long enough that a breaker which has tripped is still
-   honoured when the window ends, so `open` becomes `half-open` rather than
-   vanishing into `closed` and letting every caller through at once."
+   Twice the open window, rounded up: long enough that a breaker which has
+   tripped is still honoured when the window ends, so `open` becomes
+   `half-open` rather than vanishing into `closed` and letting every caller
+   through at once."
   [config]
-  (max 1 (* 2 (quot (:open-ms config (:open-ms cb/default-config)) 1000))))
+  (cb/ceil-seconds (* 2 (:open-ms config (:open-ms cb/default-config)))))
+
+(defn- lease-seconds
+  "How long the half-open probe lease is held.
+
+   Long enough to outlive the probe itself, not just the window: a probe that
+   takes longer than its lease releases the claim while still in flight, and a
+   second caller sends a second probe at the service that is being tested. The
+   client passes its own request budget as `:probe-lease-ms`."
+  [config]
+  (cb/ceil-seconds (max (:open-ms config (:open-ms cb/default-config))
+                        (:probe-lease-ms config 0))))
 
 (defn- read-state
   [cache-component base-url]
@@ -63,9 +75,7 @@
                        (boolean
                         (cache/set-if-absent! cache-component (probe-key base-url)
                                               {:at now-ms}
-                                              (max 1 (quot (:open-ms config
-                                                                     (:open-ms cb/default-config))
-                                                           1000))))
+                                              (lease-seconds config)))
                        (catch Exception e
                          (log/warn e "circuit breaker could not take the probe lease"
                                    {:base-url base-url})
