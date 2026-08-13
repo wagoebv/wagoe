@@ -413,6 +413,15 @@ What it does, and what it deliberately does not:
   probe, instead of all N at once. Without a `:cache` there is no breaker and
   the client behaves as it did before.
 
+  The failure count is an atomic increment, not a read-modify-write: many
+  callers hitting one outage at the same moment is what a shared breaker is
+  for, and it is exactly when a read-modify-write loses increments — each reads
+  the same value and writes back the same successor, so a burst advances the
+  counter by one and the breaker never trips.
+
+  It protects the traffic *after* the burst, not the burst. Calls issued at the
+  same instant all pass the check before any of them has failed.
+
   Trips on consecutive `:rpc/unavailable` and `:rpc/timeout` — failures where
   the call did not reach the service. A remote error does not count: the
   service answered, so it is up. Note that `:rpc/timeout` trips the breaker

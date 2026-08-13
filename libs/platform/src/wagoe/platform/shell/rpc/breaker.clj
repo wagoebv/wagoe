@@ -17,13 +17,24 @@
 
 (def ^:private key-prefix "wagoe:rpc:breaker:")
 
-(defn- state-key [base-url] (str key-prefix base-url))
-(defn- probe-key [base-url] (str key-prefix base-url ":probe"))
+(defn- failures-key [base-url] (str key-prefix base-url ":failures"))
+(defn- opened-key   [base-url] (str key-prefix base-url ":opened-at"))
+(defn- probe-key    [base-url] (str key-prefix base-url ":probe"))
+
+(defn- window-seconds
+  "How long breaker state outlives the window it describes.
+
+   Twice the open window: long enough that a breaker which has tripped is still
+   honoured when the window ends, so `open` becomes `half-open` rather than
+   vanishing into `closed` and letting every caller through at once."
+  [config]
+  (max 1 (* 2 (quot (:open-ms config (:open-ms cb/default-config)) 1000))))
 
 (defn- read-state
   [cache-component base-url]
   (try
-    (or (cache/get-value cache-component (state-key base-url)) {})
+    {:failures     (or (cache/get-value cache-component (failures-key base-url)) 0)
+     :opened-at-ms (:at (cache/get-value cache-component (opened-key base-url)))}
     (catch Exception e
       ;; A cache that is down must not stop calls going out. Failing open is
       ;; the safe direction: the worst case is the behaviour of no breaker at
@@ -61,19 +72,29 @@
                          true)))))))
 
 (defn record-failure!
-  "Count a failure, and open the breaker if it is the one that crosses the line."
+  "Count a failure, and open the breaker if it is the one that crosses the line.
+
+   The count is an atomic increment, not read-modify-write. A shared breaker
+   exists for the case where many callers hit one outage at the same moment,
+   and that is exactly when a read-modify-write loses increments: each reads the
+   same value and writes back the same successor, so a burst of twenty failures
+   advances the counter by one and the breaker never trips.
+
+   `set-if-absent!` on the open marker keeps the moment the *first* crosser
+   opened it, rather than every subsequent failure pushing the window forward."
   [cache-component config base-url now-ms]
   (when cache-component
     (try
-      (let [breaker (or (read-state cache-component base-url) {})
-            next'   (cb/on-failure breaker config now-ms)]
-        (cache/set-value! cache-component (state-key base-url) next'
-                          ;; Outlive the open window, so a breaker that has
-                          ;; tripped is not forgotten before it can be honoured.
-                          (max 1 (* 2 (quot (:open-ms config (:open-ms cb/default-config))
-                                            1000))))
-        (when (and (:opened-at-ms next') (not (:opened-at-ms breaker)))
-          (log/warn "circuit opened" {:base-url base-url :failures (:failures next')})))
+      (let [failures  (cache/increment! cache-component (failures-key base-url))
+            threshold (:failure-threshold config (:failure-threshold cb/default-config))]
+        ;; Only on the first of a run: gives the run a lifetime, so failures
+        ;; minutes apart do not accumulate as though they were consecutive.
+        (when (= 1 failures)
+          (cache/expire! cache-component (failures-key base-url) (window-seconds config)))
+        (when (and (>= failures threshold)
+                   (cache/set-if-absent! cache-component (opened-key base-url)
+                                         {:at now-ms} (window-seconds config)))
+          (log/warn "circuit opened" {:base-url base-url :failures failures})))
       (catch Exception e
         (log/warn e "circuit breaker could not record a failure" {:base-url base-url})))))
 
@@ -82,7 +103,8 @@
   [cache-component base-url]
   (when cache-component
     (try
-      (cache/delete-key! cache-component (state-key base-url))
+      (cache/delete-key! cache-component (failures-key base-url))
+      (cache/delete-key! cache-component (opened-key base-url))
       (cache/delete-key! cache-component (probe-key base-url))
       (catch Exception e
         (log/warn e "circuit breaker could not record a success" {:base-url base-url})))))

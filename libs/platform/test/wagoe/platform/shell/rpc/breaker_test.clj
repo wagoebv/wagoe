@@ -5,6 +5,7 @@
    not done its job — the point is that the failing service stops being called."
   (:require [wagoe.cache.ports :as cache]
             [wagoe.cache.shell.adapters.in-memory :as cache-mem]
+            [wagoe.platform.shell.rpc.breaker :as breaker]
             [wagoe.platform.shell.rpc.client :as client]
             [wagoe.payments.ports :as pay-ports]
             [clojure.test :refer [deftest is testing]]
@@ -137,3 +138,87 @@
           (client/call! url :get-payment-status ["id"]
                         (opts broken {:circuit-breaker {:failure-threshold 1}})))
         (is (= 3 @received) "a cache outage stopped calls the service could have served")))))
+
+(deftest ^:integration a-burst-of-simultaneous-failures-trips-the-breaker
+  ;; The case a shared breaker exists for. Read-modify-write loses increments
+  ;; here — every caller reads the same count and writes back the same
+  ;; successor — so a burst of twenty failures advances the counter by one and
+  ;; the breaker keeps sending traffic well past its threshold.
+  (let [received (atom 0)
+        cache    (cache-mem/create-in-memory-cache {})
+        cfg      {:failure-threshold 3 :open-ms 60000}
+        callers  20]
+    (with-slow-server received
+      (fn [url]
+        (let [latch (java.util.concurrent.CountDownLatch. 1)
+              calls (doall (for [_ (range callers)]
+                             (future
+                               (.await latch)
+                               (client/call! url :get-payment-status ["id"]
+                                             (opts cache {:circuit-breaker cfg})))))]
+          (.countDown latch)
+          (doseq [f calls] (deref f 10000 nil))
+
+          (testing "the failures were all counted"
+            (is (<= 3 (cache/get-value cache (str "wagoe:rpc:breaker:" url ":failures")))
+                "increments were lost — the counter is not atomic"))
+
+          (testing "and the breaker is open afterwards"
+            (let [r (client/call! url :get-payment-status ["id"]
+                                  (opts cache {:circuit-breaker cfg}))]
+              (is (= :rpc/circuit-open (get-in r [:error :type]))
+                  "a burst of failures left the breaker closed")))
+
+          (testing "and the next wave is refused without reaching it"
+            ;; The burst itself is not what the breaker protects: twenty calls
+            ;; issued at the same instant all pass `allow?` before any of them
+            ;; has failed, so all twenty reach the service. Nothing can prevent
+            ;; that without knowing the future. What the breaker protects is
+            ;; every request after it, which is where the load actually is.
+            (let [before @received]
+              (dotimes [_ callers]
+                (client/call! url :get-payment-status ["id"]
+                              (opts cache {:circuit-breaker cfg})))
+              (is (= before @received)
+                  (str "calls kept reaching the service after the breaker opened")))))))))
+
+(deftest ^:integration the-open-moment-is-the-first-crossing-not-the-last
+  ;; `set-if-absent!` on the marker. Otherwise every later failure pushes the
+  ;; window forward and a busy caller can keep a breaker open indefinitely.
+  (let [received (atom 0)
+        cache    (cache-mem/create-in-memory-cache {})
+        cfg      {:failure-threshold 1 :open-ms 60000}]
+    (with-slow-server received
+      (fn [url]
+        (client/call! url :get-payment-status ["id"] (opts cache {:circuit-breaker cfg}))
+        (let [opened-at (:at (cache/get-value cache (str "wagoe:rpc:breaker:" url ":opened-at")))]
+          (is (some? opened-at))
+          (Thread/sleep 50)
+          ;; Refused, so no new failure is recorded — but assert the marker is
+          ;; untouched regardless.
+          (client/call! url :get-payment-status ["id"] (opts cache {:circuit-breaker cfg}))
+          (is (= opened-at
+                 (:at (cache/get-value cache (str "wagoe:rpc:breaker:" url ":opened-at"))))
+              "the open window was pushed forward by a later failure"))))))
+
+(deftest ^:integration every-concurrent-failure-is-counted
+  ;; The counter itself, with the simultaneity forced. The RPC-level burst
+  ;; above cannot prove this: twenty calls time out at slightly different
+  ;; moments, so even a read-modify-write that loses updates still crawls past
+  ;; a threshold of three. Here every thread increments at the same instant,
+  ;; which is where read-modify-write loses them — each reads the same value
+  ;; and writes back the same successor.
+  (let [cache   (cache-mem/create-in-memory-cache {})
+        cfg     {:failure-threshold 1000 :open-ms 60000}   ; never opens; count only
+        url     "http://concurrent.invalid"
+        threads 50
+        latch   (java.util.concurrent.CountDownLatch. 1)
+        writers (doall (for [_ (range threads)]
+                         (future (.await latch)
+                                 (breaker/record-failure! cache cfg url 1000))))]
+    (.countDown latch)
+    (doseq [f writers] (deref f 10000 nil))
+
+    (is (= threads (cache/get-value cache (str "wagoe:rpc:breaker:" url ":failures")))
+        (str "counted " (cache/get-value cache (str "wagoe:rpc:breaker:" url ":failures"))
+             " of " threads " concurrent failures — increments were lost"))))
