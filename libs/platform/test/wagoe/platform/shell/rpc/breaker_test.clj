@@ -222,3 +222,68 @@
     (is (= threads (cache/get-value cache (str "wagoe:rpc:breaker:" url ":failures")))
         (str "counted " (cache/get-value cache (str "wagoe:rpc:breaker:" url ":failures"))
              " of " threads " concurrent failures — increments were lost"))))
+
+(deftest ^:integration a-failed-probe-reopens-the-window
+  ;; Without this the window runs out from the *original* outage. A probe
+  ;; delayed until late in the marker's lifetime fails, the marker is left
+  ;; alone, it expires shortly after, and traffic resumes against a service
+  ;; that has just demonstrated it is still down.
+  (let [received (atom 0)
+        cache    (cache-mem/create-in-memory-cache {})
+        cfg      {:failure-threshold 1 :open-ms 400}
+        opened   #(:at (cache/get-value cache (str "wagoe:rpc:breaker:" % ":opened-at")))]
+    (with-slow-server received
+      (fn [url]
+        (client/call! url :get-payment-status ["id"] (opts cache {:circuit-breaker cfg}))
+        (let [first-open (opened url)]
+          (is (some? first-open))
+
+          (testing "the probe is allowed once the window elapses"
+            (Thread/sleep 600)
+            (let [before @received]
+              (client/call! url :get-payment-status ["id"] (opts cache {:circuit-breaker cfg}))
+              (is (= (inc before) @received) "no probe was made")))
+
+          (testing "and its failure moves the window forward"
+            (is (> (opened url) first-open)
+                "the failed probe left the original open time in place"))
+
+          (testing "so the service is protected again immediately"
+            (let [before @received]
+              (client/call! url :get-payment-status ["id"] (opts cache {:circuit-breaker cfg}))
+              (is (= before @received) "traffic resumed after a failed probe"))))))))
+
+(deftest ^:integration a-second-probe-is-allowed-after-the-new-window
+  ;; The lease is released when the probe fails, or the next window has nothing
+  ;; to take and the breaker never probes again.
+  (let [received (atom 0)
+        cache    (cache-mem/create-in-memory-cache {})
+        cfg      {:failure-threshold 1 :open-ms 400}]
+    (with-slow-server received
+      (fn [url]
+        (client/call! url :get-payment-status ["id"] (opts cache {:circuit-breaker cfg}))
+        (Thread/sleep 600)
+        (client/call! url :get-payment-status ["id"] (opts cache {:circuit-breaker cfg}))
+        (let [after-first-probe @received]
+          (Thread/sleep 600)
+          (client/call! url :get-payment-status ["id"] (opts cache {:circuit-breaker cfg}))
+          (is (= (inc after-first-probe) @received)
+              "the probe lease was never released, so no further probe was made"))))))
+
+(deftest ^:integration a-misconfigured-breaker-is-refused-loudly
+  ;; Inert and working look identical from the outside.
+  (let [cache (cache-mem/create-in-memory-cache {})]
+    (doseq [[what bad] [["a typo in trip-on"    {:trip-on #{:rpc/unavailble}}]
+                        ["a zero threshold"     {:failure-threshold 0}]
+                        ["a negative threshold" {:failure-threshold -1}]
+                        ["a zero window"        {:open-ms 0}]]]
+      (testing what
+        (is (thrown-with-msg?
+             clojure.lang.ExceptionInfo #"[Cc]ircuit breaker"
+             (client/call! "http://unused.invalid" :get-payment-status ["id"]
+                           (opts cache {:circuit-breaker bad}))))))
+
+    (testing "a valid configuration is not refused"
+      (let [r (client/call! "http://localhost:1" :get-payment-status ["id"]
+                            (opts cache {:circuit-breaker {:failure-threshold 2}}))]
+        (is (= :rpc/unavailable (get-in r [:error :type])))))))

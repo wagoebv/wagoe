@@ -85,16 +85,28 @@
   [cache-component config base-url now-ms]
   (when cache-component
     (try
-      (let [failures  (cache/increment! cache-component (failures-key base-url))
+      (let [was       (cb/state (or (read-state cache-component base-url) {}) config now-ms)
+            failures  (cache/increment! cache-component (failures-key base-url))
             threshold (:failure-threshold config (:failure-threshold cb/default-config))]
         ;; Only on the first of a run: gives the run a lifetime, so failures
         ;; minutes apart do not accumulate as though they were consecutive.
         (when (= 1 failures)
           (cache/expire! cache-component (failures-key base-url) (window-seconds config)))
-        (when (and (>= failures threshold)
-                   (cache/set-if-absent! cache-component (opened-key base-url)
-                                         {:at now-ms} (window-seconds config)))
-          (log/warn "circuit opened" {:base-url base-url :failures failures})))
+        (if (= was :half-open)
+          ;; The probe failed. Reopen from now — `set-if-absent!` would find the
+          ;; old marker and leave it, so the window would run out from the
+          ;; *original* outage and traffic would resume against a service that
+          ;; has just demonstrated it is still down.
+          (do (cache/set-value! cache-component (opened-key base-url)
+                                {:at now-ms} (window-seconds config))
+              ;; Release the lease so the next window can be probed.
+              (cache/delete-key! cache-component (probe-key base-url))
+              (log/warn "circuit re-opened after a failed probe" {:base-url base-url}))
+
+          (when (and (>= failures threshold)
+                     (cache/set-if-absent! cache-component (opened-key base-url)
+                                           {:at now-ms} (window-seconds config)))
+            (log/warn "circuit opened" {:base-url base-url :failures failures}))))
       (catch Exception e
         (log/warn e "circuit breaker could not record a failure" {:base-url base-url})))))
 

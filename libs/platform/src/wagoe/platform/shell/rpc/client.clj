@@ -196,6 +196,12 @@
         url      (rpc/service-url base-url (:path opts))
         cache    (:cache opts)
         cb-cfg   (merge cb/default-config (:circuit-breaker opts))
+        _        (when-let [problem (and (:circuit-breaker opts) (cb/config-problem cb-cfg))]
+                   ;; A misconfigured breaker is inert or wrong, and either way
+                   ;; looks like a working one. `:trip-on #{:rpc/unavailble}`
+                   ;; never fires and nothing says so.
+                   (throw (ex-info problem {:type :configuration-error
+                                            :circuit-breaker (:circuit-breaker opts)})))
         now      #(System/currentTimeMillis)]
     (raise-if-thrown!
      operation

@@ -419,6 +419,14 @@ What it does, and what it deliberately does not:
   the same value and writes back the same successor, so a burst advances the
   counter by one and the breaker never trips.
 
+  A probe that fails reopens the window from that moment and releases its
+  lease, so the outage is not forgotten on the original window's schedule and
+  the next window can still be probed.
+
+  An invalid `:circuit-breaker` — `:failure-threshold 0`, or a `:trip-on` naming
+  an error the client never produces — throws rather than being accepted, since
+  an inert breaker and a working one look identical from outside.
+
   It protects the traffic *after* the burst, not the burst. Calls issued at the
   same instant all pass the check before any of them has failed.
 
