@@ -10,6 +10,7 @@
 ** xref:libraries:storage.adoc[storage]
 ** xref:libraries:scaffolder.adoc[scaffolder]
 ** xref:libraries:cache.adoc[cache]
+** xref:libraries:events.adoc[events]
 ** xref:libraries:jobs.adoc[jobs]
 ** xref:libraries:email.adoc[email]
 ** xref:libraries:tenant.adoc[tenant]

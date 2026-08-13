@@ -184,3 +184,46 @@
         (is (contains? guarded m)
             (str m " is neither statically required nor required at its condition — "
                  "its init-key would be missing when the module is active"))))))
+
+;; =============================================================================
+;; Every published library must be documented
+;; =============================================================================
+
+(deftest ^:integration every-published-library-has-a-documentation-page
+  ;; BOU-93 added `libs/events` — a published artifact, a CLI catalogue entry,
+  ;; a config key — and no page under docs/modules/libraries/. Nothing noticed:
+  ;; `bb check:doc-counts` verifies the *number* is right, `bb check-links`
+  ;; verifies existing links resolve, and neither asks whether a library that
+  ;; exists is written about anywhere.
+  ;;
+  ;; It surfaces downstream rather than here: the website builds its library
+  ;; docs from these pages, so an undocumented library is missing from
+  ;; wagoe.org with nothing in either repo to say why.
+  (let [;; A library is publishable exactly when it has a build.clj — the same
+        ;; set wagoe.tools.deploy/all-libs carries, read from the filesystem
+        ;; because that namespace is Babashka-only and not on this classpath.
+        libs      (->> (.listFiles (io/file "libs"))
+                       (filter #(.isDirectory ^java.io.File %))
+                       (filter #(.exists (io/file % "build.clj")))
+                       (map #(.getName ^java.io.File %))
+                       set)
+        ;; Directory name and page name differ for two libraries by design.
+        page-name {"wagoe-cli" "cli" "wagoe-mcp" "mcp"}
+        page-for  (fn [lib] (get page-name lib lib))
+        pages     (->> (file-seq (io/file "docs/modules/libraries/pages"))
+                       (filter #(.isFile ^java.io.File %))
+                       (map #(str/replace (.getName ^java.io.File %) ".adoc" ""))
+                       set)
+        undocumented (remove #(contains? pages (page-for %)) (sort libs))]
+
+    (testing "the library list and the pages were both read"
+      ;; Otherwise an empty set on either side makes this pass vacuously.
+      (is (< 25 (count libs)) (str "only found " (count libs) " libraries"))
+      (is (< 25 (count pages)) (str "only found " (count pages) " pages")))
+
+    (testing "every published library is written about"
+      (is (empty? undocumented)
+          (str "published with no page under docs/modules/libraries/pages/: "
+               (str/join ", " undocumented)
+               " — the website builds its library docs from these, so this is "
+               "how a library ships and is then absent from wagoe.org")))))
