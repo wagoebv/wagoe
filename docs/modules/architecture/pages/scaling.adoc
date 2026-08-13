@@ -266,6 +266,7 @@ implements that protocol by making a network call. That is this:
   (rpc-client/remote-adapter pay-ports/IPaymentProvider "http://payments:3001"
                              {:timeout-ms  5000
                               :service-key service-key
+                              :cache       cache            ; enables the breaker
                               :context     {:correlation-id id :tenant-id t}}))
 
 (ports/create-checkout-session payments {...})   ; unchanged at the call site
@@ -406,8 +407,25 @@ What it does, and what it deliberately does not:
   as the MVP in this document assumes.
 
 | Circuit breaker
-| Not included. Timeouts and bounded retries are in; a breaker needs shared
-  state to be useful across replicas and is the next piece.
+| Opt-in: pass a `:cache` component and the breaker keeps its state there, so
+  replicas share one rather than each discovering the outage separately — and
+  when the window elapses a `set-if-absent!` lease lets exactly one of them
+  probe, instead of all N at once. Without a `:cache` there is no breaker and
+  the client behaves as it did before.
+
+  Trips on consecutive `:rpc/unavailable` and `:rpc/timeout` — failures where
+  the call did not reach the service. A remote error does not count: the
+  service answered, so it is up. Note that `:rpc/timeout` trips the breaker
+  although it is never *retried*; retrying a timeout risks running a
+  non-idempotent call twice, while declining to make a new call risks nothing.
+
+  A refused call returns `:rpc/circuit-open` with `:retry-after-ms`, which is
+  deliberately distinct from `:rpc/unavailable`: one means we tried and could
+  not reach it, the other that we declined to try.
+
+  If the cache itself is unreachable the breaker fails open — the worst case is
+  the behaviour of no breaker, which is better than a cache outage taking every
+  remote call with it.
 |===
 
 === Sliceability by module
@@ -453,7 +471,7 @@ The architecture delivers the promise; these are the concrete pieces that make
 
 For *functional decomposition* (the bigger bet):
 
-. ✅ *Generic remote-port adapter + RPC envelope* — done (BOU-90), less the circuit breaker (BOU-285). `clj-http` client implementing a module protocol over transit, context propagation, typed errors, retry bounded to calls that never executed.
+. ✅ *Generic remote-port adapter + RPC envelope* — done (BOU-90), with the circuit breaker in BOU-285. `clj-http` client implementing a module protocol over transit, context propagation, typed errors, retry bounded to calls that never executed.
 . ✅ *Service launch mode* — done (BOU-91). `wagoe.main` boots a named module subset as an independent service, with its RPC endpoint on its own port.
 . *Break allowlisted dependency cycles* — `admin↔user`, `platform↔{user,tenant,admin,workflow,search}` — prerequisite for slicing those modules.
 . ✅ *Event-bus port + adapter* — done (BOU-93). `libs/events`, Redis Streams and in-memory. Kafka would be another adapter behind the same ports, not a change to them.

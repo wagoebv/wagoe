@@ -12,7 +12,9 @@
 
    FC/IS: shell. The wire contract is pure and lives in
    `wagoe.platform.core.rpc`."
-  (:require [wagoe.platform.core.rpc :as rpc]
+  (:require [wagoe.platform.core.circuit-breaker :as cb]
+            [wagoe.platform.core.rpc :as rpc]
+            [wagoe.platform.shell.rpc.breaker :as breaker]
             [clj-http.client :as http]
             [clojure.tools.logging :as log]
             [muuntaja.core :as m])
@@ -191,30 +193,44 @@
   [base-url operation args {:keys [context] :as opts}]
   (let [opts     (merge default-opts opts)
         envelope (rpc/request-envelope operation args context)
-        url      (rpc/service-url base-url (:path opts))]
+        url      (rpc/service-url base-url (:path opts))
+        cache    (:cache opts)
+        cb-cfg   (merge cb/default-config (:circuit-breaker opts))
+        now      #(System/currentTimeMillis)]
     (raise-if-thrown!
      operation
-     (loop [attempt 0]
-       (let [[outcome result] (post-envelope! url envelope opts)]
-         (cond
+     (if-not (breaker/allow? cache cb-cfg base-url (now))
+       (do (log/warn "rpc circuit open; not attempting" {:base-url base-url
+                                                         :operation operation})
+           (breaker/open-error cache cb-cfg base-url operation (now)))
+       (loop [attempt 0]
+         (let [[outcome result] (post-envelope! url envelope opts)
+               error-type (get-in result [:error :type])]
+         ;; The service answered, or it did not. Recorded here rather than after
+         ;; the retry loop, so a call that succeeded on its third attempt still
+         ;; closes the breaker.
+           (if (and (= outcome :transport) (cb/counts-as-failure? cb-cfg error-type))
+             (breaker/record-failure! cache cb-cfg base-url (now))
+             (breaker/record-success! cache base-url))
+           (cond
            ;; The service answered. Whatever the shape of that answer, the
            ;; operation ran — re-sending it would run it a second time.
-           (or (= outcome :answered)
-               (not (and (map? result) (retryable? opts result))))
-           result
+             (or (= outcome :answered)
+                 (not (and (map? result) (retryable? opts result))))
+             result
 
-           (< attempt (:retries opts))
-           (do (log/warn "rpc retrying" {:operation operation
-                                         :attempt   (inc attempt)
-                                         :error     (get-in result [:error :type])})
-               (Thread/sleep (* (inc attempt) (:retry-delay-ms opts)))
-               (recur (inc attempt)))
+             (< attempt (:retries opts))
+             (do (log/warn "rpc retrying" {:operation operation
+                                           :attempt   (inc attempt)
+                                           :error     (get-in result [:error :type])})
+                 (Thread/sleep (* (inc attempt) (:retry-delay-ms opts)))
+                 (recur (inc attempt)))
 
-           :else
-           (do (log/warn "rpc gave up" {:operation operation
-                                        :attempts  (inc attempt)
-                                        :error     (get-in result [:error :type])})
-               result)))))))
+             :else
+             (do (log/warn "rpc gave up" {:operation operation
+                                          :attempts  (inc attempt)
+                                          :error     (get-in result [:error :type])})
+                 result))))))))
 
 ;; =============================================================================
 ;; Protocol proxy
