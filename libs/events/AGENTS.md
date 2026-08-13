@@ -85,10 +85,26 @@ acks *after* the handler returns. Acking before would make delivery
 at-most-once, and a consumer crash would lose the event with nothing to show
 for it.
 
+Leaving an entry unacknowledged is only half of it — something has to offer it
+again. Each poll cycle does three things, in order:
+
+1. **Reclaim** entries idle longer than `:min-idle-ms` (default 30 s) from
+   consumers that are not coming back. A consumer name is unique per
+   subscription, so a restarted process polls under a new one and would
+   otherwise never see what its predecessor left pending.
+2. **Retry** this consumer's own unacknowledged entries.
+3. **Wait** for new ones.
+
+Reading only new entries — which is what an `XREADGROUP >` on its own does —
+leaves a failed event pending forever: durable-looking, and never delivered.
+
 **Ordering** is per topic, not global. Two topics have no relative order.
 
-**A throwing handler does not lose the event** — it is logged and the entry is
-left unacknowledged, so it comes back.
+**A poison event does not stall the topic.** After `:max-deliveries` attempts
+(default 5) the event is written to `<stream>:dead` and acknowledged, so
+everything behind it moves on and the event is still there to inspect.
+`:max-deliveries nil` retries forever, which is a choice rather than a stronger
+guarantee: one permanently failing handler then blocks its topic.
 
 ---
 
@@ -139,6 +155,12 @@ with no `:tenant-id` is a system event and goes to everyone.
 **Unbounded streams.** `:max-len` trims approximately (default 10 000 entries).
 A stream with no bound is a disk leak that appears in the longest-running
 deployment first.
+
+**Topics are whole keywords.** `:orders/placed` and `:billing/placed` are
+different topics; the namespace is part of the stream name. Deriving it from
+`(name topic)` collapsed them into one stream, which the in-memory adapter —
+keying on the keyword — never did. Anything that must hold for both backends
+belongs in `adapter_contract_test.clj`, which runs against each of them.
 
 **Publish failures are returned, not thrown.** A failed analytics event should
 not roll back the transaction that produced it, so the caller decides:

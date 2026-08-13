@@ -20,7 +20,8 @@
   (:import (java.io ByteArrayInputStream ByteArrayOutputStream)
            (java.util.concurrent Executors ExecutorService TimeUnit)
            (redis.clients.jedis StreamEntryID)
-           (redis.clients.jedis.params XAddParams XReadGroupParams)
+           (redis.clients.jedis.params XAddParams XAutoClaimParams XPendingParams
+                                       XReadGroupParams)
            (redis.clients.jedis.exceptions JedisDataException)
            (redis.clients.jedis.resps StreamEntry)))
 
@@ -65,8 +66,17 @@
                                 {:handlers read-handlers})))
 
 (defn- stream-key
+  "The Redis stream name for `topic`.
+
+   The whole keyword, namespace included: `(name :orders/placed)` is
+   \"placed\", so `:orders/placed` and `:billing/placed` would share one stream
+   and each subscriber would see the other's events. The in-memory adapter keys
+   on the keyword itself and keeps them apart, so this is also the adapters
+   disagreeing — the same shape of bug as transit not knowing Instant."
   [prefix topic]
-  (str prefix (name topic)))
+  (str prefix (if (keyword? topic)
+                (subs (str topic) 1)          ; :orders/placed -> "orders/placed"
+                (str topic))))
 
 ;; =============================================================================
 ;; Consuming
@@ -88,43 +98,132 @@
         (when-not (re-find #"BUSYGROUP" (str (.getMessage e)))
           (throw e))))))
 
+(defn- ack!
+  [pool stream group ^StreamEntryID id]
+  (with-open [jedis (.getResource pool)]
+    (.xack jedis stream group (into-array StreamEntryID [id]))))
+
+(defn- delivery-count
+  "How many times this entry has been handed out.
+
+   Redis tracks it per pending entry, so it survives a consumer restart —
+   which a counter kept in this process would not."
+  [pool stream group ^StreamEntryID id]
+  (try
+    (with-open [jedis (.getResource pool)]
+      (some-> (.xpending jedis stream group
+                         (-> (XPendingParams/xPendingParams)
+                             (.start id) (.end id) (.count (int 1))))
+              first
+              .getDeliveredTimes))
+    (catch Exception _ nil)))
+
+(defn- dead-letter!
+  "Move an entry that keeps failing out of the way.
+
+   Retrying forever is not at-least-once, it is a stalled topic: the entry is
+   re-offered every cycle, and every event behind it waits. Redis has no
+   dead-letter concept, so this is an explicit stream — the event is preserved
+   for someone to look at, and acknowledged so the topic moves on."
+  [pool stream group handler-error ^StreamEntry entry parsed]
+  (try
+    (with-open [jedis (.getResource pool)]
+      (.xadd jedis (str stream ":dead") (XAddParams/xAddParams)
+             (java.util.HashMap. {payload-field (get (.getFields entry) payload-field)
+                                  "error"       (str handler-error)
+                                  "original-id" (str (.getID entry))})))
+    (log/error handler-error
+               "event exceeded its delivery limit; moved to the dead-letter stream"
+               {:stream stream :dead (str stream ":dead") :id (:id parsed)})
+    (catch Exception e
+      ;; If even that fails, keep the entry pending rather than acking it away.
+      (log/error e "could not dead-letter event; leaving it pending"
+                 {:stream stream :id (:id parsed)})
+      (throw e)))
+  (ack! pool stream group (.getID entry)))
+
 (defn- handle-entry!
-  [pool stream group handler ^StreamEntry entry]
+  [pool stream group handler ^StreamEntry entry max-deliveries]
   (let [raw (get (.getFields entry) payload-field)
         parsed (try (decode raw)
                     (catch Exception e
                       (log/warn e "undecodable event on stream" {:stream stream})
                       nil))]
-    (when parsed
+    (if-not parsed
+      ;; Nothing will ever decode it, so redelivering is a loop with no exit.
+      (ack! pool stream group (.getID entry))
       (try
         (handler parsed)
         ;; Acknowledged only after the handler returns. A handler that throws
         ;; leaves the entry pending, so it is redelivered rather than lost —
         ;; which is the difference between at-least-once and at-most-once, and
         ;; is decided entirely by where this line sits.
-        (with-open [jedis (.getResource pool)]
-          (.xack jedis stream group (into-array StreamEntryID [(.getID entry)])))
+        (ack! pool stream group (.getID entry))
         (catch Throwable t
-          (log/warn t "event handler threw; entry left unacknowledged"
-                    {:stream stream :id (:id parsed)}))))))
+          (let [delivered (delivery-count pool stream group (.getID entry))]
+            (if (and max-deliveries delivered (>= delivered max-deliveries))
+              (dead-letter! pool stream group t entry parsed)
+              (log/warn t "event handler threw; entry left for redelivery"
+                        {:stream stream :id (:id parsed) :delivered delivered}))))))))
+
+(defn- read-entries
+  "XREADGROUP for `from` — `>` for new entries, `0` for this consumer's
+   unacknowledged ones."
+  [jedis stream group consumer from block-ms]
+  (let [params (cond-> (-> (XReadGroupParams/xReadGroupParams) (.count (int 10)))
+                 block-ms (.block (int block-ms)))]
+    (->> (.xreadGroup jedis group consumer params
+                      (java.util.HashMap. {stream from}))
+         (mapcat #(.getValue %)))))
+
+(defn- reclaim-abandoned!
+  "Take over entries pending for a consumer that is not coming back.
+
+   A consumer name is unique per subscription, so a process that restarts polls
+   under a new name and would never see what its predecessor left unacked —
+   the entries would sit pending forever, which is data loss wearing the
+   costume of durability. XAUTOCLAIM moves anything idle longer than
+   `min-idle-ms` to this consumer."
+  [jedis stream group consumer min-idle-ms]
+  (try
+    (-> (.xautoclaim jedis stream group consumer (long min-idle-ms)
+                     (StreamEntryID. "0-0")
+                     (-> (XAutoClaimParams/xAutoClaimParams) (.count (int 10))))
+        .getValue)
+    (catch JedisDataException _
+      ;; NOGROUP while a stream is being set up, or a Redis too old for
+      ;; XAUTOCLAIM. Neither is worth ending the subscription over.
+      nil)))
 
 (defn- poll-once!
-  [pool stream group consumer handler block-ms]
+  "One cycle: reclaim, retry, then wait for new.
+
+   Order matters. Reading only `>` — which is what this did — means an entry
+   left unacknowledged by a throwing handler is never offered again, so the
+   at-least-once this library promises was at-most-once in the one case that
+   makes the difference."
+  [pool stream group consumer handler block-ms max-deliveries min-idle-ms]
   (with-open [jedis (.getResource pool)]
-    (let [params (-> (XReadGroupParams/xReadGroupParams)
-                     (.count (int 10))
-                     (.block (int block-ms)))
-          streams (java.util.HashMap. {stream StreamEntryID/XREADGROUP_UNDELIVERED_ENTRY})]
-      (when-let [result (.xreadGroup jedis group consumer params streams)]
-        (doseq [entry-list result
-                ^StreamEntry entry (.getValue entry-list)]
-          (handle-entry! pool stream group handler entry))))))
+    (doseq [^StreamEntry entry (reclaim-abandoned! jedis stream group consumer min-idle-ms)]
+      (handle-entry! pool stream group handler entry max-deliveries))
+
+    ;; This consumer's own unacknowledged entries: a handler that threw on the
+    ;; previous cycle gets another go.
+    (doseq [^StreamEntry entry (read-entries jedis stream group consumer
+                                             (StreamEntryID. "0-0") nil)]
+      (handle-entry! pool stream group handler entry max-deliveries))
+
+    (doseq [^StreamEntry entry (read-entries jedis stream group consumer
+                                             StreamEntryID/XREADGROUP_UNDELIVERED_ENTRY
+                                             block-ms)]
+      (handle-entry! pool stream group handler entry max-deliveries))))
 
 ;; =============================================================================
 ;; Adapter
 ;; =============================================================================
 
-(defrecord RedisStreamsEventBus [pool prefix group ^ExecutorService executor subscriptions max-len]
+(defrecord RedisStreamsEventBus [pool prefix group ^ExecutorService executor subscriptions
+                                 max-len max-deliveries min-idle-ms]
   ports/IEventPublisher
   (publish! [_ topic event]
     (if-let [problem (or (event/topic-problem topic) (event/event-problem event))]
@@ -161,7 +260,8 @@
                  (fn []
                    (while @running
                      (try
-                       (poll-once! pool stream group consumer handler 1000)
+                       (poll-once! pool stream group consumer handler 1000
+                                   max-deliveries min-idle-ms)
                        (catch Exception e
                          (when @running
                            ;; Keep polling. A Redis that is briefly unreachable
@@ -204,14 +304,23 @@
                       group shares a cursor and each event goes to exactly one
                       member of it. Two services that both need every event
                       need two groups, not two consumers in one.
-            :max-len  approximate stream length to keep (default 10000)"
-  [pool & [{:keys [prefix group max-len]}]]
+            :max-len  approximate stream length to keep (default 10000)
+            :max-deliveries  attempts before an event is dead-lettered
+                             (default 5; nil retries forever, which stalls the
+                             topic behind a poison message)
+            :min-idle-ms     how long an entry must be untouched before this
+                             consumer reclaims it from another (default 30000)"
+  [pool & [{:keys [prefix group max-len max-deliveries min-idle-ms] :as opts}]]
   (->RedisStreamsEventBus pool
                           (or prefix "wagoe:events:")
                           (or group "wagoe")
                           (Executors/newCachedThreadPool)
                           (atom {})
-                          (or max-len 10000)))
+                          (or max-len 10000)
+                          ;; `contains?` and not `or`: an explicit nil means retry forever,
+                          ;; which is a choice, and `or` would silently override it.
+                          (if (contains? opts :max-deliveries) max-deliveries 5)
+                          (or min-idle-ms 30000)))
 
 (defn stop!
   "Stop every subscription and release the threads."

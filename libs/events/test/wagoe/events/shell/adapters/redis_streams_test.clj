@@ -195,3 +195,111 @@
              (is (= "corr-x" (:correlation-id e))
                  "and the correlation id came with it"))))
        (finally (redis-streams/stop! bus) (.close p))))))
+
+(deftest ^:integration a-failed-handler-actually-sees-the-event-again
+  ;; The at-least-once claim itself, rather than its precondition. The test
+  ;; above asserts the entry stays pending, which it always did — reading only
+  ;; `>` meant nothing ever offered it again, so a pending entry was a lost
+  ;; event with better paperwork. That test would pass on the broken adapter.
+  (when-redis
+   (let [topic    (unique-topic)
+         p        (pool)
+         bus      (redis-streams/create-redis-streams-bus
+                   p {:group (str "g-" (name topic)) :min-idle-ms 100})
+         attempts (atom 0)
+         handled  (promise)]
+     (try
+       (ports/subscribe! bus topic
+                         (fn [event]
+                           (if (= 1 (swap! attempts inc))
+                             (throw (ex-info "first attempt fails" {}))
+                             (deliver handled event))))
+       (Thread/sleep 300)
+       (publisher/emit! bus topic :order/placed :orders {:order-id 1})
+
+       (testing "the second attempt receives the same event"
+         (let [event (deref handled 15000 ::timeout)]
+           (is (not= ::timeout event) "the event was never redelivered")
+           (is (= :order/placed (:type event)))))
+
+       (testing "and it is the same event, so a consumer can recognise it"
+         (is (>= @attempts 2)))
+
+       (testing "once handled, it stops being redelivered"
+         (let [settled @attempts]
+           (Thread/sleep 2500)
+           (is (= settled @attempts) "an acknowledged entry came back")))
+       (finally (redis-streams/stop! bus) (.close p))))))
+
+(deftest ^:integration a-restarted-consumer-picks-up-what-its-predecessor-dropped
+  ;; A consumer name is unique per subscription, so a process that restarts
+  ;; polls under a new one. Without XAUTOCLAIM the previous consumer's
+  ;; unacknowledged entries sit pending forever — data loss dressed as
+  ;; durability, and invisible because the stream still shows the event.
+  (when-redis
+   (let [topic  (unique-topic)
+         group  (str "g-" (name topic))
+         p      (pool)
+         first-bus (redis-streams/create-redis-streams-bus
+                    p {:group group :min-idle-ms 100})
+         saw-it (atom 0)]
+     (try
+       ;; First consumer takes the event and never acknowledges it.
+       (ports/subscribe! first-bus topic
+                         (fn [_] (swap! saw-it inc) (throw (ex-info "crash" {}))))
+       (Thread/sleep 300)
+       (publisher/emit! first-bus topic :a/b :test {:n 1})
+       (is (wait-for #(pos? @saw-it)) "the first consumer received it")
+       (redis-streams/stop! first-bus)
+
+       ;; A different consumer in the same group, as a restart produces.
+       (let [second-bus (redis-streams/create-redis-streams-bus
+                         p {:group group :min-idle-ms 100})
+             recovered  (promise)]
+         (try
+           (Thread/sleep 300)
+           (ports/subscribe! second-bus topic #(deliver recovered %))
+           (testing "the new consumer reclaims the abandoned entry"
+             (let [event (deref recovered 15000 ::timeout)]
+               (is (not= ::timeout event)
+                   "the entry stayed pending against a consumer that is gone")
+               (is (= {:n 1} (:payload event)))))
+           (finally (redis-streams/stop! second-bus))))
+       (finally (.close p))))))
+
+(deftest ^:integration an-event-that-always-fails-does-not-stall-the-topic
+  ;; The other half of retrying: without a limit, a poison message is re-offered
+  ;; every cycle forever and everything behind it waits. "Retries forever" is
+  ;; not a stronger guarantee, it is an outage.
+  (when-redis
+   (let [topic    (unique-topic)
+         group    (str "g-" (name topic))
+         p        (pool)
+         bus      (redis-streams/create-redis-streams-bus
+                   p {:group group :min-idle-ms 100 :max-deliveries 2})
+         poison   (atom 0)
+         good     (promise)]
+     (try
+       (ports/subscribe! bus topic
+                         (fn [event]
+                           (if (= :poison (:type event))
+                             (do (swap! poison inc) (throw (ex-info "always fails" {})))
+                             (deliver good event))))
+       (Thread/sleep 300)
+       (publisher/emit! bus topic :poison :test nil)
+       (publisher/emit! bus topic :fine :test {:ok true})
+
+       (testing "the event behind the poison one still gets through"
+         (is (not= ::timeout (deref good 15000 ::timeout))))
+
+       (testing "the poison event stops being retried"
+         (let [settled @poison]
+           (Thread/sleep 3000)
+           (is (= settled @poison) "still being redelivered after its limit")
+           (is (<= settled 4) "retried far past the limit")))
+
+       (testing "and it is kept, not discarded"
+         (with-open [j (.getResource p)]
+           (let [dead (.xrange j (str "wagoe:events:" (name topic) ":dead") "-" "+")]
+             (is (seq dead) "the failing event should be inspectable, not gone"))))
+       (finally (redis-streams/stop! bus) (.close p))))))
