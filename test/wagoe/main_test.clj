@@ -184,3 +184,34 @@
         (is (contains? guarded m)
             (str m " is neither statically required nor required at its condition — "
                  "its init-key would be missing when the module is active"))))))
+
+;; =============================================================================
+;; Every published library must be documented
+;; =============================================================================
+
+(deftest ^:integration every-published-library-has-a-documentation-page
+  ;; The website builds its library docs from these pages, so a library without
+  ;; one is absent from wagoe.org.
+  (let [;; build.clj marks a library publishable. Read from disk because
+        ;; wagoe.tools.deploy is Babashka-only.
+        libs      (->> (.listFiles (io/file "libs"))
+                       (filter #(.isDirectory ^java.io.File %))
+                       (filter #(.exists (io/file % "build.clj")))
+                       (map #(.getName ^java.io.File %))
+                       set)
+        page-name {"wagoe-cli" "cli" "wagoe-mcp" "mcp"}
+        page-for  (fn [lib] (get page-name lib lib))
+        pages     (->> (file-seq (io/file "docs/modules/libraries/pages"))
+                       (filter #(.isFile ^java.io.File %))
+                       (map #(str/replace (.getName ^java.io.File %) ".adoc" ""))
+                       set)
+        undocumented (remove #(contains? pages (page-for %)) (sort libs))]
+
+    (testing "the library list and the pages were both read"
+      (is (< 25 (count libs)) (str "only found " (count libs) " libraries"))
+      (is (< 25 (count pages)) (str "only found " (count pages) " pages")))
+
+    (testing "every published library is written about"
+      (is (empty? undocumented)
+          (str "published with no page under docs/modules/libraries/pages/: "
+               (str/join ", " undocumented))))))

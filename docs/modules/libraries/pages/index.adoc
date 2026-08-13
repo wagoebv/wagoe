@@ -51,6 +51,9 @@ Every library follows the same FC/IS structure, making the codebase instantly fa
 | xref:cache.adoc[cache]
 | Distributed caching with TTL, atomic operations, and multi-tenant isolation. Redis and in-memory backends.
 
+| xref:events.adoc[events]
+| Asynchronous event bus for cross-process module communication. Redis Streams and in-memory, at-least-once delivery with consumer groups.
+
 | xref:jobs.adoc[jobs]
 | Background job processing with priority queues, retries, exponential backoff, multi-tenant support.
 

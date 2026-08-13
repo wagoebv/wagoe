@@ -1,0 +1,155 @@
+= events
+:description: Asynchronous, cross-process event bus — in-memory and Redis Streams, at-least-once.
+
+Asynchronous communication between modules. The synchronous seam is
+`ports.clj`, and across processes the remote-port adapter; this is the other
+half — a publisher does not know who is listening, does not wait, and is
+unaffected if a consumer is down.
+
+== When to use it
+
+[cols="1,2",options="header"]
+|===
+| Want | Use
+
+| An answer
+| A port. In-process, or the remote-port adapter across processes.
+
+| To tell others something happened
+| This.
+
+| Work done later, reliably, by this app
+| `wagoe-jobs`. A job queue is not an event bus: one worker per job, not N
+  independent subscribers.
+
+| To push to a browser
+| `wagoe-realtime`.
+|===
+
+An event is a statement of fact in the past tense — `:order/placed`, not
+`:order/place`. If the publisher cares what the subscriber does about it, it
+wants a port call.
+
+== Key namespaces
+
+[cols="1,3",options="header"]
+|===
+| Namespace | Purpose
+
+| `wagoe.events.ports`
+| Protocols: `IEventPublisher`, `IEventSubscriber`, `IEventHistory`
+
+| `wagoe.events.core.event`
+| Pure: envelope, validation, redelivery detection, tenant scoping
+
+| `wagoe.events.shell.publisher`
+| `build` and `emit!` — assigns the id and timestamp
+
+| `wagoe.events.shell.adapters.in-memory`
+| In-process bus with a bounded history buffer (development, tests)
+
+| `wagoe.events.shell.adapters.redis-streams`
+| Redis Streams: cross-process, at-least-once, consumer groups
+
+| `wagoe.events.shell.module-wiring`
+| `:wagoe/events` Integrant key
+|===
+
+Three protocols rather than one: a module that only emits events should not
+depend on subscription machinery it never calls, and not every backend can
+replay history.
+
+== Usage
+
+[source,clojure]
+----
+(require '[wagoe.events.ports :as events]
+         '[wagoe.events.shell.publisher :as publisher])
+
+;; Publish — pass the request's context so the trace survives the hop
+(publisher/emit! bus :orders :order/placed :orders
+                 {:order-id 7}
+                 {:correlation-id (:correlation-id request)
+                  :tenant-id      (:tenant-id request)})
+
+;; Subscribe
+(def sub (events/subscribe! bus :orders
+                            (fn [event]
+                              (when (= :order/placed (:type event))
+                                (send-confirmation! (:payload event))))))
+
+(events/unsubscribe! bus sub)
+
+;; Replay what was missed
+(events/history bus :orders {:since last-handled-at})
+----
+
+== Configuration
+
+[source,clojure]
+----
+;; config.edn — under :active
+:wagoe/events
+{:provider       :redis-streams
+ :host           #env REDIS_HOST
+ :port           #long #or [#env REDIS_PORT 6379]
+ :password       #env REDIS_PASSWORD
+ :group          "my-app"     ; one per logical consumer
+ :max-deliveries 5            ; nil retries forever
+ :min-idle-ms    30000
+ :max-total      32}          ; one connection per subscribed topic, plus headroom
+
+;; test / single process
+:wagoe/events
+{:provider :in-memory}
+----
+
+== Delivery semantics
+
+*At-least-once.* An event is redelivered until a consumer acknowledges it, so a
+consumer that crashes mid-handler sees it again. *Consumers must be
+idempotent* — `:id` is assigned by the publisher, so it is stable across
+redeliveries.
+
+Each Redis poll cycle reclaims entries abandoned by consumers that are not
+coming back, retries this consumer's own unacknowledged ones, then waits for
+new. After `:max-deliveries` attempts an event is written to `<stream>:dead`
+and acknowledged, so one poison event cannot stall its topic.
+
+*Consumer groups split work between processes.* Every event goes to exactly one
+member of a group, and to every group — so two services that both need every
+event need two groups. Within one process every `subscribe!` on a topic
+receives every event.
+
+Ordering is per topic. Two topics have no relative order.
+
+== Adapters
+
+[cols="1,1,1,1",options="header"]
+|===
+| Provider | Crosses processes | History | Use
+
+| `:redis-streams`
+| yes
+| within stream retention
+| production
+
+| `:in-memory`
+| no
+| bounded buffer, dies with the process
+| development, tests
+|===
+
+Redis *Streams*, not pub/sub. Pub/sub is fire-and-forget: a subscriber that is
+restarting when an event is published never learns it happened. A stream keeps
+its entries and tracks what is unacknowledged, which is what makes
+at-least-once possible.
+
+The two adapters are held to one contract by `adapter_surface_test.clj`, which
+runs every protocol method, option and value type against both — they disagreed
+seven times during development, every one invisible in-memory.
+
+== See also
+
+* `libs/events/AGENTS.md` — full reference, pitfalls, testing
+* xref:architecture:scaling.adoc[Sizing & Scaling] — where this fits
