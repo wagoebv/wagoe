@@ -402,3 +402,32 @@
       (is (empty? (set/difference known dispatched))
           (str "doctor accepts " (pr-str (set/difference known dispatched))
                " but build-provider would throw")))))
+
+(deftest ^:unit events-providers-match-what-the-code-can-build
+  ;; Same copy-drift hazard as :wagoe/ai-service above: doctor runs on Babashka
+  ;; and keeps its own list, so the two can disagree in either direction —
+  ;; doctor rejecting a provider that works, or accepting a typo that fails at
+  ;; Integrant startup instead of in `bb doctor`.
+  (let [src (or (some #(when (.exists (io/file %)) (slurp %))
+                      ["libs/events/src/wagoe/events/shell/module_wiring.clj"
+                       "../events/src/wagoe/events/shell/module_wiring.clj"])
+                (throw (ex-info "events module_wiring.clj not found — cannot compare"
+                                {:cwd (System/getProperty "user.dir")})))
+        ;; The case arms of init-key, which is the real registry.
+        dispatched (set (map (comp keyword second)
+                             (re-seq #"(?m)^\s+:([a-z-]+)\s+\([a-z-]+/create-" src)))
+        known      (get doctor/known-providers :wagoe/events)]
+
+    (testing "the source parsed — otherwise this passes vacuously"
+      (is (<= 2 (count dispatched))
+          (str "only found " (pr-str dispatched) " in init-key")))
+
+    (testing "doctor accepts every provider the code can build"
+      (is (empty? (set/difference dispatched known))
+          (str "init-key handles " (pr-str (set/difference dispatched known))
+               " but doctor would reject them")))
+
+    (testing "and claims no provider the code cannot build"
+      (is (empty? (set/difference known dispatched))
+          (str "doctor accepts " (pr-str (set/difference known dispatched))
+               " which init-key cannot build")))))

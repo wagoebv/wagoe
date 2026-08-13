@@ -9,7 +9,8 @@
             [wagoe.events.shell.publisher :as publisher]
             [wagoe.events.ports :as ports]
             [clojure.test :refer [deftest is testing]]
-            [clojure.java.shell :as shell])
+            [clojure.java.shell :as shell]
+            [integrant.core])
   (:import (redis.clients.jedis JedisPool JedisPoolConfig)))
 
 (defn- redis-available? []
@@ -303,3 +304,31 @@
            (let [dead (.xrange j (str "wagoe:events:" (name topic) ":dead") "-" "+")]
              (is (seq dead) "the failing event should be inspectable, not gone"))))
        (finally (redis-streams/stop! bus) (.close p))))))
+
+(deftest ^:integration configured-retry-options-reach-the-bus
+  ;; `select-keys` in the module wiring dropped :max-deliveries and
+  ;; :min-idle-ms, so a deployment that configured "retry forever" got the
+  ;; default of five and its poison events were dead-lettered anyway — the
+  ;; documentation and the behaviour disagreeing, with nothing to say so.
+  (let [built (atom nil)]
+    (with-redefs [redis-streams/create-redis-streams-bus
+                  (fn [_pool opts] (reset! built opts) {:stub true})]
+      (require 'wagoe.events.shell.module-wiring)
+      (let [init (get-method integrant.core/init-key :wagoe/events)]
+        (init :wagoe/events {:provider       :redis-streams
+                             :host           "localhost"
+                             :group          "g"
+                             :max-deliveries nil
+                             :min-idle-ms    250
+                             :max-len        7})))
+
+    (testing "every documented knob is passed through"
+      (is (= "g" (:group @built)))
+      (is (= 7 (:max-len @built)))
+      (is (= 250 (:min-idle-ms @built))))
+
+    (testing "including an explicit nil, which means retry forever"
+      ;; `contains?` and not truthiness: dropping the key and passing nil are
+      ;; different instructions, and only one of them is what was configured.
+      (is (contains? @built :max-deliveries))
+      (is (nil? (:max-deliveries @built))))))

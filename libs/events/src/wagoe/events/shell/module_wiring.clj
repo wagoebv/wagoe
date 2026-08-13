@@ -28,7 +28,13 @@
   (let [bus (case provider
               :redis-streams (redis-streams/create-redis-streams-bus
                               (redis-pool config)
-                              (select-keys config [:prefix :group :max-len]))
+                              ;; Every documented knob, not a subset. Dropping
+                              ;; :max-deliveries here meant a config that asked
+                              ;; to retry forever silently dead-lettered after
+                              ;; five attempts — the documentation and the
+                              ;; behaviour disagreeing, with nothing to say so.
+                              (select-keys config [:prefix :group :max-len
+                                                   :max-deliveries :min-idle-ms]))
               :in-memory     (in-memory/create-in-memory-bus
                               (select-keys config [:history-limit]))
               (throw (ex-info (str "Unknown event bus provider: " (pr-str provider))

@@ -145,3 +145,60 @@
                          [:error :type]))
               (str label ": an event with no id was accepted"))
           (finally (stop bus)))))))
+
+(deftest ^:integration every-subscriber-to-a-topic-receives-every-event
+  ;; The port says `subscribe!` calls the handler with each event. Redis
+  ;; consumers in one group *share* a stream — each entry goes to exactly one —
+  ;; so a consumer per subscription meant two modules listening to the same
+  ;; topic each got roughly half the events, at random. The in-memory adapter
+  ;; fanned out, so this is the third way the two have disagreed.
+  ;;
+  ;; The earlier topic test has two subscribers on *different* topics, which is
+  ;; why it did not catch this.
+  (doseq [[label make stop] (adapters)]
+    (testing label
+      (let [bus (make)
+            topic (unique "contract")
+            a (atom []) b (atom []) c (atom [])]
+        (try
+          (ports/subscribe! bus topic #(swap! a conj %))
+          (ports/subscribe! bus topic #(swap! b conj %))
+          (ports/subscribe! bus topic #(swap! c conj %))
+          (Thread/sleep 500)
+
+          (publisher/emit! bus topic :order/placed :orders {:n 1})
+
+          (testing "all three handlers see it, not one of them"
+            (is (wait-for #(and (seq @a) (seq @b) (seq @c)))
+                (str label ": delivered to "
+                     (count (filter seq [@a @b @c])) " of 3 subscribers")))
+
+          (testing "and exactly once each"
+            (Thread/sleep 1500)
+            (is (= [1 1 1] [(count @a) (count @b) (count @c)])
+                (str label ": duplicate delivery to a local subscriber")))
+          (finally (stop bus)))))))
+
+(deftest ^:integration unsubscribing-one-handler-leaves-the-others
+  ;; Sharing one Redis consumer per topic makes this worth stating: stopping
+  ;; the poller when any handler goes would silently deafen the rest.
+  (doseq [[label make stop] (adapters)]
+    (testing label
+      (let [bus (make)
+            topic (unique "contract")
+            kept (atom []) dropped (atom [])
+            _ (ports/subscribe! bus topic #(swap! kept conj %))
+            sub (ports/subscribe! bus topic #(swap! dropped conj %))]
+        (try
+          (Thread/sleep 500)
+          (ports/unsubscribe! bus sub)
+          (publisher/emit! bus topic :a/b :test {:n 1})
+
+          (testing "the remaining handler still receives events"
+            (is (wait-for #(seq @kept))
+                (str label ": unsubscribing one handler stopped the others")))
+
+          (testing "and the unsubscribed one does not"
+            (Thread/sleep 1000)
+            (is (empty? @dropped)))
+          (finally (stop bus)))))))

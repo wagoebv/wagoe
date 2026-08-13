@@ -32,7 +32,11 @@
    ;; drifts: adding :replicate there left doctor rejecting a provider that
    ;; worked. A test pins the two together (BOU-281).
    :wagoe/ai-service       #{:ollama :anthropic :openai :replicate :no-op}
-   :wagoe/cache            #{:redis :in-memory}})
+   :wagoe/cache            #{:redis :in-memory}
+   ;; Mirrors the case in wagoe.events.shell.module-wiring/init-key. Same
+   ;; copy-drift hazard as :wagoe/ai-service above, and the same reason: doctor
+   ;; runs on Babashka and cannot load the lib to ask it.
+   :wagoe/events           #{:redis-streams :in-memory}})
 
 ;; =============================================================================
 ;; Pure check functions

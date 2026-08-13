@@ -49,11 +49,14 @@ wants a port call, not an event.
 ```clojure
 ;; config.edn — under :active
 :wagoe/events
-{:provider :redis-streams
- :host     #env REDIS_HOST
- :port     #long #or [#env REDIS_PORT 6379]
- :password #env REDIS_PASSWORD
- :group    "my-app"}          ; see "Consumer groups" below
+{:provider       :redis-streams
+ :host           #env REDIS_HOST
+ :port           #long #or [#env REDIS_PORT 6379]
+ :password       #env REDIS_PASSWORD
+ :group          "my-app"     ; see "Consumer groups" below
+ :max-deliveries 5            ; nil retries forever — see "Delivery semantics"
+ :min-idle-ms    30000
+ :max-len        10000}
 
 ;; test / single process
 :wagoe/events
@@ -110,8 +113,8 @@ guarantee: one permanently failing handler then blocks its topic.
 
 ## Consumer groups
 
-`:group` is the unit of "who has seen what". Every event goes to *exactly one*
-member of a group, and to *every* group.
+`:group` splits work between **processes**. Every event goes to exactly one
+member of a group, and to every group.
 
 - Three replicas of one service sharing a group → the work is split between
   them. This is what you want for scaling a consumer.
@@ -120,6 +123,13 @@ member of a group, and to *every* group.
   like random message loss.
 
 Name the group after the service, not the topic.
+
+Within a process it does not apply: every `subscribe!` on a topic receives
+every event on it, as the port says and as the in-memory adapter does. The
+Redis adapter runs one consumer per topic and fans out locally. A consumer per
+subscription would put both handlers in the same group and hand each event to
+one of them — two modules listening to the same topic would then each get
+roughly half, at random.
 
 ---
 

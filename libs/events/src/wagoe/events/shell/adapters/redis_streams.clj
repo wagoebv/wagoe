@@ -249,32 +249,64 @@
   (subscribe! [_ topic handler]
     (if-let [problem (event/topic-problem topic)]
       {:error {:type :events/invalid :message problem}}
-      (let [stream   (stream-key prefix topic)
-            consumer (str (name group) "-" (subs (str (random-uuid)) 0 8))
-            id       (str (random-uuid))
-            running  (atom true)]
+      (let [stream (stream-key prefix topic)
+            id     (str (random-uuid))]
         (ensure-group! pool stream group)
-        (swap! subscriptions assoc id {:running running :stream stream})
-        (.submit executor
-                 ^Runnable
-                 (fn []
-                   (while @running
-                     (try
-                       (poll-once! pool stream group consumer handler 1000
-                                   max-deliveries min-idle-ms)
-                       (catch Exception e
-                         (when @running
-                           ;; Keep polling. A Redis that is briefly unreachable
-                           ;; must not end the subscription — it would come back
-                           ;; and deliver to nobody.
-                           (log/warn e "event poll failed; retrying" {:stream stream})
-                           (Thread/sleep 500)))))))
+        ;; One Redis consumer per topic, fanning out to every local handler.
+        ;;
+        ;; A consumer per `subscribe!` looks equivalent and is not: consumers
+        ;; in one group *share* a stream, so Redis hands each entry to exactly
+        ;; one of them. Two modules subscribing to the same topic would then
+        ;; each receive roughly half the events, at random — while the port
+        ;; says `subscribe!` calls the handler with each event, and the
+        ;; in-memory adapter does. `:group` is for splitting work between
+        ;; *processes*; within one, everybody hears everything.
+        (swap! subscriptions update stream
+               (fn [{:keys [handlers] :as existing}]
+                 (if existing
+                   (assoc existing :handlers (assoc handlers id handler))
+                   {:running  (atom true)
+                    :handlers {id handler}})))
+        (let [{:keys [running]} (get @subscriptions stream)]
+          (when (= 1 (count (:handlers (get @subscriptions stream))))
+            (let [consumer (str (name group) "-" (subs (str (random-uuid)) 0 8))
+                  fan-out  (fn [event]
+                             (doseq [[_ h] (:handlers (get @subscriptions stream))]
+                               (try
+                                 (h event)
+                                 (catch Throwable t
+                                   ;; One handler must not stop the others, and
+                                   ;; must not ack the entry either — rethrown
+                                   ;; below so the event is redelivered.
+                                   (log/warn t "event handler threw" {:stream stream})
+                                   (throw t)))))]
+              (.submit executor
+                       ^Runnable
+                       (fn []
+                         (while @running
+                           (try
+                             (poll-once! pool stream group consumer fan-out 1000
+                                         max-deliveries min-idle-ms)
+                             (catch Exception e
+                               (when @running
+                                 ;; Keep polling. A Redis that is briefly
+                                 ;; unreachable must not end the subscription —
+                                 ;; it would come back and deliver to nobody.
+                                 (log/warn e "event poll failed; retrying"
+                                           {:stream stream})
+                                 (Thread/sleep 500))))))))))
         id)))
 
   (unsubscribe! [_ subscription]
-    (when-let [{:keys [running]} (get @subscriptions subscription)]
-      (reset! running false))
-    (swap! subscriptions dissoc subscription)
+    (doseq [[stream {:keys [running handlers]}] @subscriptions]
+      (when (contains? handlers subscription)
+        (let [remaining (dissoc handlers subscription)]
+          (if (seq remaining)
+            (swap! subscriptions assoc-in [stream :handlers] remaining)
+            (do
+              ;; Last handler for this topic: stop polling it.
+              (reset! running false)
+              (swap! subscriptions dissoc stream))))))
     nil)
 
   ports/IEventHistory
@@ -327,7 +359,8 @@
   [{:keys [^ExecutorService executor subscriptions]}]
   (when subscriptions
     (doseq [[_ {:keys [running]}] @subscriptions]
-      (reset! running false)))
+      (reset! running false))
+    (reset! subscriptions {}))
   (when executor
     (.shutdown executor)
     (when-not (.awaitTermination executor 3 TimeUnit/SECONDS)
