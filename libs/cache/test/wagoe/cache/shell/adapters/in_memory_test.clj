@@ -381,3 +381,27 @@
       (is (true? (ports/set-if-absent! cache "lease" {:holder :c} 1))
           "an expired lease was never released")
       (is (= {:holder :c} (ports/get-value cache "lease"))))))
+
+(deftest ^:unit incrementing-an-expired-counter-starts-again
+  ;; There is no background sweep, so an expired entry sits in the map until
+  ;; something reads it. Incrementing one must behave as Redis does — the key
+  ;; is gone, so the count starts from zero and carries no expiry — rather than
+  ;; continuing a lapsed count or returning a value that is already expired.
+  (let [cache (in-mem/create-in-memory-cache {})]
+    (ports/increment! cache "counter")
+    (ports/increment! cache "counter")
+    (ports/expire! cache "counter" 1)
+    (is (= 2 (ports/get-value cache "counter")))
+
+    (Thread/sleep 1100)
+
+    (testing "the count starts again rather than continuing"
+      (is (= 1 (ports/increment! cache "counter"))
+          "a lapsed count carried on from its old value"))
+
+    (testing "and the value it returns is usable, not already expired"
+      (is (= 1 (ports/get-value cache "counter"))
+          "increment! returned a value that get-value then discarded"))
+
+    (testing "with no expiry carried from the entry that lapsed"
+      (is (nil? (ports/ttl cache "counter"))))))

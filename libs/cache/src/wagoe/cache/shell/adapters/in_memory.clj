@@ -257,22 +257,24 @@
           entries (:entries state)]
       (-> (swap! entries
                  (fn [cache]
-                   (let [current-entry (get cache namespaced-key)
-                         current-value (if current-entry
-                                         (:value current-entry)
-                                         0)
-                         new-value (+ current-value delta)]
+                   ;; An expired entry is gone, as it is in Redis: nothing is
+                   ;; carried from it. Reusing its value continues a count that
+                   ;; should have lapsed, and carrying its expiry returns a
+                   ;; value that is already expired — there is no background
+                   ;; sweep here, so an expired entry can sit unread for a long
+                   ;; time and still be found by this.
+                   (let [entry     (get cache namespaced-key)
+                         live      (when (and entry (not (expired? entry))) entry)
+                         new-value (+ (:value live 0) delta)]
                      (assoc cache namespaced-key
-                            ;; Keep the existing expiry. Redis INCR does, and a
-                            ;; counter that loses its TTL never expires — the
-                            ;; callers here set it once, on the first increment,
-                            ;; so wiping it on the second means it is never set
-                            ;; again. Rate-limit windows and circuit-breaker
-                            ;; failure counts then accumulate for the life of
-                            ;; the process.
+                            ;; A live counter keeps its expiry. Redis INCR does,
+                            ;; and callers rely on it: the breaker and the rate
+                            ;; limiter each set a TTL once, on the first
+                            ;; increment, because that is the only moment they
+                            ;; can recognise.
                             (->CacheEntry new-value
-                                          (or (:created-at current-entry) (now))
-                                          (:expires-at current-entry)
+                                          (or (:created-at live) (now))
+                                          (:expires-at live)
                                           0 (now)
                                           (swap! (:access-counter state) inc))))))
           (get namespaced-key)
