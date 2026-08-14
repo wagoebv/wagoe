@@ -198,8 +198,15 @@
         cb-cfg   (merge cb/default-config
                         ;; The probe lease must outlive a probe, and only the
                         ;; client knows how long one may take.
-                        {:probe-lease-ms (* (inc (:retries opts 0))
-                                            (:timeout-ms opts 0))}
+                        {:probe-lease-ms (let [n (:retries opts 0)]
+                                           ;; Every attempt's timeout, plus the
+                                           ;; backoff slept between them —
+                                           ;; delay×1 + delay×2 + … — or the
+                                           ;; lease expires mid-probe and a
+                                           ;; second replica sends a second one.
+                                           (+ (* (inc n) (:timeout-ms opts 0))
+                                              (* (:retry-delay-ms opts 0)
+                                                 (quot (* n (inc n)) 2))))}
                         (:circuit-breaker opts))
         _        (when-let [problem (and (:circuit-breaker opts) (cb/config-problem cb-cfg))]
                    ;; A misconfigured breaker is inert or wrong, and either way

@@ -263,7 +263,17 @@
                                          0)
                          new-value (+ current-value delta)]
                      (assoc cache namespaced-key
-                            (->CacheEntry new-value (now) nil 0 (now)
+                            ;; Keep the existing expiry. Redis INCR does, and a
+                            ;; counter that loses its TTL never expires — the
+                            ;; callers here set it once, on the first increment,
+                            ;; so wiping it on the second means it is never set
+                            ;; again. Rate-limit windows and circuit-breaker
+                            ;; failure counts then accumulate for the life of
+                            ;; the process.
+                            (->CacheEntry new-value
+                                          (or (:created-at current-entry) (now))
+                                          (:expires-at current-entry)
+                                          0 (now)
                                           (swap! (:access-counter state) inc))))))
           (get namespaced-key)
           :value)))
@@ -279,8 +289,13 @@
 
   (set-if-absent! [this key value ttl-seconds]
     (let [namespaced-key (add-namespace (:namespace state) key)
-          entries (:entries state)]
-      (if (contains? @entries namespaced-key)
+          entries (:entries state)
+          entry   (get @entries namespaced-key)]
+      ;; An expired entry is absent. `contains?` alone made a lease taken with a
+      ;; TTL permanent until something else happened to prune it — so a holder
+      ;; that died never released it, and nothing could take it again. Redis
+      ;; SETNX honours expiry, and callers write against that.
+      (if (and entry (not (expired? entry)))
         false
         (do
           (ports/set-value! this key value ttl-seconds)

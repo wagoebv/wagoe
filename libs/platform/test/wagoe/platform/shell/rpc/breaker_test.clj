@@ -356,3 +356,61 @@
       (is (= 5 @received)
           "a protocol error tripped a breaker whose :trip-on does not name it")
       (finally (.stop server)))))
+
+(deftest ^:integration the-probe-lease-covers-the-whole-probe
+  ;; End-to-end cover for a probe that retries. The arithmetic is pinned in
+  ;; `the-probe-lease-budget-includes-the-backoff`, which is what fails when the
+  ;; backoff is left out; this one keeps passing either way, because the
+  ;; timings involved are too indirect to isolate it. Kept as a guard that a
+  ;; retrying probe still holds its lease at all.
+  (let [received (atom 0)
+        cache    (cache-mem/create-in-memory-cache {})
+        cfg      {:failure-threshold 1 :open-ms 400}
+        ;; 3 attempts × 300ms, plus 500 + 1000ms of backoff: 2.4s of probe
+        ;; against a 400ms window.
+        slow     {:retries 2 :retry-delay-ms 500 :timeout-ms 300
+                  ;; Timeouts are not retried by default — without this the
+                  ;; "slow" probe gives up after one attempt and is not slow.
+                  :retry-on #{:rpc/timeout}
+                  :service-key service-key :cache cache
+                  :circuit-breaker cfg}]
+    (with-slow-server received
+      (fn [url]
+        (client/call! url :get-payment-status ["id"] (opts cache {:circuit-breaker cfg}))
+        (Thread/sleep 600)
+
+        (let [before @received
+              probe  (future (client/call! url :get-payment-status ["id"] slow))]
+          ;; While that probe is retrying, a second caller must find the lease
+          ;; taken — even though the open window elapsed long ago.
+          (Thread/sleep 1200)
+          (let [r (client/call! url :get-payment-status ["id"] (opts cache {:circuit-breaker cfg}))]
+            (is (= :rpc/circuit-open (get-in r [:error :type]))
+                "the lease expired while the probe was still running"))
+          (deref probe 10000 nil)
+          (is (<= (- @received before) 3)
+              "a second probe was sent while the first was in flight"))))))
+
+(deftest ^:unit the-probe-lease-budget-includes-the-backoff
+  ;; A probe with retries spends its timeouts *and* the backoff slept between
+  ;; them — delay×1 + delay×2 + … A lease covering only the timeouts expires
+  ;; while the probe is still running and a second replica takes it, which is
+  ;; the one thing half-open exists to prevent.
+  (let [seen (atom nil)]
+    (with-redefs [breaker/allow? (fn [_ config _ _] (reset! seen config) false)]
+      (client/call! "http://unused.invalid" :get-payment-status ["id"]
+                    {:retries 2 :retry-delay-ms 500 :timeout-ms 300
+                     :service-key service-key
+                     :cache (cache-mem/create-in-memory-cache {})}))
+
+    (testing "three attempts of 300ms, plus 500 + 1000ms of backoff"
+      (is (= (+ (* 3 300) 500 1000) (:probe-lease-ms @seen))))
+
+    (testing "and with no retries it is just the one timeout"
+      (let [seen2 (atom nil)]
+        (with-redefs [breaker/allow? (fn [_ config _ _] (reset! seen2 config) false)]
+          (client/call! "http://unused.invalid" :get-payment-status ["id"]
+                        {:retries 0 :retry-delay-ms 500 :timeout-ms 300
+                         :service-key service-key
+                         :cache (cache-mem/create-in-memory-cache {})}))
+        (is (= 300 (:probe-lease-ms @seen2)))))))

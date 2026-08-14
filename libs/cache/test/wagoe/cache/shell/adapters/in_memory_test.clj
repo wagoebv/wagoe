@@ -342,3 +342,42 @@
       ;; Verify all values
       (doseq [i (range 50)]
         (is (= i (ports/get-value cache (keyword (str "key" i)))))))))
+
+(deftest ^:unit incrementing-keeps-the-expiry
+  ;; Redis INCR preserves the TTL, and callers rely on that: both the rate
+  ;; limiter and the RPC circuit breaker set an expiry once, on the first
+  ;; increment, because that is the only moment they can recognise. An adapter
+  ;; that clears it on the second increment means the key never expires — so
+  ;; rate-limit windows and failure counts accumulate for the life of the
+  ;; process, and the breaker eventually opens on failures that were never
+  ;; consecutive.
+  (let [cache (in-mem/create-in-memory-cache {})]
+    (is (= 1 (ports/increment! cache "counter")))
+    (ports/expire! cache "counter" 60)
+    (is (some? (ports/ttl cache "counter")))
+
+    (testing "a later increment does not clear it"
+      (ports/increment! cache "counter")
+      (ports/increment! cache "counter")
+      (is (some? (ports/ttl cache "counter"))
+          "the TTL was lost, so this key will never expire")
+      (is (pos? (ports/ttl cache "counter"))))
+
+    (testing "and the value is still counted"
+      (is (= 3 (ports/get-value cache "counter"))))))
+
+(deftest ^:unit an-expired-key-is-absent-for-set-if-absent
+  ;; SETNX semantics: callers use this as a lease, and a lease that cannot be
+  ;; retaken once it expires is a lock that leaks. Redis honours the TTL here;
+  ;; checking only for the key's presence did not, so a holder that died never
+  ;; released it.
+  (let [cache (in-mem/create-in-memory-cache {})]
+    (is (true? (ports/set-if-absent! cache "lease" {:holder :a} 1)))
+    (is (false? (ports/set-if-absent! cache "lease" {:holder :b} 1))
+        "the lease was taken twice while still held")
+
+    (testing "and once it expires another holder can take it"
+      (Thread/sleep 1100)
+      (is (true? (ports/set-if-absent! cache "lease" {:holder :c} 1))
+          "an expired lease was never released")
+      (is (= {:holder :c} (ports/get-value cache "lease"))))))
