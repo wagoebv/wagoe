@@ -194,6 +194,11 @@
   (let [opts     (merge default-opts opts)
         envelope (rpc/request-envelope operation args context)
         url      (rpc/service-url base-url (:path opts))
+        ;; Key the breaker on the same normalised identity the request uses.
+        ;; Two adapters configured as "http://payments:3001" and
+        ;; "http://payments:3001/" call one service and would otherwise keep
+        ;; two failure counters and two probe leases for it.
+        service  (rpc/service-url base-url "")
         cache    (:cache opts)
         cb-cfg   (merge cb/default-config
                         ;; The probe lease must outlive a probe, and only the
@@ -217,10 +222,10 @@
         now      #(System/currentTimeMillis)]
     (raise-if-thrown!
      operation
-     (if-not (breaker/allow? cache cb-cfg base-url (now))
+     (if-not (breaker/allow? cache cb-cfg service (now))
        (do (log/warn "rpc circuit open; not attempting" {:base-url base-url
                                                          :operation operation})
-           (breaker/open-error cache cb-cfg base-url operation (now)))
+           (breaker/open-error cache cb-cfg service operation (now)))
        (loop [attempt 0]
          (let [[outcome result] (post-envelope! url envelope opts)
                error-type (get-in result [:error :type])]
@@ -234,8 +239,8 @@
            ;; service being unusable. `:trip-on` is where they say so, and a
            ;; policy the validator accepts has to be one the client honours.
            (if (cb/counts-as-failure? cb-cfg error-type)
-             (breaker/record-failure! cache cb-cfg base-url (now))
-             (breaker/record-success! cache base-url))
+             (breaker/record-failure! cache cb-cfg service (now))
+             (breaker/record-success! cache service))
            (cond
            ;; The service answered. Whatever the shape of that answer, the
            ;; operation ran — re-sending it would run it a second time.

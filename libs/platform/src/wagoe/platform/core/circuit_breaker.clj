@@ -42,7 +42,7 @@
    risks running a non-idempotent call twice; declining to make a new call
    risks nothing. The two decisions read alike and are not."
   [config error-type]
-  (contains? (:trip-on config default-config) error-type))
+  (contains? (:trip-on config (:trip-on default-config)) error-type))
 
 (defn state
   "`:closed`, `:open` or `:half-open` for `breaker` at `now-ms`.

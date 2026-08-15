@@ -110,3 +110,22 @@
     (is (= 1 (cb/ceil-seconds 1)))
     (is (= 1 (cb/ceil-seconds 999)))
     (is (= 1 (cb/ceil-seconds 0)))))
+
+(deftest ^:unit a-partial-config-still-uses-the-default-policy
+  ;; `(:trip-on config default-config)` fell back to the whole config map, so
+  ;; `contains?` was asking whether the map has a key called :rpc/unavailable —
+  ;; always false. A breaker built from a partial config counted nothing and
+  ;; never tripped, silently.
+  (testing "an empty config trips on the documented defaults"
+    (is (cb/counts-as-failure? {} :rpc/unavailable))
+    (is (cb/counts-as-failure? {} :rpc/timeout)))
+
+  (testing "and still ignores what the defaults ignore"
+    (is (not (cb/counts-as-failure? {} :rpc/remote-error))))
+
+  (testing "a config that sets other keys keeps the default policy"
+    (is (cb/counts-as-failure? {:failure-threshold 2} :rpc/unavailable)))
+
+  (testing "an explicit :trip-on still wins"
+    (is (cb/counts-as-failure? {:trip-on #{:rpc/protocol}} :rpc/protocol))
+    (is (not (cb/counts-as-failure? {:trip-on #{:rpc/protocol}} :rpc/unavailable)))))

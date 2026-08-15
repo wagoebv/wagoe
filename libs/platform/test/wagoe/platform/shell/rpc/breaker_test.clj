@@ -5,6 +5,7 @@
    not done its job — the point is that the failing service stops being called."
   (:require [wagoe.cache.ports :as cache]
             [wagoe.cache.shell.adapters.in-memory :as cache-mem]
+            [wagoe.platform.core.rpc :as rpc]
             [wagoe.platform.shell.rpc.breaker :as breaker]
             [wagoe.platform.shell.rpc.client :as client]
             [wagoe.payments.ports :as pay-ports]
@@ -25,6 +26,12 @@
         port   (.getLocalPort ^ServerConnector (first (.getConnectors server)))]
     (try (f (str "http://localhost:" port))
          (finally (.stop server)))))
+
+(defn- bkey
+  "The cache key the breaker uses — the normalised service identity, not the
+   raw base-url the test happens to have written."
+  [url suffix]
+  (str "wagoe:rpc:breaker:" (rpc/service-url url "") suffix))
 
 (defn- opts [cache extra]
   (merge {:retries 0 :timeout-ms 300 :service-key service-key :cache cache} extra))
@@ -160,7 +167,7 @@
           (doseq [f calls] (deref f 10000 nil))
 
           (testing "the failures were all counted"
-            (is (<= 3 (cache/get-value cache (str "wagoe:rpc:breaker:" url ":failures")))
+            (is (<= 3 (cache/get-value cache (bkey url ":failures")))
                 "increments were lost — the counter is not atomic"))
 
           (testing "and the breaker is open afterwards"
@@ -191,14 +198,14 @@
     (with-slow-server received
       (fn [url]
         (client/call! url :get-payment-status ["id"] (opts cache {:circuit-breaker cfg}))
-        (let [opened-at (:at (cache/get-value cache (str "wagoe:rpc:breaker:" url ":opened-at")))]
+        (let [opened-at (:at (cache/get-value cache (bkey url ":opened-at")))]
           (is (some? opened-at))
           (Thread/sleep 50)
           ;; Refused, so no new failure is recorded — but assert the marker is
           ;; untouched regardless.
           (client/call! url :get-payment-status ["id"] (opts cache {:circuit-breaker cfg}))
           (is (= opened-at
-                 (:at (cache/get-value cache (str "wagoe:rpc:breaker:" url ":opened-at"))))
+                 (:at (cache/get-value cache (bkey url ":opened-at"))))
               "the open window was pushed forward by a later failure"))))))
 
 (deftest ^:integration every-concurrent-failure-is-counted
@@ -210,7 +217,8 @@
   ;; and writes back the same successor.
   (let [cache   (cache-mem/create-in-memory-cache {})
         cfg     {:failure-threshold 1000 :open-ms 60000}   ; never opens; count only
-        url     "http://concurrent.invalid"
+        ;; Calling the breaker directly, so normalise as the client would.
+        url     (rpc/service-url "http://concurrent.invalid" "")
         threads 50
         latch   (java.util.concurrent.CountDownLatch. 1)
         writers (doall (for [_ (range threads)]
@@ -219,8 +227,8 @@
     (.countDown latch)
     (doseq [f writers] (deref f 10000 nil))
 
-    (is (= threads (cache/get-value cache (str "wagoe:rpc:breaker:" url ":failures")))
-        (str "counted " (cache/get-value cache (str "wagoe:rpc:breaker:" url ":failures"))
+    (is (= threads (cache/get-value cache (bkey url ":failures")))
+        (str "counted " (cache/get-value cache (bkey url ":failures"))
              " of " threads " concurrent failures — increments were lost"))))
 
 (deftest ^:integration a-failed-probe-reopens-the-window
@@ -231,7 +239,7 @@
   (let [received (atom 0)
         cache    (cache-mem/create-in-memory-cache {})
         cfg      {:failure-threshold 1 :open-ms 400}
-        opened   #(:at (cache/get-value cache (str "wagoe:rpc:breaker:" % ":opened-at")))]
+        opened   #(:at (cache/get-value cache (bkey % ":opened-at")))]
     (with-slow-server received
       (fn [url]
         (client/call! url :get-payment-status ["id"] (opts cache {:circuit-breaker cfg}))
@@ -414,3 +422,23 @@
                          :service-key service-key
                          :cache (cache-mem/create-in-memory-cache {})}))
         (is (= 300 (:probe-lease-ms @seen2)))))))
+
+(deftest ^:integration adapters-configured-with-a-trailing-slash-share-the-breaker
+  ;; The request URL was normalised and the breaker key was not, so
+  ;; "http://host" and "http://host/" — one service, configured twice — kept
+  ;; two failure counters and two probe leases.
+  (let [received (atom 0)
+        cache    (cache-mem/create-in-memory-cache {})
+        cfg      {:failure-threshold 2 :open-ms 60000}]
+    (with-slow-server received
+      (fn [url]
+        (dotimes [_ 2]
+          (client/call! url :get-payment-status ["id"] (opts cache {:circuit-breaker cfg})))
+        (is (= 2 @received))
+
+        (testing "the same service with a trailing slash is already open"
+          (let [r (client/call! (str url "/") :get-payment-status ["id"]
+                                (opts cache {:circuit-breaker cfg}))]
+            (is (= :rpc/circuit-open (get-in r [:error :type]))
+                "a second spelling of the same URL got its own breaker")
+            (is (= 2 @received))))))))

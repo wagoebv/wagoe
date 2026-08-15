@@ -405,3 +405,20 @@
 
     (testing "with no expiry carried from the entry that lapsed"
       (is (nil? (ports/ttl cache "counter"))))))
+
+(deftest ^:unit only-one-caller-wins-set-if-absent
+  ;; Callers use this as a lease, so "exactly one wins" is the whole point.
+  ;; Reading the map and then writing let two racing callers both find the key
+  ;; absent and both claim it.
+  (let [cache   (in-mem/create-in-memory-cache {})
+        winners (atom 0)
+        threads 50
+        latch   (java.util.concurrent.CountDownLatch. 1)
+        racers  (doall (for [_ (range threads)]
+                         (future (.await latch)
+                                 (when (ports/set-if-absent! cache "lease" :mine 60)
+                                   (swap! winners inc)))))]
+    (.countDown latch)
+    (doseq [f racers] (deref f 10000 nil))
+    (is (= 1 @winners)
+        (str @winners " callers took the same lease"))))

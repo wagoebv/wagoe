@@ -289,19 +289,29 @@
   (set-if-absent! [this key value]
     (ports/set-if-absent! this key value (:default-ttl (:config state))))
 
-  (set-if-absent! [this key value ttl-seconds]
+  (set-if-absent! [_this key value ttl-seconds]
+    ;; The check and the write happen in one `swap!`. Reading `@entries` and
+    ;; then calling `set-value!` lets two callers both find the key absent and
+    ;; both claim it — and callers use this as a lease, where "exactly one
+    ;; wins" is the entire point. Redis SETNX is one operation.
+    ;;
+    ;; An expired entry counts as absent: `contains?` alone made a lease
+    ;; permanent until something happened to prune it, so a holder that died
+    ;; never released it.
     (let [namespaced-key (add-namespace (:namespace state) key)
-          entries (:entries state)
-          entry   (get @entries namespaced-key)]
-      ;; An expired entry is absent. `contains?` alone made a lease taken with a
-      ;; TTL permanent until something else happened to prune it — so a holder
-      ;; that died never released it, and nothing could take it again. Redis
-      ;; SETNX honours expiry, and callers write against that.
-      (if (and entry (not (expired? entry)))
-        false
-        (do
-          (ports/set-value! this key value ttl-seconds)
-          true))))
+          won            (volatile! false)]
+      (swap! (:entries state)
+             (fn [cache]
+               (let [entry (get cache namespaced-key)]
+                 (if (and entry (not (expired? entry)))
+                   (do (vreset! won false) cache)
+                   (do (vreset! won true)
+                       (assoc cache namespaced-key
+                              (->CacheEntry value (now)
+                                            (calculate-expires-at ttl-seconds)
+                                            0 (now)
+                                            (swap! (:access-counter state) inc))))))))
+      @won))
 
   (compare-and-swap! [_this key expected-value new-value]
     (let [namespaced-key (add-namespace (:namespace state) key)
