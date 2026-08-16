@@ -208,6 +208,17 @@ Test fixture pattern:
       (f))))
 ```
 
+**A new `IJobQueue` operation gets covered in `test/wagoe/jobs/adapter_surface_test.clj`,
+on the way in.** The three backends have separate suites that share no cases, so
+nothing in them says db, in-memory and Redis behave alike — and for a long time
+they didn't: three different orderings within a priority, two of them
+newest-first. The sweep runs the port against all three and needs a Redis on
+localhost:6379 (database 14, which it flushes); without one it compares two
+backends and `the-sweep-covers-every-backend` fails rather than skipping
+quietly. Where the backends genuinely cannot agree — in-memory has no
+cross-process in-flight list, so it cannot reclaim — list the case in
+`known-differences` with its reason instead of dropping the assertion.
+
 ## Links
 
 - [Library README](README.md)

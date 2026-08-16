@@ -55,22 +55,36 @@
 ;; =============================================================================
 
 (defn- add-to-queue!
-  "Add job ID to priority queue.
-   Critical, high, and normal jobs are added to the front (LIFO within priority).
-   Low priority jobs are added to the back (FIFO)."
+  "Add job ID to the back of its priority queue.
+
+   FIFO within a priority, which is what the DB adapter's `ORDER BY
+   priority_rank, created_at` gives and what a queue means. Critical, high and
+   normal used to go to the front, so under load the newest work ran first and
+   the oldest waited longest — the opposite of the intent, and only here."
   [queues-atom queue-name priority job-id]
   (swap! queues-atom
          (fn [queues]
            (let [queue (get queues queue-name {:critical [] :high [] :normal [] :low []})
                  priority-key (or priority :normal)]
              (assoc queues queue-name
-                    (update queue priority-key
-                            (fn [job-ids]
-                              ;; Low priority: add to back (FIFO)
-                              ;; Others: add to front (LIFO within priority)
-                              (if (= priority-key :low)
-                                (conj (vec job-ids) job-id)  ; Add to end
-                                (cons job-id job-ids)))))))))  ; Add to front
+                    (update queue priority-key #(conj (vec %) job-id)))))))
+
+(defn- remove-job-from-queues!
+  "Drop `job-id` from every priority list of every queue.
+
+   A deleted job left in its queue is a tombstone: it still counts towards
+   `queue-size`, and the dequeue that reaches it finds no job data and returns
+   nil, so the work behind it waits for a poll that may not come."
+  [queues-atom job-id]
+  (swap! queues-atom
+         (fn [queues]
+           (reduce-kv (fn [acc queue-name queue]
+                        (assoc acc queue-name
+                               (reduce-kv (fn [q priority job-ids]
+                                            (assoc q priority
+                                                   (vec (remove #(= % job-id) job-ids))))
+                                          {} queue)))
+                      {} queues))))
 
 (defn- remove-from-queue!
   "Remove and return next job ID from priority queue."
@@ -204,19 +218,25 @@
 
   (delete-job! [_ job-id]
     (let [job (get @(:jobs state) job-id)]
-      (when job
-        ;; Remove from jobs
-        (swap! (:jobs state) dissoc job-id)
-        ;; Remove from scheduled if present
-        (remove-from-scheduled! (:scheduled state) job-id)
-        ;; Note: Can't efficiently remove from queues, but job won't be found when dequeued
-        true)))
+      (swap! (:jobs state) dissoc job-id)
+      (remove-from-scheduled! (:scheduled state) job-id)
+      (remove-job-from-queues! (:queues state) job-id)
+      ;; false, not nil: the port says "true if deleted, false if not found",
+      ;; and a caller writing `(if (delete-job! …) …)` cannot tell the two
+      ;; apart but one written with `false?` can.
+      (some? job)))
 
   (queue-size [_ queue-name]
     (queue-size-internal (:queues state) queue-name))
 
   (list-queues [_this]
-    (vec (keys @(:queues state))))
+    ;; Queues that have work. The map keeps an entry for every queue ever
+    ;; enqueued to, so without this a drained queue is still named — where the
+    ;; DB adapter lists the queues with rows and Redis drops an empty list key.
+    (->> @(:queues state)
+         (keep (fn [[queue-name priorities]]
+                 (when (some seq (vals priorities)) queue-name)))
+         vec))
 
   (process-scheduled-jobs! [this]
     (process-scheduled-jobs-internal! this)))

@@ -665,6 +665,20 @@ jobs:
     runs-on: ubuntu-latest
     needs: [lint, test-platform]
 
+    services:
+      # The adapter surface sweep compares db, in-memory and Redis. Without one
+      # it compares two backends where three were promised, which is the state
+      # that let the three of them drift apart.
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
     steps:
       - uses: actions/checkout@v6
 
