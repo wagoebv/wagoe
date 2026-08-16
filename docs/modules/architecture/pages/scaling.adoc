@@ -64,13 +64,16 @@ concrete adapter. That seam is the scaling lever: swap an in-process adapter for
 a *distributed* one — Redis, a queue, a remote service — without touching the
 functional core.
 
-Two libraries already ship both adapters and pick between them in config:
+Several libraries already ship both adapters. The provider keyword is per
+library, not a convention — check it rather than assume:
 
 [source,clojure]
 ----
-;; libs/cache  — :in-memory (dev/test) | :redis (multi-instance)
-;; libs/jobs   — :in-memory (dev/test) | :redis (shared queue across workers)
-:wagoe/cache {:provider :redis ...}
+:wagoe/cache    {:provider :redis ...}          ; | :in-memory
+:wagoe/realtime {:provider :redis ...}          ; | :in-memory (the default)
+:wagoe/events   {:provider :redis-streams ...}  ; | :in-memory — no default, throws otherwise
+;; libs/jobs has :in-memory, :redis and :db adapters, but no :provider key:
+;; the application constructs :wagoe/job-queue / :wagoe/job-store directly.
 ----
 
 This is the template every other seam follows: the protocol is the contract,
@@ -112,7 +115,7 @@ runs every method against both.
 
 | Event bus
 | ✅
-| Redis Streams adapter (`libs/events/.../adapters/redis_streams.clj`) — at-least-once, consumer groups, so one logical subscriber gets an event once across replicas rather than once per replica. The in-memory adapter (`in_memory.clj`) is single-process only. `:wagoe/events` is not in the prod profile yet; activate it there to use it (BOU-93).
+| Redis Streams adapter (`libs/events/.../adapters/redis_streams.clj`) — at-least-once, consumer groups, so one logical subscriber gets an event once across replicas rather than once per replica. Selected with `:provider :redis-streams`, spelled differently from the cache's and realtime's `:redis`; an unrecognised provider throws at boot rather than falling back. The in-memory adapter (`in_memory.clj`) is single-process only. `:wagoe/events` is not in the prod profile yet; activate it there to use it (BOU-93).
 
 | Readiness checks
 | ✅

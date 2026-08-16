@@ -86,12 +86,18 @@ this wrong is quiet — a config with no `:provider` gets `:in-memory`, and the
 single-node behaviour is a default rather than an error. Config shape is in that
 namespace's docstring.
 
-*The event bus needs `:provider :redis` for the same reason* (BOU-93,
-`libs/events`). Redis Streams with consumer groups delivers an event once per
+*The event bus needs `:provider :redis-streams`* (BOU-93, `libs/events`) —
+`:redis-streams`, not `:redis`, which is the cache's and realtime's spelling and
+not this one's. Redis Streams with consumer groups delivers an event once per
 logical subscriber across replicas; the in-memory adapter delivers it only
-within the publishing process. Unlike realtime, `:wagoe/events` *is* wired from
-config — move it into `:active` and the component is emitted — but it is absent
-from the shipped prod profile, so it is off until you add it.
+within the publishing process.
+
+Two ways this differs from realtime above. `:wagoe/events` *is* wired from
+config — move it into `:active` and the component is emitted — though it is
+absent from the shipped prod profile, so it is off until you add it. And it has
+no default: any provider other than `:redis-streams` or `:in-memory`, including
+none at all, throws `Unknown event bus provider` at boot. Loud rather than
+quiet, which is the better of the two failures here.
 
 Scheduled jobs are *not* on this list, contrary to the usual expectation.
 Promotion of a due job is an atomic claim — `ZREM` on the scheduled sorted set,
