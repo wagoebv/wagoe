@@ -110,9 +110,64 @@
      :disabled     (sort parked)
      :missing      (sort (set/difference all reached parked #{(name summary-job-key)}))}))
 
+;; =============================================================================
+;; Triggers — coverage is worthless if the workflow never starts
+;; =============================================================================
+;;
+;; BOU-315: everything above verifies that the required context covers every job
+;; that can fail. None of it means anything on a run that does not happen.
+;; ci.yml triggered on `push:` alone, so a fork PR started zero jobs — and a
+;; required context reported by a job that never ran sits *pending*, which is
+;; the same indistinguishable-from-passing shape BOU-277 was about.
+
+(defn workflow-triggers
+  "The parsed `on:` block, as a map keyed by event.
+
+   YAML 1.1 reads the bare word `on` as the boolean true, so SnakeYAML gives
+   this key back as `true` rather than `:on`; a quoted `\"on\":` stays a string.
+   Reading only `:on` would find nothing and conclude the workflow has no
+   triggers — firing this gate on a correct file."
+  [workflow]
+  (or (get workflow :on)
+      (get workflow true)
+      (get workflow "on")
+      {}))
+
+(defn trigger-findings
+  "Reasons `workflow` would not run the full pipeline on every pull request.
+
+   Empty means every PR — fork or not — starts the pipeline exactly once."
+  [workflow]
+  (let [triggers (workflow-triggers workflow)
+        push     (find triggers :push)]
+    (cond-> []
+      (empty? triggers)
+      (conj (str "no `on:` block at all — nothing triggers this workflow. "
+                 "(If the file parses, this is a reader bug, not a config one.)"))
+
+      (and (seq triggers) (not-any? #(contains? triggers %) [:pull_request :pull-request]))
+      (conj (str "no `pull_request:` trigger — a pull request from a fork runs "
+                 "zero jobs, so the required context stays pending rather than "
+                 "failing, and nothing blocks the merge."))
+
+      (and push (not (seq (:branches (val push)))))
+      (conj (str "`push:` is unscoped, so it fires on every branch. Alongside "
+                 "`pull_request:` that runs the whole pipeline twice for a "
+                 "same-repo PR, under two concurrency groups that cannot cancel "
+                 "each other. Scope it to `branches: [main]`.")))))
+
 (defn -main [& _args]
   (let [wf (ci-workflow)
-        {:keys [missing summary-name disabled]} (summary-covers wf)]
+        {:keys [missing summary-name disabled]} (summary-covers wf)
+        trigger-problems (trigger-findings wf)]
+
+    (when (seq trigger-problems)
+      (println (ansi/red "ci.yml does not run on every pull request:"))
+      (println)
+      (doseq [p trigger-problems] (println (str "  " (ansi/red "✗") " " p)))
+      (println)
+      (println "Job coverage below is only as good as the runs that start.")
+      (System/exit 1))
 
     (when-not (= summary-job-name summary-name)
       (println (ansi/red "The summary job is not named") (str "\"" summary-job-name "\""))
