@@ -72,6 +72,19 @@ for what is public API, what is internal, and how deprecations are announced.
   refused rather than written into 96 places where every location would then
   agree.
 
+### Fixed
+
+- **The documentation version scanner read one match per line, and attributed
+  `--tag` too widely** (BOU-317 follow-up; found in review, neither reachable
+  from the tree as it stands). Two `com.wagoe` coordinates on one line — routine
+  Clojure formatting — left the second ungated, and therefore stale after a
+  `bb bump` that then verified clean, because the check had the identical blind
+  spot. Separately, `--tag` was attributed to any block mentioning this
+  repository, so a third party's `--tag` in the same block would be read as a
+  stale suite version and rewritten to ours, breaking the documented command. A
+  tag now belongs to the nearest install URL at or above it, and every match on
+  a line is a finding.
+
 ### Changed
 
 - **`check:versions` now covers documentation as well as source** (BOU-317). It
