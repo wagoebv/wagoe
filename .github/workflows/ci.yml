@@ -310,6 +310,30 @@ jobs:
         run: bb check:hygiene
 
   # =============================================================================
+  # A branch changing shipped src/ must describe it in CHANGELOG.md
+  # =============================================================================
+  check-changelog:
+    name: Changelog Check
+    runs-on: ubuntu-latest
+
+    steps:
+      # Full history: the gate compares against the merge base with the target
+      # branch, and a shallow clone has neither the base nor a common ancestor.
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup Babashka
+        uses: DeLaGuardo/setup-clojure@13.6.1
+        with:
+          bb: latest
+
+      - name: Check the changelog covers this branch
+        env:
+          CHANGELOG_BASE: origin/${{ github.base_ref || github.event.repository.default_branch }}
+        run: bb check:changelog
+
+  # =============================================================================
   # Documented library counts vs deploy/all-libs (Babashka — fast, no JVM)
   # =============================================================================
   check-doc-counts:
@@ -1280,7 +1304,7 @@ jobs:
   test-summary:
     name: All Tests Passed
     runs-on: ubuntu-latest
-    needs: [lint, branch-protection, first-run-smoke, build-ui-assets, docs-lint, agents-links, command-smoke, config-doctor, i18n-scan, check-fcis, check-placeholder-tests, check-test-meta, check-test-tags, check-deps, check-ports, check-hygiene, check-doc-counts, check-versions, check-poms, check-agents, check-no-boundary, build-uberjar, test-tools, example-smoke, test-i18n, test-core, test-observability, test-platform, test-user, test-admin, test-ui-style, test-storage, test-cache, test-events, test-jobs, test-tenant, test-audience, test-devtools, test-email, test-realtime, test-workflow, test-search, test-scaffolder, test-external, test-payments, test-push, test-calendar, test-reports, test-geo, test-ai, test-mcp, test-wagoe-cli, test-shared-ui]
+    needs: [lint, branch-protection, first-run-smoke, build-ui-assets, docs-lint, agents-links, command-smoke, config-doctor, i18n-scan, check-fcis, check-placeholder-tests, check-test-meta, check-test-tags, check-deps, check-ports, check-hygiene, check-changelog, check-doc-counts, check-versions, check-poms, check-agents, check-no-boundary, build-uberjar, test-tools, example-smoke, test-i18n, test-core, test-observability, test-platform, test-user, test-admin, test-ui-style, test-storage, test-cache, test-events, test-jobs, test-tenant, test-audience, test-devtools, test-email, test-realtime, test-workflow, test-search, test-scaffolder, test-external, test-payments, test-push, test-calendar, test-reports, test-geo, test-ai, test-mcp, test-wagoe-cli, test-shared-ui]
 
     steps:
       - name: Summary

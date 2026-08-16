@@ -31,6 +31,7 @@
              [wagoe.tools.check-branch-protection :as check-bp]
              [wagoe.tools.check-hygiene :as check-hygiene]
              [wagoe.tools.check-doc-counts :as check-doc-counts]
+             [wagoe.tools.check-changelog :as check-changelog]
              [wagoe.tools.check-versions :as check-versions]
              [check-no-boundary :as check-no-boundary]  ; lives under scripts/, outside the renamed tree
              [wagoe.tools.doctor-env  :as doctor-env]
@@ -122,6 +123,8 @@
                  :task (check-hygiene/-main)}
   check:doc-counts {:doc "Documented library counts + publishing claims must match wagoe.tools.deploy/all-libs (bb check:doc-counts)"
                     :task (check-doc-counts/-main)}
+  check:changelog {:doc "A branch changing shipped src/ must add a CHANGELOG.md entry (bb check:changelog)"
+                   :task (check-changelog/-main)}
   check:no-boundary {:doc "Rename gate: scan for residual boundary tokens (ns/keys/coords/env/dirs/urls); args select groups (bb check:no-boundary)"
                      :task (apply check-no-boundary/-main *command-line-args*)}
   docs:lint     {:doc "Documentation drift: fails when a documented command names a deps.edn alias that does not exist; reports broken links + unknown namespaces (bb docs:lint)"
