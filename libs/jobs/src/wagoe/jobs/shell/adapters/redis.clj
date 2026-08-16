@@ -35,6 +35,17 @@
   [queue-name]
   (str "queue:" (name queue-name)))
 
+(def ^:private priorities
+  "Highest first — the order dequeue and peek consider them in."
+  [:critical :high :normal :low])
+
+(defn- priority-key
+  "The list a job of `priority` lives on. `:normal` is the bare queue key."
+  [queue-key priority]
+  (if (= :normal priority)
+    queue-key
+    (str queue-key ":" (name priority))))
+
 (defn- scheduled-key
   "Generate Redis key for scheduled jobs sorted set."
   []
@@ -222,12 +233,11 @@
                    (double (.toEpochMilli (:execute-at job)))
                    (str job-id))
 
-            ;; Immediate job: add to priority queue
-            (case (:priority job :normal)
-              :critical (.lpush redis (str queue-key ":critical") (into-array String [(str job-id)]))
-              :high (.lpush redis (str queue-key ":high") (into-array String [(str job-id)]))
-              :normal (.lpush redis queue-key (into-array String [(str job-id)]))
-              :low (.rpush redis (str queue-key ":low") (into-array String [(str job-id)]))))
+            ;; Immediate job: add to priority queue. LPUSH for every priority,
+            ;; because dequeue is RPOPLPUSH — RPUSH on :low made it the one
+            ;; priority that ran newest-first.
+            (.lpush redis (priority-key queue-key (:priority job :normal))
+                    (into-array String [(str job-id)])))
 
           (log/info "Enqueued job" {:job-id job-id :queue queue-name :priority (:priority job)})
           job-id))))
@@ -244,10 +254,8 @@
               ;; Atomically move the next job into the worker's processing list
               ;; (RPOPLPUSH) so a crash between dequeue and ack cannot lose it.
               ;; Try priority queues in order.
-              job-id (or (.rpoplpush redis (str queue-key ":critical") proc-key)
-                         (.rpoplpush redis (str queue-key ":high") proc-key)
-                         (.rpoplpush redis queue-key proc-key)
-                         (.rpoplpush redis (str queue-key ":low") proc-key))]
+              job-id (some #(.rpoplpush redis (priority-key queue-key %) proc-key)
+                           priorities)]
 
           (when job-id
             (let [job-key (job-key (java.util.UUID/fromString job-id))
@@ -290,8 +298,14 @@
   (peek-job [_ queue-name]
     (with-redis pool
       (fn [^Jedis redis]
+        ;; Every priority, in the order dequeue takes them, and the tail of the
+        ;; list, which is the end RPOPLPUSH pops from. Reading only the :normal
+        ;; list meant peek reported an empty queue while a critical job sat in
+        ;; it, and disagreed with the very next dequeue.
         (let [queue-key (queue-key queue-name)
-              job-ids (.lrange redis queue-key -1 -1)]
+              job-ids (some (fn [p]
+                              (seq (.lrange redis (priority-key queue-key p) -1 -1)))
+                            priorities)]
           (when-let [job-id (first job-ids)]
             (let [job-key (job-key (java.util.UUID/fromString job-id))
                   job-data (.get redis job-key)]
@@ -306,6 +320,13 @@
           ;; Also remove from scheduled set if present.
           ;; Jedis zrem is (String key, String... members) — varargs need an array.
           (.zrem redis (scheduled-key) (into-array String [(str job-id)]))
+          ;; And off the ready queues. Deleting only the job data left the id in
+          ;; its list: it still counted towards queue-size, and the dequeue that
+          ;; reached it found no data and returned nil — so the work queued
+          ;; behind it waited for a poll that may not come.
+          (doseq [queue-name (ports/list-queues (->RedisJobQueue pool))
+                  priority   priorities]
+            (.lrem redis (priority-key (queue-key queue-name) priority) 0 (str job-id)))
           (pos? result)))))
 
   (queue-size [_ queue-name]
@@ -320,10 +341,14 @@
   (list-queues [_this]
     (with-redis pool
       (fn [^Jedis redis]
+        ;; One entry per queue: a queue with work at more than one priority has
+        ;; a key per priority — "queue:default" and "queue:default:critical" —
+        ;; and both name the same queue.
         (->> (scan-keys redis "queue:*")
              (map #(second (re-find #"queue:([^:]+)" %)))
              (filter some?)
              (map keyword)
+             distinct
              vec))))
 
   (process-scheduled-jobs! [this]
@@ -365,12 +390,8 @@
                 (let [job (deserialize-job job-data)
                       queue-name (:queue job)
                       queue-key (queue-key queue-name)]
-                  ;; Add to execution queue based on priority
-                  (case (:priority job :normal)
-                    :critical (.lpush redis (str queue-key ":critical") (into-array String [job-id-str]))
-                    :high (.lpush redis (str queue-key ":high") (into-array String [job-id-str]))
-                    :normal (.lpush redis queue-key (into-array String [job-id-str]))
-                    :low (.rpush redis (str queue-key ":low") (into-array String [job-id-str])))
+                  (.lpush redis (priority-key queue-key (:priority job :normal))
+                          (into-array String [job-id-str]))
                   (swap! moved inc)
                   (log/debug "Moved scheduled job to execution queue"
                              {:job-id job-id :queue queue-name}))
