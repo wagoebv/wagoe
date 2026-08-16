@@ -39,7 +39,7 @@
 
 ;; Must match libs/tools/src/wagoe/tools/scaffold.clj scaffolder-version.
 ;; Update both together on each release.
-(def ^:private scaffolder-version "1.0.0-beta-4")
+(def ^:private scaffolder-version "1.0.0-beta-5")
 
 ;; =============================================================================
 ;; Service bootstrap

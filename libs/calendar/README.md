@@ -22,7 +22,7 @@ Calendar and scheduling library for the [Wagoe](https://github.com/wagoebv/wagoe
 Add to your `deps.edn`:
 
 ```clojure
-com.wagoe/wagoe-calendar {:mvn/version "1.0.0-beta-4"}
+com.wagoe/wagoe-calendar {:mvn/version "1.0.0-beta-5"}
 ```
 
 ## Quick Start

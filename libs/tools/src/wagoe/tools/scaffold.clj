@@ -124,7 +124,7 @@
 
 ;; Must match libs/tools/build.clj version and libs/scaffolder/build.clj version.
 ;; Update all three together on each release.
-(def ^:private scaffolder-version "1.0.0-beta-4")
+(def ^:private scaffolder-version "1.0.0-beta-5")
 
 ;; Match libs/scaffolder/deps.edn and the monorepo's own pin.
 (def ^:private rewrite-clj-version "1.2.55")

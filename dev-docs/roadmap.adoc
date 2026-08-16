@@ -9,7 +9,7 @@ Wagoe is a module-centric Clojure framework implementing Functional Core / Imper
 ====
 *This document is stale and superseded.* It was last updated in April 2026 and
 records the state as of then — including the claim that Phase 2 ("v1.0") is
-complete, which it is not: the suite ships `1.0.0-beta-4`. Its library counts
+complete, which it is not: the suite ships `1.0.0-beta-5`. Its library counts
 predate several libraries, and `push` and `audience` are listed as remaining
 though both shipped.
 

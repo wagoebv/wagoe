@@ -133,10 +133,10 @@ All libraries share the `com.wagoe` group:
 
 [source,clojure]
 ----
-{com.wagoe/wagoe-core      {:mvn/version "1.0.0-beta-4"}
- com.wagoe/wagoe-user      {:mvn/version "1.0.0-beta-4"}
- com.wagoe/wagoe-admin     {:mvn/version "1.0.0-beta-4"}
- com.wagoe/wagoe-platform  {:mvn/version "1.0.0-beta-4"}
+{com.wagoe/wagoe-core      {:mvn/version "1.0.0-beta-5"}
+ com.wagoe/wagoe-user      {:mvn/version "1.0.0-beta-5"}
+ com.wagoe/wagoe-admin     {:mvn/version "1.0.0-beta-5"}
+ com.wagoe/wagoe-platform  {:mvn/version "1.0.0-beta-5"}
  ;; etc.
  }
 ----

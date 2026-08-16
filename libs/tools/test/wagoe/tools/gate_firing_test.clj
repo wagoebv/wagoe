@@ -664,16 +664,16 @@
 
     (testing "a lagging pin is reported against the majority"
       (let [r (check-versions/disagreements
-               [(bumped "1.0.0-beta-4" "build.clj" "libs/core/build.clj")
-                (bumped "1.0.0-beta-4" "build.clj" "libs/user/build.clj")
+               [(bumped "1.0.0-beta-5" "build.clj" "libs/core/build.clj")
+                (bumped "1.0.0-beta-5" "build.clj" "libs/user/build.clj")
                 (bumped "1.0.1-alpha-32" "com.wagoe pin" "bb.edn")])]
-        (is (= "1.0.0-beta-4" (:consensus r)))
+        (is (= "1.0.0-beta-5" (:consensus r)))
         (is (= ["bb.edn"] (map :file (:offenders r))))))
 
     (testing "agreement is not a finding"
       (is (nil? (check-versions/disagreements
-                 [(bumped "1.0.0-beta-4" "build.clj" "libs/core/build.clj")
-                  (bumped "1.0.0-beta-4" "com.wagoe pin" "bb.edn")]))))
+                 [(bumped "1.0.0-beta-5" "build.clj" "libs/core/build.clj")
+                  (bumped "1.0.0-beta-5" "com.wagoe pin" "bb.edn")]))))
 
     (testing "more than one straggler is reported, sorted"
       (let [r (check-versions/disagreements
