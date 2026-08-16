@@ -85,17 +85,39 @@ jobs:
           ADV_IMAGE: ${{ matrix.image }}
         run: ./scripts/first-run-adversarial.sh
 
+  preconditions:
+    name: Preconditions — ${{ matrix.image }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Ubuntu and Fedora: the two images whose package managers can supply a
+        # JDK 17 for the old-Java case. Arch ships one JDK and pacman cannot run
+        # sandboxed here anyway, as the smoke job's note explains.
+        image:
+          - ubuntu:24.04
+          - fedora:41
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: First-run preconditions
+        env:
+          PRE_IMAGE: ${{ matrix.image }}
+        run: ./scripts/first-run-preconditions.sh
+
   matrix-summary:
     name: First-Run Matrix Passed
     runs-on: ubuntu-latest
-    needs: [smoke, adversarial]
+    needs: [smoke, adversarial, preconditions]
     steps:
       - name: Summary
         run: |
           echo "First-run matrix passed."
-          echo "  smoke:       ubuntu:24.04, fedora:41, archlinux:latest"
-          echo "  adversarial: ubuntu:24.04, fedora:41"
+          echo "  smoke:         ubuntu:24.04, fedora:41, archlinux:latest"
+          echo "  adversarial:   ubuntu:24.04, fedora:41  (8 cases, incl. bash/fish/zsh)"
+          echo "  preconditions: ubuntu:24.04, fedora:41  (old JDK, no network)"
           echo
           echo "Not covered here, and not claimed to be: macOS, WSL2, a"
-          echo "corporate proxy, offline install, and real-user observation."
-          echo "Those need machines and people this matrix does not have."
+          echo "corporate proxy, and real-user observation. Those need machines"
+          echo "and people this matrix does not have."

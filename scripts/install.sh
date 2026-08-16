@@ -95,9 +95,43 @@ as_root() {
 }
 
 # ── JVM ──────────────────────────────────────────────────────
-if java -version 2>&1 | grep -q "version"; then
-  ok "JVM already installed"
+JAVA_MIN=21
+
+# The major version of the java on PATH, or nothing.
+#
+# Two spellings: "21.0.5" since Java 9, and "1.8.0_402" before it, where the
+# major is the second component. Both appear in the wild — the second is what a
+# machine with a long-lived JDK 8 reports.
+java_major() {
+  local line raw major
+  line=$(java -version 2>&1 | head -1) || return 1
+  # Require the quoted form. Anything else — "command not found", a wrapper
+  # printing its own banner — must read as "no usable java", not as a version
+  # number parsed out of an error message.
+  [[ "$line" =~ version\ \"([^\"]+)\" ]] || return 1
+  raw="${BASH_REMATCH[1]}"
+  case "$raw" in
+    1.*) major=${raw#1.}; major=${major%%.*} ;;
+    *)   major=${raw%%.*} ;;
+  esac
+  [[ "$major" =~ ^[0-9]+$ ]] || return 1
+  echo "$major"
+}
+
+JAVA_FOUND=""
+command -v java &>/dev/null && JAVA_FOUND=$(java_major || true)
+
+if [[ -n "$JAVA_FOUND" ]] && [[ "$JAVA_FOUND" -ge "$JAVA_MIN" ]] 2>/dev/null; then
+  ok "JVM already installed (Java $JAVA_FOUND)"
 else
+  # A JDK older than $JAVA_MIN used to satisfy this check: the test was
+  # `java -version | grep -q version`, which any JDK back to 8 passes. The
+  # installer reported "JVM already installed" and carried on, and the failure
+  # surfaced much later as a class-file-version error out of the Clojure
+  # compiler — which tells a newcomer nothing about what to do.
+  if [[ -n "$JAVA_FOUND" ]]; then
+    info "Java $JAVA_FOUND is on PATH; Wagoe needs $JAVA_MIN or newer. Installing one..."
+  fi
   info "Installing JVM..."
   if [[ "$OS" == "macos" ]]; then
     brew install --cask temurin 2>/dev/null || fail "Failed to install JVM via brew"
@@ -146,7 +180,29 @@ else
   elif [[ "$OS" == "arch" ]]; then
     as_root pacman -S --noconfirm jdk-openjdk || fail "Failed to install JVM via pacman"
   fi
-  ok "JVM installed"
+
+  # Verify rather than assume. Installing a new JDK does not remove the old one,
+  # and whichever comes first on PATH is the one Clojure will use — so an
+  # install that "succeeded" can leave the same too-old java in front.
+  JAVA_NOW=$(java_major || true)
+  if [[ -n "$JAVA_NOW" ]] && [[ "$JAVA_NOW" -ge "$JAVA_MIN" ]] 2>/dev/null; then
+    ok "JVM installed (Java $JAVA_NOW)"
+  elif [[ -n "$JAVA_NOW" ]]; then
+    fail "Java $JAVA_NOW is still first on PATH, and Wagoe needs $JAVA_MIN or newer.
+
+  A JDK $JAVA_MIN was installed, but the older one shadows it. Put the new JDK
+  ahead of it on PATH — or remove the old one — and re-run:
+    curl -fsSL https://get.wagoe.org | bash
+
+  Check which one is winning with:
+    java -version && command -v java"
+  else
+    fail "No java on PATH after installing a JVM.
+
+  Open a new terminal and re-run; some installers only extend PATH for new
+  shells. If that does not help, install a JDK $JAVA_MIN+ yourself and re-run —
+  this installer skips the JVM step when a new enough java is already there."
+  fi
 fi
 
 # ── Clojure CLI ───────────────────────────────────────────────
