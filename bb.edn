@@ -79,7 +79,7 @@
                  :task (clojure "-M:coverage:db")}
   create-admin  {:doc "Create the first admin user for a new Wagoe project (interactive wizard)"
                  :task (apply admin/-main *command-line-args*)}
-  check:versions {:doc "Every hard-coded suite version must agree (bb check:versions)"
+  check:versions {:doc "Every hard-coded suite version must agree, in source and in docs (bb check:versions)"
                   :task (check-versions/-main)}
   check-links   {:doc "Validate local links in AGENTS.md and the AsciiDoc docs (dev-docs/ + docs/)"
                  :task (dev/check-links)}
