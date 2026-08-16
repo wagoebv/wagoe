@@ -116,6 +116,18 @@
         (swap! entries-atom dissoc (first lru-key))
         (record-eviction! stats-atom track-stats?)))))
 
+(defn- evict-if-full!
+  "Evict before adding, so the new entry is not the one evicted.
+
+   Every path that can add a key has to call this, or `:max-size` holds only
+   for the paths that remember to."
+  [state namespaced-key]
+  (let [entries (:entries state)]
+    (when-let [max-size (:max-size (:config state))]
+      (when (and (>= (count @entries) max-size)
+                 (not (contains? @entries namespaced-key)))
+        (evict-lru! entries (:stats state) (:track-stats? (:config state)))))))
+
 (defn- wildcard-pattern->regex
   "Convert wildcard pattern to regex.
    Example: 'user:*' -> #'user:.*'"
@@ -173,11 +185,7 @@
                  0
                  (now)
                  (swap! (:access-counter state) inc))]
-      ;; Evict before adding to prevent evicting the newly added entry
-      (when-let [max-size (:max-size (:config state))]
-        (when (and (>= (count @entries) max-size)
-                   (not (contains? @entries namespaced-key)))
-          (evict-lru! entries (:stats state) (:track-stats? (:config state)))))
+      (evict-if-full! state namespaced-key)
       (swap! entries assoc namespaced-key entry)
       true))
 
@@ -257,13 +265,25 @@
           entries (:entries state)]
       (-> (swap! entries
                  (fn [cache]
-                   (let [current-entry (get cache namespaced-key)
-                         current-value (if current-entry
-                                         (:value current-entry)
-                                         0)
-                         new-value (+ current-value delta)]
+                   ;; An expired entry is gone, as it is in Redis: nothing is
+                   ;; carried from it. Reusing its value continues a count that
+                   ;; should have lapsed, and carrying its expiry returns a
+                   ;; value that is already expired — there is no background
+                   ;; sweep here, so an expired entry can sit unread for a long
+                   ;; time and still be found by this.
+                   (let [entry     (get cache namespaced-key)
+                         live      (when (and entry (not (expired? entry))) entry)
+                         new-value (+ (:value live 0) delta)]
                      (assoc cache namespaced-key
-                            (->CacheEntry new-value (now) nil 0 (now)
+                            ;; A live counter keeps its expiry. Redis INCR does,
+                            ;; and callers rely on it: the breaker and the rate
+                            ;; limiter each set a TTL once, on the first
+                            ;; increment, because that is the only moment they
+                            ;; can recognise.
+                            (->CacheEntry new-value
+                                          (or (:created-at live) (now))
+                                          (:expires-at live)
+                                          0 (now)
                                           (swap! (:access-counter state) inc))))))
           (get namespaced-key)
           :value)))
@@ -277,14 +297,30 @@
   (set-if-absent! [this key value]
     (ports/set-if-absent! this key value (:default-ttl (:config state))))
 
-  (set-if-absent! [this key value ttl-seconds]
+  (set-if-absent! [_this key value ttl-seconds]
+    ;; The check and the write happen in one `swap!`. Reading `@entries` and
+    ;; then calling `set-value!` lets two callers both find the key absent and
+    ;; both claim it — and callers use this as a lease, where "exactly one
+    ;; wins" is the entire point. Redis SETNX is one operation.
+    ;;
+    ;; An expired entry counts as absent: `contains?` alone made a lease
+    ;; permanent until something happened to prune it, so a holder that died
+    ;; never released it.
     (let [namespaced-key (add-namespace (:namespace state) key)
-          entries (:entries state)]
-      (if (contains? @entries namespaced-key)
-        false
-        (do
-          (ports/set-value! this key value ttl-seconds)
-          true))))
+          won            (volatile! false)]
+      (evict-if-full! state namespaced-key)
+      (swap! (:entries state)
+             (fn [cache]
+               (let [entry (get cache namespaced-key)]
+                 (if (and entry (not (expired? entry)))
+                   (do (vreset! won false) cache)
+                   (do (vreset! won true)
+                       (assoc cache namespaced-key
+                              (->CacheEntry value (now)
+                                            (calculate-expires-at ttl-seconds)
+                                            0 (now)
+                                            (swap! (:access-counter state) inc))))))))
+      @won))
 
   (compare-and-swap! [_this key expected-value new-value]
     (let [namespaced-key (add-namespace (:namespace state) key)

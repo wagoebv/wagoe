@@ -266,6 +266,7 @@ implements that protocol by making a network call. That is this:
   (rpc-client/remote-adapter pay-ports/IPaymentProvider "http://payments:3001"
                              {:timeout-ms  5000
                               :service-key service-key
+                              :cache       cache            ; enables the breaker
                               :context     {:correlation-id id :tenant-id t}}))
 
 (ports/create-checkout-session payments {...})   ; unchanged at the call site
@@ -406,8 +407,49 @@ What it does, and what it deliberately does not:
   as the MVP in this document assumes.
 
 | Circuit breaker
-| Not included. Timeouts and bounded retries are in; a breaker needs shared
-  state to be useful across replicas and is the next piece.
+| Opt-in: pass a `:cache` component and the breaker keeps its state there, so
+  replicas share one rather than each discovering the outage separately — and
+  when the window elapses a `set-if-absent!` lease lets exactly one of them
+  probe, instead of all N at once. Without a `:cache` there is no breaker and
+  the client behaves as it did before.
+
+  The failure count is an atomic increment, not a read-modify-write: many
+  callers hitting one outage at the same moment is what a shared breaker is
+  for, and it is exactly when a read-modify-write loses increments — each reads
+  the same value and writes back the same successor, so a burst advances the
+  counter by one and the breaker never trips.
+
+  A probe that fails reopens the window from that moment and releases its
+  lease, so the outage is not forgotten on the original window's schedule and
+  the next window can still be probed.
+
+  An invalid `:circuit-breaker` — `:failure-threshold 0`, or a `:trip-on` naming
+  an error the client never produces — throws rather than being accepted, since
+  an inert breaker and a working one look identical from outside.
+
+  It protects the traffic *after* the burst, not the burst. Calls issued at the
+  same instant all pass the check before any of them has failed.
+
+  Trips on consecutive `:rpc/unavailable` and `:rpc/timeout` by default —
+  failures where the call did not reach the service. A remote error does not
+  count: the service answered, so it is up.
+
+  `:trip-on` overrides that, and the client counts whatever it names. Adding
+  `:rpc/protocol` is a reasonable policy — a service returning bodies that are
+  not envelopes is broken, and continuing to call it achieves nothing. Whether
+  the call reached the far side governs *retries*, where re-sending something
+  that already ran is the danger; tripping re-runs nothing, so it is not the
+  same question. Note that `:rpc/timeout` trips the breaker
+  although it is never *retried*; retrying a timeout risks running a
+  non-idempotent call twice, while declining to make a new call risks nothing.
+
+  A refused call returns `:rpc/circuit-open` with `:retry-after-ms`, which is
+  deliberately distinct from `:rpc/unavailable`: one means we tried and could
+  not reach it, the other that we declined to try.
+
+  If the cache itself is unreachable the breaker fails open — the worst case is
+  the behaviour of no breaker, which is better than a cache outage taking every
+  remote call with it.
 |===
 
 === Sliceability by module
@@ -453,7 +495,7 @@ The architecture delivers the promise; these are the concrete pieces that make
 
 For *functional decomposition* (the bigger bet):
 
-. ✅ *Generic remote-port adapter + RPC envelope* — done (BOU-90), less the circuit breaker (BOU-285). `clj-http` client implementing a module protocol over transit, context propagation, typed errors, retry bounded to calls that never executed.
+. ✅ *Generic remote-port adapter + RPC envelope* — done (BOU-90), with the circuit breaker in BOU-285. `clj-http` client implementing a module protocol over transit, context propagation, typed errors, retry bounded to calls that never executed.
 . ✅ *Service launch mode* — done (BOU-91). `wagoe.main` boots a named module subset as an independent service, with its RPC endpoint on its own port.
 . *Break allowlisted dependency cycles* — `admin↔user`, `platform↔{user,tenant,admin,workflow,search}` — prerequisite for slicing those modules.
 . ✅ *Event-bus port + adapter* — done (BOU-93). `libs/events`, Redis Streams and in-memory. Kafka would be another adapter behind the same ports, not a change to them.

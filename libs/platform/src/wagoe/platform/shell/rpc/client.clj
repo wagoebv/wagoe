@@ -12,7 +12,9 @@
 
    FC/IS: shell. The wire contract is pure and lives in
    `wagoe.platform.core.rpc`."
-  (:require [wagoe.platform.core.rpc :as rpc]
+  (:require [wagoe.platform.core.circuit-breaker :as cb]
+            [wagoe.platform.core.rpc :as rpc]
+            [wagoe.platform.shell.rpc.breaker :as breaker]
             [clj-http.client :as http]
             [clojure.tools.logging :as log]
             [muuntaja.core :as m])
@@ -191,30 +193,76 @@
   [base-url operation args {:keys [context] :as opts}]
   (let [opts     (merge default-opts opts)
         envelope (rpc/request-envelope operation args context)
-        url      (rpc/service-url base-url (:path opts))]
+        url      (rpc/service-url base-url (:path opts))
+        ;; Key the breaker on the same normalised identity the request uses.
+        ;; Two adapters configured as "http://payments:3001" and
+        ;; "http://payments:3001/" call one service and would otherwise keep
+        ;; two failure counters and two probe leases for it.
+        service  (rpc/service-url base-url "")
+        cache    (:cache opts)
+        cb-cfg   (merge cb/default-config
+                        ;; The probe lease must outlive a probe, and only the
+                        ;; client knows how long one may take.
+                        {:probe-lease-ms (let [n (:retries opts 0)]
+                                           ;; Every attempt's timeout, plus the
+                                           ;; backoff slept between them —
+                                           ;; delay×1 + delay×2 + … — or the
+                                           ;; lease expires mid-probe and a
+                                           ;; second replica sends a second one.
+                                           (+ (* (inc n) (:timeout-ms opts 0))
+                                              (* (:retry-delay-ms opts 0)
+                                                 (quot (* n (inc n)) 2))))}
+                        (:circuit-breaker opts))
+        _        (when-let [problem (and (:circuit-breaker opts) (cb/config-problem cb-cfg))]
+                   ;; A misconfigured breaker is inert or wrong, and either way
+                   ;; looks like a working one. `:trip-on #{:rpc/unavailble}`
+                   ;; never fires and nothing says so.
+                   (throw (ex-info problem {:type :configuration-error
+                                            :circuit-breaker (:circuit-breaker opts)})))
+        now      #(System/currentTimeMillis)]
     (raise-if-thrown!
      operation
-     (loop [attempt 0]
-       (let [[outcome result] (post-envelope! url envelope opts)]
-         (cond
-           ;; The service answered. Whatever the shape of that answer, the
-           ;; operation ran — re-sending it would run it a second time.
-           (or (= outcome :answered)
-               (not (and (map? result) (retryable? opts result))))
-           result
+     (if-not (breaker/allow? cache cb-cfg service (now))
+       (do (log/warn "rpc circuit open; not attempting" {:base-url base-url
+                                                         :operation operation})
+           (breaker/open-error cache cb-cfg service operation (now)))
+       (let [result
+             (loop [attempt 0]
+               (let [[outcome result] (post-envelope! url envelope opts)]
+                 (cond
+                   ;; The service answered. Whatever the shape of that answer,
+                   ;; the operation ran — re-sending it would run it a second
+                   ;; time.
+                   (or (= outcome :answered)
+                       (not (and (map? result) (retryable? opts result))))
+                   result
 
-           (< attempt (:retries opts))
-           (do (log/warn "rpc retrying" {:operation operation
-                                         :attempt   (inc attempt)
-                                         :error     (get-in result [:error :type])})
-               (Thread/sleep (* (inc attempt) (:retry-delay-ms opts)))
-               (recur (inc attempt)))
+                   (< attempt (:retries opts))
+                   (do (log/warn "rpc retrying" {:operation operation
+                                                 :attempt   (inc attempt)
+                                                 :error     (get-in result [:error :type])})
+                       (Thread/sleep (* (inc attempt) (:retry-delay-ms opts)))
+                       (recur (inc attempt)))
 
-           :else
-           (do (log/warn "rpc gave up" {:operation operation
-                                        :attempts  (inc attempt)
-                                        :error     (get-in result [:error :type])})
-               result)))))))
+                   :else
+                   (do (log/warn "rpc gave up" {:operation operation
+                                                :attempts  (inc attempt)
+                                                :error     (get-in result [:error :type])})
+                       result))))]
+         ;; Once per call, not once per attempt: with `:retries 2` one
+         ;; unreachable service costs three attempts, and counting each of them
+         ;; makes a `:failure-threshold` of 5 trip on the second call.
+         ;;
+         ;; Decided on the error type alone, not on `outcome`. Whether the call
+         ;; reached the service governs *retries* — re-sending something that
+         ;; already ran is the danger there. Tripping re-runs nothing, so the
+         ;; only question is whether the caller counts this as the service
+         ;; being unusable. `:trip-on` is where they say so, and a policy the
+         ;; validator accepts has to be one the client honours.
+         (if (cb/counts-as-failure? cb-cfg (get-in result [:error :type]))
+           (breaker/record-failure! cache cb-cfg service (now))
+           (breaker/record-success! cache service))
+         result)))))
 
 ;; =============================================================================
 ;; Protocol proxy

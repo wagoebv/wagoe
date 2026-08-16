@@ -342,3 +342,98 @@
       ;; Verify all values
       (doseq [i (range 50)]
         (is (= i (ports/get-value cache (keyword (str "key" i)))))))))
+
+(deftest ^:unit incrementing-keeps-the-expiry
+  ;; Redis INCR preserves the TTL, and callers rely on that: both the rate
+  ;; limiter and the RPC circuit breaker set an expiry once, on the first
+  ;; increment, because that is the only moment they can recognise. An adapter
+  ;; that clears it on the second increment means the key never expires — so
+  ;; rate-limit windows and failure counts accumulate for the life of the
+  ;; process, and the breaker eventually opens on failures that were never
+  ;; consecutive.
+  (let [cache (in-mem/create-in-memory-cache {})]
+    (is (= 1 (ports/increment! cache "counter")))
+    (ports/expire! cache "counter" 60)
+    (is (some? (ports/ttl cache "counter")))
+
+    (testing "a later increment does not clear it"
+      (ports/increment! cache "counter")
+      (ports/increment! cache "counter")
+      (is (some? (ports/ttl cache "counter"))
+          "the TTL was lost, so this key will never expire")
+      (is (pos? (ports/ttl cache "counter"))))
+
+    (testing "and the value is still counted"
+      (is (= 3 (ports/get-value cache "counter"))))))
+
+(deftest ^:unit an-expired-key-is-absent-for-set-if-absent
+  ;; SETNX semantics: callers use this as a lease, and a lease that cannot be
+  ;; retaken once it expires is a lock that leaks. Redis honours the TTL here;
+  ;; checking only for the key's presence did not, so a holder that died never
+  ;; released it.
+  (let [cache (in-mem/create-in-memory-cache {})]
+    (is (true? (ports/set-if-absent! cache "lease" {:holder :a} 1)))
+    (is (false? (ports/set-if-absent! cache "lease" {:holder :b} 1))
+        "the lease was taken twice while still held")
+
+    (testing "and once it expires another holder can take it"
+      (Thread/sleep 1100)
+      (is (true? (ports/set-if-absent! cache "lease" {:holder :c} 1))
+          "an expired lease was never released")
+      (is (= {:holder :c} (ports/get-value cache "lease"))))))
+
+(deftest ^:unit incrementing-an-expired-counter-starts-again
+  ;; There is no background sweep, so an expired entry sits in the map until
+  ;; something reads it. Incrementing one must behave as Redis does — the key
+  ;; is gone, so the count starts from zero and carries no expiry — rather than
+  ;; continuing a lapsed count or returning a value that is already expired.
+  (let [cache (in-mem/create-in-memory-cache {})]
+    (ports/increment! cache "counter")
+    (ports/increment! cache "counter")
+    (ports/expire! cache "counter" 1)
+    (is (= 2 (ports/get-value cache "counter")))
+
+    (Thread/sleep 1100)
+
+    (testing "the count starts again rather than continuing"
+      (is (= 1 (ports/increment! cache "counter"))
+          "a lapsed count carried on from its old value"))
+
+    (testing "and the value it returns is usable, not already expired"
+      (is (= 1 (ports/get-value cache "counter"))
+          "increment! returned a value that get-value then discarded"))
+
+    (testing "with no expiry carried from the entry that lapsed"
+      (is (nil? (ports/ttl cache "counter"))))))
+
+(deftest ^:unit only-one-caller-wins-set-if-absent
+  ;; Callers use this as a lease, so "exactly one wins" is the whole point.
+  ;; Reading the map and then writing let two racing callers both find the key
+  ;; absent and both claim it.
+  (let [cache   (in-mem/create-in-memory-cache {})
+        winners (atom 0)
+        threads 50
+        latch   (java.util.concurrent.CountDownLatch. 1)
+        racers  (doall (for [_ (range threads)]
+                         (future (.await latch)
+                                 (when (ports/set-if-absent! cache "lease" :mine 60)
+                                   (swap! winners inc)))))]
+    (.countDown latch)
+    (doseq [f racers] (deref f 10000 nil))
+    (is (= 1 @winners)
+        (str @winners " callers took the same lease"))))
+
+(deftest ^:unit set-if-absent-honours-max-size
+  ;; It used to go through `set-value!`, which evicts. Writing straight into
+  ;; the map — needed to make the check and the write one operation — skipped
+  ;; eviction, so a bounded cache grew without bound through this path.
+  (let [cache (in-mem/create-in-memory-cache {:max-size 3})]
+    (dotimes [i 5]
+      (is (true? (ports/set-if-absent! cache (str "lease-" i) i))))
+
+    (is (= 3 (count (ports/keys-matching cache "*")))
+        "a cache with :max-size 3 grew past it")
+
+    (testing "and it is the oldest that went"
+      (is (nil? (ports/get-value cache "lease-0")))
+      (is (= 4 (ports/get-value cache "lease-4"))))))
