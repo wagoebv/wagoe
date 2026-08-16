@@ -65,14 +65,21 @@
 
 (defn- integer-value?
   "True for integer types Redis can store as a native decimal string and operate
-   on with the atomic INCR/DECR commands."
+   on with the atomic INCR/DECR commands.
+
+   Bounded by what a Redis integer is. A BigInteger beyond 64 bits stored this
+   way came back as nil: reading it parses as a Long first, which overflows, and
+   the decimal bytes are not Nippy either — so the value was lost silently.
+   Those go through Nippy, which is also the only thing that preserves them, and
+   INCR could never have operated on them anyway."
   [v]
-  (or (instance? Long v)
-      (instance? Integer v)
-      (instance? Short v)
-      (instance? Byte v)
-      (instance? clojure.lang.BigInt v)
-      (instance? java.math.BigInteger v)))
+  (and (or (instance? Long v)
+           (instance? Integer v)
+           (instance? Short v)
+           (instance? Byte v)
+           (instance? clojure.lang.BigInt v)
+           (instance? java.math.BigInteger v))
+       (<= (bigint Long/MIN_VALUE) (bigint v) (bigint Long/MAX_VALUE))))
 
 (defn- serialize-value
   "Serialize a value for storage in Redis.
@@ -182,18 +189,21 @@
   ports/IBatchCache
 
   (get-many [_ keys]
-    (with-redis pool
-      (fn [^Jedis redis]
-        (let [namespaced-keys (mapv #(add-namespace namespace %) keys)
+    (if (empty? keys)
+      ;; MGET with no arguments is an error, not an empty answer.
+      {}
+      (with-redis pool
+        (fn [^Jedis redis]
+          (let [namespaced-keys (mapv #(add-namespace namespace %) keys)
               key-byte-arrays (into-array (Class/forName "[B")
                                           (map key-bytes namespaced-keys))
-              values (.mget redis key-byte-arrays)]
-          (into {}
-                (keep-indexed
-                 (fn [idx value]
-                   (when value
-                     [(nth keys idx) (deserialize-value value)]))
-                 values))))))
+                values (.mget redis key-byte-arrays)]
+            (into {}
+                  (keep-indexed
+                   (fn [idx value]
+                     (when value
+                       [(nth keys idx) (deserialize-value value)]))
+                   values)))))))
 
   (set-many! [this key-value-map]
     (ports/set-many! this key-value-map (:default-ttl config)))
@@ -213,11 +223,13 @@
           (count key-value-map)))))
 
   (delete-many! [_ keys]
-    (with-redis pool
-      (fn [^Jedis redis]
-        (let [namespaced-keys (mapv #(add-namespace namespace %) keys)
-              result (.del redis (into-array String namespaced-keys))]
-          result))))
+    (if (empty? keys)
+      ;; DEL with no arguments is an error, not a no-op.
+      0
+      (with-redis pool
+        (fn [^Jedis redis]
+          (let [namespaced-keys (mapv #(add-namespace namespace %) keys)]
+            (.del redis (into-array String namespaced-keys)))))))
 
   ;; =============================================================================
   ;; Atomic Operations
@@ -268,8 +280,12 @@
                 current-value (when current-ba (deserialize-value current-ba))]
             (if (= current-value expected-value)
               (let [transaction (.multi redis)
-                    new-ba (serialize-value new-value)]
-                (.set transaction kb new-ba)
+                    new-ba (serialize-value new-value)
+                    ;; KEEPTTL, or a swap silently makes the key permanent —
+                    ;; which is the opposite of what a caller swapping a value
+                    ;; under a lease wants. Redis 6.0 and up.
+                    params (doto (SetParams/setParams) (.keepttl))]
+                (.set transaction kb new-ba params)
                 (let [result (.exec transaction)]
                   (some? result)))
               (do

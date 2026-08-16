@@ -21,7 +21,8 @@
    - High-memory workloads (limited by JVM heap)"
   (:require [wagoe.cache.ports :as ports]
             [clojure.string :as str])
-  (:import [java.time Instant Duration]))
+  (:import [java.time Instant Duration]
+           [java.util.regex Pattern]))
 
 ;; =============================================================================
 ;; State Management
@@ -80,6 +81,17 @@
   (when-let [expires-at (:expires-at entry)]
     (.isAfter (now) expires-at)))
 
+(defn- live-entry
+  "The entry at `namespaced-key`, or nil if it is absent or has expired.
+
+   Nothing sweeps expired entries, so one can sit in the map indefinitely.
+   Every operation has to read that as absence, or the adapter keeps answering
+   questions about a key that is, to the caller, gone."
+  [entries namespaced-key]
+  (let [entry (get @entries namespaced-key)]
+    (when (and entry (not (expired? entry)))
+      entry)))
+
 (defn- calculate-expires-at
   "Calculate expiration time from TTL seconds."
   [ttl-seconds]
@@ -129,13 +141,30 @@
         (evict-lru! entries (:stats state) (:track-stats? (:config state)))))))
 
 (defn- wildcard-pattern->regex
-  "Convert wildcard pattern to regex.
-   Example: 'user:*' -> #'user:.*'"
+  "Compile a Redis-style glob to a regex.
+
+   Only `*`, `?` and `[…]` are wildcards; everything else is literal. Handing
+   the pattern to `re-pattern` unchanged made every regex metacharacter a
+   wildcard as well, so `a.b` matched `axb` — and `.` is in half the key
+   schemes there are.
+   Example: 'user:*' -> #'\\Qu\\E\\Qs\\E…:.*'"
   [pattern]
-  (-> pattern
-      (str/replace "*" ".*")
-      (str/replace "?" ".")
-      re-pattern))
+  (let [^String s (str pattern)
+        n         (count s)]
+    (re-pattern
+     (loop [i 0 out (StringBuilder.)]
+       (if (>= i n)
+         (str out)
+         (let [c (.charAt s i)]
+           (case c
+             \* (recur (inc i) (.append out ".*"))
+             \? (recur (inc i) (.append out "."))
+             \[ (let [close (.indexOf s "]" (inc i))]
+                  (if (neg? close)
+                    (recur (inc i) (.append out (Pattern/quote (str c))))
+                    (recur (inc close)
+                           (.append out (str "[" (subs s (inc i) close) "]")))))
+             (recur (inc i) (.append out (Pattern/quote (str c)))))))))))
 
 ;; =============================================================================
 ;; Cache Operations
@@ -191,12 +220,12 @@
 
   (delete-key! [_this key]
     (let [namespaced-key (add-namespace (:namespace state) key)
-          entries (:entries state)]
-      (if (contains? @entries namespaced-key)
-        (do
-          (swap! entries dissoc namespaced-key)
-          true)
-        false)))
+          entries        (:entries state)
+          existed        (some? (live-entry entries namespaced-key))]
+      ;; Dropped either way — an expired entry is gone, and this is as good a
+      ;; moment to reclaim it as any — but only a live one counts as deleted.
+      (swap! entries dissoc namespaced-key)
+      existed))
 
   (exists? [_this key]
     (let [namespaced-key (add-namespace (:namespace state) key)
@@ -205,22 +234,27 @@
       (boolean (and entry (not (expired? entry))))))
 
   (ttl [_this key]
-    (let [namespaced-key (add-namespace (:namespace state) key)
-          entries (:entries state)
-          entry (get @entries namespaced-key)]
-      (when (and entry (not (expired? entry)))
+    (let [namespaced-key (add-namespace (:namespace state) key)]
+      (when-let [entry (live-entry (:entries state) namespaced-key)]
         (when-let [expires-at (:expires-at entry)]
-          (.getSeconds (Duration/between (now) expires-at))))))
+          ;; Rounded up, as Redis TTL is. Truncating reports 29 for a key set
+          ;; to 30 a millisecond ago, and a caller comparing the two adapters
+          ;; sees an off-by-one it cannot account for.
+          (max 1 (long (Math/ceil (/ (.toMillis (Duration/between (now) expires-at))
+                                     1000.0))))))))
 
   (expire! [_this key ttl-seconds]
     (let [namespaced-key (add-namespace (:namespace state) key)
-          entries (:entries state)]
-      (if-let [_entry (get @entries namespaced-key)]
+          entries        (:entries state)]
+      (if (live-entry entries namespaced-key)
         (do
           (swap! entries assoc-in [namespaced-key :expires-at]
                  (calculate-expires-at ttl-seconds))
           true)
-        false)))
+        ;; An expired entry is not a key to put a new expiry on; giving it one
+        ;; brings back a value the caller was told had gone.
+        (do (swap! entries dissoc namespaced-key)
+            false))))
 
   ;; =============================================================================
   ;; Batch Operations
@@ -229,11 +263,16 @@
   ports/IBatchCache
 
   (get-many [this keys]
+    ;; A key that is present is in the result whatever its value. `nil` and
+    ;; `false` are things callers cache — a negative answer is an answer — and
+    ;; dropping them makes a hit indistinguishable from a miss, so the caller
+    ;; recomputes it every time.
     (into {}
           (keep (fn [k]
-                  (when-let [v (ports/get-value this k)]
-                    [k v]))
-                keys)))
+                  (let [v (ports/get-value this k)]
+                    (when (or (some? v) (ports/exists? this k))
+                      [k v]))))
+          keys))
 
   (set-many! [this key-value-map]
     (ports/set-many! this key-value-map (:default-ttl (:config state))))
@@ -328,7 +367,11 @@
           result (atom false)]
       (swap! entries
              (fn [cache]
-               (let [current-entry (get cache namespaced-key)
+               ;; An expired entry is absent, so `nil` is what matches it —
+               ;; the same thing a caller says to mean "only if it is not
+               ;; there".
+               (let [entry         (get cache namespaced-key)
+                     current-entry (when (and entry (not (expired? entry))) entry)
                      current-value (:value current-entry)]
                  (if (= current-value expected-value)
                    (do
@@ -336,7 +379,11 @@
                      (assoc cache namespaced-key
                             (->CacheEntry new-value (now) (:expires-at current-entry) 0 (now)
                                           (swap! (:access-counter state) inc))))
-                   cache))))
+                   ;; Reset, not left alone: `swap!` re-runs this under
+                   ;; contention, and a retry that loses must not report the
+                   ;; win of the attempt before it.
+                   (do (reset! result false)
+                       cache)))))
       @result))
 
   ;; =============================================================================
@@ -352,6 +399,7 @@
           namespace (:namespace state)]
       (into #{}
             (comp
+             (remove (fn [[_ entry]] (expired? entry)))
              (filter (fn [[k _]] (re-matches regex k)))
              (map (fn [[k _]] (strip-namespace namespace k))))
             @entries)))

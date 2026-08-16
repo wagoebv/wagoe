@@ -154,6 +154,15 @@ Redis adapter tests self-skip when no Redis is reachable; in-memory and
 tenant-cache tests run unconditionally. `in-memory/clear-all!` is a test helper
 for resetting state between cases.
 
+**A new operation gets covered in `test/wagoe/cache/adapter_surface_test.clj`,
+on the way in.** The per-adapter suites share no cases, so nothing in them says
+the two adapters behave alike — and for a long time they didn't. That sweep runs
+every protocol method against both, across the states a key can be in (absent,
+live, expired), and it needs a Redis: without one it compares a single adapter
+against itself and `the-sweep-covers-more-than-one-adapter` fails to say so.
+Where the adapters genuinely cannot agree, list the case with its reason rather
+than dropping the assertion.
+
 ## Links
 
 - [Root AGENTS Guide](../../AGENTS.md)
