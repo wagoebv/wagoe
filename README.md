@@ -283,27 +283,51 @@ find . \( -name "*.md" -o -name "*.adoc" \) \
 
 On Linux, use `sed -i` instead of `sed -i ''`.
 
-**2. Verify, commit, tag, and release:**
+**2. Verify and commit:**
 
 ```bash
-# Verify — must print nothing
-grep -r "$OLD" --include="*.clj" --include="*.edn" --include="*.adoc" . | grep -v ".git" | grep -v "docs/superpowers"
+# The gate, not a grep: it knows every location and fails when they disagree.
+bb check:versions
 
-bb check --quick
-
+bb check
 git add -A && git commit -m "bump library suite version $OLD → $NEW"
-git tag -a "$NEW" -m "Release $NEW"
-git push && git push --tags
-gh release create "$NEW" --title "$NEW" --notes "Library suite release $NEW"
 ```
 
-**3. Deploy to Clojars:**
+**3. Run the pre-release gate:**
+
+The nightly first-run matrix doubles as the pre-release check — that is what its
+`workflow_dispatch` is for. Run it against the commit you are about to tag
+rather than trusting last night's run to describe today's tree.
 
 ```bash
-bb deploy --all
+gh workflow run first-run-matrix.yml -f reason="pre-release gate for $NEW"
 ```
 
-`patch-catalogue-version!` in the deploy script keeps `modules-catalogue.edn` in sync automatically after each successful deploy.
+**4. Tag. The tag is the release:**
+
+```bash
+git push
+git tag -a "$NEW" -m "Release $NEW"
+git push --tags
+```
+
+Pushing an unprefixed semver tag fires `.github/workflows/publish.yml`, which
+waits for a maintainer to approve the `release` environment and then does the
+rest: builds every library from the tagged commit in publish order, refuses if
+the tag disagrees with the source version, deploys the artifacts not already on
+Clojars, and creates the GitHub release.
+
+So there is nothing to run by hand afterwards. In particular:
+
+- **Do not** `gh release create` — the workflow creates the release, and doing
+  both collides.
+- **Do not** `bb deploy --all` — the workflow has already deployed. Re-deploying
+  a published artifact 409s and aborts the run, which is why the workflow itself
+  uses `--missing`.
+
+`bb deploy` by hand is the fallback for when the workflow cannot run, not a step
+of the normal release. `patch-catalogue-version!` keeps `modules-catalogue.edn`
+in sync after each successful deploy either way.
 
 **What to skip:** `CHANGELOG.md` (maintain manually), `docs/superpowers/` (historical planning docs), draft/pre-releases on GitHub (`install.sh` uses `/releases/latest` which only returns published releases).
 
