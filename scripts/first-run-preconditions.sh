@@ -47,10 +47,10 @@ ok()   { echo "  ok — $*"; }
 export DEBIAN_FRONTEND=noninteractive
 if command -v apt-get >/dev/null 2>&1; then
   apt-get update -qq >/tmp/pkg.log 2>&1
-  apt-get install -y -qq curl ca-certificates git unzip zip openjdk-17-jdk-headless >/tmp/pkg.log 2>&1 \
+  apt-get install -y -qq curl ca-certificates git unzip zip which openjdk-17-jdk-headless >/tmp/pkg.log 2>&1 \
     || { tail -5 /tmp/pkg.log; fail "could not install the old JDK the case needs"; }
 elif command -v dnf >/dev/null 2>&1; then
-  dnf install -y -q curl ca-certificates git unzip zip java-17-openjdk-headless >/tmp/pkg.log 2>&1 \
+  dnf install -y -q curl ca-certificates git unzip zip which java-17-openjdk-headless >/tmp/pkg.log 2>&1 \
     || { tail -5 /tmp/pkg.log; fail "could not install the old JDK the case needs"; }
 else
   fail "no supported package manager for this case"
@@ -131,9 +131,9 @@ docker run --name "$CONTAINER" \
 export DEBIAN_FRONTEND=noninteractive
 if command -v apt-get >/dev/null 2>&1; then
   apt-get update -qq >/dev/null 2>&1
-  apt-get install -y -qq curl ca-certificates git unzip zip >/dev/null 2>&1
+  apt-get install -y -qq curl ca-certificates git unzip zip which >/dev/null 2>&1
 elif command -v dnf >/dev/null 2>&1; then
-  dnf install -y -q curl ca-certificates git unzip zip >/dev/null 2>&1
+  dnf install -y -q curl ca-certificates git unzip zip which >/dev/null 2>&1
 fi
 ' >/dev/null 2>&1 || { echo "  → FAILED (could not prepare the offline image)"; exit 1; }
 docker commit "$CONTAINER" "$PREPPED" >/dev/null
