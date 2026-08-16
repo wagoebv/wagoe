@@ -58,6 +58,17 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Changed
 
+- **`check:versions` now covers documentation as well as source** (BOU-317). It
+  read 59 code locations and no `.md`/`.adoc`, so roughly 40% of the version
+  surface was ungated — and it was the half users copy from, which is how
+  `installation.adoc` sat 43 releases behind through every bump and every green
+  run. It now also reads `com.wagoe` coordinates, `--tag v…` install recipes for
+  this repository, and release-pinned prose such as "NEW in v…": 96 locations
+  rather than 59. Historical documents are excluded by path, each with a stated
+  reason, and documentation is checked *against* the version the source declares
+  rather than being allowed to vote on it — otherwise a wholly stale
+  documentation set would report the correctly-bumped files as the offenders.
+
 - **`check:branch-protection` also verifies that CI can run at all.** Coverage
   of every job is worth nothing on a run that never starts, so the gate now
   reports a missing `pull_request:` trigger and an unscoped `push:` that would
