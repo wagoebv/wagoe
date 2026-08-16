@@ -8,7 +8,7 @@ description: "Draft demo script for a 10–15 minute Wagoe walkthrough."
 
 Audience - Clojure teams building internal tools/SaaS backends - Goal: show speed {plus} structure (FC/IS), security (MFA), SSR/HTMX, and observability
 
-Prereqs (on screen briefly) - Java 17{plus}, Clojure CLI, Babashka installed - Project created with `wagoe new my-app` - Env: WAG++_++ENV=development, JWT++_++SECRET set
+Prereqs (on screen briefly) - Java 21{plus}, Clojure CLI, Babashka installed - Project created with `wagoe new my-app` - Env: WAG++_++ENV=development, JWT++_++SECRET set
 
 Structure - 00:00–01:00 — Hook & value prop - 01:00–04:00 — Run the generated app, tour architecture (FC/IS) - 04:00–09:00 — Scaffold a module, migrate, admin UI in action - 09:00–12:00 — MFA enable/login flow - 12:00–14:00 — Observability and error handling - 14:00–15:00 — Deploy {plus} recap
 

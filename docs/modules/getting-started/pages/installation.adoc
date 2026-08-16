@@ -23,7 +23,7 @@ After installation, proceed to xref:getting-started:quickstart.adoc[Quickstart].
 
 == Manual installation
 
-Install Java 17+, the Clojure CLI, and Babashka (`bb`) manually if you prefer not to use the installer.
+Install Java 21+, the Clojure CLI, and Babashka (`bb`) manually if you prefer not to use the installer.
 
 If you already have those installed, skip to xref:getting-started:quickstart.adoc[Quickstart].
 
@@ -31,7 +31,7 @@ If you already have those installed, skip to xref:getting-started:quickstart.ado
 
 [source,bash]
 ----
-brew install openjdk@17 clojure/tools/clojure borkdude/brew/babashka
+brew install openjdk@21 clojure/tools/clojure borkdude/brew/babashka
 ----
 
 === Linux (Debian/Ubuntu)
@@ -39,7 +39,7 @@ brew install openjdk@17 clojure/tools/clojure borkdude/brew/babashka
 [source,bash]
 ----
 sudo apt-get update
-sudo apt-get install -y openjdk-17-jdk curl tar
+sudo apt-get install -y openjdk-21-jdk curl tar
 
 curl -L -O https://github.com/clojure/brew-install/releases/latest/download/linux-install.sh
 chmod +x linux-install.sh && sudo ./linux-install.sh
@@ -51,7 +51,7 @@ bash < <(curl -s https://raw.githubusercontent.com/babashka/babashka/master/inst
 
 [source,bash]
 ----
-sudo dnf install -y java-17-openjdk java-17-openjdk-devel
+sudo dnf install -y java-21-openjdk java-21-openjdk-devel
 curl -L -O https://github.com/clojure/brew-install/releases/latest/download/linux-install.sh
 chmod +x linux-install.sh && sudo ./linux-install.sh
 bash < <(curl -s https://raw.githubusercontent.com/babashka/babashka/master/install)
@@ -61,7 +61,7 @@ bash < <(curl -s https://raw.githubusercontent.com/babashka/babashka/master/inst
 
 [source,powershell]
 ----
-scoop bucket add java && scoop install openjdk17
+scoop bucket add java && scoop install openjdk21
 scoop bucket add scoop-clojure && scoop install clojure
 scoop install babashka
 ----
@@ -82,12 +82,12 @@ Wagoe libraries are published to Clojars. Add only what you need:
 [source,clojure]
 ----
 ;; Validation utilities only
-{:deps {com.wagoe/wagoe-core {:mvn/version "1.0.1-alpha-42"}}}
+{:deps {com.wagoe/wagoe-core {:mvn/version "1.0.0-beta-5"}}}
 
 ;; Full web application stack
-{:deps {com.wagoe/wagoe-platform {:mvn/version "1.0.1-alpha-42"}
-        com.wagoe/wagoe-user     {:mvn/version "1.0.1-alpha-42"}
-        com.wagoe/wagoe-admin    {:mvn/version "1.0.1-alpha-42"}}}
+{:deps {com.wagoe/wagoe-platform {:mvn/version "1.0.0-beta-5"}
+        com.wagoe/wagoe-user     {:mvn/version "1.0.0-beta-5"}
+        com.wagoe/wagoe-admin    {:mvn/version "1.0.0-beta-5"}}}
 ----
 
 See xref:libraries:index.adoc[Library Overview] for the complete list of available libraries.

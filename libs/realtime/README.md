@@ -187,7 +187,7 @@ ws.onclose = () => {
 
 ### Topic-Based Pub/Sub
 
-**NEW in v1.0.1-alpha-26**: Connections can subscribe to arbitrary topics and receive messages published to those topics.
+Connections can subscribe to arbitrary topics and receive messages published to those topics.
 
 **Use Cases:**
 - **Chat rooms / Game lobbies**: `topic = "chat:general"`, `"lobby:game-123"`
@@ -891,7 +891,7 @@ Client Receives Message
 
 ## Limitations
 
-### Current Limitations (v1.0.1-alpha-26)
+### Current Limitations
 
 **Single-Server Deployment:**
 - ❌ **No multi-server support**: Connections tied to single server instance
