@@ -29,6 +29,28 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ## [Unreleased]
 
+## [1.0.0-beta-5] — 2026-08-16
+
+Running as more than one process. `1.0.0-beta-4` could serve an application from
+a single JVM and little else: cross-module calls had a protocol seam but nothing
+that crossed a network, the prod profile could not boot, and the deployment
+documentation described topologies with no reference to run them from.
+
+This release makes the seam real. A module can be served over HTTP and called
+through the protocol its callers already use, one or several modules can be
+booted as their own service, and modules can tell each other things
+asynchronously through a new event bus. A circuit breaker keeps a service that
+is down from taking its callers with it, and the state behind all of it lives
+where every replica can see it rather than in one JVM's memory.
+
+The other half is what looking closely turned up. Holding the cache and
+job-queue adapters to a shared contract found twenty-one places where they
+disagreed — including three different answers to what order jobs come off a
+queue in, two of them newest-first. A failed production boot logged the database
+password. `install.sh` accepted a JDK too old to run any of this. Those were all
+shipped behaviour, and none of it was visible from the suite that was supposed
+to be watching.
+
 ### Removed
 
 - **Three HikariCP pool keys that no build has ever applied** (BOU-89).

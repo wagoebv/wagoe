@@ -238,7 +238,7 @@
   "Sentence and clause boundaries within a documentation line.
 
    The lookbehind on `[.;:]` requires trailing whitespace so `libs/e2e/README.md`
-   and `1.0.0-beta-4` stay in one piece."
+   and `1.0.0-beta-5` stay in one piece."
   #"(?<=[.;:])\s+|\s+[—–]\s+|\s+--\s+")
 
 (defn claim-text

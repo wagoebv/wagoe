@@ -261,13 +261,14 @@ See [ADR-021](./dev-docs/adr/ADR-021-fcis-boundary-rules.adoc) (FC/IS rules) and
 
 ## Releasing a New Version
 
-Version appears in 26+ files — use these steps to bump consistently.
+Version appears in 59 locations — `bb check:versions` is the list, and it fails
+when they disagree. Use these steps to bump them consistently.
 
 **1. Replace the version string everywhere (all .clj, .edn, and .md files):**
 
 ```bash
-OLD="1.0.0-beta-4"
-NEW="1.0.0-beta-4"   # example
+OLD="1.0.0-beta-5"
+NEW="1.0.0-beta-5"   # example
 
 # Source and config files
 find . \( -name "*.clj" -o -name "*.edn" \) \
@@ -312,12 +313,12 @@ bb deploy --all
 
 ```clojure
 ;; Validation utilities only
-{:deps {com.wagoe/wagoe-core {:mvn/version "1.0.0-beta-4"}}}
+{:deps {com.wagoe/wagoe-core {:mvn/version "1.0.0-beta-5"}}}
 
 ;; Full web application stack
-{:deps {com.wagoe/wagoe-platform {:mvn/version "1.0.0-beta-4"}
-        com.wagoe/wagoe-user     {:mvn/version "1.0.0-beta-4"}
-        com.wagoe/wagoe-admin    {:mvn/version "1.0.0-beta-4"}}}
+{:deps {com.wagoe/wagoe-platform {:mvn/version "1.0.0-beta-5"}
+        com.wagoe/wagoe-user     {:mvn/version "1.0.0-beta-5"}
+        com.wagoe/wagoe-admin    {:mvn/version "1.0.0-beta-5"}}}
 ```
 
 ---

@@ -11,12 +11,12 @@ Foundation library providing validation, utilities, and interceptor framework fo
 
 **deps.edn** (recommended):
 ```clojure
-{:deps {com.wagoe/wagoe-core {:mvn/version "1.0.0-beta-4"}}}
+{:deps {com.wagoe/wagoe-core {:mvn/version "1.0.0-beta-5"}}}
 ```
 
 **Leiningen**:
 ```clojure
-[com.wagoe/wagoe-core "1.0.0-beta-4"]
+[com.wagoe/wagoe-core "1.0.0-beta-5"]
 ```
 
 ## Features

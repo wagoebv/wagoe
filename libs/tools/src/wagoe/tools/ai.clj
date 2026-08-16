@@ -23,7 +23,7 @@
 ;; Must match libs/tools/build.clj and libs/ai/build.clj. Update with the other
 ;; release pins — scaffolder-version in scaffold.clj, and the two in
 ;; libs/wagoe-cli/src/wagoe/cli/new.clj.
-(def ^:private ai-version "1.0.0-beta-4")
+(def ^:private ai-version "1.0.0-beta-5")
 
 ;; Match libs/ai/deps.edn and the monorepo's own pin.
 (def ^:private tools-cli-version "1.4.256")
