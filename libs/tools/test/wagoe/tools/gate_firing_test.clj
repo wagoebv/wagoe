@@ -610,10 +610,45 @@
       (is (< 40 (count (:jobs wf)))
           "expected ci.yml's jobs, so a passing run means something")))
 
+  (testing "a workflow that never runs on a pull request is detected"
+    ;; BOU-315. Coverage is worthless on a run that does not happen: under a
+    ;; `push:`-only trigger a fork PR started zero jobs, so the required context
+    ;; sat pending — not red — and nothing said the code was untested.
+    (is (seq (check-bp/trigger-findings (yaml/parse-string "on:\n  push:\n")))))
+
+  (testing "an unscoped push alongside pull_request is detected"
+    ;; It would run the whole pipeline twice for a same-repo PR.
+    (is (seq (check-bp/trigger-findings
+              (yaml/parse-string "on:\n  push:\n  pull_request:\n")))))
+
+  (testing "an ungated publish workflow is detected"
+    ;; BOU-314. Every other guard in publish.yml protects the shape of a
+    ;; release; none asked whether the code works, so a tag on a red commit
+    ;; shipped 30 immutable Clojars coordinates with no way to recall them.
+    (is (seq (check-bp/publish-findings
+              (yaml/parse-string
+               (str "jobs:\n  publish:\n    steps:\n"
+                    "      - name: Publish\n        run: bb deploy --missing\n"))))))
+
+  (testing "a guard placed after the deploy is detected"
+    ;; Checking a release you have already published is not a gate.
+    (is (seq (check-bp/publish-findings
+              (yaml/parse-string
+               (str "jobs:\n  publish:\n    steps:\n"
+                    "      - name: Publish\n        run: bb deploy --missing\n"
+                    "      - name: Guard\n        env:\n          C: All Tests Passed\n"
+                    "        run: echo guard\n"))))))
+
+  (testing "the gate reads the real publish workflow, not an empty step list"
+    (is (< 5 (count (get-in (check-bp/publish-workflow) [:jobs :publish :steps])))
+        "expected publish.yml's steps, so a passing run means something"))
+
   (testing "the repository currently satisfies the gate"
     (let [{:keys [missing summary-name]} (check-bp/summary-covers (check-bp/ci-workflow))]
       (is (= check-bp/summary-job-name summary-name))
-      (is (empty? missing)))))
+      (is (empty? missing))
+      (is (empty? (check-bp/trigger-findings (check-bp/ci-workflow))))
+      (is (empty? (check-bp/publish-findings (check-bp/publish-workflow)))))))
 
 (def gates-with-firing-tests
   "Gate ids from `check/all-checks` that this namespace proves can still fire.

@@ -20,8 +20,11 @@ on:
 
 # The Create GitHub Release step needs write access to releases; the default
 # GITHUB_TOKEN is read-only, which 403s ("Resource not accessible by integration").
+# `checks: read` is for the CI guard below, which reads the check runs reported
+# against the tagged commit.
 permissions:
   contents: write
+  checks: read
 
 jobs:
   publish:
@@ -49,6 +52,62 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+
+      # BOU-314: every other guard in this workflow protects the *shape* of the
+      # release — the tag agrees with source (--check-versions), nothing is
+      # half-published (--missing), everything landed (--verify). None of them
+      # ask whether the code works.
+      #
+      # So a tag on a commit whose CI was red, or never ran at all, published 30
+      # artifacts. Clojars coordinates are immutable: there is no recall, no
+      # overwrite, and no way to walk it back other than burning a version
+      # number. That asymmetry is why this runs first, before the ~10 minutes of
+      # setup below — a release that must not happen should cost seconds.
+      #
+      # Reading the Checks API rather than re-running the suite is deliberate:
+      # it gates on the *same* run branch protection already requires, so a
+      # green merge and a green release mean the same thing. Re-running here
+      # would double the runtime and, worse, could pass on a flake that the
+      # recorded run had caught.
+      - name: Guard — CI passed on the tagged commit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SUMMARY_CHECK: All Tests Passed
+        run: |
+          set -euo pipefail
+
+          sha="$(git rev-parse HEAD)"
+          echo "Requiring a successful \"$SUMMARY_CHECK\" on $sha"
+
+          # No `|| true`: an API failure must abort the release, not read as
+          # "no successful run" and land in the same branch as a red CI. The
+          # two need different messages — one is a broken token, the other is
+          # broken code.
+          statuses="$(gh api \
+            --method GET \
+            "repos/${GITHUB_REPOSITORY}/commits/${sha}/check-runs" \
+            -f "check_name=${SUMMARY_CHECK}" \
+            -f per_page=100 \
+            --jq '.check_runs[] | "\(.status):\(.conclusion // "no-conclusion")"')"
+
+          if [ -z "$statuses" ]; then
+            echo "::error::No \"$SUMMARY_CHECK\" run exists for $sha — CI never ran on this commit."
+            echo ""
+            echo "Publishing would ship 30 immutable Clojars coordinates built from"
+            echo "source nothing has tested. Push the commit to a branch, open a PR,"
+            echo "and re-tag once the pipeline is green."
+            exit 1
+          fi
+
+          if ! printf '%s\n' "$statuses" | grep -qx 'completed:success'; then
+            echo "::error::\"$SUMMARY_CHECK\" did not succeed on $sha."
+            echo ""
+            echo "Runs found for this commit:"
+            printf '%s\n' "$statuses" | sed 's/^/  /'
+            exit 1
+          fi
+
+          echo "\"$SUMMARY_CHECK\" passed on $sha — proceeding."
 
       - name: Setup Clojure
         uses: DeLaGuardo/setup-clojure@13.6.1

@@ -125,6 +125,92 @@
       (is (not= sut/summary-job-name summary-name)
           "this mismatch is what -main exits 1 on"))))
 
+(deftest ^:unit the-on-block-is-read-under-both-keys-yaml-gives-it
+  ;; YAML 1.1 reads the bare word `on` as the boolean true, so SnakeYAML parses
+  ;; `on:` to the key `true` rather than `:on`. A reader that looks only for
+  ;; `:on` finds nothing and — worse — concludes the workflow has no triggers at
+  ;; all, which reads as "no pull_request trigger" and fires this gate on a
+  ;; correct file. Quoted (`"on":`) and unquoted must both work.
+  (testing "the unquoted key YAML turns into true"
+    (is (= #{:push :pull_request}
+           (set (keys (sut/workflow-triggers
+                       (wf "on:\n  push:\n    branches: [main]\n  pull_request:\n")))))))
+
+  (testing "the quoted key, which stays a string"
+    (is (= #{:push :pull_request}
+           (set (keys (sut/workflow-triggers
+                       (wf "\"on\":\n  push:\n    branches: [main]\n  pull_request:\n"))))))))
+
+(deftest ^:unit a-workflow-without-a-pull-request-trigger-runs-no-ci-on-fork-prs
+  ;; BOU-315: ci.yml triggered on `push:` only. Same-repo branches were covered,
+  ;; but a fork PR ran zero jobs — and the required "All Tests Passed" context
+  ;; is reported by a job that never started, so it sits pending rather than
+  ;; failing. Combined with the publish gap, code could reach main having never
+  ;; been tested.
+  (testing "push-only is reported"
+    (is (seq (sut/trigger-findings (wf "on:\n  push:\n")))))
+
+  (testing "adding pull_request clears it"
+    (is (empty? (sut/trigger-findings
+                 (wf "on:\n  push:\n    branches: [main]\n  pull_request:\n")))))
+
+  (testing "a workflow with no triggers at all is reported, not silently passed"
+    ;; The nil-tolerance failure mode from BOU-250: a lockstep check that passes
+    ;; when it cannot read what it compares against has stopped checking.
+    (is (seq (sut/trigger-findings (wf "jobs:\n  a:\n    name: A\n"))))))
+
+(deftest ^:unit push-must-be-scoped-so-same-repo-prs-do-not-run-ci-twice
+  ;; An unscoped `push:` fires on every branch. With pull_request added, a
+  ;; same-repo PR then runs the whole 58-job pipeline twice — once for the push,
+  ;; once for the PR — under two different concurrency groups, so neither
+  ;; cancels the other.
+  (testing "unscoped push alongside pull_request is reported"
+    (is (seq (sut/trigger-findings (wf "on:\n  push:\n  pull_request:\n")))))
+
+  (testing "push scoped to main is clean"
+    (is (empty? (sut/trigger-findings
+                 (wf "on:\n  push:\n    branches: [main]\n  pull_request:\n"))))))
+
+(deftest ^:unit publishing-must-require-the-same-context-merging-does
+  ;; BOU-314: publish.yml guarded the *shape* of a release — the tag agrees with
+  ;; source, nothing is half-published, everything landed — and never asked
+  ;; whether the code works. A tag on a red or untested commit shipped 30
+  ;; immutable Clojars coordinates, which cannot be recalled.
+  (testing "a publish job with no CI guard is reported"
+    (is (seq (sut/publish-findings
+              (wf (str "jobs:\n  publish:\n    steps:\n"
+                       "      - name: Checkout\n        uses: actions/checkout@v6\n"
+                       "      - name: Publish\n        run: bb deploy --missing\n"))))))
+
+  (testing "a guard naming the required context clears it"
+    (is (empty? (sut/publish-findings
+                 (wf (str "jobs:\n  publish:\n    steps:\n"
+                          "      - name: Guard\n        run: |\n"
+                          "          check=\"All Tests Passed\"\n"
+                          "      - name: Publish\n        run: bb deploy --missing\n"))))))
+
+  (testing "a guard that runs after the deploy is reported"
+    ;; Verifying the release you already published is not a gate.
+    (is (seq (sut/publish-findings
+              (wf (str "jobs:\n  publish:\n    steps:\n"
+                       "      - name: Publish\n        run: bb deploy --missing\n"
+                       "      - name: Guard\n        run: |\n"
+                       "          check=\"All Tests Passed\"\n"))))))
+
+  (testing "`bb deploy --check-versions` is not a publishing step"
+    ;; It reads versions and deploys nothing. Treating any `bb deploy` as the
+    ;; publish would place the guard requirement one step too early and report
+    ;; a correctly-ordered workflow.
+    (is (empty? (sut/publish-findings
+                 (wf (str "jobs:\n  publish:\n    steps:\n"
+                          "      - name: Versions\n        run: bb deploy --check-versions 1.0.0\n"
+                          "      - name: Guard\n        run: |\n"
+                          "          check=\"All Tests Passed\"\n"
+                          "      - name: Publish\n        run: bb deploy --missing\n"))))))
+
+  (testing "a workflow with no publish job at all is reported, not silently passed"
+    (is (seq (sut/publish-findings (wf "jobs:\n  something-else:\n    steps: []\n"))))))
+
 (deftest ^:unit the-repository-is-currently-consistent
   ;; The regression guard, against the real ci.yml. No token, no API — which is
   ;; the whole point of requiring one context instead of fourteen.
@@ -140,4 +226,10 @@
     (testing "and the only parked job is the one we expect"
       ;; Named rather than counted: a second parked job should be a decision,
       ;; not something that slips in behind a number.
-      (is (= ["e2e"] disabled)))))
+      (is (= ["e2e"] disabled))))
+
+  (testing "and every pull request — fork or not — actually triggers it"
+    (is (empty? (sut/trigger-findings (sut/ci-workflow)))))
+
+  (testing "and publishing requires the same context merging does"
+    (is (empty? (sut/publish-findings (sut/publish-workflow))))))
