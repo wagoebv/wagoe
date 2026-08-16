@@ -10,9 +10,34 @@
 
 (def ^:private root-dir (fs/file (System/getProperty "user.dir")))
 
-(def ^:private version-pattern
-  "A suite version: 1.0.0-beta-5, 1.0.1-alpha-32, 2.0.0."
+(def version-pattern
+  "A suite version: 1.0.0-beta-5, 1.0.1-alpha-32, 2.0.0.
+
+   Public because `bb bump` validates its argument against it. What counts as a
+   suite version has to be one definition: a bump that accepts a shape the check
+   does not recognise writes 96 locations the gate then cannot read."
   #"\d+\.\d+\.\d+(?:-[a-z]+-\d+)?")
+
+(defn matches-in
+  "Every match of `re` in `content`, as {:line :excerpt :version :groups}.
+
+   The version is read out of the matched text with `version-pattern` rather
+   than from a capture group, so the four rules below can each have whatever
+   group layout their own shape needs. `:groups` keeps the raw match for the one
+   rule that needs a group for something else — the catalogue, whose key names
+   the finding.
+
+   Line-scoped on purpose: a whole-file `re-seq` cannot say *where*, and a
+   rewrite that cannot say where has to fall back to replacing every occurrence
+   of the version string — which is the blind-sed failure BOU-316 is about."
+  [content re]
+  (for [[idx line] (map-indexed vector (str/split-lines content))
+        m          (re-seq re line)
+        :let       [matched (if (vector? m) (first m) m)
+                    v       (re-find version-pattern matched)]
+        :when      v]
+    {:line (inc idx) :excerpt matched :version v
+     :groups (if (vector? m) m [m])}))
 
 (defn version-sources
   "Every file that hard-codes the suite version, and the version it names.
@@ -23,25 +48,25 @@
    because the bump routine covered deps.edn and nobody had written bb.edn
    down.
 
-   Returns a seq of {:file str :version str :what str}."
+   Returns a seq of {:file str :line int :version str :what str :excerpt str}.
+
+   `:line` and `:excerpt` are what let `bb bump` (BOU-316) rewrite exactly what
+   this discovers, instead of keeping a second list of locations — which is the
+   drift this gate exists to catch, so it should not need one to be fixed."
   []
   (let [read* (fn [f] (try (slurp (fs/file f)) (catch Exception _ "")))
-        rel   (fn [f] (str (fs/relativize root-dir (fs/absolutize f))))
-        find1 (fn [content re]
-                (when-let [m (re-find re content)]
-                  (re-find version-pattern (if (vector? m) (first m) m))))]
+        rel   (fn [f] (str (fs/relativize root-dir (fs/absolutize f))))]
     (concat
      ;; Each publishable library's build.clj.
-     (for [f    (sort (map str (fs/glob root-dir "libs/*/build.clj")))
-           :let [v (find1 (read* f) #"\(def version \"[^\"]+\"")]
-           :when v]
-       {:file (rel f) :version v :what "build.clj"})
+     (for [f (sort (map str (fs/glob root-dir "libs/*/build.clj")))
+           m (matches-in (read* f) #"\(def version \"[^\"]+\"")]
+       (assoc m :file (rel f) :what "build.clj"))
 
      ;; The CLI's pin of the tools artifact it writes into generated projects.
-     (for [f    ["libs/wagoe-cli/src/wagoe/cli/new.clj"]
-           :let [c (read* (fs/file root-dir f))]
-           [_ v] (re-seq (re-pattern (str "-version\\s+\"(" version-pattern ")\"")) c)]
-       {:file f :version v :what "generated-project pin"})
+     (for [f ["libs/wagoe-cli/src/wagoe/cli/new.clj"]
+           m (matches-in (read* (fs/file root-dir f))
+                         (re-pattern (str "-version\\s+\"" version-pattern "\"")))]
+       (assoc m :file f :what "generated-project pin"))
 
      ;; The module catalogue shipped with the CLI. Every version-bearing key,
      ;; not just :catalogue-version: the file also carries :cli-version and a
@@ -49,23 +74,23 @@
      ;; artifact from that per-module value. Reading one of 25 meant the gate
      ;; could pass while the CLI emitted a stale dependency — the exact failure
      ;; BOU-245 is about, in the file most likely to have it.
-     (for [f     ["libs/wagoe-cli/resources/wagoe/cli/modules-catalogue.edn"]
-           :let  [c (read* (fs/file root-dir f))]
-           [_ k v] (re-seq (re-pattern (str "(:[a-z-]*version[a-z-]*)\\s+\"("
-                                            version-pattern ")\"")) c)]
-       {:file f :version v :what k})
+     (for [f ["libs/wagoe-cli/resources/wagoe/cli/modules-catalogue.edn"]
+           m (matches-in (read* (fs/file root-dir f))
+                         (re-pattern (str "(:[a-z-]*version[a-z-]*)\\s+\""
+                                          version-pattern "\"")))]
+       (assoc m :file f :what (second (:groups m))))
 
      ;; Any com.wagoe/* Maven pin, in deps.edn or bb.edn, anywhere in the tree.
      ;; This is the shape the ticket is named for: bb.edn pins are separate
      ;; from deps.edn pins and were bumped separately, which is to say not
      ;; bumped.
-     (for [f    (concat (map str (fs/glob root-dir "**/deps.edn"))
-                        (map str (fs/glob root-dir "**/bb.edn")))
+     (for [f     (concat (map str (fs/glob root-dir "**/deps.edn"))
+                         (map str (fs/glob root-dir "**/bb.edn")))
            :when (not (str/includes? f "/target/"))
-           :let  [c (read* f)]
-           [_ v] (re-seq (re-pattern (str "com\\.wagoe/[a-z0-9-]+\\s*\\{:mvn/version\\s+\"("
-                                          version-pattern ")\"")) c)]
-       {:file (rel f) :version v :what "com.wagoe pin"}))))
+           m     (matches-in (read* f)
+                             (re-pattern (str "com\\.wagoe/[a-z0-9-]+\\s*\\{:mvn/version\\s+\""
+                                              version-pattern "\"")))]
+       (assoc m :file (rel f) :what "com.wagoe pin")))))
 
 ;; =============================================================================
 ;; Documentation — the half of the surface users actually read
