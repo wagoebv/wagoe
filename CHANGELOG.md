@@ -56,6 +56,22 @@ for what is public API, what is internal, and how deprecations are announced.
   Started described bootstrapping "from the starter repository", which does not
   exist; it names `wagoe new` now.
 
+### Added
+
+- **`bb bump <version>`** (BOU-316). The release bump was a global
+  `find | xargs sed` copied out of the README, and three things were wrong with
+  it at once: the snippet set `OLD` and `NEW` to the *same string*, so a
+  copy-paste run rewrote nothing and reported success — with a verification step
+  of `grep -r "$OLD"`, which then found nothing and agreed; `sed -i ''` is
+  macOS-only, so the documented command fails on Linux and in CI; and it
+  replaced *every* occurrence of the version string, including third-party pins
+  and fixtures that happened to match. `bb bump` rewrites exactly the locations
+  `check:versions` discovers — the same code, not a second list — prints a diff,
+  and verifies the result against the version it just wrote. `--dry-run` lists
+  the files and writes nothing, a plain re-run is a no-op, and a leading `v` is
+  refused rather than written into 96 places where every location would then
+  agree.
+
 ### Changed
 
 - **`check:versions` now covers documentation as well as source** (BOU-317). It

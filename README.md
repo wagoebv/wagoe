@@ -261,41 +261,37 @@ See [ADR-021](./dev-docs/adr/ADR-021-fcis-boundary-rules.adoc) (FC/IS rules) and
 
 ## Releasing a New Version
 
-Version appears in 59 locations — `bb check:versions` is the list, and it fails
-when they disagree. Use these steps to bump them consistently.
+The version appears in 96 locations — 59 in source, 37 in documentation.
+`bb check:versions` is the list, and `bb bump` is the way to change it.
 
-**1. Replace the version string everywhere (all .clj, .edn, and .md files):**
+**1. Bump:**
 
 ```bash
-OLD="1.0.0-beta-5"
-NEW="1.0.0-beta-5"   # example
-
-# Source and config files
-find . \( -name "*.clj" -o -name "*.edn" \) \
-  ! -path "*/docs/superpowers/*" ! -path "*/.git/*" \
-  -exec grep -l "$OLD" {} \; | xargs sed -i '' "s/$OLD/$NEW/g"
-
-# Documentation (.md and .adoc)
-find . \( -name "*.md" -o -name "*.adoc" \) \
-  ! -path "*/CHANGELOG.md" ! -path "*/docs/superpowers/*" ! -path "*/.git/*" \
-  -exec grep -l "$OLD" {} \; | xargs sed -i '' "s/$OLD/$NEW/g"
+bb bump 1.0.0-beta-6 --dry-run   # list what would change
+bb bump 1.0.0-beta-6
 ```
 
-On Linux, use `sed -i` instead of `sed -i ''`.
+It rewrites exactly the locations `check:versions` discovers and nothing else,
+prints a `git diff --stat`, and finishes by verifying the result against the
+version it just wrote. Re-running it is a no-op.
+
+Give the plain version, not the tag: `1.0.0-beta-6`, not `v1.0.0-beta-6`. It
+refuses a leading `v` rather than writing it into 96 places, where every
+location would then agree and the check would pass on it.
 
 **2. Verify, commit, tag, and release:**
 
 ```bash
-# Verify — must print nothing
-grep -r "$OLD" --include="*.clj" --include="*.edn" --include="*.adoc" . | grep -v ".git" | grep -v "docs/superpowers"
-
 bb check --quick
 
-git add -A && git commit -m "bump library suite version $OLD → $NEW"
-git tag -a "$NEW" -m "Release $NEW"
+git add -A && git commit -m "bump library suite version to 1.0.0-beta-6"
+git tag -a "1.0.0-beta-6" -m "Release 1.0.0-beta-6"
 git push && git push --tags
-gh release create "$NEW" --title "$NEW" --notes "Library suite release $NEW"
+gh release create "1.0.0-beta-6" --title "1.0.0-beta-6" --notes "Library suite release"
 ```
+
+Pushing the tag starts `publish.yml`, which waits for a maintainer to approve
+and then refuses to deploy unless CI passed on that exact commit.
 
 **3. Deploy to Clojars:**
 
@@ -305,7 +301,17 @@ bb deploy --all
 
 `patch-catalogue-version!` in the deploy script keeps `modules-catalogue.edn` in sync automatically after each successful deploy.
 
-**What to skip:** `CHANGELOG.md` (maintain manually), `docs/superpowers/` (historical planning docs), draft/pre-releases on GitHub (`install.sh` uses `/releases/latest` which only returns published releases).
+**What `bb bump` deliberately leaves alone:** `CHANGELOG.md` and the ADRs
+(historical — they record what was true when written), `docs/superpowers/`
+(dated design records), and `docs/modules/ROOT/pages/stability.adoc`, whose
+subject *is* the old version numbers. Also draft/pre-releases on GitHub —
+`install.sh` uses `/releases/latest`, which only returns published releases.
+
+> Until BOU-316 this step was a global `find | xargs sed`. It set `OLD` and
+> `NEW` to the same string, so a copy-paste run rewrote nothing and reported
+> success — and the verification was `grep -r "$OLD"`, which then found nothing
+> and agreed. It was also macOS-only (`sed -i ''`) and rewrote every occurrence
+> of the version string, including third-party pins that happened to match.
 
 ---
 
