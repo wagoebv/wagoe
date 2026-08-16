@@ -30,6 +30,7 @@
             [wagoe.tools.check-deps :as check-deps]
             [wagoe.tools.check-fcis :as check-fcis]
             [wagoe.tools.check-hygiene :as check-hygiene]
+            [wagoe.tools.check-changelog :as check-changelog]
             [wagoe.tools.check-doc-counts :as check-doc-counts]
             [wagoe.tools.check-versions :as check-versions]
             [wagoe.tools.check-poms :as check-poms]
@@ -622,7 +623,39 @@
    one that does not run."
   #{:hygiene :deps :fcis :placeholder-tests :docs-lint
     :test-meta :test-tags :ports :poms :agents :doctor :linting :no-boundary
-    :doc-counts :branch-protection :versions})
+    :doc-counts :branch-protection :versions :changelog})
+
+;; =============================================================================
+;; check:changelog
+;; =============================================================================
+
+(deftest ^:unit changelog-gate-fires-test
+  ;; The shape it exists for: PR #395 changed the order jobs come off the queue
+  ;; on two of three backends and touched no changelog. Thirty PRs in eleven
+  ;; days looked like this.
+  (testing "shipped source with no entry is reported"
+    (is (= {:files ["libs/jobs/src/wagoe/jobs/shell/adapters/in_memory.clj"
+                    "libs/jobs/src/wagoe/jobs/shell/adapters/redis.clj"]}
+           (check-changelog/verdict
+            ["libs/jobs/src/wagoe/jobs/shell/adapters/in_memory.clj"
+             "libs/jobs/src/wagoe/jobs/shell/adapters/redis.clj"
+             "libs/jobs/test/wagoe/jobs/adapter_surface_test.clj"
+             ".github/workflows/ci.yml"]
+            false))))
+
+  (testing "an entry satisfies it"
+    (is (nil? (check-changelog/verdict
+               ["libs/jobs/src/wagoe/jobs/shell/adapters/redis.clj" "CHANGELOG.md"]
+               false))))
+
+  (testing "and a branch that ships nothing is not asked for one"
+    ;; Docs, tests and CI are not shipped source. A gate that demanded an entry
+    ;; for those would be worked around rather than obeyed.
+    (is (nil? (check-changelog/verdict
+               ["docs/modules/architecture/pages/scaling.adoc"
+                "libs/cache/test/wagoe/cache/adapter_surface_test.clj"
+                ".github/workflows/ci.yml"]
+               false)))))
 
 (deftest ^:unit versions-gate-fires-test
   ;; The shape the ticket names: a bump covers deps.edn and misses bb.edn, so

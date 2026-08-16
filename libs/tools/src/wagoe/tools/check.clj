@@ -101,6 +101,14 @@
     :scope :monorepo
     :label "Suite version consistency"
     :cmd   ["bb" "check:versions"]}
+   ;; Thirty PRs merged in eleven days without one CHANGELOG entry between
+   ;; them, including a new library, a removed config key and a change to the
+   ;; order jobs are dispatched in. :monorepo because a generated project keeps
+   ;; its own changelog, if any, on its own terms.
+   {:id    :changelog
+    :scope :monorepo
+    :label "Changelog covers shipped source"
+    :cmd   ["bb" "check:changelog"]}
    {:id    :agents
     :scope :monorepo
     :label "AGENTS.md drift"
