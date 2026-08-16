@@ -810,11 +810,14 @@ export DB_PASSWORD="dev_password"
 
 Vertical scaling is config-driven (HikariCP pool, Jetty, JVM heap, Redis pool —
 all in `config.edn` + env). Horizontal scaling rides on the `ports.clj` seam: swap
-an in-process adapter for a distributed one. Cache, jobs, auth, and tenancy are
-already replica-safe via Redis/DB; realtime WebSocket and default rate-limiting
-are not yet. The same seam allows functional decomposition (slicing a module into
-its own service) — positioned for it, but needs a remote-port adapter + cycle
-breaking, not free by config. Full readiness matrix, topologies, sliceability,
+an in-process adapter for a distributed one. Cache, jobs, auth, tenancy, realtime
+(`:provider :redis`), rate limiting and the event bus are all replica-safe via
+Redis/DB — each still has a single-process `:in-memory` adapter that is the
+default, so the work is activating them, not building them. The same seam allows
+functional decomposition: `java -jar wagoe.jar service <module>...` boots a module
+alone, `wagoe.platform.shell.rpc` gives any port a remote implementation, and no
+dependency cycles remain to block slicing. What is not done is service discovery
+and the data-ownership decision. Full readiness matrix, topologies, sliceability,
 and the production checklist: `docs/modules/architecture/pages/scaling.adoc`.
 
 ---

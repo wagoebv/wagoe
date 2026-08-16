@@ -39,8 +39,11 @@ The same image runs all of them. The container argument selects the mode:
 
 == Before N replicas
 
-Two things are not replica-safe by default, and both are configuration rather
-than code.
+Three things default to a single-process adapter. All three have a replica-safe
+one; each is configuration rather than code, and none of them is on by default.
+Only the rate limiter below was exercised across running replicas; the realtime
+and event-bus claims are read from the adapters and their tests, not from a
+topology brought up here.
 
 *Rate limiting needs a shared cache.* A limit counted in one JVM is not a limit
 when there are three. With Redis behind it the counter is shared — verified by
@@ -68,13 +71,36 @@ Redis. That is an edit to your own config file; no environment variable does
 it, which is why the compose reference deploys Redis but leaves
 `HTTP_RATE_LIMIT_ENABLED` off.
 
-*Realtime pub/sub is not replica-safe at all.* A WebSocket connected to replica
-A does not see an event published on replica B. Sticky sessions do not fix it —
-the publisher and subscriber are different connections. Until the Redis-backed
-adapter lands, either run realtime on a single replica or do not rely on it
-across them.
+*Realtime pub/sub needs `:provider :redis`.* Under the default `:in-memory`
+provider a WebSocket connected to replica A does not see an event published on
+replica B, and sticky sessions do not fix it — the publisher and the subscriber
+are different connections. The Redis provider (BOU-85, ADR-035) fans routing
+envelopes out over a pub/sub channel and keeps topic subscriptions in Redis
+sets, so a broadcast reaches clients on any replica. Sockets stay node-local
+under both providers; only the bus and the pub/sub manager differ.
 
-Scheduled work is the third: N workers run every job N times. Run one worker.
+Note what "configuration" means here: the monorepo's `wagoe.config/ig-config`
+does not emit `:wagoe/realtime` at all, so an application that wants realtime
+wires the component itself against `wagoe.realtime.shell.module-wiring`. Getting
+this wrong is quiet — a config with no `:provider` gets `:in-memory`, and the
+single-node behaviour is a default rather than an error. Config shape is in that
+namespace's docstring.
+
+*The event bus needs `:provider :redis` for the same reason* (BOU-93,
+`libs/events`). Redis Streams with consumer groups delivers an event once per
+logical subscriber across replicas; the in-memory adapter delivers it only
+within the publishing process. Unlike realtime, `:wagoe/events` *is* wired from
+config — move it into `:active` and the component is emitted — but it is absent
+from the shipped prod profile, so it is off until you add it.
+
+Scheduled jobs are *not* on this list, contrary to the usual expectation.
+Promotion of a due job is an atomic claim — `ZREM` on the scheduled sorted set,
+and only the worker whose `ZREM` returns 1 owns it — so N workers polling
+concurrently promote each due job exactly once (BOU-88). There is no recurring
+or cron scheduler in the framework, so there is nothing that fires per process
+at start-up either. Running more than one worker is safe; job handlers must be
+idempotent for the ordinary at-least-once reason, not because of duplicate
+scheduling.
 
 == Health endpoints
 
@@ -179,7 +205,7 @@ docker compose -f deploy/compose/per-service.yml up -d
 Both are required — the compose file refuses to interpolate without them, which
 is deliberate: a secret with a default is a secret nobody sets.
 
-`service user` boots the user module and the platform it needs — 19 of 29
+`service user` boots the user module and the platform it needs — 20 of 29
 components in the prod profile — and serves `IUserService` on port 3001 for the
 rest of the deployment. The composition is logged at start-up, including what
 was left out, so a service that quietly kept everything is visible rather than
@@ -200,11 +226,12 @@ That is a wiring decision in an application's own config — which component a k
 resolves to — not something a framework reference can make for it. The compose
 file says so rather than setting a URL that nothing reads.
 
-*One process serves one protocol.* A service naming two RPC-capable modules —
-`service user payments`, once both offer one — is refused at start-up, naming
-both. Serving the first and carrying on would leave the other reachable by
-nobody, with a healthy process and nothing in the log. Run them as separate
-services.
+*One process serves one protocol.* The catalogue already declares an RPC
+protocol for both `user` and `payments`, so `service user payments` is refused
+at start-up with both named, in any profile where both modules are active.
+Serving the first and carrying on would leave the other reachable by nobody,
+with a healthy process and nothing in the log. Run them as separate services, or
+drop `:wagoe/rpc` to run them together with neither reachable.
 
 The RPC port is published to nothing. It invokes port methods directly, so it
 belongs on the internal network:

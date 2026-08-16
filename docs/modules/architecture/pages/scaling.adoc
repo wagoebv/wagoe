@@ -33,8 +33,8 @@ environment variables. Change the value, restart the process. No code.
 | Knob | Where | Notes
 
 | DB connection pool
-| `:wagoe/postgresql :pool` — `minimum-idle`, `maximum-pool-size`, `connection-timeout-ms`, `idle-timeout-ms`, `max-lifetime-ms`, `keepalive-time-ms`, `leak-detection-threshold-ms`
-| HikariCP. prod default `min 10 / max 50`, dev `2 / 10`, test (H2) `1 / 5`. `DB_POOL_SIZE` env override.
+| `:wagoe/postgresql :pool` — `minimum-idle`, `maximum-pool-size`, `connection-timeout-ms`, `idle-timeout-ms`, `max-lifetime-ms`
+| HikariCP. prod default `min 10 / max 50`, dev `2 / 10`, test (H2) `1 / 5`. `DB_POOL_SIZE` env override. *These five only.* The pool map is a `:closed` Malli schema and the pool builder applies exactly this set, so adding `keepalive-time-ms`, `validation-timeout-ms` or `leak-detection-threshold-ms` does not tune anything — it fails the boot at `:wagoe/db-context` with "Invalid database configuration". Restoring one means adding the matching `.setKeepaliveTime` / `.setValidationTimeout` / `.setLeakDetectionThreshold` call in `adapters/database/common/connection.clj` first.
 
 | HTTP server
 | `:wagoe/http` — `:port`, `:host`, `:port-range`
@@ -76,6 +76,14 @@ Two libraries already ship both adapters and pick between them in config:
 This is the template every other seam follows: the protocol is the contract,
 the distributed adapter is "just configuration" once it exists.
 
+With one condition that is easy to leave implicit. Swapping adapters is only
+safe if both answer the protocol the same way, and a protocol does not enforce
+that — a test across both adapters does. `libs/cache` had thirteen divergences
+between its two adapters, each invisible to per-adapter suites that only ever
+asked one of them, until a contract sweep enumerated the surface (BOU-288). Any
+new seam here inherits that risk, so a second adapter comes with a sweep that
+runs every method against both.
+
 == Horizontal readiness matrix
 
 [cols="1,1,3",options="header"]
@@ -84,7 +92,7 @@ the distributed adapter is "just configuration" once it exists.
 
 | Cache
 | ✅
-| Redis adapter (`libs/cache/.../adapters/redis.clj`) — Nippy serialization, atomic ops. In-memory adapter is dev/test only.
+| Redis adapter (`libs/cache/.../adapters/redis.clj`) — Nippy serialization, atomic ops. In-memory adapter is dev/test only. `adapter_surface_test.clj` holds both to one contract, so the swap is behaviour-preserving rather than merely type-compatible (BOU-288) — which matters here because both the rate limiter and the RPC circuit breaker keep their cross-replica state in this component. (Realtime does not — it opens its own Jedis pools.)
 
 | Jobs
 | ✅
@@ -102,13 +110,17 @@ the distributed adapter is "just configuration" once it exists.
 | ✅
 | Async via the jobs queue / stateless IO adapters.
 
+| Event bus
+| ✅
+| Redis Streams adapter (`libs/events/.../adapters/redis_streams.clj`) — at-least-once, consumer groups, so one logical subscriber gets an event once across replicas rather than once per replica. The in-memory adapter (`in_memory.clj`) is single-process only. `:wagoe/events` is not in the prod profile yet; activate it there to use it (BOU-93).
+
 | Readiness checks
 | ✅
 | `/health/ready` (`readiness-handler`, wired in `wiring.clj`) probes DB + cache and returns *503* when any is down — correct for load balancers and k8s.
 
 | Rate limiting
 | ✅
-| The config-driven `http-rate-limit-protection` interceptor is wired into the default route pipeline (`wiring.clj` injects `:rate-limit` config + the `:wagoe/cache` into the interceptor `system` map). Configure under `:wagoe/http :rate-limit {:enabled? :limit :window-ms}` (per-env; `HTTP_RATE_LIMIT`/`HTTP_RATE_LIMIT_WINDOW_MS`). Enforcement is *opt-in* (default off — the bundled prod/acc configs ship it disabled; enable it together with an active Redis cache) so an upgrade cannot start 429-ing existing consumers, nor silently run a per-process limiter in production. With an active Redis cache the fixed-window limit is shared across replicas; *with no cache it falls back to a per-process counter — single-node only, effective global limit = limit × N* (the wiring logs a warning at startup in that case). The in-process fallback is heap-bounded by a hard cap — before a new client is recorded at the cap, stale clients are swept and, if the map is still full, the least-recently-active client is evicted — so high-cardinality client ids can't leak memory on a long-running node even when every client is in-window. BOU-87.
+| The config-driven `http-rate-limit-protection` interceptor is wired into the default route pipeline (`wiring.clj` injects `:rate-limit` config + the `:wagoe/cache` into the interceptor `system` map). Configure under `:wagoe/http :rate-limit {:enabled? :limit :window-ms}` (per-env; `HTTP_RATE_LIMIT_ENABLED`/`HTTP_RATE_LIMIT`/`HTTP_RATE_LIMIT_WINDOW_MS`). Enforcement is *opt-in* (default off — the bundled prod/acc configs ship it disabled; enable it together with an active Redis cache) so an upgrade cannot start 429-ing existing consumers, nor silently run a per-process limiter in production. With an active Redis cache the fixed-window limit is shared across replicas; *with no cache it falls back to a per-process counter — single-node only, effective global limit = limit × N*. Enabling it without a reachable cache is handled per profile: in `:prod` the wiring *refuses to boot* (BOU-173 — a limit counted per replica is not a limit, and a false sense of protection is worse than none), in dev/test/acc it logs a warning and falls back. Note `:wagoe/cache` ships under `:inactive` in `resources/conf/prod/config.edn`, so enabling the limiter in production is two edits, not one. The in-process fallback is heap-bounded by a hard cap — before a new client is recorded at the cap, stale clients are swept and, if the map is still full, the least-recently-active client is evicted — so high-cardinality client ids can't leak memory on a long-running node even when every client is in-window. BOU-87.
 
 | Graceful shutdown
 | ✅
@@ -126,24 +138,31 @@ the distributed adapter is "just configuration" once it exists.
 | Shape | When
 
 | *Single fat node*
-| Vertical only. One process, large heap and pools. Everything works, including realtime and in-memory rate limiting. Simplest; capped by one machine.
+| Vertical only. One process, large heap and pools. Everything works, including realtime and the in-memory adapters. Rate limiting is the one exception: the `:prod` profile refuses to boot with it enabled and no cache, single node or not. Simplest; capped by one machine.
 
 | *N stateless web replicas*
-| The main horizontal mode. N copies of the uberjar behind a load balancer, sharing Postgres + Redis. Cache, jobs, auth, tenancy all scale. Caveats: wire Redis rate limiting; WebSocket scales horizontally via `:provider :redis` (sticky sessions are only required when running the `:in-memory` provider).
+| The main horizontal mode. N copies of the uberjar behind a load balancer, sharing Postgres + Redis. Cache, jobs, auth, tenancy all scale. Caveats: activate `:wagoe/cache` and wire Redis rate limiting; WebSocket scales horizontally via `:provider :redis` (sticky sessions are only required when running the `:in-memory` provider). Reference: `deploy/compose/multi-instance.yml`.
 
-| *Web / worker split* (future)
-| Run dedicated job-worker processes separate from web. The jobs Redis queue already supports it, but there is currently no `worker` launch mode — `wagoe.main` exposes only `server` and `cli`. Adding a worker entrypoint is the enabling step.
+| *Web / worker split*
+| Dedicated job-worker processes separate from web. `java -jar wagoe.jar worker` boots the full system minus the HTTP surface (`:wagoe/http-server`, `:wagoe/http-handler`, `:wagoe/dashboard`), so it binds no port and runs only background components. Reference: the two Deployments in `deploy/k8s/wagoe.yaml`.
+
+| *Module as its own service*
+| `java -jar wagoe.jar service <module>...` — see <<service-launch-mode>>. Reference: `deploy/compose/per-service.yml`.
 |===
+
+The same image runs all four; the container argument selects the mode. Compose
+files, manifests and what has actually been brought up are in
+xref:architecture:deployment-topologies.adoc[Deployment Topologies].
 
 == Production checklist
 
 * Use the *Redis* cache and jobs adapters, never `:in-memory`, for more than one replica.
-* Register all job handlers on *every* instance. A dequeued job with no local handler is re-enqueued (bounded by `:max-requeues`) so another instance can run it, and is dead-lettered only if no instance handles it — but a job-type that *no* worker registers still burns its requeue budget before failing, so keep handler sets consistent.
-* Enable rate limiting (`:wagoe/http :rate-limit :enabled? true`) with an *active Redis cache* for a global limit across replicas; without a cache each instance counts independently (limit × N).
+* Register all job handlers on *every* instance. A dequeued job with no local handler is re-enqueued so another instance can run it, and is dead-lettered only after `:max-requeue-age-ms` (default 5 min) of going continuously unhandled — so a job-type that *no* worker registers costs five minutes of re-enqueue churn before it fails. (`:max-requeues`, default 10000, is a runaway backstop, not the budget: give-up is age-based so a slow handler-owning worker cannot lose a job to attempt exhaustion.)
+* Enable rate limiting (`:wagoe/http :rate-limit :enabled? true`) with an *active Redis cache* for a global limit across replicas. In `:prod` this is not optional — the boot fails without a reachable cache. `:wagoe/cache` is `:inactive` in the shipped prod profile; move it to `:active` first.
 * Keep `replicas × maximum-pool-size` under Postgres `max_connections`.
 * Confirm your load balancer points health probes at `/health/ready` (503-aware), not `/health/live`.
 * For WebSocket: use `:provider :redis` on `:wagoe/realtime` to scale across replicas (ADR-035). Sticky sessions / single-node are only required with the default `:in-memory` provider.
-* Add Redis (and, for testing N replicas, a load balancer) to your deployment — `docker-compose.yml` currently defines a single app service only.
+* Deploy Redis, and a load balancer for N replicas. The root `docker-compose.yml` is a single-instance dev stack (db, app, docs, dev-tools — no Redis); the replica and per-service references are `deploy/compose/multi-instance.yml`, `deploy/compose/per-service.yml` and `deploy/k8s/wagoe.yaml`.
 
 == Functional decomposition (slicing services out)
 
@@ -173,6 +192,9 @@ today, but the architecture is positioned for it.
 | Clean data boundaries
 | `bb check:ports` already forbids one module's shell from touching another's `shell.persistence`/`shell.service` — the only cross-module path is the service port. No cross-module SQL joins to untangle.
 
+| An acyclic dependency graph
+| `allowed-cycle-edges` in `check_deps.clj` is now empty — every source-level cycle was dissolved (BOU-171/192/193/194/198). A new one fails `bb check:deps`. What is left between modules is one-directional coupling, which is a porting job; a cycle is not.
+
 | Context plumbing
 | `correlation-id`, tenant, and auth already flow through the interceptor pipeline and can ride request headers across a network hop.
 |===
@@ -186,8 +208,8 @@ today, but the architecture is positioned for it.
   `…rpc.server/rpc-handler` serves a protocol from the process that owns it.
   correlation-id, tenant and auth ride the same headers the interceptor
   pipeline already uses. See <<remote-port-adapter>>.
-* *Network resilience* — timeouts, retries, circuit breaker, service discovery (hardcoded URLs for MVP). External adapters use `:throw-exceptions false` but no retry/breaker.
-* *Break the allowlisted dependency cycles* — `check_deps.clj` allows `admin↔user`, `platform↔{user,tenant,admin,workflow,search}`. A cycle means two modules can't be cleanly separated; these must be broken (e.g. extract the shared auth check behind a port) before slicing.
+* *Network resilience* — timeouts, retries and a shared circuit breaker are in the remote-port adapter (BOU-90, BOU-285). *Service discovery* is not: URLs are configuration, hardcoded or env-supplied. The `libs/external` adapters still use `:throw-exceptions false` with no retry/breaker of their own.
+* ✅ *Break the allowlisted dependency cycles* — done. `allowed-cycle-edges` in `check_deps.clj` is `#{}`; `admin↔user` and `platform↔{user,tenant,admin,workflow,search}` were dissolved rather than allowlisted, so no module pair is blocked from separation by a cycle.
 * ✅ *Async option* — shipped in BOU-93 as `libs/events`: `IEventPublisher` / `IEventSubscriber` / `IEventHistory`, with a Redis Streams adapter (at-least-once, consumer groups) and an in-memory one. A publisher does not know who is listening and is unaffected if a consumer is down — the complement to the synchronous remote-port adapter.
 * *Data ownership decision* — schema-per-tenant assumes co-located modules in one Postgres. Across services either share the DB (pragmatic) or give each service its own; there are no distributed transactions, so split writes become eventual-consistency.
 * ✅ *Service launch mode* — shipped in BOU-91: `java -jar wagoe.jar service <module>...` boots a named subset plus the platform, and starts that module's RPC endpoint when one is configured. See <<service-launch-mode>>.
@@ -207,7 +229,7 @@ java -jar wagoe.jar service payments        # one module
 java -jar wagoe.jar service user tenant     # several in one process
 ----
 
-In the test profile `service user` runs 19 of the application's 33 components.
+In the test profile `service user` runs 20 of the application's 34 components.
 `/health` answers, `/web/login` answers, `/api/v1/tenants` is a 404 — the tenant
 module is not there to serve it.
 
@@ -466,18 +488,19 @@ What it does, and what it deliberately does not:
 
 | user, tenant, external
 | With work
-| Depend on platform + the in-process service assumption in middleware. Need the remote adapter + cycle-breaking (user↔admin, tenant↔platform).
+| Depend on platform + the in-process service assumption in middleware. The remote adapter exists and the cycles are gone; what remains is deciding data ownership and pointing consumers at a remote adapter instead of the local component — a wiring change in the *application's* config, which is why `deploy/compose/per-service.yml` demonstrates the mechanism without making it for you.
 
 | admin, search, workflow
 | Entangled
-| `search`/`workflow` depend on `admin`'s schema provider; `admin↔user` is circular. Extract shared schema/auth behind ports first.
+| `search`/`workflow` depend on `admin`'s schema provider — a one-directional dep, but a heavy one: slicing either means the schema provider goes over the wire or gets extracted behind its own port. `admin→user` is now one-directional too, so this is coupling to untangle, no longer a cycle to break.
 |===
 
 [TIP]
 ====
-Recommended path: build the generic remote-port adapter once, prove it by
-extracting *payments* as a standalone service, then tackle `user`. Don't attempt
-`admin`/`search`/`workflow` until the cycles are broken.
+Recommended path: prove the remote-port adapter by extracting *payments* as a
+standalone service (zero internal deps, and the one the reference topology
+uses), then `user`. `admin`/`search`/`workflow` are last — not because of
+cycles any more, but because of the shared schema provider.
 ====
 
 == Known gaps & roadmap
@@ -495,5 +518,11 @@ For *functional decomposition* (the bigger bet):
 
 . ✅ *Generic remote-port adapter + RPC envelope* — done (BOU-90), with the circuit breaker in BOU-285. `clj-http` client implementing a module protocol over transit, context propagation, typed errors, retry bounded to calls that never executed.
 . ✅ *Service launch mode* — done (BOU-91). `wagoe.main` boots a named module subset as an independent service, with its RPC endpoint on its own port.
-. *Break allowlisted dependency cycles* — `admin↔user`, `platform↔{user,tenant,admin,workflow,search}` — prerequisite for slicing those modules.
+. ✅ *Break allowlisted dependency cycles* — done (BOU-171/192/193/194/198). `admin↔user` and `platform↔{user,tenant,admin,workflow,search}` are gone; `check_deps.clj` allowlists no cycle edges, so the gate now fails on any cycle at all.
 . ✅ *Event-bus port + adapter* — done (BOU-93). `libs/events`, Redis Streams and in-memory. Kafka would be another adapter behind the same ports, not a change to them.
+
+What is left, in order:
+
+. *Service discovery* — remote-port URLs are configuration today. Fine for a fixed deployment, insufficient once services move.
+. *Data ownership across services* — schema-per-tenant assumes co-located modules in one Postgres (see the entry above).
+. *Activate `:wagoe/events` in the prod profile* — it is configured in `test` only, so the event bus is currently a test-profile capability in practice.
