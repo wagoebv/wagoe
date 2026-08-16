@@ -39,12 +39,22 @@ for what is public API, what is internal, and how deprecations are announced.
   triggers on `pull_request:`, with `push:` scoped to `main` so a same-repo PR
   runs the pipeline once rather than twice.
 
+- **A tag on an untested commit could publish 30 immutable artifacts**
+  (BOU-314). `publish.yml` verified that the tag agreed with source, that a
+  re-run did not double-publish, and that everything landed — all properties of
+  the *shape* of a release, none of them asking whether the code works. It now
+  requires a completed, successful `All Tests Passed` on the tagged commit
+  before any deploy step runs. Clojars coordinates cannot be recalled, so this
+  aborts in seconds, before the release does any other work.
+
 ### Changed
 
 - **`check:branch-protection` also verifies that CI can run at all.** Coverage
   of every job is worth nothing on a run that never starts, so the gate now
   reports a missing `pull_request:` trigger and an unscoped `push:` that would
-  double every run.
+  double every run — and, because a release path that routes around CI makes the
+  merge gate optional in practice, a `publish.yml` whose CI guard is missing or
+  sequenced after the deploy.
 
 ## [1.0.0-beta-5] — 2026-08-16
 
