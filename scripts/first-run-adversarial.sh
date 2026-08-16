@@ -396,7 +396,18 @@ echo
 SUMMARY="$FAILED failed, $SKIPPED skipped"
 if [ "$FAILED" -eq 0 ]; then
   echo "Adversarial cases: all exercised cases passed ($SUMMARY)."
-  [ "$SKIPPED" -gt 0 ] && echo "Skipped cases are NOT coverage — see the notes above."
+  # An `if`, not `[ … ] && echo …`. As the last command under `set -e`, that
+  # list decides the exit status of the whole run: with nothing skipped the
+  # test is false, the list returns 1, and the suite reported failure precisely
+  # when it was healthiest. It went red the night PR #360 stopped case 6
+  # skipping, and stayed red every nightly after.
+  #
+  # No apostrophes in here: this block is a single-quoted argument to bash -c,
+  # and one would end the string. That is what "user9s" in case 7 is about.
+  if [ "$SKIPPED" -gt 0 ]; then
+    echo "Skipped cases are NOT coverage — see the notes above."
+  fi
+  exit 0
 else
   echo "Adversarial cases: $SUMMARY — each failure is first-run friction."
   exit 1
