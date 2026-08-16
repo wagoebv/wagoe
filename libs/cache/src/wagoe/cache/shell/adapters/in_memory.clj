@@ -75,11 +75,20 @@
         key))
     key))
 
+(defn- expired-at?
+  "Whether `entry` has expired as of `at`.
+
+   The instant is a parameter so a read and the decision taken on it can share
+   one: an operation that asks twice can see the entry cross its expiry in
+   between and act on one answer while reporting the other."
+  [entry ^Instant at]
+  (when-let [expires-at (:expires-at entry)]
+    (.isAfter at expires-at)))
+
 (defn- expired?
   "Check if cache entry has expired."
   [entry]
-  (when-let [expires-at (:expires-at entry)]
-    (.isAfter (now) expires-at)))
+  (expired-at? entry (now)))
 
 (defn- live-entry
   "The entry at `namespaced-key`, or nil if it is absent or has expired.
@@ -219,13 +228,15 @@
       true))
 
   (delete-key! [_this key]
+    ;; One `swap-vals!`, so the entry reported on is the entry removed. Reading
+    ;; first and dropping afterwards leaves a window: a value written in between
+    ;; is deleted by the `dissoc` and reported as never having been there.
     (let [namespaced-key (add-namespace (:namespace state) key)
-          entries        (:entries state)
-          existed        (some? (live-entry entries namespaced-key))]
-      ;; Dropped either way — an expired entry is gone, and this is as good a
-      ;; moment to reclaim it as any — but only a live one counts as deleted.
-      (swap! entries dissoc namespaced-key)
-      existed))
+          [before _]     (swap-vals! (:entries state) dissoc namespaced-key)
+          entry          (get before namespaced-key)]
+      ;; Expired entries go too — this is as good a moment to reclaim one as
+      ;; any — but only a live one counts as deleted.
+      (boolean (and entry (not (expired? entry))))))
 
   (exists? [_this key]
     (let [namespaced-key (add-namespace (:namespace state) key)
@@ -244,17 +255,27 @@
                                      1000.0))))))))
 
   (expire! [_this key ttl-seconds]
+    ;; Decided and applied in one `swap-vals!`, against one instant. Reading
+    ;; first and writing afterwards gets both branches wrong under contention:
+    ;; the `assoc-in` recreates a key deleted in between as an entry with no
+    ;; value, and the `dissoc` drops a value written in between while reporting
+    ;; that there was nothing there.
     (let [namespaced-key (add-namespace (:namespace state) key)
-          entries        (:entries state)]
-      (if (live-entry entries namespaced-key)
-        (do
-          (swap! entries assoc-in [namespaced-key :expires-at]
-                 (calculate-expires-at ttl-seconds))
-          true)
-        ;; An expired entry is not a key to put a new expiry on; giving it one
-        ;; brings back a value the caller was told had gone.
-        (do (swap! entries dissoc namespaced-key)
-            false))))
+          at             (now)
+          [before _]
+          (swap-vals! (:entries state)
+                      (fn [cache]
+                        (let [entry (get cache namespaced-key)]
+                          (cond
+                            (nil? entry) cache
+                            ;; An expired entry is not a key to put a new expiry
+                            ;; on; giving it one brings back a value the caller
+                            ;; was told had gone.
+                            (expired-at? entry at) (dissoc cache namespaced-key)
+                            :else (assoc-in cache [namespaced-key :expires-at]
+                                            (calculate-expires-at ttl-seconds))))))
+          entry (get before namespaced-key)]
+      (boolean (and entry (not (expired-at? entry at))))))
 
   ;; =============================================================================
   ;; Batch Operations

@@ -437,3 +437,65 @@
     (testing "and it is the oldest that went"
       (is (nil? (ports/get-value cache "lease-0")))
       (is (= 4 (ports/get-value cache "lease-4"))))))
+
+;; =============================================================================
+;; Races between a read and the write it decides on
+;; =============================================================================
+
+(defn- race
+  "Run `a` and `b` against the same fresh key, `n` times, as close to
+   simultaneously as two threads get. Returns the keys where `check` held."
+  [n a b check]
+  (let [cache  (in-mem/create-in-memory-cache {})
+        caught (atom [])]
+    (dotimes [i n]
+      (let [k       (str "race-" i)
+            barrier (java.util.concurrent.CyclicBarrier. 2)
+            fa      (future (.await barrier) (a cache k))
+            fb      (future (.await barrier) (b cache k))
+            _       (deref fa 5000 nil)
+            rb      (deref fb 5000 nil)]
+        (when (check cache k rb)
+          (swap! caught conj k))))
+    @caught))
+
+(deftest ^:unit a-delete-that-reports-nothing-deleted-nothing
+  ;; Reading the entry and then dropping it are two steps, and a value written
+  ;; between them was deleted by the drop and reported as never having been
+  ;; there — a write that succeeded, and vanished.
+  (let [lost (race 2000
+                   (fn [cache k] (ports/set-value! cache k :written 60))
+                   (fn [cache k] (ports/delete-key! cache k))
+                   (fn [cache k deleted?]
+                     (and (false? deleted?) (nil? (ports/get-value cache k)))))]
+    (is (empty? lost)
+        (str (count lost) " writes were deleted by a delete that returned false"))))
+
+(deftest ^:unit an-expire-that-reports-no-key-leaves-the-key-alone
+  ;; Same shape: the branch for a missing key dropped whatever was there by the
+  ;; time it ran.
+  (let [lost (race 2000
+                   (fn [cache k] (ports/set-value! cache k :written))
+                   (fn [cache k] (ports/expire! cache k 60))
+                   (fn [cache k expired?]
+                     (and (false? expired?) (nil? (ports/get-value cache k)))))]
+    (is (empty? lost)
+        (str (count lost) " writes were deleted by an expire! that returned false"))))
+
+(deftest ^:unit an-expire-never-creates-a-key
+  ;; The other branch: `assoc-in` on a key deleted since the read recreated it
+  ;; as an entry with an expiry and no value, which reads back as a hit on nil.
+  (let [ghosts (race 2000
+                     (fn [cache k] (ports/delete-key! cache k))
+                     (fn [cache k]
+                       (ports/set-value! cache k :written)
+                       (ports/expire! cache k 60))
+                     (fn [cache k _]
+                       ;; Reading one throws rather than returning nil — it has
+                       ;; no :access-count for get-value to increment — so the
+                       ;; throw is the finding, not a broken test.
+                       (try (and (ports/exists? cache k)
+                                 (nil? (ports/get-value cache k)))
+                            (catch Exception _ true))))]
+    (is (empty? ghosts)
+        (str (count ghosts) " keys exist with an expiry and no value"))))
