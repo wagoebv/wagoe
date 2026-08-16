@@ -248,6 +248,7 @@ git push origin v1.0.1-alpha-14
 GitHub Actions will:
 
 . **Wait for approval** — see <<approval-gate>> below; nothing runs until a maintainer approves
+. **Require green CI on the tagged commit** — see <<ci-gate>> below; the release aborts in seconds if the commit was never tested
 . Build the Tailwind CSS bundle (required for the `ui-style` jar)
 . Run `bb deploy --all` with the Clojars credentials
 . Create a GitHub Release marked as pre-release for alpha/beta versions
@@ -293,6 +294,36 @@ The Clojars credentials (`CLOJARS_USERNAME`, `CLOJARS_PASSWORD`) should be
 other workflow or branch can read them. Environment secrets shadow repository
 secrets of the same name, so the move is: set them on the environment, confirm a
 release still works, then delete the repository-level copies.
+
+[#ci-gate]
+=== The CI gate
+
+Approval proves a human wanted this release. It does not prove the code works.
+
+The step immediately after checkout reads the GitHub Checks API for the tagged
+commit and requires a completed, successful `All Tests Passed` — the same single
+context branch protection requires to merge. Anything else aborts the run:
+
+* **no run at all** — the commit never went through CI, so nothing has tested the
+  source about to be published;
+* **a run that failed, or is still going** — pending is not green.
+
+Why this matters more here than anywhere else: Clojars coordinates are
+*immutable*. A bad release cannot be recalled, overwritten or yanked; the only
+way out is burning a version number and telling everyone who already resolved it.
+Every other guard in the workflow protects the *shape* of a release — the tag
+agrees with source (`--check-versions`), nothing is half-published (`--missing`),
+everything landed (`--verify`). None of them asks whether the code works.
+
+It reads the recorded run rather than re-running the suite, deliberately.
+Re-running would double the release time and could pass on a flake the recorded
+run had caught — and a release that means something different from a merge is
+how the merge gate becomes optional.
+
+The guard runs *before* the ~10 minutes of setup below, so a release that must
+not happen costs seconds. `check:branch-protection` asserts that it exists and
+that it precedes the deploy, on every pull request — the same no-token,
+no-API trade the rest of that gate makes.
 
 ---
 
