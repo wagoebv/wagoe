@@ -366,11 +366,11 @@
       (finally (.stop server)))))
 
 (deftest ^:integration the-probe-lease-covers-the-whole-probe
-  ;; End-to-end cover for a probe that retries. The arithmetic is pinned in
-  ;; `the-probe-lease-budget-includes-the-backoff`, which is what fails when the
-  ;; backoff is left out; this one keeps passing either way, because the
-  ;; timings involved are too indirect to isolate it. Kept as a guard that a
-  ;; retrying probe still holds its lease at all.
+  ;; End-to-end cover for a probe that retries. The lease arithmetic is pinned
+  ;; separately in `the-probe-lease-budget-includes-the-backoff`; what this one
+  ;; holds is that nothing else lapses first — the open marker has to outlive
+  ;; the probe too, and its lifetime was written by whoever tripped the
+  ;; breaker, who may have had a far smaller request budget.
   (let [received (atom 0)
         cache    (cache-mem/create-in-memory-cache {})
         cfg      {:failure-threshold 1 :open-ms 400}
@@ -442,3 +442,66 @@
             (is (= :rpc/circuit-open (get-in r [:error :type]))
                 "a second spelling of the same URL got its own breaker")
             (is (= 2 @received))))))))
+
+(defn- counting-cache
+  "Delegates to `inner`, counting the port calls the breaker makes.
+
+   Counted at this boundary rather than inside the adapter: the in-memory
+   `get-many` is itself a loop over `get-value`, so counting there would say
+   nothing about how many round-trips a real adapter makes."
+  [inner counts]
+  (let [tally #(swap! counts update % (fnil inc 0))]
+    ;; Only what the breaker calls; anything else reaching this is a call the
+    ;; breaker should not be making, and an AbstractMethodError says so.
+    #_{:clj-kondo/ignore [:missing-protocol-method]}
+    (reify
+      cache/ICache
+      (get-value      [_ k]       (tally :get-value) (cache/get-value inner k))
+      (set-value!     [_ k v ttl] (tally :set-value!) (cache/set-value! inner k v ttl))
+      (delete-key!    [_ k]       (tally :delete-key!) (cache/delete-key! inner k))
+      (expire!        [_ k ttl]   (tally :expire!) (cache/expire! inner k ttl))
+      cache/IBatchCache
+      (get-many       [_ ks]      (tally :get-many) (cache/get-many inner ks))
+      (delete-many!   [_ ks]      (tally :delete-many!) (cache/delete-many! inner ks))
+      cache/IAtomicCache
+      (increment!     [_ k]       (tally :increment!) (cache/increment! inner k))
+      (set-if-absent! [_ k v ttl] (tally :set-if-absent!) (cache/set-if-absent! inner k v ttl)))))
+
+(deftest ^:unit a-healthy-call-costs-two-cache-round-trips
+  ;; Every RPC hop pays this, so it is a hop of its own. Reading the two state
+  ;; keys and clearing the three, one at a time, put five round-trips in front
+  ;; of every call.
+  (let [counts (atom {})
+        cache  (counting-cache (cache-mem/create-in-memory-cache {}) counts)
+        url    "http://payments:3001"]
+    (is (true? (breaker/allow? cache {} url 0)))
+    (breaker/record-success! cache url)
+    (is (= {:get-many 1 :delete-many! 1} @counts))))
+
+(deftest ^:integration the-attempts-within-one-call-count-once
+  ;; `:failure-threshold` is a number of failed calls. Counting each attempt
+  ;; made a threshold of 3 trip on the first call, because one call with
+  ;; `:retries 2` makes three attempts.
+  (let [received (atom 0)
+        cache    (cache-mem/create-in-memory-cache {})
+        cfg      {:failure-threshold 3 :open-ms 60000}
+        o        (opts cache {:circuit-breaker cfg
+                              :retries         2
+                              :retry-delay-ms  1
+                              :retry-on        #{:rpc/timeout}})]
+    (with-slow-server received
+      (fn [url]
+        (client/call! url :get-payment-status ["id"] o)
+        (is (= 3 @received) "one call, three attempts")
+        (is (= 1 (cache/get-value cache (bkey url ":failures")))
+            "one call counted as more than one failure")
+
+        (client/call! url :get-payment-status ["id"] o)
+        (is (= 6 @received) "the breaker opened before the threshold")
+
+        (testing "and the third call is the one that opens it"
+          (client/call! url :get-payment-status ["id"] o)
+          (is (= 9 @received))
+          (let [r (client/call! url :get-payment-status ["id"] o)]
+            (is (= :rpc/circuit-open (get-in r [:error :type])))
+            (is (= 9 @received))))))))

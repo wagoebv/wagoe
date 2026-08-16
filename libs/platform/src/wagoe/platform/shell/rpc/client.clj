@@ -226,40 +226,43 @@
        (do (log/warn "rpc circuit open; not attempting" {:base-url base-url
                                                          :operation operation})
            (breaker/open-error cache cb-cfg service operation (now)))
-       (loop [attempt 0]
-         (let [[outcome result] (post-envelope! url envelope opts)
-               error-type (get-in result [:error :type])]
-           ;; Recorded here rather than after the retry loop, so a call that
-           ;; succeeded on its third attempt still closes the breaker.
-           ;;
-           ;; Decided on the error type alone, not on `outcome`. Whether the
-           ;; call reached the service governs *retries* — re-sending something
-           ;; that already ran is the danger there. Tripping re-runs nothing,
-           ;; so the only question is whether the caller counts this as the
-           ;; service being unusable. `:trip-on` is where they say so, and a
-           ;; policy the validator accepts has to be one the client honours.
-           (if (cb/counts-as-failure? cb-cfg error-type)
-             (breaker/record-failure! cache cb-cfg service (now))
-             (breaker/record-success! cache service))
-           (cond
-           ;; The service answered. Whatever the shape of that answer, the
-           ;; operation ran — re-sending it would run it a second time.
-             (or (= outcome :answered)
-                 (not (and (map? result) (retryable? opts result))))
-             result
+       (let [result
+             (loop [attempt 0]
+               (let [[outcome result] (post-envelope! url envelope opts)]
+                 (cond
+                   ;; The service answered. Whatever the shape of that answer,
+                   ;; the operation ran — re-sending it would run it a second
+                   ;; time.
+                   (or (= outcome :answered)
+                       (not (and (map? result) (retryable? opts result))))
+                   result
 
-             (< attempt (:retries opts))
-             (do (log/warn "rpc retrying" {:operation operation
-                                           :attempt   (inc attempt)
-                                           :error     (get-in result [:error :type])})
-                 (Thread/sleep (* (inc attempt) (:retry-delay-ms opts)))
-                 (recur (inc attempt)))
+                   (< attempt (:retries opts))
+                   (do (log/warn "rpc retrying" {:operation operation
+                                                 :attempt   (inc attempt)
+                                                 :error     (get-in result [:error :type])})
+                       (Thread/sleep (* (inc attempt) (:retry-delay-ms opts)))
+                       (recur (inc attempt)))
 
-             :else
-             (do (log/warn "rpc gave up" {:operation operation
-                                          :attempts  (inc attempt)
-                                          :error     (get-in result [:error :type])})
-                 result))))))))
+                   :else
+                   (do (log/warn "rpc gave up" {:operation operation
+                                                :attempts  (inc attempt)
+                                                :error     (get-in result [:error :type])})
+                       result))))]
+         ;; Once per call, not once per attempt: with `:retries 2` one
+         ;; unreachable service costs three attempts, and counting each of them
+         ;; makes a `:failure-threshold` of 5 trip on the second call.
+         ;;
+         ;; Decided on the error type alone, not on `outcome`. Whether the call
+         ;; reached the service governs *retries* — re-sending something that
+         ;; already ran is the danger there. Tripping re-runs nothing, so the
+         ;; only question is whether the caller counts this as the service
+         ;; being unusable. `:trip-on` is where they say so, and a policy the
+         ;; validator accepts has to be one the client honours.
+         (if (cb/counts-as-failure? cb-cfg (get-in result [:error :type]))
+           (breaker/record-failure! cache cb-cfg service (now))
+           (breaker/record-success! cache service))
+         result)))))
 
 ;; =============================================================================
 ;; Protocol proxy

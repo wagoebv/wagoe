@@ -422,3 +422,18 @@
     (doseq [f racers] (deref f 10000 nil))
     (is (= 1 @winners)
         (str @winners " callers took the same lease"))))
+
+(deftest ^:unit set-if-absent-honours-max-size
+  ;; It used to go through `set-value!`, which evicts. Writing straight into
+  ;; the map — needed to make the check and the write one operation — skipped
+  ;; eviction, so a bounded cache grew without bound through this path.
+  (let [cache (in-mem/create-in-memory-cache {:max-size 3})]
+    (dotimes [i 5]
+      (is (true? (ports/set-if-absent! cache (str "lease-" i) i))))
+
+    (is (= 3 (count (ports/keys-matching cache "*")))
+        "a cache with :max-size 3 grew past it")
+
+    (testing "and it is the oldest that went"
+      (is (nil? (ports/get-value cache "lease-0")))
+      (is (= 4 (ports/get-value cache "lease-4"))))))

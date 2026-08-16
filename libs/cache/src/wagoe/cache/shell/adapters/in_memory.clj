@@ -116,6 +116,18 @@
         (swap! entries-atom dissoc (first lru-key))
         (record-eviction! stats-atom track-stats?)))))
 
+(defn- evict-if-full!
+  "Evict before adding, so the new entry is not the one evicted.
+
+   Every path that can add a key has to call this, or `:max-size` holds only
+   for the paths that remember to."
+  [state namespaced-key]
+  (let [entries (:entries state)]
+    (when-let [max-size (:max-size (:config state))]
+      (when (and (>= (count @entries) max-size)
+                 (not (contains? @entries namespaced-key)))
+        (evict-lru! entries (:stats state) (:track-stats? (:config state)))))))
+
 (defn- wildcard-pattern->regex
   "Convert wildcard pattern to regex.
    Example: 'user:*' -> #'user:.*'"
@@ -173,11 +185,7 @@
                  0
                  (now)
                  (swap! (:access-counter state) inc))]
-      ;; Evict before adding to prevent evicting the newly added entry
-      (when-let [max-size (:max-size (:config state))]
-        (when (and (>= (count @entries) max-size)
-                   (not (contains? @entries namespaced-key)))
-          (evict-lru! entries (:stats state) (:track-stats? (:config state)))))
+      (evict-if-full! state namespaced-key)
       (swap! entries assoc namespaced-key entry)
       true))
 
@@ -300,6 +308,7 @@
     ;; never released it.
     (let [namespaced-key (add-namespace (:namespace state) key)
           won            (volatile! false)]
+      (evict-if-full! state namespaced-key)
       (swap! (:entries state)
              (fn [cache]
                (let [entry (get cache namespaced-key)]

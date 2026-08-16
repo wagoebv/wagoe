@@ -21,15 +21,28 @@
 (defn- opened-key   [base-url] (str key-prefix base-url ":opened-at"))
 (defn- probe-key    [base-url] (str key-prefix base-url ":probe"))
 
-(defn- window-seconds
-  "How long breaker state outlives the window it describes.
+(defn- open-ms [config] (:open-ms config (:open-ms cb/default-config)))
 
-   Twice the open window, rounded up: long enough that a breaker which has
-   tripped is still honoured when the window ends, so `open` becomes
-   `half-open` rather than vanishing into `closed` and letting every caller
-   through at once."
+(defn- counter-seconds
+  "How long a run of failures stays a run.
+
+   Twice the open window: long enough to survive the window itself, short
+   enough that failures minutes apart do not accumulate as though they were
+   consecutive."
   [config]
-  (cb/ceil-seconds (* 2 (:open-ms config (:open-ms cb/default-config)))))
+  (cb/ceil-seconds (* 2 (open-ms config))))
+
+(defn- marker-seconds
+  "How long the open marker lives.
+
+   It has to outlast the window *and* the probe admitted at the end of it. A
+   probe may take far longer than the window — it spends the client's whole
+   retry budget — and while it runs the breaker is half-open. If the marker
+   expires first the breaker reads as closed, every caller is let through, and
+   the probe it was waiting on is still in flight."
+  [config]
+  (cb/ceil-seconds (max (* 2 (open-ms config))
+                        (+ (open-ms config) (:probe-lease-ms config 0)))))
 
 (defn- lease-seconds
   "How long the half-open probe lease is held.
@@ -39,14 +52,26 @@
    second caller sends a second probe at the service that is being tested. The
    client passes its own request budget as `:probe-lease-ms`."
   [config]
-  (cb/ceil-seconds (max (:open-ms config (:open-ms cb/default-config))
-                        (:probe-lease-ms config 0))))
+  (cb/ceil-seconds (max (open-ms config) (:probe-lease-ms config 0))))
+
+(defn- read-many
+  "The breaker's keys in one round-trip where the adapter has one.
+
+   Every call that goes out reads this, so it is on the hot path of every RPC
+   hop; against Redis, one MGET rather than a GET per key."
+  [cache-component ks]
+  (if (satisfies? cache/IBatchCache cache-component)
+    (cache/get-many cache-component ks)
+    (into {} (map (juxt identity #(cache/get-value cache-component %))) ks)))
 
 (defn- read-state
   [cache-component base-url]
   (try
-    {:failures     (or (cache/get-value cache-component (failures-key base-url)) 0)
-     :opened-at-ms (:at (cache/get-value cache-component (opened-key base-url)))}
+    (let [failures-k (failures-key base-url)
+          opened-k   (opened-key base-url)
+          values     (read-many cache-component [failures-k opened-k])]
+      {:failures     (or (get values failures-k) 0)
+       :opened-at-ms (:at (get values opened-k))})
     (catch Exception e
       ;; A cache that is down must not stop calls going out. Failing open is
       ;; the safe direction: the worst case is the behaviour of no breaker at
@@ -73,9 +98,18 @@
           :open      false
           :half-open (try
                        (boolean
-                        (cache/set-if-absent! cache-component (probe-key base-url)
-                                              {:at now-ms}
-                                              (lease-seconds config)))
+                        (when (cache/set-if-absent! cache-component (probe-key base-url)
+                                                    {:at now-ms}
+                                                    (lease-seconds config))
+                         ;; Keep the breaker's memory alive for as long as this
+                         ;; probe runs. The marker's lifetime was set by
+                         ;; whoever tripped the breaker, who may have had a much
+                         ;; smaller request budget than the prober; if it
+                         ;; expires mid-probe the breaker reads as closed and
+                         ;; every caller is let through behind the probe.
+                          (cache/expire! cache-component (opened-key base-url)
+                                         (marker-seconds config))
+                          true))
                        (catch Exception e
                          (log/warn e "circuit breaker could not take the probe lease"
                                    {:base-url base-url})
@@ -101,21 +135,21 @@
         ;; Only on the first of a run: gives the run a lifetime, so failures
         ;; minutes apart do not accumulate as though they were consecutive.
         (when (= 1 failures)
-          (cache/expire! cache-component (failures-key base-url) (window-seconds config)))
+          (cache/expire! cache-component (failures-key base-url) (counter-seconds config)))
         (if (= was :half-open)
           ;; The probe failed. Reopen from now — `set-if-absent!` would find the
           ;; old marker and leave it, so the window would run out from the
           ;; *original* outage and traffic would resume against a service that
           ;; has just demonstrated it is still down.
           (do (cache/set-value! cache-component (opened-key base-url)
-                                {:at now-ms} (window-seconds config))
+                                {:at now-ms} (marker-seconds config))
               ;; Release the lease so the next window can be probed.
               (cache/delete-key! cache-component (probe-key base-url))
               (log/warn "circuit re-opened after a failed probe" {:base-url base-url}))
 
           (when (and (>= failures threshold)
                      (cache/set-if-absent! cache-component (opened-key base-url)
-                                           {:at now-ms} (window-seconds config)))
+                                           {:at now-ms} (marker-seconds config)))
             (log/warn "circuit opened" {:base-url base-url :failures failures}))))
       (catch Exception e
         (log/warn e "circuit breaker could not record a failure" {:base-url base-url})))))
@@ -125,9 +159,12 @@
   [cache-component base-url]
   (when cache-component
     (try
-      (cache/delete-key! cache-component (failures-key base-url))
-      (cache/delete-key! cache-component (opened-key base-url))
-      (cache/delete-key! cache-component (probe-key base-url))
+      ;; Every successful call clears these, so it is worth one DEL rather
+      ;; than three.
+      (let [ks [(failures-key base-url) (opened-key base-url) (probe-key base-url)]]
+        (if (satisfies? cache/IBatchCache cache-component)
+          (cache/delete-many! cache-component ks)
+          (run! #(cache/delete-key! cache-component %) ks)))
       (catch Exception e
         (log/warn e "circuit breaker could not record a success" {:base-url base-url})))))
 
