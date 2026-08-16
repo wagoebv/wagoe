@@ -295,10 +295,8 @@ cache calls to the payments URL.
 
 What it does, and what it deliberately does not:
 
-[cols="1,3",options="header"]
+[cols="1,3"]
 |===
-| | |
-
 | Context
 | `correlation-id`, `tenant-id` and `auth-token` ride `x-correlation-id`,
   `x-tenant-id` and `Authorization`. A request keeps one correlation id across
