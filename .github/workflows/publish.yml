@@ -164,7 +164,7 @@ jobs:
       # must skip already-published libs (re-deploying them 409s and aborts the
       # whole run). --missing makes the publish idempotent and recoverable: on a
       # fresh release nothing is published so it deploys everything, and on a
-      # re-run it ships only the stragglers. --verify below still gates on all 26.
+      # re-run it ships only the stragglers. --verify below still gates on all 30.
       - name: Publish libraries (idempotent — skips already-published)
         env:
           CLOJARS_USERNAME: ${{ secrets.CLOJARS_USERNAME }}

@@ -199,7 +199,7 @@
                        :extra-paths ["test" "dev" "test-resources"
                                      "libs/devtools/src" "libs/devtools/test"
                                      "libs/devtools/resources"]
-                       ;; Everything here is resolved by all 27 per-library CI
+                       ;; Everything here is resolved by all 30 per-library CI
                        ;; jobs, so one flaky artifact fails them all under an
                        ;; innocent library's name (BOU-260). Keep it to what
                        ;; every suite genuinely needs: kaocha, the JDBC drivers

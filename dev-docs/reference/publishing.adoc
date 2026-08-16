@@ -233,16 +233,20 @@ This is the normal release flow:
 
 [source,bash]
 ----
-# 1. Bump versions in all build.clj files
-sed -i '' 's/(def version "1.0.1-alpha-14")/(def version "1.0.1-alpha-14")/' libs/*/build.clj
-sed -i '' 's/(def version "1.0.1-alpha-14")/(def version "1.0.1-alpha-14")/' libs/tools/build.clj
+# 1. Bump versions in all build.clj files. OLD is the version currently in
+#    source, NEW the one you are releasing — both without a leading "v".
+sed -i '' "s/(def version \"OLD\")/(def version \"NEW\")/" libs/*/build.clj
+sed -i '' "s/(def version \"OLD\")/(def version \"NEW\")/" libs/tools/build.clj
 
-# 2. Commit and tag
+# 2. Confirm every hard-coded copy of the version agrees before tagging
+bb check:versions
+
+# 3. Commit and tag
 git add libs/*/build.clj libs/tools/build.clj
-git commit -m "Bump version to 1.0.1-alpha-14"
-git tag -a v1.0.1-alpha-14 -m "Release 1.0.1-alpha-14"
+git commit -m "Bump version to NEW"
+git tag -a vNEW -m "Release NEW"
 git push origin main
-git push origin v1.0.1-alpha-14
+git push origin vNEW
 ----
 
 GitHub Actions will:
