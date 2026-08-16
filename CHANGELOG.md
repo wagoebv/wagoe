@@ -29,6 +29,23 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A pull request from a fork ran no tests at all** (BOU-315). `ci.yml`
+  triggered on `push:` alone, so same-repo branches were covered and fork PRs
+  started zero jobs — leaving `All Tests Passed`, the one context branch
+  protection requires, permanently *pending* rather than failing. Pending is not
+  red, so nothing announced that the code had never been tested. CI now also
+  triggers on `pull_request:`, with `push:` scoped to `main` so a same-repo PR
+  runs the pipeline once rather than twice.
+
+### Changed
+
+- **`check:branch-protection` also verifies that CI can run at all.** Coverage
+  of every job is worth nothing on a run that never starts, so the gate now
+  reports a missing `pull_request:` trigger and an unscoped `push:` that would
+  double every run.
+
 ## [1.0.0-beta-5] — 2026-08-16
 
 Running as more than one process. `1.0.0-beta-4` could serve an application from

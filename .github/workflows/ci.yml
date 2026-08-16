@@ -1,8 +1,23 @@
 name: Wagoe CI
 
+# A `push:`-only trigger covered same-repo branches and nothing else: a pull
+# request from a fork ran zero jobs, so "All Tests Passed" — the one context
+# branch protection requires — sat permanently pending rather than failing.
+# Pending is not red, so nothing announced that the code had never been tested
+# (BOU-315; same shape as BOU-277, where 13 required contexts never reported).
+#
+# `push:` is scoped to main because pull_request now covers everything else.
+# Left unscoped, a same-repo PR would run all 58 jobs twice — once for the push,
+# once for the PR — under two concurrency groups that cannot cancel each other.
 on:
   push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened]
 
+# `github.event.pull_request.number` was dead under a push-only trigger and
+# always fell through to github.ref. With pull_request wired up it finally does
+# what it says: successive pushes to one PR cancel the previous run.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true

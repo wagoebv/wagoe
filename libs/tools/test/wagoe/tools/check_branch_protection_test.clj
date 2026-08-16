@@ -125,6 +125,52 @@
       (is (not= sut/summary-job-name summary-name)
           "this mismatch is what -main exits 1 on"))))
 
+(deftest ^:unit the-on-block-is-read-under-both-keys-yaml-gives-it
+  ;; YAML 1.1 reads the bare word `on` as the boolean true, so SnakeYAML parses
+  ;; `on:` to the key `true` rather than `:on`. A reader that looks only for
+  ;; `:on` finds nothing and — worse — concludes the workflow has no triggers at
+  ;; all, which reads as "no pull_request trigger" and fires this gate on a
+  ;; correct file. Quoted (`"on":`) and unquoted must both work.
+  (testing "the unquoted key YAML turns into true"
+    (is (= #{:push :pull_request}
+           (set (keys (sut/workflow-triggers
+                       (wf "on:\n  push:\n    branches: [main]\n  pull_request:\n")))))))
+
+  (testing "the quoted key, which stays a string"
+    (is (= #{:push :pull_request}
+           (set (keys (sut/workflow-triggers
+                       (wf "\"on\":\n  push:\n    branches: [main]\n  pull_request:\n"))))))))
+
+(deftest ^:unit a-workflow-without-a-pull-request-trigger-runs-no-ci-on-fork-prs
+  ;; BOU-315: ci.yml triggered on `push:` only. Same-repo branches were covered,
+  ;; but a fork PR ran zero jobs — and the required "All Tests Passed" context
+  ;; is reported by a job that never started, so it sits pending rather than
+  ;; failing. Combined with the publish gap, code could reach main having never
+  ;; been tested.
+  (testing "push-only is reported"
+    (is (seq (sut/trigger-findings (wf "on:\n  push:\n")))))
+
+  (testing "adding pull_request clears it"
+    (is (empty? (sut/trigger-findings
+                 (wf "on:\n  push:\n    branches: [main]\n  pull_request:\n")))))
+
+  (testing "a workflow with no triggers at all is reported, not silently passed"
+    ;; The nil-tolerance failure mode from BOU-250: a lockstep check that passes
+    ;; when it cannot read what it compares against has stopped checking.
+    (is (seq (sut/trigger-findings (wf "jobs:\n  a:\n    name: A\n"))))))
+
+(deftest ^:unit push-must-be-scoped-so-same-repo-prs-do-not-run-ci-twice
+  ;; An unscoped `push:` fires on every branch. With pull_request added, a
+  ;; same-repo PR then runs the whole 58-job pipeline twice — once for the push,
+  ;; once for the PR — under two different concurrency groups, so neither
+  ;; cancels the other.
+  (testing "unscoped push alongside pull_request is reported"
+    (is (seq (sut/trigger-findings (wf "on:\n  push:\n  pull_request:\n")))))
+
+  (testing "push scoped to main is clean"
+    (is (empty? (sut/trigger-findings
+                 (wf "on:\n  push:\n    branches: [main]\n  pull_request:\n"))))))
+
 (deftest ^:unit the-repository-is-currently-consistent
   ;; The regression guard, against the real ci.yml. No token, no API — which is
   ;; the whole point of requiring one context instead of fourteen.
@@ -140,4 +186,7 @@
     (testing "and the only parked job is the one we expect"
       ;; Named rather than counted: a second parked job should be a decision,
       ;; not something that slips in behind a number.
-      (is (= ["e2e"] disabled)))))
+      (is (= ["e2e"] disabled))))
+
+  (testing "and every pull request — fork or not — actually triggers it"
+    (is (empty? (sut/trigger-findings (sut/ci-workflow))))))

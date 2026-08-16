@@ -610,10 +610,22 @@
       (is (< 40 (count (:jobs wf)))
           "expected ci.yml's jobs, so a passing run means something")))
 
+  (testing "a workflow that never runs on a pull request is detected"
+    ;; BOU-315. Coverage is worthless on a run that does not happen: under a
+    ;; `push:`-only trigger a fork PR started zero jobs, so the required context
+    ;; sat pending — not red — and nothing said the code was untested.
+    (is (seq (check-bp/trigger-findings (yaml/parse-string "on:\n  push:\n")))))
+
+  (testing "an unscoped push alongside pull_request is detected"
+    ;; It would run the whole pipeline twice for a same-repo PR.
+    (is (seq (check-bp/trigger-findings
+              (yaml/parse-string "on:\n  push:\n  pull_request:\n")))))
+
   (testing "the repository currently satisfies the gate"
     (let [{:keys [missing summary-name]} (check-bp/summary-covers (check-bp/ci-workflow))]
       (is (= check-bp/summary-job-name summary-name))
-      (is (empty? missing)))))
+      (is (empty? missing))
+      (is (empty? (check-bp/trigger-findings (check-bp/ci-workflow)))))))
 
 (def gates-with-firing-tests
   "Gate ids from `check/all-checks` that this namespace proves can still fire.
