@@ -621,11 +621,34 @@
     (is (seq (check-bp/trigger-findings
               (yaml/parse-string "on:\n  push:\n  pull_request:\n")))))
 
+  (testing "an ungated publish workflow is detected"
+    ;; BOU-314. Every other guard in publish.yml protects the shape of a
+    ;; release; none asked whether the code works, so a tag on a red commit
+    ;; shipped 30 immutable Clojars coordinates with no way to recall them.
+    (is (seq (check-bp/publish-findings
+              (yaml/parse-string
+               (str "jobs:\n  publish:\n    steps:\n"
+                    "      - name: Publish\n        run: bb deploy --missing\n"))))))
+
+  (testing "a guard placed after the deploy is detected"
+    ;; Checking a release you have already published is not a gate.
+    (is (seq (check-bp/publish-findings
+              (yaml/parse-string
+               (str "jobs:\n  publish:\n    steps:\n"
+                    "      - name: Publish\n        run: bb deploy --missing\n"
+                    "      - name: Guard\n        env:\n          C: All Tests Passed\n"
+                    "        run: echo guard\n"))))))
+
+  (testing "the gate reads the real publish workflow, not an empty step list"
+    (is (< 5 (count (get-in (check-bp/publish-workflow) [:jobs :publish :steps])))
+        "expected publish.yml's steps, so a passing run means something"))
+
   (testing "the repository currently satisfies the gate"
     (let [{:keys [missing summary-name]} (check-bp/summary-covers (check-bp/ci-workflow))]
       (is (= check-bp/summary-job-name summary-name))
       (is (empty? missing))
-      (is (empty? (check-bp/trigger-findings (check-bp/ci-workflow)))))))
+      (is (empty? (check-bp/trigger-findings (check-bp/ci-workflow))))
+      (is (empty? (check-bp/publish-findings (check-bp/publish-workflow)))))))
 
 (def gates-with-firing-tests
   "Gate ids from `check/all-checks` that this namespace proves can still fire.

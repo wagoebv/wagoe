@@ -28,6 +28,7 @@
   (:require [clj-yaml.core :as yaml]
             [clojure.java.io :as io]
             [clojure.set :as set]
+            [clojure.string :as str]
             [wagoe.tools.ansi :as ansi]))
 
 (def summary-job-name
@@ -156,10 +157,83 @@
                  "same-repo PR, under two concurrency groups that cannot cancel "
                  "each other. Scope it to `branches: [main]`.")))))
 
+;; =============================================================================
+;; Publishing — the merge gate is worth nothing if releases route around it
+;; =============================================================================
+;;
+;; BOU-314: publish.yml had four guards and none of them asked whether the code
+;; works. `--check-versions` proves the tag agrees with source, `--missing`
+;; makes a re-run idempotent, `--verify` proves everything landed — all
+;; properties of the *shape* of a release.
+;;
+;; So a tag pushed onto a commit whose CI was red, or never ran, published 30
+;; artifacts. Clojars coordinates are immutable: no recall, no overwrite, and
+;; the only way out is burning a version number. Requiring one context to merge
+;; while requiring none to release makes the merge gate optional in practice.
+
+(defn publish-workflow
+  "Parsed publish.yml. Throws when it cannot be found, for the same reason
+   `ci-workflow` does."
+  []
+  (let [cwd        (System/getProperty "user.dir")
+        candidates [(io/file cwd ".github" "workflows" "publish.yml")
+                    (io/file cwd ".." ".." ".github" "workflows" "publish.yml")]]
+    (if-let [f (some (fn [^java.io.File f] (when (.exists f) f)) candidates)]
+      (yaml/parse-string (slurp f))
+      (throw (ex-info "publish.yml not found — cannot verify the release is gated"
+                      {:cwd cwd :tried (mapv str candidates)})))))
+
+(def ^:private deploying-step-re
+  "A step that actually ships to Clojars.
+
+   Scoped to the deploying flags on purpose. `bb deploy --check-versions` and
+   `bb deploy --verify` are also `bb deploy`, and treating any of them as the
+   publish would demand the guard one step too early — reporting a
+   correctly-ordered workflow as broken."
+  #"bb\s+deploy\s+(--missing|--all)\b")
+
+(defn publish-findings
+  "Reasons a tag could publish without CI having passed on that commit.
+
+   Structural rather than behavioural: this reads the workflow, so it runs on
+   every pull request with no token and no API, the same trade the summary
+   check makes above."
+  [workflow]
+  (let [steps      (get-in workflow [:jobs :publish :steps])
+        ;; `env:` counts as much as `run:`. The guard names the context once, as
+        ;; an environment variable, and the script refers to `$SUMMARY_CHECK` —
+        ;; reading only `run:` would miss the one place the literal appears.
+        step-text  (fn [step]
+                     (str/join "\n" (concat [(:name step) (:run step)]
+                                            (map str (vals (:env step))))))
+        guard-idx  (first (keep-indexed
+                           (fn [i s] (when (str/includes? (step-text s) summary-job-name) i))
+                           steps))
+        deploy-idx (first (keep-indexed
+                           (fn [i s] (when (re-find deploying-step-re (str (:run s))) i))
+                           steps))]
+    (cond
+      (empty? steps)
+      [(str "publish.yml has no `publish` job with steps — nothing to verify. "
+            "(If the file parses, this is a reader bug, not a config one.)")]
+
+      (nil? guard-idx)
+      [(str "no step requires \"" summary-job-name "\" to have passed on the tagged "
+            "commit. A tag on a red — or never-tested — commit publishes 30 "
+            "immutable Clojars coordinates, and there is no recall.")]
+
+      (and deploy-idx (> guard-idx deploy-idx))
+      [(str "the \"" summary-job-name "\" guard runs at step " (inc guard-idx)
+            ", after the deploy at step " (inc deploy-idx)
+            ". Checking a release you have already published is not a gate.")]
+
+      :else [])))
+
 (defn -main [& _args]
   (let [wf (ci-workflow)
         {:keys [missing summary-name disabled]} (summary-covers wf)
-        trigger-problems (trigger-findings wf)]
+        trigger-problems (trigger-findings wf)
+        publish-problems (publish-findings (publish-workflow))]
 
     (when (seq trigger-problems)
       (println (ansi/red "ci.yml does not run on every pull request:"))
@@ -167,6 +241,15 @@
       (doseq [p trigger-problems] (println (str "  " (ansi/red "✗") " " p)))
       (println)
       (println "Job coverage below is only as good as the runs that start.")
+      (System/exit 1))
+
+    (when (seq publish-problems)
+      (println (ansi/red "publish.yml can release code that CI never approved:"))
+      (println)
+      (doseq [p publish-problems] (println (str "  " (ansi/red "✗") " " p)))
+      (println)
+      (println "Requiring one context to merge and none to release makes the merge")
+      (println "gate optional in practice.")
       (System/exit 1))
 
     (when-not (= summary-job-name summary-name)

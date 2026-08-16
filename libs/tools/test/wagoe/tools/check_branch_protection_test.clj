@@ -171,6 +171,46 @@
     (is (empty? (sut/trigger-findings
                  (wf "on:\n  push:\n    branches: [main]\n  pull_request:\n"))))))
 
+(deftest ^:unit publishing-must-require-the-same-context-merging-does
+  ;; BOU-314: publish.yml guarded the *shape* of a release — the tag agrees with
+  ;; source, nothing is half-published, everything landed — and never asked
+  ;; whether the code works. A tag on a red or untested commit shipped 30
+  ;; immutable Clojars coordinates, which cannot be recalled.
+  (testing "a publish job with no CI guard is reported"
+    (is (seq (sut/publish-findings
+              (wf (str "jobs:\n  publish:\n    steps:\n"
+                       "      - name: Checkout\n        uses: actions/checkout@v6\n"
+                       "      - name: Publish\n        run: bb deploy --missing\n"))))))
+
+  (testing "a guard naming the required context clears it"
+    (is (empty? (sut/publish-findings
+                 (wf (str "jobs:\n  publish:\n    steps:\n"
+                          "      - name: Guard\n        run: |\n"
+                          "          check=\"All Tests Passed\"\n"
+                          "      - name: Publish\n        run: bb deploy --missing\n"))))))
+
+  (testing "a guard that runs after the deploy is reported"
+    ;; Verifying the release you already published is not a gate.
+    (is (seq (sut/publish-findings
+              (wf (str "jobs:\n  publish:\n    steps:\n"
+                       "      - name: Publish\n        run: bb deploy --missing\n"
+                       "      - name: Guard\n        run: |\n"
+                       "          check=\"All Tests Passed\"\n"))))))
+
+  (testing "`bb deploy --check-versions` is not a publishing step"
+    ;; It reads versions and deploys nothing. Treating any `bb deploy` as the
+    ;; publish would place the guard requirement one step too early and report
+    ;; a correctly-ordered workflow.
+    (is (empty? (sut/publish-findings
+                 (wf (str "jobs:\n  publish:\n    steps:\n"
+                          "      - name: Versions\n        run: bb deploy --check-versions 1.0.0\n"
+                          "      - name: Guard\n        run: |\n"
+                          "          check=\"All Tests Passed\"\n"
+                          "      - name: Publish\n        run: bb deploy --missing\n"))))))
+
+  (testing "a workflow with no publish job at all is reported, not silently passed"
+    (is (seq (sut/publish-findings (wf "jobs:\n  something-else:\n    steps: []\n"))))))
+
 (deftest ^:unit the-repository-is-currently-consistent
   ;; The regression guard, against the real ci.yml. No token, no API — which is
   ;; the whole point of requiring one context instead of fourteen.
@@ -189,4 +229,7 @@
       (is (= ["e2e"] disabled))))
 
   (testing "and every pull request — fork or not — actually triggers it"
-    (is (empty? (sut/trigger-findings (sut/ci-workflow))))))
+    (is (empty? (sut/trigger-findings (sut/ci-workflow)))))
+
+  (testing "and publishing requires the same context merging does"
+    (is (empty? (sut/publish-findings (sut/publish-workflow))))))
