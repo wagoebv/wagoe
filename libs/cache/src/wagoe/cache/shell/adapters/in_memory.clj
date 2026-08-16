@@ -232,11 +232,15 @@
     ;; first and dropping afterwards leaves a window: a value written in between
     ;; is deleted by the `dissoc` and reported as never having been there.
     (let [namespaced-key (add-namespace (:namespace state) key)
+          ;; Read before the removal, and used for the answer: asking the clock
+          ;; again afterwards lets an entry lapse in between, so a live entry is
+          ;; removed and reported as though it had never been there.
+          at             (now)
           [before _]     (swap-vals! (:entries state) dissoc namespaced-key)
           entry          (get before namespaced-key)]
       ;; Expired entries go too — this is as good a moment to reclaim one as
       ;; any — but only a live one counts as deleted.
-      (boolean (and entry (not (expired? entry))))))
+      (boolean (and entry (not (expired-at? entry at))))))
 
   (exists? [_this key]
     (let [namespaced-key (add-namespace (:namespace state) key)
