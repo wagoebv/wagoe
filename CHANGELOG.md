@@ -47,6 +47,15 @@ for what is public API, what is internal, and how deprecations are announced.
   before any deploy step runs. Clojars coordinates cannot be recalled, so this
   aborts in seconds, before the release does any other work.
 
+- **Stale install instructions on the first page users copy from** (BOU-313).
+  `installation.adoc` pinned four coordinates to `1.0.1-alpha-42`, a
+  discontinued line that Maven sorts *newer* than every beta, so anyone
+  following it — or resolving a range — landed on unsupported jars. The manual
+  install steps also asked for Java 17 while `install.sh` has required 21 since
+  `1.0.0-beta-5`, in prose and in all four package-manager commands. Getting
+  Started described bootstrapping "from the starter repository", which does not
+  exist; it names `wagoe new` now.
+
 ### Changed
 
 - **`check:branch-protection` also verifies that CI can run at all.** Coverage
