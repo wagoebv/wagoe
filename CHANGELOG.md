@@ -133,6 +133,13 @@ for what is public API, what is internal, and how deprecations are announced.
   requires must be declared, and the allowlist is empty (BOU-273, BOU-276); a
   library with a `build.clj` must have a documentation page (BOU-93).
 
+- **Three more first-run matrix cells** (BOU-232). A machine with a JDK too old
+  to use and a machine with no network, both in `first-run-preconditions.sh`;
+  and zsh alongside bash and fish in the adversarial suite, which had been
+  verified by hand once and never since. The old-JDK cell found the `install.sh`
+  defect below. The offline cell pins behaviour that was already correct: the
+  installer fails with something actionable rather than raw curl output.
+
 - **Nightly first-run matrix** (BOU-232). The broad first-run coverage —
   Ubuntu, Fedora and Arch for the install-to-serving-app path, plus the
   adversarial cases on Ubuntu and Fedora — now runs on a schedule and on
@@ -175,6 +182,16 @@ for what is public API, what is internal, and how deprecations are announced.
   key now registers it.
 
 ### Fixed
+
+- **`install.sh` accepted any JDK, including ones too old to run Wagoe**
+  (BOU-232). The check was `java -version | grep -q "version"`, which every JDK
+  back to 8 passes, while the installer's own text says JDK 21+. On a machine
+  with an older JDK it reported "JVM already installed" and carried on, and the
+  failure surfaced much later as a class-file-version error out of the Clojure
+  compiler — which tells a newcomer nothing. It now reads the major version,
+  says which one it found and which is needed, installs a current JDK, and
+  verifies the result rather than assuming it: an older JDK still first on PATH
+  is a loud failure naming the one that is winning, not a silent success.
 
 - **A deleted job stayed on the queue** (BOU-289). Redis and the in-memory
   backend removed the job data but left its id in the list, so it still counted

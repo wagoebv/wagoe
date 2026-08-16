@@ -62,16 +62,16 @@ export DEBIAN_FRONTEND=noninteractive
 if command -v apt-get >/dev/null 2>&1; then
   apt-get update -qq >/tmp/pkg.log 2>&1 || { tail -5 /tmp/pkg.log; echo "apt-get update failed"; exit 1; }
   pkg_install() { apt-get install -y -qq "$@" >/tmp/pkg.log 2>&1 || { tail -5 /tmp/pkg.log; echo "apt-get install $* failed"; exit 1; }; }
-  PKGS="curl ca-certificates git unzip zip which procps python3 fish"
+  PKGS="curl ca-certificates git unzip zip which procps python3 fish zsh"
 elif command -v dnf >/dev/null 2>&1; then
   pkg_install() { dnf install -y -q "$@" >/tmp/pkg.log 2>&1 || { tail -5 /tmp/pkg.log; echo "dnf install $* failed"; exit 1; }; }
-  PKGS="curl ca-certificates git unzip zip which procps-ng python3 fish"
+  PKGS="curl ca-certificates git unzip zip which procps-ng python3 fish zsh"
 elif command -v pacman >/dev/null 2>&1; then
   # See first-run-smoke.sh: pacman needs --disable-sandbox under qemu emulation.
   PAC_FLAGS="--noconfirm --disable-sandbox"
   pacman -Sy $PAC_FLAGS >/tmp/pkg.log 2>&1 || { tail -5 /tmp/pkg.log; echo "pacman -Sy failed"; exit 1; }
   pkg_install() { pacman -S $PAC_FLAGS --needed "$@" >/tmp/pkg.log 2>&1 || { tail -5 /tmp/pkg.log; echo "pacman -S $* failed"; exit 1; }; }
-  PKGS="curl ca-certificates git unzip zip which procps-ng python fish"
+  PKGS="curl ca-certificates git unzip zip which procps-ng python fish zsh"
 else
   echo "no supported package manager"; exit 1
 fi
@@ -81,7 +81,7 @@ fi
 pkg_install $PKGS
 
 # Fail here, loudly, rather than three cases later on a confusing symptom.
-for t in curl git unzip zip which python3 fish; do
+for t in curl git unzip zip which python3 fish zsh; do
   command -v "$t" >/dev/null 2>&1 \
     || { echo "setup: $t missing after installing: $PKGS"; exit 1; }
 done
@@ -351,6 +351,44 @@ if command -v fish >/dev/null 2>&1; then
     || ok "no duplicate in the fish config on re-run"
 else
   echo "  SKIP — fish not installed in this image."
+  SKIPPED=$((SKIPPED+1))
+fi
+
+# ── 8. the same, for zsh ────────────────────────────────────────────────────
+# zsh is the default shell on macOS and common on Linux, and it was verified by
+# hand once during PR #353 and never again — only bash and fish were in the
+# suite. A hand-verified case is one release away from being an unverified one.
+head_ "[8] PATH is set for a zsh user"
+if command -v zsh >/dev/null 2>&1; then
+  rm -f "$HOME/.zshrc"
+  SHELL=$(command -v zsh) bash /repo/scripts/install.sh >/tmp/install-zsh.log 2>&1 \
+    || fail "install.sh exited non-zero under zsh"
+  ZSH_RC="$HOME/.zshrc"
+  if [ -f "$ZSH_RC" ]; then
+    ok "wrote $ZSH_RC, the file zsh reads"
+  else
+    fail "no zsh config written; PATH line went somewhere zsh never loads"
+  fi
+  # ~/.zshrc takes POSIX export syntax, unlike the fish case above. Asserted so
+  # a future rework of the shell branch cannot swap the two.
+  if grep -q "export PATH" "$ZSH_RC" 2>/dev/null; then
+    ok "used POSIX export syntax"
+  else
+    fail "wrote non-POSIX syntax into ~/.zshrc: $(head -1 "$ZSH_RC" 2>/dev/null)"
+  fi
+  if zsh -c "source $ZSH_RC >/dev/null 2>&1; command -v wagoe >/dev/null"; then
+    ok "wagoe resolves in a zsh session that has read its rc"
+  else
+    fail "wagoe still not on PATH for zsh after sourcing $ZSH_RC"
+  fi
+  BEFORE=$(grep -c "babashka/bbin/bin" "$ZSH_RC" 2>/dev/null || echo 0)
+  SHELL=$(command -v zsh) bash /repo/scripts/install.sh >/dev/null 2>&1 || true
+  AFTER=$(grep -c "babashka/bbin/bin" "$ZSH_RC" 2>/dev/null || echo 0)
+  [ "$AFTER" -gt "$BEFORE" ] \
+    && fail "~/.zshrc gained a duplicate PATH line on re-run ($BEFORE -> $AFTER)" \
+    || ok "no duplicate in ~/.zshrc on re-run"
+else
+  echo "  SKIP — zsh not installed in this image."
   SKIPPED=$((SKIPPED+1))
 fi
 
