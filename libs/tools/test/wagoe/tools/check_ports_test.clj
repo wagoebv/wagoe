@@ -57,6 +57,68 @@
                "wagoe.license.billing.core.invoice"
                ["wagoe.license.catalog.shell.service"]))))
 
+(deftest ^:unit cross-module-covers-any-foreign-shell-namespace
+  ;; BOU-307. The rule matched exactly two suffixes — `.shell.persistence` and
+  ;; `.shell.service` — and every real coupling in the tree went around it:
+  ;; database adapters, i18n render, auth middleware. Named suffixes cannot keep
+  ;; up with names.
+  (testing "an adapter is as much a reach into another module as a service is"
+    (is (seq (ports/cross-module-violations
+              "wagoe.tenant.shell.persistence"
+              ["wagoe.platform.shell.adapters.database.protocols"]))))
+
+  (testing "so is middleware, and a render helper"
+    (is (seq (ports/cross-module-violations
+              "wagoe.admin.shell.http" ["wagoe.user.shell.middleware"])))
+    (is (seq (ports/cross-module-violations
+              "wagoe.admin.shell.http.support" ["wagoe.i18n.shell.render"]))))
+
+  (testing "a foreign core or ports namespace is not a violation"
+    ;; Ports are the sanctioned way across a module boundary, and core is pure.
+    (is (empty? (ports/cross-module-violations
+                 "wagoe.tenant.shell.persistence"
+                 ["wagoe.platform.ports" "wagoe.core.utils.type-conversion"])))))
+
+(deftest ^:unit a-composition-root-may-name-implementations
+  ;; Wiring is the one job that has to know concrete types. Flagging it would
+  ;; report 39 of the 62 cross-module requires in this tree — every adapter the
+  ;; system wiring assembles — and an allowlist that large stops being read.
+  (testing "module wiring and system wiring are exempt"
+    (is (empty? (ports/cross-module-violations
+                 "wagoe.platform.shell.system.wiring"
+                 ["wagoe.observability.logging.shell.adapters.stdout"])))
+    (is (empty? (ports/cross-module-violations
+                 "wagoe.user.shell.module-wiring"
+                 ["wagoe.platform.shell.adapters.database.factory"]))))
+
+  (testing "so are entry points, which compose to boot"
+    (is (empty? (ports/cross-module-violations
+                 "wagoe.user.shell.cli-entry"
+                 ["wagoe.platform.shell.adapters.database.factory"]))))
+
+  (testing "an ordinary shell namespace is not exempt for having 'wiring' nearby"
+    ;; The exemption is the namespace's job, not a substring anywhere in it.
+    (is (seq (ports/cross-module-violations
+              "wagoe.tenant.shell.wiring-helpers"
+              ["wagoe.platform.shell.adapters.database.config"])))))
+
+(deftest ^:unit an-exemption-covers-a-target-prefix-and-must-say-why
+  ;; 43 sites reach into 8 target groups. Exempting per site would make the list
+  ;; unreadable and hide that they are eight decisions, not forty-three.
+  (testing "a prefix entry exempts everything under it"
+    (let [allow (ports/parse-shell-allowlist
+                 {:allow-cross-module-shell
+                  [{:target-prefix "wagoe.platform.shell.adapters.database"
+                    :why "BOU-303 — platform has no database port yet."}]})]
+      (is (ports/shell-target-allowed? allow "wagoe.platform.shell.adapters.database.protocols"))
+      (is (ports/shell-target-allowed? allow "wagoe.platform.shell.adapters.database.common.core"))
+      (is (not (ports/shell-target-allowed? allow "wagoe.user.shell.middleware")))))
+
+  (testing "an entry without :why is rejected, not honoured"
+    (is (thrown? clojure.lang.ExceptionInfo
+                 (ports/parse-shell-allowlist
+                  {:allow-cross-module-shell [{:target-prefix "wagoe.platform.shell"}]})))))
+
 ;; ---------------------------------------------------------------------------
 ;; Rule 3 — web layer requiring persistence
 ;; ---------------------------------------------------------------------------

@@ -69,6 +69,48 @@
   (let [m (re-find #"^(.*?)\.(?:core|shell|ports)(?:\.|$)" ns-str)]
     (second m)))
 
+(defn foreign-shell-require?
+  "True when `req` names some module's shell namespace.
+
+   Any shell namespace, not two named suffixes. The rule used to match exactly
+   `.shell.persistence` and `.shell.service`, and every real coupling in the
+   tree went around it — database adapters, i18n render helpers, auth
+   middleware. A list of suffixes cannot keep up with names (BOU-307)."
+  [req]
+  (str/includes? req ".shell."))
+
+(defn composition-root?
+  "True when `ns-str` exists to assemble components.
+
+   Wiring is the one job that has to name concrete implementations, so flagging
+   it would report every adapter the system assembles — 39 of the 62
+   cross-module requires in this tree — and an allowlist that size stops being
+   read. Matched on the namespace's last segments rather than a substring
+   anywhere, so `tenant.shell.wiring-helpers` is not exempt for the word."
+  [ns-str]
+  (some #(or (str/ends-with? ns-str %) (str/includes? ns-str (str % ".")))
+        [".shell.module-wiring" ".shell.system.wiring" ".shell.cli-entry" ".shell.boot"]))
+
+(defn parse-shell-allowlist
+  "`:allow-cross-module-shell` entries as a set of target prefixes.
+
+   By prefix, not by site: 43 findings in this tree reach into 8 target groups,
+   and listing them one by one would hide that they are eight decisions rather
+   than forty-three. Every entry must carry a `:why` — an exemption with no
+   stated reason cannot be burnt down (BOU-250)."
+  [m]
+  (let [entries (:allow-cross-module-shell m)]
+    (doseq [{:keys [target-prefix why]} entries]
+      (when (str/blank? why)
+        (throw (ex-info (str "Allowlist entry for " target-prefix " has no :why.")
+                        {:target-prefix target-prefix}))))
+    (set (map :target-prefix entries))))
+
+(defn shell-target-allowed?
+  "True when `req` falls under an allowed target prefix."
+  [allow req]
+  (boolean (some #(str/starts-with? req %) allow)))
+
 (defn persistence-require?
   "True when a required namespace is a module's shell persistence namespace."
   [req]
@@ -161,13 +203,18 @@
 ;; ---------------------------------------------------------------------------
 
 (defn cross-module-violations
-  "Rule 2: a shell namespace requiring another module's shell
-   persistence/service namespace. Returns a seq of violation maps."
+  "Rule 2: a shell namespace reaching into another module's shell.
+
+   Reaching into an implementation is the violation; assembling components is
+   not, so composition roots are exempt. A foreign `ports` or `core` namespace
+   is fine — ports are the sanctioned way across a boundary, and core is pure.
+
+   Returns a seq of violation maps."
   [ns-str requires]
-  (when (shell-ns? ns-str)
+  (when (and (shell-ns? ns-str) (not (composition-root? ns-str)))
     (let [own (ns->module ns-str)]
       (->> requires
-           (filter #(or (persistence-require? %) (service-require? %)))
+           (filter foreign-shell-require?)
            (keep (fn [req]
                    (let [target (ns->module req)]
                      (when (and target own (not= target own))
@@ -193,16 +240,18 @@
                  :req  req})))))
 
 (defn- check-file
-  "Apply rules 2 and 3 to a single file. Honours ^:wagoe/allow-direct and
-   the :allow-direct config allowlist."
-  [file allow-direct-set]
+  "Apply rules 2 and 3 to a single file. Honours ^:wagoe/allow-direct, the
+   :allow-direct config allowlist, and :allow-cross-module-shell target
+   prefixes."
+  [file allow-direct-set allow-shell]
   (let [ns-form (parsing/read-ns-form file)
         ns-str  (str (second ns-form))]
     (when (and ns-form
                (not (ns-allow-direct? ns-form))
                (not (contains? allow-direct-set ns-str)))
       (let [requires (extract-requires ns-form)]
-        (->> (concat (cross-module-violations ns-str requires)
+        (->> (concat (remove #(shell-target-allowed? allow-shell (:req %))
+                             (cross-module-violations ns-str requires))
                      (web-persistence-violations ns-str requires))
              (map #(assoc % :file (str file))))))))
 
@@ -240,18 +289,27 @@
   #{"wagoe.platform"})
 
 (defn read-config
-  "Read the optional .wagoe/check-ports.edn allowlist. Returns a map with
-   :allow-missing-ports and :allow-direct sets (string members)."
+  "Read the optional .wagoe/check-ports.edn allowlist.
+
+   Returns :allow-missing-ports, :allow-direct and :allow-cross-module-shell.
+
+   A malformed file used to be swallowed and read as an empty allowlist, which
+   turns every exemption off and the gate red — or, for a rule whose findings
+   are all exempt, would have turned it green while nobody could tell the file
+   was broken. It throws now (BOU-250)."
   []
   (let [f (io/file (System/getProperty "user.dir") ".wagoe" "check-ports.edn")]
-    (if (.exists f)
-      (try
-        (let [m (edn/read-string (slurp f))]
-          {:allow-missing-ports (set (map str (:allow-missing-ports m)))
-           :allow-direct        (set (map str (:allow-direct m)))})
-        (catch Exception _
-          {:allow-missing-ports #{} :allow-direct #{}}))
-      {:allow-missing-ports #{} :allow-direct #{}})))
+    (if-not (.exists f)
+      {:allow-missing-ports #{} :allow-direct #{} :allow-cross-module-shell #{}}
+      (let [m (try
+                (edn/read-string (slurp f))
+                (catch Exception e
+                  (throw (ex-info (str "Cannot read " (.getPath f) " — the allowlist is "
+                                       "unreadable, so this gate cannot report a verdict")
+                                  {:file (.getPath f)} e))))]
+        {:allow-missing-ports      (set (map str (:allow-missing-ports m)))
+         :allow-direct             (set (map str (:allow-direct m)))
+         :allow-cross-module-shell (parse-shell-allowlist m)}))))
 
 ;; ---------------------------------------------------------------------------
 ;; Entry point
@@ -262,14 +320,14 @@
    `source-roots`). Used by both -main and tests; takes the config allowlists
    explicitly."
   ([config] (collect-violations config (source-roots)))
-  ([{:keys [allow-missing-ports allow-direct]} roots]
+  ([{:keys [allow-missing-ports allow-direct allow-cross-module-shell]} roots]
    (let [modules  (module-dirs roots)
          missing  (->> modules
                        (keep module-completeness-violation)
                        (remove #(contains? allow-missing-ports (:module %))))
          coupling (->> roots
                        (mapcat clj-files)
-                       (mapcat #(check-file % allow-direct)))]
+                       (mapcat #(check-file % allow-direct allow-cross-module-shell)))]
      {:modules    (count modules)
       :violations (concat missing coupling)})))
 
