@@ -290,6 +290,11 @@
   ;; adapter, so the assertion is inverted from what it was — deliberately, and
   ;; here rather than deleted, because the regression is easy to reintroduce:
   ;; anything that reaches for auth from realtime again shows up right here.
+  ;; not-any? passes on an empty seq, so the guard needs a precondition or it
+  ;; disarms itself the moment the scanner stops scanning. Guarded on realtime
+  ;; having source at all rather than on findings existing — findings go to zero
+  ;; when the burn-down finishes, and this assertion has to outlive that.
+  (is (seq (sut/namespaces-of "realtime")) "realtime's source must be reachable")
   (is (not-any? #(and (= "realtime" (:lib* %))
                       (str/starts-with? (:namespace %) "wagoe.user"))
                 (sut/all-findings))))

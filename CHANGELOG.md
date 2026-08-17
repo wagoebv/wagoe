@@ -56,7 +56,7 @@ for what is public API, what is internal, and how deprecations are announced.
   Started described bootstrapping "from the starter repository", which does not
   exist; it names `wagoe new` now.
 
-### Removed
+ ### Removed
 
 - **`realtime`'s `UserJWTAdapter`** (BOU-305). It resolved
   `wagoe.user.shell.auth` at runtime without declaring the dependency, so it

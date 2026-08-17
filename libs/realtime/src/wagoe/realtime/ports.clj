@@ -360,8 +360,9 @@
   "JWT token verification.
 
   The application supplies the implementation — it knows what issues its
-  tokens. realtime ships only `TestJWTAdapter`; wire a real one into
-  `:wagoe.realtime/service`.
+  tokens. realtime ships only `TestJWTAdapter`; wire a real one as
+  `:jwt-verifier` on the `:wagoe/realtime` Integrant key. See the README for a
+  worked example.
 
   Realtime used to ship a `UserJWTAdapter` that resolved
   `wagoe.user.shell.auth` at runtime without declaring the dependency, so it

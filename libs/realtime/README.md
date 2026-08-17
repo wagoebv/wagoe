@@ -17,7 +17,7 @@ JWT-authenticated WebSocket support with:
 - ✅ Topic-based pub/sub (subscribe to arbitrary topics)
 - ✅ Pure functional core (FC/IS pattern)
 - ✅ Pluggable adapters (test and production)
-- ✅ Integration with wagoe/user authentication
+- ✅ Pluggable JWT verification (you supply the verifier)
 
 ---
 
@@ -42,31 +42,52 @@ JWT-authenticated WebSocket support with:
 
 ```clojure
 ;; deps.edn
-{:deps {com.wagoe/wagoe-realtime {:mvn/version "1.0.0-beta-5"}
-        com.wagoe/wagoe-user {:mvn/version "1.0.0-beta-5"}}}
+{:deps {com.wagoe/wagoe-realtime {:mvn/version "1.0.0-beta-5"}}}
 ```
 
-### 2. Create Realtime Service
+### 2. Implement a JWT Verifier
+
+Realtime does not verify tokens itself — it does not know what issues them.
+Implement `IJWTVerifier` in your application and return claims in realtime's
+shape.
+
+```clojure
+(require '[wagoe.realtime.ports :as ports])
+
+(defrecord AppJWTVerifier [verify-token]
+  ports/IJWTVerifier
+  (verify-jwt [_ token]
+    ;; Whatever issues your tokens — wagoe/user, an identity provider, your own
+    ;; signing key. Throw ex-info {:type :unauthorized} when the token is bad.
+    (let [claims (verify-token token)]
+      {:user-id     (java.util.UUID/fromString (:sub claims))
+       :email       (:email claims)
+       :roles       #{(keyword (:role claims))}
+       :permissions #{}
+       :exp         (:exp claims)
+       :iat         (:iat claims)})))
+```
+
+Using `wagoe/user`? Add `com.wagoe/wagoe-user` to *your* deps and call
+`wagoe.user.shell.auth/validate-jwt-token` from `verify-jwt`. Realtime does not
+depend on it, so a project that authenticates some other way carries none of it.
+
+### 3. Create Realtime Service
 
 ```clojure
 (require '[wagoe.realtime.shell.service :as realtime-service]
-         '[wagoe.realtime.shell.connection-registry :as registry]
-         '[wagoe.realtime.shell.adapters.jwt-adapter :as jwt]
-         '[wagoe.realtime.ports :as ports])
+         '[wagoe.realtime.shell.connection-registry :as registry])
 
-;; Create connection registry
 (def connection-registry (registry/create-in-memory-registry))
 
-;; Create JWT verifier (integrates with wagoe/user)
-(def jwt-verifier (jwt/create-user-jwt-adapter))
-
-;; Create realtime service
 (def realtime-svc (realtime-service/create-realtime-service
                     connection-registry
-                    jwt-verifier))
+                    (->AppJWTVerifier my-verify-fn)))
 ```
 
-### 3. Add WebSocket Endpoint
+Under Integrant, pass it as `:jwt-verifier` on the `:wagoe/realtime` key.
+
+### 4. Add WebSocket Endpoint
 
 ```clojure
 (require '[wagoe.realtime.shell.adapters.websocket-adapter :as ws])
@@ -100,7 +121,7 @@ JWT-authenticated WebSocket support with:
   [["/ws" {:get {:handler websocket-handler}}]])
 ```
 
-### 4. Send Messages
+### 5. Send Messages
 
 ```clojure
 ;; Send to specific user (all their connections)
@@ -125,7 +146,7 @@ JWT-authenticated WebSocket support with:
    :status "Processing..."})
 ```
 
-### 5. Client-Side Connection
+### 6. Client-Side Connection
 
 ```javascript
 // Get JWT token from login
@@ -647,7 +668,7 @@ client.connect()
 
 ```bash
 # No environment variables needed for basic setup
-# JWT secret is managed by wagoe/user module
+# JWT secret belongs to whatever issues your tokens, not to realtime
 ```
 
 ---
@@ -983,7 +1004,7 @@ clojure -M:test
 **Solutions:**
 1. Check JWT token is included in query params: `?token=<jwt>`
 2. Verify JWT is valid and not expired
-3. Ensure wagoe/user module is properly configured
+3. Ensure your IJWTVerifier is wired as :jwt-verifier
 4. Check JWT secret matches between user module and realtime module
 
 ### Messages Not Being Received
@@ -1015,7 +1036,6 @@ clojure -M:test
 | `malli` | 0.20.0 | Schema validation |
 | `cheshire` | 6.1.0 | JSON encoding/decoding |
 | `tools.logging` | 1.3.1 | Logging |
-| `wagoe/user` | 1.0.0-beta-5 | JWT authentication (optional) |
 
 ---
 
