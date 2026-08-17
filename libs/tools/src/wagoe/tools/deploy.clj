@@ -5,7 +5,7 @@
 ;;
 ;; Usage (via bb.edn task):
 ;;   bb deploy                         -- show help
-;;   bb deploy --all                   -- deploy all 23 artifacts in dependency order
+;;   bb deploy --all                   -- deploy all 30 artifacts in dependency order
 ;;   bb deploy core platform user      -- deploy specific libs
 ;;   bb deploy --missing               -- deploy only libs not yet on Clojars
 ;;

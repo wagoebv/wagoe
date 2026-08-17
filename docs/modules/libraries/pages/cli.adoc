@@ -122,7 +122,7 @@ If you prefer to manage your own bbin installation:
 [source,bash]
 ----
 bbin install https://github.com/wagoebv/wagoe \
-  --tag v1.0.1-alpha-15 \
+  --tag v1.0.0-beta-5 \
   --git/root libs/wagoe-cli \
   --main-opts '["-m" "wagoe.cli.main"]' \
   --as wagoe

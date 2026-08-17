@@ -83,7 +83,7 @@
   "The retired artifact id for a lib, derived from its current one:
    `wagoe-core` -> `boundary-core`. Derived rather than listed so a lib added to
    the deploy registry cannot be silently missed here — the two groups hold the
-   same 29 artifacts under a 1:1 name mapping."
+   same 30 artifacts under a 1:1 name mapping."
   [lib]
   (str/replace-first (deploy/artifact-name lib) #"^wagoe-" "boundary-"))
 

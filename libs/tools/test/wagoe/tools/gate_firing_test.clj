@@ -723,6 +723,41 @@
       ;; Without this the gate could pass by finding nothing at all.
       (is (<= 20 (count (check-versions/version-sources)))))
 
+    (testing "a stale version planted in documentation is reported"
+      ;; BOU-317. This is the BOU-313 defect as a fixture: the installation
+      ;; page pinned 1.0.1-alpha-42 for 43 releases while every run stayed
+      ;; green, because the gate read source only.
+      (let [findings (check-versions/doc-version-findings
+                      "docs/modules/getting-started/pages/installation.adoc"
+                      "{:deps {com.wagoe/wagoe-core {:mvn/version \"1.0.1-alpha-42\"}}}\n")]
+        (is (= [{:file    "docs/modules/getting-started/pages/installation.adoc"
+                 :line    1
+                 :version "1.0.1-alpha-42"
+                 :what    "com.wagoe pin"
+                 :excerpt "com.wagoe/wagoe-core {:mvn/version \"1.0.1-alpha-42\""}]
+               findings))
+        (is (seq (check-versions/disagreements
+                  (conj (vec findings) (bumped "1.0.0-beta-5" "build.clj" "libs/core/build.clj"))
+                  "1.0.0-beta-5")))))
+
+    (testing "documentation is actually discovered, not an empty file list"
+      ;; The BOU-250 shape again, for the half of the surface just added.
+      (is (<= 10 (count (check-versions/doc-sources)))
+          "expected the documented com.wagoe pins, so a passing run means something"))
+
+    (testing "a wholly stale documentation set cannot outvote the source"
+      ;; The majority rule inverts when a whole category is missed: three stale
+      ;; docs against one correct build.clj would name the build.clj as the
+      ;; offender. The version the code declares is the version.
+      (let [r (check-versions/disagreements
+               [(bumped "1.0.0-beta-5" "build.clj" "libs/core/build.clj")
+                (bumped "1.0.1-alpha-42" "com.wagoe pin" "README.md")
+                (bumped "1.0.1-alpha-42" "com.wagoe pin" "installation.adoc")
+                (bumped "1.0.1-alpha-42" "com.wagoe pin" "index.adoc")]
+               "1.0.0-beta-5")]
+        (is (= "1.0.0-beta-5" (:consensus r)))
+        (is (= ["README.md" "index.adoc" "installation.adoc"] (map :file (:offenders r))))))
+
     (testing "every version-bearing kind is actually scanned"
       ;; The first version of this gate read one key from the module catalogue
       ;; and ignored the other 24 — :cli-version and a per-module :version for

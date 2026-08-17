@@ -261,37 +261,33 @@ See [ADR-021](./dev-docs/adr/ADR-021-fcis-boundary-rules.adoc) (FC/IS rules) and
 
 ## Releasing a New Version
 
-Version appears in 59 locations — `bb check:versions` is the list, and it fails
-when they disagree. Use these steps to bump them consistently.
+The version appears in 104 locations — 59 in source, 45 in documentation.
+`bb check:versions` is the list, and `bb bump` is the way to change it.
 
-**1. Replace the version string everywhere (all .clj, .edn, and .md files):**
+**1. Bump:**
 
 ```bash
-OLD="1.0.0-beta-5"
-NEW="1.0.0-beta-5"   # example
-
-# Source and config files
-find . \( -name "*.clj" -o -name "*.edn" \) \
-  ! -path "*/docs/superpowers/*" ! -path "*/.git/*" \
-  -exec grep -l "$OLD" {} \; | xargs sed -i '' "s/$OLD/$NEW/g"
-
-# Documentation (.md and .adoc)
-find . \( -name "*.md" -o -name "*.adoc" \) \
-  ! -path "*/CHANGELOG.md" ! -path "*/docs/superpowers/*" ! -path "*/.git/*" \
-  -exec grep -l "$OLD" {} \; | xargs sed -i '' "s/$OLD/$NEW/g"
+bb bump 1.0.0-beta-6 --dry-run   # list what would change
+bb bump 1.0.0-beta-6
 ```
 
-On Linux, use `sed -i` instead of `sed -i ''`.
+It rewrites exactly the locations `check:versions` discovers and nothing else,
+prints a `git diff --stat`, and finishes by verifying the result against the
+version it just wrote. Re-running it is a no-op.
+
+Give the plain version, not the tag: `1.0.0-beta-6`, not `v1.0.0-beta-6`. It
+refuses a leading `v` rather than writing it into 104 places, where every
+location would then agree and the check would pass on it.
 
 **2. Verify and commit:**
 
 ```bash
-# The gate, not a grep: it knows every location and fails when they disagree.
-bb check:versions
-
 bb check
-git add -A && git commit -m "bump library suite version $OLD → $NEW"
+git add -A && git commit -m "bump library suite version to 1.0.0-beta-6"
 ```
+
+The full `bb check` — not `--quick`, which skips `check:versions`. That gate is
+the one that knows every location and fails when they disagree.
 
 **3. Run the pre-release gate:**
 
@@ -300,22 +296,23 @@ The nightly first-run matrix doubles as the pre-release check — that is what i
 rather than trusting last night's run to describe today's tree.
 
 ```bash
-gh workflow run first-run-matrix.yml -f reason="pre-release gate for $NEW"
+gh workflow run first-run-matrix.yml -f reason="pre-release gate for 1.0.0-beta-6"
 ```
 
 **4. Tag. The tag is the release:**
 
 ```bash
 git push
-git tag -a "$NEW" -m "Release $NEW"
+git tag -a "1.0.0-beta-6" -m "Release 1.0.0-beta-6"
 git push --tags
 ```
 
 Pushing an unprefixed semver tag fires `.github/workflows/publish.yml`, which
 waits for a maintainer to approve the `release` environment and then does the
 rest: builds every library from the tagged commit in publish order, refuses if
-the tag disagrees with the source version, deploys the artifacts not already on
-Clojars, and creates the GitHub release.
+the tag disagrees with the source version or if CI did not pass on that exact
+commit, deploys the artifacts not already on Clojars, and creates the GitHub
+release.
 
 So there is nothing to run by hand afterwards. In particular:
 
@@ -329,7 +326,17 @@ So there is nothing to run by hand afterwards. In particular:
 of the normal release. `patch-catalogue-version!` keeps `modules-catalogue.edn`
 in sync after each successful deploy either way.
 
-**What to skip:** `CHANGELOG.md` (maintain manually), `docs/superpowers/` (historical planning docs), draft/pre-releases on GitHub (`install.sh` uses `/releases/latest` which only returns published releases).
+**What `bb bump` deliberately leaves alone:** `CHANGELOG.md` and the ADRs
+(historical — they record what was true when written), `docs/superpowers/`
+(dated design records), and `docs/modules/ROOT/pages/stability.adoc`, whose
+subject *is* the old version numbers. Also draft/pre-releases on GitHub —
+`install.sh` uses `/releases/latest`, which only returns published releases.
+
+> Until BOU-316 this step was a global `find | xargs sed`. It set `OLD` and
+> `NEW` to the same string, so a copy-paste run rewrote nothing and reported
+> success — and the verification was `grep -r "$OLD"`, which then found nothing
+> and agreed. It was also macOS-only (`sed -i ''`) and rewrote every occurrence
+> of the version string, including third-party pins that happened to match.
 
 ---
 

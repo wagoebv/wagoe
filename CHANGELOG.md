@@ -47,7 +47,43 @@ for what is public API, what is internal, and how deprecations are announced.
   before any deploy step runs. Clojars coordinates cannot be recalled, so this
   aborts in seconds, before the release does any other work.
 
+- **Stale install instructions on the first page users copy from** (BOU-313).
+  `installation.adoc` pinned four coordinates to `1.0.1-alpha-42`, a
+  discontinued line that Maven sorts *newer* than every beta, so anyone
+  following it — or resolving a range — landed on unsupported jars. The manual
+  install steps also asked for Java 17 while `install.sh` has required 21 since
+  `1.0.0-beta-5`, in prose and in all four package-manager commands. Getting
+  Started described bootstrapping "from the starter repository", which does not
+  exist; it names `wagoe new` now.
+
+### Added
+
+- **`bb bump <version>`** (BOU-316). The release bump was a global
+  `find | xargs sed` copied out of the README, and three things were wrong with
+  it at once: the snippet set `OLD` and `NEW` to the *same string*, so a
+  copy-paste run rewrote nothing and reported success — with a verification step
+  of `grep -r "$OLD"`, which then found nothing and agreed; `sed -i ''` is
+  macOS-only, so the documented command fails on Linux and in CI; and it
+  replaced *every* occurrence of the version string, including third-party pins
+  and fixtures that happened to match. `bb bump` rewrites exactly the locations
+  `check:versions` discovers — the same code, not a second list — prints a diff,
+  and verifies the result against the version it just wrote. `--dry-run` lists
+  the files and writes nothing, a plain re-run is a no-op, and a leading `v` is
+  refused rather than written into 96 places where every location would then
+  agree.
+
 ### Changed
+
+- **`check:versions` now covers documentation as well as source** (BOU-317). It
+  read 59 code locations and no `.md`/`.adoc`, so roughly 40% of the version
+  surface was ungated — and it was the half users copy from, which is how
+  `installation.adoc` sat 43 releases behind through every bump and every green
+  run. It now also reads `com.wagoe` coordinates, `--tag v…` install recipes for
+  this repository, and release-pinned prose such as "NEW in v…": 96 locations
+  rather than 59. Historical documents are excluded by path, each with a stated
+  reason, and documentation is checked *against* the version the source declares
+  rather than being allowed to vote on it — otherwise a wholly stale
+  documentation set would report the correctly-bumped files as the offenders.
 
 - **`check:branch-protection` also verifies that CI can run at all.** Coverage
   of every job is worth nothing on a run that never starts, so the gate now
