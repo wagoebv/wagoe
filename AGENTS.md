@@ -360,6 +360,23 @@ Every module MUST define `ports.clj`.
 ```
 <!-- /gen:fc-is -->
 
+### 4. Write Short
+
+Comments, docstrings, commit messages and PR descriptions: say the thing, then
+stop. Someone has to read all of it.
+
+- **Comments and docstrings** — explain what is not obvious from the code.
+  Usually why, not what. One or two sentences. If a comment needs paragraphs,
+  the code probably needs a rethink, or the reasoning belongs in an ADR.
+- **Commit messages** — a subject line that says what changed, and a body only
+  when the reason is not evident from the diff. Reference the ticket.
+- **PR descriptions** — what changed and why, in a few lines. Reviewers read
+  the diff; do not narrate it back to them. Include verification output only
+  when a reviewer would otherwise have to re-run it.
+
+Existing long comments in this repo are not a target for rewriting — leave
+them. This applies to what you write next.
+
 ---
 
 ## Common Workflows
