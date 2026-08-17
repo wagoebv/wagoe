@@ -7,9 +7,11 @@
 ;;
 ;;   1. Module completeness — every module (a directory with both core/ and
 ;;      shell/) must define a ports.clj containing at least one defprotocol.
-;;   2. No cross-module shell coupling — a wagoe.X.shell.* namespace must
-;;      not require wagoe.Y.shell.persistence / wagoe.Y.shell.service of
-;;      another module Y. Cross-module access goes through wagoe.Y.ports.
+;;   2. No cross-module shell coupling — a wagoe.X.shell.* namespace must not
+;;      require any wagoe.Y.shell.* namespace of another module Y. Cross-module
+;;      access goes through wagoe.Y.ports. Composition roots (module-wiring,
+;;      system.wiring, cli-entry, boot) are exempt: assembling components means
+;;      naming them (BOU-307).
 ;;   3. Web/HTTP layers never require *.shell.persistence directly — they must
 ;;      go through service ports.
 ;;
@@ -17,8 +19,9 @@
 ;;   - `^:wagoe/allow-direct` metadata on a namespace exempts it from
 ;;     rules 2 and 3.
 ;;   - An optional .wagoe/check-ports.edn at the repo root supplies
-;;     :allow-missing-ports (module ns prefixes) and :allow-direct (namespace
-;;     names) allowlists.
+;;     :allow-missing-ports (module ns prefixes), :allow-direct (namespace
+;;     names), and :allow-cross-module-shell (target prefixes, each with a
+;;     mandatory :why) allowlists.
 ;;
 ;; See BOU-79/BOU-81 for rationale.
 
@@ -82,11 +85,15 @@
 (defn composition-root?
   "True when `ns-str` exists to assemble components.
 
-   Wiring is the one job that has to name concrete implementations, so flagging
-   it would report every adapter the system assembles — 39 of the 62
-   cross-module requires in this tree — and an allowlist that size stops being
-   read. Matched on the namespace's last segments rather than a substring
-   anywhere, so `tenant.shell.wiring-helpers` is not exempt for the word."
+   Wiring is the one job that has to name concrete implementations. Exempting it
+   here rather than in the allowlist keeps 19 of this tree's 62 cross-module
+   requires out of a list that is meant to be read and burnt down — they are the
+   system assembling its own adapters, which is not a finding in any future
+   either.
+
+   Matched on the namespace's own segments rather than a substring anywhere, so
+   `tenant.shell.wiring-helpers` is not exempt for containing the word, and
+   `x.shell.bootstrap` is not exempt for starting like `.shell.boot`."
   [ns-str]
   (some #(or (str/ends-with? ns-str %) (str/includes? ns-str (str % ".")))
         [".shell.module-wiring" ".shell.system.wiring" ".shell.cli-entry" ".shell.boot"]))
@@ -94,13 +101,21 @@
 (defn parse-shell-allowlist
   "`:allow-cross-module-shell` entries as a set of target prefixes.
 
-   By prefix, not by site: 43 findings in this tree reach into 8 target groups,
-   and listing them one by one would hide that they are eight decisions rather
-   than forty-three. Every entry must carry a `:why` — an exemption with no
-   stated reason cannot be burnt down (BOU-250)."
+   By prefix, not by site: 43 findings in this tree reach into 9 target prefixes,
+   so listing call sites would hide that they are nine decisions rather than
+   forty-three.
+
+   Both keys are required. `:why` because an exemption with no stated reason
+   cannot be burnt down; `:target-prefix` because a typo in that key yielded
+   `#{nil}`, and the nil only surfaced as an NPE from `starts-with?` once some
+   finding existed to test against — so a repo with none passed green on a
+   structurally broken allowlist (BOU-250)."
   [m]
   (let [entries (:allow-cross-module-shell m)]
     (doseq [{:keys [target-prefix why]} entries]
+      (when (str/blank? target-prefix)
+        (throw (ex-info (str "Allowlist entry has no :target-prefix: " (pr-str entries))
+                        {:entry (pr-str entries)})))
       (when (str/blank? why)
         (throw (ex-info (str "Allowlist entry for " target-prefix " has no :why.")
                         {:target-prefix target-prefix}))))
@@ -110,6 +125,22 @@
   "True when `req` falls under an allowed target prefix."
   [allow req]
   (boolean (some #(str/starts-with? req %) allow)))
+
+(defn stale-shell-exemptions
+  "Allowed prefixes that no longer exempt anything.
+
+   Without this the list is a drawer, not a burn-down: when
+   `wagoe.user.shell.middleware` — the entry its own `:why` calls the first to
+   burn down — is finally burnt down, the entry stays green and unnoticed. A
+   prefix makes that worse than a per-site exemption would, because it silently
+   pre-approves the next module that reaches for the same target.
+
+   `check_isolation.clj` does the same for its list; this rule was written
+   without it."
+  [allow violation-reqs]
+  (->> allow
+       (remove (fn [prefix] (some #(str/starts-with? % prefix) violation-reqs)))
+       sort))
 
 (defn persistence-require?
   "True when a required namespace is a module's shell persistence namespace."
@@ -249,11 +280,14 @@
     (when (and ns-form
                (not (ns-allow-direct? ns-form))
                (not (contains? allow-direct-set ns-str)))
-      (let [requires (extract-requires ns-form)]
-        (->> (concat (remove #(shell-target-allowed? allow-shell (:req %))
-                             (cross-module-violations ns-str requires))
-                     (web-persistence-violations ns-str requires))
-             (map #(assoc % :file (str file))))))))
+      (let [requires (extract-requires ns-form)
+            cross    (cross-module-violations ns-str requires)]
+        {:violations (->> (concat (remove #(shell-target-allowed? allow-shell (:req %)) cross)
+                                  (web-persistence-violations ns-str requires))
+                          (map #(assoc % :file (str file))))
+         ;; Kept before the allowlist is applied, so an exemption that no longer
+         ;; matches anything can be reported as stale.
+         :cross-reqs (map :req cross)}))))
 
 ;; ---------------------------------------------------------------------------
 ;; Module completeness (rule 1)
@@ -325,17 +359,22 @@
          missing  (->> modules
                        (keep module-completeness-violation)
                        (remove #(contains? allow-missing-ports (:module %))))
-         coupling (->> roots
+         checked  (->> roots
                        (mapcat clj-files)
-                       (mapcat #(check-file % allow-direct allow-cross-module-shell)))]
+                       (keep #(check-file % allow-direct allow-cross-module-shell)))
+         coupling (mapcat :violations checked)
+         stale    (stale-shell-exemptions allow-cross-module-shell
+                                          (mapcat :cross-reqs checked))]
      {:modules    (count modules)
-      :violations (concat missing coupling)})))
+      :violations (concat missing coupling)
+      :stale      stale})))
 
 (defn -main [& _args]
   (let [config     (-> (read-config)
                        (update :allow-missing-ports into builtin-allow-missing-ports))
-        {:keys [modules violations]} (collect-violations config)]
-    (if (seq violations)
+        {:keys [modules violations stale]} (collect-violations config)]
+    (cond
+      (seq violations)
       (do
         (println (ansi/red "Ports / hexagonal boundary violations found:"))
         (println)
@@ -359,6 +398,18 @@
         (println (str (count violations) " violation(s) found across " modules " module(s)."))
         (println (ansi/dim "Escape hatch: ^:wagoe/allow-direct ns metadata, or .wagoe/check-ports.edn allowlist."))
         (System/exit 1))
+
+      (seq stale)
+      (do
+        (println (ansi/red (str (count stale) " allowlist prefix(es) no longer exempt anything:")))
+        (println)
+        (doseq [p stale] (println (str "  " p)))
+        (println)
+        (println "The coupling is gone — remove the entry from .wagoe/check-ports.edn.")
+        (println "A prefix left behind pre-approves the next module that reaches for it.")
+        (System/exit 1))
+
+      :else
       (do
         (println (ansi/green "Ports check passed.")
                  (str modules " module(s) scanned, 0 violations."))

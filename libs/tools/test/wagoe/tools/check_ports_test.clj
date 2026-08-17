@@ -117,7 +117,30 @@
   (testing "an entry without :why is rejected, not honoured"
     (is (thrown? clojure.lang.ExceptionInfo
                  (ports/parse-shell-allowlist
-                  {:allow-cross-module-shell [{:target-prefix "wagoe.platform.shell"}]})))))
+                  {:allow-cross-module-shell [{:target-prefix "wagoe.platform.shell"}]}))))
+
+  (testing "and so is a typo in the :target-prefix key"
+    ;; It used to yield #{nil}, and the nil only surfaced as an NPE from
+    ;; starts-with? once some finding existed to test against — so a repo with
+    ;; none passed green on a structurally broken allowlist.
+    (is (thrown? clojure.lang.ExceptionInfo
+                 (ports/parse-shell-allowlist
+                  {:allow-cross-module-shell [{:targt-prefix "x" :why "typo in the key"}]})))))
+
+(deftest ^:unit an-exemption-that-stops-exempting-is-reported
+  ;; Without this the list is a drawer. A prefix is worse than a per-site
+  ;; exemption when it goes stale, because it pre-approves the next module that
+  ;; reaches for the same target.
+  (testing "a prefix with nothing left under it is stale"
+    (is (= ["wagoe.gone.shell"]
+           (ports/stale-shell-exemptions
+            #{"wagoe.user.shell.middleware" "wagoe.gone.shell"}
+            ["wagoe.user.shell.middleware"]))))
+
+  (testing "a prefix still covering something is not"
+    (is (empty? (ports/stale-shell-exemptions
+                 #{"wagoe.platform.shell.adapters.database"}
+                 ["wagoe.platform.shell.adapters.database.protocols"])))))
 
 ;; ---------------------------------------------------------------------------
 ;; Rule 3 — web layer requiring persistence

@@ -90,9 +90,10 @@ for what is public API, what is internal, and how deprecations are announced.
   wiring is the one job that has to name concrete implementations; without that
   exemption 39 of the 62 cross-module requires would be the system assembling
   its own adapters. `.wagoe/check-ports.edn` gains
-  `:allow-cross-module-shell`, a burn-down list of 8 target prefixes — one entry
-  per decision rather than one per call site — each with a mandatory `:why`. A
-  malformed allowlist now throws instead of being read as empty.
+  `:allow-cross-module-shell`, a burn-down list of 9 target prefixes — one entry
+  per decision rather than one per call site — each with a mandatory
+  `:target-prefix` and `:why`, and each reported when it stops exempting
+  anything. A malformed allowlist now throws instead of being read as empty.
 
 - **The monorepo's `wagoe.config` is now `wagoe.system-config`, and `wagoe new`
   generates `system_config.clj`** (BOU-306). Assembling an Integrant system is
