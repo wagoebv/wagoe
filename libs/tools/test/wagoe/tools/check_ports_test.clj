@@ -127,6 +127,25 @@
                  (ports/parse-shell-allowlist
                   {:allow-cross-module-shell [{:targt-prefix "x" :why "typo in the key"}]})))))
 
+(deftest ^:unit a-generated-project-passes-without-an-allowlist-file
+  ;; A scaffolded project ships no .wagoe/check-ports.edn, and its persistence
+  ;; layer requires platform's database adapters because platform exposes no
+  ;; port. Failing `bb check` on a freshly scaffolded module for a gap in the
+  ;; framework is the BOU-267 shape — and it is what the first-run smoke caught
+  ;; when this rule was broadened without the builtins.
+  (testing "the framework gaps a generated project cannot close are built in"
+    (doseq [req ["wagoe.platform.shell.adapters.database.common.core"
+                 "wagoe.platform.shell.persistence-interceptors"
+                 "wagoe.i18n.shell.render"]]
+      (is (ports/shell-target-allowed? ports/builtin-allow-cross-module-shell req)
+          (str req " must not fail a scaffolded project"))))
+
+  (testing "this repository's own couplings are not built in"
+    ;; They belong on the burn-down list, where they can be seen and removed.
+    (doseq [req ["wagoe.user.shell.middleware"
+                 "wagoe.external.shell.adapters.smtp"]]
+      (is (not (ports/shell-target-allowed? ports/builtin-allow-cross-module-shell req))))))
+
 (deftest ^:unit an-exemption-that-stops-exempting-is-reported
   ;; Without this the list is a drawer. A prefix is worse than a per-site
   ;; exemption when it goes stale, because it pre-approves the next module that

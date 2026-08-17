@@ -94,6 +94,10 @@ for what is public API, what is internal, and how deprecations are announced.
   per decision rather than one per call site — each with a mandatory
   `:target-prefix` and `:why`, and each reported when it stops exempting
   anything. A malformed allowlist now throws instead of being read as empty.
+  Framework gaps a downstream project cannot close — platform's database
+  adapters, its interceptor pipelines, i18n's render helpers — are exempt
+  everywhere rather than by file, so `bb check` still passes on a freshly
+  scaffolded module.
 
 - **The monorepo's `wagoe.config` is now `wagoe.system-config`, and `wagoe new`
   generates `system_config.clj`** (BOU-306). Assembling an Integrant system is

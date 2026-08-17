@@ -317,6 +317,28 @@
 ;; Config allowlist
 ;; ---------------------------------------------------------------------------
 
+(def builtin-allow-cross-module-shell
+  "Target prefixes exempt everywhere, including in generated projects.
+
+   These are gaps in the framework, not in the code that hits them: a project's
+   persistence layer has to reach `platform.shell.adapters.database` because
+   platform exposes no database port (BOU-303), and its UI reaches i18n's render
+   helpers because i18n exposes them nowhere else. A downstream project cannot
+   close any of them, and failing `bb check` on a freshly scaffolded module for a
+   framework gap is the BOU-267 shape.
+
+   The monorepo lists the same prefixes in `.wagoe/check-ports.edn` so they stay
+   on a burn-down list with a stated reason; these are what keep generated
+   projects green until that list empties. Repo-specific couplings —
+   `user.shell.middleware`, email's bridging adapter — are not here."
+  #{"wagoe.platform.shell.adapters.database"
+    "wagoe.platform.shell.persistence-interceptors"
+    "wagoe.platform.shell.service-interceptors"
+    "wagoe.platform.shell.interceptors"
+    "wagoe.platform.shell.web"
+    "wagoe.i18n.shell.render"
+    "wagoe.i18n.shell.middleware"})
+
 (def ^:private builtin-allow-missing-ports
   "Module ns prefixes acknowledged as not yet having a ports.clj in this
    monorepo. Remove entries as modules are retrofitted; new entries need an ADR."
@@ -363,7 +385,11 @@
                        (mapcat clj-files)
                        (keep #(check-file % allow-direct allow-cross-module-shell)))
          coupling (mapcat :violations checked)
-         stale    (stale-shell-exemptions allow-cross-module-shell
+         ;; Staleness is judged on the repository's own list only. A builtin is
+         ;; not stale when this repo stops hitting it — it exists for generated
+         ;; projects, which are not being scanned here.
+         stale    (stale-shell-exemptions (remove builtin-allow-cross-module-shell
+                                                 allow-cross-module-shell)
                                           (mapcat :cross-reqs checked))]
      {:modules    (count modules)
       :violations (concat missing coupling)
@@ -371,7 +397,8 @@
 
 (defn -main [& _args]
   (let [config     (-> (read-config)
-                       (update :allow-missing-ports into builtin-allow-missing-ports))
+                       (update :allow-missing-ports into builtin-allow-missing-ports)
+                       (update :allow-cross-module-shell into builtin-allow-cross-module-shell))
         {:keys [modules violations stale]} (collect-violations config)]
     (cond
       (seq violations)
