@@ -792,6 +792,35 @@
       (is (str/includes? output "[_ {:keys [service config]}]"))
       (is (not (str/includes? output "[_ {:keys [repository config]}]"))))))
 
+(deftest ^:unit module-wiring-never-confuses-the-module-with-the-entity
+  ;; The fixture above uses module "product" with entity "Product", so the two
+  ;; render identically and every substring assertion passes whichever is
+  ;; wrong. An earlier version passed entity-name into nine module slots and
+  ;; emitted "Integrant wiring for the Widget module" for module `inventory`.
+  (let [output (gen/generate-module-wiring-file
+                {:base-ns "acme" :module-name "inventory"
+                 :entities [{:entity-name "Widget" :entity-lower "widget"
+                             :entity-kebab "widget" :entity-table "widgets"
+                             :fields []}]})]
+    (testing "the entity name appears nowhere in the wiring"
+      ;; Wiring names components, and a component is the module's, not the
+      ;; entity's — a module can grow a second entity without rewiring.
+      (is (not (str/includes? output "Widget")) output))
+
+    (testing "and every key is the module's"
+      (doseq [k [":wagoe/inventory-repository" ":wagoe/inventory-service"
+                 ":wagoe/inventory-routes" ":wagoe/inventory\n"]]
+        (is (str/includes? output k) (str "missing " k))))))
+
+(deftest ^:unit module-wiring-calls-the-normalized-routes-fn
+  ;; :wagoe/http-handler reads (:api routes) from the normalized map. http/routes
+  ;; is the legacy flat vector, so wiring that one contributes zero routes and
+  ;; says nothing about it — the module generates, compiles, boots, and serves
+  ;; no requests.
+  (let [output (gen/generate-module-wiring-file base-ctx)]
+    (is (str/includes? output "http/product-routes-normalized"))
+    (is (not (str/includes? output "(http/routes ")))))
+
 (deftest ^:unit module-wiring-uses-the-projects-own-base-ns
   ;; A generated project is not called wagoe. Hard-coding the prefix would emit
   ;; a namespace that does not match its own file path.

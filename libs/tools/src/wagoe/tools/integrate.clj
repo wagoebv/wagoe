@@ -62,11 +62,25 @@
   "An Integrant config template snippet for a new module."
   [module-name has-routes?]
   (let [ns-name (str/replace module-name "_" "-")]
+    ;; All four keys, not just the aggregate. It used to print :wagoe/<module>
+    ;; alone, which the generated wiring destructures for :routes and :service —
+    ;; both nil, because nothing initialised the components they come from
+    ;; (BOU-309).
     (str "  ;; " (str/capitalize ns-name) " module\n"
-         "  :wagoe/" ns-name "\n"
-         "  {:enabled? true"
+         "  :wagoe/" ns-name "-repository\n"
+         "  {:ctx (ig/ref :wagoe/db-context)}\n\n"
+         "  :wagoe/" ns-name "-service\n"
+         "  {:repository (ig/ref :wagoe/" ns-name "-repository)}\n\n"
          (when has-routes?
-           (str "\n   :base-path \"/api/" ns-name "\""))
+           (str "  :wagoe/" ns-name "-routes\n"
+                "  {:service (ig/ref :wagoe/" ns-name "-service)\n"
+                "   :config  config}\n\n"))
+         "  :wagoe/" ns-name "\n"
+         "  {:enabled? true\n"
+         "   :service  (ig/ref :wagoe/" ns-name "-service)"
+         (when has-routes?
+           (str "\n   :routes   (ig/ref :wagoe/" ns-name "-routes)"
+                "\n   :base-path \"/api/" ns-name "\""))
          "}")))
 
 ;; =============================================================================

@@ -213,7 +213,7 @@
          ;; writes the :wagoe/<module> key the generated module_wiring.clj
          ;; defines (BOU-309).
          :next-steps ["Review the generated files"
-                      (format "Wire it up: bb scaffold integrate %s" module-name)
+                      (format "Print the config it needs: bb scaffold integrate %s" module-name)
                       (format "Run tests: clojure -M:test --focus %s.%s.core.%s-test"
                               (str/replace base-ns-path "/" ".") module-name module-name)]
          :warnings (if dry-run?
