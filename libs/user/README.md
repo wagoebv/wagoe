@@ -45,10 +45,12 @@ Complete user management and authentication system with MFA support, session man
 ```clojure
 (ns myapp.main
   (:require [wagoe.user.shell.module-wiring]  ; Auto-registers module
-            [wagoe.platform.shell.system.wiring :as wiring]))
+            [wagoe.platform.shell.system.wiring :as wiring]
+            [wagoe.config :as config]
+            [myapp.system-config :as sys-config]))   ; your Integrant config
 
 (defn -main [& args]
-  (wiring/start!))
+  (wiring/start! (sys-config/ig-config (config/load-config))))
 ```
 
 ### Configuration

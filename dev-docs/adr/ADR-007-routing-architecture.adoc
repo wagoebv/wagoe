@@ -290,7 +290,7 @@ This pattern aligns with Wagoe's architectural principles:
    - Modified `create-handler` to use `wrap-resource` middleware
    - Static files served before Reitit routing
 
-5. **src/wagoe/config.clj**
+5. **src/wagoe/system_config.clj**
    - Changed `:wagoe/http-handler` dependency to `:user-routes`
    - Updated documentation for structured route format
 

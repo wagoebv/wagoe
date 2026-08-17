@@ -73,6 +73,8 @@ The `:wagoe/dashboard` Integrant component starts Jetty on port 9999. Pages:
 `/dashboard` (overview), `/routes`, `/requests`, `/schemas`, `/db`, `/errors`,
 `/jobs`, `/config`, `/security`, `/docs`.
 
+Editing a config value from the dashboard rebuilds the system, so `:wagoe/dashboard` also takes `:ig-config-fn` — a zero-argument function returning your Integrant config. Without it the config editor reports what is missing and the rest of the dashboard works as normal.
+
 ## Documentation
 
 - [AGENTS.md](AGENTS.md) — full module reference (phases, key files, safety model)

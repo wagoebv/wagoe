@@ -2,6 +2,16 @@
  :catalogue-version "1.0.0-beta-5"
  :modules
  [;; ─── Core (always included) ───────────────────────────────────────────────
+  {:name                "config"
+   :description         "Aero config loading and the typed accessors libraries read through"
+   :clojars             com.wagoe/wagoe-config
+   :version             "1.0.0-beta-5"
+   :category            :core
+   :config-snippet      ""
+   :test-config-snippet ""
+   :add-command         "wagoe add config"
+   :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/config/AGENTS.md"}
+
   {:name                "core"
    :description         "Pure validation, case conversion, interceptor pipeline, feature flags"
    :clojars             com.wagoe/wagoe-core

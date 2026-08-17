@@ -31,7 +31,7 @@ Code generation tool for creating new Wagoe modules following the Functional Cor
 
 > **Use `wagoe new` for new projects.** The Wagoe CLI (`wagoe new <name>`,
 > from `wagoe-cli`) is the canonical, actively-maintained project generator — it
-> produces the current template (`src/wagoe/config.clj`, `src/<project>/system.clj`,
+> produces the current template (`src/wagoe/system_config.clj`, `src/<project>/system.clj`,
 > `.env`, `bb.edn`, tests, hooks). The scaffolder's own `new` command below is a
 > lower-level/legacy generator kept for embedding; it emits a different, simpler
 > layout (`src/<name>/app.clj`) and does **not** match a `wagoe new` project.
