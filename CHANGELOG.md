@@ -68,10 +68,13 @@ for what is public API, what is internal, and how deprecations are announced.
   The namespace loads and the adapter throws on first use, from Clojars, in a
   user's application. So the gate reads the loading forms themselves — `require`,
   `requiring-resolve`, `the-ns`, `resolve` — and fails when a library reaches for
-  a namespace it neither owns nor declares. It ships with a justified burn-down
-  list in `.wagoe/check-isolation.edn` — 15 entries covering 28 sites — which
-  BOU-305, BOU-306 and BOU-307 empty; an entry that stops exempting anything also
-  fails the build, so the list cannot quietly become a drawer.
+  a namespace it neither owns nor declares — written as a static `:require`, a
+  fully qualified call, or any dynamic load. `libs/tools` cannot be a matrix cell
+  because its runtime is Babashka rather than the JVM, so it gets the equivalent
+  load under `bb` instead. It ships with a justified burn-down list in
+  `.wagoe/check-isolation.edn` — 14 entries covering 26 sites — which BOU-305,
+  BOU-306 and BOU-307 empty; an entry that stops exempting anything also fails
+  the build, so the list cannot quietly become a drawer.
 
 - **`bb bump <version>`** (BOU-316). The release bump was a global
   `find | xargs sed` copied out of the README, and three things were wrong with

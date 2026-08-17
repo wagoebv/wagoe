@@ -390,6 +390,18 @@ jobs:
       - name: Check no library loads an undeclared namespace
         run: bb check:isolation
 
+      # libs/tools is the one library the isolated-build matrix cannot cover:
+      # its runtime is Babashka, so `clojure -M` cannot load it. Babashka can,
+      # and against its own src/ alone this is the same property every other
+      # library gets from a matrix cell. Without it, tools' isolation rested
+      # entirely on the static gate above.
+      - name: Load libs/tools against only its own source (Babashka runtime)
+        run: |
+          set -euo pipefail
+          form="$(bb -e "(require '[wagoe.tools.check-isolation :as ci]) (print (ci/require-form \"tools\"))")"
+          cd libs/tools
+          bb --classpath src -e "$form"
+
   # =============================================================================
   # "30 independently publishable libraries" — the compile half
   #

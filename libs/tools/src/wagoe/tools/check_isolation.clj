@@ -143,33 +143,41 @@
 ;; Detection
 ;; =============================================================================
 
-(def ^:private quoted-namespace-re
-  "A quoted symbol naming a wagoe namespace: 'wagoe.user.shell.auth or
-   '[wagoe.user.shell.auth :as a].
+(def ^:private namespace-reference-re
+  "Any reference to a wagoe namespace in code, however it is written.
 
-   Reads the quoted symbol rather than the verb in front of it. An earlier
-   version anchored on the verb — `\\((?:require|the-ns|resolve|…)\\s+'…` — and
-   had two ways round it, both of which this gate's own docstring says it cannot
-   afford:
+   Three shapes have to match, and earlier versions of this each missed some:
 
-     (require '[wagoe.core.x :as x] '[wagoe.user.auth :as a])   ; second one missed
-     (require
-       '[wagoe.user.auth :as a])                                ; verb on another line
+     (require '[wagoe.user.auth :as a])   dynamic, quoted
+     (:require [wagoe.user.auth :as a])   static, in an ns form
+     (wagoe.user.auth/validate token)     fully qualified, no require in sight
 
-   Neither shape occurs in the tree today, so both were latent rather than live.
-   A quoted namespace symbol in code is a reference to that namespace whichever
-   verb consumes it, so matching the symbol needs no list of verbs to keep
-   current — the same reason `namespace-owners` reads the tree instead of a
-   naming convention.
+   Anchoring on a verb — `\\((?:require|the-ns|resolve|…)\\s+'…` — missed a
+   second namespace in one require and a require whose namespace sits on the
+   next line. Requiring the quote missed both remaining shapes, and that gap had
+   a hole in it exactly where the gate could least afford one: `libs/tools` is
+   the one library the isolated-build matrix cannot cover, because its runtime
+   is Babashka rather than the JVM. A static undeclared require there passed
+   both jobs.
 
-   Keywords are not matched, which is the point: `:wagoe.observability/logger`
-   is an Integrant component key, not a namespace to load. Matching every
-   `wagoe.*` string reported 19 of 31 libraries, almost all of it component keys
-   and prose."
-  #"'\[?(wagoe\.[a-z0-9.-]+)")
+   So it matches the namespace, not its context. The lookbehind excludes a
+   preceding `:`, which is the whole reason this is usable:
+   `:wagoe.observability/logger` is an Integrant component key naming a
+   component, not a namespace to load. It also excludes a preceding word
+   character or dot, so a longer namespace is matched once rather than at every
+   internal boundary.
+
+   Strings, comments and `(comment …)` blocks are removed by `code-only` before
+   this runs. Without that, every docstring showing a require as an example is a
+   finding — matching raw text this way reported 19 of 31 libraries."
+  #"(?<![:\w.-])wagoe\.[a-z0-9-]+(?:\.[a-z0-9-]+)*")
+
+(def ^:private comment-form-re
+  "The opening of a rich `(comment …)` block."
+  #"^\(comment(?=[\s\)])")
 
 (defn code-only
-  "`text` with string literals and comments blanked out, line structure intact.
+  "`text` with strings, comments and `(comment …)` blocks blanked, lines intact.
 
    Necessary rather than fastidious. This gate reads quoted namespace symbols,
    and a docstring showing `(require '[wagoe.user.auth :as a])` as an *example*
@@ -180,29 +188,82 @@
    Blanking rather than deleting keeps line numbers and columns true, so a
    finding still points at the right line.
 
-   Character-level rather than regex, because the two constructs nest: a `;`
-   inside a string is not a comment, and a `\"` inside a comment does not open
-   one. A regex for either alone gets the other wrong."
+   Character-level rather than regex, because the constructs nest: a `;` inside
+   a string is not a comment, a quote inside a comment does not open one, and a
+   character literal is neither. A regex for any one of them gets the others
+   wrong.
+
+   The character-literal case is not hypothetical — it is how this function's
+   own file desynchronised. Clojure writes a literal double-quote as a
+   backslash followed by a quote, and a scanner that does not know that reads
+   the quote as opening a string, then treats everything up to the next one as
+   string content. This namespace contains several, so its own docstrings were
+   handed back as code and reported as findings against libs/tools.
+
+   `(comment …)` blocks go too. They are read but never evaluated, so a
+   namespace named inside one is not loaded. `libs/platform/.../ports/http.clj`
+   carries a worked example in one, referencing four `wagoe.user.*` namespaces
+   — which reached the burn-down list as a dependency platform 'has to invert',
+   with a justification written for a thing that does not happen."
   [text]
   (let [sb (StringBuilder.)]
-    (loop [chars (seq text), state :code]
+    (loop [chars (seq text), state :code, depth 0]
       (when-let [c (first chars)]
         (case state
-          :code    (cond
-                     (= c \") (do (.append sb \") (recur (rest chars) :string))
-                     (= c \;) (do (.append sb \space) (recur (rest chars) :comment))
-                     :else    (do (.append sb c) (recur (rest chars) :code)))
-          :string  (cond
-                     ;; An escaped character cannot close the string, and both
-                     ;; characters are blanked so a \" inside it cannot be read
-                     ;; as an opening quote either.
-                     (= c \\) (do (.append sb "  ") (recur (drop 2 chars) :string))
-                     (= c \") (do (.append sb \") (recur (rest chars) :code))
-                     :else    (do (.append sb (if (= c \newline) \newline \space))
-                                  (recur (rest chars) :string)))
-          :comment (if (= c \newline)
-                     (do (.append sb \newline) (recur (rest chars) :code))
-                     (do (.append sb \space) (recur (rest chars) :comment))))))
+          :code
+          (cond
+            ;; A character literal: the next character is data, whatever it is.
+            ;; Both are kept — they cannot name a namespace, and dropping them
+            ;; would shift columns.
+            (= c \\) (do (.append sb c)
+                         (when-let [n (second chars)] (.append sb n))
+                         (recur (drop 2 chars) :code depth))
+            (= c \") (do (.append sb \") (recur (rest chars) :string depth))
+            (= c \;) (do (.append sb \space) (recur (rest chars) :comment depth))
+            (and (= c \() (re-find comment-form-re (apply str (take 9 chars))))
+            (do (.append sb \space) (recur (rest chars) :discard 1))
+            :else    (do (.append sb c) (recur (rest chars) :code depth)))
+
+          :string
+          (cond
+            ;; An escaped character cannot close the string, and both are
+            ;; blanked so an escaped quote inside cannot be read as an opener.
+            (= c \\) (do (.append sb "  ") (recur (drop 2 chars) :string depth))
+            (= c \") (do (.append sb \") (recur (rest chars) :code depth))
+            :else    (do (.append sb (if (= c \newline) \newline \space))
+                         (recur (rest chars) :string depth)))
+
+          :comment
+          (if (= c \newline)
+            (do (.append sb \newline) (recur (rest chars) :code depth))
+            (do (.append sb \space) (recur (rest chars) :comment depth)))
+
+          ;; Inside a (comment …) block. Everything is blanked, but strings,
+          ;; character literals and line comments still have to be recognised —
+          ;; otherwise a paren inside one of them ends the block early and the
+          ;; rest of the file is scanned as if the example were code.
+          :discard
+          (cond
+            (= c \\) (do (.append sb "  ") (recur (drop 2 chars) :discard depth))
+            (= c \") (do (.append sb \space) (recur (rest chars) :discard-string depth))
+            (= c \;) (do (.append sb \space) (recur (rest chars) :discard-comment depth))
+            (= c \() (do (.append sb \space) (recur (rest chars) :discard (inc depth)))
+            (= c \)) (do (.append sb \space)
+                         (recur (rest chars) (if (= 1 depth) :code :discard) (dec depth)))
+            :else    (do (.append sb (if (= c \newline) \newline \space))
+                         (recur (rest chars) :discard depth)))
+
+          :discard-string
+          (cond
+            (= c \\) (do (.append sb "  ") (recur (drop 2 chars) :discard-string depth))
+            (= c \") (do (.append sb \space) (recur (rest chars) :discard depth))
+            :else    (do (.append sb (if (= c \newline) \newline \space))
+                         (recur (rest chars) :discard-string depth)))
+
+          :discard-comment
+          (if (= c \newline)
+            (do (.append sb \newline) (recur (rest chars) :discard depth))
+            (do (.append sb \space) (recur (rest chars) :discard-comment depth))))))
     (str sb)))
 
 (defn- owning-lib
@@ -224,7 +285,7 @@
   ([lib declared text path owners]
    (let [own (set (for [[ns-name owner] owners :when (= lib owner)] ns-name))]
      (for [[idx line] (map-indexed vector (str/split-lines (code-only text)))
-           [_ ns-name] (re-seq quoted-namespace-re line)
+           ns-name (re-seq namespace-reference-re line)
            :let  [top   (str/join "." (take 2 (str/split ns-name #"\.")))
                   owner (owning-lib owners ns-name)]
            :when (not (contains? own top))

@@ -75,10 +75,6 @@
    :why "BOU-307. Same optional-devtools shape as the dashboard middleware."}
   {:lib "platform"  :namespace "wagoe.i18n.shell.middleware"
    :why "BOU-307. Same optional-feature shape, for translations."}
-  {:lib "platform"  :namespace "wagoe.user.shell.handlers"
-   :why "BOU-307. platform reaches into the user library's HTTP handlers, and
-         cannot declare it — user depends on platform, so declaring would close a
-         cycle. This one has to be inverted, not declared."}
 
   ;; ==========================================================================
   ;; test-support — application test scaffolding

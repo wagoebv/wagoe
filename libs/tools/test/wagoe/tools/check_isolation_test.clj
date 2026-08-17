@@ -90,6 +90,67 @@
     (testing "and declaring the dependency clears it"
       (is (empty? (sut/smuggle-findings "realtime" #{"user"} text "jwt_adapter.clj"))))))
 
+(deftest ^:unit a-static-require-counts-even-though-it-is-not-dynamic
+  ;; Review finding. The gate read quoted symbols only, on the reasoning that
+  ;; the isolated-build matrix covers static requires. That reasoning has a hole
+  ;; in exactly one place, and it is the place it can least afford: `libs/tools`
+  ;; is excluded from the matrix, because its runtime is Babashka rather than
+  ;; the JVM. A normal undeclared `:require` there passed both jobs.
+  (testing "an ns-form require of another library is a finding"
+    (let [[f] (sut/smuggle-findings
+               "tools" #{}
+               "(ns wagoe.tools.x\n  (:require [wagoe.user.shell.auth :as a]))"
+               "x.clj")]
+      (is (= "wagoe.user.shell.auth" (:namespace f)))
+      (is (= 2 (:line f)))))
+
+  (testing "a fully qualified call is a finding too"
+    ;; No require in sight, and still a dependency.
+    (is (= ["wagoe.user.shell.auth"]
+           (map :namespace (sut/smuggle-findings
+                            "tools" #{} "(wagoe.user.shell.auth/validate token)" "x.clj")))))
+
+  (testing "and declaring it clears both"
+    (is (empty? (sut/smuggle-findings
+                 "tools" #{"user"}
+                 "(ns x (:require [wagoe.user.shell.auth :as a]))\n(wagoe.user.shell.auth/v 1)"
+                 "x.clj")))))
+
+(deftest ^:unit code-only-does-not-lose-track-of-the-file
+  ;; Both of these desynchronised the scanner, and both were found by the gate
+  ;; reporting things that were not there.
+  (testing "a character literal is not the start of a string"
+    ;; Clojure writes a literal double-quote as backslash-quote. Read as an
+    ;; opening quote, everything after it becomes 'string' and the rest of the
+    ;; file is scanned wrong — which is how this namespace's own docstrings were
+    ;; handed back as code and reported against libs/tools.
+    (let [text (str "(defn f [] (= c \\\" ))\n"
+                    "(defn g \"doc: (require '[wagoe.user.indoc :as d])\" [] nil)\n"
+                    "(require '[wagoe.user.real :as r])\n")]
+      (is (= ["wagoe.user.real"]
+             (map :namespace (sut/smuggle-findings "tools" #{} text "x.clj"))))))
+
+  (testing "a (comment …) block is read but never evaluated"
+    ;; platform's ports/http.clj carries a worked example in one, naming four
+    ;; wagoe.user namespaces. They reached the burn-down list as a dependency
+    ;; platform 'has to invert', with a justification written for something that
+    ;; does not happen.
+    (is (empty? (sut/smuggle-findings
+                 "platform" #{}
+                 (str "(comment\n"
+                      "  (def routes [{:handler 'wagoe.user.shell.handlers/list}])\n"
+                      "  (def s wagoe.user.schema/Query))\n")
+                 "http.clj"))))
+
+  (testing "a paren inside a string does not end the block early"
+    ;; If it did, everything after the example would be scanned as code again.
+    (is (empty? (sut/smuggle-findings
+                 "platform" #{}
+                 (str "(comment\n"
+                      "  (println \")\")\n"
+                      "  wagoe.user.after/thing)\n")
+                 "http.clj")))))
+
 (deftest ^:unit every-loading-trick-is-covered
   ;; Each of these appears in the tree. Matching only `require` would leave the
   ;; other three as the way round the gate — and a gate with a documented way
@@ -216,7 +277,13 @@
     (testing "the exclusions are deliberate, not a gap"
       ;; tools' runtime is bb, not the JVM; e2e has no src/. Named rather than
       ;; counted, so a third exclusion has to be a decision.
-      (is (= #{"tools" "e2e"} (set (remove in-ci (sut/libs))))))))
+      (is (= #{"tools" "e2e"} (set (remove in-ci (sut/libs))))))
+
+    (testing "and tools, which cannot be a cell, is loaded in isolation anyway"
+      ;; It is the one library with no matrix cell, so without this step its
+      ;; isolation rests entirely on the static gate.
+      (is (str/includes? yaml "bb --classpath src -e")
+          "the check-isolation job must still load libs/tools against its own src"))))
 
 (deftest ^:unit the-known-offender-is-still-detected
   ;; Guards the gate against being quietly narrowed until it reports nothing.
