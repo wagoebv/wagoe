@@ -1,0 +1,78 @@
+;; Exemptions for `bb check:ports`.
+;;
+;; `:allow-cross-module-shell` is a BURN-DOWN LIST. Each entry names a target
+;; prefix that shell namespaces in other modules currently reach into, and says
+;; why that is tolerated for now.
+;;
+;; By prefix rather than by call site on purpose: 43 sites reach into 8 target
+;; groups, and listing them one by one would hide that these are eight
+;; decisions, not forty-three. Every entry MUST carry a `:why` — the gate throws
+;; on one without it rather than honouring it (BOU-250).
+;;
+;; Composition roots — `*.shell.module-wiring`, `*.shell.system.wiring`,
+;; `*.shell.cli-entry`, `*.shell.boot` — are exempt in code, not here. Wiring is
+;; the one job that has to name concrete implementations.
+
+{:allow-cross-module-shell
+ [;; ==========================================================================
+  ;; BOU-303 (M3) — platform has no database port
+  ;; ==========================================================================
+  ;; The largest group by far, and the one the ticket for this gate named. Every
+  ;; module's persistence layer reaches straight into platform's JDBC adapters
+  ;; because there is nothing else to reach for. A port closes all 20 at once.
+  {:target-prefix "wagoe.platform.shell.adapters.database"
+   :why "BOU-303. 20 sites across tenant, user, admin, workflow and devtools.
+         platform exposes no database port, so a module's persistence layer has
+         no sanctioned way to reach a connection. Clears when the port lands."}
+
+  ;; ==========================================================================
+  ;; Framework building blocks that live under shell/ but are not implementations
+  ;; ==========================================================================
+  ;; These are pipeline pieces every module composes into its own persistence and
+  ;; service layers. Reaching for them is not reaching into platform's business
+  ;; logic — platform has none. The honest fix is that they do not belong under
+  ;; `shell/`, which is a rename, not a redesign.
+  {:target-prefix "wagoe.platform.shell.persistence-interceptors"
+   :why "BOU-307 follow-up. 6 sites. An interceptor pipeline every module's
+         persistence composes; not an implementation of platform's own. Wrongly
+         placed under shell/ rather than wrongly used — moving it is a rename
+         with its own ticket."}
+  {:target-prefix "wagoe.platform.shell.service-interceptors"
+   :why "BOU-307 follow-up. 4 sites. Same shape as persistence-interceptors."}
+  {:target-prefix "wagoe.platform.shell.interceptors"
+   :why "BOU-307 follow-up. 1 site (user.shell.interceptors). Same shape."}
+
+  ;; ==========================================================================
+  ;; i18n — rendering infrastructure, used by every UI-bearing module
+  ;; ==========================================================================
+  {:target-prefix "wagoe.i18n.shell.render"
+   :why "BOU-307 follow-up. 4 sites (admin, search, user, workflow). Resolving
+         [:t :key] markers in a Hiccup tree is infrastructure every UI module
+         needs, and i18n exposes it nowhere else. Needs a port or a non-shell
+         home; the marker convention is ADR-013 and not in question."}
+  {:target-prefix "wagoe.i18n.shell.middleware"
+   :why "BOU-307 follow-up. 4 sites, same modules. The Ring middleware that puts
+         the translation fn on the request. Same decision as render."}
+
+  ;; ==========================================================================
+  ;; Genuine cross-feature coupling — the ones that are actually wrong
+  ;; ==========================================================================
+  {:target-prefix "wagoe.user.shell.middleware"
+   :why "BOU-307 follow-up. 2 sites (admin, workflow) reaching into the user
+         module's auth middleware. This is a feature library depending on
+         another feature library's shell — the shape this gate exists to catch.
+         Needs an auth port, and is the first entry to burn down."}
+  {:target-prefix "wagoe.platform.shell.web.table"
+   :why "BOU-307 follow-up. 1 site (user.shell.web-handlers). A Hiccup table
+         helper; same placement question as the interceptors."}
+
+  ;; ==========================================================================
+  ;; Bridging adapter — deliberate, and declared
+  ;; ==========================================================================
+  {:target-prefix "wagoe.external.shell.adapters.smtp"
+   :why "email's SMTP adapter exists to bridge its Email domain model onto
+         external's raw javax.mail transport, and constructing that transport
+         means naming it. It talks to wagoe.external.ports for everything else
+         and declares wagoe/external in deps.edn. Closing this properly means
+         external exposing a constructor through its ports — worth doing, not
+         urgent."}]}

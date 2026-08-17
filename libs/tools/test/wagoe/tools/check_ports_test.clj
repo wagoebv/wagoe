@@ -57,6 +57,110 @@
                "wagoe.license.billing.core.invoice"
                ["wagoe.license.catalog.shell.service"]))))
 
+(deftest ^:unit cross-module-covers-any-foreign-shell-namespace
+  ;; BOU-307. The rule matched exactly two suffixes — `.shell.persistence` and
+  ;; `.shell.service` — and every real coupling in the tree went around it:
+  ;; database adapters, i18n render, auth middleware. Named suffixes cannot keep
+  ;; up with names.
+  (testing "an adapter is as much a reach into another module as a service is"
+    (is (seq (ports/cross-module-violations
+              "wagoe.tenant.shell.persistence"
+              ["wagoe.platform.shell.adapters.database.protocols"]))))
+
+  (testing "so is middleware, and a render helper"
+    (is (seq (ports/cross-module-violations
+              "wagoe.admin.shell.http" ["wagoe.user.shell.middleware"])))
+    (is (seq (ports/cross-module-violations
+              "wagoe.admin.shell.http.support" ["wagoe.i18n.shell.render"]))))
+
+  (testing "a foreign core or ports namespace is not a violation"
+    ;; Ports are the sanctioned way across a module boundary, and core is pure.
+    (is (empty? (ports/cross-module-violations
+                 "wagoe.tenant.shell.persistence"
+                 ["wagoe.platform.ports" "wagoe.core.utils.type-conversion"])))))
+
+(deftest ^:unit a-composition-root-may-name-implementations
+  ;; Wiring is the one job that has to know concrete types. Flagging it would
+  ;; report 39 of the 62 cross-module requires in this tree — every adapter the
+  ;; system wiring assembles — and an allowlist that large stops being read.
+  (testing "module wiring and system wiring are exempt"
+    (is (empty? (ports/cross-module-violations
+                 "wagoe.platform.shell.system.wiring"
+                 ["wagoe.observability.logging.shell.adapters.stdout"])))
+    (is (empty? (ports/cross-module-violations
+                 "wagoe.user.shell.module-wiring"
+                 ["wagoe.platform.shell.adapters.database.factory"]))))
+
+  (testing "so are entry points, which compose to boot"
+    (is (empty? (ports/cross-module-violations
+                 "wagoe.user.shell.cli-entry"
+                 ["wagoe.platform.shell.adapters.database.factory"]))))
+
+  (testing "an ordinary shell namespace is not exempt for having 'wiring' nearby"
+    ;; The exemption is the namespace's job, not a substring anywhere in it.
+    (is (seq (ports/cross-module-violations
+              "wagoe.tenant.shell.wiring-helpers"
+              ["wagoe.platform.shell.adapters.database.config"])))))
+
+(deftest ^:unit an-exemption-covers-a-target-prefix-and-must-say-why
+  ;; 43 sites reach into 8 target groups. Exempting per site would make the list
+  ;; unreadable and hide that they are eight decisions, not forty-three.
+  (testing "a prefix entry exempts everything under it"
+    (let [allow (ports/parse-shell-allowlist
+                 {:allow-cross-module-shell
+                  [{:target-prefix "wagoe.platform.shell.adapters.database"
+                    :why "BOU-303 — platform has no database port yet."}]})]
+      (is (ports/shell-target-allowed? allow "wagoe.platform.shell.adapters.database.protocols"))
+      (is (ports/shell-target-allowed? allow "wagoe.platform.shell.adapters.database.common.core"))
+      (is (not (ports/shell-target-allowed? allow "wagoe.user.shell.middleware")))))
+
+  (testing "an entry without :why is rejected, not honoured"
+    (is (thrown? clojure.lang.ExceptionInfo
+                 (ports/parse-shell-allowlist
+                  {:allow-cross-module-shell [{:target-prefix "wagoe.platform.shell"}]}))))
+
+  (testing "and so is a typo in the :target-prefix key"
+    ;; It used to yield #{nil}, and the nil only surfaced as an NPE from
+    ;; starts-with? once some finding existed to test against — so a repo with
+    ;; none passed green on a structurally broken allowlist.
+    (is (thrown? clojure.lang.ExceptionInfo
+                 (ports/parse-shell-allowlist
+                  {:allow-cross-module-shell [{:targt-prefix "x" :why "typo in the key"}]})))))
+
+(deftest ^:unit a-generated-project-passes-without-an-allowlist-file
+  ;; A scaffolded project ships no .wagoe/check-ports.edn, and its persistence
+  ;; layer requires platform's database adapters because platform exposes no
+  ;; port. Failing `bb check` on a freshly scaffolded module for a gap in the
+  ;; framework is the BOU-267 shape — and it is what the first-run smoke caught
+  ;; when this rule was broadened without the builtins.
+  (testing "the framework gaps a generated project cannot close are built in"
+    (doseq [req ["wagoe.platform.shell.adapters.database.common.core"
+                 "wagoe.platform.shell.persistence-interceptors"
+                 "wagoe.i18n.shell.render"]]
+      (is (ports/shell-target-allowed? ports/builtin-allow-cross-module-shell req)
+          (str req " must not fail a scaffolded project"))))
+
+  (testing "this repository's own couplings are not built in"
+    ;; They belong on the burn-down list, where they can be seen and removed.
+    (doseq [req ["wagoe.user.shell.middleware"
+                 "wagoe.external.shell.adapters.smtp"]]
+      (is (not (ports/shell-target-allowed? ports/builtin-allow-cross-module-shell req))))))
+
+(deftest ^:unit an-exemption-that-stops-exempting-is-reported
+  ;; Without this the list is a drawer. A prefix is worse than a per-site
+  ;; exemption when it goes stale, because it pre-approves the next module that
+  ;; reaches for the same target.
+  (testing "a prefix with nothing left under it is stale"
+    (is (= ["wagoe.gone.shell"]
+           (ports/stale-shell-exemptions
+            #{"wagoe.user.shell.middleware" "wagoe.gone.shell"}
+            ["wagoe.user.shell.middleware"]))))
+
+  (testing "a prefix still covering something is not"
+    (is (empty? (ports/stale-shell-exemptions
+                 #{"wagoe.platform.shell.adapters.database"}
+                 ["wagoe.platform.shell.adapters.database.protocols"])))))
+
 ;; ---------------------------------------------------------------------------
 ;; Rule 3 — web layer requiring persistence
 ;; ---------------------------------------------------------------------------

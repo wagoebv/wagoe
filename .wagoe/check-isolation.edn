@@ -1,8 +1,16 @@
 ;; Exemptions for `bb check:isolation`.
 ;;
-;; This file is a BURN-DOWN LIST, not a drawer. Every entry is a library that
-;; loads a namespace it does not declare — which works in the monorepo and
-;; throws for anyone who takes that library off Clojars. Each one has a ticket.
+;; Every entry is a library that loads a namespace it does not declare. Two
+;; kinds live here, and the :why says which:
+;;
+;;   TO FIX  — works in the monorepo and throws for anyone who takes the library
+;;             off Clojars. Has a ticket.
+;;   BY DESIGN — deliberate late binding for an optional companion library. The
+;;             call site carries the same reason inline, and the feature
+;;             degrades rather than failing when the companion is absent.
+;;
+;; An entry that stops exempting anything fails the build either way, so neither
+;; kind can quietly outlive its reason.
 ;;
 ;; Every entry MUST carry a `:why`. The gate rejects one without it rather than
 ;; honouring it: an exemption with no stated reason cannot be burnt down, and is
@@ -29,31 +37,34 @@
   ;; Real cross-library coupling, dynamically loaded, none of it declared. Each
   ;; needs the same decision: declare it, or invert it behind a port.
   {:lib "email"     :namespace "wagoe.jobs.ports"
-   :why "BOU-307. Reaches into the jobs library's ports to enqueue sending.
-         Candidate for declaring — email genuinely wants a job queue."}
+   :why "BY DESIGN. Optional companion: email sends synchronously when no job
+         queue is wired, and enqueues when one is. Declaring wagoe/jobs would
+         make a queue mandatory for anyone sending mail. Documented at both call
+         sites in jobs_integration.clj."}
   {:lib "reports"   :namespace "wagoe.jobs.ports"
-   :why "BOU-307. Same shape as email's."}
+   :why "BY DESIGN. Same optional-companion shape as email's."}
   {:lib "workflow"  :namespace "wagoe.jobs.ports"
-   :why "BOU-307. Same shape as email's."}
+   :why "BY DESIGN. Same optional-companion shape as email's."}
   {:lib "workflow"  :namespace "wagoe.jobs.core.job"
-   :why "BOU-307. Reaches past the jobs library's ports into its core, so this one
-         is a layering question as well as a dependency one."}
+   :why "TO FIX. BOU-307 follow-up. Optional-companion binding like the others, but it
+         reaches past the jobs ports into its core — a layering question on top of
+         the dependency one. jobs should expose what workflow needs on its port."}
 
   {:lib "platform"  :namespace "wagoe.devtools.shell.dashboard.middleware"
-   :why "BOU-307. platform loads devtools middleware when present. Optional-feature
-         shape: the right answer is probably a port the application wires, since a
-         production project should not carry devtools."}
+   :why "BY DESIGN. Dev-only: the branch is behind (= :dev profile) and degrades to no
+         enrichment when devtools is absent. Documented inline in routes.clj."}
   {:lib "platform"  :namespace "wagoe.devtools.shell.http-error-middleware"
-   :why "BOU-307. Same optional-devtools shape as the dashboard middleware."}
+   :why "BY DESIGN. Same dev-only shape as the dashboard middleware."}
   {:lib "platform"  :namespace "wagoe.i18n.shell.middleware"
-   :why "BOU-307. Same optional-feature shape, for translations."}
+   :why "TO FIX. BOU-131 deprecation path — the call site logs that wiring :i18n here is
+         deprecated and builds the middleware anyway. Clears when that argument goes."}
 
   ;; ==========================================================================
   ;; test-support — application test scaffolding
   ;; ==========================================================================
   {:lib "platform"  :namespace "wagoe.test-support.shell.handler"
-   :why "BOU-307. Loads the application's test-support namespace, which ships in no
-         library. Same class as wagoe.config: a downstream project has nothing to
-         resolve. Lower priority because the call sites are test-only paths."}
+   :why "TO FIX. Loads an application namespace that ships in no library — the same shape
+         wagoe.config had before BOU-306. Survivable only because the branch is
+         behind a flag that throws outside :test and :dev."}
   {:lib "platform"  :namespace "wagoe.test-support.shell.reset"
-   :why "BOU-307. Same as the test-support handler above."}]}
+   :why "TO FIX. Same as the test-support handler above."}]}

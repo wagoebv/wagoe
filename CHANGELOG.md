@@ -82,6 +82,23 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Changed
 
+- **`check:ports` catches any reach into another module's shell, not two named
+  suffixes** (BOU-307). The rule matched exactly `.shell.persistence` and
+  `.shell.service`, and every real coupling in the tree went around it —
+  database adapters, i18n render helpers, auth middleware. It now flags any
+  foreign `*.shell.*` require, with composition roots exempt in code, because
+  wiring is the one job that has to name concrete implementations; without that
+  exemption 39 of the 62 cross-module requires would be the system assembling
+  its own adapters. `.wagoe/check-ports.edn` gains
+  `:allow-cross-module-shell`, a burn-down list of 9 target prefixes — one entry
+  per decision rather than one per call site — each with a mandatory
+  `:target-prefix` and `:why`, and each reported when it stops exempting
+  anything. A malformed allowlist now throws instead of being read as empty.
+  Framework gaps a downstream project cannot close — platform's database
+  adapters, its interceptor pipelines, i18n's render helpers — are exempt
+  everywhere rather than by file, so `bb check` still passes on a freshly
+  scaffolded module.
+
 - **The monorepo's `wagoe.config` is now `wagoe.system-config`, and `wagoe new`
   generates `system_config.clj`** (BOU-306). Assembling an Integrant system is
   an application's decision, and the name now says so — but the practical reason

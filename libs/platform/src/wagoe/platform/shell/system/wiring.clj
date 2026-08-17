@@ -144,6 +144,13 @@
         (throw (ex-info "test/reset endpoint cannot be enabled outside :test/:dev"
                         {:profile profile
                          :flag    :test/reset-endpoint-enabled?}))))
+    ;; Resolved rather than required: wagoe.test-support lives in the
+    ;; application, not in any library, so platform cannot declare it and a
+    ;; downstream project has nothing to resolve. That is only survivable
+    ;; because this whole branch is behind a flag that throws outside :test and
+    ;; :dev. It is the same shape wagoe.config had before BOU-306, and the
+    ;; honest fix is the same: a small published library, or the application
+    ;; passing its own handler in.
     (let [make-handler (requiring-resolve 'wagoe.test-support.shell.handler/make-reset-handler)
           truncate!    (requiring-resolve 'wagoe.test-support.shell.reset/truncate-all!)
           seed!        (requiring-resolve 'wagoe.test-support.shell.reset/seed-baseline!)
