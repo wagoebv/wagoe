@@ -109,6 +109,16 @@
     :scope :monorepo
     :label "Changelog covers shipped source"
     :cmd   ["bb" "check:changelog"]}
+   ;; "30 independently publishable libraries" was documented and never
+   ;; checked. The CI matrix job compiles each library against its own
+   ;; deps.edn; this catches what a compile cannot see, which turned out to be
+   ;; the part that matters — 30 of 31 compile clean, `realtime` among them,
+   ;; while realtime's require sits in a try/catch that swallows the failure
+   ;; (BOU-304). :monorepo because a generated project has no libs/ to isolate.
+   {:id    :isolation
+    :scope :monorepo
+    :label "Libraries declare what they load"
+    :cmd   ["bb" "check:isolation"]}
    {:id    :agents
     :scope :monorepo
     :label "AGENTS.md drift"

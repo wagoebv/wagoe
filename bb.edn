@@ -33,6 +33,7 @@
              [wagoe.tools.check-doc-counts :as check-doc-counts]
              [wagoe.tools.check-changelog :as check-changelog]
              [wagoe.tools.check-versions :as check-versions]
+             [wagoe.tools.check-isolation :as check-isolation]
              [wagoe.tools.bump        :as bump]
              [check-no-boundary :as check-no-boundary]  ; lives under scripts/, outside the renamed tree
              [wagoe.tools.doctor-env  :as doctor-env]
@@ -84,6 +85,8 @@
                   :task (check-versions/-main)}
   bump          {:doc "Rewrite the suite version everywhere check:versions looks (bb bump <version> [--dry-run])"
                  :task (apply bump/-main *command-line-args*)}
+  check:isolation {:doc "No library may load a namespace it neither owns nor declares (bb check:isolation)"
+                   :task (check-isolation/-main)}
   check-links   {:doc "Validate local links in AGENTS.md and the AsciiDoc docs (dev-docs/ + docs/)"
                  :task (dev/check-links)}
   agents:gen    {:doc "Generate AGENTS.md + AGENTS.md.tmpl from resources/agents/knowledge.edn (bb agents:gen [--check])"

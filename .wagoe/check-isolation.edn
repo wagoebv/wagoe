@@ -1,0 +1,87 @@
+;; Exemptions for `bb check:isolation`.
+;;
+;; This file is a BURN-DOWN LIST, not a drawer. Every entry is a library that
+;; loads a namespace it does not declare — which works in the monorepo and
+;; throws for anyone who takes that library off Clojars. Each one has a ticket.
+;;
+;; Every entry MUST carry a `:why`. The gate rejects one without it rather than
+;; honouring it: an exemption with no stated reason cannot be burnt down, and is
+;; indistinguishable from an unfixed bug (BOU-250). An entry that stops exempting
+;; anything also fails the build — left in place it is a pre-approval for the
+;; next regression of the same shape.
+;;
+;; Before adding an entry, the alternatives are usually right:
+;;
+;;   * Declare the dependency in the library's deps.edn, as
+;;     `wagoe/<lib> {:local/root "../<lib>"}`. Honest, and correct whenever the
+;;     coupling is real and wanted.
+;;   * Invert it behind a port the application wires up. Correct when the
+;;     library should not carry the weight of the other one — realtime should
+;;     not drag in auth, MFA and persistence to verify a token.
+;;
+;; `:namespace :any` exempts a library's whole surface. It is for a library
+;; whose runtime is not the JVM, not for one with a lot of work outstanding.
+
+{:allow
+ [;; ==========================================================================
+  ;; BOU-306 — wagoe.config is application code, not a library
+  ;; ==========================================================================
+  ;; The worst of the three groups: `wagoe.config` lives in the application, so
+  ;; a downstream user has no such namespace at all. Four published libraries
+  ;; resolve it at runtime.
+  {:lib "ai"        :namespace "wagoe.config"
+   :why "BOU-306. Resolves the application's config namespace, which no downstream
+         project has. Clears when wagoe.config becomes a published library."}
+  {:lib "devtools"  :namespace "wagoe.config"
+   :why "BOU-306. Same as ai — the application's config namespace, resolved at
+         runtime from a published library."}
+  {:lib "platform"  :namespace "wagoe.config"
+   :why "BOU-306. Three sites. platform is the library most projects depend on
+         first, so this is the one that breaks a new project earliest."}
+  {:lib "user"      :namespace "wagoe.config"
+   :why "BOU-306. Three sites, same shape as platform's."}
+
+  ;; ==========================================================================
+  ;; BOU-305 — realtime's smuggled auth dependency
+  ;; ==========================================================================
+  {:lib "realtime"  :namespace "wagoe.user.shell.auth"
+   :why "BOU-305. The case this gate was built to catch: jwt_adapter.clj requires
+         it inside a try/catch, so the library compiles clean in isolation and
+         throws on first JWT verification from Clojars. The ns docstring claims it
+         'avoids direct dependency' — it avoids the declaration, not the
+         dependency."}
+
+  ;; ==========================================================================
+  ;; BOU-307 — the remaining dynamic-resolve sites
+  ;; ==========================================================================
+  ;; Real cross-library coupling, dynamically loaded, none of it declared. Each
+  ;; needs the same decision: declare it, or invert it behind a port.
+  {:lib "email"     :namespace "wagoe.jobs.ports"
+   :why "BOU-307. Reaches into the jobs library's ports to enqueue sending.
+         Candidate for declaring — email genuinely wants a job queue."}
+  {:lib "reports"   :namespace "wagoe.jobs.ports"
+   :why "BOU-307. Same shape as email's."}
+  {:lib "workflow"  :namespace "wagoe.jobs.ports"
+   :why "BOU-307. Same shape as email's."}
+  {:lib "workflow"  :namespace "wagoe.jobs.core.job"
+   :why "BOU-307. Reaches past the jobs library's ports into its core, so this one
+         is a layering question as well as a dependency one."}
+
+  {:lib "platform"  :namespace "wagoe.devtools.shell.dashboard.middleware"
+   :why "BOU-307. platform loads devtools middleware when present. Optional-feature
+         shape: the right answer is probably a port the application wires, since a
+         production project should not carry devtools."}
+  {:lib "platform"  :namespace "wagoe.devtools.shell.http-error-middleware"
+   :why "BOU-307. Same optional-devtools shape as the dashboard middleware."}
+  {:lib "platform"  :namespace "wagoe.i18n.shell.middleware"
+   :why "BOU-307. Same optional-feature shape, for translations."}
+
+  ;; ==========================================================================
+  ;; test-support — application test scaffolding
+  ;; ==========================================================================
+  {:lib "platform"  :namespace "wagoe.test-support.shell.handler"
+   :why "BOU-307. Loads the application's test-support namespace, which ships in no
+         library. Same class as wagoe.config: a downstream project has nothing to
+         resolve. Lower priority because the call sites are test-only paths."}
+  {:lib "platform"  :namespace "wagoe.test-support.shell.reset"
+   :why "BOU-307. Same as the test-support handler above."}]}
