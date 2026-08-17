@@ -11,6 +11,8 @@
    in scope for the mutation and out of scope for the verification. A step that
    can silently do nothing, checked by nothing, is how a page drifts that far."
   (:require [clojure.test :refer [deftest is testing]]
+            [clojure.string :as str]
+            [wagoe.tools.bump :as bump]
             [wagoe.tools.check-versions :as sut]))
 
 ;; =============================================================================
@@ -101,6 +103,74 @@
                       "\n"
                       "Unrelated paragraph:\n\n"
                       "bbin install https://github.com/someone/else --tag v3.2.1\n"))))))
+
+;; =============================================================================
+;; Both rules, on a line that carries more than one match
+;; =============================================================================
+
+(deftest ^:unit a-second-match-on-the-same-line-is-not-lost
+  ;; Found reviewing BOU-317 after it merged. The source scanner reads every
+  ;; match on a line (`matches-in` uses re-seq); this one read the first
+  ;; (`re-find`). A README that writes two coordinates on one line — which is
+  ;; ordinary Clojure formatting — was therefore gated on its first coordinate
+  ;; only.
+  ;;
+  ;; The consequence is worse than a plain miss, because `bb bump` rewrites what
+  ;; this function discovers: the second coordinate stays stale, and the
+  ;; verification afterwards passes, because the check has the identical blind
+  ;; spot. Both halves agree with each other while both are wrong — which is the
+  ;; failure mode this whole epic is about.
+  (testing "two coordinates on one line are two findings"
+    (let [fs* (sut/doc-version-findings
+               "README.md"
+               (str "{:deps {com.wagoe/wagoe-core {:mvn/version \"1.0.1-alpha-42\"} "
+                    "com.wagoe/wagoe-user {:mvn/version \"1.0.1-alpha-42\"}}}\n"))]
+      (is (= 2 (count fs*)))
+      (is (= ["wagoe-core" "wagoe-user"]
+             (map #(second (re-find #"com\.wagoe/([a-z0-9-]+)" (:excerpt %))) fs*)))))
+
+  (testing "and the bump rewrites both, not just the first"
+    (let [line     (str "{:deps {com.wagoe/wagoe-core {:mvn/version \"1.0.1-alpha-42\"} "
+                        "com.wagoe/wagoe-user {:mvn/version \"1.0.1-alpha-42\"}}}\n")
+          findings (sut/doc-version-findings "README.md" line)]
+      (is (not (str/includes? (bump/rewrite line findings "1.0.0-beta-5")
+                              "1.0.1-alpha-42"))))))
+
+;; =============================================================================
+;; Rule 2, continued — whose tag is it
+;; =============================================================================
+
+(deftest ^:unit a-tag-belongs-to-the-install-command-above-it
+  ;; Also found reviewing BOU-317 after it merged, and the more dangerous of the
+  ;; two. `--tag` was scoped to the blank-line block, so one install command for
+  ;; this repository made *every* --tag in that block ours. AGENTS.md already
+  ;; writes two `bbin install` lines with no blank line between them; add a
+  ;; wagoe install to such a block and `bb bump` would rewrite someone else's
+  ;; tool to our version, breaking the documented command.
+  ;;
+  ;; That is precisely the collateral damage BOU-316 removed from the sed, so it
+  ;; must not come back through the scanner.
+  (testing "a third party's tag beneath ours is not ours"
+    (let [fs* (sut/doc-version-findings
+               "AGENTS.md"
+               (str "bbin install https://github.com/wagoebv/wagoe --tag v1.0.0-beta-5 --as wagoe\n"
+                    "bbin install https://github.com/bhauman/clojure-mcp-light.git"
+                    " --tag v0.2.2 --as clj-nrepl-eval\n"))]
+      (is (= ["1.0.0-beta-5"] (map :version fs*))
+          "v0.2.2 belongs to clojure-mcp-light, and rewriting it breaks the command")))
+
+  (testing "our tag still counts when the install spans lines"
+    ;; The reason the rule was block-scoped in the first place: the URL and the
+    ;; --tag are different lines of one command.
+    (is (= ["1.0.0-beta-5"]
+           (map :version (sut/doc-version-findings
+                          "cli.adoc"
+                          (str "bbin install https://github.com/wagoebv/wagoe \\\n"
+                               "  --tag v1.0.0-beta-5 \\\n"
+                               "  --as wagoe\n"))))))
+
+  (testing "a tag with no install command above it is nobody's"
+    (is (empty? (sut/doc-version-findings "x.adoc" "  --tag v9.9.9\n")))))
 
 ;; =============================================================================
 ;; Rule 3 — prose that pins a version

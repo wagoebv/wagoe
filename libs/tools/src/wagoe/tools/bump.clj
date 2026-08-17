@@ -164,8 +164,12 @@
 
         :else
         (do
-          (doseq [[path content] p]
-            (spit (fs/file root-dir path) content))
+          ;; Only the files that differ. Writing all 58 identical-content files
+          ;; back would touch their mtimes, which makes every downstream tool
+          ;; that watches timestamps — build caches, editors, `make` — think the
+          ;; whole tree moved.
+          (doseq [path changed]
+            (spit (fs/file root-dir path) (get p path)))
           (println (str (count changed) " file(s) changed:"))
           (doseq [f changed] (println (str "  " f)))
           (println)
