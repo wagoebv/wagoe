@@ -686,9 +686,20 @@
 
   (testing "the gate reads the real tree, not an empty library list"
     ;; The BOU-250 shape: a live check scanning nothing reports clean forever.
+    ;;
+    ;; Deliberately not `(seq (all-findings))`. That would prove discovery works
+    ;; by asserting the repository is still broken — so it goes red the day
+    ;; BOU-305/306/307 finish, and the cheapest fix at that point is deleting
+    ;; the only proof this gate can fire. Discovery is asserted against things
+    ;; that stay true after the burn-down: libraries are found, their source is
+    ;; read, and their declarations parse.
     (is (<= 30 (count (check-isolation/libs))))
-    (is (seq (check-isolation/all-findings))
-        "the burn-down list is not empty yet, so the scan must be finding it"))
+    (is (seq (check-isolation/namespaces-of "platform"))
+        "the scan reaches real source files")
+    (is (contains? (check-isolation/declared-deps "user") "platform")
+        "and reads real deps.edn declarations — this returned #{} for every
+         library while it looked for the published coordinate rather than the
+         :local/root one, which made the whole 'nor declares' half inert"))
 
   (testing "every finding in the tree is on the burn-down list"
     (is (empty? (check-isolation/unexplained-findings)))))

@@ -399,10 +399,15 @@ jobs:
   # test suite: it is a fraction of the runtime, and the tests would not add
   # coverage of the smuggling — check-isolation above is what catches that.
   #
-  # `libs/tools` is excluded because its runtime is Babashka, not the JVM:
-  # babashka.process and babashka.fs are built into bb and are not Maven
-  # dependencies, so `clojure -M` cannot load it by design. `bb test:tools` is
-  # what exercises it.
+  # Two of the 31 libraries are not cells. `libs/tools` because its runtime is
+  # Babashka, not the JVM: babashka.process and babashka.fs are built into bb and
+  # are not Maven dependencies, so `clojure -M` cannot load it by design —
+  # `bb test:tools` is what exercises it. `libs/e2e` because it has no src/ at
+  # all, only tests.
+  #
+  # The list below is checked against the tree by `matrix-covers-every-library`
+  # in check_isolation_test.clj: a library added under libs/ without a cell here
+  # fails that test rather than silently going unbuilt.
   # =============================================================================
   check-isolation-matrix:
     name: Isolated Build (${{ matrix.lib }})
@@ -420,20 +425,22 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Setup Clojure
+      # The composite action rather than a hand-rolled setup-clojure + cache.
+      # It carries the v2 cache key — the un-versioned one it replaced was
+      # poisoned by whichever job with the smallest dependency tree won the save
+      # race, and 29 cells racing to write it would re-mint that stub — and it
+      # prefetches serially, which is what avoids the Maven concurrent-resolution
+      # crash and retries Maven Central's 429s. Without it, a rate-limited cell
+      # fails under an innocent library's name (#211, #329, BOU-250).
+      - name: Setup Clojure + restore deps
+        uses: ./.github/actions/clojure-deps
+        with:
+          aliases: -M:test
+
+      - name: Setup Babashka
         uses: DeLaGuardo/setup-clojure@13.6.1
         with:
-          cli: 1.12.5.1654
           bb: latest
-
-      - name: Restore dependency cache
-        uses: actions/cache@v5
-        with:
-          path: |
-            ~/.m2/repository
-            ~/.gitlibs
-          key: ${{ runner.os }}-clojure-${{ hashFiles('**/deps.edn') }}
-          restore-keys: ${{ runner.os }}-clojure-
 
       # Requires every namespace the library ships, from the library's own
       # directory, so the classpath is its deps.edn and nothing else.

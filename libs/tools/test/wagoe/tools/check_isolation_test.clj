@@ -178,9 +178,45 @@
     ;; allowlist, and BOU-305/306/307 empty it. Asserting that findings and
     ;; allowlist agree is what makes the list a burn-down rather than a drawer.
     (let [unexplained (sut/unexplained-findings)]
+      ;; :lib* is the library doing the smuggling; :lib is the one that owns the
+      ;; namespace. Reporting :lib here sent the reader to the wrong library.
       (is (empty? unexplained)
           (str "smuggled dependencies with no allowlist entry: "
-               (pr-str (map (juxt :lib :namespace) unexplained)))))))
+               (pr-str (map (juxt :lib* :namespace) unexplained)))))))
+
+(deftest ^:unit matrix-covers-every-library
+  ;; The isolated-build matrix lists its libraries by hand — a YAML matrix
+  ;; cannot glob. That is one hand-maintained copy of a fact the tree already
+  ;; holds, which is the drift every other gate in this epic exists to stop, so
+  ;; it gets the same treatment: the copy is checked against the source.
+  ;;
+  ;; Without this, a library added under libs/ gets no isolated build and
+  ;; nothing says so — check:branch-protection reads job keys, not matrix
+  ;; values, so the job list still looks complete.
+  (let [yaml     (slurp ".github/workflows/ci.yml")
+        block    (second (re-find #"(?s)check-isolation-matrix:.*?lib:\s*\[(.*?)\]" yaml))
+        in-ci    (set (remove str/blank? (map str/trim (str/split (str block) #"[,\s]+"))))
+        excluded #{"tools" "e2e"}
+        expected (remove excluded (sut/libs))]
+
+    (testing "the matrix was found in the workflow at all"
+      ;; A regex that stops matching would otherwise make this test pass by
+      ;; comparing two empty sets.
+      (is (seq in-ci)))
+
+    (testing "every library has a cell, except the two documented exclusions"
+      (is (empty? (remove in-ci expected))
+          (str "libraries with no isolated build: " (pr-str (remove in-ci expected)))))
+
+    (testing "and the matrix names no library that no longer exists"
+      (is (empty? (remove (set (sut/libs)) in-ci))
+          (str "cells for libraries not in libs/: "
+               (pr-str (remove (set (sut/libs)) in-ci)))))
+
+    (testing "the exclusions are deliberate, not a gap"
+      ;; tools' runtime is bb, not the JVM; e2e has no src/. Named rather than
+      ;; counted, so a third exclusion has to be a decision.
+      (is (= #{"tools" "e2e"} (set (remove in-ci (sut/libs))))))))
 
 (deftest ^:unit the-known-offender-is-still-detected
   ;; Guards the gate against being quietly narrowed until it reports nothing.

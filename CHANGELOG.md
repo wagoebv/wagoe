@@ -69,9 +69,9 @@ for what is public API, what is internal, and how deprecations are announced.
   user's application. So the gate reads the loading forms themselves — `require`,
   `requiring-resolve`, `the-ns`, `resolve` — and fails when a library reaches for
   a namespace it neither owns nor declares. It ships with a justified burn-down
-  list of 17 known cases in `.wagoe/check-isolation.edn`, which BOU-305, BOU-306
-  and BOU-307 empty; an entry that stops exempting anything also fails the build,
-  so the list cannot quietly become a drawer.
+  list in `.wagoe/check-isolation.edn` — 15 entries covering 28 sites — which
+  BOU-305, BOU-306 and BOU-307 empty; an entry that stops exempting anything also
+  fails the build, so the list cannot quietly become a drawer.
 
 - **`bb bump <version>`** (BOU-316). The release bump was a global
   `find | xargs sed` copied out of the README, and three things were wrong with

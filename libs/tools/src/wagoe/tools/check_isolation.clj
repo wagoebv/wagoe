@@ -68,16 +68,39 @@
           [(str "wagoe." seg) lib])))
 
 (defn declared-deps
-  "The library names `lib` declares as com.wagoe dependencies."
+  "The library directory names `lib` declares as dependencies.
+
+   In-repo libraries are declared by `:local/root`, not by coordinate:
+   `wagoe/platform {:local/root \"../platform\"}`. `com.wagoe/wagoe-platform`
+   is the *published* coordinate, which `build.clj` substitutes at pom time —
+   `check_poms.clj` documents that translation.
+
+   An earlier version of this read `com.wagoe/` keys, so it matched nothing in
+   any of the 31 libraries, `declared-deps` was always empty, and the \"nor
+   declares\" half of this gate never ran. Every cross-library load looked
+   smuggled, including the ones properly declared, and four of them reached the
+   burn-down list with confident justifications attached. The directory name
+   under `:local/root` is the identity `namespace-owners` uses, so it is the one
+   to compare against."
   [lib]
   (let [f (fs/file root-dir "libs" lib "deps.edn")]
     (if-not (fs/exists? f)
       #{}
-      (->> (:deps (edn/read-string (slurp f)))
-           keys
-           (filter #(str/starts-with? (str %) "com.wagoe/"))
-           (map #(str/replace (name %) #"^wagoe-" ""))
-           set))))
+      (let [deps (:deps (edn/read-string (slurp f)))]
+        (set (concat
+              ;; The in-repo form.
+              (for [[_ coord] deps
+                    :let  [root (:local/root coord)]
+                    :when root]
+                (str (fs/file-name (fs/normalize (fs/file root)))))
+              ;; The published form, in case a library ever pins a sibling from
+              ;; Clojars rather than by path. Both spellings, because the
+              ;; artifact-to-directory mapping is not a single rule:
+              ;; com.wagoe/wagoe-user is libs/user, com.wagoe/wagoe-cli is
+              ;; libs/wagoe-cli. Stripping unconditionally made the latter two
+              ;; impossible to declare.
+              (mapcat (fn [k] [(name k) (str/replace (name k) #"^wagoe-" "")])
+                      (filter #(str/starts-with? (str %) "com.wagoe/") (keys deps)))))))))
 
 ;; =============================================================================
 ;; Namespaces, for the isolated-build matrix
@@ -120,18 +143,67 @@
 ;; Detection
 ;; =============================================================================
 
-(def loading-forms
-  "The ways a namespace gets loaded or reached at runtime.
+(def ^:private quoted-namespace-re
+  "A quoted symbol naming a wagoe namespace: 'wagoe.user.shell.auth or
+   '[wagoe.user.shell.auth :as a].
 
-   Each of these appears in the tree. `resolve` and `the-ns` do not load
-   anything themselves, but a library only names another library's namespace in
-   them because something else loaded it — realtime uses all three in one file
-   to work around the dependency it does not declare."
-  #{"require" "requiring-resolve" "the-ns" "resolve" "ns-resolve" "find-ns"})
+   Reads the quoted symbol rather than the verb in front of it. An earlier
+   version anchored on the verb — `\\((?:require|the-ns|resolve|…)\\s+'…` — and
+   had two ways round it, both of which this gate's own docstring says it cannot
+   afford:
 
-(def ^:private loading-form-re
-  (re-pattern (str "\\((?:" (str/join "|" loading-forms) ")\\s+'?\\[?'?"
-                   "(wagoe\\.[a-z0-9.-]+)")))
+     (require '[wagoe.core.x :as x] '[wagoe.user.auth :as a])   ; second one missed
+     (require
+       '[wagoe.user.auth :as a])                                ; verb on another line
+
+   Neither shape occurs in the tree today, so both were latent rather than live.
+   A quoted namespace symbol in code is a reference to that namespace whichever
+   verb consumes it, so matching the symbol needs no list of verbs to keep
+   current — the same reason `namespace-owners` reads the tree instead of a
+   naming convention.
+
+   Keywords are not matched, which is the point: `:wagoe.observability/logger`
+   is an Integrant component key, not a namespace to load. Matching every
+   `wagoe.*` string reported 19 of 31 libraries, almost all of it component keys
+   and prose."
+  #"'\[?(wagoe\.[a-z0-9.-]+)")
+
+(defn code-only
+  "`text` with string literals and comments blanked out, line structure intact.
+
+   Necessary rather than fastidious. This gate reads quoted namespace symbols,
+   and a docstring showing `(require '[wagoe.user.auth :as a])` as an *example*
+   contains one — so scanning raw text made this namespace's own documentation a
+   finding against `libs/tools`, twice, and turned the `ai` library's prompt
+   templates into dependencies on namespaces that do not exist.
+
+   Blanking rather than deleting keeps line numbers and columns true, so a
+   finding still points at the right line.
+
+   Character-level rather than regex, because the two constructs nest: a `;`
+   inside a string is not a comment, and a `\"` inside a comment does not open
+   one. A regex for either alone gets the other wrong."
+  [text]
+  (let [sb (StringBuilder.)]
+    (loop [chars (seq text), state :code]
+      (when-let [c (first chars)]
+        (case state
+          :code    (cond
+                     (= c \") (do (.append sb \") (recur (rest chars) :string))
+                     (= c \;) (do (.append sb \space) (recur (rest chars) :comment))
+                     :else    (do (.append sb c) (recur (rest chars) :code)))
+          :string  (cond
+                     ;; An escaped character cannot close the string, and both
+                     ;; characters are blanked so a \" inside it cannot be read
+                     ;; as an opening quote either.
+                     (= c \\) (do (.append sb "  ") (recur (drop 2 chars) :string))
+                     (= c \") (do (.append sb \") (recur (rest chars) :code))
+                     :else    (do (.append sb (if (= c \newline) \newline \space))
+                                  (recur (rest chars) :string)))
+          :comment (if (= c \newline)
+                     (do (.append sb \newline) (recur (rest chars) :code))
+                     (do (.append sb \space) (recur (rest chars) :comment))))))
+    (str sb)))
 
 (defn- owning-lib
   "The library owning `ns-name`, or nil when no library does.
@@ -151,15 +223,8 @@
   ([lib declared text path] (smuggle-findings lib declared text path (namespace-owners)))
   ([lib declared text path owners]
    (let [own (set (for [[ns-name owner] owners :when (= lib owner)] ns-name))]
-     (for [[idx line] (map-indexed vector (str/split-lines text))
-           ;; A whole-line comment is not code. Commented-out requires and
-           ;; examples in prose would otherwise be findings — this gate found
-           ;; its own docstring that way. Only the fully-commented line is
-           ;; skipped, never a trailing `; note` after real code, because
-           ;; dropping the code before it would be a false negative and this
-           ;; gate is only worth having if it has none.
-           :when (not (str/starts-with? (str/triml line) ";"))
-           [_ ns-name] (re-seq loading-form-re line)
+     (for [[idx line] (map-indexed vector (str/split-lines (code-only text)))
+           [_ ns-name] (re-seq quoted-namespace-re line)
            :let  [top   (str/join "." (take 2 (str/split ns-name #"\.")))
                   owner (owning-lib owners ns-name)]
            :when (not (contains? own top))
@@ -243,7 +308,12 @@
                     (if (= :any ns-name)
                       (contains? libs* lib)
                       (contains? found [lib ns-name]))))
-          sort))))
+          ;; Sorted by printed form, not naturally: `:any` is a keyword and the
+          ;; rest are strings, and comparing the two throws — so the first
+          ;; person to use the documented :any hatch alongside an ordinary entry
+          ;; would get a ClassCastException from the reporting path instead of
+          ;; the report.
+          (sort-by pr-str)))))
 
 (defn -main [& _]
   (println "Verifying no library reaches for a namespace it does not declare")
