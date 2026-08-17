@@ -358,13 +358,15 @@
 
 (defprotocol IJWTVerifier
   "JWT token verification.
-  
-  Delegates to boundary/user module for actual verification. This port
-  exists to avoid direct dependency on user module from core layer.
-  
-  Implemented by:
-    - UserJWTAdapter (delegates to wagoe.user.shell.jwt)
-    - TestJWTAdapter (returns mock claims for testing)"
+
+  The application supplies the implementation — it knows what issues its
+  tokens. realtime ships only `TestJWTAdapter`; wire a real one into
+  `:wagoe.realtime/service`.
+
+  Realtime used to ship a `UserJWTAdapter` that resolved
+  `wagoe.user.shell.auth` at runtime without declaring the dependency, so it
+  worked in the monorepo and threw for anyone using realtime from Clojars
+  (BOU-305)."
 
   (verify-jwt [this token]
     "Verify JWT token and extract claims.
