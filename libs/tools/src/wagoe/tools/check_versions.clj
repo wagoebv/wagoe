@@ -150,45 +150,68 @@
   (re-pattern (str "(?i)\\b(?:new|added|introduced|available)\\s+in\\s+v?("
                    version-pattern ")\\b")))
 
-(def ^:private our-repo-re
-  "This repository, in the forms documentation refers to it by."
-  #"wagoebv/wagoe\b")
+(def ^:private github-repo-re
+  "The owner/name of whatever repository a line points at, if any."
+  #"github\.com/([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+?)(?:\.git)?(?:[/\s\\]|$)")
+
+(def ^:private our-repo "wagoebv/wagoe")
 
 (defn- blocks
-  "`text` split into blank-line-separated blocks, each with its starting line.
-
-   `--tag` is scoped per block rather than per line because a shell command is
-   written across several lines: `bbin install https://github.com/wagoebv/wagoe \\`
-   and `  --tag v1.0.0-beta-5 \\` are one command and two lines. A line-scoped
-   rule sees the tag with no repository beside it, and would then have to choose
-   between missing our own recipe and rewriting `--tag v0.2.2` in the
-   clojure-mcp-light install — someone else's tool, at the correct version."
+  "`text` split into blank-line-separated blocks, each line paired with its index."
   [text]
   (->> (str/split-lines text)
        (map-indexed vector)
        (partition-by (fn [[_ line]] (str/blank? line)))
        (remove (fn [group] (str/blank? (second (first group)))))))
 
+(defn- tag-ownership
+  "For each line of `block`, the repository a `--tag` on it would belong to.
+
+   A `--tag` cannot be read on its own line, because a shell command is written
+   across several: `bbin install https://github.com/wagoebv/wagoe \\` and
+   `  --tag v1.0.0-beta-5 \\` are one command and two lines.
+
+   An earlier version therefore asked whether the *block* mentioned this
+   repository anywhere — which is wrong in the other direction. AGENTS.md
+   already writes two `bbin install` lines with no blank line between them; put
+   a wagoe install in such a block and every `--tag` in it becomes ours,
+   including `--tag v0.2.2` for clojure-mcp-light. The gate would go red on a
+   correct file, and `bb bump` — which rewrites what this discovers — would
+   rewrite someone else's tool to our version and break the documented command.
+
+   So a tag belongs to the nearest install URL at or above it. Nothing above it
+   means it belongs to nobody."
+  [block]
+  (->> block
+       (reductions (fn [owner [_ line]]
+                     (or (second (re-find github-repo-re line)) owner))
+                   nil)
+       rest))
+
 (defn doc-version-findings
   "Every suite version `text` names, as {:file :line :version :what :excerpt}.
 
+   Every match on a line, not the first: two coordinates on one line is ordinary
+   Clojure formatting, and reading one of them would leave the other ungated —
+   and, because `bb bump` rewrites what this discovers, stale after a bump that
+   then verified clean.
+
    Pure and public so the gate can be proven to fire without a repository to
-   break — and so `bb bump` can rewrite exactly what this discovers rather than
-   keeping a second list that drifts from it."
+   break."
   [path text]
   (for [block (blocks text)
-        :let  [ours? (some (fn [[_ l]] (re-find our-repo-re l)) block)]
-        [idx line] block
+        [[idx line] owner] (map vector block (tag-ownership block))
         [what re] [["com.wagoe pin"        coordinate-re]
-                   ["git tag pin"          (when ours? tag-pin-re)]
+                   ["git tag pin"          (when (= our-repo owner) tag-pin-re)]
                    ["release-pinned prose" prose-pin-re]]
         :when re
-        :let  [m (re-find re line)]
-        :when m
-        :let  [matched (if (vector? m) (first m) m)]]
+        m     (re-seq re line)
+        :let  [matched (if (vector? m) (first m) m)
+               v       (re-find version-pattern matched)]
+        :when v]
     {:file    path
      :line    (inc idx)
-     :version (re-find version-pattern matched)
+     :version v
      :what    what
      :excerpt (str/trim matched)}))
 
