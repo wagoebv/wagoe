@@ -261,7 +261,7 @@ See [ADR-021](./dev-docs/adr/ADR-021-fcis-boundary-rules.adoc) (FC/IS rules) and
 
 ## Releasing a New Version
 
-The version appears in 96 locations — 59 in source, 37 in documentation.
+The version appears in 104 locations — 59 in source, 45 in documentation.
 `bb check:versions` is the list, and `bb bump` is the way to change it.
 
 **1. Bump:**
@@ -276,30 +276,55 @@ prints a `git diff --stat`, and finishes by verifying the result against the
 version it just wrote. Re-running it is a no-op.
 
 Give the plain version, not the tag: `1.0.0-beta-6`, not `v1.0.0-beta-6`. It
-refuses a leading `v` rather than writing it into 96 places, where every
+refuses a leading `v` rather than writing it into 104 places, where every
 location would then agree and the check would pass on it.
 
-**2. Verify, commit, tag, and release:**
+**2. Verify and commit:**
 
 ```bash
-bb check --quick
-
+bb check
 git add -A && git commit -m "bump library suite version to 1.0.0-beta-6"
-git tag -a "1.0.0-beta-6" -m "Release 1.0.0-beta-6"
-git push && git push --tags
-gh release create "1.0.0-beta-6" --title "1.0.0-beta-6" --notes "Library suite release"
 ```
 
-Pushing the tag starts `publish.yml`, which waits for a maintainer to approve
-and then refuses to deploy unless CI passed on that exact commit.
+The full `bb check` — not `--quick`, which skips `check:versions`. That gate is
+the one that knows every location and fails when they disagree.
 
-**3. Deploy to Clojars:**
+**3. Run the pre-release gate:**
+
+The nightly first-run matrix doubles as the pre-release check — that is what its
+`workflow_dispatch` is for. Run it against the commit you are about to tag
+rather than trusting last night's run to describe today's tree.
 
 ```bash
-bb deploy --all
+gh workflow run first-run-matrix.yml -f reason="pre-release gate for 1.0.0-beta-6"
 ```
 
-`patch-catalogue-version!` in the deploy script keeps `modules-catalogue.edn` in sync automatically after each successful deploy.
+**4. Tag. The tag is the release:**
+
+```bash
+git push
+git tag -a "1.0.0-beta-6" -m "Release 1.0.0-beta-6"
+git push --tags
+```
+
+Pushing an unprefixed semver tag fires `.github/workflows/publish.yml`, which
+waits for a maintainer to approve the `release` environment and then does the
+rest: builds every library from the tagged commit in publish order, refuses if
+the tag disagrees with the source version or if CI did not pass on that exact
+commit, deploys the artifacts not already on Clojars, and creates the GitHub
+release.
+
+So there is nothing to run by hand afterwards. In particular:
+
+- **Do not** `gh release create` — the workflow creates the release, and doing
+  both collides.
+- **Do not** `bb deploy --all` — the workflow has already deployed. Re-deploying
+  a published artifact 409s and aborts the run, which is why the workflow itself
+  uses `--missing`.
+
+`bb deploy` by hand is the fallback for when the workflow cannot run, not a step
+of the normal release. `patch-catalogue-version!` keeps `modules-catalogue.edn`
+in sync after each successful deploy either way.
 
 **What `bb bump` deliberately leaves alone:** `CHANGELOG.md` and the ADRs
 (historical — they record what was true when written), `docs/superpowers/`
