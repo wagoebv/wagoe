@@ -5,6 +5,7 @@
             [clojure.test :refer [deftest is testing]]
             [integrant.core :as ig]
             [wagoe.config :as config]
+            [wagoe.system-config :as sys-config]
             [wagoe.main :as main]))
 
 (deftest ^:unit worker-ig-config-drops-http-surface
@@ -128,7 +129,7 @@
                  :wagoe.external/imap   {:host "localhost" :port 143}
                  :wagoe.external/twilio {:account-sid "x" :auth-token "y"}}
         with-all (update loaded :active merge opt-in)
-        cfg        (config/ig-config with-all)
+        cfg        (sys-config/ig-config with-all)
         registered (set (keys (methods ig/init-key)))
         missing    (remove registered (keys cfg))]
 
@@ -159,10 +160,10 @@
   ;; are opt-in, and are required at the point the config decides they are
   ;; active.
   (let [src (or (some #(when (.exists (io/file %)) (slurp %))
-                      ["src/wagoe/config.clj" "../../src/wagoe/config.clj"])
-                (throw (ex-info "config.clj not found — cannot check"
+                      ["src/wagoe/system_config.clj" "../../src/wagoe/system_config.clj"])
+                (throw (ex-info "system_config.clj not found — cannot check"
                                 {:cwd (System/getProperty "user.dir")})))
-        ns-form  (subs src 0 (str/index-of src "(def ^:private env-aliases"))
+        ns-form  (subs src 0 (str/index-of src "(declare ig-config)"))
         static   (set (map second (re-seq #"\[(wagoe\.[a-z0-9-]+\.shell\.module-wiring)\]" ns-form)))
         guarded  (set (map second (re-seq #"\(require '(wagoe\.[a-z0-9-]+\.shell\.module-wiring)\)" src)))]
 

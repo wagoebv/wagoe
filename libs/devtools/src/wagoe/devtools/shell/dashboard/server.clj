@@ -185,12 +185,29 @@
                                   _            (when (= new-val ::parse-failed)
                                                  (throw (ex-info "Failed to parse edited config value as EDN" {})))
                                   set-prep-fn  (resolve 'integrant.repl/set-prep!)
-                                  load-cfg-fn  (resolve 'wagoe.config/load-config)
-                                  ig-cfg-fn    (resolve 'wagoe.config/ig-config)
+                                  ;; Supplied by the application on :wagoe/dashboard.
+                                  ;; Rebuilding the Integrant config means knowing
+                                  ;; which components this application runs, which
+                                  ;; is not something a library can know — this used
+                                  ;; to resolve wagoe.config/ig-config at runtime
+                                  ;; (BOU-306).
+                                  ig-config-fn (:ig-config-fn config)
                                   sys-var      (resolve 'integrant.repl.state/system)
                                   cfg-var      (resolve 'integrant.repl.state/config)
                                   restart-fn   (resolve 'wagoe.devtools.shell.repl/restart-component)]
-                              (if (and set-prep-fn sys-var cfg-var restart-fn load-cfg-fn ig-cfg-fn)
+                              ;; Split from the resolve checks below on purpose:
+                              ;; folding it in reported a missing :ig-config-fn
+                              ;; as "is the system running?", which sends the
+                              ;; reader to look at the wrong thing entirely.
+                              (cond
+                                (nil? ig-config-fn)
+                                {:success? false
+                                 :error (str "This dashboard cannot rebuild the system: no :ig-config-fn "
+                                             "on :wagoe/dashboard. Wire it as a zero-argument function "
+                                             "returning your Integrant config, e.g. "
+                                             "#(my-app.system-config/ig-config (wagoe.config/load-config)).")}
+
+                                (and set-prep-fn sys-var cfg-var restart-fn)
                                 (let [;; Snapshot previous state so we can roll back on failure
                                       prev-override (get @config-overrides* section-key ::absent)
                                       prev-cfg-val  (get @cfg-var section-key)]
@@ -200,8 +217,7 @@
                                   ;; after loading from disk, so reset preserves all edits
                                   (set-prep-fn
                                    (fn []
-                                     (let [cfg (load-cfg-fn)]
-                                       (merge (ig-cfg-fn cfg) @config-overrides*))))
+                                     (merge (ig-config-fn) @config-overrides*)))
                                   ;; Update the live config var, restart the component,
                                   ;; then cascade to all dependents so they pick up
                                   ;; the new instance (restart-component alone leaves
@@ -252,8 +268,7 @@
                                           (alter-var-root cfg-var assoc section-key prev-cfg-val)
                                           (set-prep-fn
                                            (fn []
-                                             (let [cfg (load-cfg-fn)]
-                                               (merge (ig-cfg-fn cfg) @config-overrides*))))
+                                             (merge (ig-config-fn) @config-overrides*)))
                                           ;; Re-restart succeeded components with restored config
                                           (doseq [k succeeded]
                                             (try (restart-fn sys-var @cfg-var k)
@@ -271,6 +286,7 @@
                                            :error (str "Failed to restart " failed-key " (" failed-error
                                                        "). All changes rolled back.")})
                                       {:success? true :restarted all-to-restart})))
+                                :else
                                 {:success? false
                                  :error "Cannot resolve Integrant REPL state. Is the system running?"}))
                             (catch Exception e

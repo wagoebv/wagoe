@@ -241,7 +241,7 @@ Which keys belong to which module is declared, not guessed:
 [source,clojure]
 ----
 ;; config.edn, under :active — merged over
-;; wagoe.config/default-service-catalogue, replacing an entry of the same name
+;; wagoe.system-config/default-service-catalogue, replacing an entry of the same name
 ;; rather than merging into it
 :wagoe/services
 {:payments {:keys [:wagoe/payment-provider]

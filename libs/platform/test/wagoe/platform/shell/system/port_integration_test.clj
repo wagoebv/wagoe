@@ -1,6 +1,7 @@
 (ns wagoe.platform.shell.system.port-integration-test
   "Integration tests for HTTP server port allocation and system startup"
   (:require [wagoe.config :as config]
+            [wagoe.system-config :as sys-config]
             [wagoe.platform.shell.system.wiring]
             [wagoe.user.shell.module-wiring]
             ;; The full-system boot here includes tenant/membership keys; load their
@@ -91,7 +92,7 @@
   [port & {:keys [port-range]}]
   (let [test-config (create-test-config :port port
                                         :port-range port-range)
-        ig-config (config/ig-config test-config)]
+        ig-config (sys-config/ig-config test-config)]
     (try
       (ig/init ig-config)
       (catch Exception e
@@ -158,7 +159,7 @@
   (testing "HTTP server receives complete configuration including port-range"
     (let [test-config (create-test-config :port 59975
                                           :port-range {:start 59970 :end 59979})
-          ig-config (config/ig-config test-config)
+          ig-config (sys-config/ig-config test-config)
           http-server-config (:wagoe/http-server ig-config)]
 
       ;; Verify the HTTP server config includes all expected keys

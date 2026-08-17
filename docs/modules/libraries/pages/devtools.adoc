@@ -78,6 +78,8 @@ Local web UI at `http://localhost:9999` providing live insight into the running 
 * Request capture middleware wraps the main HTTP handler (port 3000)
 * Dark theme CSS in `resources/dashboard/assets/dashboard.css`
 
+Editing a config value from the dashboard rebuilds the system, so `:wagoe/dashboard` also takes `:ig-config-fn` — a zero-argument function returning your Integrant config. Without it the config editor reports what is missing and the rest of the dashboard works as normal.
+
 == Introspection & REPL Tools
 
 [source,clojure]

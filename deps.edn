@@ -1,5 +1,6 @@
 ;; deps.edn
 {:paths   ["src" "test" "resources"                         ;; Monolith paths
+           "libs/config/src" "libs/config/test"             ;; Config loading + accessors (BOU-306)
            "libs/core/src" "libs/core/test"                 ;; Phase 1: Core library
            "libs/observability/src" "libs/observability/test" ;; Phase 2: Observability
            "libs/platform/src" "libs/platform/test"         ;; Phase 3: Platform

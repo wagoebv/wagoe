@@ -60,11 +60,11 @@ Core infrastructure for web applications: database, HTTP routing, pagination, se
 ```clojure
 (ns myapp.main
   (:require [wagoe.platform.shell.system.wiring :as wiring]
-            [wagoe.config :as config]))
+            [wagoe.config :as config]
+            [myapp.system-config :as sys-config]))   ; your Integrant config
 
 (defn -main [& args]
-  (let [cfg (config/load-config "production")
-        system (wiring/start! cfg)]
+  (let [system (wiring/start! (sys-config/ig-config (config/load-config)))]
     (println "System started on port" (get-in system [:wagoe/http :port]))
     system))
 ```

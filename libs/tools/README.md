@@ -28,7 +28,7 @@ available out of the box:
 | `wagoe.tools.doctor` | `bb doctor` | Rule-based config validation (6 checks) |
 | `wagoe.tools.setup` | `bb setup`, `bb setup ai` | Config setup wizard (interactive / flags / AI) |
 | `wagoe.tools.admin` | `bb create-admin` | Create the first admin user |
-| `wagoe.tools.deploy` | `bb deploy` | Publish the 30 Clojars artifacts (tools itself included) |
+| `wagoe.tools.deploy` | `bb deploy` | Publish the 31 Clojars artifacts (tools itself included) |
 | `wagoe.tools.dev` | `bb migrate`, `bb check-links`, `bb smoke-check`, `bb install-hooks` | Dev utilities |
 | `wagoe.tools.i18n` | `bb i18n:find/scan/missing/unused` | Translation catalogue management |
 

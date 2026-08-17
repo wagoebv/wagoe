@@ -1,0 +1,72 @@
+= config
+:description: Configuration loading and typed accessors: Aero-based profile resolution and the settings libraries read through.
+
+Loads `resources/conf/<env>/config.edn` through Aero and exposes the settings
+libraries need. Assembling an Integrant system from those settings is your
+application's job, not this library's.
+
+== Coordinates
+
+[source,clojure]
+----
+{:deps {com.wagoe/wagoe-config {:mvn/version "1.0.0-beta-5"}}}
+----
+
+== Key namespaces
+
+[cols="1,3",options="header"]
+|===
+| Namespace | Purpose
+
+| `wagoe.config`
+| `load-config` plus typed accessors for the database, HTTP, observability and
+  user-validation sections.
+|===
+
+== Usage
+
+[source,clojure]
+----
+(require '[wagoe.config :as config])
+
+(def cfg (config/load-config))          ; reads conf/<WAG_ENV>/config.edn
+(config/db-spec cfg)                    ; => {:adapter :sqlite :database-path "app.db" ...}
+(config/http-config cfg)
+(config/logging-config cfg)
+----
+
+`load-config` resolves the profile from `WAG_ENV`, accepting both the long and
+short spellings — `production` and `prod` name the same directory.
+
+== Accessors
+
+[cols="1,3",options="header"]
+|===
+| Function | Reads
+
+| `db-adapter` / `db-spec`
+| The active database. Exactly one of `:wagoe/sqlite`, `:wagoe/h2`,
+  `:wagoe/postgresql` or `:wagoe/mysql` must be present; none is an error rather
+  than a default, because defaulting would boot against a database nobody chose.
+
+| `http-config`
+| Port, host and server settings.
+
+| `app-config` / `default-tenant-id`
+| Application identity and the development tenant.
+
+| `user-validation-config`
+| Password and profile rules for the `user` library.
+
+| `logging-config` / `metrics-config` / `tracing-config` / `error-reporting-config`
+| Observability adapters. Each defaults rather than throwing — an absent
+  optional section is normal.
+|===
+
+== Why it is a library
+
+Four published libraries read configuration. Until BOU-306 they did it with
+`requiring-resolve` against a `wagoe.config` namespace that the monorepo and
+`wagoe new` both happened to generate — a convention nothing declared and
+nothing checked, resting in one case on a private var. Anyone assembling a
+Wagoe application by hand had no such namespace at all.

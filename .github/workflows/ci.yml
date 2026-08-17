@@ -429,7 +429,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        lib: [admin, ai, audience, cache, calendar, core, devtools, email, events,
+        lib: [admin, ai, audience, cache, calendar, config, core, devtools, email, events,
               external, geo, i18n, jobs, observability, payments, platform, push,
               realtime, reports, scaffolder, search, shared-ui, storage, tenant,
               ui-style, user, wagoe-cli, wagoe-mcp, workflow]
@@ -604,6 +604,22 @@ jobs:
   # =============================================================================
   # Test individual libraries (run from root to ensure all dependencies available)
   # =============================================================================
+  test-config:
+    name: Test wagoe/config
+    runs-on: ubuntu-latest
+    needs: warm-deps
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Clojure + warm deps
+        uses: ./.github/actions/clojure-deps
+        with:
+          aliases: -M:test
+
+      - name: Run config tests
+        run: cd libs/config && clojure -M:test
+
   test-core:
     name: Test wagoe/core
     runs-on: ubuntu-latest
@@ -1432,7 +1448,7 @@ jobs:
   test-summary:
     name: All Tests Passed
     runs-on: ubuntu-latest
-    needs: [lint, branch-protection, first-run-smoke, build-ui-assets, docs-lint, agents-links, command-smoke, config-doctor, i18n-scan, check-fcis, check-placeholder-tests, check-test-meta, check-test-tags, check-deps, check-ports, check-hygiene, check-changelog, check-doc-counts, check-versions, check-isolation, check-isolation-matrix, check-poms, check-agents, check-no-boundary, build-uberjar, test-tools, example-smoke, test-i18n, test-core, test-observability, test-platform, test-user, test-admin, test-ui-style, test-storage, test-cache, test-events, test-jobs, test-tenant, test-audience, test-devtools, test-email, test-realtime, test-workflow, test-search, test-scaffolder, test-external, test-payments, test-push, test-calendar, test-reports, test-geo, test-ai, test-mcp, test-wagoe-cli, test-shared-ui]
+    needs: [lint, branch-protection, first-run-smoke, build-ui-assets, docs-lint, agents-links, command-smoke, config-doctor, i18n-scan, check-fcis, check-placeholder-tests, check-test-meta, check-test-tags, check-deps, check-ports, check-hygiene, check-changelog, check-doc-counts, check-versions, check-isolation, check-isolation-matrix, check-poms, check-agents, check-no-boundary, build-uberjar, test-tools, example-smoke, test-i18n, test-config, test-core, test-observability, test-platform, test-user, test-admin, test-ui-style, test-storage, test-cache, test-events, test-jobs, test-tenant, test-audience, test-devtools, test-email, test-realtime, test-workflow, test-search, test-scaffolder, test-external, test-payments, test-push, test-calendar, test-reports, test-geo, test-ai, test-mcp, test-wagoe-cli, test-shared-ui]
 
     steps:
       - name: Summary

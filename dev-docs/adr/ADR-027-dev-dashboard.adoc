@@ -138,7 +138,12 @@ Also available via REPL `(worktrees)` and CLI `bb worktree:list`.
   security) in Phase 6.
 * Dashboard reads from existing system state (Integrant, Reitit, HikariCP) --
   no separate data layer needed.
-* Port configurable via `:wagoe/dashboard {:port 9999}`.
+* Port configurable via `:wagoe/dashboard {:port 9999
+                  ;; Zero-arg fn returning your Integrant config. The dashboard
+                  ;; rebuilds the system when you edit a config value, and only
+                  ;; your application knows what it runs.
+                  :ig-config-fn #(my-app.system-config/ig-config
+                                  (wagoe.config/load-config))}`.
 * Web REPL binds to localhost only, not 0.0.0.0.
 
 == Related ADRs

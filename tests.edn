@@ -30,6 +30,7 @@
 
   :tests [{:id :unit
            :test-paths ["test"
+                        "libs/config/test"
                         "libs/core/test"
                         "libs/observability/test"
                         "libs/platform/test"

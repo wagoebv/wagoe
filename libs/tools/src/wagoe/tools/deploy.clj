@@ -40,6 +40,7 @@
 ;; entries here; never hand-tune the order.
 (def all-libs
   ["tools"
+   "config"
    "core"
    "observability"
    "platform"

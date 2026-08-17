@@ -53,10 +53,12 @@ Auto-generated CRUD admin interface with database schema introspection, filterin
 (ns myapp.main
   (:require [wagoe.admin.shell.module-wiring]  ; Auto-registers module
             [wagoe.user.shell.module-wiring]   ; Required for auth
-            [wagoe.platform.shell.system.wiring :as wiring]))
+            [wagoe.platform.shell.system.wiring :as wiring]
+            [wagoe.config :as config]
+            [myapp.system-config :as sys-config]))   ; your Integrant config
 
 (defn -main [& args]
-  (wiring/start!))
+  (wiring/start! (sys-config/ig-config (config/load-config))))
 ```
 
 ### 2. Top-level Configuration

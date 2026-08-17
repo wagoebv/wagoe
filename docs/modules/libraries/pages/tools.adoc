@@ -45,7 +45,7 @@ bb ai admin-entity "products with name, price, status"  # Generate admin entity 
 
 [source,bash]
 ----
-bb deploy --all              # Deploy all 30 libraries to Clojars
+bb deploy --all              # Deploy all 31 libraries to Clojars
 bb deploy --missing          # Deploy only unpublished versions
 bb deploy core platform user # Deploy specific libraries
 ----
@@ -109,7 +109,7 @@ bb install-hooks             # Configure git hooks path to .githooks
 | Module Integration — wire into deps/tests/wiring
 
 | `wagoe.tools.deploy`
-| Clojars deployment for all 30 published artifacts
+| Clojars deployment for all 31 published artifacts
 
 | `wagoe.tools.i18n`
 | i18n catalogue management (find/scan/missing/unused)

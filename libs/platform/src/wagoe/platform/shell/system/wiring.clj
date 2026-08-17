@@ -18,8 +18,9 @@
    
    Usage:
      (require '[wagoe.config :as config])
+     (require '[wagoe.system-config :as sys-config])   ; your application's
      (require '[integrant.core :as ig])
-     (def cfg (config/ig-config (config/load-config)))
+     (def cfg (sys-config/ig-config (config/load-config)))
      (def system (ig/init cfg))
      (ig/halt! system)"
   (:require [wagoe.platform.shell.adapters.database.factory :as db-factory]
@@ -733,23 +734,22 @@
 (declare stop!)
 
 (defn start!
-  "Start the system using default configuration.
-   
-   Returns:
-     Started system map
-   
+  "Start the system from `ig-cfg` and remember it, halting any running one.
+
+   Takes the Integrant config rather than building it. Which components an
+   application runs is the application's decision — this used to resolve
+   `wagoe.config/ig-config` at runtime, so a library reached into the
+   composition root of whatever project happened to be on the classpath
+   (BOU-306).
+
    Example:
-     (start!)"
-  []
+     (start! (wagoe.system-config/ig-config (wagoe.config/load-config)))"
+  [ig-cfg]
   (when @system-state
     (log/warn "System already started, halting existing system first")
     (stop!))
   (log/info "Starting Wagoe system")
-  (let [_config (require 'wagoe.config)
-        load-config (ns-resolve 'wagoe.config 'load-config)
-        ig-config (ns-resolve 'wagoe.config 'ig-config)
-        cfg (ig-config (load-config))
-        system (ig/init cfg)]
+  (let [system (ig/init ig-cfg)]
     (reset! system-state system)
     (log/info "Wagoe system started successfully")
     system))
@@ -771,16 +771,15 @@
   nil)
 
 (defn restart!
-  "Restart the system (stop then start).
-   
-   Returns:
-     Started system map
-   
+  "Restart the system from `ig-cfg` (stop then start).
+
+   Takes the config for the same reason `start!` does.
+
    Example:
-     (restart!)"
-  []
+     (restart! (wagoe.system-config/ig-config (wagoe.config/load-config)))"
+  [ig-cfg]
   (stop!)
-  (start!))
+  (start! ig-cfg))
 
 ;; =============================================================================
 ;; Integrant REPL Setup
@@ -792,15 +791,16 @@
   ;;
   ;; (require '[integrant.repl :as ig-repl])
   ;; (require '[wagoe.config :as config])
-  ;; (ig-repl/set-prep! #(config/ig-config (config/load-config)))
+  ;; (require '[wagoe.system-config :as sys-config])
+  ;; (ig-repl/set-prep! #(sys-config/ig-config (config/load-config)))
   ;; (ig-repl/go)     ; Start system
   ;; (ig-repl/reset)  ; Reload and restart
   ;; (ig-repl/halt)   ; Stop system
 
-  ;; Or use the convenience functions:
-  (start!)
+  ;; Or use the convenience functions, passing your application's config:
+  ;;   (start!   (sys-config/ig-config (config/load-config)))
+  ;;   (restart! (sys-config/ig-config (config/load-config)))
   (stop!)
-  (restart!)
 
   ;; Check system state
   @system-state

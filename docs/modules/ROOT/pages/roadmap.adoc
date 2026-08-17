@@ -9,7 +9,7 @@ absent — the ordering is the useful part.
 
 == Where we are
 
-Thirty libraries are published on Clojars under `com.wagoe`, versioned in
+Thirty-one libraries are published on Clojars under `com.wagoe`, versioned in
 lockstep. The framework is feature-complete for the applications it targets; the
 remaining work before `1.0.0` is about trust rather than capability.
 

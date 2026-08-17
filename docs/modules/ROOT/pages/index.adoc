@@ -6,7 +6,7 @@ pure business logic in `core/`, side effects in `shell/`, and clean interfaces t
 
 == What Wagoe provides
 
-* *30 independently publishable libraries* on Clojars — use only what you need
+* *31 independently publishable libraries* on Clojars — use only what you need
 * *Scaffolder* that generates fully structured modules (entity + routes + tests) in seconds
 * *Auto-generated admin UI* from your schema — no manual forms
 * *Built-in observability*, RFC 5988 pagination, and declarative interceptors
@@ -31,7 +31,7 @@ pure business logic in `core/`, side effects in `shell/`, and clean interfaces t
 | Add a module to an existing app
 | xref:guides:create-module.adoc[Create a Module]
 
-| Browse all 30 libraries
+| Browse all 31 libraries
 | xref:libraries:index.adoc[Library Overview]
 
 | Know what I can rely on

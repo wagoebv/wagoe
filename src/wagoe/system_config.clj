@@ -1,287 +1,35 @@
-(ns wagoe.config
-  "Configuration management using Aero for environment-based config.
-   
-   This namespace provides configuration loading and Integrant system
-   configuration generation for the Wagoe application.
-   
+(ns wagoe.system-config
+  "Assembles this application's Integrant system from its configuration.
+
+   Reading configuration is `wagoe.config`, a published library. Deciding which
+   components this particular application runs is here, because it is not a
+   framework concern — a generated project has its own version of this file.
+
    Usage:
-     (def config (load-config))
-     (def ig-config (ig-config config))
-     (integrant.core/init ig-config)"
-  (:require [aero.core :as aero]
-            [clojure.java.io :as io]
-            [clojure.tools.logging :as log]
-            [integrant.core :as ig]
+     (ig-config (wagoe.config/load-config))"
+  (:require [integrant.core :as ig]
+            [wagoe.config :as config]
             ;; core-system-config emits :wagoe/email unconditionally, so the
             ;; config that references it self-registers the init/halt methods —
-            ;; every full-system boot (app + tests) then resolves the key.
+            ;; every full-system boot (app + tests) then resolves the key. The
+            ;; layer that emits a key registers it.
             [wagoe.email.shell.module-wiring]
-            ;; Same rule, and the reason it is a rule: external-module-config
-            ;; emits :wagoe.external/{smtp,imap,twilio} whenever they are
-            ;; active, so this namespace must register them. Requiring it from
-            ;; wagoe.main instead covered the app and left every other caller of
-            ;; ig-config short — dev/repl/user.clj, the platform port tests, and
-            ;; the devtools dashboard, which resolves wagoe.config/ig-config at
-            ;; runtime. The layer that emits a key registers it.
-            ;; i18n is the only one of these that is emitted unconditionally
-            ;; (i18n-module-config falls back to defaults), so it is the only
-            ;; one that can be required statically.
-            ;;
-            ;; cache, payments and the external adapters are opt-in, and a
-            ;; static require here would recreate the problem BOU-131 removed
-            ;; from platform one layer down: loading this namespace would demand
-            ;; jars the app may not ship. They are required where the config
-            ;; decides they are active — see the module-config fns below.
+            ;; i18n is emitted unconditionally too (it falls back to defaults),
+            ;; so it is the other one that can be required statically. cache,
+            ;; payments and the external adapters are opt-in: a static require
+            ;; would demand jars the app may not ship, so they are required
+            ;; where the config decides they are active — see the module-config
+            ;; fns below.
             [wagoe.i18n.shell.module-wiring]
             [wagoe.user.schema :as user-schema]))
 
 ;; =============================================================================
-;; Configuration Loading
-;; =============================================================================
-
-(def ^:private env-aliases
-  "Map long-form environment names to the short directory names under resources/conf/."
-  {"development" "dev"
-   "production"  "prod"
-   "acceptance"  "acc"
-   "testing"     "test"})
-
-(defn- normalize-env
-  "Normalize a WAG_ENV value to one of the short config directory names (dev, test, prod, acc)."
-  [env]
-  (let [s (some-> env str .trim .toLowerCase)]
-    (get env-aliases s s)))
-
-(defn load-config
-  "Load configuration from resources/conf/dev/config.edn using Aero.
-
-   Args:
-     opts: Optional map with :profile key (defaults to :dev)
-
-   Returns:
-     Configuration map with resolved environment variables and profile selection
-
-   Example:
-     (load-config)
-     (load-config {:profile :test})"
-  ([] (load-config {}))
-  ([{:keys [profile] :or {profile (keyword (or (System/getenv "WAG_ENV") "dev"))}}]
-   (let [profile (keyword (normalize-env (name profile)))
-         config-path (str "conf/" (name profile) "/config.edn")
-         config-resource (io/resource config-path)]
-     (if config-resource
-       (do
-         (log/info "Loading configuration" {:profile profile :path config-path})
-         (assoc (aero/read-config config-resource {:profile profile})
-                :wagoe/profile profile))
-       (throw (ex-info "Configuration file not found"
-                       {:profile profile
-                        :path config-path
-                        :available-profiles [:dev :test :prod]}))))))
-
-;; =============================================================================
-;; Configuration Helpers
-;; =============================================================================
-
-(defn- active-database-adapter
-  "Determine which database adapter is active from config.
-   
-   Args:
-     config: Configuration map from load-config
-   
-   Returns:
-     Keyword adapter (:sqlite, :h2, :postgresql, :mysql) or nil"
-  [config]
-  (let [active-config (:active config)]
-    (cond
-      (:wagoe/sqlite active-config) :sqlite
-      (:wagoe/h2 active-config) :h2
-      (:wagoe/postgresql active-config) :postgresql
-      (:wagoe/mysql active-config) :mysql
-      :else nil)))
-
-(defn db-adapter
-  "Extract database adapter keyword from config.
-   
-   Args:
-     config: Configuration map from load-config
-   
-   Returns:
-     Keyword adapter (:sqlite, :h2, :postgresql, :mysql)"
-  [config]
-  (or (active-database-adapter config)
-      (throw (ex-info "No active database adapter found in configuration"
-                      {:active-keys (keys (:active config))}))))
-
-(defn db-spec
-  "Extract database specification from config for the active adapter.
-   
-   Args:
-     config: Configuration map from load-config
-   
-   Returns:
-     Database spec map appropriate for the adapter
-   
-   Example:
-     {:adapter :sqlite :database-path \"dev-database.db\"}"
-  [config]
-  (let [adapter (db-adapter config)
-        adapter-key (keyword "wagoe" (name adapter))
-        slash-key (keyword (str "wagoe/" (name adapter)))
-        adapter-config (or (get-in config [:active adapter-key])
-                           (get-in config [:active slash-key]))]
-
-    (when-not adapter-config
-      (throw (ex-info "No configuration found for active adapter"
-                      {:adapter adapter
-                       :adapter-key adapter-key
-                       :slash-key slash-key})))
-
-    (case adapter
-      :sqlite
-      {:adapter :sqlite
-       :database-path (:db adapter-config)
-       :pool (:pool adapter-config)}
-
-      :h2
-      {:adapter :h2
-       :database-path (if (:memory adapter-config)
-                        "mem:wagoe;DB_CLOSE_DELAY=-1"
-                        (:db adapter-config))
-       :pool (:pool adapter-config)}
-
-      :postgresql
-      {:adapter :postgresql
-       :host (:host adapter-config)
-       :port (:port adapter-config)
-       :name (:dbname adapter-config)
-       :username (:user adapter-config)
-       :password (:password adapter-config)
-       :pool (:pool adapter-config)}
-
-      :mysql
-      {:adapter :mysql
-       :host (:host adapter-config)
-       :port (:port adapter-config)
-       :name (:dbname adapter-config)
-       :username (:user adapter-config)
-       :password (:password adapter-config)
-       :pool (:pool adapter-config)}
-
-      (throw (ex-info "Unsupported database adapter"
-                      {:adapter adapter
-                       :supported [:sqlite :h2 :postgresql :mysql]})))))
-
-(defn http-config
-  "Extract HTTP server configuration.
-   
-   Args:
-     config: Configuration map from load-config
-   
-   Returns:
-     Map with :port, :host, :join?, :port-range, and :drain-timeout-ms keys
-
-   :drain-timeout-ms controls graceful shutdown: on stop the server stops
-   accepting new connections, lets in-flight requests finish (bounded by this
-   timeout, in milliseconds), then halts. 0 or nil disables graceful draining."
-  [config]
-  (let [http-cfg (get-in config [:active :wagoe/http])]
-    {:port (or (:port http-cfg) 3000)
-     :host (or (:host http-cfg) "0.0.0.0")
-     :join? (or (:join? http-cfg) false)
-     :port-range (:port-range http-cfg)
-     ;; default only when the key is absent — an explicit nil disables draining
-     :drain-timeout-ms (get http-cfg :drain-timeout-ms 30000)}))
-
-(defn app-config
-  "Extract application-level configuration.
-   
-   Args:
-     config: Configuration map from load-config
-   
-   Returns:
-     Map with application settings"
-  [config]
-  (get-in config [:active :wagoe/settings] {}))
-
-(defn default-tenant-id
-  "Extract default tenant ID for development/testing.
-   
-   This provides a consistent tenant context for:
-   - REPL development and testing
-   - CLI operations without explicit tenant specification  
-   - Default test fixtures
-   
-   Args:
-     config: Configuration map from load-config
-   
-   Returns:
-     UUID string of default tenant ID
-   
-   Note:
-     Production systems should NOT rely on defaults and must
-     always specify tenant-id explicitly in requests."
-  [config]
-  (get-in config [:active :wagoe/settings :default-tenant-id]))
-
-(defn user-validation-config
-  "Extract user validation configuration.
-   
-   Args:
-     config: Configuration map from load-config
-   
-   Returns:
-     Map with user validation settings including:
-     - :email-domain-allowlist - Set of allowed email domains
-     - :password-policy - Password complexity requirements
-     - :name-restrictions - Name validation rules
-     - :role-restrictions - Role assignment rules
-     - :tenant-limits - Per-tenant user limits
-     - :cross-field-validation - Cross-field validation rules"
-  [config]
-  (get-in config [:active :wagoe/settings :user-validation] {}))
-
-(defn logging-config
-  "Extract logging configuration.
-   
-   Args:
-     config: Configuration map from load-config
-   
-   Returns:
-     Map with logging provider and settings"
-  [config]
-  (get-in config [:active :wagoe/logging] {:provider :no-op}))
-
-(defn metrics-config
-  "Extract metrics configuration.
-   
-   Args:
-     config: Configuration map from load-config
-   
-   Returns:
-     Map with metrics provider and settings"
-  [config]
-  (get-in config [:active :wagoe/metrics] {:provider :no-op}))
-
-(defn tracing-config
-  "Extract tracing configuration (defaults to the inert no-op tracer)."
-  [config]
-  (get-in config [:active :wagoe/tracing] {:provider :no-op}))
-
-(defn error-reporting-config
-  "Extract error reporting configuration.
-   
-   Args:
-     config: Configuration map from load-config
-   
-   Returns:
-     Map with error reporting provider and settings"
-  [config]
-  (get-in config [:active :wagoe/error-reporting] {:provider :no-op}))
-
-;; =============================================================================
 ;; Integrant Configuration Generation
 ;; =============================================================================
+
+;; The devtools dashboard is handed a thunk that rebuilds this map, and it is
+;; wired further up the file than ig-config is defined.
+(declare ig-config)
 
 (defn- cache-config
   "Extract cache configuration from active config, or nil if not configured."
@@ -296,11 +44,11 @@
 (defn- core-system-config
   "Return core system components (database, observability) independent of modules."
   [config]
-  (let [db-cfg (db-spec config)
-        logging-cfg (logging-config config)
-        metrics-cfg (metrics-config config)
-        tracing-cfg (tracing-config config)
-        error-reporting-cfg (error-reporting-config config)
+  (let [db-cfg (config/db-spec config)
+        logging-cfg (config/logging-config config)
+        metrics-cfg (config/metrics-config config)
+        tracing-cfg (config/tracing-config config)
+        error-reporting-cfg (config/error-reporting-config config)
         email-cfg (email-config config)
         router-cfg (get-in config [:active :wagoe/router] {:adapter :reitit})
         cache-cfg (cache-config config)
@@ -330,8 +78,8 @@
    Future modules should follow this pattern: define a *-module-config function
    that returns a partial Integrant map and merge it into ig-config."
   [config]
-  (let [http-cfg (http-config config)
-        validation-cfg (user-validation-config config)
+  (let [http-cfg (config/http-config config)
+        validation-cfg (config/user-validation-config config)
         pagination-cfg (get-in config [:active :wagoe/pagination] {:default-limit 20 :max-limit 100})
         admin-enabled? (get-in config [:active :wagoe/admin :enabled?])
         workflow-enabled? (get-in config [:active :wagoe/workflow :enabled?])
@@ -455,7 +203,7 @@
    
    Multi-tenant middleware is integrated separately in the HTTP handler."
   [config]
-  (let [validation-cfg (user-validation-config config)]
+  (let [validation-cfg (config/user-validation-config config)]
     {:wagoe/tenant-db-schema
      {:ctx (ig/ref :wagoe/db-context)}
 
@@ -598,6 +346,11 @@
           (require 'wagoe.devtools.shell.dashboard.server)
           {:wagoe/dashboard
            {:port         (:port dashboard-cfg 9999)
+            ;; The dashboard rebuilds the system when you edit a config value,
+            ;; which means rebuilding this map — so it needs a way back here.
+            ;; Passed in rather than resolved: which components an application
+            ;; runs is the application's to know (BOU-306).
+            :ig-config-fn #(ig-config (config/load-config))
             :http-handler (ig/ref :wagoe/http-handler)
             :http-server  (ig/ref :wagoe/http-server)
             :db-context   (ig/ref :wagoe/db-context)
@@ -633,7 +386,7 @@
 
    The returned map is data. Initialising it needs the `init-key` methods, and
    most of them are registered by the namespace that starts the system, not by
-   this one — `ig/init` on the result of `(ig-config (load-config))` alone fails
+   this one — `ig/init` on the result of `(ig-config (config/load-config))` alone fails
    with \"No method in multimethod 'init-key'\".
 
    Two rules, and the difference matters:
@@ -655,7 +408,7 @@
 
    Example:
      (require 'wagoe.main)           ; registers the unconditional init-keys
-     (def ig-cfg (ig-config (load-config)))
+     (def ig-cfg (ig-config (config/load-config)))
      (integrant.core/init ig-cfg)"
   [config]
   (merge (core-system-config config)
@@ -746,40 +499,3 @@
   "Settings for the RPC endpoint a service exposes, or nil if none configured."
   [config]
   (get-in config [:active :wagoe/rpc]))
-
-;; =============================================================================
-;; REPL Utilities
-;; =============================================================================
-
-(comment
-  ;; Load configuration
-  (def config (load-config))
-
-  ;; Check active adapter
-  (db-adapter config)
-
-  ;; Extract database spec
-  (db-spec config)
-
-  ;; HTTP config
-  (http-config config)
-
-  ;; Get default tenant ID for development
-  (default-tenant-id config)
-  ;; => "00000000-0000-0000-0000-000000000001" (or value from DEFAULT_TENANT_ID env var)
-
-  ;; Use default tenant ID in REPL development
-  (require '[wagoe.core.utils.type-conversion :as tc])
-  (def tenant-id (tc/string->uuid (default-tenant-id config)))
-  ;; => #uuid "00000000-0000-0000-0000-000000000001"
-
-  ;; Generate Integrant config
-  (def ig-cfg (ig-config config))
-
-  ;; Initialize system
-  (def system (ig/init ig-cfg))
-
-  ;; Halt system
-  (ig/halt! system)
-  ...)
-

@@ -68,7 +68,7 @@ Measured on two projects generated side by side:
 |===
 
 The choice is a plain `user?` literal near the top of the generated
-`src/wagoe/config.clj` — turning the module back on later is editing one word,
+`src/wagoe/system_config.clj` — turning the module back on later is editing one word,
 not regenerating the project. A database is still configured either way; if the
 application needs no persistence at all, remove `:wagoe/sqlite` from
 `resources/conf/dev/config.edn` as well.

@@ -39,7 +39,7 @@
                    ".claude/skills/wagoe/SKILL.md"
                    "resources/conf/dev/config.edn"
                    "resources/conf/test/config.edn"
-                   "src/wagoe/config.clj"
+                   "src/wagoe/system_config.clj"
                    "dev/user.clj"
                    "src/test_proj/system.clj"
                    ;; The non-REPL entry point and the build path that uses it
@@ -340,7 +340,7 @@
                                 "/wagoe-new-test-" (System/nanoTime))]
                    (try
                      (new/generate! dir "sample" opts)
-                     (slurp (io/file dir "src/wagoe/config.clj"))
+                     (slurp (io/file dir "src/wagoe/system_config.clj"))
                      (finally
                        (doseq [f (reverse (file-seq (io/file dir)))] (.delete f))))))
         with    (render {})

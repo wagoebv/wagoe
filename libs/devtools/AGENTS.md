@@ -76,6 +76,8 @@ Local web UI at `localhost:9999` providing x-ray vision into the running system.
 - Dark theme CSS in `resources/dashboard/assets/dashboard.css`
 - All data access through existing introspection functions
 
+Editing a config value from the dashboard rebuilds the system, so `:wagoe/dashboard` also takes `:ig-config-fn` — a zero-argument function returning your Integrant config. Without it the config editor reports what is missing and the rest of the dashboard works as normal.
+
 ### Key Files
 
 - `shell/dashboard/server.clj` — Integrant component, Reitit router

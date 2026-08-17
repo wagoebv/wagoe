@@ -194,7 +194,7 @@ libs/user/
 [source]
 ----
 wagoe/
-├── libs/                        # All 30 publishable libraries (+ e2e, an in-repo test harness)
+├── libs/                        # All 31 publishable libraries (+ e2e, an in-repo test harness)
 │   ├── core/                    # Foundation utilities, validation
 │   ├── observability/           # Logging, metrics, error reporting
 │   ├── platform/                # HTTP, database, CLI infrastructure
