@@ -20,7 +20,7 @@ WebSocket-based real-time communication with JWT authentication, message routing
 | `wagoe.realtime.shell.connection-registry` | In-memory registry (atom-backed) |
 | `wagoe.realtime.shell.pubsub-manager` | Atom-backed pub/sub state management |
 | `wagoe.realtime.shell.adapters.websocket-adapter` | Ring/Jetty WebSocket adapter + TestWebSocketAdapter |
-| `wagoe.realtime.shell.adapters.jwt-adapter` | JWT verifier delegating to wagoe/user module + TestJWTAdapter |
+| `wagoe.realtime.shell.adapters.jwt-adapter` | TestJWTAdapter only — the application supplies the real IJWTVerifier |
 
 ## Message Routing Types
 

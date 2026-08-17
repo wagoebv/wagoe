@@ -38,7 +38,7 @@ message routing, and topic-based pub/sub.
 | Ring/Jetty WebSocket adapter
 
 | `wagoe.realtime.shell.adapters.jwt-adapter`
-| JWT verifier delegating to `wagoe-user`
+| Test JWT verifier; the application supplies the real one
 |===
 
 == Message routing types

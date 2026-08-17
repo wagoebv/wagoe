@@ -12,11 +12,11 @@
 ;; numbers say why: 30 of 31 libraries compile clean against their own deps.edn —
 ;; including `realtime`, the library the assessment names as broken.
 ;;
-;; `libs/realtime/.../jwt_adapter.clj` requires `wagoe.user.shell.auth` at the
-;; top level, inside a try/catch. The require runs, fails, and is swallowed. The
-;; namespace loads, the compile job goes green, and the adapter throws on first
-;; use — from Clojars, in a user's application, with realtime's only JWT
-;; verifier.
+;; `libs/realtime/.../jwt_adapter.clj` required `wagoe.user.shell.auth` at the
+;; top level, inside a try/catch. The require ran, failed, and was swallowed.
+;; The namespace loaded, a compile job went green, and the adapter threw on
+;; first use — from Clojars, in a user's application, with realtime's only JWT
+;; verifier. (Fixed in BOU-305; the shape is why this gate exists.)
 ;;
 ;; A compile answers "does it load". The claim is "does it work without the
 ;; libraries it does not declare". So this gate reads the loading forms

@@ -42,16 +42,6 @@
    :why "BOU-306. Three sites, same shape as platform's."}
 
   ;; ==========================================================================
-  ;; BOU-305 — realtime's smuggled auth dependency
-  ;; ==========================================================================
-  {:lib "realtime"  :namespace "wagoe.user.shell.auth"
-   :why "BOU-305. The case this gate was built to catch: jwt_adapter.clj requires
-         it inside a try/catch, so the library compiles clean in isolation and
-         throws on first JWT verification from Clojars. The ns docstring claims it
-         'avoids direct dependency' — it avoids the declaration, not the
-         dependency."}
-
-  ;; ==========================================================================
   ;; BOU-307 — the remaining dynamic-resolve sites
   ;; ==========================================================================
   ;; Real cross-library coupling, dynamically loaded, none of it declared. Each

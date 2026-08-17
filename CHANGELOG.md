@@ -56,6 +56,16 @@ for what is public API, what is internal, and how deprecations are announced.
   Started described bootstrapping "from the starter repository", which does not
   exist; it names `wagoe new` now.
 
+ ### Removed
+
+- **`realtime`'s `UserJWTAdapter`** (BOU-305). It resolved
+  `wagoe.user.shell.auth` at runtime without declaring the dependency, so it
+  worked in the monorepo and threw on first JWT verification for anyone using
+  `wagoe-realtime` from Clojars — realtime's only verifier. Nothing wired it
+  outside realtime's own tests. `IJWTVerifier` already exists as a port; the
+  application supplies the implementation, since it knows what issues its
+  tokens. `TestJWTAdapter` is unchanged.
+
 ### Added
 
 - **`bb check:isolation`, and an isolated build per library in CI** (BOU-304).

@@ -6,7 +6,7 @@
 
   Responsibilities (Shell/I/O):
   - WebSocket connection lifecycle (open, close)
-  - JWT authentication (delegates to user module)
+  - JWT authentication (delegates to the injected IJWTVerifier)
   - Message routing (publishes envelopes onto the message bus)
   - Connection registry management
   - Pub/sub topic management
@@ -58,7 +58,7 @@
                           {:type :unauthorized
                            :message "WebSocket connection requires 'token' query parameter"})))
 
-        ;; 2. Verify JWT token (delegates to user module via adapter)
+        ;; 2. Verify JWT token via the injected verifier
         (let [claims (ports/verify-jwt jwt-verifier token)
               now (current-timestamp)
               connection-id (java.util.UUID/randomUUID)
