@@ -10,7 +10,8 @@
      gen-tests <source-file>                   -- test generator
      sql <description>                         -- SQL copilot
      docs --module <path> --type <type>        -- documentation wizard"
-  (:require [wagoe.ai.core.context :as ctx]
+  (:require [wagoe.config :as config]
+            [wagoe.ai.core.context :as ctx]
             [wagoe.ai.core.parsing :as parsing]
             [wagoe.ai.shell.module-wiring]
             [wagoe.ai.shell.providers.anthropic :as anthropic]
@@ -229,28 +230,24 @@
   []
   (if (provider-env-vars-set?)
     (make-service-from-env)
-    (let [config-available? (try (require 'wagoe.config) true
-                                 (catch Exception _ false))]
-      (if-not config-available?
-        (make-service-from-env)
-        (let [load-config (resolve 'wagoe.config/load-config)
-              config      (try (load-config)
-                               (catch Exception e
-                                 ;; Config resources absent (external consumer without
-                                 ;; resources/conf/<env>/config.edn) — fall back to env vars.
-                                 ;; Pin to the exact message so Aero env-var resolution
-                                 ;; errors ("Environment variable not found: X") are NOT
-                                 ;; swallowed — those indicate a broken config that should
-                                 ;; surface immediately.
-                                 (if (= (str (.getMessage e)) "Configuration file not found")
-                                   nil
-                                   (throw e))))
-              ai-cfg      (when config (get-in config [:active :wagoe/ai-service]))]
-          (if (and ai-cfg (not= (:provider ai-cfg) :no-op))
-            ;; Chosen in resources/conf/<env>/config.edn — a supported path, and
-            ;; as deliberate as an environment variable.
-            (assoc (ig/init-key :wagoe/ai-service ai-cfg) :configured? true)
-            (make-service-from-env)))))))
+    (let [config (try
+                   (config/load-config)
+                   (catch Exception e
+                     ;; Config resources absent (external consumer without
+                     ;; resources/conf/<env>/config.edn) — fall back to env vars.
+                     ;; Pinned to the exact message so Aero env-var resolution
+                     ;; errors ("Environment variable not found: X") are NOT
+                     ;; swallowed — those mean a broken config, which should
+                     ;; surface immediately.
+                     (if (= (str (.getMessage e)) "Configuration file not found")
+                       nil
+                       (throw e))))
+          ai-cfg (when config (get-in config [:active :wagoe/ai-service]))]
+      (if (and ai-cfg (not= (:provider ai-cfg) :no-op))
+        ;; Chosen in resources/conf/<env>/config.edn — a supported path, and as
+        ;; deliberate as an environment variable.
+        (assoc (ig/init-key :wagoe/ai-service ai-cfg) :configured? true)
+        (make-service-from-env)))))
 
 ;; =============================================================================
 ;; Subcommand: scaffold-ai

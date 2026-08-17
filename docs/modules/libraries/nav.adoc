@@ -1,5 +1,6 @@
 * Libraries
 ** xref:libraries:index.adoc[Overview]
+** xref:libraries:config.adoc[config]
 ** xref:libraries:core.adoc[core]
 ** xref:libraries:observability.adoc[observability]
 ** xref:libraries:platform.adoc[platform]

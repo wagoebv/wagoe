@@ -15,6 +15,7 @@
      java -jar wagoe-standalone.jar service payments  # Start one module as a service
      java -jar wagoe-standalone.jar cli [args]        # Run CLI commands"
   (:require [wagoe.config :as config]
+            [wagoe.system-config :as sys-config]
             [wagoe.platform.shell.system.wiring] ; Required for Integrant init functions
             ;; Load feature modules' Integrant init/halt methods at the app layer
             ;; so platform does not depend on the feature libs (BOU-171 / BOU-192).
@@ -121,7 +122,7 @@
   []
   (log/info "Starting Wagoe HTTP server")
   (try
-    (boot-and-block! "HTTP server" (config/ig-config (config/load-config)))
+    (boot-and-block! "HTTP server" (sys-config/ig-config (config/load-config)))
     (catch Exception e
       (log/error (startup-failure-summary e))
       (System/exit 1))))
@@ -137,14 +138,14 @@
    Returns `[ig-config summary]`, or throws `:configuration-error` with a
    message meant for an operator reading a container log."
   [config service-names]
-  (let [catalogue (config/service-catalogue config)
-        full      (config/ig-config config)]
+  (let [catalogue (sys-config/service-catalogue config)
+        full      (sys-config/ig-config config)]
     (when-let [problem (selection/catalogue-problem catalogue)]
       (throw (ex-info problem {:type :configuration-error})))
     (when-let [problem (selection/selection-problem catalogue full service-names)]
       (throw (ex-info problem {:type :configuration-error})))
     (let [selected (selection/service-config full catalogue service-names)
-          rpc-cfg  (config/rpc-config config)
+          rpc-cfg  (sys-config/rpc-config config)
           offered  (->> (sort service-names)
                         (keep (fn [service-name]
                                 (when-let [{:keys [protocol component]}
@@ -198,7 +199,7 @@
   []
   (log/info "Starting Wagoe worker (no HTTP listener)")
   (try
-    (boot-and-block! "worker" (worker-ig-config (config/ig-config (config/load-config))))
+    (boot-and-block! "worker" (worker-ig-config (sys-config/ig-config (config/load-config))))
     (catch Exception e
       (log/error (startup-failure-summary e))
       (System/exit 1))))

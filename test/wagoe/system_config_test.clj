@@ -1,5 +1,6 @@
-(ns wagoe.config-test
+(ns wagoe.system-config-test
   (:require [wagoe.config :as sut]
+            [wagoe.system-config :as sys-config]
             [wagoe.platform.shell.adapters.database.protocols :as db-protocols]
             [clojure.test :refer [deftest is testing]]
             [integrant.core :as ig]))
@@ -66,7 +67,7 @@
 
 (deftest ^:unit ig-config-wires-tenant-membership-and-http-components-test
   (let [config (assoc-in (base-config) [:active :wagoe/admin] {:enabled? true})
-        ig-config (sut/ig-config config)]
+        ig-config (sys-config/ig-config config)]
     (testing "tenant and membership services are part of the Integrant graph"
       (is (contains? ig-config :wagoe/tenant-repository))
       (is (contains? ig-config :wagoe/tenant-service))
@@ -168,7 +169,7 @@
       ;; for deployments that never provisioned one.
       (is (not (contains? active :wagoe/cache)))
       (is (empty? (filter #(re-find #"cache" (str %))
-                          (keys (sut/ig-config prod))))
+                          (keys (sys-config/ig-config prod))))
           "and no cache component is built"))
 
     (testing "so is every other optional module"
@@ -188,7 +189,7 @@
   ;; Unconditional keys are the entry point's job — asserted separately in
   ;; wagoe.main-test.
   (require 'wagoe.config :reload)
-  (let [emitted    (set (keys (sut/ig-config (sut/load-config {:profile :test}))))
+  (let [emitted    (set (keys (sys-config/ig-config (sut/load-config {:profile :test}))))
         registered (set (keys (methods ig/init-key)))
         conditional (filter emitted [:wagoe/events :wagoe/email :wagoe/cache
                                      :wagoe/payment-provider :wagoe/i18n])]

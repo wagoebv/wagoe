@@ -8,6 +8,7 @@
    them. Only booting the real thing shows that, and the acceptance criterion —
    absent modules' routes not mounted — is about a running router."
   (:require [wagoe.config :as config]
+            [wagoe.system-config :as sys-config]
             [wagoe.main :as main]
             [wagoe.platform.core.system-selection :as selection]
             [wagoe.payments.ports :as pay-ports]
@@ -29,7 +30,7 @@
 
 (deftest ^:integration a-service-runs-fewer-components-than-the-application
   (let [config     (test-config)
-        full       (config/ig-config config)
+        full       (sys-config/ig-config config)
         [user-cfg summary] (main/service-ig-config config #{:user})]
 
     (testing "it is genuinely smaller"
@@ -65,8 +66,8 @@
   ;; between a service that starts and one that dies at boot — and it has to
   ;; hold for every module, not just the one that happened to be tried.
   (let [config    (test-config)
-        catalogue (config/service-catalogue config)
-        full      (config/ig-config config)
+        catalogue (sys-config/service-catalogue config)
+        full      (sys-config/ig-config config)
         buildable (remove #(selection/selection-problem catalogue full #{%})
                           (keys catalogue))]
     (is (seq buildable) "the test profile must build at least one service")
@@ -109,18 +110,18 @@
   ;; boot is unaffected. If selecting every service is not the identity, the
   ;; catalogue and the config have drifted.
   (let [config    (test-config)
-        catalogue (config/service-catalogue config)
-        full      (config/ig-config config)]
+        catalogue (sys-config/service-catalogue config)
+        full      (sys-config/ig-config config)]
     (is (= full (selection/service-config full catalogue (set (keys catalogue)))))))
 
 (deftest ^:integration the-shipped-catalogue-is-well-formed
-  (let [catalogue (config/service-catalogue (test-config))]
+  (let [catalogue (sys-config/service-catalogue (test-config))]
     (is (nil? (selection/catalogue-problem catalogue)))
 
     (testing "and every module the test profile builds can be selected"
       ;; Optional modules are off in this profile and are meant to be
       ;; unselectable here; the ones that are built must work.
-      (let [full (config/ig-config (test-config))
+      (let [full (sys-config/ig-config (test-config))
             buildable (remove #(selection/selection-problem catalogue full #{%})
                               (keys catalogue))]
         (is (contains? (set buildable) :user))
@@ -225,8 +226,8 @@
 
 (deftest ^:integration no-module-component-is-mistaken-for-the-platform
   (let [config    (everything-enabled-config)
-        full      (config/ig-config config)
-        catalogue (config/service-catalogue config)
+        full      (sys-config/ig-config config)
+        catalogue (sys-config/service-catalogue config)
         claimed   (selection/owned-keys catalogue)
         unclaimed (remove (some-fn claimed platform-keys) (keys full))]
 
@@ -264,17 +265,17 @@
   (let [entry {:my-module {:keys [:wagoe/user-service]}}]
 
     (testing "under :active"
-      (let [catalogue (config/service-catalogue
+      (let [catalogue (sys-config/service-catalogue
                        (assoc-in (test-config) [:active :wagoe/services] entry))]
         (is (contains? catalogue :my-module))))
 
     (testing "at the top level"
-      (let [catalogue (config/service-catalogue
+      (let [catalogue (sys-config/service-catalogue
                        (assoc (test-config) :wagoe/services entry))]
         (is (contains? catalogue :my-module))))
 
     (testing "and either way the framework's own modules survive"
-      (let [catalogue (config/service-catalogue
+      (let [catalogue (sys-config/service-catalogue
                        (assoc-in (test-config) [:active :wagoe/services] entry))]
         (is (contains? catalogue :user))
         (is (contains? catalogue :payments))))
@@ -282,7 +283,7 @@
     (testing "an override replaces the entry of the same name outright"
       ;; Merging into it would leave an application that split a module up with
       ;; the framework's idea of its keys as well as its own.
-      (let [catalogue (config/service-catalogue
+      (let [catalogue (sys-config/service-catalogue
                        (assoc-in (test-config) [:active :wagoe/services]
                                  {:user {:keys [:wagoe/user-service]}}))]
         (is (= [:wagoe/user-service] (get-in catalogue [:user :keys])))))))

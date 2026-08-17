@@ -171,12 +171,12 @@
                  "(requiring-resolve 'wagoe.realtime.shell.server/start)" "f.clj")))))
 
 (deftest ^:unit a-namespace-no-library-owns-is-still-a-finding
-  ;; `wagoe.config` and `wagoe.test-support` live in the application, not in any
-  ;; lib. A published library reaching for them is broken in exactly the same
-  ;; way — it is the one thing a downstream user certainly does not have. This
-  ;; is what BOU-306 is for, and it must not be invisible until then.
-  (let [[f] (sut/smuggle-findings "platform" #{} "(require 'wagoe.config)" "f.clj")]
-    (is (= "wagoe.config" (:namespace f)))
+  ;; `wagoe.test-support` lives in the application, in no library. A published
+  ;; library reaching for it is broken in the worst way available — that is the
+  ;; one namespace a downstream user certainly does not have. `wagoe.config` was
+  ;; the other, until BOU-306 made it a library.
+  (let [[f] (sut/smuggle-findings "platform" #{} "(require 'wagoe.test-support.shell.reset)" "f.clj")]
+    (is (= "wagoe.test-support.shell.reset" (:namespace f)))
     (is (nil? (:lib f)) "no library owns it")))
 
 (deftest ^:unit keywords-and-prose-are-not-dependencies

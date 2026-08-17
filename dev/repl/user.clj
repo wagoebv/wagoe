@@ -12,6 +12,7 @@
      (routes)    ; Show all HTTP routes
      (commands)  ; Show all available commands"
   (:require [wagoe.config :as config]
+            [wagoe.system-config :as sys-config]
             ;; platform Integrant init/halt methods load via the :as wiring
             ;; require below; feature modules load here (app layer, not platform —
             ;; BOU-171 / BOU-192).
@@ -61,7 +62,7 @@
    (log/info "Preparing system configuration")
    (let [cfg (config/load-config)]
      (log/info "Configuration loaded" {:adapter (config/db-adapter cfg)})
-     (config/ig-config cfg))))
+     (sys-config/ig-config cfg))))
 
 ;; =============================================================================
 ;; REPL Convenience Functions

@@ -27,7 +27,7 @@
           knows it was replaced rather than that they misread it."}
 
   {:path "dev-docs/reference/publishing.adoc"
-   :line 111
+   :line 112
    :why  "Quotes the old wrong count on purpose. The comment above the bump command
           records that the previous version hardcoded 22 library names and would
           have left 7 artifacts on the old version silently — the reason the

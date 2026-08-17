@@ -11,7 +11,7 @@
 
 ## Why Wagoe?
 
-**For developers:** 30 independently-publishable libraries on Clojars — use just `wagoe-core` for validation utilities, or go full-stack with JWT + MFA auth, auto-generated CRUD UIs, background jobs, multi-tenancy, real-time WebSockets, and more. Every library follows the same FC/IS structure, making any Wagoe codebase instantly familiar.
+**For developers:** 31 independently-publishable libraries on Clojars — use just `wagoe-core` for validation utilities, or go full-stack with JWT + MFA auth, auto-generated CRUD UIs, background jobs, multi-tenancy, real-time WebSockets, and more. Every library follows the same FC/IS structure, making any Wagoe codebase instantly familiar.
 
 **Ship faster:** The scaffolder generates fully structured modules (entity + routes + tests) in seconds. The admin UI auto-generates CRUD interfaces from your schema — no manual forms. Built-in observability, RFC 5988 pagination, and declarative interceptors mean you write business logic, not plumbing. AI tooling (`bb scaffold ai`, `bb ai gen-tests`, `bb ai sql`) handles the repetitive parts.
 
@@ -111,10 +111,11 @@ Each library also has its own `AGENTS.md` with library-specific documentation.
 
 ## Libraries
 
-Wagoe is a monorepo of **30 independently publishable libraries**, application and development tooling alike:
+Wagoe is a monorepo of **31 independently publishable libraries**, application and development tooling alike:
 
 | Library | Description |
 |---------|-------------|
+| [config](libs/config/) | Aero-based configuration loading and typed accessors |
 | [core](libs/core/) | Foundation: validation, utilities, interceptor pipeline, feature flags |
 | [observability](libs/observability/) | Logging, metrics, error reporting (Datadog, Sentry) |
 | [platform](libs/platform/) | HTTP, database, CLI infrastructure |

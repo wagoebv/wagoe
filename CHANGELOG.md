@@ -68,6 +68,26 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **`com.wagoe/wagoe-config` — configuration loading as a library** (BOU-306).
+  Four published libraries read settings through a `wagoe.config` namespace they
+  resolved at runtime and nobody declared. It worked because the monorepo has
+  one and `wagoe new` generates one, so the coupling was a convention rather
+  than a dependency — in one case resting on a *private* var, meaning renaming
+  it would have broken `wagoe-user` at runtime with nothing to catch it. Anyone
+  assembling a Wagoe application by hand had no such namespace at all. The
+  loading and the typed accessors now ship as a library that `ai` and `user`
+  declare; `platform`'s `start!`/`restart!` and the devtools dashboard take the
+  Integrant config as an argument instead of reaching for the application's
+  composition root. This makes it 31 libraries.
+
+### Changed
+
+- **The monorepo's `wagoe.config` is now `wagoe.system-config`, and `wagoe new`
+  generates `system_config.clj`** (BOU-306). Assembling an Integrant system is
+  an application's decision, and the name now says so — but the practical reason
+  is that `wagoe.config` is a published library, and two namespaces of that name
+  on one classpath shadow each other.
+
 - **`bb check:isolation`, and an isolated build per library in CI** (BOU-304).
   "30 independently publishable libraries" was documented and never checked — no
   CI job had ever built a library against its own `deps.edn`. The new matrix job

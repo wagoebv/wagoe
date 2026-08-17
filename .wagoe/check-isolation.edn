@@ -24,24 +24,6 @@
 
 {:allow
  [;; ==========================================================================
-  ;; BOU-306 — wagoe.config is application code, not a library
-  ;; ==========================================================================
-  ;; The worst of the three groups: `wagoe.config` lives in the application, so
-  ;; a downstream user has no such namespace at all. Four published libraries
-  ;; resolve it at runtime.
-  {:lib "ai"        :namespace "wagoe.config"
-   :why "BOU-306. Resolves the application's config namespace, which no downstream
-         project has. Clears when wagoe.config becomes a published library."}
-  {:lib "devtools"  :namespace "wagoe.config"
-   :why "BOU-306. Same as ai — the application's config namespace, resolved at
-         runtime from a published library."}
-  {:lib "platform"  :namespace "wagoe.config"
-   :why "BOU-306. Three sites. platform is the library most projects depend on
-         first, so this is the one that breaks a new project earliest."}
-  {:lib "user"      :namespace "wagoe.config"
-   :why "BOU-306. Three sites, same shape as platform's."}
-
-  ;; ==========================================================================
   ;; BOU-307 — the remaining dynamic-resolve sites
   ;; ==========================================================================
   ;; Real cross-library coupling, dynamically loaded, none of it declared. Each

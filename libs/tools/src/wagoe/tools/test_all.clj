@@ -64,6 +64,10 @@
     :label "AGENTS.md generator tests"
     :dir   "."
     :cmd   ["bb" "test:agents"]}
+   {:id    :config
+    :label "config (standalone lib)"
+    :dir   "libs/config"
+    :cmd   ["clojure" "-M:test"]}
    {:id    :wagoe-cli
     :label "wagoe-cli (standalone lib)"
     :dir   "libs/wagoe-cli"

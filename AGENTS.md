@@ -1048,7 +1048,7 @@ Clojure's `{:or {limit 20 offset 0}}` destructuring only fires for **absent** ke
 | `wagoe.tools.integrate` | `bb scaffold integrate` — guide module integration (Integrant config + wiring) |
 | `wagoe.tools.i18n` | `bb i18n:find/scan/missing/unused` |
 | `wagoe.tools.admin` | `bb create-admin` |
-| `wagoe.tools.deploy` | `bb deploy` (handles all 30 libs) |
+| `wagoe.tools.deploy` | `bb deploy` (handles all 31 libs) |
 | `wagoe.tools.dev` | `bb migrate`, `bb check-links`, `bb smoke-check`, `bb install-hooks` |
 | `wagoe.tools.check-fcis` | `bb check:fcis` — FC/IS boundary enforcement (ADR-021) |
 | `wagoe.tools.check-tests` | `bb check:placeholder-tests` — placeholder assertion detection |

@@ -5,7 +5,7 @@
      (go)    — start the system
      (reset) — reload changed namespaces and restart
      (halt)  — stop the system"
-  (:require [wagoe.config]          ; loads ig-repl/set-prep! and Integrant init-keys
+  (:require [wagoe.system-config]          ; loads ig-repl/set-prep! and Integrant init-keys
             [integrant.repl :as ig-repl]))
 
 (defn go    [] (ig-repl/go))

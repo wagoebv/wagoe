@@ -1,6 +1,7 @@
 {:paths ["src" "resources"]
 
- :deps  {org.clojure/clojure     {:mvn/version "1.12.5"}
+ :deps  {wagoe/config            {:local/root "../config"}
+         org.clojure/clojure     {:mvn/version "1.12.5"}
          ;; wagoe.user.shell.cli requires this — it is what `bb create-admin`
          ;; reaches. Same undeclared transitive as platform (BOU-273).
          org.clojure/tools.cli   {:mvn/version "1.4.256"}
