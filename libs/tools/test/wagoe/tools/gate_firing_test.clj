@@ -33,6 +33,7 @@
             [wagoe.tools.check-changelog :as check-changelog]
             [wagoe.tools.check-doc-counts :as check-doc-counts]
             [wagoe.tools.check-versions :as check-versions]
+            [wagoe.tools.check-isolation :as check-isolation]
             [wagoe.tools.check-poms :as check-poms]
             [wagoe.tools.check-ports :as check-ports]
             [wagoe.tools.check-tests :as check-tests]
@@ -650,6 +651,48 @@
       (is (empty? (check-bp/trigger-findings (check-bp/ci-workflow))))
       (is (empty? (check-bp/publish-findings (check-bp/publish-workflow)))))))
 
+;; =============================================================================
+;; check:isolation
+;; =============================================================================
+
+(deftest ^:unit isolation-gate-fires-test
+  ;; BOU-304. The gate exists because the obvious one — compile each library
+  ;; against its own deps.edn — does not detect the defect it was built for.
+  ;; Measured: 30 of 31 libraries compile clean, `realtime` included, while
+  ;; realtime's require sits in a try/catch that swallows the failure.
+  (testing "a require hidden in a try/catch is still detected"
+    (is (seq (check-isolation/smuggle-findings
+              "realtime" #{}
+              "(try (require '[wagoe.user.shell.auth :as a]) (catch Exception _ nil))"
+              "jwt_adapter.clj"))))
+
+  (testing "declaring the dependency clears it"
+    (is (empty? (check-isolation/smuggle-findings
+                 "realtime" #{"user"}
+                 "(try (require '[wagoe.user.shell.auth :as a]) (catch Exception _ nil))"
+                 "jwt_adapter.clj"))))
+
+  (testing "an Integrant key is not a dependency"
+    ;; The reason this reads loading forms rather than every wagoe.* string: a
+    ;; first pass that matched any occurrence reported 19 of 31 libraries,
+    ;; almost all of it component keys and docstrings.
+    (is (empty? (check-isolation/smuggle-findings
+                 "platform" #{} "{:wagoe.observability/logger {}}" "config.clj"))))
+
+  (testing "an exemption with no reason is rejected, not honoured"
+    (is (thrown? clojure.lang.ExceptionInfo
+                 (check-isolation/parse-allowlist
+                  {:allow [{:lib "realtime" :namespace "wagoe.user"}]}))))
+
+  (testing "the gate reads the real tree, not an empty library list"
+    ;; The BOU-250 shape: a live check scanning nothing reports clean forever.
+    (is (<= 30 (count (check-isolation/libs))))
+    (is (seq (check-isolation/all-findings))
+        "the burn-down list is not empty yet, so the scan must be finding it"))
+
+  (testing "every finding in the tree is on the burn-down list"
+    (is (empty? (check-isolation/unexplained-findings)))))
+
 (def gates-with-firing-tests
   "Gate ids from `check/all-checks` that this namespace proves can still fire.
 
@@ -658,7 +701,7 @@
    one that does not run."
   #{:hygiene :deps :fcis :placeholder-tests :docs-lint
     :test-meta :test-tags :ports :poms :agents :doctor :linting :no-boundary
-    :doc-counts :branch-protection :versions :changelog})
+    :doc-counts :branch-protection :versions :changelog :isolation})
 
 ;; =============================================================================
 ;; check:changelog

@@ -58,6 +58,21 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **`bb check:isolation`, and an isolated build per library in CI** (BOU-304).
+  "30 independently publishable libraries" was documented and never checked — no
+  CI job had ever built a library against its own `deps.edn`. The new matrix job
+  loads every namespace of each library against only its own dependencies. That
+  turned out not to be enough on its own: 30 of 31 libraries already compile
+  clean in isolation, `realtime` among them, because its require of
+  `wagoe.user.shell.auth` sits inside a `try`/`catch` that swallows the failure.
+  The namespace loads and the adapter throws on first use, from Clojars, in a
+  user's application. So the gate reads the loading forms themselves — `require`,
+  `requiring-resolve`, `the-ns`, `resolve` — and fails when a library reaches for
+  a namespace it neither owns nor declares. It ships with a justified burn-down
+  list of 17 known cases in `.wagoe/check-isolation.edn`, which BOU-305, BOU-306
+  and BOU-307 empty; an entry that stops exempting anything also fails the build,
+  so the list cannot quietly become a drawer.
+
 - **`bb bump <version>`** (BOU-316). The release bump was a global
   `find | xargs sed` copied out of the README, and three things were wrong with
   it at once: the snippet set `OLD` and `NEW` to the *same string*, so a

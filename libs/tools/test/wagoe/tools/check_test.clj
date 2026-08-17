@@ -289,7 +289,7 @@
     ;; will invoke it, so the task must exist in bb.edn.tmpl first — which the
     ;; test below enforces.
     (is (= #{:doc-counts :versions :agents :poms :no-boundary :docs-lint
-             :branch-protection :changelog}
+             :branch-protection :changelog :isolation}
            (set (map :id (remove #(= :any (:scope %)) check/all-checks)))))))
 
 (deftest ^:unit portable-checks-exist-as-tasks-in-generated-projects

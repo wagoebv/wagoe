@@ -367,6 +367,100 @@ jobs:
         run: bb check:doc-counts
 
   # =============================================================================
+  # "30 independently publishable libraries" — the static half
+  #
+  # A library may not load a namespace it neither owns nor declares. This is the
+  # half `check-isolation-matrix` below cannot see: 30 of 31 libraries compile
+  # clean against their own deps.edn, realtime included, because its require sits
+  # in a try/catch that swallows the failure. The namespace loads; the adapter
+  # throws on first use, from Clojars, in a user's application (BOU-304).
+  # =============================================================================
+  check-isolation:
+    name: Libraries Declare What They Load
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Babashka
+        uses: DeLaGuardo/setup-clojure@13.6.1
+        with:
+          bb: latest
+
+      - name: Check no library loads an undeclared namespace
+        run: bb check:isolation
+
+  # =============================================================================
+  # "30 independently publishable libraries" — the compile half
+  #
+  # Each library built against *only* its own deps.edn, not the monorepo
+  # classpath. Catches an undeclared static require, which is the failure the
+  # claim is usually assumed to be about. Compile-only rather than each library's
+  # test suite: it is a fraction of the runtime, and the tests would not add
+  # coverage of the smuggling — check-isolation above is what catches that.
+  #
+  # `libs/tools` is excluded because its runtime is Babashka, not the JVM:
+  # babashka.process and babashka.fs are built into bb and are not Maven
+  # dependencies, so `clojure -M` cannot load it by design. `bb test:tools` is
+  # what exercises it.
+  # =============================================================================
+  check-isolation-matrix:
+    name: Isolated Build (${{ matrix.lib }})
+    runs-on: ubuntu-latest
+    needs: warm-deps
+
+    strategy:
+      fail-fast: false
+      matrix:
+        lib: [admin, ai, audience, cache, calendar, core, devtools, email, events,
+              external, geo, i18n, jobs, observability, payments, platform, push,
+              realtime, reports, scaffolder, search, shared-ui, storage, tenant,
+              ui-style, user, wagoe-cli, wagoe-mcp, workflow]
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Clojure
+        uses: DeLaGuardo/setup-clojure@13.6.1
+        with:
+          cli: 1.12.5.1654
+          bb: latest
+
+      - name: Restore dependency cache
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.m2/repository
+            ~/.gitlibs
+          key: ${{ runner.os }}-clojure-${{ hashFiles('**/deps.edn') }}
+          restore-keys: ${{ runner.os }}-clojure-
+
+      # Requires every namespace the library ships, from the library's own
+      # directory, so the classpath is its deps.edn and nothing else.
+      #
+      # The namespace list is built by wagoe.tools.check-isolation rather than by
+      # find|sed here: the shell version used `s|\.cljc\?$||`, and `\?` is GNU
+      # basic-regex, so BSD sed left the extension on and emitted
+      # `(require 'wagoe.core.foo.clj)`. Green on this runner, broken for anyone
+      # reproducing the job on a Mac. It is unit-tested there.
+      - name: Load every namespace against only this library's deps.edn
+        run: |
+          set -euo pipefail
+
+          form="$(bb -e "(require '[wagoe.tools.check-isolation :as ci]) (print (ci/require-form \"${{ matrix.lib }}\"))")"
+
+          if [ -z "$form" ]; then
+            echo "No namespaces under src/ — nothing to isolate."
+            exit 0
+          fi
+
+          echo "Loading in isolation:"
+          bb -e "(require '[wagoe.tools.check-isolation :as ci]) (run! println (ci/namespaces-of \"${{ matrix.lib }}\"))" | sed 's/^/  /'
+
+          cd "libs/${{ matrix.lib }}"
+          clojure -M -e "$form"
+
+  # =============================================================================
   # Suite version consistency (Babashka — fast, no JVM)
   # =============================================================================
   check-versions:
@@ -1319,7 +1413,7 @@ jobs:
   test-summary:
     name: All Tests Passed
     runs-on: ubuntu-latest
-    needs: [lint, branch-protection, first-run-smoke, build-ui-assets, docs-lint, agents-links, command-smoke, config-doctor, i18n-scan, check-fcis, check-placeholder-tests, check-test-meta, check-test-tags, check-deps, check-ports, check-hygiene, check-changelog, check-doc-counts, check-versions, check-poms, check-agents, check-no-boundary, build-uberjar, test-tools, example-smoke, test-i18n, test-core, test-observability, test-platform, test-user, test-admin, test-ui-style, test-storage, test-cache, test-events, test-jobs, test-tenant, test-audience, test-devtools, test-email, test-realtime, test-workflow, test-search, test-scaffolder, test-external, test-payments, test-push, test-calendar, test-reports, test-geo, test-ai, test-mcp, test-wagoe-cli, test-shared-ui]
+    needs: [lint, branch-protection, first-run-smoke, build-ui-assets, docs-lint, agents-links, command-smoke, config-doctor, i18n-scan, check-fcis, check-placeholder-tests, check-test-meta, check-test-tags, check-deps, check-ports, check-hygiene, check-changelog, check-doc-counts, check-versions, check-isolation, check-isolation-matrix, check-poms, check-agents, check-no-boundary, build-uberjar, test-tools, example-smoke, test-i18n, test-core, test-observability, test-platform, test-user, test-admin, test-ui-style, test-storage, test-cache, test-events, test-jobs, test-tenant, test-audience, test-devtools, test-email, test-realtime, test-workflow, test-search, test-scaffolder, test-external, test-payments, test-push, test-calendar, test-reports, test-geo, test-ai, test-mcp, test-wagoe-cli, test-shared-ui]
 
     steps:
       - name: Summary
