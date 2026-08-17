@@ -125,6 +125,7 @@
             persistence-content (generators/generate-persistence-file ctx)
             http-content (generators/generate-http-file ctx)
             web-handlers-content (generators/generate-web-handlers-file ctx)
+            module-wiring-content (generators/generate-module-wiring-file ctx)
             ui-content (generators/generate-ui-file ctx)
 
             ;; Generate test file contents
@@ -156,6 +157,12 @@
                     :action :create}
                    {:path (format "src/%s/%s/shell/web_handlers.clj" base-ns-path module-name)
                     :content web-handlers-content
+                    :action :create}
+                   ;; Without this, `bb scaffold integrate` reported that the
+                   ;; module had no wiring and the user hand-wrote the Integrant
+                   ;; keys the framework says never to hand-write (BOU-309).
+                   {:path (format "src/%s/%s/shell/module_wiring.clj" base-ns-path module-name)
+                    :content module-wiring-content
                     :action :create}
                    ;; migratus discovers `<id>-<name>.up.sql` / `.down.sql`. The old
                    ;; `%s_create_%s.sql` shape was invisible to it, so scaffolded
@@ -201,9 +208,12 @@
          ;; Supplied here rather than in the CLI so the namespace follows
          ;; --base-ns. The CLI cannot know it, and a hardcoded "wagoe." would
          ;; be one more instruction that does not run.
+         ;; "Add module to config: [:active :wagoe/settings :modules]" used to be
+         ;; here. Nothing reads that path, and it contradicted `integrate`, which
+         ;; writes the :wagoe/<module> key the generated module_wiring.clj
+         ;; defines (BOU-309).
          :next-steps ["Review the generated files"
-                      "Add module to config: [:active :wagoe/settings :modules]"
-                      "Wire module into Integrant system configuration"
+                      (format "Wire it up: bb scaffold integrate %s" module-name)
                       (format "Run tests: clojure -M:test --focus %s.%s.core.%s-test"
                               (str/replace base-ns-path "/" ".") module-name module-name)]
          :warnings (if dry-run?

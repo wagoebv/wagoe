@@ -25,7 +25,8 @@ src/wagoe/product/
 │   ├── persistence.clj  ← Database translation and queries
 │   ├── service.clj      ← Orchestration and validation
 │   ├── http.clj         ← Request and response handlers
-│   └── web_handlers.clj
+│   ├── web_handlers.clj
+│   └── module_wiring.clj ← Integrant components — what `integrate` wires up
 ├── ports.clj            ← Protocol definitions
 └── schema.clj           ← Malli validation schemas
 ----
