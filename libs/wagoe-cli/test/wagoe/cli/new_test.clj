@@ -390,7 +390,25 @@
         (testing "and it discovers scaffolded modules"
           ;; Without this the generated project ignores every module the
           ;; scaffolder makes, which is the defect BOU-311 fixes.
-          (is (str/includes? src "discover-module-config"))))
+          (is (str/includes? src "discover-module-config")))
+
+        (testing "and hands their routes to the http handler"
+          ;; Discovery alone is half the wiring, and the half that boots
+          ;; quietly: the module initialises, nothing mounts it, and
+          ;; /api/v1/<module> is a 404 while `bb quickstart` reports 8/8 Done.
+          ;; Asserting only on discover-module-config above is what let that
+          ;; ship (BOU-312).
+          ;;
+          ;; Read forms, not the text. `str/includes?` here would be satisfied
+          ;; by the comment that explains the wiring, so deleting the wiring and
+          ;; keeping the comment would pass.
+          (let [ig-form (some #(when (and (seq? %) (= 'defn (first %)) (= 'ig-config (second %))) %)
+                              (read-string (str "[" src "]")))
+                nodes   (tree-seq coll? seq ig-form)]
+            (is (some #{:module-routes} nodes)
+                "ig-config must put :module-routes on the http-handler")
+            (is (some #(and (symbol? %) (str/ends-with? (name %) "discovered-route-refs")) nodes)
+                "and fill it from the discovered modules, not a hardcoded list"))))
       (finally
         (when (.exists (io/file tmp))
           (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f)))))))

@@ -31,6 +31,17 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **A scaffolded module booted but served nothing in a generated project**
+  (BOU-312). `wagoe new`'s config template discovered scaffolded modules and
+  wired their components, but never passed their routes to the HTTP handler, so
+  `/api/v1/<module>` was a 404 in every generated project while `bb quickstart`
+  reported 8/8 Done. The first-run smoke could not see it either: it asserted
+  that `/api-docs/` returns 200, which the framework serves in a project with no
+  module at all. The smoke now curls the module quickstart scaffolded, requires
+  a 2xx with a JSON body, and requires an unknown sibling path to 404 — a router
+  that answers everything would otherwise pass. The nightly first-run matrix
+  inherits all three.
+
 - **A pull request from a fork ran no tests at all** (BOU-315). `ci.yml`
   triggered on `push:` alone, so same-repo branches were covered and fork PRs
   started zero jobs — leaving `All Tests Passed`, the one context branch
@@ -105,7 +116,8 @@ for what is public API, what is internal, and how deprecations are announced.
   shape `bb scaffold integrate` prints — is now wired from its
   `wagoe.<module>.shell.module-wiring`, and its routes reach `:wagoe/http-handler`
   through `:module-routes`, because the handler names its route keys one by one
-  and cannot name a generated module. A key whose wiring namespace will not load
+  and cannot name a generated module. (In the framework's own app root only —
+  generated projects got the `:module-routes` half in BOU-312, below.) A key whose wiring namespace will not load
   throws at boot naming the key, the namespace it looked for, and the fix; a
   misspelled key used to look exactly like a working one.
 
