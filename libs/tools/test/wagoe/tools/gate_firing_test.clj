@@ -34,6 +34,7 @@
             [wagoe.tools.check-doc-counts :as check-doc-counts]
             [wagoe.tools.check-versions :as check-versions]
             [wagoe.tools.check-isolation :as check-isolation]
+            [wagoe.tools.check-error-shape :as check-error-shape]
             [wagoe.tools.check-poms :as check-poms]
             [wagoe.tools.check-ports :as check-ports]
             [wagoe.tools.check-tests :as check-tests]
@@ -712,7 +713,76 @@
    one that does not run."
   #{:hygiene :deps :fcis :placeholder-tests :docs-lint
     :test-meta :test-tags :ports :poms :agents :doctor :linting :no-boundary
-    :doc-counts :branch-protection :versions :changelog :isolation})
+    :doc-counts :branch-protection :versions :changelog :isolation
+    :error-shape})
+
+;; =============================================================================
+;; check:error-shape
+;; =============================================================================
+
+(deftest ^:unit error-shape-gate-fires-test
+  ;; ADR-022 required a :type on every thrown ex-info in April 2026. Nothing
+  ;; checked it, and 59 shell throws had none by August — a rule that existed
+  ;; only in a document. This gate is that rule; these are the cases it has to
+  ;; catch, and the ones it must not.
+
+  (testing "a thrown ex-info with no :type is a finding"
+    (is (seq (check-error-shape/untyped-throw-findings
+              "(defn f [] (throw (ex-info \"boom\" {:provider :x})))"
+              "libs/x/src/wagoe/x/shell/f.clj"))))
+
+  (testing "one with a :type is not"
+    (is (empty? (check-error-shape/untyped-throw-findings
+                 "(defn f [] (throw (ex-info \"boom\" {:type :not-found})))"
+                 "libs/x/src/wagoe/x/shell/f.clj"))))
+
+  (testing "a data map built elsewhere is not judged"
+    ;; `(throw (ex-info msg err))` where err carries :type at runtime is the
+    ;; documented way a shell rethrows what a pure validator produced. A static
+    ;; check that guessed would report the audience service, which does exactly
+    ;; that on purpose.
+    (is (empty? (check-error-shape/untyped-throw-findings
+                 "(defn f [err] (throw (ex-info \"boom\" err)))"
+                 "libs/x/src/wagoe/x/shell/f.clj"))))
+
+  (testing "an ex-info in a docstring or a comment is not code"
+    (is (empty? (check-error-shape/untyped-throw-findings
+                 "(defn f \"Example: (throw (ex-info \\\"x\\\" {:a 1}))\" [] 1)"
+                 "libs/x/src/wagoe/x/shell/f.clj"))))
+
+  (testing "{:success? false} must carry an :error map"
+    (is (= [:no-error]
+           (map :rule (check-error-shape/failure-map-findings
+                       "(defn f [] {:success? false :message \"nope\"})" "x.clj"))))
+    (is (= [:string-error]
+           (map :rule (check-error-shape/failure-map-findings
+                       "(defn f [] {:success? false :error \"nope\"})" "x.clj"))))
+    (is (= [:string-type]
+           (map :rule (check-error-shape/failure-map-findings
+                       "(defn f [] {:success? false :error {:type \"SmtpError\"}})" "x.clj"))))
+    (is (empty? (check-error-shape/failure-map-findings
+                 "(defn f [] {:success? false :error {:type :smtp-error :message \"x\"}})" "x.clj"))))
+
+  (testing "a computed :type is left alone rather than guessed at"
+    ;; The gate reads shapes. `(or (:reason check) :forbidden)` is a value only
+    ;; the runtime knows, and a gate that pretended otherwise would report on
+    ;; what it cannot see.
+    (is (empty? (check-error-shape/failure-map-findings
+                 "(defn f [c] {:success? false :error {:type (or (:reason c) :forbidden)}})"
+                 "x.clj"))))
+
+  (testing "an exemption with no reason is rejected, not honoured"
+    (is (thrown? clojure.lang.ExceptionInfo
+                 (check-error-shape/parse-allowlist [{:file "x.clj" :rule :untyped-throw}]))))
+
+  (testing "the gate reads the real tree, and the tree is currently explained"
+    ;; The BOU-250 shape: a live check scanning nothing reports clean forever.
+    ;; The allowlist ships full, so "no unexplained findings" is the assertion —
+    ;; and `stale-exemptions` is what makes the list shrink rather than rot.
+    (is (seq (check-error-shape/all-findings))
+        "the scan found nothing at all — it is not looking at the tree")
+    (is (empty? (check-error-shape/unexplained-findings)))
+    (is (empty? (check-error-shape/stale-exemptions)))))
 
 ;; =============================================================================
 ;; check:changelog

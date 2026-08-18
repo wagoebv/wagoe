@@ -31,6 +31,19 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **`bb check:error-shape`** (BOU-323). ADR-022 required a `:type` on every
+  exception thrown at a boundary, in April; nothing checked it, and 59 `ex-info`
+  throws in `shell/` namespaces had none by August — the HTTP layer maps `:type`
+  to a status code, so each of those is a 500 that could have been a 404 or a
+  400. ADR-036 added the return shapes: a `{:success? false}` carries
+  `{:error {:type <keyword> :message …}}`, not a bare string and not nothing.
+
+  The gate ships with its 77 existing violations in
+  `.wagoe/check-error-shape.edn`, each with a `:why` naming the migration step
+  that removes it. New ones fail the build, and an entry that stops exempting
+  anything fails it too — the burn-down rule the other gates use. It reads
+  shapes, not intent: a computed `:type` is left alone rather than guessed at.
+
 - **The MCP server advertised seven resources and could serve none of them in a
   project** (BOU-320). `.mcp.json` ships in every generated project, so an
   editor agent connects and asks — and got `:unavailable` from all seven.
