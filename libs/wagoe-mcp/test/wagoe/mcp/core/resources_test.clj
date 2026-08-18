@@ -45,3 +45,36 @@
                   :module-graph (delay (swap! forced conj :module-graph) {:m 1})}]
       (is (= {:ok 1} (res/read-resource snap "wagoe://conventions")))
       (is (= #{:conventions} @forced)))))
+
+(deftest ^:unit only-resources-that-deliver-are-advertised
+  ;; resources/list advertised all seven everywhere, and four of them answered
+  ;; with an :unavailable note in any project — the agent spent a round trip to
+  ;; be told the resource does not exist here (BOU-320).
+  (testing "a project that can serve two advertises two"
+    (let [snap {:conventions  {:fc-is {}}
+                :module-graph {:source :project :libraries ["wagoe-core"]}}]
+      (is (= ["wagoe://conventions" "wagoe://module-graph"]
+             (mapv :uri (res/available-catalog snap))))))
+
+  (testing "a view present but :unavailable is not advertised"
+    (is (empty? (res/available-catalog {:conventions {:status :unavailable :note "x"}}))))
+
+  (testing "the lib template is advertised only when libs are reflected"
+    (is (empty? (res/available-catalog {:libs {}})))
+    (is (= [(str res/lib-uri-prefix "{name}")]
+           (mapv :uri (res/available-catalog {:libs {"user" {:namespaces []}}})))))
+
+  (testing "a snapshot with everything still advertises everything"
+    (is (= (count res/catalog)
+           (count (res/available-catalog (assoc full-snapshot
+                                                :schema-registry {:x 1}
+                                                :routes          {:x 1}
+                                                :workflows       {:x 1})))))))
+
+(deftest ^:unit availability-forces-only-what-it-must
+  ;; Views are delays so reading one resource does not pay to build the others.
+  ;; The filter forces them — that is what it is for — but a delay that throws
+  ;; must not take the whole listing down with it.
+  (let [snap {:conventions (delay {:fc-is {}})
+              :module-graph (delay nil)}]
+    (is (= ["wagoe://conventions"] (mapv :uri (res/available-catalog snap))))))

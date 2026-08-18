@@ -27,7 +27,10 @@
                             [:license
                              [:name "Eclipse Public License 2.0"]
                              [:url "https://www.eclipse.org/legal/epl-2.0/"]]]]})
-  (b/copy-dir {:src-dirs ["src"]
+  ;; "resources" is not decoration: the agents knowledge base ships from here,
+  ;; and the MCP server reads it off the classpath so wagoe://conventions
+  ;; answers in a project rather than only in this repository (BOU-320).
+  (b/copy-dir {:src-dirs ["src" "resources"]
                :target-dir class-dir})
   ;; BOU-76: ship the shared error catalogue inside the wagoe-tools jar so
   ;; consumer projects that depend on wagoe-tools alone (without

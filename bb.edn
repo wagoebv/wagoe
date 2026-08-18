@@ -3,6 +3,8 @@
                                        ; implementation, shared with `clojure -M:docs-lint`
          "libs/tools/src"              ; wagoe-tools — pure bb, no Maven deps needed at runtime
          "libs/devtools/resources"     ; shared error catalogue EDN (wagoe/devtools/core/error_catalog.edn)
+         "libs/tools/resources"        ; agents knowledge EDN, shipped in the jar so the MCP
+                                       ; server can read it from a project (BOU-320)
          "libs/wagoe-cli/src"       ; bbin installs via --deps-root repo-root, so root bb.edn :paths must include CLI src
          "libs/wagoe-cli/resources"]
  :tasks
@@ -89,7 +91,7 @@
                    :task (check-isolation/-main)}
   check-links   {:doc "Validate local links in AGENTS.md and the AsciiDoc docs (dev-docs/ + docs/)"
                  :task (dev/check-links)}
-  agents:gen    {:doc "Generate AGENTS.md + AGENTS.md.tmpl from resources/agents/knowledge.edn (bb agents:gen [--check])"
+  agents:gen    {:doc "Generate AGENTS.md + AGENTS.md.tmpl from the agents knowledge base on the classpath (bb agents:gen [--check])"
                  :task (apply agents-gen/-main *command-line-args*)}
   check:agents  {:doc "Verify AGENTS files are in sync with knowledge.edn and the module catalogue is valid (bb check:agents)"
                  :task (agents-gen/-main "--check")}

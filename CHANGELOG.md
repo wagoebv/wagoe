@@ -31,6 +31,25 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **The MCP server advertised seven resources and could serve none of them in a
+  project** (BOU-320). `.mcp.json` ships in every generated project, so an
+  editor agent connects and asks — and got `:unavailable` from all seven.
+  `wagoe://conventions` read `resources/agents/knowledge.edn`, a path that
+  exists in this repository and in no project; `wagoe://module-graph` walked a
+  `libs/` directory only this repository has; the rest wait on the nREPL bridge.
+
+  The knowledge base ships in the `wagoe-tools` jar now and is read from the
+  classpath, so the resource that explains how to write Wagoe code answers
+  wherever the server runs (a project can still override it with its own
+  `resources/agents/knowledge.edn`). The module graph answers for a project:
+  the `com.wagoe` libraries it depends on, which of those are dev-only, and the
+  `:wagoe/*` modules its config switches on — from the config text, so a module
+  named in a comment is not reported as running.
+
+  And `resources/list` now advertises only what the project can serve. An
+  advertisement that always answers "not available in the current context"
+  costs the agent a round trip to learn nothing.
+
 - **A malformed request answered 500, and no error carried a BND code**
   (BOU-321). Reitit applies a `:middleware` vector first-to-outermost, and the
   exception middleware sat last — *inside* request coercion. So a POST missing a

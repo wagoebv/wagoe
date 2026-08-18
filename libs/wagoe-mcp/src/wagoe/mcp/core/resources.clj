@@ -106,3 +106,25 @@
 (defn known-resource?
   [snapshot uri]
   (some? (read-resource snapshot uri)))
+
+(defn available?
+  "True when `uri` resolves to real content for `snapshot`.
+
+   The `wagoe://lib/{name}` entry is a template rather than a readable uri, so
+   it is judged by whether the snapshot carries a non-empty `:libs` view."
+  [snapshot {:keys [uri]}]
+  (if (str/ends-with? uri "{name}")
+    (boolean (seq (force-val (get snapshot :libs))))
+    (let [v (read-resource snapshot uri)]
+      (and (some? v) (not= :unavailable (:status v))))))
+
+(defn available-catalog
+  "The resources this project can actually serve.
+
+   `resources/list` advertised all seven everywhere, and four of them answered
+   with an :unavailable placeholder in any project — the agent asked for a
+   schema registry, got a note explaining that it does not exist here, and had
+   spent a round trip to learn it. An advertisement that never delivers is
+   worse than an absence (BOU-320)."
+  [snapshot]
+  (vec (filter #(available? snapshot %) catalog)))

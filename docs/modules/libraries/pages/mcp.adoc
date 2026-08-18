@@ -173,9 +173,19 @@ Or by hand, in `.mcp.json`:
 == Resources
 
 Beyond tools, the server exposes framework knowledge as MCP resources under the
-`wagoe://` scheme — conventions, the module graph and related project
-introspection. An agent can read these to ground itself in the project's actual
-shape instead of guessing from file names.
+`wagoe://` scheme. An agent can read these to ground itself in the project's
+actual shape instead of guessing from file names.
+
+`wagoe://conventions` returns the FC/IS rules, naming conventions and pitfalls
+that generate `AGENTS.md`; drop your own `resources/agents/knowledge.edn` in the
+project to override it. `wagoe://module-graph` returns the `com.wagoe`
+libraries the project depends on and the `:wagoe/*` modules its config switches
+on. `wagoe://kondo-rules` returns `.clj-kondo/config.edn` where a project has
+one.
+
+`resources/list` advertises only what the project can actually serve — the
+live-system resources (schemas, routes, workflows, per-library API surface) wait
+on the nREPL bridge and are not offered until they can answer.
 
 == Architecture
 

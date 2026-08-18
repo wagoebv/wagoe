@@ -162,22 +162,28 @@ version skew. Producers (`core/resources`) are pure functions of a project
 **snapshot**; a `SystemSource` port supplies it (hybrid: in-process file
 reflection now; nREPL bridge later for live-system views).
 
-| URI | Source | Status |
-|-----|--------|--------|
-| `wagoe://conventions`     | `resources/agents/knowledge.edn` (FC/IS + naming) | concrete |
-| `wagoe://module-graph`    | `libs/*/deps.edn` + `ports.clj` presence | concrete |
-| `wagoe://kondo-rules`     | `.clj-kondo/config.edn` | concrete |
-| `wagoe://schema-registry` | live Malli registry | `:unavailable` until nREPL bridge |
-| `wagoe://routes`          | live reitit router | `:unavailable` until nREPL bridge |
-| `wagoe://workflows`       | workflow registry | `:unavailable` until nREPL bridge |
-| `wagoe://lib/{name}`      | installed lib API surface | `:unavailable` until nREPL bridge |
+| URI | Source | Where it resolves |
+|-----|--------|-------------------|
+| `wagoe://conventions`     | `wagoe/agents/knowledge.edn` on the classpath (FC/IS, naming, pitfalls); a project's own `resources/agents/knowledge.edn` overrides it | anywhere |
+| `wagoe://module-graph`    | this repo: `libs/*/deps.edn` + `ports.clj`. A project: its `com.wagoe/*` deps and the `:wagoe/*` keys its dev config switches on | anywhere |
+| `wagoe://kondo-rules`     | `.clj-kondo/config.edn` | where one exists |
+| `wagoe://schema-registry` | live Malli registry | not yet — nREPL bridge |
+| `wagoe://routes`          | live reitit router | not yet — nREPL bridge |
+| `wagoe://workflows`       | workflow registry | not yet — nREPL bridge |
+| `wagoe://lib/{name}`      | installed lib API surface | not yet — nREPL bridge |
 
+- **`resources/list` advertises only what this project can serve.** The registry
+  is seeded from `resources/available-catalog` against a snapshot, so an agent
+  is not offered a schema registry that answers "not available in the current
+  context" (BOU-320). A direct `resources/read` of a known-but-unfilled uri
+  still returns `{:status :unavailable :note ...}` — honest, not silent-empty.
 - `resources/read` is gated (`security/authorize` `:read`) + audited in
   `shell/dispatch`; denial returns the guardrail payload. Unknown uri →
-  `-32602`. Content is JSON. Live views the snapshot can't fill return
-  `{:status :unavailable :note ...}` (honest, not silent-empty).
+  `-32602`. Content is JSON.
 - The in-process adapter reflects the **current working directory** — run from a
-  Wagoe project root.
+  Wagoe project root. `build-snapshot` takes the root as an argument, which is
+  what makes the reflection testable: relative paths in the JVM resolve against
+  the process working directory, and no test can change that.
 
 ## Tier 0 tools (BOU-100)
 
