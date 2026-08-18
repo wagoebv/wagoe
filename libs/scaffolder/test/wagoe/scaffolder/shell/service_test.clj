@@ -830,3 +830,23 @@
         (is (true? (:success preview)))
         (is (every? #(= :skip (:action %)) (:files preview))))
       (finally (rm-r dir)))))
+
+(deftest ^:integration force-replaces-the-migration-rather-than-adding-one
+  ;; Migration filenames carry a fresh UTC timestamp, so the pair is never in
+  ;; `existing` and --force added a second create-<table> per run. `up` is
+  ;; CREATE TABLE IF NOT EXISTS so `migrate up` stays quiet — but `migrate down`
+  ;; then drops the table with an older create still recorded as applied.
+  (let [dir (tmp-dir)
+        svc (service/create-scaffolder-service)
+        migs (fn []
+               (->> (.listFiles (io/file dir "migrations"))
+                    (map (fn [^java.io.File f] (.getName f)))
+                    (filter (fn [n] (str/includes? n "create-notes")))
+                    sort))]
+    (try
+      (ports/generate-module svc (assoc note-request :output-dir (.getPath dir)))
+      (let [before (migs)]
+        (is (= 2 (count before)) "one up/down pair")
+        (ports/generate-module svc (assoc note-request :output-dir (.getPath dir) :force true))
+        (is (= before (migs)) "--force must reuse the id, not add a second pair"))
+      (finally (rm-r dir)))))

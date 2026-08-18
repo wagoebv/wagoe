@@ -77,7 +77,7 @@
   [:map {:title "Generated File"}
    [:path :string]                                          ; File path
    [:content :string]                                       ; File content
-   [:action [:enum :create :update :skip]]])                ; Action taken
+   [:action [:enum :create :update :skip :overwrite]]])                ; Action taken
 
 (def ModuleGenerationResult
   "Schema for module generation result."

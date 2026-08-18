@@ -89,6 +89,19 @@
                       (.format (java.time.LocalDateTime/now java.time.ZoneOffset/UTC)
                                (java.time.format.DateTimeFormatter/ofPattern "yyyyMMddHHmmss")))))
 
+(defn- existing-migration-for
+  "The id of this module's create-<table> migration, if one is already there.
+
+   Returns the id only — the caller rebuilds both filenames from it, so an
+   overwrite replaces the pair it found instead of adding another."
+  [output-dir table]
+  (let [dir (io/file output-dir "migrations")]
+    (when (.isDirectory dir)
+      (some (fn [^java.io.File f]
+              (second (re-matches (re-pattern (str "(\\d+)-create-" table "\\.up\\.sql"))
+                                  (.getName f))))
+            (sort-by #(.getName ^java.io.File %) (.listFiles dir))))))
+
 (def ^:private module-generation-request-validator (m/validator schema/ModuleGenerationRequest))
 (def ^:private module-generation-request-explainer (m/explainer schema/ModuleGenerationRequest))
 
@@ -115,7 +128,17 @@
 
 ;; UTC timestamp id — see get-next-migration-number. Scoped to
             ;; output-dir so ids stay unique in the directory being written to.
-            migration-number (get-next-migration-number output-dir)
+            ;; Reuse the module's existing migration id when overwriting.
+            ;; A fresh UTC timestamp means the migration filename is never in
+            ;; `existing`, so --force added a *second* create-<table> pair per
+            ;; run rather than replacing the first. `up` is CREATE TABLE IF NOT
+            ;; EXISTS so `migrate up` stays quiet, but `migrate down` then drops
+            ;; the table with an older create still recorded as applied.
+            existing-migration (when force?
+                                 (existing-migration-for output-dir
+                                                         (:entity-plural (first (:entities ctx)))))
+            migration-number (or existing-migration
+                                 (get-next-migration-number output-dir))
 
             ;; Generate source file contents
             schema-content (generators/generate-schema-file ctx)
@@ -505,6 +528,7 @@
       (let [{:keys [module-name port adapter-name methods dry-run]} request
             base-ns      (or (:base-ns request) "wagoe")
             base-ns-path (str/replace base-ns "." "/")
+            output-dir   (:output-dir request ".")
 
             ;; Generate adapter file content
             adapter-content (generators/generate-adapter-file
@@ -516,11 +540,20 @@
                                  base-ns-path module-name adapter-name)
             files [{:path adapter-path
                     :content adapter-content
-                    :action :create}]]
+                    ;; :skip on a dry run — it reported :create for a file it
+                    ;; never wrote.
+                    :action (if dry-run :skip :create)}]]
 
         ;; Write adapter file (unless dry-run)
         (when-not dry-run
-          (let [file (io/file adapter-path)]
+          ;; resolve-path, not io/file: this path ignored --output-dir, so
+          ;; `bb scaffold adapter --output-dir /tmp` wrote into the cwd. And it
+          ;; spit unconditionally, like generate did before BOU-308 — a re-run
+          ;; replaced a hand-edited adapter with no warning.
+          (let [file (resolve-path output-dir adapter-path)]
+            (when (and (.exists file) (not (:force request false)))
+              (throw (ex-info "refuse-overwrite"
+                              {:type ::refuse-overwrite :existing [(.getPath file)]})))
             (.mkdirs (.getParentFile file))
             (spit file adapter-content)))
 

@@ -33,7 +33,7 @@
    re-check an unchanged file the tool did not touch."
   [files]
   (->> files
-       (filter #(= :create (:action %)))
+       (filter #(#{:create :overwrite} (:action %)))
        (map :path)
        (filter #(.exists (io/file %)))))
 

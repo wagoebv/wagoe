@@ -163,14 +163,19 @@
       (str/replace #"(^|/)src/" "$1test/")
       (str/replace #"\.clj$" "_test.clj")))
 
-(defn- scaffold-module [{:keys [module entities interfaces preview allow]} deps]
+(defn- scaffold-module [{:keys [module entities interfaces preview force allow]} deps]
   (valid-name! :module module-name-re module)
   (run! #(valid-name! :entity entity-name-re (:name %)) entities)
   (let [svc (:scaffolder deps)
         req {:module-name module
              :entities    (mapv entity->scaffolder entities)
              :interfaces  (select-keys (or interfaces {}) [:http :cli :web])
-             :dry-run     (boolean preview)}]
+             :dry-run     (boolean preview)
+             ;; Without this the verify-and-re-invoke loop this tool documents
+             ;; is a dead end: the first call writes the files, so every later
+             ;; one is refused and the agent has no flag to get past it
+             ;; (BOU-308).
+             :force       (boolean force)}]
     (if preview
       (let [r (scaffold/generate-module svc (assoc req :dry-run true))]
         {:status  :preview

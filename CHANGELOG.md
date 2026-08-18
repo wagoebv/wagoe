@@ -71,12 +71,16 @@ for what is public API, what is internal, and how deprecations are announced.
 - **`bb scaffold generate` no longer overwrites an existing module without
   asking** (BOU-308). The write path `spit`-ed every file unconditionally, so
   re-running the framework's most-recommended command after a day of editing
-  replaced all fourteen files — no prompt, no backup, exit 0. `--force` was
+  replaced every file it had written — no prompt, no backup, exit 0. `--force` was
   declared in the CLI and threaded into the request; nothing read it. Generation
   now refuses before writing anything, listing the files it would have replaced,
   and exits non-zero. With `--force` it overwrites and reports those files as
   `:overwrite` rather than `:create`. A dry run never refuses, since it writes
-  nothing.
+  nothing. `--force` reuses the module's existing migration id rather than
+  adding a second `create-<table>` pair, and the MCP `scaffold-module` tool
+  gained the flag — without it, the verify-and-re-invoke loop that tool
+  documents was a dead end. `bb scaffold adapter` had the same unconditional
+  write, ignored `--output-dir`, and reported `:create` for a dry run.
 
 ### Added
 
