@@ -964,6 +964,7 @@ Automated safeguards run in CI (and `check:fcis` + `check:ports` in pre-commit) 
 | [calendar](https://github.com/wagoebv/wagoe/blob/main/libs/calendar/AGENTS.md)           | iCal, RRULE recurrence, conflict detection, Hiccup UI                                        |
 | [config](https://github.com/wagoebv/wagoe/blob/main/libs/config/AGENTS.md)               | Aero config loading and the typed accessors libraries read through                           |
 | [core](https://github.com/wagoebv/wagoe/blob/main/libs/core/AGENTS.md)                   | Pure validation, case conversion, interceptor pipeline, feature flags                        |
+| [devtools](https://github.com/wagoebv/wagoe/blob/main/libs/devtools/AGENTS.md)           | Error pipeline with BND codes, (fix!), dev dashboard, REPL tools                             |
 | [devtools](https://github.com/wagoebv/wagoe/blob/main/libs/devtools/AGENTS.md)           | Dev-only tools: REPL helpers, error pipeline, dashboard                                      |
 | [email](https://github.com/wagoebv/wagoe/blob/main/libs/email/AGENTS.md)                 | SMTP email sending, async and queued modes                                                   |
 | [events](https://github.com/wagoebv/wagoe/blob/main/libs/events/AGENTS.md)               | Event bus for cross-process, asynchronous module communication — in-memory and Redis Streams |

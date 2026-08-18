@@ -269,4 +269,20 @@
    :add-command         "wagoe add ui-style"
    :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/ui-style/AGENTS.md"
    :post-install        ["Pure data library — no config and no Integrant key."
-                         "Reference a bundle from your page templates."]}]}
+                         "Reference a bundle from your page templates."]}
+
+  {:name                "devtools"
+   :description         "Error pipeline with BND codes, (fix!), dev dashboard, REPL tools"
+   :clojars             com.wagoe/wagoe-devtools
+   :version             "1.0.0-beta-5"
+   :category            :optional
+   ;; Dev-only. `wagoe add devtools` puts this in the :repl alias, not :deps —
+   ;; it pulls a Jetty adapter and a dashboard, and none of it belongs in a
+   ;; production uberjar. `wagoe new` already writes it into :repl.
+   :scope               :dev
+   :config-snippet      ""
+   :test-config-snippet ""
+   :add-command         "wagoe add devtools"
+   :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/devtools/AGENTS.md"
+   :post-install        ["Dev-only: added to the :repl alias, not to :deps."
+                         "It is on the classpath of `clojure -M:repl`, and of nothing else."]}]}

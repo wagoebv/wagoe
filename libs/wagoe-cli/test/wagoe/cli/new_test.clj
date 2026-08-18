@@ -167,6 +167,18 @@
             (is (str/includes? content (str "com.wagoe/" lib))
                 (str "Missing from :mcp closure: " lib)))))
 
+      (testing "devtools is on the :repl alias and nowhere else"
+        ;; The dev classpath is the point: devtools carries a dashboard and a
+        ;; Jetty adapter, so :deps would put all of it in the uberjar and in the
+        ;; Dockerfile image (BOU-318).
+        (let [deps (edn/read-string (slurp (io/file tmp "deps.edn")))]
+          (is (get-in deps [:aliases :repl :extra-deps 'com.wagoe/wagoe-devtools])
+              "`clojure -M:repl` must have devtools")
+          (is (nil? (get-in deps [:deps 'com.wagoe/wagoe-devtools]))
+              "and the production classpath must not")
+          (is (not (str/includes? (slurp (io/file tmp "deps.edn")) "{{devtools-version}}"))
+              "unrendered version placeholder")))
+
       (testing "pre-commit hook is executable"
         (is (.canExecute (io/file tmp ".githooks/pre-commit"))))
       (finally

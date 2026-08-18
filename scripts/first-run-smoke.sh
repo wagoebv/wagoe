@@ -317,6 +317,25 @@ NOPE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 http://localhost:300
 T1=$(date +%s)
 ok "/api/v1/tasks returned $MODULE_CODE with a JSON body, and unknown paths still 404"
 
+# ── are the devtools the docs point at on the classpath? ────────────────────
+# devtools ships the BND error pipeline, (fix!) and the dashboard, and until
+# BOU-318 it reached generated projects nowhere: not in :deps, not in the :repl
+# alias, not in the module catalogue. Loading it through the REPL that is
+# already running is the assert — a classpath grep would pass on a jar that
+# cannot load.
+#
+# The value asserted on is COMPUTED, not a literal in the expression. The first
+# version evaluated `(require ...) :loaded` and grepped for :loaded, which
+# clj-nrepl-eval echoes back as part of the code it was given: the step passed
+# with devtools removed from the template entirely. A count cannot be echoed.
+bash -ic "clj-nrepl-eval -p 7888 \"(do (require (quote wagoe.devtools.core.error-classifier)) (str (quote devtools-publics=) (count (ns-publics (quote wagoe.devtools.core.error-classifier)))))\"" \
+  >/tmp/devtools.log 2>&1 || { tail -15 /tmp/devtools.log
+                               fail "wagoe.devtools is not loadable in the generated project (deps.edn :repl alias)"; }
+grep -qE "devtools-publics=[1-9]" /tmp/devtools.log \
+  || { tail -15 /tmp/devtools.log
+       fail "wagoe.devtools did not load — the eval returned no public vars"; }
+ok "wagoe-devtools loads from the :repl alias"
+
 echo
 echo "First-run smoke passed in $((T1-T0))s (install to serving app)."
 '

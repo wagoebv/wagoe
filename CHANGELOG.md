@@ -31,6 +31,22 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **devtools reached generated projects nowhere, and `wagoe add ai` wrote
+  nothing** (BOU-318). The error pipeline with its BND codes, `(fix!)` and the
+  dev dashboard existed only in the monorepo: `wagoe-devtools` was in no
+  template dependency and in no catalogue entry, so `wagoe add devtools` failed
+  with "Unknown module". It is now in the `:repl` alias of a generated
+  `deps.edn` — dev-only on purpose, so it stays out of the uberjar and the
+  Docker image — and in the catalogue as the first `:scope :dev` module, which
+  `wagoe add` puts in that alias rather than in `:deps`.
+
+  Finding that surfaced a second defect: `wagoe add` searched the whole
+  `deps.edn` as text for the coordinate. The generated `:mcp` alias names five
+  wagoe libs it launches the MCP server with, so `wagoe add ai`, `jobs`,
+  `scaffolder` and `tools` all read as already installed — the command printed
+  success and left `:deps` untouched. It reads the file as EDN now and looks
+  where the module belongs.
+
 - **A scaffolded module booted but served nothing in a generated project**
   (BOU-312). `wagoe new`'s config template discovered scaffolded modules and
   wired their components, but never passed their routes to the HTTP handler, so
