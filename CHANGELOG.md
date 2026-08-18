@@ -66,6 +66,18 @@ for what is public API, what is internal, and how deprecations are announced.
   application supplies the implementation, since it knows what issues its
   tokens. `TestJWTAdapter` is unchanged.
 
+### Fixed
+
+- **`bb scaffold generate` no longer overwrites an existing module without
+  asking** (BOU-308). The write path `spit`-ed every file unconditionally, so
+  re-running the framework's most-recommended command after a day of editing
+  replaced all fourteen files — no prompt, no backup, exit 0. `--force` was
+  declared in the CLI and threaded into the request; nothing read it. Generation
+  now refuses before writing anything, listing the files it would have replaced,
+  and exits non-zero. With `--force` it overwrites and reports those files as
+  `:overwrite` rather than `:create`. A dry run never refuses, since it writes
+  nothing.
+
 ### Added
 
 - **`bb scaffold integrate` writes the config key, and `--dry-run` works**

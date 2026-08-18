@@ -764,3 +764,69 @@
       (is (some #(str/includes? % "src/wagoe/widget/shell/persistence.clj") steps))
       (is (not-any? #(str/includes? % "(from ") steps)
           "no directory suffix when there is no directory to name"))))
+
+;; =============================================================================
+;; Overwrite protection (BOU-308)
+;; =============================================================================
+
+(defn- tmp-dir []
+  (let [d (java.io.File/createTempFile "scaffold" "")]
+    (.delete d) (.mkdirs d) d))
+
+(defn- rm-r [^java.io.File f]
+  (when (.isDirectory f) (run! rm-r (.listFiles f)))
+  (.delete f))
+
+(def ^:private note-request
+  {:module-name "notes"
+   :entities [{:name "Note"
+               :fields [{:name :body :type :string :required true}]}]
+   :interfaces {:http true}})
+
+(deftest ^:integration regenerating-does-not-silently-overwrite
+  ;; The framework's most-recommended command destroyed a day's work without a
+  ;; prompt, a backup or a non-zero exit. --force was declared in the CLI,
+  ;; threaded into the request, and read by nothing.
+  (let [dir (tmp-dir)
+        svc (service/create-scaffolder-service)]
+    (try
+      (let [first-run (ports/generate-module svc (assoc note-request :output-dir (.getPath dir)))
+            edited    (io/file dir "src/wagoe/notes/core/note.clj")]
+        (is (true? (:success first-run)))
+        (spit edited (str (slurp edited) "\n;; hand-written, must survive\n"))
+
+        (testing "a re-run without --force refuses, and touches nothing"
+          (let [again (ports/generate-module svc (assoc note-request :output-dir (.getPath dir)))]
+            (is (false? (:success again)) "must not report success")
+            (is (str/includes? (slurp edited) "hand-written, must survive")
+                "the edited file must be untouched")))
+
+        (testing "and names the files it would have overwritten"
+          (let [again (ports/generate-module svc (assoc note-request :output-dir (.getPath dir)))]
+            (is (seq (:existing-files again)))
+            (is (some #(str/includes? % "note.clj") (:existing-files again))
+                "a refusal that does not say which files is not actionable")))
+
+        (testing "--force overwrites, and says which files it replaced"
+          (let [forced (ports/generate-module svc (assoc note-request
+                                                        :output-dir (.getPath dir)
+                                                        :force true))]
+            (is (true? (:success forced)))
+            (is (not (str/includes? (slurp edited) "hand-written, must survive")))
+            (is (some #(= :overwrite (:action %)) (:files forced))
+                "an overwritten file must not be reported as :create"))))
+      (finally (rm-r dir)))))
+
+(deftest ^:integration a-dry-run-never-refuses
+  ;; It writes nothing, so existing files are not at risk and the preview is
+  ;; still useful on a module that already exists.
+  (let [dir (tmp-dir)
+        svc (service/create-scaffolder-service)]
+    (try
+      (ports/generate-module svc (assoc note-request :output-dir (.getPath dir)))
+      (let [preview (ports/generate-module svc (assoc note-request
+                                                     :output-dir (.getPath dir)
+                                                     :dry-run true))]
+        (is (true? (:success preview)))
+        (is (every? #(= :skip (:action %)) (:files preview))))
+      (finally (rm-r dir)))))

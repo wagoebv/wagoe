@@ -61,7 +61,12 @@
      [:audit {:optional true} :boolean]
      [:soft-delete {:optional true} :boolean]
      [:pagination {:optional true} :boolean]]]
-   [:dry-run {:optional true} :boolean]])                   ; Preview without writing
+   [:dry-run {:optional true} :boolean]                     ; Preview without writing
+   ;; Overwrite files that already exist. Without it, generation refuses rather
+   ;; than replacing a module someone has edited — the CLI declared this flag
+   ;; and threaded it into the request, and nothing read it (BOU-308).
+   [:force {:optional true} :boolean]
+   [:output-dir {:optional true} :string]])                 ; Write somewhere other than cwd
 
 ;; =============================================================================
 ;; Module Generation Result
