@@ -16,12 +16,39 @@ along with their context and consequences. Each ADR describes:
 
 === Status Legend
 
-* *Accepted* — Decision made and implemented
+* *Accepted* — Decision made. Implementation may be tracked separately; an ADR
+  says what was decided, not that every call site has caught up
 * *Proposed* — Decision drafted, awaiting implementation
 * *Deprecated* — Superseded by a later ADR
 * *Superseded* — Replaced by another decision
 
 === Current ADRs
+
+==== ADR-001: Split Wagoe Monolith into Modular Libraries [Accepted]
+
+ADR-001-library-split.adoc
+
+Splits the framework into independently publishable libraries with explicit
+dependencies.
+
+==== ADR-002: Implement `wagoe new` in the Scaffolder [Superseded]
+
+ADR-002-wagoe-new-command.adoc
+
+Project generation from templates rather than a cloned repository. Superseded
+2026-08-02 (BOU-259) — the command lives in the CLI, not the scaffolder.
+
+==== ADR-003: WebSocket Architecture for the Realtime Module [Proposed]
+
+ADR-003-websocket-architecture.adoc
+
+In-memory connection registry and pub/sub; multi-replica deferred to ADR-035.
+
+==== ADR-004: Multi-Tenancy Architecture [Accepted]
+
+ADR-004-multi-tenancy-architecture.adoc
+
+Schema-per-tenant isolation, with the tenant resolved at the HTTP boundary.
 
 ==== ADR-005: Validation DevEx Foundations [Accepted]
 
@@ -298,6 +325,70 @@ contextual tips, state-aware guidance, and in-REPL documentation.
 * In-REPL documentation: `(doc :scaffold)`, `(doc :fcis)`, etc.
 * Command palette: `(commands)` lists all REPL functions by category
 * Unified CLI: `bb check`, `bb db:*`, `bb help <topic>`
+
+==== ADR-030: Audience Segmentation Library [Proposed]
+
+ADR-030-audience-segmentation.adoc
+
+Segment definitions as data, evaluated against a member's attributes and
+events.
+
+==== ADR-031: MCP Server Security Model [Proposed]
+
+ADR-031-mcp-security-model.adoc
+
+Threat model for the MCP server, with capability tiers (`:read`, `:generate`,
+`:execute`) gated by the context the server was launched in.
+
+==== ADR-032: MCP Guardrail Error Payload [Proposed]
+
+ADR-032-mcp-guardrail-error-payload.adoc
+
+A refused MCP call answers with the rule, the reason and whether it can be
+overridden — "guardrail, not straitjacket".
+
+==== ADR-033: Reflective MCP Resources [Proposed]
+
+ADR-033-mcp-reflective-resources.adoc
+
+Resources are derived from a snapshot of the running project rather than
+hardcoded, so they cannot drift. Its file paths are partly superseded by
+BOU-320, which moved the knowledge base onto the classpath and gave the module
+graph a project mode.
+
+==== ADR-034: Tier 1 Generate Tools + Closed Verify Loop [Proposed]
+
+ADR-034-mcp-tier1-verify-loop.adoc
+
+Generated code is linted and tested by the server before it is reported as
+done.
+
+==== ADR-035: Realtime Redis-backed Pub/Sub [Proposed]
+
+ADR-035-realtime-redis-scaling.adoc
+
+Sockets stay node-local; only routing intent crosses replicas via Redis.
+
+==== ADR-036: One Error Convention [Accepted]
+
+ADR-036-error-convention.adoc
+
+Extends ADR-022 to *return* values. ADR-022 decided what a thrown error looks
+like; nothing decided what a function returns when it does not throw, and five
+shapes grew there (295 typed throws, 144 `{:valid? …}`, 91 `{:success? …}`,
+34 `{:success …}`, 21 `{:error {:type …}}`).
+
+*Key Decisions:*
+
+* ADR-022's rule stands and finally gets a gate — around 79 `shell/` throws
+  carry no `:type` today
+* Pure core decisions return `{:valid? … :errors <map> :warnings …}`
+* Expected failure — a bounced message, a wrong MFA code — returns
+  `{:success? … :error {:type <keyword> :message …}}`; the line is who was
+  wrong, the caller or the world
+* `cognitect.anomalies` rejected: a third vocabulary to map onto the two the
+  HTTP layer already reads
+* `bb check:error-shape` enforces the shapes, not the judgement (BOU-323)
 
 === Related Documentation
 
