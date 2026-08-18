@@ -53,8 +53,6 @@
   {:lib "platform"  :namespace "wagoe.devtools.shell.dashboard.middleware"
    :why "BY DESIGN. Dev-only: the branch is behind (= :dev profile) and degrades to no
          enrichment when devtools is absent. Documented inline in routes.clj."}
-  {:lib "platform"  :namespace "wagoe.devtools.shell.http-error-middleware"
-   :why "BY DESIGN. Same dev-only shape as the dashboard middleware."}
   {:lib "platform"  :namespace "wagoe.i18n.shell.middleware"
    :why "TO FIX. BOU-131 deprecation path — the call site logs that wiring :i18n here is
          deprecated and builds the middleware anyway. Clears when that argument goes."}

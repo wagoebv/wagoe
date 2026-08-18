@@ -366,73 +366,110 @@
 ;; Router Creation
 ;; =============================================================================
 
+(defn- field-names-only
+  "`{:email [\"invalid\"]}` — which fields, and nothing about why.
+
+   What production returns. `me/humanize` renders the constraints of the schema into
+   its messages: an `[:enum \"admin\" \"superuser\" \"internal-auditor\"]` comes back
+   as \"should be either admin, superuser or internal-auditor\", so POSTing junk
+   to an open endpoint enumerates roles nobody was told about. Bounds and
+   regexes go the same way."
+  [humanized]
+  (when (map? humanized)
+    (into {} (map (fn [[k _]] [k ["invalid"]])) humanized)))
+
 (defn- humanize-coercion-errors
   "Field-level messages for a coercion failure — `{:email [\"missing required key\"]}`.
 
    Built here rather than read off the exception: reitit hands us `:errors`,
    `:schema` and `:value`, and `:errors` carries schema fragments. Malli turns
-   the three into a map keyed by the fields the caller got wrong, which is the
-   part that is theirs to see."
-  [data]
-  (or (try
-        (me/humanize (select-keys data [:schema :value :errors]))
-        (catch Throwable _ nil))
-      {}))
+   the three into a map keyed by the fields the caller got wrong.
+
+   `dev?` decides how much of the why is returned. The keys are what the caller sent
+   either way; the messages describe the schema, and that is ours."
+  [data dev?]
+  (let [humanized (try
+                    (me/humanize (select-keys data [:schema :value :errors]))
+                    (catch Throwable _ nil))]
+    (or (if dev? humanized (field-names-only humanized))
+        {})))
 
 (defn- coercion-error-response
   "400 for a request the client got wrong, naming the fields.
 
-   `:humanized` is the field-level explanation from Malli — \"missing required key\"
-   against the key that is missing — and it is about what the caller sent, so
-   returning it is the point rather than a leak. The schema itself is not
-   returned."
-  [system data]
-  (let [dev  (http-interceptors/dev-error-info
-              system (ex-info "Request validation failed" {:type :validation-error}))
-        body (cond-> {:error   "validation-error"
-                      :message "Request validation failed"
-                      :details (humanize-coercion-errors data)}
+   Which fields went wrong is what the caller sent. Why they are wrong is the schema
+   talking, so the full message is dev-only — the same gate the BND block uses."
+  [system e request]
+  (let [dev  (http-interceptors/dev-error-info system e)
+        ;; This response never reaches the interceptor stack — it is produced
+        ;; outside it — so the correlation header every other response carries
+        ;; has to be set here. Without it a client reporting "your API 400s me"
+        ;; has no id to hand to whoever reads the log.
+        cid  (or (get-in request [:headers "x-correlation-id"])
+                 (str (java.util.UUID/randomUUID)))
+        body (cond-> {:error         "validation-error"
+                      :message       "Request validation failed"
+                      :details       (humanize-coercion-errors (ex-data e) (some? dev))
+                      :correlationId cid}
                dev (assoc :dev dev))]
     {:status  400
-     :headers {"Content-Type" "application/json"}
-     :body    (json/generate-string body)}))
+     :headers {"X-Correlation-ID" cid}
+     :body    body}))
+
+(defn- server-error-response
+  "A 500 that says nothing. What went wrong goes to the log."
+  []
+  {:status 500
+   :body   {:error   "internal-error"
+            :message "Internal Server Error"}})
 
 (defn- create-exception-middleware
-  "Reitit exception middleware, placed outermost.
+  "Reitit exception middleware, placed between response formatting and request
+   decoding.
 
-   It has to be outermost, and it was innermost. Reitit applies a `:middleware`
-   vector first-to-outermost, and this sat last — inside `coerce-request`. So a
-   request that failed coercion threw past every handler in the chain and left
-   the app answering 500 to a malformed request, with a stack trace where the
-   400 should have been (BOU-321).
+   Position is the whole point, and it was wrong twice over. Reitit applies a
+   `:middleware` vector first-to-outermost, and this sat last — inside
+   `coerce-request` — so a request that failed coercion threw past every handler
+   and the app answered 500 to a malformed request (BOU-321).
 
-   The typed errors the framework raises are still handled by the interceptor stack
+   Outermost would fix that and break something else: outside
+   `format-response`, an error body can only be a pre-encoded string, and a
+   client asking for transit or EDN would get JSON it cannot read. Sitting just
+   inside `format-response` catches request decoding and coercion while its map
+   bodies are still negotiated like any other response.
+
+   The typed errors the framework raises are handled by the interceptor stack
    closer to the handler; what reaches here is what that stack cannot see."
   [config]
-  (let [system (or (:system config) {})]
+  (let [system (or (:system config) {})
+        log-error (fn [e request msg]
+                    ;; Not the throwable: reitit puts the whole Ring request in
+                    ;; the ex-data of a coercion failure — headers, cookies,
+                    ;; the match tree — and logging it writes the Authorization
+                    ;; header of the caller into the log on every occurrence.
+                    (log/error msg
+                               {:uri            (:uri request)
+                                :method         (some-> (:request-method request) name)
+                                :correlation-id (get-in request [:headers "x-correlation-id"])
+                                :exception      (some-> ^Throwable e class .getName)
+                                :message        (ex-message e)}))]
     (exception/create-exception-middleware
      (merge
       exception/default-handlers
       {:reitit.coercion/request-coercion
-       (fn [e _request] (coercion-error-response system (ex-data e)))
+       (fn [e request] (coercion-error-response system e request))
 
        ;; A response that does not match its own schema is a bug in the app, not
        ;; in the request: generic 500, details in the log only.
        :reitit.coercion/response-coercion
-       (fn [e _request]
-         (log/error e "Response coercion failed")
-         {:status  500
-          :headers {"Content-Type" "application/json"}
-          :body    (json/generate-string {:error   "internal-error"
-                                          :message "Internal Server Error"})})
+       (fn [e request]
+         (log-error e request "Response coercion failed")
+         (server-error-response))
 
        ::exception/default
-       (fn [e _request]
-         (log/error e "Unhandled exception at the HTTP boundary")
-         {:status  500
-          :headers {"Content-Type" "application/json"}
-          :body    (json/generate-string {:error   "internal-error"
-                                          :message "Internal Server Error"})})}))))
+       (fn [e request]
+         (log-error e request "Unhandled exception at the HTTP boundary")
+         (server-error-response))}))))
 
 (defn- create-default-middleware
   "Create default middleware stack for Reitit router.
@@ -440,15 +477,16 @@
   Returns:
     Vector of middleware for Reitit router"
   [config]
-  [;; Exception handling — first, so it wraps everything below it, coercion
-   ;; included.
-   (create-exception-middleware config)
-   ;; Query params & form params
+  [;; Query params & form params
    parameters/parameters-middleware
    ;; Content negotiation
    muuntaja/format-negotiate-middleware
    ;; Encoding response body
    muuntaja/format-response-middleware
+   ;; Exception handling — after response formatting so its bodies are
+   ;; negotiated, before request decoding and coercion so their failures are
+   ;; caught rather than thrown past everything.
+   (create-exception-middleware config)
    ;; Decoding request body
    muuntaja/format-request-middleware
    ;; Coercing request parameters

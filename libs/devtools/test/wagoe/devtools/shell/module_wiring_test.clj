@@ -18,13 +18,13 @@
     (is (= :validation (:category info)))
 
     (testing "and it says where to read more"
-      (is (= "bb guide error BND-201" (:docs-url info))))
+      (is (= "bb guide error BND-201" (:help info))))
 
     (testing "nothing the HTTP layer should not hand out"
       ;; The formatted terminal block, the stacktrace and the raw exception stay
       ;; server-side: this map goes into a response body. Keys with no value are
       ;; dropped rather than sent as null.
-      (is (empty? (remove #{:code :category :fix :docs-url} (keys info))))
+      (is (empty? (remove #{:code :category :fix :help} (keys info))))
       (is (not-any? nil? (vals info))))))
 
 (deftest ^:unit an-exception-the-pipeline-cannot-place-adds-nothing

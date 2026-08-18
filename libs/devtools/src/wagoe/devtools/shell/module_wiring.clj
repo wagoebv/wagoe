@@ -10,8 +10,8 @@
             [wagoe.devtools.shell.dashboard.pages.errors :as dashboard-errors]))
 
 (defn error-enricher
-  "A function from exception to `{:code :category :fix :docs-url}`, or nil when
-   the pipeline has nothing to say about it.
+  "A function from exception to `{:code :category :fix :help}`, or nil when the
+   pipeline has nothing to say about it.
 
    This is what turns a 400 that reads \"Validation failed\" into one that names
    BND-201 and the field to add. It also records the error for the dashboard,
@@ -35,7 +35,10 @@
               {:code     (:code enriched)
                :category (:category enriched)
                :fix      (get-in enriched [:fix :label])
-               :docs-url (:docs-url enriched)})))))
+               ;; :help, not :docs-url — the value is `bb guide error <code>`,
+               ;; a command, and a consumer that treats a *-url as an href
+               ;; would build a broken link out of it.
+               :help     (:docs-url enriched)})))))
 
 (defmethod ig/init-key :wagoe/dev-error-enricher
   [_ _config]

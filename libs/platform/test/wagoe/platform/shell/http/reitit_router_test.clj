@@ -11,12 +11,18 @@
 ;; =============================================================================
 
 (defn response-body-as-map
-  "Return response body as a Clojure map (parses JSON string bodies when needed)."
+  "Return response body as a Clojure map.
+
+   Error responses no longer set their own Content-Type, so muuntaja encodes
+   them like any other body and they arrive as a stream — which is what makes
+   an EDN or transit client able to read them, and what stopped Ring being
+   handed a raw map on an HTML request (BOU-321)."
   [response]
   (let [body (:body response)]
     (cond
-      (string? body) (json/parse-string body true)
-      :else body)))
+      (string? body)                       (json/parse-string body true)
+      (instance? java.io.InputStream body) (json/parse-string (slurp body) true)
+      :else                                body)))
 
 ;; =============================================================================
 ;; Test Handlers
@@ -395,6 +401,16 @@
 ;; Coercion failures (BOU-321)
 ;; =============================================================================
 
+(defn- error-body
+  "The response body as data.
+
+   Read through `slurp`: the exception middleware sits inside
+   `format-response`, so its bodies are negotiated and encoded like any other
+   response — which is the point, and which means the body arrives as a
+   stream rather than the map the handler returned."
+  [resp]
+  (json/parse-string (slurp (:body resp)) true))
+
 (defn- login-like-handler
   "A route whose body schema requires two fields, wired the way the user module
    wires login."
@@ -417,27 +433,63 @@
                                        :uri            "/auth/login"
                                        :headers        {}
                                        :body-params    {}})
-        body (json/parse-string (:body resp) true)]
+        body (error-body resp)]
     (is (= 400 (:status resp)))
     (is (= "validation-error" (:error body)))
 
     (testing "and it names the fields the caller got wrong"
-      (is (= {:email ["missing required key"] :password ["missing required key"]}
-             (:details body))))
+      (is (= {:email ["invalid"] :password ["invalid"]} (:details body))))
 
     (testing "but not the schema it checked them against"
-      (is (not (str/includes? (:body resp) ":map")))
       (is (nil? (:schema body))))))
+
+(deftest ^:security production-does-not-explain-the-schema-it-rejected-you-with
+  ;; me/humanize renders the schema's constraints into its messages, so the
+  ;; full text hands an unauthenticated caller every enum member and every
+  ;; bound in exchange for one malformed POST. The field names are the
+  ;; caller's own input and stay; the why is dev-only.
+  (let [handler (ports/compile-routes
+                 (reitit/create-reitit-router)
+                 [{:path    "/users"
+                   :methods {:post {:handler    (fn [_] {:status 201 :body {}})
+                                    :parameters {:body [:map {:closed true}
+                                                        [:role [:enum "admin" "superuser" "internal-auditor"]]
+                                                        [:age [:int {:min 18 :max 120}]]]}}}}]
+                 {})
+        resp    (handler {:request-method :post :uri "/users" :headers {}
+                          :body-params {:role "peasant" :age 4}})
+        raw     (slurp (:body resp))]
+    (is (= 400 (:status resp)))
+    (doseq [secret ["superuser" "internal-auditor" "should be at least 18" "120"]]
+      (is (not (str/includes? raw secret))
+          (str "leaked schema detail: " secret)))
+    (is (= {:role ["invalid"] :age ["invalid"]} (:details (json/parse-string raw true))))))
+
+(deftest ^:unit dev-gets-the-explanation-production-does-not
+  (let [handler (fn [system]
+                  (ports/compile-routes
+                   (reitit/create-reitit-router)
+                   [{:path    "/users"
+                     :methods {:post {:handler    (fn [_] {:status 201 :body {}})
+                                      :parameters {:body [:map {:closed true} [:role [:enum "admin"]]]}}}}]
+                   {:system system}))
+        details (fn [system]
+                  (:details (json/parse-string
+                             (slurp (:body ((handler system) {:request-method :post :uri "/users"
+                                                              :headers {} :body-params {}})))
+                             true)))]
+    (is (= {:role ["missing required key"]}
+           (details {:error-enricher (constantly {:code "BND-201"}) :environment "dev"})))
+    (is (= {:role ["invalid"]}
+           (details {:error-enricher (constantly {:code "BND-201"}) :environment "prod"})))))
 
 (deftest ^:unit coercion-failures-carry-the-bnd-code-in-dev-only
   (let [enricher (fn [_] {:code "BND-201" :category :validation})
         body-of  (fn [system]
-                   (json/parse-string
-                    (:body ((login-like-handler system) {:request-method :post
-                                                         :uri            "/auth/login"
-                                                         :headers        {}
-                                                         :body-params    {}}))
-                    true))]
+                   (error-body ((login-like-handler system) {:request-method :post
+                                                             :uri            "/auth/login"
+                                                             :headers        {}
+                                                             :body-params    {}})))]
     (testing "dev"
       (is (= "BND-201" (get-in (body-of {:error-enricher enricher :environment "development"})
                                [:dev :code]))))

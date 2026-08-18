@@ -186,19 +186,16 @@
                                 extra-middleware []}}]
   (let [common-routes (concat (health-routes config additional-health-checks)
                               (api-docs-routes config))
-        ;; In dev mode, inject devtools error enrichment INSIDE the exception handler.
-        ;; Reitit applies middleware last=outermost, so dev middleware goes before
-        ;; wrap-exception-handling: it catches exceptions, enriches ex-data with
-        ;; :dev-info, re-throws, then exception handler includes :dev-info in RFC 7807.
-        dev-error-middleware (when (= :dev (:wagoe/profile config))
-                               (try
-                                 (require 'wagoe.devtools.shell.http-error-middleware)
-                                 (ns-resolve 'wagoe.devtools.shell.http-error-middleware
-                                             'wrap-dev-error-enrichment)
-                                 (catch Exception _ nil)))
+        ;; No dev-error hook here. There used to be one, resolving devtools by
+        ;; name and attaching :dev-info — a second enrichment mechanism beside
+        ;; the one in wagoe.platform.shell.http.reitit-router, which is the
+        ;; router the system actually wires. Its comment also had the ordering
+        ;; backwards ("last=outermost"; reitit applies a :middleware vector
+        ;; first-to-outermost), and its :dev-info carried the formatted block
+        ;; including the stacktrace. Dead code that would have leaked if this
+        ;; function were ever wired (BOU-321).
         enhanced-middleware (concat default-middleware
                                     extra-middleware
-                                    (when dev-error-middleware [dev-error-middleware])
                                     [(http-middleware/wrap-exception-handling error-mappings)])
         enhanced-route-data (assoc route-data :middleware enhanced-middleware)
         ;; Separate routes that should be under /api from root-level routes

@@ -379,6 +379,10 @@ esac
 grep -q "BND-" /tmp/badreq.json \
   || { head -c 600 /tmp/badreq.json 2>/dev/null; echo
        fail "the 400 carries no BND code — dev error enrichment is not wired in a generated project"; }
+# The enrichment is dev-only. Nothing here can run the app as production — the
+# generated project has no prod config — so the negative is asserted in
+# wagoe.platform.shell.http.reitit-router-test and interceptors-test instead,
+# with the profile the wiring passes through.
 ok "a malformed request answers 400 with a BND code"
 
 echo

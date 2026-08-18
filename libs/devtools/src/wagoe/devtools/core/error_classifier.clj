@@ -41,7 +41,11 @@
         (or (contains? data :malli/error)
             (= :malli.core/invalid (:type data))
             (= :validation-error (:type data))
-            (= :invalid-request (:type data)))
+            (= :invalid-request (:type data))
+            ;; What reitit throws when a request does not match its schema —
+            ;; the most common validation failure of all, and the one the
+            ;; handler never even sees.
+            (= :reitit.coercion/request-coercion (:type data)))
         {:code "BND-201" :category :validation :data data :source :ex-data-pattern}
 
         (= :db/error (:type data))

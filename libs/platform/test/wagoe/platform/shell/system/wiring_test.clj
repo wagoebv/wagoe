@@ -356,3 +356,35 @@
 
     (testing "neither key means no i18n middleware, and no error"
       (is (= 1 (count (:middleware (build {}))))))))
+
+(deftest ^:security the-profile-reaches-the-interceptors-that-gate-on-environment
+  ;; Interceptors decide what an error may say by environment, and they read it
+  ;; from the system map they are given. Nothing put it there: the detector fell
+  ;; through to WAG_ENV, which a generated project never sets, so every
+  ;; deployment read as development wherever it ran (BOU-321).
+  (let [captured (atom nil)
+        build    (fn [config]
+                   (with-redefs [wagoe.platform.ports.http/compile-routes
+                                 (fn [_router _routes router-config]
+                                   (reset! captured router-config)
+                                   (fn [_] {:status 200}))
+                                 wagoe.platform.shell.interfaces.http.common/health-check-handler
+                                 (fn [_ _ _] (fn [_] {:status 200}))
+                                 wagoe.platform.shell.http.versioning/apply-versioning
+                                 (fn [routes _] (vec routes))
+                                 wagoe.platform.shell.http.versioning/wrap-handler-with-version-headers
+                                 (fn [handler _] handler)]
+                     (ig/init-key :wagoe/http-handler
+                                  {:module-routes [] :router ::router :logger ::logger
+                                   :metrics-emitter ::metrics :tracer ::tracer
+                                   :error-reporter ::error-reporter :db-context ::db-context
+                                   :config config})
+                     (get-in @captured [:system :environment])))]
+
+    (is (= "prod" (build {:wagoe/profile :prod :active {}})))
+    (is (= "dev"  (build {:wagoe/profile :dev  :active {}})))
+
+    (testing "an app with no profile leaves the key absent, as before"
+      ;; Absent, not nil: the detector then falls through to WAG_ENV exactly as
+      ;; it did before this existed.
+      (is (nil? (build {:active {}}))))))

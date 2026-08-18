@@ -133,8 +133,11 @@
   [ctx]
   (assoc ctx
          :halt? true
+         ;; No Content-Type: muuntaja encodes this body on the way out and
+         ;; sets the header from what the caller asked for. Setting it here
+         ;; made muuntaja skip the response, and Ring cannot write a map
+         ;; (BOU-321).
          :response {:status 403
-                    :headers {"Content-Type" "application/json"}
                     :body {:error "CSRF token validation failed"
                            :message "Invalid or missing CSRF token"
                            :type :csrf-validation-failed}}))
@@ -183,7 +186,6 @@
   [context]
   (or (:response context)
       {:status 500
-       :headers {"Content-Type" "application/json"}
        :body {:error "Internal server error"
               :message "No response generated"
               :correlation-id (:correlation-id context)}}))
@@ -266,11 +268,12 @@
 
    Two conditions, both required. The app must have wired an enricher —
    `:wagoe/dev-error-enricher`, which only a dev config asks for — and the
-   environment must be dev-like. A generated project sets no WAG_ENV, so
-   `detect-environment` answers \"development\" by default; the wiring is what
-   makes this deliberate rather than accidental, and the environment check is
-   what stops a dev config copied into production from explaining its own
-   internals to the internet (BOU-321).
+   environment must be dev-like.
+
+   The environment now comes from the profile the app booted with, passed into
+   this system map by the wiring. It used to come from WAG_ENV alone, which a
+   generated project never sets, so the check answered \"development\"
+   everywhere and only the wiring was really gating anything (BOU-321).
 
    Never throws: an enricher that dies must not replace the error the user
    needed to see.
@@ -311,8 +314,7 @@
                      :ex-data-keys (sort (keys ex-data))}))
   (set-response ctx
                 {:status 500
-                 :headers {"Content-Type" "application/json"
-                           "X-Correlation-ID" correlation-id}
+                 :headers {"X-Correlation-ID" correlation-id}
                  :body {:error "missing-error-type"
                         :message "Exceptions reaching the HTTP boundary must include :type in ex-data."
                         :hint "Add :type to the ex-info data map (e.g., {:type :validation-error})."
@@ -534,8 +536,7 @@
                                             :ex-data ex-data})))
                       (set-response ctx
                                     {:status status
-                                     :headers {"Content-Type" "application/json"
-                                               "X-Correlation-ID" correlation-id}
+                                     :headers {"X-Correlation-ID" correlation-id}
                                      :body (cond-> (if server-error?
                                                      {:error "internal-error"
                                                       :message "Internal Server Error"

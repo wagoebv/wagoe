@@ -45,11 +45,25 @@ for what is public API, what is internal, and how deprecations are announced.
   the type the platform HTTP boundary requires and every Wagoe handler raises —
   so the most common error in a Wagoe app was the one error it could not name.
 
-  Production is unchanged: no `dev` block, and a 5xx still says only "Internal
-  Server Error" with the details in the log. Two conditions gate it — the
-  `:wagoe/dev-error-enricher` key, which `wagoe new` writes into the dev config
-  and nowhere else, and a dev-like environment. Platform takes the enricher as
-  an injected function, so it still has no dependency on devtools.
+  Production returns the same shape without the `dev` block, and its `details`
+  name only the fields that were wrong: the full messages describe the schema
+  (`"should be either \"admin\" or \"auditor\""` hands a caller every enum member
+  it never knew about), so they are dev-only too. A 5xx still says only
+  "Internal Server Error" with everything else in the log.
+
+  Three conditions gate it — the `:wagoe/dev-error-enricher` key, which
+  `wagoe new` writes into the dev config and nowhere else; a dev-like profile,
+  which the wiring now passes to the interceptors (they read only `WAG_ENV`
+  before, which a generated project never sets, so the check answered
+  "development" wherever it ran); and devtools on the classpath, which the
+  `:repl` alias keeps out of `-M:run`, the uberjar and the Docker image.
+  Platform takes the enricher as an injected function and still has no
+  dependency on devtools.
+
+  Along the way: error responses no longer set their own `Content-Type`, so
+  Muuntaja encodes them like any other body. An EDN or transit client can read
+  them now, and an `Accept: text/html` request no longer hands Ring a raw map —
+  the `PersistentArrayMap` crash `libs/admin/AGENTS.md` documents.
 
 - **The first thing `bb quickstart` tells you to run did not exist** (BOU-319).
   Quickstart closes with "run `(status)`, run `(commands)`", and both lived only

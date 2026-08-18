@@ -1,8 +1,16 @@
 (ns wagoe.devtools.shell.http-error-middleware
   "Dev-mode HTTP error enrichment middleware.
-   Positioned INSIDE wrap-enhanced-exception-handling. Catches exceptions,
-   runs the error pipeline, and re-throws with :dev-info attached
-   to ex-data so the outer middleware can include it in the RFC 7807 response."
+
+   NOT the supported path, and nothing in the framework wires it. The
+   application injects `:wagoe/dev-error-enricher` (see module-wiring) and the
+   platform interceptor calls it; that route is gated on the environment and
+   returns a code, a category and a fix. This one attaches `:dev-info`
+   containing the *formatted* block — stacktrace included — to ex-data, so
+   whatever includes ex-data in a response would put a stacktrace in it.
+   Kept for an application that wired it by hand before BOU-321.
+
+   Positioned INSIDE the exception handler: catches exceptions, runs the error
+   pipeline, re-throws with :dev-info attached."
   (:require [wagoe.devtools.core.error-classifier :as classifier]
             [wagoe.devtools.core.error-enricher :as enricher]
             [wagoe.devtools.core.error-formatter :as formatter]
