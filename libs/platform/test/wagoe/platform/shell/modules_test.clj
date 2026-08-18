@@ -79,3 +79,18 @@
                #{}
                "acme"
                (constantly true)))))
+
+(deftest ^:unit discovered-routes-reach-the-handler
+  ;; Emitting the keys is half the job. :wagoe/http-handler destructures a fixed
+  ;; list of *-routes keys — it cannot name a generated module — so a discovered
+  ;; module initialised and served nothing until its routes arrived as a
+  ;; collection on :module-routes.
+  (testing "a ref per discovered module"
+    (is (= [(ig/ref :wagoe/tasks-routes)]
+           (sut/discovered-route-refs {:wagoe/tasks {:enabled? true}} #{}))))
+
+  (testing "framework modules are not double-wired"
+    (is (empty? (sut/discovered-route-refs {:wagoe/admin {:enabled? true}} #{:wagoe/admin}))))
+
+  (testing "and a disabled module contributes none"
+    (is (empty? (sut/discovered-route-refs {:wagoe/tasks {:enabled? false}} #{})))))

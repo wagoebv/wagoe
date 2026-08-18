@@ -74,9 +74,11 @@ for what is public API, what is internal, and how deprecations are announced.
   init-key, no route, no warning. `bb quickstart` reported success over a module
   that could not be reached. Any `:wagoe/<module>` carrying `:enabled?` — the
   shape `bb scaffold integrate` prints — is now wired from its
-  `<project-ns>.<module>.shell.module-wiring`, and a key whose wiring namespace
-  will not load throws at boot naming the key, the namespace it looked for, and
-  the fix. A misspelled key used to look exactly like a working one.
+  `wagoe.<module>.shell.module-wiring`, and its routes reach `:wagoe/http-handler`
+  through `:module-routes`, because the handler names its route keys one by one
+  and cannot name a generated module. A key whose wiring namespace will not load
+  throws at boot naming the key, the namespace it looked for, and the fix; a
+  misspelled key used to look exactly like a working one.
 
 - **The scaffolder emits `shell/module_wiring.clj`** (BOU-309). It generated
   every file a module needs except the one its own integrate step requires, so

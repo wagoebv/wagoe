@@ -431,7 +431,7 @@
      (def ig-cfg (ig-config (config/load-config)))
      (integrant.core/init ig-cfg)"
   [config]
-  (merge (core-system-config config)
+  (-> (merge (core-system-config config)
          (i18n-module-config config)
          (user-module-config config)
          (tenant-module-config config)
@@ -448,7 +448,11 @@
          ;; could not be reached (BOU-311).
          (modules/discover-module-config
           (:active config) framework-module-keys "wagoe"
-          modules/require-wiring!)))
+          modules/require-wiring!))
+      ;; The handler cannot name a generated module, so its routes reach it as a
+      ;; collection. Without this the module initialises and serves nothing.
+      (assoc-in [:wagoe/http-handler :module-routes]
+                (modules/discovered-route-refs (:active config) framework-module-keys))))
 
 ;; =============================================================================
 ;; Service catalogue (BOU-91)

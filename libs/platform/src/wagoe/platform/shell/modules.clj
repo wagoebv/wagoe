@@ -7,8 +7,7 @@
   - Dispatch CLI commands to module-specific runners.
 
   For now, only the `:user` module is supported."
-  (:require [clojure.string :as str]
-            [clojure.tools.logging :as log]
+  (:require [clojure.tools.logging :as log]
             [integrant.core :as ig]))
 
 (defn enabled-modules
@@ -142,7 +141,13 @@
        (filter (fn [[k v]]
                  (and (= "wagoe" (namespace k))
                       (map? v)
-                      (contains? v :enabled?))))
+                      (contains? v :enabled?)
+                      ;; Filtered here rather than only where the entries are
+                      ;; built: `discovered-route-refs` reads this too, and a
+                      ;; disabled module was still handed a ref to a routes key
+                      ;; the config does not contain — a dangling ref, which
+                      ;; fails the boot.
+                      (not (false? (:enabled? v))))))
        (map key)
        (remove (set known-keys))
        sort))
@@ -198,10 +203,29 @@
    (scaffolded-module-keys active known-keys)))
 
 (defn require-wiring!
-  "Load `wiring-ns`, returning true when it exists. The default predicate for
-   `discover-module-config`; separate so tests can substitute one."
+  "Load `wiring-ns`. Returns true when it loaded, false when it does not exist,
+   and rethrows anything else.
+
+   The distinction matters: a wiring namespace that exists but throws on load —
+   freshly generated code with a compile error, or a missing transitive dep — is
+   not a missing module, and reporting it as one buries the real error under a
+   suggestion to check the spelling."
   [wiring-ns]
   (try
     (require wiring-ns)
     true
-    (catch Exception _ false)))
+    (catch java.io.FileNotFoundException _ false)
+    (catch Exception e
+      (throw (ex-info (str "Module wiring " wiring-ns " exists but failed to load: "
+                           (.getMessage e))
+                      {:type :wagoe/module-wiring-broken :namespace (str wiring-ns)}
+                      e)))))
+
+(defn discovered-route-refs
+  "Integrant refs to every discovered module's routes key.
+
+   The HTTP handler cannot name a generated module, so it takes the routes as a
+   collection — this is what the application puts in `:module-routes`."
+  [active known-keys]
+  (mapv #(ig/ref (keyword "wagoe" (str (name %) "-routes")))
+        (scaffolded-module-keys active known-keys)))

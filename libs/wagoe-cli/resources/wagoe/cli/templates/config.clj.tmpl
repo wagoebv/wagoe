@@ -363,8 +363,12 @@
      ;; what `bb scaffold integrate` prints. An :enabled? key whose wiring
      ;; namespace will not load fails the boot naming the key and the
      ;; namespace, rather than being skipped in silence (BOU-311).
+     ;; "wagoe", not this project's namespace: `bb scaffold generate` defaults
+     ;; --base-ns to wagoe and neither quickstart nor integrate overrides it, so
+     ;; a scaffolded module lands in src/wagoe/<module>/. Passing the project
+     ;; namespace here made the boot demand a namespace nothing writes.
      (modules/discover-module-config
-      active framework-module-keys "{{project-ns}}"
+      active framework-module-keys "wagoe"
       modules/require-wiring!))))
 
 ;; Wire integrant.repl to use this configuration.
