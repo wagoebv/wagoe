@@ -56,7 +56,13 @@
       ;; Check result structure
       (is (true? (:success result)))
       (is (= "customer" (:module-name result)))
-      (is (= 13 (count (:files result))))
+      (is (= 14 (count (:files result))))
+
+      ;; Named, not just counted: a count that goes up tells you nothing about
+      ;; which file appeared, and the one that was missing for so long —
+      ;; module_wiring.clj — is the one integrate needs (BOU-309).
+      (is (some #(str/ends-with? (:path %) "shell/module_wiring.clj") (:files result))
+          "the module must ship its own Integrant wiring")
 
       ;; Check files are listed in result
       (is (some #(str/ends-with? (:path %) "schema.clj") (:files result)))
@@ -117,7 +123,8 @@
 
       ;; Check result
       (is (true? (:success result)))
-      (is (= 13 (count (:files result))))
+      (is (= 14 (count (:files result))))
+      (is (some #(str/ends-with? (:path %) "shell/module_wiring.clj") (:files result)))
       (is (some #(str/includes? % "Dry run") (:warnings result))))))
 
 (deftest ^:unit generate-module-validation-test

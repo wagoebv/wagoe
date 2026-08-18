@@ -746,3 +746,101 @@
       (let [after (gen/add-field-to-schema (:content once) "Widget"
                                            {:name :nick :type :string :required false})]
         (is (= :updated (:status after)))))))
+
+;; =============================================================================
+;; generate-module-wiring-file (BOU-309)
+;; =============================================================================
+
+(deftest ^:unit generate-module-wiring-file-test
+  ;; The scaffolder emitted 13 files and not the one its own integrate step
+  ;; needs, so `bb scaffold integrate` always landed on "this module has no
+  ;; shell/module_wiring.clj yet — add one" and the user hand-wrote the Integrant
+  ;; wiring the framework says never to hand-write.
+  (let [output (gen/generate-module-wiring-file base-ctx)]
+
+    (testing "it is the namespace integrate looks for"
+      (is (str/includes? output "(ns wagoe.product.shell.module-wiring")))
+
+    (testing "it wires the three things the generated module ships"
+      (is (str/includes? output "ig/init-key :wagoe/product-repository"))
+      (is (str/includes? output "ig/init-key :wagoe/product-service"))
+      (is (str/includes? output "ig/init-key :wagoe/product-routes")))
+
+    (testing "and calls the constructors the other generators emit"
+      ;; persistence/create-repository and service/create-service are what
+      ;; generate-persistence-file and generate-service-file define. A wiring
+      ;; that called anything else would compile and fail at boot.
+      (is (str/includes? output "persistence/create-repository"))
+      (is (str/includes? output "service/create-service")))
+
+    (testing "every init-key has a halt-key!"
+      ;; Integrant halts what it started; a missing halt-key! is a resource left
+      ;; open on every reset.
+      (doseq [k ["product-repository" "product-service" "product-routes"]]
+        (is (str/includes? output (str "ig/halt-key! :wagoe/" k))
+            (str k " has no halt-key!"))))
+
+    (testing "it exposes the aggregate key module discovery keys on"
+      ;; BOU-311 wires a scaffolded module by finding :wagoe/<module>; without
+      ;; this key the module is generated, compiled, and never reached.
+      (is (str/includes? output "ig/init-key :wagoe/product")))
+
+    (testing "the routes key takes a service, not a repository"
+      ;; The `ig/ref` that supplies it lives in the system config, which
+      ;; BOU-311 emits; what this file must get right is what it destructures.
+      ;; Routes reaching for a repository would skip the service layer.
+      (is (str/includes? output "[_ {:keys [service config]}]"))
+      (is (not (str/includes? output "[_ {:keys [repository config]}]"))))))
+
+(deftest ^:unit module-wiring-never-confuses-the-module-with-the-entity
+  ;; The fixture above uses module "product" with entity "Product", so the two
+  ;; render identically and every substring assertion passes whichever is
+  ;; wrong. An earlier version passed entity-name into nine module slots and
+  ;; emitted "Integrant wiring for the Widget module" for module `inventory`.
+  (let [output (gen/generate-module-wiring-file
+                {:base-ns "acme" :module-name "inventory"
+                 :entities [{:entity-name "Widget" :entity-lower "widget"
+                             :entity-kebab "widget" :entity-table "widgets"
+                             :fields []}]})]
+    (testing "the entity name appears nowhere in the wiring"
+      ;; Wiring names components, and a component is the module's, not the
+      ;; entity's — a module can grow a second entity without rewiring.
+      (is (not (str/includes? output "Widget")) output))
+
+    (testing "and every key is the module's"
+      (doseq [k [":wagoe/inventory-repository" ":wagoe/inventory-service"
+                 ":wagoe/inventory-routes" ":wagoe/inventory\n"]]
+        (is (str/includes? output k) (str "missing " k))))))
+
+(deftest ^:unit module-wiring-calls-the-normalized-routes-fn
+  ;; :wagoe/http-handler reads (:api routes) from the normalized map. http/routes
+  ;; is the legacy flat vector, so wiring that one contributes zero routes and
+  ;; says nothing about it — the module generates, compiles, boots, and serves
+  ;; no requests.
+  (let [output (gen/generate-module-wiring-file base-ctx)]
+    (is (str/includes? output "http/product-routes-normalized"))
+    (is (not (str/includes? output "(http/routes ")))))
+
+(deftest ^:unit module-wiring-uses-the-projects-own-base-ns
+  ;; A generated project is not called wagoe. Hard-coding the prefix would emit
+  ;; a namespace that does not match its own file path.
+  (let [output (gen/generate-module-wiring-file (assoc base-ctx :base-ns "acme"))]
+    (is (str/includes? output "(ns acme.product.shell.module-wiring"))
+    (is (str/includes? output "acme.product.shell.persistence"))
+    (is (not (str/includes? output "wagoe.product.shell.persistence")))))
+
+(deftest ^:unit generated-wiring-is-loadable-clojure
+  ;; The generators emit strings, so "it compiles" is not something the other
+  ;; assertions can tell you — they match substrings, and a wiring file with an
+  ;; unbalanced paren matches them all. Reading the whole file back is the
+  ;; cheapest way to know it is Clojure at all.
+  ;;
+  ;; Verified further by hand against a real generated module: all four keys
+  ;; init, the routes key returns 3 routes, and :enabled? false yields nil. That
+  ;; needs platform on the classpath, so it lives in the first-run smoke
+  ;; (BOU-312) rather than here.
+  (let [output (gen/generate-module-wiring-file base-ctx)
+        forms  (read-string (str "[" output "]"))]
+    (is (< 8 (count forms)) "ns form plus four init-keys and four halt-keys")
+    (is (= 'ns (ffirst forms)))
+    (is (= 'wagoe.product.shell.module-wiring (second (first forms))))))

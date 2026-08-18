@@ -205,9 +205,11 @@
                  files)))
 
 (def ^:private module-next-steps
+  ;; Fallback only — the service supplies these, because it knows --base-ns.
+  ;; The old "[:active :wagoe/settings :modules]" line named a path nothing
+  ;; reads (BOU-309).
   ["Review the generated files"
-   "Add module to config: [:active :wagoe/settings :modules]"
-   "Wire module into Integrant system configuration"])
+   "Print the config it needs: bb scaffold integrate <module>"])
 
 (defn- numbered [steps]
   (str/join "\n" (map-indexed #(format "  %d. %s" (inc %1) %2) steps)))

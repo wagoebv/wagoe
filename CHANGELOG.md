@@ -68,6 +68,16 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **The scaffolder emits `shell/module_wiring.clj`** (BOU-309). It generated
+  every file a module needs except the one its own integrate step requires, so
+  `bb scaffold integrate` always reported that the module had no wiring yet and
+  the user hand-wrote the Integrant keys the framework says never to hand-write.
+  A generated module now ships `:wagoe/<module>-repository`, `-service`,
+  `-routes` and the `:wagoe/<module>` key discovery looks for, each with a
+  `halt-key!`. The dead next-step telling you to add the module to
+  `[:active :wagoe/settings :modules]` — a path nothing reads, and one that
+  contradicted `integrate` — is replaced by the command that does the work.
+
 - **`com.wagoe/wagoe-config` — configuration loading as a library** (BOU-306).
   Four published libraries read settings through a `wagoe.config` namespace they
   resolved at runtime and nobody declared. It worked because the monorepo has

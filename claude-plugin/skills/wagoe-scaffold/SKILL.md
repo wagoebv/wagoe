@@ -51,8 +51,9 @@ where it says.
 
 ## What `generate` produces
 
-Thirteen files for one entity: `schema.clj`, `ports.clj`, `core/<entity>.clj`,
-`core/ui.clj`, four under `shell/`, an up/down migration pair, and three tests.
+Fourteen files for one entity: `schema.clj`, `ports.clj`, `core/<entity>.clj`,
+`core/ui.clj`, five under `shell/` (including `module_wiring.clj`), an up/down
+migration pair, and three tests.
 
 The tests are real tests, not placeholders — they are tagged and they assert
 something, because `bb check` rejects both untagged deftests and `(is true)`.
@@ -75,7 +76,7 @@ it found and prints the steps for you to carry out:
 
 Register the module's Integrant components:
   1. Add config to resources/conf/dev/config.edn (and test)
-  2. This module has no shell/module_wiring.clj yet — add one …
+  2. Paste the printed Integrant config into your system config
 ```
 
 So `deps.edn` and `tests.edn` need nothing — the generated paths already cover
