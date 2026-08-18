@@ -266,7 +266,6 @@ for _ in $(seq 1 45); do
   sleep 2
 done
 [ "$CODE" = "200" ] || { tail -25 /tmp/repl.log; fail "/api-docs/ returned $CODE, expected 200"; }
-T1=$(date +%s)
 ok "/api-docs/ returned 200"
 
 # ── does the module quickstart scaffolded serve anything? ───────────────────
@@ -275,24 +274,47 @@ ok "/api-docs/ returned 200"
 # is how scaffold -> integrate -> dead code survived for months: quickstart
 # reported 8/8 Done and this script reported success while /api/v1/tasks was a
 # 404 (BOU-309, BOU-310, BOU-311).
-MODULE_CODE=$(curl -s -o /tmp/tasks.json -w "%{http_code}" --max-time 5 http://localhost:3000/api/v1/tasks || true)
+#
+# The path comes from the ENTITY, not the module: quickstart passes
+# --module-name tasks --entity Task, and the scaffolder pluralises the entity.
+# Change either in quickstart.clj and this URL has to change with it.
+#
+# Retried, and only while the status is 000. Every route is compiled in one pass
+# inside init-key :wagoe/http-handler, so once /api-docs/ answers, this route
+# exists or never will — a 404 is an answer and must not be retried away. What
+# is not inherited from the loop above is latency: this is the first request
+# through the /api/v1 pipeline, all of it cold, on an emulated matrix cell.
+MODULE_CODE=000
+for _ in $(seq 1 10); do
+  MODULE_CODE=$(curl -s -o /tmp/tasks.json -w "%{http_code}" --max-time 10 http://localhost:3000/api/v1/tasks || true)
+  [ "$MODULE_CODE" != "000" ] && break
+  sleep 2
+done
+# `|| true` on every read of the body file. curl writes no file at all when it
+# never gets a response, and a bare `head` on a missing file is a non-zero exit
+# under `set -e` — which killed the script inside its own failure branch,
+# printing a head: error and no SMOKE FAILURE line.
+body_() { head -c 400 /tmp/tasks.json 2>/dev/null || true; echo; }
 case "$MODULE_CODE" in
   2*) ;;
   404) tail -25 /tmp/repl.log
        fail "/api/v1/tasks returned 404 — quickstart scaffolded and integrated the module, but nothing mounted its routes" ;;
-  *)   head -c 400 /tmp/tasks.json; echo; tail -25 /tmp/repl.log
+  000) tail -25 /tmp/repl.log
+       fail "/api/v1/tasks never answered within 10 attempts" ;;
+  *)   body_; tail -25 /tmp/repl.log
        fail "/api/v1/tasks returned $MODULE_CODE, expected 2xx" ;;
 esac
 # The status alone is not the assertion. Assert on the body too: a handler that
 # is mounted but returns nothing usable is not a module that serves.
-head -c 1 /tmp/tasks.json | grep -qE "[[{]" \
-  || { head -c 400 /tmp/tasks.json; echo
-       fail "/api/v1/tasks returned $MODULE_CODE but the body is not JSON"; }
-# And the control. A router that answers every path under the prefix passes the
-# two asserts above while proving nothing, so require an unknown sibling to 404.
-NOPE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://localhost:3000/api/v1/not-a-module || true)
+head -c 1 /tmp/tasks.json 2>/dev/null | grep -qE "[[{]" \
+  || { body_; fail "/api/v1/tasks returned $MODULE_CODE but the body is not JSON"; }
+# The control. Today the router installs a default 404 handler, so this holds in
+# the broken state too — it does not discriminate. It guards the future: a
+# catch-all, or a prefix mounted too greedily, would satisfy both asserts above.
+NOPE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 http://localhost:3000/api/v1/not-a-module || true)
 [ "$NOPE" = "404" ] \
-  || fail "/api/v1/not-a-module returned $NOPE instead of 404, so the 2xx above proves nothing"
+  || fail "/api/v1/not-a-module returned $NOPE instead of 404 — an unknown path must not be served"
+T1=$(date +%s)
 ok "/api/v1/tasks returned $MODULE_CODE with a JSON body, and unknown paths still 404"
 
 echo

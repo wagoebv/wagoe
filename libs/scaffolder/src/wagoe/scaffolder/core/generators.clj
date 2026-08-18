@@ -912,10 +912,11 @@ DROP TABLE IF EXISTS %s;
 ;; The module
 ;; =============================================================================
 ;;
-;; The key module discovery will look for. Today nothing consumes it: the HTTP
-;; handler destructures a hardcoded list of *-routes keys, so a scaffolded
-;; module's routes are reached by naming :wagoe/%s-routes in the config.
-;; BOU-311 makes discovery generic, and this key is what it will find.
+;; The key module discovery looks for. `bb scaffold integrate` writes it to the
+;; :active section of config.edn, ig-config turns it into the components below,
+;; and the app hands :wagoe/%s-routes to the HTTP handler as one of
+;; :module-routes. Setting :enabled? false in config.edn switches the module off
+;; without deleting anything.
 
 (defmethod ig/init-key :wagoe/%s
   [_ {:keys [routes service enabled?]}]

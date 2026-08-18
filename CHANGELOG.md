@@ -116,7 +116,8 @@ for what is public API, what is internal, and how deprecations are announced.
   shape `bb scaffold integrate` prints — is now wired from its
   `wagoe.<module>.shell.module-wiring`, and its routes reach `:wagoe/http-handler`
   through `:module-routes`, because the handler names its route keys one by one
-  and cannot name a generated module. A key whose wiring namespace will not load
+  and cannot name a generated module. (In the framework's own app root only —
+  generated projects got the `:module-routes` half in BOU-312, below.) A key whose wiring namespace will not load
   throws at boot naming the key, the namespace it looked for, and the fix; a
   misspelled key used to look exactly like a working one.
 
