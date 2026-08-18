@@ -22,8 +22,6 @@
    :docs-url "https://github.com/wagoebv/wagoe/blob/main/libs/scaffolder/AGENTS.md"}
   {:name "tools" :description "Developer CLI: scaffolding, AI, config, i18n, deployment"
    :docs-url "https://github.com/wagoebv/wagoe/blob/main/libs/tools/AGENTS.md"}
-  {:name "devtools" :description "Dev-only tools: REPL helpers, error pipeline, dashboard"
-   :docs-url "https://github.com/wagoebv/wagoe/blob/main/libs/devtools/AGENTS.md"}
   {:name "wagoe-mcp" :description "MCP server (stdio): tool/resource registry + JSON-RPC transport for editor agents"
    :docs-url "https://github.com/wagoebv/wagoe/blob/main/libs/wagoe-mcp/AGENTS.md"}]
 

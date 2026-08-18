@@ -5,11 +5,16 @@ Wagoe ships with a suite of developer tools that give you x-ray vision into your
 
 == Starting the Dev Dashboard
 
-The dashboard starts automatically when you boot the system with the `:dev` or `:repl-clj` alias:
+In a project created by `wagoe new`, devtools is in the `:repl` alias — start
+the REPL with `clojure -M:repl`. (Inside this monorepo the aliases are `:dev`
+and `:repl-clj`.)
 
-[source,bash]
+The dashboard is an Integrant component, so it starts when the config asks for
+it. Add to the `:active` section of `resources/conf/dev/config.edn`:
+
+[source,clojure]
 ----
-clojure -M:repl-clj
+:wagoe/dashboard {:port 9999}
 ----
 
 [source,clojure]

@@ -1,5 +1,6 @@
 (ns wagoe.cli.add
-  (:require [clojure.java.io :as io]
+  (:require [clojure.edn :as edn]
+            [clojure.java.io :as io]
             [clojure.string :as str]
             [wagoe.cli.catalogue :as cat]
             [wagoe.cli.templates :as templates]))
@@ -15,18 +16,121 @@
 
 ;; ─── deps.edn patching ───────────────────────────────────────────────────────
 
+(defn dep-coords
+  "Coordinate of `clojars` where the module belongs, or `:unreadable`, or nil.
+
+   Where matters, and a substring search over the file gets it wrong. The
+   generated deps.edn lists wagoe-devtools, wagoe-ai, wagoe-scaffolder,
+   wagoe-tools and wagoe-jobs inside the `:mcp` alias, which is a launcher for
+   the MCP server and not the app's classpath. `wagoe add ai` read the file as
+   text, found the name in that alias, and treated the module as installed —
+   printing success and writing nothing.
+
+   deps.edn is plain EDN, so this reads it. `:unreadable` when it will not
+   parse: writing into a file we cannot read risks a duplicate key, and a
+   deps.edn with a duplicate key does not load at all."
+  [content clojars scope]
+  (try
+    (let [parsed (edn/read-string content)]
+      (if (= :dev scope)
+        (get-in parsed [:aliases :repl :extra-deps clojars])
+        (get-in parsed [:deps clojars])))
+    (catch Exception _ :unreadable)))
+
+(defn- code-only
+  "`text` with strings and comments blanked, positions and newlines intact.
+
+   Brace counting without this is not brace counting: deps.edn is hand-edited
+   and the generated one carries `;;` comments above half its aliases."
+  [text]
+  (let [n (count text)]
+    (loop [i 0, state :code, out (transient [])]
+      (if (>= i n)
+        (apply str (persistent! out))
+        (let [c (nth text i)
+              keep (fn [ch] (conj! out ch))
+              blank (fn [] (conj! out (if (= c \newline) \newline \space)))]
+          (case state
+            :code    (cond
+                       (= c \") (recur (inc i) :string (blank))
+                       (= c \;) (recur (inc i) :comment (blank))
+                       :else    (recur (inc i) :code (keep c)))
+            :string  (cond
+                       (= c \\) (recur (+ i 2) :string (-> (blank) (conj! \space)))
+                       (= c \") (recur (inc i) :code (blank))
+                       :else    (recur (inc i) :string (blank)))
+            :comment (if (= c \newline)
+                       (recur (inc i) :code (keep c))
+                       (recur (inc i) :comment (blank)))))))))
+
+(defn- map-extent
+  "[open close] of the map opening at or after `from` in `code`, or nil."
+  [code from]
+  (when-let [open (str/index-of code "{" from)]
+    (loop [i (inc open), depth 1]
+      (cond
+        (>= i (count code)) nil
+        (zero? depth)       [open (dec i)]
+        :else (recur (inc i) (case (nth code i) \{ (inc depth) \} (dec depth) depth))))))
+
+(defn repl-extra-deps-insertion-point
+  "Index just after the `:extra-deps {` of the `:repl` alias, or nil.
+
+   Scoped to the alias, which a regex is not. `(?s):repl\\s*\\{.*?:extra-deps\\s*\\{`
+   anchors on :repl and then takes the NEXT :extra-deps in the file, which need
+   not be inside it — with a :repl alias that has none, devtools landed in
+   whatever alias came next (:test in a generated project). It reported the
+   :repl alias while writing to :test."
+  [content]
+  (let [code (code-only content)]
+    (when-let [[aliases-open aliases-close] (some->> (str/index-of code ":aliases")
+                                                     (map-extent code))]
+      (when-let [repl-idx (loop [pos aliases-open]
+                            (when-let [i (str/index-of code ":repl" pos)]
+                              (cond
+                                (>= i aliases-close) nil
+                                ;; :repl-clj and :repl/foo are other aliases.
+                                (re-matches #"[A-Za-z0-9*+!?<>=_/-]" (str (nth code (+ i 5)))) (recur (+ i 5))
+                                :else i)))]
+        (when-let [[alias-open alias-close] (map-extent code repl-idx)]
+          (let [ed (str/index-of code ":extra-deps" alias-open)]
+            (when (and ed (< ed alias-close))
+              (when-let [[open _] (map-extent code ed)]
+                (inc open)))))))))
+
 (defn patch-deps!
-  "Add clojars coordinate to deps.edn if not already present."
-  [dir {:keys [clojars version]}]
+  "Add clojars coordinate to deps.edn if not already present.
+
+   A module with `:scope :dev` goes into the `:repl` alias instead of `:deps`.
+   devtools is the first: it pulls a dashboard and a Jetty adapter, and putting
+   it in `:deps` would ship all of that in the uberjar. Returns `:deps`,
+   `:repl-alias`, `:no-repl-extra-deps` or `:unreadable` (nothing written), or
+   nil when the dep was already there."
+  [dir {:keys [clojars version scope]}]
   (let [f         (io/file dir "deps.edn")
         content   (slurp f)
-        coord-str (str clojars)]
-    (when-not (str/includes? content coord-str)
-      (let [new-content (str/replace-first
-                         content
-                         #"(:deps\s*\{)"
-                         (str "$1\n         " coord-str " {:mvn/version \"" version "\"}\n         "))]
-        (spit f new-content)))))
+        coord-str (str clojars)
+        entry     (str coord-str " {:mvn/version \"" version "\"}")
+        existing  (dep-coords content clojars scope)]
+    (cond
+      (= :unreadable existing) :unreadable
+      existing                 nil
+
+      (= :dev scope)
+      (if-let [at (repl-extra-deps-insertion-point content)]
+        (do (spit f (str (subs content 0 at)
+                         "\n                          " entry
+                         "\n                         "
+                         (subs content at)))
+            :repl-alias)
+        :no-repl-extra-deps)
+
+      :else
+      (do (spit f (str/replace-first
+                   content
+                   #"(:deps\s*\{)"
+                   (str "$1\n         " entry "\n         ")))
+          :deps))))
 
 ;; ─── config.edn patching ─────────────────────────────────────────────────────
 
@@ -93,13 +197,13 @@
             (println (str "  " (:name m))))
           (System/exit 1))
         (let [deps-content (slurp (io/file dir "deps.edn"))
-              coord-str    (str (:clojars module))
-              dep-present? (str/includes? deps-content coord-str)
-              existing-ver (when dep-present?
-                             (second (re-find
-                                      (re-pattern (str (java.util.regex.Pattern/quote coord-str)
-                                                       "[\\s\\S]*?:mvn/version\\s+\"([^\"]+)\""))
-                                      deps-content)))
+              ;; Where the module belongs, not anywhere in the file — see
+              ;; dep-coords. The :mcp alias names five wagoe libs it launches
+              ;; the MCP server with, and reading those as installed made
+              ;; `wagoe add ai` report success over an untouched deps.edn.
+              existing     (dep-coords deps-content (:clojars module) (:scope module))
+              dep-present? (boolean existing)
+              existing-ver (:mvn/version existing)
               snippet      (:config-snippet module)
               ;; A module is "installed" when its dep is present AND its config key is
               ;; wired. Requiring dep-present? prevents false positives when two modules
@@ -132,7 +236,20 @@
             :else
             (do
               (println (str "Adding " module-name "..."))
-              (patch-deps! dir module)
+              ;; Every outcome says what happened to deps.edn. "added" over an
+              ;; untouched file is how `wagoe add ai` looked while doing
+              ;; nothing, and a fresh project already ships devtools in :repl,
+              ;; so the no-op branch is the common one for it.
+              (let [by-hand (str "  Add " (:clojars module) " {:mvn/version \""
+                                 (:version module) "\"} by hand.")]
+                (case (patch-deps! dir module)
+                  :repl-alias         (println "  deps.edn: added to the :repl alias — dev-only, not on the production classpath")
+                  :deps               (println "  deps.edn: added to :deps")
+                  :no-repl-extra-deps (do (println "  deps.edn: no :extra-deps in the :repl alias, so nothing was written there.")
+                                          (println by-hand))
+                  :unreadable         (do (println "  deps.edn: could not be read as EDN, so nothing was written.")
+                                          (println by-hand))
+                  (println (str "  deps.edn: unchanged — " (:clojars module) " is already there"))))
               (patch-config! dir "resources/conf/dev/config.edn" (:config-snippet module))
               (patch-config! dir "resources/conf/test/config.edn" (:test-config-snippet module))
               (patch-agents-md! dir module)

@@ -50,6 +50,75 @@
       (finally
         (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))
 
+(deftest ^:integration a-dev-scoped-module-lands-in-the-repl-alias
+  ;; devtools carries a dashboard and a Jetty adapter. In :deps it would be in
+  ;; the uberjar of every project that ran `wagoe add devtools` (BOU-318).
+  (let [tmp (str (System/getProperty "java.io.tmpdir") "/wagoe-add-dev-" (System/currentTimeMillis))
+        dev {:clojars 'com.wagoe/wagoe-devtools :version "1.0.0" :scope :dev}]
+    (try
+      (make-wagoe-project! tmp)
+      (spit (io/file tmp "deps.edn")
+            (str "{:deps {com.wagoe/wagoe-core {:mvn/version \"1.0.0\"}}\n"
+                 " :aliases\n"
+                 " {:repl {:extra-paths [\"dev\"]\n"
+                 "         :extra-deps {nrepl/nrepl {:mvn/version \"1.3.0\"}}}}}"))
+
+      (testing "it goes in the :repl alias, not in :deps"
+        (is (= :repl-alias (add/patch-deps! tmp dev)))
+        (let [parsed (clojure.edn/read-string (slurp (io/file tmp "deps.edn")))]
+          (is (nil? (get-in parsed [:deps 'com.wagoe/wagoe-devtools]))
+              "a dev-only module in :deps ships in the uberjar")
+          (is (= {:mvn/version "1.0.0"}
+                 (get-in parsed [:aliases :repl :extra-deps 'com.wagoe/wagoe-devtools])))
+          (is (get-in parsed [:aliases :repl :extra-deps 'nrepl/nrepl])
+              "the deps already in the alias survive"))
+        (is (not (re-find #"\}[^\s\}\)\]]" (slurp (io/file tmp "deps.edn"))))
+            "a coordinate must not be glued onto the end of the previous one"))
+
+      (testing "and it is idempotent"
+        (is (nil? (add/patch-deps! tmp dev)))
+        (is (= 1 (count (re-seq #"wagoe-devtools" (slurp (io/file tmp "deps.edn")))))))
+
+      (testing "a project with no :repl alias is told, not silently skipped"
+        (spit (io/file tmp "deps.edn") "{:deps {com.wagoe/wagoe-core {:mvn/version \"1.0.0\"}}}")
+        (is (= :no-repl-extra-deps (add/patch-deps! tmp dev)))
+        (is (not (str/includes? (slurp (io/file tmp "deps.edn")) "devtools"))
+            "nothing may be written when there is nowhere correct to write it"))
+
+      (testing "it never writes into a different alias"
+        ;; A regex anchored on :repl takes the next :extra-deps in the FILE,
+        ;; which need not be inside :repl. With a :repl alias that has none,
+        ;; devtools landed in :test — and the command reported the :repl alias
+        ;; while writing to :test.
+        (spit (io/file tmp "deps.edn")
+              (str "{:deps {com.wagoe/wagoe-core {:mvn/version \"1.0.0\"}}\n"
+                   " :aliases\n"
+                   " {:repl {:extra-paths [\"dev\"] :main-opts [\"-m\" \"nrepl.cmdline\"]}\n"
+                   "  :test {:extra-paths [\"test\"]\n"
+                   "         :extra-deps {lambdaisland/kaocha {:mvn/version \"1.0\"}}}}}"))
+        (is (= :no-repl-extra-deps (add/patch-deps! tmp dev)))
+        (let [parsed (clojure.edn/read-string (slurp (io/file tmp "deps.edn")))]
+          (is (nil? (get-in parsed [:aliases :test :extra-deps 'com.wagoe/wagoe-devtools])))))
+
+      (testing "a brace in a comment does not move the insertion"
+        (spit (io/file tmp "deps.edn")
+              (str "{:deps {com.wagoe/wagoe-core {:mvn/version \"1.0.0\"}}\n"
+                   " :aliases\n"
+                   " {;; e.g. :extra-deps {foo/bar {:mvn/version \"1\"}\n"
+                   "  :repl {:extra-deps {nrepl/nrepl {:mvn/version \"1.3.0\"}}}}}"))
+        (is (= :repl-alias (add/patch-deps! tmp dev)))
+        (let [parsed (clojure.edn/read-string (slurp (io/file tmp "deps.edn")))]
+          (is (get-in parsed [:aliases :repl :extra-deps 'com.wagoe/wagoe-devtools]))))
+
+      (testing "an unreadable deps.edn is left alone"
+        ;; Writing into a file we cannot parse risks a second copy of a key the
+        ;; file already has, and a deps.edn with a duplicate key does not load.
+        (spit (io/file tmp "deps.edn") "{:deps {com.wagoe/wagoe-core {:mvn/version \"1.0.0\"}}")
+        (is (= :unreadable (add/patch-deps! tmp dev)))
+        (is (not (str/includes? (slurp (io/file tmp "deps.edn")) "devtools"))))
+      (finally
+        (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))
+
 (deftest ^:integration patch-config-test
   (let [tmp (str (System/getProperty "java.io.tmpdir") "/wagoe-add-cfg-" (System/currentTimeMillis))]
     (try

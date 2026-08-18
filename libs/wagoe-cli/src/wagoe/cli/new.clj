@@ -69,7 +69,10 @@
                      :search-version        (:version (cat/find-module "search"))
                      :external-version      (:version (cat/find-module "external"))
                      :payments-version      (:version (cat/find-module "payments"))
-                     :i18n-version          (:version (cat/find-module "i18n"))}
+                     :i18n-version          (:version (cat/find-module "i18n"))
+                     ;; Dev-only, and it lands in the :repl alias — see
+                     ;; deps.edn.tmpl.
+                     :devtools-version      (:version (cat/find-module "devtools"))}
         files       {"deps.edn"                            "deps.edn.tmpl"
                      "bb.edn"                              "bb.edn.tmpl"
                      ".gitignore"                          "gitignore.tmpl"
