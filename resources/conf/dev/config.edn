@@ -185,7 +185,12 @@
    :model    #or [#env AI_MODEL "qwen2.5-coder:7b"]}
 
   ;; Developer dashboard — live system introspection UI (dev only)
-  :wagoe/dashboard {:port 9999}}
+  :wagoe/dashboard {:port 9999}
+
+  ;; Dev-only: an error over HTTP answers with its BND code and the fix
+  ;; (BOU-321). Never in prod config — the enrichment is gated on this key and
+  ;; on a dev-like environment, and both exist so production says nothing.
+  :wagoe/dev-error-enricher {}}
 
  ;; Guidance engine is managed by the REPL (dev/repl/user.clj), not by Integrant.
  ;; Set level in your REPL: (guidance :minimal) or (guidance :off)

@@ -6,6 +6,8 @@
   (:require             [wagoe.platform.ports.http :as ports]
                         [wagoe.platform.shell.http.interceptors :as http-interceptors]
                         [cheshire.core :as json]
+                        [malli.error :as me]
+                        [clojure.tools.logging :as log]
                         [clojure.string :as str]
                         [reitit.coercion.malli :as malli-coercion]
                         [reitit.ring :as ring]
@@ -364,13 +366,84 @@
 ;; Router Creation
 ;; =============================================================================
 
+(defn- humanize-coercion-errors
+  "Field-level messages for a coercion failure — `{:email [\"missing required key\"]}`.
+
+   Built here rather than read off the exception: reitit hands us `:errors`,
+   `:schema` and `:value`, and `:errors` carries schema fragments. Malli turns
+   the three into a map keyed by the fields the caller got wrong, which is the
+   part that is theirs to see."
+  [data]
+  (or (try
+        (me/humanize (select-keys data [:schema :value :errors]))
+        (catch Throwable _ nil))
+      {}))
+
+(defn- coercion-error-response
+  "400 for a request the client got wrong, naming the fields.
+
+   `:humanized` is the field-level explanation from Malli — \"missing required key\"
+   against the key that is missing — and it is about what the caller sent, so
+   returning it is the point rather than a leak. The schema itself is not
+   returned."
+  [system data]
+  (let [dev  (http-interceptors/dev-error-info
+              system (ex-info "Request validation failed" {:type :validation-error}))
+        body (cond-> {:error   "validation-error"
+                      :message "Request validation failed"
+                      :details (humanize-coercion-errors data)}
+               dev (assoc :dev dev))]
+    {:status  400
+     :headers {"Content-Type" "application/json"}
+     :body    (json/generate-string body)}))
+
+(defn- create-exception-middleware
+  "Reitit exception middleware, placed outermost.
+
+   It has to be outermost, and it was innermost. Reitit applies a `:middleware`
+   vector first-to-outermost, and this sat last — inside `coerce-request`. So a
+   request that failed coercion threw past every handler in the chain and left
+   the app answering 500 to a malformed request, with a stack trace where the
+   400 should have been (BOU-321).
+
+   The typed errors the framework raises are still handled by the interceptor stack
+   closer to the handler; what reaches here is what that stack cannot see."
+  [config]
+  (let [system (or (:system config) {})]
+    (exception/create-exception-middleware
+     (merge
+      exception/default-handlers
+      {:reitit.coercion/request-coercion
+       (fn [e _request] (coercion-error-response system (ex-data e)))
+
+       ;; A response that does not match its own schema is a bug in the app, not
+       ;; in the request: generic 500, details in the log only.
+       :reitit.coercion/response-coercion
+       (fn [e _request]
+         (log/error e "Response coercion failed")
+         {:status  500
+          :headers {"Content-Type" "application/json"}
+          :body    (json/generate-string {:error   "internal-error"
+                                          :message "Internal Server Error"})})
+
+       ::exception/default
+       (fn [e _request]
+         (log/error e "Unhandled exception at the HTTP boundary")
+         {:status  500
+          :headers {"Content-Type" "application/json"}
+          :body    (json/generate-string {:error   "internal-error"
+                                          :message "Internal Server Error"})})}))))
+
 (defn- create-default-middleware
   "Create default middleware stack for Reitit router.
-  
+
   Returns:
     Vector of middleware for Reitit router"
-  []
-  [;; Query params & form params
+  [config]
+  [;; Exception handling — first, so it wraps everything below it, coercion
+   ;; included.
+   (create-exception-middleware config)
+   ;; Query params & form params
    parameters/parameters-middleware
    ;; Content negotiation
    muuntaja/format-negotiate-middleware
@@ -381,9 +454,7 @@
    ;; Coercing request parameters
    coercion/coerce-request-middleware
    ;; Coercing response bodies
-   coercion/coerce-response-middleware
-   ;; Exception handling
-   exception/exception-middleware])
+   coercion/coerce-response-middleware])
 
 (defn- create-router-options
   "Create Reitit router options from config.
@@ -398,7 +469,7 @@
    Returns:
      Map of Reitit router options"
   [config]
-  (let [default-middleware (create-default-middleware)
+  (let [default-middleware (create-default-middleware config)
         custom-middleware (resolve-middleware-fns (:middleware config))
         all-middleware (into default-middleware custom-middleware)]
     {:data {:coercion (or (:coercion config) malli-coercion/coercion)

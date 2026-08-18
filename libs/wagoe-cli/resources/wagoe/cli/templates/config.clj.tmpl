@@ -132,6 +132,23 @@
         reports?  (boolean (:wagoe/reports active))
         calendar? (boolean (:wagoe/calendar active))
         ui-style? (boolean (:wagoe/ui-style active))
+        ;; Dev-only error enrichment: a validation failure answers with its BND
+        ;; code and the fix, instead of "Validation failed". Wired only when the
+        ;; config asks for it, and devtools lives in the :repl alias — so
+        ;; `clojure -M:run`, the uberjar and the Docker image never see it.
+        ;;
+        ;; requiring-resolve rather than require: someone running -M:run against
+        ;; the dev config has the key but not the jar, and a dev-only nicety must
+        ;; not stop the app from booting.
+        dev-errors? (and (boolean (:wagoe/dev-error-enricher active))
+                         (try
+                           (some? (requiring-resolve
+                                   'wagoe.devtools.shell.module-wiring/error-enricher))
+                           (catch Throwable _
+                             (println (str "Note: :wagoe/dev-error-enricher is configured but "
+                                           "wagoe-devtools is not on this classpath — "
+                                           "starting without BND error enrichment."))
+                             false)))
         ;; The user module: auth, sessions, MFA, audit trail, and the four
         ;; tables behind them. Set by `wagoe new` (--no-user writes false) and
         ;; a plain literal so you can change your mind by editing this line.
@@ -182,6 +199,7 @@
                                   :error-reporter  (ig/ref :wagoe/error-reporting)
                                   :db-context      (ig/ref :wagoe/db-context)
                                   :i18n-middleware (ig/ref :wagoe/i18n-http-middleware)}
+                           dev-errors? (assoc :error-enricher (ig/ref :wagoe/dev-error-enricher))
                            user?     (assoc :user-routes  (ig/ref :wagoe/user-routes)
                                             :user-service (ig/ref :wagoe/user-service))
                            cache?    (assoc :cache              (ig/ref :wagoe/cache))
@@ -364,7 +382,8 @@
       realtime? (assoc :wagoe/realtime      (:wagoe/realtime active))
       reports?  (assoc :wagoe/reports       (:wagoe/reports active))
       calendar? (assoc :wagoe/calendar      (:wagoe/calendar active))
-      ui-style? (assoc :wagoe/ui-style      (:wagoe/ui-style active)))
+      ui-style? (assoc :wagoe/ui-style      (:wagoe/ui-style active))
+      dev-errors? (assoc :wagoe/dev-error-enricher (:wagoe/dev-error-enricher active)))
 
      ;; Modules this file has never heard of — what `bb scaffold generate`
      ;; produces. Each is a :wagoe/<module> key carrying :enabled?, which is

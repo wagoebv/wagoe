@@ -3,6 +3,7 @@
   (:require [wagoe.platform.ports.http :as ports]
             [wagoe.platform.shell.http.reitit-router :as reitit]
             [cheshire.core :as json]
+            [clojure.string :as str]
             [clojure.test :refer [deftest testing is]]))
 
 ;; =============================================================================
@@ -389,3 +390,60 @@
       (is (= "true" (get-in resp-with-mw [:headers "x-saw-mw"])))
       (is (= "false" (get-in resp-without-mw [:headers "x-saw-mw"]))))))
 
+
+;; =============================================================================
+;; Coercion failures (BOU-321)
+;; =============================================================================
+
+(defn- login-like-handler
+  "A route whose body schema requires two fields, wired the way the user module
+   wires login."
+  [system]
+  (ports/compile-routes
+   (reitit/create-reitit-router)
+   [{:path    "/auth/login"
+     :methods {:post {:handler    (fn [_] {:status 200 :body {:ok true}})
+                      :parameters {:body [:map {:closed true}
+                                          [:email :string]
+                                          [:password :string]]}}}}]
+   {:system system}))
+
+(deftest ^:unit a-request-that-fails-coercion-is-a-400-not-a-500
+  ;; Reitit applies a :middleware vector first-to-outermost, and the exception
+  ;; middleware sat last — inside coerce-request. A request missing a required
+  ;; field threw past every handler, so the app answered 500 to a malformed
+  ;; request and the client learned nothing.
+  (let [resp ((login-like-handler {}) {:request-method :post
+                                       :uri            "/auth/login"
+                                       :headers        {}
+                                       :body-params    {}})
+        body (json/parse-string (:body resp) true)]
+    (is (= 400 (:status resp)))
+    (is (= "validation-error" (:error body)))
+
+    (testing "and it names the fields the caller got wrong"
+      (is (= {:email ["missing required key"] :password ["missing required key"]}
+             (:details body))))
+
+    (testing "but not the schema it checked them against"
+      (is (not (str/includes? (:body resp) ":map")))
+      (is (nil? (:schema body))))))
+
+(deftest ^:unit coercion-failures-carry-the-bnd-code-in-dev-only
+  (let [enricher (fn [_] {:code "BND-201" :category :validation})
+        body-of  (fn [system]
+                   (json/parse-string
+                    (:body ((login-like-handler system) {:request-method :post
+                                                         :uri            "/auth/login"
+                                                         :headers        {}
+                                                         :body-params    {}}))
+                    true))]
+    (testing "dev"
+      (is (= "BND-201" (get-in (body-of {:error-enricher enricher :environment "development"})
+                               [:dev :code]))))
+
+    (testing "production, with the same enricher wired"
+      (is (nil? (:dev (body-of {:error-enricher enricher :environment "production"})))))
+
+    (testing "no enricher"
+      (is (nil? (:dev (body-of {:environment "development"})))))))

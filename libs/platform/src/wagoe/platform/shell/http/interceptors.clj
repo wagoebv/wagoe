@@ -256,6 +256,37 @@
           str/trim
           str/lower-case))
 
+(defn- dev-like?
+  "True when the runtime environment is one people develop against."
+  [system]
+  (boolean (dev-like-environments (or (detect-environment system) "development"))))
+
+(defn dev-error-info
+  "BND code, category and fix for `exception`, or nil.
+
+   Two conditions, both required. The app must have wired an enricher —
+   `:wagoe/dev-error-enricher`, which only a dev config asks for — and the
+   environment must be dev-like. A generated project sets no WAG_ENV, so
+   `detect-environment` answers \"development\" by default; the wiring is what
+   makes this deliberate rather than accidental, and the environment check is
+   what stops a dev config copied into production from explaining its own
+   internals to the internet (BOU-321).
+
+   Never throws: an enricher that dies must not replace the error the user
+   needed to see.
+
+   Public because the router needs it too: a request-coercion failure is thrown
+   by middleware sitting outside this interceptor chain, so the router handles
+   that one and asks here for the same enrichment."
+  [system exception]
+  (when-let [enrich (:error-enricher system)]
+    (when (dev-like? system)
+      (try
+        (let [info (enrich exception)]
+          (when (map? info)
+            (not-empty (select-keys info [:code :category :fix :docs-url]))))
+        (catch Throwable _ nil)))))
+
 (defn- enforce-error-type?
   "Return true when exceptions must include :type in ex-data."
   [system]
@@ -482,7 +513,12 @@
                                    :forbidden 403
                                    :conflict 409
                                    500)
-                          server-error? (>= status 500)]
+                          server-error? (>= status 500)
+                          ;; Dev only, and only when the app wired an enricher:
+                          ;; the BND code and its fix. The one place a 5xx says
+                          ;; more than "Internal Server Error", which is why it
+                          ;; is gated twice (BOU-321).
+                          dev-info      (dev-error-info system exception)]
                       ;; Never leak internals on a 5xx: log the full exception
                       ;; (message, class, ex-data, stacktrace) server-side, keyed
                       ;; by correlation-id, and return only a generic body to the
@@ -500,19 +536,20 @@
                                     {:status status
                                      :headers {"Content-Type" "application/json"
                                                "X-Correlation-ID" correlation-id}
-                                     :body (if server-error?
-                                             {:error "internal-error"
-                                              :message "Internal Server Error"
-                                              :correlation-id correlation-id}
-                                             ;; A typed 4xx carries a domain-authored
-                                             ;; message (ex-data :message or the
-                                             ;; ex-info message) — safe to return.
-                                             {:error (name error-type)
-                                              :message (or (:message ex-data)
-                                                           (.getMessage ^Throwable exception)
-                                                           "An error occurred")
-                                              :correlation-id correlation-id
-                                              :details (dissoc ex-data :type :message)})})))))))})
+                                     :body (cond-> (if server-error?
+                                                     {:error "internal-error"
+                                                      :message "Internal Server Error"
+                                                      :correlation-id correlation-id}
+                                                     ;; A typed 4xx carries a domain-authored
+                                                     ;; message (ex-data :message or the
+                                                     ;; ex-info message) — safe to return.
+                                                     {:error (name error-type)
+                                                      :message (or (:message ex-data)
+                                                                   (.getMessage ^Throwable exception)
+                                                                   "An error occurred")
+                                                      :correlation-id correlation-id
+                                                      :details (dissoc ex-data :type :message)})
+                                             dev-info (assoc :dev dev-info))})))))))})
 
 (def http-csrf-protection
   "Validates CSRF tokens for state-changing requests (POST, PUT, DELETE, PATCH) and

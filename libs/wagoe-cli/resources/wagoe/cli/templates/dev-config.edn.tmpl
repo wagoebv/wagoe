@@ -30,6 +30,12 @@
    :wagoe/router
    {:adapter :reitit :coercion :malli :middleware []}
 
+   ;; Dev-only. An error over HTTP answers with its BND code and the fix, not
+   ;; just "Validation failed". Comes from wagoe-devtools, which lives in the
+   ;; :repl alias — so this key belongs in dev config and nowhere else. Delete
+   ;; it and errors go back to the plain shape production uses.
+   :wagoe/dev-error-enricher {}
+
    :wagoe/logging
    {:level :debug :console true}}
 

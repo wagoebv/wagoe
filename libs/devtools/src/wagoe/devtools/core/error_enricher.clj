@@ -22,7 +22,7 @@
    - :suggestions — 'Did you mean?' suggestions (when applicable)
    - :fix — auto-fix descriptor or nil
    - :dashboard-url — link to dev dashboard error page
-   - :docs-url — link to error code documentation
+   - :docs-url — where to read about this code (`bb guide error <code>`)
 
    Each field is independently protected: if a sub-call fails,
    that field is omitted from the result."
@@ -40,7 +40,11 @@
                               {:allowed (:allowed-values data)
                                :suggestion suggestion})]))))
         dashboard   (when code "http://localhost:9999/dashboard/errors")
-        docs        (when code (str "https://wagoe.dev/errors/" code))]
+        ;; `bb guide error <code>` reads the same catalogue this enricher does,
+        ;; so it always answers. The URL that used to be here — wagoe.dev — is
+        ;; not a domain this project owns (wagoe.org is), and since BOU-321 the
+        ;; value is handed to HTTP clients rather than only printed in a REPL.
+        docs        (when code (str "bb guide error " code))]
     (cond-> classified
       trace       (assoc :stacktrace trace)
       fix         (assoc :fix fix)
