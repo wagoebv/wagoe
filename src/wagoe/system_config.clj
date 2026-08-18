@@ -9,6 +9,7 @@
      (ig-config (wagoe.config/load-config))"
   (:require [integrant.core :as ig]
             [wagoe.config :as config]
+            [wagoe.platform.shell.modules :as modules]
             ;; core-system-config emits :wagoe/email unconditionally, so the
             ;; config that references it self-registers the init/halt methods —
             ;; every full-system boot (app + tests) then resolves the key. The
@@ -22,6 +23,25 @@
             ;; fns below.
             [wagoe.i18n.shell.module-wiring]
             [wagoe.user.schema :as user-schema]))
+
+;; =============================================================================
+;; Scaffolded module discovery
+;; =============================================================================
+
+(def framework-module-keys
+  "`:active` keys the functions above already wire.
+
+   Hand-maintained, deliberately: anything not listed is treated as a scaffolded
+   module, and discovery throws when its wiring namespace will not load. So a
+   framework key missing from this set fails the boot with a message naming it,
+   rather than being wired twice or silently.
+
+   Keys whose namespace is not `wagoe` — `:wagoe.external/smtp` — need no entry;
+   discovery only considers `:wagoe/<name>`."
+  #{:wagoe/i18n :wagoe/cache :wagoe/tenant :wagoe/admin :wagoe/workflow
+    :wagoe/search :wagoe/events :wagoe/push :wagoe/audience :wagoe/storage
+    :wagoe/jobs :wagoe/realtime :wagoe/reports :wagoe/calendar :wagoe/ui-style
+    :wagoe/email :wagoe/user :wagoe/geo :wagoe/ai})
 
 ;; =============================================================================
 ;; Integrant Configuration Generation
@@ -411,7 +431,7 @@
      (def ig-cfg (ig-config (config/load-config)))
      (integrant.core/init ig-cfg)"
   [config]
-  (merge (core-system-config config)
+  (-> (merge (core-system-config config)
          (i18n-module-config config)
          (user-module-config config)
          (tenant-module-config config)
@@ -421,7 +441,18 @@
          (external-module-config config)
          (payments-module-config config)
          (events-module-config config)
-         (dashboard-module-config config)))
+         (dashboard-module-config config)
+         ;; Modules this file has never heard of — what `bb scaffold generate`
+         ;; produces. They used to be skipped in silence: no init-key, no route,
+         ;; no warning, and `bb quickstart` reporting success over a module that
+         ;; could not be reached (BOU-311).
+         (modules/discover-module-config
+          (:active config) framework-module-keys "wagoe"
+          modules/require-wiring!))
+      ;; The handler cannot name a generated module, so its routes reach it as a
+      ;; collection. Without this the module initialises and serves nothing.
+      (assoc-in [:wagoe/http-handler :module-routes]
+                (modules/discovered-route-refs (:active config) framework-module-keys))))
 
 ;; =============================================================================
 ;; Service catalogue (BOU-91)

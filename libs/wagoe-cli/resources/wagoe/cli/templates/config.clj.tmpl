@@ -22,6 +22,7 @@
             ;; (db, http, router, observability). Feature-module wiring is loaded
             ;; by the APP, not by platform (BOU-171/192/198): user below, optional
             ;; modules dynamically in ig-config as they are enabled.
+            [wagoe.platform.shell.modules :as modules]
             [wagoe.platform.shell.system.wiring]
             [wagoe.user.shell.module-wiring]
             [wagoe.email.shell.module-wiring]
@@ -85,6 +86,17 @@
   "Extract user validation configuration."
   [config]
   (get-in config [:active :wagoe/settings :user-validation] {}))
+
+(def framework-module-keys
+  "`:active` keys ig-config already wires.
+
+   Anything else carrying `:enabled?` is treated as a scaffolded module, so a
+   framework key missing here fails the boot with a message naming it rather
+   than being wired twice."
+  #{:wagoe/i18n :wagoe/cache :wagoe/tenant :wagoe/admin :wagoe/workflow
+    :wagoe/search :wagoe/events :wagoe/push :wagoe/audience :wagoe/storage
+    :wagoe/jobs :wagoe/realtime :wagoe/reports :wagoe/calendar :wagoe/ui-style
+    :wagoe/email :wagoe/user :wagoe/geo :wagoe/ai})
 
 (defn ig-config
   "Build Integrant configuration map from loaded config.
@@ -177,7 +189,8 @@
                            workflow? (assoc :workflow-routes    (ig/ref :wagoe/workflow-routes))
                            search?   (assoc :search-routes      (ig/ref :wagoe/search-routes)))]
 
-    (cond->
+    (merge
+     (cond->
       {:wagoe/settings        (:wagoe/settings active)
        :wagoe/db-context      db
        :wagoe/logging         (get active :wagoe/logging {:provider :no-op})
@@ -343,7 +356,20 @@
       realtime? (assoc :wagoe/realtime      (:wagoe/realtime active))
       reports?  (assoc :wagoe/reports       (:wagoe/reports active))
       calendar? (assoc :wagoe/calendar      (:wagoe/calendar active))
-      ui-style? (assoc :wagoe/ui-style      (:wagoe/ui-style active)))))
+      ui-style? (assoc :wagoe/ui-style      (:wagoe/ui-style active)))
+
+     ;; Modules this file has never heard of — what `bb scaffold generate`
+     ;; produces. Each is a :wagoe/<module> key carrying :enabled?, which is
+     ;; what `bb scaffold integrate` prints. An :enabled? key whose wiring
+     ;; namespace will not load fails the boot naming the key and the
+     ;; namespace, rather than being skipped in silence (BOU-311).
+     ;; "wagoe", not this project's namespace: `bb scaffold generate` defaults
+     ;; --base-ns to wagoe and neither quickstart nor integrate overrides it, so
+     ;; a scaffolded module lands in src/wagoe/<module>/. Passing the project
+     ;; namespace here made the boot demand a namespace nothing writes.
+     (modules/discover-module-config
+      active framework-module-keys "wagoe"
+      modules/require-wiring!))))
 
 ;; Wire integrant.repl to use this configuration.
 ;; Loaded automatically via dev/user.clj when starting the REPL.

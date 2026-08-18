@@ -367,3 +367,30 @@
 
     (testing "default is user-on"
       (is (= with (render {:with-user? true}))))))
+
+(deftest ^:integration generated-system-config-is-readable-clojure
+  ;; A template is not compiled by anything until someone generates a project
+  ;; and boots it, so an unbalanced paren in it survives every gate. Reading the
+  ;; rendered file back is the cheapest check that it is Clojure at all — and
+  ;; the merge/cond-> restructuring in BOU-311 is exactly the kind of edit that
+  ;; gets this wrong.
+  (let [tmp (str (System/getProperty "java.io.tmpdir") "/wagoe-tmpl-" (System/currentTimeMillis))]
+    (try
+      (new/generate! tmp "test-proj" {})
+      (let [src (slurp (io/file tmp "src/wagoe/system_config.clj"))]
+        (testing "no placeholder survived rendering"
+          (is (not (str/includes? src "{{")) "unrendered placeholder in generated config"))
+
+        (testing "it parses"
+          (let [forms (read-string (str "[" src "]"))]
+            (is (< 1 (count forms)))
+            (is (some #(and (seq? %) (= 'defn (first %)) (= 'ig-config (second %))) forms)
+                "ig-config must survive as a defn")))
+
+        (testing "and it discovers scaffolded modules"
+          ;; Without this the generated project ignores every module the
+          ;; scaffolder makes, which is the defect BOU-311 fixes.
+          (is (str/includes? src "discover-module-config"))))
+      (finally
+        (when (.exists (io/file tmp))
+          (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f)))))))

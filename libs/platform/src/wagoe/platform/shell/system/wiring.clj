@@ -169,7 +169,7 @@
                          :skip-interceptors? true}}}])))
 
 (defmethod ig/init-key :wagoe/http-handler
-  [_ {:keys [user-routes admin-routes tenant-routes membership-routes workflow-routes search-routes router logger metrics-emitter tracer error-reporter config tenant-service db-context cache i18n i18n-middleware user-service request-capture? extra-middleware]}]
+  [_ {:keys [user-routes admin-routes tenant-routes membership-routes workflow-routes search-routes module-routes router logger metrics-emitter tracer error-reporter config tenant-service db-context cache i18n i18n-middleware user-service request-capture? extra-middleware]}]
   (log/info "Initializing top-level HTTP handler with normalized routing and API versioning")
   (require 'wagoe.platform.ports.http)
   (require 'wagoe.platform.shell.interfaces.http.common)
@@ -324,13 +324,27 @@
                                       search-web-routes-raw))
         search-normalized-api (when (seq search-api-routes) search-api-routes)
 
+        ;; Scaffolded modules, discovered from config rather than named here
+        ;; (BOU-311). Every other key in this let is a framework module this
+        ;; namespace knows by name; a generated module cannot be, so its routes
+        ;; arrive as a collection. Without this the module initialises and
+        ;; serves nothing, which is not what "scaffold, never hand-write" can
+        ;; mean.
+        discovered-api    (mapcat #(or (:api %) []) (or module-routes []))
+        discovered-web    (mapcat #(or (:web %) []) (or module-routes []))
+        discovered-static (mapcat #(or (:static %) []) (or module-routes []))
+
         ;; Combine all API routes (unversioned at this point)
         all-api-routes (concat (or user-normalized-api [])
                                (or admin-normalized-api [])
                                (or tenant-normalized-api [])
                                (or membership-normalized-api [])
                                (or workflow-normalized-api [])
-                               (or search-normalized-api []))
+                               (or search-normalized-api [])
+                               ;; Versioned like everyone else's — a generated
+                               ;; module's /api routes should not sit outside
+                               ;; /api/v1 because nothing named them here.
+                               discovered-api)
 
         ;; Apply API versioning to all API routes
         ;; This wraps routes with /api/v1 prefix and creates backward compatibility redirects
@@ -355,6 +369,8 @@
                                       (or admin-normalized-web [])
                                       (or workflow-normalized-web [])
                                       (or search-normalized-web [])
+                                      discovered-static
+                                      discovered-web
                                       versioned-api-routes
                                       (or test-reset-routes []))
 
