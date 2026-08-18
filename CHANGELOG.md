@@ -76,7 +76,10 @@ for what is public API, what is internal, and how deprecations are announced.
   did per file, and is a no-op on a second run. Since discovery loads the wiring
   namespace by convention (BOU-311), that key is the whole registration: no
   require to add by hand. The brace-balanced config editor `bb quickstart` had
-  is now shared rather than duplicated.
+  is now shared rather than duplicated, and reads `config.edn` with a real lexer:
+  a brace inside a string or comment used to shift the depth count and place the
+  key in the wrong section, silently, since the result still parsed. `--base-ns`
+  is refused rather than writing a key discovery cannot resolve.
 
 - **Scaffolded modules are discovered, and an unknown module key fails the boot**
   (BOU-311). `ig-config` built from a fixed list of module keys, so adding

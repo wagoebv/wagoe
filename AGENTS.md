@@ -21,7 +21,7 @@ bb scaffold ai "product module with name, price"   # AI-powered NL scaffolding (
 bb scaffold ai "product module with name, price" --yes  # AI-powered NL scaffolding (non-interactive)
 bb scaffold field --module-name invoice --entity Invoice --name amount --type decimal   # Add field to existing module
 bb scaffold endpoint --module-name invoice --path /invoices --method post --handler-name create-invoice  # Add HTTP endpoint
-bb scaffold integrate product                      # Guide integration of a scaffolded module (config + wiring)
+bb scaffold integrate product                      # Write a scaffolded module's config key (--dry-run to preview)
 
 # Testing - EVERY test surface (use this before committing / claiming green)
 bb test:all                                              # main + tools + agents + wagoe-cli + wagoe-mcp
@@ -252,7 +252,7 @@ The quality gate `bb check:fcis` (run on every commit) enforces strict rules:
 | `bb scaffold ai "description"` | Generating module structure from natural language description |
 | `bb scaffold field --module-name {m} --entity {E} --name {field} --type {type}` | Adding a field to an existing module's schema |
 | `bb scaffold endpoint --module-name {m} --path {path} --method {method} --handler-name {name}` | Adding an HTTP endpoint to an existing module |
-| `bb scaffold integrate {module}` | Guide integration of a generated module (Integrant config + wiring) |
+| `bb scaffold integrate {module}` | Write a generated module's config key into resources/conf/{dev,test}/config.edn |
 
 ### Scaffolder Best Practices for AI Agents
 
@@ -403,7 +403,7 @@ bb scaffold ai "product module with name, price" --yes  # AI-powered (non-intera
 
 **After scaffolding:**
 ```bash
-bb scaffold integrate {module-name}    # Guides integration of your new module (config + wiring)
+bb scaffold integrate {module-name}    # Writes its config key — that is the whole registration
 ```
 
 **For large features within existing modules:**

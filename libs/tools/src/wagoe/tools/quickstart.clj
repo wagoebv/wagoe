@@ -174,7 +174,7 @@
         (run-step 5 8 "Integrating sample module into project"
                   ["bb" "scaffold" "integrate" "tasks"]
                   :continue? true)
-        ;; Step 6: Activate module in config — the part integrate leaves manual
+        ;; Step 6: Activate module in config — the config key, which integrate also writes
         (println)
         (println (bold "[6/8] Activating sample module in config"))
         (if (inject-sample-module-config)

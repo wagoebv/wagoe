@@ -112,6 +112,18 @@
     (println "  the module's tests run with" (cyan "clojure -M:test") "(no deps.edn/tests.edn changes).")
     (println)
 
+    ;; Discovery resolves wagoe.<module>.shell.module-wiring — both the monorepo
+    ;; and the generated template pass "wagoe" — so a module under another base
+    ;; namespace would get a config key that throws at boot. It used to print
+    ;; the right require instead; now that the require is gone, refuse rather
+    ;; than write something that cannot work.
+    (when (and base-ns (not= base-ns "wagoe"))
+      (println (red "✗") (str "--base-ns " base-ns " is not supported by module discovery."))
+      (println (dim "  ig-config resolves wagoe.<module>.shell.module-wiring, so a module"))
+      (println (dim "  under another base namespace needs wiring by hand. Generate without"))
+      (println (dim "  --base-ns, or add the key and the require yourself."))
+      (System/exit 1))
+
     (when-not (:has-wiring? module)
       (println (red "✗") (str "No " (cyan "shell/module_wiring.clj") " in this module."))
       (println (dim "  Regenerate it with `bb scaffold generate` — without it the config"))
@@ -126,24 +138,42 @@
       (println (dim snippet))
       (println)
 
-      (doseq [env ["dev" "test"]]
-        (let [path   (str (root-dir) "/resources/conf/" env "/config.edn")
-              result (config-edn/inject-key! path key-str (str "\n" snippet "\n")
-                                             {:dry-run? dry-run?})]
-          (println (str "  " (case result
+      (let [results
+            (doall
+             (for [env ["dev" "test"]]
+               (let [path   (str (root-dir) "/resources/conf/" env "/config.edn")
+                     result (config-edn/inject-key! path key-str (str "\n" snippet "\n")
+                                                    {:dry-run? dry-run?})]
+                 (println (str "  " (case result
                                :written           (str (green "✓") " " (if dry-run? "would add to" "added to"))
                                :already-present   (str (green "✓") " already in")
                                :no-active-section (str (red "✗") " no :active section in")
-                               :no-file           (str (dim "–") " not found:"))
-                        " " (cyan (str "resources/conf/" env "/config.edn"))))))
+                                     :no-file           (str (dim "–") " not found:"))
+                              " " (cyan (str "resources/conf/" env "/config.edn"))))
+                 result)))]
 
-      (println)
-      (if dry-run?
-        (println (dim "Nothing written (--dry-run)."))
-        (do
-          (println (str "Next: " (cyan "clojure -M:test") " then " (cyan "(go)")
-                        " — " (dim (str "GET " (or (:base-path module) (str "/api/" module-name))))))
-          (println (dim "  The wiring namespace needs no require: ig-config loads it by convention.")))))))
+        (println)
+        (cond
+          ;; A run that wrote nothing must not look like success — to a person
+          ;; or to a CI wrapper reading $?.
+          (some #{:no-active-section} results)
+          (do (println (red "No :active section — nothing was written."))
+              (System/exit 1))
+
+          (every? #{:no-file} results)
+          (do (println (red "No config files found — is this a Wagoe project?"))
+              (System/exit 1))
+
+          dry-run?
+          (println (dim "Nothing written (--dry-run)."))
+
+          :else
+          (do
+            (println (str "Next: " (cyan "clojure -M:test") " then " (cyan "(go)")))
+            (when (:has-routes? module)
+              (println (dim (str "  Routes are mounted under /api/v1 — see "
+                                 (:module-ns module) ".shell.http for the paths."))))
+            (println (dim "  No require to add: ig-config loads the wiring namespace by convention."))))))))
 
 ;; =============================================================================
 ;; Argument parsing

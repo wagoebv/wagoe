@@ -18,48 +18,104 @@
             [clojure.java.io :as io]
             [clojure.string :as str]))
 
-(defn active-closing-brace
-  "Index of the brace closing the `:active` map, or nil.
+(defn- lex
+  "`text` as [index char state] triples, state being :code, :string or :comment.
 
-   Two things it has to get right. `:inactive` contains `:active` as a
-   substring, and a module injected there is configured and switched off — which
-   reads as a scaffolder bug rather than a config one. And `:active` is
-   mentioned in the file's own comments, which are not the section."
+   A brace counter without lexer state is not a brace counter. All three of
+   these put the insertion in the wrong section, and the result still balances
+   and still parses, so nothing complains:
+
+     {:url \"jdbc:h2;INIT=CREATE SCHEMA {\"}   ; brace in a string
+     ;; example: {:foo 1                        ; brace in a comment
+     \\{                                        ; char literal
+
+   Config files are hand-edited, and `#{}` and `{L}` in a regex already appear
+   in the shipped dev config."
   [text]
-  (let [active-idx
-        (loop [pos 0]
-          (let [idx (str/index-of text ":active" pos)]
-            (cond
-              (nil? idx) nil
+  (loop [i 0, state :code, out (transient [])]
+    (if (>= i (count text))
+      (persistent! out)
+      (let [c (nth text i)]
+        (case state
+          :code    (cond
+                     (= c \\) (recur (+ i 2) :code (-> out (conj! [i c :code])
+                                                       (conj! [(inc i) \space :code])))
+                     (= c \") (recur (inc i) :string (conj! out [i c :string]))
+                     (= c \;) (recur (inc i) :comment (conj! out [i c :comment]))
+                     :else   (recur (inc i) :code (conj! out [i c :code])))
+          :string  (cond
+                     (= c \\) (recur (+ i 2) :string (-> out (conj! [i c :string])
+                                                         (conj! [(inc i) \space :string])))
+                     (= c \") (recur (inc i) :code (conj! out [i c :string]))
+                     :else   (recur (inc i) :string (conj! out [i c :string])))
+          :comment (if (= c \newline)
+                     (recur (inc i) :code (conj! out [i c :code]))
+                     (recur (inc i) :comment (conj! out [i c :comment]))))))))
 
-              ;; A mention inside a comment line.
-              (let [line-start (let [li (.lastIndexOf ^String text "\n" (int idx))]
-                                 (if (neg? li) 0 li))
-                    line-text  (str/trim (subs text line-start idx))]
-                (str/starts-with? line-text ";"))
-              (recur (+ idx 7))
+(defn- code-only
+  "`text` with strings and comments blanked, line structure intact."
+  [text]
+  (apply str (map (fn [[_ c st]]
+                    (cond (= st :code)  c
+                          (= c \newline) c
+                          :else         \space))
+                  (lex text))))
 
-              ;; ":inactive" — the match started one character early.
-              (and (pos? idx) (= \: (nth text (dec idx))))
-              (recur (+ idx 7))
+(defn active-section
+  "[start end] indices of the `:active` map's braces, or nil.
 
-              (str/starts-with? (subs text idx) ":inactive")
-              (recur (+ idx 9))
-
-              :else idx)))]
-    (when active-idx
-      (when-let [open-idx (str/index-of text "{" (+ active-idx 7))]
-        (loop [i (inc open-idx), depth 1]
+   `end` is the closing brace. Strings and comments are blanked first, so a
+   brace inside either cannot shift the depth count, and a `:active` mentioned
+   in prose is not the section."
+  [text]
+  (let [code (code-only text)
+        idx  (loop [pos 0]
+               (let [i (str/index-of code ":active" pos)]
+                 (cond
+                   (nil? i) nil
+                   ;; `:inactive` does not contain `:active` — the colon is in
+                   ;; the wrong place — so no guard is needed for it. An earlier
+                   ;; version had one anyway, and a test that never exercised it.
+                   ;; What does need excluding is `::active`.
+                   (and (pos? i) (= \: (nth code (dec i)))) (recur (+ i 7))
+                   :else i)))]
+    (when idx
+      (when-let [open (str/index-of code "{" (+ idx 7))]
+        (loop [i (inc open), depth 1]
           (cond
-            (>= i (count text)) nil
-            (zero? depth)       (dec i)
+            (>= i (count code)) nil
+            (zero? depth)       [open (dec i)]
             :else (recur (inc i)
-                         (case (nth text i) \{ (inc depth) \} (dec depth) depth))))))))
+                         (case (nth code i) \{ (inc depth) \} (dec depth) depth))))))))
+
+(defn active-closing-brace
+  "Index of the brace closing the `:active` map, or nil."
+  [text]
+  (second (active-section text)))
 
 (defn key-status
-  "`:already-present` when `key-str` appears in `text`, else `:absent`."
+  "`:already-present` when `key-str` is a key in the `:active` map, else
+   `:absent`.
+
+   Two mistakes a substring search over the whole file makes, both of which
+   report a module as configured while writing nothing:
+
+   - `:wagoe/payment` is a substring of `:wagoe/payment-provider`, which the
+     shipped dev config already contains. So are route/router,
+     setting/settings, metric/metrics, log/logging — six plausible module names
+     in one file.
+   - `:wagoe/h2` appears only under `:inactive`, and `:wagoe/cache` only in a
+     comment. Reporting those as present is the configured-and-switched-off
+     outcome this namespace exists to avoid."
   [text key-str]
-  (if (str/includes? text key-str) :already-present :absent))
+  (if-let [[open end] (active-section text)]
+    (let [active (subs (code-only text) open end)]
+      (if (re-find (re-pattern (str (java.util.regex.Pattern/quote key-str)
+                                    "(?![A-Za-z0-9*+!?<>=_-])"))
+                   active)
+        :already-present
+        :absent))
+    :absent))
 
 (defn insert-before-active-close
   "`text` with `snippet` inserted just inside the `:active` map's closing brace.

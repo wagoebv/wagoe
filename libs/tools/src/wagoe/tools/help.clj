@@ -191,7 +191,7 @@
   (println (cyan "Scaffolding:"))
   (println "  bb scaffold                          Interactive module scaffolding wizard")
   (println "  bb scaffold ai \"description\"          AI-powered scaffolding from NL")
-  (println "  bb scaffold integrate <module>        Wire scaffolded module into project")
+  (println "  bb scaffold integrate <module>        Write a scaffolded module's config key")
   (println)
   (println (cyan "AI Tools:"))
   (println "  bb ai explain --file stacktrace.txt   Explain a Clojure/Wagoe error")
