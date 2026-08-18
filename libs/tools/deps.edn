@@ -1,4 +1,4 @@
-{:paths ["src"]
+{:paths ["src" "resources"]
  :deps  {org.clojure/clojure {:mvn/version "1.12.5"}
                          cheshire/cheshire {:mvn/version "6.2.0"}}
  :aliases

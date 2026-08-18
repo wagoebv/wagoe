@@ -1,7 +1,8 @@
 #!/usr/bin/env bb
 ;; scripts/agents_gen.clj
 ;; Deterministic generator for the framework AGENTS.md and the downstream
-;; AGENTS.md.tmpl, from resources/agents/knowledge.edn + modules-catalogue.edn.
+;; AGENTS.md.tmpl, from the agents knowledge base + modules-catalogue.edn,
+;; both read from the classpath.
 ;; Usage:
 ;;   bb agents:gen            ; write both targets
 ;;   bb agents:gen --check    ; verify in sync + module-source valid; non-zero on drift
@@ -98,11 +99,23 @@
                  (apply str (repeat (+ w2 2) "-"))) "\n"
          (str/join "\n" (map #(row (cell-name %) (esc-cell (:description %))) sorted)))))
 
-(def knowledge-path "resources/agents/knowledge.edn")
+(def knowledge-resource
+  "The agents knowledge base, on the classpath.
+
+   It used to live at resources/agents/knowledge.edn in this repository, which
+   meant the MCP server could read it here and nowhere else — every project
+   that installed the server got `:unavailable` from wagoe://conventions
+   (BOU-320). It ships in the wagoe-tools jar now, and this reads it the same
+   way the server does."
+  "wagoe/agents/knowledge.edn")
 (def catalogue-resource "wagoe/cli/modules-catalogue.edn")
 (def tmpl-path "libs/wagoe-cli/resources/wagoe/cli/templates/AGENTS.md.tmpl")
 
-(defn load-knowledge [] (edn/read-string (slurp knowledge-path)))
+(defn load-knowledge []
+  (if-let [r (io/resource knowledge-resource)]
+    (edn/read-string (slurp r))
+    (throw (ex-info "knowledge.edn not found on classpath"
+                    {:resource knowledge-resource}))))
 (defn load-modules []
   (if-let [r (io/resource catalogue-resource)]
     (-> r slurp edn/read-string :modules)

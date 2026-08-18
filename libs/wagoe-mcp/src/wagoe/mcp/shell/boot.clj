@@ -28,10 +28,15 @@
             [clojure.tools.logging :as log]))
 
 (defn- seed-registry
-  "Register the reflective resources (BOU-99) and Tier 0 tools (BOU-100)."
-  []
+  "Register the reflective resources (BOU-99) and Tier 0 tools (BOU-100).
+
+   Only the resources this project can serve: the catalog is filtered against a
+   snapshot, so `resources/list` stops advertising four resources that answer
+   \"not available in the current context\" in every project (BOU-320)."
+  [system-source]
   (as-> registry/empty-registry r
-    (reduce registry/register-resource r resources/catalog)
+    (reduce registry/register-resource r
+            (resources/available-catalog (ports/snapshot system-source)))
     (reduce registry/register-tool r tools/catalog)))
 
 (defn start!
@@ -40,12 +45,13 @@
    `protocol-out` is the real stdout, handed over by the entry point after it
    claimed it — see wagoe.mcp.shell.server/claim-stdout!."
   [protocol-out]
-  (let [ctx       (context/from-env)
-        audit-log (audit/logging-audit-log)
-        deps      {:registry      (seed-registry)
+  (let [ctx        (context/from-env)
+        audit-log  (audit/logging-audit-log)
+        sys-source (system-source/in-process-system-source)
+        deps      {:registry      (seed-registry sys-source)
                    :security      ctx
                    :audit         audit-log
-                   :system-source (system-source/in-process-system-source)
+                   :system-source sys-source
                    ;; Tier 1 generate tools (BOU-101): the scaffolder writes the
                    ;; code; the test-runner runs the project's affected tests in
                    ;; the closed verify loop.

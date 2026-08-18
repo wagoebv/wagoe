@@ -271,7 +271,7 @@
 
 ;; `bb check` runs each check as a subprocess (`bb check:fcis`, ...). Five of
 ;; them only make sense in the Wagoe repo: doc-counts and poms compare against
-;; wagoe.tools.deploy/all-libs, agents diffs resources/agents/knowledge.edn,
+;; wagoe.tools.deploy/all-libs, agents diffs the agents knowledge base,
 ;; no-boundary is a rename gate for our own history, and docs:lint lives on the
 ;; dev/ path. In a generated project those tasks do not exist, so `bb check`
 ;; invoked them, bb exited 1 on "File does not exist", and run-check reported

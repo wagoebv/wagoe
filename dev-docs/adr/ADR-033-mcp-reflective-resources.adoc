@@ -48,6 +48,14 @@ adapters:
   conventions, `libs/*/deps.edn` + `ports.clj` presence → module graph,
   `.clj-kondo/config.edn` → kondo rules. Re-read on every call so resources
   always reflect current state.
++
+NOTE: Superseded in part by BOU-320. Both file paths above existed only in the
+framework repository, so all three resources answered `:unavailable` in the
+projects that ship `.mcp.json`. The knowledge base now ships in the
+`wagoe-tools` jar and is read from the classpath, and the module graph has a
+project mode (declared `com.wagoe` dependencies + active config keys). The
+snapshot also takes the project root as an argument rather than assuming the
+working directory.
 * *nREPL bridge* (later): connects to the project's running REPL and evaluates
   introspection forms to populate the live-system views (schema registry,
   routes, workflows, `lib/{name}` at the installed version). This is the

@@ -907,12 +907,14 @@ See `libs/i18n/AGENTS.md` for complete API reference, middleware wiring, and com
 FC/IS rules, naming conventions, pitfalls, and the module table in this file —
 and the FC/IS / naming / pitfalls sections of the downstream
 `libs/wagoe-cli/resources/wagoe/cli/templates/AGENTS.md.tmpl` — are
-generated from `resources/agents/knowledge.edn` (+ `modules-catalogue.edn` for the
-module table). The generator lives at `scripts/agents_gen.clj`.
+generated from `libs/tools/resources/wagoe/agents/knowledge.edn` (+ `modules-catalogue.edn`
+for the module table). The generator lives at `scripts/agents_gen.clj` and reads
+both from the classpath — which is also how the MCP server reads the knowledge
+base in a project that installed it (BOU-320).
 
 - Regenerate:  `bb agents:gen`
 - Verify sync: `bb check:agents`  (also part of `bb check` + CI)
-- Add/edit a pitfall, naming rule, or FC/IS rule: edit `resources/agents/knowledge.edn`,
+- Add/edit a pitfall, naming rule, or FC/IS rule: edit `libs/tools/resources/wagoe/agents/knowledge.edn`,
   then run `bb agents:gen`.
 - Add a library: add it to `modules-catalogue.edn` (or, for dev-only tooling not
   published as an app module, to `:dev-modules` in `knowledge.edn`), then `bb agents:gen`.

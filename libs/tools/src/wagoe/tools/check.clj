@@ -168,7 +168,7 @@
   "True when running inside the Wagoe monorepo rather than a generated project.
 
    Five checks only mean something here: doc-counts and poms compare against
-   wagoe.tools.deploy/all-libs, agents diffs resources/agents/knowledge.edn,
+   wagoe.tools.deploy/all-libs, agents diffs the agents knowledge base,
    no-boundary is a rename gate for this repo's own history, and docs:lint runs
    from the dev/ path. Generated projects define none of those bb tasks, so
    `bb check` used to invoke them, bb exited 1 on \"File does not exist\", and

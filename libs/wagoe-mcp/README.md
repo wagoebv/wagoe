@@ -404,19 +404,20 @@ project** rather than hardcoding — the cure for doc drift. Producers in
 `core/resources` are pure functions of a project _snapshot_; a `SystemSource` port
 supplies the snapshot.
 
-| URI | Source | Status |
-|-----|--------|--------|
-| `wagoe://conventions` | `resources/agents/knowledge.edn` (FC/IS + naming) | concrete |
-| `wagoe://module-graph` | `libs/*/deps.edn` + `ports.clj` presence | concrete |
-| `wagoe://kondo-rules` | `.clj-kondo/config.edn` | concrete |
-| `wagoe://schema-registry` | live Malli registry | `:unavailable` until nREPL bridge |
-| `wagoe://routes` | live reitit router | `:unavailable` until nREPL bridge |
-| `wagoe://workflows` | workflow registry | `:unavailable` until nREPL bridge |
-| `wagoe://lib/{name}` | installed lib API surface | `:unavailable` until nREPL bridge |
+| URI | Source | Where it resolves |
+|-----|--------|-------------------|
+| `wagoe://conventions` | `wagoe/agents/knowledge.edn` on the classpath (FC/IS, naming, pitfalls); a project's own `resources/agents/knowledge.edn` wins | anywhere |
+| `wagoe://module-graph` | the framework repo: `libs/*/deps.edn` + `ports.clj`. A project: its `com.wagoe` dependencies and the `:wagoe/*` modules its `:active` config switches on | anywhere |
+| `wagoe://kondo-rules` | `.clj-kondo/config.edn` | where a project has one |
+| `wagoe://schema-registry` | live Malli registry | not yet — nREPL bridge |
+| `wagoe://routes` | live reitit router | not yet — nREPL bridge |
+| `wagoe://workflows` | workflow registry | not yet — nREPL bridge |
+| `wagoe://lib/{name}` | installed lib API surface | not yet — nREPL bridge |
 
-The "concrete" ones work today by reflecting files in the working directory. The
-live-system ones honestly return `{:status :unavailable}` until the nREPL bridge
-lands — never a silent empty answer.
+`resources/list` advertises only the ones this project can serve: an offer that
+always answers "not available in the current context" costs the agent a round
+trip to learn nothing. A direct `resources/read` of a known-but-unfilled uri
+still returns `{:status :unavailable}` — never a silent empty answer.
 
 ### Adding a tool or resource
 
