@@ -2,12 +2,74 @@
   "REPL convenience functions — automatically loaded when starting the REPL.
 
    Usage:
-     (go)    — start the system
-     (reset) — reload changed namespaces and restart
-     (halt)  — stop the system"
-  (:require [wagoe.system-config]          ; loads ig-repl/set-prep! and Integrant init-keys
-            [integrant.repl :as ig-repl]))
+     (go)       — start the system
+     (reset)    — reload changed namespaces and restart
+     (halt)     — stop the system
+     (status)   — components, URLs, active modules
+     (modules)  — active modules
+     (routes)   — HTTP routes of the running system
+     (config)   — the running config
+     (fix!)     — apply the suggested fix for the last error
+     (commands) — the full list
 
-(defn go    [] (ig-repl/go))
-(defn reset [] (ig-repl/reset))
-(defn halt  [] (ig-repl/halt))
+   Everything below (halt) comes from wagoe-devtools, which lives in the :repl
+   alias of deps.edn. Take it out and these print one line saying so instead of
+   throwing — the REPL still starts and the system still runs."
+  (:require [wagoe.system-config]          ; loads ig-repl/set-prep! and Integrant init-keys
+            [integrant.repl :as ig-repl]
+            [integrant.repl.state :as ig-state]))
+
+(defn- devtools
+  "Resolve a devtools var, or nil when devtools is not on the classpath.
+
+   requiring-resolve rather than a :require in the ns form: a missing dep in
+   the ns form fails the whole namespace, which would take (go) down with it —
+   and (go) has nothing to do with devtools."
+  [sym]
+  (try (requiring-resolve sym) (catch Exception _ nil)))
+
+(defn- no-devtools []
+  (println "This needs wagoe-devtools, which is not on the classpath.")
+  (println "Add it to the :repl alias of deps.edn:  wagoe add devtools"))
+
+(defn- call [sym & args]
+  (if-let [f (devtools sym)]
+    (apply f args)
+    (no-devtools)))
+
+(defn- on-error!
+  "Hand an exception to the error pipeline, so (fix!) has something to fix."
+  [e]
+  (when-let [f (devtools 'wagoe.devtools.shell.project-repl/handle-error!)]
+    (f e)))
+
+(defn status   [] (call 'wagoe.devtools.shell.project-repl/status))
+
+(defn go
+  "Start the system, then print the dashboard `bb quickstart` promises."
+  []
+  (try (let [result (ig-repl/go)]
+         (status)
+         result)
+       (catch Exception e (on-error! e) (throw e))))
+
+(defn reset
+  []
+  (try (ig-repl/reset)
+       (catch Exception e (on-error! e) (throw e))))
+
+(defn halt [] (ig-repl/halt))
+
+(defn system [] ig-state/system)
+(defn config [] ig-state/config)
+
+(defn modules  [] (call 'wagoe.devtools.shell.project-repl/modules))
+(defn commands [] (call 'wagoe.devtools.shell.project-repl/commands))
+
+(defn routes
+  ([]           (call 'wagoe.devtools.shell.project-repl/routes))
+  ([filter-key] (call 'wagoe.devtools.shell.project-repl/routes filter-key)))
+
+(defn fix!
+  ([]          (call 'wagoe.devtools.shell.project-repl/fix!))
+  ([exception] (call 'wagoe.devtools.shell.project-repl/fix! exception)))

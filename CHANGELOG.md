@@ -31,6 +31,22 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **The first thing `bb quickstart` tells you to run did not exist** (BOU-319).
+  Quickstart closes with "run `(status)`, run `(commands)`", and both lived only
+  in this repository's own `dev/repl/user.clj`. The generated one was thirteen
+  lines of `go`/`reset`/`halt`, so the first instruction a new user follows
+  answered `Unable to resolve symbol: status`. A generated `dev/user.clj` now
+  has `(status)`, `(modules)`, `(routes)`, `(config)`, `(fix!)` and
+  `(commands)`, and `(go)` prints the startup dashboard the same text promises.
+
+  The implementations live in `wagoe.devtools.shell.project-repl` rather than in
+  the template — a template is compiled by nothing until someone generates a
+  project and boots it, which is how this survived. `(commands)` lists what a
+  generated project has, not this repository's palette of `(lint)`,
+  `(check-all)` and `(scaffold!)`. Take devtools out of the `:repl` alias and
+  the helpers print one line saying so: they resolve at call time, so a missing
+  devtools cannot take `(go)` down with it.
+
 - **devtools reached generated projects nowhere, and `wagoe add ai` wrote
   nothing** (BOU-318). The error pipeline with its BND codes, `(fix!)` and the
   dev dashboard existed only in the monorepo: `wagoe-devtools` was in no
