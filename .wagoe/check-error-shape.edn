@@ -1,0 +1,213 @@
+;; Errors whose shape predates ADR-036 (BOU-322) and this gate.
+;;
+;; Every entry is TO FIX: the list ships full and empties as BOU-323 walks
+;; the migration order in the ADR.
+;;
+;; :count is what keeps it a burn-down list. An entry exempts the violations
+;; a file had, not the file — add a new one and the gate fails, fix one and
+;; the count is stale, which also fails. Both directions are proved in
+;; gate_firing_test.
+;;
+;; 81 findings across 37 files, measured 2026-08-18:
+;;   {:untyped-throw 59, :string-error 6, :string-type 11, :non-map-error 4, :no-error 1}
+
+[
+  {:file  "libs/ai/src/wagoe/ai/shell/module_wiring.clj"
+   :rule  :untyped-throw
+   :count 1
+   :why   "TO FIX (BOU-323 step 1). ADR-022 requires :type on a thrown ex-info; predates the gate."}
+
+  {:file  "libs/ai/src/wagoe/ai/shell/repl.clj"
+   :rule  :untyped-throw
+   :count 2
+   :why   "TO FIX (BOU-323 step 1). ADR-022 requires :type on a thrown ex-info; predates the gate."}
+
+  {:file  "libs/audience/src/wagoe/audience/shell/cache.clj"
+   :rule  :untyped-throw
+   :count 1
+   :why   "TO FIX (BOU-323 step 1). ADR-022 requires :type on a thrown ex-info; predates the gate."}
+
+  {:file  "libs/audience/src/wagoe/audience/shell/module_wiring.clj"
+   :rule  :untyped-throw
+   :count 1
+   :why   "TO FIX (BOU-323 step 1). ADR-022 requires :type on a thrown ex-info; predates the gate."}
+
+  {:file  "libs/audience/src/wagoe/audience/shell/registry.clj"
+   :rule  :untyped-throw
+   :count 1
+   :why   "TO FIX (BOU-323 step 1). ADR-022 requires :type on a thrown ex-info; predates the gate."}
+
+  {:file  "libs/devtools/src/wagoe/devtools/shell/dashboard/server.clj"
+   :rule  :string-error
+   :count 2
+   :why   "TO FIX (BOU-323 step 2). :error is a bare string; ADR-036 §3 requires a map with a :type."}
+
+  {:file  "libs/devtools/src/wagoe/devtools/shell/dashboard/server.clj"
+   :rule  :untyped-throw
+   :count 1
+   :why   "TO FIX (BOU-323 step 1). ADR-022 requires :type on a thrown ex-info; predates the gate."}
+
+  {:file  "libs/devtools/src/wagoe/devtools/shell/recording.clj"
+   :rule  :untyped-throw
+   :count 1
+   :why   "TO FIX (BOU-323 step 1). ADR-022 requires :type on a thrown ex-info; predates the gate."}
+
+  {:file  "libs/email/src/wagoe/email/shell/jobs_integration.clj"
+   :rule  :string-type
+   :count 1
+   :why   "TO FIX (BOU-323 step 3). :type is a string. external and email move together — email reads external's :error :type."}
+
+  {:file  "libs/external/src/wagoe/external/shell/adapters/imap.clj"
+   :rule  :string-type
+   :count 3
+   :why   "TO FIX (BOU-323 step 3). :type is a string. external and email move together — email reads external's :error :type."}
+
+  {:file  "libs/external/src/wagoe/external/shell/adapters/smtp.clj"
+   :rule  :string-type
+   :count 4
+   :why   "TO FIX (BOU-323 step 3). :type is a string. external and email move together — email reads external's :error :type."}
+
+  {:file  "libs/external/src/wagoe/external/shell/adapters/twilio.clj"
+   :rule  :string-type
+   :count 1
+   :why   "TO FIX (BOU-323 step 3). :type is a string. external and email move together — email reads external's :error :type."}
+
+  {:file  "libs/geo/src/wagoe/geo/shell/module_wiring.clj"
+   :rule  :untyped-throw
+   :count 1
+   :why   "TO FIX (BOU-323 step 1). ADR-022 requires :type on a thrown ex-info; predates the gate."}
+
+  {:file  "libs/jobs/src/wagoe/jobs/shell/worker.clj"
+   :rule  :string-type
+   :count 1
+   :why   "TO FIX (BOU-323 step 3). :type is a string. external and email move together — email reads external's :error :type."}
+
+  {:file  "libs/observability/src/wagoe/observability/errors/shell/adapters/sentry.clj"
+   :rule  :untyped-throw
+   :count 1
+   :why   "TO FIX (BOU-323 step 1). ADR-022 requires :type on a thrown ex-info; predates the gate."}
+
+  {:file  "libs/observability/src/wagoe/observability/logging/shell/adapters/datadog.clj"
+   :rule  :untyped-throw
+   :count 4
+   :why   "TO FIX (BOU-323 step 1). ADR-022 requires :type on a thrown ex-info; predates the gate."}
+
+  {:file  "libs/observability/src/wagoe/observability/metrics/shell/adapters/datadog.clj"
+   :rule  :untyped-throw
+   :count 6
+   :why   "TO FIX (BOU-323 step 1). ADR-022 requires :type on a thrown ex-info; predates the gate."}
+
+  {:file  "libs/platform/src/wagoe/platform/shell/adapters/database/common/connection.clj"
+   :rule  :untyped-throw
+   :count 1
+   :why   "TO FIX (BOU-323 step 1). ADR-022 requires :type on a thrown ex-info; predates the gate."}
+
+  {:file  "libs/platform/src/wagoe/platform/shell/adapters/database/common/execution.clj"
+   :rule  :untyped-throw
+   :count 2
+   :why   "TO FIX (BOU-323 step 1). ADR-022 requires :type on a thrown ex-info; predates the gate."}
+
+  {:file  "libs/platform/src/wagoe/platform/shell/adapters/database/common/schema.clj"
+   :rule  :untyped-throw
+   :count 1
+   :why   "TO FIX (BOU-323 step 1). ADR-022 requires :type on a thrown ex-info; predates the gate."}
+
+  {:file  "libs/platform/src/wagoe/platform/shell/adapters/database/config.clj"
+   :rule  :untyped-throw
+   :count 2
+   :why   "TO FIX (BOU-323 step 1). ADR-022 requires :type on a thrown ex-info; predates the gate."}
+
+  {:file  "libs/platform/src/wagoe/platform/shell/adapters/database/integration_example.clj"
+   :rule  :untyped-throw
+   :count 2
+   :why   "TO FIX (BOU-323 step 1). ADR-022 requires :type on a thrown ex-info; predates the gate."}
+
+  {:file  "libs/platform/src/wagoe/platform/shell/adapters/database/protocols.clj"
+   :rule  :untyped-throw
+   :count 1
+   :why   "TO FIX (BOU-323 step 1). ADR-022 requires :type on a thrown ex-info; predates the gate."}
+
+  {:file  "libs/platform/src/wagoe/platform/shell/database/migrations.clj"
+   :rule  :untyped-throw
+   :count 8
+   :why   "TO FIX (BOU-323 step 1). ADR-022 requires :type on a thrown ex-info; predates the gate."}
+
+  {:file  "libs/platform/src/wagoe/platform/shell/http/reitit_router.clj"
+   :rule  :untyped-throw
+   :count 1
+   :why   "TO FIX (BOU-323 step 1). ADR-022 requires :type on a thrown ex-info; predates the gate."}
+
+  {:file  "libs/platform/src/wagoe/platform/shell/system/wiring.clj"
+   :rule  :untyped-throw
+   :count 3
+   :why   "TO FIX (BOU-323 step 1). ADR-022 requires :type on a thrown ex-info; predates the gate."}
+
+  {:file  "libs/platform/src/wagoe/platform/shell/utils/port_manager.clj"
+   :rule  :untyped-throw
+   :count 2
+   :why   "TO FIX (BOU-323 step 1). ADR-022 requires :type on a thrown ex-info; predates the gate."}
+
+  {:file  "libs/platform/src/wagoe/platform/shell/validation_registry.clj"
+   :rule  :untyped-throw
+   :count 2
+   :why   "TO FIX (BOU-323 step 1). ADR-022 requires :type on a thrown ex-info; predates the gate."}
+
+  {:file  "libs/reports/src/wagoe/reports/shell/jobs_integration.clj"
+   :rule  :string-type
+   :count 1
+   :why   "TO FIX (BOU-323 step 3). :type is a string. external and email move together — email reads external's :error :type."}
+
+  {:file  "libs/storage/src/wagoe/storage/shell/adapters/gcs.clj"
+   :rule  :untyped-throw
+   :count 3
+   :why   "TO FIX (BOU-323 step 1). ADR-022 requires :type on a thrown ex-info; predates the gate."}
+
+  {:file  "libs/storage/src/wagoe/storage/shell/adapters/image_processor.clj"
+   :rule  :untyped-throw
+   :count 3
+   :why   "TO FIX (BOU-323 step 1). ADR-022 requires :type on a thrown ex-info; predates the gate."}
+
+  {:file  "libs/storage/src/wagoe/storage/shell/adapters/local.clj"
+   :rule  :untyped-throw
+   :count 2
+   :why   "TO FIX (BOU-323 step 1). ADR-022 requires :type on a thrown ex-info; predates the gate."}
+
+  {:file  "libs/storage/src/wagoe/storage/shell/adapters/s3.clj"
+   :rule  :untyped-throw
+   :count 3
+   :why   "TO FIX (BOU-323 step 1). ADR-022 requires :type on a thrown ex-info; predates the gate."}
+
+  {:file  "libs/storage/src/wagoe/storage/shell/http_handlers.clj"
+   :rule  :untyped-throw
+   :count 1
+   :why   "TO FIX (BOU-323 step 1). ADR-022 requires :type on a thrown ex-info; predates the gate."}
+
+  {:file  "libs/storage/src/wagoe/storage/shell/service.clj"
+   :rule  :untyped-throw
+   :count 1
+   :why   "TO FIX (BOU-323 step 1). ADR-022 requires :type on a thrown ex-info; predates the gate."}
+
+  {:file  "libs/user/src/wagoe/user/shell/auth.clj"
+   :rule  :no-error
+   :count 1
+   :why   "TO FIX (BOU-323 step 2). {:success? false} with no :error at all."}
+
+  {:file  "libs/user/src/wagoe/user/shell/auth.clj"
+   :rule  :non-map-error
+   :count 4
+   :why   "TO FIX (BOU-323 step 2). :error is a keyword; ADR-036 §3 requires a map with a :type."}
+
+  {:file  "libs/user/src/wagoe/user/shell/auth.clj"
+   :rule  :string-error
+   :count 3
+   :why   "TO FIX (BOU-323 step 2). :error is a bare string; ADR-036 §3 requires a map with a :type."}
+
+  {:file  "libs/user/src/wagoe/user/shell/mfa.clj"
+   :rule  :string-error
+   :count 1
+   :why   "TO FIX (BOU-323 step 2). :error is a bare string; ADR-036 §3 requires a map with a :type."}
+
+  {:file  "libs/user/src/wagoe/user/shell/module_wiring.clj"
+   :rule  :untyped-throw
+   :count 1
+   :why   "TO FIX (BOU-323 step 1). ADR-022 requires :type on a thrown ex-info; predates the gate."}]

@@ -4,7 +4,7 @@
 ;; The error convention of ADR-036, enforced.
 ;;
 ;; ADR-022 decided in April that every exception reaching the HTTP boundary
-;; carries a `:type` keyword. Nothing checked it, and by August ~79 `ex-info`
+;; carries a `:type` keyword. Nothing checked it, and by August 59 `ex-info`
 ;; throws in `shell/` namespaces had none — the largest single item in the
 ;; BOU-323 migration, and invisible until someone counted.
 ;;
@@ -46,108 +46,193 @@
 ;; =============================================================================
 
 (defn- balanced-form
-  "The substring of `text` starting at `start` (an opening paren or brace) up to
-   its matching close, or nil.
+  "The substring of `code` from `start` (an opening delimiter) through its match,
+   or nil.
 
-   Reads the code-only projection, so a paren inside a string or a comment
-   cannot end a form early."
+   Character literals are skipped rather than counted. `code-only` keeps them —
+   check:isolation needs them intact — so a map using a character literal as a
+   separator would otherwise read one delimiter deeper than it is, and every
+   finding after it in the file would be lost."
   [code start]
   (let [open  (nth code start)
-        close ({\( \) \{ \} \[ \]} open)]
+        close ({\( \) \{ \} \[ \]} open)
+        n     (count code)]
     (when close
       (loop [i (inc start), depth 1]
         (cond
-          (>= i (count code)) nil
-          (zero? depth)       (subs code start i)
+          (zero? depth)  (subs code start i)
+          (>= i n)       nil
           :else (let [c (nth code i)]
-                  (recur (inc i) (cond (= c open)  (inc depth)
-                                       (= c close) (dec depth)
-                                       :else       depth))))))))
+                  (cond
+                    (= c \\) (recur (+ i 2) depth)          ;; a character literal
+                    (= c open)  (recur (inc i) (inc depth))
+                    (= c close) (recur (inc i) (dec depth))
+                    :else       (recur (inc i) depth))))))))
 
 (defn- line-of
   "1-based line number of index `idx` in `text`."
   [text idx]
   (inc (count (re-seq #"\n" (subs text 0 idx)))))
 
+(defn top-level-keys
+  "`{key-string -> [start end]}` for the *top level* of a map literal.
+
+   `form` is the map's code-only text; the spans index into it, and because
+   code-only preserves length they index the raw text identically.
+
+   Top level is the point. `:type` inside `{:data {:type :x}}` does not give the
+   exception a type, and an `:error` inside `{:result {:error …}}` is not the
+   failure detail — a substring search says otherwise for both. Keys are read
+   whole, so `:errors` and `:error-message` are not `:error`."
+  [form]
+  (let [n (count form)]
+    (loop [i 1, depth 0, acc {}, pending nil]
+      (if (>= i n)
+        acc
+        (let [c (nth form i)]
+          (cond
+            (= c \\)                       (recur (+ i 2) depth acc pending)
+            (#{\{ \[ \(} c)
+            (if (and (zero? depth) pending)
+              ;; A value that is itself a collection: record its whole span.
+              (let [sub (balanced-form form i)
+                    end (if sub (+ i (count sub)) (inc i))]
+                (recur end depth (assoc acc pending [i end]) nil))
+              (recur (inc i) (inc depth) acc pending))
+
+            (#{\} \] \)} c)               (recur (inc i) (dec depth) acc pending)
+
+            (and (zero? depth) (= c \:) (nil? pending))
+            (let [m (re-find #"^:[^\s\(\)\[\]\{\},;\"]+" (subs form i))]
+              (if m
+                (recur (+ i (count m)) depth acc m)
+                (recur (inc i) depth acc pending)))
+
+            (and (zero? depth) pending (not (Character/isWhitespace c)))
+            ;; A scalar value: to the next whitespace or delimiter.
+            (let [m (re-find #"^[^\s\(\)\[\]\{\},;]+" (subs form i))
+                  end (+ i (count (or m " ")))]
+              (recur end depth (assoc acc pending [i end]) nil))
+
+            :else (recur (inc i) depth acc pending)))))))
+
+(defn- value-at
+  "The raw text of the value `k` holds in `form`, or nil when the key is absent.
+
+   Read from `raw` rather than from the code-only projection: a blanked string
+   is indistinguishable from a computed expression, and that difference is the
+   whole line between `:type \"SmtpError\"` (a finding) and
+   `:type (or (:reason c) :forbidden)` (not one)."
+  [form raw k]
+  (when-let [[a b] (get (top-level-keys form) k)]
+    (str/trim (subs raw a (min b (count raw))))))
+
 ;; =============================================================================
 ;; Rule 1 — a thrown ex-info carries :type  (ADR-022, unenforced since April)
 ;; =============================================================================
 
 (defn- throw-sites
-  "[index …] of every `(throw (ex-info` in `code`."
+  "[index …] of every `(throw (ex-info` in `code`, metadata hints included."
   [code]
   (loop [from 0, acc []]
     (if-let [i (str/index-of code "(throw" from)]
-      (let [head (subs code i (min (count code) (+ i 40)))]
+      (let [head (subs code i (min (count code) (+ i 60)))]
         (recur (inc i)
-               (if (re-find #"^\(throw\s+\(ex-info\b" head) (conj acc i) acc)))
+               (if (re-find #"^\(throw\s+(\^\S+\s+)?\(ex-info\b" head) (conj acc i) acc)))
       acc)))
 
+(defn- ex-info-data-map
+  "Span of the data-map literal inside a `(throw (ex-info …))` form, or nil.
+
+   Found by depth, not by skipping the message argument: in the code-only
+   projection a string message is blank, so a scan that expected to step over
+   `\"boom\"` stepped over nothing and every throw read as having no map. The
+   data map is the first `{` that sits directly inside the `ex-info` call."
+  [form]
+  (when-let [m (re-find #"^\(throw\s+(?:\^\S+\s+)?\(ex-info\b" form)]
+    (loop [i (count m), depth 0]
+      (when (< i (count form))
+        (let [c (nth form i)]
+          (cond
+            (= c \\)                 (recur (+ i 2) depth)
+            (and (zero? depth) (= c \{)) i
+            (#{\( \[ \{} c)          (recur (inc i) (inc depth))
+            (#{\) \] \}} c)          (if (and (zero? depth) (= c \)))
+                                       nil                    ;; call closed, no map
+                                       (recur (inc i) (dec depth)))
+            :else                    (recur (inc i) depth)))))))
+
 (defn untyped-throw-findings
-  "Every `(throw (ex-info … {…}))` in `text` whose *literal* data map has no
-   `:type` key."
-  [text path]
-  (let [code (iso/code-only text)]
-    (for [i     (throw-sites code)
-          :let  [form (balanced-form code i)]
-          :when form
-          ;; The data map, when it is a literal: the first `{` inside the form.
-          :let  [brace (str/index-of form "{")
-                 data  (when brace (balanced-form form brace))]
-          ;; No literal map at all — `(ex-info msg err)` — is not judged here.
-          :when (and data (not (re-find #":type\b" data)))]
-      {:rule :untyped-throw
-       :file path
-       :line (line-of text i)})))
+  "Every `(throw (ex-info … {…}))` whose *literal* data map has no top-level
+   `:type`.
+
+   `(throw (ex-info msg err))` — a map built elsewhere — is not judged: that is
+   how a shell rethrows what a pure validator produced, and a static check that
+   guessed would report it. Neither is `(merge {…} {…})`: an earlier version
+   took the first `{` anywhere in the form and called a merged map untyped."
+  ([text path] (untyped-throw-findings text path (iso/code-only text)))
+  ([text path code]
+   (for [i     (throw-sites code)
+         :let  [form (balanced-form code i)]
+         :when form
+         :let  [open (ex-info-data-map form)
+                data (when open (balanced-form form open))]
+         :when (and data (not (contains? (top-level-keys data) ":type")))]
+     {:rule :untyped-throw
+      :file path
+      :line (line-of text i)})))
 
 ;; =============================================================================
 ;; Rule 2 — a {:success? false} return carries {:error {:type <keyword>}}
 ;; =============================================================================
 
+(defn- map-literals
+  "[index …] of every map literal in `code`."
+  [code]
+  (loop [i 0, acc []]
+    (if-let [j (str/index-of code "{" i)]
+      ;; `#{` is a set, and `#_{…}` is discarded code — neither is a map to judge.
+      (let [prev (when (pos? j) (nth code (dec j)))]
+        (recur (inc j) (if (#{\# \\} prev) acc (conj acc j))))
+      acc)))
+
 (defn failure-map-findings
-  "Every `{:success? false …}` literal in `text` whose failure detail is missing
-   or malformed.
+  "Every map literal whose top-level `:success?` is `false` and whose failure
+   detail is missing or malformed.
 
-   Three ways it goes wrong, all present in the tree: no `:error` at all, an
-   `:error` that is a bare string, and an `:error` map whose `:type` is a string
-   literal (`\"SmtpError\"`) where every other `:type` in the framework is a
-   keyword.
-
-   Structure is read from the code-only projection so a brace inside a string
-   cannot end a form early; the *values* are read from the raw text at the same
-   indices, because code-only blanks strings and a blanked string is
-   indistinguishable from a computed expression. That distinction is the
-   difference between flagging `:type \"SmtpError\"` (a finding) and
-   `:type (or (:reason check) :forbidden)` (not one — this gate does not guess
-   at computed values)."
-  [text path]
-  (let [code (iso/code-only text)]
-    (loop [from 0, acc []]
-      (if-let [i (str/index-of code "{:success? false" from)]
-        (let [form (balanced-form code i)
-              line (line-of text i)
-              ;; Same span, raw: strings are visible again.
-              raw  (when form (subs text i (+ i (count form))))
-              ei   (when form (str/index-of form ":error"))
-              val  (when ei (str/triml (subs raw (+ ei 6))))
-              finding
-              (cond
-                (nil? form) nil
-                (nil? ei)   {:rule :no-error :file path :line line}
-
-                (str/starts-with? val "\"")
-                {:rule :string-error :file path :line line}
-
-                (str/starts-with? val "{")
-                (let [emap (balanced-form val 0)
-                      ti   (when emap (str/index-of emap ":type"))
-                      tval (when ti (str/triml (subs emap (+ ti 5))))]
-                  (when (and tval (str/starts-with? tval "\""))
-                    {:rule :string-type :file path :line line}))
-
-                :else nil)]
-          (recur (inc i) (cond-> acc finding (conj finding))))
-        acc))))
+   Keyed on the parsed map, not on the string `\"{:success? false\"`. That
+   literal is how the first version scanned, and it missed every map that wrote
+   the key second (`{:error … :success? false}`) or aligned its values with
+   extra spaces — which is how `libs/push`'s four violations were invisible to
+   a gate that reported the tree clean."
+  ([text path] (failure-map-findings text path (iso/code-only text)))
+  ([text path code]
+   (for [i     (map-literals code)
+         :let  [form (balanced-form code i)]
+         :when form
+         :let  [raw   (subs text i (+ i (count form)))
+                keys* (top-level-keys form)
+                succ  (value-at form raw ":success?")]
+         :when (= "false" succ)
+         :let  [err  (value-at form raw ":error")
+                line (line-of text i)
+                finding
+                (cond
+                  (not (contains? keys* ":error")) {:rule :no-error :file path :line line}
+                  (str/starts-with? err "\"")      {:rule :string-error :file path :line line}
+                  (str/starts-with? err ":")       {:rule :non-map-error :file path :line line}
+                  (str/starts-with? err "{")
+                  (let [emap  (balanced-form err 0)
+                        eraw  emap
+                        tval  (when emap (value-at emap eraw ":type"))]
+                    (cond
+                      (nil? tval)                   {:rule :no-type :file path :line line}
+                      (str/starts-with? tval "\"")  {:rule :string-type :file path :line line}
+                      :else nil))
+                  ;; Anything else is computed, and this gate does not guess.
+                  :else nil)]
+         :when finding]
+     finding)))
 
 ;; =============================================================================
 ;; Scan
@@ -161,6 +246,22 @@
   [path]
   (str/includes? (str/replace path "\\" "/") "/shell/"))
 
+(defn scanned-files
+  "Every source file this gate reads.
+
+   Exposed so the firing test can assert the scan has inputs without asserting
+   that the tree is still broken — the check-isolation test documents why that
+   distinction matters: a proof built on \"findings exist\" goes red the day the
+   burn-down finishes, and the cheapest fix then is deleting the proof."
+  []
+  (let [roots (concat (for [lib (iso/libs)] (fs/file root-dir "libs" lib "src"))
+                      [(fs/file root-dir "src")])]
+    (for [root  roots
+          :when (fs/exists? root)
+          f     (fs/glob root "**/*.clj{,c}")
+          :when (fs/regular-file? f)]
+      f)))
+
 (defn all-findings
   "Every violation in the tree, allowlist not applied."
   []
@@ -171,9 +272,12 @@
           f     (fs/glob root "**/*.clj{,c}")
           :when (fs/regular-file? f)
           :let  [path (str (fs/relativize root-dir f))
-                 text (slurp (fs/file f))]
-          fnd   (concat (when (shell-file? path) (untyped-throw-findings text path))
-                        (failure-map-findings text path))]
+                 text (slurp (fs/file f))
+                 ;; One projection per file, not one per rule: code-only is
+                 ;; two thirds of this gate's runtime.
+                 code (iso/code-only text)]
+          fnd   (concat (when (shell-file? path) (untyped-throw-findings text path code))
+                        (failure-map-findings text path code))]
       fnd)))
 
 ;; =============================================================================
@@ -181,46 +285,69 @@
 ;; =============================================================================
 
 (defn parse-allowlist
-  "`[{:file … :rule … :why …}]` → #{[file rule]}.
+  "`[{:file … :rule … :count n :why …}]` → `{[file rule] count}`.
 
    `:why` is mandatory, and a missing one is a hard error rather than a skipped
    entry: an exemption nobody had to justify is the one that outlives its
-   reason."
+   reason.
+
+   `:count` is mandatory too, and it is what keeps this a burn-down list. With
+   file+rule alone, one entry covering a file's eight untyped throws exempts a
+   ninth added tomorrow — the gate stays green while the tree gets worse, which
+   is the failure mode every allowlist in this repository is written to avoid."
   [entries]
-  (into #{}
-        (for [{:keys [file rule why] :as entry} entries]
+  (into {}
+        (for [{:keys [file rule count why] :as entry} entries]
           (do
             (when (str/blank? why)
               (throw (ex-info (str "check-error-shape allowlist entry without :why: " (pr-str entry))
                               {:type :invalid-allowlist :entry entry})))
-            [file (or rule :any)]))))
+            (when-not (and (integer? count) (pos? count))
+              (throw (ex-info (str "check-error-shape allowlist entry without a positive :count: "
+                                   (pr-str entry))
+                              {:type :invalid-allowlist :entry entry})))
+            [[file (or rule :any)] count]))))
 
 (defn read-allowlist []
   (let [f (fs/file root-dir allowlist-path)]
-    (if (fs/exists? f) (parse-allowlist (edn/read-string (slurp f))) #{})))
+    (if (fs/exists? f)
+      (parse-allowlist (edn/read-string (slurp f)))
+      ;; Absent is not empty. A gate whose allowlist was never committed reports
+      ;; every pre-existing finding as new, which is how this one first went red
+      ;; in CI — .wagoe/* is gitignored, and the un-ignore line was missing.
+      (throw (ex-info (str "check-error-shape allowlist not found: " allowlist-path)
+                      {:type :missing-allowlist :path allowlist-path})))))
 
-(defn allowed?
-  [allow {:keys [file rule]}]
-  (boolean (or (contains? allow [file rule])
-               (contains? allow [file :any]))))
+(defn unexplained
+  "Findings beyond what the allowlist accounts for, per [file rule].
+
+   Counted rather than matched: an entry exempts the violations a file had, not
+   the file itself."
+  [findings allow]
+  (->> (group-by (juxt :file :rule) findings)
+       (mapcat (fn [[k fs*]]
+                 (let [budget (or (get allow k) (get allow [(first k) :any]) 0)]
+                   (drop budget (sort-by :line fs*)))))
+       (sort-by (juxt :file :line))))
 
 (defn stale-exemptions
-  "Allowlist entries with nothing left to exempt — what makes this a burn-down
-   list rather than a drawer."
+  "Allowlist entries with nothing left to exempt, or more budget than findings —
+   what makes this a burn-down list rather than a drawer."
   ([] (stale-exemptions (all-findings) (read-allowlist)))
   ([findings allow]
-   (let [found (set (map (juxt :file :rule) findings))
-         files (set (map :file findings))]
+   (let [counts (frequencies (map (juxt :file :rule) findings))
+         files  (set (map :file findings))]
      (->> allow
-          (remove (fn [[file rule]]
-                    (if (= :any rule)
-                      (contains? files file)
-                      (contains? found [file rule]))))
+          (keep (fn [[[file rule] budget]]
+                  (let [have (if (= :any rule)
+                               (if (contains? files file) budget 0)
+                               (get counts [file rule] 0))]
+                    (when (< have budget)
+                      [file rule budget have]))))
           (sort-by pr-str)))))
 
 (defn unexplained-findings []
-  (let [allow (read-allowlist)]
-    (remove #(allowed? allow %) (all-findings))))
+  (unexplained (all-findings) (read-allowlist)))
 
 ;; =============================================================================
 ;; Report
@@ -236,7 +363,7 @@
   (println "Verifying errors carry the shape ADR-022 and ADR-036 decided")
   (let [all   (all-findings)
         allow (read-allowlist)
-        bad   (remove #(allowed? allow %) all)
+        bad   (unexplained all allow)
         stale (stale-exemptions all allow)
         known (- (count all) (count bad))]
 
@@ -265,8 +392,9 @@
                                     (if (= 1 (count stale)) "y" "ies")
                                     " no longer exempt anything")))
             (println)
-            (doseq [[file rule] stale]
-              (println (str "      " file " (" rule ")")))
+            (doseq [[file rule budget have] stale]
+              (println (str "      " file " (" rule "): exempts " budget
+                            ", finds " have)))
             (println)
             (println "  The violation is gone — remove the entry. Left in place it is a")
             (println "  pre-approval for the next regression of the same shape."))
