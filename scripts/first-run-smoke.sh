@@ -269,6 +269,32 @@ done
 T1=$(date +%s)
 ok "/api-docs/ returned 200"
 
+# ── does the module quickstart scaffolded serve anything? ───────────────────
+# The check above only proves that *some* server is up. /api-docs/ is served by
+# the framework and answers 200 in a project with no module in it at all, which
+# is how scaffold -> integrate -> dead code survived for months: quickstart
+# reported 8/8 Done and this script reported success while /api/v1/tasks was a
+# 404 (BOU-309, BOU-310, BOU-311).
+MODULE_CODE=$(curl -s -o /tmp/tasks.json -w "%{http_code}" --max-time 5 http://localhost:3000/api/v1/tasks || true)
+case "$MODULE_CODE" in
+  2*) ;;
+  404) tail -25 /tmp/repl.log
+       fail "/api/v1/tasks returned 404 — quickstart scaffolded and integrated the module, but nothing mounted its routes" ;;
+  *)   head -c 400 /tmp/tasks.json; echo; tail -25 /tmp/repl.log
+       fail "/api/v1/tasks returned $MODULE_CODE, expected 2xx" ;;
+esac
+# The status alone is not the assertion. Assert on the body too: a handler that
+# is mounted but returns nothing usable is not a module that serves.
+head -c 1 /tmp/tasks.json | grep -qE "[[{]" \
+  || { head -c 400 /tmp/tasks.json; echo
+       fail "/api/v1/tasks returned $MODULE_CODE but the body is not JSON"; }
+# And the control. A router that answers every path under the prefix passes the
+# two asserts above while proving nothing, so require an unknown sibling to 404.
+NOPE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://localhost:3000/api/v1/not-a-module || true)
+[ "$NOPE" = "404" ] \
+  || fail "/api/v1/not-a-module returned $NOPE instead of 404, so the 2xx above proves nothing"
+ok "/api/v1/tasks returned $MODULE_CODE with a JSON body, and unknown paths still 404"
+
 echo
 echo "First-run smoke passed in $((T1-T0))s (install to serving app)."
 '

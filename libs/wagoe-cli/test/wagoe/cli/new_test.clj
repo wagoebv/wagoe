@@ -390,7 +390,16 @@
         (testing "and it discovers scaffolded modules"
           ;; Without this the generated project ignores every module the
           ;; scaffolder makes, which is the defect BOU-311 fixes.
-          (is (str/includes? src "discover-module-config"))))
+          (is (str/includes? src "discover-module-config")))
+
+        (testing "and hands their routes to the http handler"
+          ;; Discovery alone is half the wiring, and the half that boots
+          ;; quietly: the module initialises, nothing mounts it, and
+          ;; /api/v1/<module> is a 404 while `bb quickstart` reports 8/8 Done.
+          ;; Asserting only on discover-module-config is what let that ship
+          ;; (BOU-312).
+          (is (str/includes? src "discovered-route-refs"))
+          (is (str/includes? src ":module-routes"))))
       (finally
         (when (.exists (io/file tmp))
           (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f)))))))

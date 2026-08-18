@@ -167,6 +167,14 @@
 
         ;; Build HTTP handler config, injecting optional module refs as they are enabled
         http-handler-cfg (cond-> {:config          config
+                                  ;; Routes of the modules discovered below. The
+                                  ;; handler cannot name a generated module, so
+                                  ;; they reach it as a collection. Without this
+                                  ;; a scaffolded module initialises and serves
+                                  ;; nothing: /api/v1/<module> is a 404 while
+                                  ;; quickstart reports 8/8 Done (BOU-312).
+                                  :module-routes   (modules/discovered-route-refs
+                                                    active framework-module-keys)
                                   :router          (ig/ref :wagoe/router)
                                   :logger          (ig/ref :wagoe/logging)
                                   :metrics-emitter (ig/ref :wagoe/metrics)
