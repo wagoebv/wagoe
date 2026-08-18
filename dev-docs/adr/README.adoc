@@ -16,12 +16,39 @@ along with their context and consequences. Each ADR describes:
 
 === Status Legend
 
-* *Accepted* — Decision made and implemented
+* *Accepted* — Decision made. Implementation may be tracked separately; an ADR
+  says what was decided, not that every call site has caught up
 * *Proposed* — Decision drafted, awaiting implementation
 * *Deprecated* — Superseded by a later ADR
 * *Superseded* — Replaced by another decision
 
 === Current ADRs
+
+==== ADR-001: Split Wagoe Monolith into Modular Libraries [Accepted]
+
+ADR-001-library-split.adoc
+
+Splits the framework into independently publishable libraries with explicit
+dependencies.
+
+==== ADR-002: Implement `wagoe new` in the Scaffolder [Superseded]
+
+ADR-002-wagoe-new-command.adoc
+
+Project generation from templates rather than a cloned repository. Superseded
+2026-08-02 (BOU-259) — the command lives in the CLI, not the scaffolder.
+
+==== ADR-003: WebSocket Architecture for the Realtime Module [Proposed]
+
+ADR-003-websocket-architecture.adoc
+
+In-memory connection registry and pub/sub; multi-replica deferred to ADR-035.
+
+==== ADR-004: Multi-Tenancy Architecture [Accepted]
+
+ADR-004-multi-tenancy-architecture.adoc
+
+Schema-per-tenant isolation, with the tenant resolved at the HTTP boundary.
 
 ==== ADR-005: Validation DevEx Foundations [Accepted]
 
@@ -346,20 +373,22 @@ Sockets stay node-local; only routing intent crosses replicas via Redis.
 
 ADR-036-error-convention.adoc
 
-Four shapes for failure existed side by side (352 typed `ex-info`, 180
-`{:valid? …}`, 131 `{:success? …}`, 25 `{:error {:type …}}`). Three shapes now,
-each owning a domain.
+Extends ADR-022 to *return* values. ADR-022 decided what a thrown error looks
+like; nothing decided what a function returns when it does not throw, and five
+shapes grew there (295 typed throws, 144 `{:valid? …}`, 91 `{:success? …}`,
+34 `{:success …}`, 21 `{:error {:type …}}`).
 
 *Key Decisions:*
 
-* Shell boundaries throw `ex-info` with a mandatory `:type` — the taxonomy the
-  HTTP status mapping and the BND classifier already read
-* Pure core decisions return `{:valid? … :errors … :warnings …}`
+* ADR-022's rule stands and finally gets a gate — around 79 `shell/` throws
+  carry no `:type` today
+* Pure core decisions return `{:valid? … :errors <map> :warnings …}`
 * Expected failure — a bounced message, a wrong MFA code — returns
   `{:success? … :error {:type <keyword> :message …}}`; the line is who was
   wrong, the caller or the world
-* `cognitect.anomalies` rejected: a second vocabulary to map onto the first
-* `bb check:error-shape` enforces it, with a burn-down allowlist (BOU-323)
+* `cognitect.anomalies` rejected: a third vocabulary to map onto the two the
+  HTTP layer already reads
+* `bb check:error-shape` enforces the shapes, not the judgement (BOU-323)
 
 === Related Documentation
 

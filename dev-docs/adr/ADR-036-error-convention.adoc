@@ -1,154 +1,184 @@
-= ADR-036: One Error Convention — Typed `ex-info` at Boundaries, Data Inside
+= ADR-036: One Error Convention — Extending ADR-022 to Return Values
 :status: Accepted
 :date: 2026-08-18
 :deciders: wagoe-team
 
 == Status
 
-Accepted (BOU-322). The migration and the gate that enforces it are BOU-323.
+Accepted (BOU-322). Extends and partly corrects
+xref:ADR-022-error-handling-conventions.adoc[ADR-022], which decided the
+*thrown* half of this in April and is still in force. The migration and the
+gate are BOU-323.
+
+ADR-022 settled what an exception looks like at the HTTP boundary. It said
+nothing about what a function *returns* when it does not throw, and that is
+where the drift went: four shapes, none of them decided.
 
 == Context
 
 === What is actually in the tree
 
-Counted over `libs/*/src` and `src` on 2026-08-18 (excluding tests; the numbers
-roughly double when tests are included):
+Counted over `libs/*/src` and `src` on 2026-08-18. Two numbers per shape,
+because they answer different questions — how many sites *produce* it, and how
+many lines *mention* it. A first draft of this ADR quoted the second and called
+it the first.
 
-[cols="3,1,4",options="header"]
+[cols="3,1,1,3",options="header"]
 |===
-| Shape | Sites | Where it lives
+| Shape | Produced | Mentioned | Where
 
-| `(throw (ex-info msg {:type :validation-error …}))`
-| 352
-| Everywhere. Heaviest in platform (55), tenant (51), user (45), admin (35).
+| `(throw (ex-info … {:type …}))`
+| 295
+| 353
+| Everywhere. Decided by ADR-022.
 
-| `{:valid? bool :errors … :warnings …}`
+| `{:valid? …}`
+| 144
 | 180
-| Validation and other pure decisions — 18 files under `core/`, 14 under `shell/`.
+| Pure decisions. 18 files under `core/`, 14 under `shell/`, 4 elsewhere.
 
-| `{:success? bool …}`
+| `{:success? …}`
+| 91
 | 131
-| user (33 — MFA verification), external (27), email (14), push (13), jobs (13),
-  tenant (12 — provisioning), workflow (7), devtools (6), reports (4).
+| user 33 (auth 12, mfa 13), external 27, email 14, push 13, jobs 13,
+  tenant 12, workflow 7, devtools 6, reports 4.
 
-| `{:error {:type … :message …}}` as a return value
+| `{:success …}` — no question mark
+| 34
+| 34
+| scaffolder 11, storage 5, platform's driver-loader 5, wagoe-mcp 3. A fifth
+  shape a gate keyed on `:success?` would never see.
+
+| `{:error {:type … :message …}}` returned
+| 21
 | 25
-| Scattered; no library owns it.
+| Not scattered: platform owns 9 (RPC + seed), audience 6, events 4.
+  `wagoe.platform.core.rpc/transport-error` defines it deliberately.
 |===
 
-The `{:success?}` group is not one shape. Its failure branch is a map
-(`{:error {:message … :type …}}`) in the adapters, a bare string in the devtools
-dashboard, and absent in places. Eleven of those `:type` values are *strings* —
-`"ImapError"`, `"SmtpError"`, `"NoHandlerError"` — where the same key holds a
-keyword everywhere else. (A first count said 159; that was `:type "button"` in
-Hiccup markup. The eleven are the ones inside an `:error` map.)
+=== What ADR-022 already decided, and what drifted from it
 
-=== What already depends on `:type`
+ADR-022 is Accepted and mandates `ex-info` with a `:type` keyword, with a
+canonical table: `:validation-error` 400, `:not-found` 404, `:unauthorized`
+401, `:forbidden` 403, `:conflict` 409, `:redirect` 302, anything else 500.
+`wagoe.platform.shell.http.interceptors/http-error-handler` implements exactly
+that.
 
-`ex-info` is not merely the largest group; the framework is built on the
-taxonomy it carries:
+Three things drifted:
 
-* `wagoe.platform.shell.http.interceptors/http-error-handler` maps `:type` to a
-  status code — `:validation-error` → 400, `:not-found` → 404, `:unauthorized`
-  → 401, `:forbidden` → 403, `:conflict` → 409, anything else → 500.
-* The same interceptor **refuses** an untyped exception at the HTTP boundary in
-  dev-like environments (`enforce-error-type?`), answering with a diagnostic
-  that names the missing `:type`.
-* The BND error classifier (BOU-321) keys on `:type` to produce `BND-201`,
-  `BND-401`, `BND-402` — so an error's `:type` is what makes it explainable in
-  a response and on the dashboard.
+* **Dozens of thrown exceptions carry no `:type`.** Around 79 `ex-info` throws
+  in `shell/` namespaces have none — heaviest in platform, observability and
+  storage. ADR-022 mandated it; nothing enforced it.
+* **ADR-022's description of the diagnostic is stale.** It says the check runs
+  "when the system configuration includes `{:enforce-error-type? true}`". The
+  code reads the profile and `WAG_ENV`, with an override
+  (`WAGOE_ENFORCE_TYPED_ERRORS`), and refuses only an `ex-info` whose data map
+  lacks `:type` — a bare `RuntimeException` has no `ex-data` at all and passes
+  straight to a 500.
+* **A second `:type` → status table exists.**
+  `wagoe.platform.core.http.problem-details/default-error-mappings` carries 14
+  entries (`:user-not-found`, `:auth-failed`, `:business-rule-violation`,
+  `:deletion-not-allowed`, …) and is used by admin, storage and the RPC server.
+  ADR-022's table is not the only vocabulary.
 
-The measured taxonomy, by frequency: `:validation-error` (71), `:not-found`
-(25), `:internal-error` (17), `:forbidden` (14), `:unauthorized` (11),
-`:configuration-error` (11).
+=== The problem this ADR addresses
 
-=== The problem
-
-Four shapes for one concept is four things a reader has to know, and the cost
-lands on the person least able to pay it: someone writing their first Wagoe
-module, reading two of our libraries and finding two answers. It also breaks
-composition — a service that calls an adapter returning `{:success? false}` and
-a repository that throws has to handle both in one function.
+A caller composing two Wagoe libraries meets two answers to "it did not work":
+one throws, one returns a map — and the map has four spellings. The cost lands
+on the person least able to pay it: someone writing their first module against
+two of our libraries.
 
 == Decision
 
-Three shapes, each with a domain it owns. Not one shape everywhere: the
-distinction below is load-bearing, and collapsing it would make the convention
-worse than the drift.
+=== 1. Thrown errors: ADR-022 stands, and gets enforced
 
-=== 1. Shell boundaries throw typed `ex-info`
+No change to the rule. What changes is that `bb check:error-shape` fails an
+`ex-info` thrown in a `shell/` namespace with no `:type` — what ADR-022 asked
+for and never got.
 
-A service, repository, or HTTP handler that cannot do what it was asked throws:
+Two corrections to ADR-022 while we are here:
 
-[source,clojure]
-----
-(throw (ex-info "Order not found"
-                {:type :not-found :order-id id}))
-----
+* Its enforcement description is replaced by what the code does (above).
+* Its "new types should be added here before use" is relaxed: a library may
+  define a `:type` of its own, and one that reaches HTTP unmapped is a 500 —
+  deliberately, so an unmapped type is visible rather than silently coerced.
+  The canonical table remains the vocabulary to reach for first, and
+  `problem-details/default-error-mappings` is part of that vocabulary.
 
-`:type` is mandatory. The vocabulary is the one already mapped at the HTTP
-boundary; a library may add its own `:type` value, and one that reaches HTTP
-without a mapping is a 500 — deliberately, so an unmapped type is visible
-rather than guessed at.
-
-Rejected alternative — *return errors as data everywhere*. Purer against FC/IS,
-and it would remove exceptions from the shell entirely. It also means rewriting
-all 352 sites and the HTTP mapping they feed, to move failure handling from the
-call stack into every caller's return path. The framework's own error DX (the
-`:type`-keyed status mapping, the BND classifier, the dev enrichment) is built
-on the exception carrying its own type; that investment is the deciding
-argument.
+Rejected alternative — *return errors as data everywhere*, no exceptions at
+shell boundaries. Purer against FC/IS. It also means rewriting 295 throw sites
+and both status-mapping tables, and moving failure handling out of the call
+stack into every caller's return path. The framework's error DX — the
+`:type`-keyed status mapping, the BND classifier that produces BND-201/401/402
+from `:type`, the dev enrichment of BOU-321 — is built on the exception
+carrying its own type. That investment is the deciding argument.
 
 === 2. Pure decisions return `{:valid? …}`
 
-A core function that judges something returns data — throwing from the
-functional core is what FC/IS exists to prevent:
+A `core/` function that judges something returns data; throwing from the
+functional core is what `check:fcis` already forbids.
 
 [source,clojure]
 ----
-{:valid? false
- :errors   {:email ["missing required key"]}
- :warnings []}
+{:valid?   false
+ :errors   {:email ["missing required key"]}   ;; a map: field -> messages
+ :warnings []}                                  ;; optional; omit rather than nil
 ----
 
-`:errors` is a map of field to messages, matching what Malli's `humanize`
-produces and what the HTTP layer already returns as `:details`.
+`:errors` is a **map**, the shape Malli's `humanize` produces. Today it is a
+vector at roughly 40 sites and a map at 13; the vector form is what migrates.
+`:warnings` appears on 31 of 180 `:valid?` lines and stays optional — an absent
+key says what an empty vector says, and this ADR will not manufacture work to
+make them identical.
+
+One case §2 has to answer explicitly:
+`libs/tenant/src/wagoe/tenant/core/tenant.clj` returns
+`{:valid? false :error "Tenant not found"}` from a pure function — a
+bare-string `:error`, and semantically a `:not-found` that §1 would throw if
+core were allowed to throw. It becomes
+`{:valid? false :errors {:tenant ["not found"]}}`, and the `shell/` caller
+decides whether that is a 404.
 
 === 3. Expected failure is an answer, and it has one shape
 
-Some failures are not exceptional. A bounced email, an MFA code that does not
-match, a provisioning step that finds the tenant already there — the caller
-asked a question whose answer can be "no", and throwing would force every
-caller into `try`/`catch` for the normal path. These return:
+Some failures are not exceptional: a bounced email, an MFA code that does not
+match, a push token the provider rejects. The caller asked a question whose
+answer can be "no", and throwing would force every caller into `try`/`catch`
+for the normal path. These return:
 
 [source,clojure]
 ----
 {:success? false
- :error    {:type :delivery-failed          ;; a keyword, always
+ :error    {:type    :delivery-failed   ;; keyword, always
             :message "connection refused"}}
 ----
 
-This is where the 131 sites already are: outbound adapters (email, external,
-push), MFA verification, tenant provisioning, job execution. They keep the
-shape. What changes is that it becomes *one* shape:
+The line between §1 and §3 is **who was wrong**. If the caller asked for
+something impossible or forbidden — a missing entity, an unauthorised action, a
+malformed request — that is §1, and it throws. If the request was reasonable
+and the world said no, that is §3, and it returns.
 
-* `:error` is always a map, never a bare string;
-* `:type` inside it is always a keyword — the eleven string types
-  (`"SmtpError"`) become `:smtp-error`, so a caller that escalates can rethrow
-  as a typed `ex-info` without translating;
-* `:message` is for a human; nothing branches on it.
+Applying that line to the sites that exist is not a formality:
 
-The line between §1 and §3 is who was wrong. If the caller asked for something
-impossible or forbidden — a missing order, an unauthorised action, a malformed
-request — that is §1 and it throws. If the request was reasonable and the world
-said no, that is §3 and it returns.
+* email, external, push, jobs — the outbound adapters — are §3 and keep their
+  shape.
+* `libs/workflow`'s service returns
+  `{:success? false :error {:type :insufficient-permissions}}`. By the line
+  above that is a caller error and belongs in §1. It migrates, and its two
+  tests change with it.
+* `libs/tenant`'s provisioning returns
+  `{:success? true :message "already provisioned"}` and *throws* on every
+  failure — it is already §1 with a success value. Its docstring advertises an
+  `:errors` vector no code path produces; that docstring is the thing to fix.
+
+`{:success …}` without the question mark (34 sites) is not a variant to bless.
+It becomes `:success?` or §1, by the same line.
 
 === 4. `cognitect.anomalies` is rejected
 
-Zero usages today. It would add a dependency and a second vocabulary
-(`::anom/incorrect`, `::anom/not-found`) that has to be mapped onto the
-`:type` values the HTTP layer already understands. The neutrality it buys is
-worth less than the mapping layer it costs.
+Zero usages today. It adds a dependency and a third vocabulary to map onto the
+two the HTTP layer already reads. The neutrality it buys is worth less than the
+mapping layer it costs.
 
 == Consequences
 
@@ -156,56 +186,83 @@ worth less than the mapping layer it costs.
 
 `bb check:error-shape` fails when:
 
-* a map literal with `:success? false` has no `:error`, or its `:error` is not
-  a map, or the `:type` inside it is not a keyword;
-* an `ex-info` thrown in a `shell/` namespace has no `:type` in its data map;
-* a `core/` namespace throws `ex-info` at all;
-* an entry in the allowlist no longer exempts anything — the burn-down rule
-  every other Wagoe gate uses, so the list cannot rot into a drawer.
+* an `ex-info` thrown in a `shell/` namespace has no `:type` in its data map —
+  ADR-022's rule, finally enforced. **Around 79 sites fail this on day one**;
+  they are the bulk of the migration, and the allowlist is how they burn down;
+* a `{:success? false}` map literal has no `:error`, or its `:error` is not a
+  map, or the `:type` inside it is not a keyword. Measured: 42 such literals,
+  of which about 20 fail today (one missing `:error`, ~6 bare-string `:error`,
+  ~14 string `:type`);
+* an allowlist entry no longer exempts anything — the burn-down rule the other
+  gates use, so the list cannot rot into a drawer.
 
-The allowlist carries a mandatory `:why` per entry, in the two flavours the
-existing gates use: `BY DESIGN` for the expected-failure returns of §3, which
-stay, and `TO FIX` for everything else, which names the ticket that removes
-it.
+Three things the gate deliberately does **not** do:
+
+* It does not re-check "core must not throw". `bb check:fcis` already does,
+  with `^:wagoe/allow-throw` and `.wagoe/check-fcis.edn` for the namespaces
+  that are exempt. Restating it here would duplicate a rule and drop its
+  exemptions.
+* It does not judge §1 versus §3. That is the reading of a situation, not a
+  shape.
+* It cannot see computed values — `(assoc result :success? false)`,
+  `{:success? (boolean …)}`, `:type (or (:reason check) :forbidden)`. Those get
+  reviewed, not gated, and this ADR would be dishonest to imply otherwise.
+
+String literals must be stripped before matching, or two docstrings in
+`libs/external`'s tests are false positives on day one.
+
+The allowlist carries a mandatory `:why` per entry, in the flavours
+`.wagoe/check-isolation.edn` uses: `BY DESIGN` for the §3 returns that stay,
+`TO FIX` for everything else, naming the ticket that removes it.
 
 === Migration order (BOU-323)
 
-The migration is mostly *inside* the `{:success?}` shape rather than away from
-it. Smallest blast radius first, each step a library whose own tests prove it:
+Ordered by blast radius — which is not the order a first draft of this ADR
+proposed:
 
-. String `:type` values → keywords (11 sites, in external, email, jobs,
-  reports). Mechanical, and it is what makes an escalated `{:success? false}`
-  rethrowable as a typed `ex-info`.
-. `:error` as a bare string → `{:type … :message …}` — devtools' dashboard and
-  the handful like it.
-. `libs/jobs`: `process-job!` answers `{:success? false :error {… :type
-  "NoHandlerError"}}`; the type becomes `:no-handler` and the docstring states
-  the shape.
-. The 25 `{:error {:type …}}` returns — the shape with no owner — become §1 or
-  §3 depending on which side of the "who was wrong" line they sit.
-. Anything left returning `{:success?}` for a *caller* error (a missing entity,
-  a forbidden action) becomes a typed `ex-info`.
-
-=== What this does not change
-
-`:valid?` maps and typed `ex-info` are already the majority, and the
-`{:success?}` sites mostly keep their shape. The migration is a normalisation —
-11 string types, the bare-string `:error` values, 25 ownerless maps, and the few
-`{:success?}` returns that are really caller errors. It is a day of work, not a
-quarter.
+. **The ~79 untyped `shell/` throws.** Mechanical: no consumer reads a key that
+  is not there, and it is the rule ADR-022 already made. One structural
+  exception — `platform/…/utils/error_handling.clj` rewraps an exception and
+  strips `:type` on purpose; that needs a decision, not a keyword.
+. **Bare-string `:error` values** in `{:success? false}` returns — devtools'
+  dashboard and a handful like it.
+. **The ~14 string `:type` values** (external 10, jobs 2, email 1, reports 1).
+  *Not* mechanical: `libs/email`'s SMTP adapter reads
+  `(get-in result [:error :type] "SmtpError")` out of `libs/external`'s output,
+  so the change crosses a library boundary, and five test assertions match the
+  strings. Both libraries move in one step.
+. **`libs/workflow`** — the `{:success? false}` returns that are caller errors
+  become §1.
+. **`{:success …}` without the question mark** — scaffolder, storage,
+  driver-loader.
+. **The 21 `{:error {:type …}}` returns — last, not first.** `platform`'s RPC
+  client documents why: an `{:error {:type …}}` *result* must stay
+  distinguishable from a transport failure, or the circuit breaker re-sends a
+  non-idempotent call. There are 40+ assertions behind it, and the honest
+  outcome may be "leave it — it is the right shape for RPC".
 
 === Costs accepted
 
-* Two shapes for failure (`ex-info`, `{:success? …}`) means a reader still has
-  to decide which side of the "who was wrong" line a case falls on, and that is
-  a judgement. It is a smaller judgement than choosing between four shapes, and
-  the gate checks the shape rather than the judgement.
-* An exception carries no compile-time signature. Nothing in Clojure will tell a
-  caller which `:type` values a function can throw; the docstring must, and
-  ports.clj docstrings already do this in the libraries that got it right.
+* Two shapes for failure (`ex-info`, `{:success? …}`) means a reader decides
+  which side of the "who was wrong" line a case falls on. That is a judgement,
+  and a smaller one than choosing between five shapes.
+* An exception carries no signature. Nothing tells a caller which `:type`
+  values a function throws; the `ports.clj` docstring must — and 7 of 27 ports
+  files do today. BOU-323 does not fix that; it deserves its own ticket.
+* `:type` means something else in RFC 7807: `problem-details` uses it for the
+  URI string of a problem type. A gate asserting "`:type` is a keyword" must
+  not run against those maps.
+
+=== Known-wrong documentation this ADR does not fix
+
+`docs/modules/architecture/pages/conventions.adoc` states
+`:validation-error → HTTP 422`. The interceptor returns 400. Recorded here so
+it is not discovered twice; the docs round is BOU-298.
 
 == References
 
-* xref:ADR-021-fcis-boundary-rules.adoc[ADR-021] — the FC/IS split this rests on
-* BOU-321 — the BND enrichment and HTTP mapping keyed on `:type`
+* xref:ADR-022-error-handling-conventions.adoc[ADR-022] — the thrown half,
+  extended and partly corrected here
+* xref:ADR-021-fcis-boundary-rules.adoc[ADR-021] — core must not throw
+* BOU-321 — the BND enrichment and the status mapping keyed on `:type`
 * BOU-323 — the migration and `check:error-shape`
