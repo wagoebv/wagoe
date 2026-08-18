@@ -139,6 +139,7 @@ bb check:placeholder-tests                         # Detect (is true) placeholde
 bb check:deps                                      # Dependency direction + cycles + undeclared third-party deps
 bb check:ports                                     # Hexagonal: modules must define ports.clj; shell/web must not bypass protocols
 bb check:poms                                      # Published POMs must carry inter-Wagoe deps (build-shared rewrite + pom-basis)
+bb check:error-shape                               # Errors carry the shape ADR-022/ADR-036 decided: :type on a thrown ex-info, {:error {:type <kw>}} on a {:success? false}
 clojure -M:test --focus-meta :security             # Security-focused tests (error mapping, CSRF, XSS, SQL)
 ```
 

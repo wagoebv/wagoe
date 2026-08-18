@@ -18,7 +18,7 @@
    `-main` is never called: every gate exits the process. That is why each
    gate needs a seam that returns a verdict — adding one is part of bringing a
    gate under this test."
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [clojure.test :refer [are deftest is testing]]
             [clj-yaml.core :as yaml]
             [wagoe.tools.check-branch-protection :as check-bp]
             [clojure.edn :as edn]
@@ -34,6 +34,7 @@
             [wagoe.tools.check-doc-counts :as check-doc-counts]
             [wagoe.tools.check-versions :as check-versions]
             [wagoe.tools.check-isolation :as check-isolation]
+            [wagoe.tools.check-error-shape :as check-error-shape]
             [wagoe.tools.check-poms :as check-poms]
             [wagoe.tools.check-ports :as check-ports]
             [wagoe.tools.check-tests :as check-tests]
@@ -712,7 +713,124 @@
    one that does not run."
   #{:hygiene :deps :fcis :placeholder-tests :docs-lint
     :test-meta :test-tags :ports :poms :agents :doctor :linting :no-boundary
-    :doc-counts :branch-protection :versions :changelog :isolation})
+    :doc-counts :branch-protection :versions :changelog :isolation
+    :error-shape})
+
+;; =============================================================================
+;; check:error-shape
+;; =============================================================================
+
+(deftest ^:unit error-shape-gate-fires-test
+  ;; ADR-022 required a :type on every thrown ex-info in April 2026. Nothing
+  ;; checked it, and 59 shell throws had none by August — a rule that existed
+  ;; only in a document. This gate is that rule; these are the cases it must
+  ;; catch, and the ones it must leave alone.
+
+  (testing "a thrown ex-info with no :type is a finding"
+    (is (= [:untyped-throw]
+           (map :rule (check-error-shape/untyped-throw-findings
+                       "(throw (ex-info \"boom\" {:provider :x}))\n" "f.clj")))))
+
+  (testing "one with a :type is not"
+    (is (empty? (check-error-shape/untyped-throw-findings
+                 "(throw (ex-info \"boom\" {:type :not-found}))\n" "f.clj"))))
+
+  (testing ":type in a nested map does not type the exception"
+    ;; The HTTP mapper reads the top level. A substring search over the data
+    ;; map called this typed, which is the same as not checking.
+    (is (= [:untyped-throw]
+           (map :rule (check-error-shape/untyped-throw-findings
+                       "(throw (ex-info \"boom\" {:data {:type :x}}))\n" "f.clj")))))
+
+  (testing "::type is a different keyword"
+    (is (= [:untyped-throw]
+           (map :rule (check-error-shape/untyped-throw-findings
+                       "(throw (ex-info \"boom\" {::type :x}))\n" "f.clj")))))
+
+  (testing "a metadata hint does not hide the throw"
+    (is (= [:untyped-throw]
+           (map :rule (check-error-shape/untyped-throw-findings
+                       "(throw ^Exception (ex-info \"boom\" {:a 1}))\n" "f.clj")))))
+
+  (testing "a data map built elsewhere is not judged"
+    ;; `(throw (ex-info msg err))` where err carries :type at runtime is how a
+    ;; shell rethrows what a pure validator produced. A check that guessed
+    ;; would report the audience service, which does exactly that on purpose.
+    (is (empty? (check-error-shape/untyped-throw-findings
+                 "(throw (ex-info \"boom\" err))\n" "f.clj")))
+    (is (empty? (check-error-shape/untyped-throw-findings
+                 "(throw (ex-info m (merge {:a 1} {:type :x})))\n" "f.clj"))))
+
+  (testing "an ex-info in a docstring is not code"
+    (is (empty? (check-error-shape/untyped-throw-findings
+                 "(defn f \"Example: (throw (ex-info \\\"x\\\" {:a 1}))\" [] 1)\n" "f.clj"))))
+
+  (testing "{:success? false} must carry an :error map with a keyword :type"
+    (are [rules src] (= rules (map :rule (check-error-shape/failure-map-findings src "x.clj")))
+      [:no-error]      "{:success? false :message \"nope\"}\n"
+      [:no-error]      "{:success? false :errors [\"a\"]}\n"        ;; :errors is not :error
+      [:string-error]  "{:success? false :error \"nope\"}\n"
+      [:non-map-error] "{:success? false :error :auth-failed}\n"
+      [:no-type]       "{:success? false :error {:message \"x\"}}\n"
+      [:string-type]   "{:success? false :error {:type \"SmtpError\"}}\n"
+      []               "{:success? false :error {:type :x :message \"m\"}}\n"
+      ;; A nested :type does not satisfy the outer map, and does not fail it
+      ;; either when the outer one is fine.
+      []               "{:success? false :error {:ctx {:type \"S\"} :type :ok}}\n"))
+
+  (testing "the key does not have to come first, or be written tightly"
+    ;; The first version scanned for the literal \"{:success? false\", so a map
+    ;; that aligned its values or wrote the flag second was invisible — which
+    ;; is how four violations in libs/push went unreported by a gate that
+    ;; called the tree clean.
+    (are [rules src] (= rules (map :rule (check-error-shape/failure-map-findings src "x.clj")))
+      [:string-error] "{:success?   false :error \"x\"}\n"
+      [:string-error] "{:error \"x\" :success? false}\n"
+      [:string-error] "{:message \"m\" :code 1 :success? false :error \"x\"}\n"))
+
+  (testing "a computed value is left alone rather than guessed at"
+    ;; The gate reads shapes. `(or (:reason c) :forbidden)` is a value only the
+    ;; runtime knows; a gate that pretended otherwise would report on what it
+    ;; cannot see.
+    (are [src] (empty? (check-error-shape/failure-map-findings src "x.clj"))
+      "{:success? false :error {:type (or (:r c) :forbidden)}}\n"
+      "{:success? (not ok) :error \"x\"}\n"
+      "{:success? false :error (build-error e)}\n"))
+
+  (testing "an exemption without a reason, or without a count, is rejected"
+    (is (thrown? clojure.lang.ExceptionInfo
+                 (check-error-shape/parse-allowlist
+                  [{:file "x.clj" :rule :untyped-throw :count 1}])))
+    (is (thrown? clojure.lang.ExceptionInfo
+                 (check-error-shape/parse-allowlist
+                  [{:file "x.clj" :rule :untyped-throw :why "because"}]))))
+
+  (testing "an entry exempts the violations a file had, not the file"
+    ;; Without a count, one entry covering eight throws pre-approves a ninth:
+    ;; the gate stays green while the tree gets worse.
+    (let [allow (check-error-shape/parse-allowlist
+                 [{:file "a.clj" :rule :untyped-throw :count 2 :why "burn-down"}])
+          finding (fn [line] {:file "a.clj" :rule :untyped-throw :line line})]
+      (is (empty? (check-error-shape/unexplained [(finding 1) (finding 2)] allow)))
+      (is (= [3] (map :line (check-error-shape/unexplained
+                             [(finding 1) (finding 2) (finding 3)] allow))))
+
+      (testing "and fixing one makes the entry stale, so the count has to follow"
+        (is (= [["a.clj" :untyped-throw 2 1]]
+               (check-error-shape/stale-exemptions [(finding 1)] allow))))))
+
+  (testing "the gate reads the real tree, not an empty file list"
+    ;; The BOU-250 shape: a live check scanning nothing reports clean forever.
+    ;;
+    ;; Deliberately not `(seq (all-findings))`. That proves discovery by
+    ;; asserting the repository is still broken, so it goes red the day the
+    ;; burn-down finishes and the cheapest fix is deleting the proof. Assert on
+    ;; the scan's inputs instead, and on the allowlist accounting for whatever
+    ;; is there today.
+    (is (<= 30 (count (check-error-shape/scanned-files)))
+        "the scan is not looking at the tree")
+    (is (empty? (check-error-shape/unexplained-findings)))
+    (is (empty? (check-error-shape/stale-exemptions)))))
 
 ;; =============================================================================
 ;; check:changelog

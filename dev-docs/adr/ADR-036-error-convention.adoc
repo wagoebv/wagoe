@@ -187,12 +187,12 @@ mapping layer it costs.
 `bb check:error-shape` fails when:
 
 * an `ex-info` thrown in a `shell/` namespace has no `:type` in its data map —
-  ADR-022's rule, finally enforced. **Around 79 sites fail this on day one**;
-  they are the bulk of the migration, and the allowlist is how they burn down;
+  ADR-022's rule, finally enforced. **59 sites fail this**; they are the bulk of
+  the migration, and the allowlist is how they burn down;
 * a `{:success? false}` map literal has no `:error`, or its `:error` is not a
-  map, or the `:type` inside it is not a keyword. Measured: 42 such literals,
-  of which about 20 fail today (one missing `:error`, ~6 bare-string `:error`,
-  ~14 string `:type`);
+  map, or the map has no `:type`, or that `:type` is a string. **22 sites**: 11
+  string `:type`, 6 bare-string `:error`, 4 keyword `:error`, 1 missing
+  `:error`;
 * an allowlist entry no longer exempts anything — the burn-down rule the other
   gates use, so the list cannot rot into a drawer.
 

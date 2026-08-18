@@ -119,6 +119,14 @@
     :scope :monorepo
     :label "Libraries declare what they load"
     :cmd   ["bb" "check:isolation"]}
+   ;; ADR-022 required a :type on every thrown ex-info in April and nothing
+   ;; checked it; 59 shell throws had none by August. ADR-036 added the return
+   ;; shapes. :monorepo because the allowlist is this repository's burn-down
+   ;; list — a generated project has no such history (BOU-323).
+   {:id    :error-shape
+    :scope :monorepo
+    :label "Errors carry their shape"
+    :cmd   ["bb" "check:error-shape"]}
    {:id    :agents
     :scope :monorepo
     :label "AGENTS.md drift"

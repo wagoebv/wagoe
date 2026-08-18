@@ -36,6 +36,7 @@
              [wagoe.tools.check-changelog :as check-changelog]
              [wagoe.tools.check-versions :as check-versions]
              [wagoe.tools.check-isolation :as check-isolation]
+             [wagoe.tools.check-error-shape :as check-error-shape]
              [wagoe.tools.bump        :as bump]
              [check-no-boundary :as check-no-boundary]  ; lives under scripts/, outside the renamed tree
              [wagoe.tools.doctor-env  :as doctor-env]
@@ -89,6 +90,8 @@
                  :task (apply bump/-main *command-line-args*)}
   check:isolation {:doc "No library may load a namespace it neither owns nor declares (bb check:isolation)"
                    :task (check-isolation/-main)}
+  check:error-shape {:doc "Errors carry the shape ADR-022 and ADR-036 decided (bb check:error-shape)"
+                     :task (check-error-shape/-main)}
   check-links   {:doc "Validate local links in AGENTS.md and the AsciiDoc docs (dev-docs/ + docs/)"
                  :task (dev/check-links)}
   agents:gen    {:doc "Generate AGENTS.md + AGENTS.md.tmpl from the agents knowledge base on the classpath (bb agents:gen [--check])"
