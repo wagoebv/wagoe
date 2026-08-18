@@ -37,7 +37,9 @@ for what is public API, what is internal, and how deprecations are announced.
   lines of `go`/`reset`/`halt`, so the first instruction a new user follows
   answered `Unable to resolve symbol: status`. A generated `dev/user.clj` now
   has `(status)`, `(modules)`, `(routes)`, `(config)`, `(fix!)` and
-  `(commands)`, and `(go)` prints the startup dashboard the same text promises.
+  `(commands)`, and `(go)` and `(reset)` print the startup dashboard the same
+  text promises — listing the modules you added rather than every Integrant key
+  the framework wired.
 
   The implementations live in `wagoe.devtools.shell.project-repl` rather than in
   the template — a template is compiled by nothing until someone generates a
