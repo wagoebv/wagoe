@@ -9,6 +9,7 @@
 
 (ns wagoe.tools.quickstart
   (:require [wagoe.tools.ansi :refer [bold green red dim]]
+            [wagoe.tools.config-edn :as config-edn]
             [babashka.process :as process]
             [clojure.java.io :as io]
             [clojure.string :as str]))
@@ -42,74 +43,19 @@
        "  {:enabled? true\n"
        "   :base-path \"/api/tasks\"}\n"))
 
-(defn- find-active-closing-brace
-  "Find the index of the closing brace of the :active section using
-   brace-balanced walking. Returns the index in the original text, or nil."
-  [text]
-  ;; Find :active keyword in the text (not inside comments)
-  (let [active-idx (loop [pos 0]
-                     (let [idx (str/index-of text ":active" pos)]
-                       (cond
-                         (nil? idx) nil
-                         ;; Skip if inside a comment (check if line starts with ;)
-                         (let [line-start (let [li (.lastIndexOf ^String text "\n" (int idx))]
-                                            (if (neg? li) 0 li))
-                               line-text  (str/trim (subs text line-start idx))]
-                           (str/starts-with? line-text ";"))
-                         (recur (+ idx 7))
-                         ;; Skip :inactive
-                         (str/starts-with? (subs text idx) ":inactive")
-                         (recur (+ idx 9))
-                         :else idx)))]
-    (when active-idx
-      ;; Find the opening { of the :active value (skip past ":active\n {")
-      (let [open-idx (str/index-of text "{" (+ active-idx 7))]
-        (when open-idx
-          (loop [i     (inc open-idx)
-                 depth 1]
-            (cond
-              (>= i (count text)) nil
-              (zero? depth)       (dec i)
-              :else (let [c (nth text i)]
-                      (recur (inc i)
-                             (case c \{ (inc depth) \} (dec depth) depth))))))))))
-
-(defn- paren-repair
-  "Run clj-paren-repair on a file to fix any brace/paren imbalance."
-  [config-path]
-  (try
-    (process/shell {:continue true :out :string :err :string}
-                   "clj-paren-repair" config-path)
-    (catch Exception _ nil)))
-
-(defn- inject-module-config
-  "Inject the sample module Integrant config into a config.edn file.
-   Uses brace-balanced walking to find the :active section's closing brace,
-   inserts the snippet before it, then runs clj-paren-repair as a safety net.
-   Returns true if injection succeeded."
-  [config-path]
-  (let [f (io/file config-path)]
-    (when (.exists f)
-      (let [text (slurp f)]
-        (if (str/includes? text ":wagoe/tasks")
-          true ;; already present
-          (let [brace-idx (find-active-closing-brace text)]
-            (if brace-idx
-              (let [new-text (str (subs text 0 brace-idx)
-                                  sample-config-snippet
-                                  (subs text brace-idx))]
-                (spit config-path new-text)
-                (paren-repair config-path)
-                true)
-              false)))))))
-
 (defn inject-sample-module-config
-  "Inject the sample tasks module config into dev and test config.edn files."
+  "Inject the sample tasks module config into dev and test config.edn files.
+
+   The text editing lives in wagoe.tools.config-edn — `bb scaffold integrate`
+   needs the same thing for an arbitrary module, and two copies of an editor for
+   one file is how they drift (BOU-310)."
   []
-  (let [root    (System/getProperty "user.dir")
-        dev-ok  (inject-module-config (str root "/resources/conf/dev/config.edn"))
-        test-ok (inject-module-config (str root "/resources/conf/test/config.edn"))]
-    (and dev-ok test-ok)))
+  (let [root (System/getProperty "user.dir")]
+    (every? #(contains? #{:written :already-present}
+                        (config-edn/inject-key!
+                         (str root "/resources/conf/" % "/config.edn")
+                         ":wagoe/tasks" sample-config-snippet {}))
+            ["dev" "test"])))
 
 ;; =============================================================================
 ;; Step runner

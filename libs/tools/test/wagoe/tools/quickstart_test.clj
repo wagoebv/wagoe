@@ -1,5 +1,6 @@
 (ns wagoe.tools.quickstart-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [wagoe.tools.config-edn :as config-edn]
+            [clojure.test :refer [deftest is testing]]
             [wagoe.tools.quickstart :as quickstart]))
 
 ;; =============================================================================
@@ -51,7 +52,8 @@
                         "\n"
                         " :inactive\n"
                         " {:wagoe/cache {:provider :redis}}}\n"))
-        (is (true? (#'quickstart/inject-module-config path)))
+        (is (= :written (config-edn/inject-key! path ":wagoe/tasks"
+                                               "\n  :wagoe/tasks\n  {:enabled? true}\n" {})))
         (let [result (slurp path)]
           (is (re-find #":wagoe/tasks" result)
               "config should contain :wagoe/tasks after injection")
@@ -73,7 +75,8 @@
                         "\n"
                         " :inactive\n"
                         " {:wagoe/cache {:provider :redis}}}\n"))
-        (is (true? (#'quickstart/inject-module-config path)))
+        (is (= :written (config-edn/inject-key! path ":wagoe/tasks"
+                                               "\n  :wagoe/tasks\n  {:enabled? true}\n" {})))
         (let [result (slurp path)]
           (is (re-find #":wagoe/tasks" result)
               "config should contain :wagoe/tasks")
@@ -87,21 +90,36 @@
     (let [tmp (java.io.File/createTempFile "config" ".edn")
           path (.getAbsolutePath tmp)]
       (try
-        (spit path ":wagoe/tasks {:enabled? true}\n:inactive {}")
-        (is (true? (#'quickstart/inject-module-config path)))
-        ;; Should not duplicate
+        (spit path "{:active\n {:wagoe/tasks {:enabled? true}}}\n")
+        (is (= :already-present
+               (config-edn/inject-key! path ":wagoe/tasks"
+                                       "\n  :wagoe/tasks\n  {:enabled? true}\n" {})))
+        ;; Running integrate twice must not duplicate the key — EDN keeps the
+        ;; last one, so a second copy silently discards hand edits to the first.
         (is (= 1 (count (re-seq #":wagoe/tasks" (slurp path)))))
         (finally
           (.delete tmp)))))
 
-  (testing "returns nil for non-existent file"
-    (is (nil? (#'quickstart/inject-module-config "/nonexistent/config.edn"))))
+  (testing "a missing file is reported, not silently treated as done"
+    (is (= :no-file (config-edn/inject-key! "/nonexistent/config.edn" ":wagoe/tasks" "x" {}))))
 
-  (testing "returns false when no :active section found"
+  (testing "a config with no :active section is reported too"
     (let [tmp (java.io.File/createTempFile "config" ".edn")
           path (.getAbsolutePath tmp)]
       (try
         (spit path "{:some-key {:value 1}}")
-        (is (false? (#'quickstart/inject-module-config path)))
+        (is (= :no-active-section (config-edn/inject-key! path ":wagoe/tasks" "x" {})))
+        (finally
+          (.delete tmp)))))
+
+  (testing "--dry-run reports what it would do and leaves the file alone"
+    (let [tmp (java.io.File/createTempFile "config" ".edn")
+          path (.getAbsolutePath tmp)]
+      (try
+        (spit path "{:active\n {:wagoe/settings {:name \"x\"}}}\n")
+        (let [before (slurp path)]
+          (is (= :written (config-edn/inject-key! path ":wagoe/tasks" "\n  :wagoe/tasks\n  {}\n"
+                                                  {:dry-run? true})))
+          (is (= before (slurp path)) "--dry-run must not write"))
         (finally
           (.delete tmp))))))

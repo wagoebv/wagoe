@@ -29,7 +29,7 @@
                      :task (apply scaffold/-main *command-line-args*)}
   scaffold:ai       {:doc "NL scaffolding via AI (--yes for non-interactive)"
                      :task (apply scaffold/-main "ai" *command-line-args*)}
-  scaffold:integrate {:doc "Wire a scaffolded module into deps.edn, tests.edn, wiring.clj"
+  scaffold:integrate {:doc "Write a scaffolded module's config key into resources/conf/{dev,test}/config.edn"
                       :task (apply integrate/-main *command-line-args*)}
 
   ;; Config setup wizard

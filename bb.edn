@@ -67,7 +67,7 @@
                  :task (apply help/-main *command-line-args*)}
   setup         {:doc "Interactive config setup wizard (bb setup [ai <description>])"
                  :task (apply setup/-main *command-line-args*)}
-  scaffold:integrate {:doc "Locate a scaffolded module under src/ and guide its Integrant config + wiring"
+  scaffold:integrate {:doc "Write a scaffolded module's config key into resources/conf/{dev,test}/config.edn"
                       :task (apply integrate/-main *command-line-args*)}
   upgrade-outdated {:doc "Check (and optionally upgrade) outdated Maven deps across all libs (--update to apply, --lib <name> to filter)"
                     :task (apply deps/-main *command-line-args*)}

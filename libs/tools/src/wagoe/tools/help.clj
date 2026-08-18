@@ -72,10 +72,10 @@
   (println "  bb scaffold ai \"product module\" --yes                 # Skip confirmation prompts")
   (println)
   (println (cyan "Integration:"))
-  (println "  bb scaffold integrate product                         # Wire module into deps/tests/wiring")
-  (println "  bb scaffold integrate product --dry-run               # Preview changes only")
+  (println "  bb scaffold integrate product                         # Write its config key")
+  (println "  bb scaffold integrate product --dry-run               # Show the config key, write nothing")
   (println)
-  (println (dim "After scaffolding, always run `bb scaffold integrate <module>` to wire it up."))
+  (println (dim "After scaffolding, run `bb scaffold integrate <module>` — it writes the config key that activates it."))
   (println (dim "See libs/scaffolder/AGENTS.md for full documentation.")))
 
 (defn- help-topic-testing []
