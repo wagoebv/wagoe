@@ -111,12 +111,17 @@
   "True when `uri` resolves to real content for `snapshot`.
 
    The `wagoe://lib/{name}` entry is a template rather than a readable uri, so
-   it is judged by whether the snapshot carries a non-empty `:libs` view."
+   it is judged by whether the snapshot carries a non-empty `:libs` view.
+   A view that throws counts as unavailable. Forcing every view is what this
+   does, and one unreadable file — a config the process cannot open — used to
+   take down `resources/list`, and with it the server's whole startup."
   [snapshot {:keys [uri]}]
-  (if (str/ends-with? uri "{name}")
-    (boolean (seq (force-val (get snapshot :libs))))
-    (let [v (read-resource snapshot uri)]
-      (and (some? v) (not= :unavailable (:status v))))))
+  (try
+    (if (str/ends-with? uri "{name}")
+      (boolean (seq (force-val (get snapshot :libs))))
+      (let [v (read-resource snapshot uri)]
+        (and (some? v) (not= :unavailable (:status v)))))
+    (catch Throwable _ false)))
 
 (defn available-catalog
   "The resources this project can actually serve.

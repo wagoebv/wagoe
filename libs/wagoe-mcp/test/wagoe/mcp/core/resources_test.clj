@@ -71,10 +71,11 @@
                                                 :routes          {:x 1}
                                                 :workflows       {:x 1})))))))
 
-(deftest ^:unit availability-forces-only-what-it-must
-  ;; Views are delays so reading one resource does not pay to build the others.
-  ;; The filter forces them — that is what it is for — but a delay that throws
-  ;; must not take the whole listing down with it.
-  (let [snap {:conventions (delay {:fc-is {}})
-              :module-graph (delay nil)}]
+(deftest ^:unit a-view-that-throws-does-not-take-the-listing-with-it
+  ;; Filtering forces every view — that is what it is for. The registry is
+  ;; seeded from this at startup, so one unreadable file used to mean the
+  ;; server did not start at all.
+  (let [snap {:conventions  (delay {:fc-is {}})
+              :module-graph (delay (throw (java.io.FileNotFoundException. "permission denied")))
+              :kondo-rules  (delay nil)}]
     (is (= ["wagoe://conventions"] (mapv :uri (res/available-catalog snap))))))

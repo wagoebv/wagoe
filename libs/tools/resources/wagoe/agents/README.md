@@ -28,12 +28,14 @@ references a pitfall by number (e.g. "see Common Pitfalls #11") lives OUTSIDE th
 generated regions and is NOT drift-checked — if you reorder or insert pitfalls in
 `knowledge.edn`, update those hand-written references by hand.
 
-## Phase 2 — MCP server data contract
-A future Wagoe MCP guardrails server serves this same data, no schema change:
+## The MCP server reads this file
 
-| MCP tool         | Source                            |
-|------------------|-----------------------------------|
-| `list_modules`   | `modules-catalogue.edn :modules`  |
-| `get_fc_is_rules`| `knowledge.edn :fc-is`            |
-| `naming_rule`    | `knowledge.edn :naming`           |
-| `lookup_pitfall` | `knowledge.edn :pitfalls`         |
+`wagoe-mcp` serves `:fc-is`, `:naming` and `:pitfalls` as the `wagoe://conventions`
+resource. It reads them off the classpath — this file ships in the `wagoe-tools`
+jar — so an editor agent in any project gets the same rules the framework
+generates `AGENTS.md` from (BOU-320). A project that wants different rules puts
+its own `resources/agents/knowledge.edn` in place; that one wins.
+
+The tool names an earlier draft of this file listed (`list_modules`,
+`get_fc_is_rules`, `naming_rule`, `lookup_pitfall`) were never built. The server
+exposes this as a resource, not as four tools.

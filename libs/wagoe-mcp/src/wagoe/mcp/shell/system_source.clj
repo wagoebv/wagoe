@@ -36,6 +36,10 @@
    that wants to say something different."
   [root]
   (when-let [k (or (read-edn-file root "resources/agents/knowledge.edn")
+                   ;; A project has resources/ on its classpath, so its own copy
+                   ;; is found even when the server was launched from somewhere
+                   ;; other than the project root — .mcp.json sets no :cwd.
+                   (read-edn-resource "agents/knowledge.edn")
                    (read-edn-resource "wagoe/agents/knowledge.edn"))]
     {:fc-is    (:fc-is k)
      :naming   (:naming k)
@@ -66,30 +70,80 @@
                     :deps         wagoe
                     :external-libs external
                     :has-ports?   (has-ports? d)})]
-        {:source  :monorepo
-         :modules (vec (sort-by :name mods))
-         :edges   (vec (for [m mods, dep (:deps m)] [(:name m) dep]))}))))
+        ;; Only when it actually found libraries. A project with its own libs/
+        ;; directory used to get {:modules [] :edges []} — advertised as
+        ;; available, answering nothing, which is the shape this ticket exists
+        ;; to remove.
+        (when (seq mods)
+          {:source  :monorepo
+           :modules (vec (sort-by :name mods))
+           :edges   (vec (for [m mods, dep (:deps m)] [(:name m) dep]))})))))
+
+(defn- code-only
+  "`text` with strings and comments blanked, indices and newlines intact.
+
+   Brace counting without this is not brace counting, and a regex over the raw
+   text is worse: `\"jdbc:h2:mem:app;DB_CLOSE_DELAY=-1\"` contains a `;`, so
+   stripping comments by regex swallowed the rest of that line.
+
+   wagoe.tools.config-edn has the same lexer, and this does not call it: that
+   namespace requires babashka.process for its paren-repair safety net, a
+   dependency this JVM-side server has no reason to carry."
+  [text]
+  (let [n (count text)]
+    (loop [i 0, state :code, out (transient [])]
+      (if (>= i n)
+        (apply str (persistent! out))
+        (let [c     (nth text i)
+              blank (if (= c \newline) \newline \space)]
+          (case state
+            :code    (cond
+                       (= c \") (recur (inc i) :string (conj! out blank))
+                       (= c \;) (recur (inc i) :comment (conj! out blank))
+                       :else    (recur (inc i) :code (conj! out c)))
+            :string  (cond
+                       (= c \\) (recur (+ i 2) :string (-> out (conj! blank) (conj! \space)))
+                       (= c \") (recur (inc i) :code (conj! out blank))
+                       :else    (recur (inc i) :string (conj! out blank)))
+            :comment (if (= c \newline)
+                       (recur (inc i) :code (conj! out c))
+                       (recur (inc i) :comment (conj! out blank)))))))))
+
+(defn- active-section
+  "[start end] of the `:active` map in `code`, or nil."
+  [code]
+  (when-let [idx (loop [pos 0]
+                   (when-let [i (str/index-of code ":active" pos)]
+                     ;; ::active is a different keyword; :inactive does not
+                     ;; contain :active — the colon is in the wrong place.
+                     (if (and (pos? i) (= \: (nth code (dec i))))
+                       (recur (+ i 7))
+                       i)))]
+    (when-let [open (str/index-of code "{" (+ idx 7))]
+      (loop [i (inc open), depth 1]
+        (cond
+          (>= i (count code)) nil
+          (zero? depth)       [open (dec i)]
+          :else (recur (inc i) (case (nth code i) \{ (inc depth) \} (dec depth) depth)))))))
 
 (defn- active-config-keys
-  "`:wagoe/*` keys in the :active section of the dev config.
+  "The `:wagoe/*` keys inside the `:active` map of the dev config.
 
-   Read as text, not EDN: config.edn carries Aero reader tags (#env, #profile,
-   #or) that no plain reader knows, so reading it would throw on the first one.
-   A key name is all this needs."
+   Scoped, not scanned. Keys under `:inactive` are exactly the modules that are
+   switched off, and reporting them as running is how an agent comes to write
+   code against a module the system never starts.
+
+   Read as text rather than EDN because config.edn carries Aero reader tags
+   (#env, #profile, #or) that no plain reader knows."
   [root]
   (let [f (io/file root "resources/conf/dev/config.edn")]
     (when (.exists f)
-      (let [;; Comments stripped first. The shipped dev config lists the
-            ;; alternatives it did not choose — `:wagoe/postgresql` sits in a
-            ;; comment above the sqlite block — and reporting those as active
-            ;; modules is worse than reporting none.
-            code (->> (str/split-lines (slurp f))
-                      (map #(str/replace % #";.*$" ""))
-                      (str/join "\n"))]
-        (->> (re-seq #":wagoe[./a-z-]*/[a-z][a-z0-9-]*" code)
-             distinct
-             sort
-             vec)))))
+      (let [code (code-only (slurp f))]
+        (when-let [[open end] (active-section code)]
+          (->> (re-seq #":wagoe[.a-z-]*/[a-z][a-z0-9-]*" (subs code open end))
+               distinct
+               sort
+               vec))))))
 
 (defn- project-module-graph
   "What a project created by `wagoe new` has: the wagoe libraries it depends on
@@ -99,16 +153,18 @@
    resource answered :unavailable everywhere the server was actually installed
    (BOU-320)."
   [root]
-  (let [deps    (:deps (read-edn-file root "deps.edn"))
-        aliases (:aliases (read-edn-file root "deps.edn"))
+  (let [{:keys [deps aliases]} (read-edn-file root "deps.edn")
         wagoe-of (fn [m] (->> (keys m)
                               (filter #(= "com.wagoe" (namespace %)))
                               (map name)
                               sort
                               vec))
         libs     (wagoe-of deps)
+        ;; :replace-deps as well as :extra-deps — the documented way to isolate
+        ;; a tool alias, and the shape this repository's own :mcp alias uses.
         dev-libs (->> (vals aliases)
-                      (mapcat #(wagoe-of (:extra-deps %)))
+                      (mapcat #(concat (wagoe-of (:extra-deps %))
+                                       (wagoe-of (:replace-deps %))))
                       distinct
                       sort
                       vec)]
