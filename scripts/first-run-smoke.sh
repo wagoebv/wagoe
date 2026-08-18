@@ -336,6 +336,29 @@ grep -qE "devtools-classify=true" /tmp/devtools.log \
 T1=$(date +%s)
 ok "wagoe-devtools loads from the :repl alias"
 
+# ── do the REPL helpers quickstart names exist? ─────────────────────────────
+# `bb quickstart` closes with "run (status), run (commands)". Both lived only
+# in the dev/repl/user.clj of this monorepo: the generated one was thirteen
+# lines of go/reset/halt, so the first instruction a new user follows answered
+# "Unable to resolve symbol: status" (BOU-319).
+#
+# Asserted on a computed value again — clj-nrepl-eval echoes the code it is
+# given, so any literal in the expression is already in the output. The
+# dashboard box is drawn by devtools from the running system.
+bash -ic "clj-nrepl-eval -p 7888 \"(with-out-str (user/status))\"" >/tmp/status.log 2>&1 \
+  || { tail -15 /tmp/status.log; fail "(status) threw"; }
+grep -q "Wagoe Dev" /tmp/status.log \
+  || { tail -15 /tmp/status.log
+       fail "(status) printed no dashboard — it resolved to something that is not the devtools helper"; }
+grep -q "tasks" /tmp/status.log \
+  || { tail -15 /tmp/status.log
+       fail "(status) does not list the scaffolded module among the running ones"; }
+bash -ic "clj-nrepl-eval -p 7888 \"(with-out-str (user/commands))\"" >/tmp/commands.log 2>&1 \
+  || { tail -15 /tmp/commands.log; fail "(commands) threw"; }
+grep -q "SYSTEM:" /tmp/commands.log \
+  || { tail -15 /tmp/commands.log; fail "(commands) printed no palette"; }
+ok "(status) and (commands) work in the generated project"
+
 echo
 echo "First-run smoke passed in $((T1-T0))s (install to serving app)."
 '

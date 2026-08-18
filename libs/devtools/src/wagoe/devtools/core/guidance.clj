@@ -19,12 +19,21 @@
 ;; Startup dashboard rendering
 ;; =============================================================================
 
-(defn- pad-right [s width]
-  (let [s (str s)
+(defn- pad-right
+  "`s` at exactly `width` characters: padded when short, truncated when long.
+
+   Truncated, because this draws a box. A line longer than the box pushes the
+   right border past it, and the module list is routinely longer — which every
+   `(go)` in a generated project now shows on its first line of output."
+  [s width]
+  (let [s   (str s)
         len (count s)]
-    (if (>= len width)
-      s
-      (str s (apply str (repeat (- width len) " "))))))
+    (cond
+      (= len width) s
+      (< len width) (str s (apply str (repeat (- width len) " ")))
+      (< width 1)   ""
+      (< width 4)   (subs s 0 width)
+      :else         (str (subs s 0 (- width 3)) "..."))))
 
 (defn format-startup-dashboard
   "Renders the startup dashboard box as a string.
@@ -166,9 +175,14 @@
                {:name "(next-steps)"     :desc "What should you do next?"}
                {:name "(guidance lv)"    :desc "Set guidance level"}]})
 
-(defn format-commands
-  "Format the command palette as a string."
-  []
+(defn format-command-groups
+  "Format a palette of `{group [{:name :desc}]}` as a string.
+
+   Takes the groups rather than reading `command-groups`: a project created by
+   `wagoe new` has a smaller set than this monorepo — no (lint), no (scaffold!)
+   — and a palette that lists commands the project does not have is the same
+   defect as no palette at all (BOU-319)."
+  [groups]
   (let [format-group (fn [[group cmds]]
                        (str "  " (clojure.string/upper-case (name group)) ":\n"
                             (clojure.string/join
@@ -177,5 +191,10 @@
                                     (str "    " (format "%-26s" name) " " desc))
                                   cmds))))]
     (str "Available REPL commands:\n\n"
-         (clojure.string/join "\n\n" (map format-group command-groups))
+         (clojure.string/join "\n\n" (map format-group groups))
          "\n")))
+
+(defn format-commands
+  "Format this monorepo's command palette as a string."
+  []
+  (format-command-groups command-groups))

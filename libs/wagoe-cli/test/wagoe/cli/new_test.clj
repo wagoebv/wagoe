@@ -179,6 +179,32 @@
           (is (not (str/includes? (slurp (io/file tmp "deps.edn")) "{{devtools-version}}"))
               "unrendered version placeholder")))
 
+      (testing "dev/user.clj defines the helpers quickstart tells users to run"
+        ;; `bb quickstart` closes with "run (status), run (commands)". They did
+        ;; not exist: the generated dev/user.clj was go/reset/halt, so the
+        ;; first instruction a new user follows answered "Unable to resolve
+        ;; symbol: status" (BOU-319).
+        (let [src   (slurp (io/file tmp "dev/user.clj"))
+              forms (read-string (str "[" src "]"))
+              defs  (set (keep #(when (and (seq? %) (= 'defn (first %))) (second %)) forms))]
+          (doseq [helper '[go reset halt status modules routes config commands fix!]]
+            (is (contains? defs helper) (str "dev/user.clj must define (" helper ")")))))
+
+      (testing "and it survives devtools not being on the classpath"
+        ;; A :require of devtools in the ns form would take (go) down with it,
+        ;; and (go) has nothing to do with devtools. Read the ns form rather
+        ;; than the text: `devtools` appears half a dozen times further down,
+        ;; and a text search for it matched those.
+        (let [src     (slurp (io/file tmp "dev/user.clj"))
+              ns-form (some #(when (and (seq? %) (= 'ns (first %))) %)
+                            (read-string (str "[" src "]")))
+              required (->> (tree-seq coll? seq ns-form)
+                            (filter symbol?)
+                            (map str))]
+          (is (not-any? #(str/includes? % "devtools") required)
+              "devtools must not be in the ns form")
+          (is (str/includes? src "requiring-resolve"))))
+
       (testing "pre-commit hook is executable"
         (is (.canExecute (io/file tmp ".githooks/pre-commit"))))
       (finally

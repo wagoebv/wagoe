@@ -202,13 +202,15 @@ The doctor runs 6 checks: env var references, provider validity, JWT secret, adm
 |===
 | Action | Command
 
-| Start dashboard | `(ig-repl/go)` then visit `http://localhost:9999`
+| System overview | `(status)` — components, URL, active modules
+| Start dashboard | add `:wagoe/dashboard {:port 9999}` to the config, `(go)`, visit `http://localhost:9999`
 | Fix last error | `(fix!)`
 | View routes | `(routes)` or dashboard `/routes`
-| View config | `(config)` or dashboard `/config`
-| Record requests | `(recording/create-session)`
-| Explore schemas | `(schema-tree :user/CreateUser)` or dashboard `/schemas`
-| AI code review | `(ai/review "path/to/file.clj")`
+| View config | `(config :database)` or dashboard `/config`
+| List helpers | `(commands)`
+| Record requests | `(recording/create-session)` (this monorepo; downstream call `wagoe.devtools.shell.recording` directly)
+| Explore schemas | `(schema-tree :user/CreateUser)` (this monorepo; downstream `wagoe.devtools.core.schema-tools`)
+| AI code review | `(ai/review "path/to/file.clj")` (this monorepo)
 | Validate config | `bb doctor`
 | Scaffold + wire | `bb scaffold generate` then `bb scaffold integrate <module>`
 |===
