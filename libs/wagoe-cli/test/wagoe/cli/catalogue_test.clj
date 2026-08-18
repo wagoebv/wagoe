@@ -22,6 +22,14 @@
       (is (string? (:test-config-snippet m)) (str "missing :test-config-snippet in " m))
       (is (string? (:docs-url m))   (str "missing :docs-url in " m))))
 
+  (testing "every :scope is one the CLI knows"
+    ;; :scope routes the dep: :dev goes to the :repl alias, anything else to
+    ;; :deps. A typo (:development) silently ships devtools in the uberjar, and
+    ;; nothing else in the pipeline reads this key (BOU-318).
+    (doseq [m (:modules (cat/load-catalogue))]
+      (is (contains? #{nil :dev} (:scope m))
+          (str "unknown :scope " (pr-str (:scope m)) " in " (:name m)))))
+
   (testing "every module :clojars is a symbol"
     (doseq [m (:modules (cat/load-catalogue))]
       (is (symbol? (:clojars m)) (str ":clojars is not a symbol in " (:name m))))))

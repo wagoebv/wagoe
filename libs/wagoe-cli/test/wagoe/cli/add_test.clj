@@ -81,9 +81,41 @@
 
       (testing "a project with no :repl alias is told, not silently skipped"
         (spit (io/file tmp "deps.edn") "{:deps {com.wagoe/wagoe-core {:mvn/version \"1.0.0\"}}}")
-        (is (= :no-repl-alias (add/patch-deps! tmp dev)))
+        (is (= :no-repl-extra-deps (add/patch-deps! tmp dev)))
         (is (not (str/includes? (slurp (io/file tmp "deps.edn")) "devtools"))
             "nothing may be written when there is nowhere correct to write it"))
+
+      (testing "it never writes into a different alias"
+        ;; A regex anchored on :repl takes the next :extra-deps in the FILE,
+        ;; which need not be inside :repl. With a :repl alias that has none,
+        ;; devtools landed in :test — and the command reported the :repl alias
+        ;; while writing to :test.
+        (spit (io/file tmp "deps.edn")
+              (str "{:deps {com.wagoe/wagoe-core {:mvn/version \"1.0.0\"}}\n"
+                   " :aliases\n"
+                   " {:repl {:extra-paths [\"dev\"] :main-opts [\"-m\" \"nrepl.cmdline\"]}\n"
+                   "  :test {:extra-paths [\"test\"]\n"
+                   "         :extra-deps {lambdaisland/kaocha {:mvn/version \"1.0\"}}}}}"))
+        (is (= :no-repl-extra-deps (add/patch-deps! tmp dev)))
+        (let [parsed (clojure.edn/read-string (slurp (io/file tmp "deps.edn")))]
+          (is (nil? (get-in parsed [:aliases :test :extra-deps 'com.wagoe/wagoe-devtools])))))
+
+      (testing "a brace in a comment does not move the insertion"
+        (spit (io/file tmp "deps.edn")
+              (str "{:deps {com.wagoe/wagoe-core {:mvn/version \"1.0.0\"}}\n"
+                   " :aliases\n"
+                   " {;; e.g. :extra-deps {foo/bar {:mvn/version \"1\"}\n"
+                   "  :repl {:extra-deps {nrepl/nrepl {:mvn/version \"1.3.0\"}}}}}"))
+        (is (= :repl-alias (add/patch-deps! tmp dev)))
+        (let [parsed (clojure.edn/read-string (slurp (io/file tmp "deps.edn")))]
+          (is (get-in parsed [:aliases :repl :extra-deps 'com.wagoe/wagoe-devtools]))))
+
+      (testing "an unreadable deps.edn is left alone"
+        ;; Writing into a file we cannot parse risks a second copy of a key the
+        ;; file already has, and a deps.edn with a duplicate key does not load.
+        (spit (io/file tmp "deps.edn") "{:deps {com.wagoe/wagoe-core {:mvn/version \"1.0.0\"}}")
+        (is (= :unreadable (add/patch-deps! tmp dev)))
+        (is (not (str/includes? (slurp (io/file tmp "deps.edn")) "devtools"))))
       (finally
         (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))
 

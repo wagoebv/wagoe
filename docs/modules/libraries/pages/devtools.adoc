@@ -1,11 +1,13 @@
 = devtools
 :description: Development-only tools: error pipeline, dev dashboard, REPL power tools, guidance engine, request recording, AI REPL commands.
 
-Development-only library providing x-ray vision into running Wagoe applications. Zero production overhead — loaded only via the `:dev` and `:repl-clj` aliases.
+Development-only library providing x-ray vision into running Wagoe applications. Zero production overhead — it lives in a dev alias, so it is on no production classpath.
 
 NOTE: Published to Clojars as `com.wagoe/wagoe-devtools`, in lockstep with the
-rest of the suite. Dev-only describes when you use it — inside this monorepo it
-is wired in as a local dependency via `libs/devtools`.
+rest of the suite. In a project created by `wagoe new` it is in the `:repl`
+alias, so `clojure -M:repl` has it and `-M:run`, the uberjar and the Docker
+image do not. Inside this monorepo it is a local dependency on `libs/devtools`,
+reached through the `:dev` and `:repl-clj` aliases.
 
 == Features
 

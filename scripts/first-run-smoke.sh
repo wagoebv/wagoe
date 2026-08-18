@@ -314,7 +314,6 @@ head -c 1 /tmp/tasks.json 2>/dev/null | grep -qE "[[{]" \
 NOPE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 http://localhost:3000/api/v1/not-a-module || true)
 [ "$NOPE" = "404" ] \
   || fail "/api/v1/not-a-module returned $NOPE instead of 404 — an unknown path must not be served"
-T1=$(date +%s)
 ok "/api/v1/tasks returned $MODULE_CODE with a JSON body, and unknown paths still 404"
 
 # ── are the devtools the docs point at on the classpath? ────────────────────
@@ -328,12 +327,13 @@ ok "/api/v1/tasks returned $MODULE_CODE with a JSON body, and unknown paths stil
 # version evaluated `(require ...) :loaded` and grepped for :loaded, which
 # clj-nrepl-eval echoes back as part of the code it was given: the step passed
 # with devtools removed from the template entirely. A count cannot be echoed.
-bash -ic "clj-nrepl-eval -p 7888 \"(do (require (quote wagoe.devtools.core.error-classifier)) (str (quote devtools-publics=) (count (ns-publics (quote wagoe.devtools.core.error-classifier)))))\"" \
+bash -ic "clj-nrepl-eval -p 7888 \"(do (require (quote wagoe.devtools.core.error-classifier)) (str (quote devtools-classify=) (some? (resolve (quote wagoe.devtools.core.error-classifier/classify)))))\"" \
   >/tmp/devtools.log 2>&1 || { tail -15 /tmp/devtools.log
                                fail "wagoe.devtools is not loadable in the generated project (deps.edn :repl alias)"; }
-grep -qE "devtools-publics=[1-9]" /tmp/devtools.log \
+grep -qE "devtools-classify=true" /tmp/devtools.log \
   || { tail -15 /tmp/devtools.log
-       fail "wagoe.devtools did not load — the eval returned no public vars"; }
+       fail "wagoe.devtools did not load — classify does not resolve"; }
+T1=$(date +%s)
 ok "wagoe-devtools loads from the :repl alias"
 
 echo

@@ -272,7 +272,7 @@
                          "Reference a bundle from your page templates."]}
 
   {:name                "devtools"
-   :description         "Error pipeline with BND codes, (fix!), dev dashboard, REPL tools"
+   :description         "Dev-only: error pipeline with BND codes, REPL helpers, dashboard component"
    :clojars             com.wagoe/wagoe-devtools
    :version             "1.0.0-beta-5"
    :category            :optional

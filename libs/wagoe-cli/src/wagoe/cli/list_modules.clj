@@ -16,8 +16,13 @@
     (println (format fmt (apply str (repeat 12 "-"))
                      (apply str (repeat 50 "-"))
                      (apply str (repeat 28 "-"))))
-    (doseq [{:keys [name description add-command]} modules]
-      (println (format fmt (pad name 12) (pad description 50) add-command)))
+    (doseq [{:keys [name description add-command scope]} modules]
+      ;; The scope is the difference between a dep in :deps and one in a dev
+      ;; alias, which is the difference between shipping a dashboard in the
+      ;; uberjar and not.
+      (println (format fmt (pad name 12)
+                       (pad (if (= :dev scope) (str description " [dev-only]") description) 50)
+                       add-command)))
     (println)))
 
 ;; print-json includes all modules (core + optional) so AI tools can discover
@@ -30,6 +35,9 @@
                           :clojars          (str (:clojars m))
                           :version          (:version m)
                           :category         (name (:category m))
+                          ;; Omitted, an agent reads devtools as an ordinary
+                          ;; runtime dep and puts it in :deps.
+                          :scope            (some-> (:scope m) name)
                           :add-command      (:add-command m)
                           :docs-url         (:docs-url m)})
                        (:modules catalogue))]
