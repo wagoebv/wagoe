@@ -169,7 +169,7 @@
                          :skip-interceptors? true}}}])))
 
 (defmethod ig/init-key :wagoe/http-handler
-  [_ {:keys [user-routes admin-routes tenant-routes membership-routes workflow-routes search-routes module-routes router logger metrics-emitter tracer error-reporter config tenant-service db-context cache i18n i18n-middleware user-service request-capture? extra-middleware]}]
+  [_ {:keys [user-routes admin-routes tenant-routes membership-routes workflow-routes search-routes module-routes router logger metrics-emitter tracer error-reporter error-enricher config tenant-service db-context cache i18n i18n-middleware user-service request-capture? extra-middleware]}]
   (log/info "Initializing top-level HTTP handler with normalized routing and API versioning")
   (require 'wagoe.platform.ports.http)
   (require 'wagoe.platform.shell.interfaces.http.common)
@@ -429,14 +429,30 @@
         ;; emit them (registering per request would reset counters on some adapters).
         metrics-handles (http-interceptors/register-http-metrics! metrics-emitter)
 
-        system {:logger logger
-                :metrics-emitter metrics-emitter
-                :metrics-handles metrics-handles
-                :tracer tracer
-                :error-reporter error-reporter
-                :csrf csrf-config
-                :rate-limit rate-limit-config
-                :cache cache}
+        system (cond-> {:logger logger
+                        :metrics-emitter metrics-emitter
+                        :metrics-handles metrics-handles
+                        :tracer tracer
+                        :error-reporter error-reporter
+                        ;; The profile the app booted with. Interceptors decide
+                        ;; what an error may say by environment, and they were
+                        ;; reading only WAG_ENV and a `:config` key nothing put
+                        ;; here — so a project that sets no WAG_ENV (every
+                        ;; generated one) read as development wherever it ran.
+                        ;; The config knows; pass it (BOU-321).
+                        :csrf csrf-config
+                        :rate-limit rate-limit-config
+                        :cache cache}
+                 ;; Optional, dev-only: a fn from exception to {:code :category
+                 ;; :fix}, supplied by devtools via :wagoe/dev-error-enricher.
+                 ;; Injected rather than resolved here — platform must not know
+                 ;; the name of an optional library (BOU-131, BOU-321). Absent
+                 ;; rather than nil, so an app that wired none is byte-identical
+                 ;; to one built before this existed.
+                 error-enricher (assoc :error-enricher error-enricher)
+                 ;; Absent rather than nil when the app has no profile, so the
+                 ;; detector falls through to WAG_ENV as it always did.
+                 (:wagoe/profile config) (assoc :environment (name (:wagoe/profile config))))
 
         ;; i18n middleware is built by the i18n lib and injected
         ;; (:wagoe/i18n-http-middleware), the shape BOU-200 established for

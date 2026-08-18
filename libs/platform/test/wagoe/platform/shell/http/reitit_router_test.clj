@@ -3,6 +3,7 @@
   (:require [wagoe.platform.ports.http :as ports]
             [wagoe.platform.shell.http.reitit-router :as reitit]
             [cheshire.core :as json]
+            [clojure.string :as str]
             [clojure.test :refer [deftest testing is]]))
 
 ;; =============================================================================
@@ -10,12 +11,18 @@
 ;; =============================================================================
 
 (defn response-body-as-map
-  "Return response body as a Clojure map (parses JSON string bodies when needed)."
+  "Return response body as a Clojure map.
+
+   Error responses no longer set their own Content-Type, so muuntaja encodes
+   them like any other body and they arrive as a stream — which is what makes
+   an EDN or transit client able to read them, and what stopped Ring being
+   handed a raw map on an HTML request (BOU-321)."
   [response]
   (let [body (:body response)]
     (cond
-      (string? body) (json/parse-string body true)
-      :else body)))
+      (string? body)                       (json/parse-string body true)
+      (instance? java.io.InputStream body) (json/parse-string (slurp body) true)
+      :else                                body)))
 
 ;; =============================================================================
 ;; Test Handlers
@@ -389,3 +396,106 @@
       (is (= "true" (get-in resp-with-mw [:headers "x-saw-mw"])))
       (is (= "false" (get-in resp-without-mw [:headers "x-saw-mw"]))))))
 
+
+;; =============================================================================
+;; Coercion failures (BOU-321)
+;; =============================================================================
+
+(defn- error-body
+  "The response body as data.
+
+   Read through `slurp`: the exception middleware sits inside
+   `format-response`, so its bodies are negotiated and encoded like any other
+   response — which is the point, and which means the body arrives as a
+   stream rather than the map the handler returned."
+  [resp]
+  (json/parse-string (slurp (:body resp)) true))
+
+(defn- login-like-handler
+  "A route whose body schema requires two fields, wired the way the user module
+   wires login."
+  [system]
+  (ports/compile-routes
+   (reitit/create-reitit-router)
+   [{:path    "/auth/login"
+     :methods {:post {:handler    (fn [_] {:status 200 :body {:ok true}})
+                      :parameters {:body [:map {:closed true}
+                                          [:email :string]
+                                          [:password :string]]}}}}]
+   {:system system}))
+
+(deftest ^:unit a-request-that-fails-coercion-is-a-400-not-a-500
+  ;; Reitit applies a :middleware vector first-to-outermost, and the exception
+  ;; middleware sat last — inside coerce-request. A request missing a required
+  ;; field threw past every handler, so the app answered 500 to a malformed
+  ;; request and the client learned nothing.
+  (let [resp ((login-like-handler {}) {:request-method :post
+                                       :uri            "/auth/login"
+                                       :headers        {}
+                                       :body-params    {}})
+        body (error-body resp)]
+    (is (= 400 (:status resp)))
+    (is (= "validation-error" (:error body)))
+
+    (testing "and it names the fields the caller got wrong"
+      (is (= {:email ["invalid"] :password ["invalid"]} (:details body))))
+
+    (testing "but not the schema it checked them against"
+      (is (nil? (:schema body))))))
+
+(deftest ^:unit ^:security production-does-not-explain-the-schema-it-rejected-you-with
+  ;; me/humanize renders the schema's constraints into its messages, so the
+  ;; full text hands an unauthenticated caller every enum member and every
+  ;; bound in exchange for one malformed POST. The field names are the
+  ;; caller's own input and stay; the why is dev-only.
+  (let [handler (ports/compile-routes
+                 (reitit/create-reitit-router)
+                 [{:path    "/users"
+                   :methods {:post {:handler    (fn [_] {:status 201 :body {}})
+                                    :parameters {:body [:map {:closed true}
+                                                        [:role [:enum "admin" "superuser" "internal-auditor"]]
+                                                        [:age [:int {:min 18 :max 120}]]]}}}}]
+                 {})
+        resp    (handler {:request-method :post :uri "/users" :headers {}
+                          :body-params {:role "peasant" :age 4}})
+        raw     (slurp (:body resp))]
+    (is (= 400 (:status resp)))
+    (doseq [secret ["superuser" "internal-auditor" "should be at least 18" "120"]]
+      (is (not (str/includes? raw secret))
+          (str "leaked schema detail: " secret)))
+    (is (= {:role ["invalid"] :age ["invalid"]} (:details (json/parse-string raw true))))))
+
+(deftest ^:unit dev-gets-the-explanation-production-does-not
+  (let [handler (fn [system]
+                  (ports/compile-routes
+                   (reitit/create-reitit-router)
+                   [{:path    "/users"
+                     :methods {:post {:handler    (fn [_] {:status 201 :body {}})
+                                      :parameters {:body [:map {:closed true} [:role [:enum "admin"]]]}}}}]
+                   {:system system}))
+        details (fn [system]
+                  (:details (json/parse-string
+                             (slurp (:body ((handler system) {:request-method :post :uri "/users"
+                                                              :headers {} :body-params {}})))
+                             true)))]
+    (is (= {:role ["missing required key"]}
+           (details {:error-enricher (constantly {:code "BND-201"}) :environment "dev"})))
+    (is (= {:role ["invalid"]}
+           (details {:error-enricher (constantly {:code "BND-201"}) :environment "prod"})))))
+
+(deftest ^:unit coercion-failures-carry-the-bnd-code-in-dev-only
+  (let [enricher (fn [_] {:code "BND-201" :category :validation})
+        body-of  (fn [system]
+                   (error-body ((login-like-handler system) {:request-method :post
+                                                             :uri            "/auth/login"
+                                                             :headers        {}
+                                                             :body-params    {}})))]
+    (testing "dev"
+      (is (= "BND-201" (get-in (body-of {:error-enricher enricher :environment "development"})
+                               [:dev :code]))))
+
+    (testing "production, with the same enricher wired"
+      (is (nil? (:dev (body-of {:error-enricher enricher :environment "production"})))))
+
+    (testing "no enricher"
+      (is (nil? (:dev (body-of {:environment "development"})))))))

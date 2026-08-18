@@ -547,7 +547,7 @@ Both values are submitted when checkbox is checked, resulting in an array.
 
 **Symptom**: `java.lang.IllegalArgumentException: No implementation of method: :write-body-to-stream of protocol: #'ring.core.protocols/StreamableResponseBody found for class: clojure.lang.PersistentArrayMap`
 
-**Root Cause**: When an entity has `:split-table-update` but no `:create-redirect-url`, the admin renders its own generic create form. On submit, `create-entity` throws `:cannot-create-split-table-entity` because the generic flow only writes to one table. The exception bubbles to Reitit's `exception/exception-middleware`, which returns a map body. Since the browser sent `Accept: text/html`, Muuntaja doesn't JSON-encode the map — Ring gets a raw `PersistentArrayMap` as body and crashes.
+**Root Cause**: When an entity has `:split-table-update` but no `:create-redirect-url`, the admin renders its own generic create form. On submit, `create-entity` throws `:cannot-create-split-table-entity` because the generic flow only writes to one table. The exception bubbles to Reitit's `exception/exception-middleware`. (The crash itself is fixed as of BOU-321: error responses no longer set their own `Content-Type`, so Muuntaja encodes them — including on an `Accept: text/html` request, which falls back to the default format. The pairing below is still required, or the create form 500s instead of working.)
 
 **Solution**: Always pair `:split-table-update` with `:create-redirect-url`:
 ```clojure

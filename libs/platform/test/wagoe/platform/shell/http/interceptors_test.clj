@@ -1,5 +1,6 @@
 (ns wagoe.platform.shell.http.interceptors-test
-  (:require [clojure.test :refer [deftest testing is]]
+  (:require [clojure.string :as str]
+            [clojure.test :refer [deftest testing is]]
             [wagoe.platform.shell.http.interceptors :as http-interceptors]))
 
 ;; ==============================================================================
@@ -258,6 +259,60 @@
                :response {:headers {}}}
           result ((:error http-interceptors/http-correlation-header) ctx)]
       (is (= "test-123" (get-in result [:response :headers "X-Correlation-ID"]))))))
+
+(defn- stub-enricher
+  "Stands in for devtools: platform must not depend on it, and the interceptor
+   only ever calls `(enrich ex)`."
+  [_exception]
+  {:code "BND-201" :category :validation :fix "Add the missing field" :docs-url "https://x/BND-201"})
+
+(deftest ^:unit dev-error-enrichment-test
+  (let [validation (ex-info "Validation failed" {:type :validation-error :errors {:title "required"}})
+        boom       (ex-info "connection refused: postgres://user:hunter2@db" {:type :internal-error})
+        respond    (fn [system ex] ((:error http-interceptors/http-error-handler)
+                                    {:exception ex
+                                     :correlation-id "cid-1"
+                                     :request {:uri "/api/v1/notes" :request-method :post}
+                                     :system system}))]
+
+    (testing "a dev project that wired an enricher gets the code and the fix"
+      (let [body (get-in (respond {:error-enricher stub-enricher :environment "development"} validation)
+                         [:response :body])]
+        (is (= "BND-201" (get-in body [:dev :code])))
+        (is (= "Add the missing field" (get-in body [:dev :fix])))
+        (testing "and the rest of the response is unchanged"
+          (is (= "validation-error" (:error body)))
+          (is (= {:errors {:title "required"}} (:details body))))))
+
+    (testing "a 5xx in dev says what went wrong, and still not what the message was"
+      (let [body (get-in (respond {:error-enricher stub-enricher :environment "dev"} boom)
+                         [:response :body])]
+        (is (= "BND-201" (get-in body [:dev :code])))
+        (is (= "Internal Server Error" (:message body)))
+        (is (not (str/includes? (pr-str body) "hunter2")))))
+
+    (testing "production says nothing extra, even with an enricher wired"
+      ;; The environment check is the second gate. A dev config copied to a
+      ;; server is exactly the accident it exists for.
+      (doseq [env ["production" "prod" "staging"]]
+        (let [body (get-in (respond {:error-enricher stub-enricher :environment env} validation)
+                           [:response :body])]
+          (is (nil? (:dev body)) (str "leaked BND info in " env)))))
+
+    (testing "no enricher wired, no :dev key"
+      (is (nil? (get-in (respond {:environment "development"} validation) [:response :body :dev]))))
+
+    (testing "an enricher that throws does not replace the error being reported"
+      (let [body (get-in (respond {:error-enricher (fn [_] (throw (RuntimeException. "enricher bug")))
+                                   :environment "development"}
+                                  validation)
+                         [:response :body])]
+        (is (= "validation-error" (:error body)))
+        (is (nil? (:dev body)))))
+
+    (testing "an enricher with nothing to say adds nothing"
+      (is (nil? (get-in (respond {:error-enricher (constantly nil) :environment "development"} validation)
+                        [:response :body :dev]))))))
 
 ;; ==============================================================================
 ;; Error Type Enforcement Tests

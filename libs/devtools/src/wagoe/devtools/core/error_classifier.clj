@@ -33,17 +33,30 @@
   (let [data (ex-data ex)]
     (when data
       (cond
+        ;; :validation-error is the framework's own type — the platform HTTP
+        ;; boundary refuses an untyped exception and every generated handler
+        ;; raises this one. Recognising only Malli's shapes meant the most
+        ;; common error in a Wagoe app was the one error the pipeline could not
+        ;; name (BOU-321).
         (or (contains? data :malli/error)
-            (= :malli.core/invalid (:type data)))
+            (= :malli.core/invalid (:type data))
+            (= :validation-error (:type data))
+            (= :invalid-request (:type data))
+            ;; What reitit throws when a request does not match its schema —
+            ;; the most common validation failure of all, and the one the
+            ;; handler never even sees.
+            (= :reitit.coercion/request-coercion (:type data)))
         {:code "BND-201" :category :validation :data data :source :ex-data-pattern}
 
         (= :db/error (:type data))
         {:code "BND-303" :category :persistence :data data :source :ex-data-pattern}
 
-        (= :auth/required (:type data))
+        ;; Both spellings: :auth/required is what the auth lib throws,
+        ;; :unauthorized what the HTTP error mapping expects.
+        (contains? #{:auth/required :unauthorized :auth-failed} (:type data))
         {:code "BND-401" :category :auth :data data :source :ex-data-pattern}
 
-        (= :auth/forbidden (:type data))
+        (contains? #{:auth/forbidden :forbidden} (:type data))
         {:code "BND-402" :category :auth :data data :source :ex-data-pattern}
 
         (and (= :configuration-error (:type data))

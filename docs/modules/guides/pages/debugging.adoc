@@ -90,6 +90,42 @@ Add temporary logging in handlers:
     (throw (ex-info "Invalid UUID" {:type :validation-error :value id-string}))))
 ----
 
+=== An error response carries a BND code — where does it come from?
+
+In dev, an error over HTTP answers with a `dev` block:
+
+[source,json]
+----
+{"error": "validation-error",
+ "message": "Request validation failed",
+ "details": {"email": ["missing required key"]},
+ "dev": {"code": "BND-201",
+         "category": "validation",
+         "docs-url": "bb guide error BND-201"}}
+----
+
+Three things have to be true for that block to appear, and each is deliberate:
+
+* `:wagoe/dev-error-enricher {}` is in the `:active` section of the config —
+  `wagoe new` writes it into the dev config and nowhere else;
+* the profile the app booted with is dev-like (`:dev`, `:test`) — the profile,
+  not an environment variable the deployment may never have been given;
+* `wagoe-devtools` is on the classpath, and it lives in the `:repl` alias — so
+  `clojure -M:run`, the uberjar and the Docker image cannot produce it.
+
+Production gets the same response without the `dev` block, and its `details`
+name only the fields that were wrong. The full messages describe the schema —
+`"should be either \"admin\" or \"auditor\""` hands a caller every enum member
+it never knew about — so they are dev-only too. A 5xx says "Internal Server
+Error" and nothing else; the message, the class and the `ex-data` go to the
+log, keyed by correlation ID. Delete the config key to see the production shape
+while developing.
+
+One thing this response does not go through: a coercion failure is answered
+before the interceptor stack runs, so it carries a correlation ID but not the
+security headers, and it is not counted by request metrics or the rate
+limiter.
+
 === SQL error: unknown column name
 
 *Cause*: Schema and database migration are out of sync.

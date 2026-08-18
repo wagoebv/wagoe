@@ -31,6 +31,40 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **A malformed request answered 500, and no error carried a BND code**
+  (BOU-321). Reitit applies a `:middleware` vector first-to-outermost, and the
+  exception middleware sat last — *inside* request coercion. So a POST missing a
+  required field threw past every handler in the chain: the app answered 500 to
+  a request the client got wrong, and said nothing about which field. It is a
+  400 now, naming the fields (`{"email": ["missing required key"]}`) but not the
+  schema they were checked against.
+
+  On top of that, in dev the response carries the BND code and where to read
+  about it. The pipeline that produces it lives in devtools and reached no
+  generated project; its classifier also did not recognise `:validation-error`,
+  the type the platform HTTP boundary requires and every Wagoe handler raises —
+  so the most common error in a Wagoe app was the one error it could not name.
+
+  Production returns the same shape without the `dev` block, and its `details`
+  name only the fields that were wrong: the full messages describe the schema
+  (`"should be either \"admin\" or \"auditor\""` hands a caller every enum member
+  it never knew about), so they are dev-only too. A 5xx still says only
+  "Internal Server Error" with everything else in the log.
+
+  Three conditions gate it — the `:wagoe/dev-error-enricher` key, which
+  `wagoe new` writes into the dev config and nowhere else; a dev-like profile,
+  which the wiring now passes to the interceptors (they read only `WAG_ENV`
+  before, which a generated project never sets, so the check answered
+  "development" wherever it ran); and devtools on the classpath, which the
+  `:repl` alias keeps out of `-M:run`, the uberjar and the Docker image.
+  Platform takes the enricher as an injected function and still has no
+  dependency on devtools.
+
+  Along the way: error responses no longer set their own `Content-Type`, so
+  Muuntaja encodes them like any other body. An EDN or transit client can read
+  them now, and an `Accept: text/html` request no longer hands Ring a raw map —
+  the `PersistentArrayMap` crash `libs/admin/AGENTS.md` documents.
+
 - **The first thing `bb quickstart` tells you to run did not exist** (BOU-319).
   Quickstart closes with "run `(status)`, run `(commands)`", and both lived only
   in this repository's own `dev/repl/user.clj`. The generated one was thirteen

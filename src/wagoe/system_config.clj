@@ -61,6 +61,20 @@
   [config]
   (get-in config [:active :wagoe/email] {:provider :logging}))
 
+(defn- dev-error-enricher-config
+  "Integrant configuration for dev-only BND error enrichment.
+
+   Same shape as the dashboard wiring below: dev profile, config key present, and the
+   wiring namespace loaded lazily so a non-REPL boot without devtools on the
+   classpath still starts (BOU-321)."
+  [config]
+  (when (and (= (:wagoe/profile config) :dev)
+             (get-in config [:active :wagoe/dev-error-enricher]))
+    (try
+      (require 'wagoe.devtools.shell.module-wiring)
+      {:wagoe/dev-error-enricher (get-in config [:active :wagoe/dev-error-enricher])}
+      (catch Exception _ nil))))
+
 (defn- core-system-config
   "Return core system components (database, observability) independent of modules."
   [config]
@@ -128,7 +142,13 @@
                               (assoc :search-routes (ig/ref :wagoe/search-routes)))
         http-handler-config (cond-> http-handler-config
                               (= (:wagoe/profile config) :dev)
-                              (assoc :request-capture? true))]
+                              (assoc :request-capture? true)
+                              ;; Dev-only BND enrichment on the HTTP error path.
+                              ;; The ref is only emitted when
+                              ;; dev-error-enricher-config produced the key, so
+                              ;; a config without it stays untouched (BOU-321).
+                              (dev-error-enricher-config config)
+                              (assoc :error-enricher (ig/ref :wagoe/dev-error-enricher)))]
     {:wagoe/user-db-schema
      {:ctx (ig/ref :wagoe/db-context)}
 
@@ -442,6 +462,7 @@
          (payments-module-config config)
          (events-module-config config)
          (dashboard-module-config config)
+         (dev-error-enricher-config config)
          ;; Modules this file has never heard of — what `bb scaffold generate`
          ;; produces. They used to be skipped in silence: no init-key, no route,
          ;; no warning, and `bb quickstart` reporting success over a module that

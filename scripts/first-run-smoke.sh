@@ -359,6 +359,32 @@ grep -q "SYSTEM:" /tmp/commands.log \
   || { tail -15 /tmp/commands.log; fail "(commands) printed no palette"; }
 ok "(status) and (commands) work in the generated project"
 
+# ── does a bad request explain itself? ──────────────────────────────────────
+# A validation failure used to answer "Validation failed" and nothing else. The
+# pipeline that names the BND code and the fix lived in devtools, which reached
+# no downstream classpath, and its classifier did not recognise
+# :validation-error — the type every Wagoe handler raises (BOU-321).
+#
+# POST /auth/login with an empty body: coercion rejects it before any handler
+# runs, which is the error path a beginner meets first. Not the scaffolded
+# module: its generated handlers are stubs that validate nothing and answer 201.
+LOGIN_CODE=$(curl -s -o /tmp/badreq.json -w "%{http_code}" --max-time 10 \
+                  -X POST -H "Content-Type: application/json" -d "{}" \
+                  http://localhost:3000/api/v1/auth/login || true)
+case "$LOGIN_CODE" in
+  400) ;;
+  *)   head -c 400 /tmp/badreq.json 2>/dev/null; echo
+       fail "POST /api/v1/auth/login with an empty body returned $LOGIN_CODE, expected 400" ;;
+esac
+grep -q "BND-" /tmp/badreq.json \
+  || { head -c 600 /tmp/badreq.json 2>/dev/null; echo
+       fail "the 400 carries no BND code — dev error enrichment is not wired in a generated project"; }
+# The enrichment is dev-only. Nothing here can run the app as production — the
+# generated project has no prod config — so the negative is asserted in
+# wagoe.platform.shell.http.reitit-router-test and interceptors-test instead,
+# with the profile the wiring passes through.
+ok "a malformed request answers 400 with a BND code"
+
 echo
 echo "First-run smoke passed in $((T1-T0))s (install to serving app)."
 '
