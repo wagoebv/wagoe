@@ -61,7 +61,7 @@ something, because `bb check` rejects both untagged deftests and `(is true)`.
 ## After generating
 
 ```bash
-bb scaffold integrate <module>   # prints the wiring steps — writes nothing
+bb scaffold integrate <module>   # writes the module's config key into resources/conf/{dev,test}/config.edn (--dry-run to preview)
 bb migrate up                    # the generated migration
 bb check --ci                    # the gates
 clojure -M:test                  # the generated tests

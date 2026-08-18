@@ -309,7 +309,7 @@ After scaffolding a module, wire it into the project:
 
 [source,bash]
 ----
-bb scaffold integrate product              # Wire module into deps.edn, tests.edn, wiring.clj
+bb scaffold integrate product              # Write its config key (--dry-run to preview)
 bb scaffold integrate product --dry-run    # Preview changes without writing
 ----
 

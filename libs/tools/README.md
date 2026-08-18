@@ -23,7 +23,7 @@ available out of the box:
 | Namespace | `bb` command(s) | Purpose |
 |-----------|-----------------|---------|
 | `wagoe.tools.scaffold` | `bb scaffold`, `bb scaffold ai`, `bb scaffold generate/field/endpoint/adapter` | Interactive scaffolding wizards + AI passthrough |
-| `wagoe.tools.integrate` | `bb scaffold integrate`, `bb scaffold:integrate` | Wire a scaffolded module into deps/tests/wiring |
+| `wagoe.tools.integrate` | `bb scaffold integrate`, `bb scaffold:integrate` | Write a scaffolded module's config key into config.edn |
 | `wagoe.tools.ai` | `bb ai explain/gen-tests/sql/docs/admin-entity` | Framework-aware AI CLI |
 | `wagoe.tools.doctor` | `bb doctor` | Rule-based config validation (6 checks) |
 | `wagoe.tools.setup` | `bb setup`, `bb setup ai` | Config setup wizard (interactive / flags / AI) |

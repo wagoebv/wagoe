@@ -45,7 +45,7 @@ wagoe list modules --json   # machine-readable catalogue (for AI tools)
 bb scaffold ai "product module with name, price, stock" --yes   # natural language (needs AI provider)
 bb scaffold generate --module-name product --entity Product \
   --field name:string:required --field price:decimal:required   # explicit, no AI needed
-bb scaffold integrate product  # wire module into deps.edn / tests.edn / wiring
+bb scaffold integrate product  # write its config key (--dry-run to preview)
 bb guide next                  # state-aware: what should happen next?
 
 # AI tooling (needs Ollama or ANTHROPIC_API_KEY / OPENAI_API_KEY)

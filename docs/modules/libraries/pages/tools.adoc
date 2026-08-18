@@ -106,7 +106,7 @@ bb install-hooks             # Configure git hooks path to .githooks
 | Config Setup Wizard — interactive + template-based
 
 | `wagoe.tools.integrate`
-| Module Integration — wire into deps/tests/wiring
+| Module Integration — write the config key into config.edn
 
 | `wagoe.tools.deploy`
 | Clojars deployment for all 31 published artifacts

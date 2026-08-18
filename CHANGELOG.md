@@ -68,6 +68,19 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **`bb scaffold integrate` writes the config key, and `--dry-run` works**
+  (BOU-310). It printed guidance and said so in its own header, while `bb.edn`,
+  the generated `AGENTS.md` and `bb scaffold --help` all described it as wiring
+  things up — and `--dry-run` was parsed and never read. It now writes
+  `:wagoe/<module>` into `resources/conf/{dev,test}/config.edn`, reports what it
+  did per file, and is a no-op on a second run. Since discovery loads the wiring
+  namespace by convention (BOU-311), that key is the whole registration: no
+  require to add by hand. The brace-balanced config editor `bb quickstart` had
+  is now shared rather than duplicated, and reads `config.edn` with a real lexer:
+  a brace inside a string or comment used to shift the depth count and place the
+  key in the wrong section, silently, since the result still parsed. `--base-ns`
+  is refused rather than writing a key discovery cannot resolve.
+
 - **Scaffolded modules are discovered, and an unknown module key fails the boot**
   (BOU-311). `ig-config` built from a fixed list of module keys, so adding
   `:wagoe/tasks` after `bb scaffold generate tasks` produced nothing: no

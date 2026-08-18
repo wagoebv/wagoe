@@ -7,7 +7,12 @@
 ;;   bb scaffold integrate product                 # Guide integration of "product"
 ;;   bb scaffold integrate product --base-ns myapp # Module under myapp.product.*
 ;;
-;; This command only reads + prints guidance; it never writes files.
+;; It writes the module's Integrant config into resources/conf/{dev,test}/config.edn
+;; and reports what it did. `--dry-run` shows the same and writes nothing.
+;;
+;; It used to only print, while bb.edn.tmpl, the generated AGENTS.md and
+;; `bb scaffold --help` all said it wired things up, and --dry-run was parsed and
+;; never read (BOU-310).
 ;;
 ;; A module scaffolded by `bb scaffold generate` lands in
 ;; `src/<base-ns-path>/<module>/` (BOU-205). Because `src`/`test` are already on
@@ -19,6 +24,7 @@
 
 (ns wagoe.tools.integrate
   (:require [wagoe.tools.ansi :refer [bold green red cyan dim]]
+            [wagoe.tools.config-edn :as config-edn]
             [clojure.java.io :as io]
             [clojure.string :as str]))
 
@@ -59,28 +65,20 @@
 ;; =============================================================================
 
 (defn generate-config-snippet
-  "An Integrant config template snippet for a new module."
+  "The module's entry for `resources/conf/<env>/config.edn`.
+
+   Settings only. The Integrant components and the refs between them are built
+   by `wagoe.platform.shell.modules/discover-module-config` from this one key
+   (BOU-311) — an earlier version printed those too, which was right when you
+   pasted it into `ig-config` and wrong now that it is written into config.edn,
+   where `(ig/ref …)` is a list and `config` is a bare symbol."
   [module-name has-routes?]
   (let [ns-name (str/replace module-name "_" "-")]
-    ;; All four keys, not just the aggregate. It used to print :wagoe/<module>
-    ;; alone, which the generated wiring destructures for :routes and :service —
-    ;; both nil, because nothing initialised the components they come from
-    ;; (BOU-309).
-    (str "  ;; " (str/capitalize ns-name) " module\n"
-         "  :wagoe/" ns-name "-repository\n"
-         "  {:ctx (ig/ref :wagoe/db-context)}\n\n"
-         "  :wagoe/" ns-name "-service\n"
-         "  {:repository (ig/ref :wagoe/" ns-name "-repository)}\n\n"
-         (when has-routes?
-           (str "  :wagoe/" ns-name "-routes\n"
-                "  {:service (ig/ref :wagoe/" ns-name "-service)\n"
-                "   :config  config}\n\n"))
+    (str "  ;; " (str/capitalize ns-name) " module (bb scaffold integrate)\n"
          "  :wagoe/" ns-name "\n"
-         "  {:enabled? true\n"
-         "   :service  (ig/ref :wagoe/" ns-name "-service)"
+         "  {:enabled? true"
          (when has-routes?
-           (str "\n   :routes   (ig/ref :wagoe/" ns-name "-routes)"
-                "\n   :base-path \"/api/" ns-name "\""))
+           (str "\n   :base-path \"/api/" ns-name "\""))
          "}")))
 
 ;; =============================================================================
@@ -90,7 +88,7 @@
 (defn integrate-module
   "Guide integration of a scaffolded module. `opts` may carry :base-ns and
    :dry-run?."
-  [module-name {:keys [base-ns]}]
+  [module-name {:keys [base-ns dry-run?]}]
   (let [module (discover-module module-name base-ns)]
     (when-not module
       (println (red (str "Module not found: src/" (base-ns-path base-ns) "/" module-name "/")))
@@ -114,21 +112,68 @@
     (println "  the module's tests run with" (cyan "clojure -M:test") "(no deps.edn/tests.edn changes).")
     (println)
 
-    (println (bold "Register the module's Integrant components:"))
-    (println)
-    (println (str "  1. Add config to " (cyan "resources/conf/dev/config.edn")
-                  " (and " (cyan "test") "):"))
-    (println)
-    (println (dim (generate-config-snippet module-name (:has-routes? module))))
-    (println)
-    (if (:has-wiring? module)
-      (do
-        (println (str "  2. Load the module's init/halt methods — add to your app's "
-                      (cyan "config") " namespace requires:"))
-        (println (dim (str "     [" (:module-ns module) ".shell.module-wiring]"))))
-      (println (str "  2. This module has no " (cyan "shell/module_wiring.clj")
-                    " yet — add one to register its Integrant keys, then require it from your app config.")))
-    (println (str "  3. Verify: " (cyan "clojure -M:test")))))
+    ;; Discovery resolves wagoe.<module>.shell.module-wiring — both the monorepo
+    ;; and the generated template pass "wagoe" — so a module under another base
+    ;; namespace would get a config key that throws at boot. It used to print
+    ;; the right require instead; now that the require is gone, refuse rather
+    ;; than write something that cannot work.
+    (when (and base-ns (not= base-ns "wagoe"))
+      (println (red "✗") (str "--base-ns " base-ns " is not supported by module discovery."))
+      (println (dim "  ig-config resolves wagoe.<module>.shell.module-wiring, so a module"))
+      (println (dim "  under another base namespace needs wiring by hand. Generate without"))
+      (println (dim "  --base-ns, or add the key and the require yourself."))
+      (System/exit 1))
+
+    (when-not (:has-wiring? module)
+      (println (red "✗") (str "No " (cyan "shell/module_wiring.clj") " in this module."))
+      (println (dim "  Regenerate it with `bb scaffold generate` — without it the config"))
+      (println (dim "  key resolves to nothing and the boot fails."))
+      (System/exit 1))
+
+    (let [snippet (generate-config-snippet module-name (:has-routes? module))
+          key-str (str ":wagoe/" (str/replace module-name "_" "-"))]
+
+      (println (bold (if dry-run? "Would write:" "Writing:")))
+      (println)
+      (println (dim snippet))
+      (println)
+
+      (let [results
+            (doall
+             (for [env ["dev" "test"]]
+               (let [path   (str (root-dir) "/resources/conf/" env "/config.edn")
+                     result (config-edn/inject-key! path key-str (str "\n" snippet "\n")
+                                                    {:dry-run? dry-run?})]
+                 (println (str "  " (case result
+                               :written           (str (green "✓") " " (if dry-run? "would add to" "added to"))
+                               :already-present   (str (green "✓") " already in")
+                               :no-active-section (str (red "✗") " no :active section in")
+                                     :no-file           (str (dim "–") " not found:"))
+                              " " (cyan (str "resources/conf/" env "/config.edn"))))
+                 result)))]
+
+        (println)
+        (cond
+          ;; A run that wrote nothing must not look like success — to a person
+          ;; or to a CI wrapper reading $?.
+          (some #{:no-active-section} results)
+          (do (println (red "No :active section — nothing was written."))
+              (System/exit 1))
+
+          (every? #{:no-file} results)
+          (do (println (red "No config files found — is this a Wagoe project?"))
+              (System/exit 1))
+
+          dry-run?
+          (println (dim "Nothing written (--dry-run)."))
+
+          :else
+          (do
+            (println (str "Next: " (cyan "clojure -M:test") " then " (cyan "(go)")))
+            (when (:has-routes? module)
+              (println (dim (str "  Routes are mounted under /api/v1 — see "
+                                 (:module-ns module) ".shell.http for the paths."))))
+            (println (dim "  No require to add: ig-config loads the wiring namespace by convention."))))))))
 
 ;; =============================================================================
 ;; Argument parsing
@@ -146,16 +191,19 @@
       :else                      (recur more opts))))
 
 (defn- print-help []
-  (println (bold "bb scaffold integrate") " — Guide integration of a scaffolded module")
+  (println (bold "bb scaffold integrate") " — wire a scaffolded module into the system")
   (println)
   (println "Usage:")
-  (println "  bb scaffold integrate <module>              Guide integration (read-only)")
+  (println "  bb scaffold integrate <module>              Write the config key")
+  (println "  bb scaffold integrate <module> --dry-run    Show it, write nothing")
   (println "  bb scaffold integrate <module> --base-ns NS Module under NS.<module>.*")
   (println)
   (println "What it does:")
   (println "  1. Locates the module under src/<base-ns>/<module>/")
   (println "  2. Confirms it is on the classpath + covered by the test suites")
-  (println "  3. Prints the Integrant config snippet and the module-wiring require"))
+  (println "  3. Writes :wagoe/<module> into resources/conf/{dev,test}/config.edn")
+  (println)
+  (println "Running it twice is a no-op — an existing key is left alone."))
 
 ;; =============================================================================
 ;; Main entry point

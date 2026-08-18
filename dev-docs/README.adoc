@@ -65,7 +65,7 @@ Key tools:
 
 * `bb doctor` — Validate config for common mistakes
 * `bb setup` — Interactive config setup wizard (with optional AI mode)
-* `bb scaffold integrate <module>` — Wire scaffolded modules into deps/tests/wiring
+* `bb scaffold integrate <module>` — Write a scaffolded module's config key into config.edn
 * `bb ai admin-entity <description>` — Generate admin entity EDN config via AI
 * `bb deploy` — Deploy libraries to Clojars
 * `bb create-admin` — Create first admin user
