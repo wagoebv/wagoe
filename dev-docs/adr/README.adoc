@@ -299,6 +299,68 @@ contextual tips, state-aware guidance, and in-REPL documentation.
 * Command palette: `(commands)` lists all REPL functions by category
 * Unified CLI: `bb check`, `bb db:*`, `bb help <topic>`
 
+==== ADR-030: Audience Segmentation Library [Proposed]
+
+ADR-030-audience-segmentation.adoc
+
+Segment definitions as data, evaluated against a member's attributes and
+events.
+
+==== ADR-031: MCP Server Security Model [Proposed]
+
+ADR-031-mcp-security-model.adoc
+
+Threat model for the MCP server, with capability tiers (`:read`, `:generate`,
+`:execute`) gated by the context the server was launched in.
+
+==== ADR-032: MCP Guardrail Error Payload [Proposed]
+
+ADR-032-mcp-guardrail-error-payload.adoc
+
+A refused MCP call answers with the rule, the reason and whether it can be
+overridden — "guardrail, not straitjacket".
+
+==== ADR-033: Reflective MCP Resources [Proposed]
+
+ADR-033-mcp-reflective-resources.adoc
+
+Resources are derived from a snapshot of the running project rather than
+hardcoded, so they cannot drift. Its file paths are partly superseded by
+BOU-320, which moved the knowledge base onto the classpath and gave the module
+graph a project mode.
+
+==== ADR-034: Tier 1 Generate Tools + Closed Verify Loop [Proposed]
+
+ADR-034-mcp-tier1-verify-loop.adoc
+
+Generated code is linted and tested by the server before it is reported as
+done.
+
+==== ADR-035: Realtime Redis-backed Pub/Sub [Proposed]
+
+ADR-035-realtime-redis-scaling.adoc
+
+Sockets stay node-local; only routing intent crosses replicas via Redis.
+
+==== ADR-036: One Error Convention [Accepted]
+
+ADR-036-error-convention.adoc
+
+Four shapes for failure existed side by side (352 typed `ex-info`, 180
+`{:valid? …}`, 131 `{:success? …}`, 25 `{:error {:type …}}`). Three shapes now,
+each owning a domain.
+
+*Key Decisions:*
+
+* Shell boundaries throw `ex-info` with a mandatory `:type` — the taxonomy the
+  HTTP status mapping and the BND classifier already read
+* Pure core decisions return `{:valid? … :errors … :warnings …}`
+* Expected failure — a bounced message, a wrong MFA code — returns
+  `{:success? … :error {:type <keyword> :message …}}`; the line is who was
+  wrong, the caller or the world
+* `cognitect.anomalies` rejected: a second vocabulary to map onto the first
+* `bb check:error-shape` enforces it, with a burn-down allowlist (BOU-323)
+
 === Related Documentation
 
 * link:../../docs/modules/architecture/pages/[Architecture] - Detailed architecture
