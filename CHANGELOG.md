@@ -35,10 +35,12 @@ for what is public API, what is internal, and how deprecations are announced.
   nothing** (BOU-318). The error pipeline with its BND codes, `(fix!)` and the
   dev dashboard existed only in the monorepo: `wagoe-devtools` was in no
   template dependency and in no catalogue entry, so `wagoe add devtools` failed
-  with "Unknown module". It is now in the `:repl` alias of a generated
+  with "Unknown module". The jar is now in the `:repl` alias of a generated
   `deps.edn` — dev-only on purpose, so it stays out of the uberjar and the
   Docker image — and in the catalogue as the first `:scope :dev` module, which
-  `wagoe add` puts in that alias rather than in `:deps`.
+  `wagoe add` puts in that alias rather than in `:deps`. The classpath is what
+  this fixes: the dashboard still needs `:wagoe/dashboard` in your config, and
+  the generated `dev/user.clj` has no `(fix!)` yet (BOU-319).
 
   Finding that surfaced a second defect: `wagoe add` searched the whole
   `deps.edn` as text for the coordinate. The generated `:mcp` alias names five
