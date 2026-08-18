@@ -84,6 +84,7 @@
                                              :description "Which interfaces to generate (all default false)."
                                              :properties {"http" {:type "boolean"} "cli" {:type "boolean"} "web" {:type "boolean"}}}
                                "preview"  {:type "boolean" :description "Dry-run: return the file plan without writing or verifying."}
+                               "force"    {:type "boolean" :description "Overwrite an existing module. Without it, scaffolding a module that already exists is refused and the files it would replace are listed — so re-invoking after a failed verify needs this."}
                                "allow"    {:type "boolean" :description "Audited override of soft (FC/IS, convention) guardrails."}}
                   :required   ["module" "entities"]}}
    {:name        "add-field"

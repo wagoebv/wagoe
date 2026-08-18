@@ -389,8 +389,11 @@
             (if (:success result)
               {:status 0
                :result result}
-              {:status 1
-               :errors (:errors result)})))))))
+              ;; :existing-files carried alongside the prose so a machine
+              ;; consumer does not have to string-parse :errors for the paths.
+              (cond-> {:status 1 :errors (:errors result)}
+                (seq (:existing-files result))
+                (assoc :existing-files (:existing-files result))))))))))
 
 (defn execute-field
   "Execute field command - add a field to an existing entity."
@@ -590,6 +593,8 @@ Feature Options (default: all enabled):
   --pagination         Enable pagination support
 
 Other Options:
+  --force              Overwrite an existing module (refused without it)
+  --output-dir DIR     Write somewhere other than the current directory
   --dry-run            Show what would be generated without creating files
 
 Examples:

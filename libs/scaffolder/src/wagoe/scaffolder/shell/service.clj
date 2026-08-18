@@ -89,6 +89,19 @@
                       (.format (java.time.LocalDateTime/now java.time.ZoneOffset/UTC)
                                (java.time.format.DateTimeFormatter/ofPattern "yyyyMMddHHmmss")))))
 
+(defn- existing-migration-for
+  "The id of this module's create-<table> migration, if one is already there.
+
+   Returns the id only — the caller rebuilds both filenames from it, so an
+   overwrite replaces the pair it found instead of adding another."
+  [output-dir table]
+  (let [dir (io/file output-dir "migrations")]
+    (when (.isDirectory dir)
+      (some (fn [^java.io.File f]
+              (second (re-matches (re-pattern (str "(\\d+)-create-" table "\\.up\\.sql"))
+                                  (.getName f))))
+            (sort-by #(.getName ^java.io.File %) (.listFiles dir))))))
+
 (def ^:private module-generation-request-validator (m/validator schema/ModuleGenerationRequest))
 (def ^:private module-generation-request-explainer (m/explainer schema/ModuleGenerationRequest))
 
@@ -110,11 +123,22 @@
             entity (first (:entities ctx))
             entity-kebab (:entity-kebab entity)
             dry-run? (:dry-run request false)
+            force?   (:force request false)
             output-dir (:output-dir request ".")
 
 ;; UTC timestamp id — see get-next-migration-number. Scoped to
             ;; output-dir so ids stay unique in the directory being written to.
-            migration-number (get-next-migration-number output-dir)
+            ;; Reuse the module's existing migration id when overwriting.
+            ;; A fresh UTC timestamp means the migration filename is never in
+            ;; `existing`, so --force added a *second* create-<table> pair per
+            ;; run rather than replacing the first. `up` is CREATE TABLE IF NOT
+            ;; EXISTS so `migrate up` stays quiet, but `migrate down` then drops
+            ;; the table with an older create still recorded as applied.
+            existing-migration (when force?
+                                 (existing-migration-for output-dir
+                                                         (:entity-plural (first (:entities ctx)))))
+            migration-number (or existing-migration
+                                 (get-next-migration-number output-dir))
 
             ;; Generate source file contents
             schema-content (generators/generate-schema-file ctx)
@@ -186,6 +210,23 @@
                     :content service-test-content
                     :action :create}]
 
+            ;; Which of them are already on disk. Checked before anything is
+            ;; written: a re-run of the framework's most-recommended command
+            ;; replaced all fourteen files with no prompt, no backup and exit 0,
+            ;; so a day's edits went with them. --force was declared in the CLI
+            ;; and read by nothing (BOU-308).
+            existing (when-not dry-run?
+                       (->> files
+                            (map #(resolve-path output-dir (:path %)))
+                            (filter #(.exists ^java.io.File %))
+                            (mapv #(.getPath ^java.io.File %))))
+
+            ;; Before anything is written, not after — the rebinding below is
+            ;; the write.
+            _ (when (and (seq existing) (not force?))
+                (throw (ex-info "refuse-overwrite"
+                                {:type ::refuse-overwrite :existing existing})))
+
             ;; Rebound to what was actually done, so the report cannot drift
             ;; from the filesystem.
             files (if dry-run?
@@ -197,10 +238,15 @@
                                   :note "dry run — would be created")
                           files)
                     (mapv (fn [{:keys [path content] :as entry}]
-                            (let [file (resolve-path output-dir path)]
+                            (let [file    (resolve-path output-dir path)
+                                  existed (.exists file)]
                               (.mkdirs (.getParentFile file))
                               (spit file content)
-                              (assoc entry :action :create :path (.getPath file))))
+                              ;; :overwrite, not :create — a report that calls a
+                              ;; replaced file "created" hides what --force did.
+                              (assoc entry
+                                     :action (if existed :overwrite :create)
+                                     :path   (.getPath file))))
                           files))]
         {:success true
          :module-name module-name
@@ -220,6 +266,23 @@
                      ["Dry run - no files were written"]
                      [])})
 
+      (catch clojure.lang.ExceptionInfo e
+        (if (= ::refuse-overwrite (:type (ex-data e)))
+          (let [existing (:existing (ex-data e))]
+            {:success        false
+             :module-name    (:module-name request)
+             :files          []
+             :existing-files existing
+             ;; Named, not counted: "14 files already exist" tells you nothing
+             ;; about which of your edits are at stake.
+             :errors         (into [(str (count existing) " file(s) already exist. "
+                                         "Re-run with --force to overwrite them, "
+                                         "or move them aside first:")]
+                                   (map #(str "  " %) existing))})
+          {:success false
+           :module-name (:module-name request)
+           :files []
+           :errors [(str "Generation failed: " (.getMessage e))]}))
       (catch Exception e
         {:success false
          :module-name (:module-name request)
@@ -465,6 +528,7 @@
       (let [{:keys [module-name port adapter-name methods dry-run]} request
             base-ns      (or (:base-ns request) "wagoe")
             base-ns-path (str/replace base-ns "." "/")
+            output-dir   (:output-dir request ".")
 
             ;; Generate adapter file content
             adapter-content (generators/generate-adapter-file
@@ -476,11 +540,20 @@
                                  base-ns-path module-name adapter-name)
             files [{:path adapter-path
                     :content adapter-content
-                    :action :create}]]
+                    ;; :skip on a dry run — it reported :create for a file it
+                    ;; never wrote.
+                    :action (if dry-run :skip :create)}]]
 
         ;; Write adapter file (unless dry-run)
         (when-not dry-run
-          (let [file (io/file adapter-path)]
+          ;; resolve-path, not io/file: this path ignored --output-dir, so
+          ;; `bb scaffold adapter --output-dir /tmp` wrote into the cwd. And it
+          ;; spit unconditionally, like generate did before BOU-308 — a re-run
+          ;; replaced a hand-edited adapter with no warning.
+          (let [file (resolve-path output-dir adapter-path)]
+            (when (and (.exists file) (not (:force request false)))
+              (throw (ex-info "refuse-overwrite"
+                              {:type ::refuse-overwrite :existing [(.getPath file)]})))
             (.mkdirs (.getParentFile file))
             (spit file adapter-content)))
 

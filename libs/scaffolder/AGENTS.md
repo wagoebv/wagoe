@@ -311,7 +311,7 @@ Configure the provider via environment variables: `ANTHROPIC_API_KEY`, `OPENAI_A
 
 ## Gotchas
 
-- Regenerated files overwrite existing ones — use `--dry-run` first if you've customized them.
+- Regenerating a module that already exists is refused, and the files it would replace are listed. Pass `--force` to overwrite them.
 - Generated field names are always kebab-case internally; only converted at HTTP/DB boundaries.
 - AI mode requires a configured LLM provider. Ollama works offline: set `OLLAMA_URL`.
 - After scaffolding, always add the library to `deps.edn` and `tests.edn` — the scaffolder doesn't modify these.
