@@ -8,15 +8,16 @@
 
    The implementations live here rather than in the template because a template
    is not compiled by anything until someone generates a project and boots it.
-   dev/user.clj is now a thin delegation layer over these, and these are
-   tested.
+   dev/user.clj is a thin delegation layer over these, and these are tested.
 
-   Shell, not core: every function here reads the running system or prints."
+   Shell: reads the running system, asks Jetty for its port, prints. The
+   formatting and the module detection are in the core namespace of the same
+   name."
   (:require [integrant.repl.state :as state]
             [wagoe.devtools.core.auto-fix :as auto-fix]
             [wagoe.devtools.core.error-classifier :as classifier]
-            [wagoe.devtools.core.guidance :as guidance]
             [wagoe.devtools.core.introspection :as introspection]
+            [wagoe.devtools.core.project-repl :as core]
             [wagoe.devtools.shell.auto-fix :as auto-fix-shell]
             [wagoe.devtools.shell.repl :as repl]
             [wagoe.devtools.shell.repl-error-handler :as repl-errors]))
@@ -25,65 +26,43 @@
 ;; What is running
 ;; =============================================================================
 
-(def ^:private infra-keys
-  "Integrant keys that are infrastructure rather than application modules."
-  #{"settings" "postgresql" "sqlite" "mysql" "h2" "http" "router"
-    "api-versioning" "pagination" "logging" "metrics" "tracing"
-    "error-reporting" "http-server" "http-handler" "db-context"
-    "i18n" "i18n-http-middleware" "email"})
+(defn base-url
+  "The URL you can open, from the running server rather than the config.
 
-(defn module-names
-  "Names of the application modules in `system`, sorted."
-  [system]
-  (->> (keys system)
-       (filter #(and (keyword? %)
-                     (= "wagoe" (namespace %))
-                     (not (contains? infra-keys (name %)))))
-       (map name)
-       sort
-       vec))
-
-(defn- http-port
-  "The port the server is actually listening on, not the one that was asked
-   for. They differ whenever auto-find moved the app off an occupied 3000, and
-   printing the configured port then sends the user to a dead URL."
+   Two things the config cannot tell you. The port: auto-find moves the app off
+   an occupied 3000, and printing the configured port then sends the user to a
+   dead address. The host: `0.0.0.0` is what the server binds, not something a
+   browser can open. And `ig-config` folds the `:wagoe/http` block into
+   `:wagoe/http-server`, so the key the first version of this read did not
+   exist in the Integrant config at all."
   [system config]
-  (or (try
-        (some-> (get system :wagoe/http-server)
-                (.getConnectors)
-                first
-                (.getLocalPort))
-        (catch Exception _ nil))
-      (get-in config [:wagoe/http :port])
-      3000))
-
-(defn status-report
-  "The startup dashboard for `system`, or nil when nothing is running."
-  [system config]
-  (when system
-    (let [host      (or (get-in config [:wagoe/http :host]) "localhost")
-          base-url  (str "http://" (if (= host "0.0.0.0") "localhost" host)
-                         ":" (http-port system config))
-          admin     (get config :wagoe/admin)]
-      (guidance/format-startup-dashboard
-       {:components (count system)
-        :errors     0
-        :web-url    base-url
-        :admin-url  (when admin (str base-url (or (:base-path admin) "/admin")))
-        :nrepl-port 7888
-        :modules    (module-names system)}))))
+  (let [server (get system :wagoe/http-server)
+        port   (or (try
+                     (some-> server (.getConnectors) first (.getLocalPort))
+                     (catch Throwable _ nil))
+                   (get-in config [:wagoe/http-server :port])
+                   3000)
+        host   (or (get-in config [:wagoe/http-server :host]) "localhost")]
+    (str "http://" (if (contains? #{"0.0.0.0" "::"} host) "localhost" host) ":" port)))
 
 (defn status
-  "Print system health: components, URLs, active modules."
+  "Print system health: components, URL, active modules."
   []
-  (if-let [report (status-report state/system state/config)]
+  (if-let [report (core/status-text {:system   state/system
+                                     :base-url (base-url state/system state/config)})]
     (println report)
     (println "System not running. Start it with (go)")))
 
 (defn modules
   "Active application modules, as a vector of names."
   []
-  (module-names state/system))
+  (core/module-names state/system))
+
+(defn config
+  "The running config. With a section keyword, print that section as a tree
+   with secrets redacted."
+  ([] state/config)
+  ([section] (println (introspection/format-config-tree state/config section))))
 
 (defn routes
   "Print the HTTP routes of the running system, optionally filtered by module
@@ -128,33 +107,7 @@
                                                           (= "y" (read-line)))})
        (println "No auto-fix available for this error.")))))
 
-;; =============================================================================
-;; The palette
-;; =============================================================================
-
-(def command-groups
-  "What a generated project actually has.
-
-   Deliberately not this monorepo's `guidance/command-groups`: that one lists
-   (lint), (check-all), (scaffold!) and the ai/* helpers, none of which exist
-   in a generated project's dev/user.clj. A palette that names commands the
-   project does not have is the defect BOU-319 fixes, one layer down."
-  {:system [{:name "(go)"        :desc "Start the system"}
-            {:name "(reset)"     :desc "Reload code and restart"}
-            {:name "(halt)"      :desc "Stop the system"}
-            {:name "(status)"    :desc "Components, URLs, active modules"}
-            {:name "(modules)"   :desc "List active modules"}
-            {:name "(config)"    :desc "The running config"}
-            {:name "(routes)"    :desc "Show all HTTP routes"}
-            {:name "(routes :m)" :desc "Filter routes by module"}]
-   :debug  [{:name "(fix!)"      :desc "Apply the fix for the last error"}
-            {:name "(commands)"  :desc "Show this list"}]
-   :shell  [{:name "bb scaffold" :desc "Generate a module"}
-            {:name "bb migrate"  :desc "Run database migrations"}
-            {:name "bb check"    :desc "FC/IS, deps, lint, doctor"}
-            {:name "bb guide"    :desc "Contextual help"}]})
-
 (defn commands
   "Print the commands this project has."
   []
-  (println (guidance/format-command-groups command-groups)))
+  (println (core/commands-text)))

@@ -18,6 +18,7 @@ All pure functions in `core/`, side effects in `shell/`.
 | `core/stacktrace.clj` | Reorder stack traces: user code first, framework/JVM collapsed. Namespace prefix classification |
 | `core/auto_fix.clj` | Pure fix descriptor registry. Maps BND codes to `{:fix-id :action :safe? :label}` |
 | `core/error_codes.clj` | BND error catalog: BND-1xx (config), BND-2xx (validation), BND-3xx (persistence), BND-4xx (auth), BND-5xx (interceptor), BND-6xx (FC/IS) |
+| `core/project_repl.clj` | Which Integrant keys are modules (a scaffolded module wires four; the user module eight), and the command palette a generated project has |
 
 ### Shell Modules
 
@@ -27,11 +28,17 @@ All pure functions in `core/`, side effects in `shell/`.
 | `shell/auto_fix.clj` | Executes fix descriptors: migrations, env vars, JWT, module wiring. Multimethod dispatch on `:action` |
 | `shell/http_error_middleware.clj` | `wrap-dev-error-enrichment` — catches exceptions, attaches `:wagoe/dev-info` to ex-data, re-throws |
 | `shell/fcis_checker.clj` | Post-reset namespace scan for BND-601 (core imports shell). Runs after `(go)` and `(reset)` |
+| `shell/project_repl.clj` | The helpers a `wagoe new` project gets: `status`, `modules`, `routes`, `config`, `fix!`, `commands`. Its generated `dev/user.clj` resolves these by name at call time |
 
 ### REPL Commands
 
 - `(fix!)` — Auto-fix last error. Safe fixes auto-apply, risky fixes always confirm
 - `(fix! ex)` — Fix a specific exception
+
+In a project created by `wagoe new`, `dev/user.clj` also exposes `(status)`,
+`(modules)`, `(routes)`, `(config :k)` and `(commands)` from
+`shell/project_repl.clj`. They resolve at call time, so removing devtools from
+the `:repl` alias degrades them to one line instead of breaking the namespace.
 
 ### Safety Model
 

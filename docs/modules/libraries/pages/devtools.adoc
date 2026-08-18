@@ -90,15 +90,22 @@ Editing a config value from the dashboard rebuilds the system, so `:wagoe/dashbo
 (routes)
 
 ;; Config tree (secrets redacted)
-(config)
+(config :database)
 
 ;; Module summary
 (modules)
+----
 
+The five above — plus `(status)`, `(fix!)` and `(commands)` — are in the
+`dev/user.clj` of every project created by `wagoe new`. The rest of this page
+describes helpers wired in this monorepo's own `dev/repl/user.clj`; in your
+project, call them through their namespaces:
+
+[source,clojure]
+----
 ;; Schema exploration
-(schema-tree :user/CreateUser)
-(schema-example :user/CreateUser)
-(schema-diff :user/CreateUser :user/UpdateUser)
+(require (quote [wagoe.devtools.core.schema-tools :as schema-tools]))
+(schema-tools/schema-tree :user/CreateUser)
 ----
 
 == Request Recording

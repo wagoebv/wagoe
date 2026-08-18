@@ -19,12 +19,21 @@
 ;; Startup dashboard rendering
 ;; =============================================================================
 
-(defn- pad-right [s width]
-  (let [s (str s)
+(defn- pad-right
+  "`s` at exactly `width` characters: padded when short, truncated when long.
+
+   Truncated, because this draws a box. A line longer than the box pushes the
+   right border past it, and the module list is routinely longer — which every
+   `(go)` in a generated project now shows on its first line of output."
+  [s width]
+  (let [s   (str s)
         len (count s)]
-    (if (>= len width)
-      s
-      (str s (apply str (repeat (- width len) " "))))))
+    (cond
+      (= len width) s
+      (< len width) (str s (apply str (repeat (- width len) " ")))
+      (< width 1)   ""
+      (< width 4)   (subs s 0 width)
+      :else         (str (subs s 0 (- width 3)) "..."))))
 
 (defn format-startup-dashboard
   "Renders the startup dashboard box as a string.

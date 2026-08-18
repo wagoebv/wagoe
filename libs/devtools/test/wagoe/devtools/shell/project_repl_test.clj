@@ -1,66 +1,50 @@
 (ns wagoe.devtools.shell.project-repl-test
-  "The helpers a generated project's dev/user.clj delegates to.
-
-   They are tested here rather than in the template because a template is not
-   compiled by anything until someone generates a project and boots it — which
-   is how `bb quickstart` came to close by telling users to run two commands
-   that did not exist (BOU-319)."
-  (:require [clojure.string :as str]
+  "The shell half: the URL a user can open, and the vars the generated
+   dev/user.clj resolves by name."
+  (:require [clojure.java.io :as io]
+            [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [wagoe.devtools.shell.project-repl :as sut]))
 
-(deftest ^:unit modules-are-the-application-keys-not-the-plumbing
-  ;; `(status)` and `(modules)` exist to answer "is my module running". Listing
-  ;; :wagoe/http-server and :wagoe/logging alongside it buries the answer in
-  ;; fifteen names the user did not write.
-  (let [system {:wagoe/settings     {}
-                :wagoe/db-context   {}
-                :wagoe/http-server  {}
-                :wagoe/http-handler {}
-                :wagoe/logging      {}
-                :wagoe/tasks        {}
-                :wagoe/invoices     {}
-                :some.other/thing   {}}]
-    (is (= ["invoices" "tasks"] (sut/module-names system)))))
+(deftest ^:unit the-url-comes-from-the-server-not-the-config-block
+  ;; `ig-config` folds the :wagoe/http block into :wagoe/http-server, so the
+  ;; key the first version read did not exist in the Integrant config at all
+  ;; and every project was told "http://localhost:3000" whatever it ran on.
+  (let [config {:wagoe/http-server {:port 3001 :host "127.0.0.1"}}]
+    (is (= "http://127.0.0.1:3001" (sut/base-url {} config))))
 
-(deftest ^:unit a-system-that-is-not-running-has-no-report
-  ;; nil, not an empty dashboard: the caller prints "start it with (go)".
-  (is (nil? (sut/status-report nil nil))))
+  (testing "0.0.0.0 is what the server binds, not an address a browser opens"
+    (is (= "http://localhost:8080"
+           (sut/base-url {} {:wagoe/http-server {:port 8080 :host "0.0.0.0"}}))))
 
-(deftest ^:unit the-report-names-the-url-you-can-actually-open
-  (let [config {:wagoe/http {:host "0.0.0.0" :port 3001}}
-        report (sut/status-report {:wagoe/tasks {}} config)]
-    (testing "0.0.0.0 is what the server binds, not an address you can open"
-      (is (str/includes? report "http://localhost:3001"))
-      (is (not (str/includes? report "http://0.0.0.0"))))
+  (testing "no config at all still yields a URL rather than a nil"
+    (is (= "http://localhost:3000" (sut/base-url {} {})))))
 
-    (testing "and the module is named"
-      (is (str/includes? report "tasks")))
-
-    (testing "no admin key, no admin URL"
-      (is (not (str/includes? report "Admin:"))))))
-
-(deftest ^:unit the-admin-url-follows-the-configured-base-path
-  (let [report (sut/status-report {:wagoe/admin {}}
-                                  {:wagoe/http  {:port 3000}
-                                   :wagoe/admin {:base-path "/backoffice"}})]
-    (is (str/includes? report "/backoffice"))))
-
-(deftest ^:unit the-palette-lists-what-a-generated-project-has
-  ;; The monorepo palette lists (lint), (check-all), (scaffold!) and the ai/*
-  ;; helpers. None of them exist in a generated dev/user.clj, and a palette
-  ;; naming commands the project does not have is the same defect as no
-  ;; palette.
-  (let [names (->> (vals sut/command-groups) (apply concat) (map :name) set)]
-    (testing "the commands quickstart tells the user to run"
-      (is (contains? names "(status)"))
-      (is (contains? names "(commands)")))
-
-    (testing "and nothing that only exists in the framework repo"
-      (doseq [absent ["(lint)" "(check-all)" "(scaffold!)" "(test-module :mod)"]]
-        (is (not (contains? names absent))
-            (str absent " is not in a generated project"))))))
+(deftest ^:unit an-http-server-that-cannot-be-asked-for-its-port-is-not-fatal
+  ;; The port is read off the Jetty connector because auto-find may have moved
+  ;; the app. Anything else in that slot — a mock, a half-initialised system —
+  ;; falls back to the config rather than throwing inside (status).
+  (is (= "http://localhost:3001"
+         (sut/base-url {:wagoe/http-server ::not-a-server}
+                       {:wagoe/http-server {:port 3001}}))))
 
 (deftest ^:unit fix-without-an-error-says-so-rather-than-throwing
-  (let [out (with-out-str (sut/fix! nil))]
-    (is (str/includes? out "No recent error"))))
+  (is (str/includes? (with-out-str (sut/fix! nil)) "No recent error")))
+
+(deftest ^:integration the-generated-user-clj-resolves-every-var-it-delegates-to
+  ;; dev/user.clj reaches these by quoted symbol, so a typo — /moduls, /fix —
+  ;; degrades into "wagoe-devtools is not on the classpath" and sends the user
+  ;; to install what they already have. Nothing else compares the two files.
+  (let [tmpl (io/file "../wagoe-cli/resources/wagoe/cli/templates/user.clj.tmpl")]
+    (if-not (.exists tmpl)
+      ;; Run from somewhere the sibling library is not on disk. Record the skip
+      ;; as an assertion so kaocha does not flag a zero-assertion test.
+      (is (not (.exists tmpl)) "skipped: wagoe-cli is not next to this library")
+      (let [syms (->> (re-seq #"'wagoe\.devtools\.shell\.project-repl/([A-Za-z0-9*+!?<>=_-]+)"
+                              (slurp tmpl))
+                      (map second)
+                      distinct)]
+        (is (seq syms) "the template must delegate to this namespace")
+        (doseq [s syms]
+          (is (ns-resolve 'wagoe.devtools.shell.project-repl (symbol s))
+              (str "dev/user.clj calls project-repl/" s ", which does not exist")))))))

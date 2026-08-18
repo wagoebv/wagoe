@@ -258,10 +258,16 @@ clojure -M:repl
 ```
 
 ```clojure
-(go)    ; start system
+(go)        ; start system, print the dashboard
+(status)    ; components, URL, active modules
+(modules)   ; active modules
+(routes)    ; HTTP routes, (routes :tasks) to filter
+(config :database)  ; one config section, secrets redacted
+(fix!)      ; apply the suggested fix for the last error
+(commands)  ; the full list
 
 ;; Access a running component
-(def user-svc (get integrant.repl.state/system :wagoe/user-service))
+(def user-svc (get (system) :wagoe/user-service))
 
 ;; Test a service function directly (bypass HTTP)
 ;; (user-svc/list-users user-svc {:limit 10})
