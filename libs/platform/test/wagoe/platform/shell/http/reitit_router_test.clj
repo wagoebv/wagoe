@@ -443,7 +443,7 @@
     (testing "but not the schema it checked them against"
       (is (nil? (:schema body))))))
 
-(deftest ^:security production-does-not-explain-the-schema-it-rejected-you-with
+(deftest ^:unit ^:security production-does-not-explain-the-schema-it-rejected-you-with
   ;; me/humanize renders the schema's constraints into its messages, so the
   ;; full text hands an unauthenticated caller every enum member and every
   ;; bound in exchange for one malformed POST. The field names are the

@@ -357,7 +357,7 @@
     (testing "neither key means no i18n middleware, and no error"
       (is (= 1 (count (:middleware (build {}))))))))
 
-(deftest ^:security the-profile-reaches-the-interceptors-that-gate-on-environment
+(deftest ^:unit ^:security the-profile-reaches-the-interceptors-that-gate-on-environment
   ;; Interceptors decide what an error may say by environment, and they read it
   ;; from the system map they are given. Nothing put it there: the detector fell
   ;; through to WAG_ENV, which a generated project never sets, so every
