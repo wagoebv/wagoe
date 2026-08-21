@@ -245,7 +245,9 @@
       (testing "enable fails with invalid code"
         (is (some? enable-result))
         (is (false? (:success? enable-result)))
-        (is (some? (:error enable-result))))
+        (is (= {:type :invalid-code :message "Invalid verification code"}
+               (:error enable-result))
+            "the headline case of the ADR-036 migration: a typed error, not a bare string"))
 
       (testing "user remains not enabled"
         (let [user (ports/find-user-by-id mock-repo (:id test-user))]

@@ -69,7 +69,7 @@
             ;; :retry-after is lockout-specific — proving it is absent here is
             ;; what lets the locked assertion below distinguish lockout from a
             ;; mere wrong password.
-            (is (nil? (:retry-after result))))))
+            (is (nil? (get-in result [:error :retry-after]))))))
       (testing "the account is now locked in persisted state"
         (is (= 3 (:failed-login-count @state)))
         (is (some? (:lockout-until @state)) "lockout-until is set")

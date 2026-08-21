@@ -306,7 +306,7 @@
                {:authenticated false
                 :requires-mfa? true
                 :user (:user auth-result)
-                :message (:message auth-result)}
+                :message (get-in auth-result [:error :message])}
 
                ;; Authentication failed
                :else

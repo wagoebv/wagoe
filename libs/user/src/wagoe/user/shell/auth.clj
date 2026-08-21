@@ -261,9 +261,9 @@
                    {:success? false
                     :error {:type        :authentication-failed
                             :message     (:reason login-allowed?)
-                            ;; Kept beside the message rather than at the top
-                            ;; level: it is part of why this failed, and the
-                            ;; service lifts it out for the Retry-After header.
+                            ;; Beside the message rather than at the top level:
+                            ;; it is part of why this failed. The service lifts
+                            ;; it back out for its own callers.
                             :retry-after (:retry-after login-allowed?)}}
 
                    ;; Password verification failed

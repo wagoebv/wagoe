@@ -40,10 +40,17 @@ for what is public API, what is internal, and how deprecations are announced.
   escalate can rethrow the `:error` map as a typed `ex-info` without inventing
   a taxonomy.
 
-  Public behaviour is unchanged and tested: `IUserService/authenticate-user`
-  still answers `{:authenticated false :reason … :message … :retry-after …}`,
-  and the MFA endpoints still answer `{"error": "<message>"}`. Direct callers of
-  the two shell namespaces are affected — see UPGRADING.md.
+  Public behaviour is unchanged, and now tested rather than asserted:
+  `IUserService/authenticate-user` still answers
+  `{:authenticated false :reason … :message … :retry-after …}` — including its
+  MFA-required branch, which the first version of this change broke silently
+  because nothing in the repository reads that `:message` — and the three MFA
+  endpoints still answer `{"error": "<message>"}`, which had no test at all
+  until now. Direct callers of the two shell namespaces are affected; see
+  UPGRADING.md.
+
+  The deprecated `:wagoe/user-http-handler` init-key throws with
+  `:type :configuration-error` instead of an untyped `ex-info`.
 
   `auth/change-user-password` is deleted rather than migrated. It had no
   callers, and it could not have had working ones: it called `update-user` with
@@ -53,15 +60,17 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **`bb check:error-shape`** (BOU-323). ADR-022 required a `:type` on every
   exception thrown at a boundary, in April; nothing checked it, and 59 `ex-info`
-  throws in `shell/` namespaces had none by August. Roughly half sit on a
+  throws in `shell/` namespaces had none by August (58 after the first
+  migration step below). Roughly half sit on a
   request path, where the HTTP layer maps `:type` to a status code — so each of
   those is a 500 that could have been a 404 or a 400; the rest are startup, CLI
   and dev-only paths that never reach a response. ADR-036 added the return
   shapes: a `{:success? false}` carries `{:error {:type <keyword> :message …}}`,
   not a bare string, not a keyword, and not nothing.
 
-  The gate ships with its 81 existing violations in
-  `.wagoe/check-error-shape.edn`, each with a `:why` and a `:count`. The count
+  The gate shipped with 81 existing violations in
+  `.wagoe/check-error-shape.edn`, each with a `:why` and a `:count` (71 after
+  the first migration step below). The count
   is what makes it a burn-down list: an entry exempts the violations a file
   had, not the file, so a new one in an already-listed file fails the build and
   fixing one makes the entry stale — which fails it too. It reads shapes, not
