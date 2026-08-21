@@ -17,3 +17,22 @@
     (let [html (config-page/render {})]
       (is (string? html))
       (is (str/includes? html "No config")))))
+
+(deftest ^:unit apply-result-renders-the-message-not-the-map
+  ;; The failure branches return {:error {:type … :message …}} since BOU-323;
+  ;; this renderer reads that value into (str "✗ " …), so a version that read
+  ;; :error itself would print the map into the page — and nothing covered it.
+  (let [html (config-page/render-apply-result
+              {:success? false
+               :error {:type :restart-failed
+                       :message "Failed to restart :wagoe/db (boom). All changes rolled back."}})]
+    (is (str/includes? html "✗ Failed to restart :wagoe/db (boom). All changes rolled back."))
+    (is (not (str/includes? html ":restart-failed"))
+        "the type is for the caller to branch on, not for the page"))
+
+  (testing "a failure with no message still says something"
+    (is (str/includes? (config-page/render-apply-result {:success? false}) "✗ Apply failed")))
+
+  (testing "success is unchanged"
+    (is (str/includes? (config-page/render-apply-result {:success? true :restarted [:wagoe/db]})
+                       "Config applied successfully"))))

@@ -136,7 +136,7 @@
            {:success? false
             :messages []
             :count    0
-            :error    {:message (.getMessage e) :type "ImapError"}})))))
+            :error    {:message (.getMessage e) :type :imap-error}})))))
 
   (fetch-unread!
     ([this]
@@ -158,7 +158,7 @@
         (catch Exception e
           (log/error e "IMAP mark-read failed" {:uid uid})
           {:success? false
-           :error    {:message (.getMessage e) :type "ImapError"}}))))
+           :error    {:message (.getMessage e) :type :imap-error}}))))
 
   (delete-message! [this uid]
     (let [folder-name (or (:folder this) "INBOX")]
@@ -174,7 +174,7 @@
         (catch Exception e
           (log/error e "IMAP delete failed" {:uid uid})
           {:success? false
-           :error    {:message (.getMessage e) :type "ImapError"}}))))
+           :error    {:message (.getMessage e) :type :imap-error}}))))
 
   (close! [_this]
     ;; ImapMailboxAdapter is connection-per-call; nothing to close at the adapter level.

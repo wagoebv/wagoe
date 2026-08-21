@@ -180,7 +180,7 @@
       
       {:success? false
        :error {:message (.getMessage e)
-               :type "EmailJobError"
+               :type :email-job-error
                :stacktrace (with-out-str (clojure.stacktrace/print-stack-trace e))}})))
 
 ;; =============================================================================

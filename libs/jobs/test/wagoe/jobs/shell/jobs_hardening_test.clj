@@ -53,7 +53,7 @@
       (is (true? (process-single-job! config queue store registry ws)))
       (let [j (ports/find-job store (:id the-job))]
         (is (= :failed (:status j)))
-        (is (= "NoHandlerError" (get-in j [:error :type])))
+        (is (= :no-handler (get-in j [:error :type])))
         (is (re-find #"No handler registered" (get-in j [:error :message]))))
       (is (some #(= (:id the-job) (:id %)) (ports/failed-jobs store 10))
           "job landed in the dead-letter queue, not silently dropped")

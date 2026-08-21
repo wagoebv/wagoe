@@ -102,4 +102,7 @@
            (when (seq restarted)
              [:p (str "Restarted: " (str/join ", " (map pr-str restarted)))])]
           [:div.detail-panel.detail-panel-error
-           [:p {:style "color:var(--color-red,#f87171)"} (str "✗ " (or error "Apply failed"))]]))))
+           ;; :error is {:type … :message …} since BOU-323; a bare string here
+           ;; would render the map itself into the page.
+           [:p {:style "color:var(--color-red,#f87171)"}
+            (str "✗ " (or (:message error) "Apply failed"))]]))))

@@ -50,7 +50,52 @@ Both are covered by tests that fail if the flattening breaks.
 `(get-in result [:error :message])` where you read `(:error result)` and
 `(:message result)` before.
 
-### 2. `wagoe.user.shell.auth/change-user-password` is gone (BOU-323)
+### 2. Adapter `:error :type` values are keywords (BOU-323)
+
+`wagoe-external`'s SMTP, IMAP and Twilio adapters, `wagoe-email`'s job
+integration, `wagoe-jobs`' worker and `wagoe-reports`' job integration returned
+a *string* in the `:type` of their `:error` map:
+
+```clojure
+;; before
+{:success? false :error {:message "…" :type "SmtpError"}}
+;; after
+{:success? false :error {:message "…" :type :smtp-error}}
+```
+
+The full set: `:smtp-error`, `:smtp-connection-error`, `:imap-error`,
+`:twilio-error`, `:network-error`, `:unexpected-error`, `:no-handler`,
+`:email-job-error`, `:report-job-error`.
+
+`wagoe-push`'s adapters moved too: their `:error` was a bare string where
+`ports.clj` had always documented a map.
+
+**Fix:** compare against the keyword. A caller that escalates can now rethrow
+the `:error` map as a typed `ex-info` without translating a string first, which
+is the point.
+
+**Two things to know if you store these results:**
+
+* `wagoe.jobs.schema/Job` and `wagoe.external.schema/EmailSendResult` declare
+  `[:type keyword?]` now. Validating a *stored* job whose `:error :type` is
+  still a string will fail — the schema describes what this version produces.
+* Job rows written before the upgrade keep the old spelling. The Redis store
+  restores `:error :type` as a keyword on read, so `"NoHandlerError"` comes back
+  as `:NoHandlerError`, not `:no-handler`. A consumer that has to handle both
+  should match on the old name explicitly for as long as those rows live.
+
+The jobs worker also stopped putting a thrown exception's class name in
+`:error :type`. That field is a keyword naming the kind of failure
+(`:handler-error`); the class is `:error :exception-class`.
+
+### 3. `wagoe.core.validation.result/normalize-result` and `legacy-result?` are gone (BOU-323)
+
+They coerced between two result shapes at runtime, in the namespace that
+defines the one shape. Nothing in the framework called them. If you did: a
+result without `:warnings` is a valid result, and `get-warnings` already
+answers `[]` for it.
+
+### 4. `wagoe.user.shell.auth/change-user-password` is gone (BOU-323)
 
 It had no callers, and it could not have had working ones: it called
 `update-user` with three arguments where the repository protocol takes two, so

@@ -26,9 +26,10 @@
 ;;     Those are reviewed, not gated, and pretending otherwise would be the
 ;;     kind of gate that reports green over what it cannot see.
 ;;
-;; Escape hatch: `.wagoe/check-error-shape.edn`, one justification per entry.
-;; It ships non-empty on purpose — it is the burn-down list BOU-323 empties,
-;; and an entry that stops exempting anything fails the build.
+;; Escape hatch: `.wagoe/check-error-shape.edn`, one justification and one count
+;; per entry. It shipped with 81 findings and BOU-323 walked it to empty; an
+;; entry that stops exempting anything fails the build, so it cannot quietly
+;; refill.
 
 (ns wagoe.tools.check-error-shape
   (:require [babashka.fs :as fs]

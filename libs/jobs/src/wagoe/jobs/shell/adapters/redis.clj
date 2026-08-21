@@ -143,7 +143,14 @@
         (update :created-at #(Instant/ofEpochMilli %))
         (update :updated-at #(Instant/ofEpochMilli %))
         (update :started-at #(when % (Instant/ofEpochMilli %)))
-        (update :completed-at #(when % (Instant/ofEpochMilli %))))))
+        (update :completed-at #(when % (Instant/ofEpochMilli %)))
+        ;; :error :type is a keyword too (ADR-036 §3), and it round-tripped as a
+        ;; string — so a consumer matching :no-handler matched against the
+        ;; in-memory store and missed against Redis. Jobs stored before the
+        ;; migration carry the old spelling ("NoHandlerError" -> :NoHandlerError);
+        ;; they were strings before this and are keywords of the old name now,
+        ;; which is no worse and is at least one type.
+        (update :error #(when % (cond-> % (:type %) (update :type keyword)))))))
 
 ;; =============================================================================
 ;; Redis Operations

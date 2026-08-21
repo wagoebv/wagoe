@@ -221,12 +221,20 @@
   (when-redis
    (let [test-job (make-job {:max-retries 0})]
      (ports/save-job! *store* test-job)
-     (ports/update-job-status! *store* (:id test-job) :failed {:message "boom" :type "TestError"})
+     (ports/update-job-status! *store* (:id test-job) :failed {:message "boom" :type :test-error})
 
      (testing "failed-jobs includes exhausted failed jobs"
        (let [failed (ports/failed-jobs *store* 10)]
          (is (= 1 (count failed)))
-         (is (= (:id test-job) (:id (first failed))))))
+         (is (= (:id test-job) (:id (first failed))))
+
+         (testing "and :error :type survives the JSON round trip as a keyword"
+           ;; JSON has no keywords. The deserializer restores :job-type,
+           ;; :status, :queue and :priority and used to stop there, so a
+           ;; consumer matching (= :no-handler (get-in job [:error :type]))
+           ;; matched against the in-memory store and missed against Redis
+           ;; (BOU-323).
+           (is (= :test-error (get-in (first failed) [:error :type]))))))
 
      (testing "retry-job! moves failed job back to pending with execute-at"
        (let [retried (ports/retry-job! *store* (:id test-job))]

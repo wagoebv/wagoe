@@ -157,12 +157,12 @@
         (log/error e "SMTP send failed" {:host (:host this) :error (.getMessage e)})
         {:success? false
          :error    {:message (.getMessage e)
-                    :type    "SmtpError"}})
+                    :type    :smtp-error}})
       (catch Exception e
         (log/error e "Unexpected error during SMTP send")
         {:success? false
          :error    {:message (.getMessage e)
-                    :type    "UnexpectedError"}})))
+                    :type    :unexpected-error}})))
 
   (send-email-async! [this email]
     (future (ports/send-email! this email)))
@@ -182,12 +182,12 @@
         (log/warn e "SMTP connection test failed" {:host (:host this)})
         {:success? false
          :error    {:message (.getMessage e)
-                    :type    "SmtpConnectionError"}})
+                    :type    :smtp-connection-error}})
       (catch Exception e
         (log/warn e "SMTP connection test unexpected error")
         {:success? false
          :error    {:message (.getMessage e)
-                    :type    "UnexpectedError"}}))))
+                    :type    :unexpected-error}}))))
 
 ;; =============================================================================
 ;; Constructor

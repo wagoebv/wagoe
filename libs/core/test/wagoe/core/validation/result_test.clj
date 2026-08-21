@@ -116,23 +116,6 @@
       (is (= 1 (count (:out-of-range by-code)))))))
 
 ;; =============================================================================
-;; Legacy Compatibility Tests
-;; =============================================================================
-
-(deftest ^:unit legacy-compatibility-test
-  (testing "Detect legacy result format"
-    (let [legacy-result {:valid? true :data {:foo "bar"}}
-          modern-result (vr/success-result {:foo "bar"})]
-      (is (vr/legacy-result? legacy-result))
-      (is (not (vr/legacy-result? modern-result)))))
-
-  (testing "Normalize legacy result"
-    (let [legacy-result {:valid? true :data {:foo "bar"}}
-          normalized (vr/normalize-result legacy-result)]
-      (is (contains? normalized :warnings))
-      (is (empty? (:warnings normalized))))))
-
-;; =============================================================================
 ;; Result Combinator Tests
 ;; =============================================================================
 

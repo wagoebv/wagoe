@@ -1,52 +1,11 @@
 ;; Errors whose shape predates ADR-036 (BOU-322) and this gate.
 ;;
-;; Every entry is TO FIX: the list ships full and empties as BOU-323 walks
-;; the migration order in the ADR.
+;; Empty, and that is the point: it shipped with 81 findings on 2026-08-18 and
+;; BOU-323 walked them down to zero in three steps — 58 untyped throws, the
+;; user library's returns, and the string :type values that crossed the
+;; external/email boundary.
 ;;
-;; :count is what keeps it a burn-down list. An entry exempts the violations
-;; a file had, not the file — add a new one and the gate fails, fix one and
-;; the count is stale, which also fails. Both directions are proved in
-;; gate_firing_test.
-;;
-;; 13 findings across 7 files, measured 2026-08-21:
-;;   {:string-type 11, :string-error 2}
-;;
-;; The 58 untyped throws are gone — ADR-022's rule, finally applied. What is
-;; left is the {:success? false} normalisation of ADR-036 §3, and the string
-;; :type values that cross a library boundary (email reads external's).
+;; A new entry needs a :why and a :count. An entry that stops exempting
+;; anything fails the build, so this file cannot quietly become a drawer again.
 
-[
-  {:file  "libs/devtools/src/wagoe/devtools/shell/dashboard/server.clj"
-   :rule  :string-error
-   :count 2
-   :why   "TO FIX (BOU-323 step 2). :error is a bare string; ADR-036 §3 requires a map with a :type."}
-
-  {:file  "libs/email/src/wagoe/email/shell/jobs_integration.clj"
-   :rule  :string-type
-   :count 1
-   :why   "TO FIX (BOU-323 step 3). :type is a string. external and email move together — email reads external's :error :type."}
-
-  {:file  "libs/external/src/wagoe/external/shell/adapters/imap.clj"
-   :rule  :string-type
-   :count 3
-   :why   "TO FIX (BOU-323 step 3). :type is a string. external and email move together — email reads external's :error :type."}
-
-  {:file  "libs/external/src/wagoe/external/shell/adapters/smtp.clj"
-   :rule  :string-type
-   :count 4
-   :why   "TO FIX (BOU-323 step 3). :type is a string. external and email move together — email reads external's :error :type."}
-
-  {:file  "libs/external/src/wagoe/external/shell/adapters/twilio.clj"
-   :rule  :string-type
-   :count 1
-   :why   "TO FIX (BOU-323 step 3). :type is a string. external and email move together — email reads external's :error :type."}
-
-  {:file  "libs/jobs/src/wagoe/jobs/shell/worker.clj"
-   :rule  :string-type
-   :count 1
-   :why   "TO FIX (BOU-323 step 3). :type is a string. external and email move together — email reads external's :error :type."}
-
-  {:file  "libs/reports/src/wagoe/reports/shell/jobs_integration.clj"
-   :rule  :string-type
-   :count 1
-   :why   "TO FIX (BOU-323 step 3). :type is a string. external and email move together — email reads external's :error :type."}]
+[]

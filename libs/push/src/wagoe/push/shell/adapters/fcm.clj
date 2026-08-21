@@ -46,7 +46,9 @@
         {:success?       false
          :device-token   token
          :platform       :fcm
-         :error          error-code
+         ;; ports.clj has documented ":error map" all along; the adapters
+         ;; returned a string (BOU-323, ADR-036 §3).
+         :error          {:type :provider-rejected :message error-code}
          :token-invalid? (contains? #{"UNREGISTERED" "INVALID_ARGUMENT"} error-code)}))))
 
 (defrecord FCMProvider [project-id credentials http-client]
@@ -77,7 +79,7 @@
                   {:success?     false
                    :device-token token
                    :platform     :fcm
-                   :error        (.getMessage e)})))
+                   :error        {:type :push-send-failed :message (.getMessage e)}})))
             futures)))
 
   (fcm-validate-token [this token]

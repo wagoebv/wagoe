@@ -135,7 +135,7 @@
                                   :event-type          (name (:event-type event))
                                   :user-id             (:user-id event)
                                   :provider-message-id (:provider-message-id event)
-                                  :error-message       (:error event)
+                                  :error-message       (get-in event [:error :message])
                                   :timestamp           (or (:timestamp event) (java.util.Date.))}]))))
 
   (record-delivery! [this event]

@@ -88,7 +88,7 @@
         {:success? true :message-id (:message-id result)}
         {:success? false
          :error    {:message        (get-in result [:error :message])
-                    :type           (get-in result [:error :type] "SmtpError")
+                    :type           (get-in result [:error :type] :smtp-error)
                     :provider-error {}}})))
 
   (send-email-async! [this email]

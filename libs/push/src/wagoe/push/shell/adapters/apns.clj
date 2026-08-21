@@ -70,7 +70,7 @@
       {:success?       false
        :device-token   device-token
        :platform       :apns
-       :error          reason
+       :error          {:type :provider-rejected :message reason}
        :token-invalid? (contains? #{"BadDeviceToken" "Unregistered"} reason)})))
 
 (defrecord APNsProvider [team-id key-id private-key bundle-id sandbox? http-client]
@@ -100,7 +100,7 @@
                   {:success?     false
                    :device-token token
                    :platform     :apns
-                   :error        (.getMessage e)})))
+                   :error        {:type :push-send-failed :message (.getMessage e)}})))
             futures))))
 
 (defn make-apns-provider [team-id key-id key-path bundle-id sandbox?]

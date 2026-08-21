@@ -97,9 +97,14 @@
         (assoc result :success? false)))
     (catch Exception e
       {:success? false
-       :error {:message (.getMessage e)
-               :type (-> e class .getName)
-               :stacktrace (with-out-str (.printStackTrace e))}})))
+       ;; :type is a keyword naming the *kind* of failure; the Java class of
+       ;; what was thrown is a separate fact and gets its own key. They shared
+       ;; one field, so :error :type held :no-handler in one branch and
+       ;; "java.lang.RuntimeException" in the next (BOU-323).
+       :error {:message         (.getMessage e)
+               :type            :handler-error
+               :exception-class (-> e class .getName)
+               :stacktrace      (with-out-str (.printStackTrace e))}})))
 
 (defn- handle-missing-handler!
   "Handle a dequeued job whose type has no handler registered on THIS instance.
@@ -169,7 +174,7 @@
                      (str "no worker handled it within " max-age-ms " ms")
                      (str "re-enqueue backstop of " max-requeues " attempts reached"))
             error  {:message (str "No handler registered for job type " job-type " on any worker: " reason)
-                    :type    "NoHandlerError"}]
+                    :type    :no-handler}]
         (log/error "No handler for job type — dead-lettering"
                    {:job-id job-id :job-type job-type :reason reason
                     :unhandled-for-ms (when first-seen (- now-ms first-seen)) :requeue-count requeues})
@@ -223,9 +228,10 @@
 
               (catch Exception e
                 ;; Unexpected error during processing
-                (let [error {:message    (.getMessage e)
-                             :type       (-> e class .getName)
-                             :stacktrace (with-out-str (.printStackTrace e))}]
+                (let [error {:message         (.getMessage e)
+                             :type            :handler-error
+                             :exception-class (-> e class .getName)
+                             :stacktrace      (with-out-str (.printStackTrace e))}]
                   (ports/update-job-status! store job-id :failed error)
                   (swap! (:failed-count worker-state) inc)
                   (log/error e "Unexpected error processing job" {:job-id job-id})))
@@ -362,7 +368,7 @@
         (execute-job-handler handler-fn (:args job))
         {:success? false
          :error {:message (str "No handler registered for job type: " job-type)
-                 :type "NoHandlerError"}})))
+                 :type :no-handler}})))
 
   (start-worker! [_this]
     (:id state))  ; Already started in create-worker

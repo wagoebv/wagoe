@@ -93,7 +93,7 @@
           result (ports/send-email! sender email)]
       (is (false? (:success? result)))
       (is (some? (:error result)))
-      (is (= "SmtpError" (get-in result [:error :type])))
+      (is (= :smtp-error (get-in result [:error :type])))
       (is (string? (get-in result [:error :message]))))))
 
 (deftest ^:integration send-email-with-connection-refused-test
@@ -109,8 +109,8 @@
           result (ports/send-email! sender email)]
       (is (false? (:success? result)))
       (is (some? (:error result)))
-      (is (or (= "SmtpError" (get-in result [:error :type]))
-              (= "UnexpectedError" (get-in result [:error :type])))))))
+      (is (or (= :smtp-error (get-in result [:error :type]))
+              (= :unexpected-error (get-in result [:error :type])))))))
 
 ;; =============================================================================
 ;; Email Structure Tests

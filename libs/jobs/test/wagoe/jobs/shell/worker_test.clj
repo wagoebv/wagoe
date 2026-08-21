@@ -187,7 +187,7 @@
             ;; Verify it was dead-lettered with a clear NoHandlerError, not dropped.
             (let [failed-job (ports/find-job store (:id test-job))]
               (is (= :failed (:status failed-job)))
-              (is (= "NoHandlerError" (get-in failed-job [:error :type])))
+              (is (= :no-handler (get-in failed-job [:error :type])))
               (is (re-find #"No handler registered" (get-in failed-job [:error :message])))
               (is (some #(= (:id test-job) (:id %)) (ports/failed-jobs store 10))
                   "job is present in the dead-letter queue"))

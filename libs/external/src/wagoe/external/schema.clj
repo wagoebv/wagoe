@@ -46,9 +46,10 @@
   [:map
    [:success? :boolean]
    [:message-id {:optional true} [:string {:min 1}]]
+   ;; A keyword since ADR-036 §3 — :smtp-error, :imap-error, :twilio-error …
    [:error {:optional true} [:map
                              [:message :string]
-                             [:type :string]]]])
+                             [:type keyword?]]]])
 
 ;; =============================================================================
 ;; IMAP Schemas
@@ -112,9 +113,10 @@
    [:success? :boolean]
    [:message-sid {:optional true} :string]
    [:status {:optional true} :string]
+   ;; A keyword since ADR-036 §3 — :smtp-error, :imap-error, :twilio-error …
    [:error {:optional true} [:map
                              [:message :string]
-                             [:type :string]]]])
+                             [:type keyword?]]]])
 
 ;; =============================================================================
 ;; Validation Functions

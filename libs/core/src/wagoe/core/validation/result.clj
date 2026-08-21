@@ -253,38 +253,6 @@
   (count (get-errors result)))
 
 ;; =============================================================================
-;; Legacy Compatibility
-;; =============================================================================
-
-(defn legacy-result?
-  "Check if result uses legacy format (no :warnings key).
-   
-    Args:
-      result: Validation result map
-    
-    Returns:
-      Boolean indicating legacy format"
-  [result]
-  (and (map? result)
-       (:valid? result)
-       (not (contains? result :warnings))))
-
-(defn normalize-result
-  "Normalize legacy result to standard format.
-  
-   Ensures result has all expected keys (:valid?, :data, :errors, :warnings).
-   
-   Args:
-     result: Validation result map (legacy or standard)
-   
-   Returns:
-     Normalized result map"
-  [result]
-  (if (legacy-result? result)
-    (assoc result :warnings [])
-    result))
-
-;; =============================================================================
 ;; Result Combinators
 ;; =============================================================================
 
