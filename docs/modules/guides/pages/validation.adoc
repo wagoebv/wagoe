@@ -28,29 +28,35 @@ Validation always happens in the shell, never in core.
 
 [source,clojure]
 ----
-(require '[wagoe.core.utils.validation :as validation])
+(require '[wagoe.core.validation :as validation]
+         '[malli.transform :as mt])
 
 (defn create-user [this input]
-  (let [{:keys [valid? data errors]}
-        (validation/validate-with-transform UserInput input mt/string-transformer)]
-    (if valid?
+  ;; The decoder and the validator are cached on the schema, so this compiles
+  ;; once per schema rather than once per call.
+  (let [data ((validation/decoder UserInput mt/string-transformer) input)]
+    (if (validation/valid? UserInput data)
       (do-create (:db this) data)
       (throw (ex-info "Validation failed"
-                      {:type :validation-error :errors errors})))))
+                      {:type   :validation-error
+                       :errors (validation/explain UserInput data)})))))
 ----
 
 == CLI argument validation
 
 [source,clojure]
 ----
-(require '[wagoe.core.utils.validation :as v])
+(require '[wagoe.core.validation :as v]
+         '[malli.transform :as mt])
 
 (def CLIArgs
   [:map
    [:module-name [:string {:min 1}]]
    [:entity      [:string {:min 1}]]])
 
-(v/validate-cli-args CLIArgs args cli-transformer)
+(let [parsed ((v/decoder CLIArgs mt/string-transformer) args)]
+  (when-not (v/valid? CLIArgs parsed)
+    (v/explain CLIArgs parsed)))
 ----
 
 == Validation coverage reporting

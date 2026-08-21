@@ -67,7 +67,8 @@ NOTE: All keys are `kebab-case` internally. Conversion to `snake_case` for the d
 ----
 (ns wagoe.product.core.product
   (:require [wagoe.product.schema :as schema]
-            [wagoe.core.utils.validation :as v]))
+            [wagoe.core.validation :as v]
+            [wagoe.core.validation.result :as result]))
 
 (defn prepare-product
   "Validates input and returns a product entity ready for persistence."
@@ -76,7 +77,9 @@ NOTE: All keys are `kebab-case` internally. Conversion to `snake_case` for the d
                        :created-at now
                        :updated-at now}
                       input)]
-    (v/validate-with-transform schema/Product entity)))
+    (if (v/valid? schema/Product entity)
+      (result/success-result entity)
+      (result/failure-result [(result/error-map nil :invalid-format "Invalid product")]))))
 ----
 
 No I/O. No side effects. Easy to test without mocks.
