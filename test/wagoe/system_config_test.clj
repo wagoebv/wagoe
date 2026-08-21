@@ -3,6 +3,8 @@
             [wagoe.platform.shell.modules :as modules]
             [wagoe.system-config :as sys-config]
             [wagoe.platform.shell.adapters.database.protocols :as db-protocols]
+            [clojure.java.io :as io]
+            [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [integrant.core :as ig]))
 
@@ -234,3 +236,64 @@
       (is (empty? missing)
           (str "no init-key registered for: " (pr-str (sort missing))
                " — the library that emits a key must also register it")))))
+
+(deftest ^:integration every-module-component-is-wired-by-someone
+  ;; The other half of the check above, and the half that matters here: that one
+  ;; asks whether every emitted key can be built, this one asks whether every
+  ;; component a module defines is ever emitted at all.
+  ;;
+  ;; That is the shape of the defect BOU-326 fixed. `libs/workflow` defined and
+  ;; documented `:wagoe/workflow-db-schema`, which creates its tables, and no
+  ;; application wired it — for as long as the graph was a hand-maintained list
+  ;; in each app, nothing could notice. A module owns its graph now, so "the
+  ;; library defines a component nobody builds" is a question with an answer.
+  ;;
+  ;; Read from source rather than from `methods`, which reports whatever the
+  ;; test run happened to load and would make this depend on test order.
+  (let [;; Components a library defines but the framework deliberately does not
+        ;; assemble. Every entry needs a reason; an entry that stops exempting
+        ;; anything fails below, so the list shrinks rather than rots.
+        not-assembled
+        {:wagoe/admin          "settings passthrough with no consumer — admin's components take the settings map directly. Dead key; removing it is BOU-346"
+         :wagoe/user-http-handler "superseded by platform's :wagoe/http-handler, which composes every module's routes. Dead key; removing it is BOU-346"
+         :wagoe/auth-user-repository "no consumer: :wagoe/auth-service takes :wagoe/user-repository. Dead key; removing it is BOU-346"
+         :wagoe/email-queue    "opt-in outbox nothing wires yet; BOU-346 decides whether it ships or goes"
+         :wagoe/audience-routes "REAL: audience ships HTTP routes no application mounts — the workflow-db-schema defect, in another module. BOU-346"
+         :wagoe/storage-routes  "REAL: storage ships HTTP routes no application mounts. BOU-346"
+         :wagoe.push/job-handlers "REAL: push enqueues :push/send and :push/broadcast jobs and nothing registers the handlers, so they are never processed. BOU-346"}
+
+        defined  (into {}
+                       (for [[_ lib] modules/framework-modules
+                             :let [f (io/file (str "libs/" lib "/src/wagoe/"
+                                                   (str/replace lib "-" "_")
+                                                   "/shell/module_wiring.clj"))]
+                             :when (.exists f)
+                             k (re-seq #"(?m)^\(defmethod ig/init-key\s+(:[a-z][a-z0-9.-]*/[a-z][a-z0-9-]*)"
+                                       (slurp f))]
+                         [(keyword (subs (second k) 1)) lib]))
+
+        everything (reduce (fn [c k] (assoc-in c [:active k] {:enabled? true}))
+                           (base-config)
+                           (keys modules/framework-modules))
+        emitted    (set (keys (sys-config/ig-config everything)))
+        unwired    (remove (some-fn emitted not-assembled) (keys defined))]
+
+    (testing "the libraries were read — otherwise this passes vacuously"
+      (is (< 30 (count defined))
+          (str "found only " (count defined) " init-keys across "
+               (count modules/framework-modules) " modules; the source paths are wrong"))
+      (is (contains? defined :wagoe/workflow-db-schema)
+          "the key this ticket was about must be among those read"))
+
+    (testing "every component a module defines is assembled by someone"
+      (is (empty? unwired)
+          (str "defined but never wired: "
+               (pr-str (sort-by str (map #(vector % (get defined %)) unwired)))
+               " — either emit it from that module's ig-config, or add it to "
+               "not-assembled with the reason")))
+
+    (testing "and nothing on the not-assembled list is exempting nothing"
+      ;; The burn-down rule the other gates use.
+      (doseq [[k why] not-assembled]
+        (is (or (contains? defined k) (contains? emitted k))
+            (str k " no longer exists — remove it from not-assembled (" why ")"))))))

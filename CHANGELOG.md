@@ -66,6 +66,14 @@ for what is public API, what is internal, and how deprecations are announced.
   switched on. All three were the same class of defect: a component list
   maintained by hand next to a config that had moved on.
 
+- **A module can no longer ship a component nothing wires** (BOU-326). The gate
+  that catches the defect above, generalised: for every framework module, each
+  `ig/init-key` it defines must be emitted by some application, or carry a
+  written reason why not. It ships with seven exemptions and three of them are
+  the same defect in another module — push enqueues jobs whose handlers are
+  never registered, audience and storage ship HTTP routes nothing mounts.
+  Emptying that list is BOU-346.
+
 - **Two admin helpers had never worked** (BOU-326).
   `wagoe.admin.shell.module-wiring/admin-system-config` and
   `start-admin-only-system`, documented for REPL and integration use, built
