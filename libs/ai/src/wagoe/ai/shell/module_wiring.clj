@@ -53,7 +53,7 @@
     :openai    (openai/create-openai-provider config)
     :no-op     (no-op/create-no-op-provider config)
     :replicate (replicate-provider/create-replicate-provider config)
-    (throw (ex-info "Unknown AI provider" {:type :configuration-error :provider provider}))))
+    (throw (ex-info "Unknown AI provider" {:type :unknown-provider :provider provider}))))
 
 ;; =============================================================================
 ;; Integrant lifecycle

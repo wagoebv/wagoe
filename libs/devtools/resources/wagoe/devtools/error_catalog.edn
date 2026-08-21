@@ -67,6 +67,12 @@
             :description "Could not connect to the configured database."
             :fix         "Verify the database is running and config values (host, port, name) are correct."}
 
+ "BND-304" {:code        "BND-304"
+            :category    :persistence
+            :title       "Database Query Failed"
+            :description "A query, update or DDL statement was rejected by the database."
+            :fix         "Read the cause: a constraint violation, a syntax error or a missing column. The failing SQL is in the exception data."}
+
  "BND-305" {:code        "BND-305"
             :category    :persistence
             :title       "Migration Version Conflict"

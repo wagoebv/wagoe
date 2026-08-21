@@ -32,9 +32,10 @@ for what is public API, what is internal, and how deprecations are announced.
 ### Fixed
 
 - **58 exceptions thrown at boundaries now say what kind of failure they are**
-  (BOU-323, second migration step). ADR-022 required a `:type` on every
+  (BOU-323; the untyped-throw step, which ADR-036 numbers first). ADR-022 required a `:type` on every
   `ex-info` reaching the HTTP boundary in April; the gate added last week
-  measured 59 throws in `shell/` namespaces without one. They are typed:
+  measured 59 throws in `shell/` namespaces without one (58 after the user
+  library's step). They are typed:
   `:configuration-error` for missing or unusable config (Datadog keys, Sentry
   DSN, an unknown AI or geo provider, a CSRF secret that is blank while CSRF is
   enabled), `:db/error` and `:database-error` for the database adapters,
@@ -43,18 +44,26 @@ for what is public API, what is internal, and how deprecations are announced.
   `:conflict`, `:forbidden` and `:port-unavailable` where those fit.
 
   This is not bookkeeping. The HTTP layer maps `:type` to a status code, so an
-  untyped throw on a request path is a 500 that could have said 404 or 400; and
-  the BND classifier reads `:type` too, so the dev pipeline can now name these
-  errors. Two codes that had sat in the catalogue with nothing producing them
-  are live: `BND-303` (database connection failed) and `BND-102` (unknown
-  provider), the second with a classifier rule added here.
+  untyped throw on a request path is a 500 that could have said 404 or 400.
 
-  `:db/error` is deliberately only the connection case. A failed query carries
-  `:database-error`, so the dashboard does not report every SQL error as a
-  connection problem.
+  It also fixed the classifier that reads `:type`. It walked to the *root
+  cause* first, so a wrapped database failure was read as its `SQLException`
+  and every one of them — a constraint violation, a syntax error — came back as
+  `BND-303 "Database Connection Failed — verify the database is running"`. The
+  type the thrower chose now wins over the class of what it wrapped, a failed
+  query has its own code (`BND-304`), and `BND-102` ("Unknown Provider") has a
+  producer at last.
 
-  The allowlist is down from 71 entries to 13 — what is left is the
-  `{:success? false}` normalisation of ADR-036 §3.
+  Which surfaced a fourth thing: the same mistake had four spellings across the
+  module wirings — `:internal-error` in payments, `:configuration-error` in
+  events, `:config-error` in the payments adapters, and `:validation-error` in
+  storage, which the HTTP layer maps to **400**, telling a caller they sent a
+  bad request when the server was misconfigured. All of them are
+  `:unknown-provider` now.
+
+  The allowlist is down from 71 findings to 13 — what is left is the
+  `{:success? false}` normalisation of ADR-036 §3, which is the step ADR-036
+  numbers second.
 
 - **The user library's authentication and MFA results carry a typed error**
   (BOU-323, first migration step). `auth/authenticate-user` answered

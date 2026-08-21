@@ -34,7 +34,7 @@
     :s3    (s3/create-s3-storage (assoc config :logger logger))
     :gcs   (gcs/create-gcs-storage (assoc config :logger logger))
     (throw (ex-info "Unknown storage provider"
-                    {:type :validation-error :provider provider}))))
+                    {:type :unknown-provider :provider provider}))))
 
 (defmethod ig/init-key :wagoe/storage
   [_ {:keys [provider logger] :or {provider :local} :as config}]

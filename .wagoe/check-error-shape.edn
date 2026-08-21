@@ -8,7 +8,7 @@
 ;; the count is stale, which also fails. Both directions are proved in
 ;; gate_firing_test.
 ;;
-;; 13 findings across 5 files, measured 2026-08-21:
+;; 13 findings across 7 files, measured 2026-08-21:
 ;;   {:string-type 11, :string-error 2}
 ;;
 ;; The 58 untyped throws are gone — ADR-022's rule, finally applied. What is

@@ -480,18 +480,24 @@
    `:validation-error`, `:conflict`, …). Rethrow such a typed `ex-info` UNWRAPPED
    so tenant-scoped code surfaces the correct status instead of a generic 500.
    Only a genuinely untyped exception (an infra failure) is wrapped as
-   `:tenant-context-error`, preserving the original as the cause. Always throws."
+   `:tenant-context-error`, preserving the original as the cause. Always throws,
+   and always logs the schema first — the wrapper is what carries the schema
+   name to a reader, so the branch that does not wrap has to put it in the log."
   [e tenant-schema-name]
+  ;; Logged either way. This used to log only on the wrapping branch, on the
+  ;; assumption that a typed exception is a domain error the caller expects —
+  ;; and then BOU-323 typed the database adapters, so a SQL failure inside a
+  ;; tenant schema started taking the rethrow branch and lost the one line that
+  ;; said which schema it happened in.
+  (log/error e "Error executing in tenant schema context"
+             {:schema tenant-schema-name :error (.getMessage e)})
   (if (and (instance? clojure.lang.ExceptionInfo e) (:type (ex-data e)))
     (throw e)
-    (do
-      (log/error e "Error executing in tenant schema context"
-                 {:schema tenant-schema-name :error (.getMessage e)})
-      (throw (ex-info "Tenant context execution failed"
-                      {:type :tenant-context-error
-                       :schema-name tenant-schema-name
-                       :cause (.getMessage e)}
-                      e)))))
+    (throw (ex-info "Tenant context execution failed"
+                    {:type :tenant-context-error
+                     :schema-name tenant-schema-name
+                     :cause (.getMessage e)}
+                    e))))
 
 (defn with-tenant-schema
   "Execute function f with database search_path set to tenant schema.
