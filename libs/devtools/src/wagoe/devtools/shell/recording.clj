@@ -190,7 +190,7 @@
         resolved (.getCanonicalPath file)]
     (when-not (.startsWith resolved base-dir)
       (throw (ex-info "Invalid recording name: path traversal detected"
-                      {:resolved resolved :base-dir base-dir})))))
+                      {:type :forbidden :resolved resolved :base-dir base-dir})))))
 
 (defn save-session!
   ([name] (save-session! name default-dir))

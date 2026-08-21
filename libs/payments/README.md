@@ -93,7 +93,7 @@ Other protocol methods: `create-off-session-payment`, `get-payment-status`,
 | **Stripe** | `:stripe` | `:api-key`, `:webhook-secret` | `STRIPE_API_KEY`, `STRIPE_WEBHOOK_SECRET` | HMAC-SHA256 webhooks; full off-session + expiry support |
 
 A configured provider missing a required credential (e.g. a forgotten env var
-resolving to nil) **fails the boot** with a `{:type :config-error}` error naming
+resolving to nil) **fails the boot** with a `{:type :configuration-error}` error naming
 each missing key. In tests, build the Mock directly:
 
 ```clojure

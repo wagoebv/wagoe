@@ -306,7 +306,7 @@
   ;; upstream config (unset PUBLIC_BASE_URL) reaches Stripe as either an empty
   ;; string (parameter_invalid_empty, BOU-148) or a scheme-less relative path
   ;; (url_invalid, BOU-149). The guard rejects both, named, and never POSTs.
-  (testing "blank resolved return URL → :config-error, Stripe is never called (BOU-148)"
+  (testing "blank resolved return URL → :configuration-error, Stripe is never called (BOU-148)"
     (let [posted? (atom false)]
       (with-redefs [http/post (fn [_ _] (reset! posted? true)
                                 (json-response 200 {:id "cs" :url "u"}))]
@@ -317,11 +317,11 @@
             :redirect-url ""})           ; blank → success_url/cancel_url blank
           (is false "should have thrown")
           (catch clojure.lang.ExceptionInfo e
-            (is (= :config-error (:type (ex-data e))))
+            (is (= :configuration-error (:type (ex-data e))))
             (is (= "success_url" (:param (ex-data e))))))
         (is (false? @posted?) "must not POST an empty success_url to Stripe"))))
 
-  (testing "relative (scheme-less) return URL → :config-error, Stripe is never called (BOU-149)"
+  (testing "relative (scheme-less) return URL → :configuration-error, Stripe is never called (BOU-149)"
     (let [posted? (atom false)]
       (with-redefs [http/post (fn [_ _] (reset! posted? true)
                                 (json-response 200 {:id "cs" :url "u"}))]
@@ -333,7 +333,7 @@
             :redirect-url "/web/license/payment/return?session_id={CHECKOUT_SESSION_ID}"})
           (is false "should have thrown")
           (catch clojure.lang.ExceptionInfo e
-            (is (= :config-error (:type (ex-data e))))
+            (is (= :configuration-error (:type (ex-data e))))
             (is (= "success_url" (:param (ex-data e))))))
         (is (false? @posted?) "must not POST a relative success_url to Stripe"))))
 

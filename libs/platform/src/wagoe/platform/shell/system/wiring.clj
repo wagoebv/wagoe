@@ -142,7 +142,8 @@
     (let [profile (:wagoe/profile config)]
       (when-not (contains? #{:test :dev} profile)
         (throw (ex-info "test/reset endpoint cannot be enabled outside :test/:dev"
-                        {:profile profile
+                        {:type    :configuration-error
+                         :profile profile
                          :flag    :test/reset-endpoint-enabled?}))))
     ;; Resolved rather than required: wagoe.test-support lives in the
     ;; application, not in any library, so platform cannot declare it and a
@@ -393,7 +394,7 @@
                                  "An enabled interceptor with a blank secret fails OPEN — "
                                  "state-changing requests would NOT be CSRF-validated. "
                                  "Set CSRF_SECRET or JWT_SECRET, or :wagoe/http :security :csrf :secret.")
-                            {:csrf/enabled? true :csrf/secret-present? false})))
+                            {:type :configuration-error :csrf/enabled? true :csrf/secret-present? false})))
 
         ;; Rate-limit config consumed by the http-rate-limit-protection interceptor.
         ;; Opt-in like CSRF: disabled by default so a framework upgrade cannot start
@@ -417,7 +418,8 @@
                                    "effective global limit is limit x N, so it is NOT a real limit. "
                                    "Activate :wagoe/cache (Redis), or disable rate limiting "
                                    "(HTTP_RATE_LIMIT_ENABLED=false).")
-                              {:rate-limit/enabled? true :cache/present? false :profile :prod}))
+                              {:type :configuration-error
+                               :rate-limit/enabled? true :cache/present? false :profile :prod}))
               (log/warn (str "Rate limiting is enabled but no cache is configured — "
                              "falling back to a per-process counter. This is correct on a "
                              "single node only; across replicas each instance counts "

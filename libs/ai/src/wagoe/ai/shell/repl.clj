@@ -39,7 +39,8 @@
 (defn- require-service []
   (or *ai-service*
       (throw (ex-info "No AI service bound. Call (ai/set-service! system-service) first."
-                      {:hint "Try: (ai/set-service! (integrant.repl.state/system :wagoe/ai-service))"}))))
+                      {:type :configuration-error
+                       :hint "Try: (ai/set-service! (integrant.repl.state/system :wagoe/ai-service))"}))))
 
 ;; =============================================================================
 ;; Feature 2: Error Explainer REPL wrapper
@@ -221,7 +222,7 @@
                             (catch Exception _ nil))))
         _        (when-not source
                    (throw (ex-info (str "Cannot find source for " ns-sym)
-                                   {:ns ns-sym :tried file-path})))
+                                   {:type :not-found :ns ns-sym :tried file-path})))
         violations (let [requires (re-seq #"\[(\S+\.shell\.\S+)" (or source ""))]
                      (mapv (fn [[_ dep]] {:from ns-str :to dep}) requires))]
     (if (empty? violations)

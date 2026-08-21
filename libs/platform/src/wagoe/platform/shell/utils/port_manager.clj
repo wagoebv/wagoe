@@ -41,7 +41,8 @@
      (cond
        (> port end-port)
        (throw (ex-info "No available port found in range"
-                       {:start-port start-port
+                       {:type :port-unavailable
+                        :start-port start-port
                         :end-port end-port
                         :attempted-range (- end-port start-port)}))
 
@@ -145,7 +146,8 @@
         {:port requested-port
          :message (str message " - using requested port")}
         (throw (ex-info "Requested port not available in strict environment"
-                        {:requested-port requested-port
+                        {:type :port-unavailable
+                         :requested-port requested-port
                          :environment-type (if (docker-environment?) "docker" "production")
                          :suggestion "Use different port or stop conflicting process"})))
 

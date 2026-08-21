@@ -138,7 +138,8 @@
                           :filename (:filename metadata)
                           :error (.getMessage e)}))
         (throw (ex-info "Failed to store file in S3"
-                        {:bucket bucket
+                        {:type :storage-error
+                         :bucket bucket
                          :filename (:filename metadata)
                          :error (.getMessage e)}
                         e)))))
@@ -280,11 +281,13 @@
   [{:keys [bucket region prefix public-read? logger] :as config}]
   (when-not bucket
     (throw (ex-info "bucket is required for S3 storage"
-                    {:provided-config (dissoc config :secret-key)})))
+                    {:type :configuration-error
+                     :provided-config (dissoc config :secret-key)})))
 
   (when-not region
     (throw (ex-info "region is required for S3 storage"
-                    {:provided-config (dissoc config :secret-key)})))
+                    {:type :configuration-error
+                     :provided-config (dissoc config :secret-key)})))
 
   (let [s3-client (create-s3-client config)
         presigner (create-s3-presigner config)]

@@ -121,7 +121,7 @@
                         ;; rather than as a provider error.
                         (when-not (re-find #"(?i)^https?://.+" (str (get params k)))
                           (throw (ex-info (str "Stripe checkout: " k " is not an absolute http(s) URL")
-                                          {:type  :config-error
+                                          {:type  :configuration-error
                                            :param k
                                            :value (get params k)
                                            :fix   "Provide an absolute https:// return URL (:success-url/:cancel-url, or :redirect-url as fallback); set PUBLIC_BASE_URL in acc/prod so the configured URL is not left relative"}))))

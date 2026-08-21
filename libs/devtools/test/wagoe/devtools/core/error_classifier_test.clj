@@ -81,3 +81,48 @@
           result (classifier/classify ex)]
       (is (nil? (:code result))
           "should not misclassify as JWT-specific BND-103"))))
+
+(deftest ^:unit an-unknown-provider-is-bnd-102
+  ;; BND-102 ("Unknown Provider") sat in the catalogue with nothing producing
+  ;; it. The module wirings of ai, geo, events, payments and storage threw the
+  ;; same mistake under four different types — one of them :validation-error,
+  ;; which the HTTP layer maps to 400, telling a caller they sent a bad request
+  ;; when the server was misconfigured. One type now (BOU-323).
+  (is (= "BND-102" (:code (classifier/classify
+                           (ex-info "Unknown AI provider"
+                                    {:type :unknown-provider :provider :nope})))))
+
+  (testing "a config error that merely names a provider is not misfiled as one"
+    ;; A missing Sentry DSN names its provider too, and answering "check the
+    ;; valid providers list" to that is worse than answering nothing.
+    (is (nil? (:code (classifier/classify
+                      (ex-info "Sentry DSN is required"
+                               {:type :configuration-error :provider :sentry})))))))
+
+(deftest ^:unit the-thrower-s-type-beats-the-cause-s-class
+  ;; classify walked to the root cause first, so every wrapped database failure
+  ;; was read as its SQLException: an INSERT violating a unique constraint came
+  ;; back as BND-303 "Database Connection Failed — verify the database is
+  ;; running". The code that threw chose a :type; that choice is better
+  ;; information than the class of what it wrapped (BOU-323).
+  (let [constraint (java.sql.SQLException.
+                    "duplicate key value violates unique constraint \"users_email_key\"")]
+    (is (= "BND-304" (:code (classifier/classify
+                             (ex-info "Database update failed"
+                                      {:type :database-error} constraint))))))
+
+  (testing "a connection failure still reads as one"
+    (is (= "BND-303" (:code (classifier/classify
+                             (ex-info "Database initialization failed"
+                                      {:type :db/error}
+                                      (java.sql.SQLException. "connection refused")))))))
+
+  (testing "an untyped wrapper still falls through to the cause"
+    (is (= "BND-303" (:code (classifier/classify
+                             (ex-info "boom" {}
+                                      (java.sql.SQLException. "connection refused")))))))
+
+  (testing "and an explicit :wagoe/error-code still wins over everything"
+    (is (= "BND-201" (:code (classifier/classify
+                             (ex-info "x" {:wagoe/error-code "BND-201"
+                                           :type :database-error})))))))

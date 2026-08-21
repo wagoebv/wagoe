@@ -33,11 +33,12 @@
    Returns the registered rule definition."
   [rule]
   (when-not (:rule-id rule)
-    (throw (ex-info "Rule must have :rule-id" {:rule rule})))
+    (throw (ex-info "Rule must have :rule-id"
+                    {:type :validation-error :rule rule})))
   (let [rule-id (:rule-id rule)]
     (when (get @registry rule-id)
       (throw (ex-info (str "Rule already registered: " rule-id)
-                      {:rule-id rule-id})))
+                      {:type :conflict :rule-id rule-id})))
     (swap! registry assoc rule-id rule)
     rule))
 

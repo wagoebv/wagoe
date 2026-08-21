@@ -367,7 +367,7 @@
   [config]
   (let [{:keys [dsn environment release sample-rate debug server-name]} config]
     (when-not dsn
-      (throw (ex-info "Sentry DSN is required" {:config config})))
+      (throw (ex-info "Sentry DSN is required" {:type :configuration-error :config config})))
 
     ;; Initialize Sentry client
     (sentry/init! dsn (cond-> {}

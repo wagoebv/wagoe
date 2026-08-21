@@ -48,8 +48,9 @@
               :in-memory     (in-memory/create-in-memory-bus
                               (select-keys config [:history-limit]))
               (throw (ex-info (str "Unknown event bus provider: " (pr-str provider))
-                              {:type :configuration-error
-                               :known [:redis-streams :in-memory]})))]
+                              {:type     :unknown-provider
+                               :provider provider
+                               :known    [:redis-streams :in-memory]})))]
     (log/info "Event bus initialized" {:provider provider})
     (assoc bus :wagoe.events/provider provider)))
 

@@ -86,7 +86,8 @@
 
   (put-cached [_ audience-id result ttl-minutes]
     (when-not ttl-minutes
-      (throw (ex-info "put-cached requires non-nil ttl-minutes" {:audience-id audience-id})))
+      (throw (ex-info "put-cached requires non-nil ttl-minutes"
+                      {:type :validation-error :audience-id audience-id})))
     (log/debug "Caching audience result"
                {:audience-id audience-id :count (:count result) :ttl-minutes ttl-minutes})
     (let [user-ids (:user-ids result)]

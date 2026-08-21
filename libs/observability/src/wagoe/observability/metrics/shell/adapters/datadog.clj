@@ -374,7 +374,7 @@
       (let [data (ports/export-metrics this :datadog)]
         (json/generate-string data {:pretty true}))
 
-      (throw (ex-info "Unsupported export format" {:format format}))))
+      (throw (ex-info "Unsupported export format" {:type :validation-error :format format}))))
 
   (export-metric [this metric-name format]
     (case format
@@ -392,13 +392,13 @@
             (:histogram :summary) (assoc base-data
                                          :values values
                                          :stats (calculate-histogram-stats values))))
-        (throw (ex-info "Metric not found" {:metric-name metric-name})))
+        (throw (ex-info "Metric not found" {:type :not-found :metric-name metric-name})))
 
       :json
       (let [data (ports/export-metric this metric-name :datadog)]
         (json/generate-string data {:pretty true}))
 
-      (throw (ex-info "Unsupported export format" {:format format}))))
+      (throw (ex-info "Unsupported export format" {:type :validation-error :format format}))))
 
   (get-metric-values [_ metric-name]
     (if-let [metric (get @(:metrics registry) metric-name)]
@@ -418,7 +418,7 @@
                                  :stats (calculate-histogram-stats values)
                                  :tags (:tags metric)
                                  :timestamp timestamp}))
-      (throw (ex-info "Metric not found" {:metric-name metric-name}))))
+      (throw (ex-info "Metric not found" {:type :not-found :metric-name metric-name}))))
 
   (reset-metrics! [_this]
     (doseq [[_ metric] @(:metrics registry)]
@@ -588,7 +588,8 @@
   [config]
   (when-not (datadog-statsd-config-validator config)
     (throw (ex-info "Invalid Datadog metrics configuration"
-                    {:config config
+                    {:type :configuration-error
+                     :config config
                      :errors (datadog-statsd-config-explainer config)})))
   (let [host (:host config)
         port (:port config 8125)
@@ -612,7 +613,8 @@
   [config]
   (when-not (datadog-statsd-config-validator config)
     (throw (ex-info "Invalid Datadog metrics configuration"
-                    {:config config
+                    {:type :configuration-error
+                     :config config
                      :errors (datadog-statsd-config-explainer config)})))
   (let [host (:host config)
         port (:port config 8125)

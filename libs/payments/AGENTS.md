@@ -212,7 +212,7 @@ first webhook), shipping a payment system that silently takes no money.
 | `:mock` | none | — |
 
 On a missing/blank credential it throws `ex-info` with
-`{:type :config-error :provider … :missing-keys [...] :env-vars [...]}` and a
+`{:type :configuration-error :provider … :missing-keys [...] :env-vars [...]}` and a
 message naming each missing key + env var, e.g.:
 
 ```

@@ -185,7 +185,8 @@
                     :sql (first sql-query)
                     :error (.getMessage e)})
         (throw (ex-info "Database query failed"
-                        {:adapter adapter-dialect
+                        {:type :database-error
+                         :adapter adapter-dialect
                          :sql (first sql-query)
                          :params (rest sql-query)
                          :original-error (.getMessage e)}
@@ -286,7 +287,8 @@
                     :sql (first sql-query)
                     :error (.getMessage e)})
         (throw (ex-info "Database update failed"
-                        {:adapter adapter-dialect
+                        {:type :database-error
+                         :adapter adapter-dialect
                          :sql (first sql-query)
                          :params (rest sql-query)
                          :original-error (.getMessage e)}

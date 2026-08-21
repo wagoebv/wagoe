@@ -160,7 +160,8 @@
                           :filename (:filename metadata)
                           :error (.getMessage e)}))
         (throw (ex-info "Failed to store file"
-                        {:filename (:filename metadata)
+                        {:type :storage-error
+                         :filename (:filename metadata)
                          :error (.getMessage e)}
                         e)))))
 
@@ -263,7 +264,8 @@
     :or {create-directories? true}}]
   (when-not base-path
     (throw (ex-info "base-path is required for local storage"
-                    {:provided-config {:base-path base-path}})))
+                    {:type :configuration-error
+                     :provided-config {:base-path base-path}})))
 
   ;; Create base directory if needed
   (when create-directories?

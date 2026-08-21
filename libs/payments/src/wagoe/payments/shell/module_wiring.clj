@@ -23,7 +23,7 @@
    HMAC verification against a nil secret on first webhook).
 
    `required` is an ordered seq of [config-key ENV_VAR] pairs; `config` is the
-   component config map. Throws ex-info {:type :config-error} naming every
+   component config map. Throws ex-info {:type :configuration-error} naming every
    missing key and its env var."
   [provider required config]
   (when-let [missing (seq (filter (fn [[k _env]] (blank? (get config k))) required))]
@@ -31,7 +31,7 @@
                             (str/capitalize (name provider))
                             (str/join ", " (map (comp str first) missing))
                             (str/join ", " (map second missing)))
-                    {:type         :config-error
+                    {:type         :configuration-error
                      :provider     provider
                      :missing-keys (mapv first missing)
                      :env-vars     (mapv second missing)}))))
@@ -50,7 +50,7 @@
                 (log/info "Using Stripe payment provider")
                 (stripe/->StripePaymentProvider api-key webhook-secret))
     (throw (ex-info "Unknown payment provider"
-                    {:type     :internal-error
+                    {:type     :unknown-provider
                      :provider provider
                      :valid    #{:mock :mollie :stripe}}))))
 

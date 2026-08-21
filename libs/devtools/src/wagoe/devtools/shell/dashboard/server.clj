@@ -183,7 +183,7 @@
                           (try
                             (let [new-val      (config-page/parse-edited-value new-val-str ::parse-failed)
                                   _            (when (= new-val ::parse-failed)
-                                                 (throw (ex-info "Failed to parse edited config value as EDN" {})))
+                                                 (throw (ex-info "Failed to parse edited config value as EDN" {:type :validation-error})))
                                   set-prep-fn  (resolve 'integrant.repl/set-prep!)
                                   ;; Supplied by the application on :wagoe/dashboard.
                                   ;; Rebuilding the Integrant config means knowing

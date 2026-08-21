@@ -244,7 +244,8 @@
   (if (db-config-validator db-config)
     db-config
     (throw (ex-info "Invalid database configuration"
-                    {:config db-config
+                    {:type :configuration-error
+                     :config db-config
                      :errors (db-config-explainer db-config)}))))
 
 ;; =============================================================================

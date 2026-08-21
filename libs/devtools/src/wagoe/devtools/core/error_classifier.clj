@@ -51,6 +51,11 @@
         (= :db/error (:type data))
         {:code "BND-303" :category :persistence :data data :source :ex-data-pattern}
 
+        ;; A query, update or DDL that failed — not a connection problem, which
+        ;; is what BND-303's fix line tells you to go and check.
+        (= :database-error (:type data))
+        {:code "BND-304" :category :persistence :data data :source :ex-data-pattern}
+
         ;; Both spellings: :auth/required is what the auth lib throws,
         ;; :unauthorized what the HTTP error mapping expects.
         (contains? #{:auth/required :unauthorized :auth-failed} (:type data))
@@ -66,6 +71,16 @@
         (and (= :configuration-error (:type data))
              (:required-env-var data))
         {:code "BND-101" :category :config :data data :source :ex-data-pattern}
+
+        ;; BND-102 is "Unknown Provider", and it had no producer at all until
+        ;; the module wirings started typing their throws (BOU-323).
+        ;;
+        ;; Keyed on the type, not on "a :configuration-error that happens to
+        ;; carry a :provider": a missing Sentry DSN names its provider too, and
+        ;; answering "check the valid providers list" to that is worse than
+        ;; answering nothing.
+        (= :unknown-provider (:type data))
+        {:code "BND-102" :category :config :data data :source :ex-data-pattern}
 
         :else nil))))
 
@@ -104,9 +119,16 @@
 (defn classify
   "Classify an exception into a BND-xxx error code.
 
-   Walks the cause chain: if the outermost exception has :wagoe/error-code
-   in ex-data (strategy 1), that takes precedence. Otherwise, classifies the
-   root cause.
+   Order, and why. An explicit `:wagoe/error-code` wins. Then the *outermost*
+   exception's own ex-data: the code that threw chose a `:type`, and that
+   choice is better information than the class of whatever it wrapped. Only
+   then the root cause — its ex-data, its message, its class.
+
+   Reading the root cause first is what this used to do, and it produced the
+   wrong answer for every wrapped database failure: an INSERT violating a
+   unique constraint is thrown as `{:type :database-error}` around a
+   `SQLException`, and `instance? SQLException` reported BND-303 \"Database
+   Connection Failed — verify the database is running\" (BOU-323).
 
    Returns a map with :code, :category, :exception, :data, :source
    or a map with :code nil for unclassified errors."
@@ -115,6 +137,7 @@
     (let [explicit (classify-explicit-code exception)
           root     (root-cause exception)
           result   (or explicit
+                       (classify-ex-data-pattern exception)
                        (classify-ex-data-pattern root)
                        (classify-message-pattern root)
                        (classify-exception-type root)

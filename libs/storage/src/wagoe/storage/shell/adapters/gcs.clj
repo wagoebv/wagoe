@@ -107,7 +107,8 @@
                           :filename (:filename metadata)
                           :error (.getMessage e)}))
         (throw (ex-info "Failed to store file in GCS"
-                        {:bucket bucket
+                        {:type :storage-error
+                         :bucket bucket
                          :filename (:filename metadata)
                          :error (.getMessage e)}
                         e)))))
@@ -245,11 +246,13 @@
   [{:keys [bucket project-id prefix public-read? logger] :as config}]
   (when-not bucket
     (throw (ex-info "bucket is required for GCS storage"
-                    {:provided-config (dissoc config :credentials-path)})))
+                    {:type :configuration-error
+                     :provided-config (dissoc config :credentials-path)})))
 
   (when-not project-id
     (throw (ex-info "project-id is required for GCS storage"
-                    {:provided-config (dissoc config :credentials-path)})))
+                    {:type :configuration-error
+                     :provided-config (dissoc config :credentials-path)})))
 
   (let [storage (create-storage config)]
 
