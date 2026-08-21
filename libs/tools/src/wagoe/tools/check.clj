@@ -64,8 +64,12 @@
     :scope :any
     :label "FC/IS boundaries"
     :cmd   ["bb" "check:fcis"]}
+   ;; :monorepo, because check-deps walks libs/* and nothing else. A generated
+   ;; project has no libs/, so this reported "0 libraries scanned, 0 violations"
+   ;; — a green row in `bb check` for a check that cannot fire, which is the
+   ;; shape BOU-250 was about (BOU-325).
    {:id    :deps
-    :scope :any
+    :scope :monorepo
     :label "Dependency direction"
     :cmd   ["bb" "check:deps"]}
    {:id    :ports

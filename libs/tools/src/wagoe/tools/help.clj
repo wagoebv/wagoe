@@ -10,7 +10,8 @@
 ;;   bb guide error BND-xxx      # Look up an error code
 
 (ns wagoe.tools.help
-  (:require [wagoe.tools.ansi :refer [bold green red yellow dim cyan]]
+  (:require [wagoe.tools.check :as check]
+            [wagoe.tools.ansi :refer [bold green red yellow dim cyan]]
             [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.string :as str]))
@@ -98,9 +99,9 @@
   (println "  bb ai gen-tests libs/user/src/wagoe/user/core/validation.clj")
   (println)
   (println (cyan "Quality gates:"))
+  (println "  bb check                                              # Every gate that applies here")
   (println "  bb check:fcis                                         # FC/IS enforcement")
   (println "  bb check:placeholder-tests                            # Detect placeholder tests")
-  (println "  bb check:deps                                         # Dependency direction check")
   (println)
   (println (dim "Test suites are defined in tests.edn. Each library has its own :id.")))
 
@@ -214,9 +215,9 @@
   (println "  bb doctor                             Validate config for common mistakes")
   (println "  bb doctor:env                         Check environment prerequisites")
   (println "  bb doctor --all                       Run both config + environment checks")
+  (println "  bb check                              Every gate that applies to this project")
   (println "  bb check:fcis                         FC/IS enforcement check")
   (println "  bb check:placeholder-tests            Detect placeholder test assertions")
-  (println "  bb check:deps                         Verify library dependency direction")
   (println "  bb check-links                        Validate local markdown links")
   (println "  bb smoke-check                        Verify deps.edn aliases and tools")
   (println)
@@ -225,11 +226,16 @@
   (println "  bb db:reset                           Drop + recreate + migrate (with confirmation)")
   (println "  bb db:seed                            Seed database from dev.edn")
   (println)
-  (println (cyan "Deployment:"))
-  (println "  bb deploy --all                       Deploy all libraries to Clojars")
-  (println "  bb deploy --missing                   Deploy only missing libraries")
-  (println "  bb deploy core platform user          Deploy specific libraries")
-  (println)
+  ;; Publishing is a maintainer's job in the Wagoe repository. A generated
+  ;; project has no `bb deploy` task — it was removed in BOU-325, because it
+  ;; publishes *Wagoe's* libraries to Clojars — so printing it here told users
+  ;; to run a command they do not have, about artifacts that are not theirs.
+  (when (check/framework-repo?)
+    (println (cyan "Deployment:"))
+    (println "  bb deploy --all                       Deploy all libraries to Clojars")
+    (println "  bb deploy --missing                   Deploy only missing libraries")
+    (println "  bb deploy core platform user          Deploy specific libraries")
+    (println))
   (println (cyan "Utilities:"))
   (println "  bb install-hooks                      Configure git hooks")
   (println)

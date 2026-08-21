@@ -2,6 +2,7 @@
   (:require [clojure.test :refer [deftest is testing]]
             [clojure.java.io :as io]
             [clojure.string :as str]
+            [wagoe.tools.check]
             [wagoe.tools.help :as help]))
 
 ;; =============================================================================
@@ -91,3 +92,26 @@
       (is (re-find #"bb db:status" output) "missing db:status")
       (is (re-find #"bb db:reset" output) "missing db:reset")
       (is (re-find #"bb db:seed" output) "missing db:seed"))))
+
+;; =============================================================================
+;; What `bb guide` advertises depends on where it runs (BOU-325)
+;; =============================================================================
+
+(deftest ^:unit guide-does-not-offer-deployment-outside-the-framework-repo
+  ;; `bb guide` ships in every generated project, and it printed a Deployment
+  ;; section telling the user to run `bb deploy --all` — a task their bb.edn
+  ;; does not define, about libraries that are not theirs. It publishes Wagoe
+  ;; to Clojars.
+  (testing "in a generated project the section is absent"
+    (with-redefs [wagoe.tools.check/framework-repo? (constantly false)]
+      (let [out (with-out-str (help/-main))]
+        (is (not (str/includes? out "bb deploy")))
+        (is (not (str/includes? out "Deployment:")))
+
+        (testing "and what remains still tells the user what to do"
+          (is (str/includes? out "bb scaffold"))
+          (is (str/includes? out "bb check"))))))
+
+  (testing "in the framework repo it is there"
+    (with-redefs [wagoe.tools.check/framework-repo? (constantly true)]
+      (is (str/includes? (with-out-str (help/-main)) "bb deploy --all")))))
