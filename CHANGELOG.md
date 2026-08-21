@@ -31,6 +31,27 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **One validation API instead of three** (BOU-323). `wagoe.core.validation` and
+  `wagoe.core.utils.validation` each defined `validate-with-transform`,
+  `validate-cli-args`, `validate-request` and a set of result accessors — same
+  names, different implementations — and the first also re-exported the
+  constructors from `wagoe.core.validation.result`. Nothing outside their own
+  tests called any of them: the two real consumers use the compiled-schema cache
+  and two value predicates.
+
+  The version in `wagoe.core.validation` also chose its *return shape* at
+  runtime from the `WAG_DEVEX_VALIDATION` flag — `{:valid? true :data …}` with
+  the flag off, a structured result with it on. A function whose result shape
+  depends on an environment variable cannot be typed, tested or documented, and
+  it had no test covering either branch. ADR-036 §2 settles the shape, so the
+  fork is deleted rather than ported, along with the flag's only reader.
+
+  What is left is one job per namespace: `wagoe.core.validation` caches
+  compiled Malli validators (which is worth roughly ten runs each),
+  `wagoe.core.validation.result` owns the result shape, and
+  `wagoe.core.utils.validation` keeps the two predicates the user CLI uses. The
+  cache had no tests at all; it does now.
+
 - **The error-shape allowlist is empty** (BOU-323, last migration step). It
   shipped with 81 findings on 18 August; the remaining 13 are gone.
 

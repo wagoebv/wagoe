@@ -21,29 +21,15 @@
 
    Design Principles:
    - Forward compatibility: new keys can be added without breaking existing code
-   - Feature-flag gated: new functionality controlled by WAG_DEVEX_VALIDATION
    - I18n-ready: :code + :params enable future message translation
-   - FC/IS compliant: pure data structures, no side effects"
-  (:require [wagoe.core.config.feature-flags :as flags]))
+   - FC/IS compliant: pure data structures, no side effects
 
-;; =============================================================================
-;; Feature Flag Support
-;; =============================================================================
+   One shape, not two. This namespace used to expose
+   `devex-validation-enabled?`, and wagoe.core.validation branched on it to
+   decide whether to return {:valid? true :data …} or a structured result — a
+   function whose return shape depended on an environment variable. ADR-036 §2
+   settles the shape; the flag had no other reader (BOU-323).")
 
-(defn devex-validation-enabled?
-  "Check if DevEx validation features are enabled.
-
-   Delegates to the feature-flags system for consistent flag resolution.
-   Default: false (backward compatible).
-
-   Returns:
-     Boolean indicating if DevEx validation is enabled"
-  []
-  (flags/enabled? :devex-validation))
-
-;; =============================================================================
-;; Result Constructors
-;; =============================================================================
 
 (defn success-result
   "Create a successful validation result.

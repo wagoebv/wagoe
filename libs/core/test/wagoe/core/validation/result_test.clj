@@ -4,15 +4,6 @@
             [clojure.test :refer [deftest is testing]]))
 
 ;; =============================================================================
-;; Feature Flag Tests
-;; =============================================================================
-
-(deftest ^:unit devex-validation-enabled-test
-  (testing "Feature flag reads from environment"
-    ;; By default should be false (unset)
-    (is (false? (vr/devex-validation-enabled?)))))
-
-;; =============================================================================
 ;; Result Constructor Tests
 ;; =============================================================================
 

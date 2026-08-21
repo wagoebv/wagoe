@@ -88,14 +88,43 @@ The jobs worker also stopped putting a thrown exception's class name in
 `:error :type`. That field is a keyword naming the kind of failure
 (`:handler-error`); the class is `:error :exception-class`.
 
-### 3. `wagoe.core.validation.result/normalize-result` and `legacy-result?` are gone (BOU-323)
+### 3. The duplicated validation API is gone (BOU-323)
+
+Three namespaces defined the same functions. `wagoe.core.validation` and
+`wagoe.core.utils.validation` each had their own `validate-with-transform`,
+`validate-cli-args`, `validate-request` and result accessors, and
+`wagoe.core.validation` also re-exported `success-result`, `failure-result` and
+`error-map` from `wagoe.core.validation.result`.
+
+Worse, `wagoe.core.validation/validate-with-transform` chose its **return
+shape** at runtime from the `WAG_DEVEX_VALIDATION` flag: `{:valid? true :data …}`
+with it off, a structured result with it on.
+
+What each namespace is now:
+
+* `wagoe.core.validation` — cached compiled `validator` / `explainer` /
+  `decoder`, plus `valid?` and `explain`. That is the reason it exists:
+  compiling a Malli validator costs about ten times running one.
+* `wagoe.core.validation.result` — the result shape and its accessors.
+* `wagoe.core.utils.validation` — `valid-uuid?` and `valid-output-format?`.
+
+**Fix:** decode with `(validation/decoder schema transformer)`, validate with
+`validation/valid?`, and build results with `wagoe.core.validation.result`. If
+you relied on the flag-on behaviour, the structured constructors are what you
+were getting; if you relied on the flag-off behaviour, `{:valid? …}` is a map
+literal you can write yourself.
+
+`devex-validation-enabled?` is gone from `wagoe.core.validation.result`. The
+flag is still registered in `wagoe.core.config.feature-flags`; nothing reads it.
+
+### 4. `wagoe.core.validation.result/normalize-result` and `legacy-result?` are gone (BOU-323)
 
 They coerced between two result shapes at runtime, in the namespace that
 defines the one shape. Nothing in the framework called them. If you did: a
 result without `:warnings` is a valid result, and `get-warnings` already
 answers `[]` for it.
 
-### 4. `wagoe.user.shell.auth/change-user-password` is gone (BOU-323)
+### 5. `wagoe.user.shell.auth/change-user-password` is gone (BOU-323)
 
 It had no callers, and it could not have had working ones: it called
 `update-user` with three arguments where the repository protocol takes two, so

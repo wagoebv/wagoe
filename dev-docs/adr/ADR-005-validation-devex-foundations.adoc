@@ -118,6 +118,17 @@ Environment variable `WAG_DEVEX_VALIDATION=true` enables:
 
 === 2. Backward Compatibility Strategy
 
+[NOTE]
+====
+Superseded in part by xref:ADR-036-error-convention.adoc[ADR-036] (BOU-323).
+The dual code path below lived in
+`wagoe.core.validation/validate-with-transform`, which chose its *return shape*
+at runtime from the flag — and nothing outside its own tests ever called it.
+ADR-036 §2 settles one shape for a pure decision, so the fork, the function and
+the flag's only reader are gone. `WAG_DEVEX_VALIDATION` is still registered in
+`wagoe.core.config.feature-flags`, and is now read by nothing.
+====
+
 **Existing code path (WAG_DEVEX_VALIDATION=false or unset):**
 
 - Legacy result format: `{:valid? boolean :data map :errors malli-errors}`
