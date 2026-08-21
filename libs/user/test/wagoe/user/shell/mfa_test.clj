@@ -312,7 +312,7 @@
       (testing "returns error for missing user"
         (is (some? result))
         (is (false? (:success? result)))
-        (is (= "User not found" (:error result)))))))
+        (is (= {:type :cannot-enable :message "User not found"} (:error result)))))))
 
 (deftest ^:unit ^:security enable-mfa-without-setup-test
   (testing "MFA enable without prior setup (missing secret/codes)"
@@ -337,4 +337,4 @@
       (testing "returns error when MFA not enabled"
         (is (some? result))
         (is (false? (:success? result)))
-        (is (= "MFA is not enabled" (:error result)))))))
+        (is (= {:type :cannot-disable :message "MFA is not enabled"} (:error result)))))))

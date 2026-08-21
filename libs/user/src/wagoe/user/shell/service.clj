@@ -319,13 +319,19 @@
                                     ip-address
                                     user-agent
                                     false
-                                    (or (:message auth-result) "Authentication failed")))]
+                                    (or (get-in auth-result [:error :message])
+                                        "Authentication failed")))]
                  (when audit-entry
                    (.create-audit-log audit-repository audit-entry))
+                 ;; The public shape is unchanged. auth-shell moved to the
+                 ;; ADR-036 §3 return — {:error {:type … :message …}} — and this
+                 ;; is the layer that flattens it, so `login` keeps answering
+                 ;; {:authenticated false :reason … :message … :retry-after …}
+                 ;; to every existing caller (BOU-323).
                  {:authenticated false
-                  :reason (:error auth-result)
-                  :message (:message auth-result)
-                  :retry-after (:retry-after auth-result)}))))))
+                  :reason (get-in auth-result [:error :type])
+                  :message (get-in auth-result [:error :message])
+                  :retry-after (get-in auth-result [:error :retry-after])}))))))
      {:system {:user-repository user-repository
                :session-repository session-repository
                :audit-repository audit-repository

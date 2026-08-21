@@ -1488,7 +1488,7 @@
             (html-response request
                            (profile-ui/mfa-qr-code-step secret qr-code-url issuer account-name backup-codes)))
           ;; Error during setup
-          (html-response request (ui/error-message (:error setup-result)) 500)))
+          (html-response request (ui/error-message (get-in setup-result [:error :message])) 500)))
       (catch Exception e
         (log/error e "Error in mfa-setup-initiate-handler")
         (html-response request (ui/error-message (.getMessage e)) 500)))))
@@ -1531,7 +1531,7 @@
           (let [;; Call MFA service to enable MFA
                 enable-result (mfa/enable-mfa mfa-service user-id secret backup-codes verification-code)]
             (log/info "MFA enable result" {:success? (:success? enable-result)
-                                           :error (:error enable-result)})
+                                           :error (get-in enable-result [:error :message])})
             (if (:success? enable-result)
               ;; Success - show backup codes directly (HTMX response)
               (html-response request
@@ -1635,7 +1635,7 @@
               (-> (response/redirect "/web/profile")
                   (assoc :flash {:success "Two-factor authentication has been disabled"}))
               (html-response request
-                             (profile-ui/mfa-disable-confirm-page {:password [(:error disable-result)]})
+                             (profile-ui/mfa-disable-confirm-page {:password [(get-in disable-result [:error :message])]})
                              400)))
           ;; Password incorrect
           (html-response request

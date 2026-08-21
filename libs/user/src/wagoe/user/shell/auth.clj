@@ -187,7 +187,18 @@
      login-context: Map with :ip-address, :user-agent, :mfa-code (optional)
      
    Returns:
-     Authentication result map with :success?, :user, :session, :requires-mfa?, etc."
+     On success `{:success? true :user … :session …}`.
+
+     On failure `{:success? false :error {:type … :message …}}`, the shape
+     ADR-036 §3 decided — a wrong password is an answer, not an exceptional
+     condition, and a caller that wants to escalate can rethrow the `:error`
+     map as a typed `ex-info` without inventing a taxonomy. `:type` is one of
+     `:validation-error`, `:authentication-failed`, `:mfa-required`,
+     `:mfa-verification-failed`; the authentication-failed case may carry
+     `:retry-after`.
+
+     `:requires-mfa?` stays at the top level: it is not part of why the attempt
+     failed, it is what the caller does next."
   [auth-service email password login-context]
   (let [{:keys [user-repository session-repository mfa-service auth-config]} auth-service]
     (log/info "Authentication attempt" {:email email :ip (:ip-address login-context)})
@@ -242,15 +253,18 @@
                    ;; Validation errors
                    (not (:valid? credential-validation))
                    {:success? false
-                    :error :validation-error
-                    :message "Invalid request format"}
+                    :error {:type    :validation-error
+                            :message "Invalid request format"}}
 
                    ;; User not found or login blocked
                    (not (:allowed? login-allowed?))
                    {:success? false
-                    :error :authentication-failed
-                    :message (:reason login-allowed?)
-                    :retry-after (:retry-after login-allowed?)}
+                    :error {:type        :authentication-failed
+                            :message     (:reason login-allowed?)
+                            ;; Kept beside the message rather than at the top
+                            ;; level: it is part of why this failed, and the
+                            ;; service lifts it out for the Retry-After header.
+                            :retry-after (:retry-after login-allowed?)}}
 
                    ;; Password verification failed
                    (not password-valid?)
@@ -261,15 +275,16 @@
                      (.update-user user-repository updated-user)
                      (log/warn "Authentication failed - invalid password" {:email email})
                      {:success? false
-                      :error :authentication-failed
-                      :message "Invalid credentials"})
+                      :error {:type    :authentication-failed
+                              :message "Invalid credentials"}})
 
                    ;; MFA required but not provided
                    (and (:requires-mfa? mfa-requirement)
                         (nil? mfa-code))
                    {:success? false
                     :requires-mfa? true
-                    :message "MFA code required"
+                    :error {:type    :mfa-required
+                            :message "MFA code required"}
                     :user (dissoc user :password-hash :mfa-secret :mfa-backup-codes)}
 
                    ;; MFA code provided but invalid
@@ -279,8 +294,8 @@
                    (do
                      (log/warn "MFA verification failed" {:email email})
                      {:success? false
-                      :error :mfa-verification-failed
-                      :message "Invalid MFA code"})
+                      :error {:type    :mfa-verification-failed
+                              :message "Invalid MFA code"}})
 
                    ;; Successful authentication (with or without MFA)
                    :else
@@ -355,52 +370,3 @@
                               :password-created-at (Instant/now))]
     user-with-hash))
 
-(defn change-user-password
-  "Shell function: Change user password with validation.
-   
-   Args:
-     user-id: User ID
-     old-password: Current password (for verification)
-     new-password: New password to set
-     user-repository: IUserRepository implementation
-     auth-config: Authentication configuration
-     
-   Returns:
-     {:success? boolean :error optional-string}
-     
-   Side effects: Password hashing, I/O operations"
-  [user-id old-password new-password user-repository auth-config]
-  (let [user (.find-user-by-id user-repository user-id)
-        current-time (Instant/now)]
-
-    (cond
-      ;; User not found
-      (nil? user)
-      {:success? false :error "User not found"}
-
-      ;; Old password verification failed
-      (not (verify-password old-password (:password-hash user)))
-      {:success? false :error "Current password is incorrect"}
-
-      ;; New password doesn't meet policy
-      (let [policy-check (auth-core/meets-password-policy?
-                          new-password
-                          (:password-policy auth-config)
-                          {:email (:email user)})]
-        (not (:valid? policy-check)))
-      {:success? false
-       :error "New password doesn't meet security requirements"
-       :violations (:violations (auth-core/meets-password-policy?
-                                 new-password
-                                 (:password-policy auth-config)
-                                 {:email (:email user)}))}
-
-      ;; Change password
-      :else
-      (let [new-hash (hash-password new-password)
-            updates {:password-hash new-hash
-                     :password-created-at current-time
-                     :force-password-reset false}]
-        (.update-user user-repository user-id updates)
-        (log/info "Password changed" {:user-id user-id})
-        {:success? true}))))

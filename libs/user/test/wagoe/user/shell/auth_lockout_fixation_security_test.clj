@@ -78,8 +78,8 @@
       (testing "the CORRECT password is rejected while locked (brute-force defense)"
         (let [result (login svc correct-password)]
           (is (false? (:success? result)) "correct password still refused")
-          (is (= :authentication-failed (:error result)))
-          (is (some? (:retry-after result)) "response tells the client when to retry"))))))
+          (is (= :authentication-failed (get-in result [:error :type])))
+          (is (some? (get-in result [:error :retry-after])) "response tells the client when to retry"))))))
 
 (deftest ^:security ^:unit successful-login-resets-failed-count
   (testing "a correct password before the threshold clears accrued failures"

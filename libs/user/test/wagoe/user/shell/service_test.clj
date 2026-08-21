@@ -570,3 +570,31 @@
           (let [ex (is (thrown? clojure.lang.ExceptionInfo
                                 (ports/change-password service user-id "wrong" "BetterPass123!")))]
             (is (= :invalid-current-password (:type (ex-data ex))))))))))
+
+(deftest ^:unit failed-login-keeps-its-public-shape
+  ;; auth-shell moved to the ADR-036 §3 return — {:error {:type … :message …}}
+  ;; — and this service is the layer that flattens it. If the flattening is
+  ;; wrong, every caller of `authenticate-user` silently gets nil for :reason
+  ;; and :message: the login page shows an empty error, the audit log records
+  ;; "Authentication failed" for everything, and no test would have noticed
+  ;; (BOU-323).
+  (let [user-id (UUID/randomUUID)
+        state   (atom {user-id {:id user-id :email "a@example.nl" :active true}})
+        service (sut/->UserService (->UserRepoStub state) nil (->AuditRepoStub) {} nil nil)
+        retry   (Instant/parse "2026-08-21T10:15:00Z")]
+    (with-redefs [auth-shell/authenticate-user
+                  (fn [_ _ _ _]
+                    {:success? false
+                     :error {:type        :authentication-failed
+                             :message     "Account temporarily locked due to failed login attempts"
+                             :retry-after retry}})]
+      (let [result (ports/authenticate-user service {:email "a@example.nl"
+                                                     :password "wrong"
+                                                     :ip-address "127.0.0.1"
+                                                     :user-agent "test"})]
+        (is (= false (:authenticated result)))
+        (is (= :authentication-failed (:reason result))
+            ":reason is the type, as it was before the shape moved")
+        (is (= "Account temporarily locked due to failed login attempts" (:message result)))
+        (is (= retry (:retry-after result))
+            ":retry-after survives the move into the :error map")))))

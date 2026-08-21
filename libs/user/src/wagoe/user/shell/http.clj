@@ -259,7 +259,10 @@
                    :accountName (:account-name result)})}
           {:status 400
            :headers {"Content-Type" "application/json"}
-           :body (json/generate-string {:error (:error result)})}))
+           ;; The message, not the map. mfa moved to the ADR-036 §3 return
+           ;; ({:error {:type … :message …}}); flattening here keeps this
+           ;; endpoint answering exactly what it answered before (BOU-323).
+           :body (json/generate-string {:error (get-in result [:error :message])})}))
       (catch Exception e
         {:status 500
          :headers {"Content-Type" "application/json"}
@@ -284,7 +287,10 @@
            :body (json/generate-string {:message "MFA enabled successfully"})}
           {:status 400
            :headers {"Content-Type" "application/json"}
-           :body (json/generate-string {:error (:error result)})}))
+           ;; The message, not the map. mfa moved to the ADR-036 §3 return
+           ;; ({:error {:type … :message …}}); flattening here keeps this
+           ;; endpoint answering exactly what it answered before (BOU-323).
+           :body (json/generate-string {:error (get-in result [:error :message])})}))
       (catch Exception e
         {:status 500
          :headers {"Content-Type" "application/json"}
@@ -305,7 +311,10 @@
            :body (json/generate-string {:message "MFA disabled successfully"})}
           {:status 400
            :headers {"Content-Type" "application/json"}
-           :body (json/generate-string {:error (:error result)})}))
+           ;; The message, not the map. mfa moved to the ADR-036 §3 return
+           ;; ({:error {:type … :message …}}); flattening here keeps this
+           ;; endpoint answering exactly what it answered before (BOU-323).
+           :body (json/generate-string {:error (get-in result [:error :message])})}))
       (catch Exception e
         {:status 500
          :headers {"Content-Type" "application/json"}

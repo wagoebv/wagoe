@@ -31,6 +31,26 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **The user library's authentication and MFA results carry a typed error**
+  (BOU-323, first migration step). `auth/authenticate-user` answered
+  `{:error :authentication-failed :message "…"}` and the MFA shell answered
+  `{:error "Invalid verification code"}` — a keyword in one place, a bare string
+  in another, for the same idea. Both are `{:error {:type <keyword> :message
+  <string>}}` now, the shape ADR-036 §3 decided, so a caller that wants to
+  escalate can rethrow the `:error` map as a typed `ex-info` without inventing
+  a taxonomy.
+
+  Public behaviour is unchanged and tested: `IUserService/authenticate-user`
+  still answers `{:authenticated false :reason … :message … :retry-after …}`,
+  and the MFA endpoints still answer `{"error": "<message>"}`. Direct callers of
+  the two shell namespaces are affected — see UPGRADING.md.
+
+  `auth/change-user-password` is deleted rather than migrated. It had no
+  callers, and it could not have had working ones: it called `update-user` with
+  three arguments where the protocol takes two, so any call ended in an arity
+  error. Ten of the 81 findings in `.wagoe/check-error-shape.edn` are gone with
+  this step.
+
 - **`bb check:error-shape`** (BOU-323). ADR-022 required a `:type` on every
   exception thrown at a boundary, in April; nothing checked it, and 59 `ex-info`
   throws in `shell/` namespaces had none by August. Roughly half sit on a
