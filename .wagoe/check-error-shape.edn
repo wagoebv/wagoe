@@ -8,8 +8,8 @@
 ;; the count is stale, which also fails. Both directions are proved in
 ;; gate_firing_test.
 ;;
-;; 81 findings across 37 files, measured 2026-08-18:
-;;   {:untyped-throw 59, :string-error 6, :string-type 11, :non-map-error 4, :no-error 1}
+;; 71 findings across 34 files, measured 2026-08-21:
+;;   {:untyped-throw 58, :string-error 2, :string-type 11}
 
 [
   {:file  "libs/ai/src/wagoe/ai/shell/module_wiring.clj"
@@ -183,31 +183,6 @@
    :why   "TO FIX (BOU-323 step 1). ADR-022 requires :type on a thrown ex-info; predates the gate."}
 
   {:file  "libs/storage/src/wagoe/storage/shell/service.clj"
-   :rule  :untyped-throw
-   :count 1
-   :why   "TO FIX (BOU-323 step 1). ADR-022 requires :type on a thrown ex-info; predates the gate."}
-
-  {:file  "libs/user/src/wagoe/user/shell/auth.clj"
-   :rule  :no-error
-   :count 1
-   :why   "TO FIX (BOU-323 step 2). {:success? false} with no :error at all."}
-
-  {:file  "libs/user/src/wagoe/user/shell/auth.clj"
-   :rule  :non-map-error
-   :count 4
-   :why   "TO FIX (BOU-323 step 2). :error is a keyword; ADR-036 §3 requires a map with a :type."}
-
-  {:file  "libs/user/src/wagoe/user/shell/auth.clj"
-   :rule  :string-error
-   :count 3
-   :why   "TO FIX (BOU-323 step 2). :error is a bare string; ADR-036 §3 requires a map with a :type."}
-
-  {:file  "libs/user/src/wagoe/user/shell/mfa.clj"
-   :rule  :string-error
-   :count 1
-   :why   "TO FIX (BOU-323 step 2). :error is a bare string; ADR-036 §3 requires a map with a :type."}
-
-  {:file  "libs/user/src/wagoe/user/shell/module_wiring.clj"
    :rule  :untyped-throw
    :count 1
    :why   "TO FIX (BOU-323 step 1). ADR-022 requires :type on a thrown ex-info; predates the gate."}]

@@ -264,9 +264,11 @@
                    nil)]
       (with-redefs [auth-shell/authenticate-user
                     (fn [_auth-service _email _password _login-context]
+                      ;; The shape auth-shell produces since ADR-036 — a stub
+                      ;; that lies about its producer teaches the wrong
+                      ;; convention to whoever copies it next (BOU-323).
                       {:success? false
-                       :error :invalid-credentials
-                       :message "Nope"})]
+                       :error {:type :invalid-credentials :message "Nope"}})]
         (let [ex (is (thrown? clojure.lang.ExceptionInfo
                               (ports/claim-user-identity
                                service
@@ -291,8 +293,7 @@
                     auth-shell/authenticate-user
                     (fn [_auth-service _email _password _login-context]
                       {:success? false
-                       :error :session-creation-failed
-                       :message "session boom"})]
+                       :error {:type :session-creation-failed :message "session boom"}})]
         (let [ex (is (thrown? clojure.lang.ExceptionInfo
                               (ports/claim-user-identity
                                service
@@ -570,3 +571,52 @@
           (let [ex (is (thrown? clojure.lang.ExceptionInfo
                                 (ports/change-password service user-id "wrong" "BetterPass123!")))]
             (is (= :invalid-current-password (:type (ex-data ex))))))))))
+
+(deftest ^:unit failed-login-keeps-its-public-shape
+  ;; auth-shell moved to the ADR-036 §3 return — {:error {:type … :message …}}
+  ;; — and this service is the layer that flattens it. If the flattening is
+  ;; wrong, every caller of `authenticate-user` silently gets nil for :reason
+  ;; and :message: the login page shows an empty error, the audit log records
+  ;; "Authentication failed" for everything, and no test would have noticed
+  ;; (BOU-323).
+  (let [user-id (UUID/randomUUID)
+        state   (atom {user-id {:id user-id :email "a@example.nl" :active true}})
+        service (sut/->UserService (->UserRepoStub state) nil (->AuditRepoStub) {} nil nil)
+        retry   (Instant/parse "2026-08-21T10:15:00Z")]
+    (with-redefs [auth-shell/authenticate-user
+                  (fn [_ _ _ _]
+                    {:success? false
+                     :error {:type        :authentication-failed
+                             :message     "Account temporarily locked due to failed login attempts"
+                             :retry-after retry}})]
+      (let [result (ports/authenticate-user service {:email "a@example.nl"
+                                                     :password "wrong"
+                                                     :ip-address "127.0.0.1"
+                                                     :user-agent "test"})]
+        (is (= false (:authenticated result)))
+        (is (= :authentication-failed (:reason result))
+            ":reason is the type, as it was before the shape moved")
+        (is (= "Account temporarily locked due to failed login attempts" (:message result)))
+        (is (= retry (:retry-after result))
+            ":retry-after survives the move into the :error map"))))
+
+  (testing "and so does the MFA-required branch"
+    ;; This is the branch the first version of the migration missed. Nothing in
+    ;; the repository reads this :message — web_handlers branches on
+    ;; :requires-mfa? and the interceptor hardcodes its own string — so it went
+    ;; from "MFA code required" to nil with every test still green.
+    (let [user-id (UUID/randomUUID)
+          state   (atom {user-id {:id user-id :email "a@example.nl" :active true}})
+          service (sut/->UserService (->UserRepoStub state) nil (->AuditRepoStub) {} nil nil)]
+      (with-redefs [auth-shell/authenticate-user
+                    (fn [_ _ _ _]
+                      {:success? false
+                       :requires-mfa? true
+                       :user {:id user-id :email "a@example.nl"}
+                       :error {:type :mfa-required :message "MFA code required"}})]
+        (let [result (ports/authenticate-user service {:email "a@example.nl"
+                                                       :password "right"
+                                                       :ip-address "127.0.0.1"
+                                                       :user-agent "test"})]
+          (is (true? (:requires-mfa? result)))
+          (is (= "MFA code required" (:message result))))))))

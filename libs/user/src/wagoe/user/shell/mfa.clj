@@ -162,11 +162,9 @@
      user-id: UUID of user setting up MFA
      
    Returns:
-     {:success? boolean
-      :secret string (if successful)
-      :qr-code-url string (if successful)
-      :backup-codes vector (if successful)
-      :error string (if failed)}"
+     `{:success? true :secret … :qr-code-url … :backup-codes …}`, or
+     `{:success? false :error {:type … :message …}}` — the ADR-036 §3 shape.
+     `:type` is `:cannot-enable` or `:mfa-setup-failed`."
   [mfa-service user-id]
   (let [{:keys [user-repository config]} mfa-service]
     (try
@@ -188,10 +186,12 @@
              :account-name account-name})
           ;; Cannot enable MFA
           {:success? false
-           :error (:reason can-enable)}))
+           :error {:type    :cannot-enable
+                   :message (:reason can-enable)}}))
       (catch Exception e
         {:success? false
-         :error (str "Failed to set up MFA: " (.getMessage e))}))))
+         :error {:type    :mfa-setup-failed
+                 :message (str "Failed to set up MFA: " (.getMessage e))}}))))
 
 (defn enable-mfa
   "Enable MFA for a user after verifying setup.
@@ -204,8 +204,10 @@
      verification-code: 6-digit code from authenticator app
      
    Returns:
-     {:success? boolean
-      :error string (if failed)}"
+     `{:success? true}`, or `{:success? false :error {:type … :message …}}` —
+     the ADR-036 §3 shape. A code that does not match is an answer, not an
+     exceptional condition. `:type` is `:invalid-code`, `:cannot-enable` or
+     `:mfa-enable-failed`."
   [mfa-service user-id secret backup-codes verification-code]
   (let [{:keys [user-repository]} mfa-service]
     (try
@@ -232,13 +234,16 @@
               {:success? true})
             ;; Invalid verification code
             {:success? false
-             :error "Invalid verification code"})
+             :error {:type    :invalid-code
+                     :message "Invalid verification code"}})
           ;; Cannot enable MFA
           {:success? false
-           :error (:reason can-enable)}))
+           :error {:type    :cannot-enable
+                   :message (:reason can-enable)}}))
       (catch Exception e
         {:success? false
-         :error (str "Failed to enable MFA: " (.getMessage e))}))))
+         :error {:type    :mfa-enable-failed
+                 :message (str "Failed to enable MFA: " (.getMessage e))}}))))
 
 (defn disable-mfa
   "Disable MFA for a user.
@@ -248,8 +253,9 @@
      user-id: UUID of user disabling MFA
      
    Returns:
-     {:success? boolean
-      :error string (if failed)}"
+     `{:success? true}`, or `{:success? false :error {:type … :message …}}` —
+     the ADR-036 §3 shape. `:type` is `:cannot-disable` or
+     `:mfa-disable-failed`."
   [mfa-service user-id]
   (let [{:keys [user-repository]} mfa-service]
     (try
@@ -263,10 +269,12 @@
             {:success? true})
           ;; Cannot disable MFA
           {:success? false
-           :error (:reason can-disable)}))
+           :error {:type    :cannot-disable
+                   :message (:reason can-disable)}}))
       (catch Exception e
         {:success? false
-         :error (str "Failed to disable MFA: " (.getMessage e))}))))
+         :error {:type    :mfa-disable-failed
+                 :message (str "Failed to disable MFA: " (.getMessage e))}}))))
 
 (defn- find-unused-backup-code-hash
   "Return the stored bcrypt hash that the presented plaintext `code` matches and

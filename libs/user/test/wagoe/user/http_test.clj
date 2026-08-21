@@ -9,6 +9,7 @@
    These tests exercise the handlers directly; routing (e.g. /api prefix) is
    validated at the router level, not here."
   (:require [wagoe.user.shell.http :as user-http]
+            [wagoe.user.shell.mfa :as mfa]
             [wagoe.user.ports :as ports]
             [wagoe.platform.shell.interfaces.http.middleware :as middleware]
             [clojure.test :refer [deftest testing is]]
@@ -451,3 +452,40 @@
       ;; Verify session is invalidated
       (let [invalidated-session (ports/validate-session service (:session-token session))]
         (is (nil? invalidated-session))))))
+
+
+;; =============================================================================
+;; MFA endpoints — the wire shape across the ADR-036 migration (BOU-323)
+;; =============================================================================
+
+(deftest ^:unit mfa-endpoints-answer-with-an-error-string
+  ;; The MFA shell moved to {:error {:type … :message …}} and these handlers
+  ;; flatten it, so the endpoints answer exactly what they answered before.
+  ;; Nothing tested that: reverting the flattening left the whole suite green
+  ;; while the endpoints started returning a JSON object where clients expect a
+  ;; string.
+  (let [user-id (UUID/randomUUID)
+        request {:user {:id user-id}
+                 :body-params {:secret "S" :backupCodes ["a"] :verificationCode "000000"}}
+        failure {:success? false
+                 :error {:type :invalid-code :message "Invalid verification code"}}
+        body-of (fn [resp] (json/parse-string (:body resp) true))]
+
+    (testing "setup"
+      (with-redefs [mfa/setup-mfa (fn [_ _] failure)]
+        (let [resp ((user-http/mfa-setup-handler nil) request)]
+          (is (= 400 (:status resp)))
+          (is (= "Invalid verification code" (:error (body-of resp)))
+              "a string, not the :error map"))))
+
+    (testing "enable"
+      (with-redefs [mfa/enable-mfa (fn [_ _ _ _ _] failure)]
+        (let [resp ((user-http/mfa-enable-handler nil) request)]
+          (is (= 400 (:status resp)))
+          (is (= "Invalid verification code" (:error (body-of resp)))))))
+
+    (testing "disable"
+      (with-redefs [mfa/disable-mfa (fn [_ _] failure)]
+        (let [resp ((user-http/mfa-disable-handler nil) request)]
+          (is (= 400 (:status resp)))
+          (is (= "Invalid verification code" (:error (body-of resp)))))))))

@@ -155,7 +155,8 @@
 (defmethod ig/init-key :wagoe/user-http-handler
   [_ {:keys [user-service config]}]
   (throw (ex-info "DEPRECATED: :wagoe/user-http-handler no longer supported"
-                  {:message "Legacy create-handler function has been removed"
+                  {:type :configuration-error
+                   :message "Legacy create-handler function has been removed"
                    :migration "Use :wagoe/user-routes with top-level :wagoe/http-handler instead"
                    :user-service user-service
                    :config config})))
