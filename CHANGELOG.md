@@ -29,6 +29,50 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ## [Unreleased]
 
+### Changed
+
+- **A generated `config.clj` is 63 lines instead of 404** (BOU-326). It used to
+  carry the Integrant graph of every framework module it might enable — 41
+  components, their refs, and the eighteen boolean flags that gated them —
+  which meant the first file a new user opened was mostly framework plumbing
+  they had no reason to edit. A module now describes its own graph
+  (`ig-config` in its `module-wiring` namespace), and
+  `wagoe.platform.shell.system.config/system-config` assembles what the config
+  switches on. What is left in the generated file is the user module, the admin
+  schemas, and a comment showing where your own components go.
+
+  Nothing to do for an existing project: the file is yours, and the old one
+  still works. To adopt the shorter version, replace `ig-config` with a call to
+  `system-config` and keep whatever you added.
+
+  `{{project-ns}}.system` is now empty too. The seven `ig/init-key` methods it
+  defined belong to the libraries that own those keys, and four of those
+  libraries (`jobs`, `reports`, `calendar`, `ui-style`) had no wiring namespace
+  at all — so an application that enabled one of them and had not copied the
+  defmethod failed the boot with `No such namespace: wagoe`.
+
+### Fixed
+
+- **`wagoe add workflow` created a module whose tables did not exist**
+  (BOU-326). `libs/workflow` defines `:wagoe/workflow-db-schema`, which creates
+  them, and documents it in the first lines of its wiring namespace. Neither
+  the generated `config.clj` nor this repository's own system config wired it —
+  the same omission in two hand-maintained copies of a graph the module already
+  described. The workflow component logged `started without :db-schema
+  dependency` and carried on.
+
+- **The monorepo ran the tenant module whether or not it was configured**
+  (BOU-326), and never wired `:wagoe/settings` or the AI service it had
+  switched on. All three were the same class of defect: a component list
+  maintained by hand next to a config that had moved on.
+
+- **Two admin helpers had never worked** (BOU-326).
+  `wagoe.admin.shell.module-wiring/admin-system-config` and
+  `start-admin-only-system`, documented for REPL and integration use, built
+  their graph against `:wagoe/database-context`, `:wagoe/logger` and
+  `:wagoe/error-reporter` — keys no application wires. Removed; the module's
+  real graph is `ig-config`.
+
 ### Fixed
 
 - **A generated project no longer ships `bb deploy`** (BOU-325). It published

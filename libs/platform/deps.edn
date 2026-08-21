@@ -14,6 +14,10 @@
          ;; emit, which forced every consumer to ship all three.
          wagoe/cache                    {:local/root "../cache"}
          wagoe/core                     {:local/root "../core"}
+         ;; wagoe.platform.shell.system.config reads the loaded config and
+         ;; derives the database spec from it. The generated app used to carry
+         ;; its own copy of both (BOU-326).
+         wagoe/config                   {:local/root "../config"}
          ;; wagoe.platform.shell.rpc.client — the remote-port adapter (BOU-90),
          ;; same client libs/external's outbound adapters use.
          clj-http/clj-http              {:mvn/version "3.13.1"}

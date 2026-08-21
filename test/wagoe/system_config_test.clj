@@ -1,5 +1,6 @@
 (ns wagoe.system-config-test
   (:require [wagoe.config :as sut]
+            [wagoe.platform.shell.modules :as modules]
             [wagoe.system-config :as sys-config]
             [wagoe.platform.shell.adapters.database.protocols :as db-protocols]
             [clojure.test :refer [deftest is testing]]
@@ -66,7 +67,13 @@
       (is (= "No active database adapter found in configuration" (ex-message ex))))))
 
 (deftest ^:unit ig-config-wires-tenant-membership-and-http-components-test
-  (let [config (assoc-in (base-config) [:active :wagoe/admin] {:enabled? true})
+  (let [config (-> (base-config)
+                   (assoc-in [:active :wagoe/admin] {:enabled? true})
+                   ;; Tenancy is wired because the config asks for it. Until
+                   ;; BOU-326 the tenant graph was emitted unconditionally, so a
+                   ;; config that never mentioned tenants still got ten of their
+                   ;; components.
+                   (assoc-in [:active :wagoe/tenant] {:enabled? true}))
         ig-config (sys-config/ig-config config)]
     (testing "tenant and membership services are part of the Integrant graph"
       (is (contains? ig-config :wagoe/tenant-repository))
@@ -202,3 +209,28 @@
         (is (contains? registered k)
             (str k " is emitted conditionally but its wiring is not required "
                  "where it is emitted"))))))
+
+(deftest ^:integration every-emitted-key-has-an-init-key
+  ;; The generated config used to enumerate 41 Integrant keys and separately
+  ;; require the wiring that registered each one. Forgetting one half produced
+  ;; "No method in multimethod 'init-key' for dispatch value", at boot, in a
+  ;; user's project — so a regex test in wagoe-cli paired the two by reading the
+  ;; template. Both halves now live in the module's own library, and this is the
+  ;; check that replaces it: run the real assembler over a config with every
+  ;; framework module enabled, and ask Integrant whether it could build each key.
+  (let [everything (reduce (fn [c k] (assoc-in c [:active k] {:enabled? true}))
+                           (base-config)
+                           (keys modules/framework-modules))
+        ig-config  (sys-config/ig-config everything)
+        missing    (remove #(contains? (methods ig/init-key) %) (keys ig-config))]
+
+    (testing "the modules really are built here — otherwise this is vacuous"
+      (is (< 40 (count ig-config))
+          (str "only " (count ig-config) " keys; the modules did not assemble"))
+      (is (contains? ig-config :wagoe/tenant-service))
+      (is (contains? ig-config :wagoe/workflow-db-schema)))
+
+    (testing "and every one of them can be initialised"
+      (is (empty? missing)
+          (str "no init-key registered for: " (pr-str (sort missing))
+               " — the library that emits a key must also register it")))))

@@ -3,7 +3,11 @@
          com.wagoe/wagoe-observability {:mvn/version "{{observability-version}}"}
          com.wagoe/wagoe-platform      {:mvn/version "{{platform-version}}"}
          com.wagoe/wagoe-user          {:mvn/version "{{user-version}}"}
-         ;; Required by wagoe-platform's system wiring (unconditional module loads)
+         ;; Reads resources/conf/<env>/config.edn — src/wagoe/system_config.clj
+         ;; calls it directly.
+         com.wagoe/wagoe-config        {:mvn/version "{{config-version}}"}
+         ;; The modules a fresh project can switch on by editing config.edn
+         ;; alone. Drop the ones you know you will not use; each is independent.
          com.wagoe/wagoe-cache         {:mvn/version "{{cache-version}}"}
          com.wagoe/wagoe-admin         {:mvn/version "{{admin-version}}"}
          com.wagoe/wagoe-ui-style      {:mvn/version "{{ui-style-version}}"}
@@ -54,7 +58,7 @@
              ;; -m, not -e: with -e the first non-option argument is taken as a
              ;; script path and *command-line-args* holds only what follows, so
              ;; `create` in `bb create-admin` was dropped and the CLI rejected
-             ;; --email as an unknown global option (BOU-266).
+             ;; --email as an unknown global option.
              :main-opts  ["-m" "wagoe.user.shell.cli-entry"]}
   ;; Wagoe MCP server for editor agents (Claude Code / Cursor). Kept in an
   ;; alias — NOT in :deps — so the app runtime never pulls the MCP server.

@@ -57,3 +57,31 @@
   (handlers/push-routes {:device-store    device-store
                          :analytics-store analytics-store
                          :callback-secret callback-secret}))
+
+;; =============================================================================
+;; Module graph
+;; =============================================================================
+
+(defn ig-config
+  "This module's Integrant entries, for `wagoe.platform.shell.system.config`.
+
+   `:wagoe/push` is a settings block, not a component: it configures the four
+   `:wagoe.push/*` components assembled here. Both providers fall back to
+   `:mock` when no credentials are configured, so an app can enable push before
+   it has an FCM account."
+  [settings _ctx]
+  {:components
+   {:wagoe.push/fcm-provider    {:provider    (if (:fcm-credentials settings) :fcm :mock)
+                                 :credentials (:fcm-credentials settings)}
+    :wagoe.push/apns-provider   (merge {:provider (if (:apns-credentials settings) :apns :mock)}
+                                       (:apns-credentials settings))
+    :wagoe.push/device-store    {:db (ig/ref :wagoe/db-context)}
+    :wagoe.push/analytics-store {:db (ig/ref :wagoe/db-context)}
+    :wagoe.push/service         {:device-store    (ig/ref :wagoe.push/device-store)
+                                 :analytics-store (ig/ref :wagoe.push/analytics-store)
+                                 :fcm-provider    (ig/ref :wagoe.push/fcm-provider)
+                                 :apns-provider   (ig/ref :wagoe.push/apns-provider)
+                                 :callback-secret (:callback-secret settings)}
+    :wagoe.push/routes          {:device-store    (ig/ref :wagoe.push/device-store)
+                                 :analytics-store (ig/ref :wagoe.push/analytics-store)
+                                 :callback-secret (:callback-secret settings)}}})

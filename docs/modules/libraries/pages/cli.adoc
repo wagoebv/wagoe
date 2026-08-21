@@ -67,9 +67,12 @@ Measured on two projects generated side by side:
 | no
 |===
 
-The choice is a plain `user?` literal near the top of the generated
-`src/wagoe/system_config.clj` — turning the module back on later is editing one word,
-not regenerating the project. A database is still configured either way; if the
+The choice is the `:extra-modules` set in the generated
+`src/wagoe/system_config.clj`: `#{:wagoe/user}` with the module, `#{}` without.
+Turning it back on later is editing one word, not regenerating the project. It
+is a set in code rather than a key in `config.edn` because the user module is
+not something an application switches per environment.
+A database is still configured either way; if the
 application needs no persistence at all, remove `:wagoe/sqlite` from
 `resources/conf/dev/config.edn` as well.
 
@@ -83,7 +86,10 @@ wagoe add search            # Full-text search (Meilisearch)
 wagoe add jobs              # Background job processing
 ----
 
-Wires the module into `deps.edn`, `system.clj`, and migration files.
+Adds the dependency to `deps.edn` and the module's key to
+`resources/conf/{dev,test}/config.edn`. Nothing else has to change: the module
+describes its own Integrant components, and `system-config` builds them because
+the config now names it.
 
 === List available modules
 

@@ -63,3 +63,22 @@
 (defmethod ig/halt-key! :wagoe/i18n-http-middleware
   [_ _mw]
   (log/info "i18n HTTP middleware halted (no cleanup needed)"))
+
+;; =============================================================================
+;; Module graph
+;; =============================================================================
+
+(defn ig-config
+  "This module's Integrant entries, for `wagoe.platform.shell.system.config`.
+
+   Assembled in every application whether or not its config names `:wagoe/i18n`:
+   the defaults below are a working English-only setup, and the HTTP handler
+   takes a ref to the middleware unconditionally.
+
+   The middleware is built here and injected rather than constructed by the
+   HTTP handler, so platform does not require `wagoe.i18n.shell.middleware`."
+  [settings _ctx]
+  {:components
+   {:wagoe/i18n                 (or settings {:catalogue-path "wagoe/i18n/translations"
+                                              :default-locale :en})
+    :wagoe/i18n-http-middleware {:i18n (ig/ref :wagoe/i18n)}}})

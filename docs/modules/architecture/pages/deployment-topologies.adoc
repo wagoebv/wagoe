@@ -79,10 +79,10 @@ envelopes out over a pub/sub channel and keeps topic subscriptions in Redis
 sets, so a broadcast reaches clients on any replica. Sockets stay node-local
 under both providers; only the bus and the pub/sub manager differ.
 
-Note what "configuration" means here: the monorepo's `wagoe.system-config/ig-config`
-does not emit `:wagoe/realtime` at all, so an application that wants realtime
-wires the component itself against `wagoe.realtime.shell.module-wiring`. Getting
-this wrong is quiet — a config with no `:provider` gets `:in-memory`, and the
+Note what "configuration" means here: `:wagoe/realtime` under `:active` is the
+whole of it — `system-config` loads `wagoe.realtime.shell.module-wiring` and
+emits the key because the config names the module. Getting the settings wrong is
+quiet, though: a config with no `:provider` gets `:in-memory`, and the
 single-node behaviour is a default rather than an error. Config shape is in that
 namespace's docstring.
 

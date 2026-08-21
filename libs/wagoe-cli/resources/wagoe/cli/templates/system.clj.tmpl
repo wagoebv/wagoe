@@ -1,16 +1,14 @@
 (ns {{project-ns}}.system
-  (:require [integrant.core :as ig]))
+  "Integrant keys this application defines itself.
 
-;; System configuration is loaded from resources/conf/{env}/config.edn
-;; via Aero. Add module configs with `wagoe add <module>`.
+   Configuration is loaded from resources/conf/<env>/config.edn via Aero, and
+   which components run is src/wagoe/system_config.clj. Framework modules
+   register their own keys, so `wagoe add <module>` needs no line here.
 
-(defmethod ig/init-key :wagoe/settings [_ config] config)
+   Empty on purpose. Add an init-key when you write a component of your own:
 
-;; Config-only modules — no lifecycle component, init-key exposes config as an Integrant ref.
-;; Added by `wagoe add <module>`; ig-config wires them in automatically when present.
-(defmethod ig/init-key :wagoe/storage        [_ cfg] cfg)
-(defmethod ig/init-key :wagoe/jobs           [_ cfg] cfg)
-(defmethod ig/init-key :wagoe/realtime       [_ cfg] cfg)
-(defmethod ig/init-key :wagoe/reports        [_ cfg] cfg)
-(defmethod ig/init-key :wagoe/calendar       [_ cfg] cfg)
-(defmethod ig/init-key :wagoe/ui-style       [_ cfg] cfg)
+     (require '[integrant.core :as ig])
+
+     (defmethod ig/init-key :acme/report-mailer
+       [_ {:keys [email db-ctx]}]
+       (->ReportMailer email db-ctx))")

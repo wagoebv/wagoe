@@ -51,12 +51,15 @@
   (let [project-ns  (name->ns project-name)
         jwt-secret  (random-jwt-secret)
         with-user?  (not (false? (:with-user? opts)))
-        subs        {:with-user                (str with-user?)
+        subs        {;; The set `system-config` takes as :extra-modules — the
+                     ;; modules an app enables in code rather than in config.
+                     :user-modules             (if with-user? "#{:wagoe/user}" "#{}")
                      :project-name             project-name
                      :project-ns               project-ns
                      :jwt-secret               jwt-secret
                      :wagoe-tools-version   wagoe-tools-version
                      :wagoe-mcp-version     wagoe-mcp-version
+                     :config-version        (:version (cat/find-module "config"))
                      :core-version             (:version (cat/find-module "core"))
                      :observability-version (:version (cat/find-module "observability"))
                      :platform-version      (:version (cat/find-module "platform"))
