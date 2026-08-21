@@ -35,9 +35,9 @@ for what is public API, what is internal, and how deprecations are announced.
   `wagoe.core.utils.validation` each defined `validate-with-transform`,
   `validate-cli-args`, `validate-request` and a set of result accessors — same
   names, different implementations — and the first also re-exported the
-  constructors from `wagoe.core.validation.result`. Nothing outside their own
-  tests called any of them: the two real consumers use the compiled-schema cache
-  and two value predicates.
+  constructors from `wagoe.core.validation.result`. Nothing outside their own tests called any of them: the three real consumers —
+  the user module's web handlers, the user CLI and the todo example — use the
+  compiled-schema cache and one value predicate.
 
   The version in `wagoe.core.validation` also chose its *return shape* at
   runtime from the `WAG_DEVEX_VALIDATION` flag — `{:valid? true :data …}` with
@@ -51,6 +51,11 @@ for what is public API, what is internal, and how deprecations are announced.
   `wagoe.core.validation.result` owns the result shape, and
   `wagoe.core.utils.validation` keeps the two predicates the user CLI uses. The
   cache had no tests at all; it does now.
+
+  Not settled by this change: `failure-result` still returns `:errors` as a
+  vector, and ADR-036 §2 asks for a map of field to messages. That migration is
+  open, and pointing new code at `validation.result` points it at the shape
+  that will move.
 
 - **The error-shape allowlist is empty** (BOU-323, last migration step). It
   shipped with 81 findings on 18 August; the remaining 13 are gone.

@@ -125,8 +125,10 @@ The dual code path below lived in
 `wagoe.core.validation/validate-with-transform`, which chose its *return shape*
 at runtime from the flag — and nothing outside its own tests ever called it.
 ADR-036 §2 settles one shape for a pure decision, so the fork, the function and
-the flag's only reader are gone. `WAG_DEVEX_VALIDATION` is still registered in
-`wagoe.core.config.feature-flags`, and is now read by nothing.
+`devex-validation-enabled?` are gone. `WAG_DEVEX_VALIDATION` is still registered
+in `wagoe.core.config.feature-flags`; no production namespace reads it, and the
+one remaining reader is a snapshot-test helper that reads the environment
+variable directly.
 ====
 
 **Existing code path (WAG_DEVEX_VALIDATION=false or unset):**

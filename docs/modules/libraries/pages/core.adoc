@@ -32,7 +32,7 @@ Contains *no shell layer* — everything is pure functions.
 | PII filtering for logs and error reports
 
 | `wagoe.core.utils.validation`
-| Generic validation helpers
+| Value predicates for CLI arguments (`valid-output-format?`, `valid-uuid?`)
 
 | `wagoe.core.interceptor`
 | Interceptor pipeline runner (enter/leave/error phases)
@@ -69,15 +69,14 @@ The most commonly used utilities across the entire monorepo:
 
 [source,clojure]
 ----
-(require '[wagoe.core.utils.validation :as validation])
+(require '[wagoe.core.validation :as validation]
+         '[malli.transform :as mt])
 
-;; Generic validation with transformation
-(validation/validate-with-transform SomeSchema data mt/string-transformer)
-;=> {:valid? true :data transformed-data}
-;=> {:valid? false :errors validation-errors}
-
-;; CLI argument validation
-(validation/validate-cli-args CliSchema args cli-transformer)
+;; Decode, then validate. Both compilers are cached on the schema.
+(let [data ((validation/decoder SomeSchema mt/string-transformer) input)]
+  (if (validation/valid? SomeSchema data)
+    data
+    (validation/explain SomeSchema data)))
 ----
 
 == Interceptor pipeline

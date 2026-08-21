@@ -159,3 +159,18 @@
       (is (vr/validation-passed? updated))
       (is (vr/has-warnings? updated))
       (is (= 1 (count (vr/get-warnings updated)))))))
+
+(deftest ^:unit get-validated-data-test
+  ;; Its only coverage was through a wrapper in wagoe.core.validation that
+  ;; delegated straight here, and that wrapper was deleted in BOU-323 — leaving
+  ;; a public accessor with no test at all.
+  (testing "a passing result hands back its data"
+    (is (= {:email "a@example.nl"}
+           (vr/get-validated-data (vr/success-result {:email "a@example.nl"})))))
+
+  (testing "a failing result hands back nothing, rather than the data it rejected"
+    (is (nil? (vr/get-validated-data
+               (vr/failure-result [(vr/error-map :email :required "Email is required")])))))
+
+  (testing "nil is not a result"
+    (is (nil? (vr/get-validated-data nil)))))

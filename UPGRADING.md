@@ -115,7 +115,14 @@ were getting; if you relied on the flag-off behaviour, `{:valid? …}` is a map
 literal you can write yourself.
 
 `devex-validation-enabled?` is gone from `wagoe.core.validation.result`. The
-flag is still registered in `wagoe.core.config.feature-flags`; nothing reads it.
+flag is still registered in `wagoe.core.config.feature-flags`, and no production
+namespace reads it — one test helper still reads the environment variable
+directly.
+
+Note on the result shape: `failure-result` puts `:errors` in a **vector**.
+ADR-036 §2 asks for a map of field to messages and lists the vector form as
+migration work that has not happened yet, so expect that key to change shape in
+a later release.
 
 ### 4. `wagoe.core.validation.result/normalize-result` and `legacy-result?` are gone (BOU-323)
 

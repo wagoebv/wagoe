@@ -35,7 +35,7 @@ return `nil` for invalid input by design.
 
 | Namespace | Key fns / vars |
 |-----------|----------------|
-| `wagoe.core.utils.validation` | Value predicates the CLI validates arguments with: `valid-uuid?`, `valid-output-format?`. Its copy of the validate/result API was removed in BOU-323 — schema validation goes through `wagoe.core.validation`, result shapes through `wagoe.core.validation.result` |
+| `wagoe.core.utils.validation` | Value predicates the CLI validates arguments with: `valid-output-format?` (the user CLI validates `--format` with it) and `valid-uuid?` (no caller in this repository). Its copy of the validate/result API was removed in BOU-323 — schema validation goes through `wagoe.core.validation`, result shapes through `wagoe.core.validation.result` |
 | `wagoe.core.validation` | Cached compiled `validator` / `explainer` / `decoder` (memoized), `valid?`, `explain`. Nothing else: the second copy of the result API, and the `WAG_DEVEX_VALIDATION` fork that chose a return shape at runtime, were removed in BOU-323 |
 | `wagoe.core.validation.result` | Canonical result format: `success-result`, `failure-result`, `error-map`, `warning-map`, predicates `validation-passed?` / `validation-failed?` / `has-warnings?`, accessors `get-errors` / `get-warnings` / `get-validated-data`, grouping `errors-by-field` / `errors-by-code`, `first-error`, `error-count`, `merge-results`, `add-error` / `add-warning` |
 | `wagoe.core.validation.codes` | Error-code catalog: `common-error-codes`, `user-error-codes`, `billing-error-codes`, `workflow-error-codes`, merged `error-code-catalog`; lookups `get-error-code-info`, `error-code-exists?`, `get-error-codes-by-category`, `get-error-codes-for-field`, `suggest-error-code` |
@@ -99,16 +99,21 @@ keep everything internal kebab-case.
 ## Running a Validation
 
 ```clojure
-(require '[wagoe.core.utils.validation :as v]
+(require '[wagoe.core.validation :as v]
          '[malli.transform :as mt])
 
-(v/validate-with-transform UserSchema data (mt/string-transformer))
-;; => {:valid? true  :data <coerced>}    on success
-;; => {:valid? false :errors <explain>}  on failure
-
-(when-not (v/validation-passed? result)
-  (v/get-validation-errors result))
+;; Decode then validate. Both compilers are cached on the schema, so this is
+;; one compile per schema for the life of the process, not one per call.
+(let [coerced ((v/decoder UserSchema mt/string-transformer) data)]
+  (if (v/valid? UserSchema coerced)
+    coerced
+    (v/explain UserSchema coerced)))
 ```
+
+Building a result map for a caller? That shape lives in
+`wagoe.core.validation.result` — `success-result`, `failure-result`,
+`error-map`. There is one implementation of each; BOU-323 removed the copies
+that used to live in `wagoe.core.validation` and `wagoe.core.utils.validation`.
 
 ## Interceptor Pipeline
 
@@ -150,10 +155,12 @@ interceptor metadata.
 - **`string->int` / `string->boolean` pass through on failure** (return the
   original value), while the CLI `parse-int` / `parse-bool` / `parse-uuid-string`
   return `nil`. Pick the right one for your call site.
-- **Two `validate-with-transform`s exist.** `utils.validation` is the plain
-  decode-then-validate helper; `wagoe.core.validation` is the legacy facade
-  that switches to structured errors under `WAG_DEVEX_VALIDATION`. Prefer the new
-  `validation.result` API for new code.
+- **One namespace per job, since BOU-323.** `wagoe.core.validation` caches
+  compiled Malli validators; `wagoe.core.validation.result` owns the result
+  shape; `wagoe.core.utils.validation` is two value predicates. Two of the
+  three used to define `validate-with-transform`, and the one in
+  `wagoe.core.validation` chose its return shape at runtime from
+  `WAG_DEVEX_VALIDATION` — both are gone.
 - **`default-error-mappings` lives in `interceptor-context`**, inlined there on
   purpose to avoid a `core → platform` circular dependency — do not re-home it.
 

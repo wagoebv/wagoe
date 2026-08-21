@@ -28,7 +28,9 @@
    `devex-validation-enabled?`, and wagoe.core.validation branched on it to
    decide whether to return {:valid? true :data …} or a structured result — a
    function whose return shape depended on an environment variable. ADR-036 §2
-   settles the shape; the flag had no other reader (BOU-323).")
+   settles the shape, so the fork and this namespace's `devex-validation-enabled?`
+   are gone. Nothing in `src` reads the flag now; the snapshot-test helper in
+   `libs/core/test` still reads the env var directly (BOU-323).")
 
 
 (defn success-result

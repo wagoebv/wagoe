@@ -1,14 +1,9 @@
 (ns wagoe.core.utils.validation-test
-  "Unit tests for wagoe.core.utils.validation namespace."
+  "The value predicates. The schema-validation tests that used to live here
+   covered a second implementation of wagoe.core.validation's API, deleted in
+   BOU-323 — the Malli transformer and the schema they needed went with them."
   (:require [clojure.test :refer [deftest is testing]]
-            [malli.transform :as mt]
             [wagoe.core.utils.validation :as validation]))
-
-(def TestSchema
-  [:map
-   [:name :string]
-   [:age :int]
-   [:active :boolean]])
 
 (deftest ^:unit valid-uuid?-test
   (testing "valid UUID strings"
