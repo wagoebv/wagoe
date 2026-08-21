@@ -149,42 +149,30 @@
 ;; Conditionally emitted keys must not be statically required (BOU-131)
 ;; =============================================================================
 
-(deftest ^:unit config-requires-optional-module-wiring-only-when-active
-  ;; Moving platform's static requires into wagoe.config fixed nothing if they
-  ;; stayed static: loading this namespace would still demand jars the app may
-  ;; not ship — the same mandatory dependency, one layer down.
+(deftest ^:unit the-app-config-requires-no-module-wiring
+  ;; Requiring a module's wiring here loads it for every consumer of this
+  ;; namespace, whether or not the app enables that module — the mandatory
+  ;; dependency this repository has spent three tickets removing.
   ;;
-  ;; A module-wiring may be required statically here only if its key is emitted
-  ;; unconditionally. Today that is email and i18n — both are in the base map of
-  ;; core-system-config with defaults. cache, payments and the external adapters
-  ;; are opt-in, and are required at the point the config decides they are
-  ;; active.
+  ;; Nothing needs requiring any more: `system-config` loads a module's wiring
+  ;; when the config switches that module on, and only then. The property that
+  ;; it loads no more than that is
+  ;; `wagoe.platform.shell.modules-test/only-the-enabled-modules-are-loaded`;
+  ;; what this test guards is that nobody reintroduces a static require here.
   (let [src (or (some #(when (.exists (io/file %)) (slurp %))
                       ["src/wagoe/system_config.clj" "../../src/wagoe/system_config.clj"])
                 (throw (ex-info "system_config.clj not found — cannot check"
-                                {:cwd (System/getProperty "user.dir")})))
-        ns-form  (subs src 0 (str/index-of src "(declare ig-config)"))
-        static   (set (map second (re-seq #"\[(wagoe\.[a-z0-9-]+\.shell\.module-wiring)\]" ns-form)))
-        guarded  (set (map second (re-seq #"\(require '(wagoe\.[a-z0-9-]+\.shell\.module-wiring)\)" src)))]
+                                {:cwd (System/getProperty "user.dir")})))]
 
     (testing "the source parsed — otherwise this passes vacuously"
       (is (str/includes? src "ig-config"))
-      (is (seq static) "no static requires found at all; the ns form was not read"))
+      (is (str/includes? src "system/system-config")))
 
-    (testing "only unconditionally emitted modules are required statically"
-      (is (= #{"wagoe.email.shell.module-wiring"
-               "wagoe.i18n.shell.module-wiring"} static)
-          (str "statically required: " (pr-str static)
-               " — a module whose key is emitted conditionally must be required "
-               "where that condition is evaluated, or every consumer must ship its jar")))
-
-    (testing "the opt-in modules are required, just guarded"
-      (doseq [m ["wagoe.cache.shell.module-wiring"
-                 "wagoe.payments.shell.module-wiring"
-                 "wagoe.external.shell.module-wiring"]]
-        (is (contains? guarded m)
-            (str m " is neither statically required nor required at its condition — "
-                 "its init-key would be missing when the module is active"))))))
+    (testing "no module wiring is loaded, statically or otherwise"
+      (is (empty? (map second (re-seq #"\[(wagoe\.[a-z0-9-]+\.shell\.module-wiring)\]" src)))
+          "a static require here ships that module's jar to every consumer")
+      (is (empty? (map second (re-seq #"\(require '(wagoe\.[a-z0-9-]+\.shell\.module-wiring)\)" src)))
+          "wiring is the assembler's job; a require here is a second mechanism"))))
 
 ;; =============================================================================
 ;; Every published library must be documented

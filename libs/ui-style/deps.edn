@@ -1,6 +1,7 @@
 {:paths ["src" "resources"]
 
- :deps  {org.clojure/clojure {:mvn/version "1.12.5"}}
+ :deps  {integrant/integrant                {:mvn/version "1.0.1"}
+         org.clojure/clojure {:mvn/version "1.12.5"}}
 
  :aliases
  {:build {:replace-deps {io.github.clojure/tools.build {:git/tag "v0.10.13" :git/sha "3a3c177d"}

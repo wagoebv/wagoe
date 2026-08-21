@@ -118,11 +118,9 @@
 ;; skipped: no init-key, no route, no warning. `bb quickstart` reported 8/8 and
 ;; left the module on disk, compiled and unreachable.
 ;;
-;; The framework's own modules keep their bespoke wiring. Their keys do not all
-;; follow the convention (`:wagoe/payment-provider`, `:wagoe.external/smtp`) and
-;; several wire more than four components, so collapsing them is a separate job
-;; (BOU-326). This covers what the scaffolder generates, which is exactly the
-;; four keys `module_wiring.clj` defines.
+;; The framework's own modules go through `framework-module-config` below, which
+;; asks each module for its own graph. This function covers what the scaffolder
+;; generates, which is exactly the four keys `module_wiring.clj` defines.
 
 (defn scaffolded-module-keys
   "The `:active` keys that declare a scaffolded module and are not already
@@ -229,3 +227,131 @@
   [active known-keys]
   (mapv #(ig/ref (keyword "wagoe" (str (name %) "-routes")))
         (scaffolded-module-keys active known-keys)))
+
+;; =============================================================================
+;; Framework module assembly (BOU-326)
+;; =============================================================================
+;;
+;; Every generated application used to carry the Integrant graph of every
+;; framework module it enabled: 290 of the 404 lines of `config.clj` were
+;; `:wagoe/tenant-repository {:ctx (ig/ref …)}` and its 40 siblings. This
+;; repository kept a second copy of the same enumeration in
+;; `src/wagoe/system_config.clj`.
+;;
+;; Two hand-maintained copies of a graph the module itself defines drift, and
+;; both drifted the same way: `libs/workflow` documents and initialises
+;; `:wagoe/workflow-db-schema`, which creates its tables — and neither copy
+;; wired it. `wagoe add workflow` gave you a module whose tables never existed.
+;;
+;; So a module owns its own graph. `wagoe.<lib>.shell.module-wiring/ig-config`
+;; returns it, this assembles what the config switches on, and an application
+;; declares which modules it wants — not how they are built.
+
+(def framework-modules
+  "`:active` key -> the library that owns it.
+
+   The wiring namespace is derived (`wagoe.<lib>.shell.module-wiring`) rather
+   than listed, so a new module is one entry. Four keys predate the convention
+   and cannot be derived from their own name; they are spelled out.
+
+   These are keyword-to-string pairs, not namespace loads: platform still
+   depends on none of these libraries, and `bb check:isolation` still passes."
+  (into {:wagoe/payment-provider    "payments"
+         :wagoe/ai-service          "ai"
+         :wagoe/geo-service         "geo"
+         :wagoe.external/smtp       "external"
+         :wagoe.external/imap       "external"
+         :wagoe.external/twilio     "external"
+         :wagoe/dev-error-enricher  "devtools"}
+        (map (juxt #(keyword "wagoe" %) identity))
+        ["email" "i18n" "user" "cache" "tenant" "admin" "workflow" "search" "events"
+         "push" "audience" "storage" "jobs" "realtime" "reports" "calendar"
+         "ui-style"]))
+
+(def always-on-modules
+  "Modules every application gets whether or not its config mentions them.
+
+   Both fall back to a working default — the logging email sender, an
+   English-only catalogue — and the HTTP handler takes a ref to i18n's
+   middleware unconditionally, so leaving them out is not an option an
+   application has. They are modules rather than core components because the
+   wiring lives in their own library, and platform depends on neither."
+  #{:wagoe/email :wagoe/i18n})
+
+(def optional-modules
+  "Modules whose library may legitimately be absent at runtime.
+
+   `:wagoe/dev-error-enricher` comes from wagoe-devtools, which lives in the
+   `:repl` alias — so `clojure -M:run` against the dev config has the key and
+   not the jar. A dev-only nicety must not stop the app from booting; every
+   other missing library is a real error and throws."
+  #{:wagoe/dev-error-enricher})
+
+(defn- module-entries
+  "The framework modules `active` switches on, as [key lib] pairs.
+
+   `extra` names modules an application enables in code rather than in config —
+   `wagoe new --no-user` is a generated literal, not a config key."
+  [active extra]
+  (->> framework-modules
+       (filter (fn [[k _]] (or (contains? extra k)
+                               (and (contains? active k)
+                                    (not (false? (:enabled? (get active k))))))))
+       (sort-by key)))
+
+(defn- module-graph
+  "Ask one module for its graph, or fall back to passing its settings through.
+
+   A module with no components of its own — `:wagoe/storage`, `:wagoe/jobs` —
+   defines no `ig-config`, and its `:active` value *is* its Integrant value.
+   That default is why 13 of the 21 modules need no code at all."
+  [resolve-var k lib settings ctx]
+  (if-let [build (resolve-var (symbol (str "wagoe." lib ".shell.module-wiring") "ig-config"))]
+    (build settings ctx)
+    {:components {k settings}}))
+
+(defn framework-module-config
+  "Integrant entries for the framework modules `active` switches on.
+
+   Returns `{:components {…} :http {…}}` — `:components` merges into the system
+   config, `:http` into `:wagoe/http-handler`, which is how tenant contributes
+   `:extra-middleware` and admin its `:admin-routes` ref.
+
+   `ctx` is what a module may need from the application and cannot know:
+   `:config` (the whole loaded map), `:validation-config`, and `:enabled` — the
+   set of sibling modules that are on, so user-service can take a cache ref only
+   when there is a cache.
+
+   `load-wiring!` and `resolve-var` are injected so this is testable without a
+   module on the classpath; `system-config` passes the real ones."
+  [active {:keys [extra-modules] :as ctx} load-wiring! resolve-var]
+  (let [enabled (into #{} (map key) (module-entries active extra-modules))
+        ctx     (assoc ctx :enabled enabled)]
+    (reduce
+     (fn [acc [k lib]]
+       (let [wiring (symbol (str "wagoe." lib ".shell.module-wiring"))]
+         (cond
+           (load-wiring! wiring)
+           (let [{:keys [components http]} (module-graph resolve-var k lib (get active k) ctx)
+                 clash (some (set (keys (:components acc))) (keys components))]
+             (when clash
+               (throw (ex-info (str "Two modules both wire " clash
+                                    ". The later one would silently replace the earlier.")
+                               {:type :wagoe/module-key-conflict :key clash :module k})))
+             (-> acc
+                 (update :components merge components)
+                 (update :http merge http)))
+
+           (contains? optional-modules k)
+           (do (log/info (str "Skipping " k ": " wiring " is not on this classpath.")
+                         {:module k})
+               acc)
+
+           :else
+           (throw (ex-info
+                   (str "Module " k " is enabled but " wiring " is not on the classpath.\n"
+                        "  Add the library to deps.edn, or remove " k
+                        " from :active in resources/conf/<env>/config.edn.")
+                   {:type :wagoe/module-library-missing :module-key k :namespace (str wiring)})))))
+     {:components {} :http {}}
+     (module-entries active extra-modules))))

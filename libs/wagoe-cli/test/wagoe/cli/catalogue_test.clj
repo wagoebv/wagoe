@@ -2,6 +2,7 @@
   (:require [clojure.test :refer [deftest is testing]]
             [clojure.edn]
             [clojure.java.io :as io]
+            [clojure.string :as str]
             [wagoe.cli.catalogue :as cat]))
 
 (deftest ^:unit load-catalogue-test
@@ -125,15 +126,31 @@
             (is (< (idx "external") (idx "payments")) "payments must come after external")
             (is (< (idx "payments") (idx "geo"))      "payments must come before geo")))))))
 
-(deftest ^:unit every-catalogue-module-is-wired-in-the-generated-template
-  ;; `wagoe add <module>` adds the dependency and the config snippet. If
-  ;; config.clj.tmpl does not also build the Integrant key, the command
-  ;; succeeds, the config is written, and the app ignores it — no error, no
-  ;; component, and nothing to suggest where the events went.
+(deftest ^:unit every-catalogue-module-is-wired-by-the-assembler
+  ;; `wagoe add <module>` adds the dependency and the config snippet. If nothing
+  ;; then builds the Integrant key, the command succeeds, the config is written,
+  ;; and the app ignores it — no error, no component, and nothing to suggest
+  ;; where the events went.
   ;;
   ;; The events module shipped exactly that way: a catalogue entry, a config
   ;; snippet, and a template that had never heard of it.
-  (let [template (slurp (io/resource "wagoe/cli/templates/config.clj.tmpl"))
+  ;;
+  ;; What builds the key moved out of config.clj.tmpl and into
+  ;; `wagoe.platform.shell.modules/framework-modules`, so that is what this
+  ;; reads. As source text, not as a var: wagoe-cli depends on no Wagoe library,
+  ;; and this test is not a reason to give it one.
+  (let [modules-src (or (some #(when (.exists (io/file %)) (slurp %))
+                              ["../platform/src/wagoe/platform/shell/modules.clj"
+                               "libs/platform/src/wagoe/platform/shell/modules.clj"])
+                        (throw (ex-info "platform's modules.clj not found — cannot check" {})))
+        table       (subs modules-src
+                          (str/index-of modules-src "(def framework-modules")
+                          (str/index-of modules-src "(def always-on-modules"))
+        ;; Both halves of the table: the keys spelled out, and the module names
+        ;; the rest are derived from.
+        assembled   (into (set (re-seq #":wagoe[.a-z-]*/[a-z0-9-]+" table))
+                          (map #(str ":wagoe/" (subs % 1 (dec (count %)))))
+                          (re-seq #"\"[a-z0-9-]+\"" table))
         ;; Known-unwired, with the reason. Not a way to make this quiet: an
         ;; entry here is a module whose `wagoe add` still does nothing, and it
         ;; has to name the ticket that will fix it.
@@ -141,14 +158,12 @@
         ;; The Integrant keys a module's config snippet tells a project to add.
         snippet-keys (fn [m]
                        (set (re-seq #":wagoe[.a-z-]*/[a-z-]+"
-                                    (str (:config-snippet m)))))
-        ;; Modules the template handles: it either names the key directly or
-        ;; the module is part of a bundle it assembles.
-        wired? (fn [k] (.contains ^String template k))]
+                                    (str (:config-snippet m)))))]
 
-    (testing "the template was read — otherwise this passes vacuously"
-      (is (re-find #"defn ig-config" template))
-      (is (< 100 (count (re-seq #":wagoe" template)))))
+    (testing "the table was read — otherwise this passes vacuously"
+      (is (str/includes? table "framework-modules"))
+      (is (< 15 (count assembled))
+          (str "only found " (count assembled) " modules in the table")))
 
     (doseq [m (:modules (cat/load-catalogue))
             :let [ks (snippet-keys m)
@@ -156,14 +171,14 @@
                   primary (first (filter #(= (str ":wagoe/" (:name m)) %) ks))]
             :when primary]
       (testing (str "`" (:add-command m) "` produces a working app")
-        (is (or (wired? primary) (contains? known-unwired (:name m)))
+        (is (or (contains? assembled primary) (contains? known-unwired (:name m)))
             (str "catalogue offers " (:name m) " with config key " primary
-                 ", but config.clj.tmpl never builds it — `" (:add-command m)
+                 ", but framework-modules never builds it — `" (:add-command m)
                  "` would report success and do nothing")))
 
       (testing "and nothing is on the known-unwired list once it works"
         ;; So the list shrinks rather than rots.
         (when (contains? known-unwired (:name m))
-          (is (not (wired? primary))
+          (is (not (contains? assembled primary))
               (str (:name m) " is wired now — remove it from known-unwired: "
                    (get known-unwired (:name m)))))))))

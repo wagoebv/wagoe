@@ -47,3 +47,17 @@
       (cache-ports/close! cache))
     (catch Exception e
       (log/warn e "Error while closing cache"))))
+
+;; =============================================================================
+;; Module graph
+;; =============================================================================
+
+(defn ig-config
+  "This module's Integrant entries, for `wagoe.platform.shell.system.config`.
+
+   The cache is one component, but the HTTP handler takes a ref to it, so this
+   cannot be the default passthrough the assembler applies to a settings-only
+   module."
+  [settings _ctx]
+  {:components {:wagoe/cache settings}
+   :http       {:cache (ig/ref :wagoe/cache)}})

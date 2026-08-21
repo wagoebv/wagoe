@@ -47,15 +47,15 @@
                      :task (check-fcis/-main)}
   check:placeholder-tests {:doc "Detect placeholder (is true) assertions in test files"
                            :task (check-tests/-main)}
-  ;; BOU-80 requires every module to define ports.clj, and AGENTS.md says so.
+  ;; Every module defines a ports.clj, and AGENTS.md says so.
   ;; The task was missing here while the scaffolder's duplicate bb.edn generator
   ;; had it, so `bb check` — which shells out to `bb check:ports` — hit an
-  ;; undefined task in every generated project (found via BOU-259).
+  ;; undefined task in every generated project.
   check:ports       {:doc "Hexagonal enforcement: modules must define ports.clj; shell/web must not bypass protocols"
                      :task (check-ports/-main)}
   ;; `bb check` shells out to each of these. They were missing here while the
   ;; registry in wagoe-tools still listed them, so `bb check` reported them as
-  ;; failures in every generated project (BOU-264).
+  ;; failures in every generated project.
   check:test-meta   {:doc "Detect deftest metadata placed after the name (breaks --focus-meta)"
                      :task (check-tests/check-deftest-metadata)}
   check:test-tags   {:doc "Enforce exactly one pyramid tag (^:unit/^:integration/^:contract) per deftest"

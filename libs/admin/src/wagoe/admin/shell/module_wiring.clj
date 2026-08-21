@@ -64,119 +64,29 @@
   nil)
 
 ;; =============================================================================
-;; Helper Functions for Testing and Development
+;; Module graph
 ;; =============================================================================
 
-(defn admin-system-config
-  "Generate Integrant system config for admin module.
+(defn ig-config
+  "This module's Integrant entries, for `wagoe.platform.shell.system.config`.
 
-   Useful for REPL development and integration testing.
-
-   Args:
-     base-config: Base system config with database, logging, etc.
-
-   Returns:
-     Complete Integrant config map with admin components
-
-   Example:
-     (def config (admin-system-config base-config))
-     (def system (ig/init config))"
-  [base-config]
-  (merge base-config
-         {:wagoe/admin-schema-provider
-          {:db-ctx (ig/ref :wagoe/database-context)
-           :config (ig/ref :wagoe/admin)}
-
-          :wagoe/admin-service
-          {:db-ctx (ig/ref :wagoe/database-context)
-           :schema-provider (ig/ref :wagoe/admin-schema-provider)
-           :logger (ig/ref :wagoe/logger)
-           :error-reporter (ig/ref :wagoe/error-reporter)
-           :config (ig/ref :wagoe/admin)}
-
-          :wagoe/admin-routes
-          {:admin-service (ig/ref :wagoe/admin-service)
-           :schema-provider (ig/ref :wagoe/admin-schema-provider)
-           :user-service (ig/ref :wagoe/user-service)
-           :config (ig/ref :wagoe/admin)}}))
-
-(defn start-admin-only-system
-  "Start a minimal system with only admin components for testing.
-
-   Creates an in-memory database and starts admin service.
-
-   Args:
-     admin-config: Admin configuration map
-
-   Returns:
-     Integrant system map
-
-   Example:
-     (def system (start-admin-only-system admin-config))
-     (ig/halt! system)"
-  [admin-config]
-  (let [minimal-config
-        {:wagoe/database
-         {:adapter :h2
-          :memory true}
-
-         :wagoe/database-context
-         {:database (ig/ref :wagoe/database)}
-
-         :wagoe/admin
-         admin-config
-
-         :wagoe/logger
-         {:provider :no-op}
-
-         :wagoe/error-reporter
-         {:provider :no-op}
-
-         :wagoe/admin-schema-provider
-         {:db-ctx (ig/ref :wagoe/database-context)
-          :config (ig/ref :wagoe/admin)}
-
-         :wagoe/admin-service
-         {:db-ctx (ig/ref :wagoe/database-context)
-          :schema-provider (ig/ref :wagoe/admin-schema-provider)
-          :logger (ig/ref :wagoe/logger)
-          :error-reporter (ig/ref :wagoe/error-reporter)
-          :config (ig/ref :wagoe/admin)}}]
-
-    (ig/init minimal-config)))
-
-(comment
-  ; REPL workflow examples
-
-  ; 1. Start minimal admin system for testing
-  #_(require '[integrant.repl :as ig-repl])
-
-  (def test-config
-    {:enabled? true
-     :base-path "/web/admin"
-     :require-role :admin
-     :entity-discovery {:mode :allowlist
-                        :allowlist #{:users}}
-     :entities {:users {:label "Users"}}
-     :pagination {:default-page-size 50
-                  :max-page-size 200}})
-
-  (def system (start-admin-only-system test-config))
-
-  ; 2. Access components
-  (def admin-service (:wagoe/admin-service system))
-  (def schema-provider (:wagoe/admin-schema-provider system))
-
-  ; 3. Test operations
-  (require '[wagoe.admin.ports :as ports])
-  (ports/list-available-entities schema-provider)
-  ; => [:users]
-
-  (ports/get-entity-config schema-provider :users)
-  ; => {:label "Users" :table-name :users :fields {...} ...}
-
-  ; 4. Cleanup
-  (ig/halt! system)
-
-  ; End REPL examples
-  )
+   `:malli-schemas` is deliberately absent: which of its entities the admin UI
+   manages is the application's decision, and it merges them in. Two helpers
+   that used to live here built the same graph against `:wagoe/database-context`
+   and `:wagoe/logger` — keys no application wires — so they had never run
+   (BOU-326)."
+  [settings _ctx]
+  {:components
+   {:wagoe/admin-schema-provider {:db-ctx (ig/ref :wagoe/db-context)
+                                  :config settings}
+    :wagoe/admin-service         {:db-ctx          (ig/ref :wagoe/db-context)
+                                  :schema-provider (ig/ref :wagoe/admin-schema-provider)
+                                  :logger          (ig/ref :wagoe/logging)
+                                  :error-reporter  (ig/ref :wagoe/error-reporting)
+                                  :config          settings}
+    :wagoe/admin-routes          {:admin-service   (ig/ref :wagoe/admin-service)
+                                  :schema-provider (ig/ref :wagoe/admin-schema-provider)
+                                  :user-service    (ig/ref :wagoe/user-service)
+                                  :config          settings}}
+   :http
+   {:admin-routes (ig/ref :wagoe/admin-routes)}})

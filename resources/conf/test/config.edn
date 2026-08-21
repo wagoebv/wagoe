@@ -62,6 +62,12 @@
    :release     #or [#env "APP_RELEASE" "test"]
    :sample-rate 1.0}
 
+  ;; Multi-tenancy — tenants, memberships, invites, and the middleware that
+  ;; resolves a request's tenant. Was wired unconditionally in code until
+  ;; BOU-326; now it is on because this says so.
+  :wagoe/tenant
+  {:enabled? true}
+
   ;; Admin interface configuration (enabled in tests to satisfy system wiring)
   :wagoe/admin
   {:enabled?         true

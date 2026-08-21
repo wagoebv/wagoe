@@ -53,3 +53,16 @@
   [_ _routes]
   ;; Routes are pure data — no cleanup needed
   nil)
+
+;; =============================================================================
+;; Module graph
+;; =============================================================================
+
+(defn ig-config
+  "This module's Integrant entries, for `wagoe.platform.shell.system.config`."
+  [_settings _ctx]
+  {:components
+   {:wagoe/search        {:db-ctx (ig/ref :wagoe/db-context)}
+    :wagoe/search-routes {:search-service (ig/ref :wagoe/search)}}
+   :http
+   {:search-routes (ig/ref :wagoe/search-routes)}})

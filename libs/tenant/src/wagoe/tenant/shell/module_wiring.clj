@@ -211,3 +211,43 @@
 (defmethod ig/halt-key! :wagoe/tenant-http-middleware
   [_ _mw]
   (log/info "Tenant HTTP middleware halted (no cleanup needed)"))
+
+;; =============================================================================
+;; Module graph
+;; =============================================================================
+
+(defn ig-config
+  "This module's Integrant entries, for `wagoe.platform.shell.system.config`."
+  [_settings {:keys [config validation-config]}]
+  (let [obs {:logger         (ig/ref :wagoe/logging)
+             :error-reporter (ig/ref :wagoe/error-reporting)}]
+    {:components
+     {:wagoe/tenant-db-schema      {:ctx (ig/ref :wagoe/db-context)}
+      :wagoe/tenant-repository     (merge obs {:ctx (ig/ref :wagoe/db-context)})
+      :wagoe/membership-repository (merge obs {:ctx (ig/ref :wagoe/db-context)})
+      :wagoe/invite-repository     (merge obs {:ctx (ig/ref :wagoe/db-context)})
+      :wagoe/tenant-service        (merge obs {:tenant-repository (ig/ref :wagoe/tenant-repository)
+                                               :validation-config validation-config
+                                               :metrics-emitter   (ig/ref :wagoe/metrics)})
+      :wagoe/membership-service    (merge obs {:repository      (ig/ref :wagoe/membership-repository)
+                                               :metrics-emitter (ig/ref :wagoe/metrics)})
+      :wagoe/invite-service        (merge obs {:repository            (ig/ref :wagoe/invite-repository)
+                                               :membership-repository (ig/ref :wagoe/membership-repository)
+                                               :metrics-emitter       (ig/ref :wagoe/metrics)})
+      :wagoe/tenant-routes         {:tenant-service (ig/ref :wagoe/tenant-service)
+                                    :db-context     (ig/ref :wagoe/db-context)
+                                    :config         config}
+      :wagoe/membership-routes     {:service (ig/ref :wagoe/membership-service)
+                                    :config  config}
+      ;; Builds the tenant HTTP middleware seq (tenant resolution + membership).
+      ;; The http-handler takes it as :extra-middleware rather than constructing
+      ;; it, so it does not need to know this module exists.
+      :wagoe/tenant-http-middleware {:tenant-service     (ig/ref :wagoe/tenant-service)
+                                     :membership-service (ig/ref :wagoe/membership-service)
+                                     :db-context         (ig/ref :wagoe/db-context)}}
+
+     :http
+     {:tenant-routes     (ig/ref :wagoe/tenant-routes)
+      :membership-routes (ig/ref :wagoe/membership-routes)
+      :tenant-service    (ig/ref :wagoe/tenant-service)
+      :extra-middleware  (ig/ref :wagoe/tenant-http-middleware)}}))

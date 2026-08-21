@@ -303,68 +303,30 @@
 ;; Integrant keys the generated config can add must be resolvable
 ;; =============================================================================
 
-(deftest ^:unit every-integrant-key-the-template-emits-has-a-provider
-  ;; config.clj.tmpl assembles an Integrant config. Every key in it needs an
-  ;; `ig/init-key` method at runtime, from one of two places: a `defmethod` in
-  ;; system.clj.tmpl, or a module-wiring namespace the template requires.
-  ;;
-  ;; Two regressions this has now caught, both the same shape — platform used
-  ;; to require a module's wiring on every app's behalf, and when it stopped,
-  ;; the generated app lost the registration:
-  ;;
-  ;;   :wagoe.external/smtp  (BOU-92)   — caught in review
-  ;;   :wagoe/i18n           (BOU-131)  — caught by First-Run Smoke, because
-  ;;                                      the first version of this test looked
-  ;;                                      only at `(assoc :key …)` and missed
-  ;;                                      the base map, then fell back to "is
-  ;;                                      anything required at all" for keys
-  ;;                                      whose namespace has no dot.
-  ;;
-  ;; It now reads what each required wiring actually declares, rather than
-  ;; inferring a provider from the key's name — `:wagoe/payment-provider` comes
-  ;; from wagoe.payments, `:wagoe/user-db-schema` from wagoe.user, and no rule
-  ;; derives either.
-  (let [config   (slurp (io/resource "wagoe/cli/templates/config.clj.tmpl"))
-        system   (slurp (io/resource "wagoe/cli/templates/system.clj.tmpl"))
-        ;; Keys the config puts in the Integrant map: assoc'd, or in the base map.
-        emitted  (into (set (map second (re-seq #"\(assoc\s+(:[a-z][a-z0-9.-]*/[a-z][a-z0-9-]*)" config)))
-                       (map second (re-seq #"(?m)^\s+(:wagoe[a-z0-9.-]*/[a-z][a-z0-9-]*)\s+\S" config)))
-        ;; Keys the generated project defines itself.
-        local    (set (map second (re-seq #"defmethod ig/init-key\s+(:[a-z][a-z0-9.-]*/[a-z][a-z0-9-]*)" system)))
-        ;; Every wagoe namespace the template requires, statically or
-        ;; conditionally — not only the *.shell.module-wiring ones. Platform's
-        ;; system wiring registers :wagoe/db-context, :wagoe/http-handler and
-        ;; the rest, and is required like any other.
-        wirings  (set (map second (re-seq #"'?\[?(wagoe\.[a-z0-9.-]+(?:\.shell\.module-wiring|\.shell\.system\.wiring))\]?" config)))
-        ;; What those namespaces actually register, read from their source.
-        provided (into #{}
-                       (mapcat (fn [ns']
-                                 ;; Run from the repo root by bb test:all and from
-                                 ;; libs/wagoe-cli by its own kaocha, so both.
-                                 (let [lib  (second (re-find #"^wagoe\.([a-z0-9-]+)\." ns'))
-                                       tail (str "/src/" (str/replace (str/replace ns' "." "/") "-" "_") ".clj")
-                                       f    (first (filter #(.exists ^java.io.File %)
-                                                           [(io/file (str "libs/" lib tail))
-                                                            (io/file (str "../" lib tail))]))]
-                                   (when f
-                                     (map second (re-seq #"defmethod ig/init-key\s+(:[a-z][a-z0-9.-]*/[a-z][a-z0-9-]*)"
-                                                         (slurp f)))))))
-                       wirings)]
+(deftest ^:unit the-template-emits-no-integrant-keys-of-its-own
+  ;; It used to emit 41, and every one of them needed an init-key that the
+  ;; template also had to remember to require — the pairing this test checked by
+  ;; regex. Both halves moved into the libraries that own the keys, so the
+  ;; generated file names none. What replaces this check is
+  ;; `wagoe.system-config-test/every-emitted-key-has-an-init-key`, which boots
+  ;; the real assembler rather than reading source with a regex.
+  (let [config (slurp (io/resource "wagoe/cli/templates/config.clj.tmpl"))
+        system (slurp (io/resource "wagoe/cli/templates/system.clj.tmpl"))]
 
-    (testing "the templates and wiring sources parsed — otherwise this is vacuous"
-      (is (<= 15 (count emitted)) (str "only found " (count emitted) " emitted keys"))
-      (is (seq local))
-      (is (<= 3 (count wirings)) (str "only found " (pr-str wirings)))
-      (is (<= 10 (count provided))
-          (str "read only " (count provided) " init-keys from " (pr-str wirings)
-               " — the source paths are probably wrong, which would make this pass for the wrong reason")))
+    (testing "the templates were read — otherwise this passes vacuously"
+      (is (str/includes? config "defn ig-config"))
+      (is (str/includes? system ".system")))
 
-    (testing "every emitted key is provided by the app or by a required wiring"
-      (doseq [k (sort emitted)]
-        (is (or (contains? local k) (contains? provided k))
-            (str k " is put in the Integrant config but nothing provides an "
-                 "init-key: add a defmethod to system.clj.tmpl, or require the "
-                 "module-wiring that declares it in config.clj.tmpl"))))))
+    (testing "the generated config assembles rather than enumerates"
+      (is (str/includes? config "system/system-config"))
+      (is (empty? (map second (re-seq #"\(assoc\s+(:wagoe[a-z0-9.-]*/[a-z][a-z0-9-]*)" config)))
+          "an assoc of a framework key here is a graph drifting from the module that owns it"))
+
+    (testing "and the project's own system namespace starts empty"
+      ;; Anchored: the docstring shows a defmethod as the example of what to
+      ;; add, and an unanchored match would read that as a definition.
+      (is (empty? (re-seq #"(?m)^\(defmethod ig/init-key" system))
+          "an init-key for a framework key belongs in that framework library"))))
 
 (deftest ^:unit user-module-is-opt-out
   ;; The scaffold wired the user chain unconditionally, so every generated app
@@ -384,24 +346,16 @@
         with    (render {})
         without (render {:with-user? false})]
 
-    (testing "the flag reaches the generated config as a literal"
-      (is (str/includes? with    "user?     true"))
-      (is (str/includes? without "user?     false")))
+    (testing "the flag reaches the generated config as the set the assembler takes"
+      ;; A set rather than a boolean since BOU-326: the user module is the one
+      ;; an application switches on in code, and :extra-modules is how.
+      (is (str/includes? with    "{:extra-modules #{:wagoe/user}}"))
+      (is (str/includes? without "{:extra-modules #{}}")))
 
-    (testing "both variants still contain the chain — it is guarded, not deleted"
-      ;; Guarding rather than templating the block out keeps the generated file
-      ;; the same shape either way, so turning user back on is editing one word.
-      (doseq [src [with without]]
-        (is (str/includes? src ":wagoe/user-service"))
-        (is (str/includes? src ":wagoe/user-db-schema"))))
-
-    (testing "the user chain is behind the flag, not in the base map"
-      ;; If it were unconditional again, `user?` would be unused and the
-      ;; components would be built regardless of the literal.
-      (is (str/includes? without "      user?\n      (assoc")))
-
-    (testing "the HTTP handler only references user components when enabled"
-      (is (str/includes? with "user?     (assoc :user-routes")))
+    (testing "both variants are the same file apart from that set"
+      ;; Turning the user module back on is editing one word, not restoring a
+      ;; block the generator left out.
+      (is (= (str/replace with "#{:wagoe/user}" "#{}") without)))
 
     (testing "default is user-on"
       (is (= with (render {:with-user? true}))))))
@@ -425,28 +379,20 @@
             (is (some #(and (seq? %) (= 'defn (first %)) (= 'ig-config (second %))) forms)
                 "ig-config must survive as a defn")))
 
-        (testing "and it discovers scaffolded modules"
-          ;; Without this the generated project ignores every module the
-          ;; scaffolder makes, which is the defect BOU-311 fixes.
-          (is (str/includes? src "discover-module-config")))
-
-        (testing "and hands their routes to the http handler"
-          ;; Discovery alone is half the wiring, and the half that boots
-          ;; quietly: the module initialises, nothing mounts it, and
-          ;; /api/v1/<module> is a 404 while `bb quickstart` reports 8/8 Done.
-          ;; Asserting only on discover-module-config above is what let that
-          ;; ship (BOU-312).
-          ;;
-          ;; Read forms, not the text. `str/includes?` here would be satisfied
-          ;; by the comment that explains the wiring, so deleting the wiring and
-          ;; keeping the comment would pass.
+        (testing "and it assembles rather than enumerating"
+          ;; Scaffolded-module discovery and the :module-routes it feeds the
+          ;; HTTP handler both moved into `system-config`. Read forms, not the
+          ;; text: `str/includes?` would be satisfied by the comment that
+          ;; explains the call, so deleting the call and keeping the comment
+          ;; would pass. What discovery does is
+          ;; `wagoe.platform.shell.system.config-test`.
           (let [ig-form (some #(when (and (seq? %) (= 'defn (first %)) (= 'ig-config (second %))) %)
                               (read-string (str "[" src "]")))
                 nodes   (tree-seq coll? seq ig-form)]
-            (is (some #{:module-routes} nodes)
-                "ig-config must put :module-routes on the http-handler")
-            (is (some #(and (symbol? %) (str/ends-with? (name %) "discovered-route-refs")) nodes)
-                "and fill it from the discovered modules, not a hardcoded list"))))
+            (is (some #(and (symbol? %) (= "system-config" (name %))) nodes)
+                "ig-config must call system-config")
+            (is (some #{:extra-modules} nodes)
+                "and tell it which modules this app enables in code"))))
       (finally
         (when (.exists (io/file tmp))
           (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f)))))))

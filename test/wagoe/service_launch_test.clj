@@ -204,6 +204,8 @@
    passenger."
   #{:wagoe/db-context :wagoe/logging :wagoe/metrics :wagoe/tracing
     :wagoe/error-reporting :wagoe/router :wagoe/email :wagoe/cache
+    ;; The application's own settings block. Every service reads it.
+    :wagoe/settings
     :wagoe/i18n :wagoe/i18n-http-middleware
     ;; The event bus is infrastructure: every service that runs needs one,
     ;; whichever module it is running.
@@ -222,7 +224,10 @@
   (-> (test-config)
       (assoc-in [:active :wagoe/workflow] {:enabled? true})
       (assoc-in [:active :wagoe/search] {:enabled? true})
-      (assoc-in [:active :wagoe/admin] {:enabled? true})))
+      (assoc-in [:active :wagoe/admin] {:enabled? true})
+      ;; Tenancy is wired because the config asks for it. It used to be wired
+      ;; unconditionally in code, which is why this line was not needed.
+      (assoc-in [:active :wagoe/tenant] {:enabled? true})))
 
 (deftest ^:integration no-module-component-is-mistaken-for-the-platform
   (let [config    (everything-enabled-config)

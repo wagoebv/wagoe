@@ -47,3 +47,19 @@
 (defmethod ig/halt-key! :wagoe/dev-error-enricher
   [_ _enricher]
   nil)
+
+;; =============================================================================
+;; Module graph
+;; =============================================================================
+
+(defn ig-config
+  "This module's Integrant entries, for `wagoe.platform.shell.system.config`.
+
+   Dev-only: an error over HTTP answers with its BND code and the fix instead of
+   \"Validation failed\". devtools lives in the `:repl` alias, so a project
+   running `clojure -M:run` against the dev config has the key and not the
+   library — the assembler treats this module as optional and skips it rather
+   than failing the boot."
+  [settings _ctx]
+  {:components {:wagoe/dev-error-enricher settings}
+   :http       {:error-enricher (ig/ref :wagoe/dev-error-enricher)}})

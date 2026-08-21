@@ -1,6 +1,7 @@
 {:paths ["src"]
 
- :deps  {org.clojure/clojure       {:mvn/version "1.12.5"}
+ :deps  {integrant/integrant                {:mvn/version "1.0.1"}
+         org.clojure/clojure       {:mvn/version "1.12.5"}
          wagoe/shared-ui  {:local/root "../shared-ui"}
          metosin/malli             {:mvn/version "0.20.1"}
          hiccup/hiccup             {:mvn/version "2.0.0"}

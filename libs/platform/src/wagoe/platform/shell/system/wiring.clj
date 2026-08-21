@@ -74,6 +74,18 @@
             [ring.adapter.jetty :as jetty]))
 
 ;; =============================================================================
+;; Application Settings
+;; =============================================================================
+
+;; :wagoe/settings is the application's own settings block, and components take
+;; a ref to it. The init-key used to be written into each application's
+;; namespace by `wagoe new`; this repository never wrote one, so emitting the
+;; key here failed the boot with "No such namespace: wagoe" (BOU-326).
+(defmethod ig/init-key :wagoe/settings [_ config] config)
+
+(defmethod ig/halt-key! :wagoe/settings [_ _config] nil)
+
+;; =============================================================================
 ;; Database Context
 ;; =============================================================================
 

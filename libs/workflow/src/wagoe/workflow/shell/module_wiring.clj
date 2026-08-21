@@ -78,3 +78,24 @@
   [_ _routes]
   ;; Routes are pure data — no cleanup needed
   nil)
+
+;; =============================================================================
+;; Module graph
+;; =============================================================================
+
+(defn ig-config
+  "This module's Integrant entries, for `wagoe.platform.shell.system.config`.
+
+   :wagoe/workflow-db-schema creates the module's tables. Applications used to
+   enumerate this graph by hand and none of them wired it, so `wagoe add
+   workflow` gave you a service whose tables did not exist (BOU-326)."
+  [_settings _ctx]
+  {:components
+   {:wagoe/workflow-db-schema {:ctx (ig/ref :wagoe/db-context)}
+    :wagoe/workflow           {:db-ctx         (ig/ref :wagoe/db-context)
+                               :db-schema      (ig/ref :wagoe/workflow-db-schema)
+                               :guard-registry {}}
+    :wagoe/workflow-routes    {:workflow-service (ig/ref :wagoe/workflow)
+                               :user-service     (ig/ref :wagoe/user-service)}}
+   :http
+   {:workflow-routes (ig/ref :wagoe/workflow-routes)}})
