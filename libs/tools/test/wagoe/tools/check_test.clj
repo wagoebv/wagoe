@@ -304,7 +304,13 @@
   ;; generated project — a green row for a check that cannot fire (BOU-325).
   (let [tmpl (io/file "libs/wagoe-cli/resources/wagoe/cli/templates/bb.edn.tmpl")]
     (if-not (.exists tmpl)
-      (is (not (.exists tmpl)) "skipped: template not reachable from this working directory")
+      ;; Not a skip. Both directions of this lockstep used to answer "pass" when
+      ;; the template was missing, so renaming or moving it disarmed the guard
+      ;; silently — the same green-row-that-cannot-fail shape this test exists
+      ;; to prevent. The file is part of the repository; if it is gone, say so.
+      (is (.exists tmpl)
+          (str "bb.edn.tmpl not found at " (.getPath tmpl)
+               " — the lockstep cannot check a template it cannot read"))
       (let [tasks      (set (map second (re-seq #"(?m)^\s{2}([a-z][a-z0-9:_-]*)\s+\{" (slurp tmpl))))
             monorepo   (->> check/all-checks
                             (remove #(= :any (:scope %)))
@@ -327,8 +333,9 @@
     ;; a template in another library — two places, nothing comparing them.
     (let [tmpl (io/file "libs/wagoe-cli/resources/wagoe/cli/templates/bb.edn.tmpl")]
       (if-not (.exists tmpl)
-        (is (not (.exists tmpl))
-            "skipped: template not reachable from this working directory")
+        (is (.exists tmpl)
+            (str "bb.edn.tmpl not found at " (.getPath tmpl)
+                 " — this lockstep cannot check a template it cannot read"))
         (let [content   (slurp tmpl)
               ;; task keys look like `  check:fcis        {:doc ...`
               task-names (set (map second (re-seq #"(?m)^\s{2}([a-z][a-z0-9:_-]*)\s+\{" content)))

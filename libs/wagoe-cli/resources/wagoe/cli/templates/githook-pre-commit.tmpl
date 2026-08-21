@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Quick local gate. The full check suite (ports, deps) runs in CI.
+# Quick local gate. The full check suite runs in CI (`bb check --ci`).
 
 # FC/IS enforcement — blocks the commit on a violation. Scans src/**/core/.
 bb check:fcis

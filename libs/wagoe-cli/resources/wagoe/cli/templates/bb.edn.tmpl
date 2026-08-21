@@ -41,7 +41,7 @@
                      :task (apply doctor-env/-main *command-line-args*)}
 
   ;; Quality checks
-  check             {:doc "Run all quality checks (FC/IS, deps, placeholder-tests, kondo, doctor)"
+  check             {:doc "Run all quality checks (FC/IS, ports, placeholder-tests, kondo, doctor)"
                      :task (apply check/-main *command-line-args*)}
   check:fcis        {:doc "FC/IS boundary enforcement"
                      :task (check-fcis/-main)}

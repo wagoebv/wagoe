@@ -41,7 +41,11 @@ bb ai docs --module libs/user --type agents  # Generate AGENTS.md
 bb ai admin-entity "products with name, price, status"  # Generate admin entity EDN
 ----
 
-=== Deployment
+=== Deployment (framework repository only)
+
+These publish the Wagoe libraries themselves and exist only in the framework
+repository — a project created by `wagoe new` has no `bb deploy` task.
+
 
 [source,bash]
 ----

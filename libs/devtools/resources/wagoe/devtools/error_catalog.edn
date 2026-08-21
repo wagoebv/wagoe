@@ -117,7 +117,7 @@
             :category    :tooling
             :title       "Circular Library Dependency"
             :description "Two or more libraries depend on each other, creating a cycle."
-            :fix         "Run `bb check:deps` to identify the cycle. Extract shared code into a lower-level library (usually core)."}
+            :fix         "Run `bb check` to identify the cycle (`bb check:deps` in the framework repo). Extract shared code into a lower-level library (usually core)."}
 
  "BND-702" {:code        "BND-702"
             :category    :tooling
