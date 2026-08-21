@@ -18,7 +18,7 @@ Uses an in-memory backend for development/tests and Redis for production.
 ;; A failing handler
 (defn process-payment [args]
   {:success? false
-   :error {:message "Payment gateway unavailable" :type "GatewayError"}})
+   :error {:message "Payment gateway unavailable" :type :gateway-error}})
 ----
 
 == Registering handlers

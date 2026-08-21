@@ -116,7 +116,7 @@
       (is (= 1 (count (:out-of-range by-code)))))))
 
 ;; =============================================================================
-;; Legacy Compatibility Tests
+;; Result Combinator Tests
 ;; =============================================================================
 
 (deftest ^:unit merge-results-test

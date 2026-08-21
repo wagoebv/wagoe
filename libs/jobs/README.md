@@ -553,7 +553,7 @@ clojure -M:test --focus wagoe.jobs.shell.tenant-context-test
     (catch Exception e
       {:success? false
        :error {:message (.getMessage e)
-               :type "EmailError"
+               :type :email-error
                :stacktrace (with-out-str (clojure.stacktrace/print-stack-trace e))}})))
 ```
 
@@ -570,11 +570,11 @@ clojure -M:test --focus wagoe.jobs.shell.tenant-context-test
                   :status "completed"}}
         {:success? false
          :error {:message (:error-message result)
-                 :type "PaymentFailed"}}))
+                 :type :payment-failed}}))
     (catch Exception e
       {:success? false
        :error {:message (.getMessage e)
-               :type "PaymentError"}})))
+               :type :payment-error}})))
 ```
 
 **Generate Report:**
@@ -592,7 +592,7 @@ clojure -M:test --focus wagoe.jobs.shell.tenant-context-test
     (catch Exception e
       {:success? false
        :error {:message (.getMessage e)
-               :type "ReportGenerationError"}})))
+               :type :report-generation-error}})))
 ```
 
 ---

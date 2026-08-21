@@ -220,19 +220,20 @@ The allowlist carries a mandatory `:why` per entry, in the flavours
 Ordered by blast radius — which is not the order a first draft of this ADR
 proposed:
 
-. **The ~79 untyped `shell/` throws.** Mechanical: no consumer reads a key that
+. **The ~79 untyped `shell/` throws** (done, BOU-323 — 58 of them, measured). Mechanical: no consumer reads a key that
   is not there, and it is the rule ADR-022 already made. One structural
   exception — `platform/…/utils/error_handling.clj` rewraps an exception and
   strips `:type` on purpose; that needs a decision, not a keyword.
 . **Bare-string `:error` values** in `{:success? false}` returns — devtools'
-  dashboard and a handful like it.
+  dashboard and a handful like it (done, BOU-323).
 . **The string `:type` values** (external 10, jobs 2, email 2, reports 1).
   *Not* mechanical: `libs/email`'s SMTP adapter read
   `(get-in result [:error :type] "SmtpError")` out of `libs/external`'s output,
   so the change crossed a library boundary, and five test assertions matched the
   strings. Both libraries moved in one step (done, BOU-323).
 . **`libs/workflow`** — the `{:success? false}` returns that are caller errors
-  become §1.
+  become §1. Still open: the gate cannot see them, because the `:type` is
+  computed.
 . **`{:success …}` without the question mark** — scaffolder, storage,
   driver-loader.
 . **The 21 `{:error {:type …}}` returns — last, not first.** `platform`'s RPC

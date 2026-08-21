@@ -44,7 +44,7 @@ automatic retries with exponential backoff, and multi-tenant support.
 ;; Failing handler
 (defn failing-handler [args]
   {:success? false
-   :error {:message "Processing failed" :type "ProcessingError"}})
+   :error {:message "Processing failed" :type :processing-error}})
 ----
 
 == Enqueueing jobs

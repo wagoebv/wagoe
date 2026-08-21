@@ -38,8 +38,22 @@ for what is public API, what is internal, and how deprecations are announced.
   `"SmtpError"` became `:smtp-error`, and so on for IMAP, Twilio, the email and
   report job integrations, and the jobs worker's `:no-handler`. That change
   crossed a library boundary, which is why it went last: `wagoe-email`'s SMTP
-  adapter reads the `:type` out of `wagoe-external`'s result, and five test
-  assertions in `wagoe-email` cover `wagoe-external`'s code.
+  adapter reads the `:type` out of `wagoe-external`'s result — including as the
+  default of a `get-in` — and `wagoe-email`'s tests cover `wagoe-external`'s
+  code, so the two libraries had to move together.
+
+  Two Malli schemas moved with them. `wagoe.jobs.schema/Job` and
+  `wagoe.external.schema/EmailSendResult` declared `[:type :string]`, so the
+  libraries' own published validators rejected the values their own adapters
+  had started producing. `wagoe-jobs` also stored `:error` as JSON without
+  restoring that keyword, so a consumer matching `:no-handler` matched against
+  the in-memory store and missed against Redis; and its worker used the one
+  field for two things — a failure kind (`:no-handler`) and a thrown
+  exception's class name. The class has its own key now.
+
+  `wagoe-push` came along, though the gate cannot see it: its adapters build
+  `:error` from a computed value, and its `ports.clj` had documented
+  ":error map" while the adapters returned a string.
 
   The dev dashboard's config-apply returned `:error` as a bare string in five
   branches; they carry `{:type … :message …}` now, and the page renders the
@@ -51,7 +65,9 @@ for what is public API, what is internal, and how deprecations are announced.
 
   What the gate protects from here is a new violation, not a backlog: an entry
   added to the allowlist needs a `:why` and a `:count`, and an entry that stops
-  exempting anything fails the build.
+  exempting anything fails the build. It reads shapes, not intent — a computed
+  `:type` is outside what any static check can see, which is why the push
+  adapters above were found by reading rather than by the gate.
 
 - **58 exceptions thrown at boundaries now say what kind of failure they are**
   (BOU-323; the untyped-throw step, which ADR-036 numbers first). ADR-022 required a `:type` on every

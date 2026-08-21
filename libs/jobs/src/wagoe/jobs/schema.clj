@@ -41,9 +41,13 @@
    [:started-at {:optional true} inst?]
    [:completed-at {:optional true} inst?]
    [:result {:optional true} [:map-of keyword? any?]]
+   ;; :type is a keyword (ADR-036 §3): :no-handler, :handler-error, … The Java
+   ;; class of a thrown exception is :exception-class, not a second spelling of
+   ;; the same field.
    [:error {:optional true} [:map
                              [:message :string]
-                             [:type :string]
+                             [:type keyword?]
+                             [:exception-class {:optional true} :string]
                              [:stacktrace {:optional true} :string]]]
    [:metadata {:optional true} [:map-of keyword? any?]]])
 

@@ -95,7 +95,7 @@ A worker on the DB queue picks the job up after commit.
 ;; Failed handler
 (defn failing-handler [args]
   {:success? false
-   :error {:message "Processing failed" :type "ProcessingError"}})
+   :error {:message "Processing failed" :type :processing-error}})
 ```
 
 ## Usage Patterns
