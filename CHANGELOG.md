@@ -31,6 +31,28 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **The error-shape allowlist is empty** (BOU-323, last migration step). It
+  shipped with 81 findings on 18 August; the remaining 13 are gone.
+
+  The string `:type` values in the outbound adapters are keywords —
+  `"SmtpError"` became `:smtp-error`, and so on for IMAP, Twilio, the email and
+  report job integrations, and the jobs worker's `:no-handler`. That change
+  crossed a library boundary, which is why it went last: `wagoe-email`'s SMTP
+  adapter reads the `:type` out of `wagoe-external`'s result, and five test
+  assertions in `wagoe-email` cover `wagoe-external`'s code.
+
+  The dev dashboard's config-apply returned `:error` as a bare string in five
+  branches; they carry `{:type … :message …}` now, and the page renders the
+  message rather than the map.
+
+  `wagoe.core.validation.result/normalize-result` and `legacy-result?` are
+  deleted. They coerced between two result shapes at runtime, in the namespace
+  that defines the one shape, and nothing outside their own tests called them.
+
+  What the gate protects from here is a new violation, not a backlog: an entry
+  added to the allowlist needs a `:why` and a `:count`, and an entry that stops
+  exempting anything fails the build.
+
 - **58 exceptions thrown at boundaries now say what kind of failure they are**
   (BOU-323; the untyped-throw step, which ADR-036 numbers first). ADR-022 required a `:type` on every
   `ex-info` reaching the HTTP boundary in April; the gate added last week

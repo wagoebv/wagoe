@@ -169,7 +169,7 @@
                      (str "no worker handled it within " max-age-ms " ms")
                      (str "re-enqueue backstop of " max-requeues " attempts reached"))
             error  {:message (str "No handler registered for job type " job-type " on any worker: " reason)
-                    :type    "NoHandlerError"}]
+                    :type    :no-handler}]
         (log/error "No handler for job type — dead-lettering"
                    {:job-id job-id :job-type job-type :reason reason
                     :unhandled-for-ms (when first-seen (- now-ms first-seen)) :requeue-count requeues})
@@ -362,7 +362,7 @@
         (execute-job-handler handler-fn (:args job))
         {:success? false
          :error {:message (str "No handler registered for job type: " job-type)
-                 :type "NoHandlerError"}})))
+                 :type :no-handler}})))
 
   (start-worker! [_this]
     (:id state))  ; Already started in create-worker

@@ -119,23 +119,6 @@
 ;; Legacy Compatibility Tests
 ;; =============================================================================
 
-(deftest ^:unit legacy-compatibility-test
-  (testing "Detect legacy result format"
-    (let [legacy-result {:valid? true :data {:foo "bar"}}
-          modern-result (vr/success-result {:foo "bar"})]
-      (is (vr/legacy-result? legacy-result))
-      (is (not (vr/legacy-result? modern-result)))))
-
-  (testing "Normalize legacy result"
-    (let [legacy-result {:valid? true :data {:foo "bar"}}
-          normalized (vr/normalize-result legacy-result)]
-      (is (contains? normalized :warnings))
-      (is (empty? (:warnings normalized))))))
-
-;; =============================================================================
-;; Result Combinator Tests
-;; =============================================================================
-
 (deftest ^:unit merge-results-test
   (testing "Merge all successful results"
     (let [result1 (vr/success-result {:email "test@example.com"})

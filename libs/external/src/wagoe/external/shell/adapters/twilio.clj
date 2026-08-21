@@ -48,14 +48,14 @@
       {:success? false
        :error    (let [err (twilio-core/parse-twilio-error body status)]
                    {:message (:message err)
-                    :type    "TwilioError"})})))
+                    :type    :twilio-error})})))
 
 (defn- handle-exception
   [e context]
   (log/error e "Twilio API call failed" context)
   {:success? false
    :error    {:message (.getMessage e)
-              :type    "NetworkError"}})
+              :type    :network-error}})
 
 ;; =============================================================================
 ;; Adapter Record
@@ -103,7 +103,7 @@
           {:success? false
            :error    (let [err (twilio-core/parse-twilio-error body status)]
                        {:message (:message err)
-                        :type    "TwilioError"})}))
+                        :type    :twilio-error})}))
       (catch Exception e
         (handle-exception e {:op :get-message-status :sid sid})))))
 

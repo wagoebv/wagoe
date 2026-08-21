@@ -107,7 +107,7 @@
                   :error-message   (.getMessage e)})
       {:success? false
        :error    {:message    (.getMessage e)
-                  :type       "ReportJobError"
+                  :type       :report-job-error
                   :stacktrace (with-out-str (clojure.stacktrace/print-stack-trace e))}})))
 
 ;; =============================================================================

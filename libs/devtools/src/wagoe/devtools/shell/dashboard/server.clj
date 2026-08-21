@@ -202,10 +202,11 @@
                               (cond
                                 (nil? ig-config-fn)
                                 {:success? false
-                                 :error (str "This dashboard cannot rebuild the system: no :ig-config-fn "
-                                             "on :wagoe/dashboard. Wire it as a zero-argument function "
-                                             "returning your Integrant config, e.g. "
-                                             "#(my-app.system-config/ig-config (wagoe.config/load-config)).")}
+                                 :error {:type    :configuration-error
+                                         :message (str "This dashboard cannot rebuild the system: no :ig-config-fn "
+                                                       "on :wagoe/dashboard. Wire it as a zero-argument function "
+                                                       "returning your Integrant config, e.g. "
+                                                       "#(my-app.system-config/ig-config (wagoe.config/load-config)).")}}
 
                                 (and set-prep-fn sys-var cfg-var restart-fn)
                                 (let [;; Snapshot previous state so we can roll back on failure
@@ -283,15 +284,20 @@
                                                (catch Exception e
                                                  (log/warn "Rollback re-init failed" {:key failed-key :error (.getMessage e)})))
                                           {:success? false
-                                           :error (str "Failed to restart " failed-key " (" failed-error
-                                                       "). All changes rolled back.")})
+                                           :error {:type    :restart-failed
+                                                   :message (str "Failed to restart " failed-key " (" failed-error
+                                                                 "). All changes rolled back.")}})
                                       {:success? true :restarted all-to-restart})))
                                 :else
                                 {:success? false
-                                 :error "Cannot resolve Integrant REPL state. Is the system running?"}))
+                                 :error {:type    :system-not-running
+                                         :message "Cannot resolve Integrant REPL state. Is the system running?"}}))
                             (catch Exception e
-                              {:success? false :error (.getMessage e)}))
-                          {:success? false :error "No config section identified in request."})]
+                              {:success? false
+                               :error {:type :apply-failed :message (.getMessage e)}}))
+                          {:success? false
+                           :error {:type    :validation-error
+                                   :message "No config section identified in request."}})]
                     {:status  200
                      :headers {"Content-Type" "text/html; charset=utf-8"}
                      :body    (config-page/render-apply-result result)}))}]

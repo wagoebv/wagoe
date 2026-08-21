@@ -147,7 +147,7 @@ running → retrying → pending → running → ...
 The handler registry is per-process. When a worker dequeues a job whose type it
 has no handler for, it does **not** silently dead-letter it — the job is
 **re-enqueued** for another instance that registered the handler, and dead-lettered
-(with a `NoHandlerError`) only once it has gone unhandled for too long. A worker
+(with `{:error {:type :no-handler}}`) only once it has gone unhandled for too long. A worker
 created with an **empty** registry logs a loud warning at startup.
 
 Two safeguards make this correct on a heterogeneous, loaded fleet:

@@ -766,14 +766,14 @@ Send email synchronously (blocks until complete).
 - `:message-id` - Message ID from SMTP (if successful)
 - `:error` - Error map (if failed) with:
   - `:message` - Error message
-  - `:type` - Error type ("SmtpError", etc.)
+  - `:type` - Error type keyword (`:smtp-error`, `:unexpected-error`, …)
   - `:provider-error` - Provider-specific error details
 
 **Example:**
 ```clojure
 (send-email! email-sender prepared-email)
 ;; Success: {:success? true :message-id "<msg-123@smtp.example.com>"}
-;; Failure: {:success? false :error {:message "Connection timeout" :type "SmtpError"}}
+;; Failure: {:success? false :error {:message "Connection timeout" :type :smtp-error}}
 ```
 
 #### `send-email-async!`

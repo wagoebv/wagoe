@@ -226,11 +226,11 @@ proposed:
   strips `:type` on purpose; that needs a decision, not a keyword.
 . **Bare-string `:error` values** in `{:success? false}` returns — devtools'
   dashboard and a handful like it.
-. **The ~14 string `:type` values** (external 10, jobs 2, email 1, reports 1).
-  *Not* mechanical: `libs/email`'s SMTP adapter reads
+. **The string `:type` values** (external 10, jobs 2, email 2, reports 1).
+  *Not* mechanical: `libs/email`'s SMTP adapter read
   `(get-in result [:error :type] "SmtpError")` out of `libs/external`'s output,
-  so the change crosses a library boundary, and five test assertions match the
-  strings. Both libraries move in one step.
+  so the change crossed a library boundary, and five test assertions matched the
+  strings. Both libraries moved in one step (done, BOU-323).
 . **`libs/workflow`** — the `{:success? false}` returns that are caller errors
   become §1.
 . **`{:success …}` without the question mark** — scaffolder, storage,
