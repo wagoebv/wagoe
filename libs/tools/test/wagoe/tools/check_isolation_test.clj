@@ -58,8 +58,13 @@
       (is (not-any? #(str/includes? % "_") nss))
       (is (every? #(str/starts-with? % "wagoe.") nss))))
 
-  (testing "a single-file library resolves to its one namespace"
-    (is (= ["wagoe.ui-style"] (sut/namespaces-of "ui-style"))))
+  (testing "a hyphenated library directory munges back to a hyphenated namespace"
+    ;; libs/ui-style/src/wagoe/ui_style.clj — the directory keeps the hyphen,
+    ;; the file takes an underscore, and the namespace has the hyphen back.
+    ;; Membership rather than equality: this is about the munging, and pinning
+    ;; the whole list made adding a second namespace to the library a failure.
+    (is (some #{"wagoe.ui-style"} (sut/namespaces-of "ui-style")))
+    (is (not-any? #(str/includes? % "_") (sut/namespaces-of "ui-style"))))
 
   (testing "the require form loads all of them"
     (let [form (sut/require-form "ui-style")]
