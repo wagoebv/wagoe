@@ -64,8 +64,12 @@
     :scope :any
     :label "FC/IS boundaries"
     :cmd   ["bb" "check:fcis"]}
+   ;; :monorepo, because check-deps walks libs/* and nothing else. A generated
+   ;; project has no libs/, so this reported "0 libraries scanned, 0 violations"
+   ;; — a green row in `bb check` for a check that cannot fire, which is the
+   ;; shape BOU-250 was about (BOU-325).
    {:id    :deps
-    :scope :any
+    :scope :monorepo
     :label "Dependency direction"
     :cmd   ["bb" "check:deps"]}
    {:id    :ports
@@ -175,10 +179,12 @@
 (defn framework-repo?
   "True when running inside the Wagoe monorepo rather than a generated project.
 
-   Five checks only mean something here: doc-counts and poms compare against
+   Eleven checks only mean something here: doc-counts and poms compare against
    wagoe.tools.deploy/all-libs, agents diffs the agents knowledge base,
-   no-boundary is a rename gate for this repo's own history, and docs:lint runs
-   from the dev/ path. Generated projects define none of those bb tasks, so
+   no-boundary is a rename gate for this repo's own history, docs:lint runs from
+   the dev/ path, and deps walks libs/*, which a generated project does not
+   have (BOU-325). The others — versions, changelog, isolation, error-shape,
+   branch-protection — are about this repository's own release history. Generated projects define none of those bb tasks, so
    `bb check` used to invoke them, bb exited 1 on \"File does not exist\", and
    run-check reported them as violations the user could not act on (BOU-264).
 
@@ -260,17 +266,17 @@
   (println)
   (println "Usage:")
   (println "  bb check                 Run all quality checks")
-  (println "  bb check --quick         Run only FC/IS and dependency checks (fast)")
+  (println "  bb check --quick         Run the quick subset (fast)")
   (println "  bb check --fix           Pass --fix to kondo linter")
   (println "  bb check --ci            Exit non-zero on any check failure")
   (println)
+  ;; Listed from the registry, filtered the way `bb check` itself filters. The
+  ;; hardcoded list included `deps`, which a generated project cannot run —
+  ;; help that names commands the reader does not have is the surface BOU-325
+  ;; is about.
   (println "Checks:")
-  (println "  fcis               FC/IS boundary enforcement")
-  (println "  deps               Library dependency direction + cycle detection")
-  (println "  ports              Hexagonal boundaries: ports.clj presence + protocol usage")
-  (println "  placeholder-tests  Detect (is true) placeholder assertions")
-  (println "  linting            clj-kondo lint across all sources")
-  (println "  doctor             Config doctor validation"))
+  (doseq [{:keys [id label]} (first (applicable-checks all-checks (framework-repo?)))]
+    (println (format "  %-18s %s" (name id) label))))
 
 ;; =============================================================================
 ;; Main entry point

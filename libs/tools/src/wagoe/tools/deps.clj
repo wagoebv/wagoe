@@ -222,7 +222,7 @@
 (defn cmd-check
   "Check all (or one) locations and report outdated deps."
   [only-lib]
-  (println (bold "\nChecking dependencies across the monorepo..."))
+  (println (bold "\nChecking dependencies..."))
   (let [files       (vec (find-deps-files only-lib))
         by-file     (map (fn [f] [f (coords-from-file f)]) files)
         all-coords  (mapcat (comp keys second) by-file)

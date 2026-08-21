@@ -31,6 +31,30 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **A generated project no longer ships `bb deploy`** (BOU-325). It published
+  *Wagoe's* libraries to Clojars, from a user's project, and `bb guide` printed
+  a whole Deployment section advertising it. Both are gone downstream; the
+  monorepo keeps them, and a test asserts the section appears in one context and
+  not the other.
+
+- **`bb check:deps` was a green row that could not fail — or worse** (BOU-325).
+  It walks `libs/*`, which a generated project never has, so it reported "0
+  libraries scanned, 0 violations" in every project. Give a project a `libs/`
+  directory of its own and it does something worse than nothing: it reports the
+  project's own namespaces as undeclared dependencies and tells the reader to
+  edit a private var inside Wagoe's source. It is a framework-only check now,
+  and `bb check` names it among the eleven it skips.
+
+  `bb check --help` listed it too, along with the rest of a hardcoded list; it
+  reads the registry now, so it describes the checks this project actually
+  runs.
+
+  A second lockstep test came with it. The existing one proves the template
+  defines every task `bb check` calls; the new one proves it defines nothing
+  framework-shaped — no task a monorepo-only check owns, and nothing that
+  publishes. The template's copy of the task list has broken twice through
+  registry drift (BOU-259, BOU-264); this closes the other direction.
+
 - **One validation API instead of three** (BOU-323). `wagoe.core.validation` and
   `wagoe.core.utils.validation` each defined `validate-with-transform`,
   `validate-cli-args`, `validate-request` and a set of result accessors — same

@@ -1,5 +1,6 @@
 (ns wagoe.tools.check-test
   (:require [clojure.edn :as edn]
+            [clojure.set]
             [clojure.test :refer [deftest is testing]]
             [clojure.java.io :as io]
             [clojure.string :as str]
@@ -289,8 +290,41 @@
     ;; will invoke it, so the task must exist in bb.edn.tmpl first — which the
     ;; test below enforces.
     (is (= #{:doc-counts :versions :agents :poms :no-boundary :docs-lint
-             :branch-protection :changelog :isolation :error-shape}
+             :branch-protection :changelog :isolation :error-shape :deps}
            (set (map :id (remove #(= :any (:scope %)) check/all-checks)))))))
+
+(deftest ^:unit the-template-defines-no-task-a-user-has-no-business-running
+  ;; The other direction of the lockstep. `portable-checks-exist-as-tasks`
+  ;; proves the template has every task `bb check` calls; this proves it has
+  ;; nothing else framework-shaped.
+  ;;
+  ;; What was in there: `bb deploy`, which publishes *Wagoe's* libraries to
+  ;; Clojars, in a fresh user project. And `bb check:deps`, which walks libs/*
+  ;; and therefore answered "0 libraries scanned, 0 violations" in every
+  ;; generated project — a green row for a check that cannot fire (BOU-325).
+  (let [tmpl (io/file "libs/wagoe-cli/resources/wagoe/cli/templates/bb.edn.tmpl")]
+    (if-not (.exists tmpl)
+      ;; Not a skip. Both directions of this lockstep used to answer "pass" when
+      ;; the template was missing, so renaming or moving it disarmed the guard
+      ;; silently — the same green-row-that-cannot-fail shape this test exists
+      ;; to prevent. The file is part of the repository; if it is gone, say so.
+      (is (.exists tmpl)
+          (str "bb.edn.tmpl not found at " (.getPath tmpl)
+               " — the lockstep cannot check a template it cannot read"))
+      (let [tasks      (set (map second (re-seq #"(?m)^\s{2}([a-z][a-z0-9:_-]*)\s+\{" (slurp tmpl))))
+            monorepo   (->> check/all-checks
+                            (remove #(= :any (:scope %)))
+                            (filter #(= "bb" (first (:cmd %))))
+                            (map (comp second :cmd))
+                            set)]
+        (testing "no task a monorepo-only check owns"
+          (is (empty? (clojure.set/intersection tasks monorepo))
+              (str "framework-only task(s) in the project template: "
+                   (pr-str (sort (clojure.set/intersection tasks monorepo))))))
+
+        (testing "and nothing that publishes"
+          (is (not (contains? tasks "deploy"))
+              "`bb deploy` publishes Wagoe's libraries to Clojars — not a user's command"))))))
 
 (deftest ^:unit portable-checks-exist-as-tasks-in-generated-projects
   (testing "every :any check names a bb task the project template defines"
@@ -299,8 +333,9 @@
     ;; a template in another library — two places, nothing comparing them.
     (let [tmpl (io/file "libs/wagoe-cli/resources/wagoe/cli/templates/bb.edn.tmpl")]
       (if-not (.exists tmpl)
-        (is (not (.exists tmpl))
-            "skipped: template not reachable from this working directory")
+        (is (.exists tmpl)
+            (str "bb.edn.tmpl not found at " (.getPath tmpl)
+                 " — this lockstep cannot check a template it cannot read"))
         (let [content   (slurp tmpl)
               ;; task keys look like `  check:fcis        {:doc ...`
               task-names (set (map second (re-seq #"(?m)^\s{2}([a-z][a-z0-9:_-]*)\s+\{" content)))
