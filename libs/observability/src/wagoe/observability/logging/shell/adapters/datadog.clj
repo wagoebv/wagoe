@@ -303,9 +303,9 @@
   "Create a Datadog logger instance."
   [config]
   (when-not (:api-key config)
-    (throw (ex-info "Datadog API key is required" {:config config})))
+    (throw (ex-info "Datadog API key is required" {:type :configuration-error :config config})))
   (when-not (:service config)
-    (throw (ex-info "Datadog service name is required" {:config config})))
+    (throw (ex-info "Datadog service name is required" {:type :configuration-error :config config})))
   (let [batch-processor (create-batch-processor (:api-key config) config)]
     (->DatadogLogger config batch-processor)))
 
@@ -397,9 +397,9 @@
    This is the recommended way to create Datadog logging for use with Integrant."
   [config]
   (when-not (:api-key config)
-    (throw (ex-info "Datadog API key is required" {:config config})))
+    (throw (ex-info "Datadog API key is required" {:type :configuration-error :config config})))
   (when-not (:service config)
-    (throw (ex-info "Datadog service name is required" {:config config})))
+    (throw (ex-info "Datadog service name is required" {:type :configuration-error :config config})))
   (let [batch-processor (create-batch-processor (:api-key config) config)
         logger (->DatadogLogger config batch-processor)
         audit-logger (->DatadogAuditLogger logger)

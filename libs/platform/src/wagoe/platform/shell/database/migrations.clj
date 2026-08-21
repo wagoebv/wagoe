@@ -48,7 +48,8 @@
                 :else nil)]
     (when-not (sequential? paths)
       (throw (ex-info "Invalid migration manifest"
-                      {:resource migration-manifest-resource
+                      {:type :configuration-error
+                       :resource migration-manifest-resource
                        :url (str manifest-url)
                        :expected "vector or map with :paths vector"})))
     (->> paths
@@ -351,7 +352,8 @@
     (catch Exception e
       (log/error e "Failed to load database configuration for migrations")
       (throw (ex-info "Migration configuration failed"
-                      {:error (.getMessage e)}
+                      {:type :configuration-error
+                       :error (.getMessage e)}
                       e)))))
 
 ;; =============================================================================
@@ -388,7 +390,8 @@
       (rethrow-config-conflict! e)
       (log/error e "Database migration failed")
       (throw (ex-info "Migration failed"
-                      {:error (.getMessage e)}
+                      {:type :migration-failed
+                       :error (.getMessage e)}
                       e)))))
 
 (defn rollback
@@ -409,7 +412,8 @@
       (rethrow-config-conflict! e)
       (log/error e "Database rollback failed")
       (throw (ex-info "Rollback failed"
-                      {:error (.getMessage e)}
+                      {:type :migration-failed
+                       :error (.getMessage e)}
                       e)))))
 
 (defn rollback-until-just-after
@@ -430,7 +434,8 @@
       (rethrow-config-conflict! e)
       (log/error e "Database rollback to migration failed" {:migration-id migration-id})
       (throw (ex-info "Rollback to migration failed"
-                      {:error (.getMessage e)
+                      {:type :migration-failed
+                       :error (.getMessage e)
                        :migration-id migration-id}
                       e)))))
 
@@ -521,7 +526,8 @@
       (rethrow-config-conflict! e)
       (log/error e "Failed to create migration" {:name name})
       (throw (ex-info "Migration creation failed"
-                      {:error (.getMessage e)
+                      {:type :migration-failed
+                       :error (.getMessage e)
                        :name name}
                       e)))))
 
@@ -542,7 +548,8 @@
       (rethrow-config-conflict! e)
       (log/error e "Database reset failed")
       (throw (ex-info "Database reset failed"
-                      {:error (.getMessage e)}
+                      {:type :migration-failed
+                       :error (.getMessage e)}
                       e)))))
 
 (defn init
@@ -560,7 +567,8 @@
       (rethrow-config-conflict! e)
       (log/error e "Migration system initialization failed")
       (throw (ex-info "Migration init failed"
-                      {:error (.getMessage e)}
+                      {:type :migration-failed
+                       :error (.getMessage e)}
                       e)))))
 
 ;; =============================================================================

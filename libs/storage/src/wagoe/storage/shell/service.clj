@@ -273,7 +273,8 @@
   [{:keys [storage image-processor logger]}]
   (when-not storage
     (throw (ex-info "storage adapter is required"
-                    {:provided {:storage storage}})))
+                    {:type :configuration-error
+                     :provided {:storage storage}})))
 
   (when logger
     (logging/info logger "Storage service created"

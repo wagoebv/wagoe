@@ -52,7 +52,7 @@
        (cond-> {:api-key api-key}
          min-ms (assoc :min-interval-ms min-ms)))
 
-      (throw (ex-info "Unknown geo provider" {:provider provider-kw})))))
+      (throw (ex-info "Unknown geo provider" {:type :configuration-error :provider provider-kw})))))
 
 (defn- build-providers
   "Return a vector of provider adapters from a single keyword or a vector."

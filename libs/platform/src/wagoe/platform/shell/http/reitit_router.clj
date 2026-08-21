@@ -42,7 +42,8 @@
   (if (symbol? handler-sym)
     (or (requiring-resolve handler-sym)
         (throw (ex-info "Could not resolve handler function"
-                        {:handler handler-sym})))
+                        {:type :configuration-error
+                         :handler handler-sym})))
     handler-sym))
 
 (defn- resolve-middleware-fns

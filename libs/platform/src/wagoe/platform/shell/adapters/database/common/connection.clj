@@ -63,7 +63,14 @@
                       :error (.getMessage e)})
           (.close datasource)
           (throw (ex-info "Database initialization failed"
-                          {:adapter (protocols/dialect adapter)
+                          ;; :db/error is what the BND classifier reads for
+                          ;; BND-303 ("Database Connection Failed"), which is
+                          ;; exactly this case. A failed query or DDL is a
+                          ;; different failure and carries :database-error, so
+                          ;; the dashboard does not report every SQL error as a
+                          ;; connection problem (BOU-323).
+                          {:type :db/error
+                           :adapter (protocols/dialect adapter)
                            :original-error (.getMessage e)}
                           e)))))))
 

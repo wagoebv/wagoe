@@ -81,3 +81,15 @@
           result (classifier/classify ex)]
       (is (nil? (:code result))
           "should not misclassify as JWT-specific BND-103"))))
+
+(deftest ^:unit an-unknown-provider-is-bnd-102
+  ;; BND-102 ("Unknown Provider") sat in the catalogue with nothing producing
+  ;; it. The module wirings for ai, geo and the observability adapters throw
+  ;; :configuration-error naming the :provider they could not resolve
+  ;; (BOU-323) — that is the case the entry describes.
+  (is (= "BND-102" (:code (classifier/classify (ex-info "Unknown AI provider"
+                                                 {:type :configuration-error
+                                                  :provider :nope})))))
+  (testing "a configuration error without a provider is not misfiled as one"
+    (is (nil? (:code (classifier/classify (ex-info "Datadog API key is required"
+                                            {:type :configuration-error})))))))

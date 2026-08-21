@@ -31,7 +31,8 @@
   [definition]
   (when-not (audience-definition-validator definition)
     (throw (ex-info "Invalid audience definition"
-                    {:errors (audience-definition-explainer definition)
+                    {:type   :validation-error
+                     :errors (audience-definition-explainer definition)
                      :id     (:id definition)})))
   (let [id (:id definition)]
     (swap! registry assoc id definition)

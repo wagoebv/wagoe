@@ -152,7 +152,8 @@
                          {:event ::resize-image-failed
                           :error (.getMessage e)}))
         (throw (ex-info "Failed to resize image"
-                        {:dimensions dimensions
+                        {:type :storage-error
+                         :dimensions dimensions
                          :error (.getMessage e)}
                         e)))))
 
@@ -193,7 +194,8 @@
                           :size size
                           :error (.getMessage e)}))
         (throw (ex-info "Failed to create thumbnail"
-                        {:size size
+                        {:type :storage-error
+                         :size size
                          :error (.getMessage e)}
                         e)))))
 
@@ -215,7 +217,8 @@
                          {:event ::get-image-info-failed
                           :error (.getMessage e)}))
         (throw (ex-info "Failed to get image info"
-                        {:error (.getMessage e)}
+                        {:type :storage-error
+                         :error (.getMessage e)}
                         e)))))
 
   (is-image? [_ bytes _content-type]

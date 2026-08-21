@@ -67,6 +67,14 @@
              (:required-env-var data))
         {:code "BND-101" :category :config :data data :source :ex-data-pattern}
 
+        ;; BND-102 is "Unknown Provider", and it had no producer until the
+        ;; module wirings of ai, geo and the observability adapters started
+        ;; typing their throws (BOU-323). A :configuration-error naming a
+        ;; :provider is exactly the case the catalogue entry describes.
+        (and (= :configuration-error (:type data))
+             (:provider data))
+        {:code "BND-102" :category :config :data data :source :ex-data-pattern}
+
         :else nil))))
 
 (def ^:private message-patterns

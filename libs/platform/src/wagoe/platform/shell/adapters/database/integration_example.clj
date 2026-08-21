@@ -76,7 +76,8 @@
      (catch Exception e
        (log/error e "Failed to initialize databases")
        (throw (ex-info "Database initialization failed"
-                       {:environment environment
+                       {:type :db/error
+                        :environment environment
                         :error (.getMessage e)}
                        e))))))
 
@@ -141,7 +142,8 @@
     ;; Just rename :pool to :datasource for the db-core API
     (db-core/execute-query! {:adapter (:adapter db) :datasource (:pool db)} query-map)
     (throw (ex-info "Database adapter not found or not initialized"
-                    {:adapter-key adapter-key
+                    {:type :configuration-error
+                     :adapter-key adapter-key
                      :available-adapters (keys (:databases @app-state))}))))
 
 ;; =============================================================================

@@ -48,7 +48,8 @@
 
     :else
     (throw (ex-info "Unable to extract bytes from multipart file"
-                    {:multipart-file (dissoc multipart-file :tempfile :content)}))))
+                    {:type :validation-error
+                     :multipart-file (dissoc multipart-file :tempfile :content)}))))
 
 (defn- extract-file-data
   "Extract file data from Ring multipart request."

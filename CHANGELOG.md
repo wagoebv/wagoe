@@ -31,6 +31,31 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **58 exceptions thrown at boundaries now say what kind of failure they are**
+  (BOU-323, second migration step). ADR-022 required a `:type` on every
+  `ex-info` reaching the HTTP boundary in April; the gate added last week
+  measured 59 throws in `shell/` namespaces without one. They are typed:
+  `:configuration-error` for missing or unusable config (Datadog keys, Sentry
+  DSN, an unknown AI or geo provider, a CSRF secret that is blank while CSRF is
+  enabled), `:db/error` and `:database-error` for the database adapters,
+  `:migration-failed` for the migration commands, `:storage-error` for the S3,
+  GCS, local and image adapters, plus `:validation-error`, `:not-found`,
+  `:conflict`, `:forbidden` and `:port-unavailable` where those fit.
+
+  This is not bookkeeping. The HTTP layer maps `:type` to a status code, so an
+  untyped throw on a request path is a 500 that could have said 404 or 400; and
+  the BND classifier reads `:type` too, so the dev pipeline can now name these
+  errors. Two codes that had sat in the catalogue with nothing producing them
+  are live: `BND-303` (database connection failed) and `BND-102` (unknown
+  provider), the second with a classifier rule added here.
+
+  `:db/error` is deliberately only the connection case. A failed query carries
+  `:database-error`, so the dashboard does not report every SQL error as a
+  connection problem.
+
+  The allowlist is down from 71 entries to 13 — what is left is the
+  `{:success? false}` normalisation of ADR-036 §3.
+
 - **The user library's authentication and MFA results carry a typed error**
   (BOU-323, first migration step). `auth/authenticate-user` answered
   `{:error :authentication-failed :message "…"}` and the MFA shell answered

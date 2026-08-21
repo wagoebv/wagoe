@@ -44,7 +44,7 @@
         (log/info "Loading database configuration" {:env env :path config-path})
         (aero/read-config config-resource))
       (throw (ex-info (str "Configuration file not found: " config-path)
-                      {:env env :path config-path})))))
+                      {:type :configuration-error :env env :path config-path})))))
 
 (defn load-config
   "Load configuration for environment with caching"
@@ -292,7 +292,7 @@
         db-configs (get-active-db-configs env)]
     (when (empty? db-configs)
       (throw (ex-info "No active database configured"
-                      {:environment env})))
+                      {:type :configuration-error :environment env})))
     (let [[config-key config] (first db-configs)
           ;; Create a datasource for the database configuration
           datasource (factory/create-datasource config)]

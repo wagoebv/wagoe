@@ -34,7 +34,7 @@
                      :user-data-source user-data-source})]
     (when-not user-data-source
       (throw (ex-info "Audience component requires :user-data-source. Wire an IUserDataSource implementation via Integrant config."
-                      {:missing-key :user-data-source})))
+                      {:type :configuration-error :missing-key :user-data-source})))
     {:store    store
      :resolver resolver
      :cache    acache}))

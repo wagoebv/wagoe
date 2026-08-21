@@ -77,7 +77,8 @@
                     :error (.getMessage e)
                     :exception-type (type e)})
         (throw (ex-info "DDL execution failed"
-                        {:adapter (protocols/dialect (:adapter ctx))
+                        {:type :database-error
+                         :adapter (protocols/dialect (:adapter ctx))
                          :statement ddl-statement
                          :original-error (.getMessage e)}
                         e))))))
