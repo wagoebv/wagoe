@@ -1,0 +1,10 @@
+#kaocha/v1
+ {:kaocha/source-paths ["src"]
+
+  :tests [{:id          :unit
+           :test-paths  ["test"]
+           :kaocha/metadata {:focus [:unit]}}
+
+          {:id          :integration
+           :test-paths  ["test"]
+           :kaocha/metadata {:focus [:integration]}}]}

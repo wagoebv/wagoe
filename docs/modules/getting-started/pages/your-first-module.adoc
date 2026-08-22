@@ -230,6 +230,20 @@ clojure -M:test --focus-meta :unit     # just the pure ones
 The generator writes three test namespaces: one for the core, one for the
 repository, one for the service.
 
+== The same thing, already built
+
+`examples/shop` in the framework repository is this page's output, committed:
+`wagoe new shop` plus exactly the `bb scaffold` command above. CI boots it and
+asserts that `/api/v1/products` answers, so what you read there is what the
+current generators produce — not what they produced when someone last wrote it
+down.
+
+[source,bash]
+----
+cd examples/shop
+WAG_ENV=test JWT_SECRET=$(openssl rand -hex 32) clojure -M:run
+----
+
 == Next steps
 
 * xref:guides:validation.adoc[Validation] — Malli schemas and the validation framework
