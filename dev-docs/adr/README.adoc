@@ -87,17 +87,18 @@ composition.
 * Route composition in system wiring
 * Consistent route structure across modules
 
-==== ADR-008: Normalized Routing Abstraction [Accepted]
+==== ADR-008: Normalized Routing Abstraction [Superseded]
 ADR-008-normalized-routing-abstraction.adoc
 
-Introduces framework-agnostic route definitions using normalized EDN schema,
+Introduced framework-agnostic route definitions using a normalized EDN schema,
 enabling pluggable HTTP routers and servers through the Ports & Adapters pattern.
+Superseded by ADR-037: the router half never got a second implementation and was
+removed. The server half stands.
 
 *Key Decisions:*
 
-* Framework-agnostic normalized EDN route schema
-* IRouter and IHttpServer protocols (ports)
-* Pluggable router adapters (currently Reitit)
+* Framework-agnostic normalized EDN route schema — superseded
+* IRouter (removed) and IHttpServer (kept) protocols
 * Pluggable server adapters (Ring+Jetty, Undertow, etc.)
 * Pure data in modules, framework selection via configuration
 
@@ -110,9 +111,10 @@ abandoning exploration of alternative router adapters due to architectural compl
 *Key Decisions:*
 
 * Reitit as sole router implementation
-* Normalized routing format still valuable for clean module interfaces
-* IRouter protocol kept for future flexibility (single implementation)
 * Focus on feature development over infrastructure flexibility
+* The normalized format and the IRouter protocol were kept here for future
+  flexibility; ADR-037 removed both, on the grounds that this ADR is what made
+  them unpaid-for
 
 ==== ADR-010: HTTP Interceptor Architecture [Accepted]
 ADR-010-http-interceptor-architecture.adoc
@@ -124,7 +126,7 @@ cross-cutting concerns.
 *Key Decisions:*
 
 * HTTP interceptor pattern with enter/leave/error phases
-* Declarative interceptors via `:interceptors` in normalized routes
+* Declarative interceptors via `:interceptors` in route data
 * Automatic integration with observability services
 * Ring/Reitit compatibility via middleware adapter
 * Consistent pattern across HTTP, service, and persistence layers
@@ -139,6 +141,29 @@ Make user, auth, and authorization logic pluggable (like observability and datab
 * Providers configurable (`:auth {:provider ...}`), reference provider outside core
 * HTTP/CLI interceptors call ports, not concrete user namespaces
 * Token shape and policy engine as adapters (JWT/opaque/PASETO, RBAC/OPA/etc.)
+
+==== ADR-012: User Module Admin Integration — Split-Table Architecture [Accepted]
+ADR-012 user module updates.adoc
+
+Identity in `auth_users`, profile in `users`, joined for the admin UI — which is
+why the admin entity config carries `:split-table-update`.
+
+==== ADR-013: Internationalisation (i18n) [Accepted]
+ADR-013-intenationalisation.adoc
+
+Marker-based translation with EDN catalogues; the middleware is built by the
+i18n library and injected, so platform requires none of it.
+
+==== ADR-014: Pluggable User / Auth / Authorization [Accepted]
+ADR-014-pluggable-auth.adoc
+
+Identity behind ports, like the database and observability adapters.
+
+==== ADR-015: wagoe-tools — Distributing Developer Tooling [Accepted]
+ADR-015-wagoe-tools.adoc
+
+The `bb` tasks ship to generated projects as a library rather than as copied
+scripts.
 
 ==== ADR-016: Tenant User Membership [Accepted]
 ADR-016-tenant-user-membership.adoc
@@ -379,3 +404,10 @@ Consequences)
 . Discuss with the team before finalizing
 . Update this README with a summary
 . Reference the ADR in relevant code and documentation
+
+==== ADR-037: Modules Emit Reitit Route Data [Accepted]
+ADR-037-reitit-routes-directly.adoc
+
+Supersedes ADR-008's abstraction half. 341 lines translated one EDN route format
+into another for a seam with one implementation, and cost conflict detection,
+reverse routing and lint-visible handlers to do it.

@@ -232,54 +232,49 @@
         (error-response 500 "Internal server error")))))
 
 ;; =============================================================================
-;; Routes (Normalized Format)
+;; Routes
 ;; =============================================================================
 
-(defn membership-routes-normalized
-  "Create membership management routes in normalized format.
-
-   Args:
-     membership-service - ITenantMembershipService implementation
-
-   Returns:
-     Map with :api key containing route definitions."
+(defn membership-routes
+  "Membership's contribution to the route table: Reitit route data under
+   :api, at paths relative to /api/v1."
   [membership-service]
   {:api
-   [{:path    "/tenants/:tenant-id/memberships"
-     :methods {:post {:handler     (invite-user-handler membership-service)
-                      :summary     "Invite user to tenant"
-                      :tags        ["memberships"]
-                      :responses   {201 {:description "Membership created"}
-                                    400 {:description "Validation error"}
-                                    409 {:description "Membership already exists"}}}
-               :get  {:handler     (list-members-handler membership-service)
-                      :summary     "List tenant members"
-                      :tags        ["memberships"]
-                      :responses   {200 {:description "List of memberships"}
-                                    400 {:description "Bad request"}}}}}
+   [["/tenants/:tenant-id/memberships"
+     {:post {:handler     (invite-user-handler membership-service)
+             :summary     "Invite user to tenant"
+             :tags        ["memberships"]
+             :responses   {201 {:description "Membership created"}
+                           400 {:description "Validation error"}
+                           409 {:description "Membership already exists"}}}
+      :get  {:handler     (list-members-handler membership-service)
+             :summary     "List tenant members"
+             :tags        ["memberships"]
+             :responses   {200 {:description "List of memberships"}
+                           400 {:description "Bad request"}}}}]
 
-    {:path    "/tenants/:tenant-id/memberships/:id"
-     :methods {:get    {:handler   (get-membership-handler membership-service)
-                        :summary   "Get membership by ID"
-                        :tags      ["memberships"]
-                        :responses {200 {:description "Membership details"}
-                                    404 {:description "Membership not found"}}}
-               :put    {:handler   (update-membership-handler membership-service)
-                        :summary   "Update membership role or status"
-                        :tags      ["memberships"]
-                        :responses {200 {:description "Membership updated"}
-                                    400 {:description "Validation error"}
-                                    404 {:description "Membership not found"}}}
-               :delete {:handler   (revoke-member-handler membership-service)
-                        :summary   "Revoke membership"
-                        :tags      ["memberships"]
-                        :responses {200 {:description "Membership revoked"}
-                                    404 {:description "Membership not found"}}}}}
+    ["/tenants/:tenant-id/memberships/:id"
+     {:get    {:handler   (get-membership-handler membership-service)
+               :summary   "Get membership by ID"
+               :tags      ["memberships"]
+               :responses {200 {:description "Membership details"}
+                           404 {:description "Membership not found"}}}
+      :put    {:handler   (update-membership-handler membership-service)
+               :summary   "Update membership role or status"
+               :tags      ["memberships"]
+               :responses {200 {:description "Membership updated"}
+                           400 {:description "Validation error"}
+                           404 {:description "Membership not found"}}}
+      :delete {:handler   (revoke-member-handler membership-service)
+               :summary   "Revoke membership"
+               :tags      ["memberships"]
+               :responses {200 {:description "Membership revoked"}
+                           404 {:description "Membership not found"}}}}]
 
-    {:path    "/memberships/:id/accept"
-     :methods {:post {:handler   (accept-invitation-handler membership-service)
-                      :summary   "Accept membership invitation"
-                      :tags      ["memberships"]
-                      :responses {200 {:description "Invitation accepted"}
-                                  400 {:description "Invitation already accepted or invalid status"}
-                                  404 {:description "Membership not found"}}}}}]})
+    ["/memberships/:id/accept"
+     {:post {:handler   (accept-invitation-handler membership-service)
+             :summary   "Accept membership invitation"
+             :tags      ["memberships"]
+             :responses {200 {:description "Invitation accepted"}
+                         400 {:description "Invitation already accepted or invalid status"}
+                         404 {:description "Membership not found"}}}}]]})

@@ -42,11 +42,11 @@ Declarative cross-cutting concerns (auth, rate limiting, audit):
             (assoc ctx :response {:status 500 :body {:error "Internal error"}}))})
 
 ;; Attach interceptors to routes
-[{:path "/api/admin"
-  :methods {:post {:handler     'handlers/create-resource
-                   :interceptors ['auth/require-admin
-                                  'audit/log-action]
-                   :summary "Create admin resource"}}}]
+[["/admin"
+  {:post {:handler      handlers/create-resource
+          :interceptors ['auth/require-admin
+                         'audit/log-action]
+          :summary      "Create admin resource"}}]]
 ----
 
 == Built-in interceptors

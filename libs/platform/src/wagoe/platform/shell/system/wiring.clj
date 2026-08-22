@@ -117,19 +117,13 @@
 ;; =============================================================================
 
 (defmethod ig/init-key :wagoe/router
-  [_ {:keys [adapter]}]
-  (log/info "Initializing HTTP router adapter" {:adapter adapter})
-  (let [router (case adapter
-                 :reitit (reitit-router/create-reitit-router)
-                 ;; Future routers:
-                 ;; :pedestal (pedestal-router/create-pedestal-router)
-                 ;; :compojure (compojure-router/create-compojure-router)
-                 (do
-                   (log/warn "Unknown router adapter, falling back to reitit"
-                             {:adapter adapter})
-                   (reitit-router/create-reitit-router)))]
-    (log/info "HTTP router adapter initialized" {:adapter adapter})
-    router))
+  [_ config]
+  ;; Router settings, not an adapter instance. This used to dispatch on
+  ;; `:adapter` to one of three routers, two of which were comments — the
+  ;; abstraction ADR-037 removed. Reitit is the router; what an application
+  ;; configures here is coercion and its own middleware.
+  (log/info "HTTP router configured" {:coercion (:coercion config :malli)})
+  config)
 
 (defmethod ig/halt-key! :wagoe/router
   [_ _router]
@@ -151,15 +145,15 @@
 (defn- mount-web-routes
   "Prefix a module's web routes and settle their doc visibility.
 
-   `:meta` is merged into the route root and `:no-doc` defaults to true: web UI
-   routes do not belong in the API documentation, and a module that wants one
-   listed says so in its own `:meta`."
+   Web UI routes do not belong in the API documentation, so `:no-doc` defaults
+   to true; a module that wants one listed says so.
+
+   A route is `[path data & children]`; the prefix goes on the path."
   [prefix routes]
-  (mapv (fn [{:keys [path meta] :as route}]
-          (-> route
-              (dissoc :meta)
-              (merge {:no-doc true} meta)
-              (assoc :path (str prefix path))))
+  (mapv (fn [[path data & children]]
+          (into [(str prefix path)
+                 (if (map? data) (merge {:no-doc true} data) data)]
+                children))
         routes))
 
 (defn module-route-contributions
@@ -228,11 +222,11 @@
                         :seed!          (fn [d] (seed! d))}
           handler      (make-handler deps)]
       (log/warn "Mounting /test/reset endpoint — test-profile only, DO NOT enable in production")
-      [{:path "/test/reset"
-        :methods {:post {:handler handler
-                         :summary "Playwright e2e reset + seed endpoint"
-                         :no-doc  true
-                         :skip-interceptors? true}}}])))
+      [["/test/reset"
+        {:post {:handler handler
+                :summary "Playwright e2e reset + seed endpoint"
+                :no-doc  true
+                :skip-interceptors? true}}]])))
 
 (defn- interceptor-services
   "What the HTTP interceptors are handed.
@@ -318,8 +312,7 @@
    is about assembling a handler and this is about refusing to build a unsafe
    one (BOU-330)."
   [{:keys [config cache]}]
-  (let [
-        ;; CSRF config consumed by http-csrf-protection interceptor.
+  (let [        ;; CSRF config consumed by http-csrf-protection interceptor.
         ;; Opt-in: disabled by default so a framework upgrade cannot 403 consumers
         ;; that don't yet emit tokens. Each app enables it (after emitting tokens in
         ;; its /web forms) via :wagoe/http :security :csrf :enabled? true. Secret
@@ -368,9 +361,8 @@
                              "falling back to a per-process counter. This is correct on a "
                              "single node only; across replicas each instance counts "
                              "independently, so the effective global limit is limit x N. "
-                             "Configure :wagoe/cache (Redis) for a shared limit."))))
+                             "Configure :wagoe/cache (Redis) for a shared limit."))))]
 
-        ]
     {:csrf csrf-config :rate-limit rate-limit-config}))
 
 (defn- platform-routes
@@ -378,7 +370,10 @@
 
    Health, readiness, liveness, the Prometheus scrape and the `/` redirect.
    `:skip-interceptors?` on all of them: a liveness probe that needs a session
-   is not a liveness probe."
+   is not a liveness probe.
+
+   Reitit route data, used as-is — handlers are vars and functions rather than
+   quoted symbols resolved at boot, so a typo is a lint error (ADR-037)."
   [{:keys [config db-context cache metrics-emitter]}]
   (require 'wagoe.platform.shell.interfaces.http.common)
   (let [health-fn      (ns-resolve 'wagoe.platform.shell.interfaces.http.common 'health-check-handler)
@@ -387,55 +382,41 @@
                         (get-in config [:active :wagoe/settings :name] "wagoe")
                         (get-in config [:active :wagoe/settings :version] "unknown")
                         nil)
-        ready-handler  (readiness-fn db-context cache)]
-    [{:path "/"
-      :methods {:get {:handler (fn [request]
-                                 ;; Signed in or not decides where "/" goes.
-                                 (if (:user request)
-                                   {:status 302 :headers {"Location" "/web/users"}}
-                                   {:status 302 :headers {"Location" "/web/login"}}))
-                      :summary "Home page (redirects to login or users)"
-                      :no-doc true
-                      :skip-interceptors? true}}}
-     {:path "/health"
-      :methods {:get {:handler health-handler
-                      :summary "Health check endpoint"
-                      :no-doc true
-                      :skip-interceptors? true}}}
-     {:path "/health/ready"
-      :methods {:get {:handler ready-handler
-                      :summary "Readiness check with dependency health"
-                      :no-doc true
-                      :skip-interceptors? true}}}
-     {:path "/health/live"
-      :methods {:get {:handler (fn [_] {:status 200
-                                        :headers {"Content-Type" "application/json"}
-                                        :body (cheshire.core/generate-string {:status "alive"})})
-                      :summary "Liveness check"
-                      :no-doc true
-                      :skip-interceptors? true}}}
+        ready-handler  (readiness-fn db-context cache)
+        internal       {:no-doc true :skip-interceptors? true}]
+    [["/" {:get (merge internal
+                       {:handler (fn [request]
+                                   ;; Signed in or not decides where "/" goes.
+                                   (if (:user request)
+                                     {:status 302 :headers {"Location" "/web/users"}}
+                                     {:status 302 :headers {"Location" "/web/login"}}))
+                        :summary "Home page (redirects to login or users)"})}]
+     ["/health" {:get (merge internal {:handler health-handler
+                                       :summary "Health check endpoint"})}]
+     ["/health/ready" {:get (merge internal {:handler ready-handler
+                                             :summary "Readiness check with dependency health"})}]
+     ["/health/live" {:get (merge internal
+                                  {:handler (fn [_] {:status 200
+                                                     :headers {"Content-Type" "application/json"}
+                                                     :body (cheshire.core/generate-string {:status "alive"})})
+                                   :summary "Liveness check"})}]
      ;; Serves the text exposition format from the active metrics component; the
      ;; :no-op and :datadog-statsd providers return an empty body, :prometheus
      ;; returns real metrics.
-     {:path "/metrics"
-      :methods {:get {:handler (fn [_]
-                                 {:status  200
-                                  :headers {"Content-Type" "text/plain; version=0.0.4; charset=utf-8"}
-                                  :body    (if (satisfies? metrics-ports/IMetricsExporter metrics-emitter)
-                                             (metrics-ports/export-metrics metrics-emitter :prometheus)
-                                             "")})
-                      :summary "Prometheus metrics scrape endpoint"
-                      :no-doc true
-                      :skip-interceptors? true}}}]))
+     ["/metrics" {:get (merge internal
+                              {:handler (fn [_]
+                                          {:status  200
+                                           :headers {"Content-Type" "text/plain; version=0.0.4; charset=utf-8"}
+                                           :body    (if (satisfies? metrics-ports/IMetricsExporter metrics-emitter)
+                                                      (metrics-ports/export-metrics metrics-emitter :prometheus)
+                                                      "")})
+                               :summary "Prometheus metrics scrape endpoint"})}]]))
 
 (defmethod ig/init-key :wagoe/http-handler
-  [_ {:keys [module-routes router logger metrics-emitter tracer error-reporter error-enricher config tenant-service db-context cache i18n i18n-middleware user-service request-capture? extra-middleware]}]
-  (log/info "Initializing top-level HTTP handler with normalized routing and API versioning")
-  (require 'wagoe.platform.ports.http)
+  [_ {:keys [module-routes logger metrics-emitter tracer error-reporter error-enricher config tenant-service db-context cache i18n i18n-middleware user-service request-capture? extra-middleware]}]
+  (log/info "Initializing top-level HTTP handler")
   (require 'wagoe.platform.shell.interfaces.http.common)
-  (let [compile-routes (ns-resolve 'wagoe.platform.ports.http 'compile-routes)
-
-        platform-routes (platform-routes {:config          config
+  (let [platform-routes (platform-routes {:config          config
                                           :db-context      db-context
                                           :cache           cache
                                           :metrics-emitter metrics-emitter})
@@ -469,7 +450,7 @@
                             :db-context     db-context})
 
         ;; Combine all routes: platform, static, web, and versioned API
-        all-normalized-routes (concat platform-routes
+        all-routes (concat platform-routes
                                       module-static
                                       module-web
                                       versioned-api-routes
@@ -496,12 +477,18 @@
         ;; Kept as its own injection point rather than folded into
         ;; extra-middleware so the pipeline position does not change.
         ;;
+        ;; Built here, not from the :wagoe/router component. That component's
+        ;; settings — :coercion, :muuntaja, :middleware — have never reached the
+        ;; router: this map was always constructed fresh, and the component was
+        ;; passed only as the protocol receiver, which ADR-037 removed. Making
+        ;; those settings live means deciding what `:coercion :malli` in an app's
+        ;; config.edn should resolve to, which is its own ticket.
         router-config {:middleware (request-middleware
                                     {:extra-middleware extra-middleware
                                      :i18n             i18n
                                      :i18n-middleware  i18n-middleware})
                        :system system}
-        handler (compile-routes router all-normalized-routes router-config)
+        handler (reitit-router/compile-routes all-routes router-config)
 
         ;; Wrap handler with version headers middleware
         versioned-handler (http-versioning/wrap-handler-with-version-headers handler config)
@@ -528,8 +515,7 @@
                                :web    (count module-web)
                                :api    (count module-api)}
                :versioned-api-routes (count versioned-api-routes)
-               :total-normalized-routes (count all-normalized-routes)
-               :router-adapter (class router)
+               :total-routes (count all-routes)
                :system-services (keys system)
                :api-versioning-enabled true
                :request-capture-enabled (boolean request-capture?)})

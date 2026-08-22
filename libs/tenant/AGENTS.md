@@ -287,17 +287,17 @@ The four tenant-aware HTTP interceptors live in `wagoe.user.shell.http-intercept
 | `require-web-tenant-admin` | 302 redirect to `/web/login` for `/web/*` routes, 403 JSON otherwise |
 
 ```clojure
-;; API route — protected by tenant admin
-{:path    "/tenants/:tenant-id/settings"
- :methods {:put {:handler   update-settings
-                 :interceptors [http-int/require-authenticated
-                                http-int/require-tenant-admin]}}}
+;; API route — protected by tenant admin. Served at /api/v1/tenants/…
+["/tenants/:tenant-id/settings"
+ {:put {:handler      update-settings
+        :interceptors [http-int/require-authenticated
+                       http-int/require-tenant-admin]}}]
 
-;; Web route — HTML redirect instead of JSON 403
-{:path    "/web/tenants/:tenant-id/settings"
- :methods {:get {:handler   settings-page
-                 :interceptors [http-int/require-authenticated
-                                http-int/require-web-tenant-admin]}}}
+;; Web route — HTML redirect instead of JSON 403. Served at /web/tenants/…
+["/tenants/:tenant-id/settings"
+ {:get {:handler      settings-page
+        :interceptors [http-int/require-authenticated
+                       http-int/require-web-tenant-admin]}}]
 ```
 
 ---

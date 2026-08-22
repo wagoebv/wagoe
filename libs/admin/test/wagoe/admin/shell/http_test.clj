@@ -102,7 +102,7 @@
         error-reporter (error-reporting-no-op/create-error-reporting-component {})
         schema-provider (schema-repo/create-schema-repository db-ctx admin-config)
         admin-service (service/create-admin-service db-ctx schema-provider logger error-reporter admin-config)
-        routes (admin-http/normalized-web-routes admin-service schema-provider admin-config nil)
+        routes (admin-http/web-routes admin-service schema-provider admin-config nil)
 
         ;; Create simple handler that wraps routes (Week 1 stub - no full router)
         handler (fn [request]
@@ -121,8 +121,10 @@
                       (or
                          ;; Iterate through routes IN ORDER (important for specificity)
                        (some (fn [route]
-                               (let [route-path (:path route)
-                                     route-methods (:methods route)]
+                               ;; Reitit data: [path data], where data carries
+                               ;; the endpoints and any route-level keys (ADR-037).
+                               (let [route-path (first route)
+                                     route-methods (second route)]
                                  (when (contains? route-methods method)
                                     ;; Match path pattern
                                    (let [route-parts (str/split route-path #"/")

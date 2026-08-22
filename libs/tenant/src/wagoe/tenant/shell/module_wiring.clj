@@ -84,9 +84,9 @@
 
 (defmethod ig/init-key :wagoe/tenant-routes
   [_ {:keys [tenant-service db-context config]}]
-  (log/info "Initializing tenant module routes (normalized format)")
+  (log/info "Initializing tenant module routes")
   (require 'wagoe.tenant.shell.http)
-  (let [tenant-routes-fn (ns-resolve 'wagoe.tenant.shell.http 'tenant-routes-normalized)
+  (let [tenant-routes-fn (ns-resolve 'wagoe.tenant.shell.http 'tenant-routes)
         routes (tenant-routes-fn tenant-service db-context (or config {}))]
     (log/info "Tenant module routes initialized successfully"
               {:route-keys (keys routes)
@@ -172,9 +172,9 @@
 
 (defmethod ig/init-key :wagoe/membership-routes
   [_ {:keys [service]}]
-  (log/info "Initializing membership module routes (normalized format)")
+  (log/info "Initializing membership module routes")
   (require 'wagoe.tenant.shell.membership-http)
-  (let [routes-fn (ns-resolve 'wagoe.tenant.shell.membership-http 'membership-routes-normalized)
+  (let [routes-fn (ns-resolve 'wagoe.tenant.shell.membership-http 'membership-routes)
         routes    (routes-fn service)]
     (log/info "Membership module routes initialized successfully"
               {:route-keys (keys routes)

@@ -43,10 +43,10 @@ Add the auth interceptor to routes that require authentication:
 
 [source,clojure]
 ----
-[{:path "/api/profile"
-  :methods {:get {:handler 'handlers/get-profile
-                  :interceptors ['auth/require-authenticated]
-                  :summary "Get current user profile"}}}]
+[["/profile"
+  {:get {:handler      handlers/get-profile
+         :interceptors ['auth/require-authenticated]
+         :summary      "Get current user profile"}}]]
 ----
 
 == Multi-Factor Authentication (MFA)

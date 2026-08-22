@@ -28,7 +28,7 @@ remaining work before `1.0.0` is about trust rather than capability.
   from a natural-language description
 
 | Web + admin
-| Reitit routing with normalized route maps, HTMX + Hiccup UI, and an auto-CRUD
+| Reitit routing, HTMX + Hiccup UI, and an auto-CRUD
   admin interface generated from entity configuration
 
 | Identity

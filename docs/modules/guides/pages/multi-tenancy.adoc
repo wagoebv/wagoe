@@ -141,34 +141,37 @@ Import the interceptors from the `user` library:
 (require '[wagoe.user.shell.http-interceptors :as auth])
 ----
 
+Paths below are relative: the ones under `:api` in your module's contribution
+are served at `/api/v1/...`, the ones under `:web` at `/web/...`.
+
 === Require active membership (any role)
 
 [source,clojure]
 ----
-{:path    "/api/tenants/:tenant-id/dashboard"
- :methods {:get {:handler   dashboard-handler
-                 :interceptors [auth/require-authenticated
-                                auth/require-tenant-member]}}}
+["/tenants/:tenant-id/dashboard"
+ {:get {:handler   dashboard-handler
+        :interceptors [auth/require-authenticated
+                       auth/require-tenant-member]}}]
 ----
 
 === Require a specific role
 
 [source,clojure]
 ----
-{:path    "/api/tenants/:tenant-id/settings"
- :methods {:put {:handler   update-settings-handler
-                 :interceptors [auth/require-authenticated
-                                (auth/require-tenant-role #{:admin})]}}}
+["/tenants/:tenant-id/settings"
+ {:put {:handler   update-settings-handler
+        :interceptors [auth/require-authenticated
+                       (auth/require-tenant-role #{:admin})]}}]
 ----
 
 === Require tenant admin (shorthand)
 
 [source,clojure]
 ----
-{:path    "/api/tenants/:tenant-id/members"
- :methods {:post {:handler   invite-member-handler
-                  :interceptors [auth/require-authenticated
-                                 auth/require-tenant-admin]}}}
+["/tenants/:tenant-id/members"
+ {:post {:handler   invite-member-handler
+         :interceptors [auth/require-authenticated
+                        auth/require-tenant-admin]}}]
 ----
 
 === Web routes — HTML redirect instead of JSON 403
@@ -179,10 +182,10 @@ instead of returning a bare JSON 403:
 
 [source,clojure]
 ----
-{:path    "/web/tenants/:tenant-id/settings"
- :methods {:get {:handler   settings-page-handler
-                 :interceptors [auth/require-authenticated
-                                auth/require-web-tenant-admin]}}}
+["/tenants/:tenant-id/settings"
+ {:get {:handler   settings-page-handler
+        :interceptors [auth/require-authenticated
+                       auth/require-web-tenant-admin]}}]
 ----
 
 == Step 4 — Bootstrap the first admin member

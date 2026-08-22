@@ -31,6 +31,24 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Changed
 
+- **Modules emit Reitit route data; the normalized format is gone** (BOU-331,
+  [ADR-037](dev-docs/adr/ADR-037-reitit-routes-directly.adoc)). **Breaking.**
+  A route was `{:path "/users" :methods {:get {:handler 'ns/fn}}}` and is now
+  `["/users" {:get {:handler ns/fn}}]`. Modules keep contributing
+  `{:api [..] :web [..] :static [..]}`, and paths stay relative — the platform
+  still adds `/api/v1` and `/web`.
+
+  ADR-008 introduced the format so modules would not depend on Reitit; ADR-009
+  then made Reitit the only router, and the second implementation was never
+  built. What was left was 341 lines translating one EDN shape into another,
+  and three things given up for it: Reitit's route conflict detection, reverse
+  routing by name, and handlers as vars — a typo in a handler was a boot
+  failure, and is now a lint error.
+
+  To migrate, turn each route map inside out: the `:path` becomes the first
+  element, `:methods` and `:meta` merge into the data map, and quoted handler
+  symbols become the vars themselves.
+
 - **A library can serve HTTP without platform knowing it exists** (BOU-330).
   `:wagoe/http-handler` destructured six named route slots — user, admin,
   tenant, membership, workflow, search — each followed by its own copy of the

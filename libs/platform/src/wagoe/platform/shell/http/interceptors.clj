@@ -37,9 +37,8 @@
    {:get {:handler my-handler
           :middleware [(interceptor-middleware [auth rate-limit])]}}
    
-   Integration with Normalized Routes:
-   - Normalized routes can specify :interceptors vector
-   - Reitit adapter translates :interceptors → :middleware with this runner"
+   Route data may also carry an :interceptors vector; when the routes are
+   compiled, it becomes :middleware running through this same runner."
   (:require [wagoe.cache.ports :as cache-ports]
             [wagoe.core.interceptor :as interceptor]
             [wagoe.observability.logging.ports :as log-ports]

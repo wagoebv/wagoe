@@ -8,8 +8,7 @@
      (require '[wagoe.realtime.shell.handlers.ring-websocket :as ws-handler])
 
      ;; In your route definitions
-     {:path \"/ws\"
-      :methods {:get {:handler (ws-handler/websocket-handler realtime-service)}}}"
+     [\"/ws\" {:get {:handler (ws-handler/websocket-handler realtime-service)}}]"
   (:require [wagoe.realtime.ports :as realtime-ports]
             [wagoe.realtime.shell.adapters.websocket-adapter :as ws-adapter]
             [clojure.tools.logging :as log]

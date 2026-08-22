@@ -9,7 +9,6 @@
             [wagoe.platform.core.http.problem-details :as problem-details]
             [wagoe.platform.shell.http.interceptors :as interceptors]
             [wagoe.platform.shell.http.reitit-router :as reitit-router]
-            [wagoe.platform.ports.http :as http-ports]
             [wagoe.admin.core.schema-introspection :as schema-intro]
             [buddy.core.nonce :as nonce]
             [honey.sql :as sql]
@@ -246,10 +245,9 @@
 ;; =============================================================================
 
 (defn- compile-web-handler
-  "Compile a single normalized route through the real reitit router with CSRF on."
+  "Compile a single route through the real reitit router with CSRF on."
   [route]
-  (http-ports/compile-routes
-   (reitit-router/->ReititRouter)
+  (reitit-router/compile-routes
    [route]
    {:swagger-enabled false
     :system {:csrf {:enabled? true :secret csrf-secret :exempt-paths ["/web/hook"]}}}))
@@ -263,10 +261,10 @@
     token    (assoc-in [:headers "x-csrf-token"] token)))
 
 (deftest ^:security ^:unit csrf-runs-on-web-routes-through-router-test
-  (let [web-route {:path "/web/profile/update"
-                   :no-doc true                       ; as wiring marks every /web route
-                   :methods {:post {:handler (fn [_] {:status 200 :body "ok"})}
-                             :get  {:handler (fn [_] {:status 200 :body "ok"})}}}
+  (let [web-route ["/web/profile/update"
+                   {:no-doc true                       ; as wiring marks every /web route
+                    :post {:handler (fn [_] {:status 200 :body "ok"})}
+                    :get  {:handler (fn [_] {:status 200 :body "ok"})}}]
         handler   (compile-web-handler web-route)]
 
     (testing "session POST to a :no-doc /web route WITHOUT a token is blocked (regression)"
@@ -284,17 +282,17 @@
       (is (= 403 (:status (handler (req :post "/web/profile/update"))))))
 
     (testing "session-less non-web POST is skipped (token-auth API, not CSRF-vulnerable)"
-      (let [api ((compile-web-handler {:path "/api/v1/things"
-                                       :methods {:post {:handler (fn [_] {:status 200 :body "ok"})}}})
+      (let [api ((compile-web-handler ["/api/v1/things"
+                                       {:post {:handler (fn [_] {:status 200 :body "ok"})}}])
                  (req :post "/api/v1/things"))]
         (is (= 200 (:status api)))))))
 
 (deftest ^:security ^:unit csrf-skip-interceptors-flag-test
   (testing ":skip-interceptors? routes bypass the stack (health/internal endpoints)"
-    (let [route   {:path "/health"
-                   :no-doc true
-                   :methods {:post {:skip-interceptors? true
-                                    :handler (fn [_] {:status 200 :body "ok"})}}}
+    (let [route   ["/health"
+                   {:no-doc true
+                    :post {:skip-interceptors? true
+                           :handler (fn [_] {:status 200 :body "ok"})}}]
           handler (compile-web-handler route)]
       ;; A session POST with no token would be 403 if CSRF ran; skip flag lets it pass.
       (is (= 200 (:status (handler (req :post "/health" :session? true))))))))
@@ -396,9 +394,9 @@
       (is (= "same-origin" (get headers "Cross-Origin-Opener-Policy")))
       (is (= "geolocation=(), microphone=(), camera=()" (get headers "Permissions-Policy")))))
   (testing "the interceptor is actually mounted on the router stack, not just callable in isolation"
-    (let [handler (compile-web-handler {:path    "/web/headers-probe"
-                                        :no-doc  true
-                                        :methods {:get {:handler (fn [_] {:status 200 :body "ok"})}}})
+    (let [handler (compile-web-handler ["/web/headers-probe"
+                                        {:no-doc  true
+                                         :get {:handler (fn [_] {:status 200 :body "ok"})}}])
           resp    (handler (req :get "/web/headers-probe"))]
       (is (= "DENY" (get-in resp [:headers "X-Frame-Options"]))
           "a routed response carries the security headers → interceptor is wired in")

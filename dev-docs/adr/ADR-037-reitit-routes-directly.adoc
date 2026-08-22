@@ -1,0 +1,151 @@
+= ADR-037: Modules Emit Reitit Route Data
+:status: Accepted
+:date: 2026-08-22
+:deciders: wagoe-team
+
+== Status
+
+Accepted — supersedes the normalized-format half of
+xref:ADR-008-normalized-routing-abstraction.adoc[ADR-008] and settles the
+question xref:ADR-009-reitit-exclusive-router.adoc[ADR-009] left open. BOU-331.
+
+== Context
+
+ADR-008 introduced a framework-agnostic route format so modules would not depend
+on Reitit, on the same reasoning that gave us pluggable databases. ADR-009 then
+chose Reitit as the only router and abandoned the Pedestal adapter. Both are
+Accepted, and together they leave the framework paying for an abstraction whose
+second implementation was cancelled.
+
+=== What it costs
+
+`reitit_router.clj` is 750 lines. 341 of them — `resolve-handler-fn`,
+`resolve-middleware-fns`, `resolve-interceptors`, `interceptors->middleware`,
+`convert-coercion`, `convert-handler-config`, `convert-methods`, `convert-route`,
+`convert-all-routes` — translate one EDN route format into another EDN route
+format. The remaining 409 are real: exception middleware, coercion error
+responses, the Swagger routes, gzip, the default handler. Those survive any
+decision made here.
+
+`IRouter` has one implementation. Its own docstring advertises three:
+
+----
+Example adapters:
+- ReititRouter: Converts normalized routes to Reitit format
+- PedestalRouter: Converts normalized routes to Pedestal routing table
+- MockRouter: In-memory router for testing
+----
+
+Two of those do not exist and, per ADR-009, one of them was deliberately
+abandoned. A seam that has never had a second implementation is a guess about
+the future, and this one has been tested against reality once and failed.
+
+=== What it loses
+
+Three things Reitit has and the normalized format does not:
+
+* **Route conflict detection.** Reitit refuses to build a router with two routes
+  that can match the same request. The normalized format concatenates and hopes;
+  today's route table happens to have 99 distinct paths, which is luck holding
+  rather than a rule enforced.
+* **Reverse routing.** `match-by-name` turns a route name and parameters into a
+  URL. Without it every link in the framework is a hand-written string, and a
+  path change is a grep.
+* **Lint-visible handlers.** Handlers and interceptors are quoted symbols —
+  `'wagoe.user.shell.http-interceptors/require-admin` — resolved at boot. A typo
+  is a runtime boot failure. As a var it is a clj-kondo error before the code
+  runs.
+
+=== What it costs a reader
+
+`AGENTS.md` Common Pitfalls #9 exists only because the two formats look alike:
+
+____
+**Symptom:** IllegalArgumentException: Key must be integer at
+wrap-route-with-version on `(ig-repl/go)`. **Cause:** module `shell/http.clj`
+returns Reitit-style route vectors instead of the normalized map format.
+____
+
+A newcomer who knows Reitit writes Reitit and gets a stack trace from
+`apply-versioning`. The pitfall is the format's tax, paid by every new reader.
+
+== Decision
+
+Modules emit Reitit route data. The translation layer is deleted.
+
+[source,clojure]
+----
+;; Before — normalized, translated at boot
+{:path "/users/:id"
+ :methods {:get {:handler 'wagoe.user.shell.http/get-user
+                 :interceptors ['wagoe.user.shell.http-interceptors/require-admin]
+                 :summary "Get user"}}}
+
+;; After — Reitit data, used as-is
+["/users/:id"
+ {:get {:handler user-http/get-user
+        :middleware [mw/require-admin]
+        :summary "Get user"}}]
+----
+
+`IRouter` is removed with the format it existed to translate. Platform keeps the
+half of `reitit_router.clj` that is behaviour rather than translation, as plain
+functions: the exception middleware, the coercion error shape, the Swagger
+routes, gzip.
+
+API versioning stops being `(update route :path #(str prefix %))` over a vector
+of maps and becomes what Reitit already does — a path-prefixed group.
+
+=== Rejected alternative: build the second implementation
+
+Prove the seam with a real second backend (Pedestal or a ring-router), and close
+the format's gaps by implementing conflict detection and named routes inside it.
+
+This is the honest way to keep the abstraction, and it is rejected on cost. It
+means two backends implementing every routing feature forever, a CI matrix
+running the suite twice, and reimplementing two things Reitit already does well
+— to deliver a promise nobody has asked for. ADR-009 already decided we are not
+switching routers.
+
+=== Rejected alternative: collapse but keep a thin `IRouter`
+
+Keep the protocol, drop only the translation: `compile-routes` would take Reitit
+data and return a Ring handler.
+
+Tempting, and rejected for what it preserves: a named seam with one
+implementation, which is the thing this ADR is about. If a second router is ever
+wanted, a protocol can be introduced then, against two real implementations
+rather than one and a guess. The functions stay where they are either way; what
+goes is the claim that they are interchangeable.
+
+== Consequences
+
+* **A public API break, and it must land before 1.0.** Every module's route
+  builders change shape. That is the whole reason this is decided now rather
+  than after the API freezes.
+* Migration surface, measured: roughly 33 route maps in module code, the
+  platform's own health and metrics routes, `apply-versioning`, and
+  `module-route-contributions` from BOU-330.
+* Conflict detection arrives with the collapse, and it may fail on the current
+  route table. If two routes conflict today, nothing reports it; after this,
+  the boot does. That is a feature, and it may mean fixing routes we did not
+  know overlapped.
+* Pitfall #9 keeps its slot and changes what it warns about. The two-format
+  confusion is gone; the trap that remains is the prefix, which the platform
+  adds to each part of a module's contribution. Writing `/api` into an `:api`
+  route now serves it at `/api/v1/api/…` — no exception, just a wrong URL.
+* `bb scaffold` generates Reitit data; the generated tutorial and
+  `your-first-module.adoc` change with it, and the BOU-327 test that pins the
+  tutorial to generator output will catch any half-migration.
+* Handlers become vars, so clj-kondo sees a typo. That is the largest day-to-day
+  win and the hardest to quantify.
+
+== References
+
+* xref:ADR-008-normalized-routing-abstraction.adoc[ADR-008] — introduced the
+  format; its abstraction half is superseded here
+* xref:ADR-009-reitit-exclusive-router.adoc[ADR-009] — chose Reitit exclusively,
+  which is what makes the translation unpaid-for
+* BOU-330 — route contribution as a collection; made this change smaller by
+  removing the six named slots first
+* BOU-331 — this decision and its execution

@@ -130,7 +130,7 @@ design, and the rule above still applies — only the file layout differs.
 
 | `platform`
 | `wagoe.platform.ports.*` — a directory rather than one file. Today it holds
-  `ports.http` (`IRouter`, `IHttpServer`, `IRouteValidator`). Its `DBAdapter`
+  `ports.http` (`IHttpServer`; routing is not a port, see ADR-037). Its `DBAdapter`
   and `IFileSystemAdapter` protocols currently sit under
   `shell.adapters.*.protocols`; they are supported surface despite the
   location, and moving them under `ports` is tracked work

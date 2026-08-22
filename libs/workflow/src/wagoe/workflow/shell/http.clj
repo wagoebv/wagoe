@@ -161,29 +161,23 @@
 ;; =============================================================================
 
 (defn workflow-routes
-  "Return normalized route definitions for the workflow API.
+  "Reitit route data for the workflow API. Mounted under /api/v1.
 
    Args:
-     engine - WorkflowService (IWorkflowEngine)
-
-   Returns:
-     Vector of normalized route maps (will be mounted under /api/v1 by versioning middleware)"
+     engine - WorkflowService (IWorkflowEngine)"
   [engine]
-  [{:path    "/workflow/instances"
-    :methods {:post {:handler (fn [req] (handle-start-workflow engine req))
-                     :summary "Start a new workflow instance"}}}
-
-   {:path    "/workflow/instances/:id"
-    :methods {:get {:handler (fn [req] (handle-get-instance engine req))
-                    :summary "Get current workflow state"}}}
-
-   {:path    "/workflow/instances/:id/audit"
-    :methods {:get {:handler (fn [req] (handle-get-audit-log engine req))
-                    :summary "Get workflow audit log"}}}
-
-   {:path    "/workflow/instances/:id/transition"
-    :methods {:post {:handler (fn [req] (handle-transition engine req))
-                     :summary "Execute a workflow transition"}}}])
+  [["/workflow/instances"
+    {:post {:handler (fn [req] (handle-start-workflow engine req))
+            :summary "Start a new workflow instance"}}]
+   ["/workflow/instances/:id"
+    {:get {:handler (fn [req] (handle-get-instance engine req))
+           :summary "Get current workflow state"}}]
+   ["/workflow/instances/:id/audit"
+    {:get {:handler (fn [req] (handle-get-audit-log engine req))
+           :summary "Get workflow audit log"}}]
+   ["/workflow/instances/:id/transition"
+    {:post {:handler (fn [req] (handle-transition engine req))
+            :summary "Execute a workflow transition"}}]])
 
 ;; =============================================================================
 ;; Admin web UI helpers
@@ -271,30 +265,30 @@
                      500))))
 
 ;; =============================================================================
-;; Normalized web route definitions
+;; Web route definitions
 ;; =============================================================================
 
 (defn workflow-web-routes
-  "Return normalized web route definitions for the workflow admin UI.
+  "Web routes for the workflow admin UI, as Reitit data.
 
    Routes are mounted under /web/admin by the HTTP handler:
      GET /web/admin/workflows        — list all workflow instances
      GET /web/admin/workflows/:id    — instance detail + audit trail
 
+   Route-level `:middleware` is Reitit's own and applies to every endpoint
+   beneath it — the `:meta` wrapper this used to need is gone (ADR-037).
+
    Args:
      store        - IWorkflowStore
      registry     - IWorkflowRegistry
-     user-service - IUserService (for authentication middleware)
-
-   Returns:
-     Vector of normalized route maps"
+     user-service - IUserService (for authentication middleware)"
   [store registry user-service]
   (let [auth-mw (user-middleware/flexible-authentication-middleware user-service)]
-    [{:path    "/workflows"
-      :meta    {:middleware [auth-mw] :no-doc true}
-      :methods {:get {:handler (fn [req] (handle-list-instances-web store req))
-                      :summary "Workflow instances list"}}}
-     {:path    "/workflows/:id"
-      :meta    {:middleware [auth-mw] :no-doc true}
-      :methods {:get {:handler (fn [req] (handle-get-instance-web store registry req))
-                      :summary "Workflow instance detail"}}}]))
+    [["/workflows"
+      {:middleware [auth-mw]
+       :get {:handler (fn [req] (handle-list-instances-web store req))
+             :summary "Workflow instances list"}}]
+     ["/workflows/:id"
+      {:middleware [auth-mw]
+       :get {:handler (fn [req] (handle-get-instance-web store registry req))
+             :summary "Workflow instance detail"}}]]))

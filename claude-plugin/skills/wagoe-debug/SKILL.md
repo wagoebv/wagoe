@@ -15,7 +15,7 @@ from first principles — it is usually faster, and the symptoms are distinctive
 | A field reads back `nil` for no reason | snake_case / kebab-case mismatch |
 | A new field is missing or rejected | schema, column and persistence transform out of sync |
 | Generic 500 with "Exception reached HTTP boundary" | `ex-info` without `:type` in ex-data |
-| `Key must be integer` at `wrap-route-with-version` | module routes returning Reitit vectors, not normalized maps |
+| A route answers at `/api/v1/api/…`, or not at all | module routes wrote the prefix themselves, or returned a flat vector instead of a `{:api :web :static}` contribution |
 | `No matching method` on a Java call | static vs instance interop |
 | `Unable to resolve symbol` for your own fn | private helper defined below its caller |
 

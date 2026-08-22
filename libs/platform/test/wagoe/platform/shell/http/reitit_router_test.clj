@@ -1,7 +1,6 @@
 (ns wagoe.platform.shell.http.reitit-router-test
   "Tests for Reitit router adapter."
-  (:require [wagoe.platform.ports.http :as ports]
-            [wagoe.platform.shell.http.reitit-router :as reitit]
+  (:require [wagoe.platform.shell.http.reitit-router :as reitit]
             [cheshire.core :as json]
             [clojure.string :as str]
             [clojure.test :refer [deftest testing is]]))
@@ -68,33 +67,36 @@
 ;; =============================================================================
 
 (def simple-routes
-  "Simple normalized route specifications for testing."
-  [{:path "/api/items"
-    :methods {:get {:handler `test-list-handler
-                    :summary "List items"
-                    :tags ["items"]}
-              :post {:handler `test-create-handler
-                     :summary "Create item"
-                     :tags ["items"]}}}])
+  "Simple Reitit route data for testing."
+  [["/api/items"
+    {:get {:handler test-list-handler
+           :summary "List items"
+           :tags ["items"]}
+     :post {:handler test-create-handler
+            :summary "Create item"
+            :tags ["items"]}}]])
 
 (def nested-routes
   "Nested route specifications for testing."
-  [{:path "/api/users"
-    :methods {:get {:handler `test-list-handler
-                    :summary "List users"
-                    :tags ["users"]}
-              :post {:handler `test-create-handler
-                     :summary "Create user"
-                     :tags ["users"]}}
-    :children [{:path "/:id"
-                :methods {:get {:handler `test-get-handler
-                                :summary "Get user by ID"
-                                :tags ["users"]
-                                :coercion {:path [:map [:id :string]]}}
-                          :delete {:handler `test-delete-handler
-                                   :summary "Delete user"
-                                   :tags ["users"]
-                                   :coercion {:path [:map [:id :string]]}}}}]}])
+  ;; Nesting is Reitit's own: [path data & children] (ADR-037). `:coercion`
+  ;; becomes `:parameters`, which is what reitit reads.
+  [["/api/users"
+    [""
+     {:get  {:handler test-list-handler
+             :summary "List users"
+             :tags ["users"]}
+      :post {:handler test-create-handler
+             :summary "Create user"
+             :tags ["users"]}}]
+    ["/:id"
+     {:get    {:handler test-get-handler
+               :summary "Get user by ID"
+               :tags ["users"]
+               :parameters {:path [:map [:id :string]]}}
+      :delete {:handler test-delete-handler
+               :summary "Delete user"
+               :tags ["users"]
+               :parameters {:path [:map [:id :string]]}}}]]])
 
 (defn test-list-products-handler
   "Handler that returns data matching the coercion schema."
@@ -107,32 +109,31 @@
 
 (def routes-with-coercion
   "Routes with Malli coercion for testing."
-  [{:path "/api/products"
-    :methods {:get {:handler `test-list-products-handler
-                    :summary "List products"
-                    :tags ["products"]
-                    :coercion {:query [:map
-                                       [:limit {:optional true} :int]
-                                       [:offset {:optional true} :int]]}}
-              ;; POST without body coercion for simpler testing
-              :post {:handler `test-create-handler
-                     :summary "Create product"
-                     :tags ["products"]}}}])
+  [["/api/products"
+    {:get {:handler test-list-products-handler
+           :summary "List products"
+           :tags ["products"]
+           :parameters {:query [:map
+                                [:limit {:optional true} :int]
+                                [:offset {:optional true} :int]]}}
+     ;; POST without body coercion for simpler testing
+     :post {:handler test-create-handler
+            :summary "Create product"
+            :tags ["products"]}}]])
 
 ;; =============================================================================
 ;; Router Tests
 ;; =============================================================================
 
-(deftest ^:unit create-router-test
-  (testing "Can create Reitit router instance"
-    (let [router (reitit/create-reitit-router)]
-      (is (some? router))
-      (is (satisfies? ports/IRouter router)))))
+(deftest ^:unit compile-routes-is-a-function-not-a-protocol
+  ;; IRouter had one implementation and existed to make the normalized format
+  ;; swappable. Both are gone, so this is a function call (ADR-037).
+  (is (fn? reitit/compile-routes))
+  (is (fn? (reitit/compile-routes simple-routes {}))))
 
 (deftest ^:contract compile-simple-routes-test
   (testing "Can compile simple routes to Ring handler"
-    (let [router (reitit/create-reitit-router)
-          handler (ports/compile-routes router simple-routes {})]
+    (let [handler (reitit/compile-routes simple-routes {})]
       (is (fn? handler))
 
       (testing "GET request works"
@@ -154,8 +155,7 @@
 
 (deftest ^:contract compile-nested-routes-test
   (testing "Can compile nested routes with path parameters"
-    (let [router (reitit/create-reitit-router)
-          handler (ports/compile-routes router nested-routes {})]
+    (let [handler (reitit/compile-routes nested-routes {})]
 
       (testing "Parent route works"
         (let [response (handler {:request-method :get
@@ -175,8 +175,7 @@
 
 (deftest ^:contract compile-routes-with-coercion-test
   (testing "Can compile routes with Malli coercion"
-    (let [router (reitit/create-reitit-router)
-          handler (ports/compile-routes router routes-with-coercion {})]
+    (let [handler (reitit/compile-routes routes-with-coercion {})]
 
       (testing "Route with query coercion compiles"
         (let [response (handler {:request-method :get
@@ -190,14 +189,13 @@
 
 (deftest ^:contract router-with-middleware-test
   (testing "Can compile routes with custom middleware"
-    (let [router (reitit/create-reitit-router)
-          ;; Simple middleware that adds header
+    (let [;; Simple middleware that adds header
           add-header-mw (fn [handler]
                           (fn [request]
                             (let [response (handler request)]
                               (assoc-in response [:headers "X-Custom"] "test"))))
           config {:middleware [add-header-mw]}
-          handler (ports/compile-routes router simple-routes config)]
+          handler (reitit/compile-routes simple-routes config)]
 
       (testing "Middleware is applied"
         (let [response (handler {:request-method :get
@@ -211,11 +209,10 @@
 
 (deftest ^:contract symbol-resolution-test
   (testing "Handler symbols are resolved to functions"
-    (let [router (reitit/create-reitit-router)
-          ;; Use quoted symbols (will be resolved by adapter)
-          routes [{:path "/test"
-                   :methods {:get {:handler `test-list-handler}}}]
-          handler (ports/compile-routes router routes {})]
+    (let [;; Use quoted symbols (will be resolved by adapter)
+          routes [["/test"
+                   {:get {:handler test-list-handler}}]]
+          handler (reitit/compile-routes routes {})]
 
       (testing "Resolved handler works"
         (let [response (handler {:request-method :get
@@ -229,18 +226,16 @@
 
 (deftest ^:contract method-not-allowed-test
   (testing "Returns 405 for unsupported methods"
-    (let [router (reitit/create-reitit-router)
-          ;; Only GET is supported
-          routes [{:path "/api/items"
-                   :methods {:get {:handler `test-list-handler}}}]
-          handler (ports/compile-routes router routes {})]
+    (let [;; Only GET is supported
+          routes [["/api/items"
+                   {:get {:handler test-list-handler}}]]
+          handler (reitit/compile-routes routes {})]
       (is (= 405 (:status (handler {:request-method :post
                                     :uri "/api/items"})))))))
 
 (deftest ^:contract not-found-test
   (testing "Returns 404 for unknown routes"
-    (let [router (reitit/create-reitit-router)
-          handler (ports/compile-routes router simple-routes {})
+    (let [handler (reitit/compile-routes simple-routes {})
           response (handler {:request-method :get
                              :uri "/api/nonexistent"})]
       (is (= 404 (:status response)))
@@ -296,15 +291,14 @@
 (defn routes-with-interceptors
   "Route specs with interceptor usage."
   []
-  [{:path "/api/intercepted"
-    :methods {:get {:handler `test-list-handler
-                    :interceptors [test-interceptor-enter test-interceptor-leave]
-                    :summary "Route with interceptors"}}}])
+  [["/api/intercepted"
+    {:get {:handler test-list-handler
+           :interceptors [test-interceptor-enter test-interceptor-leave]
+           :summary "Route with interceptors"}}]])
 
 (deftest ^:contract compile-routes-with-interceptors-test
   (testing "Can compile routes with interceptors"
-    (let [router (reitit/create-reitit-router)
-          handler (ports/compile-routes router (routes-with-interceptors) {})]
+    (let [handler (reitit/compile-routes (routes-with-interceptors) {})]
 
       (is (fn? handler))
 
@@ -317,18 +311,17 @@
 
 (deftest ^:contract mixed-middleware-and-interceptors-test
   (testing "Can use both middleware and interceptors together"
-    (let [router (reitit/create-reitit-router)
-          ;; Middleware adds header
+    (let [;; Middleware adds header
           test-middleware (fn [handler]
                             (fn [request]
                               (let [response (handler request)]
                                 (assoc-in response [:headers "x-middleware"] "yes"))))
-          routes [{:path "/api/mixed"
-                   :methods {:get {:handler `test-list-handler
-                                   :middleware [test-middleware]
-                                   :interceptors [test-interceptor-leave]
-                                   :summary "Route with both"}}}]
-          handler (ports/compile-routes router routes {})]
+          routes [["/api/mixed"
+                   {:get {:handler test-list-handler
+                          :middleware [test-middleware]
+                          :interceptors [test-interceptor-leave]
+                          :summary "Route with both"}}]]
+          handler (reitit/compile-routes routes {})]
 
       (testing "Both middleware and interceptors execute"
         (let [response (handler {:request-method :get
@@ -343,8 +336,7 @@
 
 (deftest ^:contract default-interceptors-add-correlation-id-test
   (testing "Default interceptors add/propagate X-Correlation-ID header for matched routes"
-    (let [router (reitit/create-reitit-router)
-          handler (ports/compile-routes router simple-routes {})
+    (let [handler (reitit/compile-routes simple-routes {})
           correlation-id "test-correlation-id"
           response (handler {:request-method :get
                              :uri "/api/items"
@@ -356,10 +348,9 @@
 
 (deftest ^:contract default-error-handler-converts-exceptions-test
   (testing "Default interceptors convert exceptions into safe error responses"
-    (let [router (reitit/create-reitit-router)
-          routes [{:path "/api/boom"
-                   :methods {:get {:handler `test-throwing-handler}}}]
-          handler (ports/compile-routes router routes {})
+    (let [routes [["/api/boom"
+                   {:get {:handler test-throwing-handler}}]]
+          handler (reitit/compile-routes routes {})
           correlation-id "test-correlation-id"
           response (handler {:request-method :get
                              :uri "/api/boom"
@@ -376,26 +367,24 @@
 
 (deftest ^:contract route-middleware-runs-before-interceptors-test
   (testing "Route middleware runs before interceptors (interceptors see modified request)"
-    (let [router (reitit/create-reitit-router)
-          routes-with-middleware
-          [{:path "/api/order"
-            :meta {:middleware [add-request-header-middleware]}
-            :methods {:get {:handler `test-list-handler
-                            :interceptors [test-interceptor-sees-middleware]}}}]
+    (let [routes-with-middleware
+          [["/api/order"
+            {:middleware [add-request-header-middleware]
+             :get {:handler test-list-handler
+                   :interceptors [test-interceptor-sees-middleware]}}]]
 
           routes-without-middleware
-          [{:path "/api/order"
-            :methods {:get {:handler `test-list-handler
-                            :interceptors [test-interceptor-sees-middleware]}}}]
+          [["/api/order"
+            {:get {:handler test-list-handler
+                   :interceptors [test-interceptor-sees-middleware]}}]]
 
-          handler-with-middleware (ports/compile-routes router routes-with-middleware {})
-          handler-without-middleware (ports/compile-routes router routes-without-middleware {})
+          handler-with-middleware (reitit/compile-routes routes-with-middleware {})
+          handler-without-middleware (reitit/compile-routes routes-without-middleware {})
 
           resp-with-mw (handler-with-middleware {:request-method :get :uri "/api/order"})
           resp-without-mw (handler-without-middleware {:request-method :get :uri "/api/order"})]
       (is (= "true" (get-in resp-with-mw [:headers "x-saw-mw"])))
       (is (= "false" (get-in resp-without-mw [:headers "x-saw-mw"]))))))
-
 
 ;; =============================================================================
 ;; Coercion failures (BOU-321)
@@ -415,14 +404,12 @@
   "A route whose body schema requires two fields, wired the way the user module
    wires login."
   [system]
-  (ports/compile-routes
-   (reitit/create-reitit-router)
-   [{:path    "/auth/login"
-     :methods {:post {:handler    (fn [_] {:status 200 :body {:ok true}})
-                      :parameters {:body [:map {:closed true}
-                                          [:email :string]
-                                          [:password :string]]}}}}]
-   {:system system}))
+  (reitit/compile-routes [["/auth/login"
+                           {:post {:handler    (fn [_] {:status 200 :body {:ok true}})
+                                   :parameters {:body [:map {:closed true}
+                                                       [:email :string]
+                                                       [:password :string]]}}}]]
+                         {:system system}))
 
 (deftest ^:unit a-request-that-fails-coercion-is-a-400-not-a-500
   ;; Reitit applies a :middleware vector first-to-outermost, and the exception
@@ -448,14 +435,12 @@
   ;; full text hands an unauthenticated caller every enum member and every
   ;; bound in exchange for one malformed POST. The field names are the
   ;; caller's own input and stay; the why is dev-only.
-  (let [handler (ports/compile-routes
-                 (reitit/create-reitit-router)
-                 [{:path    "/users"
-                   :methods {:post {:handler    (fn [_] {:status 201 :body {}})
-                                    :parameters {:body [:map {:closed true}
-                                                        [:role [:enum "admin" "superuser" "internal-auditor"]]
-                                                        [:age [:int {:min 18 :max 120}]]]}}}}]
-                 {})
+  (let [handler (reitit/compile-routes [["/users"
+                                         {:post {:handler    (fn [_] {:status 201 :body {}})
+                                                 :parameters {:body [:map {:closed true}
+                                                                     [:role [:enum "admin" "superuser" "internal-auditor"]]
+                                                                     [:age [:int {:min 18 :max 120}]]]}}}]]
+                                       {})
         resp    (handler {:request-method :post :uri "/users" :headers {}
                           :body-params {:role "peasant" :age 4}})
         raw     (slurp (:body resp))]
@@ -467,12 +452,10 @@
 
 (deftest ^:unit dev-gets-the-explanation-production-does-not
   (let [handler (fn [system]
-                  (ports/compile-routes
-                   (reitit/create-reitit-router)
-                   [{:path    "/users"
-                     :methods {:post {:handler    (fn [_] {:status 201 :body {}})
-                                      :parameters {:body [:map {:closed true} [:role [:enum "admin"]]]}}}}]
-                   {:system system}))
+                  (reitit/compile-routes [["/users"
+                                           {:post {:handler    (fn [_] {:status 201 :body {}})
+                                                   :parameters {:body [:map {:closed true} [:role [:enum "admin"]]]}}}]]
+                                         {:system system}))
         details (fn [system]
                   (:details (json/parse-string
                              (slurp (:body ((handler system) {:request-method :post :uri "/users"
@@ -499,3 +482,69 @@
 
     (testing "no enricher"
       (is (nil? (:dev (body-of {:environment "development"})))))))
+
+;; =============================================================================
+;; Reitit route data, used as-is (ADR-037 / BOU-331)
+;; =============================================================================
+
+(deftest ^:unit reitit-data-passes-through-and-still-gets-the-interceptor-stack
+  ;; The one thing the normalized format did that Reitit does not: every
+  ;; endpoint gets the default interceptor stack — security headers, CSRF, rate
+  ;; limiting, metrics — unless it opts out. Collapsing the format must not
+  ;; collapse that.
+  (let [decorate #'reitit/decorate-reitit-route
+        [_ data] (decorate ["/users" {:get {:handler identity}}] {})]
+
+    (testing "the endpoint keeps its handler"
+      (is (= identity (get-in data [:get :handler]))))
+
+    (testing "and gains the default stack as middleware"
+      (is (= 1 (count (get-in data [:get :middleware])))))
+
+    (testing "an endpoint that opts out gets none of it"
+      (let [[_ d] (decorate ["/health" {:get {:handler identity
+                                              :skip-interceptors? true}}] {})]
+        (is (nil? (get-in d [:get :middleware])))
+        (is (not (contains? (:get d) :skip-interceptors?))
+            ":skip-interceptors? is ours, not Reitit's — it must not reach the router")))
+
+    (testing "route-level data Reitit understands is left alone"
+      (let [[path d] (decorate ["/users" {:name ::users
+                                          :middleware [:route-mw]
+                                          :get {:handler identity}}] {})]
+        (is (= "/users" path))
+        (is (= ::users (:name d)) "named routes are Reitit's, and reverse routing needs them")
+        (is (= [:route-mw] (:middleware d)))))
+
+    (testing "nested routes are walked, so children are decorated too"
+      (let [[_ _ child] (decorate ["/api" {} ["/users" {:get {:handler identity}}]] {})
+            [_ child-data] child]
+        (is (= 1 (count (get-in child-data [:get :middleware]))))))
+
+    (testing "non-endpoint keys are not mistaken for endpoints"
+      (let [[_ d] (decorate ["/x" {:conflicting true :get {:handler identity}}] {})]
+        (is (true? (:conflicting d)))))
+
+    (testing "Reitit's bare-handler shorthand gets the stack too"
+      ;; `{:get my-handler}` is valid Reitit and has nowhere to hang
+      ;; middleware. Skipping it would serve that endpoint without security
+      ;; headers, CSRF or rate limiting — a hole opened by writing less.
+      (let [[_ d] (decorate ["/shorthand" {:get identity}] {})]
+        (is (= identity (get-in d [:get :handler]))
+            "the shorthand is expanded, not dropped")
+        (is (= 1 (count (get-in d [:get :middleware])))
+            "an endpoint written shorthand is as protected as one written long")))))
+
+(deftest ^:unit every-route-in-the-table-is-decorated
+  ;; compile-routes maps over the table; decorate-reitit-route takes one route.
+  ;; An earlier version of this test handed the whole table to the single-route
+  ;; function and passed, because [[..] [..]] destructures as [path data] and
+  ;; comes back out with two elements — the assertions held while nothing was
+  ;; decorated.
+  (let [decorate #'reitit/decorate-reitit-route
+        table    [["/a" {:get {:handler identity}}]
+                  ["/b" {:post {:handler identity}}]]
+        out      (mapv #(decorate % {}) table)]
+    (is (= ["/a" "/b"] (mapv first out)))
+    (is (= 1 (count (get-in (second (first out)) [:get :middleware]))))
+    (is (= 1 (count (get-in (second (second out)) [:post :middleware]))))))

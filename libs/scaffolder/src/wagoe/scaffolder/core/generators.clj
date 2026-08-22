@@ -609,77 +609,34 @@ DROP TABLE IF EXISTS %s;
          ";; wire them to the service, add to the ns form above:\n"
          ";;   (:require [" base-ns "." module-name ".ports :as ports])\n"
          "\n"
-         ";; =============================================================================\n"
-         ";; Legacy Reitit Routes\n"
-         ";; =============================================================================\n"
+         "(defn api-routes\n"
+         "  \"Reitit route data: [path data & children].\n"
          "\n"
-         "(defn api-routes [_service]\n"
-         "  [[\"/api/" entity-plural "\" {:get {:handler (fn [_req] {:status 200 :body []})}\n"
-         "                          :post {:handler (fn [_req] {:status 201 :body {}})}}]\n"
-         "   [\"/api/" entity-plural "/:id\" {:get {:handler (fn [_req] {:status 200 :body {}})}\n"
-         "                                :put {:handler (fn [_req] {:status 200 :body {}})}\n"
-         "                                :delete {:handler (fn [_req] {:status 204})}}]])\n"
-         "\n"
-         "(defn web-routes [_service _config]\n"
-         "  [[\"/web/" entity-plural "\" {:get {:handler (fn [_req] {:status 200 :body \"<html><body>Web UI</body></html>\"})}}]])\n"
-         "\n"
-         "(defn routes [service config]\n"
-         "  (vec (concat (api-routes service) (web-routes service config))))\n"
-         "\n"
-         ";; =============================================================================\n"
-         ";; Normalized Routes\n"
-         ";; =============================================================================\n"
-         "\n"
-         "(defn normalized-api-routes\n"
-         "  \"Define API routes in normalized format.\n"
-         "   \n"
-         "   Args:\n"
-         "     service: " (str/capitalize module-name) " service instance\n"
-         "     \n"
-         "   Returns:\n"
-         "     Vector of normalized route maps\"\n"
+         "   Paths are relative — the platform mounts these under /api/v1.\"\n"
          "  [_service]\n"
-         "  [{:path \"/" entity-plural "\"\n"
-         "    :methods {:get {:handler (fn [_req] {:status 200 :body []})}\n"
-         "              :post {:handler (fn [_req] {:status 201 :body {}})}}}\n"
-         "   {:path \"/" entity-plural "/:id\"\n"
-         "    :methods {:get {:handler (fn [_req] {:status 200 :body {}})}\n"
-         "              :put {:handler (fn [_req] {:status 200 :body {}})}\n"
-         "              :delete {:handler (fn [_req] {:status 204})}}}])\n"
+         "  [[\"/" entity-plural "\"\n"
+         "    {:get  {:handler (fn [_req] {:status 200 :body []})}\n"
+         "     :post {:handler (fn [_req] {:status 201 :body {}})}}]\n"
+         "   [\"/" entity-plural "/:id\"\n"
+         "    {:get    {:handler (fn [_req] {:status 200 :body {}})}\n"
+         "     :put    {:handler (fn [_req] {:status 200 :body {}})}\n"
+         "     :delete {:handler (fn [_req] {:status 204})}}]])\n"
          "\n"
-         "(defn normalized-web-routes\n"
-         "  \"Define web UI routes in normalized format (WITHOUT /web prefix).\n"
-         "   \n"
-         "   NOTE: These routes will be mounted under /web by the top-level router.\n"
-         "   Do NOT include /web prefix in paths here.\n"
-         "   \n"
-         "   Args:\n"
-         "     service: " (str/capitalize module-name) " service instance\n"
-         "     config: Application configuration map\n"
-         "     \n"
-         "   Returns:\n"
-         "     Vector of normalized route maps\"\n"
+         "(defn web-routes\n"
+         "  \"Mounted under /web — do not repeat the prefix here.\"\n"
          "  [_service _config]\n"
-         "  [{:path \"/" entity-plural "\"\n"
-         "    :methods {:get {:handler (fn [_req] {:status 200 :body \"<html><body>Web UI</body></html>\"})}}}])\n"
+         "  [[\"/" entity-plural "\"\n"
+         "    {:get {:handler (fn [_req] {:status 200 :body \"<html><body>Web UI</body></html>\"})}}]])\n"
          "\n"
-         "(defn " module-name "-routes-normalized\n"
-         "  \"Define " module-name " module routes in normalized format for top-level composition.\n"
-         "   \n"
-         "   Returns a map with route categories:\n"
-         "   - :api - REST API routes (will be mounted under /api)\n"
-         "   - :web - Web UI routes (will be mounted under /web)\n"
-         "   - :static - Static asset routes (empty)\n"
-         "   \n"
-         "   Args:\n"
-         "     service: " (str/capitalize module-name) " service instance\n"
-         "     config: Application configuration map\n"
+         "(defn " module-name "-routes\n"
+         "  \"This module's contribution to the application's route table.\n"
          "\n"
-         "   Returns:\n"
-         "     Map with keys :api, :web, :static containing normalized route vectors\"\n"
+         "   :api    versioned, mounted under /api/v1\n"
+         "   :web    mounted under /web\n"
+         "   :static mounted as written\"\n"
          "  [service config]\n"
-         "  {:api (normalized-api-routes service)\n"
-         "   :web (normalized-web-routes service config)\n"
+         "  {:api    (api-routes service)\n"
+         "   :web    (web-routes service config)\n"
          "   :static []})\n"
          "\n")))
 
@@ -899,10 +856,10 @@ DROP TABLE IF EXISTS %s;
 (defmethod ig/init-key :wagoe/%s-routes
   [_ {:keys [service config]}]
   (log/info \"Initializing %s routes\")
-  ;; The normalized shape — {:api [...] :web [...] :static [...]}. The flat
-  ;; vector from http/routes is the legacy form, and :wagoe/http-handler reads
-  ;; (:api routes), so wiring that one contributes no routes and says nothing.
-  (http/%s-routes-normalized service (or config {})))
+  ;; A contribution — {:api [...] :web [...] :static [...]} — not a route
+  ;; table. :wagoe/http-handler prefixes and versions each part before
+  ;; mounting it.
+  (http/%s-routes service (or config {})))
 
 (defmethod ig/halt-key! :wagoe/%s-routes
   [_ _routes]
@@ -1247,16 +1204,16 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s;
      handler-name - Handler function name (e.g., \"send-invoice\")
    
    Returns:
-     String content for endpoint definition (normalized format)
-   
+     String content for endpoint definition (Reitit route data)
+
    Pure: true"
   [module-name path method handler-name]
   (let [method-str (name method)]
-    (format ";; Add to normalized-api-routes in src/wagoe/%s/shell/http.clj:
+    (format ";; Add to api-routes in src/wagoe/%s/shell/http.clj:
 ;;
-;; {:path \"%s\"
-;;  :methods {:%s {:handler %s-handler
-;;                 :summary \"%s endpoint\"}}}
+;; [\"%s\"
+;;  {:%s {:handler %s-handler
+;;        :summary \"%s endpoint\"}}]
 ;;
 ;; Then create the handler function:
 ;;

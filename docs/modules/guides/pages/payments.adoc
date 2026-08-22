@@ -101,9 +101,9 @@ Route definition:
 
 [source,clojure]
 ----
-{:path    "/payments/webhook"
- :methods {:post {:handler   payment-webhook-handler
-                  :summary   "PSP webhook receiver"}}}
+["/payments/webhook"
+ {:post {:handler   payment-webhook-handler
+         :summary   "PSP webhook receiver"}}]
 ----
 
 WARNING: The webhook route must receive the **raw body string** before body-parsing middleware runs.

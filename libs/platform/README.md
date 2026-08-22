@@ -73,20 +73,21 @@ Core infrastructure for web applications: database, HTTP routing, pagination, se
 
 ```clojure
 (ns myapp.routes
-  (:require [wagoe.platform.ports.http :as http]))
+  (:require [myapp.handlers :as handlers]))
 
-;; Define normalized routes
+;; Reitit route data. Paths are relative — /api/v1 is added when the
+;; module's :api contribution is mounted.
 (def routes
-  [{:path "/api/users"
-    :methods {:get {:handler 'myapp.handlers/list-users
-                    :summary "List all users"
-                    :interceptors ['auth/require-auth]}
-              :post {:handler 'myapp.handlers/create-user
-                     :summary "Create user"}}}
-   {:path "/api/users/:id"
-    :methods {:get {:handler 'myapp.handlers/get-user}
-              :put {:handler 'myapp.handlers/update-user}
-              :delete {:handler 'myapp.handlers/delete-user}}}])
+  [["/users"
+    {:get  {:handler      handlers/list-users
+            :summary      "List all users"
+            :interceptors ['auth/require-auth]}
+     :post {:handler handlers/create-user
+            :summary "Create user"}}]
+   ["/users/:id"
+    {:get    {:handler handlers/get-user}
+     :put    {:handler handlers/update-user}
+     :delete {:handler handlers/delete-user}}]])
 ```
 
 ### Database Operations

@@ -812,14 +812,13 @@
                  ":wagoe/inventory-routes" ":wagoe/inventory\n"]]
         (is (str/includes? output k) (str "missing " k))))))
 
-(deftest ^:unit module-wiring-calls-the-normalized-routes-fn
-  ;; :wagoe/http-handler reads (:api routes) from the normalized map. http/routes
-  ;; is the legacy flat vector, so wiring that one contributes zero routes and
-  ;; says nothing about it — the module generates, compiles, boots, and serves
-  ;; no requests.
+(deftest ^:unit module-wiring-calls-the-routes-fn
+  ;; :wagoe/http-handler folds the {:api :web :static} contribution. Wiring
+  ;; anything else contributes zero routes and says nothing about it — the
+  ;; module generates, compiles, boots, and serves no requests.
   (let [output (gen/generate-module-wiring-file base-ctx)]
-    (is (str/includes? output "http/product-routes-normalized"))
-    (is (not (str/includes? output "(http/routes ")))))
+    (is (str/includes? output "(http/product-routes service"))
+    (is (not (str/includes? output "routes-normalized")))))
 
 (deftest ^:unit module-wiring-uses-the-projects-own-base-ns
   ;; A generated project is not called wagoe. Hard-coding the prefix would emit

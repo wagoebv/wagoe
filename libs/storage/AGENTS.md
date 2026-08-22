@@ -23,7 +23,7 @@ S3 / S3-compatible, and Google Cloud Storage adapters behind a single
 | `wagoe.storage.shell.adapters.gcs` | `GCSFileStorage` — Google Cloud Storage via `google-cloud-storage`; V4 signed URLs |
 | `wagoe.storage.shell.adapters.image-processor` | `JavaImageProcessor` — Java AWT / `javax.imageio` |
 | `wagoe.storage.shell.module-wiring` | `:wagoe/storage` + `:wagoe/storage-routes` Integrant keys |
-| `wagoe.storage.shell.http-handlers` | Ring handlers + `storage-routes` (normalized `:api` map format) |
+| `wagoe.storage.shell.http-handlers` | Ring handlers + `storage-routes` (the module's `:api` contribution) |
 
 ## Ports
 
@@ -125,7 +125,7 @@ S3 / S3-compatible, and Google Cloud Storage adapters behind a single
 builds the adapter + a default image processor and returns
 `{:provider <kw> :storage <IFileStorage> :service <IStorageService>}`; the
 halt-key closes the S3/GCS client. `:wagoe/storage-routes` turns the service
-into normalized `:api` routes. The config matches the `wagoe new` catalogue
+into the module's `:api` contribution. The config matches the `wagoe new` catalogue
 (`:local` accepts `:root` as an alias for `:base-path`):
 
 ```clojure
@@ -199,9 +199,9 @@ adapter (`store-file`, `retrieve-file`, `file-exists?`, `delete-file`,
 ## HTTP endpoints (`storage-routes`)
 
 `(http-handlers/storage-routes svc {:base-path "/storage"})` returns the
-framework's **normalized module `:api` map format** — a vector of
-`{:path … :methods {…}}` maps. Paths carry NO `/api` prefix (versioning adds
-`/api/v1`). Mount via the module route mechanism (`:wagoe/storage-routes`):
+the module's **`:api` contribution** — a vector of Reitit route data. Paths
+carry NO `/api` prefix (versioning adds `/api/v1`). Mount via the module route
+mechanism (`:wagoe/storage-routes`):
 
 | Method | Path | Handler |
 |--------|------|---------|

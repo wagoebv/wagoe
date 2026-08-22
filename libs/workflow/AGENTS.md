@@ -187,7 +187,7 @@ The component map returned is:
 
 ## HTTP API
 
-Routes are defined in `shell/http.clj` using the normalized map format (no `/api` prefix) and mounted by the platform versioning middleware under `/api/v1`.
+Routes are defined in `shell/http.clj` as Reitit route data (no `/api` prefix) and mounted by the platform versioning middleware under `/api/v1`.
 
 | Method | Mounted path | Description |
 |--------|-------------|-------------|
@@ -237,7 +237,7 @@ CREATE TABLE workflow_audit (
 5. **snake_case only at DB boundary** — all internal maps use kebab-case; `instance->db`/`db->instance` handle conversion.
 6. **Hooks are best-effort** — exceptions inside hook functions are caught and logged; they do NOT roll back the transition.
 7. **Auto-transitions bypass permissions** — they fire with `[:system]` roles; only mark transitions `:auto? true` when no user authorisation is required.
-8. **API routes must use normalized map format, not Reitit vectors** — `workflow-routes` must return `[{:path "..." :methods {...}}]`. Returning Reitit-style vectors `[["/path" {:get ...}]]` causes `IllegalArgumentException: Key must be integer` in the versioning middleware at startup. Paths must also omit the `/api` prefix — the platform adds `/api/v1` automatically.
+8. **Route paths omit the `/api` prefix** — `workflow-routes` returns Reitit route data (`[["/path" {:get ...}]]`) at paths relative to the mount point. Writing `/api/workflow` there serves it at `/api/v1/api/workflow`; the platform adds `/api/v1` itself.
 
 ## Testing
 

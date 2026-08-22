@@ -473,21 +473,21 @@
 ;; Routes Structure Tests
 ;; =============================================================================
 
-(deftest ^:contract tenant-routes-normalized-test
-  (testing "returns normalized route structure"
-    (let [routes (tenant-http/tenant-routes-normalized *mock-tenant-service* nil {})]
+(deftest ^:contract tenant-routes-test
+  (testing "returns a contribution with an :api key"
+    (let [routes (tenant-http/tenant-routes *mock-tenant-service* nil {})]
       (is (map? routes))
       (is (contains? routes :api))
       (is (vector? (:api routes)))
       (is (= 5 (count (:api routes))))))
 
-  (testing "all routes have required structure"
-    (let [routes (tenant-http/tenant-routes-normalized *mock-tenant-service* nil {})
-          api-routes (:api routes)]
-      (doseq [route api-routes]
-        (is (contains? route :path))
-        (is (contains? route :methods))
-        (is (map? (:methods route)))
-        (doseq [[_method config] (:methods route)]
+  (testing "every route is Reitit data with real handlers"
+    ;; [path {method {:handler f}}] — ADR-037.
+    (let [routes (tenant-http/tenant-routes *mock-tenant-service* nil {})]
+      (doseq [route (:api routes)]
+        (is (vector? route))
+        (is (string? (first route)))
+        (is (map? (second route)))
+        (doseq [[_method config] (second route)]
           (is (contains? config :handler))
           (is (fn? (:handler config))))))))

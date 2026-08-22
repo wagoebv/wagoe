@@ -14,26 +14,27 @@
             [clojure.test :refer [deftest is testing]]
             [integrant.core :as ig]))
 
-(deftest ^:unit router-init-falls-back-to-reitit-for-unknown-adapters
-  (with-redefs [wagoe.platform.shell.http.reitit-router/create-reitit-router
-                (fn [] ::reitit-router)]
-    (is (= ::reitit-router
-           (ig/init-key :wagoe/router {:adapter :unknown})))))
+(deftest ^:unit the-router-component-is-settings-not-an-adapter
+  ;; It used to dispatch on :adapter to one of three routers, two of which were
+  ;; comments. Reitit is the router; this key is what an application configures
+  ;; about it (ADR-037).
+  (is (= {:coercion :malli} (ig/init-key :wagoe/router {:coercion :malli})))
+  (is (= {} (ig/init-key :wagoe/router {}))))
 
 (deftest ^:unit http-handler-includes-membership-routes-and-optional-middleware
   (let [captured-routes (atom nil)
         captured-config (atom nil)
         compiled-handler (fn [request] {:status 200 :body request})
         config {:active {:wagoe/settings {:name "Wagoe"
-                                             :version "1.2.3"}}}
+                                          :version "1.2.3"}}}
         ;; Tenant/membership middleware now arrives via :extra-middleware, built
         ;; by the tenant lib's :wagoe/tenant-http-middleware component (BOU-200);
         ;; platform's http-handler no longer constructs it. Two stand-in wrappers.
         extra-middleware [(fn [h] (fn [request] (h (assoc request :tenant true))))
                           (fn [h] (fn [request] (h (assoc request :membership true))))]
         i18n-middleware  (fn [h] (fn [request] (h (assoc request :i18n true))))
-        handler (with-redefs [wagoe.platform.ports.http/compile-routes
-                              (fn [_router routes router-config]
+        handler (with-redefs [wagoe.platform.shell.http.reitit-router/compile-routes
+                              (fn [routes router-config]
                                 (reset! captured-routes routes)
                                 (reset! captured-config router-config)
                                 compiled-handler)
@@ -49,10 +50,10 @@
                                 ;; module platform has never heard of
                                 ;; contributes the same way (BOU-330).
                                 :module-routes
-                                [{:api [{:path "/users" :methods {:get {:handler identity}}}]}
-                                 {:api [{:path "/tenants" :methods {:get {:handler identity}}}]}
-                                 {:api [{:path "/tenants/:tenant-id/memberships"
-                                         :methods {:get {:handler identity}}}]}]
+                                [{:api [["/users" {:get {:handler identity}}]]}
+                                 {:api [["/tenants" {:get {:handler identity}}]]}
+                                 {:api [["/tenants/:tenant-id/memberships"
+                                         {:get {:handler identity}}]]}]
                                 :router ::router
                                 :logger ::logger
                                 :metrics-emitter ::metrics
@@ -69,9 +70,9 @@
                                 ;; is this argument.
                                 :i18n-middleware i18n-middleware}))]
     (testing "the compiled route set includes membership endpoints"
-      (is (some #(= "/tenants/:tenant-id/memberships" (:path %)) @captured-routes))
-      (is (some #(= "/tenants" (:path %)) @captured-routes))
-      (is (some #(= "/users" (:path %)) @captured-routes)))
+      (is (some #(= "/tenants/:tenant-id/memberships" (first %)) @captured-routes))
+      (is (some #(= "/tenants" (first %)) @captured-routes))
+      (is (some #(= "/users" (first %)) @captured-routes)))
 
     (testing "router config receives the injected extra middleware, i18n, and method override"
       (is (= 4 (count (:middleware @captured-config))))
@@ -93,8 +94,8 @@
   (let [captured-routes (atom nil)
         captured-config (atom nil)
         compiled-handler (fn [request] {:status 200 :body request})
-        handler (with-redefs [wagoe.platform.ports.http/compile-routes
-                              (fn [_router routes router-config]
+        handler (with-redefs [wagoe.platform.shell.http.reitit-router/compile-routes
+                              (fn [routes router-config]
                                 (reset! captured-routes routes)
                                 (reset! captured-config router-config)
                                 compiled-handler)
@@ -110,45 +111,32 @@
                                 ;; mounts at /web, admin/workflow/search under
                                 ;; /web/admin, and each says so (BOU-330).
                                 :module-routes
-                                [{:web [{:path "/profile"
-                                         :meta {:middleware [:user-mw]}
-                                         :methods {:get {:handler identity}}}]}
+                                [{:web [["/profile" {:middleware [:user-mw]
+                                                     :get {:handler identity}}]]}
                                  {:web-prefix "/web/admin"
-                                  :web [{:path "/users"
-                                         :meta {:middleware [:admin-mw]}
-                                         :methods {:get {:handler identity}}}]}
+                                  :web [["/users" {:middleware [:admin-mw]
+                                                   :get {:handler identity}}]]}
                                  {:web-prefix "/web/admin"
-                                  :web [{:path "/workflow"
-                                         :meta {:middleware [:workflow-mw]}
-                                         :methods {:get {:handler identity}}}]}
+                                  :web [["/workflow" {:middleware [:workflow-mw]
+                                                      :get {:handler identity}}]]}
                                  {:web-prefix "/web/admin"
-                                  :web [{:path "/search"
-                                         :meta {:middleware [:search-mw]}
-                                         :methods {:get {:handler identity}}}]}]
+                                  :web [["/search" {:middleware [:search-mw]
+                                                    :get {:handler identity}}]]}]
                                 :router ::router
                                 :logger ::logger
                                 :metrics-emitter ::metrics
                                 :tracer ::tracer
                                 :error-reporter ::error-reporter
                                 :config {:active {:wagoe/settings {:name "Wagoe"
-                                                                      :version "1.2.3"}}}}))]
-    (testing "web routes are prefixed and route meta is merged at the route root"
-      (is (some #(and (= "/web/profile" (:path %))
-                      (= [:user-mw] (:middleware %))
-                      (= true (:no-doc %)))
-                @captured-routes))
-      (is (some #(and (= "/web/admin/users" (:path %))
-                      (= [:admin-mw] (:middleware %))
-                      (= true (:no-doc %)))
-                @captured-routes))
-      (is (some #(and (= "/web/admin/workflow" (:path %))
-                      (= [:workflow-mw] (:middleware %))
-                      (= true (:no-doc %)))
-                @captured-routes))
-      (is (some #(and (= "/web/admin/search" (:path %))
-                      (= [:search-mw] (:middleware %))
-                      (= true (:no-doc %)))
-                @captured-routes)))
+                                                                   :version "1.2.3"}}}}))]
+    (testing "web routes are prefixed, keep their data, and stay out of the docs"
+      (let [mounted (into {} (map (juxt first second)) @captured-routes)]
+        (doseq [[path mw] {"/web/profile"         [:user-mw]
+                           "/web/admin/users"     [:admin-mw]
+                           "/web/admin/workflow"  [:workflow-mw]
+                           "/web/admin/search"    [:search-mw]}]
+          (is (= mw (:middleware (mounted path))) (str path " lost its middleware"))
+          (is (true? (:no-doc (mounted path))) (str path " would show up in the API docs")))))
 
     (testing "only method override middleware is configured when tenant, membership, and i18n are absent"
       (is (= 1 (count (:middleware @captured-config))))
@@ -188,7 +176,7 @@
                        :metrics-emitter ::metrics
                        :error-reporter ::error-reporter
                        :config {:active {:wagoe/http {:security {:csrf {:enabled? true
-                                                                           :secret ""}}}}}})))))
+                                                                        :secret ""}}}}}})))))
 
 (deftest ^:security ^:unit rate-limit-fails-loud-in-prod-without-cache
   (testing "rate limiting enabled in :prod with no cache throws at startup (no false protection)"
@@ -239,8 +227,8 @@
           _       (metrics-ports/inc-counter! metrics h)
           captured-routes (atom nil)
           config  {:active {:wagoe/settings {:name "B" :version "1"}}}]
-      (with-redefs [wagoe.platform.ports.http/compile-routes
-                    (fn [_router routes _cfg] (reset! captured-routes routes) (fn [_] {:status 200}))
+      (with-redefs [wagoe.platform.shell.http.reitit-router/compile-routes
+                    (fn [routes _cfg] (reset! captured-routes routes) (fn [_] {:status 200}))
                     wagoe.platform.shell.interfaces.http.common/health-check-handler
                     (fn [_ _ _] (fn [_] {:status 200}))
                     wagoe.platform.shell.http.versioning/apply-versioning (fn [routes _] (vec routes))
@@ -248,8 +236,9 @@
         (ig/init-key :wagoe/http-handler
                      {:module-routes [] :router ::r :logger ::l :metrics-emitter metrics
                       :error-reporter ::e :config config}))
-      (let [metrics-route (first (filter #(= "/metrics" (:path %)) @captured-routes))
-            handler       (get-in metrics-route [:methods :get :handler])
+      ;; Reitit data: ["/metrics" {:get {:handler ...}}] (ADR-037).
+      (let [metrics-route (first (filter #(= "/metrics" (first %)) @captured-routes))
+            handler       (get-in (second metrics-route) [:get :handler])
             resp          (handler {})]
         (is (some? metrics-route) "/metrics route is mounted")
         (is (= 200 (:status resp)))
@@ -335,8 +324,8 @@
         compiled-handler (fn [_] {:status 200})
         config {:active {:wagoe/settings {:name "test" :version "0.0.1"}}}
         build (fn [extra-keys]
-                (with-redefs [wagoe.platform.ports.http/compile-routes
-                              (fn [_router _routes router-config]
+                (with-redefs [wagoe.platform.shell.http.reitit-router/compile-routes
+                              (fn [_routes router-config]
                                 (reset! captured-config router-config)
                                 compiled-handler)
                               wagoe.platform.shell.interfaces.http.common/health-check-handler
@@ -375,8 +364,8 @@
   ;; deployment read as development wherever it ran (BOU-321).
   (let [captured (atom nil)
         build    (fn [config]
-                   (with-redefs [wagoe.platform.ports.http/compile-routes
-                                 (fn [_router _routes router-config]
+                   (with-redefs [wagoe.platform.shell.http.reitit-router/compile-routes
+                                 (fn [_routes router-config]
                                    (reset! captured router-config)
                                    (fn [_] {:status 200}))
                                  wagoe.platform.shell.interfaces.http.common/health-check-handler
