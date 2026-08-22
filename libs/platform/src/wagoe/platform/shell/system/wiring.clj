@@ -117,19 +117,13 @@
 ;; =============================================================================
 
 (defmethod ig/init-key :wagoe/router
-  [_ {:keys [adapter]}]
-  (log/info "Initializing HTTP router adapter" {:adapter adapter})
-  (let [router (case adapter
-                 :reitit (reitit-router/create-reitit-router)
-                 ;; Future routers:
-                 ;; :pedestal (pedestal-router/create-pedestal-router)
-                 ;; :compojure (compojure-router/create-compojure-router)
-                 (do
-                   (log/warn "Unknown router adapter, falling back to reitit"
-                             {:adapter adapter})
-                   (reitit-router/create-reitit-router)))]
-    (log/info "HTTP router adapter initialized" {:adapter adapter})
-    router))
+  [_ config]
+  ;; Router settings, not an adapter instance. This used to dispatch on
+  ;; `:adapter` to one of three routers, two of which were comments — the
+  ;; abstraction ADR-037 removed. Reitit is the router; what an application
+  ;; configures here is coercion and its own middleware.
+  (log/info "HTTP router configured" {:coercion (:coercion config :malli)})
+  config)
 
 (defmethod ig/halt-key! :wagoe/router
   [_ _router]
@@ -432,13 +426,10 @@
 
 
 (defmethod ig/init-key :wagoe/http-handler
-  [_ {:keys [module-routes router logger metrics-emitter tracer error-reporter error-enricher config tenant-service db-context cache i18n i18n-middleware user-service request-capture? extra-middleware]}]
+  [_ {:keys [module-routes logger metrics-emitter tracer error-reporter error-enricher config tenant-service db-context cache i18n i18n-middleware user-service request-capture? extra-middleware]}]
   (log/info "Initializing top-level HTTP handler with normalized routing and API versioning")
-  (require 'wagoe.platform.ports.http)
   (require 'wagoe.platform.shell.interfaces.http.common)
-  (let [compile-routes (ns-resolve 'wagoe.platform.ports.http 'compile-routes)
-
-        platform-routes (platform-routes {:config          config
+  (let [        platform-routes (platform-routes {:config          config
                                           :db-context      db-context
                                           :cache           cache
                                           :metrics-emitter metrics-emitter})
@@ -499,12 +490,18 @@
         ;; Kept as its own injection point rather than folded into
         ;; extra-middleware so the pipeline position does not change.
         ;;
+        ;; Built here, not from the :wagoe/router component. That component's
+        ;; settings — :coercion, :muuntaja, :middleware — have never reached the
+        ;; router: this map was always constructed fresh, and the component was
+        ;; passed only as the protocol receiver, which ADR-037 removed. Making
+        ;; those settings live means deciding what `:coercion :malli` in an app's
+        ;; config.edn should resolve to, which is its own ticket.
         router-config {:middleware (request-middleware
                                     {:extra-middleware extra-middleware
                                      :i18n             i18n
                                      :i18n-middleware  i18n-middleware})
                        :system system}
-        handler (compile-routes router all-normalized-routes router-config)
+        handler (reitit-router/compile-routes all-normalized-routes router-config)
 
         ;; Wrap handler with version headers middleware
         versioned-handler (http-versioning/wrap-handler-with-version-headers handler config)
@@ -532,7 +529,6 @@
                                :api    (count module-api)}
                :versioned-api-routes (count versioned-api-routes)
                :total-normalized-routes (count all-normalized-routes)
-               :router-adapter (class router)
                :system-services (keys system)
                :api-versioning-enabled true
                :request-capture-enabled (boolean request-capture?)})

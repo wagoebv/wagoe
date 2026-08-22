@@ -3,8 +3,7 @@
 
    This adapter implements the IRouter protocol to translate framework-agnostic
    normalized route specifications into Reitit-specific route definitions."
-  (:require             [wagoe.platform.ports.http :as ports]
-                        [wagoe.platform.shell.http.interceptors :as http-interceptors]
+  (:require                         [wagoe.platform.shell.http.interceptors :as http-interceptors]
                         [cheshire.core :as json]
                         [malli.error :as me]
                         [clojure.tools.logging :as log]
@@ -27,35 +26,24 @@
 ;; Symbol Resolution
 ;; =============================================================================
 
-(defn- resolve-handler-fn
-  "Resolve qualified symbol to handler function.
-  
-  Args:
-    handler-sym - Either a function (returned as-is) or qualified symbol
-    
-  Returns:
-    Function
-    
-  Throws:
-    Exception if symbol cannot be resolved"
-  [handler-sym]
-  (if (symbol? handler-sym)
-    (or (requiring-resolve handler-sym)
-        (throw (ex-info "Could not resolve handler function"
-                        {:type :configuration-error
-                         :handler handler-sym})))
-    handler-sym))
+(defn- resolve-spec
+  "A symbol resolved to its value, or the value itself.
+
+   Handlers no longer come through here — they are vars in the route data, which
+   is the point of ADR-037. What remains are interceptor specs and the
+   middleware an application can name in its `:wagoe/router` config, both of
+   which may still be written as qualified symbols."
+  [spec]
+  (if (symbol? spec)
+    (or (requiring-resolve spec)
+        (throw (ex-info "Could not resolve symbol"
+                        {:type :configuration-error :symbol spec})))
+    spec))
 
 (defn- resolve-middleware-fns
-  "Resolve vector of qualified symbols to middleware functions.
-   
-   Args:
-     middleware-syms - Vector of qualified symbols or functions
-     
-   Returns:
-     Vector of middleware functions"
-  [middleware-syms]
-  (mapv resolve-handler-fn (or middleware-syms [])))
+  "Resolve a vector of middleware specs to functions."
+  [specs]
+  (mapv resolve-spec (or specs [])))
 
 (defn- resolve-interceptors
   "Resolve vector of interceptor specs to actual interceptor instances.
@@ -76,7 +64,7 @@
             (cond
               ;; Symbol - resolve and call if function
               (symbol? spec)
-              (let [resolved (resolve-handler-fn spec)]
+              (let [resolved (resolve-spec spec)]
                 (if (fn? resolved)
                   (resolved)  ; Call function to get interceptor
                   resolved))  ; Already an interceptor map
@@ -116,238 +104,6 @@
 ;; =============================================================================
 ;; Route Conversion
 ;; =============================================================================
-
-(defn- convert-coercion
-  "Convert normalized coercion spec to Reitit parameters format.
-  
-  Normalized format:
-    {:query SomeSchema
-     :body SomeSchema
-     :path SomeSchema
-     :response {200 SuccessSchema 400 ErrorSchema}}
-     
-  Reitit format:
-    {:parameters {:query [...]
-                  :body [...]
-                  :path [...]}
-     :responses {200 {:body [...]}
-                 400 {:body [...]}}}
-  
-  Args:
-    coercion-spec - Normalized coercion map
-    
-  Returns:
-    Map with :parameters and :responses for Reitit"
-  [coercion-spec]
-  (when coercion-spec
-    (let [params (select-keys coercion-spec [:query :body :path])
-          responses (:response coercion-spec)]
-      (cond-> {}
-        (seq params)
-        (assoc :parameters params)
-
-        (seq responses)
-        (assoc :responses (into {}
-                                (map (fn [[status schema]]
-                                       [status {:body schema}]))
-                                responses))))))
-
-(defn- convert-handler-config
-  "Convert normalized handler config to Reitit handler data.
-   
-   Normalized format:
-     {:handler 'ns/fn
-      :middleware ['ns/mw1 'ns/mw2]
-      :interceptors ['ns/int1 'ns/int2]
-      :coercion {:query ... :response ...}
-      :summary \"Description\"
-      :tags [\"tag1\"]
-      :produces [\"application/json\"]
-      :consumes [\"application/json\"]}
-      
-   Reitit format:
-     {:handler (fn ...)
-      :middleware [(fn ...) (fn ...)]
-      :parameters {:query ...}
-      :responses {200 {:body ...}}
-      :summary \"Description\"
-      :tags [\"tag1\"]}
-   
-   Notes:
-   - HTTP interceptors run for every matched endpoint.
-   - The framework default stack is always applied.
-   - Route-specific interceptors (via :interceptors) are appended after defaults.
-   - :system is optional; if omitted, it defaults to {}.
-   
-   Args:
-     handler-config - Normalized handler config map
-     system - Optional observability services map {:logger :metrics-emitter :error-reporter}
-     
-   Returns:
-     Reitit handler data map"
-  ([handler-config]
-   (convert-handler-config handler-config nil))
-
-  ([{:keys [handler middleware interceptors coercion parameters summary tags produces consumes no-doc responses skip-interceptors?]} system]
-   (let [resolved-handler (resolve-handler-fn handler)
-         resolved-middleware (resolve-middleware-fns middleware)
-
-         ;; Treat system services as optional; interceptors can run with {}.
-         system (or system {})
-
-         ;; Skip the default HTTP interceptor stack ONLY for routes that explicitly
-         ;; opt out via :skip-interceptors? (genuinely-internal endpoints such as
-         ;; health checks). This is decoupled from :no-doc — :no-doc only controls
-         ;; Swagger visibility. All /web routes are :no-doc but MUST keep the default
-         ;; stack so security interceptors (CSRF, security headers) apply to them.
-
-         ;; Always apply default HTTP interceptors UNLESS route explicitly opts out;
-         ;; append any route-specific interceptors.
-         resolved-route-interceptors (or (resolve-interceptors interceptors) [])
-         all-interceptors (if skip-interceptors?
-                            resolved-route-interceptors  ; Only route-specific interceptors
-                            (vec (concat http-interceptors/default-http-interceptors
-                                         resolved-route-interceptors)))
-         interceptor-middleware (when (seq all-interceptors)
-                                  [(interceptors->middleware all-interceptors system)])
-
-         ;; Combine regular middleware with interceptor-generated middleware.
-         ;; We append interceptors last so they are closest to the resolved handler,
-         ;; while still seeing a fully prepared request (session/body/coercions).
-         all-middleware (concat resolved-middleware interceptor-middleware)
-
-         ;; Support both :coercion (normalized) and :parameters (Reitit native) formats
-         coercion-data (convert-coercion coercion)]
-     (cond-> {:handler resolved-handler
-              :middleware (vec all-middleware)}
-       ;; Merge coercion data if present
-       coercion-data
-       (merge coercion-data)
-
-       ;; Pass through :parameters if provided (Reitit native format)
-       parameters
-       (assoc :parameters parameters)
-
-       ;; Pass through :responses if provided (Reitit native format)  
-       responses
-       (assoc :responses responses)
-
-       summary
-       (assoc :summary summary)
-
-       (seq tags)
-       (assoc :tags tags)
-
-       (seq produces)
-       (assoc :produces produces)
-
-       (seq consumes)
-       (assoc :consumes consumes)
-
-       no-doc
-       (assoc :no-doc no-doc)))))
-
-(defn- convert-methods
-  "Convert normalized methods map to Reitit format.
-   
-   Normalized format:
-     {:get {:handler 'ns/fn ...}
-      :post {:handler 'ns/fn ...}}
-      
-   Reitit format:
-     {:get {:handler (fn ...) ...}
-      :post {:handler (fn ...) ...}}
-   
-   Args:
-     methods-map - Map of HTTP method keyword to handler config
-     system - Optional observability services map {:logger :metrics-emitter :error-reporter} (defaults to {})
-     
-   Returns:
-     Map of HTTP method keyword to Reitit handler data"
-  ([methods-map]
-   (convert-methods methods-map nil))
-
-  ([methods-map system]
-   (into {}
-         (map (fn [[method handler-cfg]]
-                [method (convert-handler-config handler-cfg system)]))
-         methods-map)))
-
-(defn- convert-route
-  "Convert single normalized route entry to Reitit format.
-   
-   Handles nested routes via :children.
-   
-   IMPORTANT: When a route has both methods AND children, Reitit requires
-   the parent methods to be defined as an empty string child route.
-   
-   Normalized format:
-     {:path \"/users\"
-      :methods {:get {...} :post {...}}
-      :children [{:path \"/:id\" :methods {...}}]
-      :meta {:middleware [...] :auth true}}
-      
-   Reitit format (when route has children):
-     [\"/users\"
-      {:middleware [...] :auth true}
-      [\"\" {:get {...} :post {...}}]     ; Parent methods as empty string child
-      [\"/:id\" {:get {...}}]]             ; Actual children
-   
-   Reitit format (when route has NO children):
-     [\"/users\"
-      {:middleware [...] :auth true
-       :get {...}
-       :post {...}}]
-   
-   Args:
-     route-entry - Normalized route map
-     system - Optional observability services map {:logger :metrics-emitter :error-reporter} (defaults to {})
-     
-   Returns:
-     Reitit route vector [path data & children]"
-  ([route-entry]
-   (convert-route route-entry nil))
-
-  ([{:keys [path methods children meta] :as route-entry} system]
-   (let [;; Extract route-level data (everything except path, methods, children)
-          ;; This includes :middleware, :auth, :name, etc.
-         route-data (dissoc route-entry :path :methods :children)
-
-          ;; Route-level middleware defined in :meta should run before
-          ;; handler-level middleware and before HTTP interceptors so that
-          ;; interceptors can observe the modified request.
-         route-middleware (get-in meta [:middleware])
-         methods-with-route-middleware (if (seq route-middleware)
-                                         (into {}
-                                               (map (fn [[method handler-cfg]]
-                                                      [method (update handler-cfg :middleware
-                                                                      (fn [mw]
-                                                                        (vec (concat route-middleware
-                                                                                     (or mw [])))))]))
-                                               methods)
-                                         methods)
-
-          ;; Recursively convert children
-         reitit-children (when (seq children)
-                           (mapv #(convert-route % system) children))]
-
-     (if (seq reitit-children)
-        ;; Route HAS children: parent methods must be empty string child
-       (let [reitit-methods (convert-methods methods-with-route-middleware system)
-              ;; Create empty string child route for parent methods (if any)
-             parent-child (when (seq reitit-methods)
-                            ["" reitit-methods])]
-          ;; Build: [path route-data empty-string-child ...children]
-         (into [path route-data]
-               (if parent-child
-                 (into [parent-child] reitit-children)
-                 reitit-children)))
-
-        ;; Route has NO children: methods can be on route data directly
-       (let [reitit-methods (convert-methods methods-with-route-middleware system)
-             merged-data (merge route-data reitit-methods)]
-         [path merged-data])))))
-
 
 ;; =============================================================================
 ;; Router Creation
@@ -677,32 +433,19 @@
                                                                (cons data children)))]
       (into (if (map? data) [path data'] [path]) children'))))
 
-(defn- reitit-route?
-  "Whether `route` is Reitit data rather than a normalized map.
-
-   Both formats travel through `compile-routes` while the migration runs: a
-   module that has moved emits `[\"/path\" {...}]`, one that has not emits
-   `{:path \"/path\" :methods {...}}` (BOU-331)."
-  [route]
-  (vector? route))
-
-(defn- prepare-routes
-  "Every route as Reitit data, whichever format it arrived in."
-  [route-specs system]
-  (mapv (fn [route]
-          (if (reitit-route? route)
-            (decorate-reitit-route route system)
-            (convert-route route system)))
-        route-specs))
-
 ;; =============================================================================
-;; IRouter Implementation
+;; Compiling routes
 ;; =============================================================================
 
-(defrecord ReititRouter []
-  ports/IRouter
-  (compile-routes [_this route-specs config]
-    (let [;; Extract observability services from config (if provided)
+(defn compile-routes
+  "Reitit route data in, a Ring handler out.
+
+   A plain function rather than a protocol method: `IRouter` had one
+   implementation and existed to make the normalized format swappable, and both
+   are gone (ADR-037). The Reitit router is attached to the handler's metadata
+   so devtools can read the route table without unwrapping middleware."
+  [route-specs config]
+  (let [;; Extract observability services from config (if provided)
           system (:system config)
 
           ;; Extract Swagger configuration (optional)
@@ -712,9 +455,7 @@
                                    :description "Wagoe Framework REST API"
                                    :version "0.1.0"}})
 
-          ;; Reitit data passes through; normalized maps are still converted
-          ;; while modules migrate (BOU-331/ADR-037).
-          reitit-routes (prepare-routes route-specs system)
+          reitit-routes (mapv #(decorate-reitit-route % system) route-specs)
 
           ;; Add Swagger routes if enabled
           all-routes (if swagger-enabled?
@@ -744,58 +485,19 @@
 
       ;; Store the Reitit router in metadata so devtools can extract route info
       ;; from the wrapped handler without needing to unwrap middleware layers.
-      (with-meta handler {:reitit/router router}))))
-
-;; =============================================================================
-;; Public API
-;; =============================================================================
-
-(defn create-reitit-router
-  "Create new Reitit router adapter instance.
-  
-  Returns:
-    ReititRouter instance implementing IRouter"
-  []
-  (->ReititRouter))
+      (with-meta handler {:reitit/router router})))
 
 (comment
-  ;; Example usage:
-
-  ;; Define normalized routes
+  ;; Reitit route data in, Ring handler out.
   (def example-routes
-    [{:path "/api/users"
-      :methods {:get {:handler 'my.app.handlers/list-users
-                      :summary "List users"
-                      :tags ["users"]
-                      :coercion {:query [:map
-                                         [:limit {:optional true} :int]
-                                         [:offset {:optional true} :int]]
-                                 :response {200 [:vector [:map [:id :uuid] [:name :string]]]
-                                            400 [:map [:error :string]]}}}
-                :post {:handler 'my.app.handlers/create-user
-                       :summary "Create user"
-                       :tags ["users"]
-                       :coercion {:body [:map
-                                         [:name :string]
-                                         [:email :string]]
-                                  :response {201 [:map [:id :uuid]]
-                                             400 [:map [:error :string]]}}}}
-      :children [{:path "/:id"
-                  :methods {:get {:handler 'my.app.handlers/get-user
-                                  :coercion {:path [:map [:id :uuid]]
-                                             :response {200 [:map [:id :uuid] [:name :string]]
-                                                        404 [:map [:error :string]]}}}
-                            :delete {:handler 'my.app.handlers/delete-user
-                                     :coercion {:path [:map [:id :uuid]]
-                                                :response {204 nil
-                                                           404 [:map [:error :string]]}}}}}]}])
+    [["/users"
+      {:get  {:handler (fn [_] {:status 200 :body []})
+              :summary "List users"
+              :parameters {:query [:map
+                                   [:limit  {:optional true} :int]
+                                   [:offset {:optional true} :int]]}}
+       :post {:handler (fn [_] {:status 201 :body {}})
+              :summary "Create user"}}]])
 
-  ;; Create router and compile routes
-  (let [router (create-reitit-router)
-        config {:middleware ['my.app.middleware/wrap-auth]}
-        handler (ports/compile-routes router example-routes config)]
-
-    ;; Use handler as Ring handler
-    (handler {:request-method :get
-              :uri "/api/users"
-              :query-params {"limit" "10" "offset" "0"}})))
+  (let [handler (compile-routes example-routes {:middleware []})]
+    (handler {:request-method :get :uri "/users"})))

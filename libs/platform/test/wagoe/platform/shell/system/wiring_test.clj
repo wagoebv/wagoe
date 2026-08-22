@@ -14,11 +14,12 @@
             [clojure.test :refer [deftest is testing]]
             [integrant.core :as ig]))
 
-(deftest ^:unit router-init-falls-back-to-reitit-for-unknown-adapters
-  (with-redefs [wagoe.platform.shell.http.reitit-router/create-reitit-router
-                (fn [] ::reitit-router)]
-    (is (= ::reitit-router
-           (ig/init-key :wagoe/router {:adapter :unknown})))))
+(deftest ^:unit the-router-component-is-settings-not-an-adapter
+  ;; It used to dispatch on :adapter to one of three routers, two of which were
+  ;; comments. Reitit is the router; this key is what an application configures
+  ;; about it (ADR-037).
+  (is (= {:coercion :malli} (ig/init-key :wagoe/router {:coercion :malli})))
+  (is (= {} (ig/init-key :wagoe/router {}))))
 
 (deftest ^:unit http-handler-includes-membership-routes-and-optional-middleware
   (let [captured-routes (atom nil)
@@ -32,8 +33,8 @@
         extra-middleware [(fn [h] (fn [request] (h (assoc request :tenant true))))
                           (fn [h] (fn [request] (h (assoc request :membership true))))]
         i18n-middleware  (fn [h] (fn [request] (h (assoc request :i18n true))))
-        handler (with-redefs [wagoe.platform.ports.http/compile-routes
-                              (fn [_router routes router-config]
+        handler (with-redefs [wagoe.platform.shell.http.reitit-router/compile-routes
+                              (fn [routes router-config]
                                 (reset! captured-routes routes)
                                 (reset! captured-config router-config)
                                 compiled-handler)
@@ -93,8 +94,8 @@
   (let [captured-routes (atom nil)
         captured-config (atom nil)
         compiled-handler (fn [request] {:status 200 :body request})
-        handler (with-redefs [wagoe.platform.ports.http/compile-routes
-                              (fn [_router routes router-config]
+        handler (with-redefs [wagoe.platform.shell.http.reitit-router/compile-routes
+                              (fn [routes router-config]
                                 (reset! captured-routes routes)
                                 (reset! captured-config router-config)
                                 compiled-handler)
@@ -239,8 +240,8 @@
           _       (metrics-ports/inc-counter! metrics h)
           captured-routes (atom nil)
           config  {:active {:wagoe/settings {:name "B" :version "1"}}}]
-      (with-redefs [wagoe.platform.ports.http/compile-routes
-                    (fn [_router routes _cfg] (reset! captured-routes routes) (fn [_] {:status 200}))
+      (with-redefs [wagoe.platform.shell.http.reitit-router/compile-routes
+                    (fn [routes _cfg] (reset! captured-routes routes) (fn [_] {:status 200}))
                     wagoe.platform.shell.interfaces.http.common/health-check-handler
                     (fn [_ _ _] (fn [_] {:status 200}))
                     wagoe.platform.shell.http.versioning/apply-versioning (fn [routes _] (vec routes))
@@ -336,8 +337,8 @@
         compiled-handler (fn [_] {:status 200})
         config {:active {:wagoe/settings {:name "test" :version "0.0.1"}}}
         build (fn [extra-keys]
-                (with-redefs [wagoe.platform.ports.http/compile-routes
-                              (fn [_router _routes router-config]
+                (with-redefs [wagoe.platform.shell.http.reitit-router/compile-routes
+                              (fn [_routes router-config]
                                 (reset! captured-config router-config)
                                 compiled-handler)
                               wagoe.platform.shell.interfaces.http.common/health-check-handler
@@ -376,8 +377,8 @@
   ;; deployment read as development wherever it ran (BOU-321).
   (let [captured (atom nil)
         build    (fn [config]
-                   (with-redefs [wagoe.platform.ports.http/compile-routes
-                                 (fn [_router _routes router-config]
+                   (with-redefs [wagoe.platform.shell.http.reitit-router/compile-routes
+                                 (fn [_routes router-config]
                                    (reset! captured router-config)
                                    (fn [_] {:status 200}))
                                  wagoe.platform.shell.interfaces.http.common/health-check-handler

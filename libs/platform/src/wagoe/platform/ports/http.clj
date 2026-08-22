@@ -9,48 +9,6 @@
   Modules provide normalized route specifications (pure EDN data) which are
   translated by router adapters into framework-specific route definitions.")
 
-(defprotocol IRouter
-  "Protocol for HTTP routing implementations.
-  
-  Router adapters translate normalized route specifications into
-  framework-specific routing structures and produce Ring-compatible handlers.
-  
-  Example adapters:
-  - ReititRouter: Converts normalized routes to Reitit format
-  - PedestalRouter: Converts normalized routes to Pedestal routing table
-  - MockRouter: In-memory router for testing"
-
-  (compile-routes [this route-specs config]
-    "Compile normalized route specifications into a Ring handler.
-    
-    Takes a vector of normalized route maps and produces a Ring handler
-    function that can process HTTP requests. The router adapter is responsible
-    for:
-    - Resolving handler and middleware symbols to functions
-    - Applying coercion based on Malli schemas
-    - Setting up route matching and parameter extraction
-    - Organizing routes according to framework conventions
-    
-    Args:
-      route-specs - Vector of normalized route maps with structure:
-                    {:path \"/api/users\"
-                     :methods {:get {:handler 'ns/fn :coercion {...}}
-                               :post {...}}
-                     :children [...]}
-      config - Router configuration map with keys:
-               :middleware - Vector of middleware symbols (applied globally)
-               :coercion - Coercion configuration
-               :default-handlers - Map of default handlers (404, etc.)
-      
-    Returns:
-      Ring handler function (request-map → response-map)
-      
-    Example:
-      (compile-routes router
-                      [{:path \"/api/users\"
-                        :methods {:get {:handler 'user/list-users}}}]
-                      {:middleware ['wrap-json 'wrap-cors]})"))
-
 (defprotocol IHttpServer
   "Protocol for HTTP server implementations.
   
@@ -104,31 +62,6 @@
       
     Example:
       (stop! server server-instance)"))
-
-(defprotocol IRouteValidator
-  "Protocol for route validation.
-  
-  Validates normalized route specifications to ensure they conform to the
-  expected schema and contain all required information."
-
-  (validate-routes [this route-specs]
-    "Validate normalized route specifications.
-    
-    Checks that route specs conform to the normalized schema and contain
-    all required fields. Returns validation result.
-    
-    Args:
-      route-specs - Vector of normalized route maps
-      
-    Returns:
-      Map with keys:
-        :valid? - Boolean indicating if routes are valid
-        :errors - Vector of error maps (empty if valid)
-        :warnings - Vector of warning maps
-      
-    Example:
-      (validate-routes validator [{:path \"/api/users\" ...}])
-      ;; => {:valid? true :errors [] :warnings []}"))
 
 #_:clj-kondo/ignore
 (comment
