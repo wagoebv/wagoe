@@ -31,6 +31,22 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **The quickstart's last step 404'd** (BOU-328). It ended on
+  `http://localhost:3000/admin/products`, which was wrong twice: the admin
+  module is not in a generated project's `:active`, and admin mounts at
+  `/web/admin`, not `/admin`. The final instruction of the framework's first
+  page sent every new user to a 404.
+
+  It ends on `curl http://localhost:3000/api/v1/products` returning `[]` —
+  checked by scaffolding a module into a generated project and booting it — and
+  says why `[]` is the right answer: the generated handlers are stubs, and
+  wiring them up is your first edit. Adding the admin UI is a step of its own,
+  with the `bb create-admin` that `wagoe add admin` itself tells you to run.
+
+  The page also never named `bb quickstart`, the command `wagoe new` prints as
+  your next step, while describing the same eight steps by hand. Both are named
+  now, and a test keeps the page's URLs and that command in step.
+
 - **Two guides were unreachable, and 29 ADRs did not say what they were**
   (BOU-329). `migrations.adoc` (304 lines, the largest guide) and
   `deployment-patterns.adoc` were in no nav and linked from nowhere under
