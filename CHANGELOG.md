@@ -31,6 +31,23 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Two guides were unreachable, and 29 ADRs did not say what they were**
+  (BOU-329). `migrations.adoc` (304 lines, the largest guide) and
+  `deployment-patterns.adoc` were in no nav and linked from nowhere under
+  `docs/` — written, accurate, and invisible in the published site. Both are in
+  the guides nav now, and linked from where a reader is standing when they need
+  them: the quickstart's migration step, the tutorial's, and the deployment
+  guide.
+
+  Thirteen ADRs declared no status at all; sixteen sat on `Proposed` over code
+  that had shipped and was in daily use — devtools, the dev dashboard, the MCP
+  server, audience segmentation. Each is now `Accepted` and names the
+  implementation, so the claim can be checked rather than taken.
+
+  Three places said it and could disagree: the `:status:` attribute, the page's
+  own Status section, and the index in `dev-docs/adr/README.adoc`, which
+  repeated fourteen stale ones. A test holds the three together.
+
 - **The getting-started tutorial showed code the scaffolder does not write**
   (BOU-327). `your-first-module.adoc` is the framework's flagship tutorial, and
   a reader following it hit a compile error on their first edit: it named

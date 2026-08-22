@@ -1,6 +1,7 @@
 == ADR-001: Split Wagoe Monolith into Modular Libraries
+:status: Accepted
 
-*Status:* Accepted +
+*Status:* Accepted — the 31 directories under `libs/`. +
 *Date:* 2026-01-18 +
 *Deciders:* Wagoe Core Team +
 *Context:* Planning Phase

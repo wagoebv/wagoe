@@ -1,11 +1,11 @@
 = ADR-013: Internationalisation (i18n) — Multi-Language Support
-:status: Proposed
+:status: Accepted
 :date: 2026-03-23
 :deciders: wagoe-team
 
 == Status
 
-Proposed
+Accepted — `libs/i18n/`.
 
 == Context
 

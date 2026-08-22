@@ -62,6 +62,9 @@ wagoe list modules          # See all 19 optional modules
 clojure -M:migrate up
 ----
 
+Naming, safe patterns and recipes are in
+xref:guides:migrations.adoc[Database Migrations].
+
 == Start the system
 
 [source,bash]

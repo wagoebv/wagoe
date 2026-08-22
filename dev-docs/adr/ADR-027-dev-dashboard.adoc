@@ -1,11 +1,11 @@
 = ADR-027: Dev Dashboard
-:status: Proposed
+:status: Accepted
 :date: 2026-04-18
 :deciders: wagoe-team
 
 == Status
 
-Proposed
+Accepted — `libs/devtools/src/wagoe/devtools/shell/dashboard/`.
 
 == Context
 

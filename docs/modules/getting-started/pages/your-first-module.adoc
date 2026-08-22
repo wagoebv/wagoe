@@ -47,6 +47,10 @@ clojure -M:migrate up
 else needs changing: `src/` and `test/` are already on the project's paths, so
 the module's tests run under plain `clojure -M:test`.
 
+The generated migration creates the table. For editing it — and for the
+patterns that avoid locking a live table — see
+xref:guides:migrations.adoc[Database Migrations].
+
 == schema.clj
 
 Two shapes: the entity as it is stored, and what an API request may contain.

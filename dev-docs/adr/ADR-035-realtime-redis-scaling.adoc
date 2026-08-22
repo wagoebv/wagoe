@@ -1,11 +1,11 @@
 = ADR-035: Realtime Redis-backed Pub/Sub and Multi-Replica Scaling
-:status: Proposed
+:status: Accepted
 :date: 2026-06-19
 :deciders: wagoe-team
 
 == Status
 
-Proposed
+Accepted — `libs/realtime/src/wagoe/realtime/shell/bus/redis.clj`.
 
 Implements the "Redis Pub/Sub (v0.2.0)" enhancement deferred by
 xref:ADR-003-websocket-architecture.adoc[ADR-003] and the realtime axis of the

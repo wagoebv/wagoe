@@ -1,11 +1,11 @@
 = ADR-018: Admin Module — :belongs-to Widget for Foreign Key Lookups
-:status: Proposed
+:status: Accepted
 :date: 2026-03-26
 :deciders: wagoe-team
 
 == Status
 
-Proposed
+Accepted — the `:belongs-to` field type in `libs/admin/src/wagoe/admin/core/schema_introspection.clj`.
 
 == Context
 

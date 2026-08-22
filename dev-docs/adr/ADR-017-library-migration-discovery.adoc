@@ -1,11 +1,11 @@
 = ADR-017: Library Migration Discovery
-:status: Proposed
+:status: Accepted
 :date: 2026-03-24
 :deciders: wagoe-team
 
 == Status
 
-Proposed
+Accepted — `libs/platform/src/wagoe/platform/shell/database/migrations.clj`.
 
 == Context
 

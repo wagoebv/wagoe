@@ -1,11 +1,11 @@
 = ADR-025: Zero-Friction Onboarding
-:status: Proposed
+:status: Accepted
 :date: 2026-04-18
 :deciders: wagoe-team
 
 == Status
 
-Proposed
+Accepted — `bb quickstart` — `libs/tools/src/wagoe/tools/quickstart.clj`.
 
 == Context
 

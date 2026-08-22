@@ -1,4 +1,5 @@
 = ADR-014: Pluggable User / Auth / Authorization
+:status: Accepted
 :revdate: 2026-01-02
 :revremark: Make identity/auth/authorization pluggable like DB and observability
 :toc:
@@ -6,7 +7,7 @@
 
 == Status
 
-**PROPOSED**
+Accepted — `libs/user/src/wagoe/user/shell/auth.clj`.
 
 == Context
 

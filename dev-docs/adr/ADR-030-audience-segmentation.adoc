@@ -1,4 +1,5 @@
 = ADR-030: Audience Segmentation Library
+:status: Accepted
 :revdate: 2026-05-29
 :revremark: wagoe-audience — declarative audience engine with hybrid evaluation, composable segments, and visual builder UI
 :toc:
@@ -6,7 +7,7 @@
 
 == Status
 
-**PROPOSED** - Design approved, pending implementation
+Accepted — `libs/audience/`.
 
 == Context
 

@@ -1,4 +1,5 @@
 = ADR-010: HTTP Interceptor Architecture
+:status: Accepted
 :revdate: 2024-12-06
 :revremark: HTTP interceptor pattern for Ring/Reitit with observability integration
 :toc:
@@ -6,7 +7,7 @@
 
 == Status
 
-**ACCEPTED** - Implemented and tested
+Accepted — `libs/platform/src/wagoe/platform/shell/http/interceptors.clj`.
 
 == Context
 

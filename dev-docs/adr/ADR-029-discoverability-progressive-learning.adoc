@@ -1,11 +1,11 @@
 = ADR-029: Discoverability & Progressive Learning
-:status: Proposed
+:status: Accepted
 :date: 2026-04-18
 :deciders: wagoe-team
 
 == Status
 
-Proposed
+Accepted — `bb guide` — `libs/tools/src/wagoe/tools/help.clj`.
 
 == Context
 

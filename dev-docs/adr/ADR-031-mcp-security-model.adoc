@@ -1,11 +1,11 @@
 = ADR-031: MCP Server Security Model — Threat Model & Capability/Context Gating
-:status: Proposed
+:status: Accepted
 :date: 2026-06-16
 :deciders: wagoe-team
 
 == Status
 
-Proposed
+Accepted — `libs/wagoe-mcp/`.
 
 == Context
 

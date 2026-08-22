@@ -1,6 +1,7 @@
 == ADR-004: Multi-Tenancy Architecture
+:status: Accepted
 
-*Status:* Accepted +
+*Status:* Accepted — `libs/tenant/`. +
 *Date Proposed:* 2026-02-05 +
 *Date Accepted:* 2026-02-09 +
 *Deciders:* Wagoe Core Team +

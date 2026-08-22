@@ -1,11 +1,11 @@
 = ADR-028: Error Experience & Auto-Recovery
-:status: Proposed
+:status: Accepted
 :date: 2026-04-18
 :deciders: wagoe-team
 
 == Status
 
-Proposed
+Accepted — `libs/devtools/src/wagoe/devtools/core/error_classifier.clj`.
 
 == Context
 

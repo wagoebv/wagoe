@@ -1,6 +1,9 @@
 = Deployment
 :description: Building and deploying a Wagoe application.
 
+For systemd, nginx, Fly.io and Render — with the reference configs from
+`resources/deploy/` — see xref:guides:deployment-patterns.adoc[Deployment Patterns].
+
 == Build an uberjar
 
 [source,bash]

@@ -1,11 +1,11 @@
 = ADR-023: Multi-Database Adapter Support
-:status: Proposed
+:status: Accepted
 :date: 2026-04-17
 :deciders: wagoe-team
 
 == Status
 
-Proposed
+Accepted — `libs/platform/src/wagoe/platform/shell/adapters/database/`.
 
 == Context
 

@@ -1,11 +1,11 @@
 = ADR-033: Reflective MCP Resources — Ground Truth from the Running Project
-:status: Proposed
+:status: Accepted
 :date: 2026-06-16
 :deciders: wagoe-team
 
 == Status
 
-Proposed
+Accepted — `libs/wagoe-mcp/src/wagoe/mcp/shell/system_source.clj`.
 
 == Context
 

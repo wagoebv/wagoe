@@ -1,4 +1,5 @@
 = ADR-007: Routing Architecture - Module Composition and Path Prefixing
+:status: Accepted
 :revdate: 2025-11-18
 :revremark: Routing re-architecture for proper /api and /web prefixing
 :toc:
@@ -6,7 +7,7 @@
 
 == Status
 
-**ACCEPTED** - Implementation complete, all tests passing
+Accepted — `libs/platform/src/wagoe/platform/shell/interfaces/http/routes.clj`.
 
 == Context
 
