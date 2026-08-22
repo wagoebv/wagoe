@@ -74,8 +74,8 @@ for what is public API, what is internal, and how deprecations are announced.
   neither, and the page's own lesson about keeping the clock in the shell
   contradicted the snippet above it.
 
-  Rewritten against the generator's actual output, and a test regenerates the
-  module and checks that every name the page shows exists. It matches
+  Rewritten against the generator's actual output, and a test calls the
+  generators and checks that every name the page shows exists. It matches
   identifiers rather than formatting, so a rewrapped docstring does not fail the
   build; putting `find-product-by-id` back does, naming it.
 
