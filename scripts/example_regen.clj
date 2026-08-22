@@ -169,6 +169,22 @@
   [s]
   (str/replace s #"\d{14}" "<timestamp>"))
 
+(defn- unindent
+  "Drop leading indentation from every line.
+
+   `bb scaffold integrate` edits config.edn with babashka's built-in
+   rewrite-clj, and how it re-indents the map it inserted into depends on the
+   babashka version. CI installs the latest; a contributor has whatever they
+   have. Comparing indentation made the check report drift on a machine
+   difference, which is the fastest way to teach people to ignore it.
+
+   The cost is that a template change consisting only of re-indentation goes
+   unreported here. Content — including comments — is still compared."
+  [s]
+  (->> (str/split-lines s)
+       (map str/triml)
+       (str/join "\n")))
+
 (defn- tree
   "path -> contents, for comparing two generated trees.
 
@@ -184,7 +200,7 @@
               :let  [rel (str (fs/relativize dir (fs/path p)))]
               :when (and (not (excluded (first (str/split rel #"/"))))
                          (not (preserved rel)))]
-          [(undate rel) (undate (slurp p))])))
+          [(undate rel) (unindent (undate (slurp p)))])))
 
 (defn- line-diff
   "The first few lines where `committed` and `fresh` disagree.
