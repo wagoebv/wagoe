@@ -29,6 +29,44 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ## [Unreleased]
 
+### Changed
+
+- **A library can serve HTTP without platform knowing it exists** (BOU-330).
+  `:wagoe/http-handler` destructured six named route slots — user, admin,
+  tenant, membership, workflow, search — each followed by its own copy of the
+  same prefix-and-normalise block. Every module's mount point and doc
+  visibility lived in platform, so a 31st library could not contribute a route
+  without editing platform: the inversion the library split was meant to remove.
+  Middleware was given injection in BOU-131; routes have it now.
+
+  Routes arrive as one collection. A module returns `:routes` from its
+  `ig-config` and says where its web routes mount with `:web-prefix` — admin,
+  workflow and search say `/web/admin`, everyone else gets `/web`. Admin's
+  slash redirect (`/web/admin` → `/web/admin/`) moved with it, as
+  `:extra-web`, because it is admin's route.
+
+  Module discovery asks any module for its own graph, not only the ones in
+  platform's table, so a library with components of its own needs no entry
+  anywhere in platform. A test proves it: `wagoe.widgets` is built, mounted and
+  served, and the test fails if any platform source ever mentions it.
+
+  The `:wagoe/http-handler` init-key is 106 lines, from 370. Platform
+  endpoints, the security configuration, the interceptor services and the
+  middleware pipeline are each their own function now. Both fail-loud
+  bootguards — CSRF enabled with a blank secret, rate limiting without a shared
+  cache in prod — were carried over whole and still refuse the boot.
+
+  Verified by diffing the route table: 99 routes before and after, identical
+  set, every path distinct so the concat order cannot change what matches.
+
+  One regression, caught by an existing test: `service <module>` prunes refs to
+  the keys it dropped, and did so only for refs that were map values. With
+  routes in a collection, `service user` kept `:module-routes` pointing at
+  admin's and tenant's route keys, and Integrant refuses to build a config with
+  dangling refs — so the service died at boot. Pruning now reaches into
+  vectors and lists.
+
+
 ### Fixed
 
 - **The quickstart's last step 404'd** (BOU-328). It ended on

@@ -192,3 +192,43 @@
     (is (= 11 (:available summary)))
     (is (some #{":billing/service"} (:omitted summary)))
     (is (some #{":tenant/service"} (:omitted summary)))))
+
+(deftest ^:unit a-dropped-ref-goes-from-a-collection-too
+  ;; This pruned only refs that were map values. Routes became a collection in
+  ;; BOU-330, and `service user` then kept
+  ;; `:module-routes [#ref :wagoe/admin-routes ...]` pointing at keys the
+  ;; service had discarded — Integrant refuses to build a config with dangling
+  ;; refs, so `service user` died at boot.
+  (let [gone #{:wagoe/admin-routes :wagoe/tenant-routes}]
+
+    (testing "a ref in a vector is removed, the rest of the vector kept"
+      (is (= {:module-routes [(ig/ref :wagoe/user-routes)]}
+             (selection/without-refs-to
+              {:module-routes [(ig/ref :wagoe/user-routes)
+                               (ig/ref :wagoe/admin-routes)
+                               (ig/ref :wagoe/tenant-routes)]}
+              gone))))
+
+    (testing "and in a list"
+      (is (= [(ig/ref :wagoe/user-routes)]
+             (vec (:xs (selection/without-refs-to
+                        {:xs (list (ig/ref :wagoe/user-routes)
+                                   (ig/ref :wagoe/admin-routes))}
+                        gone))))))
+
+    (testing "map values still go, which is what this always did"
+      (is (= {:keep (ig/ref :wagoe/user-routes)}
+             (selection/without-refs-to {:keep (ig/ref :wagoe/user-routes)
+                                   :drop (ig/ref :wagoe/admin-routes)}
+                                  gone))))
+
+    (testing "a map inside the collection keeps its shape"
+      ;; postwalk hands map entries as two-element vectors; rebuilding one as a
+      ;; plain vector made the parent map's `into` throw.
+      (is (= {:xs [{:a 1 :b 2}]}
+             (selection/without-refs-to {:xs [{:a 1 :b 2 :c (ig/ref :wagoe/admin-routes)}]}
+                                  gone))))
+
+    (testing "and a config with nothing to drop is returned unchanged"
+      (let [cfg {:module-routes [(ig/ref :wagoe/user-routes)] :port 3000}]
+        (is (= cfg (selection/without-refs-to cfg gone)))))))

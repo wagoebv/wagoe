@@ -126,16 +126,33 @@
    same thing it already does for a module disabled in config, since that
    produces exactly this shape. `http-handler` reads `(:web routes)` off a nil
    and mounts nothing, which is the behaviour the acceptance criterion asks
-   for."
+   for.
+
+   Collections as well as map values. This dropped only map values until routes
+   became a collection: `service user` then kept
+   `:module-routes [#ref :wagoe/admin-routes ...]` pointing at keys the service
+   had discarded, and Integrant refused to build a config with dangling refs
+   (BOU-330)."
   [value gone]
-  (walk/postwalk
-   (fn [node]
-     (if (and (map? node) (not (record? node)))
-       (into (empty node)
-             (remove (fn [[_ v]] (and (ig/ref? v) (contains? gone (:key v)))))
-             node)
-       node))
-   value))
+  (letfn [(dangling? [v] (and (ig/ref? v) (contains? gone (:key v))))]
+    (walk/postwalk
+     (fn [node]
+       (cond
+         (and (map? node) (not (record? node)))
+         (into (empty node) (remove (comp dangling? val)) node)
+
+         ;; A vector or list of refs — how every module now contributes routes.
+         ;; `map-entry?` first: postwalk hands entries as two-element vectors,
+         ;; and rebuilding one as a plain vector makes the parent map's `into`
+         ;; throw "Vector arg to map conj must be a pair".
+         (and (vector? node) (not (map-entry? node)) (some dangling? node))
+         (filterv (complement dangling?) node)
+
+         (and (seq? node) (some dangling? node))
+         (remove dangling? node)
+
+         :else node))
+     value)))
 
 (defn- reachable
   "`roots` plus everything they refer to, transitively."

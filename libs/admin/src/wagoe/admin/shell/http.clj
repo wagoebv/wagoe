@@ -105,4 +105,20 @@
   [admin-service schema-provider config user-service]
   {:api []  ; Week 2+: JSON API endpoints
    :web (normalized-web-routes admin-service schema-provider config user-service)
-   :static []})  ; Week 2+: Admin-specific static assets
+   :static []  ; Week 2+: Admin-specific static assets
+
+   ;; Where these mount. Platform held this for six modules and a seventh could
+   ;; not contribute routes without editing it (BOU-330).
+   :web-prefix "/web/admin"
+
+   ;; Already-pathed, so it is not prefixed again. This module's root route is
+   ;; "/", which becomes "/web/admin/" — and the un-slashed "/web/admin" that
+   ;; people actually type matched nothing and 404'd on a feature that works
+   ;; (BOU-229). 302 rather than 301: browsers cache permanent redirects hard,
+   ;; and this mount point is configurable via :base-path.
+   :extra-web [{:path    "/web/admin"
+                :no-doc  true
+                :methods {:get {:handler (fn [_]
+                                           {:status  302
+                                            :headers {"Location" "/web/admin/"}
+                                            :body    ""})}}}]})

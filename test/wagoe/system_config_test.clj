@@ -93,8 +93,12 @@
              (:wagoe/tenant-routes ig-config))))
 
     (testing "http handler receives membership routes and the injected tenant middleware (BOU-200)"
-      (is (= (ig/ref :wagoe/membership-routes)
-             (get-in ig-config [:wagoe/http-handler :membership-routes])))
+      ;; In the module-routes collection, not a :membership-routes slot of its
+      ;; own: platform keeps no list of which modules may serve HTTP (BOU-330).
+      (is (some #{(ig/ref :wagoe/membership-routes)}
+                (get-in ig-config [:wagoe/http-handler :module-routes])))
+      (is (some #{(ig/ref :wagoe/tenant-routes)}
+                (get-in ig-config [:wagoe/http-handler :module-routes])))
       ;; Tenant/membership middleware is no longer built inside http-handler; it is
       ;; injected via :extra-middleware from the tenant lib's component.
       (is (= (ig/ref :wagoe/tenant-http-middleware)

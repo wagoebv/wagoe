@@ -246,8 +246,12 @@
                                      :membership-service (ig/ref :wagoe/membership-service)
                                      :db-context         (ig/ref :wagoe/db-context)}}
 
+     ;; :tenant-service and :extra-middleware stay named — the handler reads the
+     ;; first directly and threads the second into its middleware pipeline.
+     ;; Routes are a collection, so platform holds no per-module slot (BOU-330).
      :http
-     {:tenant-routes     (ig/ref :wagoe/tenant-routes)
-      :membership-routes (ig/ref :wagoe/membership-routes)
-      :tenant-service    (ig/ref :wagoe/tenant-service)
-      :extra-middleware  (ig/ref :wagoe/tenant-http-middleware)}}))
+     {:tenant-service   (ig/ref :wagoe/tenant-service)
+      :extra-middleware (ig/ref :wagoe/tenant-http-middleware)}
+
+     :routes [(ig/ref :wagoe/tenant-routes)
+              (ig/ref :wagoe/membership-routes)]}))
