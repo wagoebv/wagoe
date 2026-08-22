@@ -66,6 +66,18 @@ Connect your editor (or the Wagoe MCP server) to the nREPL port, then eval:
 
 You get: SQLite database (zero-config, and your data survives a restart), HTTP server on port 3000, a complete Integrant system, and REPL-driven development.
 
+### When something is wrong
+
+```bash
+wagoe doctor      # checks the project and prints the one thing to fix
+bb guide          # topic guides: scaffold, testing, database, fcis, config
+bb guide error BND-201   # what an error code means and how to fix it
+```
+
+`wagoe doctor` runs the environment, config, command and project-setup checks in
+one pass and ends with a single next action. The `bb` tasks behind it still
+exist and CI calls them directly; you do not need to know which is which.
+
 ---
 
 ## AI-Native Development (Claude Code & Agentic CLIs)
@@ -216,8 +228,10 @@ bb ai sql "find active users with orders in last 7 days"          # HoneySQL fro
 bb ai docs --module libs/user --type agents                       # Generate AGENTS.md
 
 # Operations
-bb doctor                          # Validate config for common mistakes
+wagoe doctor                       # One diagnostic pass, one next action (start here)
+bb doctor                          # Just the config checks
 bb doctor --env all --ci           # Check all envs, exit non-zero (CI)
+bb guide next                      # What to do next in this project
 bb setup                           # Interactive config setup wizard
 bb setup ai "PostgreSQL with Stripe payments"  # AI-powered config setup
 bb deploy --all                    # Deploy all libraries to Clojars

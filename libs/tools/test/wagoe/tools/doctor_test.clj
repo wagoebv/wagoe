@@ -250,33 +250,6 @@
       (is (= :pass (:level (first result)))))))
 
 ;; =============================================================================
-;; check-wiring-requires
-;; =============================================================================
-
-(deftest ^:unit check-wiring-requires-test
-  (testing "passes when all modules are wired"
-    (let [wiring "(ns ... (:require [wagoe.admin.shell.module-wiring]))"
-          config {:wagoe/admin {:enabled? true}}
-          result (doctor/check-wiring-requires wiring config)]
-      (is (= :pass (:level (first result))))))
-
-  (testing "warns on missing module-wiring"
-    (let [wiring "(ns ... (:require [wagoe.admin.shell.module-wiring]))"
-          config {:wagoe/admin   {:enabled? true}
-                  :wagoe/search  {:enabled? true}}
-          result (doctor/check-wiring-requires wiring config)]
-      (is (= :warn (:level (first result))))
-      (is (re-find #"search" (:msg (first result))))))
-
-  (testing "excludes infrastructure keys"
-    (let [wiring "(ns ...)"
-          config {:wagoe/postgresql {:host "localhost"}
-                  :wagoe/settings   {:name "test"}
-                  :wagoe/logging    {:provider :slf4j}}
-          result (doctor/check-wiring-requires wiring config)]
-      (is (= :pass (:level (first result)))))))
-
-;; =============================================================================
 ;; extract-active-section
 ;; =============================================================================
 
@@ -306,24 +279,22 @@
       (is (not (re-find #"INACTIVE_HOST"
                         (#'wagoe.tools.doctor/extract-active-section config)))))))
 
-(deftest ^:unit check-upgrade-wiring-flags-tenant-without-http-middleware
-  (testing "BOU-200 silent case: tenant-service wired, tenant-http-middleware absent"
-    (let [results (doctor/check-upgrade-wiring
-                   "(ig/ref :wagoe/tenant-service) (ig/ref :wagoe/membership-service)")]
-      (is (= [:warn] (map :level results)))
-      (is (re-find #"tenant-http-middleware" (:msg (first results))))))
+(deftest ^:unit check-upgrade-wiring-no-longer-polices-tenant-middleware
+  ;; It used to warn when an app wired the tenant module without referencing
+  ;; :wagoe/tenant-http-middleware, because the http-handler had stopped
+  ;; building that middleware itself and an app could mount tenant resolution
+  ;; nowhere without noticing (BOU-200).
+  ;;
+  ;; BOU-326 made that impossible rather than detectable: the tenant library
+  ;; emits the middleware from its own ig-config and contributes it to the HTTP
+  ;; handler, so there is no app in which one exists without the other. The
+  ;; check's advice — hand-write both into your config — is now the opposite of
+  ;; what an app should do.
+  (testing "an app that wires tenant and never names the middleware is fine"
+    (is (= [:pass] (map :level (doctor/check-upgrade-wiring
+                                "(ig/ref :wagoe/tenant-service)")))))
 
-  (testing "tenant-service + tenant-http-middleware both wired passes"
-    (let [results (doctor/check-upgrade-wiring
-                   (str "(ig/ref :wagoe/tenant-service)\n"
-                        ":wagoe/tenant-http-middleware {:tenant-service (ig/ref :wagoe/tenant-service)}"))]
-      (is (= [:pass] (map :level results)))))
-
-  (testing "tenant signalled by :tenant-routes alone (no service key) still warns"
-    (let [results (doctor/check-upgrade-wiring "(ig/ref :wagoe/tenant-routes)")]
-      (is (= [:warn] (map :level results)))))
-
-  (testing "no tenant module at all passes"
+  (testing "and so is one that names neither"
     (is (= [:pass] (map :level (doctor/check-upgrade-wiring "(ns app.config)"))))))
 
 (deftest ^:unit check-upgrade-wiring-flags-relocated-namespaces
@@ -338,11 +309,14 @@
                    "(:require [wagoe.platform.shell.interfaces.http.membership-middleware :as mmw])")]
       (is (= [:error] (map :level results)))))
 
-  (testing "stale ns AND missing middleware pair reports both"
+  (testing "a stale ns is still the only thing reported, tenant wiring or not"
+    ;; This used to assert both a stale-namespace error and a
+    ;; missing-middleware warning. The second half is gone — see
+    ;; check-upgrade-wiring-no-longer-polices-tenant-middleware.
     (let [results (doctor/check-upgrade-wiring
                    (str "(:require [wagoe.platform.shell.interfaces.http.tenant-middleware :as mw])\n"
                         "(ig/ref :wagoe/tenant-service)"))]
-      (is (= #{:error :warn} (set (map :level results))))))
+      (is (= [:error] (map :level results)))))
 
   (testing "new tenant-lib ns does not trip the relocated check"
     (is (= [:pass] (map :level (doctor/check-upgrade-wiring

@@ -11,6 +11,7 @@
 
 (ns wagoe.tools.help
   (:require [wagoe.tools.check :as check]
+            [wagoe.tools.report :as report]
             [wagoe.tools.ansi :refer [bold green red yellow dim cyan]]
             [clojure.edn :as edn]
             [clojure.java.io :as io]
@@ -267,47 +268,72 @@
   [deps-text module]
   (str/includes? deps-text (str "libs/" module "/src")))
 
-(def ^:private non-module-libs
-  "Directories under libs/ that are not application modules and should not
-   be checked for integration in deps.edn. These are consumed through other
-   mechanisms (e.g., bb.edn for tools, dev alias for devtools, e2e alias)."
-  #{"tools" "devtools" "e2e"})
-
 (defn- check-unintegrated-modules
-  "Find libs/ directories that are not referenced in deps.edn.
-   Excludes known non-module libraries (tools, devtools, e2e)."
+  "Find libs/ directories the project's deps.edn never mentions.
+
+   Only meaningful in a generated project, where libs/ holds modules you
+   scaffolded and a module has to be in deps.edn to be used. The framework
+   repository puts its 31 libraries on `:paths`, not in `:deps`, so asking this
+   question there reported every standalone library as unintegrated — it named
+   wagoe-cli and wagoe-mcp and told the reader to run `bb scaffold integrate` on
+   them, which is not a thing you should do to either (BOU-324).
+
+   A hand-maintained list of libraries to skip is what produced that: it had
+   \"tools\", \"devtools\" and \"e2e\" and had never heard of the two added since."
   []
   (let [deps-file (io/file (root-dir) "deps.edn")]
-    (if-not (.exists deps-file)
+    (cond
+      (check/framework-repo?)
+      [{:level :pass
+        :msg   "Framework repository — libraries are on :paths, not :deps"}]
+
+      (not (.exists deps-file))
       [{:level :warn :msg "deps.edn not found — cannot check module integration"}]
+
+      :else
       (let [deps-text    (slurp deps-file)
-            modules      (remove non-module-libs (lib-dirs))
+            modules      (lib-dirs)
             unintegrated (remove #(integrated? deps-text %) modules)]
-        (if (seq unintegrated)
+        (cond
+          (empty? modules)
+          [{:level :pass :msg "No modules under libs/ yet"}]
+
+          (seq unintegrated)
           [{:level :warn
-            :msg   (str "Unintegrated modules (in libs/ but not in deps.edn): "
+            :msg   (str "Modules in libs/ that deps.edn does not mention: "
                         (str/join ", " unintegrated))
-            :fix   "Run `bb scaffold integrate <module>` to wire them in, or verify they are standalone libraries."}]
+            :fix   "Run `bb scaffold integrate <module>` to wire them in."}]
+
+          :else
           [{:level :pass
             :msg   (str "All " (count modules) " modules are integrated in deps.edn")}])))))
 
 (defn- check-migrations
-  "Check for pending migration files."
+  "Report the project's migration files.
+
+   Absence is not a problem to fix. `wagoe new` writes no resources/migrations/,
+   and the user module creates its four tables through
+   `:wagoe/user-db-schema` rather than a migration — so a fresh project has
+   nothing here and is working correctly. Warning about it gave every new
+   project an item it could only clear by creating a directory it did not need,
+   and the suggested fix (`clojure -M:migrate up`) does nothing without one
+   (BOU-324)."
   []
-  (let [migration-dir (io/file (root-dir) "resources" "migrations")]
-    (if-not (.exists migration-dir)
-      [{:level :warn
-        :msg   "No resources/migrations/ directory found"
-        :fix   "Create resources/migrations/ and add migration files, or run `clojure -M:migrate up`."}]
-      (let [files (->> (.listFiles migration-dir)
-                       (filter #(.isFile %))
-                       vec)]
-        (if (empty? files)
-          [{:level :warn
-            :msg   "No migration files found in resources/migrations/"
-            :fix   "Add migration SQL files if you have database tables to create."}]
-          [{:level :pass
-            :msg   (str (count files) " migration file(s) found in resources/migrations/")}])))))
+  (let [migration-dir (io/file (root-dir) "resources" "migrations")
+        files         (when (.exists migration-dir)
+                        (filter #(.isFile %) (.listFiles migration-dir)))]
+    (cond
+      (seq files)
+      [{:level :pass
+        :msg   (str (count files) " migration file(s) found in resources/migrations/")}]
+
+      (.exists migration-dir)
+      [{:level :pass
+        :msg   "resources/migrations/ is empty (add .sql files, then `clojure -M:migrate up`)"}]
+
+      :else
+      [{:level :pass
+        :msg   "No migrations yet (optional — put .sql files in resources/migrations/)"}])))
 
 (defn- check-seeds
   "Check if dev seed data file exists."
@@ -316,9 +342,12 @@
     (if (.exists seed-file)
       [{:level :pass
         :msg   "Dev seed file exists (resources/seeds/dev.edn)"}]
-      [{:level :warn
-        :msg   "No dev seed file found at resources/seeds/dev.edn"
-        :fix   "Create resources/seeds/dev.edn with sample data for local development."}])))
+      ;; A pass, not a warning. Seed data is optional — `bb db:seed` reads this
+      ;; file if it is there — so a project without one is healthy, and a
+      ;; warning that can never be cleared is what teaches a reader to skim
+      ;; past the ones that matter (BOU-324).
+      [{:level :pass
+        :msg   "No dev seed file (optional — `bb db:seed` reads resources/seeds/dev.edn)"}])))
 
 (defn- check-config-exists
   "Check that at least dev config exists."
@@ -340,14 +369,17 @@
          (when fix
            (str "\n" (dim (str "    Fix: " fix)))))))
 
-(defn- help-next []
+(defn- next-results []
+  (concat (check-config-exists)
+          (check-unintegrated-modules)
+          (check-migrations)
+          (check-seeds)))
+
+(defn- help-next-text []
   (println)
   (println (bold "Wagoe — What To Do Next"))
   (println)
-  (let [results (concat (check-config-exists)
-                        (check-unintegrated-modules)
-                        (check-migrations)
-                        (check-seeds))
+  (let [results (next-results)
         passes (count (filter #(= :pass (:level %)) results))
         warns  (count (filter #(= :warn (:level %)) results))]
     (doseq [r results]
@@ -358,6 +390,11 @@
       (println (str (yellow (str warns " item" (when (not= warns 1) "s") " need attention"))
                     ", " (green (str passes " OK"))
                     ". " (dim "Fix the warnings above to get started."))))))
+
+(defn- help-next [& {:keys [edn?]}]
+  (if edn?
+    (report/print-edn :project (next-results))
+    (help-next-text)))
 
 ;; =============================================================================
 ;; Error code lookup
@@ -440,7 +477,7 @@
 
 (defn -main [& args]
   (case (first args)
-    "next"  (help-next)
+    "next"  (help-next :edn? (report/edn-requested? args))
     "error" (help-error (second args))
     nil     (help-general)
     (help-topic (first args))))

@@ -71,12 +71,24 @@
     (is (#'help/integrated? "\"libs/admin/src\"" "admin"))
     (is (not (#'help/integrated? "\"libs/admin/src\"" "user")))))
 
-(deftest ^:unit non-module-libs-excludes-infrastructure
-  (testing "tools, devtools, and e2e are excluded"
-    (let [libs @#'help/non-module-libs]
-      (is (contains? libs "tools"))
-      (is (contains? libs "devtools"))
-      (is (contains? libs "e2e")))))
+(deftest ^:unit the-framework-repo-is-not-asked-a-generated-projects-question
+  ;; `bb guide next` reported wagoe-cli and wagoe-mcp as "unintegrated modules"
+  ;; in this repository and told the reader to run `bb scaffold integrate` on
+  ;; them. Both are deliberately standalone, and the monorepo puts its libraries
+  ;; on :paths rather than in :deps, so the question does not apply here at all.
+  ;;
+  ;; It was suppressed by a hand-maintained list of library names to skip —
+  ;; #{"tools" "devtools" "e2e"} — which had never heard of the two added since.
+  ;; A test that asserted the list contained those three names could not have
+  ;; caught that; this asserts the behaviour instead (BOU-324).
+  (let [results (#'help/check-unintegrated-modules)]
+    (is (= [:pass] (map :level results)))
+    (is (re-find #":paths" (:msg (first results)))
+        "and says why, rather than passing silently")
+
+    (testing "nothing is named as needing integration"
+      (is (not-any? #(re-find #"wagoe-cli|wagoe-mcp|scaffold integrate" (str (:msg %) (:fix %)))
+                    results)))))
 
 ;; =============================================================================
 ;; General help output

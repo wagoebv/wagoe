@@ -8,7 +8,8 @@
 ;;   bb doctor:env --ci         # Exit non-zero on any error (CI mode)
 
 (ns wagoe.tools.doctor-env
-  (:require [wagoe.tools.ansi :refer [bold green red yellow dim]]
+  (:require [wagoe.tools.ansi :refer [bold]]
+            [wagoe.tools.report :as report]
             [clojure.string :as str]
             [babashka.process :as process]))
 
@@ -222,31 +223,6 @@
 ;; Output formatting
 ;; =============================================================================
 
-(defn- format-result [{:keys [id level msg fix]}]
-  (let [icon   (case level
-                 :pass  (green "✓")
-                 :warn  (yellow "⚠")
-                 :error (red "✗"))
-        id-str (format "%-20s" (name id))]
-    (str "  " icon " " id-str " " msg
-         (when fix
-           (str "\n" (dim (str "                       Fix: " fix)))))))
-
-(defn- print-results [results]
-  (println)
-  (println (bold "Wagoe Environment Doctor"))
-  (println)
-  (doseq [r results]
-    (println (format-result r)))
-  (let [passed (count (filter #(= :pass (:level %)) results))
-        warns  (count (filter #(= :warn (:level %)) results))
-        errors (count (filter #(= :error (:level %)) results))]
-    (println)
-    (println (str "Summary: " (green (str passed " passed"))
-                  ", " (yellow (str warns " warning" (when (not= warns 1) "s")))
-                  ", " (red (str errors " error" (when (not= errors 1) "s")))))
-    {:passed passed :warnings warns :errors errors}))
-
 ;; =============================================================================
 ;; Argument parsing
 ;; =============================================================================
@@ -257,7 +233,8 @@
     (cond
       (empty? remaining) opts
       (or (= flag "--help") (= flag "-h")) (assoc opts :help true)
-      (= flag "--ci") (recur more (assoc opts :ci true))
+      (= flag "--ci")  (recur more (assoc opts :ci true))
+      (= flag "--edn") (recur more (assoc opts :edn true))
       :else (recur more opts))))
 
 (defn- print-help []
@@ -266,6 +243,7 @@
   (println "Usage:")
   (println "  bb doctor:env              Check all prerequisites")
   (println "  bb doctor:env --ci         Exit non-zero on any error (CI mode)")
+  (println "  bb doctor:env --edn        Print results as data (what `wagoe doctor` reads)")
   (println)
   (println "Checks:")
   (println "  java              Java >= 17 installed")
@@ -286,7 +264,9 @@
       (print-help)
       (System/exit 0))
     (let [results (run-checks)
-          summary (print-results results)]
+          summary (if (:edn opts)
+                    (do (report/print-edn :environment results) (report/tally results))
+                    (report/print-results "Wagoe Environment Doctor" results))]
       (when (and (:ci opts) (pos? (:errors summary)))
         (System/exit 1)))))
 

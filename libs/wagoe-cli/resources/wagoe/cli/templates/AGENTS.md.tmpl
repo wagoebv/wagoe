@@ -53,9 +53,17 @@ bb ai explain --file stacktrace.txt   # explain a Clojure/Wagoe error
 bb ai gen-tests src/path/to/ns.clj    # generate a test namespace
 bb ai sql "find active users with orders in last 7 days"  # HoneySQL from NL
 bb setup ai "PostgreSQL with Stripe payments"             # AI-powered config setup
-bb doctor --all                       # validate config + environment
-bb check                              # quality gates (FC/IS, deps, lint)
+
+# Diagnostics — start here when something is wrong
+wagoe doctor                          # environment + config + commands + setup,
+                                      # ending with the one thing to fix
+bb check                              # quality gates for code you wrote
+                                      # (FC/IS, deps, lint) — a different question
 ```
+
+`wagoe doctor` is the front door. The individual checks behind it
+(`bb doctor:env`, `bb doctor`, `bb smoke-check`, `bb guide next`) still exist
+and are what CI calls; reach for one directly only when you already know which.
 
 ---
 
