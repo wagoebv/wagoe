@@ -42,8 +42,10 @@ for what is public API, what is internal, and how deprecations are announced.
   then made Reitit the only router, and the second implementation was never
   built. What was left was 341 lines translating one EDN shape into another,
   and three things given up for it: Reitit's route conflict detection, reverse
-  routing by name, and handlers as vars — a typo in a handler was a boot
-  failure, and is now a lint error.
+  routing by name, and handlers as vars. The last of those is yours today — a
+  typo in a handler was a boot failure and is now a lint error. The other two
+  are now possible rather than delivered: conflict detection is still switched
+  off (BOU-356), and reverse routing needs routes to carry `:name`.
 
   To migrate, turn each route map inside out: the `:path` becomes the first
   element, `:methods` and `:meta` merge into the data map, and quoted handler
