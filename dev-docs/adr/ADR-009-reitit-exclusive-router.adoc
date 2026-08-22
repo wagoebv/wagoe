@@ -1,4 +1,5 @@
 = ADR-009: Reitit as Exclusive Router Implementation
+:status: Accepted
 :revdate: 2024-12-06
 :revremark: Decision to use Reitit exclusively, abandoning Pedestal adapter
 :toc:
@@ -6,7 +7,7 @@
 
 == Status
 
-**ACCEPTED** - Pedestal adapter abandoned, Reitit chosen as sole router implementation
+Accepted — `libs/platform/src/wagoe/platform/shell/http/reitit_router.clj`, the only adapter.
 
 == Context
 

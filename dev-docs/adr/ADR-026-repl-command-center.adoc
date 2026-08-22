@@ -1,11 +1,11 @@
 = ADR-026: REPL as Command Center
-:status: Proposed
+:status: Accepted
 :date: 2026-04-18
 :deciders: wagoe-team
 
 == Status
 
-Proposed
+Accepted — `libs/tools/src/wagoe/tools/dev.clj`.
 
 == Context
 

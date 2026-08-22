@@ -1,4 +1,5 @@
 = ADR-005: Validation Developer Experience Foundations
+:status: Accepted
 :revdate: 2025-11-03
 :revremark: Initial draft
 :toc:
@@ -6,7 +7,7 @@
 
 == Status
 
-**ACCEPTED** - Implementation in progress
+Accepted — `libs/core/src/wagoe/core/validation/`.
 
 == Context
 

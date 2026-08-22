@@ -31,6 +31,67 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **The quickstart's last step 404'd** (BOU-328). It ended on
+  `http://localhost:3000/admin/products`, which was wrong twice: the admin
+  module is not in a generated project's `:active`, and admin mounts at
+  `/web/admin`, not `/admin`. The final instruction of the framework's first
+  page sent every new user to a 404.
+
+  It ends on `curl http://localhost:3000/api/v1/products` returning `[]` —
+  checked by scaffolding a module into a generated project and booting it — and
+  says why `[]` is the right answer: the generated handlers are stubs, and
+  wiring them up is your first edit. Adding the admin UI is a step of its own,
+  with the `bb create-admin` that `wagoe add admin` itself tells you to run.
+
+  The page also never named `bb quickstart`, the command `wagoe new` prints as
+  your next step, while describing the same eight steps by hand. Both are named
+  now, and a test keeps the page's URLs and that command in step.
+
+- **Two guides were unreachable, and 29 ADRs did not say what they were**
+  (BOU-329). `migrations.adoc` (304 lines, the largest guide) and
+  `deployment-patterns.adoc` were in no nav and linked from nowhere under
+  `docs/` — written, accurate, and invisible in the published site. Both are in
+  the guides nav now, and linked from where a reader is standing when they need
+  them: the quickstart's migration step, the tutorial's, and the deployment
+  guide.
+
+  Thirteen ADRs declared no status at all; sixteen sat on `Proposed` over code
+  that had shipped and was in daily use — devtools, the dev dashboard, the MCP
+  server, audience segmentation. Each is now `Accepted` and names the
+  implementation, so the claim can be checked rather than taken.
+
+  Three places said it and could disagree: the `:status:` attribute, the page's
+  own Status section, and the index in `dev-docs/adr/README.adoc`, which
+  repeated fourteen stale ones. A test holds the three together.
+
+- **The getting-started tutorial showed code the scaffolder does not write**
+  (BOU-327). `your-first-module.adoc` is the framework's flagship tutorial, and
+  a reader following it hit a compile error on their first edit: it named
+  `prepare-product` (really `prepare-new-product`), repository methods
+  `find-product-by-id` and `list-products` (really `find-by-id` and
+  `find-all`), and a `ProductInput` schema (really `CreateProductRequest`). Its
+  core function validated its input and generated a UUID — the real one does
+  neither, and the page's own lesson about keeping the clock in the shell
+  contradicted the snippet above it.
+
+  Rewritten against the generator's actual output, and a test calls the
+  generators and checks that every name the page shows exists. It matches
+  identifiers rather than formatting, so a rewrapped docstring does not fail the
+  build; putting `find-product-by-id` back does, naming it.
+
+  The page also said wiring a module into `deps.edn`/`tests.edn` "assumes the
+  monorepo layout". `bb scaffold integrate` says the opposite and is right: a
+  module under `src/` is already on the project's paths and its tests run under
+  plain `clojure -M:test`.
+
+  It now says plainly what the generator leaves undone — the generated service
+  persists without validating, and `core/validate-product` is written but
+  uncalled — with the edit that wires it in. That was the most useful thing the
+  page could have said and the one thing it did not.
+
+
+### Fixed
+
 - **The e2e suite runs in CI again, and a red e2e test blocks the merge**
   (BOU-297). 52 tests over login, registration, MFA, sessions and admin CRUD —
   the flows a new user meets first — sat behind `if: false`, with

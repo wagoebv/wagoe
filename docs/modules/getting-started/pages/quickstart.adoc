@@ -23,10 +23,15 @@ See xref:getting-started:installation.adoc[Installation] for manual setup.
 
 [TIP]
 ====
-This page is the *manual* path. If you use Claude Code (or a compatible agentic
-CLI), the `wagoe-setup` skill runs every step on this page for you — install
-check, project creation, database config, migrations, admin user, and starting
-the app — and finishes by handing you the URL and admin credentials.
+This page is the *manual* path. Two things do it for you:
+
+`bb quickstart`, from inside a new project — the command `wagoe new` prints as
+your next step. It runs the same eight steps: environment check, configuration,
+a sample module, migrations.
+
+Or, in Claude Code (or a compatible agentic CLI), the `wagoe-setup` skill, which
+starts one step earlier — it creates the project too — and finishes by handing
+you the URL and admin credentials.
 
 [source]
 ----
@@ -61,6 +66,9 @@ wagoe list modules          # See all 19 optional modules
 ----
 clojure -M:migrate up
 ----
+
+Naming, safe patterns and recipes are in
+xref:guides:migrations.adoc[Database Migrations].
 
 == Start the system
 
@@ -119,8 +127,31 @@ Then reload the system so the new routes are live:
 [source,clojure]
 ----
 (reset)
-;; => Visit http://localhost:3000/admin/products
 ----
+
+[source,bash]
+----
+curl http://localhost:3000/api/v1/products
+# => []
+----
+
+`[]` is the right answer: the generated handlers are stubs that return canned
+responses, and wiring them to the service is your first edit. The routes live in
+`src/wagoe/product/shell/http.clj` — `bb scaffold integrate` prints the prefix
+they are mounted under.
+
+For a browsable CRUD UI over your tables rather than a JSON stub, add the admin
+module:
+
+[source,bash]
+----
+wagoe add admin
+bb create-admin       # it requires a signed-in admin, and a new project has none
+----
+
+Restart, then open http://localhost:3000/web/admin/. See
+xref:libraries:admin.adoc[the admin reference] for choosing which entities it
+manages.
 
 == Run tests
 

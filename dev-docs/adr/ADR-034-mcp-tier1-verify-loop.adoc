@@ -1,11 +1,11 @@
 = ADR-034: Tier 1 Generate Tools + Closed Verify Loop — the Moat
-:status: Proposed
+:status: Accepted
 :date: 2026-06-17
 :deciders: wagoe-team
 
 == Status
 
-Proposed
+Accepted — `libs/wagoe-mcp/src/wagoe/mcp/core/verify.clj`.
 
 == Context
 

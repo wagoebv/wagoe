@@ -1,5 +1,6 @@
 * Guides
 ** xref:guides:create-module.adoc[Create a Module]
+** xref:guides:migrations.adoc[Database Migrations]
 ** xref:guides:validation.adoc[Validation]
 ** xref:guides:authentication.adoc[Authentication & JWT]
 ** xref:guides:background-jobs.adoc[Background Jobs]
@@ -11,4 +12,5 @@
 ** xref:guides:debugging.adoc[Debugging]
 ** xref:guides:developer-tools.adoc[Developer Tools]
 ** xref:guides:deployment.adoc[Deployment]
+** xref:guides:deployment-patterns.adoc[Deployment Patterns]
 ** xref:guides:payments.adoc[Payments]

@@ -1,11 +1,11 @@
 = ADR-016: Tenant User Membership
-:status: Proposed
+:status: Accepted
 :date: 2026-03-24
 :deciders: wagoe-team
 
 == Status
 
-Proposed
+Accepted — `libs/tenant/src/wagoe/tenant/shell/membership_http.clj`.
 
 == Context
 

@@ -25,33 +25,28 @@ along with their context and consequences. Each ADR describes:
 === Current ADRs
 
 ==== ADR-001: Split Wagoe Monolith into Modular Libraries [Accepted]
-
 ADR-001-library-split.adoc
 
 Splits the framework into independently publishable libraries with explicit
 dependencies.
 
 ==== ADR-002: Implement `wagoe new` in the Scaffolder [Superseded]
-
 ADR-002-wagoe-new-command.adoc
 
 Project generation from templates rather than a cloned repository. Superseded
 2026-08-02 (BOU-259) — the command lives in the CLI, not the scaffolder.
 
-==== ADR-003: WebSocket Architecture for the Realtime Module [Proposed]
-
+==== ADR-003: WebSocket Architecture for the Realtime Module [Accepted]
 ADR-003-websocket-architecture.adoc
 
 In-memory connection registry and pub/sub; multi-replica deferred to ADR-035.
 
 ==== ADR-004: Multi-Tenancy Architecture [Accepted]
-
 ADR-004-multi-tenancy-architecture.adoc
 
 Schema-per-tenant isolation, with the tenant resolved at the HTTP boundary.
 
 ==== ADR-005: Validation DevEx Foundations [Accepted]
-
 ADR-005-validation-devex-foundations.adoc
 
 Establishes the foundation for an excellent validation developer
@@ -67,7 +62,6 @@ shell layers.
 
 [[adr-006-web-ui-architecture-htmx--hiccup]]
 ==== ADR-006: Web UI Architecture (HTMX {plus} Hiccup) [Accepted]
-
 ADR-006-web-ui-architecture-htmx-hiccup.adoc
 
 Defines the web UI architecture using server-side rendering with HTMX
@@ -81,7 +75,6 @@ for progressive enhancement and Hiccup for HTML generation.
 * Module-integrated UI code
 
 ==== ADR-007: Routing Architecture [Accepted]
-
 ADR-007-routing-architecture.adoc
 
 Documents the routing architecture using Reitit with module-based route
@@ -95,7 +88,6 @@ composition.
 * Consistent route structure across modules
 
 ==== ADR-008: Normalized Routing Abstraction [Accepted]
-
 ADR-008-normalized-routing-abstraction.adoc
 
 Introduces framework-agnostic route definitions using normalized EDN schema,
@@ -110,7 +102,6 @@ enabling pluggable HTTP routers and servers through the Ports & Adapters pattern
 * Pure data in modules, framework selection via configuration
 
 ==== ADR-009: Reitit as Exclusive Router Implementation [Accepted]
-
 ADR-009-reitit-exclusive-router.adoc
 
 Decides to use Reitit exclusively as the HTTP router implementation,
@@ -124,7 +115,6 @@ abandoning exploration of alternative router adapters due to architectural compl
 * Focus on feature development over infrastructure flexibility
 
 ==== ADR-010: HTTP Interceptor Architecture [Accepted]
-
 ADR-010-http-interceptor-architecture.adoc
 
 Implements HTTP interceptor pattern providing bidirectional enter/leave/error
@@ -139,7 +129,6 @@ cross-cutting concerns.
 * Ring/Reitit compatibility via middleware adapter
 * Consistent pattern across HTTP, service, and persistence layers
 ==== ADR-011: Pluggable User/Auth/Authorization [Accepted]
-
 ADR-pluggable-auth.adoc
 
 Make user, auth, and authorization logic pluggable (like observability and database) via clear ports and swappable providers; keep the current user module only as a reference provider.
@@ -152,7 +141,6 @@ Make user, auth, and authorization logic pluggable (like observability and datab
 * Token shape and policy engine as adapters (JWT/opaque/PASETO, RBAC/OPA/etc.)
 
 ==== ADR-016: Tenant User Membership [Accepted]
-
 ADR-016-tenant-user-membership.adoc
 
 Introduce `tenant_memberships` as a first-class framework concept in
@@ -167,7 +155,6 @@ membership lifecycle.
 * Derive tenant authorization from membership role and status
 
 ==== ADR-017: Library Migration Discovery [Accepted]
-
 ADR-017-library-migration-discovery.adoc
 
 Allow Wagoe libraries to publish Migratus migration directories through a
@@ -182,26 +169,22 @@ schema changes via the normal `clojure -M:migrate up` flow.
 * Require standard Migratus up/down filenames for library migrations
 
 ==== ADR-018: Admin Belongs-To Widget [Accepted]
-
 ADR-018-admin-belongs-to-widget.adoc
 
 Defines the belongs-to widget pattern for admin entity relationships.
 
 ==== ADR-019: Shared Payments Library [Accepted]
-
 ADR-019-shared-payments-library.adoc
 
 Establishes a shared payments library with PSP abstraction (Mollie, Stripe, Mock),
 checkout flow, and webhook verification.
 
 ==== ADR-020: Tenant Database Scope [Accepted]
-
 ADR-020-tenant-database-scope.adoc
 
 Defines how tenant-scoped data is isolated at the database level.
 
 ==== ADR-021: FC/IS Boundary Rules [Accepted]
-
 ADR-021-fcis-boundary-rules.adoc
 
 Formalizes and enforces the Functional Core / Imperative Shell boundary rules
@@ -214,7 +197,6 @@ with automated checking via `bb check:fcis`.
 * Clear violation detection with actionable error messages
 
 ==== ADR-022: Error Handling Conventions [Accepted]
-
 ADR-022-error-handling-conventions.adoc
 
 Establishes canonical error types mapped to HTTP status codes, with
@@ -226,15 +208,13 @@ Establishes canonical error types mapped to HTTP status codes, with
 * Canonical type table: `:validation-error`, `:not-found`, `:unauthorized`, `:forbidden`, `:conflict`, `:redirect`
 * Dev diagnostic catches missing `:type` fields
 
-==== ADR-023: Multi-Database Adapter Support [Proposed]
-
+==== ADR-023: Multi-Database Adapter Support [Accepted]
 ADR-023-multi-database-adapter-support.adoc
 
 Introduces pluggable database adapter support (PostgreSQL, SQLite, MySQL, H2)
 with dynamic driver loading.
 
-==== ADR-024: Devtools Library & Guidance Engine [Proposed]
-
+==== ADR-024: Devtools Library & Guidance Engine [Accepted]
 ADR-024-devtools-guidance-engine.adoc
 
 Creates `libs/devtools/` as a dev-only library with a guidance engine that
@@ -248,8 +228,7 @@ provides contextual, actionable help throughout the development lifecycle.
 * FC/IS violations detected at REPL time, not just CI
 * Clear separation: `libs/tools/` = CLI tasks, `libs/devtools/` = JVM REPL
 
-==== ADR-025: Zero-Friction Onboarding [Proposed]
-
+==== ADR-025: Zero-Friction Onboarding [Accepted]
 ADR-025-zero-friction-onboarding.adoc
 
 Establishes a one-command onboarding experience from clone to running app.
@@ -262,8 +241,7 @@ Establishes a one-command onboarding experience from clone to running app.
 * AI provider flexibility: Ollama, MLX/oMLX, Anthropic, OpenAI, custom endpoints
 * Local example app in `examples/quickstart/`
 
-==== ADR-026: REPL as Command Center [Proposed]
-
+==== ADR-026: REPL as Command Center [Accepted]
 ADR-026-repl-command-center.adoc
 
 Transforms the REPL into a full development cockpit where every `bb` command
@@ -279,8 +257,7 @@ has an equivalent and developers never need to leave flow state.
 * Live system mutation: `(restart-component)`, `(defroute!)`
 * AI-assisted: `(ai/suggest)`, `(ai/review)`, `(ai/test-ideas)`
 
-==== ADR-027: Dev Dashboard [Proposed]
-
+==== ADR-027: Dev Dashboard [Accepted]
 ADR-027-dev-dashboard.adoc
 
 A browser-based development dashboard at `localhost:9999` providing x-ray
@@ -295,8 +272,7 @@ vision into the running system.
 * Dev-only Integrant component, zero production overhead
 * Web REPL connected to nREPL for browser-based development
 
-==== ADR-028: Error Experience & Auto-Recovery [Proposed]
-
+==== ADR-028: Error Experience & Auto-Recovery [Accepted]
 ADR-028-error-experience.adoc
 
 Extends ADR-022 with structured error codes, rich dev-mode output, and
@@ -311,8 +287,7 @@ automatic recovery via `(fix! *e)`.
 * Stack trace filtering: user code first, framework frames dimmed
 * Output verbosity respects `:guidance-level`
 
-==== ADR-029: Discoverability & Progressive Learning [Proposed]
-
+==== ADR-029: Discoverability & Progressive Learning [Accepted]
 ADR-029-discoverability-progressive-learning.adoc
 
 Ensures developers discover Wagoe's features at the right moment through
@@ -326,29 +301,25 @@ contextual tips, state-aware guidance, and in-REPL documentation.
 * Command palette: `(commands)` lists all REPL functions by category
 * Unified CLI: `bb check`, `bb db:*`, `bb help <topic>`
 
-==== ADR-030: Audience Segmentation Library [Proposed]
-
+==== ADR-030: Audience Segmentation Library [Accepted]
 ADR-030-audience-segmentation.adoc
 
 Segment definitions as data, evaluated against a member's attributes and
 events.
 
-==== ADR-031: MCP Server Security Model [Proposed]
-
+==== ADR-031: MCP Server Security Model [Accepted]
 ADR-031-mcp-security-model.adoc
 
 Threat model for the MCP server, with capability tiers (`:read`, `:generate`,
 `:execute`) gated by the context the server was launched in.
 
-==== ADR-032: MCP Guardrail Error Payload [Proposed]
-
+==== ADR-032: MCP Guardrail Error Payload [Accepted]
 ADR-032-mcp-guardrail-error-payload.adoc
 
 A refused MCP call answers with the rule, the reason and whether it can be
 overridden — "guardrail, not straitjacket".
 
-==== ADR-033: Reflective MCP Resources [Proposed]
-
+==== ADR-033: Reflective MCP Resources [Accepted]
 ADR-033-mcp-reflective-resources.adoc
 
 Resources are derived from a snapshot of the running project rather than
@@ -356,21 +327,18 @@ hardcoded, so they cannot drift. Its file paths are partly superseded by
 BOU-320, which moved the knowledge base onto the classpath and gave the module
 graph a project mode.
 
-==== ADR-034: Tier 1 Generate Tools + Closed Verify Loop [Proposed]
-
+==== ADR-034: Tier 1 Generate Tools + Closed Verify Loop [Accepted]
 ADR-034-mcp-tier1-verify-loop.adoc
 
 Generated code is linted and tested by the server before it is reported as
 done.
 
-==== ADR-035: Realtime Redis-backed Pub/Sub [Proposed]
-
+==== ADR-035: Realtime Redis-backed Pub/Sub [Accepted]
 ADR-035-realtime-redis-scaling.adoc
 
 Sockets stay node-local; only routing intent crosses replicas via Redis.
 
 ==== ADR-036: One Error Convention [Accepted]
-
 ADR-036-error-convention.adoc
 
 Extends ADR-022 to *return* values. ADR-022 decided what a thrown error looks

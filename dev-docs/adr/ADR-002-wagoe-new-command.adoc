@@ -1,6 +1,7 @@
 == ADR-002: Implement `wagoe new` Command in Scaffolder
+:status: Superseded
 
-*Status:* Superseded (2026-08-02, BOU-259) +
+*Status:* Superseded. `bb scaffold new` was removed in BOU-259; `wagoe new` is the only project generator. +
 *Date:* 2026-01-26 +
 *Context:* Project Bootstrapping
 

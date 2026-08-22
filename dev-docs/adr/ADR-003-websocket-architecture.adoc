@@ -1,6 +1,7 @@
 == ADR-003: WebSocket Architecture for Real-time Module
+:status: Accepted
 
-*Status:* Proposed +
+*Status:* Accepted — `libs/realtime/`. +
 *Date:* 2026-02-04 +
 *Deciders:* Wagoe Core Team +
 *Context:* Real-time/WebSocket Module (Phase 5)
