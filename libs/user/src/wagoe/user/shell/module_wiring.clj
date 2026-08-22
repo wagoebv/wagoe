@@ -220,6 +220,7 @@
                                :email-sender (ig/ref :wagoe/email)
                                :config       config}}
 
-   :http
-   {:user-routes  (ig/ref :wagoe/user-routes)
-    :user-service (ig/ref :wagoe/user-service)}})
+   ;; :user-service stays named: the handler passes it to the test-reset
+   ;; endpoint and the readiness check. Routes are a collection (BOU-330).
+   :http   {:user-service (ig/ref :wagoe/user-service)}
+   :routes [(ig/ref :wagoe/user-routes)]})

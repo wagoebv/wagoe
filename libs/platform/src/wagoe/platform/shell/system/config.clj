@@ -32,8 +32,9 @@
   "The components every Wagoe application has, whatever it enables.
 
    `http-extras` carries what the modules contributed to `:wagoe/http-handler`
-   — tenant's `:extra-middleware`, admin's `:admin-routes` ref — because the
-   handler takes them as named keys rather than discovering them."
+   by name — tenant's `:extra-middleware`, user's `:user-service`. Routes are
+   not among them: they arrive as `module-routes`, one collection, so platform
+   holds no list of which modules may serve HTTP (BOU-330)."
   [config http-extras module-routes]
   (let [active   (:active config)
         http-cfg (config/http-config config)]
@@ -79,14 +80,23 @@
   ([config {:keys [extra-modules base-ns] :or {extra-modules #{} base-ns "wagoe"}}]
    (let [active     (:active config)
          known      (into core-keys (keys modules/framework-modules))
-         {:keys [components http]}
+         {:keys [components http routes]}
          (modules/framework-module-config
           active
           {:config            config
            :validation-config (get-in active [:wagoe/settings :user-validation] {})
            :extra-modules     (into modules/always-on-modules extra-modules)}
           modules/require-wiring!
-          requiring-resolve)]
-     (merge (core-components config http (modules/discovered-route-refs active known))
+          requiring-resolve)
+
+         ;; Built before the refs, so they can be filtered against what exists:
+         ;; a discovered module with a graph of its own need not have routes.
+         discovered (modules/discover-module-config
+                     active known base-ns modules/require-wiring! requiring-resolve)]
+     ;; Framework modules first, then the scaffolded ones — the order routes are
+     ;; concatenated in and mounted.
+     (merge (core-components config http
+                             (into (vec routes)
+                                   (modules/discovered-route-refs active known discovered)))
             components
-            (modules/discover-module-config active known base-ns modules/require-wiring!)))))
+            discovered))))

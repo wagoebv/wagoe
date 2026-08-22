@@ -45,10 +45,14 @@
                               wagoe.platform.shell.http.versioning/wrap-handler-with-version-headers
                               (fn [wrapped-handler _config] wrapped-handler)]
                   (ig/init-key :wagoe/http-handler
-                               {:user-routes {:api [{:path "/users" :methods {:get {:handler identity}}}]}
-                                :tenant-routes {:api [{:path "/tenants" :methods {:get {:handler identity}}}]}
-                                :membership-routes {:api [{:path "/tenants/:tenant-id/memberships"
-                                                           :methods {:get {:handler identity}}}]}
+                               {;; One collection, not a slot per module — a
+                                ;; module platform has never heard of
+                                ;; contributes the same way (BOU-330).
+                                :module-routes
+                                [{:api [{:path "/users" :methods {:get {:handler identity}}}]}
+                                 {:api [{:path "/tenants" :methods {:get {:handler identity}}}]}
+                                 {:api [{:path "/tenants/:tenant-id/memberships"
+                                         :methods {:get {:handler identity}}}]}]
                                 :router ::router
                                 :logger ::logger
                                 :metrics-emitter ::metrics
@@ -102,18 +106,25 @@
                               wagoe.platform.shell.http.versioning/wrap-handler-with-version-headers
                               (fn [wrapped-handler _config] wrapped-handler)]
                   (ig/init-key :wagoe/http-handler
-                               {:user-routes {:web [{:path "/profile"
-                                                     :meta {:middleware [:user-mw]}
-                                                     :methods {:get {:handler identity}}}]}
-                                :admin-routes {:web [{:path "/users"
-                                                      :meta {:middleware [:admin-mw]}
-                                                      :methods {:get {:handler identity}}}]}
-                                :workflow-routes {:web [{:path "/workflow"
-                                                         :meta {:middleware [:workflow-mw]}
-                                                         :methods {:get {:handler identity}}}]}
-                                :search-routes {:web [{:path "/search"
-                                                       :meta {:middleware [:search-mw]}
-                                                       :methods {:get {:handler identity}}}]}
+                               {;; The prefixes are the modules' own now: user
+                                ;; mounts at /web, admin/workflow/search under
+                                ;; /web/admin, and each says so (BOU-330).
+                                :module-routes
+                                [{:web [{:path "/profile"
+                                         :meta {:middleware [:user-mw]}
+                                         :methods {:get {:handler identity}}}]}
+                                 {:web-prefix "/web/admin"
+                                  :web [{:path "/users"
+                                         :meta {:middleware [:admin-mw]}
+                                         :methods {:get {:handler identity}}}]}
+                                 {:web-prefix "/web/admin"
+                                  :web [{:path "/workflow"
+                                         :meta {:middleware [:workflow-mw]}
+                                         :methods {:get {:handler identity}}}]}
+                                 {:web-prefix "/web/admin"
+                                  :web [{:path "/search"
+                                         :meta {:middleware [:search-mw]}
+                                         :methods {:get {:handler identity}}}]}]
                                 :router ::router
                                 :logger ::logger
                                 :metrics-emitter ::metrics
@@ -235,7 +246,7 @@
                     wagoe.platform.shell.http.versioning/apply-versioning (fn [routes _] (vec routes))
                     wagoe.platform.shell.http.versioning/wrap-handler-with-version-headers (fn [hh _] hh)]
         (ig/init-key :wagoe/http-handler
-                     {:user-routes {} :router ::r :logger ::l :metrics-emitter metrics
+                     {:module-routes [] :router ::r :logger ::l :metrics-emitter metrics
                       :error-reporter ::e :config config}))
       (let [metrics-route (first (filter #(= "/metrics" (:path %)) @captured-routes))
             handler       (get-in metrics-route [:methods :get :handler])
@@ -335,7 +346,7 @@
                               wagoe.platform.shell.http.versioning/wrap-handler-with-version-headers
                               (fn [h _] h)]
                   (ig/init-key :wagoe/http-handler
-                               (merge {:user-routes {:api []}
+                               (merge {:module-routes []
                                        :router ::router :logger ::logger
                                        :metrics-emitter ::metrics :tracer ::tracer
                                        :error-reporter ::error-reporter :config config

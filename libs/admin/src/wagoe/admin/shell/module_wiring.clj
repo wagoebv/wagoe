@@ -88,5 +88,6 @@
                                   :schema-provider (ig/ref :wagoe/admin-schema-provider)
                                   :user-service    (ig/ref :wagoe/user-service)
                                   :config          settings}}
-   :http
-   {:admin-routes (ig/ref :wagoe/admin-routes)}})
+   ;; A ref in a collection, not a named slot on the handler: platform holds no
+   ;; list of which modules may contribute routes (BOU-330).
+   :routes [(ig/ref :wagoe/admin-routes)]})

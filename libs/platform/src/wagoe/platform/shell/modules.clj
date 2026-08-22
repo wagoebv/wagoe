@@ -159,12 +159,28 @@
    Throws when a module key names a wiring namespace that will not load. The
    silent skip is the whole defect: a typo in a key — `:wagoe/tsaks`, or the
    `:active`/`:inactive` mix-up — produced no signal at all."
-  [active known-keys base-ns wiring-loadable?]
-  (reduce
+  ([active known-keys base-ns wiring-loadable?]
+   (discover-module-config active known-keys base-ns wiring-loadable? (constantly nil)))
+  ([active known-keys base-ns wiring-loadable? resolve-var]
+   (reduce
    (fn [acc k]
-     (let [module   (name k)
-           settings (get active k)
-           wiring   (symbol (str base-ns "." module ".shell.module-wiring"))]
+     (let [module    (name k)
+           settings  (get active k)
+           wiring    (symbol (str base-ns "." module ".shell.module-wiring"))
+           loadable? (and (not (false? (:enabled? settings)))
+                          (wiring-loadable? wiring))
+           ;; A module that describes its own graph gets it built, exactly as a
+           ;; framework module does. Without this a library outside
+           ;; `framework-modules` could have only the four keys the scaffolder
+           ;; writes — so a 31st library with a graph of its own still needed an
+           ;; entry in a platform table, which is the coupling BOU-330 removes.
+           ;;
+           ;; Its routes need no special case: `discovered-route-refs` refs
+           ;; `:wagoe/<name>-routes` by convention, and a module that has routes
+           ;; names its component that.
+           own-graph (when loadable?
+                       (when-let [build (resolve-var (symbol (str wiring) "ig-config"))]
+                         (build settings {:config {:active active}})))]
        (cond
          (false? (:enabled? settings))
          acc
@@ -178,6 +194,10 @@
                  {:type       :wagoe/module-wiring-not-found
                   :module-key k
                   :namespace  (str wiring)}))
+
+         own-graph
+         (do (log/info "Discovered module with its own graph" {:module module})
+             (merge acc (:components own-graph)))
 
          :else
          (do
@@ -197,8 +217,8 @@
                   {:enabled? true
                    :service  (ig/ref (keyword "wagoe" (str module "-service")))
                    :routes   (ig/ref (keyword "wagoe" (str module "-routes")))})))))
-   {}
-   (scaffolded-module-keys active known-keys)))
+    {}
+    (scaffolded-module-keys active known-keys))))
 
 (defn require-wiring!
   "Load `wiring-ns`. Returns true when it loaded, false when it does not exist,
@@ -220,13 +240,25 @@
                       e)))))
 
 (defn discovered-route-refs
-  "Integrant refs to every discovered module's routes key.
+  "Integrant refs to the routes of every discovered module that has any.
 
    The HTTP handler cannot name a generated module, so it takes the routes as a
-   collection — this is what the application puts in `:module-routes`."
-  [active known-keys]
-  (mapv #(ig/ref (keyword "wagoe" (str (name %) "-routes")))
-        (scaffolded-module-keys active known-keys)))
+   collection — this is what the application puts in `:module-routes`.
+
+   `built` is the config those modules produced, and the refs are filtered
+   against it. Referencing `:wagoe/<name>-routes` by convention alone was safe
+   only while every discovered module went through the scaffolder's four-key
+   shape, which always builds one. A module with a graph of its own need not
+   serve HTTP at all — a background-jobs library is exactly the kind of library
+   this is meant to welcome — and a ref to a component it never built is a
+   dangling ref, which Integrant refuses (BOU-330)."
+  ([active known-keys] (discovered-route-refs active known-keys nil))
+  ([active known-keys built]
+   (into []
+         (comp (map #(keyword "wagoe" (str (name %) "-routes")))
+               (filter #(or (nil? built) (contains? built %)))
+               (map ig/ref))
+         (scaffolded-module-keys active known-keys))))
 
 ;; =============================================================================
 ;; Framework module assembly (BOU-326)
@@ -313,9 +345,11 @@
 (defn framework-module-config
   "Integrant entries for the framework modules `active` switches on.
 
-   Returns `{:components {…} :http {…}}` — `:components` merges into the system
-   config, `:http` into `:wagoe/http-handler`, which is how tenant contributes
-   `:extra-middleware` and admin its `:admin-routes` ref.
+   Returns `{:components {…} :http {…} :routes [..]}`. `:components` merges into
+   the system config and `:http` into `:wagoe/http-handler` — that is how tenant
+   contributes `:extra-middleware`. `:routes` is a vector of refs to modules'
+   route components, which reach the handler as one collection rather than as a
+   named slot per module (BOU-330).
 
    `ctx` is what a module may need from the application and cannot know:
    `:config` (the whole loaded map), `:validation-config`, and `:enabled` — the
@@ -332,7 +366,7 @@
        (let [wiring (symbol (str "wagoe." lib ".shell.module-wiring"))]
          (cond
            (load-wiring! wiring)
-           (let [{:keys [components http]} (module-graph resolve-var k lib (get active k) ctx)
+           (let [{:keys [components http routes]} (module-graph resolve-var k lib (get active k) ctx)
                  clash (some (set (keys (:components acc))) (keys components))]
              (when clash
                (throw (ex-info (str "Two modules both wire " clash
@@ -340,7 +374,8 @@
                                {:type :wagoe/module-key-conflict :key clash :module k})))
              (-> acc
                  (update :components merge components)
-                 (update :http merge http)))
+                 (update :http merge http)
+                 (update :routes into (or routes []))))
 
            (contains? optional-modules k)
            (do (log/info (str "Skipping " k ": " wiring " is not on this classpath.")
@@ -353,5 +388,5 @@
                         "  Add the library to deps.edn, or remove " k
                         " from :active in resources/conf/<env>/config.edn.")
                    {:type :wagoe/module-library-missing :module-key k :namespace (str wiring)})))))
-     {:components {} :http {}}
+     {:components {} :http {} :routes []}
      (module-entries active extra-modules))))

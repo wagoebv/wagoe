@@ -29,6 +29,66 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ## [Unreleased]
 
+### Changed
+
+- **A library can serve HTTP without platform knowing it exists** (BOU-330).
+  `:wagoe/http-handler` destructured six named route slots — user, admin,
+  tenant, membership, workflow, search — each followed by its own copy of the
+  same prefix-and-normalise block. Every module's mount point and doc
+  visibility lived in platform, so a 31st library could not contribute a route
+  without editing platform: the inversion the library split was meant to remove.
+  Middleware was given injection in BOU-131; routes have it now.
+
+  Routes arrive as one collection. A module returns `:routes` from its
+  `ig-config` and says where its web routes mount with `:web-prefix` — admin,
+  workflow and search say `/web/admin`, everyone else gets `/web`. Admin's
+  slash redirect (`/web/admin` → `/web/admin/`) moved with it, as
+  `:extra-web`, because it is admin's route.
+
+  Module discovery asks any module for its own graph, not only the ones in
+  platform's table, so a library with components of its own needs no entry
+  anywhere in platform. A test proves it: `wagoe.widgets` is built, mounted and
+  served, and the test fails if any platform source ever mentions it.
+
+  The `:wagoe/http-handler` init-key is 106 lines, from 370. Platform
+  endpoints, the security configuration, the interceptor services and the
+  middleware pipeline are each their own function now. Both fail-loud
+  bootguards — CSRF enabled with a blank secret, rate limiting without a shared
+  cache in prod — were carried over whole and still refuse the boot.
+
+  Verified by diffing the route table: 99 routes before and after, identical
+  set, every path distinct so the concat order cannot change what matches.
+
+- **A scaffolded module's web routes mount under `/web`, as the scaffolder always
+  said they would** (BOU-330). `bb scaffold generate` writes
+  `normalized-web-routes` with the docstring *"WITHOUT /web prefix… these routes
+  will be mounted under /web by the top-level router"* — and the router did not.
+  Framework modules were prefixed; discovered ones were passed through raw, so a
+  generated module's web UI answered at `/products` while its own generated
+  comment said `/web/products`. Folding every contribution through one path
+  fixes it: measured in a generated project, `/web/products` now serves 200
+  where it was a 404.
+
+  **If you have a scaffolded module with web routes, its URLs move** — from
+  `/<path>` to `/web/<path>`. That is the documented contract finally being
+  kept, but it is a change to live URLs.
+
+  One regression, caught by an existing test: `service <module>` prunes refs to
+  the keys it dropped, and did so only for refs that were map values. With
+  routes in a collection, `service user` kept `:module-routes` pointing at
+  admin's and tenant's route keys, and Integrant refuses to build a config with
+  dangling refs — so the service died at boot. Pruning now reaches into
+  vectors, lists and sets.
+
+  Two more found in review, both mine: `discovered-route-refs` referenced
+  `:wagoe/<name>-routes` for every discovered module by convention, which was
+  safe only while all of them went through the scaffolder's four-key shape. A
+  module with a graph of its own need not serve HTTP — a background-jobs
+  library is exactly the kind this welcomes — and referencing routes it never
+  built is the same dangling ref, at boot. Refs are filtered against what the
+  modules actually built.
+
+
 ### Fixed
 
 - **The quickstart's last step 404'd** (BOU-328). It ended on

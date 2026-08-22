@@ -72,7 +72,10 @@
             (:store workflow-service)
             (:registry workflow-service)
             user-service)
-   :static []})
+   :static []
+   ;; Mounted alongside the admin UI rather than at /web, because that is where
+   ;; a reader looks for it. Platform used to hold this fact (BOU-330).
+   :web-prefix "/web/admin"})
 
 (defmethod ig/halt-key! :wagoe/workflow-routes
   [_ _routes]
@@ -97,5 +100,4 @@
                                :guard-registry {}}
     :wagoe/workflow-routes    {:workflow-service (ig/ref :wagoe/workflow)
                                :user-service     (ig/ref :wagoe/user-service)}}
-   :http
-   {:workflow-routes (ig/ref :wagoe/workflow-routes)}})
+   :routes [(ig/ref :wagoe/workflow-routes)]})

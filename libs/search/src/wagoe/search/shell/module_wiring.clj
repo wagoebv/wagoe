@@ -47,7 +47,10 @@
   (log/info "Initializing search routes")
   {:api    (search-http/search-routes (:engine search-service))
    :web    (search-http/search-web-routes (:engine search-service))
-   :static []})
+   :static []
+   ;; Mounted alongside the admin UI rather than at /web, because that is where
+   ;; a reader looks for it. Platform used to hold this fact (BOU-330).
+   :web-prefix "/web/admin"})
 
 (defmethod ig/halt-key! :wagoe/search-routes
   [_ _routes]
@@ -64,5 +67,4 @@
   {:components
    {:wagoe/search        {:db-ctx (ig/ref :wagoe/db-context)}
     :wagoe/search-routes {:search-service (ig/ref :wagoe/search)}}
-   :http
-   {:search-routes (ig/ref :wagoe/search-routes)}})
+   :routes [(ig/ref :wagoe/search-routes)]})

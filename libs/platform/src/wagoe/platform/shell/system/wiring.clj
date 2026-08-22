@@ -139,6 +139,59 @@
 ;; HTTP Handler
 ;; =============================================================================
 
+(def ^:private default-web-prefix
+  "Where a module's `:web` routes mount when it does not say.
+
+   `/web` is the ordinary answer; admin, workflow and search mount under
+   `/web/admin` and say so themselves. Platform used to hold that fact for all
+   six modules, which is why a seventh could not contribute routes without
+   editing this file (BOU-330)."
+  "/web")
+
+(defn- mount-web-routes
+  "Prefix a module's web routes and settle their doc visibility.
+
+   `:meta` is merged into the route root and `:no-doc` defaults to true: web UI
+   routes do not belong in the API documentation, and a module that wants one
+   listed says so in its own `:meta`."
+  [prefix routes]
+  (mapv (fn [{:keys [path meta] :as route}]
+          (-> route
+              (dissoc :meta)
+              (merge {:no-doc true} meta)
+              (assoc :path (str prefix path))))
+        routes))
+
+(defn module-route-contributions
+  "Fold every module's routes into {:static [..] :web [..] :api [..]}.
+
+   A contribution is what a module's `:wagoe/<name>-routes` component returns:
+
+     {:static     [..]   mounted as-is
+      :web        [..]   mounted under :web-prefix
+      :api        [..]   versioned by the caller
+      :web-prefix \"/web/admin\"   optional, defaults to \"/web\"
+      :extra-web  [..]   already-pathed routes, appended after the prefixed ones}
+
+   `:extra-web` exists for admin's slash redirect: `/web/admin/` is the module's
+   `/` route once prefixed, and the un-slashed `/web/admin` that people type
+   matched nothing and 404'd on a feature that works (BOU-229). That route is
+   admin's, is already absolutely pathed, and must not be prefixed again.
+
+   Order is the caller's: contributions are folded in the order given, and
+   within a contribution static comes before web. Public so a test can drive it
+   without an Integrant system."
+  [contributions]
+  (reduce (fn [acc {:keys [static web api web-prefix extra-web]}]
+            (-> acc
+                (update :static into (or static []))
+                (update :web into (mount-web-routes (or web-prefix default-web-prefix)
+                                                    (or web [])))
+                (update :web into (or extra-web []))
+                (update :api into (or api []))))
+          {:static [] :web [] :api []}
+          (remove nil? contributions)))
+
 (defn- build-test-reset-routes
   "Return a one-element vector containing the POST /test/reset reitit route
    when :test/reset-endpoint-enabled? is true in `config`, otherwise nil.
@@ -181,212 +234,91 @@
                          :no-doc  true
                          :skip-interceptors? true}}}])))
 
-(defmethod ig/init-key :wagoe/http-handler
-  [_ {:keys [user-routes admin-routes tenant-routes membership-routes workflow-routes search-routes module-routes router logger metrics-emitter tracer error-reporter error-enricher config tenant-service db-context cache i18n i18n-middleware user-service request-capture? extra-middleware]}]
-  (log/info "Initializing top-level HTTP handler with normalized routing and API versioning")
-  (require 'wagoe.platform.ports.http)
-  (require 'wagoe.platform.shell.interfaces.http.common)
-  (let [;; Import compile-routes function
-        compile-routes (ns-resolve 'wagoe.platform.ports.http 'compile-routes)
+(defn- interceptor-services
+  "What the HTTP interceptors are handed.
 
-        ;; Create health check handler
-        health-handler (let [health-fn (ns-resolve 'wagoe.platform.shell.interfaces.http.common 'health-check-handler)]
-                         (health-fn
-                          (get-in config [:active :wagoe/settings :name] "wagoe")
-                          (get-in config [:active :wagoe/settings :version] "unknown")
-                          nil))
+   The standard HTTP metrics are registered once here rather than per request:
+   some adapters reset a counter when it is re-registered."
+  [{:keys [logger metrics-emitter tracer error-reporter error-enricher cache config
+           csrf-config rate-limit-config]}]
+  (cond-> {:logger          logger
+           :metrics-emitter metrics-emitter
+           :metrics-handles (http-interceptors/register-http-metrics! metrics-emitter)
+           :tracer          tracer
+           :error-reporter  error-reporter
+           :csrf            csrf-config
+           :rate-limit      rate-limit-config
+           :cache           cache}
+    ;; Optional, dev-only: a fn from exception to {:code :category :fix},
+    ;; supplied by devtools via :wagoe/dev-error-enricher. Injected rather than
+    ;; resolved here — platform must not know the name of an optional library
+    ;; (BOU-131, BOU-321). Absent rather than nil, so an app that wired none is
+    ;; byte-identical to one built before this existed.
+    error-enricher (assoc :error-enricher error-enricher)
 
-        ;; Create readiness handler with dependency checks
-        readiness-handler-fn (ns-resolve 'wagoe.platform.shell.interfaces.http.common 'readiness-handler)
-        ready-handler (readiness-handler-fn db-context cache)
+    ;; The profile the app booted with. Interceptors decide what an error may
+    ;; say by environment, and they were reading only WAG_ENV and a `:config`
+    ;; key nothing put here — so a project that sets no WAG_ENV (every generated
+    ;; one) read as development wherever it ran. The config knows; pass it
+    ;; (BOU-321). Absent rather than nil when there is no profile, so the
+    ;; detector falls through to WAG_ENV as it always did.
+    (:wagoe/profile config) (assoc :environment (name (:wagoe/profile config)))))
 
-        ;; Define platform routes (health checks, etc.) in normalized format
-        platform-routes [{:path "/"
-                          :methods {:get {:handler (fn [request]
-                                                     ;; Redirect to login if not authenticated, users if authenticated
-                                                     (if (:user request)
-                                                       {:status 302
-                                                        :headers {"Location" "/web/users"}}
-                                                       {:status 302
-                                                        :headers {"Location" "/web/login"}}))
-                                          :summary "Home page (redirects to login or users)"
-                                          :no-doc true
-                                          :skip-interceptors? true}}}
-                         {:path "/health"
-                          :methods {:get {:handler health-handler
-                                          :summary "Health check endpoint"
-                                          :no-doc true
-                                          :skip-interceptors? true}}}
-                         {:path "/health/ready"
-                          :methods {:get {:handler ready-handler
-                                          :summary "Readiness check with dependency health"
-                                          :no-doc true
-                                          :skip-interceptors? true}}}
-                         {:path "/health/live"
-                          :methods {:get {:handler (fn [_] {:status 200
-                                                            :headers {"Content-Type" "application/json"}
-                                                            :body (cheshire.core/generate-string {:status "alive"})})
-                                          :summary "Liveness check"
-                                          :no-doc true
-                                          :skip-interceptors? true}}}
-                         ;; Prometheus scrape endpoint. Serves the text exposition
-                         ;; format from the active metrics component; the :no-op /
-                         ;; :datadog-statsd providers return an empty body, the
-                         ;; :prometheus provider returns real metrics.
-                         {:path "/metrics"
-                          :methods {:get {:handler (fn [_]
-                                                     {:status  200
-                                                      :headers {"Content-Type" "text/plain; version=0.0.4; charset=utf-8"}
-                                                      :body    (if (satisfies? metrics-ports/IMetricsExporter metrics-emitter)
-                                                                 (metrics-ports/export-metrics metrics-emitter :prometheus)
-                                                                 "")})
-                                          :summary "Prometheus metrics scrape endpoint"
-                                          :no-doc true
-                                          :skip-interceptors? true}}}]
+(defn- request-middleware
+  "The middleware every request passes through, outermost first.
 
-        ;; Extract user module routes (normalized format)
-        user-static-routes (or (:static user-routes) [])
-        user-web-routes (or (:web user-routes) [])
-        user-api-routes (or (:api user-routes) [])
+   `extra-middleware` is a seq of `(fn [handler] ...)` supplied by the
+   application — tenant resolution arrives this way. Platform provides the
+   pipeline; feature libraries inject their middleware, which is why platform
+   does not require the tenant library (BOU-200)."
+  [{:keys [extra-middleware i18n i18n-middleware]}]
+  (let [;; `:i18n` is still accepted. An app that upgrades platform without
+        ;; regenerating its config still passes the component under that key —
+        ;; the documented input until now — and dropping it would take the
+        ;; translation middleware out of the pipeline without erroring:
+        ;; handlers read `(get request :i18n/t identity)`, so every marker would
+        ;; render as its own keyword and the page would just look wrong. The
+        ;; resolve is dynamic and only runs when an app supplied the component,
+        ;; which means it already ships the lib, so this reintroduces no static
+        ;; dependency.
+        i18n-mw (or i18n-middleware
+                    (when i18n
+                      (log/warn (str "Deprecated: :wagoe/http-handler received :i18n. "
+                                     "Wire :wagoe/i18n-http-middleware from the i18n "
+                                     "module and pass it as :i18n-middleware instead "
+                                     "(BOU-131). Building the middleware here for now."))
+                      (let [wrap (requiring-resolve 'wagoe.i18n.shell.middleware/wrap-i18n)]
+                        (fn [handler] (wrap handler i18n)))))]
+    (concat
+     (or extra-middleware [])
+     (when i18n-mw [i18n-mw])
+     ;; HTML forms can only GET and POST, so a POST carrying _method=delete is
+     ;; how a form issues a DELETE. Applied innermost, after the app's own.
+     [(fn [handler]
+        (fn [request]
+          (if (= :post (:request-method request))
+            (let [method (or (get-in request [:form-params "_method"])
+                             (get-in request [:params "_method"]))]
+              (if method
+                (handler (assoc request :request-method (keyword (str/lower-case method))))
+                (handler request)))
+            (handler request))))])))
 
-        ;; User routes are in normalized format - use directly
-        user-normalized-static (when (seq user-static-routes) user-static-routes)
-        user-normalized-web (when (seq user-web-routes)
-                             ;; Add /web prefix to web routes and merge :meta into route root.
-                             ;; Always set :no-doc true — web UI routes never belong in API docs.
-                              (mapv (fn [{:keys [path meta] :as route}]
-                                      (-> route
-                                          (dissoc :meta)
-                                          (merge {:no-doc true} meta)
-                                          (assoc :path (str "/web" path))))
-                                    user-web-routes))
-        user-normalized-api (when (seq user-api-routes) user-api-routes)
+(defn- security-config
+  "CSRF and rate-limit settings, and the two guards that refuse to boot without
+   them.
 
-        ;; Extract admin module routes (normalized format) - may be nil if admin disabled
-        admin-static-routes (or (:static admin-routes) [])
-        admin-web-routes (or (:web admin-routes) [])
-        admin-api-routes (or (:api admin-routes) [])
+   Both are opt-in: a framework upgrade must not start 403-ing or 429-ing an
+   application that was working. What is not optional is failing loudly when the
+   configuration cannot do what it claims — an enabled CSRF interceptor with no
+   secret fails OPEN, and rate limiting without a shared cache is a per-process
+   counter wearing a global limit's name.
 
-        ;; Admin routes are in normalized format - use directly
-        admin-normalized-static (when (seq admin-static-routes) admin-static-routes)
-        admin-normalized-web (when (seq admin-web-routes)
-                              ;; Add /web/admin prefix to web routes and merge :meta into route root.
-                              ;; Always set :no-doc true — web UI routes never belong in API docs.
-                               (let [transformed (mapv (fn [{:keys [path meta] :as route}]
-                                                         (let [result (-> route
-                                                                          (dissoc :meta)
-                                                                          (merge {:no-doc true} meta)
-                                                                          (assoc :path (str "/web/admin" path)))]
-                                                           (log/info "Admin route transformation"
-                                                                     {:original-path path
-                                                                      :new-path (:path result)
-                                                                      :had-meta (some? meta)
-                                                                      :has-middleware (contains? result :middleware)
-                                                                      :result-keys (keys result)})
-                                                           result))
-                                                       admin-web-routes)
-                                     ;; The admin module's root route is "/", which the prefix above
-                                     ;; turns into "/web/admin/" — so the un-slashed "/web/admin" that
-                                     ;; people actually type matched nothing and 404'd on a feature
-                                     ;; that works. Redirect it to the canonical path (BOU-229).
-                                     ;; 302 rather than 301: browsers cache permanent redirects hard,
-                                     ;; and this mount point is configurable via :base-path.
-                                     slash-redirect {:path    "/web/admin"
-                                                     :no-doc  true
-                                                     :methods {:get {:handler (fn [_]
-                                                                                {:status  302
-                                                                                 :headers {"Location" "/web/admin/"}
-                                                                                 :body    ""})}}}]
-                                 (log/info "Total admin web routes transformed" {:count (count transformed)})
-                                 (conj transformed slash-redirect)))
-        admin-normalized-api (when (seq admin-api-routes) admin-api-routes)
-
-        ;; Extract tenant module routes (normalized format)
-        tenant-api-routes (or (:api tenant-routes) [])
-        tenant-normalized-api (when (seq tenant-api-routes) tenant-api-routes)
-
-        ;; Extract tenant membership module routes (normalized format)
-        membership-api-routes (or (:api membership-routes) [])
-        membership-normalized-api (when (seq membership-api-routes) membership-api-routes)
-
-        ;; Extract workflow module routes (normalized format) — may be nil if workflow disabled
-        workflow-web-routes-raw (or (:web workflow-routes) [])
-        workflow-api-routes (or (:api workflow-routes) [])
-
-        ;; Workflow web routes — mounted under /web/admin (same prefix as admin routes)
-        workflow-normalized-web (when (seq workflow-web-routes-raw)
-                                  (mapv (fn [{:keys [path meta] :as route}]
-                                          (-> route
-                                              (dissoc :meta)
-                                              (merge {:no-doc true} meta)
-                                              (assoc :path (str "/web/admin" path))))
-                                        workflow-web-routes-raw))
-        workflow-normalized-api (when (seq workflow-api-routes) workflow-api-routes)
-
-        ;; Extract search module routes (normalized format) — may be nil if search disabled
-        search-web-routes-raw (or (:web search-routes) [])
-        search-api-routes     (or (:api search-routes) [])
-
-        ;; Search web routes — mounted under /web/admin (same prefix as admin/workflow routes)
-        search-normalized-web (when (seq search-web-routes-raw)
-                                (mapv (fn [{:keys [path meta] :as route}]
-                                        (-> route
-                                            (dissoc :meta)
-                                            (merge {:no-doc true} meta)
-                                            (assoc :path (str "/web/admin" path))))
-                                      search-web-routes-raw))
-        search-normalized-api (when (seq search-api-routes) search-api-routes)
-
-        ;; Scaffolded modules, discovered from config rather than named here
-        ;; (BOU-311). Every other key in this let is a framework module this
-        ;; namespace knows by name; a generated module cannot be, so its routes
-        ;; arrive as a collection. Without this the module initialises and
-        ;; serves nothing, which is not what "scaffold, never hand-write" can
-        ;; mean.
-        discovered-api    (mapcat #(or (:api %) []) (or module-routes []))
-        discovered-web    (mapcat #(or (:web %) []) (or module-routes []))
-        discovered-static (mapcat #(or (:static %) []) (or module-routes []))
-
-        ;; Combine all API routes (unversioned at this point)
-        all-api-routes (concat (or user-normalized-api [])
-                               (or admin-normalized-api [])
-                               (or tenant-normalized-api [])
-                               (or membership-normalized-api [])
-                               (or workflow-normalized-api [])
-                               (or search-normalized-api [])
-                               ;; Versioned like everyone else's — a generated
-                               ;; module's /api routes should not sit outside
-                               ;; /api/v1 because nothing named them here.
-                               discovered-api)
-
-        ;; Apply API versioning to all API routes
-        ;; This wraps routes with /api/v1 prefix and creates backward compatibility redirects
-        versioned-api-routes (if (seq all-api-routes)
-                               (http-versioning/apply-versioning all-api-routes config)
-                               [])
-
-        ;; Conditionally build /test/reset route (test profile only).
-        ;; Deliberately NOT routed through apply-versioning — we want the
-        ;; literal path /test/reset, not /api/v1/test/reset.
-        test-reset-routes (build-test-reset-routes
-                           {:config         config
-                            :user-service   user-service
-                            :tenant-service tenant-service
-                            :db-context     db-context})
-
-        ;; Combine all routes: platform, static, web, and versioned API
-        all-normalized-routes (concat platform-routes
-                                      (or user-normalized-static [])
-                                      (or user-normalized-web [])
-                                      (or admin-normalized-static [])
-                                      (or admin-normalized-web [])
-                                      (or workflow-normalized-web [])
-                                      (or search-normalized-web [])
-                                      discovered-static
-                                      discovered-web
-                                      versioned-api-routes
-                                      (or test-reset-routes []))
-
+   Lifted out of `:wagoe/http-handler` whole, guards included, so that init-key
+   is about assembling a handler and this is about refusing to build a unsafe
+   one (BOU-330)."
+  [{:keys [config cache]}]
+  (let [
         ;; CSRF config consumed by http-csrf-protection interceptor.
         ;; Opt-in: disabled by default so a framework upgrade cannot 403 consumers
         ;; that don't yet emit tokens. Each app enables it (after emitting tokens in
@@ -438,35 +370,124 @@
                              "independently, so the effective global limit is limit x N. "
                              "Configure :wagoe/cache (Redis) for a shared limit."))))
 
-        ;; Build system services map for HTTP interceptors
-        ;; Register the standard HTTP metrics once so the request interceptor can
-        ;; emit them (registering per request would reset counters on some adapters).
-        metrics-handles (http-interceptors/register-http-metrics! metrics-emitter)
+        ]
+    {:csrf csrf-config :rate-limit rate-limit-config}))
 
-        system (cond-> {:logger logger
-                        :metrics-emitter metrics-emitter
-                        :metrics-handles metrics-handles
-                        :tracer tracer
-                        :error-reporter error-reporter
-                        ;; The profile the app booted with. Interceptors decide
-                        ;; what an error may say by environment, and they were
-                        ;; reading only WAG_ENV and a `:config` key nothing put
-                        ;; here — so a project that sets no WAG_ENV (every
-                        ;; generated one) read as development wherever it ran.
-                        ;; The config knows; pass it (BOU-321).
-                        :csrf csrf-config
-                        :rate-limit rate-limit-config
-                        :cache cache}
-                 ;; Optional, dev-only: a fn from exception to {:code :category
-                 ;; :fix}, supplied by devtools via :wagoe/dev-error-enricher.
-                 ;; Injected rather than resolved here — platform must not know
-                 ;; the name of an optional library (BOU-131, BOU-321). Absent
-                 ;; rather than nil, so an app that wired none is byte-identical
-                 ;; to one built before this existed.
-                 error-enricher (assoc :error-enricher error-enricher)
-                 ;; Absent rather than nil when the app has no profile, so the
-                 ;; detector falls through to WAG_ENV as it always did.
-                 (:wagoe/profile config) (assoc :environment (name (:wagoe/profile config))))
+(defn- platform-routes
+  "The endpoints every Wagoe application serves, whoever it is.
+
+   Health, readiness, liveness, the Prometheus scrape and the `/` redirect.
+   `:skip-interceptors?` on all of them: a liveness probe that needs a session
+   is not a liveness probe."
+  [{:keys [config db-context cache metrics-emitter]}]
+  (require 'wagoe.platform.shell.interfaces.http.common)
+  (let [health-fn      (ns-resolve 'wagoe.platform.shell.interfaces.http.common 'health-check-handler)
+        readiness-fn   (ns-resolve 'wagoe.platform.shell.interfaces.http.common 'readiness-handler)
+        health-handler (health-fn
+                        (get-in config [:active :wagoe/settings :name] "wagoe")
+                        (get-in config [:active :wagoe/settings :version] "unknown")
+                        nil)
+        ready-handler  (readiness-fn db-context cache)]
+    [{:path "/"
+      :methods {:get {:handler (fn [request]
+                                 ;; Signed in or not decides where "/" goes.
+                                 (if (:user request)
+                                   {:status 302 :headers {"Location" "/web/users"}}
+                                   {:status 302 :headers {"Location" "/web/login"}}))
+                      :summary "Home page (redirects to login or users)"
+                      :no-doc true
+                      :skip-interceptors? true}}}
+     {:path "/health"
+      :methods {:get {:handler health-handler
+                      :summary "Health check endpoint"
+                      :no-doc true
+                      :skip-interceptors? true}}}
+     {:path "/health/ready"
+      :methods {:get {:handler ready-handler
+                      :summary "Readiness check with dependency health"
+                      :no-doc true
+                      :skip-interceptors? true}}}
+     {:path "/health/live"
+      :methods {:get {:handler (fn [_] {:status 200
+                                        :headers {"Content-Type" "application/json"}
+                                        :body (cheshire.core/generate-string {:status "alive"})})
+                      :summary "Liveness check"
+                      :no-doc true
+                      :skip-interceptors? true}}}
+     ;; Serves the text exposition format from the active metrics component; the
+     ;; :no-op and :datadog-statsd providers return an empty body, :prometheus
+     ;; returns real metrics.
+     {:path "/metrics"
+      :methods {:get {:handler (fn [_]
+                                 {:status  200
+                                  :headers {"Content-Type" "text/plain; version=0.0.4; charset=utf-8"}
+                                  :body    (if (satisfies? metrics-ports/IMetricsExporter metrics-emitter)
+                                             (metrics-ports/export-metrics metrics-emitter :prometheus)
+                                             "")})
+                      :summary "Prometheus metrics scrape endpoint"
+                      :no-doc true
+                      :skip-interceptors? true}}}]))
+
+(defmethod ig/init-key :wagoe/http-handler
+  [_ {:keys [module-routes router logger metrics-emitter tracer error-reporter error-enricher config tenant-service db-context cache i18n i18n-middleware user-service request-capture? extra-middleware]}]
+  (log/info "Initializing top-level HTTP handler with normalized routing and API versioning")
+  (require 'wagoe.platform.ports.http)
+  (require 'wagoe.platform.shell.interfaces.http.common)
+  (let [compile-routes (ns-resolve 'wagoe.platform.ports.http 'compile-routes)
+
+        platform-routes (platform-routes {:config          config
+                                          :db-context      db-context
+                                          :cache           cache
+                                          :metrics-emitter metrics-emitter})
+
+        ;; Every module's routes, framework and scaffolded alike, arrive as a
+        ;; collection. Six named slots used to live in this destructuring —
+        ;; user, admin, tenant, membership, workflow, search — each with its own
+        ;; copy of the same prefix-and-normalise block, so a seventh library
+        ;; could not contribute a route without editing this file. Middleware
+        ;; was given this treatment in BOU-131; routes get it here (BOU-330).
+        {module-static :static
+         module-web    :web
+         module-api    :api} (module-route-contributions module-routes)
+
+        ;; Combine all API routes (unversioned at this point)
+        all-api-routes module-api
+
+        ;; Apply API versioning to all API routes
+        ;; This wraps routes with /api/v1 prefix and creates backward compatibility redirects
+        versioned-api-routes (if (seq all-api-routes)
+                               (http-versioning/apply-versioning all-api-routes config)
+                               [])
+
+        ;; Conditionally build /test/reset route (test profile only).
+        ;; Deliberately NOT routed through apply-versioning — we want the
+        ;; literal path /test/reset, not /api/v1/test/reset.
+        test-reset-routes (build-test-reset-routes
+                           {:config         config
+                            :user-service   user-service
+                            :tenant-service tenant-service
+                            :db-context     db-context})
+
+        ;; Combine all routes: platform, static, web, and versioned API
+        all-normalized-routes (concat platform-routes
+                                      module-static
+                                      module-web
+                                      versioned-api-routes
+                                      (or test-reset-routes []))
+
+        {csrf-config :csrf
+         rate-limit-config :rate-limit} (security-config {:config config :cache cache})
+
+        system (interceptor-services
+                {:logger            logger
+                 :metrics-emitter   metrics-emitter
+                 :tracer            tracer
+                 :error-reporter    error-reporter
+                 :error-enricher    error-enricher
+                 :cache             cache
+                 :config            config
+                 :csrf-config       csrf-config
+                 :rate-limit-config rate-limit-config})
 
         ;; i18n middleware is built by the i18n lib and injected
         ;; (:wagoe/i18n-http-middleware), the shape BOU-200 established for
@@ -475,43 +496,10 @@
         ;; Kept as its own injection point rather than folded into
         ;; extra-middleware so the pipeline position does not change.
         ;;
-        ;; `:i18n` is still accepted. An app that upgrades platform without
-        ;; regenerating its config still passes the component under that key —
-        ;; the documented input until now — and dropping it would take the
-        ;; translation middleware out of the pipeline without erroring:
-        ;; handlers read `(get request :i18n/t identity)`, so every marker would
-        ;; render as its own keyword and the page would just look wrong. The
-        ;; resolve is dynamic and only runs when an app supplied the component,
-        ;; which means it already ships the lib, so this reintroduces no static
-        ;; dependency.
-        i18n-mw (or i18n-middleware
-                    (when i18n
-                      (log/warn (str "Deprecated: :wagoe/http-handler received :i18n. "
-                                     "Wire :wagoe/i18n-http-middleware from the i18n "
-                                     "module and pass it as :i18n-middleware instead "
-                                     "(BOU-131). Building the middleware here for now."))
-                      (let [wrap (requiring-resolve 'wagoe.i18n.shell.middleware/wrap-i18n)]
-                        (fn [handler] (wrap handler i18n)))))
-
-        ;; Compile routes using router adapter with system services.
-        ;; `extra-middleware` is a seq of (fn [handler] ...) supplied by the app
-        ;; (e.g. tenant/membership middleware via :wagoe/tenant-http-middleware).
-        ;; Platform provides the pipeline; feature libs inject their middleware —
-        ;; platform no longer requires the tenant lib (BOU-200). Applied before the
-        ;; method-override middleware, matching the previous ordering.
-        router-config {:middleware (concat
-                                    (or extra-middleware [])
-                                    (when i18n-mw [i18n-mw])
-                                    [(fn [handler]
-                                       (fn [request]
-                                         (if (= :post (:request-method request))
-                                           (let [method (or (get-in request [:form-params "_method"])
-                                                            (get-in request [:params "_method"]))]
-                                             (if method
-                                               (let [override-method (keyword (str/lower-case method))]
-                                                 (handler (assoc request :request-method override-method)))
-                                               (handler request)))
-                                           (handler request))))])
+        router-config {:middleware (request-middleware
+                                    {:extra-middleware extra-middleware
+                                     :i18n             i18n
+                                     :i18n-middleware  i18n-middleware})
                        :system system}
         handler (compile-routes router all-normalized-routes router-config)
 
@@ -532,18 +520,13 @@
                         versioned-handler)]
 
     (log/info "Top-level HTTP handler initialized successfully"
-              {:user-routes {:static (count (or user-static-routes []))
-                             :web (count (or user-web-routes []))
-                             :api (count (or user-api-routes []))}
-               :admin-routes {:static (count (or admin-static-routes []))
-                              :web (count (or admin-web-routes []))
-                              :api (count (or admin-api-routes []))}
-               :tenant-routes {:api (count (or tenant-api-routes []))}
-               :membership-routes {:api (count (or membership-api-routes []))}
-               :workflow-routes {:web (count (or workflow-web-routes-raw []))
-                                 :api (count (or workflow-api-routes []))}
-               :search-routes {:web (count (or search-web-routes-raw []))
-                               :api (count (or search-api-routes []))}
+              {;; Counts rather than six named modules: this line named the
+               ;; same six the destructuring did, so a seventh library's routes
+               ;; were invisible in the boot log as well as unwireable.
+               :module-contributions (count (remove nil? module-routes))
+               :module-routes {:static (count module-static)
+                               :web    (count module-web)
+                               :api    (count module-api)}
                :versioned-api-routes (count versioned-api-routes)
                :total-normalized-routes (count all-normalized-routes)
                :router-adapter (class router)
