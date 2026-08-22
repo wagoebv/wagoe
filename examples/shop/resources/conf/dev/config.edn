@@ -1,0 +1,47 @@
+{;; shop — dev configuration
+ :active
+ {:wagoe/settings
+  {:name             "shop-dev"
+   :version          "0.1.0"
+   :date-format      "yyyy-MM-dd"
+   :date-time-format "yyyy-MM-dd HH:mm:ss"
+     ;; Auth cookies omit the Secure attribute for local HTTP dev.
+     ;; Defaults to true (HTTPS-only) when unset — set true behind TLS in prod.
+   :secure-cookies?  false
+   :features         {}}
+
+   ;; SQLite by default: no server to install, and unlike in-memory H2 the
+   ;; data survives a restart, so the first app you build still has its rows
+   ;; the next morning. Swap in :wagoe/postgresql when you need one.
+   ;; Key is :db — that is what the platform's config reader looks for
+   ;; (adapters/database/config.clj). :database-path is the *adapter* key it
+   ;; derives, not the config key; using it here yields database-path nil and
+   ;; a Malli "Invalid database configuration" failure at migrate time.
+  :wagoe/sqlite
+  {:db   "shop-dev.db"
+   :pool {:minimum-idle 1 :maximum-pool-size 10}}
+
+  :wagoe/http
+  {:port       #or [#env HTTP_PORT 3000]
+   :host       #or [#env HTTP_HOST "0.0.0.0"]
+   :join?      false
+   :port-range {:start 3000 :end 3099}}
+
+  :wagoe/router
+  {:adapter :reitit :coercion :malli :middleware []}
+
+   ;; Dev-only. An error over HTTP answers with its BND code and the fix, not
+   ;; just "Validation failed". Comes from wagoe-devtools, which lives in the
+   ;; :repl alias — so this key belongs in dev config and nowhere else. Delete
+   ;; it and errors go back to the plain shape production uses.
+  :wagoe/dev-error-enricher {}
+
+  :wagoe/logging
+  {:level :debug :console true}
+  ;; Product module (bb scaffold integrate)
+  :wagoe/product
+  {:enabled? true
+   :base-path "/api/product"}}
+
+ :inactive
+ {}}

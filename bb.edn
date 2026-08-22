@@ -102,6 +102,9 @@
                  :task (do (require 'agents-gen-test)
                            (let [s (clojure.test/run-tests 'agents-gen-test)]
                              (when (pos? (+ (:fail s) (:error s))) (System/exit 1))))}
+  example:regen {:doc "Regenerate examples/shop from this checkout's CLI + scaffolder (bb example:regen [--check])"
+                 :task (do (require 'example-regen)
+                           (apply (resolve 'example-regen/-main) *command-line-args*))}
   smoke-check   {:doc "Run command smoke checks (verify deps.edn aliases and key commands)"
                  :task (dev/smoke-check)}
   install-hooks {:doc "Configure git hooks path to .githooks"
