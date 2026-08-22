@@ -1,5 +1,5 @@
 = ADR-008: Normalized Routing Abstraction - Framework-Agnostic Route Definitions
-:status: Accepted
+:status: Superseded
 :revdate: 2024-12-06
 :revremark: Pluggable HTTP routing with normalized EDN schema
 :toc:
@@ -7,7 +7,10 @@
 
 == Status
 
-Accepted — the normalized route vectors in `wiring.clj`, `libs/user/src/wagoe/user/shell/http.clj`, and what `bb scaffold` generates.
+Superseded by xref:ADR-037-reitit-routes-directly.adoc[ADR-037]. The format and
+the `IRouter` port it was translated through are both gone; modules emit Reitit
+route data. What remains true is the `IHttpServer` half — the server is still
+pluggable, and that port has an implementation.
 
 == Context
 

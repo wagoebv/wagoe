@@ -197,16 +197,17 @@ log-all-actions          ; Logs all actions including failures
 ### Applying to Routes
 
 ```clojure
-;; Protect a route — apply per-method
-{:path    "/api/v1/users/:id"
- :methods {:get    {:handler      get-user-handler
-                    :interceptors user-endpoint-stack}
-           :put    {:handler      update-user-handler
-                    :interceptors [require-authenticated
-                                   require-self-or-admin
-                                   log-action]}
-           :delete {:handler      delete-user-handler
-                    :interceptors admin-endpoint-stack}}}
+;; Protect a route — apply per-method. The path is relative: /api/v1 is added
+;; when the module's :api contribution is mounted.
+["/users/:id"
+ {:get    {:handler      get-user-handler
+           :interceptors user-endpoint-stack}
+  :put    {:handler      update-user-handler
+           :interceptors [require-authenticated
+                          require-self-or-admin
+                          log-action]}
+  :delete {:handler      delete-user-handler
+           :interceptors admin-endpoint-stack}}]
 ```
 
 ---

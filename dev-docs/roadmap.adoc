@@ -23,9 +23,10 @@ the historical phase breakdown and the strategic notes at the end.
 *Goal: Make Wagoe usable for early adopters with minimal friction.*
 
 === Delivered
-- [x] Core APIs frozen (FC/IS, Interceptors, Normalized Routing)
-- [x] All modules use the normalized routing system
-- [x] Scaffolder generates normalized routes, interceptor hooks, CRUD stubs
+- [x] Core APIs frozen (FC/IS, Interceptors, Routing)
+- [x] All modules contribute routes through the same mechanism
+      (a normalized format then; Reitit route data since ADR-037)
+- [x] Scaffolder generates routes, interceptor hooks, CRUD stubs
 - [x] Beginner documentation: Getting Started, Your First Module, FC/IS guide
 - [x] Public release: GitHub open, Clojars deployment (`bb deploy --all`)
 - [x] 22 independently publishable libraries under `libs/` (+ `libs/tools` for dev tooling)

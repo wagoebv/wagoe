@@ -411,7 +411,31 @@ with your application.
                      :message "Must be a valid integer"}))))
 ```
 
-### 6. forward references — define before use
+### 6. module routes — the prefix is added for you
+
+- **Symptom:** A route answers at /api/v1/api/my-resource instead of /api/v1/my-resource, or the module serves nothing at all and says nothing about it.
+- **Cause:** A module's :wagoe/<name>-routes component returns a contribution — {:api [..] :web [..] :static [..]} — and the platform prefixes each part before mounting it: :api is versioned under /api/v1, :web mounted under /web. Paths written with the prefix already on them get it twice. A flat vector returned instead of the three-key map contributes zero routes, and nothing errors.
+- **Fix:** Write Reitit route data at paths relative to the mount point, and return the three-key map. `bb scaffold generate` writes both; this is what to preserve when editing by hand.
+
+```clojure
+;; WRONG — prefix written twice, and a flat vector instead of a contribution
+(defn my-routes [svc _config]
+  [["/api/my-resource"
+    {:get {:handler (fn [req] ...)}}]])
+
+;; CORRECT
+(defn api-routes [svc]
+  [["/my-resource"          ; no /api — versioning adds /api/v1
+    {:get {:handler (fn [req] ...)
+           :summary "..."}}]])
+
+(defn my-routes [svc config]
+  {:api    (api-routes svc)
+   :web    (web-routes svc config)   ; paths without /web
+   :static []})
+```
+
+### 7. forward references — define before use
 
 - **Symptom:** Unable to resolve symbol: my-helper in this context; Syntax error compiling.
 - **Cause:** Private helpers placed after the public functions that call them; Clojure compiles top-to-bottom.

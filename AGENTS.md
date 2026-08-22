@@ -713,23 +713,28 @@ java.time.temporal.ChronoUnit/DAYS
 (.length my-string)
 ```
 
-### 9. module API routes — wrong format (Reitit vectors vs normalized maps)
+### 9. module routes — the prefix is added for you
 
-- **Symptom:** IllegalArgumentException: Key must be integer at wrap-route-with-version on (ig-repl/go).
-- **Cause:** Module shell/http.clj returns Reitit-style route vectors instead of the normalized map format; the platform's apply-versioning calls (update route :path ...) which throws on vectors.
-- **Fix:** API routes in shell/http.clj MUST be vectors of maps [{:path "..." :methods {...}}], not Reitit vectors, and paths must NOT include the /api prefix (versioning adds /api/v1).
+- **Symptom:** A route answers at /api/v1/api/my-resource instead of /api/v1/my-resource, or the module serves nothing at all and says nothing about it.
+- **Cause:** A module's :wagoe/<name>-routes component returns a contribution — {:api [..] :web [..] :static [..]} — and the platform prefixes each part before mounting it: :api is versioned under /api/v1, :web mounted under /web. Paths written with the prefix already on them get it twice. A flat vector returned instead of the three-key map contributes zero routes, and nothing errors.
+- **Fix:** Write Reitit route data at paths relative to the mount point, and return the three-key map. `bb scaffold generate` writes both; this is what to preserve when editing by hand.
 
 ```clojure
-;; WRONG - Reitit-style tuple (do NOT use for module :api routes)
-(defn my-routes [svc]
+;; WRONG — prefix written twice, and a flat vector instead of a contribution
+(defn my-routes [svc _config]
   [["/api/my-resource"
     {:get {:handler (fn [req] ...)}}]])
 
-;; CORRECT - Normalized map format
-(defn my-routes [svc]
-  [{:path    "/my-resource"   ; NO /api prefix — versioning adds /api/v1
-    :methods {:get {:handler (fn [req] ...)
-                    :summary "..."}}}])
+;; CORRECT
+(defn api-routes [svc]
+  [["/my-resource"          ; no /api — versioning adds /api/v1
+    {:get {:handler (fn [req] ...)
+           :summary "..."}}]])
+
+(defn my-routes [svc config]
+  {:api    (api-routes svc)
+   :web    (web-routes svc config)   ; paths without /web
+   :static []})
 ```
 
 ### 10. forward references — define before use

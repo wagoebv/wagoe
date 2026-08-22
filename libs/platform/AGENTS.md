@@ -190,16 +190,20 @@ Disabled or secretless config makes it a pass-through.
 
 ### Route Specification Format
 
+Reitit route data — `[path data & children]` — with handlers as vars, so a typo
+is a lint error rather than a boot failure (ADR-037). Paths are relative: `/api/v1`
+is added when the module's `:api` contribution is mounted.
+
 ```clojure
-{:path    "/api/users"
- :methods {:get  {:handler  'wagoe.user.shell.http/list-users-handler
-                  :summary  "List users"
-                  :tags     ["users"]
-                  :parameters {:query [:map [:limit {:optional true} :int]]}}
-           :post {:handler  'wagoe.user.shell.http/create-user-handler
-                  :summary  "Create user"
-                  :tags     ["users"]
-                  :coercion {:body CreateUserRequest}}}}
+["/users"
+ {:get  {:handler    user-http/list-users-handler
+         :summary    "List users"
+         :tags       ["users"]
+         :parameters {:query [:map [:limit {:optional true} :int]]}}
+  :post {:handler  user-http/create-user-handler
+         :summary  "Create user"
+         :tags     ["users"]
+         :coercion {:body CreateUserRequest}}}]
 ```
 
 ### Creating a Router
@@ -235,12 +239,12 @@ Disabled or secretless config makes it a pass-through.
             (assoc ctx :response {:status 500 :body {:error "Internal error"}}))})
 
 ;; Apply to specific routes
-[{:path    "/api/admin"
-  :methods {:post {:handler     'handlers/create-resource
-                   :interceptors [require-admin
-                                  'audit/log-action
-                                  (http-rate-limit 10 60000 cache)]
-                   :summary     "Create admin resource"}}}]
+[["/admin"
+  {:post {:handler      handlers/create-resource
+          :interceptors [require-admin
+                         'audit/log-action
+                         (http-rate-limit 10 60000 cache)]
+          :summary      "Create admin resource"}}]]
 ```
 
 ---

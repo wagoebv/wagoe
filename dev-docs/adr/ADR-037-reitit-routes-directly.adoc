@@ -130,7 +130,10 @@ goes is the claim that they are interchangeable.
   route table. If two routes conflict today, nothing reports it; after this,
   the boot does. That is a feature, and it may mean fixing routes we did not
   know overlapped.
-* Pitfall #9 is deleted rather than reworded. There is one format.
+* Pitfall #9 keeps its slot and changes what it warns about. The two-format
+  confusion is gone; the trap that remains is the prefix, which the platform
+  adds to each part of a module's contribution. Writing `/api` into an `:api`
+  route now serves it at `/api/v1/api/…` — no exception, just a wrong URL.
 * `bb scaffold` generates Reitit data; the generated tutorial and
   `your-first-module.adoc` change with it, and the BOU-327 test that pins the
   tutorial to generator output will catch any half-migration.
