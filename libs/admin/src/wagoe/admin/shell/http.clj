@@ -40,59 +40,59 @@
   (let [;; Reuse existing auth middleware from user module
         auth-middleware (user-middleware/flexible-authentication-middleware user-service)]
 
-    [{:path "/"
-      :meta {:middleware [auth-middleware]}
-      :methods {:get {:handler (list-handlers/admin-home-handler admin-service schema-provider config)
-                      :summary "Admin home page"}}}
+    [["/"
+      {:middleware [auth-middleware]
+       :get {:handler (list-handlers/admin-home-handler admin-service schema-provider config)
+             :summary "Admin home page"}}]
 
       ;; More specific routes first (to avoid matching /:id patterns)
-     {:path "/:entity/new"
-      :meta {:middleware [auth-middleware]}
-      :methods {:get {:handler (detail/new-entity-handler admin-service schema-provider config)
-                      :summary "Create form page"}}}
+     ["/:entity/new"
+      {:middleware [auth-middleware]
+       :get {:handler (detail/new-entity-handler admin-service schema-provider config)
+             :summary "Create form page"}}]
 
-     {:path "/:entity/table"
-      :meta {:middleware [auth-middleware]}
-      :methods {:get {:handler (list-handlers/entity-table-fragment-handler admin-service schema-provider config)
-                      :summary "HTMX table fragment"}}}
+     ["/:entity/table"
+      {:middleware [auth-middleware]
+       :get {:handler (list-handlers/entity-table-fragment-handler admin-service schema-provider config)
+             :summary "HTMX table fragment"}}]
 
-     {:path "/:entity/bulk-delete"
-      :meta {:middleware [auth-middleware]}
-      :methods {:post {:handler (delete/bulk-delete-handler admin-service schema-provider config)
-                       :summary "Bulk delete entities"}}}
+     ["/:entity/bulk-delete"
+      {:middleware [auth-middleware]
+       :post {:handler (delete/bulk-delete-handler admin-service schema-provider config)
+              :summary "Bulk delete entities"}}]
 
       ;; Inline editing routes (Week 2)
-     {:path "/:entity/:id/:field/edit"
-      :meta {:middleware [auth-middleware]}
-      :methods {:get {:handler (inline/inline-edit-widget-handler admin-service schema-provider config)
-                      :summary "Get inline edit form for field"}}}
+     ["/:entity/:id/:field/edit"
+      {:middleware [auth-middleware]
+       :get {:handler (inline/inline-edit-widget-handler admin-service schema-provider config)
+             :summary "Get inline edit form for field"}}]
 
-     {:path "/:entity/:id/:field/cancel"
-      :meta {:middleware [auth-middleware]}
-      :methods {:get {:handler (inline/cancel-inline-edit-handler admin-service schema-provider config)
-                      :summary "Cancel inline edit"}}}
+     ["/:entity/:id/:field/cancel"
+      {:middleware [auth-middleware]
+       :get {:handler (inline/cancel-inline-edit-handler admin-service schema-provider config)
+             :summary "Cancel inline edit"}}]
 
-     {:path "/:entity/:id/:field"
-      :meta {:middleware [auth-middleware]}
-      :methods {:patch {:handler (inline/update-field-handler admin-service schema-provider config)
-                        :summary "Update single field (inline edit)"}}}
+     ["/:entity/:id/:field"
+      {:middleware [auth-middleware]
+       :patch {:handler (inline/update-field-handler admin-service schema-provider config)
+               :summary "Update single field (inline edit)"}}]
 
       ;; General routes with path params last
-     {:path "/:entity"
-      :meta {:middleware [auth-middleware]}
-      :methods {:get {:handler (list-handlers/entity-list-handler admin-service schema-provider config)
-                      :summary "Entity list page"}
-                :post {:handler (crud/create-entity-handler admin-service schema-provider config)
-                       :summary "Create entity"}}}
+     ["/:entity"
+      {:middleware [auth-middleware]
+       :get {:handler (list-handlers/entity-list-handler admin-service schema-provider config)
+             :summary "Entity list page"}
+       :post {:handler (crud/create-entity-handler admin-service schema-provider config)
+              :summary "Create entity"}}]
 
-     {:path "/:entity/:id"
-      :meta {:middleware [auth-middleware]}
-      :methods {:get {:handler (detail/entity-detail-handler admin-service schema-provider config)
-                      :summary "Entity detail/edit page"}
-                :put {:handler (crud/update-entity-handler admin-service schema-provider config)
-                      :summary "Update entity"}
-                :delete {:handler (delete/delete-entity-handler admin-service schema-provider config)
-                         :summary "Delete entity"}}}]))
+     ["/:entity/:id"
+      {:middleware [auth-middleware]
+       :get {:handler (detail/entity-detail-handler admin-service schema-provider config)
+             :summary "Entity detail/edit page"}
+       :put {:handler (crud/update-entity-handler admin-service schema-provider config)
+             :summary "Update entity"}
+       :delete {:handler (delete/delete-entity-handler admin-service schema-provider config)
+                :summary "Delete entity"}}]]))
 
 (defn admin-routes-normalized
   "Normalized admin routes grouped by category.
@@ -116,9 +116,9 @@
    ;; people actually type matched nothing and 404'd on a feature that works
    ;; (BOU-229). 302 rather than 301: browsers cache permanent redirects hard,
    ;; and this mount point is configurable via :base-path.
-   :extra-web [{:path    "/web/admin"
-                :no-doc  true
-                :methods {:get {:handler (fn [_]
-                                           {:status  302
-                                            :headers {"Location" "/web/admin/"}
-                                            :body    ""})}}}]})
+   :extra-web [["/web/admin"
+                {:no-doc  true
+                 :get {:handler (fn [_]
+                                  {:status  302
+                                   :headers {"Location" "/web/admin/"}
+                                   :body    ""})}}]]})

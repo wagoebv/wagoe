@@ -41,10 +41,12 @@
   (try
     (let [component (ig/init-key :wagoe/storage {:provider :local :root test-root})
           routes    (ig/init-key :wagoe/storage-routes {:storage component})]
-      (testing "routes component exposes normalized :api vector"
+      (testing "routes component exposes Reitit :api data"
+        ;; [path {method {...}}] — ADR-037.
         (is (vector? (:api routes)))
-        (is (every? (every-pred :path :methods) (:api routes)))
-        (is (every? #(re-find #"^/storage" (:path %)) (:api routes))
+        (is (every? #(and (vector? %) (string? (first %)) (map? (second %)))
+                    (:api routes)))
+        (is (every? #(re-find #"^/storage" (first %)) (:api routes))
             "paths carry no /api prefix (versioning adds it)"))
       (ig/halt-key! :wagoe/storage component))
     (finally (cleanup))))

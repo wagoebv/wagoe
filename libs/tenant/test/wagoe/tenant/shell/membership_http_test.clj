@@ -353,9 +353,10 @@
       (is (contains? routes :api))
       (is (= 3 (count (:api routes))))))
 
-  (testing "all routes have :path and :methods"
+  (testing "every route is Reitit data with real handlers"
+    ;; [path {method {:handler f}}] — ADR-037.
     (doseq [route (:api (sut/membership-routes-normalized *mock-service*))]
-      (is (contains? route :path))
-      (is (contains? route :methods))
-      (doseq [[_method config] (:methods route)]
+      (is (vector? route))
+      (is (string? (first route)))
+      (doseq [[_method config] (second route)]
         (is (fn? (:handler config)))))))

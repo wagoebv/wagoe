@@ -237,11 +237,11 @@
                         :seed!          (fn [d] (seed! d))}
           handler      (make-handler deps)]
       (log/warn "Mounting /test/reset endpoint — test-profile only, DO NOT enable in production")
-      [{:path "/test/reset"
-        :methods {:post {:handler handler
-                         :summary "Playwright e2e reset + seed endpoint"
-                         :no-doc  true
-                         :skip-interceptors? true}}}])))
+      [["/test/reset"
+        {:post {:handler handler
+                :summary "Playwright e2e reset + seed endpoint"
+                :no-doc  true
+                :skip-interceptors? true}}]])))
 
 (defn- interceptor-services
   "What the HTTP interceptors are handed.

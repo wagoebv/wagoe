@@ -9,10 +9,14 @@
             [wagoe.user.shell.http-interceptors]
             [clojure.test :refer [deftest is testing]]))
 
-(defn- interceptors-of [routes path method]
+(defn- interceptors-of
+  "The interceptor fns guarding `path`'s `method`.
+
+   Reitit data: `[path {method {:interceptors [...]}}]` (ADR-037)."
+  [routes path method]
   (->> routes
-       (filter #(= path (:path %)))
-       first :methods method :interceptors
+       (filter #(= path (first %)))
+       first second method :interceptors
        (map #(deref (resolve %)))))
 
 (def ^:private api-routes (http/normalized-api-routes nil nil))

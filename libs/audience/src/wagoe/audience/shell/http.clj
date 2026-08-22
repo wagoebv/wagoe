@@ -275,53 +275,43 @@
 ;; =============================================================================
 
 (defn audience-web-routes
-  "Return normalized route definitions for the audience web pages.
-
-   Routes will be mounted under /web by the HTTP handler.
+  "Reitit route data for the audience web pages. Mounted under /web.
 
    Args:
      resolver - IAudienceResolver
-     store    - IAudienceRepository
-
-   Returns:
-     Vector of normalized route maps"
+     store    - IAudienceRepository"
   [resolver store]
-  [{:path    "/audiences"
-    :methods {:get {:handler (fn [req] (list-audiences-handler resolver store req))
-                    :summary "List audience segments"}}}
-   {:path    "/audiences/builder"
-    :methods {:get {:handler (fn [req] (builder-page-handler resolver store req))
-                    :summary "New audience builder page"}}}
-   {:path    "/audiences/builder/:id"
-    :methods {:get {:handler (fn [req] (builder-edit-handler resolver store req))
-                    :summary "Edit audience builder page"}}}])
+  [["/audiences"
+    {:get {:handler (fn [req] (list-audiences-handler resolver store req))
+           :summary "List audience segments"}}]
+   ["/audiences/builder"
+    {:get {:handler (fn [req] (builder-page-handler resolver store req))
+           :summary "New audience builder page"}}]
+   ["/audiences/builder/:id"
+    {:get {:handler (fn [req] (builder-edit-handler resolver store req))
+           :summary "Edit audience builder page"}}]])
 
 (defn audience-api-routes
-  "Return normalized route definitions for the audience API.
-
-   Routes will be mounted under /api by the HTTP handler.
+  "Reitit route data for the audience API. Mounted under /api/v1.
 
    Args:
      resolver - IAudienceResolver
-     store    - IAudienceRepository
-
-   Returns:
-     Vector of normalized route maps"
+     store    - IAudienceRepository"
   [resolver store]
-  [{:path    "/audiences"
-    :methods {:post {:handler (fn [req] (create-audience-handler resolver store req))
-                     :summary "Create audience segment"}}}
-   {:path    "/audiences/preview"
-    :methods {:post {:handler (fn [req] (preview-audience-handler resolver store req))
-                     :summary "Preview audience filter results"}}}
-   {:path    "/audiences/:id"
-    :methods {:put    {:handler (fn [req] (update-audience-handler resolver store req))
-                       :summary "Update audience segment"}
-              :delete {:handler (fn [req] (delete-audience-handler resolver store req))
-                       :summary "Delete audience segment"}}}
-   {:path    "/audiences/:id/evaluate"
-    :methods {:post {:handler (fn [req] (evaluate-audience-handler resolver store req))
-                     :summary "Evaluate and cache audience"}}}
-   {:path    "/audiences/:id/members"
-    :methods {:get {:handler (fn [req] (list-members-handler resolver store req))
-                    :summary "List audience member user-ids"}}}])
+  [["/audiences"
+    {:post {:handler (fn [req] (create-audience-handler resolver store req))
+            :summary "Create audience segment"}}]
+   ["/audiences/preview"
+    {:post {:handler (fn [req] (preview-audience-handler resolver store req))
+            :summary "Preview audience filter results"}}]
+   ["/audiences/:id"
+    {:put    {:handler (fn [req] (update-audience-handler resolver store req))
+              :summary "Update audience segment"}
+     :delete {:handler (fn [req] (delete-audience-handler resolver store req))
+              :summary "Delete audience segment"}}]
+   ["/audiences/:id/evaluate"
+    {:post {:handler (fn [req] (evaluate-audience-handler resolver store req))
+            :summary "Evaluate and cache audience"}}]
+   ["/audiences/:id/members"
+    {:get {:handler (fn [req] (list-members-handler resolver store req))
+           :summary "List audience member user-ids"}}]])

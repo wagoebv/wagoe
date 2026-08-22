@@ -261,43 +261,40 @@
                  :description "Storage key of the file"}]})
 
 (defn storage-routes
-  "Normalized module `:api` routes for storage endpoints.
+  "Reitit route data for the storage endpoints, as this module's `:api`.
 
-  Returns the framework's normalized route format (a vector of
-  `{:path … :methods {…}}` maps), NOT Reitit tuples — API versioning prepends
-  `/api/v1`, so paths here must NOT include an `/api` prefix (see AGENTS
-  pitfall #9).
+  Versioning prepends `/api/v1`, so paths here carry no `/api` prefix.
 
   Parameters:
   - storage-service: Instance of IStorageService
   - options: Map with optional :base-path (default: \"/storage\")"
   ([storage-service] (storage-routes storage-service {}))
   ([storage-service {:keys [base-path] :or {base-path "/storage"}}]
-   [{:path    (str base-path "/upload")
-     :methods {:post {:handler     (upload-file-handler storage-service)
-                      :summary     "Upload a file"
-                      :description "Upload a file with validation (max-size, allowed-types, allowed-extensions)."}}}
+   [[(str base-path "/upload")
+     {:post {:handler     (upload-file-handler storage-service)
+             :summary     "Upload a file"
+             :description "Upload a file with validation (max-size, allowed-types, allowed-extensions)."}}]
 
-    {:path    (str base-path "/upload/image")
-     :methods {:post {:handler     (upload-image-handler storage-service)
-                      :summary     "Upload an image with optional processing"
-                      :description "Upload an image and optionally create a thumbnail."}}}
+    [(str base-path "/upload/image")
+     {:post {:handler     (upload-image-handler storage-service)
+             :summary     "Upload an image with optional processing"
+             :description "Upload an image and optionally create a thumbnail."}}]
 
-    {:path    (str base-path "/download/:file-key")
-     :methods {:get {:handler (download-file-handler storage-service)
-                     :summary "Download a file"
-                     :swagger file-key-swagger}}}
+    [(str base-path "/download/:file-key")
+     {:get {:handler (download-file-handler storage-service)
+            :summary "Download a file"
+            :swagger file-key-swagger}}]
 
-    {:path    (str base-path "/delete/:file-key")
-     :methods {:delete {:handler (delete-file-handler storage-service)
-                        :summary "Delete a file"
-                        :swagger file-key-swagger}}}
+    [(str base-path "/delete/:file-key")
+     {:delete {:handler (delete-file-handler storage-service)
+               :summary "Delete a file"
+               :swagger file-key-swagger}}]
 
-    {:path    (str base-path "/url/:file-key")
-     :methods {:get {:handler (get-file-url-handler storage-service)
-                     :summary "Get a direct or signed URL for a file"
-                     :swagger {:parameters
-                               [{:name "file-key" :in "path" :required true :type "string"
-                                 :description "Storage key of the file"}
-                                {:name "expiration" :in "query" :required false :type "integer"
-                                 :description "Signed-URL lifetime in seconds (default 3600)"}]}}}}]))
+    [(str base-path "/url/:file-key")
+     {:get {:handler (get-file-url-handler storage-service)
+            :summary "Get a direct or signed URL for a file"
+            :swagger {:parameters
+                      [{:name "file-key" :in "path" :required true :type "string"
+                        :description "Storage key of the file"}
+                       {:name "expiration" :in "query" :required false :type "integer"
+                        :description "Signed-URL lifetime in seconds (default 3600)"}]}}}]]))

@@ -281,63 +281,63 @@
   [tenant-service db-context _config]
   {:api
    [;; Tenant collection endpoint
-    {:path "/tenants"
-     :methods {:get {:handler (list-tenants-handler tenant-service)
-                     :summary "List all tenants"
-                     :description "List tenants with optional filtering and pagination"
-                     :tags ["tenants"]
-                     :responses {200 {:description "List of tenants"}
-                                 400 {:description "Bad request"}}}
-               :post {:handler (create-tenant-handler tenant-service)
-                      :summary "Create new tenant"
-                      :description "Create a new tenant with name and slug"
-                      :tags ["tenants"]
-                      :responses {201 {:description "Tenant created successfully"}
-                                  400 {:description "Validation error"}}}}}
+    ["/tenants"
+     {:get {:handler (list-tenants-handler tenant-service)
+            :summary "List all tenants"
+            :description "List tenants with optional filtering and pagination"
+            :tags ["tenants"]
+            :responses {200 {:description "List of tenants"}
+                        400 {:description "Bad request"}}}
+      :post {:handler (create-tenant-handler tenant-service)
+             :summary "Create new tenant"
+             :description "Create a new tenant with name and slug"
+             :tags ["tenants"]
+             :responses {201 {:description "Tenant created successfully"}
+                         400 {:description "Validation error"}}}}]
 
     ;; Tenant resource endpoints
-    {:path "/tenants/:id"
-     :methods {:get {:handler (get-tenant-handler tenant-service)
-                     :summary "Get tenant by ID"
-                     :description "Retrieve tenant details by UUID"
-                     :tags ["tenants"]
-                     :responses {200 {:description "Tenant details"}
-                                 404 {:description "Tenant not found"}}}
-               :put {:handler (update-tenant-handler tenant-service)
-                     :summary "Update tenant"
-                     :description "Update tenant name, slug, or status"
-                     :tags ["tenants"]
-                     :responses {200 {:description "Tenant updated successfully"}
-                                 400 {:description "Validation error"}}}
-               :delete {:handler (delete-tenant-handler tenant-service)
-                        :summary "Delete tenant"
-                        :description "Soft delete tenant (marks as deleted)"
-                        :tags ["tenants"]
-                        :responses {200 {:description "Tenant deleted successfully"}
-                                    404 {:description "Tenant not found"}}}}}
+    ["/tenants/:id"
+     {:get {:handler (get-tenant-handler tenant-service)
+            :summary "Get tenant by ID"
+            :description "Retrieve tenant details by UUID"
+            :tags ["tenants"]
+            :responses {200 {:description "Tenant details"}
+                        404 {:description "Tenant not found"}}}
+      :put {:handler (update-tenant-handler tenant-service)
+            :summary "Update tenant"
+            :description "Update tenant name, slug, or status"
+            :tags ["tenants"]
+            :responses {200 {:description "Tenant updated successfully"}
+                        400 {:description "Validation error"}}}
+      :delete {:handler (delete-tenant-handler tenant-service)
+               :summary "Delete tenant"
+               :description "Soft delete tenant (marks as deleted)"
+               :tags ["tenants"]
+               :responses {200 {:description "Tenant deleted successfully"}
+                           404 {:description "Tenant not found"}}}}]
 
     ;; Tenant action endpoints
-    {:path "/tenants/:id/suspend"
-     :methods {:post {:handler (suspend-tenant-handler tenant-service)
-                      :summary "Suspend tenant"
-                      :description "Suspend tenant access (prevents login)"
-                      :tags ["tenants"]
-                      :responses {200 {:description "Tenant suspended successfully"}
-                                  404 {:description "Tenant not found"}}}}}
+    ["/tenants/:id/suspend"
+     {:post {:handler (suspend-tenant-handler tenant-service)
+             :summary "Suspend tenant"
+             :description "Suspend tenant access (prevents login)"
+             :tags ["tenants"]
+             :responses {200 {:description "Tenant suspended successfully"}
+                         404 {:description "Tenant not found"}}}}]
 
-    {:path "/tenants/:id/activate"
-     :methods {:post {:handler (activate-tenant-handler tenant-service)
-                      :summary "Activate tenant"
-                      :description "Activate suspended tenant"
-                      :tags ["tenants"]
-                      :responses {200 {:description "Tenant activated successfully"}
-                                  404 {:description "Tenant not found"}}}}}
+    ["/tenants/:id/activate"
+     {:post {:handler (activate-tenant-handler tenant-service)
+             :summary "Activate tenant"
+             :description "Activate suspended tenant"
+             :tags ["tenants"]
+             :responses {200 {:description "Tenant activated successfully"}
+                         404 {:description "Tenant not found"}}}}]
 
-    {:path "/tenants/:id/provision"
-     :methods {:post {:handler (provision-tenant-handler tenant-service db-context)
-                      :summary "Provision tenant schema"
-                      :description "Create database schema for tenant (PostgreSQL only). Idempotent operation."
-                      :tags ["tenants"]
-                      :responses {200 {:description "Tenant provisioned successfully"}
-                                  404 {:description "Tenant not found"}
-                                  501 {:description "Not supported (requires PostgreSQL)"}}}}}]})
+    ["/tenants/:id/provision"
+     {:post {:handler (provision-tenant-handler tenant-service db-context)
+             :summary "Provision tenant schema"
+             :description "Create database schema for tenant (PostgreSQL only). Idempotent operation."
+             :tags ["tenants"]
+             :responses {200 {:description "Tenant provisioned successfully"}
+                         404 {:description "Tenant not found"}
+                         501 {:description "Not supported (requires PostgreSQL)"}}}}]]})

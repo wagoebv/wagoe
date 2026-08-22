@@ -121,8 +121,10 @@
                       (or
                          ;; Iterate through routes IN ORDER (important for specificity)
                        (some (fn [route]
-                               (let [route-path (:path route)
-                                     route-methods (:methods route)]
+                               ;; Reitit data: [path data], where data carries
+                               ;; the endpoints and any route-level keys (ADR-037).
+                               (let [route-path (first route)
+                                     route-methods (second route)]
                                  (when (contains? route-methods method)
                                     ;; Match path pattern
                                    (let [route-parts (str/split route-path #"/")

@@ -355,143 +355,143 @@
      Vector of normalized route maps"
   [user-service mfa-service]
   (let [auth-middleware (user-middleware/flexible-authentication-middleware user-service)]
-    [{:path    "/users"
-      :meta    {:middleware [auth-middleware]}
-      :methods {:post {:handler      (create-user-handler user-service)
-                       :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
-                                      'wagoe.user.shell.http-interceptors/require-admin
-                                      'wagoe.user.shell.http-interceptors/log-action]
-                       :summary      "Create user"
-                       :tags         ["users"]
-                       :parameters   {:body [:map {:closed true}
-                                             [:email :string]
-                                             [:name :string]
-                                             [:password {:optional true} :string]
-                                             [:role [:enum "admin" "user" "viewer"]]
-                                             [:active {:optional true} :boolean]
-                                             ;; Preferences (flattened into user entity)
-                                             [:notificationsEmail {:optional true} :boolean]
-                                             [:notificationsPush {:optional true} :boolean]
-                                             [:notificationsSms {:optional true} :boolean]
-                                             [:theme {:optional true} [:enum "light" "dark" "auto"]]
-                                             [:language {:optional true} :string]
-                                             [:timezone {:optional true} :string]
-                                             [:dateFormat {:optional true} [:enum "iso" "us" "eu"]]
-                                             [:timeFormat {:optional true} [:enum "12h" "24h"]]]}}
-                :get  {:handler    (list-users-handler user-service)
-                       ;; Listing all users is an admin operation (consistent with
-                       ;; POST create); non-admins must not enumerate the directory.
-                       :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
-                                      'wagoe.user.shell.http-interceptors/require-admin]
-                       :summary    "List users with pagination and filters"
-                       :tags       ["users"]
-                       :parameters {:query [:map
-                                            [:limit {:optional true} :int]
-                                            [:offset {:optional true} :int]
-                                            [:role {:optional true} [:enum "admin" "user" "viewer"]]
-                                            [:active {:optional true} :boolean]]}}}}
-     {:path    "/users/:id"
-      :meta    {:middleware [auth-middleware]}
-      :methods {:get    {:handler    (get-user-handler user-service)
-                         ;; Read own record or admin — closes the cross-user IDOR
-                         ;; (a non-admin cannot fetch another user's record by :id).
-                         :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
-                                        'wagoe.user.shell.http-interceptors/require-self-or-admin]
-                         :summary    "Get user by ID"
-                         :tags       ["users"]
-                         :parameters {:path [:map [:id :string]]}}
-                :put    {:handler    (update-user-handler user-service)
-                         ;; Admin-only: the update body includes :role, so a
-                         ;; self-or-admin guard would allow privilege escalation
-                         ;; via self-edit. Self-service profile edits go through
-                         ;; the /profile web routes, which do not accept :role.
-                         :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
-                                        'wagoe.user.shell.http-interceptors/require-admin]
-                         :summary    "Update user"
-                         :tags       ["users"]
-                         :parameters {:path [:map [:id :string]]
-                                      :body [:map {:closed true}
-                                             [:name {:optional true} :string]
-                                             [:email {:optional true} :string]
-                                             [:role {:optional true} [:enum "admin" "user" "viewer"]]
-                                             [:active {:optional true} :boolean]
-                                             ;; Preferences (flattened into user entity)
-                                             [:notificationsEmail {:optional true} :boolean]
-                                             [:notificationsPush {:optional true} :boolean]
-                                             [:notificationsSms {:optional true} :boolean]
-                                             [:theme {:optional true} [:enum "light" "dark" "auto"]]
-                                             [:language {:optional true} :string]
-                                             [:timezone {:optional true} :string]
-                                             [:dateFormat {:optional true} [:enum "iso" "us" "eu"]]
-                                             [:timeFormat {:optional true} [:enum "12h" "24h"]]]}}
-                :delete {:handler    (delete-user-handler user-service)
-                         ;; Admin-only: deleting a user is an administrative action.
-                         :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
-                                        'wagoe.user.shell.http-interceptors/require-admin]
-                         :summary    "Soft delete user"
-                         :tags       ["users"]
-                         :parameters {:path [:map [:id :string]]}}}}
-     {:path    "/auth/login"
-      :methods {:post {:handler    (login-handler user-service)
-                       :summary    "Authenticate user with email/password"
-                       :tags       ["authentication"]
-                       :parameters {:body [:map {:closed true}
-                                           [:email :string]
-                                           [:password :string]
-                                           [:deviceInfo {:optional true} [:map
-                                                                          [:userAgent {:optional true} :string]
-                                                                          [:ipAddress {:optional true} :string]]]]}}}}
-     {:path    "/sessions"
-      :methods {:post {:handler    (create-session-handler user-service)
-                       :summary    "Create session (login by user ID)"
-                       :tags       ["sessions"]
-                       :parameters {:body [:or
-                                           [:map {:closed true}
-                                            [:userId :string]
-                                            [:deviceInfo {:optional true} [:map
-                                                                           [:userAgent {:optional true} :string]
-                                                                           [:ipAddress {:optional true} :string]]]]
-                                           [:map {:closed true}
-                                            [:email :string]
-                                            [:password :string]
-                                            [:deviceInfo {:optional true} [:map
-                                                                           [:userAgent {:optional true} :string]
-                                                                           [:ipAddress {:optional true} :string]]]]]}}}}
-     {:path    "/sessions/:token"
-      :methods {:get    {:handler    (validate-session-handler user-service)
-                         :summary    "Validate session"
-                         :tags       ["sessions"]
-                         :parameters {:path [:map [:token :string]]}}
-                :delete {:handler    (invalidate-session-handler user-service)
-                         :summary    "Invalidate session (logout)"
-                         :tags       ["sessions"]
-                         :parameters {:path [:map [:token :string]]}}}}
-     {:path    "/auth/mfa/setup"
-      :meta    {:middleware [(user-middleware/flexible-authentication-middleware user-service)]}
-      :methods {:post {:handler    (mfa-setup-handler mfa-service)
-                       :summary    "Initiate MFA setup"
-                       :tags       ["mfa"]
-                       :description "Returns TOTP secret, QR code URL, and backup codes for MFA setup"}}}
-     {:path    "/auth/mfa/enable"
-      :meta    {:middleware [(user-middleware/flexible-authentication-middleware user-service)]}
-      :methods {:post {:handler    (mfa-enable-handler mfa-service)
-                       :summary    "Enable MFA after verification"
-                       :tags       ["mfa"]
-                       :parameters {:body [:map {:closed true}
-                                           [:secret :string]
-                                           [:backupCodes [:vector :string]]
-                                           [:verificationCode :string]]}}}}
-     {:path    "/auth/mfa/disable"
-      :meta    {:middleware [(user-middleware/flexible-authentication-middleware user-service)]}
-      :methods {:post {:handler    (mfa-disable-handler mfa-service)
-                       :summary    "Disable MFA"
-                       :tags       ["mfa"]}}}
-     {:path    "/auth/mfa/status"
-      :meta    {:middleware [(user-middleware/flexible-authentication-middleware user-service)]}
-      :methods {:get {:handler    (mfa-status-handler mfa-service)
-                      :summary    "Get MFA status"
-                      :tags       ["mfa"]
-                      :description "Returns whether MFA is enabled and remaining backup codes"}}}]))
+    [["/users"
+      {:middleware [auth-middleware]
+       :post {:handler      (create-user-handler user-service)
+              :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
+                             'wagoe.user.shell.http-interceptors/require-admin
+                             'wagoe.user.shell.http-interceptors/log-action]
+              :summary      "Create user"
+              :tags         ["users"]
+              :parameters   {:body [:map {:closed true}
+                                    [:email :string]
+                                    [:name :string]
+                                    [:password {:optional true} :string]
+                                    [:role [:enum "admin" "user" "viewer"]]
+                                    [:active {:optional true} :boolean]
+                                    ;; Preferences (flattened into user entity)
+                                    [:notificationsEmail {:optional true} :boolean]
+                                    [:notificationsPush {:optional true} :boolean]
+                                    [:notificationsSms {:optional true} :boolean]
+                                    [:theme {:optional true} [:enum "light" "dark" "auto"]]
+                                    [:language {:optional true} :string]
+                                    [:timezone {:optional true} :string]
+                                    [:dateFormat {:optional true} [:enum "iso" "us" "eu"]]
+                                    [:timeFormat {:optional true} [:enum "12h" "24h"]]]}}
+       :get  {:handler    (list-users-handler user-service)
+              ;; Listing all users is an admin operation (consistent with
+              ;; POST create); non-admins must not enumerate the directory.
+              :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
+                             'wagoe.user.shell.http-interceptors/require-admin]
+              :summary    "List users with pagination and filters"
+              :tags       ["users"]
+              :parameters {:query [:map
+                                   [:limit {:optional true} :int]
+                                   [:offset {:optional true} :int]
+                                   [:role {:optional true} [:enum "admin" "user" "viewer"]]
+                                   [:active {:optional true} :boolean]]}}}]
+     ["/users/:id"
+      {:middleware [auth-middleware]
+       :get    {:handler    (get-user-handler user-service)
+                ;; Read own record or admin — closes the cross-user IDOR
+                ;; (a non-admin cannot fetch another user's record by :id).
+                :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
+                               'wagoe.user.shell.http-interceptors/require-self-or-admin]
+                :summary    "Get user by ID"
+                :tags       ["users"]
+                :parameters {:path [:map [:id :string]]}}
+       :put    {:handler    (update-user-handler user-service)
+                ;; Admin-only: the update body includes :role, so a
+                ;; self-or-admin guard would allow privilege escalation
+                ;; via self-edit. Self-service profile edits go through
+                ;; the /profile web routes, which do not accept :role.
+                :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
+                               'wagoe.user.shell.http-interceptors/require-admin]
+                :summary    "Update user"
+                :tags       ["users"]
+                :parameters {:path [:map [:id :string]]
+                             :body [:map {:closed true}
+                                    [:name {:optional true} :string]
+                                    [:email {:optional true} :string]
+                                    [:role {:optional true} [:enum "admin" "user" "viewer"]]
+                                    [:active {:optional true} :boolean]
+                                    ;; Preferences (flattened into user entity)
+                                    [:notificationsEmail {:optional true} :boolean]
+                                    [:notificationsPush {:optional true} :boolean]
+                                    [:notificationsSms {:optional true} :boolean]
+                                    [:theme {:optional true} [:enum "light" "dark" "auto"]]
+                                    [:language {:optional true} :string]
+                                    [:timezone {:optional true} :string]
+                                    [:dateFormat {:optional true} [:enum "iso" "us" "eu"]]
+                                    [:timeFormat {:optional true} [:enum "12h" "24h"]]]}}
+       :delete {:handler    (delete-user-handler user-service)
+                ;; Admin-only: deleting a user is an administrative action.
+                :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
+                               'wagoe.user.shell.http-interceptors/require-admin]
+                :summary    "Soft delete user"
+                :tags       ["users"]
+                :parameters {:path [:map [:id :string]]}}}]
+     ["/auth/login"
+      {:post {:handler    (login-handler user-service)
+              :summary    "Authenticate user with email/password"
+              :tags       ["authentication"]
+              :parameters {:body [:map {:closed true}
+                                  [:email :string]
+                                  [:password :string]
+                                  [:deviceInfo {:optional true} [:map
+                                                                 [:userAgent {:optional true} :string]
+                                                                 [:ipAddress {:optional true} :string]]]]}}}]
+     ["/sessions"
+      {:post {:handler    (create-session-handler user-service)
+              :summary    "Create session (login by user ID)"
+              :tags       ["sessions"]
+              :parameters {:body [:or
+                                  [:map {:closed true}
+                                   [:userId :string]
+                                   [:deviceInfo {:optional true} [:map
+                                                                  [:userAgent {:optional true} :string]
+                                                                  [:ipAddress {:optional true} :string]]]]
+                                  [:map {:closed true}
+                                   [:email :string]
+                                   [:password :string]
+                                   [:deviceInfo {:optional true} [:map
+                                                                  [:userAgent {:optional true} :string]
+                                                                  [:ipAddress {:optional true} :string]]]]]}}}]
+     ["/sessions/:token"
+      {:get    {:handler    (validate-session-handler user-service)
+                :summary    "Validate session"
+                :tags       ["sessions"]
+                :parameters {:path [:map [:token :string]]}}
+       :delete {:handler    (invalidate-session-handler user-service)
+                :summary    "Invalidate session (logout)"
+                :tags       ["sessions"]
+                :parameters {:path [:map [:token :string]]}}}]
+     ["/auth/mfa/setup"
+      {:middleware [(user-middleware/flexible-authentication-middleware user-service)]
+       :post {:handler    (mfa-setup-handler mfa-service)
+              :summary    "Initiate MFA setup"
+              :tags       ["mfa"]
+              :description "Returns TOTP secret, QR code URL, and backup codes for MFA setup"}}]
+     ["/auth/mfa/enable"
+      {:middleware [(user-middleware/flexible-authentication-middleware user-service)]
+       :post {:handler    (mfa-enable-handler mfa-service)
+              :summary    "Enable MFA after verification"
+              :tags       ["mfa"]
+              :parameters {:body [:map {:closed true}
+                                  [:secret :string]
+                                  [:backupCodes [:vector :string]]
+                                  [:verificationCode :string]]}}}]
+     ["/auth/mfa/disable"
+      {:middleware [(user-middleware/flexible-authentication-middleware user-service)]
+       :post {:handler    (mfa-disable-handler mfa-service)
+              :summary    "Disable MFA"
+              :tags       ["mfa"]}}]
+     ["/auth/mfa/status"
+      {:middleware [(user-middleware/flexible-authentication-middleware user-service)]
+       :get {:handler    (mfa-status-handler mfa-service)
+             :summary    "Get MFA status"
+             :tags       ["mfa"]
+             :description "Returns whether MFA is enabled and remaining backup codes"}}]]))
 
 (defn normalized-web-routes
   "Define web UI routes in normalized format (WITHOUT /web prefix).
@@ -509,198 +509,198 @@
   [user-service mfa-service config]
   (let [auth-middleware (user-middleware/flexible-authentication-middleware user-service)
         email-sender    (:email-sender config)]
-    [{:path    ""
-      :meta    {:no-doc true}
-      :methods {:get {:handler (web-handlers/web-root-page-handler user-service config)
-                      :summary "Web root landing page"}}}
-     {:path    "/register"
-      :meta    {:no-doc true}
-      :methods {:get  {:handler (web-handlers/register-page-handler config)
-                       :summary "Self-service registration page"}
-                :post {:handler (web-handlers/register-submit-handler user-service config)
-                       :summary "Submit registration form"}}}
-     {:path    "/login"
-      :meta    {:no-doc true}
-      :methods {:get  {:handler (web-handlers/login-page-handler config)
-                       :summary "Login page"}
-                :post {:handler (web-handlers/login-submit-handler user-service config)
-                       :summary "Submit login form"}}}
-     {:path    "/logout"
-      :meta    {:no-doc true}
-      :methods {:post {:middleware [auth-middleware]
-                       :handler    (web-handlers/logout-handler user-service config)
-                       :summary    "Logout current user"}}}
-     {:path    "/dashboard"
-      :meta    {:no-doc     true
-                :middleware [auth-middleware]}
-      :methods {:get {:handler (web-handlers/dashboard-page-handler user-service mfa-service config)
-                      :summary "User dashboard page"}}}
+    [[""
+      {:no-doc true
+       :get {:handler (web-handlers/web-root-page-handler user-service config)
+             :summary "Web root landing page"}}]
+     ["/register"
+      {:no-doc true
+       :get  {:handler (web-handlers/register-page-handler config)
+              :summary "Self-service registration page"}
+       :post {:handler (web-handlers/register-submit-handler user-service config)
+              :summary "Submit registration form"}}]
+     ["/login"
+      {:no-doc true
+       :get  {:handler (web-handlers/login-page-handler config)
+              :summary "Login page"}
+       :post {:handler (web-handlers/login-submit-handler user-service config)
+              :summary "Submit login form"}}]
+     ["/logout"
+      {:no-doc true
+       :post {:middleware [auth-middleware]
+              :handler    (web-handlers/logout-handler user-service config)
+              :summary    "Logout current user"}}]
+     ["/dashboard"
+      {:no-doc     true
+                :middleware [auth-middleware]
+       :get {:handler (web-handlers/dashboard-page-handler user-service mfa-service config)
+             :summary "User dashboard page"}}]
      ;; User creation routes (admin-only). The admin panel delegates to this flow
      ;; for split-table entities like :users where the generic admin create cannot
      ;; write both auth_users and users atomically.
-     {:path    "/users/new"
-      :meta    {:no-doc     true
-                :middleware [auth-middleware user-middleware/require-admin-middleware]}
-      :methods {:get {:handler (web-handlers/create-user-page-handler config)
-                      :summary "Create user page"}}}
-     {:path    "/users"
-      :meta    {:no-doc     true
-                :middleware [auth-middleware user-middleware/require-admin-middleware]}
-      :methods {:get  {:handler (web-handlers/users-page-handler user-service config)
-                       :summary "Users management list page (admin)"}
-                :post {:handler (web-handlers/create-user-htmx-handler user-service email-sender config)
-                       :summary "Create user (HTMX fragment)"}}}
-     {:path    "/users/table"
-      :meta    {:no-doc     true
-                :middleware [auth-middleware]}
-      :methods {:get {:handler (web-handlers/users-table-fragment-handler user-service config)
-                      :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
-                                     'wagoe.user.shell.http-interceptors/require-admin]
-                      :summary "Users table fragment (HTMX refresh)"}}}
-     {:path    "/users/bulk"
-      :meta    {:no-doc     true
-                :middleware [auth-middleware]}
-      :methods {:post {:handler (web-handlers/bulk-update-users-htmx-handler user-service config)
-                       :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
-                                      'wagoe.user.shell.http-interceptors/require-admin]
-                       :summary "Bulk user operations (HTMX)"}}}
-     {:path    "/users/:id"
-      :meta    {:no-doc     true
-                :middleware [auth-middleware]}
-      :methods {:get    {:handler (web-handlers/user-detail-page-handler user-service config)
-                         ;; Admin-only: this is the user-MANAGEMENT detail page
-                         ;; (edit/deactivate/delete controls). Self-service lives at
-                         ;; /web/profile, so a non-admin has no reason to load it —
-                         ;; not even for their own id.
-                         :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
-                                        'wagoe.user.shell.http-interceptors/require-admin]
-                         :summary "User detail page (admin)"}
-                :put    {:handler (web-handlers/update-user-htmx-handler user-service config)
-                         ;; Admin-only: updates include role — self-or-admin would
-                         ;; allow privilege escalation via self-edit.
-                         :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
-                                        'wagoe.user.shell.http-interceptors/require-admin]
-                         :summary "Update user (HTMX)"}
-                :delete {:handler (web-handlers/delete-user-htmx-handler user-service config)
-                         :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
-                                        'wagoe.user.shell.http-interceptors/require-admin]
-                         :summary "Deactivate user (HTMX)"}}}
-     {:path    "/users/:id/hard-delete"
-      :meta    {:no-doc     true
-                :middleware [auth-middleware]}
-      :methods {:post {:handler (web-handlers/hard-delete-user-handler user-service config)
-                       :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
-                                      'wagoe.user.shell.http-interceptors/require-admin]
-                       :summary "Permanently delete user (admin)"}}}
+     ["/users/new"
+      {:no-doc     true
+                :middleware [auth-middleware user-middleware/require-admin-middleware]
+       :get {:handler (web-handlers/create-user-page-handler config)
+             :summary "Create user page"}}]
+     ["/users"
+      {:no-doc     true
+                :middleware [auth-middleware user-middleware/require-admin-middleware]
+       :get  {:handler (web-handlers/users-page-handler user-service config)
+              :summary "Users management list page (admin)"}
+       :post {:handler (web-handlers/create-user-htmx-handler user-service email-sender config)
+              :summary "Create user (HTMX fragment)"}}]
+     ["/users/table"
+      {:no-doc     true
+                :middleware [auth-middleware]
+       :get {:handler (web-handlers/users-table-fragment-handler user-service config)
+             :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
+                            'wagoe.user.shell.http-interceptors/require-admin]
+             :summary "Users table fragment (HTMX refresh)"}}]
+     ["/users/bulk"
+      {:no-doc     true
+                :middleware [auth-middleware]
+       :post {:handler (web-handlers/bulk-update-users-htmx-handler user-service config)
+              :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
+                             'wagoe.user.shell.http-interceptors/require-admin]
+              :summary "Bulk user operations (HTMX)"}}]
+     ["/users/:id"
+      {:no-doc     true
+                :middleware [auth-middleware]
+       :get    {:handler (web-handlers/user-detail-page-handler user-service config)
+                ;; Admin-only: this is the user-MANAGEMENT detail page
+                ;; (edit/deactivate/delete controls). Self-service lives at
+                ;; /web/profile, so a non-admin has no reason to load it —
+                ;; not even for their own id.
+                :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
+                               'wagoe.user.shell.http-interceptors/require-admin]
+                :summary "User detail page (admin)"}
+       :put    {:handler (web-handlers/update-user-htmx-handler user-service config)
+                ;; Admin-only: updates include role — self-or-admin would
+                ;; allow privilege escalation via self-edit.
+                :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
+                               'wagoe.user.shell.http-interceptors/require-admin]
+                :summary "Update user (HTMX)"}
+       :delete {:handler (web-handlers/delete-user-htmx-handler user-service config)
+                :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
+                               'wagoe.user.shell.http-interceptors/require-admin]
+                :summary "Deactivate user (HTMX)"}}]
+     ["/users/:id/hard-delete"
+      {:no-doc     true
+                :middleware [auth-middleware]
+       :post {:handler (web-handlers/hard-delete-user-handler user-service config)
+              :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
+                             'wagoe.user.shell.http-interceptors/require-admin]
+              :summary "Permanently delete user (admin)"}}]
       ;; Session management routes (user-specific, not duplicated in admin)
-     {:path    "/users/:id/sessions"
-      :meta    {:no-doc     true
-                :middleware [auth-middleware]}
-      :methods {:get {:handler (web-handlers/user-sessions-page-handler user-service config)
-                      ;; The handler reads the :id path param, so a non-admin must
-                      ;; not view another user's sessions (IDOR) — own or admin only.
-                      :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
-                                     'wagoe.user.shell.http-interceptors/require-self-or-admin]
-                      :summary "User sessions management page"}}}
-     {:path    "/users/:id/sessions/revoke-all"
-      :meta    {:no-doc     true
-                :middleware [auth-middleware]}
-      :methods {:post {:handler (web-handlers/revoke-all-sessions-handler user-service config)
-                       ;; Revoking by :id path param — own or admin only, else a
-                       ;; non-admin could force-logout any user (IDOR / DoS).
-                       :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
-                                      'wagoe.user.shell.http-interceptors/require-self-or-admin]
-                       :summary "Revoke all user sessions"}}}
-     {:path    "/sessions/revoke"
-      :meta    {:no-doc     true
-                :middleware [auth-middleware]}
-      :methods {:post {:handler (web-handlers/revoke-session-handler user-service config)
-                       :summary "Revoke specific session"}}}
-     {:path    "/sessions/:token/revoke"
-      :meta    {:no-doc     true
-                :middleware [auth-middleware]}
-      :methods {:post {:handler (web-handlers/revoke-session-handler user-service config)
-                       :summary "Revoke specific session"}}}
+     ["/users/:id/sessions"
+      {:no-doc     true
+                :middleware [auth-middleware]
+       :get {:handler (web-handlers/user-sessions-page-handler user-service config)
+             ;; The handler reads the :id path param, so a non-admin must
+             ;; not view another user's sessions (IDOR) — own or admin only.
+             :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
+                            'wagoe.user.shell.http-interceptors/require-self-or-admin]
+             :summary "User sessions management page"}}]
+     ["/users/:id/sessions/revoke-all"
+      {:no-doc     true
+                :middleware [auth-middleware]
+       :post {:handler (web-handlers/revoke-all-sessions-handler user-service config)
+              ;; Revoking by :id path param — own or admin only, else a
+              ;; non-admin could force-logout any user (IDOR / DoS).
+              :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
+                             'wagoe.user.shell.http-interceptors/require-self-or-admin]
+              :summary "Revoke all user sessions"}}]
+     ["/sessions/revoke"
+      {:no-doc     true
+                :middleware [auth-middleware]
+       :post {:handler (web-handlers/revoke-session-handler user-service config)
+              :summary "Revoke specific session"}}]
+     ["/sessions/:token/revoke"
+      {:no-doc     true
+                :middleware [auth-middleware]
+       :post {:handler (web-handlers/revoke-session-handler user-service config)
+              :summary "Revoke specific session"}}]
      ;; Audit trail routes
-     {:path    "/audit"
-      :meta    {:no-doc     true
-                :middleware [auth-middleware]}
-      :methods {:get {:handler (web-handlers/audit-page-handler user-service config)
-                      :interceptors ['wagoe.user.shell.http-interceptors/require-platform-admin]
-                      :summary "Audit trail page"}}}
-     {:path    "/audit/table"
-      :meta    {:no-doc     true
-                :middleware [auth-middleware]}
-      :methods {:get {:handler (web-handlers/audit-table-fragment-handler user-service config)
-                      :interceptors ['wagoe.user.shell.http-interceptors/require-platform-admin]
-                      :summary "Audit table fragment (HTMX refresh)"}}}
+     ["/audit"
+      {:no-doc     true
+                :middleware [auth-middleware]
+       :get {:handler (web-handlers/audit-page-handler user-service config)
+             :interceptors ['wagoe.user.shell.http-interceptors/require-platform-admin]
+             :summary "Audit trail page"}}]
+     ["/audit/table"
+      {:no-doc     true
+                :middleware [auth-middleware]
+       :get {:handler (web-handlers/audit-table-fragment-handler user-service config)
+             :interceptors ['wagoe.user.shell.http-interceptors/require-platform-admin]
+             :summary "Audit table fragment (HTMX refresh)"}}]
       ;; Profile routes
-     {:path    "/profile"
-      :meta    {:no-doc     true
-                :middleware [auth-middleware]}
-      :methods {:get  {:handler (web-handlers/profile-page-handler user-service mfa-service config)
-                       :summary "User profile page"}
-                :post {:handler (web-handlers/profile-edit-handler user-service config)
-                       :summary "Update profile (HTMX fragment)"}}}
-     {:path    "/profile/edit"
-      :meta    {:no-doc     true
-                :middleware [auth-middleware]}
-      :methods {:get {:handler (web-handlers/profile-edit-form-handler user-service config)
-                      :summary "Show profile edit form (HTMX fragment)"}}}
-     {:path    "/profile/info"
-      :meta    {:no-doc     true
-                :middleware [auth-middleware]}
-      :methods {:get {:handler (web-handlers/profile-info-fragment-handler user-service config)
-                      :summary "Show profile info card (HTMX fragment)"}}}
-     {:path    "/profile/preferences/edit"
-      :meta    {:no-doc     true
-                :middleware [auth-middleware]}
-      :methods {:get {:handler (web-handlers/preferences-edit-form-handler user-service config)
-                      :summary "Show preferences edit form (HTMX fragment)"}}}
-     {:path    "/profile/preferences"
-      :meta    {:no-doc     true
-                :middleware [auth-middleware]}
-      :methods {:get  {:handler (web-handlers/preferences-fragment-handler user-service config)
-                       :summary "Show preferences card (HTMX fragment)"}
-                :post {:handler (web-handlers/preferences-edit-handler user-service config)
-                       :summary "Update preferences (HTMX fragment)"}}}
-     {:path    "/profile/password/form"
-      :meta    {:no-doc     true
-                :middleware [auth-middleware]}
-      :methods {:get {:handler (web-handlers/password-change-form-handler config)
-                      :summary "Show password change form (HTMX fragment)"}}}
-     {:path    "/profile/password"
-      :meta    {:no-doc     true
-                :middleware [auth-middleware]}
-      :methods {:get  {:handler (web-handlers/password-section-fragment-handler config)
-                       :summary "Show collapsed password section (HTMX fragment)"}
-                :post {:handler (web-handlers/password-change-handler user-service config)
-                       :summary "Change password (HTMX fragment)"}}}
+     ["/profile"
+      {:no-doc     true
+                :middleware [auth-middleware]
+       :get  {:handler (web-handlers/profile-page-handler user-service mfa-service config)
+              :summary "User profile page"}
+       :post {:handler (web-handlers/profile-edit-handler user-service config)
+              :summary "Update profile (HTMX fragment)"}}]
+     ["/profile/edit"
+      {:no-doc     true
+                :middleware [auth-middleware]
+       :get {:handler (web-handlers/profile-edit-form-handler user-service config)
+             :summary "Show profile edit form (HTMX fragment)"}}]
+     ["/profile/info"
+      {:no-doc     true
+                :middleware [auth-middleware]
+       :get {:handler (web-handlers/profile-info-fragment-handler user-service config)
+             :summary "Show profile info card (HTMX fragment)"}}]
+     ["/profile/preferences/edit"
+      {:no-doc     true
+                :middleware [auth-middleware]
+       :get {:handler (web-handlers/preferences-edit-form-handler user-service config)
+             :summary "Show preferences edit form (HTMX fragment)"}}]
+     ["/profile/preferences"
+      {:no-doc     true
+                :middleware [auth-middleware]
+       :get  {:handler (web-handlers/preferences-fragment-handler user-service config)
+              :summary "Show preferences card (HTMX fragment)"}
+       :post {:handler (web-handlers/preferences-edit-handler user-service config)
+              :summary "Update preferences (HTMX fragment)"}}]
+     ["/profile/password/form"
+      {:no-doc     true
+                :middleware [auth-middleware]
+       :get {:handler (web-handlers/password-change-form-handler config)
+             :summary "Show password change form (HTMX fragment)"}}]
+     ["/profile/password"
+      {:no-doc     true
+                :middleware [auth-middleware]
+       :get  {:handler (web-handlers/password-section-fragment-handler config)
+              :summary "Show collapsed password section (HTMX fragment)"}
+       :post {:handler (web-handlers/password-change-handler user-service config)
+              :summary "Change password (HTMX fragment)"}}]
      ;; MFA routes
-     {:path    "/profile/mfa/setup"
-      :meta    {:no-doc     true
-                :middleware [auth-middleware]}
-      :methods {:get  {:handler (web-handlers/mfa-setup-page-handler mfa-service config)
-                       :summary "MFA setup page"}
-                :post {:handler (web-handlers/mfa-setup-initiate-handler mfa-service config)
-                       :summary "Initiate MFA setup (HTMX fragment)"}}}
-     {:path    "/profile/mfa/verify"
-      :meta    {:no-doc     true
-                :middleware [auth-middleware]}
-      :methods {:post {:handler (web-handlers/mfa-verify-handler mfa-service config)
-                       :summary "Verify MFA code (HTMX fragment)"}}}
-     {:path    "/profile/mfa/backup-codes"
-      :meta    {:no-doc     true
-                :middleware [auth-middleware]}
-      :methods {:get {:handler (web-handlers/mfa-backup-codes-page-handler mfa-service config)
-                      :summary "View MFA backup codes"}}}
-     {:path    "/profile/mfa/disable"
-      :meta    {:no-doc     true
-                :middleware [auth-middleware]}
-      :methods {:get  {:handler (web-handlers/mfa-disable-page-handler mfa-service config)
-                       :summary "MFA disable confirmation page"}
-                :post {:handler (web-handlers/mfa-disable-handler user-service mfa-service config)
-                       :summary "Disable MFA"}}}]))
+     ["/profile/mfa/setup"
+      {:no-doc     true
+                :middleware [auth-middleware]
+       :get  {:handler (web-handlers/mfa-setup-page-handler mfa-service config)
+              :summary "MFA setup page"}
+       :post {:handler (web-handlers/mfa-setup-initiate-handler mfa-service config)
+              :summary "Initiate MFA setup (HTMX fragment)"}}]
+     ["/profile/mfa/verify"
+      {:no-doc     true
+                :middleware [auth-middleware]
+       :post {:handler (web-handlers/mfa-verify-handler mfa-service config)
+              :summary "Verify MFA code (HTMX fragment)"}}]
+     ["/profile/mfa/backup-codes"
+      {:no-doc     true
+                :middleware [auth-middleware]
+       :get {:handler (web-handlers/mfa-backup-codes-page-handler mfa-service config)
+             :summary "View MFA backup codes"}}]
+     ["/profile/mfa/disable"
+      {:no-doc     true
+                :middleware [auth-middleware]
+       :get  {:handler (web-handlers/mfa-disable-page-handler mfa-service config)
+              :summary "MFA disable confirmation page"}
+       :post {:handler (web-handlers/mfa-disable-handler user-service mfa-service config)
+              :summary "Disable MFA"}}]]))
 
 (defn user-routes-normalized
   "Define user module routes in normalized format for top-level composition.
