@@ -209,4 +209,6 @@
       (println "\nAI-ready: CLAUDE.md, AGENTS.md, a Claude Code skill, and a wired MCP server (.mcp.json) are included.")
       (println "Open Claude Code or Cursor here — the Wagoe MCP server is live, so the agent has Wagoe's tools immediately.")
       (println (str "\nNext:\n  cd " project-name
-                    "\n  bb quickstart        # download deps, migrate, optional first module, start")))))
+                    "\n  bb quickstart        # download deps, migrate, optional first module, start"
+                    "\n\nIf anything looks wrong, `wagoe doctor` checks the project and tells"
+                    "\nyou the one thing to fix. `bb guide` has the topic guides.")))))

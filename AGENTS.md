@@ -118,7 +118,9 @@ bb ai gen-tests libs/user/src/wagoe/user/core/validation.clj  # Generate test na
 bb ai sql "find active users with orders in last 7 days"          # HoneySQL from NL
 bb ai docs --module libs/user --type agents                       # Generate AGENTS.md
 bb ai admin-entity "products with name, price, status"            # Generate admin entity EDN config
-bb doctor                                          # Validate config for common mistakes
+wagoe doctor                                       # Diagnostics front door: environment + config
+                                                   # + commands + setup, one next action
+bb doctor                                          # Just the config checks
 bb doctor --env all --ci                           # Check all environments (CI mode)
 bb setup                                           # Interactive config setup wizard
 bb setup ai "PostgreSQL with Stripe"               # AI-powered config setup
@@ -1047,7 +1049,8 @@ Clojure's `{:or {limit 20 offset 0}}` destructuring only fires for **absent** ke
 |---|---|
 | `wagoe.tools.scaffold` | `bb scaffold` |
 | `wagoe.tools.ai` | `bb ai` |
-| `wagoe.tools.doctor` | `bb doctor` — config validation (6 rule-based checks) |
+| `wagoe.tools.doctor` | `bb doctor` — config validation (8 rule-based checks; `--edn` for `wagoe doctor`) |
+| `wagoe.tools.report` | the result shape the three diagnostics share, and its two renderers |
 | `wagoe.tools.setup` | `bb setup` — config setup wizard (interactive / flags / AI) |
 | `wagoe.tools.integrate` | `bb scaffold integrate` — guide module integration (Integrant config + wiring) |
 | `wagoe.tools.i18n` | `bb i18n:find/scan/missing/unused` |

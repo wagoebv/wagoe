@@ -29,7 +29,56 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ## [Unreleased]
 
+### Added
+
+- **`wagoe doctor`** (BOU-324) — one answer to "something is wrong". Six commands
+  could tell you (`bb doctor`, `bb doctor:env`, `bb doctor --all`, `bb check`,
+  `bb smoke-check`, `bb guide next`) and nothing said which to reach for first.
+  This runs the diagnostic ones in the order their answers depend on each other
+  — environment, configuration, commands, project setup — and ends with a single
+  next action.
+
+  A failure in one of the first two stops the run and says so: a broken
+  `config.edn` makes every command that boots the system fail for that one
+  reason, and reporting the third symptom wastes the trip.
+
+  The `bb` tasks are unchanged and remain the machinery; CI still calls them
+  directly with `--ci`. They gained a `--edn` mode, which is what makes one next
+  action possible — picking it out of formatted terminal output would mean
+  parsing colour codes and column padding. Against a project pinned to an older
+  wagoe-tools, `wagoe doctor` says so once and tells you what to bump, rather
+  than reporting checks it could not read as passing.
+
+
 ### Changed
+
+- **A healthy project produces no diagnostic noise** (BOU-324). Four checks
+  warned about things that are not problems, and a warning you cannot clear is
+  what teaches a reader to skim past the ones that matter.
+
+  * `bb guide next` reported `wagoe-cli` and `wagoe-mcp` as "unintegrated
+    modules" in the framework repository and told you to run `bb scaffold
+    integrate` on them. Both are deliberately standalone, and the monorepo puts
+    its libraries on `:paths` rather than in `:deps` — the question does not
+    apply there. It was suppressed by a hand-maintained list of names to skip,
+    which had never heard of the two added since.
+  * A missing seed file and a missing `resources/migrations/` are both normal:
+    seeding is optional, and `wagoe new` writes no migrations because the user
+    module creates its tables through `:wagoe/user-db-schema`. Every fresh
+    project carried two warnings it could only clear by making directories it
+    did not need.
+  * `bb doctor --env prod` reported "config.edn could not be parsed" about a
+    file Aero reads without complaint, and told the reader to repair syntax that
+    was never broken. Its reader table listed twelve Aero tags and not
+    `#boolean`, which `acc` and `prod` both use; CI only ever ran `--env dev`, so
+    the two profiles where it mattered were the two nothing checked. An unknown
+    tag is now its own value rather than an exception.
+  * `bb doctor`'s `wiring-requires` check told you to require
+    `wagoe.dev-error-enricher.shell.module-wiring` — a namespace that does not
+    exist. It checked BOU-171's contract, which BOU-326 replaced; a module whose
+    library is genuinely missing now throws at boot, naming the library and both
+    ways out. Removed, along with the half of `upgrade-wiring` that policed
+    tenant middleware an application can no longer get wrong.
 
 - **A generated `config.clj` is 63 lines instead of 404** (BOU-326). It used to
   carry the Integrant graph of every framework module it might enable — 41

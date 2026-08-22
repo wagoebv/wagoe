@@ -71,12 +71,24 @@
     (is (#'help/integrated? "\"libs/admin/src\"" "admin"))
     (is (not (#'help/integrated? "\"libs/admin/src\"" "user")))))
 
-(deftest ^:unit non-module-libs-excludes-infrastructure
-  (testing "tools, devtools, and e2e are excluded"
-    (let [libs @#'help/non-module-libs]
-      (is (contains? libs "tools"))
-      (is (contains? libs "devtools"))
-      (is (contains? libs "e2e")))))
+(deftest ^:unit the-framework-repo-is-not-asked-a-generated-projects-question
+  ;; `bb guide next` reported wagoe-cli and wagoe-mcp as "unintegrated modules"
+  ;; in this repository and told the reader to run `bb scaffold integrate` on
+  ;; them. Both are deliberately standalone, and the monorepo puts its libraries
+  ;; on :paths rather than in :deps, so the question does not apply here at all.
+  ;;
+  ;; It was suppressed by a hand-maintained list of library names to skip —
+  ;; #{"tools" "devtools" "e2e"} — which had never heard of the two added since.
+  ;; A test that asserted the list contained those three names could not have
+  ;; caught that; this asserts the behaviour instead (BOU-324).
+  (let [results (#'help/check-unintegrated-modules)]
+    (is (= [:pass] (map :level results)))
+    (is (re-find #":paths" (:msg (first results)))
+        "and says why, rather than passing silently")
+
+    (testing "nothing is named as needing integration"
+      (is (not-any? #(re-find #"wagoe-cli|wagoe-mcp|scaffold integrate" (str (:msg %) (:fix %)))
+                    results)))))
 
 ;; =============================================================================
 ;; General help output
@@ -115,3 +127,33 @@
   (testing "in the framework repo it is there"
     (with-redefs [wagoe.tools.check/framework-repo? (constantly true)]
       (is (str/includes? (with-out-str (help/-main)) "bb deploy --all")))))
+
+(deftest ^:unit optional-things-are-not-reported-as-problems
+  ;; A warning a reader cannot clear by doing anything sensible is what teaches
+  ;; them to skim past the ones that matter. Both of these fired on every
+  ;; freshly generated project (BOU-324).
+  (testing "no migrations is normal — `wagoe new` writes none, and the user"
+    ;; module creates its four tables through :wagoe/user-db-schema, not a
+    ;; migration. The old fix text said to run `clojure -M:migrate up`, which
+    ;; does nothing without a directory.
+    (let [results (#'help/check-migrations)]
+      (is (= [:pass] (map :level results)))
+      (is (not-any? :fix results) "a pass has nothing to fix")))
+
+  (testing "and no seed file is normal — `bb db:seed` reads one if it is there"
+    (let [results (#'help/check-seeds)]
+      (is (= [:pass] (map :level results)))
+      (is (not-any? :fix results))))
+
+  (testing "the message still says where each would go, so it teaches"
+    (is (re-find #"resources/migrations/" (:msg (first (#'help/check-migrations)))))
+    (is (re-find #"resources/seeds/dev\.edn" (:msg (first (#'help/check-seeds)))))))
+
+(deftest ^:unit guide-next-is-silent-on-a-healthy-project
+  ;; The ticket's own done criterion: "there is one answer, and it contains no
+  ;; noise on a healthy project". This repository is one.
+  (let [results (#'help/next-results)]
+    (is (seq results) "otherwise this passes by checking nothing")
+    (is (= #{:pass} (set (map :level results)))
+        (str "not clean: "
+             (pr-str (map :msg (remove #(= :pass (:level %)) results)))))))

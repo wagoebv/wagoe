@@ -11,12 +11,13 @@
 ;;   bb doctor --ci                 # Exit non-zero on any error (CI mode)
 
 (ns wagoe.tools.doctor
-  (:require [wagoe.tools.ansi :refer [bold green red yellow dim]]
+  (:require [wagoe.tools.ansi :refer [bold]]
             [babashka.process :as process]
             [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.set :as set]
-            [clojure.string :as str]))
+            [clojure.string :as str]
+            [wagoe.tools.report :as report]))
 
 ;; =============================================================================
 ;; Known valid providers
@@ -272,96 +273,36 @@
    "wagoe.tenant.shell.membership-middleware"})
 
 (defn check-upgrade-wiring
-  "Framework-upgrade checks over the app's own source text (BOU-204).
+  "Framework-upgrade check over the app's own source text (BOU-204).
 
-   Two migration hazards from the Phase-2 refactors:
-   - BOU-200 (SILENT): the platform http-handler no longer builds tenant
-     middleware itself. An app that wires :wagoe/tenant-service but never
-     references :wagoe/tenant-http-middleware boots fine — with tenant
-     resolution silently absent.
-   - BOU-198 (loud): the tenant HTTP middleware namespaces moved from platform
-     to the tenant lib; requiring the old platform ns fails at compile."
+   An app that requires one of the namespaces BOU-198 moved out of platform
+   fails at compile, and the compiler error names the namespace without saying
+   where it went. This says where it went.
+
+   It used to also warn when an app wired the tenant module without referencing
+   `:wagoe/tenant-http-middleware`, which mounted tenant resolution silently
+   nowhere. That hazard is gone: the tenant library emits the middleware from
+   its own `ig-config` and contributes it to the HTTP handler, so an app cannot
+   have one without the other (BOU-326).
+
+   Nor does it check any more that the app requires a module-wiring namespace
+   per active module. That was BOU-171/192/198's contract and BOU-326 replaced
+   it: `system-config` loads a module's wiring when the config names the module,
+   and an app that requires one statically is the thing
+   `wagoe.main-test/the-app-config-requires-no-module-wiring` now forbids. A
+   module whose library is genuinely absent throws
+   `:wagoe/module-library-missing` at boot, naming the library and both ways
+   out — a better answer than a warning, and one that cannot go stale."
   [src-text]
-  (let [stale (filter #(str/includes? src-text %) (keys relocated-namespaces))
-        ;; Any of these keys implies the tenant module is wired — an app may
-        ;; reference routes or membership without the service key itself.
-        tenant-wired? (boolean (some #(str/includes? src-text %)
-                                     [":wagoe/tenant-service"
-                                      ":wagoe/tenant-routes"
-                                      ":wagoe/membership-service"]))
-        mw-wired?     (str/includes? src-text ":wagoe/tenant-http-middleware")]
-    (concat
-     (when (seq stale)
-       (mapv (fn [old-ns]
-               {:id    :upgrade-wiring
-                :level :error
-                :msg   (str "Require of relocated namespace " old-ns " (moved in BOU-198)")
-                :fix   (str "Require " (get relocated-namespaces old-ns) " instead")})
-             stale))
-     (cond
-       (and tenant-wired? (not mw-wired?))
-       [{:id    :upgrade-wiring
-         :level :warn
-         :msg   (str "Tenant module wired but :wagoe/tenant-http-middleware is never "
-                     "referenced — tenant HTTP middleware will NOT be mounted (BOU-200)")
-         :fix   (str "Add the component and inject it into the http-handler:\n"
-                     "  :wagoe/tenant-http-middleware {:tenant-service     (ig/ref :wagoe/tenant-service)\n"
-                     "                                    :membership-service (ig/ref :wagoe/membership-service)\n"
-                     "                                    :db-context         (ig/ref :wagoe/db-context)}\n"
-                     "  ;; and in the :wagoe/http-handler config:\n"
-                     "  :extra-middleware (ig/ref :wagoe/tenant-http-middleware)")}]
-       (and (empty? stale) (or (not tenant-wired?) mw-wired?))
-       [{:id :upgrade-wiring :level :pass :msg "No stale framework wiring detected"}]
-       :else nil))))
-
-(defn check-wiring-requires
-  "Check that the app source has require entries for all active Integrant module keys.
-   Post BOU-171/192/198 the app (not platform) loads feature module wiring, so the
-   scanned text is the app's own source tree (plus platform wiring.clj when present)."
-  [wiring-text active-config]
-  (let [;; Module keys that should have module-wiring requires
-        module-keys (->> (keys active-config)
-                         (filter keyword?)
-                         (map (fn [k]
-                                (let [ns-part (or (namespace k) "")
-                                      nm      (name k)]
-                                  (cond
-                                    ;; wagoe.external/* keys
-                                    (str/starts-with? (str k) ":wagoe.external/")
-                                    "external"
-                                    ;; :wagoe/foo keys -> foo
-                                    (= ns-part "wagoe")
-                                    nm
-                                    :else nil))))
-                         (remove nil?)
-                         ;; Exclude infrastructure keys that don't have module-wiring
-                         (filter #(not (contains? #{"settings" "postgresql" "sqlite" "mysql" "h2"
-                                                    "http" "router" "api-versioning" "pagination"
-                                                    "logging" "metrics" "error-reporting"
-                                                    "http-server" "db-context"
-                                                    "logging-with-stdout" "logging-with-file"
-                                                    "logging-no-op" "metrics-with-prometheus"
-                                                    "metrics-with-datadog"
-                                                    "error-reporting-with-sentry"
-                                                    ;; Config key names that don't match module names
-                                                    "ai-service"        ; module is "ai", not "ai-service"
-                                                    "payment-provider"  ; module is "payments", not "payment-provider"
-                                                    }
-                                                  %)))
-                         set)
-        ;; Extract module names from wiring.clj require entries
-        wired-modules (->> (re-seq #"wagoe\.([a-z0-9-]+)\.shell\.module-wiring" wiring-text)
-                           (map second)
-                           set)
-        missing (set/difference module-keys wired-modules)]
-    (if (seq missing)
-      [{:id    :wiring-requires
-        :level :warn
-        :msg   (str "Active modules with no module-wiring require in app source: "
-                    (str/join ", " (sort missing)))
-        :fix   (str "Require the module wiring from the app (e.g. main/config ns):\n"
-                    (str/join "\n" (map #(str "  [wagoe." % ".shell.module-wiring]") (sort missing))))}]
-      [{:id :wiring-requires :level :pass :msg "All active modules wired"}])))
+  (let [stale (filter #(str/includes? src-text %) (keys relocated-namespaces))]
+    (if (seq stale)
+      (mapv (fn [old-ns]
+              {:id    :upgrade-wiring
+               :level :error
+               :msg   (str "Require of relocated namespace " old-ns " (moved in BOU-198)")
+               :fix   (str "Require " (get relocated-namespaces old-ns) " instead")})
+            stale)
+      [{:id :upgrade-wiring :level :pass :msg "No stale framework wiring detected"}])))
 
 ;; =============================================================================
 ;; Shell: file loading
@@ -392,6 +333,8 @@
         readers {'env      (fn [v] (str "ENV:" v))
                  'or       (fn [v] (if (vector? v) (last v) v))
                  'long     (fn [v] (if (number? v) v 0))
+                 'double   (fn [v] (if (number? v) v 0.0))
+                 'boolean  (fn [v] (boolean v))
                  'merge    (fn [v] (if (vector? v) (apply merge v) v))
                  'include  (fn [_v] {})
                  'str      (fn [v] (str v))
@@ -401,7 +344,16 @@
                  'ig/ref   (fn [v] v)
                  'profile  (fn [v] v)}]
     (try
-      (edn/read-string {:readers readers} config-text)
+      ;; :default is why this table cannot rot. It listed twelve tags and not
+      ;; #boolean, which acc/prod both use — so `bb doctor --env prod` reported
+      ;; "config.edn could not be parsed" about a file Aero reads without
+      ;; complaint, and the fix it printed was to repair syntax that was never
+      ;; broken. CI only ever ran --env dev, which is why it went unseen.
+      ;;
+      ;; Aero has more tags than this knows and can gain more. An unknown one is
+      ;; now its value rather than an exception: this parser exists to find the
+      ;; :active keys, and approximating one tag beats refusing the file.
+      (edn/read-string {:readers readers :default (fn [_tag v] v)} config-text)
       ;; Returns nil on failure; `check-config-loadable` turns that into a
       ;; reported error. It used to println a warning here and return nil,
       ;; which never reached the summary — so an unparseable config produced
@@ -501,10 +453,16 @@
   [env _opts]
   (let [config-text (load-raw-config env)
         env-map     (into {} (System/getenv))]
-    (when-not config-text
-      (println (red (str "Config file not found: " (config-path env))))
-      (System/exit 1))
-    (let [parsed       (parse-config-minimal config-text)
+    (if-not config-text
+      ;; A result rather than a println and an exit: `--edn` writes to a reader
+      ;; that calls read-string, and a bare line of red text on stdout is not
+      ;; something it can parse. The caller decides what a missing config is
+      ;; worth — `bb doctor --ci` still exits 1 on it, because it is an error.
+      [{:id    :config-loadable
+        :level :error
+        :msg   (str "Config file not found: " (config-path env))
+        :fix   (str "Create " (config-path env) ", or pass --env <profile> for one that exists.")}]
+      (let [parsed       (parse-config-minimal config-text)
           active       (or (:active parsed) {})
           active-text  (extract-active-section config-text)
           src-text     (load-app-source-text)
@@ -518,37 +476,11 @@
        (check-admin-parity dev-admin test-admin)
        (check-prod-placeholders config-text env)
        (check-reset-endpoint-flag (or parsed {}) env)
-       (check-wiring-requires src-text active)
-       (check-upgrade-wiring src-text)))))
+       (check-upgrade-wiring src-text))))))
 
 ;; =============================================================================
 ;; Output formatting
 ;; =============================================================================
-
-(defn- format-result [{:keys [id level msg fix]}]
-  (let [icon (case level
-               :pass (green "✓")
-               :warn (yellow "⚠")
-               :error (red "✗"))
-        id-str (format "%-20s" (name id))]
-    (str "  " icon " " id-str " " msg
-         (when fix
-           (str "\n" (dim (str "                       Fix: " fix)))))))
-
-(defn- print-results [env results]
-  (println)
-  (println (bold (str "Wagoe Config Doctor — " env)))
-  (println)
-  (doseq [r results]
-    (println (format-result r)))
-  (let [passed  (count (filter #(= :pass (:level %)) results))
-        warns   (count (filter #(= :warn (:level %)) results))
-        errors  (count (filter #(= :error (:level %)) results))]
-    (println)
-    (println (str "Summary: " (green (str passed " passed"))
-                  ", " (yellow (str warns " warning" (when (not= warns 1) "s")))
-                  ", " (red (str errors " error" (when (not= errors 1) "s")))))
-    {:passed passed :warnings warns :errors errors}))
 
 ;; =============================================================================
 ;; Argument parsing
@@ -560,7 +492,8 @@
     (cond
       (empty? remaining) opts
       (or (= flag "--help") (= flag "-h")) (assoc opts :help true)
-      (= flag "--ci") (recur more (assoc opts :ci true))
+      (= flag "--ci")  (recur more (assoc opts :ci true))
+      (= flag "--edn") (recur more (assoc opts :edn true))
       (= flag "--all") (recur more (assoc opts :all true))
       (= flag "--env") (recur (rest more) (assoc opts :env (first more)))
       :else (recur more opts))))
@@ -576,13 +509,13 @@
   (println "  bb doctor --ci             Exit non-zero on any error (CI mode)")
   (println)
   (println "Checks:")
+  (println "  config-loadable     config.edn parses and has an :active section")
   (println "  env-refs            #env vars without #or defaults are set")
   (println "  providers           Provider values are recognized")
   (println "  jwt-secret          JWT_SECRET set when user module active")
   (println "  admin-parity        Admin entity files exist in both dev and test")
   (println "  prod-placeholders   No placeholder values in prod config")
   (println "  reset-endpoint-flag :test/reset-endpoint-enabled? only true in test/dev")
-  (println "  wiring-requires     App source requires wiring for all active modules")
   (println "  upgrade-wiring      No stale pre-Phase-2 framework wiring (BOU-198/200)"))
 
 ;; =============================================================================
@@ -615,7 +548,11 @@
                     [(:env opts)])
           all-summaries (mapv (fn [env]
                                 (let [results (run-checks env opts)]
-                                  (print-results env results)))
+                                  (if (:edn opts)
+                                    (do (report/print-edn :config results)
+                                        (report/tally results))
+                                    (report/print-results (str "Wagoe Config Doctor — " env)
+                                                          results))))
                               envs)
           total-errors (reduce + (map :errors all-summaries))]
       (when (and (:ci opts) (pos? total-errors))

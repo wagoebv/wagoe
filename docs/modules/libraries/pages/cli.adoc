@@ -91,6 +91,50 @@ Adds the dependency to `deps.edn` and the module's key to
 describes its own Integrant components, and `system-config` builds them because
 the config now names it.
 
+=== Diagnose a project
+
+[source,bash]
+----
+wagoe doctor                # Check the project, print the one thing to fix
+wagoe doctor --env prod     # Check a profile other than dev
+wagoe doctor --ci           # Exit non-zero when anything errors
+----
+
+Run from inside a project. It runs four checks in the order their answers depend
+on each other:
+
+[cols="1,2,1",options="header"]
+|===
+| Stage | What it checks | Stops the run
+
+| Environment prerequisites
+| Java, Clojure CLI, Babashka, Node, dev ports, clj-kondo, AI providers
+| yes
+
+| Configuration
+| `config.edn` parses, `#env` refs resolve, providers are known, secrets are set
+| yes
+
+| Commands and aliases
+| every `deps.edn` alias resolves and the key entrypoints run
+| no
+
+| Project setup
+| dev config, module integration, migrations, seed data
+| no
+|===
+
+The first two stop the run because everything after them would report the same
+problem in another way — a broken `config.edn` fails every command that boots the
+system, and the alias that failed is not the thing to fix.
+
+Each stage is a `bb` task in the project (`bb doctor:env`, `bb doctor`,
+`bb smoke-check`, `bb guide next`), and CI calls those directly with `--ci`.
+`wagoe doctor` reads their `--edn` output so it can end with one next action
+rather than four screens.
+
+For code quality rather than setup, run `bb check`.
+
 === List available modules
 
 [source,bash]

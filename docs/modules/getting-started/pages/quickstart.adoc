@@ -130,6 +130,42 @@ clojure -M:test
 clojure -M:test --focus-meta :unit
 ----
 
+== When something is wrong
+
+One command, and it ends with the single thing to fix:
+
+[source,bash]
+----
+wagoe doctor
+----
+
+It runs four checks in the order their answers depend on each other —
+environment prerequisites, configuration, commands and aliases, project setup —
+and stops early when a foundational one fails, because everything after it would
+report the same problem in three more ways.
+
+Each of those is still its own `bb` task (`bb doctor:env`, `bb doctor`,
+`bb smoke-check`, `bb guide next`), and CI calls them directly with `--ci`. You
+do not have to know which is which; `wagoe doctor` is the front door.
+
+For questions rather than failures, `bb guide` is a set of topic guides written
+for this framework:
+
+[source,bash]
+----
+bb guide                  # list the topics
+bb guide scaffold         # generating a module
+bb guide testing          # the test pyramid and what goes where
+bb guide database         # migrations, seeds, adapters
+bb guide fcis             # what may live in core/ and what may not
+bb guide config           # config.edn, profiles, #env
+bb guide next             # what to do next in this project
+bb guide error BND-201    # what an error code means, and the fix
+----
+
+`bb check` is a different thing: code-quality gates for code you have written,
+not setup diagnostics.
+
 == Next steps
 
 * xref:getting-started:your-first-module.adoc[Your First Module] - see what the scaffolder generated

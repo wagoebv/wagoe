@@ -68,7 +68,14 @@ bb doctor --ci               # Exit non-zero on any error (for CI pipelines)
 | `jwt-secret` | error | `JWT_SECRET` not set when the user module is active |
 | `admin-parity` | warn | Admin entity EDN files that exist in `dev/admin/` but not `test/admin/` (or vice versa) |
 | `prod-placeholders` | error | Placeholder values like `company.com`, `example.com`, `TODO` in prod/acc configs |
-| `wiring-requires` | warn | Active Integrant modules missing their `module-wiring` require in `wiring.clj` |
+| `config-loadable` | error | `config.edn` does not parse, or has no `:active` section |
+| `upgrade-wiring` | error | A namespace that moved between releases, and where it went |
+
+A module whose library is genuinely missing is not checked here: it throws
+`:wagoe/module-library-missing` at boot, naming the library and both ways out
+(BOU-326). The check that scanned app source for a `module-wiring` require per
+active module was removed with BOU-324 — it enforced a contract BOU-326 replaced,
+and told readers to require namespaces that do not exist.
 
 **Example output:**
 
@@ -81,7 +88,7 @@ Wagoe Config Doctor — dev
   ✓ providers            All provider values are known
   ⚠ admin-parity         dev/admin/users.edn has :split-table-update, test does not
   ✓ prod-placeholders    Placeholder check skipped (non-production env)
-  ✓ wiring-requires      All active modules wired
+  ✓ upgrade-wiring       No stale framework wiring detected
 
 Summary: 4 passed, 1 warning, 1 error
 ```

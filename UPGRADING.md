@@ -5,9 +5,9 @@ Migration notes for projects built on the Wagoe framework (generated with
 artifacts). Steps are ordered by impact; each names the change, the failure
 mode you'd see without it, and the fix.
 
-> **Quick check:** after bumping versions, run `bb doctor`. The
-> `upgrade-wiring` and `wiring-requires` checks detect the stale-wiring cases
-> below (including the silent one) in your own source tree.
+> **Quick check:** after bumping versions, run `wagoe doctor`. Its
+> `upgrade-wiring` check names any namespace that moved between releases and
+> says where it went.
 
 ## beta-5 → beta-6 (error shapes)
 
@@ -237,7 +237,7 @@ they must authenticate as admin now.
 ## Verifying an upgrade
 
 ```bash
-bb doctor            # config + stale-wiring checks (upgrade-wiring, wiring-requires)
+wagoe doctor         # environment, config, commands, project setup — one next action
 clojure -M:test      # your project's test suite
 ```
 
