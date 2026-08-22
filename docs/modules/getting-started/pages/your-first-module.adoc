@@ -182,6 +182,37 @@ edit:
 xref:architecture:conventions.adoc[Conventions].
 ====
 
+== shell/http.clj
+
+Reitit route data — `[path data & children]` — and stub handlers returning
+canned responses:
+
+[source,clojure]
+----
+(defn api-routes
+  [_service]
+  [["/products"
+    {:get  {:handler (fn [_req] {:status 200 :body []})}
+     :post {:handler (fn [_req] {:status 201 :body {}})}}]
+   ["/products/:id"
+    {:get    {:handler (fn [_req] {:status 200 :body {}})}
+     :put    {:handler (fn [_req] {:status 200 :body {}})}
+     :delete {:handler (fn [_req] {:status 204})}}]])
+
+(defn product-routes
+  [service config]
+  {:api    (api-routes service)
+   :web    (web-routes service config)
+   :static []})
+----
+
+The paths are relative. `product-routes` returns a *contribution*, not a route
+table: the application mounts `:api` under `/api/v1` and `:web` under `/web`, so
+writing `/api/products` here would serve it at `/api/v1/api/products`.
+
+Wiring the handlers to the service is the second edit, after validation. The
+service is already available — it is the `service` argument.
+
 == The split, in one line
 
 `core/` decides what should happen. `shell/` does it. If a function needs the

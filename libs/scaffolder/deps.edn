@@ -14,7 +14,11 @@
 
  :aliases
  {:test      {:extra-paths ["test"]
-              :extra-deps  {lambdaisland/kaocha {:mvn/version "1.91.1392"}}
+              ;; reitit-core so a test can build a router from the routes the
+              ;; generator writes. Nothing checked their shape, and they sat in
+              ;; a format the framework had stopped reading (BOU-331).
+              :extra-deps  {lambdaisland/kaocha  {:mvn/version "1.91.1392"}
+                            metosin/reitit-core  {:mvn/version "0.10.1"}}
               :main-opts   ["-m" "kaocha.runner"]}
 
   :clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2026.04.15"}}
