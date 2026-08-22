@@ -29,6 +29,26 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ## [Unreleased]
 
+### Added
+
+- **`examples/shop` — a generated application you can read and run** (BOU-300).
+  Between `examples/todo` (200 lines, no framework) and an external examples
+  repository that tracked no release, there was nothing showing what a Wagoe
+  app looks like. `examples/shop` is `wagoe new` plus one scaffolded module,
+  committed as generator output:
+
+  ```bash
+  cd examples/shop
+  WAG_ENV=test JWT_SECRET=$(openssl rand -hex 32) clojure -M:run
+  curl localhost:3000/api/v1/products     # => []
+  ```
+
+  It is regenerated rather than maintained — `bb example:regen`, with
+  `bb example:regen --check` in CI — so it cannot drift into describing a
+  project shape nobody gets. CI also boots it and asserts the scaffolded
+  module answers, and its dependencies resolve through `:local/root`, so a
+  green run means *this commit* works rather than the last release.
+
 ### Changed
 
 - **Modules emit Reitit route data; the normalized format is gone** (BOU-331,

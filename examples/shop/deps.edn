@@ -1,0 +1,77 @@
+{:paths ["src" "resources"]
+ :deps  {com.wagoe/wagoe-core         {:local/root "../../libs/core"}
+         com.wagoe/wagoe-observability {:local/root "../../libs/observability"}
+         com.wagoe/wagoe-platform      {:local/root "../../libs/platform"}
+         com.wagoe/wagoe-user          {:local/root "../../libs/user"}
+         ;; Reads resources/conf/<env>/config.edn — src/wagoe/system_config.clj
+         ;; calls it directly.
+         com.wagoe/wagoe-config        {:local/root "../../libs/config"}
+         ;; The modules a fresh project can switch on by editing config.edn
+         ;; alone. Drop the ones you know you will not use; each is independent.
+         com.wagoe/wagoe-cache         {:local/root "../../libs/cache"}
+         com.wagoe/wagoe-admin         {:local/root "../../libs/admin"}
+         com.wagoe/wagoe-ui-style      {:local/root "../../libs/ui-style"}
+         com.wagoe/wagoe-tenant        {:local/root "../../libs/tenant"}
+         com.wagoe/wagoe-workflow      {:local/root "../../libs/workflow"}
+         com.wagoe/wagoe-search        {:local/root "../../libs/search"}
+         com.wagoe/wagoe-external      {:local/root "../../libs/external"}
+         com.wagoe/wagoe-payments      {:local/root "../../libs/payments"}
+         com.wagoe/wagoe-i18n          {:local/root "../../libs/i18n"}
+         ;; SQLite drives the default dev config; H2 backs the test profile.
+         ;; Both ship by default so a fresh project boots and tests with no
+         ;; external database server.
+         org.xerial/sqlite-jdbc                  {:mvn/version "3.53.0.0"}
+         com.h2database/h2                       {:mvn/version "2.4.240"}}
+ :aliases
+ {:repl     {:extra-paths ["dev"]
+             ;; wagoe-devtools is dev-only on purpose: it carries a dashboard
+             ;; and a Jetty adapter, and it belongs on no production classpath.
+             ;; In the alias, so `clojure -M:repl` has it and `-M:run`, the
+             ;; uberjar and the Dockerfile do not.
+             :extra-deps {com.wagoe/wagoe-devtools {:local/root "../../libs/devtools"}
+                          nrepl/nrepl {:mvn/version "1.3.0"}
+                          cider/cider-nrepl {:mvn/version "0.50.2"}}
+             :main-opts  ["-m" "nrepl.cmdline" "--middleware" "[cider.nrepl/cider-middleware]"
+                          "--port" "7888"]}
+  :test     {:extra-paths ["test"]
+             :extra-deps  {lambdaisland/kaocha {:mvn/version "1.91.1392"}}
+             :main-opts   ["-m" "kaocha.runner"]}
+  ;; Foreground start — no REPL. What a container, a systemd unit or a smoke
+  ;; test uses; `clojure -M:repl` + (go) remains the development path.
+  :run      {:main-opts ["-m" "shop.main"]}
+  ;; Uberjar. `clojure -T:build uber` -> target/shop-<version>.jar
+  :build    {:extra-deps {io.github.clojure/tools.build {:mvn/version "0.10.9"}}
+             :ns-default build}
+  :migrate  {:main-opts ["-m" "wagoe.platform.shell.database.cli-migrations"]}
+  ;; Backs `bb db:seed`. Separate alias rather than a flag on :migrate — seeding
+  ;; is data, migrations are schema, and conflating them makes it too easy to
+  ;; ship demo rows to production.
+  :seed     {:main-opts ["-m" "wagoe.platform.shell.database.cli-seed"]}
+  ;; clj-kondo static analysis. Isolated via :replace-deps so it pulls only the
+  ;; linter, not the project's deps. Used by the .githooks/pre-commit gate.
+  :clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2026.04.15"}}
+              :main-opts    ["-m" "clj-kondo.main"]}
+  :user-cli {:extra-deps {org.xerial/sqlite-jdbc      {:mvn/version "3.53.0.0"}
+                          org.postgresql/postgresql   {:mvn/version "42.7.12"}
+                          com.h2database/h2           {:mvn/version "2.4.240"}
+                          com.mysql/mysql-connector-j {:mvn/version "9.6.0"}}
+             ;; -m, not -e: with -e the first non-option argument is taken as a
+             ;; script path and *command-line-args* holds only what follows, so
+             ;; `create` in `bb create-admin` was dropped and the CLI rejected
+             ;; --email as an unknown global option.
+             :main-opts  ["-m" "wagoe.user.shell.cli-entry"]}
+  ;; Wagoe MCP server for editor agents (Claude Code / Cursor). Kept in an
+  ;; alias — NOT in :deps — so the app runtime never pulls the MCP server.
+  ;; Launched by .mcp.json via `clojure -M:mcp`. wagoe-mcp's pom now declares
+  ;; its full wagoe closure (ai, devtools, scaffolder, tools, jobs via
+  ;; devtools), so once alpha-43+ poms are published this can be reduced to just
+  ;; wagoe-mcp. The closure is enumerated explicitly for now so `-M:mcp` also
+  ;; resolves against the current published poms.
+  :mcp      {:extra-deps {com.wagoe/wagoe-mcp        {:local/root "../../libs/wagoe-mcp"}
+                          com.wagoe/wagoe-ai         {:local/root "../../libs/ai"}
+                          com.wagoe/wagoe-devtools   {:local/root "../../libs/devtools"}
+                          com.wagoe/wagoe-scaffolder {:local/root "../../libs/scaffolder"}
+                          com.wagoe/wagoe-tools      {:local/root "../../libs/tools"}
+                          com.wagoe/wagoe-jobs       {:local/root "../../libs/jobs"}}
+             :main-opts  ["-m" "wagoe.mcp.shell.server"]}}}
+

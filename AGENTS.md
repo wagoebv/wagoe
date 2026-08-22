@@ -1014,24 +1014,28 @@ Also add the lib's `:id` test suite to `tests.edn` and its source/test paths to 
 
 ---
 
-## Ecommerce API Example
+## Examples
 
-A complete reference application demonstrating Wagoe patterns with SQLite, Integrant, Reitit, and Swagger UI.
-Source: https://github.com/wagoebv/wagoe-examples/tree/main/ecommerce-api
+Two, both in this repository and both run by CI on every commit:
+
+| Path | What it is |
+|---|---|
+| `examples/shop` | A generated application — `wagoe new` + `bb scaffold` output, committed. Boots, serves HTTP, has one module to copy from. |
+| `examples/todo` | Functional core / imperative shell with no framework at all. ~200 lines, prints and exits. |
 
 ```bash
-# Clone wagoe-examples and run from ecommerce-api/
-git clone https://github.com/wagoebv/wagoe-examples
-cd wagoe-examples/ecommerce-api
-clojure -M:run          # Start server on port 3002
+./scripts/example-smoke.sh     # runs both, asserts on what they do
+bb example:regen               # rebuild examples/shop from the current generators
+bb example:regen --check       # CI: fail if it has drifted from generator output
 ```
 
-**Swagger UI**: `http://localhost:3002/api-docs/`
-**OpenAPI spec**: `http://localhost:3002/swagger.json`
+`examples/shop` is regenerated rather than maintained, so it cannot describe a
+project shape nobody gets. See `examples/shop/README.md`.
 
-### Swagger parameter documentation
-
-The app reads `query-params`/`path-params` directly and does **not** configure reitit coercion middleware. This means Swagger will not auto-generate input fields from route patterns. See **Common Pitfalls #11** for the required `:swagger` parameter pattern.
+The external `wagoe-examples` repository (ecommerce-api, blog-app) is
+**community examples**: not versioned against a release, not built by this
+repo's CI, and not a place to send someone who wants to know what the current
+framework does. Prefer `examples/shop`.
 
 ### SQLite `nil` LIMIT/OFFSET pitfall
 

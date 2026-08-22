@@ -1,0 +1,22 @@
+{;; shop — test configuration
+ :active
+ {:wagoe/settings
+  {:name             "shop-test"
+   :version          "0.1.0"
+   :date-format      "yyyy-MM-dd"
+   :date-time-format "yyyy-MM-dd HH:mm:ss"
+   :features         {}}
+
+  :wagoe/h2
+  {:memory true
+   :pool   {:minimum-idle 1 :maximum-pool-size 5}}
+
+  :wagoe/logging
+  {:level :warn :console true}
+  ;; Product module (bb scaffold integrate)
+  :wagoe/product
+  {:enabled? true
+   :base-path "/api/product"}}
+
+ :inactive
+ {}}

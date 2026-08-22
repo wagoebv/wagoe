@@ -599,10 +599,14 @@ jobs:
         run: bb check:no-boundary
 
   # =============================================================================
-  # In-repo runnable example must actually run (examples/todo)
+  # In-repo runnable examples must actually run (examples/todo, examples/shop)
+  #
+  # examples/shop is generated output, committed so it can be read and so this
+  # job runs it. Both resolve com.wagoe through :local/root, so a green run
+  # means this commit works — not that the last release did (BOU-300).
   # =============================================================================
   example-smoke:
-    name: Example Smoke (examples/todo)
+    name: Example Smoke (examples/)
     runs-on: ubuntu-latest
 
     steps:
@@ -612,13 +616,16 @@ jobs:
         uses: DeLaGuardo/setup-clojure@13.6.1
         with:
           cli: 1.12.5.1654
+          bb: latest
 
-      - name: Run the todo example
-        working-directory: examples/todo
-        run: |
-          out=$(clojure -M:run)
-          echo "$out"
-          echo "$out" | grep -q "3 todos, 2 remaining" || { echo "::error::examples/todo output changed or the example failed to run"; exit 1; }
+      - name: Run both examples
+        run: ./scripts/example-smoke.sh
+
+      # Separate from running it: an example that runs can still have stopped
+      # being what `wagoe new` produces, and then it documents a project shape
+      # nobody gets. That is what happened to the external examples repo.
+      - name: examples/shop is still what the generators produce
+        run: bb example:regen --check
 
   # =============================================================================
   # Test individual libraries (run from root to ensure all dependencies available)
@@ -1515,4 +1522,4 @@ jobs:
           echo "  - check:no-boundary (no residual boundary tokens)"
           echo "  - build-uberjar (deployable artifact builds and is versioned)"
           echo "  - test-tools (libs/tools + AGENTS.md generator tests)"
-          echo "  - example-smoke (examples/todo runs)"
+          echo "  - example-smoke (examples/todo + examples/shop run)"
