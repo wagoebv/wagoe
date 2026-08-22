@@ -115,11 +115,7 @@
       (page/wait-for-selector pg "form.entity-form" {:timeout 10000.0})
       ;; Change the name
       (loc/fill (page/locator pg "input[name='name']") "Updated Acme")
-      ;; Install settle listener before submitting
-      (admin/install-htmx-settle-listener! pg)
-      (loc/click (page/locator pg "form.entity-form button[type='submit']"))
-      (admin/await-htmx-settle! pg)
-      (page/wait-for-load-state pg)
+      (admin/submit-entity-form! pg)
       ;; Verify name updated
       (let [name-value (loc/input-value (page/locator pg "input[name='name']"))]
         (is (= "Updated Acme" name-value)

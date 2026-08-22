@@ -112,11 +112,7 @@
       (page/wait-for-load-state pg)
       ;; Change role from user to viewer
       (loc/select-option (page/locator pg "select[name='role']") "viewer")
-      ;; Install settle listener before submitting
-      (admin/install-htmx-settle-listener! pg)
-      (loc/click (page/locator pg "form.entity-form button[type='submit']"))
-      (admin/await-htmx-settle! pg)
-      (page/wait-for-load-state pg)
+      (admin/submit-entity-form! pg)
       ;; Verify the role is now viewer
       (let [role-value (loc/input-value (page/locator pg "select[name='role']"))]
         (is (= "viewer" role-value)
@@ -130,11 +126,7 @@
       (page/wait-for-load-state pg)
       ;; Change the name to a new value
       (loc/fill (page/locator pg "input[name='name']") "Changed Name")
-      ;; Install settle listener before submitting
-      (admin/install-htmx-settle-listener! pg)
-      (loc/click (page/locator pg "form.entity-form button[type='submit']"))
-      (admin/await-htmx-settle! pg)
-      (page/wait-for-load-state pg)
+      (admin/submit-entity-form! pg)
       ;; After re-render, the name field should contain the new value
       (let [name-value (loc/input-value (page/locator pg "input[name='name']"))]
         (is (= "Changed Name" name-value)

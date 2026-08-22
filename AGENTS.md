@@ -461,7 +461,9 @@ found only by remembering to run an extra command.
 **So a green `clojure -M:test` does not mean the codebase is green.**
 `bb test:all` runs all of them, prints a per-surface summary, and exits non-zero
 if any fails. `bb test:all --list` shows the set, including what is deliberately
-excluded (`e2e`, which needs a running server — use `bb e2e`).
+excluded (`e2e`, which needs Chromium installed — run it with `bb e2e`, which
+starts a server on :3100 and tears it down). CI runs e2e on every pull request
+and a red e2e test blocks the merge.
 
 None of the surfaces enumerate namespaces: the standalone libs let kaocha
 discover `test/`, and the rest discover from disk. An earlier `bb test:wagoe-cli`

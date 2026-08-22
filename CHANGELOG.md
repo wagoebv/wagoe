@@ -29,6 +29,33 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The e2e suite runs in CI again, and a red e2e test blocks the merge**
+  (BOU-297). 52 tests over login, registration, MFA, sessions and admin CRUD —
+  the flows a new user meets first — sat behind `if: false`, with
+  `continue-on-error: true` under it for good measure. The reason given was that
+  they need a live server on :3100 which CI does not start; the job's own steps
+  run `bb e2e`, which starts one and tears it down. The reason had stopped being
+  true and nothing noticed, because a parked job reports as skipped.
+
+  Turning it on found real flakiness rather than a clean suite: three runs gave
+  one pass and two failures, in `admin-users` and `admin-tenants` search. Both
+  waited for a one-shot `htmx:afterSettle` listener, which fires for any swap
+  anywhere on the page and could resolve on something else — leaving the
+  assertion to read the previous search's rows. Its ten-second timeout resolved
+  the promise to `false`, and nobody read it, so a swap that never happened was
+  indistinguishable from one that happened and returned nothing.
+
+  The helpers now mark what the request is about to replace and wait for that
+  mark to go, with the timeout raised as an error naming the selector.
+
+  Verified by breaking it: point the search button's `hx-target` at an element
+  that does not exist and four tests report `HTMX never replaced
+  #entity-table-container` — where the old mechanism failed two of them on a
+  confusing assertion and let the other two pass over an app that was broken.
+
+
 ### Added
 
 - **`wagoe doctor`** (BOU-324) — one answer to "something is wrong". Six commands

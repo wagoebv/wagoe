@@ -79,9 +79,15 @@
 (defn- disabled?
   "Whether a job can never run, so nothing it does can be required.
 
-   `if: false` is how e2e is parked: it needs a live server on :3100, which CI
-   does not start, and it reports as skipped. Requiring a job that never runs
-   would recreate the original defect — a context that can never be satisfied."
+   Requiring a job that never runs recreates the original defect — a context
+   that can never be satisfied, which sits pending and reads the same as
+   passing.
+
+   No job is parked today. e2e was, on the grounds that it needed a live server
+   on :3100 which CI did not start; the job's own steps run `bb e2e`, which
+   starts one and tears it down, so the reason had stopped being true (BOU-297).
+   The summary line reports the parked count so parking a job is a visible act
+   rather than a quiet exemption from the merge gate."
   [job]
   (false? (:if job)))
 

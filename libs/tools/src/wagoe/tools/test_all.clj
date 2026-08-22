@@ -83,7 +83,12 @@
 (def excluded
   [{:id     :e2e
     :label  "e2e (Playwright)"
-    :reason "needs a running server on :3100 — `bb e2e` starts one and tears it down"}])
+    :reason (str "needs Chromium installed — `clojure -M:e2e -e \"(.exit "
+                 "(com.microsoft.playwright.CLI/main (into-array String "
+                 "[\\\"install\\\" \\\"chromium\\\"])))\"` fetches ~90MB. "
+                 "Run it with `bb e2e`, which starts a server on :3100 and tears "
+                 "it down. CI runs it on every pull request and a red test blocks "
+                 "the merge (BOU-297).")}])
 
 ;; =============================================================================
 ;; Environment
