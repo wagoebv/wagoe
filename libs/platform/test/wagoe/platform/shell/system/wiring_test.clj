@@ -248,8 +248,9 @@
         (ig/init-key :wagoe/http-handler
                      {:module-routes [] :router ::r :logger ::l :metrics-emitter metrics
                       :error-reporter ::e :config config}))
-      (let [metrics-route (first (filter #(= "/metrics" (:path %)) @captured-routes))
-            handler       (get-in metrics-route [:methods :get :handler])
+      ;; Reitit data: ["/metrics" {:get {:handler ...}}] (ADR-037).
+      (let [metrics-route (first (filter #(= "/metrics" (first %)) @captured-routes))
+            handler       (get-in (second metrics-route) [:get :handler])
             resp          (handler {})]
         (is (some? metrics-route) "/metrics route is mounted")
         (is (= 200 (:status resp)))

@@ -348,20 +348,6 @@
              merged-data (merge route-data reitit-methods)]
          [path merged-data])))))
 
-(defn- convert-all-routes
-  "Convert vector of normalized route specs to Reitit format.
-   
-   Args:
-     route-specs - Vector of normalized route maps
-     system - Optional observability services map {:logger :metrics-emitter :error-reporter} (defaults to {})
-     
-   Returns:
-     Vector of Reitit route vectors"
-  ([route-specs]
-   (convert-all-routes route-specs nil))
-
-  ([route-specs system]
-   (mapv #(convert-route % system) route-specs)))
 
 ;; =============================================================================
 ;; Router Creation
