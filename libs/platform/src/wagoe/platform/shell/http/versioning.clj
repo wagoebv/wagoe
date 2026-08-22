@@ -45,6 +45,21 @@
 ;; Route Transformation
 ;; =============================================================================
 
+(defn route-path
+  "The path of a route, whichever shape it is in.
+
+   Reitit data is `[path data & children]`; a normalized route is a map with
+   `:path`. Both travel through versioning while modules migrate (ADR-037)."
+  [route]
+  (if (vector? route) (first route) (:path route)))
+
+(defn with-route-path
+  "`route` with its path replaced, keeping its shape."
+  [route path]
+  (if (vector? route)
+    (assoc route 0 path)
+    (assoc route :path path)))
+
 (defn- wrap-route-with-version
   "Wrap a single route with version prefix.
    
@@ -61,9 +76,8 @@
        :v1)
      ;;=> {:path \"/api/v1/users\" :methods {:get {...}}}"
   [route version]
-  (let [version-str (name version)
-        prefix (str "/api/" version-str)]
-    (update route :path #(str prefix %))))
+  (let [prefix (str "/api/" (name version))]
+    (with-route-path route (str prefix (route-path route)))))
 
 (defn wrap-routes-with-version
   "Wrap all routes with version prefix.
@@ -185,17 +199,13 @@
                             :body {:message "Please use versioned API endpoint"
                                    :location target-path
                                    :version (name target-version)}})]
-    {:path (str "/api" path)
-     :methods {:get {:handler redirect-handler
-                     :summary (str "Redirect to " target-path)}
-               :post {:handler redirect-handler
-                      :summary (str "Redirect to " target-path)}
-               :put {:handler redirect-handler
-                     :summary (str "Redirect to " target-path)}
-               :delete {:handler redirect-handler
-                        :summary (str "Redirect to " target-path)}
-               :patch {:handler redirect-handler
-                       :summary (str "Redirect to " target-path)}}}))
+    ;; Reitit data: the redirect is platform's own route, so it is written in
+    ;; the target format rather than migrated later (ADR-037).
+    [(str "/api" path)
+     (into {} (map (fn [method]
+                     [method {:handler redirect-handler
+                              :summary (str "Redirect to " target-path)}]))
+           [:get :post :put :delete :patch])]))
 
 (defn create-backward-compatibility-routes
   "Create redirect routes for backward compatibility.
@@ -226,7 +236,7 @@
          version-str (name target-version)
          version-prefix (str "/api/" version-str)
          unversioned-paths (->> routes
-                                (map :path)
+                                (map route-path)
                                 (filter #(str/starts-with? % version-prefix))
                                 (map #(subs % (count version-prefix)))
                                 (into #{}))

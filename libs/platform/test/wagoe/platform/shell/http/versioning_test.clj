@@ -13,15 +13,15 @@
 
 (def sample-routes
   "Sample unversioned routes for testing."
-  [{:path "/users"
-    :methods {:get {:handler (fn [_] {:status 200 :body "list users"})}
-              :post {:handler (fn [_] {:status 201 :body "create user"})}}}
-   {:path "/users/:id"
-    :methods {:get {:handler (fn [_] {:status 200 :body "get user"})}
-              :put {:handler (fn [_] {:status 200 :body "update user"})}
-              :delete {:handler (fn [_] {:status 204 :body "delete user"})}}}
-   {:path "/items"
-    :methods {:get {:handler (fn [_] {:status 200 :body "list items"})}}}])
+  [["/users"
+    {:get  {:handler (fn [_] {:status 200 :body "list users"})}
+     :post {:handler (fn [_] {:status 201 :body "create user"})}}]
+   ["/users/:id"
+    {:get    {:handler (fn [_] {:status 200 :body "get user"})}
+     :put    {:handler (fn [_] {:status 200 :body "update user"})}
+     :delete {:handler (fn [_] {:status 204 :body "delete user"})}}]
+   ["/items"
+    {:get {:handler (fn [_] {:status 200 :body "list items"})}}]])
 
 (def sample-config
   "Sample versioning configuration."
@@ -78,27 +78,27 @@
 
 (deftest ^:unit wrap-routes-with-version-test
   (testing "Wrap routes with v1 prefix"
-    (let [routes [{:path "/users" :methods {}}
-                  {:path "/items" :methods {}}]
+    (let [routes [["/users" {}]
+                  ["/items" {}]]
           result (versioning/wrap-routes-with-version routes :v1)]
       (is (= 2 (count result)))
-      (is (= "/api/v1/users" (:path (first result))))
-      (is (= "/api/v1/items" (:path (second result))))))
+      (is (= "/api/v1/users" (versioning/route-path (first result))))
+      (is (= "/api/v1/items" (versioning/route-path (second result))))))
 
   (testing "Wrap routes with v2 prefix"
-    (let [routes [{:path "/users" :methods {}}]
+    (let [routes [["/users" {}]]
           result (versioning/wrap-routes-with-version routes :v2)]
-      (is (= "/api/v2/users" (:path (first result))))))
+      (is (= "/api/v2/users" (versioning/route-path (first result))))))
 
   (testing "Wrap routes preserves methods"
-    (let [routes [{:path "/users"
-                   :methods {:get {:handler 'list-users}
-                             :post {:handler 'create-user}}}]
+    (let [routes [["/users"
+                   {:get  {:handler 'list-users}
+                    :post {:handler 'create-user}}]]
           result (versioning/wrap-routes-with-version routes :v1)
           wrapped (first result)]
-      (is (= "/api/v1/users" (:path wrapped)))
-      (is (= 'list-users (get-in wrapped [:methods :get :handler])))
-      (is (= 'create-user (get-in wrapped [:methods :post :handler])))))
+      (is (= "/api/v1/users" (versioning/route-path wrapped)))
+      (is (= 'list-users (get-in (second wrapped) [:get :handler])))
+      (is (= 'create-user (get-in (second wrapped) [:post :handler])))))
 
   (testing "Wrap empty routes returns empty vector"
     (let [result (versioning/wrap-routes-with-version [] :v1)]
@@ -106,9 +106,9 @@
       (is (empty? result))))
 
   (testing "Wrap routes with path parameters"
-    (let [routes [{:path "/users/:id" :methods {}}]
+    (let [routes [["/users/:id" {}]]
           result (versioning/wrap-routes-with-version routes :v1)]
-      (is (= "/api/v1/users/:id" (:path (first result)))))))
+      (is (= "/api/v1/users/:id" (versioning/route-path (first result)))))))
 
 ;; =============================================================================
 ;; Version Headers Middleware Tests
@@ -193,16 +193,13 @@
 (deftest ^:unit create-redirect-route-test
   (testing "Create redirect route for users endpoint"
     (let [route (versioning/create-redirect-route "/users" :v1)]
-      (is (= "/api/users" (:path route)))
-      (is (contains? (:methods route) :get))
-      (is (contains? (:methods route) :post))
-      (is (contains? (:methods route) :put))
-      (is (contains? (:methods route) :delete))
-      (is (contains? (:methods route) :patch))))
+      ;; Reitit data — ["/api/users" {:get {..} :post {..} ..}] (ADR-037).
+      (is (= "/api/users" (versioning/route-path route)))
+      (is (every? (second route) [:get :post :put :delete :patch]))))
 
   (testing "Redirect handler returns 307 status"
     (let [route (versioning/create-redirect-route "/users" :v1)
-          handler (get-in route [:methods :get :handler])
+          handler (get-in (second route) [:get :handler])
           response (handler {:uri "/api/users"})]
       (is (= 307 (:status response)))
       (is (= "/api/v1/users" (get-in response [:headers "Location"])))
@@ -210,7 +207,7 @@
 
   (testing "Redirect handler includes informative body"
     (let [route (versioning/create-redirect-route "/users/:id" :v1)
-          handler (get-in route [:methods :get :handler])
+          handler (get-in (second route) [:get :handler])
           response (handler {:uri "/api/users/123"})]
       (is (map? (:body response)))
       (is (= "Please use versioned API endpoint" (:message (:body response))))
@@ -219,8 +216,8 @@
 
   (testing "All HTTP methods use same redirect handler"
     (let [route (versioning/create-redirect-route "/items" :v2)
-          get-handler (get-in route [:methods :get :handler])
-          post-handler (get-in route [:methods :post :handler])
+          get-handler (get-in (second route) [:get :handler])
+          post-handler (get-in (second route) [:post :handler])
           get-response (get-handler {:uri "/api/items"})
           post-response (post-handler {:uri "/api/items"})]
       (is (= 307 (:status get-response)))
@@ -230,47 +227,47 @@
 
 (deftest ^:unit create-backward-compatibility-routes-test
   (testing "Create redirects for versioned routes"
-    (let [versioned-routes [{:path "/api/v1/users" :methods {}}
-                            {:path "/api/v1/items" :methods {}}]
+    (let [versioned-routes [["/api/v1/users" {}]
+                            ["/api/v1/items" {}]]
           redirects (versioning/create-backward-compatibility-routes
                      versioned-routes :v1)]
       (is (= 2 (count redirects)))
       ;; Should create /api/users and /api/items redirects
-      (is (some #(= "/api/users" (:path %)) redirects))
-      (is (some #(= "/api/items" (:path %)) redirects))))
+      (is (some #(= "/api/users" (versioning/route-path %)) redirects))
+      (is (some #(= "/api/items" (versioning/route-path %)) redirects))))
 
   (testing "Only create redirects for matching version"
-    (let [versioned-routes [{:path "/api/v1/users" :methods {}}
-                            {:path "/api/v2/users" :methods {}}]
+    (let [versioned-routes [["/api/v1/users" {}]
+                            ["/api/v2/users" {}]]
           redirects (versioning/create-backward-compatibility-routes
                      versioned-routes :v1)]
       ;; Should only create redirect for v1 routes
       (is (= 1 (count redirects)))
-      (is (= "/api/users" (:path (first redirects))))))
+      (is (= "/api/users" (versioning/route-path (first redirects))))))
 
   (testing "Handle routes with path parameters"
-    (let [versioned-routes [{:path "/api/v1/users/:id" :methods {}}]
+    (let [versioned-routes [["/api/v1/users/:id" {}]]
           redirects (versioning/create-backward-compatibility-routes
                      versioned-routes :v1)]
       (is (= 1 (count redirects)))
-      (is (= "/api/users/:id" (:path (first redirects))))))
+      (is (= "/api/users/:id" (versioning/route-path (first redirects))))))
 
   (testing "Empty routes returns empty redirects"
     (let [redirects (versioning/create-backward-compatibility-routes [] :v1)]
       (is (empty? redirects))))
 
   (testing "Default version is v1"
-    (let [versioned-routes [{:path "/api/v1/users" :methods {}}]
+    (let [versioned-routes [["/api/v1/users" {}]]
           redirects (versioning/create-backward-compatibility-routes versioned-routes)]
       (is (= 1 (count redirects)))
       (let [route (first redirects)
-            handler (get-in route [:methods :get :handler])
+            handler (get-in (second route) [:get :handler])
             response (handler {:uri "/api/users"})]
         (is (= "/api/v1/users" (get-in response [:headers "Location"]))))))
 
   (testing "Deduplicate paths"
-    (let [versioned-routes [{:path "/api/v1/users" :methods {}}
-                            {:path "/api/v1/users" :methods {}}]  ; Duplicate
+    (let [versioned-routes [["/api/v1/users" {}]
+                            ["/api/v1/users" {}]]  ; Duplicate
           redirects (versioning/create-backward-compatibility-routes
                      versioned-routes :v1)]
       ;; Should only create one redirect even with duplicate input
@@ -282,40 +279,40 @@
 
 (deftest ^:unit apply-versioning-test
   (testing "Apply versioning to routes"
-    (let [routes [{:path "/users" :methods {}}
-                  {:path "/items" :methods {}}]
+    (let [routes [["/users" {}]
+                  ["/items" {}]]
           result (versioning/apply-versioning routes sample-config)]
       ;; Should have 2 versioned routes + 2 redirect routes
       (is (= 4 (count result)))
       ;; Check versioned routes
-      (is (some #(= "/api/v1/users" (:path %)) result))
-      (is (some #(= "/api/v1/items" (:path %)) result))
+      (is (some #(= "/api/v1/users" (versioning/route-path %)) result))
+      (is (some #(= "/api/v1/items" (versioning/route-path %)) result))
       ;; Check redirect routes
-      (is (some #(= "/api/users" (:path %)) result))
-      (is (some #(= "/api/items" (:path %)) result))))
+      (is (some #(= "/api/users" (versioning/route-path %)) result))
+      (is (some #(= "/api/items" (versioning/route-path %)) result))))
 
   (testing "Apply versioning preserves route methods"
-    (let [routes [{:path "/users"
-                   :methods {:get {:handler 'list-users}
-                             :post {:handler 'create-user}}}]
+    (let [routes [["/users"
+                   {:get  {:handler 'list-users}
+                    :post {:handler 'create-user}}]]
           result (versioning/apply-versioning routes sample-config)
-          versioned (first (filter #(str/includes? (:path %) "v1") result))]
-      (is (= "/api/v1/users" (:path versioned)))
-      (is (= 'list-users (get-in versioned [:methods :get :handler])))
-      (is (= 'create-user (get-in versioned [:methods :post :handler])))))
+          versioned (first (filter #(str/includes? (versioning/route-path %) "v1") result))]
+      (is (= "/api/v1/users" (versioning/route-path versioned)))
+      (is (= 'list-users (get-in (second versioned) [:get :handler])))
+      (is (= 'create-user (get-in (second versioned) [:post :handler])))))
 
   (testing "Apply versioning with different default version"
-    (let [routes [{:path "/users" :methods {}}]
+    (let [routes [["/users" {}]]
           config {:active {:wagoe/api-versioning
                            {:default-version :v2
                             :latest-stable :v2
                             :supported-versions #{:v2}}}}
           result (versioning/apply-versioning routes config)]
       ;; Should have v2 versioned route
-      (is (some #(= "/api/v2/users" (:path %)) result))
+      (is (some #(= "/api/v2/users" (versioning/route-path %)) result))
       ;; Redirect should point to v2
-      (let [redirect (first (filter #(= "/api/users" (:path %)) result))
-            handler (get-in redirect [:methods :get :handler])
+      (let [redirect (first (filter #(= "/api/users" (versioning/route-path %)) result))
+            handler (get-in (second redirect) [:get :handler])
             response (handler {:uri "/api/users"})]
         (is (= "/api/v2/users" (get-in response [:headers "Location"]))))))
 
@@ -324,7 +321,7 @@
       (is (empty? result))))
 
   (testing "Apply versioning returns vector"
-    (let [routes [{:path "/users" :methods {}}]
+    (let [routes [["/users" {}]]
           result (versioning/apply-versioning routes sample-config)]
       (is (vector? result)))))
 
@@ -368,9 +365,9 @@
           versioned-routes (versioning/apply-versioning sample-routes sample-config)
 
           ;; Verify route structure
-          versioned (filter #(str/includes? (:path %) "v1") versioned-routes)
-          redirects (filter #(and (not (str/includes? (:path %) "v1"))
-                                  (str/starts-with? (:path %) "/api/"))
+          versioned (filter #(str/includes? (versioning/route-path %) "v1") versioned-routes)
+          redirects (filter #(and (not (str/includes? (versioning/route-path %) "v1"))
+                                  (str/starts-with? (versioning/route-path %) "/api/"))
                             versioned-routes)]
 
       ;; Should have 3 versioned routes (users, users/:id, items)
@@ -380,15 +377,15 @@
       (is (= 3 (count redirects)))
 
       ;; Test a redirect handler
-      (let [users-redirect (first (filter #(= "/api/users" (:path %)) redirects))
-            get-handler (get-in users-redirect [:methods :get :handler])
+      (let [users-redirect (first (filter #(= "/api/users" (versioning/route-path %)) redirects))
+            get-handler (get-in (second users-redirect) [:get :handler])
             response (get-handler {:uri "/api/users"})]
         (is (= 307 (:status response)))
         (is (= "/api/v1/users" (get-in response [:headers "Location"]))))
 
       ;; Test a versioned route handler
-      (let [users-versioned (first (filter #(= "/api/v1/users" (:path %)) versioned))
-            get-handler (get-in users-versioned [:methods :get :handler])
+      (let [users-versioned (first (filter #(= "/api/v1/users" (versioning/route-path %)) versioned))
+            get-handler (get-in (second users-versioned) [:get :handler])
             response (get-handler {})]
         (is (= 200 (:status response)))
         (is (= "list users" (:body response))))))
@@ -433,14 +430,14 @@
       (is (= :v1 (:latest-stable result)))))
 
   (testing "Wrap routes with keyword version"
-    (let [routes [{:path "/users" :methods {}}]
+    (let [routes [["/users" {}]]
           result (versioning/wrap-routes-with-version routes :v123)]
-      (is (= "/api/v123/users" (:path (first result))))))
+      (is (= "/api/v123/users" (versioning/route-path (first result))))))
 
   (testing "Redirect route with complex path"
     (let [route (versioning/create-redirect-route "/users/:id/orders/:order_id" :v1)]
-      (is (= "/api/users/:id/orders/:order_id" (:path route)))
-      (let [handler (get-in route [:methods :get :handler])
+      (is (= "/api/users/:id/orders/:order_id" (versioning/route-path route)))
+      (let [handler (get-in (second route) [:get :handler])
             response (handler {:uri "/api/users/123/orders/456"})]
         (is (= "/api/v1/users/:id/orders/:order_id"
                (get-in response [:headers "Location"]))))))
@@ -462,13 +459,13 @@
       (is (= "2026-06-01" (get-in response-v2 [:headers "X-API-Sunset"])))))
 
   (testing "Routes with leading slashes are handled correctly"
-    (let [routes [{:path "/users" :methods {}}]
+    (let [routes [["/users" {}]]
           result (versioning/wrap-routes-with-version routes :v1)]
-      (is (= "/api/v1/users" (:path (first result))))
+      (is (= "/api/v1/users" (versioning/route-path (first result))))
       ;; Should not have double slashes
-      (is (not (str/includes? (:path (first result)) "//")))))
+      (is (not (str/includes? (versioning/route-path (first result)) "//")))))
 
   (testing "Empty path edge case"
     (let [routes [{:path "" :methods {}}]
           result (versioning/wrap-routes-with-version routes :v1)]
-      (is (= "/api/v1" (:path (first result)))))))
+      (is (= "/api/v1" (versioning/route-path (first result)))))))

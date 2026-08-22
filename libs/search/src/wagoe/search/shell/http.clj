@@ -192,44 +192,41 @@
 ;; =============================================================================
 
 (defn search-routes
-  "Return normalized route definitions for the search API.
+  "Reitit route data for the search API. Mounted under /api/v1.
 
    Args:
-     engine - SearchService (ISearchEngine)
-
-   Returns:
-     Vector of normalized route maps"
+     engine - SearchService (ISearchEngine)"
   [engine]
-  [{:path    "/search/:index-id"
-    :methods {:post {:handler (fn [req] (handle-search engine req))
-                     :summary "Full-text search"}}}
-   {:path    "/search/:index-id/suggest"
-    :methods {:post {:handler (fn [req] (handle-suggest engine req))
-                     :summary "Trigram suggestions"}}}
-   {:path    "/search/documents"
-    :methods {:post {:handler (fn [req] (handle-index-document engine req))
-                     :summary "Index a search document"}}}
-   {:path    "/search/documents/:entity-type/:entity-id"
-    :methods {:delete {:handler (fn [req] (handle-remove-document engine req))
-                       :summary "Remove a search document"}}}])
+  [["/search/documents"
+    {:post {:handler (fn [req] (handle-index-document engine req))
+            :summary "Index a search document"}}]
+   ["/search/documents/:entity-type/:entity-id"
+    {:delete {:handler (fn [req] (handle-remove-document engine req))
+              :summary "Remove a search document"}}]
+   ;; After /search/documents: reitit matches literal segments before
+   ;; parameters, but declaring the specific ones first says so to a reader.
+   ["/search/:index-id"
+    {:post {:handler (fn [req] (handle-search engine req))
+            :summary "Full-text search"}}]
+   ["/search/:index-id/suggest"
+    {:post {:handler (fn [req] (handle-suggest engine req))
+            :summary "Trigram suggestions"}}]])
 
 (defn search-web-routes
-  "Return normalized route definitions for the search Admin web UI.
+  "Reitit route data for the search Admin web UI.
 
-   Routes will be mounted under /web/admin by the HTTP handler.
+   Mounted under /web/admin by the HTTP handler — see this module's
+   `:web-prefix`.
 
    Args:
-     engine - SearchService (ISearchEngine)
-
-   Returns:
-     Vector of normalized route maps"
+     engine - SearchService (ISearchEngine)"
   [engine]
-  [{:path    "/search"
-    :methods {:get {:handler (fn [req] (handle-list-indices-web engine req))
-                    :summary "Search indices admin page"}}}
-   {:path    "/search/:index-id"
-    :methods {:get {:handler (fn [req] (handle-get-index-web engine req))
-                    :summary "Search index detail page"}}}
-   {:path    "/search/:index-id/search"
-    :methods {:post {:handler (fn [req] (handle-search-fragment engine req))
-                     :summary "HTMX search results fragment"}}}])
+  [["/search"
+    {:get {:handler (fn [req] (handle-list-indices-web engine req))
+           :summary "Search indices admin page"}}]
+   ["/search/:index-id"
+    {:get {:handler (fn [req] (handle-get-index-web engine req))
+           :summary "Search index detail page"}}]
+   ["/search/:index-id/search"
+    {:post {:handler (fn [req] (handle-search-fragment engine req))
+            :summary "HTMX search results fragment"}}]])

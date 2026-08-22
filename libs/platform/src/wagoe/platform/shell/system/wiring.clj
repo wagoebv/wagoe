@@ -151,15 +151,24 @@
 (defn- mount-web-routes
   "Prefix a module's web routes and settle their doc visibility.
 
-   `:meta` is merged into the route root and `:no-doc` defaults to true: web UI
-   routes do not belong in the API documentation, and a module that wants one
-   listed says so in its own `:meta`."
+   Web UI routes do not belong in the API documentation, so `:no-doc` defaults
+   to true; a module that wants one listed says so.
+
+   Both shapes, while modules migrate to Reitit data (ADR-037). A Reitit route
+   is `[path data & children]` and the prefix goes on the path; a normalized one
+   is a map whose `:meta` merges into the route root."
   [prefix routes]
-  (mapv (fn [{:keys [path meta] :as route}]
-          (-> route
-              (dissoc :meta)
-              (merge {:no-doc true} meta)
-              (assoc :path (str prefix path))))
+  (mapv (fn [route]
+          (if (vector? route)
+            (let [[path data & children] route]
+              (into [(str prefix path)
+                     (if (map? data) (merge {:no-doc true} data) data)]
+                    children))
+            (let [{:keys [path meta]} route]
+              (-> route
+                  (dissoc :meta)
+                  (merge {:no-doc true} meta)
+                  (assoc :path (str prefix path))))))
         routes))
 
 (defn module-route-contributions
