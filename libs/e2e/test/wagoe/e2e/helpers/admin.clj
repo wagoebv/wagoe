@@ -38,24 +38,75 @@
   (page/wait-for-url pg #".*/web/dashboard.*" {:timeout 10000.0})
   pg)
 
-(defn install-htmx-settle-listener!
-  "Install a one-shot htmx:afterSettle listener BEFORE triggering an
-   interaction. Stores a promise on window that resolves on settle or
-   after 10s (safety timeout). Call `await-htmx-settle!` after the
-   interaction to wait for the result."
-  [pg]
-  (page/evaluate pg
-                 (str "window.__htmxSettled = new Promise(r => {"
-                      "  let done = false;"
-                      "  document.addEventListener('htmx:afterSettle', () => { if (!done) { done = true; r(true); } }, {once:true});"
-                      "  setTimeout(() => { if (!done) { done = true; r(false); } }, 10000);"
-                      "});")))
+(def ^:private stale-marker
+  "Attribute stamped on what an HTMX request is about to replace.
 
-(defn await-htmx-settle!
-  "Await the promise installed by `install-htmx-settle-listener!`.
-   Must be called AFTER the interaction that triggers the HTMX request."
-  [pg]
-  (page/evaluate pg "window.__htmxSettled"))
+   Waiting for a mark to disappear waits for the swap that actually happened.
+   The `htmx:afterSettle` listener it replaced fired for any swap anywhere on
+   the page, so it could resolve on something else entirely and let the
+   assertion run against DOM that had not been touched yet (BOU-297)."
+  "data-e2e-stale")
+
+(defn- mark-stale!
+  "Stamp what an HTMX request is about to replace, so the swap can be detected.
+
+   `selector` names the element HTMX targets. When the swap replaces its
+   contents the mark goes on its first child; when it replaces the element
+   itself the mark goes on the element. Marking both covers either swap style.
+
+   Returns how many elements were marked, which is what `await-swap!` waits to
+   drop below. Returning it rather than assuming two matters: a target with no
+   children marks one, and a wait hardcoded to \"fewer than two\" would be
+   satisfied before the request had even been sent.
+
+   Throws when there is nothing to mark: waiting for the replacement of an
+   element that was never there passes by never having looked."
+  [pg selector]
+  (let [marked (page/evaluate
+                pg
+                (str "(() => {"
+                     "  const el = document.querySelector('" selector "');"
+                     "  if (!el) return 0;"
+                     "  el.setAttribute('" stale-marker "', '1');"
+                     "  if (!el.firstElementChild) return 1;"
+                     "  el.firstElementChild.setAttribute('" stale-marker "', '1');"
+                     "  return 2;"
+                     "})()"))
+        marked (long (or marked 0))]
+    (when (zero? marked)
+      (throw (ex-info (str "Nothing matched " selector " to wait on")
+                      {:type :wagoe.e2e/nothing-to-wait-for :selector selector})))
+    marked))
+
+(defn- await-swap!
+  "Block until something marked by `mark-stale!` has been replaced.
+
+   `wait-for-function` answers with an anomaly map rather than throwing, so the
+   result is checked. On success it hands back a JSHandle, so anything map-like
+   is the failure — keyed on the shape rather than on the anomaly's namespaced
+   `:category`, which a first version of this guessed wrong (`cognitect.` for
+   `com.blockether.`) and so never fired at all.
+
+   The listener this replaced had the same hole from the other side: a
+   ten-second promise resolving to `false`, which nobody read. A test that
+   cannot tell \"the swap did not happen\" from \"the swap happened and the
+   answer was empty\" is the shape both admin search tests failed in —
+   intermittently, which is worse (BOU-297)."
+  [pg marked selector]
+  (let [result (page/wait-for-function
+                pg
+                ;; The swap only has to clear one of the marks: an innerHTML
+                ;; swap keeps the target and drops its children, an outerHTML
+                ;; swap does the reverse.
+                (str "document.querySelectorAll('[" stale-marker "]').length < " marked)
+                {:timeout 10000.0 :polling 50.0})]
+    (when (map? result)
+      (throw (ex-info (str "HTMX never replaced " selector)
+                      {:type      :wagoe.e2e/htmx-swap-timeout
+                       :selector  selector
+                       :waited-ms 10000
+                       :anomaly   result})))
+    true))
 
 (defn table-headers
   "Read visible column header texts from table.data-table thead th.
@@ -75,16 +126,38 @@
   (loc/count-elements (page/locator pg "table.data-table tbody tr")))
 
 (defn search!
-  "Fill the search input and trigger the HTMX search by clicking the
-   search button. Waits for the HTMX settle event after the click."
+  "Fill the search input, trigger the HTMX request, and wait for the table to
+   be replaced.
+
+   The button rather than the input, because the input is
+   `hx-trigger=\"keyup changed delay:300ms\"` and waiting out a debounce is
+   waiting on a clock. The wait is for the swap itself: both `search!` calls in
+   a test hit the same container, and asserting on the second before its swap
+   landed read the first search's rows."
   [pg query]
   (let [input (page/locator pg "input.search-input")]
     (loc/fill input query)
-    ;; Click the search button to trigger the HTMX request immediately
-    ;; (avoids relying on keyup debounce timing)
-    (install-htmx-settle-listener! pg)
-    (loc/click (page/locator pg ".toolbar-search button[aria-label]"))
-    (await-htmx-settle! pg)))
+    (let [marked (mark-stale! pg "#entity-table-container")]
+      (loc/click (page/locator pg ".toolbar-search button[aria-label]"))
+      (await-swap! pg marked "#entity-table-container"))))
+
+(defn submit-entity-form!
+  "Click an admin entity form's submit button and wait for it to re-render.
+
+   The three callers of this did the same thing with a one-shot
+   `htmx:afterSettle` listener whose ten-second timeout resolved to `false` and
+   was never read, so a submit that never landed asserted against the form as
+   it was before (BOU-297)."
+  [pg]
+  ;; `body`, not `form.entity-form`: the form is `hx-target="body"
+  ;; hx-swap="outerHTML"`, so the whole document is replaced. Marking the form
+  ;; would still detect it — the form goes with the body — but the selector is
+  ;; what a timeout names, and naming the form would send the reader looking at
+  ;; the wrong element.
+  (let [marked (mark-stale! pg "body")]
+    (loc/click (page/locator pg "form.entity-form button[type='submit']"))
+    (await-swap! pg marked "body")
+    (page/wait-for-load-state pg)))
 
 (defn has-empty-state?
   "Check if the empty state element is visible or the table has no data rows."

@@ -1249,7 +1249,6 @@ jobs:
   # =============================================================================
   e2e:
     name: E2E (spel)
-    if: false  # disabled — run manually when needed
     runs-on: ubuntu-latest
     needs: [lint, build-ui-assets]
 
@@ -1290,7 +1289,6 @@ jobs:
         run: clojure -M:e2e -e "(.exit (com.microsoft.playwright.CLI/main (into-array String [\"install\" \"chromium\"])))"
 
       - name: Run e2e suite
-        continue-on-error: true
         run: bb e2e
         env:
           WAG_ENV: test
@@ -1467,7 +1465,7 @@ jobs:
   test-summary:
     name: All Tests Passed
     runs-on: ubuntu-latest
-    needs: [lint, branch-protection, first-run-smoke, build-ui-assets, docs-lint, agents-links, command-smoke, config-doctor, i18n-scan, check-fcis, check-placeholder-tests, check-test-meta, check-test-tags, check-deps, check-ports, check-hygiene, check-changelog, check-doc-counts, check-versions, check-isolation, check-error-shape, check-isolation-matrix, check-poms, check-agents, check-no-boundary, build-uberjar, test-tools, example-smoke, test-i18n, test-config, test-core, test-observability, test-platform, test-user, test-admin, test-ui-style, test-storage, test-cache, test-events, test-jobs, test-tenant, test-audience, test-devtools, test-email, test-realtime, test-workflow, test-search, test-scaffolder, test-external, test-payments, test-push, test-calendar, test-reports, test-geo, test-ai, test-mcp, test-wagoe-cli, test-shared-ui]
+    needs: [lint, branch-protection, first-run-smoke, build-ui-assets, docs-lint, agents-links, command-smoke, config-doctor, i18n-scan, check-fcis, check-placeholder-tests, check-test-meta, check-test-tags, check-deps, check-ports, check-hygiene, check-changelog, check-doc-counts, check-versions, check-isolation, check-error-shape, check-isolation-matrix, check-poms, check-agents, check-no-boundary, build-uberjar, test-tools, example-smoke, test-i18n, test-config, test-core, test-observability, test-platform, test-user, test-admin, test-ui-style, test-storage, test-cache, test-events, test-jobs, test-tenant, test-audience, test-devtools, test-email, test-realtime, test-workflow, test-search, test-scaffolder, test-external, test-payments, test-push, test-calendar, test-reports, test-geo, test-ai, test-mcp, test-wagoe-cli, test-shared-ui, e2e]
 
     steps:
       - name: Summary
