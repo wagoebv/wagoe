@@ -165,13 +165,19 @@
   (str/replace s #"\d{14}" "<timestamp>"))
 
 (defn- tree
-  "path -> contents, for comparing two generated trees."
+  "path -> contents, for comparing two generated trees.
+
+   Excludes on the first path segment, matched whole. Written as
+   `str/starts-with?` over the whole relative path, `.env.example` matched the
+   `.env` exclusion and dropped out of the comparison on both sides — so a
+   change to it was reported as no change at all, by the check whose job is to
+   notice."
   [dir]
   (into (sorted-map)
         (for [p (file-seq (fs/file dir))
               :when (.isFile p)
               :let  [rel (str (fs/relativize dir (fs/path p)))]
-              :when (and (not (some #(str/starts-with? rel %) excluded))
+              :when (and (not (excluded (first (str/split rel #"/"))))
                          (not (preserved rel)))]
           [(undate rel) (undate (slurp p))])))
 

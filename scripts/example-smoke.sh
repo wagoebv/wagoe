@@ -42,9 +42,13 @@ trap cleanup EXIT
 # profile carries no :wagoe/http block, so HTTP_PORT does not reach it there and
 # the platform default applies — and the port manager may move off a taken port
 # anyway. Both would show up as "the app did not start" if this hardcoded 3000.
+# `:port` with the colon, deliberately: the port manager also logs the range it
+# searched — "searching ports 3000-3099" — and a looser pattern picks 3000 out
+# of that line even when the server ended up somewhere else. The last match
+# wins, because the manager logs the requested port before the bound one.
 PORT=""
 for _ in $(seq 1 90); do
-  PORT=$(grep -oE '"?:?port"?[": ]+([0-9]{4,5})' /tmp/shop-smoke.log 2>/dev/null \
+  PORT=$(grep -oE ':port +[0-9]{4,5}' /tmp/shop-smoke.log 2>/dev/null \
            | grep -oE '[0-9]{4,5}' | tail -1 || true)
   if [ -n "$PORT" ] && curl -fsS -o /dev/null "http://localhost:$PORT/health" 2>/dev/null; then
     break
