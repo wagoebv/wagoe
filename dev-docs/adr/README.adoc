@@ -140,6 +140,29 @@ Make user, auth, and authorization logic pluggable (like observability and datab
 * HTTP/CLI interceptors call ports, not concrete user namespaces
 * Token shape and policy engine as adapters (JWT/opaque/PASETO, RBAC/OPA/etc.)
 
+==== ADR-012: User Module Admin Integration — Split-Table Architecture [Accepted]
+ADR-012 user module updates.adoc
+
+Identity in `auth_users`, profile in `users`, joined for the admin UI — which is
+why the admin entity config carries `:split-table-update`.
+
+==== ADR-013: Internationalisation (i18n) [Accepted]
+ADR-013-intenationalisation.adoc
+
+Marker-based translation with EDN catalogues; the middleware is built by the
+i18n library and injected, so platform requires none of it.
+
+==== ADR-014: Pluggable User / Auth / Authorization [Accepted]
+ADR-014-pluggable-auth.adoc
+
+Identity behind ports, like the database and observability adapters.
+
+==== ADR-015: wagoe-tools — Distributing Developer Tooling [Accepted]
+ADR-015-wagoe-tools.adoc
+
+The `bb` tasks ship to generated projects as a library rather than as copied
+scripts.
+
 ==== ADR-016: Tenant User Membership [Accepted]
 ADR-016-tenant-user-membership.adoc
 
@@ -379,3 +402,10 @@ Consequences)
 . Discuss with the team before finalizing
 . Update this README with a summary
 . Reference the ADR in relevant code and documentation
+
+==== ADR-037: Modules Emit Reitit Route Data [Accepted]
+ADR-037-reitit-routes-directly.adoc
+
+Supersedes ADR-008's abstraction half. 341 lines translated one EDN route format
+into another for a seam with one implementation, and cost conflict detection,
+reverse routing and lint-visible handlers to do it.

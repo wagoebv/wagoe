@@ -78,6 +78,17 @@
     (testing "the index was parsed — otherwise this is vacuous"
       (is (<= 25 (count listed)) (str "read " (count listed) " entries from README.adoc")))
 
+    (testing "every ADR is listed at all"
+      ;; This checked that listed entries matched their files and not that every
+      ;; file was listed, so five ADRs — including the two added by the ticket
+      ;; that wrote this test — were absent from the index and the gate passed.
+      ;; A missing entry is the same defect as a wrong one: a reader consulting
+      ;; the index concludes the decision was never made.
+      (let [missing (remove (set (keys listed)) (keys all))]
+        (is (empty? missing)
+            (str "not in README.adoc's index: "
+                 (pr-str (mapv #(get-in all [% :file]) (sort missing)))))))
+
     (testing "every listed status matches the ADR it names"
       (doseq [[num status] listed
               :let [actual (get-in all [num :status])]
