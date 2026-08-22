@@ -149,9 +149,14 @@
    was never read, so a submit that never landed asserted against the form as
    it was before (BOU-297)."
   [pg]
-  (let [marked (mark-stale! pg "form.entity-form")]
+  ;; `body`, not `form.entity-form`: the form is `hx-target="body"
+  ;; hx-swap="outerHTML"`, so the whole document is replaced. Marking the form
+  ;; would still detect it — the form goes with the body — but the selector is
+  ;; what a timeout names, and naming the form would send the reader looking at
+  ;; the wrong element.
+  (let [marked (mark-stale! pg "body")]
     (loc/click (page/locator pg "form.entity-form button[type='submit']"))
-    (await-swap! pg marked "form.entity-form")
+    (await-swap! pg marked "body")
     (page/wait-for-load-state pg)))
 
 (defn has-empty-state?

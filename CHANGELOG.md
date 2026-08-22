@@ -50,6 +50,13 @@ for what is public API, what is internal, and how deprecations are announced.
   The helpers now mark what the request is about to replace and wait for that
   mark to go, with the timeout raised as an error naming the selector.
 
+  `bb check:branch-protection` gained the other half of how this happened.
+  It detected `if: false` and had no concept of `continue-on-error: true` —
+  which is what the e2e job's run step actually carried, and which is worse: the
+  job stays in the required context's `needs:` looking guarded while reporting
+  success whatever the tests did. Both the job-level and step-level forms now
+  fail the check, naming the step.
+
   Verified by breaking it: point the search button's `hx-target` at an element
   that does not exist and four tests report `HTMX never replaced
   #entity-table-container` — where the old mechanism failed two of them on a

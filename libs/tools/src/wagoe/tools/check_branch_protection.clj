@@ -91,8 +91,30 @@
   [job]
   (false? (:if job)))
 
+(defn- toothless
+  "Reasons `job` is in the merge gate and cannot fail it.
+
+   `continue-on-error: true` makes GitHub report the job as successful whatever
+   happened, so a job carrying it satisfies the required context by construction.
+   That is worse than `if: false`, which at least removes the job from coverage
+   visibly — this one sits in the summary's `needs:` looking guarded.
+
+   Both halves matter, and the step form is the one that actually shipped: e2e's
+   `Run e2e suite` step carried it under an `if: false` job, so even un-parking
+   the job would have left a green light over failing tests (BOU-297).
+
+   Returns a seq of human-readable reasons, empty when the job can fail."
+  [job]
+  (concat
+   (when (true? (:continue-on-error job))
+     ["the job carries `continue-on-error: true`"])
+   (for [step  (:steps job)
+         :when (true? (:continue-on-error step))]
+     (str "step " (pr-str (or (:name step) (:run step))) " carries `continue-on-error: true`"))))
+
 (defn summary-covers
-  "{:summary-name s :missing [job-keys] :disabled [job-keys]} for `workflow`.
+  "{:summary-name s :missing [..] :disabled [..] :toothless {job reasons}} for
+   `workflow`.
 
    Coverage is transitive. A job the summary reaches through another job is
    guarded: `warm-deps` is not in the summary's `needs:`, but `lint` needs it,
@@ -112,9 +134,20 @@
                       (recur (into seen nxt)
                              (mapcat #(get graph % #{}) nxt)))))
         parked  (set (for [[k v] jobs :when (disabled? v)] (name k)))
-        all     (set (keys graph))]
+        all     (set (keys graph))
+        ;; Only jobs the summary actually reaches: one outside the gate is
+        ;; already reported as unguarded, and `continue-on-error` on something
+        ;; nothing requires is its own business.
+        blunt   (into (sorted-map)
+                      (for [[k v] jobs
+                            :let  [nm (name k)]
+                            :when (and (contains? reached nm) (not (disabled? v)))
+                            :let  [why (seq (toothless v))]
+                            :when why]
+                        [nm (vec why)]))]
     {:summary-name (when summary (job-context summary-job-key summary))
      :disabled     (sort parked)
+     :toothless    blunt
      :missing      (sort (set/difference all reached parked #{(name summary-job-key)}))}))
 
 ;; =============================================================================
@@ -237,7 +270,7 @@
 
 (defn -main [& _args]
   (let [wf (ci-workflow)
-        {:keys [missing summary-name disabled]} (summary-covers wf)
+        {:keys [missing summary-name disabled toothless]} (summary-covers wf)
         trigger-problems (trigger-findings wf)
         publish-problems (publish-findings (publish-workflow))]
 
@@ -265,6 +298,18 @@
                     ", and branch protection requires \"" summary-job-name "\"."))
       (println "  A required context nothing reports can never be satisfied — and,")
       (println "  while something absorbs it, can never fail either.")
+      (System/exit 1))
+
+    (when (seq toothless)
+      (println (ansi/red "Jobs inside the merge gate that cannot fail it:"))
+      (println)
+      (doseq [[job reasons] toothless
+              reason        reasons]
+        (println (str "  " (ansi/red job) " — " reason)))
+      (println)
+      (println (str "\"" summary-job-name "\" requires these jobs, and they report"))
+      (println "success whatever happened. A required context that cannot go red is")
+      (println "the same as no required context.")
       (System/exit 1))
 
     (if (seq missing)

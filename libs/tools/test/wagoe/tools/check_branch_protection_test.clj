@@ -114,6 +114,56 @@
       (is (= ["sometimes"] missing))
       (is (empty? disabled)))))
 
+(deftest ^:unit a-job-that-cannot-fail-does-not-guard-anything
+  ;; The other half of how e2e left the merge gate, and the half that shipped:
+  ;; `continue-on-error: true` on its "Run e2e suite" step. GitHub reports the
+  ;; job as successful whatever the step did, so the job sits in the summary's
+  ;; `needs:` looking guarded while being unable to go red.
+  ;;
+  ;; Worse than `if: false`, which at least removes the job from coverage where
+  ;; a reader can see it. This one reads as covered (BOU-297).
+  (testing "a step that swallows its failure is reported, with the step named"
+    (let [{:keys [toothless missing]}
+          (sut/summary-covers
+           (wf (str "jobs:\n"
+                    "  test-summary:\n    name: All Tests Passed\n    needs: [a]\n"
+                    "  a:\n    name: A\n    steps:\n"
+                    "      - name: Run the tests\n        continue-on-error: true\n"
+                    "        run: bb test\n")))]
+      (is (empty? missing) "it is in the needs graph — that is the point")
+      (is (= ["a"] (keys toothless)))
+      (is (re-find #"Run the tests" (first (get toothless "a"))))))
+
+  (testing "and so is the job-level form"
+    (let [{:keys [toothless]}
+          (sut/summary-covers
+           (wf (str "jobs:\n"
+                    "  test-summary:\n    name: All Tests Passed\n    needs: [a]\n"
+                    "  a:\n    name: A\n    continue-on-error: true\n")))]
+      (is (= ["a"] (keys toothless)))
+      (is (re-find #"the job carries" (first (get toothless "a"))))))
+
+  (testing "a job outside the gate is not reported here"
+    ;; It is already reported as unguarded, and what a job nothing requires does
+    ;; with its own failures is its own business.
+    (let [{:keys [toothless missing]}
+          (sut/summary-covers
+           (wf (str "jobs:\n"
+                    "  test-summary:\n    name: All Tests Passed\n    needs: [a]\n"
+                    "  a:\n    name: A\n"
+                    "  loose:\n    name: Loose\n    continue-on-error: true\n")))]
+      (is (empty? toothless))
+      (is (= ["loose"] missing))))
+
+  (testing "and a job that can fail is not reported at all"
+    (let [{:keys [toothless]}
+          (sut/summary-covers
+           (wf (str "jobs:\n"
+                    "  test-summary:\n    name: All Tests Passed\n    needs: [a]\n"
+                    "  a:\n    name: A\n    steps:\n"
+                    "      - name: Run the tests\n        run: bb test\n")))]
+      (is (empty? toothless)))))
+
 (deftest ^:unit renaming-the-summary-breaks-the-required-context
   ;; Branch protection requires the string in `summary-job-name`. Renaming the
   ;; job without changing protection recreates the original defect exactly.
@@ -236,6 +286,9 @@
       (is (empty? disabled)
           (str "parked, so a failure there cannot block a merge: "
                (pr-str disabled)))))
+
+  (testing "and nothing inside the gate has been made unable to fail"
+    (is (empty? (:toothless (sut/summary-covers (sut/ci-workflow))))))
 
   (testing "and the e2e suite in particular is required"
     ;; Named, because it is the one that was parked and the one a green
