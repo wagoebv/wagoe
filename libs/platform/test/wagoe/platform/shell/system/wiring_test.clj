@@ -26,7 +26,7 @@
         captured-config (atom nil)
         compiled-handler (fn [request] {:status 200 :body request})
         config {:active {:wagoe/settings {:name "Wagoe"
-                                             :version "1.2.3"}}}
+                                          :version "1.2.3"}}}
         ;; Tenant/membership middleware now arrives via :extra-middleware, built
         ;; by the tenant lib's :wagoe/tenant-http-middleware component (BOU-200);
         ;; platform's http-handler no longer constructs it. Two stand-in wrappers.
@@ -50,10 +50,10 @@
                                 ;; module platform has never heard of
                                 ;; contributes the same way (BOU-330).
                                 :module-routes
-                                [{:api [{:path "/users" :methods {:get {:handler identity}}}]}
-                                 {:api [{:path "/tenants" :methods {:get {:handler identity}}}]}
-                                 {:api [{:path "/tenants/:tenant-id/memberships"
-                                         :methods {:get {:handler identity}}}]}]
+                                [{:api [["/users" {:get {:handler identity}}]]}
+                                 {:api [["/tenants" {:get {:handler identity}}]]}
+                                 {:api [["/tenants/:tenant-id/memberships"
+                                         {:get {:handler identity}}]]}]
                                 :router ::router
                                 :logger ::logger
                                 :metrics-emitter ::metrics
@@ -70,9 +70,9 @@
                                 ;; is this argument.
                                 :i18n-middleware i18n-middleware}))]
     (testing "the compiled route set includes membership endpoints"
-      (is (some #(= "/tenants/:tenant-id/memberships" (:path %)) @captured-routes))
-      (is (some #(= "/tenants" (:path %)) @captured-routes))
-      (is (some #(= "/users" (:path %)) @captured-routes)))
+      (is (some #(= "/tenants/:tenant-id/memberships" (first %)) @captured-routes))
+      (is (some #(= "/tenants" (first %)) @captured-routes))
+      (is (some #(= "/users" (first %)) @captured-routes)))
 
     (testing "router config receives the injected extra middleware, i18n, and method override"
       (is (= 4 (count (:middleware @captured-config))))
@@ -111,45 +111,32 @@
                                 ;; mounts at /web, admin/workflow/search under
                                 ;; /web/admin, and each says so (BOU-330).
                                 :module-routes
-                                [{:web [{:path "/profile"
-                                         :meta {:middleware [:user-mw]}
-                                         :methods {:get {:handler identity}}}]}
+                                [{:web [["/profile" {:middleware [:user-mw]
+                                                     :get {:handler identity}}]]}
                                  {:web-prefix "/web/admin"
-                                  :web [{:path "/users"
-                                         :meta {:middleware [:admin-mw]}
-                                         :methods {:get {:handler identity}}}]}
+                                  :web [["/users" {:middleware [:admin-mw]
+                                                   :get {:handler identity}}]]}
                                  {:web-prefix "/web/admin"
-                                  :web [{:path "/workflow"
-                                         :meta {:middleware [:workflow-mw]}
-                                         :methods {:get {:handler identity}}}]}
+                                  :web [["/workflow" {:middleware [:workflow-mw]
+                                                      :get {:handler identity}}]]}
                                  {:web-prefix "/web/admin"
-                                  :web [{:path "/search"
-                                         :meta {:middleware [:search-mw]}
-                                         :methods {:get {:handler identity}}}]}]
+                                  :web [["/search" {:middleware [:search-mw]
+                                                    :get {:handler identity}}]]}]
                                 :router ::router
                                 :logger ::logger
                                 :metrics-emitter ::metrics
                                 :tracer ::tracer
                                 :error-reporter ::error-reporter
                                 :config {:active {:wagoe/settings {:name "Wagoe"
-                                                                      :version "1.2.3"}}}}))]
-    (testing "web routes are prefixed and route meta is merged at the route root"
-      (is (some #(and (= "/web/profile" (:path %))
-                      (= [:user-mw] (:middleware %))
-                      (= true (:no-doc %)))
-                @captured-routes))
-      (is (some #(and (= "/web/admin/users" (:path %))
-                      (= [:admin-mw] (:middleware %))
-                      (= true (:no-doc %)))
-                @captured-routes))
-      (is (some #(and (= "/web/admin/workflow" (:path %))
-                      (= [:workflow-mw] (:middleware %))
-                      (= true (:no-doc %)))
-                @captured-routes))
-      (is (some #(and (= "/web/admin/search" (:path %))
-                      (= [:search-mw] (:middleware %))
-                      (= true (:no-doc %)))
-                @captured-routes)))
+                                                                   :version "1.2.3"}}}}))]
+    (testing "web routes are prefixed, keep their data, and stay out of the docs"
+      (let [mounted (into {} (map (juxt first second)) @captured-routes)]
+        (doseq [[path mw] {"/web/profile"         [:user-mw]
+                           "/web/admin/users"     [:admin-mw]
+                           "/web/admin/workflow"  [:workflow-mw]
+                           "/web/admin/search"    [:search-mw]}]
+          (is (= mw (:middleware (mounted path))) (str path " lost its middleware"))
+          (is (true? (:no-doc (mounted path))) (str path " would show up in the API docs")))))
 
     (testing "only method override middleware is configured when tenant, membership, and i18n are absent"
       (is (= 1 (count (:middleware @captured-config))))
@@ -189,7 +176,7 @@
                        :metrics-emitter ::metrics
                        :error-reporter ::error-reporter
                        :config {:active {:wagoe/http {:security {:csrf {:enabled? true
-                                                                           :secret ""}}}}}})))))
+                                                                        :secret ""}}}}}})))))
 
 (deftest ^:security ^:unit rate-limit-fails-loud-in-prod-without-cache
   (testing "rate limiting enabled in :prod with no cache throws at startup (no false protection)"

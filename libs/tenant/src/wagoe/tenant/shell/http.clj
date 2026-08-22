@@ -260,23 +260,13 @@
         (error-response 500 "Internal server error")))))
 
 ;; =============================================================================
-;; Routes (Normalized Format)
+;; Routes
 ;; =============================================================================
 
-(defn tenant-routes-normalized
-  "Create tenant management routes in normalized format for composition.
-   
-   Args:
-     tenant-service: ITenantService implementation
-     db-context: Database context (required for provisioning)
-     config: Configuration map (reserved for future use)
-   
-   Returns:
-     Map with :api key containing route definitions
-   
-   Route structure:
-     {:api [...]}  ; API routes under /api/v1/tenants
-   
+(defn tenant-routes
+  "This module's contribution to the route table: Reitit route data under
+   :api, at paths relative to /api/v1.
+
    All routes require admin authentication (to be integrated)."
   [tenant-service db-context _config]
   {:api

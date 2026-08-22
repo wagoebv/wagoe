@@ -17,12 +17,12 @@
     :correlation-id UUID
     :started-at    Instant}
 
-   Usage in Normalized Routes:
-   {:path \"/users\"
-    :methods {:post {:handler create-user-handler
-                     :interceptors ['user.http-interceptors/require-authenticated
-                                    'user.http-interceptors/require-admin
-                                    'user.http-interceptors/log-action]}}}"
+   Usage:
+   [\"/users\"
+    {:post {:handler create-user-handler
+            :interceptors ['user.http-interceptors/require-authenticated
+                           'user.http-interceptors/require-admin
+                           'user.http-interceptors/log-action]}}]"
   (:require [wagoe.observability.logging.ports :as logging]
             [wagoe.observability.metrics.ports :as metrics]
             [wagoe.tenant.core.membership :as membership-core]
@@ -90,9 +90,9 @@
    with 401 Unauthorized response.
    
    Usage:
-   {:path \"/users\"
-    :methods {:get {:handler list-users
-                    :interceptors ['user.http-interceptors/require-authenticated]}}}"
+   [\"/users\"
+    {:get {:handler list-users
+           :interceptors ['user.http-interceptors/require-authenticated]}}]"
   {:name :require-authenticated
    :enter (fn [{:keys [request correlation-id system] :as ctx}]
             (if (authenticated? request)
@@ -129,9 +129,9 @@
    should redirect or prevent access.
    
    Usage:
-   {:path \"/register\"
-    :methods {:get {:handler register-page
-                    :interceptors ['user.http-interceptors/require-unauthenticated]}}}"
+   [\"/register\"
+    {:get {:handler register-page
+           :interceptors ['user.http-interceptors/require-unauthenticated]}}]"
   {:name :require-unauthenticated
    :enter (fn [{:keys [request correlation-id system] :as ctx}]
             (if-not (authenticated? request)
@@ -160,10 +160,10 @@
    Assumes require-authenticated has already run (should be earlier in chain).
    
    Usage:
-   {:path \"/users\"
-   :methods {:post {:handler create-user
-                    :interceptors ['user.http-interceptors/require-authenticated
-                                    'user.http-interceptors/require-admin]}}}"
+   [\"/users\"
+    {:post {:handler create-user
+            :interceptors ['user.http-interceptors/require-authenticated
+                           'user.http-interceptors/require-admin]}}]"
   {:name :require-admin
    :enter (fn [{:keys [request correlation-id system] :as ctx}]
             (let [user (get-user request)]
@@ -236,10 +236,10 @@
      Interceptor that checks for the required role
    
    Usage:
-   {:path \"/manager-reports\"
-    :methods {:get {:handler manager-reports
-                    :interceptors ['user.http-interceptors/require-authenticated
-                                   (user.http-interceptors/require-role \"manager\")]}}}"
+   [\"/manager-reports\"
+    {:get {:handler manager-reports
+           :interceptors ['user.http-interceptors/require-authenticated
+                          (user.http-interceptors/require-role \"manager\")]}}]"
   [required-role]
   {:name (keyword (str "require-" required-role))
    :enter (fn [{:keys [request correlation-id system] :as ctx}]
@@ -283,10 +283,10 @@
    Checks if :id path parameter matches session user ID, or if user is admin.
    
    Usage:
-   {:path \"/users/:id\"
-    :methods {:put {:handler update-user
-                    :interceptors ['user.http-interceptors/require-authenticated
-                                   'user.http-interceptors/require-self-or-admin]}}}"
+   [\"/users/:id\"
+    {:put {:handler update-user
+           :interceptors ['user.http-interceptors/require-authenticated
+                          'user.http-interceptors/require-self-or-admin]}}]"
   {:name :require-self-or-admin
    :enter (fn [{:keys [request path-params correlation-id system] :as ctx}]
             (let [user (get-user request)
@@ -337,11 +337,11 @@
    logged by error-reporting interceptors.
    
    Usage:
-   {:path \"/users\"
-    :methods {:post {:handler create-user
-                     :interceptors ['user.http-interceptors/require-authenticated
-                                    'user.http-interceptors/require-admin
-                                    'user.http-interceptors/log-action]}}}"
+   [\"/users\"
+    {:post {:handler create-user
+            :interceptors ['user.http-interceptors/require-authenticated
+                           'user.http-interceptors/require-admin
+                           'user.http-interceptors/log-action]}}]"
   {:name :log-action
    :leave (fn [{:keys [request response correlation-id system] :as ctx}]
             (let [status (:status response)
@@ -370,11 +370,11 @@
    More verbose than log-action. Use for high-security endpoints.
    
    Usage:
-   {:path \"/admin/users/:id/hard-delete\"
-    :methods {:post {:handler hard-delete-user
-                     :interceptors ['user.http-interceptors/require-authenticated
-                                    'user.http-interceptors/require-admin
-                                    'user.http-interceptors/log-all-actions]}}}"
+   [\"/admin/users/:id/hard-delete\"
+    {:post {:handler hard-delete-user
+            :interceptors ['user.http-interceptors/require-authenticated
+                           'user.http-interceptors/require-admin
+                           'user.http-interceptors/log-all-actions]}}]"
   {:name :log-all-actions
    :leave (fn [{:keys [request response correlation-id system] :as ctx}]
             (let [status (:status response)
@@ -411,9 +411,9 @@
    Applies authentication, admin authorization, and audit logging.
    
    Usage:
-   {:path \"/users\"
-    :methods {:post {:handler create-user
-                     :interceptors user.http-interceptors/admin-endpoint-stack}}}"
+   [\"/users\"
+    {:post {:handler create-user
+            :interceptors user.http-interceptors/admin-endpoint-stack}}]"
   [require-authenticated
    require-admin
    log-action])
@@ -424,9 +424,9 @@
    Applies authentication and audit logging (no role check).
    
    Usage:
-   {:path \"/users/:id\"
-    :methods {:get {:handler get-user
-                    :interceptors user.http-interceptors/user-endpoint-stack}}}"
+   [\"/users/:id\"
+    {:get {:handler get-user
+           :interceptors user.http-interceptors/user-endpoint-stack}}]"
   [require-authenticated
    log-action])
 
@@ -436,9 +436,9 @@
    Only applies audit logging for successful actions.
    
    Usage:
-   {:path \"/health\"
-    :methods {:get {:handler health-check
-                    :interceptors user.http-interceptors/public-endpoint-stack}}}"
+   [\"/health\"
+    {:get {:handler health-check
+           :interceptors user.http-interceptors/public-endpoint-stack}}]"
   [log-action])
 
 ;; =============================================================================
@@ -475,10 +475,10 @@
    Short-circuits with 403 when no active membership is found.
 
    Usage:
-   {:path \"/api/tenants/:tenant-id/documents\"
-    :methods {:get {:handler list-documents
-                    :interceptors ['user.http-interceptors/require-authenticated
-                                   'user.http-interceptors/require-tenant-member]}}}"
+   [\"/api/tenants/:tenant-id/documents\"
+    {:get {:handler list-documents
+           :interceptors ['user.http-interceptors/require-authenticated
+                          'user.http-interceptors/require-tenant-member]}}]"
   {:name  ::require-tenant-member
    :enter (fn [{:keys [request correlation-id system] :as ctx}]
             (let [membership (:tenant-membership request)]
@@ -537,10 +537,10 @@
    Shorthand for (require-tenant-role #{:admin}).
 
    Usage:
-   {:path \"/api/tenants/:tenant-id/settings\"
-    :methods {:put {:handler update-settings
-                    :interceptors ['user.http-interceptors/require-authenticated
-                                   'user.http-interceptors/require-tenant-admin]}}}"
+   [\"/api/tenants/:tenant-id/settings\"
+    {:put {:handler update-settings
+           :interceptors ['user.http-interceptors/require-authenticated
+                          'user.http-interceptors/require-tenant-admin]}}]"
   (require-tenant-role #{:admin}))
 
 (def require-web-tenant-admin
@@ -551,10 +551,10 @@
    HTML routes so the browser lands on the login page rather than a bare error body.
 
    Usage:
-   {:path \"/web/tenants/:tenant-id/settings\"
-    :methods {:get {:handler settings-page
-                    :interceptors ['user.http-interceptors/require-authenticated
-                                   'user.http-interceptors/require-web-tenant-admin]}}}"
+   [\"/web/tenants/:tenant-id/settings\"
+    {:get {:handler settings-page
+           :interceptors ['user.http-interceptors/require-authenticated
+                          'user.http-interceptors/require-web-tenant-admin]}}]"
   {:name  ::require-web-tenant-admin
    :enter (fn [{:keys [request correlation-id system] :as ctx}]
             (let [membership (:tenant-membership request)]

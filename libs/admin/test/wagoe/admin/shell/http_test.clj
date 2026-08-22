@@ -102,7 +102,7 @@
         error-reporter (error-reporting-no-op/create-error-reporting-component {})
         schema-provider (schema-repo/create-schema-repository db-ctx admin-config)
         admin-service (service/create-admin-service db-ctx schema-provider logger error-reporter admin-config)
-        routes (admin-http/normalized-web-routes admin-service schema-provider admin-config nil)
+        routes (admin-http/web-routes admin-service schema-provider admin-config nil)
 
         ;; Create simple handler that wraps routes (Week 1 stub - no full router)
         handler (fn [request]

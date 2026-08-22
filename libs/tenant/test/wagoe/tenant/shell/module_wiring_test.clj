@@ -61,14 +61,14 @@
                                                                                (is (= metrics metrics-emitter))
                                                                                (is (= error-reporter err))
                                                                                ::invite-service)
-                  wagoe.tenant.shell.http/tenant-routes-normalized (fn [service db-ctx cfg]
+                  wagoe.tenant.shell.http/tenant-routes (fn [service db-ctx cfg]
                                                                         (is (= tenant-service service))
                                                                         (is (= db-context db-ctx))
                                                                         (is (= config cfg))
-                                                                        {:api [{:path "/tenants"}]})
-                  wagoe.tenant.shell.membership-http/membership-routes-normalized (fn [service]
+                                                                        {:api [["/tenants" {}]]})
+                  wagoe.tenant.shell.membership-http/membership-routes (fn [service]
                                                                                        (is (= membership-service service))
-                                                                                       {:api [{:path "/tenants/:tenant-id/memberships"}]})]
+                                                                                       {:api [["/tenants/:tenant-id/memberships" {}]]})]
       (testing "schema, repositories, services, and routes initialize through their constructors"
         (is (= {:status :initialized}
                (ig/init-key :wagoe/tenant-db-schema {:ctx ctx})))
@@ -101,11 +101,11 @@
                                                       :logger logger
                                                       :metrics-emitter metrics
                                                       :error-reporter error-reporter})))
-        (is (= {:api [{:path "/tenants"}]}
+        (is (= {:api [["/tenants" {}]]}
                (ig/init-key :wagoe/tenant-routes {:tenant-service tenant-service
                                                      :db-context db-context
                                                      :config config})))
-        (is (= {:api [{:path "/tenants/:tenant-id/memberships"}]}
+        (is (= {:api [["/tenants/:tenant-id/memberships" {}]]}
                (ig/init-key :wagoe/membership-routes {:service membership-service})))))))
 
 (deftest ^:unit tenant-http-middleware-builds-injectable-middleware-seq

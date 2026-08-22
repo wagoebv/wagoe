@@ -1,8 +1,8 @@
 (ns wagoe.admin.shell.http
   "HTTP routes for the admin interface.
 
-   This namespace wires the admin panel's normalized web routes to their
-   handlers. Handlers live in `wagoe.admin.shell.http.handlers.*` and their
+   This namespace wires the admin panel's web routes to their handlers.
+   Handlers live in `wagoe.admin.shell.http.handlers.*` and their
    shared plumbing (middleware, error mappings, query/form parsing, handler
    helpers) lives in `wagoe.admin.shell.http.support`.
 
@@ -13,8 +13,7 @@
    - Delete and bulk delete operations
    - HTMX fragment handlers for dynamic updates
 
-   All routes require authentication and admin role.
-   Routes follow normalized format for consistent interceptor application."
+   All routes require authentication and admin role."
   (:require
    [wagoe.admin.shell.http.handlers.crud :as crud]
    [wagoe.admin.shell.http.handlers.delete :as delete]
@@ -31,9 +30,10 @@
 ;; Route Definitions
 ;; =============================================================================
 
-(defn normalized-web-routes
-  "Normalized web routes for admin interface.
+(defn web-routes
+  "The admin interface's web routes, as Reitit data.
 
+   Paths are relative to :web-prefix below, not to /web.
    All routes require authentication and admin role.
    Routes use flexible-authentication-middleware for session or token auth."
   [admin-service schema-provider config user-service]
@@ -94,17 +94,14 @@
        :delete {:handler (delete/delete-entity-handler admin-service schema-provider config)
                 :summary "Delete entity"}}]]))
 
-(defn admin-routes-normalized
-  "Normalized admin routes grouped by category.
+(defn admin-routes
+  "Admin's contribution to the application's route table.
 
-   Week 1: Only web routes (server-rendered HTML)
-   Week 2+: Add API routes for JSON responses
-
-   Returns:
-     Map with :api, :web, :static route vectors"
+   Web routes only — the admin UI is server-rendered HTML, and there is no
+   JSON API for it yet."
   [admin-service schema-provider config user-service]
   {:api []  ; Week 2+: JSON API endpoints
-   :web (normalized-web-routes admin-service schema-provider config user-service)
+   :web (web-routes admin-service schema-provider config user-service)
    :static []  ; Week 2+: Admin-specific static assets
 
    ;; Where these mount. Platform held this for six modules and a seventh could

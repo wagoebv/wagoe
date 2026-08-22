@@ -148,21 +148,12 @@
    Web UI routes do not belong in the API documentation, so `:no-doc` defaults
    to true; a module that wants one listed says so.
 
-   Both shapes, while modules migrate to Reitit data (ADR-037). A Reitit route
-   is `[path data & children]` and the prefix goes on the path; a normalized one
-   is a map whose `:meta` merges into the route root."
+   A route is `[path data & children]`; the prefix goes on the path."
   [prefix routes]
-  (mapv (fn [route]
-          (if (vector? route)
-            (let [[path data & children] route]
-              (into [(str prefix path)
-                     (if (map? data) (merge {:no-doc true} data) data)]
-                    children))
-            (let [{:keys [path meta]} route]
-              (-> route
-                  (dissoc :meta)
-                  (merge {:no-doc true} meta)
-                  (assoc :path (str prefix path))))))
+  (mapv (fn [[path data & children]]
+          (into [(str prefix path)
+                 (if (map? data) (merge {:no-doc true} data) data)]
+                children))
         routes))
 
 (defn module-route-contributions
@@ -321,8 +312,7 @@
    is about assembling a handler and this is about refusing to build a unsafe
    one (BOU-330)."
   [{:keys [config cache]}]
-  (let [
-        ;; CSRF config consumed by http-csrf-protection interceptor.
+  (let [        ;; CSRF config consumed by http-csrf-protection interceptor.
         ;; Opt-in: disabled by default so a framework upgrade cannot 403 consumers
         ;; that don't yet emit tokens. Each app enables it (after emitting tokens in
         ;; its /web forms) via :wagoe/http :security :csrf :enabled? true. Secret
@@ -371,9 +361,8 @@
                              "falling back to a per-process counter. This is correct on a "
                              "single node only; across replicas each instance counts "
                              "independently, so the effective global limit is limit x N. "
-                             "Configure :wagoe/cache (Redis) for a shared limit."))))
+                             "Configure :wagoe/cache (Redis) for a shared limit."))))]
 
-        ]
     {:csrf csrf-config :rate-limit rate-limit-config}))
 
 (defn- platform-routes
@@ -423,13 +412,11 @@
                                                       "")})
                                :summary "Prometheus metrics scrape endpoint"})}]]))
 
-
-
 (defmethod ig/init-key :wagoe/http-handler
   [_ {:keys [module-routes logger metrics-emitter tracer error-reporter error-enricher config tenant-service db-context cache i18n i18n-middleware user-service request-capture? extra-middleware]}]
-  (log/info "Initializing top-level HTTP handler with normalized routing and API versioning")
+  (log/info "Initializing top-level HTTP handler")
   (require 'wagoe.platform.shell.interfaces.http.common)
-  (let [        platform-routes (platform-routes {:config          config
+  (let [platform-routes (platform-routes {:config          config
                                           :db-context      db-context
                                           :cache           cache
                                           :metrics-emitter metrics-emitter})
@@ -463,7 +450,7 @@
                             :db-context     db-context})
 
         ;; Combine all routes: platform, static, web, and versioned API
-        all-normalized-routes (concat platform-routes
+        all-routes (concat platform-routes
                                       module-static
                                       module-web
                                       versioned-api-routes
@@ -501,7 +488,7 @@
                                      :i18n             i18n
                                      :i18n-middleware  i18n-middleware})
                        :system system}
-        handler (reitit-router/compile-routes all-normalized-routes router-config)
+        handler (reitit-router/compile-routes all-routes router-config)
 
         ;; Wrap handler with version headers middleware
         versioned-handler (http-versioning/wrap-handler-with-version-headers handler config)
@@ -528,7 +515,7 @@
                                :web    (count module-web)
                                :api    (count module-api)}
                :versioned-api-routes (count versioned-api-routes)
-               :total-normalized-routes (count all-normalized-routes)
+               :total-routes (count all-routes)
                :system-services (keys system)
                :api-versioning-enabled true
                :request-capture-enabled (boolean request-capture?)})

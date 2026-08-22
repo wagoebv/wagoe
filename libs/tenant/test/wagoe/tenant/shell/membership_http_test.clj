@@ -346,16 +346,16 @@
 ;; Routes structure
 ;; =============================================================================
 
-(deftest ^:contract membership-routes-normalized-test
-  (testing "returns normalized route structure with :api key"
-    (let [routes (sut/membership-routes-normalized *mock-service*)]
+(deftest ^:contract membership-routes-test
+  (testing "returns a contribution with an :api key"
+    (let [routes (sut/membership-routes *mock-service*)]
       (is (map? routes))
       (is (contains? routes :api))
       (is (= 3 (count (:api routes))))))
 
   (testing "every route is Reitit data with real handlers"
     ;; [path {method {:handler f}}] — ADR-037.
-    (doseq [route (:api (sut/membership-routes-normalized *mock-service*))]
+    (doseq [route (:api (sut/membership-routes *mock-service*))]
       (is (vector? route))
       (is (string? (first route)))
       (doseq [[_method config] (second route)]

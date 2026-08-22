@@ -1,25 +1,19 @@
 (ns wagoe.platform.ports.http
-  "HTTP routing and server protocols for framework-agnostic route handling.
-  
-  These protocols define the abstraction for HTTP routing and server operations,
-  allowing the framework to support multiple router implementations (Reitit,
-  Pedestal, etc.) and server implementations (Ring+Jetty, Undertow, etc.)
-  through the Ports & Adapters pattern.
-  
-  Modules provide normalized route specifications (pure EDN data) which are
-  translated by router adapters into framework-specific route definitions.")
+  "The HTTP server port.
+
+  Routing is not a port: modules emit Reitit route data and the platform
+  compiles it (ADR-037). The server is — a Ring handler is handed to whatever
+  implements this protocol.")
 
 (defprotocol IHttpServer
   "Protocol for HTTP server implementations.
   
   Server adapters manage the lifecycle of HTTP servers, accepting Ring handlers
   and starting/stopping server instances.
-  
-  Example adapters:
-  - RingJettyServer: Uses Ring's Jetty adapter
-  - UndertowServer: Uses Undertow web server
-  - NettyServer: Uses Netty for async HTTP
-  - MockServer: In-memory server for testing"
+
+  One implementation today: Ring's Jetty adapter. The protocol earns its keep
+  by keeping the server choice out of the wiring, not by predicting a second
+  one — IRouter made that prediction and was removed unimplemented."
 
   (start! [this handler config]
     "Start HTTP server with the given Ring handler.
@@ -65,30 +59,8 @@
 
 #_:clj-kondo/ignore
 (comment
-  ;; Example usage:
-
-  ;; Define routes in module
-  (def user-routes
-    [{:path "/api/users"
-      :methods {:get {:handler 'wagoe.user.shell.handlers/list-users
-                      :coercion {:query wagoe.user.schema/ListUsersQuery
-                                 :response {:200 wagoe.user.schema/UserList}}}
-                :post {:handler 'wagoe.user.shell.handlers/create-user
-                       :coercion {:body wagoe.user.schema/CreateUserRequest}}}}])
-
-  ;; Compile routes with selected router
-  (let [router (reitit-adapter/->ReititRouter)
-        route-config {:middleware ['wrap-json 'wrap-cors]}
-        my-handler (compile-routes router user-routes route-config)]
-    ;; my-handler is now a Ring function
-    (my-handler {:request-method :get :uri "/api/users"}))
-
-  ;; Start server with compiled handler
-  (let [server-adapter (ring-jetty-adapter/->RingJettyServer)
-        my-handler (fn [_req] {:status 200 :body "OK"})
-        server-config {:port 3000 :host "0.0.0.0" :join? false}
-        server-instance (start! server-adapter my-handler server-config)]
-    ;; Server is now running
-    ;; ... do work ...
-    ;; Stop server
-    (stop! server-adapter server-instance)))
+  ;; Start a server with a compiled handler, and stop it again.
+  (let [adapter  (ring-jetty-adapter/->RingJettyServer)
+        handler  (fn [_req] {:status 200 :body "OK"})
+        instance (start! adapter handler {:port 3000 :host "0.0.0.0" :join? false})]
+    (stop! adapter instance)))

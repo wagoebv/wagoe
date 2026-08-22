@@ -466,6 +466,6 @@
       (is (not (str/includes? (versioning/route-path (first result)) "//")))))
 
   (testing "Empty path edge case"
-    (let [routes [{:path "" :methods {}}]
+    (let [routes [["" {}]]
           result (versioning/wrap-routes-with-version routes :v1)]
       (is (= "/api/v1" (versioning/route-path (first result)))))))

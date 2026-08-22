@@ -232,17 +232,12 @@
         (error-response 500 "Internal server error")))))
 
 ;; =============================================================================
-;; Routes (Normalized Format)
+;; Routes
 ;; =============================================================================
 
-(defn membership-routes-normalized
-  "Create membership management routes in normalized format.
-
-   Args:
-     membership-service - ITenantMembershipService implementation
-
-   Returns:
-     Map with :api key containing route definitions."
+(defn membership-routes
+  "Membership's contribution to the route table: Reitit route data under
+   :api, at paths relative to /api/v1."
   [membership-service]
   {:api
    [["/tenants/:tenant-id/memberships"

@@ -1,24 +1,26 @@
 (ns wagoe.platform.shell.http.reitit-router
-  "Reitit router adapter - converts normalized route specs to Reitit routing.
+  "Compiles the application's route data into a Ring handler.
 
-   This adapter implements the IRouter protocol to translate framework-agnostic
-   normalized route specifications into Reitit-specific route definitions."
-  (:require                         [wagoe.platform.shell.http.interceptors :as http-interceptors]
-                        [cheshire.core :as json]
-                        [malli.error :as me]
-                        [clojure.tools.logging :as log]
-                        [clojure.string :as str]
-                        [reitit.coercion.malli :as malli-coercion]
-                        [reitit.ring :as ring]
-                        [reitit.ring.coercion :as coercion]
-                        [reitit.ring.middleware.exception :as exception]
-                        [reitit.ring.middleware.muuntaja :as muuntaja]
-                        [reitit.ring.middleware.parameters :as parameters]
-                        [reitit.swagger :as swagger]
-                        [reitit.swagger-ui :as swagger-ui]
-                        [ring.middleware.resource :refer [wrap-resource]]
-                        [ring.middleware.cookies :refer [wrap-cookies]]
-                        [muuntaja.core :as m])
+   Modules emit Reitit route data and this namespace hands it to Reitit
+   (ADR-037), so what is left here is behaviour rather than translation:
+   exception handling, the coercion error shape, the Swagger routes, gzip, and
+   the interceptor stack each route is decorated with."
+  (:require [cheshire.core :as json]
+            [clojure.string :as str]
+            [clojure.tools.logging :as log]
+            [malli.error :as me]
+            [muuntaja.core :as m]
+            [reitit.coercion.malli :as malli-coercion]
+            [reitit.ring :as ring]
+            [reitit.ring.coercion :as coercion]
+            [reitit.ring.middleware.exception :as exception]
+            [reitit.ring.middleware.muuntaja :as muuntaja]
+            [reitit.ring.middleware.parameters :as parameters]
+            [reitit.swagger :as swagger]
+            [reitit.swagger-ui :as swagger-ui]
+            [ring.middleware.cookies :refer [wrap-cookies]]
+            [ring.middleware.resource :refer [wrap-resource]]
+            [wagoe.platform.shell.http.interceptors :as http-interceptors])
   (:import [java.io ByteArrayInputStream ByteArrayOutputStream]
            [java.util.zip GZIPOutputStream]))
 
@@ -430,7 +432,7 @@
                                 {} data)
                      data)
           children' (mapv #(decorate-reitit-route % system) (if (map? data) children
-                                                               (cons data children)))]
+                                                                (cons data children)))]
       (into (if (map? data) [path data'] [path]) children'))))
 
 ;; =============================================================================
@@ -446,30 +448,30 @@
    so devtools can read the route table without unwrapping middleware."
   [route-specs config]
   (let [;; Extract observability services from config (if provided)
-          system (:system config)
+        system (:system config)
 
           ;; Extract Swagger configuration (optional)
-          swagger-enabled? (get config :swagger-enabled true)  ; Enabled by default
-          swagger-data (or (:swagger-data config)
-                           {:info {:title "Wagoe API"
-                                   :description "Wagoe Framework REST API"
-                                   :version "0.1.0"}})
+        swagger-enabled? (get config :swagger-enabled true)  ; Enabled by default
+        swagger-data (or (:swagger-data config)
+                         {:info {:title "Wagoe API"
+                                 :description "Wagoe Framework REST API"
+                                 :version "0.1.0"}})
 
-          reitit-routes (mapv #(decorate-reitit-route % system) route-specs)
+        reitit-routes (mapv #(decorate-reitit-route % system) route-specs)
 
           ;; Add Swagger routes if enabled
-          all-routes (if swagger-enabled?
-                       (into (create-swagger-routes swagger-data) reitit-routes)
-                       reitit-routes)
+        all-routes (if swagger-enabled?
+                     (into (create-swagger-routes swagger-data) reitit-routes)
+                     reitit-routes)
 
           ;; Create router options
-          router-opts (create-router-options config)
+        router-opts (create-router-options config)
 
           ;; Create Reitit router
-          router (ring/router all-routes router-opts)
+        router (ring/router all-routes router-opts)
 
           ;; Create default handler for unmatched routes
-          default-handler (create-default-handler)
+        default-handler (create-default-handler)
 
           ;; Wrap handler with middlewares (outermost last):
           ;; 1. Cookies middleware - parse and set cookies
@@ -477,15 +479,15 @@
           ;; Query/form params are parsed by reitit's parameters-middleware
           ;; (create-default-middleware) — a global wrap-params here would
           ;; parse them a second time for every request.
-          handler (-> (ring/ring-handler router default-handler)
-                      (wrap-gzip)
-                      (wrap-static-cache)
-                      (wrap-static-resources)
-                      (wrap-cookies))]
+        handler (-> (ring/ring-handler router default-handler)
+                    (wrap-gzip)
+                    (wrap-static-cache)
+                    (wrap-static-resources)
+                    (wrap-cookies))]
 
       ;; Store the Reitit router in metadata so devtools can extract route info
       ;; from the wrapped handler without needing to unwrap middleware layers.
-      (with-meta handler {:reitit/router router})))
+    (with-meta handler {:reitit/router router})))
 
 (comment
   ;; Reitit route data in, Ring handler out.

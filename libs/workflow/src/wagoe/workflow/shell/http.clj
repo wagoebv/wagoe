@@ -265,11 +265,11 @@
                      500))))
 
 ;; =============================================================================
-;; Normalized web route definitions
+;; Web route definitions
 ;; =============================================================================
 
 (defn workflow-web-routes
-  "Return normalized web route definitions for the workflow admin UI.
+  "Web routes for the workflow admin UI, as Reitit data.
 
    Routes are mounted under /web/admin by the HTTP handler:
      GET /web/admin/workflows        — list all workflow instances

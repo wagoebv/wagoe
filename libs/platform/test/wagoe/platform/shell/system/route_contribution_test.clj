@@ -24,43 +24,43 @@
 (deftest ^:unit a-module-mounts-its-web-routes-where-it-says
   (let [{:keys [static web api]}
         (#'wiring/module-route-contributions
-         [{:api [{:path "/a"}] :web [{:path "/a"}] :static [{:path "/s.css"}]}
-          {:web [{:path "/b"}] :web-prefix "/web/admin"}])]
+         [{:api [["/a" {}]] :web [["/a" {}]] :static [["/s.css" {}]]}
+          {:web [["/b" {}]] :web-prefix "/web/admin"}])]
 
     (testing "the default is /web"
-      (is (= "/web/a" (:path (first web)))))
+      (is (= "/web/a" (first (first web)))))
 
     (testing "and a module that says otherwise gets what it said"
-      (is (= "/web/admin/b" (:path (second web)))))
+      (is (= "/web/admin/b" (first (second web)))))
 
     (testing "static and api are mounted as-is — versioning is the caller's"
-      (is (= ["/s.css"] (mapv :path static)))
-      (is (= ["/a"] (mapv :path api))))
+      (is (= ["/s.css"] (mapv first static)))
+      (is (= ["/a"] (mapv first api))))
 
     (testing "web routes stay out of the API docs unless the module says so"
-      (is (every? :no-doc web)))))
+      (is (every? (comp :no-doc second) web)))))
 
-(deftest ^:unit a-module-can-override-no-doc-through-meta
+(deftest ^:unit a-module-can-list-a-web-route-in-the-api-docs
   (let [{:keys [web]} (#'wiring/module-route-contributions
-                       [{:web [{:path "/x" :meta {:no-doc false :summary "listed"}}]}])]
-    (is (= false (:no-doc (first web))))
-    (is (= "listed" (:summary (first web))))
-    (is (not (contains? (first web) :meta)) ":meta is merged into the root, not kept")))
+                       [{:web [["/x" {:no-doc false :summary "listed"}]]}])
+        data          (second (first web))]
+    (is (= false (:no-doc data)) "the module's own :no-doc wins over the default")
+    (is (= "listed" (:summary data)))))
 
 (deftest ^:unit already-pathed-routes-are-not-prefixed-again
   ;; admin's slash redirect: "/web/admin" must not become "/web/admin/web/admin".
   (let [{:keys [web]} (#'wiring/module-route-contributions
-                       [{:web        [{:path "/"}]
+                       [{:web        [["/" {}]]
                          :web-prefix "/web/admin"
-                         :extra-web  [{:path "/web/admin" :no-doc true}]}])]
-    (is (= ["/web/admin/" "/web/admin"] (mapv :path web)))))
+                         :extra-web  [["/web/admin" {:no-doc true}]]}])]
+    (is (= ["/web/admin/" "/web/admin"] (mapv first web)))))
 
 (deftest ^:unit contributions-fold-in-the-order-given
   (let [{:keys [api]} (#'wiring/module-route-contributions
-                       [{:api [{:path "/first"}]}
+                       [{:api [["/first" {}]]}
                         nil
-                        {:api [{:path "/second"}]}])]
-    (is (= ["/first" "/second"] (mapv :path api))
+                        {:api [["/second" {}]]}])]
+    (is (= ["/first" "/second"] (mapv first api))
         "and a nil contribution — a module that is off — is skipped")))
 
 (deftest ^:integration a-library-platform-never-heard-of-serves-http

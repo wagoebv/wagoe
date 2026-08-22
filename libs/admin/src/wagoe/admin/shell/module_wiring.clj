@@ -55,8 +55,8 @@
 
 (defmethod ig/init-key :wagoe/admin-routes
   [_ {:keys [admin-service schema-provider user-service config]}]
-  ; Return normalized routes grouped by category
-  (http/admin-routes-normalized admin-service schema-provider config user-service))
+  ;; The module's contribution: web routes, mounted under :web-prefix
+  (http/admin-routes admin-service schema-provider config user-service))
 
 (defmethod ig/halt-key! :wagoe/admin-routes
   [_ _routes]

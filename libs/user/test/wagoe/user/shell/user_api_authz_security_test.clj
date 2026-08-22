@@ -1,7 +1,7 @@
 (ns wagoe.user.shell.user-api-authz-security-test
   "Regression test for the IDOR fix (BOU-190): the /users and /users/:id API
    routes must actually MOUNT the authorization guards, not merely have guards
-   that work in isolation. Reads the real route table from `normalized-api-routes`,
+   that work in isolation. Reads the real route table from `api-routes`,
    resolves the interceptors each method declares, and asserts both that the
    correct guard is mounted and that the mounted guard denies a non-admin acting
    on another user's id."
@@ -19,8 +19,8 @@
        first second method :interceptors
        (map #(deref (resolve %)))))
 
-(def ^:private api-routes (http/normalized-api-routes nil nil))
-(def ^:private web-routes (http/normalized-web-routes nil nil nil))
+(def ^:private api-routes (http/api-routes nil nil))
+(def ^:private web-routes (http/web-routes nil nil nil))
 
 (defn- method-interceptors [path method] (interceptors-of api-routes path method))
 (defn- web-method-interceptors [path method] (interceptors-of web-routes path method))

@@ -14,8 +14,8 @@
 
 (defmethod ig/init-key :wagoe/widgets-routes
   [_ _]
-  {:api [{:path "/widgets" :methods {:get {:handler (fn [_] {:status 200 :body []})}}}]
-   :web [{:path "/widgets" :methods {:get {:handler (fn [_] {:status 200 :body "hi"})}}}]
+  {:api [["/widgets" {:get {:handler (fn [_] {:status 200 :body []})}}]]
+   :web [["/widgets" {:get {:handler (fn [_] {:status 200 :body "hi"})}}]]
    ;; Its own mount point, declared here rather than in platform.
    :web-prefix "/web/shop"})
 

@@ -81,7 +81,7 @@
       (assoc :error-mappings user-error-mappings)))
 
 ;; =============================================================================
-;; User Module Routes (Normalized Format)
+;; User Module Routes
 ;; =============================================================================
 
 (defn create-user-handler
@@ -168,7 +168,7 @@
       (:response result-context))))
 
 ;; =============================================================================
-;; User Module Routes (Normalized Format)
+;; User Module Routes
 ;; =============================================================================
 
 (defn create-session-handler
@@ -341,18 +341,13 @@
          :body (json/generate-string {:error (.getMessage e)})}))))
 
 ;; =============================================================================
-;; User Module Routes (Normalized Format)
+;; User Module Routes
 ;; =============================================================================
 
-(defn normalized-api-routes
-  "Define API routes in normalized format.
-   
-   Args:
-     user-service: User service instance
-     mfa-service: MFA service instance
-     
-   Returns:
-     Vector of normalized route maps"
+(defn api-routes
+  "The module's API routes, as Reitit data.
+
+   Paths are relative: the platform mounts them under /api/v1."
   [user-service mfa-service]
   (let [auth-middleware (user-middleware/flexible-authentication-middleware user-service)]
     [["/users"
@@ -493,19 +488,10 @@
              :tags       ["mfa"]
              :description "Returns whether MFA is enabled and remaining backup codes"}}]]))
 
-(defn normalized-web-routes
-  "Define web UI routes in normalized format (WITHOUT /web prefix).
+(defn web-routes
+  "The module's web UI routes, as Reitit data.
 
-   NOTE: These routes will be mounted under /web by the top-level router.
-   Do NOT include /web prefix in paths here.
-
-   Args:
-     user-service: User service instance
-     mfa-service: MFA service instance
-     config: Application configuration map
-
-   Returns:
-     Vector of normalized route maps"
+   Without the /web prefix — the platform adds it when mounting."
   [user-service mfa-service config]
   (let [auth-middleware (user-middleware/flexible-authentication-middleware user-service)
         email-sender    (:email-sender config)]
@@ -532,7 +518,7 @@
               :summary    "Logout current user"}}]
      ["/dashboard"
       {:no-doc     true
-                :middleware [auth-middleware]
+       :middleware [auth-middleware]
        :get {:handler (web-handlers/dashboard-page-handler user-service mfa-service config)
              :summary "User dashboard page"}}]
      ;; User creation routes (admin-only). The admin panel delegates to this flow
@@ -540,33 +526,33 @@
      ;; write both auth_users and users atomically.
      ["/users/new"
       {:no-doc     true
-                :middleware [auth-middleware user-middleware/require-admin-middleware]
+       :middleware [auth-middleware user-middleware/require-admin-middleware]
        :get {:handler (web-handlers/create-user-page-handler config)
              :summary "Create user page"}}]
      ["/users"
       {:no-doc     true
-                :middleware [auth-middleware user-middleware/require-admin-middleware]
+       :middleware [auth-middleware user-middleware/require-admin-middleware]
        :get  {:handler (web-handlers/users-page-handler user-service config)
               :summary "Users management list page (admin)"}
        :post {:handler (web-handlers/create-user-htmx-handler user-service email-sender config)
               :summary "Create user (HTMX fragment)"}}]
      ["/users/table"
       {:no-doc     true
-                :middleware [auth-middleware]
+       :middleware [auth-middleware]
        :get {:handler (web-handlers/users-table-fragment-handler user-service config)
              :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
                             'wagoe.user.shell.http-interceptors/require-admin]
              :summary "Users table fragment (HTMX refresh)"}}]
      ["/users/bulk"
       {:no-doc     true
-                :middleware [auth-middleware]
+       :middleware [auth-middleware]
        :post {:handler (web-handlers/bulk-update-users-htmx-handler user-service config)
               :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
                              'wagoe.user.shell.http-interceptors/require-admin]
               :summary "Bulk user operations (HTMX)"}}]
      ["/users/:id"
       {:no-doc     true
-                :middleware [auth-middleware]
+       :middleware [auth-middleware]
        :get    {:handler (web-handlers/user-detail-page-handler user-service config)
                 ;; Admin-only: this is the user-MANAGEMENT detail page
                 ;; (edit/deactivate/delete controls). Self-service lives at
@@ -587,7 +573,7 @@
                 :summary "Deactivate user (HTMX)"}}]
      ["/users/:id/hard-delete"
       {:no-doc     true
-                :middleware [auth-middleware]
+       :middleware [auth-middleware]
        :post {:handler (web-handlers/hard-delete-user-handler user-service config)
               :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
                              'wagoe.user.shell.http-interceptors/require-admin]
@@ -595,7 +581,7 @@
       ;; Session management routes (user-specific, not duplicated in admin)
      ["/users/:id/sessions"
       {:no-doc     true
-                :middleware [auth-middleware]
+       :middleware [auth-middleware]
        :get {:handler (web-handlers/user-sessions-page-handler user-service config)
              ;; The handler reads the :id path param, so a non-admin must
              ;; not view another user's sessions (IDOR) — own or admin only.
@@ -604,7 +590,7 @@
              :summary "User sessions management page"}}]
      ["/users/:id/sessions/revoke-all"
       {:no-doc     true
-                :middleware [auth-middleware]
+       :middleware [auth-middleware]
        :post {:handler (web-handlers/revoke-all-sessions-handler user-service config)
               ;; Revoking by :id path param — own or admin only, else a
               ;; non-admin could force-logout any user (IDOR / DoS).
@@ -613,65 +599,65 @@
               :summary "Revoke all user sessions"}}]
      ["/sessions/revoke"
       {:no-doc     true
-                :middleware [auth-middleware]
+       :middleware [auth-middleware]
        :post {:handler (web-handlers/revoke-session-handler user-service config)
               :summary "Revoke specific session"}}]
      ["/sessions/:token/revoke"
       {:no-doc     true
-                :middleware [auth-middleware]
+       :middleware [auth-middleware]
        :post {:handler (web-handlers/revoke-session-handler user-service config)
               :summary "Revoke specific session"}}]
      ;; Audit trail routes
      ["/audit"
       {:no-doc     true
-                :middleware [auth-middleware]
+       :middleware [auth-middleware]
        :get {:handler (web-handlers/audit-page-handler user-service config)
              :interceptors ['wagoe.user.shell.http-interceptors/require-platform-admin]
              :summary "Audit trail page"}}]
      ["/audit/table"
       {:no-doc     true
-                :middleware [auth-middleware]
+       :middleware [auth-middleware]
        :get {:handler (web-handlers/audit-table-fragment-handler user-service config)
              :interceptors ['wagoe.user.shell.http-interceptors/require-platform-admin]
              :summary "Audit table fragment (HTMX refresh)"}}]
       ;; Profile routes
      ["/profile"
       {:no-doc     true
-                :middleware [auth-middleware]
+       :middleware [auth-middleware]
        :get  {:handler (web-handlers/profile-page-handler user-service mfa-service config)
               :summary "User profile page"}
        :post {:handler (web-handlers/profile-edit-handler user-service config)
               :summary "Update profile (HTMX fragment)"}}]
      ["/profile/edit"
       {:no-doc     true
-                :middleware [auth-middleware]
+       :middleware [auth-middleware]
        :get {:handler (web-handlers/profile-edit-form-handler user-service config)
              :summary "Show profile edit form (HTMX fragment)"}}]
      ["/profile/info"
       {:no-doc     true
-                :middleware [auth-middleware]
+       :middleware [auth-middleware]
        :get {:handler (web-handlers/profile-info-fragment-handler user-service config)
              :summary "Show profile info card (HTMX fragment)"}}]
      ["/profile/preferences/edit"
       {:no-doc     true
-                :middleware [auth-middleware]
+       :middleware [auth-middleware]
        :get {:handler (web-handlers/preferences-edit-form-handler user-service config)
              :summary "Show preferences edit form (HTMX fragment)"}}]
      ["/profile/preferences"
       {:no-doc     true
-                :middleware [auth-middleware]
+       :middleware [auth-middleware]
        :get  {:handler (web-handlers/preferences-fragment-handler user-service config)
               :summary "Show preferences card (HTMX fragment)"}
        :post {:handler (web-handlers/preferences-edit-handler user-service config)
               :summary "Update preferences (HTMX fragment)"}}]
      ["/profile/password/form"
       {:no-doc     true
-                :middleware [auth-middleware]
+       :middleware [auth-middleware]
        :get {:handler (web-handlers/password-change-form-handler config)
              :summary "Show password change form (HTMX fragment)"}}]
      ["/profile/password"
       {:no-doc     true
-                :middleware [auth-middleware]
+       :middleware [auth-middleware]
        :get  {:handler (web-handlers/password-section-fragment-handler config)
               :summary "Show collapsed password section (HTMX fragment)"}
        :post {:handler (web-handlers/password-change-handler user-service config)
@@ -679,49 +665,37 @@
      ;; MFA routes
      ["/profile/mfa/setup"
       {:no-doc     true
-                :middleware [auth-middleware]
+       :middleware [auth-middleware]
        :get  {:handler (web-handlers/mfa-setup-page-handler mfa-service config)
               :summary "MFA setup page"}
        :post {:handler (web-handlers/mfa-setup-initiate-handler mfa-service config)
               :summary "Initiate MFA setup (HTMX fragment)"}}]
      ["/profile/mfa/verify"
       {:no-doc     true
-                :middleware [auth-middleware]
+       :middleware [auth-middleware]
        :post {:handler (web-handlers/mfa-verify-handler mfa-service config)
               :summary "Verify MFA code (HTMX fragment)"}}]
      ["/profile/mfa/backup-codes"
       {:no-doc     true
-                :middleware [auth-middleware]
+       :middleware [auth-middleware]
        :get {:handler (web-handlers/mfa-backup-codes-page-handler mfa-service config)
              :summary "View MFA backup codes"}}]
      ["/profile/mfa/disable"
       {:no-doc     true
-                :middleware [auth-middleware]
+       :middleware [auth-middleware]
        :get  {:handler (web-handlers/mfa-disable-page-handler mfa-service config)
               :summary "MFA disable confirmation page"}
        :post {:handler (web-handlers/mfa-disable-handler user-service mfa-service config)
               :summary "Disable MFA"}}]]))
 
-(defn user-routes-normalized
-  "Define user module routes in normalized format for top-level composition.
-   
-   DEPRECATED: Use user-routes-normalized instead for new code.
-   This function returns routes in Reitit-specific format.
+(defn user-routes
+  "This module's contribution to the application's route table.
 
-   Returns a map with route categories:
-   - :api - REST API routes (will be mounted under /api)
-   - :web - Web UI routes (will be mounted under /web)
-   - :static - Static asset routes (empty - served at handler level)
-   
-   Args:
-     user-service: User service instance
-     mfa-service: MFA service instance
-     config: Application configuration map
-
-   Returns:
-     Map with keys :api, :web, :static containing normalized route vectors"
+   :api    versioned, mounted under /api/v1
+   :web    mounted under /web, and absent when the web UI is switched off
+   :static nothing — user's assets are served at handler level"
   [user-service mfa-service config]
   (let [web-ui-enabled? (get-in config [:active :wagoe/settings :features :user-web-ui :enabled?] true)]
-    {:api    (normalized-api-routes user-service mfa-service)
-     :web    (when web-ui-enabled? (normalized-web-routes user-service mfa-service config))
+    {:api    (api-routes user-service mfa-service)
+     :web    (when web-ui-enabled? (web-routes user-service mfa-service config))
      :static []}))

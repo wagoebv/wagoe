@@ -67,7 +67,7 @@
 ;; =============================================================================
 
 (def simple-routes
-  "Simple normalized route specifications for testing."
+  "Simple Reitit route data for testing."
   [["/api/items"
     {:get {:handler test-list-handler
            :summary "List items"

@@ -36,7 +36,7 @@
   (is (thrown? clojure.lang.ExceptionInfo
                (ig/init-key :wagoe/storage {:provider :dropbox}))))
 
-(deftest ^:unit storage-routes-key-emits-normalized-api-routes
+(deftest ^:unit storage-routes-key-emits-api-routes
   (cleanup)
   (try
     (let [component (ig/init-key :wagoe/storage {:provider :local :root test-root})

@@ -128,10 +128,10 @@
 
 (defmethod ig/init-key :wagoe/user-routes
   [_ {:keys [user-service mfa-service config email-sender]}]
-  (log/info "Initializing user module routes (normalized format)"
+  (log/info "Initializing user module routes"
             {:email-sender? (some? email-sender)})
   (require 'wagoe.user.shell.http)
-  (let [user-routes-fn (ns-resolve 'wagoe.user.shell.http 'user-routes-normalized)
+  (let [user-routes-fn (ns-resolve 'wagoe.user.shell.http 'user-routes)
         config-with-email (cond-> (or config {})
                             email-sender
                             (assoc :email-sender email-sender
