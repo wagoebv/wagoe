@@ -268,9 +268,9 @@
     ;; results" of, each suggesting a command that does not exist there.
     (when-not (wagoe-project? dir)
       (println (red "Not a Wagoe project."))
-      (println (dim (str "  wagoe doctor runs a project's own diagnostics, and they come from")))
-      (println (dim (str "  com.wagoe/wagoe-tools in its bb.edn. Run this from inside a project;")))
-      (println (dim (str "  `wagoe new <name>` creates one.")))
+      (println (dim "  wagoe doctor runs a project's own diagnostics, and they come from"))
+      (println (dim "  com.wagoe/wagoe-tools in its bb.edn. Run this from inside a project;"))
+      (println (dim "  `wagoe new <name>` creates one."))
       (System/exit 1))
 
     (println)

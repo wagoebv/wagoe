@@ -429,7 +429,7 @@
   ;; Aero has more tags than the table knows and can gain more. This parser
   ;; exists to find the :active keys; approximating one tag beats refusing the
   ;; file and telling the reader their config is broken.
-  (let [results (doctor/check-config-loadable
+  (let [results (#'doctor/check-config-loadable
                  (#'doctor/parse-config-minimal
                   "{:active {:wagoe/settings {:name #udf/whatever \"x\"}}}"))]
     (is (= :pass (:level (first results))))))
