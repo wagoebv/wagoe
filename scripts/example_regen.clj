@@ -16,6 +16,7 @@
    the last release would go green while this checkout was broken — the same
    trap `scripts/first-run-smoke.sh` documents at length."
   (:require [babashka.fs :as fs]
+            [clojure.edn :as edn]
             [babashka.process :refer [shell]]
             [clojure.string :as str]))
 
@@ -169,21 +170,29 @@
   [s]
   (str/replace s #"\d{14}" "<timestamp>"))
 
-(defn- unindent
-  "Drop leading indentation from every line.
+(defn- normalize
+  "The comparable form of one file's contents.
 
-   `bb scaffold integrate` edits config.edn with babashka's built-in
-   rewrite-clj, and how it re-indents the map it inserted into depends on the
-   babashka version. CI installs the latest; a contributor has whatever they
-   have. Comparing indentation made the check report drift on a machine
-   difference, which is the fastest way to teach people to ignore it.
+   EDN is compared as data, everything else as text. `bb scaffold integrate`
+   edits config.edn with babashka's built-in rewrite-clj, and both the
+   indentation and where it puts a closing brace depend on the babashka
+   version — CI installs the latest, a contributor has whatever they have. As
+   text those files disagreed between machines with no commit behind it, which
+   is the fastest way to teach people to ignore a check.
 
-   The cost is that a template change consisting only of re-indentation goes
-   unreported here. Content — including comments — is still compared."
-  [s]
-  (->> (str/split-lines s)
-       (map str/triml)
-       (str/join "\n")))
+   The cost is real and worth naming: reading EDN discards comments, and the
+   generated config files are heavily commented. A template change to a comment
+   alone is not reported for `.edn` files. Everything else — every source file,
+   every SQL migration, every markdown page — is still compared byte for byte.
+
+   Aero tags (`#env`, `#or`, `#profile`) are not readable here, so the default
+   handler keeps them as data rather than failing."
+  [path contents]
+  (if (str/ends-with? path ".edn")
+    (try
+      (pr-str (edn/read-string {:default (fn [tag v] [tag v])} contents))
+      (catch Exception _ contents))
+    contents))
 
 (defn- tree
   "path -> contents, for comparing two generated trees.
@@ -200,7 +209,7 @@
               :let  [rel (str (fs/relativize dir (fs/path p)))]
               :when (and (not (excluded (first (str/split rel #"/"))))
                          (not (preserved rel)))]
-          [(undate rel) (unindent (undate (slurp p)))])))
+          [(undate rel) (normalize rel (undate (slurp p)))])))
 
 (defn- line-diff
   "The first few lines where `committed` and `fresh` disagree.
