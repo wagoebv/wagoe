@@ -31,6 +31,34 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **The getting-started tutorial showed code the scaffolder does not write**
+  (BOU-327). `your-first-module.adoc` is the framework's flagship tutorial, and
+  a reader following it hit a compile error on their first edit: it named
+  `prepare-product` (really `prepare-new-product`), repository methods
+  `find-product-by-id` and `list-products` (really `find-by-id` and
+  `find-all`), and a `ProductInput` schema (really `CreateProductRequest`). Its
+  core function validated its input and generated a UUID — the real one does
+  neither, and the page's own lesson about keeping the clock in the shell
+  contradicted the snippet above it.
+
+  Rewritten against the generator's actual output, and a test regenerates the
+  module and checks that every name the page shows exists. It matches
+  identifiers rather than formatting, so a rewrapped docstring does not fail the
+  build; putting `find-product-by-id` back does, naming it.
+
+  The page also said wiring a module into `deps.edn`/`tests.edn` "assumes the
+  monorepo layout". `bb scaffold integrate` says the opposite and is right: a
+  module under `src/` is already on the project's paths and its tests run under
+  plain `clojure -M:test`.
+
+  It now says plainly what the generator leaves undone — the generated service
+  persists without validating, and `core/validate-product` is written but
+  uncalled — with the edit that wires it in. That was the most useful thing the
+  page could have said and the one thing it did not.
+
+
+### Fixed
+
 - **The e2e suite runs in CI again, and a red e2e test blocks the merge**
   (BOU-297). 52 tests over login, registration, MFA, sessions and admin CRUD —
   the flows a new user meets first — sat behind `if: false`, with
