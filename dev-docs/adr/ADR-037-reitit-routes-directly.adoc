@@ -44,10 +44,12 @@ the future, and this one has been tested against reality once and failed.
 
 Three things Reitit has and the normalized format does not:
 
-* **Route conflict detection.** Reitit refuses to build a router with two routes
-  that can match the same request. The normalized format concatenates and hopes;
-  today's route table happens to have 99 distinct paths, which is luck holding
-  rather than a rule enforced.
+* **Route conflict detection, available.** Reitit can refuse to build a router
+  with two routes that can match the same request. The normalized format
+  concatenates and hopes. Note *available*: the platform passes `:conflicts nil`,
+  which switches the check off, and turning it on is BOU-356 — the live table
+  has six overlapping pairs that all work, so enabling it is a decision rather
+  than a flag flip.
 * **Reverse routing.** `match-by-name` turns a route name and parameters into a
   URL. Without it every link in the framework is a hand-written string, and a
   path change is a grep.
@@ -126,10 +128,13 @@ goes is the claim that they are interchangeable.
 * Migration surface, measured: roughly 33 route maps in module code, the
   platform's own health and metrics routes, `apply-versioning`, and
   `module-route-contributions` from BOU-330.
-* Conflict detection arrives with the collapse, and it may fail on the current
-  route table. If two routes conflict today, nothing reports it; after this,
-  the boot does. That is a feature, and it may mean fixing routes we did not
-  know overlapped.
+* Conflict detection becomes *possible* and is not switched on. This was
+  written as "arrives with the collapse", which measurement did not bear out:
+  `create-router-options` passes `:conflicts nil`, so two routes that can match
+  the same request still build a router and the first silently wins. The route
+  table has six overlapping pairs — `/web/users/new` beside `/web/users/:id`
+  and five like it — which work because Reitit matches static before dynamic.
+  Enabling detection means declaring those six `:conflicting true`. BOU-356.
 * Pitfall #9 keeps its slot and changes what it warns about. The two-format
   confusion is gone; the trap that remains is the prefix, which the platform
   adds to each part of a module's contribution. Writing `/api` into an `:api`
@@ -139,6 +144,11 @@ goes is the claim that they are interchangeable.
   tutorial to generator output will catch any half-migration.
 * Handlers become vars, so clj-kondo sees a typo. That is the largest day-to-day
   win and the hardest to quantify.
+* Of the three things the format cost us, exactly one is recovered by this
+  change alone. Lint-visible handlers are real the moment the routes are vars.
+  Conflict detection is switched off (BOU-356), and reverse routing needs
+  routes to carry `:name` — today none do, so `match-by-name` has nothing to
+  resolve. Both are now possible, which is the point; neither is free.
 
 == References
 
