@@ -645,6 +645,70 @@
         (assoc-in response [:headers "Cache-Control"] "public, max-age=31536000, immutable")
         response))))
 
+(def ^:private http-methods
+  "The endpoint keys Reitit route data can carry."
+  #{:get :post :put :delete :patch :head :options :trace})
+
+(defn- decorate-endpoint
+  "Add the framework's default HTTP interceptor stack to one Reitit endpoint.
+
+   This is the one thing the normalized format did that Reitit does not do for
+   us: every endpoint gets `default-http-interceptors` — security headers, CSRF,
+   rate limiting, metrics, error handling — unless it says `:skip-interceptors?`,
+   which genuinely-internal endpoints like the health checks do.
+
+   Appended last, so interceptors sit closest to the handler and still see a
+   fully prepared request (session, body, coercions) (BOU-331)."
+  [{:keys [middleware interceptors skip-interceptors?] :as endpoint} system]
+  (let [route-interceptors (or (resolve-interceptors interceptors) [])
+        all-interceptors   (if skip-interceptors?
+                             route-interceptors
+                             (vec (concat http-interceptors/default-http-interceptors
+                                          route-interceptors)))]
+    (cond-> (dissoc endpoint :interceptors :skip-interceptors?)
+      (seq all-interceptors)
+      (assoc :middleware (vec (concat (or middleware [])
+                                      [(interceptors->middleware all-interceptors system)]))))))
+
+(defn- decorate-reitit-route
+  "Walk a Reitit route vector, decorating every endpoint it contains.
+
+   `[path data & children]`, where `data` may carry endpoints directly and each
+   child is another route vector. Route-level `:middleware`, `:name`, coercion
+   and nesting are Reitit's own and pass through untouched."
+  [route system]
+  (if-not (vector? route)
+    route
+    (let [[path data & children] route
+          data'    (if (map? data)
+                     (reduce-kv (fn [m k v]
+                                  (assoc m k (if (and (http-methods k) (map? v))
+                                               (decorate-endpoint v system)
+                                               v)))
+                                {} data)
+                     data)
+          children' (mapv #(decorate-reitit-route % system) (if (map? data) children
+                                                               (cons data children)))]
+      (into (if (map? data) [path data'] [path]) children'))))
+
+(defn- reitit-route?
+  "Whether `route` is Reitit data rather than a normalized map.
+
+   Both formats travel through `compile-routes` while the migration runs: a
+   module that has moved emits `[\"/path\" {...}]`, one that has not emits
+   `{:path \"/path\" :methods {...}}` (BOU-331)."
+  [route]
+  (vector? route))
+
+(defn- prepare-routes
+  "Every route as Reitit data, whichever format it arrived in."
+  [route-specs system]
+  (mapv (fn [route]
+          (if (reitit-route? route)
+            (decorate-reitit-route route system)
+            (convert-route route system)))
+        route-specs))
+
 ;; =============================================================================
 ;; IRouter Implementation
 ;; =============================================================================
@@ -662,8 +726,9 @@
                                    :description "Wagoe Framework REST API"
                                    :version "0.1.0"}})
 
-          ;; Convert normalized routes to Reitit format
-          reitit-routes (convert-all-routes route-specs system)
+          ;; Reitit data passes through; normalized maps are still converted
+          ;; while modules migrate (BOU-331/ADR-037).
+          reitit-routes (prepare-routes route-specs system)
 
           ;; Add Swagger routes if enabled
           all-routes (if swagger-enabled?

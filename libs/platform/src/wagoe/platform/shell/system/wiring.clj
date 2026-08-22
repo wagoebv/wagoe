@@ -378,6 +378,122 @@
 
    Health, readiness, liveness, the Prometheus scrape and the `/` redirect.
    `:skip-interceptors?` on all of them: a liveness probe that needs a session
+   is not a liveness probe.
+
+   Reitit route data, used as-is — handlers are vars and functions rather than
+   quoted symbols resolved at boot, so a typo is a lint error (ADR-037)."
+  [{:keys [config db-context cache metrics-emitter]}]
+  (require 'wagoe.platform.shell.interfaces.http.common)
+  (let [health-fn      (ns-resolve 'wagoe.platform.shell.interfaces.http.common 'health-check-handler)
+        readiness-fn   (ns-resolve 'wagoe.platform.shell.interfaces.http.common 'readiness-handler)
+        health-handler (health-fn
+                        (get-in config [:active :wagoe/settings :name] "wagoe")
+                        (get-in config [:active :wagoe/settings :version] "unknown")
+                        nil)
+        ready-handler  (readiness-fn db-context cache)
+        internal       {:no-doc true :skip-interceptors? true}]
+    [["/" {:get (merge internal
+                       {:handler (fn [request]
+                                   ;; Signed in or not decides where "/" goes.
+                                   (if (:user request)
+                                     {:status 302 :headers {"Location" "/web/users"}}
+                                     {:status 302 :headers {"Location" "/web/login"}}))
+                        :summary "Home page (redirects to login or users)"})}]
+     ["/health" {:get (merge internal {:handler health-handler
+                                       :summary "Health check endpoint"})}]
+     ["/health/ready" {:get (merge internal {:handler ready-handler
+                                             :summary "Readiness check with dependency health"})}]
+     ["/health/live" {:get (merge internal
+                                  {:handler (fn [_] {:status 200
+                                                     :headers {"Content-Type" "application/json"}
+                                                     :body (cheshire.core/generate-string {:status "alive"})})
+                                   :summary "Liveness check"})}]
+     ;; Serves the text exposition format from the active metrics component; the
+     ;; :no-op and :datadog-statsd providers return an empty body, :prometheus
+     ;; returns real metrics.
+     ["/metrics" {:get (merge internal
+                              {:handler (fn [_]
+                                          {:status  200
+                                           :headers {"Content-Type" "text/plain; version=0.0.4; charset=utf-8"}
+                                           :body    (if (satisfies? metrics-ports/IMetricsExporter metrics-emitter)
+                                                      (metrics-ports/export-metrics metrics-emitter :prometheus)
+                                                      "")})
+                               :summary "Prometheus metrics scrape endpoint"})}]]))
+
+(defn- security-config
+  "CSRF and rate-limit settings, and the two guards that refuse to boot without
+   them.
+
+   Both are opt-in: a framework upgrade must not start 403-ing or 429-ing an
+   application that was working. What is not optional is failing loudly when the
+   configuration cannot do what it claims — an enabled CSRF interceptor with no
+   secret fails OPEN, and rate limiting without a shared cache is a per-process
+   counter wearing a global limit's name.
+
+   Lifted out of `:wagoe/http-handler` whole, guards included, so that init-key
+   is about assembling a handler and this is about refusing to build a unsafe
+   one (BOU-330)."
+  [{:keys [config cache]}]
+  (let [
+        ;; CSRF config consumed by http-csrf-protection interceptor.
+        ;; Opt-in: disabled by default so a framework upgrade cannot 403 consumers
+        ;; that don't yet emit tokens. Each app enables it (after emitting tokens in
+        ;; its /web forms) via :wagoe/http :security :csrf :enabled? true. Secret
+        ;; prefers a dedicated CSRF_SECRET, falling back to JWT_SECRET so existing
+        ;; deployments keep working while allowing key separation. Config overrides.
+        csrf-config (merge {:enabled?     false
+                            :secret       (or (System/getenv "CSRF_SECRET")
+                                              (System/getenv "JWT_SECRET"))
+                            :exempt-paths []}
+                           (get-in config [:active :wagoe/http :security :csrf]))
+        ;; Fail-loud guard: an enabled CSRF interceptor with no secret cannot validate
+        ;; (the interceptor short-circuits to a no-op — fail OPEN). Refuse to boot rather
+        ;; than start an app that silently accepts unvalidated state-changing requests.
+        _ (when (and (:enabled? csrf-config) (str/blank? (:secret csrf-config)))
+            (throw (ex-info (str "CSRF protection is enabled but no secret is configured. "
+                                 "An enabled interceptor with a blank secret fails OPEN — "
+                                 "state-changing requests would NOT be CSRF-validated. "
+                                 "Set CSRF_SECRET or JWT_SECRET, or :wagoe/http :security :csrf :secret.")
+                            {:type :configuration-error :csrf/enabled? true :csrf/secret-present? false})))
+
+        ;; Rate-limit config consumed by the http-rate-limit-protection interceptor.
+        ;; Opt-in like CSRF: disabled by default so a framework upgrade cannot start
+        ;; 429-ing consumers. When enabled with a cache present, limiting is shared
+        ;; across replicas via Redis; without a cache it falls back to a per-process
+        ;; counter (single-node only — NOT a global limit). Config keys override.
+        rate-limit-config (merge {:enabled?  false
+                                  :limit     100
+                                  :window-ms 60000}
+                                 (get-in config [:active :wagoe/http :rate-limit]))
+        ;; Fail-loud in :prod, warn elsewhere. In production a per-process fallback
+        ;; is almost never intended (multi-replica → effective limit is limit x N,
+        ;; i.e. not a real limit), so refuse to boot rather than provide a false
+        ;; sense of protection. dev/test/acc are single-node by default, so a warn
+        ;; is enough there.
+        _ (when (and (:enabled? rate-limit-config) (nil? cache))
+            (if (= :prod (:wagoe/profile config))
+              (throw (ex-info (str "Rate limiting is enabled in the :prod profile but no "
+                                   ":wagoe/cache (Redis) is active. Without a shared cache the "
+                                   "limiter falls back to a per-process counter — across replicas the "
+                                   "effective global limit is limit x N, so it is NOT a real limit. "
+                                   "Activate :wagoe/cache (Redis), or disable rate limiting "
+                                   "(HTTP_RATE_LIMIT_ENABLED=false).")
+                              {:type :configuration-error
+                               :rate-limit/enabled? true :cache/present? false :profile :prod}))
+              (log/warn (str "Rate limiting is enabled but no cache is configured — "
+                             "falling back to a per-process counter. This is correct on a "
+                             "single node only; across replicas each instance counts "
+                             "independently, so the effective global limit is limit x N. "
+                             "Configure :wagoe/cache (Redis) for a shared limit."))))
+
+        ]
+    {:csrf csrf-config :rate-limit rate-limit-config}))
+
+(defn- platform-routes
+  "The endpoints every Wagoe application serves, whoever it is.
+
+   Health, readiness, liveness, the Prometheus scrape and the `/` redirect.
+   `:skip-interceptors?` on all of them: a liveness probe that needs a session
    is not a liveness probe."
   [{:keys [config db-context cache metrics-emitter]}]
   (require 'wagoe.platform.shell.interfaces.http.common)

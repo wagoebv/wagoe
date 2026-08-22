@@ -499,3 +499,56 @@
 
     (testing "no enricher"
       (is (nil? (:dev (body-of {:environment "development"})))))))
+
+;; =============================================================================
+;; Reitit route data, used as-is (ADR-037 / BOU-331)
+;; =============================================================================
+
+(deftest ^:unit reitit-data-passes-through-and-still-gets-the-interceptor-stack
+  ;; The one thing the normalized format did that Reitit does not: every
+  ;; endpoint gets the default interceptor stack — security headers, CSRF, rate
+  ;; limiting, metrics — unless it opts out. Collapsing the format must not
+  ;; collapse that.
+  (let [decorate #'reitit/decorate-reitit-route
+        [_ data] (decorate ["/users" {:get {:handler identity}}] {})]
+
+    (testing "the endpoint keeps its handler"
+      (is (= identity (get-in data [:get :handler]))))
+
+    (testing "and gains the default stack as middleware"
+      (is (= 1 (count (get-in data [:get :middleware])))))
+
+    (testing "an endpoint that opts out gets none of it"
+      (let [[_ d] (decorate ["/health" {:get {:handler identity
+                                              :skip-interceptors? true}}] {})]
+        (is (nil? (get-in d [:get :middleware])))
+        (is (not (contains? (:get d) :skip-interceptors?))
+            ":skip-interceptors? is ours, not Reitit's — it must not reach the router")))
+
+    (testing "route-level data Reitit understands is left alone"
+      (let [[path d] (decorate ["/users" {:name ::users
+                                          :middleware [:route-mw]
+                                          :get {:handler identity}}] {})]
+        (is (= "/users" path))
+        (is (= ::users (:name d)) "named routes are Reitit's, and reverse routing needs them")
+        (is (= [:route-mw] (:middleware d)))))
+
+    (testing "nested routes are walked, so children are decorated too"
+      (let [[_ _ child] (decorate ["/api" {} ["/users" {:get {:handler identity}}]] {})
+            [_ child-data] child]
+        (is (= 1 (count (get-in child-data [:get :middleware]))))))
+
+    (testing "non-endpoint keys are not mistaken for endpoints"
+      (let [[_ d] (decorate ["/x" {:conflicting true :get {:handler identity}}] {})]
+        (is (true? (:conflicting d)))))))
+
+(deftest ^:unit both-formats-compile-while-modules-migrate
+  ;; A module that has moved emits a vector; one that has not emits a map. Both
+  ;; travel through compile-routes until the last module is migrated.
+  (let [prepare #'reitit/prepare-routes
+        out     (prepare [["/moved" {:get {:handler identity}}]
+                          {:path "/not-moved" :methods {:get {:handler identity}}}]
+                         {})]
+    (is (= 2 (count out)))
+    (is (every? vector? out) "both arrive as Reitit route vectors")
+    (is (= ["/moved" "/not-moved"] (mapv first out)))))
