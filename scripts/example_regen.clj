@@ -33,8 +33,13 @@
 
    `.git` because the example is not its own repository. `.env` because it
    holds a generated JWT secret — `.env.example` is committed in its place.
-   The build caches because they are build caches."
-  #{".git" ".env" "target" ".cpcache" ".clj-kondo/.cache" "logs" "data"})
+   The build caches because they are build caches.
+
+   `.mcp.json` and `.vscode` because this repository's own .gitignore excludes
+   them everywhere, so they cannot be committed under examples/ either. A
+   generated project does get them; the example simply cannot show them."
+  #{".git" ".env" "target" ".cpcache" ".clj-kondo/.cache" "logs" "data"
+    ".mcp.json" ".vscode"})
 
 (def preserved
   "Committed files the generators do not write, kept across a regeneration.
@@ -181,6 +186,23 @@
                          (not (preserved rel)))]
           [(undate rel) (undate (slurp p))])))
 
+(defn- line-diff
+  "The first few lines where `committed` and `fresh` disagree.
+
+   Naming a file and not saying how it differs sends whoever hit the failure
+   off to reproduce a two-minute regeneration by hand to find out."
+  [committed fresh]
+  (let [a (str/split-lines committed)
+        b (str/split-lines fresh)]
+    (->> (map vector (range) (concat a (repeat nil)) (concat b (repeat nil)))
+         (take (max (count a) (count b)))
+         (remove (fn [[_ x y]] (= x y)))
+         (take 5)
+         (mapcat (fn [[n x y]]
+                   [(str "    " (inc n) " committed: " (pr-str x))
+                    (str "    " (inc n) " generated: " (pr-str y))]))
+         (str/join "\n"))))
+
 (defn -main [& args]
   (let [check? (some #{"--check"} args)
         work   (str (fs/create-temp-dir {:prefix "wagoe-example-"}))]
@@ -200,7 +222,8 @@
                                   (cond
                                     (not (contains? have k)) (str "  missing:  " k)
                                     (not (contains? want k)) (str "  extra:    " k)
-                                    (not= (want k) (have k)) (str "  differs:  " k)))))]
+                                    (not= (want k) (have k))
+                                    (str "  differs:  " k "\n" (line-diff (have k) (want k)))))))]
             (if (seq diff)
               (do (println "\nexamples/shop no longer matches generator output:")
                   (println (str/join "\n" diff))
