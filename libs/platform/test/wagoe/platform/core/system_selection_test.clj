@@ -216,6 +216,12 @@
                                    (ig/ref :wagoe/admin-routes))}
                         gone))))))
 
+    (testing "and in a set — the docstring says collections, so it must mean all of them"
+      (is (= #{(ig/ref :wagoe/user-routes)}
+             (:xs (selection/without-refs-to
+                   {:xs #{(ig/ref :wagoe/user-routes) (ig/ref :wagoe/admin-routes)}}
+                   gone)))))
+
     (testing "map values still go, which is what this always did"
       (is (= {:keep (ig/ref :wagoe/user-routes)}
              (selection/without-refs-to {:keep (ig/ref :wagoe/user-routes)

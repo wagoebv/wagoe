@@ -240,13 +240,25 @@
                       e)))))
 
 (defn discovered-route-refs
-  "Integrant refs to every discovered module's routes key.
+  "Integrant refs to the routes of every discovered module that has any.
 
    The HTTP handler cannot name a generated module, so it takes the routes as a
-   collection — this is what the application puts in `:module-routes`."
-  [active known-keys]
-  (mapv #(ig/ref (keyword "wagoe" (str (name %) "-routes")))
-        (scaffolded-module-keys active known-keys)))
+   collection — this is what the application puts in `:module-routes`.
+
+   `built` is the config those modules produced, and the refs are filtered
+   against it. Referencing `:wagoe/<name>-routes` by convention alone was safe
+   only while every discovered module went through the scaffolder's four-key
+   shape, which always builds one. A module with a graph of its own need not
+   serve HTTP at all — a background-jobs library is exactly the kind of library
+   this is meant to welcome — and a ref to a component it never built is a
+   dangling ref, which Integrant refuses (BOU-330)."
+  ([active known-keys] (discovered-route-refs active known-keys nil))
+  ([active known-keys built]
+   (into []
+         (comp (map #(keyword "wagoe" (str (name %) "-routes")))
+               (filter #(or (nil? built) (contains? built %)))
+               (map ig/ref))
+         (scaffolded-module-keys active known-keys))))
 
 ;; =============================================================================
 ;; Framework module assembly (BOU-326)

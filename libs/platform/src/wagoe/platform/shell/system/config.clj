@@ -87,10 +87,16 @@
            :validation-config (get-in active [:wagoe/settings :user-validation] {})
            :extra-modules     (into modules/always-on-modules extra-modules)}
           modules/require-wiring!
-          requiring-resolve)]
+          requiring-resolve)
+
+         ;; Built before the refs, so they can be filtered against what exists:
+         ;; a discovered module with a graph of its own need not have routes.
+         discovered (modules/discover-module-config
+                     active known base-ns modules/require-wiring! requiring-resolve)]
      ;; Framework modules first, then the scaffolded ones — the order routes are
      ;; concatenated in and mounted.
-     (merge (core-components config http (into (vec routes)
-                                               (modules/discovered-route-refs active known)))
+     (merge (core-components config http
+                             (into (vec routes)
+                                   (modules/discovered-route-refs active known discovered)))
             components
-            (modules/discover-module-config active known base-ns modules/require-wiring! requiring-resolve)))))
+            discovered))))

@@ -148,6 +148,9 @@
          (and (vector? node) (not (map-entry? node)) (some dangling? node))
          (filterv (complement dangling?) node)
 
+         (and (set? node) (some dangling? node))
+         (into (empty node) (remove dangling?) node)
+
          (and (seq? node) (some dangling? node))
          (remove dangling? node)
 

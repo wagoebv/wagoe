@@ -83,3 +83,23 @@
       (doseq [f platform-sources]
         (is (not (str/includes? (slurp f) "widget"))
             (str f " names the module, so platform still holds the list"))))))
+
+(deftest ^:integration a-module-with-no-routes-is-not-referenced-as-if-it-had-some
+  ;; `discovered-route-refs` refs `:wagoe/<name>-routes` by convention. That was
+  ;; safe while every discovered module went through the scaffolder's four-key
+  ;; shape, which always builds one. A module with a graph of its own need not
+  ;; have routes at all — a background-jobs library is exactly the 31st library
+  ;; this ticket is meant to welcome — and referencing a component it never
+  ;; built is a dangling ref, which Integrant refuses (BOU-330).
+  (let [m (sys/system-config {:wagoe/profile :test
+                              :active {:wagoe/settings {}
+                                       :wagoe/h2       {:memory true}
+                                       :wagoe/gadgets  {:enabled? true}}})]
+    (testing "its component is built"
+      (is (contains? m :wagoe/gadgets)))
+
+    (testing "and nothing refers to routes it does not have"
+      (is (not (some #{(integrant.core/ref :wagoe/gadgets-routes)}
+                     (get-in m [:wagoe/http-handler :module-routes])))
+          "the handler would fail to build: no such key in the config")
+      (is (not (contains? m :wagoe/gadgets-routes))))))
