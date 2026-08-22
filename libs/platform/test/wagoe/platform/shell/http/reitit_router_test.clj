@@ -386,7 +386,6 @@
       (is (= "true" (get-in resp-with-mw [:headers "x-saw-mw"])))
       (is (= "false" (get-in resp-without-mw [:headers "x-saw-mw"]))))))
 
-
 ;; =============================================================================
 ;; Coercion failures (BOU-321)
 ;; =============================================================================
@@ -407,10 +406,10 @@
   [system]
   (reitit/compile-routes [["/auth/login"
                            {:post {:handler    (fn [_] {:status 200 :body {:ok true}})
-             :parameters {:body [:map {:closed true}
-                                 [:email :string]
-                                 [:password :string]]}}}]]
-   {:system system}))
+                                   :parameters {:body [:map {:closed true}
+                                                       [:email :string]
+                                                       [:password :string]]}}}]]
+                         {:system system}))
 
 (deftest ^:unit a-request-that-fails-coercion-is-a-400-not-a-500
   ;; Reitit applies a :middleware vector first-to-outermost, and the exception
@@ -438,10 +437,10 @@
   ;; caller's own input and stay; the why is dev-only.
   (let [handler (reitit/compile-routes [["/users"
                                          {:post {:handler    (fn [_] {:status 201 :body {}})
-                           :parameters {:body [:map {:closed true}
-                                               [:role [:enum "admin" "superuser" "internal-auditor"]]
-                                               [:age [:int {:min 18 :max 120}]]]}}}]]
-                 {})
+                                                 :parameters {:body [:map {:closed true}
+                                                                     [:role [:enum "admin" "superuser" "internal-auditor"]]
+                                                                     [:age [:int {:min 18 :max 120}]]]}}}]]
+                                       {})
         resp    (handler {:request-method :post :uri "/users" :headers {}
                           :body-params {:role "peasant" :age 4}})
         raw     (slurp (:body resp))]
@@ -455,8 +454,8 @@
   (let [handler (fn [system]
                   (reitit/compile-routes [["/users"
                                            {:post {:handler    (fn [_] {:status 201 :body {}})
-                             :parameters {:body [:map {:closed true} [:role [:enum "admin"]]]}}}]]
-                   {:system system}))
+                                                   :parameters {:body [:map {:closed true} [:role [:enum "admin"]]]}}}]]
+                                         {:system system}))
         details (fn [system]
                   (:details (json/parse-string
                              (slurp (:body ((handler system) {:request-method :post :uri "/users"
@@ -524,16 +523,28 @@
 
     (testing "non-endpoint keys are not mistaken for endpoints"
       (let [[_ d] (decorate ["/x" {:conflicting true :get {:handler identity}}] {})]
-        (is (true? (:conflicting d)))))))
+        (is (true? (:conflicting d)))))
 
-(deftest ^:unit both-formats-compile-while-modules-migrate
-  ;; A module that has moved emits a vector; one that has not emits a map. Both
-  ;; travel through compile-routes until the last module is migrated.
-  (let [prepare #'reitit/decorate-reitit-route
-        out     (prepare [["/moved" {:get {:handler identity}}]
-                          ["/not-moved"
-                           {:get {:handler identity}}]]
-                         {})]
-    (is (= 2 (count out)))
-    (is (every? vector? out) "both arrive as Reitit route vectors")
-    (is (= ["/moved" "/not-moved"] (mapv first out)))))
+    (testing "Reitit's bare-handler shorthand gets the stack too"
+      ;; `{:get my-handler}` is valid Reitit and has nowhere to hang
+      ;; middleware. Skipping it would serve that endpoint without security
+      ;; headers, CSRF or rate limiting — a hole opened by writing less.
+      (let [[_ d] (decorate ["/shorthand" {:get identity}] {})]
+        (is (= identity (get-in d [:get :handler]))
+            "the shorthand is expanded, not dropped")
+        (is (= 1 (count (get-in d [:get :middleware])))
+            "an endpoint written shorthand is as protected as one written long")))))
+
+(deftest ^:unit every-route-in-the-table-is-decorated
+  ;; compile-routes maps over the table; decorate-reitit-route takes one route.
+  ;; An earlier version of this test handed the whole table to the single-route
+  ;; function and passed, because [[..] [..]] destructures as [path data] and
+  ;; comes back out with two elements — the assertions held while nothing was
+  ;; decorated.
+  (let [decorate #'reitit/decorate-reitit-route
+        table    [["/a" {:get {:handler identity}}]
+                  ["/b" {:post {:handler identity}}]]
+        out      (mapv #(decorate % {}) table)]
+    (is (= ["/a" "/b"] (mapv first out)))
+    (is (= 1 (count (get-in (second (first out)) [:get :middleware]))))
+    (is (= 1 (count (get-in (second (second out)) [:post :middleware]))))))

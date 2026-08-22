@@ -403,8 +403,15 @@
 
    Appended last, so interceptors sit closest to the handler and still see a
    fully prepared request (session, body, coercions) (BOU-331)."
-  [{:keys [middleware interceptors skip-interceptors?] :as endpoint} system]
-  (let [route-interceptors (or (resolve-interceptors interceptors) [])
+  [endpoint system]
+  (let [;; `{:get my-handler}` is Reitit's own shorthand for
+        ;; `{:get {:handler my-handler}}`. Left as-is it has nowhere to hang
+        ;; middleware, so the endpoint would quietly serve without security
+        ;; headers, CSRF or rate limiting — a hole that opens by writing less.
+        {:keys [middleware interceptors skip-interceptors?] :as endpoint}
+        (if (map? endpoint) endpoint {:handler endpoint})
+
+        route-interceptors (or (resolve-interceptors interceptors) [])
         all-interceptors   (if skip-interceptors?
                              route-interceptors
                              (vec (concat http-interceptors/default-http-interceptors
@@ -426,7 +433,7 @@
     (let [[path data & children] route
           data'    (if (map? data)
                      (reduce-kv (fn [m k v]
-                                  (assoc m k (if (and (http-methods k) (map? v))
+                                  (assoc m k (if (http-methods k)
                                                (decorate-endpoint v system)
                                                v)))
                                 {} data)
