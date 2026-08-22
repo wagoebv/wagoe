@@ -405,3 +405,31 @@
       (is (empty? (set/difference known dispatched))
           (str "doctor accepts " (pr-str (set/difference known dispatched))
                " which init-key cannot build")))))
+
+(deftest ^:unit every-profile-config-in-this-repo-parses
+  ;; The reader table listed twelve Aero tags and not #boolean, which acc and
+  ;; prod both use. `bb doctor --env prod` answered "config.edn could not be
+  ;; parsed" about a file Aero reads without complaint, and told the reader to
+  ;; repair syntax that was never broken. CI only ever ran --env dev, so the two
+  ;; profiles where it mattered were the two nothing checked (BOU-324).
+  (let [profiles (->> (io/file "resources/conf")
+                      .listFiles
+                      (filter #(.isDirectory %))
+                      (map #(.getName %))
+                      sort)]
+    (is (<= 2 (count profiles)) "otherwise this passes by checking nothing")
+
+    (doseq [p profiles]
+      (let [results (doctor/run-checks p {})
+            loadable (first (filter #(= :config-loadable (:id %)) results))]
+        (is (= :pass (:level loadable))
+            (str p " does not parse: " (:msg loadable)))))))
+
+(deftest ^:unit an-aero-tag-the-reader-has-never-heard-of-is-not-a-parse-failure
+  ;; Aero has more tags than the table knows and can gain more. This parser
+  ;; exists to find the :active keys; approximating one tag beats refusing the
+  ;; file and telling the reader their config is broken.
+  (let [results (doctor/check-config-loadable
+                 (#'doctor/parse-config-minimal
+                  "{:active {:wagoe/settings {:name #udf/whatever \"x\"}}}"))]
+    (is (= :pass (:level (first results))))))

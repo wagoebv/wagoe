@@ -29,11 +29,29 @@
   (testing "a truncated map is unreadable rather than an exception"
     (is (nil? (sut/parse-stage-output "{:section :config, :results [{:id"))))
 
-  (testing "the last of ours wins"
-    ;; `bb doctor --env all` prints one map per profile.
+  (testing "every one of ours counts, not just the last"
+    ;; `bb doctor --env all --edn` prints one map per profile, and taking the
+    ;; last kept only the alphabetically final one. With a broken acc config,
+    ;; `bb doctor --env acc` reported two errors and `wagoe doctor --env all`
+    ;; answered "Everything checks out" — this command saying fine over a
+    ;; broken config, which is the failure it exists to remove.
     (let [out (str "{:section :config, :results [{:id :a, :level :pass, :msg \"1\"}]}\n"
                    "{:section :config, :results [{:id :b, :level :error, :msg \"2\"}]}\n")]
-      (is (= [:b] (map :id (sut/parse-stage-output out)))))))
+      (is (= [:a :b] (map :id (sut/parse-stage-output out))))
+      (is (= :error (:level (sut/next-action (sut/parse-stage-output out)))))))
+
+  (testing "and bb's own noise between them is still skipped"
+    (let [out (str "Picked up JAVA_TOOL_OPTIONS: -Djava.awt.headless=true\n"
+                   "{:section :config, :results [{:id :a, :level :pass, :msg \"1\"}]}\n"
+                   "Picked up JAVA_TOOL_OPTIONS: -Djava.awt.headless=true\n"
+                   "{:section :config, :results [{:id :b, :level :pass, :msg \"2\"}]}\n")]
+      (is (= [:a :b] (map :id (sut/parse-stage-output out))))))
+
+  (testing "one unreadable map among readable ones does not lose the rest"
+    (let [out (str "{:section :config, :results [{:id :a, :level :pass, :msg \"1\"}]}\n"
+                   "{:section :config, :results [{:id\n"
+                   "{:section :config, :results [{:id :b, :level :error, :msg \"2\"}]}\n")]
+      (is (= [:a :b] (map :id (sut/parse-stage-output out)))))))
 
 (deftest ^:unit the-next-action-is-the-earliest-worst-thing
   (let [results [{:level :pass  :msg "env ok"}
@@ -81,6 +99,17 @@
 
     (testing "the passing stage is untouched"
       (is (some #(= "commands ok" (:msg %)) out))))
+
+  (testing "a stage that crashed keeps its severity through the collapse"
+    ;; Unreadable has two causes: a tool too old to speak --edn (exits 0, prints
+    ;; for a human) and a tool that blew up (nonzero exit). Flattening both to a
+    ;; warning let `wagoe doctor --ci` exit 0 over a check that crashed.
+    (let [results [{:level :warn  :id :environment :unreadable? true :msg "old tool"}
+                   {:level :error :id :config      :unreadable? true :msg "crashed"}]
+          out     (sut/collapse-unreadable results)]
+      (is (= :error (:level (first (filter #(= :tools-version (:id %)) out)))))
+      (is (some #(= :error (:level %)) out)
+          "or --ci would exit 0 over a crashed check")))
 
   (testing "one unreadable stage stays as it is — there is nothing to collapse"
     (let [results [{:level :warn :id :config :unreadable? true :msg "config: could not read"}]]

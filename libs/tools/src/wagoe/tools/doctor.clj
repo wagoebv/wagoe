@@ -333,6 +333,8 @@
         readers {'env      (fn [v] (str "ENV:" v))
                  'or       (fn [v] (if (vector? v) (last v) v))
                  'long     (fn [v] (if (number? v) v 0))
+                 'double   (fn [v] (if (number? v) v 0.0))
+                 'boolean  (fn [v] (boolean v))
                  'merge    (fn [v] (if (vector? v) (apply merge v) v))
                  'include  (fn [_v] {})
                  'str      (fn [v] (str v))
@@ -342,7 +344,16 @@
                  'ig/ref   (fn [v] v)
                  'profile  (fn [v] v)}]
     (try
-      (edn/read-string {:readers readers} config-text)
+      ;; :default is why this table cannot rot. It listed twelve tags and not
+      ;; #boolean, which acc/prod both use — so `bb doctor --env prod` reported
+      ;; "config.edn could not be parsed" about a file Aero reads without
+      ;; complaint, and the fix it printed was to repair syntax that was never
+      ;; broken. CI only ever ran --env dev, which is why it went unseen.
+      ;;
+      ;; Aero has more tags than this knows and can gain more. An unknown one is
+      ;; now its value rather than an exception: this parser exists to find the
+      ;; :active keys, and approximating one tag beats refusing the file.
+      (edn/read-string {:readers readers :default (fn [_tag v] v)} config-text)
       ;; Returns nil on failure; `check-config-loadable` turns that into a
       ;; reported error. It used to println a warning here and return nil,
       ;; which never reached the summary — so an unparseable config produced
@@ -498,13 +509,13 @@
   (println "  bb doctor --ci             Exit non-zero on any error (CI mode)")
   (println)
   (println "Checks:")
+  (println "  config-loadable     config.edn parses and has an :active section")
   (println "  env-refs            #env vars without #or defaults are set")
   (println "  providers           Provider values are recognized")
   (println "  jwt-secret          JWT_SECRET set when user module active")
   (println "  admin-parity        Admin entity files exist in both dev and test")
   (println "  prod-placeholders   No placeholder values in prod config")
   (println "  reset-endpoint-flag :test/reset-endpoint-enabled? only true in test/dev")
-  (println "  wiring-requires     App source requires wiring for all active modules")
   (println "  upgrade-wiring      No stale pre-Phase-2 framework wiring (BOU-198/200)"))
 
 ;; =============================================================================

@@ -67,6 +67,12 @@ for what is public API, what is internal, and how deprecations are announced.
     module creates its tables through `:wagoe/user-db-schema`. Every fresh
     project carried two warnings it could only clear by making directories it
     did not need.
+  * `bb doctor --env prod` reported "config.edn could not be parsed" about a
+    file Aero reads without complaint, and told the reader to repair syntax that
+    was never broken. Its reader table listed twelve Aero tags and not
+    `#boolean`, which `acc` and `prod` both use; CI only ever ran `--env dev`, so
+    the two profiles where it mattered were the two nothing checked. An unknown
+    tag is now its own value rather than an exception.
   * `bb doctor`'s `wiring-requires` check told you to require
     `wagoe.dev-error-enricher.shell.module-wiring` — a namespace that does not
     exist. It checked BOU-171's contract, which BOU-326 replaced; a module whose

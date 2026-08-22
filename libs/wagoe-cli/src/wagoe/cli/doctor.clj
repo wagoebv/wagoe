@@ -73,24 +73,32 @@
       {:exit 127 :out "" :err (.getMessage e)})))
 
 (defn parse-stage-output
-  "The results a stage reported, from its stdout.
+  "Every result a stage reported, from its stdout.
 
    `bb` writes its own noise to stdout on some systems (`Picked up
-   JAVA_TOOL_OPTIONS`, task banners), so this takes the last line that reads as
-   our map rather than assuming the whole of stdout is EDN. A stage whose output
-   cannot be read at all is reported as such rather than silently counted clean
-   — a diagnostic that mistakes \"I could not tell\" for \"fine\" is the failure
-   this command exists to remove."
+   JAVA_TOOL_OPTIONS`, task banners), so this reads the lines that are ours
+   rather than assuming the whole of stdout is EDN.
+
+   All of them, not the last: `bb doctor --env all --edn` prints one map per
+   profile, and taking the last kept only the alphabetically final one. A
+   broken `acc` config reported two errors when asked directly, and `wagoe
+   doctor --env all` answered \"Everything checks out\" — a diagnostic saying
+   fine over a broken config, which is the failure this command exists to
+   remove.
+
+   Returns nil, not [], when there was nothing of ours to read: the caller
+   treats \"could not tell\" and \"told me, and it was empty\" differently."
   [out]
-  (let [candidate (->> (str/split-lines (or out ""))
-                       (map str/trim)
-                       (filter #(str/starts-with? % "{:section"))
-                       last)]
-    (when candidate
-      (try
-        (let [m (edn/read-string candidate)]
-          (when (map? m) (:results m)))
-        (catch Exception _ nil)))))
+  (let [maps (->> (str/split-lines (or out ""))
+                  (map str/trim)
+                  (filter #(str/starts-with? % "{:section"))
+                  (keep (fn [line]
+                          (try
+                            (let [m (edn/read-string line)]
+                              (when (map? m) (:results m)))
+                            (catch Exception _ nil)))))]
+    (when (seq maps)
+      (vec (apply concat maps)))))
 
 (defn- run-stage
   [dir {:keys [id task label edn?] :as stage}]
@@ -140,7 +148,11 @@
     (if (< (count unreadable) 2)
       results
       (conj (vec (remove :unreadable? results))
-            {:level :warn
+            {;; The worst of what was collapsed, not a flat :warn. A stage that
+             ;; is unreadable because it *crashed* is an error, and flattening it
+             ;; into a warning let `wagoe doctor --ci` exit 0 over a check that
+             ;; blew up.
+             :level (if (some #(= :error (:level %)) unreadable) :error :warn)
              :id    :tools-version
              :msg   (str "This project's wagoe-tools is older than `--edn`, so "
                          (count unreadable) " checks could not be read: "

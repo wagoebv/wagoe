@@ -88,8 +88,11 @@ bb install-hooks             # Configure git hooks path to .githooks
 | `jwt-secret` | error | `JWT_SECRET` not set when user module is active
 | `admin-parity` | warn | Admin entity EDN mismatch between dev and test
 | `prod-placeholders` | error | Placeholder values in prod/acc configs
-| `wiring-requires` | warn | Active modules missing `module-wiring` require
+| `upgrade-wiring` | error | A namespace that moved between releases, and where it went
 |===
+
+`--edn` prints the results as data instead of for a person; that is what
+`wagoe doctor` reads so it can end with a single next action.
 
 == Key namespaces
 
