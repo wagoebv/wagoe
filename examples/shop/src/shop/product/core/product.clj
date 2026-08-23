@@ -1,9 +1,9 @@
-(ns wagoe.product.core.product
+(ns shop.product.core.product
   "Pure business logic for product domain.
    
    All functions in this namespace are pure - they have no side effects,
    don't perform I/O, and always return the same output for the same input."
-  (:require [wagoe.product.schema :as schema]))
+  (:require [shop.product.schema :as schema]))
 
 ;; =============================================================================
 ;; Entity Creation

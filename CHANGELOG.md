@@ -29,6 +29,32 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ## [Unreleased]
 
+### Changed
+
+- **A generated project's own code lives under its own namespace** (BOU-360).
+  `wagoe new shop` put the application's wiring in `wagoe.system-config` and
+  `bb scaffold generate product` put the module in `wagoe.product` — a project
+  called shop defining namespaces in the framework's root. Now:
+
+  ```
+  src/shop/system_config.clj      ; ns shop.system-config
+  src/shop/product/…              ; ns shop.product.*
+  ```
+
+  Config keys are unchanged: `:wagoe/product` still switches the module on,
+  beside `:wagoe/http` and `:wagoe/h2`. The key names the module to the
+  framework; the namespace says whose code it is.
+
+  **Existing projects need no changes.** Module discovery resolves
+  `<project-ns>.<module>.shell.module-wiring` and falls back to
+  `wagoe.<module>.shell.module-wiring`, so a project generated on an earlier
+  beta keeps booting as it is. To move a module across, move the directory and
+  rename the namespaces — nothing else refers to them.
+
+  `--base-ns` now works rather than being refused: `bb scaffold` passes the
+  project's namespace by default, and `field`, `endpoint` and `adapter` accept
+  the flag that only `generate` had.
+
 ### Added
 
 - **`examples/shop` — a generated application you can read and run** (BOU-300).

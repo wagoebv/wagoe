@@ -39,7 +39,9 @@
                    ".claude/skills/wagoe/SKILL.md"
                    "resources/conf/dev/config.edn"
                    "resources/conf/test/config.edn"
-                   "src/wagoe/system_config.clj"
+                   ;; Under the project namespace since BOU-360 — the app's
+                   ;; own wiring is not the framework's code.
+                   "src/test_proj/system_config.clj"
                    "dev/user.clj"
                    "src/test_proj/system.clj"
                    ;; The non-REPL entry point and the build path that uses it
@@ -340,7 +342,7 @@
                                 "/wagoe-new-test-" (System/nanoTime))]
                    (try
                      (new/generate! dir "sample" opts)
-                     (slurp (io/file dir "src/wagoe/system_config.clj"))
+                     (slurp (io/file dir "src/sample/system_config.clj"))
                      (finally
                        (doseq [f (reverse (file-seq (io/file dir)))] (.delete f))))))
         with    (render {})
@@ -349,8 +351,13 @@
     (testing "the flag reaches the generated config as the set the assembler takes"
       ;; A set rather than a boolean since BOU-326: the user module is the one
       ;; an application switches on in code, and :extra-modules is how.
-      (is (str/includes? with    "{:extra-modules #{:wagoe/user}}"))
-      (is (str/includes? without "{:extra-modules #{}}")))
+      (is (str/includes? with    "{:extra-modules #{:wagoe/user}"))
+      (is (str/includes? without "{:extra-modules #{}")))
+
+    (testing "and the app tells the assembler where its own modules live"
+      ;; Without this the default wins and a module generated into
+      ;; sample.product is never found (BOU-360).
+      (is (str/includes? with ":base-ns       \"sample\"")))
 
     (testing "both variants are the same file apart from that set"
       ;; Turning the user module back on is editing one word, not restoring a
@@ -369,7 +376,7 @@
   (let [tmp (str (System/getProperty "java.io.tmpdir") "/wagoe-tmpl-" (System/currentTimeMillis))]
     (try
       (new/generate! tmp "test-proj" {})
-      (let [src (slurp (io/file tmp "src/wagoe/system_config.clj"))]
+      (let [src (slurp (io/file tmp "src/test_proj/system_config.clj"))]
         (testing "no placeholder survived rendering"
           (is (not (str/includes? src "{{")) "unrendered placeholder in generated config"))
 

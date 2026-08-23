@@ -7,7 +7,8 @@
   - Dispatch CLI commands to module-specific runners.
 
   For now, only the `:user` module is supported."
-  (:require [clojure.tools.logging :as log]
+  (:require [clojure.string :as str]
+            [clojure.tools.logging :as log]
             [integrant.core :as ig]))
 
 (defn enabled-modules
@@ -150,6 +151,23 @@
        (remove (set known-keys))
        sort))
 
+(defn wiring-candidates
+  "Where a module's wiring namespace may live, most preferred first.
+
+   An application's own code belongs under its own namespace, so
+   `shop.product.shell.module-wiring` is where `bb scaffold` writes it and the
+   first place to look (BOU-360).
+
+   `wagoe.<module>.shell.module-wiring` is the second: every project generated
+   before that change has its modules there, and the framework's own
+   application is one of them — its project namespace really is `wagoe`, so
+   this is not only a compatibility path. When base-ns is already \"wagoe\" the
+   two collapse to one candidate."
+  [base-ns module]
+  (->> [base-ns "wagoe"]
+       distinct
+       (mapv #(symbol (str % "." module ".shell.module-wiring")))))
+
 (defn discover-module-config
   "Integrant entries for scaffolded modules named under `:active`.
 
@@ -163,12 +181,14 @@
    (discover-module-config active known-keys base-ns wiring-loadable? (constantly nil)))
   ([active known-keys base-ns wiring-loadable? resolve-var]
    (reduce
-   (fn [acc k]
-     (let [module    (name k)
-           settings  (get active k)
-           wiring    (symbol (str base-ns "." module ".shell.module-wiring"))
-           loadable? (and (not (false? (:enabled? settings)))
-                          (wiring-loadable? wiring))
+    (fn [acc k]
+      (let [module    (name k)
+            candidates (wiring-candidates base-ns module)
+            wiring    (or (first (filter wiring-loadable? candidates))
+                          (first candidates))
+            settings  (get active k)
+            loadable? (and (not (false? (:enabled? settings)))
+                           (wiring-loadable? wiring))
            ;; A module that describes its own graph gets it built, exactly as a
            ;; framework module does. Without this a library outside
            ;; `framework-modules` could have only the four keys the scaffolder
@@ -178,45 +198,46 @@
            ;; Its routes need no special case: `discovered-route-refs` refs
            ;; `:wagoe/<name>-routes` by convention, and a module that has routes
            ;; names its component that.
-           own-graph (when loadable?
-                       (when-let [build (resolve-var (symbol (str wiring) "ig-config"))]
-                         (build settings {:config {:active active}})))]
-       (cond
-         (false? (:enabled? settings))
-         acc
+            own-graph (when loadable?
+                        (when-let [build (resolve-var (symbol (str wiring) "ig-config"))]
+                          (build settings {:config {:active active}})))]
+        (cond
+          (false? (:enabled? settings))
+          acc
 
-         (not (wiring-loadable? wiring))
-         (throw (ex-info
-                 (str "No wiring for module " k ". Looked for " wiring ".\n"
-                      "  Generate it:  bb scaffold generate --module-name " module " …\n"
-                      "  Or remove " k " from :active in resources/conf/<env>/config.edn.\n"
-                      "  A misspelled key looks exactly like this — check the spelling first.")
-                 {:type       :wagoe/module-wiring-not-found
-                  :module-key k
-                  :namespace  (str wiring)}))
+          (not (wiring-loadable? wiring))
+          (throw (ex-info
+                  (str "No wiring for module " k ". Looked for "
+                       (str/join " and " candidates) ".\n"
+                       "  Generate it:  bb scaffold generate --module-name " module " …\n"
+                       "  Or remove " k " from :active in resources/conf/<env>/config.edn.\n"
+                       "  A misspelled key looks exactly like this — check the spelling first.")
+                  {:type       :wagoe/module-wiring-not-found
+                   :module-key k
+                   :namespaces (mapv str candidates)}))
 
-         own-graph
-         (do (log/info "Discovered module with its own graph" {:module module})
-             (merge acc (:components own-graph)))
+          own-graph
+          (do (log/info "Discovered module with its own graph" {:module module})
+              (merge acc (:components own-graph)))
 
-         :else
-         (do
-           (log/info "Discovered scaffolded module" {:module module})
-           (assoc acc
-                  (keyword "wagoe" (str module "-repository"))
-                  {:ctx (ig/ref :wagoe/db-context)}
+          :else
+          (do
+            (log/info "Discovered scaffolded module" {:module module})
+            (assoc acc
+                   (keyword "wagoe" (str module "-repository"))
+                   {:ctx (ig/ref :wagoe/db-context)}
 
-                  (keyword "wagoe" (str module "-service"))
-                  {:repository (ig/ref (keyword "wagoe" (str module "-repository")))}
+                   (keyword "wagoe" (str module "-service"))
+                   {:repository (ig/ref (keyword "wagoe" (str module "-repository")))}
 
-                  (keyword "wagoe" (str module "-routes"))
-                  {:service (ig/ref (keyword "wagoe" (str module "-service")))
-                   :config  settings}
+                   (keyword "wagoe" (str module "-routes"))
+                   {:service (ig/ref (keyword "wagoe" (str module "-service")))
+                    :config  settings}
 
-                  k
-                  {:enabled? true
-                   :service  (ig/ref (keyword "wagoe" (str module "-service")))
-                   :routes   (ig/ref (keyword "wagoe" (str module "-routes")))})))))
+                   k
+                   {:enabled? true
+                    :service  (ig/ref (keyword "wagoe" (str module "-service")))
+                    :routes   (ig/ref (keyword "wagoe" (str module "-routes")))})))))
     {}
     (scaffolded-module-keys active known-keys))))
 

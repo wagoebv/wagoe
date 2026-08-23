@@ -87,7 +87,11 @@
                      ".claude/skills/wagoe/SKILL.md"    "claude-skill.md.tmpl"
                      "resources/conf/dev/config.edn"       "dev-config.edn.tmpl"
                      "resources/conf/test/config.edn"      "test-config.edn.tmpl"
-                     "src/wagoe/system_config.clj"     "config.clj.tmpl"
+                     ;; Under the project's own namespace, not wagoe's: this is
+                     ;; the application's wiring, and a project called shop
+                     ;; should not be defining namespaces in the framework's
+                     ;; root (BOU-360).
+                     (str "src/" project-ns "/system_config.clj") "config.clj.tmpl"
                      "dev/user.clj"                        "user.clj.tmpl"
                      (str "src/" project-ns "/system.clj") "system.clj.tmpl"
                      ;; Non-REPL entry point + the build path that uses it.

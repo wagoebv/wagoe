@@ -25,6 +25,7 @@
 (ns wagoe.tools.integrate
   (:require [wagoe.tools.ansi :refer [bold green red cyan dim]]
             [wagoe.tools.config-edn :as config-edn]
+            [wagoe.tools.project :as project]
             [clojure.java.io :as io]
             [clojure.string :as str]))
 
@@ -35,9 +36,12 @@
 (defn- root-dir [] (System/getProperty "user.dir"))
 
 (defn base-ns-path
-  "Filesystem path segment for a base namespace: dots become slashes."
-  [base-ns]
-  (str/replace (or base-ns "wagoe") "." "/"))
+  "Filesystem path segment for a base namespace: dots become slashes.
+
+   Defaults to the project's own namespace, which is where `bb scaffold
+   generate` writes a module (BOU-360)."
+  ([base-ns] (base-ns-path base-ns (project/base-ns)))
+  ([base-ns default] (str/replace (or base-ns default) "." "/")))
 
 (defn discover-module
   "Discover a scaffolded module under `<root>/src/<base-ns-path>/<module>/` —
@@ -46,13 +50,20 @@
    does not exist there."
   ([module-name base-ns] (discover-module module-name base-ns (root-dir)))
   ([module-name base-ns root]
-   (let [bnp      (base-ns-path base-ns)
-         src-dir  (io/file root "src" bnp module-name)
-         test-dir (io/file root "test" bnp module-name)]
+   ;; The project's own namespace first, then wagoe: a module generated before
+   ;; BOU-360 is still under wagoe.<module>, and integrating it must keep
+   ;; working. When they are the same there is one place to look.
+   (let [candidates (distinct [(or base-ns (project/base-ns root)) "wagoe"])
+         found      (first (filter #(.exists (io/file root "src" (base-ns-path % "wagoe") module-name))
+                                   candidates))
+         resolved   (or found (first candidates))
+         bnp        (base-ns-path resolved "wagoe")
+         src-dir    (io/file root "src" bnp module-name)
+         test-dir   (io/file root "test" bnp module-name)]
      (when (.exists src-dir)
        {:name        module-name
-        :base-ns     (or base-ns "wagoe")
-        :module-ns   (str (or base-ns "wagoe") "." module-name)
+        :base-ns     resolved
+        :module-ns   (str resolved "." module-name)
         :src-path    (str "src/" bnp "/" module-name)
         :test-path   (str "test/" bnp "/" module-name)
         :src-dir     (.getPath src-dir)
@@ -112,17 +123,18 @@
     (println "  the module's tests run with" (cyan "clojure -M:test") "(no deps.edn/tests.edn changes).")
     (println)
 
-    ;; Discovery resolves wagoe.<module>.shell.module-wiring — both the monorepo
-    ;; and the generated template pass "wagoe" — so a module under another base
-    ;; namespace would get a config key that throws at boot. It used to print
-    ;; the right require instead; now that the require is gone, refuse rather
-    ;; than write something that cannot work.
-    (when (and base-ns (not= base-ns "wagoe"))
-      (println (red "✗") (str "--base-ns " base-ns " is not supported by module discovery."))
-      (println (dim "  ig-config resolves wagoe.<module>.shell.module-wiring, so a module"))
-      (println (dim "  under another base namespace needs wiring by hand. Generate without"))
-      (println (dim "  --base-ns, or add the key and the require yourself."))
-      (System/exit 1))
+    ;; Discovery resolves <project-ns>.<module>.shell.module-wiring and, for
+    ;; projects generated before BOU-360, wagoe.<module>.… A module somewhere
+    ;; else gets a config key that throws at boot. This used to refuse outright,
+    ;; back when the project namespace was not one of the two.
+    (let [known #{(project/base-ns) "wagoe"}]
+      (when-not (known (:base-ns module))
+        (println (red "!") (str "This module is under " (:base-ns module)
+                                ", which module discovery does not look in."))
+        (println (dim (str "  It resolves " (project/base-ns) ".<module>.shell.module-wiring")))
+        (println (dim "  and wagoe.<module>.shell.module-wiring. Pass :base-ns to"))
+        (println (dim "  system-config yourself, or regenerate without --base-ns."))
+        (println)))
 
     (when-not (:has-wiring? module)
       (println (red "✗") (str "No " (cyan "shell/module_wiring.clj") " in this module."))
@@ -145,11 +157,11 @@
                      result (config-edn/inject-key! path key-str (str "\n" snippet "\n")
                                                     {:dry-run? dry-run?})]
                  (println (str "  " (case result
-                               :written           (str (green "✓") " " (if dry-run? "would add to" "added to"))
-                               :already-present   (str (green "✓") " already in")
-                               :no-active-section (str (red "✗") " no :active section in")
-                                     :no-file           (str (dim "–") " not found:"))
-                              " " (cyan (str "resources/conf/" env "/config.edn"))))
+                                      :written           (str (green "✓") " " (if dry-run? "would add to" "added to"))
+                                      :already-present   (str (green "✓") " already in")
+                                      :no-active-section (str (red "✗") " no :active section in")
+                                      :no-file           (str (dim "–") " not found:"))
+                               " " (cyan (str "resources/conf/" env "/config.edn"))))
                  result)))]
 
         (println)

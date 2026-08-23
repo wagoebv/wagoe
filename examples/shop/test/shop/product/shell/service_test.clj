@@ -1,7 +1,7 @@
-(ns wagoe.product.shell.service-test
+(ns shop.product.shell.service-test
   (:require [clojure.test :refer [deftest testing is]]
-            [wagoe.product.shell.service :as service]
-            [wagoe.product.ports :as ports]))
+            [shop.product.shell.service :as service]
+            [shop.product.ports :as ports]))
 
 (deftest ^:unit create-product-test
   (testing "creates product via service"

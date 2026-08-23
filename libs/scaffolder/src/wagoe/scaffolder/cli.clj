@@ -37,7 +37,7 @@
     :multi true
     :default []
     :update-fn conj]
-   [nil "--base-ns NS" "Base namespace + path for the module (default: wagoe)"]
+   [nil "--base-ns NS" "Base namespace + path for the module (default: the project's own)"]
    [nil "--http" "Enable HTTP (REST API) interface (default: true)"
     :default true]
    [nil "--cli" "Enable CLI interface (default: true)"
@@ -84,7 +84,8 @@
    [nil "--output-dir DIR" "Output directory (default: current directory)"
     :default "."]
    [nil "--dry-run" "Show what would be generated without creating files"
-    :default false]])
+    :default false]
+   [nil "--base-ns NS" "Base namespace + path for the module (default: the project's own)"]])
 
 ;; =============================================================================
 ;; Endpoint Command Options (add endpoint to existing module)
@@ -105,7 +106,8 @@
     :validate [#(re-matches #"^[a-z][a-z0-9-]*$" %)
                "Must be lowercase with hyphens only"]]
    [nil "--dry-run" "Show what would be generated without creating files"
-    :default false]])
+    :default false]
+   [nil "--base-ns NS" "Base namespace + path for the module (default: the project's own)"]])
 
 ;; =============================================================================
 ;; Adapter Command Options (generate new adapter implementation)
@@ -126,7 +128,8 @@
     :default []
     :update-fn conj]
    [nil "--dry-run" "Show what would be generated without creating files"
-    :default false]])
+    :default false]
+   [nil "--base-ns NS" "Base namespace + path for the module (default: the project's own)"]])
 
 ;; =============================================================================
 ;; Field Parsing
@@ -412,7 +415,8 @@
                              :required (:required opts false)
                              :unique (:unique opts false)}
                      :output-dir (:output-dir opts)
-                     :dry-run (:dry-run opts)}
+                     :dry-run (:dry-run opts)
+                     :base-ns (:base-ns opts)}
             result (ports/add-field service request)]
         (if (:success result)
           {:status 0
@@ -431,7 +435,8 @@
                      :path (:path opts)
                      :method (keyword (str/lower-case (:method opts)))
                      :handler-name (:handler-name opts)
-                     :dry-run (:dry-run opts)}
+                     :dry-run (:dry-run opts)
+                     :base-ns (:base-ns opts)}
             result (ports/add-endpoint service request)]
         (if (:success result)
           {:status 0
@@ -453,7 +458,8 @@
                      :port (:port opts)
                      :adapter-name (:adapter-name opts)
                      :methods methods
-                     :dry-run (:dry-run opts)}
+                     :dry-run (:dry-run opts)
+                     :base-ns (:base-ns opts)}
             result (ports/add-adapter service request)]
         (if (:success result)
           {:status 0

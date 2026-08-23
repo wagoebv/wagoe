@@ -1,9 +1,9 @@
-(ns wagoe.product.shell.http
+(ns shop.product.shell.http
   "HTTP routes for product module.")
 
 ;; The handlers below are stubs that return canned responses. When you
 ;; wire them to the service, add to the ns form above:
-;;   (:require [wagoe.product.ports :as ports])
+;;   (:require [shop.product.ports :as ports])
 
 (defn api-routes
   "Reitit route data: [path data & children].

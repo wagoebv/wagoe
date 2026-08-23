@@ -72,6 +72,51 @@
     (testing "and carries a BND code so the error catalogue can explain it"
       (is (= :wagoe/module-wiring-not-found (:type (ex-data e)))))))
 
+(deftest ^:unit a-module-is-looked-for-under-the-projects-namespace-first
+  ;; An application's modules belong under the application's namespace, so
+  ;; `shop.product.shell.module-wiring` is where bb scaffold writes them and
+  ;; where discovery looks first (BOU-360).
+  (let [asked (atom [])]
+    (sut/discover-module-config
+     {:wagoe/product {:enabled? true}}
+     #{}
+     "shop"
+     (fn [ns] (swap! asked conj (str ns)) true))
+    (is (= "shop.product.shell.module-wiring" (first @asked)))))
+
+(deftest ^:unit a-module-generated-before-the-move-still-boots
+  ;; Every project generated before BOU-360 has its modules under wagoe.*.
+  ;; Discovery falls back to that, so upgrading the framework does not require
+  ;; moving files.
+  (let [legacy-only (fn [ns] (= (str ns) "wagoe.product.shell.module-wiring"))
+        entries     (sut/discover-module-config
+                     {:wagoe/product {:enabled? true}}
+                     #{}
+                     "shop"
+                     legacy-only)]
+    (is (contains? entries :wagoe/product)
+        "a module still under wagoe.* must be wired, not reported missing")))
+
+(deftest ^:unit a-missing-module-names-both-places-it-was-sought
+  ;; With two candidates, naming only one sends the reader to look in the
+  ;; wrong directory for a file that is in neither.
+  (let [e (try (sut/discover-module-config
+                {:wagoe/product {:enabled? true}}
+                #{}
+                "shop"
+                (constantly false))
+               nil
+               (catch clojure.lang.ExceptionInfo e e))]
+    (is (some? e))
+    (is (str/includes? (ex-message e) "shop.product.shell.module-wiring"))
+    (is (str/includes? (ex-message e) "wagoe.product.shell.module-wiring"))))
+
+(deftest ^:unit the-frameworks-own-project-has-one-candidate-not-two
+  ;; base-ns "wagoe" is this repository's own application. Listing it twice
+  ;; would make the not-found message repeat itself.
+  (is (= ["wagoe.product.shell.module-wiring"]
+         (mapv str (sut/wiring-candidates "wagoe" "product")))))
+
 (deftest ^:unit a-disabled-module-is-not-wired
   ;; :enabled? false is how you turn a module off without deleting its config.
   (is (empty? (sut/discover-module-config

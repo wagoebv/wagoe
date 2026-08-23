@@ -16,7 +16,7 @@
    Everything below (halt) comes from wagoe-devtools, which lives in the :repl
    alias of deps.edn. Take it out and these print one line saying so instead of
    throwing — the REPL still starts and the system still runs."
-  (:require [wagoe.system-config]          ; loads ig-repl/set-prep! and Integrant init-keys
+  (:require [{{project-ns}}.system-config]          ; loads ig-repl/set-prep! and Integrant init-keys
             [integrant.repl :as ig-repl]
             [integrant.repl.state :as ig-state]))
 

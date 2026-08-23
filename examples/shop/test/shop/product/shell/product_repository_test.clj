@@ -1,7 +1,7 @@
-(ns wagoe.product.shell.product-repository-test
+(ns shop.product.shell.product-repository-test
   (:require [clojure.test :refer [deftest testing is]]
-            [wagoe.product.shell.persistence :as persistence]
-            [wagoe.product.ports :as ports]))
+            [shop.product.shell.persistence :as persistence]
+            [shop.product.ports :as ports]))
 
 (deftest ^:integration create-product-test
   (testing "the repository implements its persistence port"

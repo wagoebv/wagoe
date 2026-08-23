@@ -14,6 +14,7 @@
 
 (ns wagoe.tools.scaffold
   (:require [wagoe.tools.ansi :as ansi :refer [bold green cyan red yellow dim]]
+            [wagoe.tools.project :as project]
             [clojure.java.io :as io]
             [clojure.string :as str]
             [babashka.process :refer [shell]]))
@@ -155,6 +156,18 @@
      (str "{:deps {com.wagoe/wagoe-scaffolder " coord " "
           "rewrite-clj/rewrite-clj {:mvn/version \"" rewrite-clj-version "\"}}}"))))
 
+(defn with-base-ns
+  "Add `--base-ns <this project's namespace>` unless the caller named one.
+
+   A module belongs to the application, so it is written under the
+   application's namespace. Detected rather than asked for: `--base-ns` existed
+   before this and nobody passed it, which is how every generated project ended
+   up with its modules in `wagoe.*` (BOU-360)."
+  [args]
+  (if (some #{"--base-ns"} args)
+    args
+    (into (vec args) ["--base-ns" (project/base-ns)])))
+
 (defn run-clojure!
   "Shell out to the Clojure scaffolder CLI with given args. Streams output to terminal.
 
@@ -174,7 +187,7 @@
                           "-Sdeps"
                           (scaffolder-deps)
                           "-M" "-m" "wagoe.scaffolder.shell.cli-entry"])]
-      (apply shell (concat base-cmd args)))
+      (apply shell (concat base-cmd (with-base-ns args))))
     (catch Exception e
       (println (red (str "Scaffolder exited with error: " (.getMessage e))))
       (*exit!* 1))))

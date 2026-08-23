@@ -1,7 +1,7 @@
-(ns wagoe.product.shell.web-handlers
+(ns shop.product.shell.web-handlers
   "Web UI handlers for product module."
-  (:require [wagoe.product.core.ui :as ui]
-            [wagoe.product.ports :as ports]))
+  (:require [shop.product.core.ui :as ui]
+            [shop.product.ports :as ports]))
 
 (defn product-list-handler [service _config]
   (fn [_request]

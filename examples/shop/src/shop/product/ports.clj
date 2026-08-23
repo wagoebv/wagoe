@@ -1,4 +1,4 @@
-(ns wagoe.product.ports
+(ns shop.product.ports
   "Product module port definitions (abstract interfaces).")
 
 ;; =============================================================================

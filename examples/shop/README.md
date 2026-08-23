@@ -42,23 +42,23 @@ For a database that survives a restart, `WAG_ENV=dev` uses SQLite — copy
 
 | Path | What it shows |
 |---|---|
-| `src/wagoe/product/core/product.clj` | pure functions — no clock, no database |
-| `src/wagoe/product/shell/service.clj` | where the clock and the ID generator live |
-| `src/wagoe/product/shell/http.clj` | Reitit route data, at paths relative to `/api/v1` |
-| `src/wagoe/product/shell/module_wiring.clj` | the four Integrant components a module has |
-| `src/wagoe/system_config.clj` | how the app assembles the framework and its own keys |
+| `src/shop/product/core/product.clj` | pure functions — no clock, no database |
+| `src/shop/product/shell/service.clj` | where the clock and the ID generator live |
+| `src/shop/product/shell/http.clj` | Reitit route data, at paths relative to `/api/v1` |
+| `src/shop/product/shell/module_wiring.clj` | the four Integrant components a module has |
+| `src/shop/system_config.clj` | how the app assembles the framework and its own keys |
 | `resources/conf/test/config.edn` | the module key `bb scaffold integrate` wrote |
 
 The generated handlers return canned responses. Wiring them to the service is
 the intended first edit — see
 [Your First Module](../../docs/modules/getting-started/pages/your-first-module.adoc).
 
-## Two things the generator does that are worth knowing
+## Two things worth knowing
 
-**Modules land under `wagoe.`, not under your project's namespace.** This app is
-`shop`, and its module is `wagoe.product`. That is what module discovery
-resolves today; `bb scaffold generate --base-ns shop` writes the files
-elsewhere, and `bb scaffold integrate` then refuses and tells you why.
+**Code is namespaced by the project, config keys by the framework.** The module
+is `shop.product`, and the key that switches it on is `:wagoe/product` — beside
+`:wagoe/http` and `:wagoe/h2`. The key names the module to the framework; the
+namespace says whose code it is.
 
 **The test profile has no `:wagoe/http` block,** so `HTTP_PORT` is not read
 under `WAG_ENV=test` and the port is the platform default. The smoke script

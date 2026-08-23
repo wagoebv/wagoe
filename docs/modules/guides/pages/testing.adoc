@@ -120,7 +120,7 @@ Add new libraries to `tests.edn`:
 
 [source,bash]
 ----
-bb ai gen-tests libs/product/src/wagoe/product/core/product.clj
+bb ai gen-tests src/<your-project>/product/core/product.clj
 ----
 
 Generates a complete test namespace from the source file using Wagoe conventions.
