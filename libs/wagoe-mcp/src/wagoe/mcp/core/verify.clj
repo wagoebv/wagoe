@@ -108,11 +108,19 @@
          incomplete   (when (= :error test-status)
                         [{:step :tests :severity :warning :kind :verify-incomplete
                           :message (or (:note tests) "Affected tests could not be run.")}])
+         ;; The FC/IS step can fail to run rather than fail to pass — a
+         ;; malformed .wagoe/check-fcis.edn, for one. Reading only :violations
+         ;; would report that as :ok, which is the step saying "clean" about
+         ;; files it never looked at.
+         fcis-broken  (when (:error fcis)
+                        [{:step :fcis :severity :warning :kind :verify-incomplete
+                          :message (:error fcis)}])
          issues       (vec (concat gen-issues
                                    kondo-issues
                                    (fcis->issues (:violations fcis))
                                    test-issues
-                                   incomplete))
+                                   incomplete
+                                   fcis-broken))
          errors       (filterv #(= :error (:severity %)) issues)
          warnings     (filterv #(= :warning (:severity %)) issues)
          ;; Soft = every blocking issue carries an overridable BND code. A hard
@@ -127,8 +135,9 @@
          ;; Verification is complete only if the tests step actually ran (or was
          ;; not part of this loop at all). :error / :unavailable both mean the
          ;; affected tests were not exercised.
-         complete?    (or (nil? tests)
-                          (contains? #{:passed :failed} test-status))]
+         complete?    (and (or (nil? tests)
+                               (contains? #{:passed :failed} test-status))
+                           (not (:error fcis)))]
      (cond-> {:status    status
               :complete? complete?
               :issues    issues
@@ -137,7 +146,10 @@
                            generate (assoc :generate (if (:success generate) :ok :error))
                            kondo    (assoc :kondo (if (some #(= :error (:severity %)) kondo-issues)
                                                     :error :ok))
-                           fcis     (assoc :fcis (if (seq (:violations fcis)) :error :ok))
+                           fcis     (assoc :fcis (cond
+                                                     (:error fcis)             :error
+                                                     (seq (:violations fcis))  :error
+                                                     :else                     :ok))
                            tests    (assoc :tests (or test-status :unknown)))}
        (and (= :fail status) soft?) (assoc :overridable? true)))))
 

@@ -21,11 +21,16 @@
    - Comment lines: everything from ; to end of line -> spaces"
   [content]
   (-> content
-      ;; Replace standalone \" character literal (outside strings) with spaces.
-      ;; Lookbehind ensures the backslash-quote appears after whitespace, open
-      ;; paren, or open bracket — positions where a character literal can occur
-      ;; in Clojure code, not inside a string.
-      (str/replace #"(?<=[\s(,\[])\\\"" "  ")
+      ;; Blank every character literal — `\(`, `\;`, `\"`, `\space` — before
+      ;; anything else looks at the text. Only `\"` was handled here, which was
+      ;; enough while the scanners were line-based regexes, and stopped being
+      ;; enough when `call-forms` started treating every `(` as a form: the `(`
+      ;; inside `\(` opened one, so `(def dispatch {\( atom})` — pure code that
+      ;; stores a var in a map — was reported as holding mutable state
+      ;; (BOU-301). Named literals are matched before the single-character case
+      ;; so `\space` does not leave `pace` behind as a token.
+      (str/replace #"\\(?:newline|space|tab|formfeed|backspace|return|u[0-9a-fA-F]{4}|o[0-7]{1,3}|.)"
+                   (fn [m] (apply str (repeat (count m) \space))))
       ;; Replace string contents with spaces (preserve newlines for line counting).
       ;; Matches "..." including escaped quotes inside.
       (str/replace #"\"(?:[^\"\\]|\\.)*\""

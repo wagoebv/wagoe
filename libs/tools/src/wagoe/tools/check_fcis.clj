@@ -49,20 +49,35 @@
    #"^rewrite-clj\."
    ;; Integrant's `ref`/`ref?` are data constructors, not a running system.
    #"^integrant\.core$"
-   ;; The application's own pure code: any core namespace, the schema and the
-   ;; ports that describe its boundaries. `\.shell\.` is excluded by not
-   ;; matching, which is the point of an allowlist.
-   ;;
-   ;; The `clojure.` exclusion is load-bearing and was missing at first: written
-   ;; as a bare `\.core($|\.)` this allows `clojure.core.async`, whose whole
-   ;; purpose is the process state a core namespace must not hold. The pattern
-   ;; that lets a module require its own core let the one library the ticket
-   ;; named as a gap straight back in.
-   #"^(?!clojure\.)[\w.-]+\.core($|\.)"
-   #"\.schema($|\.)"
-   #"\.ports($|\.)"
-   #"^wagoe\.ui-style$"
-   #"\.error-codes$"])
+   ;; The framework's own pure styling helpers, usable from a downstream app.
+   #"^wagoe\.ui-style$"])
+
+(def ^:private own-code-shapes
+  "The shapes of a namespace that holds pure code: a core namespace, the
+   schemas it validates against, the ports describing its boundaries, and the
+   error-code catalogue."
+  #"(\.core($|\.)|\.schema($|\.)|\.ports($|\.)|\.error-codes$)")
+
+(defn- own-pure-namespace?
+  "Whether `req` is pure code belonging to this project or to the framework.
+
+   Two conditions, and the first is the one that matters: `req` shares its
+   top-level segment with the namespace doing the requiring — or is a
+   `wagoe.*` namespace, since a generated application's core may use the
+   framework's own pure helpers.
+
+   Written first as a bare `\\.core($|\\.)` — \"a module may require its own
+   core\" — which is not what it says. `x.core` is the commonest naming
+   convention in Clojure, so that pattern admitted `clj-time.core` (a clock),
+   `amazonica.core` (AWS), `datomic.core`, `monger.core` and `langohr.core`
+   into the functional core, measured. An allowlist has to be anchored to
+   something; \"ends in .core\" anchors to nothing."
+  [ns-name req]
+  (let [root (first (str/split (str ns-name) #"\."))]
+    (and (re-find own-code-shapes req)
+         (or (str/starts-with? req (str root "."))
+             (= req root)
+             (str/starts-with? req "wagoe.")))))
 
 (def ^:private forbidden-import-packages
   "Java class patterns that must never appear in core namespace :import vectors.
@@ -260,12 +275,14 @@
           :line (:line c) :kind :mutable-state})))))
 
 (defn- forbidden-require?
-  "Whether a core namespace may not require `ns-str`.
+  "Whether the core namespace `ns-name` may not require `req`.
 
-   Inverted since BOU-301: anything not on `allowed-require-patterns` is a
-   violation, so a library nobody anticipated fails closed rather than open."
-  [ns-str]
-  (not (some #(re-find % ns-str) allowed-require-patterns)))
+   Inverted since BOU-301: anything that is neither a named pure library nor
+   this project's own pure code is a violation, so a library nobody
+   anticipated fails closed rather than open."
+  [ns-name req]
+  (not (or (some #(re-find % req) allowed-require-patterns)
+           (own-pure-namespace? ns-name req))))
 
 ;; ---------------------------------------------------------------------------
 ;; File scanning
@@ -454,7 +471,7 @@
          exempt-reqs        (get (:allow-require config) ns-name #{})
          require-violations (->> requires
                                  (map str)
-                                 (filter forbidden-require?)
+                                 (filter #(forbidden-require? ns-name %))
                                  (remove exempt-reqs)
                                  (map (fn [req]
                                         {:file (str file)

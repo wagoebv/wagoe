@@ -53,8 +53,19 @@
   (when (seq paths)
     ;; Read the allowlist once and pass it, instead of the 1-arity re-reading
     ;; .wagoe/check-fcis.edn for every file.
-    (let [config (fcis/read-config)]
-      {:violations (vec (mapcat #(fcis/check-file % config) paths))})))
+    ;;
+    ;; A malformed allowlist throws — deliberately, since silently reading it
+    ;; as "no exemptions" is how a typo turns into a gate nobody can silence
+    ;; (BOU-301). Caught here because this is one step of several: without
+    ;; this, an unparseable file in the project would throw past the report and
+    ;; take the kondo findings and the test results with it, so a broken
+    ;; allowlist would look like a broken generator.
+    (try
+      (let [config (fcis/read-config)]
+        {:violations (vec (mapcat #(fcis/check-file % config) paths))})
+      (catch Exception e
+        {:violations []
+         :error      (str "FC/IS check could not run: " (ex-message e))}))))
 
 (defn- run-tests [test-runner module]
   (if test-runner

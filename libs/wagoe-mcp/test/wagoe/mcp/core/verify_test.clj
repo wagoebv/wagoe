@@ -98,3 +98,24 @@
       (is (= 1 (get-in r [:counts :warnings])))))
   (testing "no tests step at all → complete (loop did not include tests)"
     (is (true? (:complete? (verify/build-report {:kondo {:findings []}}))))))
+
+(deftest ^:unit an-fcis-step-that-could-not-run-is-not-a-pass
+  ;; The step can fail to run rather than fail to find anything — a malformed
+  ;; .wagoe/check-fcis.edn, which now throws by design instead of being read as
+  ;; "no exemptions" (BOU-301). Reading only :violations reports that as :ok,
+  ;; which is the step saying "clean" about files it never opened.
+  (let [r (verify/build-report {:kondo {:findings []}
+                                :fcis  {:violations []
+                                        :error "FC/IS check could not run: no :why"}})]
+    (testing "it is not reported as a clean FC/IS step"
+      (is (= :error (get-in r [:steps :fcis]))))
+
+    (testing "and the report says verification was incomplete"
+      (is (false? (:complete? r)))
+      (is (some #(and (= :fcis (:step %)) (= :verify-incomplete (:kind %)))
+                (:issues r))))
+
+    (testing "but it does not block on its own — the reason is a broken config,
+              not a violation, and the kondo and test results are still worth
+              reporting"
+      (is (= :pass (:status r))))))

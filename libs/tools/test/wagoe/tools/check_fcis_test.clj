@@ -250,3 +250,45 @@
     (is (= {"ex.core" #{"clojure.test"}}
            (fcis/allowed-requires {:allow-require [{:ns 'ex.core :require 'clojure.test
                                                     :why "it is a testing DSL"}]})))))
+
+(deftest ^:unit a-third-party-library-named-dot-core-is-not-this-projects-core
+  ;; `x.core` is the commonest naming convention in Clojure, so a rule meaning
+  ;; "a module may require its own core" written as "ends in .core" admits a
+  ;; clock, an AWS client and three datastores into the functional core.
+  ;; Measured against these exact names.
+  (doseq [lib ["clj-time.core" "amazonica.core" "datomic.core"
+               "monger.core" "langohr.core" "mount.core"]]
+    (testing lib
+      (let [vs (check-src (str "(ns wagoe.x.core.t\n  (:require [" lib " :as z]))\n"))]
+        (is (some #(= :require (:kind %)) vs)
+            (str lib " is not this project's own code"))))))
+
+(deftest ^:unit a-module-may-require-its-own-code-and-the-frameworks-pure-code
+  ;; The rule this replaced was too loose, and the replacement has to stay
+  ;; usable: same top-level segment, or the framework's own pure namespaces.
+  (testing "its own"
+    (is (not (some #(= :require (:kind %))
+                   (check-src "(ns shop.product.core.p\n  (:require [shop.billing.core.tax :as t]))\n")))))
+  (testing "the framework's"
+    (is (not (some #(= :require (:kind %))
+                   (check-src "(ns shop.product.core.p\n  (:require [wagoe.core.utils.case-conversion :as c]))\n")))))
+  (testing "but not another project's"
+    (is (some #(= :require (:kind %))
+              (check-src "(ns shop.product.core.p\n  (:require [othershop.billing.core.tax :as t]))\n"))))
+  (testing "and not its own shell"
+    (is (some #(= :require (:kind %))
+              (check-src "(ns shop.product.core.p\n  (:require [shop.product.shell.service :as s]))\n")))))
+
+(deftest ^:unit a-character-literal-paren-does-not-open-a-form
+  ;; `\( ` contains a real `(`, and the scanner reads the token after every
+  ;; paren — so a map from delimiters to functions was reported as a call to
+  ;; whatever followed. Pure code, failing a gate that hard-fails every commit.
+  (testing "a var stored under a character-literal key"
+    (is (empty? (check-src "(ns ex.core)\n(def dispatch {\\( atom})\n"))))
+
+  (testing "a set of delimiters, as the AI parser really writes it"
+    (is (empty? (check-src "(ns ex.core)\n(defn f [c] (#{\\( \\[ \\{} c))\n"))))
+
+  (testing "and a real call is still caught beside one"
+    (is (some #(= :mutable-state (:kind %))
+              (check-src "(ns ex.core)\n(def d {\\( :paren})\n(defn g [r] (swap! r inc))\n")))))
