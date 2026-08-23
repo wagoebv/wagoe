@@ -65,7 +65,7 @@
   (testing "an adapter is as much a reach into another module as a service is"
     (is (seq (ports/cross-module-violations
               "wagoe.tenant.shell.persistence"
-              ["wagoe.platform.ports.database"]))))
+              ["wagoe.platform.shell.adapters.database.common.core"]))))
 
   (testing "so is middleware, and a render helper"
     (is (seq (ports/cross-module-violations
@@ -110,7 +110,7 @@
                  {:allow-cross-module-shell
                   [{:target-prefix "wagoe.platform.shell.adapters.database"
                     :why "BOU-303 — platform has no database port yet."}]})]
-      (is (ports/shell-target-allowed? allow "wagoe.platform.ports.database"))
+      (is (ports/shell-target-allowed? allow "wagoe.platform.shell.adapters.database.common.core"))
       (is (ports/shell-target-allowed? allow "wagoe.platform.shell.adapters.database.common.core"))
       (is (not (ports/shell-target-allowed? allow "wagoe.user.shell.middleware")))))
 
@@ -128,17 +128,24 @@
                   {:allow-cross-module-shell [{:targt-prefix "x" :why "typo in the key"}]})))))
 
 (deftest ^:unit a-generated-project-passes-without-an-allowlist-file
-  ;; A scaffolded project ships no .wagoe/check-ports.edn, and its persistence
-  ;; layer requires platform's database adapters because platform exposes no
-  ;; port. Failing `bb check` on a freshly scaffolded module for a gap in the
-  ;; framework is the BOU-267 shape — and it is what the first-run smoke caught
-  ;; when this rule was broadened without the builtins.
+  ;; A scaffolded project ships no .wagoe/check-ports.edn, so the gaps it cannot
+  ;; close itself are built in. Failing `bb check` on a freshly scaffolded
+  ;; module for a gap in the framework is the BOU-267 shape — and it is what the
+  ;; first-run smoke caught when this rule was broadened without the builtins.
   (testing "the framework gaps a generated project cannot close are built in"
-    (doseq [req ["wagoe.platform.shell.adapters.database.common.core"
-                 "wagoe.platform.shell.persistence-interceptors"
+    (doseq [req ["wagoe.platform.shell.persistence-interceptors"
                  "wagoe.i18n.shell.render"]]
       (is (ports/shell-target-allowed? ports/builtin-allow-cross-module-shell req)
           (str req " must not fail a scaffolded project"))))
+
+  (testing "and the database adapters are no longer among them"
+    ;; BOU-303 gave platform wagoe.platform.database, so a generated project has
+    ;; somewhere sanctioned to reach and this exemption stopped being a gap the
+    ;; project could not close. Leaving it built in would have kept the old
+    ;; coupling passing everywhere, which is what it did until it was removed.
+    (is (not (ports/shell-target-allowed?
+              ports/builtin-allow-cross-module-shell
+              "wagoe.platform.shell.adapters.database.common.core"))))
 
   (testing "this repository's own couplings are not built in"
     ;; They belong on the burn-down list, where they can be seen and removed.
@@ -159,7 +166,7 @@
   (testing "a prefix still covering something is not"
     (is (empty? (ports/stale-shell-exemptions
                  #{"wagoe.platform.shell.adapters.database"}
-                 ["wagoe.platform.ports.database"])))))
+                 ["wagoe.platform.shell.adapters.database.common.core"])))))
 
 ;; ---------------------------------------------------------------------------
 ;; Rule 3 — web layer requiring persistence
