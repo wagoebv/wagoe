@@ -50,6 +50,31 @@
       (touch! root "src" "main.clj")
       (is (= "wagoe" (project/base-ns root))))))
 
+(deftest ^:unit an-existing-module-is-found-where-it-actually-is
+  ;; `bb scaffold field` edits a module rather than creating one, so it has to
+  ;; look where that module already is. Passing the project namespace
+  ;; regardless made it write the migration, fail to find the schema file, skip
+  ;; it, and report success — a half-applied field change that looked fine.
+  (testing "a module in the old location is found there"
+    (let [root (tmp-root)]
+      (touch! root "src" "shop" "main.clj")
+      (touch! root "src" "wagoe" "product" "schema.clj")
+      (is (= "wagoe" (project/module-base-ns "product" root)))))
+
+  (testing "a module under the project namespace wins over one under wagoe"
+    (let [root (tmp-root)]
+      (touch! root "src" "shop" "main.clj")
+      (touch! root "src" "shop" "product" "schema.clj")
+      (touch! root "src" "wagoe" "product" "schema.clj")
+      (is (= "shop" (project/module-base-ns "product" root)))))
+
+  (testing "a module that does not exist yet belongs to the project"
+    ;; This is the `generate` case: nothing on disk, and the answer must be
+    ;; the project's own namespace rather than wagoe.
+    (let [root (tmp-root)]
+      (touch! root "src" "shop" "main.clj")
+      (is (= "shop" (project/module-base-ns "product" root))))))
+
 (deftest ^:unit an-underscored-directory-is-returned-as-written
   ;; `wagoe new my-app` writes src/my_app/, and the generated namespaces are
   ;; my_app.*. Converting back to dashes here would name a namespace that does

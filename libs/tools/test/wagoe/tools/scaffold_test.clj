@@ -99,3 +99,21 @@
           injected (:mvn/version (get (:deps (read-string (#'scaffold/scaffolder-deps nil)))
                                       'rewrite-clj/rewrite-clj))]
       (is (= declared injected) "a drifted pin resolves two versions"))))
+
+;; =============================================================================
+;; BOU-360: the scaffolder is told which namespace this project's code is in
+;; =============================================================================
+
+(deftest ^:unit base-ns-is-passed-without-the-user-having-to-know-about-it
+  ;; --base-ns existed before this and defaulted to "wagoe", so every generated
+  ;; project put its modules in the framework's namespace. Nobody passed the
+  ;; flag because nobody knew they had to.
+  (testing "a generate call gains the flag"
+    (let [args (scaffold/with-base-ns ["generate" "--module-name" "product"])]
+      (is (some #{"--base-ns"} args))))
+
+  (testing "an explicit --base-ns is left alone"
+    ;; Including the value: appending a second one would win over the user's.
+    (let [args (scaffold/with-base-ns ["generate" "--module-name" "p" "--base-ns" "acme"])]
+      (is (= 1 (count (filter #{"--base-ns"} args))))
+      (is (= "acme" (second (drop-while #(not= "--base-ns" %) args)))))))

@@ -157,16 +157,24 @@
           "rewrite-clj/rewrite-clj {:mvn/version \"" rewrite-clj-version "\"}}}"))))
 
 (defn with-base-ns
-  "Add `--base-ns <this project's namespace>` unless the caller named one.
+  "Add `--base-ns` unless the caller named one.
 
-   A module belongs to the application, so it is written under the
+   A module belongs to the application, so a new one is written under the
    application's namespace. Detected rather than asked for: `--base-ns` existed
    before this and nobody passed it, which is how every generated project ended
-   up with its modules in `wagoe.*` (BOU-360)."
+   up with its modules in `wagoe.*` (BOU-360).
+
+   For a command naming an existing module — field, endpoint, adapter — the
+   answer is where that module *is*, which in a project generated before the
+   move is still `wagoe.<module>`. Passing the project namespace regardless
+   made `bb scaffold field` write the migration, skip the schema file it could
+   not find, and report success."
   [args]
-  (if (some #{"--base-ns"} args)
-    args
-    (into (vec args) ["--base-ns" (project/base-ns)])))
+  (let [module (second (drop-while #(not= "--module-name" %) args))]
+    (cond
+      (some #{"--base-ns"} args) args
+      module (into (vec args) ["--base-ns" (project/module-base-ns module)])
+      :else  (into (vec args) ["--base-ns" (project/base-ns)]))))
 
 (defn run-clojure!
   "Shell out to the Clojure scaffolder CLI with given args. Streams output to terminal.
