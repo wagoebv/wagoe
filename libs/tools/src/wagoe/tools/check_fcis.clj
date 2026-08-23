@@ -17,20 +17,67 @@
 ;; constitutes an FC/IS violation.
 ;; ---------------------------------------------------------------------------
 
-(def ^:private forbidden-require-patterns
-  "Patterns that must never appear in core namespace :require vectors.
-   Covers shell namespaces, I/O, logging, database, HTTP, and caching libraries."
-  [#"\.shell\."
-   #"^clojure\.tools\.logging$"
-   #"^clojure\.java\.io$"
-   #"^clojure\.java\.shell$"
-   #"^clojure\.java\.jdbc"
-   #"^next\.jdbc"
-   #"^clj-http"
-   #"^org\.httpkit"
-   #"^ring\."
-   #"^hikari-cp\."
-   #"^taoensso\.carmine"])
+(def ^:private allowed-require-patterns
+  "What a core namespace may require. Anything else is a violation.
+
+   An allowlist rather than a denylist because the denylist could only ever
+   name the I/O libraries somebody had thought of. It had eleven entries, and
+   a core namespace shelling out through `babashka.process`, holding process
+   state in a `core.async` channel, or talking to any datastore client not on
+   the list passed clean (BOU-301). The set below is small because the answer
+   for a functional core genuinely is small: values in, values out.
+
+   To add one, ask whether it can perform I/O, read a clock, or hold state. If
+   it can, it belongs in the shell. If a library is pure but missing here, add
+   it with the reasoning — the list is meant to be read."
+  [;; Pure data manipulation from Clojure itself. Note the absence of
+   ;; clojure.java.io, clojure.java.shell and clojure.core.async.
+   #"^clojure\.(string|set|walk|data|edn|zip|math|template)$"
+   #"^clojure\.pprint$"                    ; formatting values as strings
+   #"^clojure\.spec\.alpha$"
+   ;; Schemas are the framework's validation vocabulary and are pure data.
+   #"^malli\."
+   ;; Hiccup is data-to-HTML — the UI core is built on it (ADR-006).
+   #"^hiccup"
+   ;; Encoding and hashing over in-memory values.
+   #"^cheshire\.core$"
+   #"^buddy\.core\."
+   ;; SQL as data. Building a query is pure; running it is the shell's job,
+   ;; and next.jdbc is deliberately not here.
+   #"^honey\.sql"
+   ;; Reading and rewriting Clojure source as data — the scaffolder's core.
+   #"^rewrite-clj\."
+   ;; Integrant's `ref`/`ref?` are data constructors, not a running system.
+   #"^integrant\.core$"
+   ;; The framework's own pure styling helpers, usable from a downstream app.
+   #"^wagoe\.ui-style$"])
+
+(def ^:private own-code-shapes
+  "The shapes of a namespace that holds pure code: a core namespace, the
+   schemas it validates against, the ports describing its boundaries, and the
+   error-code catalogue."
+  #"(\.core($|\.)|\.schema($|\.)|\.ports($|\.)|\.error-codes$)")
+
+(defn- own-pure-namespace?
+  "Whether `req` is pure code belonging to this project or to the framework.
+
+   Two conditions, and the first is the one that matters: `req` shares its
+   top-level segment with the namespace doing the requiring — or is a
+   `wagoe.*` namespace, since a generated application's core may use the
+   framework's own pure helpers.
+
+   Written first as a bare `\\.core($|\\.)` — \"a module may require its own
+   core\" — which is not what it says. `x.core` is the commonest naming
+   convention in Clojure, so that pattern admitted `clj-time.core` (a clock),
+   `amazonica.core` (AWS), `datomic.core`, `monger.core` and `langohr.core`
+   into the functional core, measured. An allowlist has to be anchored to
+   something; \"ends in .core\" anchors to nothing."
+  [ns-name req]
+  (let [root (first (str/split (str ns-name) #"\."))]
+    (and (re-find own-code-shapes req)
+         (or (str/starts-with? req (str root "."))
+             (= req root)
+             (str/starts-with? req "wagoe.")))))
 
 (def ^:private forbidden-import-packages
   "Java class patterns that must never appear in core namespace :import vectors.
@@ -127,41 +174,60 @@
 ;; a code-generator emitting a `(throw ...)` template — are ignored.
 ;; ---------------------------------------------------------------------------
 
-(def ^:private symbol-tail
-  "Negative lookahead marking the end of a Clojure symbol. A plain \\b fails
-   after `!` (both `!` and the following space are non-word characters, so
-   there is no word boundary between them), so match the delimiter explicitly."
-  "(?![\\w!?*+'-])")
+(def ^:private mutable-state-symbols
+  "Mutable-state constructs. Covers the atom/ref/var/volatile/agent families —
+   all genuine mutable process state that belongs in the shell, not the
+   functional core."
+  #{"defonce" "atom" "swap!" "reset!" "compare-and-set!"
+    "volatile!" "vreset!" "vswap!"
+    "ref" "ref-set" "alter" "commute" "dosync"
+    "alter-var-root" "agent" "send" "send-off" "add-watch"})
 
-(def ^:private throw-pattern
-  "A (throw ...) call in a core namespace body."
-  (re-pattern (str "\\(\\s*throw" symbol-tail)))
+(def ^:private higher-order-heads
+  "Forms that take a function as their first argument, so `(apply swap! …)`
+   mutates just as surely as `(swap! …)` does. Matched on the argument as well
+   as the head."
+  #{"apply" "partial"})
 
-(def ^:private mutable-state-patterns
-  "Mutable-state constructs keyed by the label reported in the violation.
-   Covers the atom/ref/var/volatile/agent families — all genuine mutable
-   process state that belongs in the shell, not the functional core."
-  (into {}
-        (map (fn [sym]
-               [sym (re-pattern (str "\\(\\s*" (java.util.regex.Pattern/quote sym) symbol-tail))]))
-        ["defonce" "atom" "swap!" "reset!" "compare-and-set!"
-         "volatile!" "vreset!" "vswap!"
-         "ref" "ref-set" "alter" "commute" "dosync"
-         "alter-var-root" "agent" "send" "send-off" "add-watch"]))
+(defn allowed-requires
+  "`{ns-name #{required-ns …}}` from the `:allow-require` entries.
+
+   Each entry names one namespace and one require, and must carry a `:why`:
+   an exemption nobody can explain cannot be burnt down, and the same rule
+   already guards check-ports' allowlist. Both other keys are namespace-wide;
+   this one is deliberately per-require, because \"this core namespace may
+   require clojure.test\" is a much smaller claim than \"this core namespace
+   is exempt\"."
+  [m]
+  (let [entries (:allow-require m)]
+    (doseq [{:keys [ns require why]} entries]
+      (when (str/blank? (str ns))
+        (throw (ex-info (str "check-fcis allowlist entry has no :ns: " (pr-str entries)) {})))
+      (when (str/blank? (str require))
+        (throw (ex-info (str "check-fcis allowlist entry for " ns " has no :require.") {:ns ns})))
+      (when (str/blank? why)
+        (throw (ex-info (str "check-fcis allowlist entry for " ns " has no :why.") {:ns ns}))))
+    (reduce (fn [acc {:keys [ns require]}]
+              (update acc (str ns) (fnil conj #{}) (str require)))
+            {} entries)))
 
 (defn read-config
   "Read the optional .wagoe/check-fcis.edn allowlist. Returns a map with
-   :allow-throw and :allow-mutable-state sets (namespace-name string members)."
+   :allow-throw and :allow-mutable-state sets (namespace-name string members)
+   and :allow-require ({ns #{require}})."
   []
-  (let [f (io/file (System/getProperty "user.dir") ".wagoe" "check-fcis.edn")]
+  (let [f (io/file (System/getProperty "user.dir") ".wagoe" "check-fcis.edn")
+        empty-config {:allow-throw #{} :allow-mutable-state #{} :allow-require {}}]
     (if (.exists f)
-      (try
-        (let [m (edn/read-string (slurp f))]
-          {:allow-throw         (set (map str (:allow-throw m)))
-           :allow-mutable-state (set (map str (:allow-mutable-state m)))})
-        (catch Exception _
-          {:allow-throw #{} :allow-mutable-state #{}}))
-      {:allow-throw #{} :allow-mutable-state #{}})))
+      (let [m (edn/read-string (slurp f))]
+        {:allow-throw         (set (map str (:allow-throw m)))
+         :allow-mutable-state (set (map str (:allow-mutable-state m)))
+         ;; Deliberately outside any try: a malformed allowlist used to be
+         ;; swallowed and read as "no exemptions", which turns a typo into a
+         ;; gate that reports violations nobody can silence — or, with the
+         ;; inverted require list, one that passes for the wrong reason.
+         :allow-require       (allowed-requires m)})
+      empty-config)))
 
 (defn- ns-meta-flag?
   "True when the namespace symbol in `ns-form` carries the metadata key `k`.
@@ -172,10 +238,9 @@
   (boolean (k (meta (second ns-form)))))
 
 ;; Scanner limitations (all fail toward more manual review, never silent passes
-;; of new code): the impurity scan is line-based over stripped source, so a head
-;; symbol split from its `(` by a newline, and higher-order use like
-;; `(apply swap! ...)`, are not flagged; a `#_`-discarded form is still flagged
-;; (strip handles `;` comments and string/regex interiors, not the reader macro).
+;; of new code): a `#_`-discarded form is still flagged (strip handles `;`
+;; comments and string/regex interiors, not the reader macro), and a mutating
+;; function reached through a local binding or a var indirection is not.
 ;; Use an escape hatch for the rare false positive.
 
 (defn- scan-impurity
@@ -183,33 +248,41 @@
    A namespace is exempt from the throw ban via ^:wagoe/allow-throw metadata
    or a .wagoe/check-fcis.edn :allow-throw entry, and from the mutable-state
    ban via ^:wagoe/allow-mutable-state or an :allow-mutable-state entry.
-   Returns a seq of {:file :ns :req :line :kind} maps."
+   Returns a seq of {:file :ns :req :line :kind} maps.
+
+   Reads operator position rather than matching lines: `(\\n throw …)` is the
+   same call as `(throw …)`, and the regex version scanned one line at a time
+   and saw neither it nor `(apply swap! …)` (BOU-301)."
   [file content ns-form ns-name {:keys [allow-throw allow-mutable-state]}]
-  (let [cleaned   (parsing/strip-comments-and-strings content)
-        lines     (str/split-lines cleaned)
+  (let [calls     (parsing/call-forms (parsing/strip-comments-and-strings content))
         throw-ok? (or (ns-meta-flag? ns-form :wagoe/allow-throw)
                       (contains? (or allow-throw #{}) ns-name))
         mut-ok?   (or (ns-meta-flag? ns-form :wagoe/allow-mutable-state)
-                      (contains? (or allow-mutable-state #{}) ns-name))]
-    (->> lines
-         (map-indexed
-          (fn [idx line]
-            (concat
-             (when (and (not throw-ok?) (re-find throw-pattern line))
-               [{:file (str file) :ns ns-name :req "throw"
-                 :line (inc idx) :kind :throw}])
-             (when-not mut-ok?
-               (keep (fn [[label pat]]
-                       (when (re-find pat line)
-                         {:file (str file) :ns ns-name :req label
-                          :line (inc idx) :kind :mutable-state}))
-                     mutable-state-patterns)))))
-         (mapcat identity))))
+                      (contains? (or allow-mutable-state #{}) ns-name))
+        called    (fn [{:keys [head arg1]} target?]
+                    ;; `(swap! …)` directly, or handed to apply/partial.
+                    (or (target? head)
+                        (and (higher-order-heads head) arg1 (target? arg1))))]
+    (concat
+     (when-not throw-ok?
+       (for [c calls :when (called c #{"throw"})]
+         {:file (str file) :ns ns-name :req "throw" :line (:line c) :kind :throw}))
+     (when-not mut-ok?
+       (for [c     calls
+             :let  [label (if (mutable-state-symbols (:head c)) (:head c) (:arg1 c))]
+             :when (called c mutable-state-symbols)]
+         {:file (str file) :ns ns-name :req label
+          :line (:line c) :kind :mutable-state})))))
 
 (defn- forbidden-require?
-  "Returns true if `ns-str` matches any forbidden require pattern."
-  [ns-str]
-  (some #(re-find % ns-str) forbidden-require-patterns))
+  "Whether the core namespace `ns-name` may not require `req`.
+
+   Inverted since BOU-301: anything that is neither a named pure library nor
+   this project's own pure code is a violation, so a library nobody
+   anticipated fails closed rather than open."
+  [ns-name req]
+  (not (or (some #(re-find % req) allowed-require-patterns)
+           (own-pure-namespace? ns-name req))))
 
 ;; ---------------------------------------------------------------------------
 ;; File scanning
@@ -395,12 +468,15 @@
          ns-name  (str (second ns-form))
          requires (extract-requires ns-form)
          imports  (extract-imports ns-form)
+         exempt-reqs        (get (:allow-require config) ns-name #{})
          require-violations (->> requires
-                                 (filter #(forbidden-require? (str %)))
+                                 (map str)
+                                 (filter #(forbidden-require? ns-name %))
+                                 (remove exempt-reqs)
                                  (map (fn [req]
                                         {:file (str file)
                                          :ns   ns-name
-                                         :req  (str req)
+                                         :req  req
                                          :kind :require})))
          import-violations  (->> imports
                                  (filter forbidden-import?)

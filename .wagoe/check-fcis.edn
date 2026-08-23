@@ -12,5 +12,17 @@
 ;; validation rule registry's mutable state moved to
 ;; wagoe.platform.shell.validation-registry in BOU-188. Add an entry here only
 ;; as a temporary allowance while a new violation is being migrated out.
+;; :allow-require is per-namespace AND per-require, and every entry needs a
+;; :why. Since BOU-301 the require check is an allowlist — a core namespace may
+;; require pure libraries and its own core/schema/ports, and nothing else — so
+;; this is where a justified exception to that goes.
 {:allow-throw         []
- :allow-mutable-state []}
+ :allow-mutable-state []
+ :allow-require
+ [{:ns      wagoe.core.validation.behavior
+   :require clojure.test
+   :why     "A behaviour-spec DSL whose output is deftest forms, so clojure.test
+             is its vocabulary rather than a dependency it reaches for. The
+             functions that build scenarios are pure; only the macro that
+             expands them emits tests. Moving it out would put a testing DSL in
+             the shell, where nothing else about testing lives."}]}

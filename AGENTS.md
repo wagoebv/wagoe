@@ -238,7 +238,7 @@ The **Wagoe Scaffolder** (`bb scaffold`) is the **primary tool for creating new 
 ### Why the Scaffolder Matters
 
 The quality gate `bb check:fcis` (run on every commit) enforces strict rules:
-- Core layers **CANNOT** import shell code, I/O, logging, or database code
+- Core layers **CANNOT** require anything but pure libraries and their own core/schema/ports — the list is an allowlist, so a library nobody anticipated is refused rather than missed
 - Shell layers **MUST** depend on ports (protocols), not core implementations
 - Dependencies must flow *downward* from shell → core → ports
 
@@ -351,7 +351,7 @@ clojure -M:test --watch :{module-name}  # Watch tests
 
 Every module MUST define `ports.clj`.
 
-- core/ must not import shell/IO/logging/DB
+- core/ may require only pure libraries (clojure.string/set/walk/edn, malli, hiccup, cheshire, buddy.core, honey.sql) and its own core/schema/ports — an allowlist, so anything else is refused by default
 - core/ must not throw — return typed error values ({:error {:type ... :message ...}}); the shell translates them into HTTP responses (escape hatch: ^:wagoe/allow-throw ns metadata or .wagoe/check-fcis.edn)
 - core/ must not hold mutable state (defonce/atom/swap!/reset!) — definition registries and process state live in the shell (wagoe.<lib>.shell.registry)
 - cross-module calls go through service ports
@@ -942,7 +942,7 @@ Automated safeguards run in CI (and `check:fcis` + `check:ports` in pre-commit) 
 
 | Gate | Command | What it catches | Hard fail? |
 |------|---------|-----------------|------------|
-| **FC/IS enforcement** | `bb check:fcis` | Core namespaces importing shell, I/O, logging, or DB code; throwing; or holding mutable state (defonce/atom/swap!/reset!) | Yes |
+| **FC/IS enforcement** | `bb check:fcis` | A core namespace requiring anything outside a small allowlist of pure libraries and its own core/schema/ports; throwing; or holding mutable state (defonce/atom/swap!/reset!, including via `apply`). Reads operator position, so a newline between `(` and the symbol does not hide a call. Exceptions: `^:wagoe/allow-throw` / `^:wagoe/allow-mutable-state` ns metadata, or `.wagoe/check-fcis.edn` (`:allow-require` entries need a `:why`) | Yes |
 | **Placeholder tests** | `bb check:placeholder-tests` | `(is true)` / `(is (= true true))` masking missing coverage | Yes |
 | **Dependency direction** | `bb check:deps` | Core independence violations, circular deps between libraries, third-party namespaces required but not declared (so the published POM would omit them), requires no artifact mapping covers, unparseable `deps.edn` | Yes (cycles/core/new undeclared/unmapped); warn (allowlisted) |
 | **Ports / hexagonal** | `bb check:ports` | Modules missing `ports.clj`; a shell namespace requiring *any* of another module's `shell.*` namespaces (composition roots exempt); web/HTTP requiring `shell.persistence` directly; an allowlist prefix that no longer exempts anything | Yes |

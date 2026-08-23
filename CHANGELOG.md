@@ -31,6 +31,27 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Changed
 
+- **`bb check:fcis` reads code instead of lines, and its require list is now an
+  allowlist** (BOU-301). The gate the architecture claim rests on could be
+  switched off by pressing return: the scan matched `(\s*throw` one line at a
+  time, so `(\n throw …)` — the same call to the reader — matched nothing.
+  `(apply swap! reg …)` was invisible for the same reason. Both are caught now,
+  and a violation is reported at the symbol rather than at the paren.
+
+  The require check was a list of eleven forbidden namespaces, which could only
+  name the I/O libraries somebody had thought of. A core namespace shelling out
+  through `babashka.process`, holding process state in a `core.async` channel,
+  or using any datastore client not on the list passed clean. It is inverted: a
+  core namespace may require pure libraries (`clojure.string`/`set`/`walk`/
+  `edn`, malli, hiccup, cheshire, `buddy.core`, `honey.sql`, rewrite-clj) and
+  its own core/schema/ports, and anything else is a violation.
+
+  On this repository the inversion produced exactly one finding, and it is a
+  real exception rather than a false positive: `wagoe.core.validation.behavior`
+  is a DSL whose output is `deftest` forms. `.wagoe/check-fcis.edn` gained
+  `:allow-require`, per namespace and per require, with a mandatory `:why` — the
+  rule check-ports already applies to its own allowlist.
+
 - **A generated project's own code lives under its own namespace** (BOU-360).
   `wagoe new shop` put the application's wiring in `wagoe.system-config` and
   `bb scaffold generate product` put the module in `wagoe.product` — a project
