@@ -1,7 +1,6 @@
 (ns wagoe.tenant.shell.persistence
   (:require [wagoe.core.utils.type-conversion :as type-conversion]
-            [wagoe.platform.shell.adapters.database.common.core :as db]
-            [wagoe.platform.shell.adapters.database.utils.schema :as db-schema]
+            [wagoe.platform.database :as db]
             [wagoe.platform.shell.persistence-interceptors :as persistence-interceptors]
             [wagoe.tenant.ports :as ports]
             [wagoe.tenant.shell.provisioning :as provisioning]
@@ -26,7 +25,7 @@
      nil"
   [ctx]
   (log/info "Initializing tenant schema from Malli definitions")
-  (db-schema/initialize-tables-from-schemas! ctx
+  (db/initialize-tables-from-schemas! ctx
                                              {"tenants" tenant-schema/Tenant
                                               "tenant_memberships" tenant-schema/TenantMembership
                                               "tenant_member_invites" tenant-schema/TenantInvite}))

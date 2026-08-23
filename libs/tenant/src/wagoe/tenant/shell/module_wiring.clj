@@ -1,5 +1,5 @@
 (ns wagoe.tenant.shell.module-wiring
-  (:require [wagoe.platform.shell.adapters.database.config :as db-config]
+  (:require [wagoe.platform.database :as db-config]
             [wagoe.tenant.shell.invite-persistence :as invite-persistence]
             [wagoe.tenant.shell.invite-service :as invite-service]
             [wagoe.tenant.shell.membership-middleware :as membership-mw]

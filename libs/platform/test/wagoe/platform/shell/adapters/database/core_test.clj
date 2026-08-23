@@ -13,7 +13,7 @@
   (:require [wagoe.platform.shell.adapters.database.common.core :as db]
             [wagoe.platform.shell.adapters.database.sqlite.core :as sqlite]
             [wagoe.platform.shell.adapters.database.h2.core :as h2]
-            [wagoe.platform.shell.adapters.database.protocols :as protocols]
+            [wagoe.platform.ports.database :as protocols]
             [clojure.test :refer [deftest is testing use-fixtures]]
             [clojure.tools.logging :as log])
   (:import (java.time Instant)

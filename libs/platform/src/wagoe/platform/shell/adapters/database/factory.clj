@@ -18,7 +18,7 @@
      (def ctx (dbf/db-context {:adapter :sqlite :database-path \"./app.db\"}))
      (db/execute-query! ctx {:select [:*] :from [:users]})"
   (:require [wagoe.platform.shell.adapters.database.common.core :as core]
-            [wagoe.platform.shell.adapters.database.protocols :as protocols]
+            [wagoe.platform.ports.database :as protocols]
             [clojure.tools.logging :as log]))
 
 ;; =============================================================================

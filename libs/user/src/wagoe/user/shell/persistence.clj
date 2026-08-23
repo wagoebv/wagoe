@@ -21,9 +21,8 @@
    - Clean boundary between functional and imperative code"
   (:require [wagoe.core.utils.type-conversion :as type-conversion]
             [wagoe.platform.core.database.query :as core-query]
-            [wagoe.platform.shell.adapters.database.common.core :as db]
-            [wagoe.platform.shell.adapters.database.protocols :as protocols]
-            [wagoe.platform.shell.adapters.database.utils.schema :as db-schema]
+            [wagoe.platform.database :as db]
+            [wagoe.platform.ports.database :as protocols]
             [wagoe.user.ports :as ports]
             [wagoe.user.schema :as user-schema]
             [wagoe.platform.shell.persistence-interceptors :as persistence-interceptors]
@@ -158,7 +157,7 @@
   ;; Retire any MFA rows still holding a pre-encryption plaintext secret.
   (invalidate-legacy-plaintext-mfa! ctx)
 
-  (db-schema/initialize-tables-from-schemas! ctx
+  (db/initialize-tables-from-schemas! ctx
                                              {"auth_users" user-schema/AuthUser
                                               "users" user-schema/TenantUser
                                               "user_sessions" user-schema/UserSession

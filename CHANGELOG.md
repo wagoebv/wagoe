@@ -31,6 +31,32 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Changed
 
+- **Platform has a database port, and modules stop reaching into its shell**
+  (BOU-303). The framework's most-used abstraction was the only one without a
+  seam: every module's persistence layer required
+  `wagoe.platform.shell.adapters.database.common.core` because there was
+  nothing else to require. Two namespaces replace it:
+
+  - `wagoe.platform.database` — executing queries. `execute-query!`,
+    `execute-one!`, `execute-update!`, `execute-ddl!`, `with-transaction`,
+    `table-exists?`, `get-table-info` and the query-building helpers.
+    Deliberately narrower than what it delegates to: connection-pool
+    lifecycle and adapter construction stay internal.
+  - `wagoe.platform.ports.database` — the `DBAdapter` protocol, moved out of
+    `shell/adapters/database/protocols.clj`. Four adapters implement it
+    (postgresql, mysql, sqlite, h2), so unlike the router abstraction ADR-037
+    removed, this seam is real.
+
+  **If you required either path, update the namespace; the function names and
+  arities are unchanged.** `bb scaffold` generates the new require, so
+  regenerated modules are already correct.
+
+  This clears the largest entry in `.wagoe/check-ports.edn` — 20 sites across
+  tenant, user, admin, workflow and devtools — and the matching built-in
+  exemption in `check:ports`, so the old coupling is now a gate failure rather
+  than a documented allowance. Tenant provisioning also stops calling
+  PostgreSQL's metadata namespace directly and goes through the port.
+
 - **Feature flags no longer read the environment from the functional core**
   (BOU-302). `wagoe.core.config.feature-flags` promised "Pure functions: No
   side effects" in its docstring while five of its functions had a convenience

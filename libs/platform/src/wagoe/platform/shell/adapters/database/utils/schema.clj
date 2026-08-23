@@ -19,7 +19,7 @@
 
      (schema/generate-table-ddl ctx \"users\" some-malli-schema)
      (schema/initialize-tables-from-schemas! ctx schema-map)"
-  (:require [wagoe.platform.shell.adapters.database.protocols :as protocols]
+  (:require [wagoe.platform.ports.database :as protocols]
             [wagoe.platform.shell.adapters.database.common.core :as db-core]
             [clojure.string :as str]
             [clojure.tools.logging :as log]))

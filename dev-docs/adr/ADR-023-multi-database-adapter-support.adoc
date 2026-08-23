@@ -18,7 +18,7 @@ implementations fulfil these contracts using HoneySQL and next.jdbc against
 relational databases (H2, PostgreSQL, SQLite, MySQL).
 
 The platform library provides a `DBAdapter` protocol
-(`wagoe.platform.shell.adapters.database.protocols`) that abstracts
+(`wagoe.platform.ports.database`, moved there in BOU-303) that abstracts
 dialect-level differences between SQL engines. Connection management uses
 HikariCP, query execution uses next.jdbc, and migrations use Migratus with
 plain SQL files.

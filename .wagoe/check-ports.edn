@@ -9,23 +9,15 @@
 ;; decisions, not forty-three. Every entry MUST carry a `:why` — the gate throws
 ;; on one without it rather than honouring it (BOU-250).
 ;;
+;; One entry has burnt down: the database group (20 sites) cleared in BOU-303,
+;; when platform grew `wagoe.platform.database` and `wagoe.platform.ports.database`.
+;;
 ;; Composition roots — `*.shell.module-wiring`, `*.shell.system.wiring`,
 ;; `*.shell.cli-entry`, `*.shell.boot` — are exempt in code, not here. Wiring is
 ;; the one job that has to name concrete implementations.
 
 {:allow-cross-module-shell
  [;; ==========================================================================
-  ;; BOU-303 (M3) — platform has no database port
-  ;; ==========================================================================
-  ;; The largest group by far, and the one the ticket for this gate named. Every
-  ;; module's persistence layer reaches straight into platform's JDBC adapters
-  ;; because there is nothing else to reach for. A port closes all 20 at once.
-  {:target-prefix "wagoe.platform.shell.adapters.database"
-   :why "BOU-303. 20 sites across tenant, user, admin, workflow and devtools.
-         platform exposes no database port, so a module's persistence layer has
-         no sanctioned way to reach a connection. Clears when the port lands."}
-
-  ;; ==========================================================================
   ;; Framework building blocks that live under shell/ but are not implementations
   ;; ==========================================================================
   ;; These are pipeline pieces every module composes into its own persistence and

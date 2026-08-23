@@ -3,7 +3,7 @@
 
    Proves the BOU-159 acceptance: provision two tenant schemas, run a tenant
    migration, and confirm each schema gets the change with its own ledger."
-  (:require [wagoe.platform.shell.adapters.database.config :as db-config]
+  (:require [wagoe.platform.database :as db-config]
             [wagoe.tenant.shell.provisioning :as provisioning]
             [wagoe.tenant.shell.tenant-migrations :as tmig]
             [clojure.test :refer [deftest is testing use-fixtures]]

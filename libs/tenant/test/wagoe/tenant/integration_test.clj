@@ -30,7 +30,7 @@
             [wagoe.observability.errors.shell.adapters.no-op :as noop-errors]
             [wagoe.observability.logging.shell.adapters.no-op :as noop-logging]
             [wagoe.observability.metrics.shell.adapters.no-op :as noop-metrics]
-            [wagoe.platform.shell.adapters.database.common.core :as db]
+            [wagoe.platform.database :as db]
             [wagoe.platform.shell.adapters.database.factory :as db-factory]
             [wagoe.tenant.ports :as tenant-ports]
             [wagoe.tenant.shell.persistence :as tenant-persistence]

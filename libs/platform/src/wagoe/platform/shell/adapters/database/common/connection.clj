@@ -1,6 +1,6 @@
 (ns wagoe.platform.shell.adapters.database.common.connection
   "Common connection pool management utilities."
-  (:require [wagoe.platform.shell.adapters.database.protocols :as protocols]
+  (:require [wagoe.platform.ports.database :as protocols]
             [clojure.tools.logging :as log])
   (:import [com.zaxxer.hikari HikariConfig HikariDataSource]))
 

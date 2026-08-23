@@ -26,7 +26,7 @@
 
    This namespace maintains backward compatibility by serving as the main
    entry point that other code can require directly."
-  (:require [wagoe.platform.shell.adapters.database.protocols :as protocols]
+  (:require [wagoe.platform.ports.database :as protocols]
             [wagoe.platform.shell.adapters.database.sqlite.connection :as connection]
             [wagoe.platform.shell.adapters.database.sqlite.metadata :as metadata]
             [wagoe.platform.shell.adapters.database.sqlite.query :as query]

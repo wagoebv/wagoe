@@ -22,7 +22,7 @@
      (cf/create-config-context \"dev\" :wagoe/sqlite)"
   (:require [wagoe.platform.shell.adapters.database.config :as db-config]
             [wagoe.platform.shell.adapters.database.common.core :as core]
-            [wagoe.platform.shell.adapters.database.protocols :as protocols]
+            [wagoe.platform.ports.database :as protocols]
             [clojure.string :as str]
             [clojure.tools.logging :as log]))
 

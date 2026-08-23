@@ -15,7 +15,7 @@
   (:require [clojure.string :as str]
             [clojure.tools.logging :as log]
             [wagoe.tenant.ports :as tenant-ports]
-            [wagoe.platform.shell.adapters.database.common.core :as db]))
+            [wagoe.platform.database :as db]))
 
 ;; =============================================================================
 ;; Tenant Extraction

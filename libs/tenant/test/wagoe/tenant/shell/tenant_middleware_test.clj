@@ -1,9 +1,9 @@
 (ns wagoe.tenant.shell.tenant-middleware-test
   "Tests for multi-tenant HTTP middleware."
   (:require [clojure.test :refer [deftest testing is]]
-            [wagoe.platform.shell.adapters.database.common.core :as db]
+            [wagoe.platform.database :as db]
             [wagoe.tenant.shell.tenant-middleware :as tenant-mw]
-            [wagoe.platform.shell.adapters.database.protocols]
+            [wagoe.platform.ports.database]
             [wagoe.tenant.ports :as tenant-ports]
             [next.jdbc])
   (:import (java.util UUID)))
@@ -82,7 +82,7 @@
                             ([_k] nil)
                             ([_k _default] nil)))
         mock-adapter (reify
-                       wagoe.platform.shell.adapters.database.protocols/DBAdapter
+                       wagoe.platform.ports.database/DBAdapter
                        (dialect [_] :postgresql)
                        (jdbc-driver [_] "org.postgresql.Driver")
                        (jdbc-url [_ _db-config] "jdbc:postgresql://localhost:5432/test")

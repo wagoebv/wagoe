@@ -13,7 +13,7 @@
    - Handle soft/hard deletes based on schema"
   (:require
    [wagoe.admin.ports :as ports]
-   [wagoe.platform.shell.adapters.database.common.execution :as db]
+   [wagoe.platform.database :as db]
    [wagoe.platform.shell.persistence-interceptors :as persist-interceptors]
    [wagoe.core.utils.type-conversion :as type-conversion]
    [wagoe.core.utils.case-conversion :as case-conversion]

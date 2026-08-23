@@ -1,6 +1,6 @@
 (ns wagoe.platform.shell.adapters.database.common.schema
   "Common schema management and DDL utilities."
-  (:require [wagoe.platform.shell.adapters.database.protocols :as protocols]
+  (:require [wagoe.platform.ports.database :as protocols]
             [wagoe.platform.shell.adapters.database.common.execution :as execution]
             [clojure.string :as str]
             [clojure.tools.logging :as log]

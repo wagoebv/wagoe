@@ -4,7 +4,7 @@
    Context validation functions check data structure conformity including
    protocol satisfaction, which requires access to the DBAdapter protocol
    from the shell adapters layer."
-  (:require [wagoe.platform.shell.adapters.database.protocols :as protocols]))
+  (:require [wagoe.platform.ports.database :as protocols]))
 
 ;; =============================================================================
 ;; Context Validation

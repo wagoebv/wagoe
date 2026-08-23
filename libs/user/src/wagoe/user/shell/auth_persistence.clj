@@ -17,8 +17,8 @@
    - User profile data (name, role, avatar) → in tenant_<slug>.users
    - Tenant-specific settings → in tenant_<slug>.users"
   (:require [wagoe.core.utils.type-conversion :as type-conversion]
-            [wagoe.platform.shell.adapters.database.common.core :as db]
-            [wagoe.platform.shell.adapters.database.protocols :as protocols]
+            [wagoe.platform.database :as db]
+            [wagoe.platform.ports.database :as protocols]
             [wagoe.platform.shell.persistence-interceptors :as persistence-interceptors]
             [wagoe.user.shell.mfa-crypto :as mfa-crypto]
             [cheshire.core]

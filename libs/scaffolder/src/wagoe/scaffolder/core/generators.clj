@@ -543,7 +543,7 @@ DROP TABLE IF EXISTS %s;
     (str "(ns " base-ns "." module-name ".shell.persistence\n"
          "  \"Persistence layer for " module-name " module.\"\n"
          "  (:require [" base-ns "." module-name ".ports :as ports]\n"
-         "            [wagoe.platform.shell.adapters.database.common.core :as db]\n"
+         "            [wagoe.platform.database :as db]\n"
          "            [honey.sql :as sql]))\n"
          "\n"
          "(defrecord Database" entity-name "Repository [db-ctx]\n"

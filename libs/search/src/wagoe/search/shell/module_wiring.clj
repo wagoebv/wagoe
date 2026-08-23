@@ -14,7 +14,7 @@
      Returns {:api [...] :web [...] :static []} for composition
      by the HTTP handler."
   (:require [integrant.core :as ig]
-            [wagoe.platform.shell.adapters.database.protocols :as db-protocols]
+            [wagoe.platform.ports.database :as db-protocols]
             [wagoe.search.shell.persistence :as persistence]
             [wagoe.search.shell.service :as service]
             [wagoe.search.shell.http :as search-http]

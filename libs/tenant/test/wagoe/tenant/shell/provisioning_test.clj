@@ -8,8 +8,8 @@
   (:require [clojure.test :refer [deftest is testing]]
             [wagoe.tenant.shell.provisioning :as sut]
             [wagoe.platform.shell.adapters.database.factory :as db-factory]
-            [wagoe.platform.shell.adapters.database.common.core :as db]
-            [wagoe.platform.shell.adapters.database.protocols :as protocols])
+            [wagoe.platform.database :as db]
+            [wagoe.platform.ports.database :as protocols])
   (:import (java.util UUID)))
 
 ;; =============================================================================
@@ -196,7 +196,7 @@
                     wagoe.tenant.shell.provisioning/create-schema! (fn [_ _] nil)
                     wagoe.tenant.shell.provisioning/populate-tenant-schema! (fn [_]
                                                                                  (throw (ex-info "migrate boom" {})))
-                    wagoe.platform.shell.adapters.database.common.core/execute-ddl! (fn [_ sql]
+                    wagoe.platform.database/execute-ddl! (fn [_ sql]
                                                                                          (swap! executed-ddl conj sql))]
         (let [ex (is (thrown? clojure.lang.ExceptionInfo
                               (sut/provision-tenant! ctx tenant)))]
@@ -271,7 +271,7 @@
     (let [ctx {:adapter nil :datasource nil}
           tenant {:schema-name "tenant_locked"}]
       (with-redefs [wagoe.tenant.shell.provisioning/schema-exists? (constantly true)
-                    wagoe.platform.shell.adapters.database.common.core/execute-ddl!
+                    wagoe.platform.database/execute-ddl!
                     (fn [_ _] (throw (ex-info "drop boom" {})))]
         (let [ex (is (thrown? clojure.lang.ExceptionInfo
                               (sut/deprovision-tenant! ctx tenant)))]
@@ -284,7 +284,7 @@
           tenant {:schema-name "tenant_drop_me"}
           executed-ddl (atom [])]
       (with-redefs [wagoe.tenant.shell.provisioning/schema-exists? (constantly true)
-                    wagoe.platform.shell.adapters.database.common.core/execute-ddl!
+                    wagoe.platform.database/execute-ddl!
                     (fn [_ sql]
                       (swap! executed-ddl conj sql))]
         (is (= {:success? true
@@ -297,7 +297,7 @@
   (testing "create-schema! only issues DDL when schema is missing"
     (let [executed-ddl (atom [])]
       (with-redefs [wagoe.tenant.shell.provisioning/schema-exists? (constantly false)
-                    wagoe.platform.shell.adapters.database.common.core/execute-ddl!
+                    wagoe.platform.database/execute-ddl!
                     (fn [_ sql]
                       (swap! executed-ddl conj sql))]
         (#'sut/create-schema! {:adapter nil :datasource nil} "tenant_new")
@@ -305,7 +305,7 @@
 
     (let [executed-ddl (atom [])]
       (with-redefs [wagoe.tenant.shell.provisioning/schema-exists? (constantly true)
-                    wagoe.platform.shell.adapters.database.common.core/execute-ddl!
+                    wagoe.platform.database/execute-ddl!
                     (fn [_ sql]
                       (swap! executed-ddl conj sql))]
         (#'sut/create-schema! {:adapter nil :datasource nil} "tenant_existing")
@@ -319,7 +319,7 @@
              (#'sut/validate-provisioning {:adapter nil :datasource nil} "tenant_missing"))))
 
     (with-redefs [wagoe.tenant.shell.provisioning/schema-exists? (constantly true)
-                  wagoe.platform.shell.adapters.database.common.core/execute-one! (fn [_ _]
+                  wagoe.platform.database/execute-one! (fn [_ _]
                                                                                        {:count 0})]
       (is (= {:valid? false
               :schema-name "tenant_empty"
@@ -328,7 +328,7 @@
              (#'sut/validate-provisioning {:adapter nil :datasource nil} "tenant_empty"))))
 
     (with-redefs [wagoe.tenant.shell.provisioning/schema-exists? (constantly true)
-                  wagoe.platform.shell.adapters.database.common.core/execute-one! (fn [_ _]
+                  wagoe.platform.database/execute-one! (fn [_ _]
                                                                                        {:count 5})]
       (is (= {:valid? true
               :schema-name "tenant_ok"
@@ -337,7 +337,7 @@
              (#'sut/validate-provisioning {:adapter nil :datasource nil} "tenant_ok"))))
 
     (with-redefs [wagoe.tenant.shell.provisioning/schema-exists? (constantly true)
-                  wagoe.platform.shell.adapters.database.common.core/execute-one! (fn [_ _]
+                  wagoe.platform.database/execute-one! (fn [_ _]
                                                                                        (throw (ex-info "validation boom" {})))]
       (let [result (#'sut/validate-provisioning {:adapter nil :datasource nil} "tenant_boom")]
         (is (false? (:valid? result)))
@@ -370,13 +370,13 @@
   (testing "sets search_path and executes the callback inside a transaction"
     (let [queries (atom [])
           adapter (postgres-adapter-stub)]
-      (with-redefs [wagoe.platform.shell.adapters.database.common.core/with-transaction*
+      (with-redefs [wagoe.platform.database/with-transaction*
                     (fn [tx-ctx f]
                       (is (= adapter (:adapter tx-ctx)))
                       (is (= ::ds (:datasource tx-ctx)))
                       (f {:adapter (:adapter tx-ctx)
                           :datasource ::tx}))
-                    wagoe.platform.shell.adapters.database.common.core/execute-query!
+                    wagoe.platform.database/execute-query!
                     (fn [tx query]
                       (swap! queries conj [tx query])
                       nil)]
@@ -396,11 +396,11 @@
 
   (testing "wraps callback failures as tenant-context errors"
     (let [adapter (postgres-adapter-stub)]
-      (with-redefs [wagoe.platform.shell.adapters.database.common.core/with-transaction*
+      (with-redefs [wagoe.platform.database/with-transaction*
                     (fn [tx-ctx f]
                       (f {:adapter (:adapter tx-ctx)
                           :datasource ::tx}))
-                    wagoe.platform.shell.adapters.database.common.core/execute-query!
+                    wagoe.platform.database/execute-query!
                     (fn [_ _] nil)]
         (let [ex (is (thrown? clojure.lang.ExceptionInfo
                               (sut/with-tenant-schema {:adapter adapter
@@ -442,7 +442,7 @@
 
   (testing "queries information_schema for PostgreSQL context"
     (let [ctx {:adapter (postgres-adapter-stub) :datasource nil}]
-      (with-redefs [wagoe.platform.shell.adapters.database.common.core/execute-query!
+      (with-redefs [wagoe.platform.database/execute-query!
                     (fn [_ _]
                       [{:schema-name "tenant_acme"}
                        {:schema-name "tenant_globex"}])]
@@ -451,7 +451,7 @@
 
   (testing "returns empty vector when no tenant schemas exist in PostgreSQL"
     (let [ctx {:adapter (postgres-adapter-stub) :datasource nil}]
-      (with-redefs [wagoe.platform.shell.adapters.database.common.core/execute-query!
+      (with-redefs [wagoe.platform.database/execute-query!
                     (fn [_ _] [])]
         (is (= [] (sut/list-tenant-schemas ctx)))))))
 

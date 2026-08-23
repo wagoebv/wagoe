@@ -24,7 +24,7 @@
    - Proper timezone handling
    - Case-insensitive identifiers for compatibility
    - Optimized connection pool settings for embedded usage"
-  (:require [wagoe.platform.shell.adapters.database.protocols :as protocols]
+  (:require [wagoe.platform.ports.database :as protocols]
             [wagoe.platform.shell.adapters.database.h2.connection :as connection]
             [wagoe.platform.shell.adapters.database.h2.metadata :as metadata]
             [wagoe.platform.shell.adapters.database.h2.query :as query]

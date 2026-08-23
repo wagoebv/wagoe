@@ -321,9 +321,14 @@
   "Target prefixes exempt everywhere, including in generated projects.
 
    These are gaps in the framework, not in the code that hits them: a project's
-   persistence layer has to reach `platform.shell.adapters.database` because
-   platform exposes no database port (BOU-303), and its UI reaches i18n's render
-   helpers because i18n exposes them nowhere else. A downstream project cannot
+   UI reaches i18n's render helpers because i18n exposes them nowhere else.
+
+   The database entry is gone: platform publishes `wagoe.platform.database` for
+   executing queries and `wagoe.platform.ports.database` for the adapter
+   protocol, so a persistence layer has somewhere sanctioned to reach (BOU-303).
+   Removing it from this set is what makes the gate refuse the old coupling —
+   deleting the `.wagoe/check-ports.edn` entry alone changed nothing, because
+   this list exempted it anyway. A downstream project cannot
    close any of them, and failing `bb check` on a freshly scaffolded module for a
    framework gap is the BOU-267 shape.
 
@@ -331,8 +336,7 @@
    on a burn-down list with a stated reason; these are what keep generated
    projects green until that list empties. Repo-specific couplings —
    `user.shell.middleware`, email's bridging adapter — are not here."
-  #{"wagoe.platform.shell.adapters.database"
-    "wagoe.platform.shell.persistence-interceptors"
+  #{"wagoe.platform.shell.persistence-interceptors"
     "wagoe.platform.shell.service-interceptors"
     "wagoe.platform.shell.interceptors"
     "wagoe.platform.shell.web"

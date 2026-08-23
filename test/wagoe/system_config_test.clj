@@ -2,7 +2,7 @@
   (:require [wagoe.config :as sut]
             [wagoe.platform.shell.modules :as modules]
             [wagoe.system-config :as sys-config]
-            [wagoe.platform.shell.adapters.database.protocols :as db-protocols]
+            [wagoe.platform.ports.database :as db-protocols]
             [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]

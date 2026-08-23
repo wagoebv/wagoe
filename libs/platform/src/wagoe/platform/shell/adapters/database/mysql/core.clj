@@ -17,7 +17,7 @@
    - Query building (mysql.query)
    - Metadata operations (mysql.metadata)
    - Utility functions (mysql.utils)"
-  (:require [wagoe.platform.shell.adapters.database.protocols :as protocols]
+  (:require [wagoe.platform.ports.database :as protocols]
             [wagoe.platform.shell.adapters.database.mysql.connection :as connection]
             [wagoe.platform.shell.adapters.database.mysql.metadata :as metadata]
             [wagoe.platform.shell.adapters.database.mysql.query :as query]
