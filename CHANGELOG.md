@@ -31,6 +31,28 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Changed
 
+- **Two routes that can both match a request now fail the boot** (BOU-356).
+  Conflict detection was off — `:conflicts nil` — so `/users/:id` beside
+  `/users/:uid` built a router and whichever was concatenated first silently
+  answered. ADR-037 listed detection as something the move to Reitit route data
+  recovered; it did not, until now.
+
+  It is on by shape rather than wholesale. A literal beside a parameter —
+  `/web/users/new` and `/web/users/:id`, the pattern every REST router has and
+  six of which exist in the framework's own routes — is decided by precedence:
+  Reitit matches the literal first, always, so that pair is allowed. Two
+  parameters in the same position, or a catch-all swallowing a sibling, are
+  decided by nothing and raise `:wagoe/ambiguous-routes` at startup, naming
+  both paths.
+
+  Reitit's own per-route `:conflicting true` opt-out was the obvious approach
+  and is not used: it must be set on *both* sides of a pair, which would have
+  exempted those routes from detection against everything else too.
+
+  **If your application has genuinely ambiguous routes it will now fail to
+  start.** That is the point — but `:wagoe/router {:conflicts nil}` restores
+  the old behaviour if you need to ship before fixing them.
+
 - **Platform has a database port, and modules stop reaching into its shell**
   (BOU-303). The framework's most-used abstraction was the only one without a
   seam: every module's persistence layer required

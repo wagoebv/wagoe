@@ -44,12 +44,12 @@ the future, and this one has been tested against reality once and failed.
 
 Three things Reitit has and the normalized format does not:
 
-* **Route conflict detection, available.** Reitit can refuse to build a router
-  with two routes that can match the same request. The normalized format
-  concatenates and hopes. Note *available*: the platform passes `:conflicts nil`,
-  which switches the check off, and turning it on is BOU-356 — the live table
-  has six overlapping pairs that all work, so enabling it is a decision rather
-  than a flag flip.
+* **Route conflict detection.** Reitit refuses to build a router with two
+  routes that can match the same request. The normalized format concatenates
+  and hopes. On since BOU-356, and by shape rather than wholesale: a literal
+  beside a parameter — `/web/users/new` and `/web/users/:id`, six such pairs in
+  the live table — is decided by precedence and allowed, while two parameters
+  in the same position fail the boot.
 * **Reverse routing.** `match-by-name` turns a route name and parameters into a
   URL. Without it every link in the framework is a hand-written string, and a
   path change is a grep.
@@ -128,13 +128,20 @@ goes is the claim that they are interchangeable.
 * Migration surface, measured: roughly 33 route maps in module code, the
   platform's own health and metrics routes, `apply-versioning`, and
   `module-route-contributions` from BOU-330.
-* Conflict detection becomes *possible* and is not switched on. This was
-  written as "arrives with the collapse", which measurement did not bear out:
-  `create-router-options` passes `:conflicts nil`, so two routes that can match
-  the same request still build a router and the first silently wins. The route
-  table has six overlapping pairs — `/web/users/new` beside `/web/users/:id`
-  and five like it — which work because Reitit matches static before dynamic.
-  Enabling detection means declaring those six `:conflicting true`. BOU-356.
+* Conflict detection became *possible* with the collapse and was switched on
+  separately, in BOU-356. Worth recording that this consequence first read
+  "arrives with the collapse", which measurement did not bear out —
+  `create-router-options` passed `:conflicts nil`, so an ambiguous pair still
+  built a router and the first route silently won.
+
+  Enabling it wholesale was not possible either: the live table has six
+  overlapping pairs of the `/web/users/new` beside `/web/users/:id` shape, and
+  Reitit's per-route `:conflicting true` opt-out must be set on *both* sides of
+  a pair, which would exempt those routes from detection against everything
+  else too. The `:conflicts` handler classifies instead: precedence decides a
+  literal against a parameter, so that pair is allowed; two parameters in the
+  same position, or a catch-all swallowing a sibling, fail the boot. No route
+  opts out, and a generated project gets the same rule.
 * Pitfall #9 keeps its slot and changes what it warns about. The two-format
   confusion is gone; the trap that remains is the prefix, which the platform
   adds to each part of a module's contribution. Writing `/api` into an `:api`

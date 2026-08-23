@@ -413,7 +413,7 @@
                                :summary "Prometheus metrics scrape endpoint"})}]]))
 
 (defmethod ig/init-key :wagoe/http-handler
-  [_ {:keys [module-routes logger metrics-emitter tracer error-reporter error-enricher config tenant-service db-context cache i18n i18n-middleware user-service request-capture? extra-middleware]}]
+  [_ {:keys [module-routes logger metrics-emitter tracer error-reporter error-enricher config tenant-service db-context cache i18n i18n-middleware user-service request-capture? extra-middleware router]}]
   (log/info "Initializing top-level HTTP handler")
   (require 'wagoe.platform.shell.interfaces.http.common)
   (let [platform-routes (platform-routes {:config          config
@@ -483,11 +483,28 @@
         ;; passed only as the protocol receiver, which ADR-037 removed. Making
         ;; those settings live means deciding what `:coercion :malli` in an app's
         ;; config.edn should resolve to, which is its own ticket.
-        router-config {:middleware (request-middleware
-                                    {:extra-middleware extra-middleware
-                                     :i18n             i18n
-                                     :i18n-middleware  i18n-middleware})
-                       :system system}
+        router-config (cond-> {:middleware (request-middleware
+                                            {:extra-middleware extra-middleware
+                                             :i18n             i18n
+                                             :i18n-middleware  i18n-middleware})
+                               :system system}
+                        ;; The one :wagoe/router setting that reaches the
+                        ;; router. Threaded because BOU-356 made an ambiguous
+                        ;; route table fail the boot, and an application that
+                        ;; has to ship before untangling its routes needs a way
+                        ;; to say so: `:wagoe/router {:conflicts nil}`.
+                        ;;
+                        ;; The rest of that component — :coercion, :muuntaja,
+                        ;; :middleware — is still inert, which is BOU-357. Not
+                        ;; fixed here: those need a decision about what
+                        ;; `:coercion :malli` resolves to, and :conflicts needs
+                        ;; none because nil is the whole vocabulary EDN can
+                        ;; express for it.
+                        ;; `map?` because the component is only a settings map
+                        ;; in a real system; tests hand this key a placeholder,
+                        ;; and `contains?` on a keyword throws.
+                        (and (map? router) (contains? router :conflicts))
+                        (assoc :conflicts (:conflicts router)))
         handler (reitit-router/compile-routes all-routes router-config)
 
         ;; Wrap handler with version headers middleware
