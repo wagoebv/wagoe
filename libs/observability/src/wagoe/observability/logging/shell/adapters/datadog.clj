@@ -33,13 +33,12 @@
         :batch-size 50
         :flush-interval 5000}))"
   (:require
+   [wagoe.observability.logging.shell.time :as time]
    [wagoe.observability.logging.ports :as ports]
    [cheshire.core :as json]
    [clojure.string :as str]
    [clojure.tools.logging :as log])
   (:import
-   [java.time Instant]
-   [java.time.format DateTimeFormatter]
    [java.util.concurrent LinkedBlockingQueue Executors TimeUnit]
    [java.net.http HttpClient HttpRequest HttpRequest$BodyPublishers HttpResponse$BodyHandlers]
    [java.net URI]
@@ -89,15 +88,10 @@
   "Default Datadog logs endpoint for US region."
   "https://http-intake.logs.datadoghq.com/v1/input/")
 
-(defn- current-timestamp
-  "Generate ISO 8601 timestamp for Datadog."
-  []
-  (.format DateTimeFormatter/ISO_INSTANT (Instant/now)))
-
 (defn- prepare-log-entry
   "Prepare a log entry in Datadog format."
   [level message context exception config]
-  (let [base-entry {:timestamp (current-timestamp)
+  (let [base-entry {:timestamp (time/now-iso)
                     :level (get datadog-log-levels level "info")
                     :message (str message)
                     :service (:service config)

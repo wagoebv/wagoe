@@ -50,8 +50,12 @@
   []
   (UUID/randomUUID))
 
-(defn current-timestamp
-  "Get current timestamp. Shell layer responsibility for time dependency."
+(defn- current-timestamp
+  "Get current timestamp. Shell layer responsibility for time dependency.
+
+   Private: a one-line clock read is not this library's API, and being public
+   made it so (BOU-302). Tests still pin it with `with-redefs`, which
+   var-quotes and so reaches a private var."
   []
   (Instant/now))
 

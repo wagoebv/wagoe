@@ -38,6 +38,16 @@
    (java.time Instant)
    (java.util UUID)))
 
+
+(defn- current-timestamp
+  "Get current timestamp as Instant.
+
+   Private and local: `logging` shares one of these across its two adapters,
+   but errors is a different module and reaching across would be a boundary
+   crossing check:ports refuses (BOU-302)."
+  []
+  (Instant/now))
+
 ;; =============================================================================
 ;; State Management
 ;; =============================================================================
@@ -85,11 +95,6 @@
   "Generate a unique event ID for Sentry."
   []
   (str (UUID/randomUUID)))
-
-(defn- current-timestamp
-  "Get current timestamp as Instant."
-  []
-  (Instant/now))
 
 (defn- prepare-context
   "Prepare context map for Sentry, merging thread-local and provided context."

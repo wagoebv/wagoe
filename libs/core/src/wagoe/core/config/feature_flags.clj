@@ -4,6 +4,14 @@
    This namespace provides pure functions for checking feature flags based on
    environment variables and configuration.
    
+   The environment map is always a parameter. Each of these functions used to
+   have a convenience arity that called `(System/getenv)` itself, in a
+   namespace whose own docstring promised no side effects — so the promise and
+   the code disagreed, and every caller of a 1-arity was reading ambient
+   process state from the functional core (BOU-302). The convenience lives in
+   `wagoe.platform.shell.feature-flags`, which is a shell namespace and may
+   read the environment.
+
    Design Principles:
    - Pure functions: No side effects, configuration passed as parameter
    - Explicit defaults: Clear behavior when flag not set
@@ -52,18 +60,16 @@
      (re-matches #"(?i)true|1|yes|on" (str value)))))
 
 (defn get-env-value
-  "Get environment variable value.
-  
+  "Look up `env-var` in `env-map`.
+
    Args:
      env-var: Environment variable name
-     env-map: Map of environment variables (defaults to System/getenv)
-   
+     env-map: Map of environment variables
+
    Returns:
      String value or nil"
-  ([env-var]
-   (get-env-value env-var (System/getenv)))
-  ([env-var env-map]
-   (get env-map env-var)))
+  [env-var env-map]
+  (get env-map env-var))
 
 ;; =============================================================================
 ;; Feature Flag Checking
@@ -74,64 +80,61 @@
   
    Args:
      flag-key: Feature flag keyword (from known-flags)
-     env-map: Optional environment map (defaults to System/getenv)
-   
+     env-map: Environment map
+
    Returns:
      Boolean indicating if feature is enabled
-   
+
    Example:
-     (enabled? :devex-validation)
-     => true  ; if WAG_DEVEX_VALIDATION=true in environment"
-  ([flag-key]
-   (enabled? flag-key (System/getenv)))
-  ([flag-key env-map]
-   (if-let [flag-config (get known-flags flag-key)]
-     (let [env-value (get-env-value (:env-var flag-config) env-map)
-           parsed (parse-bool env-value)]
-       (if (nil? parsed)
-         (:default flag-config)
-         parsed))
+     (enabled? :devex-validation {\"WAG_DEVEX_VALIDATION\" \"true\"})
+     => true
+
+   To ask about the real environment, call
+   `wagoe.platform.shell.feature-flags/enabled?`, which fetches it first."
+  [flag-key env-map]
+  (if-let [flag-config (get known-flags flag-key)]
+    (let [env-value (get-env-value (:env-var flag-config) env-map)
+          parsed (parse-bool env-value)]
+      (if (nil? parsed)
+        (:default flag-config)
+        parsed))
      ;; Unknown flag defaults to false
-     false)))
+    false))
 
 (defn all-flags
   "Get status of all known feature flags.
   
    Args:
-     env-map: Optional environment map
-   
+     env-map: Environment map
+
    Returns:
      Map of flag-key -> boolean status
-   
+
    Example:
-     (all-flags)
+     (all-flags {\"WAG_DEVEX_VALIDATION\" \"true\"})
      => {:devex-validation true, :structured-logging false}"
-  ([]
-   (all-flags (System/getenv)))
-  ([env-map]
-   (into {}
-         (map (fn [[k _v]]
-                [k (enabled? k env-map)])
-              known-flags))))
+  [env-map]
+  (into {}
+        (map (fn [[k _v]]
+               [k (enabled? k env-map)])
+             known-flags)))
 
 (defn flag-info
   "Get information about a specific flag.
   
    Args:
      flag-key: Feature flag keyword
-     env-map: Optional environment map
-   
+     env-map: Environment map
+
    Returns:
      Map with :enabled?, :env-var, :description"
-  ([flag-key]
-   (flag-info flag-key (System/getenv)))
-  ([flag-key env-map]
-   (if-let [flag-config (get known-flags flag-key)]
-     (assoc flag-config
-            :enabled? (enabled? flag-key env-map)
-            :current-value (get-env-value (:env-var flag-config) env-map))
-     {:error "Unknown feature flag"
-      :flag-key flag-key})))
+  [flag-key env-map]
+  (if-let [flag-config (get known-flags flag-key)]
+    (assoc flag-config
+           :enabled? (enabled? flag-key env-map)
+           :current-value (get-env-value (:env-var flag-config) env-map))
+    {:error "Unknown feature flag"
+     :flag-key flag-key}))
 
 ;; =============================================================================
 ;; Configuration Integration
@@ -142,11 +145,9 @@
   
    Args:
      config: Application configuration map
-     env-map: Optional environment map
-   
+     env-map: Environment map
+
    Returns:
      Configuration map with :feature-flags added"
-  ([config]
-   (add-flags-to-config config (System/getenv)))
-  ([config env-map]
-   (assoc config :feature-flags (all-flags env-map))))
+  [config env-map]
+  (assoc config :feature-flags (all-flags env-map)))

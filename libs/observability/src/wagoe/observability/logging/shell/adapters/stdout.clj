@@ -5,12 +5,10 @@
    formatting options including plain text and JSON output with optional
    colors, timestamps, and structured context."
   (:require
+   [wagoe.observability.logging.shell.time :as time]
    [wagoe.observability.logging.ports :as ports]
    [clojure.string :as str]
-   [cheshire.core :as json])
-  (:import
-   [java.time Instant]
-   [java.time.format DateTimeFormatter]))
+   [cheshire.core :as json]))
 
 ;; =============================================================================
 ;; Level Management
@@ -63,19 +61,7 @@
 ;; Timestamp Formatting
 ;; =============================================================================
 
-(def ^:private iso-formatter
-  "ISO 8601 timestamp formatter."
-  DateTimeFormatter/ISO_INSTANT)
 
-(defn- current-timestamp
-  "Get current timestamp as ISO 8601 string.
-   
-   Returns:
-     ISO 8601 formatted timestamp string
-   
-   Pure: No (depends on system time)"
-  []
-  (.format iso-formatter (Instant/now)))
 
 ;; =============================================================================
 ;; Context Formatting
@@ -170,7 +156,7 @@
   [level message context config]
   (let [parts (cond-> []
                 (:include-timestamp config)
-                (conj (str "[" (current-timestamp) "]"))
+                (conj (str "[" (time/now-iso) "]"))
 
                 (:include-level config)
                 (conj (if (:colors config)
@@ -209,7 +195,7 @@
   [level message context config]
   (let [log-entry (cond-> {:level (name level)
                            :message message
-                           :timestamp (current-timestamp)}
+                           :timestamp (time/now-iso)}
 
                     (:include-thread config)
                     (assoc :thread (.getName (Thread/currentThread)))

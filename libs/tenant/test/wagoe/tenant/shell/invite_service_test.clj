@@ -4,6 +4,7 @@
             [wagoe.observability.metrics.ports :as metrics-ports]
             [wagoe.tenant.ports :as ports]
             [wagoe.tenant.shell.invite-service :as sut]
+            [wagoe.tenant.shell.time]
             [clojure.test :refer [deftest is testing use-fixtures]])
   (:import (java.time Instant)
            (java.util UUID)))
@@ -154,7 +155,7 @@
           fixed-now (Instant/parse "2026-04-10T12:00:00Z")]
       (with-redefs [wagoe.tenant.shell.invite-service/generate-invite-id (fn [] invite-id)
                     wagoe.tenant.shell.invite-service/generate-invite-token (fn [] "raw-token")
-                    wagoe.tenant.shell.invite-service/current-timestamp (fn [] fixed-now)]
+                    wagoe.tenant.shell.time/now (fn [] fixed-now)]
         (let [result (ports/invite-external-member service tenant-id "Contractor@Example.NL" :contractor {})]
           (is (= invite-id (:id result)))
           (is (= tenant-id (:tenant-id result)))

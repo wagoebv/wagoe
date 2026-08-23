@@ -31,6 +31,30 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Changed
 
+- **Feature flags no longer read the environment from the functional core**
+  (BOU-302). `wagoe.core.config.feature-flags` promised "Pure functions: No
+  side effects" in its docstring while five of its functions had a convenience
+  arity calling `(System/getenv)`. The environment map is now always a
+  parameter, and the convenience moved to
+  `wagoe.platform.shell.feature-flags`, which may read it.
+
+  **Breaking, if you called a 1-arity.** `(flags/enabled? :devex-validation)`
+  becomes either `(flags/enabled? :devex-validation env-map)` or
+  `(shell-flags/enabled? :devex-validation)`. The two-argument forms are
+  unchanged.
+
+  `bb check:fcis` now refuses `System/getenv` in a core namespace, beside
+  `getProperty` and `currentTimeMillis` — which is how the five were found.
+
+- **One clock read per library instead of eleven** (BOU-302).
+  `current-timestamp` was defined eleven times across seven libraries, and two
+  of them were public — a one-line clock read in the API surface. They are
+  private now, and the duplicates within a library share one helper
+  (`wagoe.tenant.shell.time`, `wagoe.platform.shell.utils.time`,
+  `wagoe.observability.logging.shell.time`). No behaviour changes: every call
+  site was already in a shell namespace, which is the layer allowed to read a
+  clock.
+
 - **`bb check:fcis` reads code instead of lines, and its require list is now an
   allowlist** (BOU-301). The gate the architecture claim rests on could be
   switched off by pressing return: the scan matched `(\s*throw` one line at a
