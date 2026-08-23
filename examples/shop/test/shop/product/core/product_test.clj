@@ -1,6 +1,6 @@
-(ns wagoe.product.core.product-test
+(ns shop.product.core.product-test
   (:require [clojure.test :refer [deftest testing is]]
-            [wagoe.product.core.product :as core])
+            [shop.product.core.product :as core])
   (:import [java.time Instant]
            [java.util UUID]))
 

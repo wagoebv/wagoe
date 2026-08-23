@@ -58,6 +58,28 @@
       (touch! root "libs" "product" "src" "wagoe" "product" "schema.clj") ; old layout
       (is (nil? (integrate/discover-module "product" nil root))))))
 
+(deftest ^:unit discover-module-defaults-to-the-projects-own-namespace
+  ;; With no --base-ns, a module belongs under the application's namespace —
+  ;; the whole point of BOU-360. src/shop/main.clj is what says "shop".
+  (let [root (tmp-root)]
+    (touch! root "src" "shop" "main.clj")
+    (touch! root "src" "shop" "product" "shell" "module_wiring.clj")
+    (let [m (integrate/discover-module "product" nil root)]
+      (is (some? m))
+      (is (= "shop.product" (:module-ns m)))
+      (is (= "src/shop/product" (:src-path m))))))
+
+(deftest ^:unit discover-module-still-finds-a-module-left-under-wagoe
+  ;; A project generated before the move has src/wagoe/<module>/ and a
+  ;; src/<project>/main.clj beside it. Integrating it must keep working.
+  (let [root (tmp-root)]
+    (touch! root "src" "shop" "main.clj")
+    (touch! root "src" "wagoe" "product" "shell" "module_wiring.clj")
+    (let [m (integrate/discover-module "product" nil root)]
+      (is (some? m) "the old location must still be found")
+      (is (= "wagoe.product" (:module-ns m))
+          "and reported under the namespace it is actually in"))))
+
 ;; =============================================================================
 ;; round-trip: the path generate writes is the path integrate discovers
 ;; =============================================================================

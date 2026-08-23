@@ -18,7 +18,7 @@ bb scaffold generate --module-name product --entity Product \
 
 [source]
 ----
-src/wagoe/product/
+src/<your-project>/product/
 ├── core/
 │   ├── product.clj      ← pure functions: no I/O, no clock, no database
 │   └── ui.clj           ← Hiccup templates, also pure
@@ -32,8 +32,13 @@ src/wagoe/product/
 └── schema.clj           ← Malli schemas
 
 migrations/            ← up and down SQL for the products table
-test/wagoe/product/    ← a test namespace per layer
+test/<your-project>/product/   ← a test namespace per layer
 ----
+
+The module lives under your project's namespace, not under `wagoe` — it is your
+code. The key that switches it on is `:wagoe/product`, beside `:wagoe/http` and
+`:wagoe/h2`: the namespace says whose code it is, the key names the module to
+the framework.
 
 Then activate it:
 

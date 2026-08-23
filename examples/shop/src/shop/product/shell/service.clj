@@ -1,7 +1,7 @@
-(ns wagoe.product.shell.service
+(ns shop.product.shell.service
   "Service layer for product module."
-  (:require [wagoe.product.ports :as ports]
-            [wagoe.product.core.product :as core])
+  (:require [shop.product.ports :as ports]
+            [shop.product.core.product :as core])
   (:import [java.time Instant]
            [java.util UUID]))
 

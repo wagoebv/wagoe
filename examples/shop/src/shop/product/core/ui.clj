@@ -1,4 +1,4 @@
-(ns wagoe.product.core.ui
+(ns shop.product.core.ui
   "Pure UI generation for product module - Hiccup templates.")
 
 (defn product-list-page

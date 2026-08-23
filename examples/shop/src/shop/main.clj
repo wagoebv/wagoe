@@ -6,7 +6,7 @@
    blocks, and shuts down cleanly on a signal. It is what `clojure -M:run`, the
    uberjar and the Dockerfile all call, and what a container or systemd unit
    needs, since none of them can drive a REPL."
-  (:require [wagoe.system-config :as config]
+  (:require [shop.system-config :as config]
             [clojure.tools.logging :as log]
             [integrant.core :as ig])
   (:gen-class))

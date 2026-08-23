@@ -68,7 +68,7 @@ Measured on two projects generated side by side:
 |===
 
 The choice is the `:extra-modules` set in the generated
-`src/wagoe/system_config.clj`: `#{:wagoe/user}` with the module, `#{}` without.
+`src/<your-project>/system_config.clj`: `#{:wagoe/user}` with the module, `#{}` without.
 Turning it back on later is editing one word, not regenerating the project. It
 is a set in code rather than a key in `config.edn` because the user module is
 not something an application switches per environment.

@@ -1,4 +1,4 @@
--- Migration 20260822173144: Create products table
+-- Migration 20260823052706: Create products table
 
 CREATE TABLE IF NOT EXISTS products (
   id UUID PRIMARY KEY,

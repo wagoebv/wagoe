@@ -3,7 +3,7 @@
          com.wagoe/wagoe-observability {:local/root "../../libs/observability"}
          com.wagoe/wagoe-platform      {:local/root "../../libs/platform"}
          com.wagoe/wagoe-user          {:local/root "../../libs/user"}
-         ;; Reads resources/conf/<env>/config.edn — src/wagoe/system_config.clj
+         ;; Reads resources/conf/<env>/config.edn — src/shop/system_config.clj
          ;; calls it directly.
          com.wagoe/wagoe-config        {:local/root "../../libs/config"}
          ;; The modules a fresh project can switch on by editing config.edn

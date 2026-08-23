@@ -1,6 +1,6 @@
-(ns wagoe.product.shell.persistence
+(ns shop.product.shell.persistence
   "Persistence layer for product module."
-  (:require [wagoe.product.ports :as ports]
+  (:require [shop.product.ports :as ports]
             [wagoe.platform.shell.adapters.database.common.core :as db]
             [honey.sql :as sql]))
 

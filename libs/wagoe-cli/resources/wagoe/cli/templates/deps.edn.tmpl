@@ -3,7 +3,7 @@
          com.wagoe/wagoe-observability {:mvn/version "{{observability-version}}"}
          com.wagoe/wagoe-platform      {:mvn/version "{{platform-version}}"}
          com.wagoe/wagoe-user          {:mvn/version "{{user-version}}"}
-         ;; Reads resources/conf/<env>/config.edn — src/wagoe/system_config.clj
+         ;; Reads resources/conf/<env>/config.edn — src/{{project-ns}}/system_config.clj
          ;; calls it directly.
          com.wagoe/wagoe-config        {:mvn/version "{{config-version}}"}
          ;; The modules a fresh project can switch on by editing config.edn

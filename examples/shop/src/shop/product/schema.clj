@@ -1,4 +1,4 @@
-(ns wagoe.product.schema
+(ns shop.product.schema
   "Schema definitions for product module."
   (:require [malli.core :as m]))
 

@@ -137,7 +137,7 @@ curl http://localhost:3000/api/v1/products
 
 `[]` is the right answer: the generated handlers are stubs that return canned
 responses, and wiring them to the service is your first edit. The routes live in
-`src/wagoe/product/shell/http.clj` — `bb scaffold integrate` prints the prefix
+`src/<your-project>/product/shell/http.clj` — `bb scaffold integrate` prints the prefix
 they are mounted under.
 
 For a browsable CRUD UI over your tables rather than a JSON stub, add the admin
