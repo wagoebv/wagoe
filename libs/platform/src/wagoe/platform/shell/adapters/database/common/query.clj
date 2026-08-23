@@ -1,6 +1,6 @@
 (ns wagoe.platform.shell.adapters.database.common.query
   "Common query building and formatting utilities."
-  (:require [wagoe.platform.shell.adapters.database.protocols :as protocols]
+  (:require [wagoe.platform.ports.database :as protocols]
             [wagoe.core.utils.case-conversion :as case-conv]
             [honey.sql :as sql]
             [clojure.walk :as walk]))

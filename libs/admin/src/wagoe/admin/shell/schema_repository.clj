@@ -20,7 +20,7 @@
    [wagoe.admin.ports :as ports]
    [wagoe.admin.schema :as admin-schema]
    [wagoe.admin.core.schema-introspection :as introspection]
-   [wagoe.platform.shell.adapters.database.protocols :as db-protocols]
+   [wagoe.platform.ports.database :as db-protocols]
    [wagoe.core.utils.case-conversion :as case-conv]))
 
 ;; =============================================================================

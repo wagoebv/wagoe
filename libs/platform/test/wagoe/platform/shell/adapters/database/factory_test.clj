@@ -1,7 +1,7 @@
 (ns wagoe.platform.shell.adapters.database.factory-test
   (:require [wagoe.platform.shell.adapters.database.factory :as sut]
             [wagoe.platform.shell.adapters.database.common.core :as db-core]
-            [wagoe.platform.shell.adapters.database.protocols :as protocols]
+            [wagoe.platform.ports.database :as protocols]
             [clojure.test :refer [deftest is testing]]))
 
 (defn- adapter-stub
@@ -21,7 +21,7 @@
 (deftest ^:unit create-adapter-and-context-delegate-to-core
   (let [adapter (adapter-stub :sqlite "org.sqlite.JDBC")
         datasource ::datasource]
-      (with-redefs [wagoe.platform.shell.adapters.database.protocols/validate-db-config (fn [cfg]
+      (with-redefs [wagoe.platform.ports.database/validate-db-config (fn [cfg]
                                                                                            (is (= :sqlite (:adapter cfg))))
                     wagoe.platform.shell.adapters.database.factory/load-adapter-constructor (fn [_] (fn [] adapter))
                     db-core/create-connection-pool (fn [arg cfg]

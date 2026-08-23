@@ -19,10 +19,8 @@
    - Schema names must be valid PostgreSQL identifiers
    - Provisioning is idempotent (safe to call multiple times)
    - Does not copy data from public schema (only structure)"
-  (:require [wagoe.platform.shell.adapters.database.common.core :as db]
-            [wagoe.platform.shell.adapters.database.config :as db-config]
-            [wagoe.platform.shell.adapters.database.postgresql.metadata :as pg-metadata]
-            [wagoe.platform.shell.adapters.database.protocols :as protocols]
+  (:require [wagoe.platform.database :as db]
+            [wagoe.platform.ports.database :as protocols]
             [wagoe.tenant.core.tenant :as tenant-core]
             [wagoe.tenant.ports :as ports]
             [wagoe.tenant.shell.tenant-migrations :as tenant-migrations]
@@ -59,7 +57,7 @@
    Returns:
      String DDL statement to recreate the table"
   [ctx table-name target-schema]
-  (let [columns (pg-metadata/get-table-info (:datasource ctx) table-name)
+  (let [columns (db/get-table-info ctx table-name)
         column-defs (map (fn [col]
                            (let [col-name (:name col)
                                  col-type (:type col)
@@ -200,7 +198,7 @@
    which only ever copied whole tables and never picked up column/index deltas."
   [schema-name]
   (assert-safe-schema-name! schema-name)
-  (tenant-migrations/migrate-tenant! (db-config/get-active-db-config) schema-name))
+  (tenant-migrations/migrate-tenant! (db/get-active-db-config) schema-name))
 
 (defn- validate-provisioning
   "Validate that tenant schema was provisioned successfully.

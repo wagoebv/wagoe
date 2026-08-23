@@ -65,7 +65,7 @@
   (testing "an adapter is as much a reach into another module as a service is"
     (is (seq (ports/cross-module-violations
               "wagoe.tenant.shell.persistence"
-              ["wagoe.platform.shell.adapters.database.protocols"]))))
+              ["wagoe.platform.ports.database"]))))
 
   (testing "so is middleware, and a render helper"
     (is (seq (ports/cross-module-violations
@@ -110,7 +110,7 @@
                  {:allow-cross-module-shell
                   [{:target-prefix "wagoe.platform.shell.adapters.database"
                     :why "BOU-303 — platform has no database port yet."}]})]
-      (is (ports/shell-target-allowed? allow "wagoe.platform.shell.adapters.database.protocols"))
+      (is (ports/shell-target-allowed? allow "wagoe.platform.ports.database"))
       (is (ports/shell-target-allowed? allow "wagoe.platform.shell.adapters.database.common.core"))
       (is (not (ports/shell-target-allowed? allow "wagoe.user.shell.middleware")))))
 
@@ -159,7 +159,7 @@
   (testing "a prefix still covering something is not"
     (is (empty? (ports/stale-shell-exemptions
                  #{"wagoe.platform.shell.adapters.database"}
-                 ["wagoe.platform.shell.adapters.database.protocols"])))))
+                 ["wagoe.platform.ports.database"])))))
 
 ;; ---------------------------------------------------------------------------
 ;; Rule 3 — web layer requiring persistence

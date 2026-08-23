@@ -1,6 +1,6 @@
 (ns wagoe.tenant.shell.invite-persistence
   (:require [wagoe.core.utils.type-conversion :as type-conversion]
-            [wagoe.platform.shell.adapters.database.common.core :as db]
+            [wagoe.platform.database :as db]
             [wagoe.platform.shell.persistence-interceptors :as persistence-interceptors]
             [wagoe.tenant.ports :as ports]
             [cheshire.core :as json]

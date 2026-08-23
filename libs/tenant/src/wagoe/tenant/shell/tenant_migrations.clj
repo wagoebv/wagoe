@@ -13,7 +13,7 @@
 
    Because migrations run once per tenant schema, tenant-run migrations must be
    idempotent / tenant-scoped."
-  (:require [wagoe.platform.shell.adapters.database.config :as db-config]
+  (:require [wagoe.platform.database :as db-config]
             [wagoe.tenant.core.tenant :as tenant-core]
             [clojure.tools.logging :as log]
             [migratus.core :as migratus]))

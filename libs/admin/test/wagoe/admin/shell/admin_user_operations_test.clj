@@ -15,7 +15,7 @@
             [wagoe.admin.shell.schema-repository :as schema-repo]
             [wagoe.admin.test.embedded-pg :as epg]
             [wagoe.platform.shell.adapters.database.factory :as db-factory]
-            [wagoe.platform.shell.adapters.database.common.execution :as db]
+            [wagoe.platform.database :as db]
             [wagoe.observability.logging.shell.adapters.no-op :as logging-no-op]
             [wagoe.observability.errors.shell.adapters.no-op :as error-reporting-no-op]
             [wagoe.test.logging :refer [with-silent-logging]]

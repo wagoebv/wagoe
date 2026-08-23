@@ -3,7 +3,7 @@
 
    Implements IWorkflowStore using next.jdbc + HoneySQL.
    Applies snake_case <-> kebab-case conversion at the DB boundary only."
-  (:require [wagoe.platform.shell.adapters.database.common.core :as db]
+  (:require [wagoe.platform.database :as db]
             [wagoe.workflow.ports :as ports]
             [next.jdbc :as jdbc]
             [next.jdbc.result-set :as rs]

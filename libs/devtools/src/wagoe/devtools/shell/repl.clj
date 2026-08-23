@@ -3,7 +3,7 @@
    These functions take system components as arguments — they do NOT directly
    access the running system. Wiring happens in dev/repl/user.clj."
   (:require [wagoe.devtools.core.documentation :as docs]
-            [wagoe.platform.shell.adapters.database.common.core :as db]
+            [wagoe.platform.database :as db]
             [cheshire.core :as json]
             [clojure.java.shell :as shell]
             [clojure.string :as str]

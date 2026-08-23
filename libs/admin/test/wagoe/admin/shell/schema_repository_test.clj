@@ -9,7 +9,7 @@
   (:require [wagoe.admin.ports :as ports]
             [wagoe.admin.shell.schema-repository :as schema-repo]
             [wagoe.platform.shell.adapters.database.factory :as db-factory]
-            [wagoe.platform.shell.adapters.database.common.execution :as db]
+            [wagoe.platform.database :as db]
             [clojure.test :refer [deftest is testing use-fixtures]]))
 
 ^{:kaocha.testable/meta {:integration true :admin true}}

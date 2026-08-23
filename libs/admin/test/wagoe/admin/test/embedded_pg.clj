@@ -36,7 +36,7 @@
   "Create a wagoe-compatible db-context from an embedded PG instance.
 
    Returns {:adapter adapter :datasource datasource} suitable for use with
-   wagoe.platform.shell.adapters.database.common.execution functions."
+   wagoe.platform.database functions."
   ([pg] (db-context pg {}))
   ([pg opts]
    (let [port (.getPort ^EmbeddedPostgres pg)

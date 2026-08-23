@@ -1,5 +1,6 @@
 {:hooks {:analyze-call {wagoe.observability.tracing.core/with-span hooks.wagoe.observability.tracing/with-span}}
- :lint-as {wagoe.platform.shell.adapters.database.common.core/with-transaction clojure.core/with-open
+ :lint-as {wagoe.platform.database/with-transaction clojure.core/with-open
+           wagoe.platform.shell.adapters.database.common.core/with-transaction clojure.core/with-open
            wagoe.platform.shell.adapters.database.sqlite.core/with-transaction clojure.core/with-open
            wagoe.platform.shell.adapters.database.h2.core/with-transaction clojure.core/with-open
            clojure.test.check.clojure-test/defspec clojure.core/def
@@ -9,7 +10,8 @@
            wagoe.push.shell.registry/defpush clojure.core/def
            wagoe.workflow.shell.registry/defworkflow clojure.core/def
            wagoe.audience.shell.registry/defaudience clojure.core/def}
- :linters {:unresolved-symbol {:exclude [(wagoe.platform.shell.adapters.database.common.core/with-transaction [tx])
+ :linters {:unresolved-symbol {:exclude [(wagoe.platform.database/with-transaction [tx])
+                                         (wagoe.platform.shell.adapters.database.common.core/with-transaction [tx])
                                          ;; spel (Playwright) binding macro: binds the page symbol from a vector.
                                          (com.blockether.spel.core/with-testing-page [pg])]}}
  :config-in-ns {wagoe.search.shell.registry-test {:linters {:inline-def {:level :off}}}

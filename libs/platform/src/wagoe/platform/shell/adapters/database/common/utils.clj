@@ -1,7 +1,7 @@
 (ns wagoe.platform.shell.adapters.database.common.utils
   "Common database utilities and information functions."
   (:require [wagoe.platform.core.database.query :as core-query]
-            [wagoe.platform.shell.adapters.database.protocols :as protocols]
+            [wagoe.platform.ports.database :as protocols]
             [wagoe.platform.shell.adapters.database.common.execution :as execution]
             [clojure.string :as str])
   (:import [com.zaxxer.hikari HikariDataSource]))

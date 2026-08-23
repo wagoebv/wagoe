@@ -1,7 +1,7 @@
 (ns wagoe.user.shell.persistence-test
   (:require [wagoe.platform.core.database.query :as core-query]
-            [wagoe.platform.shell.adapters.database.common.core :as db-core]
-            [wagoe.platform.shell.adapters.database.protocols :as protocols]
+            [wagoe.platform.database :as db-core]
+            [wagoe.platform.ports.database :as protocols]
             [wagoe.user.ports :as ports]
             [wagoe.user.shell.persistence :as sut]
             [cheshire.core :as json]

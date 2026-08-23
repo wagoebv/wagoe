@@ -39,7 +39,7 @@ The system is built on a clean layered architecture with proper separation of co
 │               - Malli to DDL conversion                     │
 ├─────────────────────────────────────────────────────────────┤
 │              DBAdapter Protocol                             │
-│   (wagoe.platform.shell.adapters.database.protocols)              │
+│   (wagoe.platform.ports.database)                           │
 ├─────────────────────────────────────────────────────────────┤
 │  SQLite      │    H2        │  PostgreSQL  │    MySQL       │
 │  Module      │   Module     │   Module     │   Module       │

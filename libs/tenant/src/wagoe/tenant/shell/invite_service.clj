@@ -1,6 +1,6 @@
 (ns wagoe.tenant.shell.invite-service
   (:require [wagoe.tenant.shell.time :as time]
-            [wagoe.platform.shell.adapters.database.common.core :as db]
+            [wagoe.platform.database :as db]
             [wagoe.platform.shell.service-interceptors :as service-interceptors]
             [wagoe.tenant.core.invite :as invite-core]
             [wagoe.tenant.core.membership :as membership-core]

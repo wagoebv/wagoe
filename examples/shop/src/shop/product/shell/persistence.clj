@@ -1,7 +1,7 @@
 (ns shop.product.shell.persistence
   "Persistence layer for product module."
   (:require [shop.product.ports :as ports]
-            [wagoe.platform.shell.adapters.database.common.core :as db]
+            [wagoe.platform.database :as db]
             [honey.sql :as sql]))
 
 (defrecord DatabaseProductRepository [db-ctx]

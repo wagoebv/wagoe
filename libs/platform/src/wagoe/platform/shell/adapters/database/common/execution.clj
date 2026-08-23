@@ -6,7 +6,7 @@
   (:require [wagoe.platform.core.database.query :as core-query]
             [wagoe.platform.shell.database.validation :as core-validation]
             [wagoe.core.utils.type-conversion :as type-conversion]
-            [wagoe.platform.shell.adapters.database.protocols :as protocols]
+            [wagoe.platform.ports.database :as protocols]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
             [clojure.walk :as walk]

@@ -1,5 +1,20 @@
-(ns wagoe.platform.shell.adapters.database.protocols
-  "Protocol defining the common interface for database adapters.
+(ns wagoe.platform.ports.database
+  "The database port: what a database adapter must provide.
+
+   Lived at `wagoe.platform.ports.database` until BOU-303,
+   which is where a port cannot live — every module's persistence layer had to
+   reach into platform's shell to name it, and `.wagoe/check-ports.edn` carried
+   the 20 sites that did as its largest burn-down entry.
+
+   Unlike the router abstraction ADR-037 removed, this seam is real: four
+   adapters implement it (postgresql, mysql, sqlite, h2), and the differences
+   between them — dialect, boolean representation, JDBC URL shape — are exactly
+   what the methods below name.
+
+   For executing queries rather than describing a database, see
+   `wagoe.platform.database`.
+
+   Protocol defining the common interface for database adapters.
    
    This protocol abstracts database-specific behavior while allowing 
    common database operations to be implemented in a shared core namespace.

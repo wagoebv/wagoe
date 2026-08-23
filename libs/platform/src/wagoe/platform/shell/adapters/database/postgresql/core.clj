@@ -17,7 +17,7 @@
    - Query building (postgresql.query)
    - Metadata operations (postgresql.metadata)
    - Utility functions (postgresql.utils)"
-  (:require [wagoe.platform.shell.adapters.database.protocols :as protocols]
+  (:require [wagoe.platform.ports.database :as protocols]
             [wagoe.platform.shell.adapters.database.postgresql.connection :as connection]
             [wagoe.platform.shell.adapters.database.postgresql.metadata :as metadata]
             [wagoe.platform.shell.adapters.database.postgresql.query :as query]
