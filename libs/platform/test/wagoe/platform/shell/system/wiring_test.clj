@@ -388,3 +388,33 @@
       ;; Absent, not nil: the detector then falls through to WAG_ENV exactly as
       ;; it did before this existed.
       (is (nil? (build {:active {}}))))))
+
+(deftest ^:unit an-application-can-switch-conflict-detection-off-from-config
+  ;; BOU-356 made an ambiguous route table fail the boot. An application that
+  ;; has to ship before untangling its routes says so in config, and this is
+  ;; the one :wagoe/router setting that reaches the router — the rest are
+  ;; still inert (BOU-357).
+  (let [captured (atom nil)
+        compiled (fn [_ _] identity)]
+    (with-redefs [wagoe.platform.shell.http.reitit-router/compile-routes
+                  (fn [_routes cfg] (reset! captured cfg) compiled)
+                  wagoe.platform.shell.interfaces.http.common/health-check-handler
+                  (fn [_ _ _] (fn [_] {:status 200}))
+                  wagoe.platform.shell.http.versioning/apply-versioning
+                  (fn [routes _] (vec routes))
+                  wagoe.platform.shell.http.versioning/wrap-handler-with-version-headers
+                  (fn [h _] h)]
+
+      (testing "unset — the router keeps its own default"
+        (ig/init-key :wagoe/http-handler
+                     {:module-routes [] :config {:active {:wagoe/settings {:name "t"}}}
+                      :router {}})
+        (is (not (contains? @captured :conflicts))
+            "nothing passed means the router decides, not the wiring"))
+
+      (testing ":conflicts nil reaches the router"
+        (ig/init-key :wagoe/http-handler
+                     {:module-routes [] :config {:active {:wagoe/settings {:name "t"}}}
+                      :router {:conflicts nil}})
+        (is (contains? @captured :conflicts))
+        (is (nil? (:conflicts @captured)))))))

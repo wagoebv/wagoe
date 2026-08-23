@@ -239,6 +239,69 @@
    ;; Coercing response bodies
    coercion/coerce-response-middleware])
 
+;; =============================================================================
+;; Route conflicts
+;; =============================================================================
+
+(defn- parameter-segment?
+  "Whether a path segment is a parameter (`:id`) or a catch-all (`*rest`)."
+  [seg]
+  (boolean (re-matches #"[:*].*" seg)))
+
+(defn- decided-by-precedence?
+  "Whether Reitit resolves this pair deterministically, so it is safe to keep.
+
+   True for the shape every REST router has: a literal segment beside a
+   parameter in the same position, like `/web/users/new` and `/web/users/:id`.
+   Reitit matches the literal first, always, so which handler runs is not in
+   question — the pair is reported only because the paths overlap.
+
+   False when both sides are parameters in the same position — `/users/:id`
+   and `/users/:uid` are the same route written twice, and which one answers
+   depends on the order they happened to be concatenated in. That is the case
+   worth failing a boot over.
+
+   Catch-alls count as parameters and so are never treated as decided: `*path`
+   swallowing a sibling is exactly the kind of accident this should report."
+  [path-a path-b]
+  (let [a (str/split path-a #"/")
+        b (str/split path-b #"/")]
+    (and (= (count a) (count b))
+         (every? (fn [[x y]]
+                   (or (= x y)
+                       ;; Exactly one side parameterised — the literal wins.
+                       (and (not= (parameter-segment? x) (parameter-segment? y))
+                            (not (str/starts-with? x "*"))
+                            (not (str/starts-with? y "*")))))
+                 (map vector a b)))))
+
+(defn- report-ambiguous-routes
+  "Reitit's `:conflicts` handler: throw on pairs precedence does not decide.
+
+   Conflict detection was off entirely — `:conflicts nil` — so two routes that
+   could both match a request built a router without complaint and the first
+   one silently won (BOU-356). Turning it on wholesale was not an option
+   either: the live route table has six overlapping pairs, all of them the
+   literal-beside-parameter shape that works correctly, and Reitit's per-route
+   `:conflicting true` opt-out has to be set on *both* sides of a pair — which
+   would exempt those routes from detection against everything else too.
+
+   So the decision is made here, by shape, and no route has to opt out."
+  [conflicts]
+  (when-let [ambiguous (seq (for [[route others] conflicts
+                                  other others
+                                  :let  [a (first route) b (first other)]
+                                  :when (not (decided-by-precedence? a b))]
+                              [a b]))]
+    (throw (ex-info
+            (str "Routes that can both match the same request:\n"
+                 (str/join "\n" (map (fn [[a b]] (str "  " a "\n  " b)) ambiguous))
+                 "\n\nWhich one answers depends on the order the route table was\n"
+                 "assembled, which is not something to rely on. Give them distinct\n"
+                 "paths, or merge them into one route.")
+            {:type   :wagoe/ambiguous-routes
+             :routes (mapv (fn [[a b]] {:a a :b b}) ambiguous)}))))
+
 (defn- create-router-options
   "Create Reitit router options from config.
    
@@ -247,7 +310,7 @@
               :middleware - Additional middleware vector (symbols resolved)
               :coercion - Coercion configuration (defaults to Malli)
               :muuntaja - Muuntaja configuration (defaults to json/edn/transit)
-              :conflicts - Conflict resolution (defaults to nil = disabled)
+              :conflicts - Conflict handler (defaults to report-ambiguous-routes)
               
    Returns:
      Map of Reitit router options"
@@ -258,9 +321,10 @@
     {:data {:coercion (or (:coercion config) malli-coercion/coercion)
             :muuntaja (or (:muuntaja config) m/instance)
             :middleware all-middleware}
-     ;; Disable conflict checking by default - allows routes like /users/new and /users/:id
-     ;; to coexist. Reitit will match specific paths before parameterized ones.
-     :conflicts (get config :conflicts nil)}))
+     ;; On by default since BOU-356. `/users/new` beside `/users/:id` is
+     ;; allowed — Reitit matches the literal first — while two routes neither
+     ;; precedence nor anything else decides between fail the boot.
+     :conflicts (get config :conflicts report-ambiguous-routes)}))
 
 (defn- create-default-handler
   "Create default handler for routes not matched by router.

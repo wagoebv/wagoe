@@ -548,3 +548,65 @@
     (is (= ["/a" "/b"] (mapv first out)))
     (is (= 1 (count (get-in (second (first out)) [:get :middleware]))))
     (is (= 1 (count (get-in (second (second out)) [:post :middleware]))))))
+
+;; ===========================================================================
+;; BOU-356: two routes that can both match the same request
+;; ===========================================================================
+
+(deftest ^:unit routes-precedence-decides-are-allowed
+  ;; The shape every REST router has, and all six overlaps in the live route
+  ;; table: a literal beside a parameter. Reitit matches the literal first, so
+  ;; which handler runs is not in question.
+  (testing "a literal sibling of a parameter"
+    (is (some? (reitit/compile-routes
+                [["/web/users/new" {:get {:handler identity}}]
+                 ["/web/users/:id" {:get {:handler identity}}]]
+                {}))))
+
+  (testing "several literals against one parameter"
+    (is (some? (reitit/compile-routes
+                [["/web/users/new"   {:get {:handler identity}}]
+                 ["/web/users/table" {:get {:handler identity}}]
+                 ["/web/users/bulk"  {:get {:handler identity}}]
+                 ["/web/users/:id"   {:get {:handler identity}}]]
+                {}))))
+
+  (testing "and routes that do not overlap at all"
+    (is (some? (reitit/compile-routes
+                [["/a" {:get {:handler identity}}]
+                 ["/b" {:get {:handler identity}}]]
+                {})))))
+
+(deftest ^:unit routes-nothing-decides-between-fail-the-boot
+  ;; Detection was off entirely, so these built a router and the first one
+  ;; silently won. Which one answers depended on the order the route table was
+  ;; concatenated in.
+  (testing "two parameters in the same position are the same route twice"
+    (let [e (try (reitit/compile-routes
+                  [["/users/:id"  {:get {:handler identity}}]
+                   ["/users/:uid" {:get {:handler identity}}]]
+                  {})
+                 nil
+                 (catch clojure.lang.ExceptionInfo e e))]
+      (is (some? e) "an ambiguous pair must not build")
+      (is (= :wagoe/ambiguous-routes (:type (ex-data e))))
+      (testing "and the message names both paths, since either could be the wrong one"
+        (is (str/includes? (ex-message e) "/users/:id"))
+        (is (str/includes? (ex-message e) "/users/:uid")))))
+
+  (testing "a catch-all swallowing a sibling is not decided either"
+    ;; `*path` matching everything under it is exactly the accident worth
+    ;; reporting, so catch-alls are never treated as decided by precedence.
+    (is (thrown? clojure.lang.ExceptionInfo
+                 (reitit/compile-routes
+                  [["/files/*path" {:get {:handler identity}}]
+                   ["/files/:name" {:get {:handler identity}}]]
+                  {})))))
+
+(deftest ^:unit an-application-can-still-choose-its-own-conflict-policy
+  ;; :conflicts is config, and nil is Reitit's "do not check" — an application
+  ;; that genuinely wants the old behaviour can still ask for it.
+  (is (some? (reitit/compile-routes
+              [["/users/:id"  {:get {:handler identity}}]
+               ["/users/:uid" {:get {:handler identity}}]]
+              {:conflicts nil}))))
