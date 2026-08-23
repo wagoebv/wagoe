@@ -206,3 +206,61 @@
         (read-string ns-text)))
     (catch Exception _
       nil)))
+
+;; ---------------------------------------------------------------------------
+;; Call forms — what sits in operator position
+;; ---------------------------------------------------------------------------
+
+(def ^:private symbol-char?
+  "Characters Clojure allows inside a symbol, plus / for qualified symbols."
+  (set "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789*+!-_'?<>=/.&%$#:"))
+
+(defn call-forms
+  "Every `(`-opened form in `content`, as {:head :arg1 :line}.
+
+   `:head` is the first token after the paren and `:arg1` the second — enough
+   to see both `(swap! …)` and `(apply swap! …)`.
+
+   Exists because matching `#\"\\(\\s*swap!\"` per line is enforcement that
+   depends on formatting: a newline between the paren and the symbol defeats
+   it, and a gate that a line break can turn off is not a gate. Scanning for
+   the token after the paren, however far away, cannot be dodged that way
+   (BOU-301).
+
+   Expects source that has been through `strip-comments-and-strings`, so a
+   `(throw …)` inside a docstring or a code-generating template is not a call.
+   Reader macros need no special case: `#(`, `~(` and `'(` all leave the head
+   symbol as the first token after the paren."
+  [content]
+  (let [n (count content)]
+    (loop [i 0, line 1, acc (transient [])]
+      (if (>= i n)
+        (persistent! acc)
+        (let [c (.charAt ^String content i)]
+          (cond
+            (= c \newline) (recur (inc i) (inc line) acc)
+
+            (= c \()
+            ;; Read up to two tokens, counting the newlines crossed so the
+            ;; violation is reported where the symbol is, not where the paren is.
+            (let [skip-ws  (fn [j l]
+                             (loop [j j l l]
+                               (if (and (< j n) (contains? #{\space \tab \newline \, \return}
+                                                           (.charAt ^String content j)))
+                                 (recur (inc j) (if (= \newline (.charAt ^String content j)) (inc l) l))
+                                 [j l])))
+                  read-tok (fn [j]
+                             (loop [k j]
+                               (if (and (< k n) (symbol-char? (.charAt ^String content k)))
+                                 (recur (inc k))
+                                 [(subs content j k) k])))
+                  [h-start h-line]   (skip-ws (inc i) line)
+                  [head h-end]       (read-tok h-start)
+                  [a-start _]        (skip-ws h-end h-line)
+                  [arg1 _]           (read-tok a-start)]
+              (recur (inc i) line
+                     (if (seq head)
+                       (conj! acc {:head head :arg1 (not-empty arg1) :line h-line})
+                       acc)))
+
+            :else (recur (inc i) line acc)))))))

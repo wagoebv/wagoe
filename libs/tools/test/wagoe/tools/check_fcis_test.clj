@@ -154,3 +154,99 @@
   (testing "a fn named swap!! / reset!! is not a false positive for swap!/reset!"
     (let [vs (check-src "(ns ex.core)\n(defn f [a] (swap!! a inc))\n(defn g [a] (reset!! a 0))\n")]
       (is (not (some #(= :mutable-state (:kind %)) vs))))))
+
+;; ===========================================================================
+;; BOU-301: the gate no longer depends on formatting, and requires are an
+;; allowlist rather than a list of the libraries someone thought of
+;; ===========================================================================
+
+(deftest ^:unit a-newline-between-the-paren-and-the-symbol-does-not-hide-a-call
+  ;; The scan was line-based, so `(\n throw …)` matched nothing and the whole
+  ;; enforcement could be switched off by pressing return. Both of these are
+  ;; the same call to the reader.
+  (testing "a split (throw ...)"
+    (let [vs (check-src "(ns ex.core)\n(defn f [x]\n  (\n   throw (ex-info \"bad\" {})))\n")]
+      (is (some #(= :throw (:kind %)) vs))))
+
+  (testing "a split (swap! ...)"
+    (let [vs (check-src "(ns ex.core)\n(def r nil)\n(defn f []\n  (\n   swap! r inc))\n")]
+      (is (some #(= :mutable-state (:kind %)) vs))))
+
+  (testing "and the violation is reported at the symbol, not at the paren"
+    (let [vs (check-src "(ns ex.core)\n(defn f [x]\n  (\n   throw (ex-info \"bad\" {})))\n")]
+      (is (= 4 (:line (first (filter #(= :throw (:kind %)) vs))))))))
+
+(deftest ^:unit mutation-handed-to-a-higher-order-function-is-still-mutation
+  ;; `(apply swap! r [inc])` mutates exactly as much as `(swap! r inc)`.
+  (testing "apply"
+    (let [vs (check-src "(ns ex.core)\n(def r nil)\n(defn f [] (apply swap! r [inc]))\n")]
+      (is (some #(= :mutable-state (:kind %)) vs))
+      (is (= "swap!" (:req (first (filter #(= :mutable-state (:kind %)) vs))))
+          "the report must name the mutating call, not the wrapper")))
+
+  (testing "partial"
+    (let [vs (check-src "(ns ex.core)\n(def r nil)\n(def f (partial reset! r))\n")]
+      (is (some #(= :mutable-state (:kind %)) vs)))))
+
+(deftest ^:unit a-require-nobody-thought-of-is-a-violation
+  ;; The denylist had eleven entries. These are the libraries the ticket named:
+  ;; each one lets a core namespace shell out, hold process state, or reach the
+  ;; network, and each one passed clean.
+  (doseq [lib ["babashka.process" "babashka.fs" "clojure.core.async"
+               "hato.client" "aleph.http" "cognitect.aws.client.api"]]
+    (testing lib
+      (let [vs (check-src (str "(ns ex.core\n  (:require [" lib " :as x]))\n"))]
+        (is (some #(and (= :require (:kind %)) (= lib (:req %))) vs)
+            (str lib " must not be requirable from a core namespace"))))))
+
+(deftest ^:unit the-pure-libraries-a-core-namespace-really-uses-still-pass
+  ;; An allowlist that fails the repo's own honest code is not usable. These
+  ;; are taken from what core namespaces require today.
+  (doseq [lib ["clojure.string" "clojure.set" "clojure.walk" "clojure.edn"
+               "malli.core" "malli.error" "hiccup2.core" "cheshire.core"
+               "buddy.core.codecs" "honey.sql" "rewrite-clj.zip"
+               "integrant.core"
+               "wagoe.user.schema" "wagoe.i18n.ports"
+               "wagoe.shared.ui.core.icons" "wagoe.core.utils.case-conversion"]]
+    (testing lib
+      (let [vs (check-src (str "(ns ex.core\n  (:require [" lib " :as x]))\n"))]
+        (is (not (some #(= :require (:kind %)) vs))
+            (str lib " is pure and must remain requirable"))))))
+
+(deftest ^:unit clojure-core-async-is-not-mistaken-for-a-modules-own-core
+  ;; The pattern that lets a module require its own `…core…` namespaces reads
+  ;; `clojure.core.async` as one of them unless it excludes clojure. Written
+  ;; without that exclusion, the allowlist let back in the one library the
+  ;; ticket named as the gap.
+  (let [vs (check-src "(ns ex.core\n  (:require [clojure.core.async :as a]))\n")]
+    (is (some #(= :require (:kind %)) vs))))
+
+(deftest ^:unit a-shell-namespace-is-still-refused
+  ;; The rule the whole gate exists for, now enforced by not being on the list
+  ;; rather than by a pattern.
+  (let [vs (check-src "(ns ex.core\n  (:require [wagoe.user.shell.service :as s]))\n")]
+    (is (some #(= :require (:kind %)) vs))))
+
+(deftest ^:unit allow-require-exempts-one-namespace-and-one-require
+  (let [config {:allow-require {"ex.core" #{"clojure.test"}}}]
+    (testing "the named pair is allowed"
+      (is (not (some #(= :require (:kind %))
+                     (check-src "(ns ex.core\n  (:require [clojure.test :as t]))\n" config)))))
+
+    (testing "but it does not exempt the namespace from anything else"
+      (is (some #(= :require (:kind %))
+                (check-src "(ns ex.core\n  (:require [babashka.process :as p]))\n" config))))))
+
+(deftest ^:unit an-allowlist-entry-without-a-why-is-refused
+  ;; An exemption nobody can explain cannot be burnt down — the same rule
+  ;; check-ports applies to its own allowlist.
+  (is (thrown-with-msg?
+       clojure.lang.ExceptionInfo #"no :why"
+       (fcis/allowed-requires {:allow-require [{:ns 'ex.core :require 'clojure.test}]})))
+  (is (thrown-with-msg?
+       clojure.lang.ExceptionInfo #"no :require"
+       (fcis/allowed-requires {:allow-require [{:ns 'ex.core :why "reasons"}]})))
+  (testing "a complete entry is accepted"
+    (is (= {"ex.core" #{"clojure.test"}}
+           (fcis/allowed-requires {:allow-require [{:ns 'ex.core :require 'clojure.test
+                                                    :why "it is a testing DSL"}]})))))
