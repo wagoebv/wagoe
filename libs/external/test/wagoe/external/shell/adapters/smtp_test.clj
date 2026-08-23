@@ -157,12 +157,24 @@
       (is (some? (.getMessageID msg))))))
 
 (deftest ^:integration send-email-async-test
-  (testing "send-email-async! returns a future"
+  (testing "send-email-async! returns a future whose value reports the failure"
     (let [provider (smtp/create-smtp-provider test-config)
           email    {:to "dest@example.com" :subject "Async" :body "Hi"}
           fut      (ports/send-email-async! provider email)]
       (is (future? fut))
-      ;; Dereferencing should yield an error map (host unreachable)
-      (let [result (deref fut 5000 :timeout)]
-        (is (not= :timeout result))
+      ;; The deadline was 5 seconds, and this test failed intermittently in
+      ;; full-suite runs while passing alone (BOU-355). What it is about is
+      ;; that the future eventually reports failure, not how quickly — and the
+      ;; five seconds were being spent on neither the adapter nor the network:
+      ;; the send against an unresolvable host returns in 1–31 ms measured, and
+      ;; `future` runs on the agent send-off pool, which a full suite saturates.
+      ;; A future that has not been *scheduled* yet fails a deadline that has
+      ;; nothing to do with what is under test.
+      ;;
+      ;; Bounded rather than a bare deref so a genuine hang still fails the
+      ;; suite instead of stopping it, and generous enough that it can only be
+      ;; reached by something actually wrong.
+      (let [result (deref fut 60000 :timeout)]
+        (is (not= :timeout result)
+            "the send never completed — adapter hang, not scheduling latency")
         (is (false? (:success? result)))))))

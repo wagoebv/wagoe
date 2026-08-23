@@ -36,7 +36,16 @@
 (defn- stripe-sig-header [body timestamp secret]
   (str "t=" timestamp ",v1=" (compute-signature body timestamp secret)))
 
-(def ^:private test-timestamp
+(defn- fresh-timestamp
+  "Seconds since the epoch, read now.
+
+   Was a `def`, so the value was fixed when the namespace loaded. Stripe
+   rejects a signature more than 300 seconds old — its replay window, and the
+   adapter is right to enforce it — and in a full suite this namespace loads
+   minutes before these tests run. Past five minutes the fixture is genuinely
+   expired and the test fails on its own staleness, which reads exactly like a
+   broken adapter (BOU-355)."
+  []
   (str (quot (System/currentTimeMillis) 1000)))
 
 (def ^:private paid-event
@@ -67,17 +76,17 @@
   (let [body (json/generate-string paid-event)]
 
     (testing "returns true for a valid signature — lowercase header key"
-      (let [sig (stripe-sig-header body test-timestamp test-secret)]
+      (let [sig (stripe-sig-header body (fresh-timestamp) test-secret)]
         (is (true? (ports/verify-webhook-signature
                     provider body {"stripe-signature" sig})))))
 
     (testing "returns true for a valid signature — titlecase header key"
-      (let [sig (stripe-sig-header body test-timestamp test-secret)]
+      (let [sig (stripe-sig-header body (fresh-timestamp) test-secret)]
         (is (true? (ports/verify-webhook-signature
                     provider body {"Stripe-Signature" sig})))))
 
     (testing "returns false when signature is wrong"
-      (let [sig (stripe-sig-header body test-timestamp "wrong-secret-00000000000000000")]
+      (let [sig (stripe-sig-header body (fresh-timestamp) "wrong-secret-00000000000000000")]
         (is (false? (ports/verify-webhook-signature
                      provider body {"stripe-signature" sig})))))
 
@@ -88,7 +97,7 @@
       (is (false? (ports/verify-webhook-signature provider body {"stripe-signature" nil}))))
 
     (testing "returns false when body is empty and signature does not match"
-      (let [sig (stripe-sig-header body test-timestamp test-secret)]
+      (let [sig (stripe-sig-header body (fresh-timestamp) test-secret)]
         (is (false? (ports/verify-webhook-signature
                      provider "" {"stripe-signature" sig})))))
 
