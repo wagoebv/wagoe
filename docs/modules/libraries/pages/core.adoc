@@ -41,7 +41,8 @@ Contains *no shell layer* — everything is pure functions.
 | Interceptor context creation and management
 
 | `wagoe.core.config.feature-flags`
-| Feature flag evaluation logic
+| Feature flag evaluation logic. Pure — the environment map is a parameter;
+  `wagoe.platform.shell.feature-flags` is the shell wrapper that reads it
 |===
 
 == Case conversion

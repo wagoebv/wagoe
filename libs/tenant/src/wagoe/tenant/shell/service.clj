@@ -1,19 +1,15 @@
 (ns wagoe.tenant.shell.service
-  (:require [wagoe.tenant.core.tenant :as tenant-core]
+  (:require [wagoe.tenant.shell.time :as time]
+            [wagoe.tenant.core.tenant :as tenant-core]
             [wagoe.tenant.ports :as ports]
             [wagoe.platform.shell.service-interceptors :as service-interceptors]
             [malli.core :as m]
             [wagoe.tenant.schema :as tenant-schema])
-  (:import (java.time Instant)
-           (java.util UUID)))
+  (:import (java.util UUID)))
 
 (defn generate-tenant-id
   []
   (UUID/randomUUID))
-
-(defn current-timestamp
-  []
-  (Instant/now))
 
 (def ^:private create-tenant-request-validator (m/validator tenant-schema/CreateTenantRequest))
 (def ^:private create-tenant-request-explainer (m/explainer tenant-schema/CreateTenantRequest))
@@ -82,7 +78,7 @@
                               :message (:error decision)})))
 
            (let [tenant-id (generate-tenant-id)
-                 now (current-timestamp)
+                 now (time/now)
                  prepared-tenant (tenant-core/prepare-tenant tenant-input tenant-id now)
                  created-tenant (.create-tenant tenant-repository prepared-tenant)]
 
@@ -122,7 +118,7 @@
                            {:type (if (nil? existing-tenant) :not-found :validation-error)
                             :message (:error decision)})))
 
-         (let [now (current-timestamp)
+         (let [now (time/now)
                updated-tenant (tenant-core/prepare-tenant-update existing-tenant update-data now)]
            (.update-tenant tenant-repository updated-tenant)
            updated-tenant)))
@@ -148,7 +144,7 @@
                            {:type :validation-error
                             :tenant-id tenant-id})))
 
-         (let [now (current-timestamp)
+         (let [now (time/now)
                deleted-tenant (tenant-core/prepare-tenant-deletion existing-tenant now)]
            (.update-tenant tenant-repository deleted-tenant)
            nil)))
@@ -169,7 +165,7 @@
                            {:type :not-found
                             :tenant-id tenant-id})))
 
-         (let [now (current-timestamp)
+         (let [now (time/now)
                suspended-tenant (tenant-core/prepare-tenant-update
                                  existing-tenant
                                  {:status :suspended}
@@ -193,7 +189,7 @@
                            {:type :not-found
                             :tenant-id tenant-id})))
 
-         (let [now (current-timestamp)
+         (let [now (time/now)
                activated-tenant (tenant-core/prepare-tenant-update
                                  existing-tenant
                                  {:status :active}

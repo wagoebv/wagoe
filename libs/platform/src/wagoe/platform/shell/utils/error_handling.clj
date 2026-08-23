@@ -3,7 +3,8 @@
    
    This namespace provides middleware and utilities for capturing rich error context
    across HTTP and CLI interfaces, enabling better debugging and observability."
-(:require [wagoe.platform.core.http.problem-details :as problem]
+(:require [wagoe.platform.shell.utils.time :as time]
+            [wagoe.platform.core.http.problem-details :as problem]
             [clojure.pprint :as pprint]
             [clojure.string :as str]
             [clojure.tools.logging :as log])
@@ -14,9 +15,6 @@
 
 (defn- current-cli-environment []
   (or (System/getProperty "environment") "development"))
-
-(defn- current-timestamp []
-  (java.time.Instant/now))
 
 (defn- current-process-id []
   (str (.pid (java.lang.ProcessHandle/current))))
@@ -56,9 +54,9 @@
                          (problem/request->context*
                           request
                           {:environment (current-environment)
-                           :timestamp (current-timestamp)})
+                           :timestamp (time/now)})
                          {:request-id request-id
-                          :timestamp (current-timestamp)})
+                          :timestamp (time/now)})
           ;; Add error context to request for downstream middleware
           enhanced-request (assoc request :error-context error-context)]
       ;; Add request ID header for tracing
@@ -103,7 +101,7 @@
                            (problem/request->context*
                             request
                             {:environment (current-environment)
-                             :timestamp (current-timestamp)}))
+                             :timestamp (time/now)}))
                ;; Enrich with exception-specific context
                enriched-context (problem/enrich-context
                                  context
@@ -165,7 +163,7 @@
             ;; Build CLI error context
             base-cli-context (problem/cli-context*
                               {:environment (current-cli-environment)
-                               :timestamp (current-timestamp)
+                               :timestamp (time/now)
                                :process-id (current-process-id)}
                               {:user-id (:user-id context)
                                :command (:command context)})

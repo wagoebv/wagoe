@@ -1,5 +1,6 @@
 (ns wagoe.tenant.shell.invite-service
-  (:require [wagoe.platform.shell.adapters.database.common.core :as db]
+  (:require [wagoe.tenant.shell.time :as time]
+            [wagoe.platform.shell.adapters.database.common.core :as db]
             [wagoe.platform.shell.service-interceptors :as service-interceptors]
             [wagoe.tenant.core.invite :as invite-core]
             [wagoe.tenant.core.membership :as membership-core]
@@ -9,9 +10,6 @@
            (java.security MessageDigest SecureRandom)
            (java.time Instant)
            (java.util UUID)))
-
-(defn- current-timestamp []
-  (Instant/now))
 
 (defn- generate-invite-token []
   (let [random (SecureRandom.)
@@ -67,7 +65,7 @@
 
 (defn- validate-invite-for-acceptance
   [invite]
-  (when (invite-core/expired? invite (current-timestamp))
+  (when (invite-core/expired? invite (time/now))
     (throw (ex-info "Invite has expired"
                     {:type :validation-error
                      :invite-id (:id invite)})))
@@ -90,12 +88,12 @@
              normalized-email (invite-core/normalize-email email)]
          (when-let [existing (ports/find-pending-invite-by-email-and-tenant
                               invite-repository tenant-id normalized-email)]
-           (when-not (invite-core/expired? existing (current-timestamp))
+           (when-not (invite-core/expired? existing (time/now))
              (throw (ex-info "Pending invite already exists for this email in tenant"
                              {:type :conflict
                               :tenant-id tenant-id
                               :email normalized-email}))))
-         (let [now (current-timestamp)
+         (let [now (time/now)
                invite-id (generate-invite-id)
                raw-token (generate-invite-token)
                invite (invite-core/prepare-invite*
@@ -132,7 +130,7 @@
        (let [invite (ports/find-pending-invite-by-token-hash invite-repository (sha256 token))]
          (when-not invite
            (throw (ex-info "Invite not found" {:type :not-found})))
-         (when (invite-core/expired? invite (current-timestamp))
+         (when (invite-core/expired? invite (time/now))
            (throw (ex-info "Invite has expired"
                            {:type :validation-error
                             :invite-id (:id invite)})))
@@ -164,7 +162,7 @@
                            {:type :validation-error
                             :invite-id (:invite-id params)
                             :status (:status invite)})))
-         (let [updated (invite-core/revoke-invite invite (current-timestamp))]
+         (let [updated (invite-core/revoke-invite invite (time/now))]
            (ports/update-invite invite-repository updated)
            updated)))
      (service-system this)))
@@ -207,7 +205,7 @@
          (fn [invite-repository membership-repository tx-context]
            (let [invite (-> (locked-invite-by-token invite-repository token)
                             validate-invite-for-acceptance)
-                 now (current-timestamp)]
+                 now (time/now)]
              (when (ports/membership-exists? membership-repository
                                              accepted-by-user-id
                                              (:tenant-id invite))

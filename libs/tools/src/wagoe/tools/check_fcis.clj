@@ -133,6 +133,7 @@
    #"java\.time\.ZoneId/systemDefault"
    #"java\.lang\.System/currentTimeMillis"
    #"java\.lang\.System/getProperty"
+   #"java\.lang\.System/getenv"
    #"java\.lang\.ProcessHandle/current"])
 
 (def ^:private forbidden-call-patterns
@@ -152,7 +153,11 @@
    "java.time.OffsetDateTime" ["now"]
    "java.time.ZonedDateTime" ["now"]
    "java.time.ZoneId" ["systemDefault"]
-   "java.lang.System" ["currentTimeMillis" "getProperty"]
+   ;; getenv reads the process environment, which is exactly the ambient input
+   ;; a pure function must not have. wagoe.core.config.feature-flags had five
+   ;; convenience arities calling it, in a namespace whose own docstring
+   ;; promised "no side effects" (BOU-302).
+   "java.lang.System" ["currentTimeMillis" "getProperty" "getenv"]
    "java.lang.ProcessHandle" ["current"]})
 
 (def ^:private default-static-class-aliases

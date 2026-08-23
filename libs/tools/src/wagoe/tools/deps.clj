@@ -10,7 +10,8 @@
 ;;   bb upgrade-outdated --help       -- show this help
 
 (ns wagoe.tools.deps
-  (:require [babashka.http-client :as http]
+  (:require [wagoe.tools.ansi :refer [bold green yellow dim cyan]]
+            [babashka.http-client :as http]
             [cheshire.core :as json]
             [clojure.edn :as edn]
             [clojure.java.io :as io]
@@ -20,12 +21,6 @@
 ;; ANSI helpers
 ;; =============================================================================
 
-(defn bold   [s] (str "\033[1m"  s "\033[0m"))
-(defn green  [s] (str "\033[32m" s "\033[0m"))
-(defn red    [s] (str "\033[31m" s "\033[0m"))
-(defn yellow [s] (str "\033[33m" s "\033[0m"))
-(defn dim    [s] (str "\033[2m"  s "\033[0m"))
-(defn cyan   [s] (str "\033[36m" s "\033[0m"))
 
 ;; =============================================================================
 ;; File discovery

@@ -14,7 +14,8 @@
 ;;   CLOJARS_PASSWORD  your Clojars deploy token
 
 (ns wagoe.tools.deploy
-  (:require [clojure.string :as str]
+  (:require [wagoe.tools.ansi :refer [bold green red yellow dim]]
+            [clojure.string :as str]
             [clojure.java.io :as io]
             [babashka.http-client :as http]
             [babashka.process :as p]
@@ -24,11 +25,6 @@
 ;; ANSI helpers
 ;; =============================================================================
 
-(defn bold   [s] (str "\033[1m"  s "\033[0m"))
-(defn green  [s] (str "\033[32m" s "\033[0m"))
-(defn red    [s] (str "\033[31m" s "\033[0m"))
-(defn yellow [s] (str "\033[33m" s "\033[0m"))
-(defn dim    [s] (str "\033[2m"  s "\033[0m"))
 
 ;; =============================================================================
 ;; Library registry (membership only — publish ORDER is derived, see below)

@@ -42,7 +42,8 @@
 ;; would remove this signpost along with the artifacts it points from.
 
 (ns wagoe.tools.relocate
-  (:require [clojure.java.io :as io]
+  (:require [wagoe.tools.ansi :refer [bold green red yellow dim]]
+            [clojure.java.io :as io]
             [clojure.string :as str]
             [babashka.http-client :as http]
             [babashka.process :as p]
@@ -52,11 +53,6 @@
 ;; ANSI helpers
 ;; =============================================================================
 
-(defn bold   [s] (str "\033[1m"  s "\033[0m"))
-(defn green  [s] (str "\033[32m" s "\033[0m"))
-(defn red    [s] (str "\033[31m" s "\033[0m"))
-(defn yellow [s] (str "\033[33m" s "\033[0m"))
-(defn dim    [s] (str "\033[2m"  s "\033[0m"))
 
 ;; =============================================================================
 ;; Coordinates

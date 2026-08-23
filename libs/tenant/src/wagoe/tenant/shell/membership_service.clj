@@ -1,12 +1,9 @@
 (ns wagoe.tenant.shell.membership-service
-  (:require [wagoe.tenant.core.membership :as membership-core]
+  (:require [wagoe.tenant.shell.time :as time]
+            [wagoe.tenant.core.membership :as membership-core]
             [wagoe.tenant.ports :as ports]
             [wagoe.platform.shell.service-interceptors :as service-interceptors])
-  (:import (java.time Instant)
-           (java.util UUID)))
-
-(defn- current-timestamp []
-  (Instant/now))
+  (:import (java.util UUID)))
 
 (defn- generate-membership-id []
   (UUID/randomUUID))
@@ -31,7 +28,7 @@
                            {:type      :conflict
                             :user-id   user-id
                             :tenant-id tenant-id})))
-         (let [now           (current-timestamp)
+         (let [now           (time/now)
                membership-id (generate-membership-id)
                membership    (membership-core/prepare-invitation*
                               membership-id user-id tenant-id role now)]
@@ -65,7 +62,7 @@
                            {:type      :conflict
                             :user-id   user-id
                             :tenant-id tenant-id})))
-         (let [now           (current-timestamp)
+         (let [now           (time/now)
                membership-id (generate-membership-id)
                membership    (membership-core/prepare-active-membership*
                               membership-id user-id tenant-id role now)]
@@ -88,7 +85,7 @@
            (throw (ex-info "Membership is not in invited status"
                            {:type   :validation-error
                             :status (:status membership)})))
-         (let [now     (current-timestamp)
+         (let [now     (time/now)
                updated (membership-core/accept-invitation membership now)]
            (ports/update-membership membership-repository updated)
            updated)))
@@ -106,7 +103,7 @@
            (throw (ex-info "Membership not found"
                            {:type          :not-found
                             :membership-id (:membership-id params)})))
-         (let [now     (current-timestamp)
+         (let [now     (time/now)
                updated (membership-core/update-role membership (:role params) now)]
            (ports/update-membership membership-repository updated)
            updated)))
@@ -128,7 +125,7 @@
            (throw (ex-info "Cannot suspend a revoked membership"
                            {:type          :validation-error
                             :membership-id (:membership-id params)})))
-         (let [now     (current-timestamp)
+         (let [now     (time/now)
                updated (membership-core/suspend-membership membership now)]
            (ports/update-membership membership-repository updated)
            updated)))
@@ -146,7 +143,7 @@
            (throw (ex-info "Membership not found"
                            {:type          :not-found
                             :membership-id (:membership-id params)})))
-         (let [now     (current-timestamp)
+         (let [now     (time/now)
                updated (membership-core/revoke-membership membership now)]
            (ports/update-membership membership-repository updated)
            updated)))

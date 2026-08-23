@@ -23,7 +23,8 @@
    - PostgreSQL schema switching per request
    - Tenant caching with configurable TTL
    - Combined middleware for simplified integration"
-  (:require [wagoe.platform.core.http.problem-details :as problem]
+  (:require [wagoe.platform.shell.utils.time :as time]
+            [wagoe.platform.core.http.problem-details :as problem]
             [wagoe.observability.errors.core :as error-reporting]
             [wagoe.observability.errors.ports :as error-reporting-ports]
             [wagoe.observability.logging.core :as logging]
@@ -32,9 +33,6 @@
 
 (defn- current-environment []
   (or (System/getProperty "environment") "test"))
-
-(defn- current-timestamp []
-  (java.time.Instant/now))
 
 ;; =============================================================================
 ;; Middleware - Correlation ID
@@ -286,7 +284,7 @@
                error-context (problem/request->context*
                               request
                               {:environment (current-environment)
-                               :timestamp (current-timestamp)})
+                               :timestamp (time/now)})
                ;; Add additional context for error reporting
                error-details {:method (if request-method (name request-method) "unknown")
                               :uri uri
