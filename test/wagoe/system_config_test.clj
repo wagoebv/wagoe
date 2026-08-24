@@ -40,7 +40,7 @@
                     :host "127.0.0.1"
                     :join? false
                     :port-range {:start 3000 :end 3010}}
-    :wagoe/router {:adapter :reitit}
+    :wagoe/router {:coercion :malli}
     :wagoe/logging {:provider :no-op}
     :wagoe/metrics {:provider :no-op}
     :wagoe/error-reporting {:provider :no-op}

@@ -31,6 +31,31 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Changed
 
+- **`:wagoe/router` settings now reach the router** (BOU-357). Every generated
+  `config.edn` shipped `{:adapter :reitit :coercion :malli :middleware []}` and
+  the router read none of it: `:wagoe/http-handler` built its options fresh, and
+  the component was passed only as the receiver for the protocol ADR-037
+  removed. An application that set `:coercion :malli` got Malli; one that set
+  anything else also got Malli, silently.
+
+  `:coercion`, `:middleware`, `:muuntaja` and `:conflicts` are now threaded
+  through. Two consequences:
+
+  - **`:coercion` takes a name, and an unrecognised one fails the boot** with
+    `:configuration-error` listing what exists. Only `:malli` is implemented —
+    Malli is the framework's validation vocabulary everywhere else, and a
+    `:spec` entry would promise a second implementation nobody maintains. An
+    instance is still accepted as-is.
+  - **`:middleware` is appended to the framework's pipeline, not substituted
+    for it**, so an application's global middleware sees a request the
+    framework has already prepared. Entries may be qualified symbols, which is
+    all EDN can express; these resolve to the function, not the var.
+
+  **`:adapter` is removed** from the shipped config, the `wagoe new` template
+  and `bb setup` output. It named the router seam ADR-037 deleted. It was never
+  read, so removing it changes no behaviour — but leaving it in described an
+  abstraction that does not exist.
+
 - **Two routes that can both match a request now fail the boot** (BOU-356).
   Conflict detection was off — `:conflicts nil` — so `/users/:id` beside
   `/users/:uid` built a router and whichever was concatenated first silently

@@ -391,9 +391,7 @@
 
 (deftest ^:unit an-application-can-switch-conflict-detection-off-from-config
   ;; BOU-356 made an ambiguous route table fail the boot. An application that
-  ;; has to ship before untangling its routes says so in config, and this is
-  ;; the one :wagoe/router setting that reaches the router — the rest are
-  ;; still inert (BOU-357).
+  ;; has to ship before untangling its routes says so in config.
   (let [captured (atom nil)
         compiled (fn [_ _] identity)]
     (with-redefs [wagoe.platform.shell.http.reitit-router/compile-routes
@@ -418,3 +416,59 @@
                       :router {:conflicts nil}})
         (is (contains? @captured :conflicts))
         (is (nil? (:conflicts @captured)))))))
+
+(defn- router-config-for
+  "The options `:wagoe/http-handler` hands the router for a given
+   `:wagoe/router` component. Captured at the seam the settings have to cross,
+   because that crossing is what BOU-357 was about."
+  [router]
+  (let [captured (atom nil)]
+    (with-redefs [wagoe.platform.shell.http.reitit-router/compile-routes
+                  (fn [_routes cfg] (reset! captured cfg) identity)
+                  wagoe.platform.shell.interfaces.http.common/health-check-handler
+                  (fn [_ _ _] (fn [_] {:status 200}))
+                  wagoe.platform.shell.http.versioning/apply-versioning
+                  (fn [routes _] (vec routes))
+                  wagoe.platform.shell.http.versioning/wrap-handler-with-version-headers
+                  (fn [h _] h)]
+      (ig/init-key :wagoe/http-handler
+                   {:module-routes [] :config {:active {:wagoe/settings {:name "t"}}}
+                    :router router})
+      @captured)))
+
+(deftest ^:unit every-wagoe-router-setting-reaches-the-router
+  ;; The whole surface, not a sample. `:wagoe/router` shipped in every
+  ;; generated config.edn with four keys and passed none of them: the handler
+  ;; built its options fresh and the component was only the receiver for a
+  ;; protocol ADR-037 deleted (BOU-357). A key that is silently ignored is the
+  ;; failure mode, so the test is per-key.
+  (let [muuntaja (reify Object)
+        mine     (fn [h] h)]
+    (doseq [[k v present?] [[:coercion :malli   #(= :malli (:coercion %))]
+                            [:muuntaja muuntaja #(identical? muuntaja (:muuntaja %))]
+                            [:conflicts nil     #(contains? % :conflicts)]
+                            [:middleware [mine] #(= mine (last (:middleware %)))]]]
+      (testing (str k " set in config reaches the router")
+        (is (present? (router-config-for {k v}))))
+      ;; :middleware is excluded: the wiring always passes a stack, because the
+      ;; framework's own pipeline lives there. Its "unset" case is the test
+      ;; below, which checks the app added nothing to it.
+      (when-not (= :middleware k)
+        (testing (str k " unset leaves the router's own default alone")
+          (let [cfg (router-config-for {})]
+            (is (not (contains? cfg k))
+                (str "nothing passed for " k " means the router decides, not the wiring"))))))))
+
+(deftest ^:unit an-applications-middleware-does-not-displace-the-frameworks
+  ;; :middleware is the one key where "reaches the router" is not the whole
+  ;; contract — the framework's own pipeline still has to be there, and the
+  ;; application's has to run after it, on a request the framework prepared.
+  ;; Counted, not compared: request-middleware closes over its arguments, so
+  ;; two calls give equal-length stacks of non-identical functions.
+  (let [mine      (fn [h] h)
+        stack     (:middleware (router-config-for {:middleware [mine]}))
+        framework (:middleware (router-config-for {}))]
+    (is (= mine (last stack)))
+    (is (= (inc (count framework)) (count stack))
+        "the app's middleware is appended to the framework's pipeline, not substituted for it")
+    (is (pos? (count framework)) "and that pipeline is not empty")))

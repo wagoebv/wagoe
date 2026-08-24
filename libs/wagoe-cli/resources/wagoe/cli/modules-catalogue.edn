@@ -37,7 +37,7 @@
    :clojars             com.wagoe/wagoe-platform
    :version             "1.0.0-beta-5"
    :category            :core
-   :config-snippet      "  :wagoe/http\n  {:port #or [#env HTTP_PORT 3000] :host \"0.0.0.0\" :join? false}\n\n  :wagoe/router\n  {:adapter :reitit :coercion :malli :middleware []}\n"
+   :config-snippet      "  :wagoe/http\n  {:port #or [#env HTTP_PORT 3000] :host \"0.0.0.0\" :join? false}\n\n  :wagoe/router\n  {:coercion :malli :middleware []}\n"
    :test-config-snippet ""
    :add-command         "wagoe add platform"
    :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/platform/AGENTS.md"}

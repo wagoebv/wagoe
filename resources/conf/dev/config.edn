@@ -99,11 +99,15 @@
                        :secret       #or [#env CSRF_SECRET "wagoe-dev-csrf-secret-change-me-min-32"]
                        :exempt-paths ["/api/v1/payments/webhook"]}}}
 
-  ;; HTTP Router configuration
+  ;; HTTP Router configuration.
+  ;; No :adapter key — Reitit is the router (ADR-037), and naming a seam that
+  ;; does not exist is what BOU-357 removed.
   :wagoe/router
-  {:adapter    :reitit                                      ; Router implementation: :reitit, :pedestal, etc.
-   :coercion   :malli                                       ; Coercion library: :malli, :spec, etc.
-   :middleware []}                                          ; Global middleware (specific middleware in routes)
+  ;; Two routes that can both match a request fail the boot (BOU-356). Add
+  ;; `:conflicts nil` here to switch that off — the only value EDN can express
+  ;; for it, and the reason it is not written out below.
+  {:coercion   :malli                                       ; Request/response coercion. Only :malli is implemented.
+   :middleware []}                                          ; Global middleware, appended after the framework's pipeline
 
   ;; API Versioning configuration
   :wagoe/api-versioning

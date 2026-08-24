@@ -37,9 +37,15 @@
    which may still be written as qualified symbols."
   [spec]
   (if (symbol? spec)
-    (or (requiring-resolve spec)
-        (throw (ex-info "Could not resolve symbol"
-                        {:type :configuration-error :symbol spec})))
+    ;; Dereferenced, not the var. `requiring-resolve` hands back a Var, and
+    ;; Reitit's IntoMiddleware protocol has no implementation for one — so
+    ;; naming middleware by symbol failed with "No implementation of method:
+    ;; :into-middleware ... for class: clojure.lang.Var". Nobody had hit it
+    ;; because the setting never reached the router at all (BOU-357).
+    (if-let [v (requiring-resolve spec)]
+      (deref v)
+      (throw (ex-info "Could not resolve symbol"
+                      {:type :configuration-error :symbol spec})))
     spec))
 
 (defn- resolve-middleware-fns
@@ -302,6 +308,36 @@
             {:type   :wagoe/ambiguous-routes
              :routes (mapv (fn [[a b]] {:a a :b b}) ambiguous)}))))
 
+(def ^:private coercions
+  "The coercion implementations an application may name in `:wagoe/router`.
+
+   One entry, and that is the honest size of it: Malli is the framework's
+   validation vocabulary everywhere else, and a `:spec` entry here would
+   promise a second implementation nobody maintains — the shape ADR-037
+   removed from routing. The map exists so `:coercion :malli` in a config file
+   means something and `:coercion :sepc` says so."
+  {:malli malli-coercion/coercion})
+
+(defn- resolve-coercion
+  "The coercion for `v`: a name from `coercions`, an instance, or nil.
+
+   `:coercion :malli` sat in every generated config.edn and reached nothing —
+   the router built its own options and this component was passed as a
+   protocol receiver that ADR-037 then deleted. Making it live means a wrong
+   value has to fail rather than be ignored (BOU-357)."
+  [v]
+  (cond
+    (nil? v)         (:malli coercions)
+    (keyword? v)     (or (get coercions v)
+                         (throw (ex-info
+                                 (str "Unknown :coercion " v ". Supported: "
+                                      (str/join ", " (sort (keys coercions))) ".")
+                                 {:type       :configuration-error
+                                  :key        :coercion
+                                  :value      v
+                                  :supported  (vec (sort (keys coercions)))})))
+    :else            v))
+
 (defn- create-router-options
   "Create Reitit router options from config.
    
@@ -318,7 +354,7 @@
   (let [default-middleware (create-default-middleware config)
         custom-middleware (resolve-middleware-fns (:middleware config))
         all-middleware (into default-middleware custom-middleware)]
-    {:data {:coercion (or (:coercion config) malli-coercion/coercion)
+    {:data {:coercion (resolve-coercion (:coercion config))
             :muuntaja (or (:muuntaja config) m/instance)
             :middleware all-middleware}
      ;; On by default since BOU-356. `/users/new` beside `/users/:id` is
