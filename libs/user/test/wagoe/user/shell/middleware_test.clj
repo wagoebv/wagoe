@@ -1,6 +1,7 @@
 (ns wagoe.user.shell.middleware-test
   (:require [wagoe.user.shell.middleware :as sut]
             [wagoe.user.shell.auth]
+            [wagoe.user.ports]
             [buddy.sign.jwt]
             [clojure.test :refer [deftest is testing]]))
 
@@ -84,3 +85,62 @@
     (is (= "real@example.com" (get-in resp [:body :user :email])))
     (is (= :admin (get-in resp [:body :user :role]))
         "and the role comes back a keyword, as the rest of the codebase uses it")))
+
+;; ===========================================================================
+;; BOU-373: authentication that enriches without rejecting
+;; ===========================================================================
+
+(defn- echo-handler
+  "Hands the request back as the body, so a test can see what the middleware
+   put on it."
+  [request]
+  {:status 200 :body request})
+
+(deftest ^:unit authenticate-if-present-never-rejects
+  ;; The point of this middleware. It runs on every request, including
+  ;; /health and public pages, so it must never be the thing that answers 401 —
+  ;; that stays with the per-route guards. Its whole job is to put :user on the
+  ;; request when it honestly can, so that tenant membership enrichment, which
+  ;; runs after it and reads [:user :id], has something to read (BOU-373).
+  (let [handler ((sut/authenticate-if-present ::no-service) echo-handler)]
+
+    (testing "no credentials — passes through untouched"
+      (let [resp (handler {:uri "/health"})]
+        (is (= 200 (:status resp)))
+        (is (nil? (:user (:body resp))) "nothing to authenticate, so no :user")
+        (is (nil? (:auth-type (:body resp))))))
+
+    (testing "an unparseable bearer token does not become a 401"
+      ;; A bad token on a public route is not this middleware's business. A
+      ;; route that needs a user still gets none, and its own guard rejects.
+      (let [resp (handler {:uri     "/public"
+                           :headers {"authorization" "Bearer not-a-real-jwt"}})]
+        (is (= 200 (:status resp)) "rejection belongs to the per-route guard")
+        (is (nil? (:user (:body resp))) "and an invalid token yields no user")))))
+
+(deftest ^:unit authenticate-if-present-sets-user-from-a-valid-jwt
+  ;; A real token rather than a stubbed validator: stubbing means writing down
+  ;; what I believe the validator returns, and an earlier draft of this test
+  ;; encoded the shape BOU-374 turned out to be a bug.
+  (let [id      (java.util.UUID/randomUUID)
+        token   (wagoe.user.shell.auth/create-jwt-token
+                 {:id id :email "a@b.c" :role :admin} 1)
+        handler ((sut/authenticate-if-present ::no-service) echo-handler)
+        request (:body (handler {:uri     "/x"
+                                 :headers {"authorization" (str "Bearer " token)}}))]
+    (is (= {:id id :email "a@b.c" :role :admin} (:user request)))
+    (is (= :jwt (:auth-type request)))
+    (is (some? (get-in request [:user :id]))
+        "wrap-tenant-membership reads exactly this path")))
+
+(deftest ^:unit authenticate-if-present-sets-user-from-a-valid-session
+  (let [;; The two methods the session path calls; the other 42 are not
+        ;; reachable from here.
+        service #_{:clj-kondo/ignore [:missing-protocol-method]}
+        (reify wagoe.user.ports/IUserService
+          (validate-session [_ _] {:user-id 7})
+          (get-user-by-id [_ _] {:id 7 :email "s@b.c" :role :user}))
+        handler ((sut/authenticate-if-present service) echo-handler)
+        request (:body (handler {:uri "/x" :cookies {"session-token" {:value "tok"}}}))]
+    (is (= {:id 7 :email "s@b.c" :role :user} (:user request)))
+    (is (= :session (:auth-type request)))))

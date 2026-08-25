@@ -29,6 +29,12 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`:tenant-membership` was nil on every request**, so `require-tenant-member`
+  refused all of them. Authentication now runs ahead of the tenant middleware
+  that depends on it.
+
 ### Security
 
 - **Any `Authorization: Bearer` value authenticated.** JWT validation returns a

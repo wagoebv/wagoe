@@ -417,11 +417,10 @@
         (is (contains? @captured :conflicts))
         (is (nil? (:conflicts @captured)))))))
 
-(defn- router-config-for
-  "The options `:wagoe/http-handler` hands the router for a given
-   `:wagoe/router` component. Captured at the seam the settings have to cross,
-   because that crossing is what BOU-357 was about."
-  [router]
+(defn- router-config-from
+  "The options `:wagoe/http-handler` hands the router, for arbitrary handler
+   opts. Captured at the seam the settings have to cross."
+  [opts]
   (let [captured (atom nil)]
     (with-redefs [wagoe.platform.shell.http.reitit-router/compile-routes
                   (fn [_routes cfg] (reset! captured cfg) identity)
@@ -432,9 +431,16 @@
                   wagoe.platform.shell.http.versioning/wrap-handler-with-version-headers
                   (fn [h _] h)]
       (ig/init-key :wagoe/http-handler
-                   {:module-routes [] :config {:active {:wagoe/settings {:name "t"}}}
-                    :router router})
+                   (merge {:module-routes []
+                           :config {:active {:wagoe/settings {:name "t"}}}}
+                          opts))
       @captured)))
+
+(defn- router-config-for
+  "The router options for a given `:wagoe/router` component — the seam BOU-357
+   was about."
+  [router]
+  (router-config-from {:router router}))
 
 (deftest ^:unit every-wagoe-router-setting-reaches-the-router
   ;; The whole surface, not a sample. `:wagoe/router` shipped in every
@@ -472,3 +478,22 @@
     (is (= (inc (count framework)) (count stack))
         "the app's middleware is appended to the framework's pipeline, not substituted for it")
     (is (pos? (count framework)) "and that pipeline is not empty")))
+
+(deftest ^:unit authentication-middleware-runs-outermost
+  ;; :auth-middleware is its own injection point rather than part of
+  ;; :extra-middleware, for the reason i18n is: position in the pipeline is
+  ;; platform's decision, not a consequence of which module sorted first.
+  ;;
+  ;; It has to be outermost. Tenant membership enrichment arrives via
+  ;; :extra-middleware and reads [:user :id], so anything that sets :user must
+  ;; already have run — before BOU-373 nothing did, and :tenant-membership was
+  ;; nil on every request (BOU-373).
+  (let [auth   (fn [h] h)
+        tenant (fn [h] h)
+        stack  (vec (:middleware (router-config-from
+                                  {:auth-middleware  [auth]
+                                   :extra-middleware [tenant]})))]
+    (is (= auth (first stack)) "authentication is the outermost middleware")
+    (is (< (.indexOf ^java.util.List stack auth)
+           (.indexOf ^java.util.List stack tenant))
+        "and runs before the tenant middleware that depends on it")))

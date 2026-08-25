@@ -224,6 +224,51 @@
         (create-unauthorized-response "Session token required" :missing-session request)))))
 
 ;; =============================================================================
+;; Pass-through Authentication Middleware
+;; =============================================================================
+
+(defn authenticate-if-present
+  "Middleware factory: sets `:user` when the request carries valid credentials,
+   and passes the request through untouched when it does not.
+
+   Unlike `flexible-authentication-middleware`, this never answers 401. That is
+   what lets it run globally: it sits outermost in platform's pipeline, ahead of
+   the tenant middleware, so `wrap-tenant-membership` — which looks the
+   membership up from `[:user :id]` — has a user to work with. Before BOU-373
+   nothing set `:user` before it ran, so `:tenant-membership` was nil on every
+   request and `require-tenant-member` rejected all of them.
+
+   Rejecting stays with the per-route guards (`require-authenticated`,
+   `protect-with-*`). An invalid token is therefore not an error here: a public
+   route should not 401 over one, and a protected route still sees no `:user`
+   and is refused by its own guard.
+
+   Args:
+     user-service - used for session validation; JWT needs no service
+
+   Returns:
+     `(fn [handler] ...)`, Reitit- and Ring-compatible."
+  [user-service]
+  (fn [handler]
+    (fn [request]
+      (let [;; Reuse the validating middleware rather than reimplementing JWT
+            ;; and session handling, but discard their 401. They call their
+            ;; handler only on success, so a capturing one tells us whether
+            ;; authentication worked and hands back the enriched request; on
+            ;; failure it is never called and `captured` stays nil.
+            captured (volatile! nil)
+            capture  (fn [enriched] (vreset! captured enriched) nil)]
+        (cond
+          (extract-bearer-token request)
+          ((jwt-authentication-middleware capture) request)
+
+          (extract-session-token request)
+          ((session-authentication-middleware user-service capture) request)
+
+          :else nil)
+        (handler (or @captured request))))))
+
+;; =============================================================================
 ;; Flexible Authentication Middleware
 ;; =============================================================================
 

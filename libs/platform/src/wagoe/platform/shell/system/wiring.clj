@@ -264,8 +264,15 @@
    `extra-middleware` is a seq of `(fn [handler] ...)` supplied by the
    application — tenant resolution arrives this way. Platform provides the
    pipeline; feature libraries inject their middleware, which is why platform
-   does not require the tenant library (BOU-200)."
-  [{:keys [extra-middleware i18n i18n-middleware]}]
+   does not require the tenant library (BOU-200).
+
+   `auth-middleware` is its own injection point rather than part of
+   `extra-middleware`, for the reason i18n is: its position is platform's
+   decision. It must be outermost, because tenant membership enrichment reads
+   `[:user :id]` and arrives via `extra-middleware`. Module contributions merge
+   by key and iterate in sorted order — `:wagoe/tenant` sorts before
+   `:wagoe/user` — so ordering could not come from there (BOU-373)."
+  [{:keys [auth-middleware extra-middleware i18n i18n-middleware]}]
   (let [;; `:i18n` is still accepted. An app that upgrades platform without
         ;; regenerating its config still passes the component under that key —
         ;; the documented input until now — and dropping it would take the
@@ -284,6 +291,7 @@
                       (let [wrap (requiring-resolve 'wagoe.i18n.shell.middleware/wrap-i18n)]
                         (fn [handler] (wrap handler i18n)))))]
     (concat
+     (or auth-middleware [])
      (or extra-middleware [])
      (when i18n-mw [i18n-mw])
      ;; HTML forms can only GET and POST, so a POST carrying _method=delete is
@@ -413,7 +421,7 @@
                                :summary "Prometheus metrics scrape endpoint"})}]]))
 
 (defmethod ig/init-key :wagoe/http-handler
-  [_ {:keys [module-routes logger metrics-emitter tracer error-reporter error-enricher config tenant-service db-context cache i18n i18n-middleware user-service request-capture? extra-middleware router]}]
+  [_ {:keys [module-routes logger metrics-emitter tracer error-reporter error-enricher config tenant-service db-context cache i18n i18n-middleware user-service request-capture? auth-middleware extra-middleware router]}]
   (log/info "Initializing top-level HTTP handler")
   (require 'wagoe.platform.shell.interfaces.http.common)
   (let [platform-routes (platform-routes {:config          config
@@ -491,7 +499,8 @@
                                ;; after the framework's pipeline, so it sees a
                                ;; request the framework has already prepared.
                                :middleware (into (vec (request-middleware
-                                                       {:extra-middleware extra-middleware
+                                                       {:auth-middleware  auth-middleware
+                                                        :extra-middleware extra-middleware
                                                         :i18n             i18n
                                                         :i18n-middleware  i18n-middleware}))
                                                  (:middleware settings))

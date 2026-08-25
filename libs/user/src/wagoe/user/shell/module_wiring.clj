@@ -9,6 +9,7 @@
             [wagoe.user.shell.service :as user-service]
             [wagoe.user.shell.auth :as user-auth]
             [wagoe.user.shell.mfa :as user-mfa]
+            [wagoe.user.shell.middleware :as user-middleware]
             [clojure.tools.logging :as log]
             [integrant.core :as ig]))
 
@@ -149,6 +150,29 @@
   (log/info "User module routes halted (no cleanup needed)"))
 
 ;; =============================================================================
+;; User HTTP middleware
+;; =============================================================================
+
+(defmethod ig/init-key :wagoe/user-http-middleware
+  [_ {:keys [user-service]}]
+  ;; Sets :user when the request carries valid credentials and does nothing
+  ;; when it does not — so it can run on every route, which is what the tenant
+  ;; middleware needs. Platform takes it as :auth-middleware and puts it
+  ;; outermost; membership enrichment reads [:user :id] and had nothing to read
+  ;; before this existed (BOU-373).
+  ;;
+  ;; Rejecting stays per-route. A seq, like tenant's, so an application that
+  ;; wires no user service contributes no middleware rather than a broken one.
+  (if user-service
+    [(user-middleware/authenticate-if-present user-service)]
+    (do (log/info "No user service: skipping authentication middleware")
+        [])))
+
+(defmethod ig/halt-key! :wagoe/user-http-middleware
+  [_ _mw]
+  (log/info "User HTTP middleware halted (no cleanup needed)"))
+
+;; =============================================================================
 ;; User HTTP Handler (DEPRECATED - Legacy Support REMOVED)
 ;; =============================================================================
 
@@ -218,9 +242,18 @@
     :wagoe/user-routes        {:user-service (ig/ref :wagoe/user-service)
                                :mfa-service  (ig/ref :wagoe/mfa-service)
                                :email-sender (ig/ref :wagoe/email)
-                               :config       config}}
+                               :config       config}
+
+    :wagoe/user-http-middleware {:user-service (ig/ref :wagoe/user-service)}}
 
    ;; :user-service stays named: the handler passes it to the test-reset
    ;; endpoint and the readiness check. Routes are a collection (BOU-330).
-   :http   {:user-service (ig/ref :wagoe/user-service)}
+   ;;
+   ;; :auth-middleware is its own key rather than part of :extra-middleware
+   ;; because platform decides its position — outermost, ahead of the tenant
+   ;; middleware that reads [:user :id]. Contributions merge by key and modules
+   ;; iterate sorted, and :wagoe/tenant sorts before :wagoe/user, so ordering
+   ;; could not have come from here (BOU-373).
+   :http   {:user-service    (ig/ref :wagoe/user-service)
+            :auth-middleware (ig/ref :wagoe/user-http-middleware)}
    :routes [(ig/ref :wagoe/user-routes)]})
