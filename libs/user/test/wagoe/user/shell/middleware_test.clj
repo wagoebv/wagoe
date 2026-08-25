@@ -1,6 +1,7 @@
 (ns wagoe.user.shell.middleware-test
   (:require [wagoe.user.shell.middleware :as sut]
             [wagoe.user.shell.auth]
+            [wagoe.user.ports]
             [buddy.sign.jwt]
             [clojure.test :refer [deftest is testing]]))
 
@@ -84,3 +85,117 @@
     (is (= "real@example.com" (get-in resp [:body :user :email])))
     (is (= :admin (get-in resp [:body :user :role]))
         "and the role comes back a keyword, as the rest of the codebase uses it")))
+
+;; ===========================================================================
+;; BOU-373: authentication that enriches without rejecting
+;; ===========================================================================
+
+(defn- echo-handler
+  "Hands the request back as the body, so a test can see what the middleware
+   put on it."
+  [request]
+  {:status 200 :body request})
+
+(deftest ^:unit authenticate-if-present-never-rejects
+  ;; The point of this middleware. It runs on every request, including
+  ;; /health and public pages, so it must never be the thing that answers 401 —
+  ;; that stays with the per-route guards. Its whole job is to put :user on the
+  ;; request when it honestly can, so that tenant membership enrichment, which
+  ;; runs after it and reads [:user :id], has something to read (BOU-373).
+  (let [handler ((sut/authenticate-if-present ::no-service) echo-handler)]
+
+    (testing "no credentials — passes through untouched"
+      (let [resp (handler {:uri "/health"})]
+        (is (= 200 (:status resp)))
+        (is (nil? (:user (:body resp))) "nothing to authenticate, so no :user")
+        (is (nil? (:auth-type (:body resp))))))
+
+    (testing "an unparseable bearer token does not become a 401"
+      ;; A bad token on a public route is not this middleware's business. A
+      ;; route that needs a user still gets none, and its own guard rejects.
+      (let [resp (handler {:uri     "/public"
+                           :headers {"authorization" "Bearer not-a-real-jwt"}})]
+        (is (= 200 (:status resp)) "rejection belongs to the per-route guard")
+        (is (nil? (:user (:body resp))) "and an invalid token yields no user")))))
+
+(deftest ^:unit authenticate-if-present-sets-user-from-a-valid-jwt
+  ;; A real token rather than a stubbed validator: stubbing means writing down
+  ;; what I believe the validator returns, and an earlier draft of this test
+  ;; encoded the shape BOU-374 turned out to be a bug.
+  (let [id      (java.util.UUID/randomUUID)
+        token   (wagoe.user.shell.auth/create-jwt-token
+                 {:id id :email "a@b.c" :role :admin} 1)
+        handler ((sut/authenticate-if-present ::no-service) echo-handler)
+        request (:body (handler {:uri     "/x"
+                                 :headers {"authorization" (str "Bearer " token)}}))]
+    (is (= {:id id :email "a@b.c" :role :admin} (:user request)))
+    (is (= :jwt (:auth-type request)))
+    (is (some? (get-in request [:user :id]))
+        "wrap-tenant-membership reads exactly this path")))
+
+(deftest ^:unit authenticate-if-present-sets-user-from-a-valid-session
+  (let [;; The two methods the session path calls; the other 42 are not
+        ;; reachable from here.
+        service #_{:clj-kondo/ignore [:missing-protocol-method]}
+        (reify wagoe.user.ports/IUserService
+          (validate-session [_ _] {:user-id 7})
+          (get-user-by-id [_ _] {:id 7 :email "s@b.c" :role :user}))
+        handler ((sut/authenticate-if-present service) echo-handler)
+        request (:body (handler {:uri "/x" :cookies {"session-token" {:value "tok"}}}))]
+    (is (= {:id 7 :email "s@b.c" :role :user} (:user request)))
+    (is (= :session (:auth-type request)))))
+
+;; ===========================================================================
+;; Credentials must not ride along on the request
+;; ===========================================================================
+
+(deftest ^:unit ^:security session-authentication-strips-credentials-from-user
+  ;; find-user-by-id selects mfa_secret and mfa_backup_codes, and
+  ;; get-user-by-id drops only :password-hash — so the MFA credentials reached
+  ;; :user. That was contained while authentication was per-route; BOU-373 put
+  ;; this middleware on every request, which would have handed an MFA secret to
+  ;; public handlers and to any application middleware downstream.
+  (let [stored  {:id 7 :email "s@b.c" :role :user
+                 :password-hash          "$2a$hash"
+                 :mfa-secret             "JBSWY3DPEHPK3PXP"
+                 :mfa-backup-codes       ["11111111" "22222222"]
+                 :mfa-backup-codes-used  ["33333333"]
+                 :mfa-enabled            true}
+        service #_{:clj-kondo/ignore [:missing-protocol-method]}
+        (reify wagoe.user.ports/IUserService
+          (validate-session [_ _] {:user-id 7})
+          (get-user-by-id [_ _] stored))
+        request (:body (((sut/authenticate-if-present service) echo-handler)
+                        {:uri "/x" :cookies {"session-token" {:value "tok"}}}))]
+    (is (= 7 (get-in request [:user :id])) "the identity still arrives")
+    (is (true? (get-in request [:user :mfa-enabled]))
+        "and whether MFA is on is not itself a secret")
+    (doseq [k [:password-hash :mfa-secret :mfa-backup-codes :mfa-backup-codes-used]]
+      (is (nil? (get-in request [:user k]))
+          (str k " must not reach a handler")))))
+
+(deftest ^:unit flexible-authentication-does-not-revalidate-an-authenticated-request
+  ;; user, admin and workflow routes carry flexible-authentication-middleware.
+  ;; With BOU-373 the global pass has already validated the same credentials by
+  ;; the time those run, and validate-session is not free: with the cache off it
+  ;; reads the session, writes the access time, then fetches the user. Doing it
+  ;; twice per request doubles that for no gain.
+  (let [calls   (atom 0)
+        service #_{:clj-kondo/ignore [:missing-protocol-method]}
+                (reify wagoe.user.ports/IUserService
+                  (validate-session [_ _] (swap! calls inc) {:user-id 7})
+                  (get-user-by-id [_ _] {:id 7 :email "s@b.c" :role :user}))
+        route   ((sut/flexible-authentication-middleware service) echo-handler)]
+
+    (testing "already authenticated — the route-level pass is a no-op"
+      (let [resp (route {:uri "/x" :user {:id 7} :auth-type :session
+                         :cookies {"session-token" {:value "tok"}}})]
+        (is (= 200 (:status resp)))
+        (is (= {:id 7} (:user (:body resp))) "the identity is left as it was")
+        (is (zero? @calls) "and the session is not validated a second time")))
+
+    (testing "not authenticated — it still does the work, and still rejects"
+      (reset! calls 0)
+      (is (= 200 (:status (route {:uri "/x" :cookies {"session-token" {:value "tok"}}}))))
+      (is (= 1 @calls) "no short-circuit when nothing has authenticated yet")
+      (is (= 401 (:status (route {:uri "/x"}))) "and no credentials is still a 401"))))

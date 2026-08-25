@@ -100,7 +100,8 @@
   {:user     {:keys [:wagoe/user-db-schema :wagoe/user-repository
                      :wagoe/session-repository :wagoe/audit-repository
                      :wagoe/mfa-service :wagoe/auth-service
-                     :wagoe/user-service :wagoe/user-routes]
+                     :wagoe/user-service :wagoe/user-routes
+                     :wagoe/user-http-middleware]
               ;; What this module offers the rest of a split deployment. Only
               ;; served when it is run as a service *and* :wagoe/rpc is
               ;; configured — a `server` boot never starts the listener.
