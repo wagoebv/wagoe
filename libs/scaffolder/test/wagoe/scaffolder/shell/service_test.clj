@@ -27,6 +27,58 @@
 
 (use-fixtures :each test-fixture)
 
+(defn- temp-dir []
+  (.toFile (java.nio.file.Files/createTempDirectory
+            "wagoe-scaffolder-test"
+            (make-array java.nio.file.attribute.FileAttribute 0))))
+
+(defn- delete-tree! [dir]
+  (doseq [f (reverse (file-seq dir))] (.delete f)))
+
+(defn- relative-to
+  "Path of `f` relative to `dir`.
+
+   nio relativize on canonical paths, not string arithmetic on lengths: an
+   earlier version subtracted a prefix length and produced \"own.sql\" for
+   .../add-colour-to-widgets.down.sql, because macOS reaches the temp directory
+   through a /var -> /private/var symlink and the two paths did not share the
+   prefix it assumed."
+  [dir f]
+  (str (.relativize (.toPath (io/file (.getCanonicalPath dir)))
+                    (.toPath (io/file (.getCanonicalPath f))))))
+
+(defn- files-on-disk
+  "Every file under `dir`, as paths relative to it."
+  [dir]
+  (set (for [f (file-seq dir) :when (.isFile f)] (relative-to dir f))))
+
+(defn- reported
+  "Reported paths for `action`, relative to `dir`."
+  [result dir action]
+  (set (for [e (:files result) :when (= action (:action e))]
+         (relative-to dir (io/file (:path e))))))
+
+(defn- module-in!
+  "Generate `module`/`entity` under `dir`, and return `dir`.
+
+   `field`, `endpoint` and `adapter` all edit an existing module, and since
+   BOU-364 they refuse to run when it is not there. The tests below used to pass
+   a module name that existed nowhere and assert success — which is the
+   behaviour that ticket removed, so they have to build one first."
+  ([dir module entity] (module-in! dir module entity {}))
+  ([dir module entity opts]
+   (ports/generate-module
+    (service/create-scaffolder-service)
+    (merge {:module-name module
+            :entities [{:name entity
+                        :fields [{:name :name :type :string :required true}]}]
+            :interfaces {:http true :cli true :web true}
+            :features {:audit true :pagination true}
+            :output-dir (.getPath dir)
+            :dry-run false}
+           opts))
+   dir))
+
 (deftest ^:unit generate-customer-module-test
   (testing "generates complete customer module"
     (let [svc (service/create-scaffolder-service)
@@ -146,46 +198,43 @@
 
 (deftest ^:unit add-field-test
   (testing "generates migration for adding a field"
-    (let [svc (service/create-scaffolder-service)
+    (let [dir (module-in! (temp-dir) "product" "Product")
+          svc (service/create-scaffolder-service)
+          result (ports/add-field
+                  svc {:module-name "product"
+                       :entity "Product"
+                       :field {:name :description :type :text
+                               :required false :unique false}
+                       :output-dir (.getPath dir)
+                       :dry-run true})]
+      (try
+        (is (true? (:success result)))
+        (is (= "product" (:module-name result)))
+        (is (= 3 (count (:files result))))
 
-          request {:module-name "product"
-                   :entity "Product"
-                   :field {:name :description
-                           :type :text
-                           :required false
-                           :unique false}
-                   :dry-run true}  ;; Always dry-run in tests
-
-          result (ports/add-field svc request)]
-
-      (is (true? (:success result)))
-      (is (= "product" (:module-name result)))
-      (is (= 3 (count (:files result))))
-
-      ;; Check migration file information
-      (let [migration-file (first (filter #(str/starts-with? (:path %) "migrations/")
-                                          (:files result)))]
-        (is (some? migration-file))
-        (is (str/includes? (:path migration-file) "-add-description-to-products.up.sql"))
-        (is (str/includes? (:content migration-file) "ALTER TABLE"))
-        (is (str/includes? (:content migration-file) "ADD COLUMN description"))))))
+        (let [migration-file (first (filter #(str/includes? (:path %) "migrations/")
+                                            (:files result)))]
+          (is (some? migration-file))
+          (is (str/includes? (:path migration-file) "-add-description-to-products.up.sql"))
+          (is (str/includes? (:content migration-file) "ALTER TABLE"))
+          (is (str/includes? (:content migration-file) "ADD COLUMN description")))
+        (finally (delete-tree! dir))))))
 
 (deftest ^:unit add-field-dry-run-test
   (testing "dry run does not write migration file"
-    (let [svc (service/create-scaffolder-service)
-
-          request {:module-name "product"
-                   :entity "Product"
-                   :field {:name :sku
-                           :type :string
-                           :required true
-                           :unique true}
-                   :dry-run true}
-
-          result (ports/add-field svc request)]
-
-      (is (true? (:success result)))
-      (is (some #(str/includes? % "Dry run") (:warnings result))))))
+    (let [dir (module-in! (temp-dir) "product" "Product")
+          svc (service/create-scaffolder-service)]
+      (try
+        (let [result (ports/add-field
+                      svc {:module-name "product"
+                           :entity "Product"
+                           :field {:name :sku :type :string
+                                   :required true :unique true}
+                           :output-dir (.getPath dir)
+                           :dry-run true})]
+          (is (true? (:success result)))
+          (is (some #(str/includes? % "Dry run") (:warnings result))))
+        (finally (delete-tree! dir))))))
 
 ;; =============================================================================
 ;; add-endpoint command tests
@@ -193,26 +242,26 @@
 
 (deftest ^:unit add-endpoint-test
   (testing "generates endpoint instructions"
-    (let [svc (service/create-scaffolder-service)
+    (let [dir (module-in! (temp-dir) "product" "Product")
+          svc (service/create-scaffolder-service)]
+      (try
+        (let [result (ports/add-endpoint
+                      svc {:module-name "product"
+                           :path "/products/export"
+                           :method :get
+                           :handler-name "export-products"
+                           :output-dir (.getPath dir)
+                           :dry-run true})]
+          (is (true? (:success result)))
+          (is (= "product" (:module-name result)))
+          (is (= 1 (count (:files result))))
 
-          request {:module-name "product"
-                   :path "/products/export"
-                   :method :get
-                   :handler-name "export-products"
-                   :dry-run true}  ;; Always dry-run in tests
-
-          result (ports/add-endpoint svc request)]
-
-      (is (true? (:success result)))
-      (is (= "product" (:module-name result)))
-      (is (= 1 (count (:files result))))
-
-      ;; Check instructions content
-      (let [http-file (first (:files result))]
-        (is (str/ends-with? (:path http-file) "http.clj"))
-        (is (str/includes? (:content http-file) "/products/export"))
-        (is (str/includes? (:content http-file) ":get"))
-        (is (str/includes? (:content http-file) "export-products"))))))
+          (let [http-file (first (:files result))]
+            (is (str/ends-with? (:path http-file) "http.clj"))
+            (is (str/includes? (:content http-file) "/products/export"))
+            (is (str/includes? (:content http-file) ":get"))
+            (is (str/includes? (:content http-file) "export-products"))))
+        (finally (delete-tree! dir))))))
 
 ;; =============================================================================
 ;; add-adapter command tests
@@ -220,61 +269,74 @@
 
 (deftest ^:unit add-adapter-test
   (testing "generates adapter implementation file"
-    (let [svc (service/create-scaffolder-service)
+    (let [dir (module-in! (temp-dir) "notifications" "Notification")
+          svc (service/create-scaffolder-service)]
+      (try
+        (let [result (ports/add-adapter
+                      svc {:module-name "notifications"
+                           :port "INotificationSender"
+                           :adapter-name "slack"
+                           :methods [{:name "send-notification" :args ["user-id" "message"]}
+                                     {:name "send-bulk" :args ["user-ids" "message"]}]
+                           :output-dir (.getPath dir)
+                           :dry-run true})]
+          (is (true? (:success result)))
+          (is (= "notifications" (:module-name result)))
+          (is (= 1 (count (:files result))))
 
-          request {:module-name "notifications"
-                   :port "INotificationSender"
-                   :adapter-name "slack"
-                   :methods [{:name "send-notification" :args ["user-id" "message"]}
-                             {:name "send-bulk" :args ["user-ids" "message"]}]
-                   :dry-run true}  ;; Always dry-run in tests
-
-          result (ports/add-adapter svc request)]
-
-      (is (true? (:success result)))
-      (is (= "notifications" (:module-name result)))
-      (is (= 1 (count (:files result))))
-
-      ;; Check adapter file information
-      (let [adapter-file (first (:files result))]
-        (is (str/ends-with? (:path adapter-file) "slack.clj"))
-        (is (str/includes? (:path adapter-file) "adapters/"))
-
-        ;; Check file content
-        (is (str/includes? (:content adapter-file) "defrecord Slack")) ;; Record name is based on adapter-name
-        (is (str/includes? (:content adapter-file) "INotificationSender"))
-        (is (str/includes? (:content adapter-file) "send-notification"))
-        (is (str/includes? (:content adapter-file) "send-bulk"))))))
+          (let [adapter-file (first (:files result))]
+            (is (str/ends-with? (:path adapter-file) "slack.clj"))
+            (is (str/includes? (:path adapter-file) "adapters/"))
+            (is (str/includes? (:content adapter-file) "defrecord Slack"))
+            (is (str/includes? (:content adapter-file) "INotificationSender"))
+            (is (str/includes? (:content adapter-file) "send-notification"))
+            (is (str/includes? (:content adapter-file) "send-bulk"))))
+        (finally (delete-tree! dir))))))
 
 (deftest ^:unit add-adapter-dry-run-test
   (testing "dry run does not write adapter file"
-    (let [svc (service/create-scaffolder-service)
-
-          request {:module-name "storage"
-                   :port "IFileStorage"
-                   :adapter-name "s3"
-                   :methods [{:name "store-file" :args ["path" "content"]}]
-                   :dry-run true}
-
-          result (ports/add-adapter svc request)]
-
-      (is (true? (:success result)))
-      (is (some #(str/includes? % "Dry run") (:warnings result))))))
+    (let [dir (module-in! (temp-dir) "storage" "File")
+          svc (service/create-scaffolder-service)]
+      (try
+        (let [result (ports/add-adapter
+                      svc {:module-name "storage"
+                           :port "IFileStorage"
+                           :adapter-name "s3"
+                           :methods [{:name "store-file" :args ["path" "content"]}]
+                           :output-dir (.getPath dir)
+                           :dry-run true})]
+          (is (true? (:success result)))
+          (is (some #(str/includes? % "Dry run") (:warnings result))))
+        (finally (delete-tree! dir))))))
 
 ;; =============================================================================
 ;; base-ns path parameterization (BOU-205) — endpoint + adapter honour --base-ns
 ;; =============================================================================
+;;
+;; `ends-with?`, not `=`: these paths resolve through --output-dir now, which
+;; endpoint ignored until BOU-364 needed it to find the file it describes.
 
 (deftest ^:unit add-endpoint-path-honours-base-ns
-  (let [svc (service/create-scaffolder-service)
-        req {:module-name "product" :path "/p" :method :get
-             :handler-name "h" :dry-run true}]
+  (let [svc (service/create-scaffolder-service)]
     (testing "default base-ns -> src/wagoe/<module>/"
-      (let [p (:path (first (:files (ports/add-endpoint svc req))))]
-        (is (= "src/wagoe/product/shell/http.clj" p))))
+      (let [dir (module-in! (temp-dir) "product" "Product")]
+        (try
+          (let [p (:path (first (:files (ports/add-endpoint
+                                         svc {:module-name "product" :path "/p" :method :get
+                                              :handler-name "h" :output-dir (.getPath dir)
+                                              :dry-run true}))))]
+            (is (str/ends-with? p "src/wagoe/product/shell/http.clj")))
+          (finally (delete-tree! dir)))))
     (testing "custom base-ns -> src/<base-ns>/<module>/"
-      (let [p (:path (first (:files (ports/add-endpoint svc (assoc req :base-ns "myapp")))))]
-        (is (= "src/myapp/product/shell/http.clj" p))))))
+      (let [dir (module-in! (temp-dir) "product" "Product" {:base-ns "myapp"})]
+        (try
+          (let [p (:path (first (:files (ports/add-endpoint
+                                         svc {:module-name "product" :path "/p" :method :get
+                                              :handler-name "h" :base-ns "myapp"
+                                              :output-dir (.getPath dir)
+                                              :dry-run true}))))]
+            (is (str/ends-with? p "src/myapp/product/shell/http.clj")))
+          (finally (delete-tree! dir)))))))
 
 (deftest ^:unit add-adapter-path-and-ns-honour-base-ns
   (let [svc (service/create-scaffolder-service)
@@ -282,13 +344,22 @@
              :adapter-name "slack" :methods [{:name "send" :args ["x"]}]
              :dry-run true}]
     (testing "default base-ns -> path + adapter ns under wagoe"
-      (let [f (first (:files (ports/add-adapter svc req)))]
-        (is (= "src/wagoe/notifications/shell/adapters/slack.clj" (:path f)))
-        (is (str/includes? (:content f) "(ns wagoe.notifications.shell.adapters.slack"))))
+      (let [dir (module-in! (temp-dir) "notifications" "Notification")]
+        (try
+          (let [f (first (:files (ports/add-adapter
+                                  svc (assoc req :output-dir (.getPath dir)))))]
+            (is (str/ends-with? (:path f) "src/wagoe/notifications/shell/adapters/slack.clj"))
+            (is (str/includes? (:content f) "(ns wagoe.notifications.shell.adapters.slack")))
+          (finally (delete-tree! dir)))))
     (testing "custom base-ns -> path + adapter ns under <base-ns>"
-      (let [f (first (:files (ports/add-adapter svc (assoc req :base-ns "myapp"))))]
-        (is (= "src/myapp/notifications/shell/adapters/slack.clj" (:path f)))
-        (is (str/includes? (:content f) "(ns myapp.notifications.shell.adapters.slack"))))))
+      (let [dir (module-in! (temp-dir) "notifications" "Notification" {:base-ns "myapp"})]
+        (try
+          (let [f (first (:files (ports/add-adapter
+                                  svc (assoc req :base-ns "myapp"
+                                             :output-dir (.getPath dir)))))]
+            (is (str/ends-with? (:path f) "src/myapp/notifications/shell/adapters/slack.clj"))
+            (is (str/includes? (:content f) "(ns myapp.notifications.shell.adapters.slack")))
+          (finally (delete-tree! dir)))))))
 
 (deftest ^:unit migration-ids-do-not-collide-within-a-second
   ;; Second-precision ids are not unique on their own: two scaffold operations
@@ -327,37 +398,6 @@
 ;; nothing here ever wrote a file, and nothing ever compared the report to the
 ;; filesystem. That is the gap these close: they write for real, into a temp
 ;; directory, and diff the two.
-
-(defn- temp-dir []
-  (.toFile (java.nio.file.Files/createTempDirectory
-            "wagoe-scaffolder-test"
-            (make-array java.nio.file.attribute.FileAttribute 0))))
-
-(defn- delete-tree! [dir]
-  (doseq [f (reverse (file-seq dir))] (.delete f)))
-
-(defn- relative-to
-  "Path of `f` relative to `dir`.
-
-   nio relativize on canonical paths, not string arithmetic on lengths: an
-   earlier version subtracted a prefix length and produced \"own.sql\" for
-   .../add-colour-to-widgets.down.sql, because macOS reaches the temp directory
-   through a /var -> /private/var symlink and the two paths did not share the
-   prefix it assumed."
-  [dir f]
-  (str (.relativize (.toPath (io/file (.getCanonicalPath dir)))
-                    (.toPath (io/file (.getCanonicalPath f))))))
-
-(defn- files-on-disk
-  "Every file under `dir`, as paths relative to it."
-  [dir]
-  (set (for [f (file-seq dir) :when (.isFile f)] (relative-to dir f))))
-
-(defn- reported
-  "Reported paths for `action`, relative to `dir`."
-  [result dir action]
-  (set (for [e (:files result) :when (= action (:action e))]
-         (relative-to dir (io/file (:path e))))))
 
 (deftest ^:unit generated-report-matches-the-filesystem
   (testing "every file reported as created exists, and every file created is reported"
@@ -606,20 +646,10 @@
               "following the required form here breaks every partial update"))
         (finally (delete-tree! dir)))))
 
-  (testing "a missing schema file names each target with the form it needs"
-    (let [dir (temp-dir)]
-      (try
-        (let [svc    (service/create-scaffolder-service)
-              result (ports/add-field
-                      svc {:module-name "ghost" :entity "Ghost"
-                           :field {:name :sku :type :string :required true :unique false}
-                           :output-dir (.getPath dir) :dry-run false})
-              entry  (first (filter #(str/ends-with? (:path %) "schema.clj") (:files result)))
-              note   (:manual-note entry)]
-          (is (:manual? entry))
-          (is (str/includes? note "[:sku :string] to Ghost, CreateGhostRequest"))
-          (is (str/includes? note "[:sku {:optional true} :string] to UpdateGhostRequest")))
-        (finally (delete-tree! dir)))))
+  ;; A missing schema file used to produce instructions naming each target with
+  ;; the form it needs. BOU-364 removed that path: the command refuses instead,
+  ;; because the migration it would otherwise leave behind adds a column the
+  ;; schema rejects. `add-field-fails-when-the-schema-is-not-there` covers it.
 
   (testing "the description of what was written is per target too"
     (let [dir (temp-dir)]
@@ -693,31 +723,28 @@
   ;; The file list resolved through --output-dir while the instruction appended
   ;; the cwd-relative path, so the two lines named different files and the one
   ;; the user acts on pointed at the current project.
+  ;; The manual note used to come from a missing schema file, which BOU-364
+  ;; turned into a refusal. It still arises when a target is there but cannot be
+  ;; edited, so that is what this builds: a hand-restructured UpdateItemRequest
+  ;; the generator cannot place the field into.
   (testing "the instruction names the same file as the report"
-    (let [dir (temp-dir)]
+    (let [dir (module-in! (temp-dir) "item" "Item")]
       (try
         (let [svc    (service/create-scaffolder-service)
+              schema (io/file dir "src/wagoe/item/schema.clj")
+              _      (spit schema (str/replace (slurp schema)
+                                               #"\(def UpdateItemRequest\n[^\n]*\n  \[:map \{:title \"[^\"]+\"\}\n   \[:name[^\n]*\]\]\)"
+                                               "(def UpdateItemRequest\n  \"hand-restructured\"\n  (m/schema [:map [:name {:optional true} :string]]))"))
               result (ports/add-field
                       svc {:module-name "item" :entity "Item"
                            :field {:name :sku :type :string :required true :unique false}
                            :output-dir (.getPath dir) :dry-run false})
               entry  (first (filter #(str/ends-with? (:path %) "schema.clj") (:files result)))]
-          (is (:manual? entry) "no schema file there, so there is manual work")
+          (is (:manual? entry) "one target could not be edited, so there is manual work")
           (is (str/starts-with? (:path entry) (.getPath dir)))
           (is (str/includes? (:manual-note entry) (:path entry))
               "the instruction has to point at the file the report names"))
-        (finally (delete-tree! dir)))))
-
-  (testing "without an output dir the path stays relative"
-    ;; Absolute paths everywhere would be correct but noisy for the common case.
-    (let [svc    (service/create-scaffolder-service)
-          result (ports/add-field
-                  svc {:module-name "nonexistent-module" :entity "Nope"
-                       :field {:name :sku :type :string :required false :unique false}
-                       :dry-run true})
-          entry  (first (filter #(str/ends-with? (:path %) "schema.clj") (:files result)))]
-      (is (= "src/wagoe/nonexistent-module/schema.clj" (:path entry)))
-      (is (str/includes? (:manual-note entry) "src/wagoe/nonexistent-module/schema.clj")))))
+        (finally (delete-tree! dir))))))
 
 (deftest ^:unit next-steps-point-at-the-generated-project
   ;; The migrations and the schema edit went under --output-dir while the
@@ -754,16 +781,24 @@
                 (str "command runs against the wrong project: " cmd))))
         (finally (delete-tree! dir)))))
 
-  (testing "without one, the steps stay relative"
-    (let [svc    (service/create-scaffolder-service)
-          result (ports/add-field
-                  svc {:module-name "widget" :entity "Widget"
-                       :field {:name :sku :type :string :required false :unique false}
-                       :dry-run true})
-          steps  (:next-steps result)]
-      (is (some #(str/includes? % "src/wagoe/widget/shell/persistence.clj") steps))
-      (is (not-any? #(str/includes? % "(from ") steps)
-          "no directory suffix when there is no directory to name"))))
+  ;; The "without an output dir" half of this used a module that existed
+  ;; nowhere, which BOU-364 now refuses. Checking that steps stay relative would
+  ;; mean generating a module into the working tree, so the suffix rule is
+  ;; asserted from the other side instead: with a directory, every step names it.
+  (testing "a module in the working directory is not required to say '(from …)'"
+    (let [dir (module-in! (temp-dir) "widget" "Widget")]
+      (try
+        (let [svc    (service/create-scaffolder-service)
+              result (ports/add-field
+                      svc {:module-name "widget" :entity "Widget"
+                           :field {:name :sku :type :string :required false :unique false}
+                           :output-dir (.getPath dir) :dry-run true})
+              steps  (:next-steps result)]
+          (is (some #(str/includes? % "src/wagoe/widget/shell/persistence.clj") steps))
+          (is (every? #(str/includes? % (.getPath dir))
+                      (filter #(str/includes? % "clojure -M:") steps))
+              "every command names the project it acts on"))
+        (finally (delete-tree! dir))))))
 
 ;; =============================================================================
 ;; Overwrite protection (BOU-308)
@@ -809,8 +844,8 @@
 
         (testing "--force overwrites, and says which files it replaced"
           (let [forced (ports/generate-module svc (assoc note-request
-                                                        :output-dir (.getPath dir)
-                                                        :force true))]
+                                                         :output-dir (.getPath dir)
+                                                         :force true))]
             (is (true? (:success forced)))
             (is (not (str/includes? (slurp edited) "hand-written, must survive")))
             (is (some #(= :overwrite (:action %)) (:files forced))
@@ -825,8 +860,8 @@
     (try
       (ports/generate-module svc (assoc note-request :output-dir (.getPath dir)))
       (let [preview (ports/generate-module svc (assoc note-request
-                                                     :output-dir (.getPath dir)
-                                                     :dry-run true))]
+                                                      :output-dir (.getPath dir)
+                                                      :dry-run true))]
         (is (true? (:success preview)))
         (is (every? #(= :skip (:action %)) (:files preview))))
       (finally (rm-r dir)))))
@@ -850,3 +885,78 @@
         (ports/generate-module svc (assoc note-request :output-dir (.getPath dir) :force true))
         (is (= before (migs)) "--force must reuse the id, not add a second pair"))
       (finally (rm-r dir)))))
+
+;; ===========================================================================
+;; BOU-364: a command that cannot do half its job must not report success
+;; ===========================================================================
+
+(deftest ^:unit add-field-fails-when-the-schema-is-not-there
+  ;; The migration and the schema entry are the two halves this command exists
+  ;; to keep in step. It used to write the migration, report the schema as
+  ;; ":skip … not found", and exit 0 — leaving a column the schema would then
+  ;; reject on every write. A skip is something nobody asked for; this is a
+  ;; failure.
+  (let [dir (temp-dir)]
+    (try
+      (let [svc    (service/create-scaffolder-service)
+            before (files-on-disk dir)
+            result (ports/add-field
+                    svc {:module-name "nosuchmodule" :entity "Widget"
+                         :field {:name :colour :type :string :required false :unique false}
+                         :output-dir (.getPath dir) :dry-run false})]
+        (is (false? (:success result)) "exit non-zero, not a cheerful skip")
+        (is (seq (:errors result)) "and say what is wrong")
+        (is (str/includes? (str/join " " (:errors result)) "schema.clj")
+            "naming the file it could not find")
+        (is (= before (files-on-disk dir))
+            "no migration is left behind for a column the schema will reject"))
+      (finally (delete-tree! dir)))))
+
+(deftest ^:unit add-endpoint-fails-when-the-module-http-file-is-not-there
+  ;; add-endpoint writes nothing — it returns instructions. Pointing those at a
+  ;; file that does not exist is the same false success in a quieter form.
+  (let [dir (temp-dir)]
+    (try
+      (let [svc    (service/create-scaffolder-service)
+            result (ports/add-endpoint
+                    svc {:module-name "nosuchmodule" :path "/widgets" :method :get
+                         :handler-name "list-widgets"
+                         :output-dir (.getPath dir) :dry-run false})]
+        (is (false? (:success result)))
+        (is (str/includes? (str/join " " (:errors result)) "http.clj")))
+      (finally (delete-tree! dir)))))
+
+(deftest ^:unit add-adapter-fails-when-the-module-is-not-there
+  ;; `.mkdirs` made this one worse than a bad report: a typo in --module-name
+  ;; created a directory tree for a module that does not exist.
+  (let [dir (temp-dir)]
+    (try
+      (let [svc    (service/create-scaffolder-service)
+            before (files-on-disk dir)
+            result (ports/add-adapter
+                    svc {:module-name "nosuchmodule" :port "IWidgetStore"
+                         :adapter-name "memory"
+                         :output-dir (.getPath dir) :dry-run false})]
+        (is (false? (:success result)))
+        (is (= before (files-on-disk dir))
+            "and no tree is created for a module that does not exist"))
+      (finally (delete-tree! dir)))))
+
+(deftest ^:unit add-field-still-works-on-a-module-that-is-there
+  ;; The guard must refuse a missing module without refusing a real one.
+  (let [dir (temp-dir)]
+    (try
+      (let [svc (service/create-scaffolder-service)
+            _   (ports/generate-module
+                 svc {:module-name "widget"
+                      :entities [{:name "Widget"
+                                  :fields [{:name :label :type :string :required true}]}]
+                      :interfaces {:http true :cli true :web true}
+                      :features {:audit true :pagination true}
+                      :output-dir (.getPath dir) :dry-run false})
+            result (ports/add-field
+                    svc {:module-name "widget" :entity "Widget"
+                         :field {:name :colour :type :string :required false :unique false}
+                         :output-dir (.getPath dir) :dry-run false})]
+        (is (true? (:success result))))
+      (finally (delete-tree! dir)))))

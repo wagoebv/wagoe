@@ -105,6 +105,11 @@
    [nil "--handler-name NAME" "Handler function name (kebab-case) (required)"
     :validate [#(re-matches #"^[a-z][a-z0-9-]*$" %)
                "Must be lowercase with hyphens only"]]
+   ;; Same reason `field` has it: the service resolves the module's http.clj
+   ;; through output-dir since BOU-364, so a user pointing at another project
+   ;; needs a way to say which one.
+   [nil "--output-dir DIR" "Output directory (default: current directory)"
+    :default "."]
    [nil "--dry-run" "Show what would be generated without creating files"
     :default false]
    [nil "--base-ns NS" "Base namespace + path for the module (default: the project's own)"]])
@@ -435,6 +440,7 @@
                      :path (:path opts)
                      :method (keyword (str/lower-case (:method opts)))
                      :handler-name (:handler-name opts)
+                     :output-dir (:output-dir opts)
                      :dry-run (:dry-run opts)
                      :base-ns (:base-ns opts)}
             result (ports/add-endpoint service request)]
