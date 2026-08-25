@@ -80,29 +80,53 @@ Add the tenant components to your `config.edn`:
 {:service #ig/ref :wagoe/membership-service}
 ----
 
-== Step 2 — Add middleware to your Ring stack
+== Step 2 — Inject the tenant middleware
 
-Three middlewares must be composed in the correct order.
-Each one depends on data set by the previous.
+You do not compose this stack by hand. The tenant module builds it in
+`:wagoe/tenant-http-middleware` — tenant resolution first, then membership, each
+contributed only if the service it needs is present — and the application hands
+it to platform's HTTP handler as `:extra-middleware`:
 
 [source,clojure]
 ----
-(require '[wagoe.tenant.shell.tenant-middleware :as tm]
-         '[wagoe.tenant.shell.membership-middleware :refer [wrap-tenant-membership]])
-
-(defn build-handler [routes system]
-  (-> (create-router routes)
-      ;; 3. Enrich request with :tenant-membership (needs :user + :tenant)
-      (wrap-tenant-membership (:wagoe/membership-service system))
-      ;; 2. Resolve :tenant from subdomain / JWT / header; set search_path
-      (tm/wrap-multi-tenant (:wagoe/tenant-service system)
-                            {:require-tenant? true
-                             :cache (tm/create-tenant-cache)})
-      ;; 1. Authenticate user; sets :user on request
-      (wrap-user-authentication (:wagoe/user-service system))))
+:wagoe/http-handler
+{:extra-middleware #ig/ref :wagoe/tenant-http-middleware
+ ;; … the rest of the handler's refs
+ }
 ----
 
-After this middleware stack the request map contains:
+[WARNING]
+====
+**`:tenant-membership` is nil under this wiring alone, and Step 3's
+`require-tenant-member` will reject the request.**
+
+`wrap-tenant-membership` looks the membership up from `[:user :id]`, but
+`:extra-middleware` is the *outermost* thing in platform's pipeline — nothing
+has authenticated the request by the time it runs. The framework ships no
+component that sets `:user` globally: `wagoe.user.shell.middleware`'s
+authentication middleware answers 401 when credentials are absent, so it cannot
+be applied to every route, and the `:interceptors` in Step 3 run innermost,
+*after* membership enrichment.
+
+So an application that wants `:tenant-membership` populated has to put its own
+authentication middleware ahead of the tenant middleware in the
+`:extra-middleware` seq — the order is outermost first:
+
+[source,clojure]
+----
+;; Your own component, replacing the plain ref above.
+(defmethod ig/init-key :wagoe/app-http-middleware
+  [_ {:keys [user-service tenant-middleware]}]
+  (into [(auth-middleware user-service)]   ; must come first — sets :user
+        tenant-middleware))                ; :wagoe/tenant-http-middleware
+----
+
+Tracked as BOU-373. Until it is resolved, prefer `auth/require-authenticated`
+plus an explicit membership lookup in the handler over
+`auth/require-tenant-member`.
+====
+
+With authentication wired ahead of it, the request map contains:
 
 [source,clojure]
 ----

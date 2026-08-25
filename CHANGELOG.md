@@ -29,6 +29,30 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ## [Unreleased]
 
+### Removed
+
+- **`wagoe.platform.shell.interfaces.http.routes` is gone** (BOU-358). It
+  offered `create-router`, `create-handler` and `create-app`, and its README
+  documented them as the way to build an application. Nothing wired it — the
+  system boots through `:wagoe/http-handler` → `reitit-router/compile-routes`,
+  a second implementation of the same job.
+
+  The duplication was the smaller problem. Its middleware stack was
+  correlation-id, logging, cookies, params, muuntaja and coercion — it never
+  applied `default-http-interceptors`, so anyone following the documented path
+  got **no security headers, no CSRF and no rate limiting**, with nothing to
+  signal the difference. Routes reach the router by module contribution
+  (`{:api :web :static}`); the README, `libs/platform/AGENTS.md`, the platform
+  library page and the multi-tenancy guide now say so. ADR-007 is marked
+  superseded by ADR-037: its prefixing decision holds, its named implementation
+  did not exist.
+
+  `interfaces/http/server.clj` is removed with it — a file containing nothing
+  but its `ns` form.
+
+  `interfaces/http/common.clj` (RFC 7807 problem details, health handlers) is
+  unaffected.
+
 ### Changed
 
 - **`:wagoe/router` settings now reach the router** (BOU-357). Every generated

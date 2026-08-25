@@ -13,8 +13,8 @@ CLI/runtime wiring, and shared platform adapters used by feature libraries.
 | `wagoe.platform.shell.http.interceptors`
 | HTTP interceptor composition and execution
 
-| `wagoe.platform.shell.interfaces.http.routes`
-| Normalized route handling and dispatch
+| `wagoe.platform.shell.http.reitit-router`
+| Compiles every module's route contribution into the Ring handler
 
 | `wagoe.platform.shell.adapters.database.*`
 | Database setup, context, and shared persistence infrastructure

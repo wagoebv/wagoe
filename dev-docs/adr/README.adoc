@@ -74,11 +74,13 @@ for progressive enhancement and Hiccup for HTML generation.
 * Hiccup for HTML generation in core layer
 * Module-integrated UI code
 
-==== ADR-007: Routing Architecture [Accepted]
+==== ADR-007: Routing Architecture [Superseded]
 ADR-007-routing-architecture.adoc
 
 Documents the routing architecture using Reitit with module-based route
-composition.
+composition. Superseded by ADR-037: the prefixing decision still holds, but the
+namespace this ADR named as its implementation was never wired and was deleted
+in BOU-358. `wagoe.platform.shell.http.reitit-router` applies the prefixes now.
 
 *Key Decisions:*
 
