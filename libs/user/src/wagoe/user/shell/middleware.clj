@@ -16,6 +16,24 @@
 ;; Helper Functions
 ;; =============================================================================
 
+(def ^:private credential-keys
+  "User fields that must never reach a handler on the request.
+
+   `find-user-by-id` selects `mfa_secret` and the backup codes, and
+   `get-user-by-id` drops only `:password-hash` — so these rode along on
+   `:user`. That was contained while authentication was per-route; BOU-373 put
+   it on every request, which would have handed an MFA secret to public
+   handlers and to any application middleware downstream.
+
+   `:mfa-enabled` is deliberately not here: whether MFA is on is not a secret,
+   and handlers render it."
+  [:password-hash :mfa-secret :mfa-backup-codes :mfa-backup-codes-used])
+
+(defn without-credentials
+  "`user` with its secrets removed, ready to put on a request."
+  [user]
+  (apply dissoc user credential-keys))
+
 (defn extract-bearer-token
   "Extracts Bearer token from Authorization header.
    
@@ -202,7 +220,7 @@
             (log/info "Session validation successful" {:user-id (:user-id session)})
             (if-let [user (ports/get-user-by-id user-service (:user-id session))]
               (let [enriched-request (assoc request
-                                            :user user  ; Full user object with role, email, etc.
+                                            :user (without-credentials user)
                                             :session session
                                             :auth-type :session)]
                 (handler enriched-request))
@@ -300,33 +318,45 @@
    (log/trace "Initializing flexible authentication middleware"
               {:user-service (type user-service) :handler (type handler)})
    (fn [request]
-     (let [session-token (extract-session-token request)
-           bearer-token  (extract-bearer-token request)]
-       (log/info "Processing authentication request"
-                 {:uri (:uri request)
-                  :method (:request-method request)
-                  :has-session (boolean session-token)
-                  :has-bearer (boolean bearer-token)
-                  :cookies (keys (:cookies request))
-                  :session-token-value (when session-token (subs session-token 0 (min 8 (count session-token))))})
-       (cond
-         ;; Try JWT authentication first
-         bearer-token
-         ((jwt-authentication-middleware handler) request)
+     (if (:user request)
+       ;; Already authenticated upstream. `authenticate-if-present` runs
+       ;; globally since BOU-373 and has validated these same credentials, and a
+       ;; second pass is not free: with the cache off, `validate-session` reads
+       ;; the session, writes its access time, then fetches the user. Repeating
+       ;; that doubles the database work on every authenticated request to a
+       ;; route carrying this middleware — most of user, admin and workflow.
+       ;;
+       ;; Only the middleware chain can set `:user`; it is not readable from
+       ;; anything the client sends.
+       (handler request)
 
-         ;; Fall back to session authentication
-         session-token
-         (do
-           (log/info "Attempting session authentication" {:token-preview (subs session-token 0 8)})
-           ((session-authentication-middleware user-service handler) request))
+       (let [session-token (extract-session-token request)
+             bearer-token  (extract-bearer-token request)]
+         (log/info "Processing authentication request"
+                   {:uri (:uri request)
+                    :method (:request-method request)
+                    :has-session (boolean session-token)
+                    :has-bearer (boolean bearer-token)
+                    :cookies (keys (:cookies request))
+                    :session-token-value (when session-token (subs session-token 0 (min 8 (count session-token))))})
+         (cond
+           ;; Try JWT authentication first
+           bearer-token
+           ((jwt-authentication-middleware handler) request)
 
-         ;; No authentication provided
-         :else
-         (do
-           (log/info "No authentication credentials provided"
-                     {:headers-keys (keys (:headers request))
-                      :cookie-header (get-in request [:headers "cookie"])})
-           (create-unauthorized-response "Authentication required" :no-credentials request)))))))
+           ;; Fall back to session authentication
+           session-token
+           (do
+             (log/info "Attempting session authentication" {:token-preview (subs session-token 0 8)})
+             ((session-authentication-middleware user-service handler) request))
+
+           ;; No authentication provided
+           :else
+           (do
+             (log/info "No authentication credentials provided"
+                       {:headers-keys (keys (:headers request))
+                        :cookie-header (get-in request [:headers "cookie"])})
+             (create-unauthorized-response "Authentication required" :no-credentials request))))))))
 
 ;; =============================================================================
 ;; Authorization Middleware

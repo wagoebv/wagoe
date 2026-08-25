@@ -144,3 +144,58 @@
         request (:body (handler {:uri "/x" :cookies {"session-token" {:value "tok"}}}))]
     (is (= {:id 7 :email "s@b.c" :role :user} (:user request)))
     (is (= :session (:auth-type request)))))
+
+;; ===========================================================================
+;; Credentials must not ride along on the request
+;; ===========================================================================
+
+(deftest ^:unit ^:security session-authentication-strips-credentials-from-user
+  ;; find-user-by-id selects mfa_secret and mfa_backup_codes, and
+  ;; get-user-by-id drops only :password-hash — so the MFA credentials reached
+  ;; :user. That was contained while authentication was per-route; BOU-373 put
+  ;; this middleware on every request, which would have handed an MFA secret to
+  ;; public handlers and to any application middleware downstream.
+  (let [stored  {:id 7 :email "s@b.c" :role :user
+                 :password-hash          "$2a$hash"
+                 :mfa-secret             "JBSWY3DPEHPK3PXP"
+                 :mfa-backup-codes       ["11111111" "22222222"]
+                 :mfa-backup-codes-used  ["33333333"]
+                 :mfa-enabled            true}
+        service #_{:clj-kondo/ignore [:missing-protocol-method]}
+        (reify wagoe.user.ports/IUserService
+          (validate-session [_ _] {:user-id 7})
+          (get-user-by-id [_ _] stored))
+        request (:body (((sut/authenticate-if-present service) echo-handler)
+                        {:uri "/x" :cookies {"session-token" {:value "tok"}}}))]
+    (is (= 7 (get-in request [:user :id])) "the identity still arrives")
+    (is (true? (get-in request [:user :mfa-enabled]))
+        "and whether MFA is on is not itself a secret")
+    (doseq [k [:password-hash :mfa-secret :mfa-backup-codes :mfa-backup-codes-used]]
+      (is (nil? (get-in request [:user k]))
+          (str k " must not reach a handler")))))
+
+(deftest ^:unit flexible-authentication-does-not-revalidate-an-authenticated-request
+  ;; user, admin and workflow routes carry flexible-authentication-middleware.
+  ;; With BOU-373 the global pass has already validated the same credentials by
+  ;; the time those run, and validate-session is not free: with the cache off it
+  ;; reads the session, writes the access time, then fetches the user. Doing it
+  ;; twice per request doubles that for no gain.
+  (let [calls   (atom 0)
+        service #_{:clj-kondo/ignore [:missing-protocol-method]}
+                (reify wagoe.user.ports/IUserService
+                  (validate-session [_ _] (swap! calls inc) {:user-id 7})
+                  (get-user-by-id [_ _] {:id 7 :email "s@b.c" :role :user}))
+        route   ((sut/flexible-authentication-middleware service) echo-handler)]
+
+    (testing "already authenticated — the route-level pass is a no-op"
+      (let [resp (route {:uri "/x" :user {:id 7} :auth-type :session
+                         :cookies {"session-token" {:value "tok"}}})]
+        (is (= 200 (:status resp)))
+        (is (= {:id 7} (:user (:body resp))) "the identity is left as it was")
+        (is (zero? @calls) "and the session is not validated a second time")))
+
+    (testing "not authenticated — it still does the work, and still rejects"
+      (reset! calls 0)
+      (is (= 200 (:status (route {:uri "/x" :cookies {"session-token" {:value "tok"}}}))))
+      (is (= 1 @calls) "no short-circuit when nothing has authenticated yet")
+      (is (= 401 (:status (route {:uri "/x"}))) "and no credentials is still a 401"))))

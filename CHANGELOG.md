@@ -37,6 +37,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Security
 
+- **MFA secrets and backup codes no longer reach handlers.** Session
+  authentication put the whole user record on `:user`; only `:password-hash`
+  was stripped.
+
 - **Any `Authorization: Bearer` value authenticated.** JWT validation returns a
   map on failure too, and the middleware branched on the map, so the rejection
   branch never ran. **Upgrade if you use JWT auth.**
