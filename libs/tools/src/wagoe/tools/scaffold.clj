@@ -168,13 +168,21 @@
    answer is where that module *is*, which in a project generated before the
    move is still `wagoe.<module>`. Passing the project namespace regardless
    made `bb scaffold field` write the migration, skip the schema file it could
-   not find, and report success."
+   not find, and report success.
+
+   Read from `--output-dir` when there is one, not from the working directory:
+   the project being edited is the one whose layout answers the question.
+   Deriving it from the caller sent `--base-ns wagoe` at a project whose code is
+   under `shop`, and the guards added in BOU-364 then refused a module that is
+   really there."
   [args]
-  (let [module (second (drop-while #(not= "--module-name" %) args))]
+  (let [module (second (drop-while #(not= "--module-name" %) args))
+        root   (or (second (drop-while #(not= "--output-dir" %) args))
+                   (System/getProperty "user.dir"))]
     (cond
       (some #{"--base-ns"} args) args
-      module (into (vec args) ["--base-ns" (project/module-base-ns module)])
-      :else  (into (vec args) ["--base-ns" (project/base-ns)]))))
+      module (into (vec args) ["--base-ns" (project/module-base-ns module root)])
+      :else  (into (vec args) ["--base-ns" (project/base-ns root)]))))
 
 (defn run-clojure!
   "Shell out to the Clojure scaffolder CLI with given args. Streams output to terminal.

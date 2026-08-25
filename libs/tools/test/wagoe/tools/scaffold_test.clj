@@ -10,6 +10,7 @@
    a generated project."
   (:require [clojure.test :refer [deftest is testing]]
             [clojure.string :as str]
+            [clojure.java.io :as io]
             [babashka.fs :as fs]
             [wagoe.tools.scaffold :as scaffold]))
 
@@ -117,3 +118,37 @@
     (let [args (scaffold/with-base-ns ["generate" "--module-name" "p" "--base-ns" "acme"])]
       (is (= 1 (count (filter #{"--base-ns"} args))))
       (is (= "acme" (second (drop-while #(not= "--base-ns" %) args)))))))
+
+;; =============================================================================
+;; BOU-364: --output-dir names the project the namespace is read from
+;; =============================================================================
+
+(deftest ^:unit base-ns-is-read-from-the-project-being-edited
+  ;; `module-base-ns` looks for the module's directory to decide which
+  ;; namespace it lives under, and looked in the working directory regardless of
+  ;; --output-dir. Editing another project therefore derived the *caller's*
+  ;; namespace: `bb scaffold endpoint --output-dir /path/to/shop` from this repo
+  ;; sent `--base-ns wagoe`, and the guard added in BOU-364 then refused a module
+  ;; that is really there, under `shop`.
+  (let [root (.toFile (java.nio.file.Files/createTempDirectory
+                       "wagoe-scaffold-basens"
+                       (make-array java.nio.file.attribute.FileAttribute 0)))]
+    (try
+      ;; A project whose own namespace is `shop`, with a `product` module in it.
+      (.mkdirs (io/file root "src/shop/product/shell"))
+      (spit (io/file root "src/shop/main.clj") "(ns shop.main)")
+
+      (testing "the module's own project decides, not the caller's"
+        (let [args (scaffold/with-base-ns
+                     ["endpoint" "--module-name" "product"
+                      "--output-dir" (.getPath root)])]
+          (is (= "shop" (second (drop-while #(not= "--base-ns" %) args)))
+              "the module is under shop/ in the directory being edited")))
+
+      (testing "an explicit --base-ns still wins"
+        (let [args (scaffold/with-base-ns
+                     ["endpoint" "--module-name" "product"
+                      "--output-dir" (.getPath root) "--base-ns" "acme"])]
+          (is (= "acme" (second (drop-while #(not= "--base-ns" %) args))))))
+
+      (finally (doseq [f (reverse (file-seq root))] (.delete f))))))
