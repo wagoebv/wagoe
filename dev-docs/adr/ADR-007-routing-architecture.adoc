@@ -1,5 +1,5 @@
 = ADR-007: Routing Architecture - Module Composition and Path Prefixing
-:status: Accepted
+:status: Superseded
 :revdate: 2025-11-18
 :revremark: Routing re-architecture for proper /api and /web prefixing
 :toc:
@@ -7,7 +7,13 @@
 
 == Status
 
-Accepted — `libs/platform/src/wagoe/platform/shell/interfaces/http/routes.clj`.
+Superseded by xref:ADR-037-reitit-routes-directly.adoc[ADR-037]. The prefixing
+decision below still holds — `:api` is versioned under `/api/v1` and `:web`
+mounts under `/web` — but it is `wagoe.platform.shell.http.reitit-router` that
+applies it. The namespace this ADR named as its implementation,
+`interfaces/http/routes.clj`, turned out never to be wired and was deleted in
+BOU-358; code samples referring to `create-router` / `create-handler` /
+`create-app` below are historical.
 
 == Context
 

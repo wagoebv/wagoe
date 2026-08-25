@@ -80,27 +80,23 @@ Add the tenant components to your `config.edn`:
 {:service #ig/ref :wagoe/membership-service}
 ----
 
-== Step 2 — Add middleware to your Ring stack
+== Step 2 — Inject the tenant middleware
 
-Three middlewares must be composed in the correct order.
-Each one depends on data set by the previous.
+You do not compose this stack by hand. The tenant module builds it in
+`:wagoe/tenant-http-middleware` — tenant resolution first, then membership, each
+contributed only if the service it needs is present — and the application hands
+it to platform's HTTP handler as `:extra-middleware`:
 
 [source,clojure]
 ----
-(require '[wagoe.tenant.shell.tenant-middleware :as tm]
-         '[wagoe.tenant.shell.membership-middleware :refer [wrap-tenant-membership]])
-
-(defn build-handler [routes system]
-  (-> (create-router routes)
-      ;; 3. Enrich request with :tenant-membership (needs :user + :tenant)
-      (wrap-tenant-membership (:wagoe/membership-service system))
-      ;; 2. Resolve :tenant from subdomain / JWT / header; set search_path
-      (tm/wrap-multi-tenant (:wagoe/tenant-service system)
-                            {:require-tenant? true
-                             :cache (tm/create-tenant-cache)})
-      ;; 1. Authenticate user; sets :user on request
-      (wrap-user-authentication (:wagoe/user-service system))))
+:wagoe/http-handler
+{:extra-middleware #ig/ref :wagoe/tenant-http-middleware
+ ;; … the rest of the handler's refs
+ }
 ----
+
+Authentication runs ahead of both, so by the time tenant resolution sees the
+request it already has `:user`.
 
 After this middleware stack the request map contains:
 

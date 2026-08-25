@@ -12,7 +12,7 @@ Infrastructure layer for HTTP routing/interceptors, database integration, CLI/ru
 |-----------|---------|
 | `wagoe.platform.shell.http.interceptors` | HTTP-specific interceptor pipeline execution |
 | `wagoe.platform.shell.interceptors` | Universal cross-cutting interceptors (logging, metrics, error) |
-| `wagoe.platform.shell.interfaces.http.routes` | Reitit router and Ring handler creation |
+| `wagoe.platform.shell.http.reitit-router` | Compiles module route contributions into the Ring handler |
 | `wagoe.platform.ports.http` | HTTP router and server protocols |
 | `wagoe.platform.db.*` | Database context, connection pooling, shared persistence utilities |
 
@@ -206,23 +206,22 @@ is added when the module's `:api` contribution is mounted.
          :coercion {:body CreateUserRequest}}}]
 ```
 
-### Creating a Router
+### Contributing Routes
+
+A module does not build a router — it returns a route contribution, and
+`:wagoe/http-handler` compiles every module's together. That is the only path
+that attaches the security stack, interceptors, coercion and Swagger.
 
 ```clojure
-(require '[wagoe.platform.shell.interfaces.http.routes :as routes])
-
-;; Creates complete Reitit router with health, api-docs, and your routes
-(def router
-  (routes/create-router config module-routes {:api-prefix "/api/v1"}))
-
-;; Creates Ring handler from router
-(def handler
-  (routes/create-handler router {}))
-
-;; Complete app in one call
-(def app
-  (routes/create-app config module-routes {:api-prefix "/api/v1"}))
+(defn my-routes [service config]
+  ;; Paths are relative to the mount point: :api is versioned under /api/v1
+  ;; and :web is mounted under /web, so do not write the prefix yourself.
+  {:api    [["/items" {:get {:handler (list-items service)}}]]
+   :web    (web-routes service config)
+   :static []})
 ```
+
+Health checks and `/swagger.json` are mounted for you.
 
 ### Per-Route Interceptors
 
