@@ -95,10 +95,38 @@ it to platform's HTTP handler as `:extra-middleware`:
  }
 ----
 
-Authentication runs ahead of both, so by the time tenant resolution sees the
-request it already has `:user`.
+[WARNING]
+====
+**`:tenant-membership` is nil under this wiring alone, and Step 3's
+`require-tenant-member` will reject the request.**
 
-After this middleware stack the request map contains:
+`wrap-tenant-membership` looks the membership up from `[:user :id]`, but
+`:extra-middleware` is the *outermost* thing in platform's pipeline — nothing
+has authenticated the request by the time it runs. The framework ships no
+component that sets `:user` globally: `wagoe.user.shell.middleware`'s
+authentication middleware answers 401 when credentials are absent, so it cannot
+be applied to every route, and the `:interceptors` in Step 3 run innermost,
+*after* membership enrichment.
+
+So an application that wants `:tenant-membership` populated has to put its own
+authentication middleware ahead of the tenant middleware in the
+`:extra-middleware` seq — the order is outermost first:
+
+[source,clojure]
+----
+;; Your own component, replacing the plain ref above.
+(defmethod ig/init-key :wagoe/app-http-middleware
+  [_ {:keys [user-service tenant-middleware]}]
+  (into [(auth-middleware user-service)]   ; must come first — sets :user
+        tenant-middleware))                ; :wagoe/tenant-http-middleware
+----
+
+Tracked as BOU-373. Until it is resolved, prefer `auth/require-authenticated`
+plus an explicit membership lookup in the handler over
+`auth/require-tenant-member`.
+====
+
+With authentication wired ahead of it, the request map contains:
 
 [source,clojure]
 ----
