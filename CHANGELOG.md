@@ -29,6 +29,12 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ## [Unreleased]
 
+### Security
+
+- **Any `Authorization: Bearer` value authenticated.** JWT validation returns a
+  map on failure too, and the middleware branched on the map, so the rejection
+  branch never ran. **Upgrade if you use JWT auth.**
+
 ### Removed
 
 - **`wagoe.platform.shell.interfaces.http.routes` is gone** (BOU-358). It
