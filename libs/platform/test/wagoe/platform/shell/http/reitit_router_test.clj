@@ -672,10 +672,21 @@
     (is (= 200 (:status (handler {:request-method :get :uri "/ping"}))))
     (is (true? @middleware-ran) "middleware named in config must actually run")))
 
-(deftest ^:unit a-symbol-that-resolves-to-nothing-fails-loudly
-  (let [e (try (reitit/compile-routes
-                [["/ping" {:get {:handler identity}}]]
-                {:middleware ['no.such.namespace/missing]})
-               nil
-               (catch Exception e e))]
-    (is (some? e) "an unresolvable middleware symbol must not be ignored")))
+(deftest ^:unit a-symbol-that-resolves-to-nothing-is-a-configuration-error
+  ;; Both ways a config symbol can be wrong, because they fail by different
+  ;; routes: a missing namespace throws FileNotFoundException out of the
+  ;; `require` with no ex-data, a missing var in a namespace that loads just
+  ;; returns nil. An earlier version of this test only asserted that something
+  ;; was thrown, so the untyped one went unnoticed.
+  (doseq [[what sym] [["a namespace that does not exist" 'no.such.namespace/missing]
+                      ["a var that does not exist"       'clojure.string/no-such-middleware]]]
+    (testing what
+      (let [e (try (reitit/compile-routes
+                    [["/ping" {:get {:handler identity}}]]
+                    {:middleware [sym]})
+                   nil
+                   (catch Exception e e))]
+        (is (some? e) "an unresolvable middleware symbol must not be ignored")
+        (is (= :configuration-error (:type (ex-data e)))
+            "and must carry the shape the HTTP boundary maps (ADR-022)")
+        (is (= sym (:symbol (ex-data e))) "naming the symbol that is wrong")))))
