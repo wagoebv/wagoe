@@ -8,6 +8,7 @@
    - Request context enrichment with user information"
   (:require [wagoe.user.ports :as ports]
             [wagoe.user.shell.auth :as auth-shell]
+            [wagoe.core.utils.type-conversion :as type-conv]
             [clojure.string :as str]
             [clojure.tools.logging :as log]))
 
@@ -147,16 +148,25 @@
   (fn [request]
     (if-let [token (extract-bearer-token request)]
       (try
-        (let [jwt-claims (auth-shell/validate-jwt-token token)]
-          (if jwt-claims
-            ;; Token valid - add user info to request
+        ;; Destructured, not tested for truthiness. `validate-jwt-token`
+        ;; answers a map either way — `{:valid? false :error ...}` on failure —
+        ;; so `(if jwt-claims ...)` was always true: the rejection branch was
+        ;; unreachable and any Authorization header authenticated, including a
+        ;; token signed with somebody else's secret. `require-authenticated`
+        ;; passed too, because `{:id nil}` is still `some?`.
+        ;;
+        ;; The claims are inside `:claims`, and the id is `:sub` — a string, as
+        ;; `create-jwt-token` writes it — so reading `:user-id` off the wrapper
+        ;; produced `{:id nil :email nil :role nil}` even for a good token.
+        (let [{:keys [valid? claims]} (auth-shell/validate-jwt-token token)]
+          (if valid?
             (let [enriched-request (assoc request
-                                          :user {:id    (:user-id jwt-claims)
-                                                 :email (:email jwt-claims)
-                                                 :role  (:role jwt-claims)}
+                                          :user {:id    (type-conv/string->uuid (:sub claims))
+                                                 :email (:email claims)
+                                                 ;; written with `name`, read back as a keyword
+                                                 :role  (some-> (:role claims) keyword)}
                                           :auth-type :jwt)]
               (handler enriched-request))
-            ;; Token invalid
             (create-unauthorized-response "Invalid JWT token" :invalid-jwt request)))
         (catch Exception ex
           (log/warn ex "JWT validation failed")
@@ -241,19 +251,19 @@
    (fn [handler]
      (log/trace "Wrapping handler with flexible authentication" {:handler (type handler)})
      (flexible-authentication-middleware user-service handler)))
-   ([user-service handler]
+  ([user-service handler]
    (log/trace "Initializing flexible authentication middleware"
               {:user-service (type user-service) :handler (type handler)})
    (fn [request]
      (let [session-token (extract-session-token request)
            bearer-token  (extract-bearer-token request)]
        (log/info "Processing authentication request"
-                  {:uri (:uri request)
-                   :method (:request-method request)
-                   :has-session (boolean session-token)
-                   :has-bearer (boolean bearer-token)
-                   :cookies (keys (:cookies request))
-                   :session-token-value (when session-token (subs session-token 0 (min 8 (count session-token))))})
+                 {:uri (:uri request)
+                  :method (:request-method request)
+                  :has-session (boolean session-token)
+                  :has-bearer (boolean bearer-token)
+                  :cookies (keys (:cookies request))
+                  :session-token-value (when session-token (subs session-token 0 (min 8 (count session-token))))})
        (cond
          ;; Try JWT authentication first
          bearer-token
@@ -268,7 +278,7 @@
          ;; No authentication provided
          :else
          (do
-           (log/info "No authentication credentials provided" 
+           (log/info "No authentication credentials provided"
                      {:headers-keys (keys (:headers request))
                       :cookie-header (get-in request [:headers "cookie"])})
            (create-unauthorized-response "Authentication required" :no-credentials request)))))))
