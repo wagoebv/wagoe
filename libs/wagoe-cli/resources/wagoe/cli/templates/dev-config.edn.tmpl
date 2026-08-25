@@ -28,7 +28,9 @@
     :port-range {:start 3000 :end 3099}}
 
    :wagoe/router
-   {:adapter :reitit :coercion :malli :middleware []}
+   ;; No :adapter — Reitit is the router (ADR-037). :conflicts nil switches off
+   ;; the check that two routes cannot both match a request (BOU-356).
+   {:coercion :malli :middleware []}
 
    ;; Dev-only. An error over HTTP answers with its BND code and the fix, not
    ;; just "Validation failed". Comes from wagoe-devtools, which lives in the

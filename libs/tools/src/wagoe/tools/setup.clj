@@ -144,8 +144,7 @@
 
 (defn- router-template [_env]
   (str "  :wagoe/router\n"
-       "  {:adapter    :reitit\n"
-       "   :coercion   :malli\n"
+       "  {:coercion   :malli\n"
        "   :middleware []}\n"))
 
 (defn- logging-template [env]

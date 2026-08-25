@@ -44,7 +44,7 @@
      :wagoe/metrics         (config/metrics-config config)
      :wagoe/tracing         (config/tracing-config config)
      :wagoe/error-reporting (config/error-reporting-config config)
-     :wagoe/router          (get active :wagoe/router {:adapter :reitit :coercion :malli :middleware []})
+     :wagoe/router          (get active :wagoe/router {:coercion :malli :middleware []})
 
      :wagoe/http-handler
      (merge {:config          config

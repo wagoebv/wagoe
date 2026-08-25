@@ -451,10 +451,10 @@
 
         ;; Combine all routes: platform, static, web, and versioned API
         all-routes (concat platform-routes
-                                      module-static
-                                      module-web
-                                      versioned-api-routes
-                                      (or test-reset-routes []))
+                           module-static
+                           module-web
+                           versioned-api-routes
+                           (or test-reset-routes []))
 
         {csrf-config :csrf
          rate-limit-config :rate-limit} (security-config {:config config :cache cache})
@@ -477,34 +477,36 @@
         ;; Kept as its own injection point rather than folded into
         ;; extra-middleware so the pipeline position does not change.
         ;;
-        ;; Built here, not from the :wagoe/router component. That component's
-        ;; settings — :coercion, :muuntaja, :middleware — have never reached the
-        ;; router: this map was always constructed fresh, and the component was
-        ;; passed only as the protocol receiver, which ADR-037 removed. Making
-        ;; those settings live means deciding what `:coercion :malli` in an app's
-        ;; config.edn should resolve to, which is its own ticket.
-        router-config (cond-> {:middleware (request-middleware
-                                            {:extra-middleware extra-middleware
-                                             :i18n             i18n
-                                             :i18n-middleware  i18n-middleware})
+        ;; `:wagoe/router` settings, which reached the router for the first
+        ;; time in BOU-357. They had sat in every generated config.edn since
+        ;; the beginning: this map was always built fresh, and the component
+        ;; was passed only as the receiver for a protocol ADR-037 deleted. A
+        ;; key that looks configurable and is not is worse than no key.
+        ;;
+        ;; `map?` because the component is only a settings map in a real
+        ;; system; tests hand this key a placeholder, and `contains?` on a
+        ;; keyword throws.
+        settings      (if (map? router) router {})
+        router-config (cond-> {;; The application's own global middleware runs
+                               ;; after the framework's pipeline, so it sees a
+                               ;; request the framework has already prepared.
+                               :middleware (into (vec (request-middleware
+                                                       {:extra-middleware extra-middleware
+                                                        :i18n             i18n
+                                                        :i18n-middleware  i18n-middleware}))
+                                                 (:middleware settings))
                                :system system}
-                        ;; The one :wagoe/router setting that reaches the
-                        ;; router. Threaded because BOU-356 made an ambiguous
-                        ;; route table fail the boot, and an application that
-                        ;; has to ship before untangling its routes needs a way
-                        ;; to say so: `:wagoe/router {:conflicts nil}`.
-                        ;;
-                        ;; The rest of that component — :coercion, :muuntaja,
-                        ;; :middleware — is still inert, which is BOU-357. Not
-                        ;; fixed here: those need a decision about what
-                        ;; `:coercion :malli` resolves to, and :conflicts needs
-                        ;; none because nil is the whole vocabulary EDN can
-                        ;; express for it.
-                        ;; `map?` because the component is only a settings map
-                        ;; in a real system; tests hand this key a placeholder,
-                        ;; and `contains?` on a keyword throws.
-                        (and (map? router) (contains? router :conflicts))
-                        (assoc :conflicts (:conflicts router)))
+                        (contains? settings :coercion)
+                        (assoc :coercion (:coercion settings))
+
+                        (contains? settings :muuntaja)
+                        (assoc :muuntaja (:muuntaja settings))
+
+                        ;; nil is meaningful here — Reitit reads it as "do not
+                        ;; check" — so the key's presence is what matters
+                        ;; (BOU-356).
+                        (contains? settings :conflicts)
+                        (assoc :conflicts (:conflicts settings)))
         handler (reitit-router/compile-routes all-routes router-config)
 
         ;; Wrap handler with version headers middleware

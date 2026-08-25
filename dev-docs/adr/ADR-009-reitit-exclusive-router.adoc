@@ -229,7 +229,13 @@ The abstraction serves as **documentation and structure**, even with single impl
 
 === Configuration
 
-Router is configured via Integrant:
+NOTE: Historical. `:adapter` is gone — it named the seam
+xref:ADR-037-reitit-routes-directly.adoc[ADR-037] deleted, and BOU-357 removed
+it from the shipped config. `:wagoe/router` is now settings, not an adapter:
+`:coercion` (only `:malli` is implemented; anything else fails the boot),
+`:middleware`, `:muuntaja`, `:conflicts`.
+
+Router was configured via Integrant:
 
 ```clojure
 ;; In config.edn (implicit, no configuration needed)

@@ -610,3 +610,83 @@
               [["/users/:id"  {:get {:handler identity}}]
                ["/users/:uid" {:get {:handler identity}}]]
               {:conflicts nil}))))
+
+;; ===========================================================================
+;; BOU-357: :wagoe/router settings reach the router, or say why not
+;; ===========================================================================
+
+(deftest ^:unit the-coercion-setting-means-something
+  (let [options #'reitit/create-router-options]
+
+    (testing "a named coercion resolves to the implementation"
+      (is (some? (get-in (options {:coercion :malli}) [:data :coercion]))))
+
+    (testing "absent falls back to Malli rather than to nothing"
+      ;; nil here would disable coercion silently, which is the shape of the
+      ;; bug this ticket is about.
+      (is (some? (get-in (options {}) [:data :coercion])))
+      (is (= (get-in (options {}) [:data :coercion])
+             (get-in (options {:coercion :malli}) [:data :coercion]))))
+
+    (testing "an instance is passed through untouched"
+      (let [sentinel (reify Object)]
+        (is (identical? sentinel (get-in (options {:coercion sentinel}) [:data :coercion])))))
+
+    (testing "a name nobody implements fails, and says what exists"
+      ;; The whole point: `:coercion :malli` sat in every config and reached
+      ;; nothing, so a typo could not have been noticed.
+      (let [e (try (options {:coercion :sepc}) nil
+                   (catch clojure.lang.ExceptionInfo e e))]
+        (is (some? e))
+        (is (= :configuration-error (:type (ex-data e))))
+        (is (str/includes? (ex-message e) ":sepc"))
+        (is (str/includes? (ex-message e) "malli"))))))
+
+(deftest ^:unit an-applications-own-middleware-is-appended-not-substituted
+  ;; :middleware in :wagoe/router is the application's, and the framework's
+  ;; pipeline still has to run — so it goes after, seeing a request the
+  ;; framework has already prepared.
+  (let [mine    (fn [h] h)
+        options (#'reitit/create-router-options {:middleware [mine]})
+        stack   (get-in options [:data :middleware])]
+    (is (= mine (last stack)) "the application's middleware runs last")
+    (is (< 1 (count stack)) "and the framework's pipeline is still there")))
+
+(def middleware-ran (atom false))
+
+(defn stamping-middleware
+  "Named by symbol from config, as an application would."
+  [handler]
+  (fn [request] (reset! middleware-ran true) (handler request)))
+
+(deftest ^:unit middleware-named-by-symbol-resolves-to-a-function
+  ;; EDN can only express a symbol, so this is the only way an application can
+  ;; put its own middleware in config. `requiring-resolve` returns a Var, and
+  ;; Reitit has no IntoMiddleware implementation for one — this failed with
+  ;; "No implementation of method: :into-middleware ... clojure.lang.Var" the
+  ;; first time the setting actually reached the router (BOU-357).
+  (reset! middleware-ran false)
+  (let [handler (reitit/compile-routes
+                 [["/ping" {:get {:handler (fn [_] {:status 200 :body "pong"})}}]]
+                 {:middleware ['wagoe.platform.shell.http.reitit-router-test/stamping-middleware]})]
+    (is (= 200 (:status (handler {:request-method :get :uri "/ping"}))))
+    (is (true? @middleware-ran) "middleware named in config must actually run")))
+
+(deftest ^:unit a-symbol-that-resolves-to-nothing-is-a-configuration-error
+  ;; Both ways a config symbol can be wrong, because they fail by different
+  ;; routes: a missing namespace throws FileNotFoundException out of the
+  ;; `require` with no ex-data, a missing var in a namespace that loads just
+  ;; returns nil. An earlier version of this test only asserted that something
+  ;; was thrown, so the untyped one went unnoticed.
+  (doseq [[what sym] [["a namespace that does not exist" 'no.such.namespace/missing]
+                      ["a var that does not exist"       'clojure.string/no-such-middleware]]]
+    (testing what
+      (let [e (try (reitit/compile-routes
+                    [["/ping" {:get {:handler identity}}]]
+                    {:middleware [sym]})
+                   nil
+                   (catch Exception e e))]
+        (is (some? e) "an unresolvable middleware symbol must not be ignored")
+        (is (= :configuration-error (:type (ex-data e)))
+            "and must carry the shape the HTTP boundary maps (ADR-022)")
+        (is (= sym (:symbol (ex-data e))) "naming the symbol that is wrong")))))
