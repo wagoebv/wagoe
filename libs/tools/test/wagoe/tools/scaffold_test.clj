@@ -190,3 +190,43 @@
           (is (some #{"--base-ns=acme"} args))))
 
       (finally (doseq [f (reverse (file-seq root))] (.delete f))))))
+
+(deftest ^:unit a-repeated-long-option-resolves-the-way-tools-cli-resolves-it
+  ;; tools.cli is last-wins and does not care which form each occurrence used:
+  ;;   ["--output-dir=/a" "--output-dir" "/b"] => /b
+  ;;   ["--output-dir" "/b" "--output-dir=/a"] => /a
+  ;; long-opt preferred the =value form wherever it sat, so an overridden
+  ;; default made with-base-ns read the namespace from one project while the
+  ;; scaffolder edited another — and the guard then rejected a module that is
+  ;; really there.
+  (let [a (.toFile (java.nio.file.Files/createTempDirectory
+                    "wagoe-scaffold-a" (make-array java.nio.file.attribute.FileAttribute 0)))
+        b (.toFile (java.nio.file.Files/createTempDirectory
+                    "wagoe-scaffold-b" (make-array java.nio.file.attribute.FileAttribute 0)))]
+    (try
+      ;; Two projects, distinguishable by the namespace their module sits under.
+      (.mkdirs (io/file a "src/alpha/product/shell"))
+      (spit (io/file a "src/alpha/main.clj") "(ns alpha.main)")
+      (.mkdirs (io/file b "src/bravo/product/shell"))
+      (spit (io/file b "src/bravo/main.clj") "(ns bravo.main)")
+
+      (let [base-ns-of (fn [args]
+                         (second (drop-while #(not= "--base-ns" %)
+                                             (scaffold/with-base-ns args))))]
+        (testing "equals-form first, two-token second — the second wins"
+          (is (= "bravo" (base-ns-of ["endpoint" "--module-name" "product"
+                                      (str "--output-dir=" (.getPath a))
+                                      "--output-dir" (.getPath b)]))))
+
+        (testing "two-token first, equals-form second — the second wins"
+          (is (= "alpha" (base-ns-of ["endpoint" "--module-name" "product"
+                                      "--output-dir" (.getPath b)
+                                      (str "--output-dir=" (.getPath a))]))))
+
+        (testing "same form twice — still the last one"
+          (is (= "bravo" (base-ns-of ["endpoint" "--module-name" "product"
+                                      "--output-dir" (.getPath a)
+                                      "--output-dir" (.getPath b)])))))
+
+      (finally
+        (doseq [d [a b]] (doseq [f (reverse (file-seq d))] (.delete f)))))))
