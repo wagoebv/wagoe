@@ -156,6 +156,27 @@
      (str "{:deps {com.wagoe/wagoe-scaffolder " coord " "
           "rewrite-clj/rewrite-clj {:mvn/version \"" rewrite-clj-version "\"}}}"))))
 
+(defn- long-opt
+  "Value of long option `opt` in `args`, in either form tools.cli accepts.
+
+   `--opt value` and `--opt=value` are both valid, and scanning for the bare
+   token read only the first: `--output-dir=/path/to/shop` looked like no
+   `--output-dir` at all, so `with-base-ns` fell back to the working directory
+   and derived the caller's namespace."
+  [opt args]
+  (or (some #(when (str/starts-with? % (str opt "="))
+               (subs % (inc (count opt))))
+            args)
+      ;; Not the next token unconditionally: `--output-dir --dry-run` would
+      ;; otherwise read "--dry-run" as the directory.
+      (let [v (second (drop-while #(not= opt %) args))]
+        (when-not (and v (str/starts-with? v "--")) v))))
+
+(defn- has-long-opt?
+  "Whether `opt` was given at all, in either form."
+  [opt args]
+  (boolean (some #(or (= opt %) (str/starts-with? % (str opt "="))) args)))
+
 (defn with-base-ns
   "Add `--base-ns` unless the caller named one.
 
@@ -176,11 +197,11 @@
    under `shop`, and the guards added in BOU-364 then refused a module that is
    really there."
   [args]
-  (let [module (second (drop-while #(not= "--module-name" %) args))
-        root   (or (second (drop-while #(not= "--output-dir" %) args))
+  (let [module (long-opt "--module-name" args)
+        root   (or (long-opt "--output-dir" args)
                    (System/getProperty "user.dir"))]
     (cond
-      (some #{"--base-ns"} args) args
+      (has-long-opt? "--base-ns" args) args
       module (into (vec args) ["--base-ns" (project/module-base-ns module root)])
       :else  (into (vec args) ["--base-ns" (project/base-ns root)]))))
 

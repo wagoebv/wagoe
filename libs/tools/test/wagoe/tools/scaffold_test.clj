@@ -152,3 +152,41 @@
           (is (= "acme" (second (drop-while #(not= "--base-ns" %) args))))))
 
       (finally (doseq [f (reverse (file-seq root))] (.delete f))))))
+
+(deftest ^:unit long-options-are-read-in-both-their-forms
+  ;; tools.cli accepts `--opt value` and `--opt=value`, and with-base-ns scanned
+  ;; for the bare token only. `--output-dir=/path/to/shop` therefore fell back to
+  ;; the working directory, derived the caller's namespace and sent the guards
+  ;; looking in the wrong project. The same scan reads --module-name and
+  ;; --base-ns, so all three are checked here.
+  (let [root (.toFile (java.nio.file.Files/createTempDirectory
+                       "wagoe-scaffold-eq"
+                       (make-array java.nio.file.attribute.FileAttribute 0)))]
+    (try
+      (.mkdirs (io/file root "src/shop/product/shell"))
+      (spit (io/file root "src/shop/main.clj") "(ns shop.main)")
+
+      (testing "--output-dir=DIR names the project to read the namespace from"
+        (is (= "shop" (second (drop-while
+                               #(not= "--base-ns" %)
+                               (scaffold/with-base-ns
+                                 ["endpoint" "--module-name" "product"
+                                  (str "--output-dir=" (.getPath root))]))))))
+
+      (testing "--module-name=NAME still finds the module"
+        (is (= "shop" (second (drop-while
+                               #(not= "--base-ns" %)
+                               (scaffold/with-base-ns
+                                 ["endpoint" "--module-name=product"
+                                  (str "--output-dir=" (.getPath root))]))))))
+
+      (testing "--base-ns=NS is left alone rather than joined by a second one"
+        ;; Appending would put two --base-ns on the command line; the scaffolder
+        ;; takes the first, so the user's would win by luck rather than by rule.
+        (let [args (scaffold/with-base-ns
+                     ["endpoint" "--module-name=product" "--base-ns=acme"
+                      (str "--output-dir=" (.getPath root))])]
+          (is (= 1 (count (filter #(str/starts-with? % "--base-ns") args))))
+          (is (some #{"--base-ns=acme"} args))))
+
+      (finally (doseq [f (reverse (file-seq root))] (.delete f))))))
