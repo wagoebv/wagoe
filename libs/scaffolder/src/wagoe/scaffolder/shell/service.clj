@@ -26,6 +26,36 @@
     (io/file path)
     (io/file output-dir path)))
 
+(defn- require-existing-file!
+  "Refuse to continue when `file` is not there.
+
+   The commands that edit an existing module — `field`, `endpoint`, `adapter` —
+   all used to carry on regardless: `field` wrote its migration and reported the
+   schema as \":skip … not found\", `endpoint` printed instructions for a file
+   nobody could open, and `adapter` called `.mkdirs` and built a tree for a
+   module that does not exist. Each exited 0 (BOU-364).
+
+   Thrown rather than returned so it lands in the `catch` each command already
+   has, which turns it into `{:success false :errors [...]}` — and the CLI turns
+   that into exit 1."
+  [^java.io.File file why]
+  (when-not (.isFile file)
+    (throw (ex-info (str why " Looked for " (.getPath file) ".")
+                    {:type ::missing-file :path (.getPath file)})))
+  file)
+
+(defn- require-existing-dir!
+  "Refuse to continue when `dir` is not there.
+
+   For `adapter`, which creates a file rather than editing one: the thing that
+   has to already exist is the module. `.mkdirs` meant a typo in
+   `--module-name` built a tree for a module nobody has (BOU-364)."
+  [^java.io.File dir why]
+  (when-not (.isDirectory dir)
+    (throw (ex-info (str why " Looked for " (.getPath dir) ".")
+                    {:type ::missing-dir :path (.getPath dir)})))
+  dir)
+
 (defn- existing-migration-ids
   "Numeric ids already used by migration files, as strings.
 
@@ -319,6 +349,16 @@
                     :action :create}]
             schema-path (format "src/%s/%s/schema.clj" base-ns-path module-name)
 
+            ;; Before anything is written. The migration and the schema entry
+            ;; are the two halves this command exists to keep in step, and the
+            ;; migration used to go to disk first — so a missing schema left a
+            ;; column behind that validation would reject on every write, under
+            ;; a ":skip … not found" and exit 0. Nobody asked for that file to
+            ;; be left alone; the command could not do half its job (BOU-364).
+            _ (require-existing-file!
+               (resolve-path output-dir schema-path)
+               (str "Cannot add a field to " module-name ": its schema.clj is not there."))
+
             ;; Write migration files (unless dry-run). Both up and down — writing
         ;; only the first would leave an un-rollbackable migration.
         ;;
@@ -416,15 +456,11 @@
                                          (conj (str (str/join ", " wrong-shape)
                                                     " already has it, but not as optional")))))
             schema-entry
+            ;; No arm for a missing file: `require-existing-file!` above refuses
+            ;; the run before the migration is written, so by here the schema is
+            ;; on disk. The arm that used to be here is what produced the
+            ;; ":skip … not found" this ticket is about (BOU-364).
             (cond
-              (nil? existing)
-              {:path (.getPath schema-file) :action :skip :manual? true
-               :note "not found"
-               ;; All three targets, each with the form it needs — the file is
-               ;; absent, so none of them has the field.
-               :manual-note (str (add-clause [entity (str "Create" entity "Request") update-schema])
-                                 " — " schema-display)}
-
               ;; A partial success is still a partial success. Editing two of
               ;; the three schemas and reporting only the two is how the Malli
               ;; set ends up unsynchronised while the output reads as done.
@@ -502,12 +538,27 @@
     (try
       (let [{:keys [module-name path method handler-name dry-run]} request
             base-ns-path (str/replace (or (:base-ns request) "wagoe") "." "/")
+            output-dir   (:output-dir request ".")
+
+            http-path (format "src/%s/%s/shell/http.clj" base-ns-path module-name)
+
+            ;; This command writes nothing — it returns instructions. Pointing
+            ;; them at a file nobody can open is the same false success in a
+            ;; quieter form, so the file has to be there before we describe an
+            ;; edit to it (BOU-364).
+            http-file (require-existing-file!
+                       (resolve-path output-dir http-path)
+                       (str "Cannot add an endpoint to " module-name
+                            ": its shell/http.clj is not there."))
 
             ;; Generate endpoint definition instructions
             endpoint-content (generators/generate-endpoint-definition
                               module-name path method handler-name)
 
-            files [{:path (format "src/%s/%s/shell/http.clj" base-ns-path module-name)
+            ;; Resolved, like every other reported path: the instruction named
+            ;; src/… while --output-dir put the module somewhere else, sending
+            ;; the reader to the current project.
+            files [{:path (.getPath http-file)
                     :content endpoint-content
                     :action :update}]]
 
@@ -529,6 +580,13 @@
             base-ns      (or (:base-ns request) "wagoe")
             base-ns-path (str/replace base-ns "." "/")
             output-dir   (:output-dir request ".")
+
+            ;; The module, not the adapter: the adapter file is the one being
+            ;; created. Checked before `.mkdirs` below, which otherwise builds
+            ;; the tree for whatever name it is given (BOU-364).
+            _ (require-existing-dir!
+               (resolve-path output-dir (format "src/%s/%s" base-ns-path module-name))
+               (str "Cannot add an adapter to " module-name ": there is no such module."))
 
             ;; Generate adapter file content
             adapter-content (generators/generate-adapter-file

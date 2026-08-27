@@ -31,6 +31,14 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **`bb scaffold field`/`endpoint`/`adapter` now fail when the module is not
+  there**, instead of reporting success. `field` left a migration behind for a
+  column its schema would then reject. `endpoint` also gained `--output-dir`.
+
+- **`bb scaffold --output-dir` reads the namespace from the project it edits**,
+  not the one you run it from. Editing another project derived the caller's
+  namespace and looked for the module in the wrong place.
+
 - **`:tenant-membership` was nil on every request**, so `require-tenant-member`
   refused all of them. Authentication now runs ahead of the tenant middleware
   that depends on it.

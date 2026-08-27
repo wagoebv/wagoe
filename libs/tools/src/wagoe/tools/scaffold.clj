@@ -156,6 +156,42 @@
      (str "{:deps {com.wagoe/wagoe-scaffolder " coord " "
           "rewrite-clj/rewrite-clj {:mvn/version \"" rewrite-clj-version "\"}}}"))))
 
+(defn- long-opt
+  "Value of long option `opt` in `args`, resolved the way tools.cli resolves it.
+
+   Both `--opt value` and `--opt=value` are valid, and a repeated option is
+   last-wins regardless of which form each occurrence used:
+
+     [\"--output-dir=/a\" \"--output-dir\" \"/b\"]  => /b
+     [\"--output-dir\" \"/b\" \"--output-dir=/a\"]  => /a
+
+   So this walks the arguments in order and keeps the last value it sees.
+   Scanning for the bare token missed the `=` form entirely, and preferring the
+   `=` form wherever it sat disagreed with tools.cli on an overridden default —
+   either way `with-base-ns` read the namespace from one project while the
+   scaffolder edited another, and the BOU-364 guards then rejected a module
+   that is really there."
+  [opt args]
+  (let [eq (str opt "=")]
+    (loop [[a & more] (seq args)
+           found      nil]
+      (cond
+        (nil? a)                 found
+        (str/starts-with? a eq)  (recur more (subs a (count eq)))
+        (= a opt)                (let [v (first more)]
+                                   ;; Not the next token unconditionally:
+                                   ;; `--output-dir --dry-run` would otherwise
+                                   ;; read the next flag as a directory.
+                                   (if (and v (not (str/starts-with? v "--")))
+                                     (recur (rest more) v)
+                                     (recur more found)))
+        :else                    (recur more found)))))
+
+(defn- has-long-opt?
+  "Whether `opt` was given at all, in either form."
+  [opt args]
+  (boolean (some #(or (= opt %) (str/starts-with? % (str opt "="))) args)))
+
 (defn with-base-ns
   "Add `--base-ns` unless the caller named one.
 
@@ -168,13 +204,21 @@
    answer is where that module *is*, which in a project generated before the
    move is still `wagoe.<module>`. Passing the project namespace regardless
    made `bb scaffold field` write the migration, skip the schema file it could
-   not find, and report success."
+   not find, and report success.
+
+   Read from `--output-dir` when there is one, not from the working directory:
+   the project being edited is the one whose layout answers the question.
+   Deriving it from the caller sent `--base-ns wagoe` at a project whose code is
+   under `shop`, and the guards added in BOU-364 then refused a module that is
+   really there."
   [args]
-  (let [module (second (drop-while #(not= "--module-name" %) args))]
+  (let [module (long-opt "--module-name" args)
+        root   (or (long-opt "--output-dir" args)
+                   (System/getProperty "user.dir"))]
     (cond
-      (some #{"--base-ns"} args) args
-      module (into (vec args) ["--base-ns" (project/module-base-ns module)])
-      :else  (into (vec args) ["--base-ns" (project/base-ns)]))))
+      (has-long-opt? "--base-ns" args) args
+      module (into (vec args) ["--base-ns" (project/module-base-ns module root)])
+      :else  (into (vec args) ["--base-ns" (project/base-ns root)]))))
 
 (defn run-clojure!
   "Shell out to the Clojure scaffolder CLI with given args. Streams output to terminal.
