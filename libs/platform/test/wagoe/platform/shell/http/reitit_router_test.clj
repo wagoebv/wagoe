@@ -690,3 +690,64 @@
         (is (= :configuration-error (:type (ex-data e)))
             "and must carry the shape the HTTP boundary maps (ADR-022)")
         (is (= sym (:symbol (ex-data e))) "naming the symbol that is wrong")))))
+
+;; ===========================================================================
+;; BOU-372: error handling, end to end through the stack that ships
+;; ===========================================================================
+;;
+;; `security_test` covers the mapping and the leak rules by calling the
+;; `http-error-handler` interceptor directly. What nothing covered was the whole
+;; way through: a handler throws, and what the client receives.
+;;
+;; `error_handling_integration_test` claimed to, and did not. It assembled its
+;; own stack out of `interfaces.http.middleware` — a namespace no application
+;; ran — and asserted RFC 7807 (`application/problem+json`, `:title`,
+;; `:context`), which this path does not produce. Both are gone.
+
+(defn- throwing-handler-response
+  "Response from a compiled route whose handler throws `ex`.
+
+   `:body` is decoded to a string: muuntaja encodes it to a ByteArrayInputStream,
+   so asserting over the raw value tests a stream's `toString` and passes
+   whatever the body contains — which is how the first version of the leak test
+   below passed vacuously."
+  [ex & [request]]
+  (let [handler (reitit/compile-routes
+                 [["/boom" {:get {:handler (fn [_] (throw ex))}}]]
+                 {:system {}})
+        resp    (handler (merge {:request-method :get :uri "/boom"} request))]
+    (cond-> resp
+      (instance? java.io.InputStream (:body resp))
+      (update :body slurp))))
+
+(deftest ^:unit a-thrown-typed-error-reaches-the-client-as-its-status
+  (doseq [[type status] {:validation-error 400
+                         :not-found        404
+                         :unauthorized     401
+                         :forbidden        403
+                         :conflict         409}]
+    (testing (str type " → " status)
+      (is (= status (:status (throwing-handler-response
+                              (ex-info "nope" {:type type}))))))))
+
+(deftest ^:unit ^:security an-untyped-throw-is-a-500-that-leaks-nothing
+  ;; An untyped throw is caught by the reitit exception middleware rather than
+  ;; the interceptor stack, so it answers the `missing-error-type` diagnostic
+  ;; rather than the plain "Internal Server Error" `security_test` asserts of
+  ;; the interceptor. Either way the client must learn nothing about the cause.
+  (let [secret "relation \"users\" does not exist at /var/app/db.clj"
+        resp   (throwing-handler-response (RuntimeException. secret))
+        body   (:body resp)]
+    (is (= 500 (:status resp)))
+    (is (string? body) "decoded, so the assertions below read the real content")
+    (is (not (str/includes? body secret))
+        "the exception message must not reach the client")
+    (is (not (str/includes? body "/var/app/db.clj"))
+        "nor the path it names")))
+
+(deftest ^:unit an-error-response-carries-the-caller-s-correlation-id
+  ;; So a client reporting "your API 500s me" has an id to hand over.
+  (let [resp (throwing-handler-response
+              (ex-info "nope" {:type :not-found})
+              {:headers {"x-correlation-id" "given-by-the-caller"}})]
+    (is (= "given-by-the-caller" (get-in resp [:headers "X-Correlation-ID"])))))

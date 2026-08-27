@@ -110,6 +110,9 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Removed
 
+- **`wagoe.platform.shell.interfaces.http.middleware`** (BOU-372). A parallel
+  correlation-id / logging / exception stack no application ran. Use the interceptors.
+
 - **`wagoe.platform.shell.interfaces.http.routes`** (BOU-358). A second, documented
   route builder nothing wired — and it applied no security stack. Use module contributions.
 

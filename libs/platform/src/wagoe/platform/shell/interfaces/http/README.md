@@ -1,7 +1,6 @@
 # HTTP Interface Module
 
-Shared HTTP utilities: RFC 7807 error responses, health check handlers, and a
-set of Ring middleware.
+Shared HTTP utilities: RFC 7807 error responses and health check handlers.
 
 > **This is not how you build an application's route table.** Routes reach the
 > router by module contribution — see [Contributing routes](#contributing-routes)
@@ -11,8 +10,7 @@ set of Ring middleware.
 
 ```
 wagoe.platform.shell.interfaces.http/
-├── common.clj      # RFC 7807 problem details, health check handlers
-└── middleware.clj  # Ring middleware (see the note under Middleware)
+└── common.clj      # RFC 7807 problem details, health check handlers
 ```
 
 ## Contributing routes
@@ -75,16 +73,6 @@ and `/health/live`; they are here for a caller that needs one directly.
   (http-common/create-not-found-handler))
 ```
 
-## Middleware (`middleware.clj`)
-
-`wrap-correlation-id`, `wrap-request-logging`, `wrap-exception-handling`,
-`wrap-tenant-context`, `wrap-user-context`, `wrap-observability-context`.
-
-> **No application runs these.** The wired path builds correlation ids, request
-> logging and exception handling in
-> `wagoe.platform.shell.http.interceptors`, and `routes.clj` was this
-> namespace's only caller. What remains of it after BOU-358 is a follow-up
-> decision, not a supported surface. Do not reach for it in new code.
 
 ## Standard endpoints
 
