@@ -1,0 +1,88 @@
+<!doctype html>
+<meta charset="utf-8">
+<!--
+  Render target for scripts/gen-brand-logos.sh — not served, not part of the app.
+
+  One template renders all four assets; the variant is chosen by query string so
+  the geometry cannot drift between them:
+
+    ?variant=full|icon   full adds the wordmark under the mark
+    ?theme=light|dark    which theme the asset is shown ON, matching the
+                         wagoe-<theme>-512 filenames read by
+                         wagoe.shared.ui.core.icons/brand-logo
+
+  "light" therefore means dark ink for a light background, which is the opposite
+  of what the word suggests on its own. The names predate this file and are
+  referenced from icons.clj and layout.clj, so they stay.
+
+  The wordmark is set in Space Grotesk, fetched from Google Fonts at render
+  time — the same source and weight the website uses, so the two lockups are
+  the same lockup. Rendering offline silently falls back to a system sans, so
+  gen-brand-logos.sh checks the result rather than trusting it.
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: transparent; }
+
+  body {
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    /* Accent teal, per theme. Light background gets the deep teal, dark gets the
+       mint — the same two values the site's --accent token carries. */
+    --ink: #12836D;
+    gap: 5vw;
+  }
+  body[data-theme="dark"] { --ink: #5FD3B6; }
+
+  /* Sizes are in vw, not %. The canvas is a 512px square, so 1vw is 5.12px and
+     the two axes agree. Percentages would not: a percentage font-size resolves
+     against the parent's font-size, which is 16px here, so `font-size: 15.5%`
+     silently rendered a 2px wordmark. */
+  svg { height: 46vw; width: auto; color: var(--ink); display: block; }
+  body[data-variant="icon"] svg { height: 62vw; }
+  body[data-variant="icon"] .wordmark { display: none; }
+
+  .wordmark {
+    font-family: 'Space Grotesk', system-ui, sans-serif;
+    font-weight: 600;
+    /* Set so the x-height of 'wagoe' reads level with the bracket stroke weight,
+       matching the proportion the website's nav lockup uses. */
+    font-size: 17vw;
+    letter-spacing: -0.015em;
+    line-height: 1;
+    color: var(--ink);
+  }
+</style>
+
+<!-- Geometry is a copy of the site's wagoe-mark.svg master: two brackets around
+     a value, the s-expression the brand is built on. currentColor throughout, so
+     the theme is set once on <body>. -->
+<!-- viewBox cropped to the mark's painted extents (the strokes run x 32-68 and
+     y 26-74, plus 4 for the 8-wide stroke's half-width) rather than the 0 0 100
+     100 the master carries. The master's padding is what a favicon wants; a
+     lockup that has to sit next to a wordmark wants the glyph itself. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="27 21 46 58" role="img" aria-label="Wagoe">
+  <g fill="none" stroke="currentColor" stroke-width="8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M43 26 L32 26 L32 74 L43 74"/>
+    <path d="M57 26 L68 26 L68 74 L57 74"/>
+  </g>
+  <circle cx="50" cy="50" r="7" fill="currentColor"/>
+</svg>
+<div class="wordmark">wagoe</div>
+
+<script>
+  const q = new URLSearchParams(location.search);
+  document.body.dataset.theme = q.get('theme') === 'dark' ? 'dark' : 'light';
+  document.body.dataset.variant = q.get('variant') === 'icon' ? 'icon' : 'full';
+
+  // gen-brand-logos.sh waits for this before screenshotting. document.fonts
+  // resolves even when the stylesheet 404s, so the flag records whether the
+  // real face actually loaded rather than merely that loading finished.
+  document.fonts.ready.then(() => {
+    window.__fontReady = document.fonts.check('600 100px "Space Grotesk"');
+    document.documentElement.dataset.ready = '1';
+  });
+</script>
