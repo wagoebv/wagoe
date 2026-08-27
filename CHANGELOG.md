@@ -121,6 +121,9 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Two tests bound a port they had already released** (BOU-377), failing the
+  full suite intermittently. `bb test:all` now names what exited non-zero.
+
 - **The brand logo is Wagoe's** (BOU-379). The four assets behind `brand-logo`
   were renamed to `wagoe-*` but still drew the Boundary mark and wordmark. The
   dark variant was not lighter than the light one, and `:variant :icon` was

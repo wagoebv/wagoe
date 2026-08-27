@@ -10,13 +10,27 @@
   (with-open [s (ServerSocket. 0)]
     (.getLocalPort s)))
 
+(defn- start-on-free-port
+  "Start the dashboard on a free port, retrying when it is taken.
+
+   `free-port` closes its socket before the server binds, so the port can be
+   gone by the time it is used — the race that failed the full suite
+   intermittently (BOU-377)."
+  [attempts]
+  (loop [remaining attempts]
+    (let [port   (free-port)
+          result (try
+                   {:server (ig/init-key :wagoe/dashboard {:port port}) :port port}
+                   (catch Exception e
+                     (when (<= remaining 1) (throw e))))]
+      (or result (recur (dec remaining))))))
+
 (def ^:dynamic *server* nil)
 (def ^:dynamic *port* nil)
 
 (use-fixtures :once
   (fn [f]
-    (let [port (free-port)
-          srv  (ig/init-key :wagoe/dashboard {:port port})]
+    (let [{srv :server port :port} (start-on-free-port 5)]
       (binding [*server* srv *port* port]
         (try (f) (finally (ig/halt-key! :wagoe/dashboard srv)))))))
 
