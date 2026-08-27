@@ -376,9 +376,27 @@ stop. Someone has to read all of it.
 - **PR descriptions** — what changed and why, in a few lines. Reviewers read
   the diff; do not narrate it back to them. Include verification output only
   when a reviewer would otherwise have to re-run it.
+- **CHANGELOG entries** — **two lines, hard limit.** What changed, and what a
+  user does about it. The reasoning, the measurements and the history belong in
+  the ticket and the commit; a changelog nobody finishes reading is worse than a
+  short one. Reference the ticket instead of explaining it.
+
+```markdown
+<!-- too long -->
+- **Any `Authorization: Bearer` value authenticated.** JWT validation returns a
+  map on both outcomes and the middleware branched on the map itself, so the
+  rejection branch was unreachable. Two further bugs in the same expression:
+  the claims live under `:claims`, and the id claim is `:sub`, not `:user-id`…
+
+<!-- right -->
+- **Any `Authorization: Bearer` value authenticated** (BOU-374). Upgrade if you
+  use JWT auth.
+```
 
 Existing long comments in this repo are not a target for rewriting — leave
-them. This applies to what you write next.
+them. This applies to what you write next. **The CHANGELOG is the exception:**
+it is read start to finish by people deciding whether to upgrade, so entries
+are trimmed in place when they are found over the limit (BOU-371).
 
 ---
 

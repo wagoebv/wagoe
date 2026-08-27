@@ -29,953 +29,183 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ## [Unreleased]
 
-### Fixed
-
-- **`bb scaffold field`/`endpoint`/`adapter` now fail when the module is not
-  there**, instead of reporting success. `field` left a migration behind for a
-  column its schema would then reject. `endpoint` also gained `--output-dir`.
-
-- **`bb scaffold --output-dir` reads the namespace from the project it edits**,
-  not the one you run it from. Editing another project derived the caller's
-  namespace and looked for the module in the wrong place.
-
-- **`:tenant-membership` was nil on every request**, so `require-tenant-member`
-  refused all of them. Authentication now runs ahead of the tenant middleware
-  that depends on it.
-
-### Security
-
-- **MFA secrets and backup codes no longer reach handlers.** Session
-  authentication put the whole user record on `:user`; only `:password-hash`
-  was stripped.
-
-- **Any `Authorization: Bearer` value authenticated.** JWT validation returns a
-  map on failure too, and the middleware branched on the map, so the rejection
-  branch never ran. **Upgrade if you use JWT auth.**
-
-### Removed
-
-- **`wagoe.platform.shell.interfaces.http.routes` is gone** (BOU-358). It
-  offered `create-router`, `create-handler` and `create-app`, and its README
-  documented them as the way to build an application. Nothing wired it — the
-  system boots through `:wagoe/http-handler` → `reitit-router/compile-routes`,
-  a second implementation of the same job.
-
-  The duplication was the smaller problem. Its middleware stack was
-  correlation-id, logging, cookies, params, muuntaja and coercion — it never
-  applied `default-http-interceptors`, so anyone following the documented path
-  got **no security headers, no CSRF and no rate limiting**, with nothing to
-  signal the difference. Routes reach the router by module contribution
-  (`{:api :web :static}`); the README, `libs/platform/AGENTS.md`, the platform
-  library page and the multi-tenancy guide now say so. ADR-007 is marked
-  superseded by ADR-037: its prefixing decision holds, its named implementation
-  did not exist.
-
-  `interfaces/http/server.clj` is removed with it — a file containing nothing
-  but its `ns` form.
-
-  `interfaces/http/common.clj` (RFC 7807 problem details, health handlers) is
-  unaffected.
-
-### Changed
-
-- **`:wagoe/router` settings now reach the router** (BOU-357). Every generated
-  `config.edn` shipped `{:adapter :reitit :coercion :malli :middleware []}` and
-  the router read none of it: `:wagoe/http-handler` built its options fresh, and
-  the component was passed only as the receiver for the protocol ADR-037
-  removed. An application that set `:coercion :malli` got Malli; one that set
-  anything else also got Malli, silently.
-
-  `:coercion`, `:middleware`, `:muuntaja` and `:conflicts` are now threaded
-  through. Two consequences:
-
-  - **`:coercion` takes a name, and an unrecognised one fails the boot** with
-    `:configuration-error` listing what exists. Only `:malli` is implemented —
-    Malli is the framework's validation vocabulary everywhere else, and a
-    `:spec` entry would promise a second implementation nobody maintains. An
-    instance is still accepted as-is.
-  - **`:middleware` is appended to the framework's pipeline, not substituted
-    for it**, so an application's global middleware sees a request the
-    framework has already prepared. Entries may be qualified symbols, which is
-    all EDN can express; these resolve to the function, not the var.
-
-  **`:adapter` is removed** from the shipped config, the `wagoe new` template
-  and `bb setup` output. It named the router seam ADR-037 deleted. It was never
-  read, so removing it changes no behaviour — but leaving it in described an
-  abstraction that does not exist.
-
-- **Two routes that can both match a request now fail the boot** (BOU-356).
-  Conflict detection was off — `:conflicts nil` — so `/users/:id` beside
-  `/users/:uid` built a router and whichever was concatenated first silently
-  answered. ADR-037 listed detection as something the move to Reitit route data
-  recovered; it did not, until now.
-
-  It is on by shape rather than wholesale. A literal beside a parameter —
-  `/web/users/new` and `/web/users/:id`, the pattern every REST router has and
-  six of which exist in the framework's own routes — is decided by precedence:
-  Reitit matches the literal first, always, so that pair is allowed. Two
-  parameters in the same position, or a catch-all swallowing a sibling, are
-  decided by nothing and raise `:wagoe/ambiguous-routes` at startup, naming
-  both paths.
-
-  Reitit's own per-route `:conflicting true` opt-out was the obvious approach
-  and is not used: it must be set on *both* sides of a pair, which would have
-  exempted those routes from detection against everything else too.
-
-  **If your application has genuinely ambiguous routes it will now fail to
-  start.** That is the point — but `:wagoe/router {:conflicts nil}` restores
-  the old behaviour if you need to ship before fixing them.
-
-- **Platform has a database port, and modules stop reaching into its shell**
-  (BOU-303). The framework's most-used abstraction was the only one without a
-  seam: every module's persistence layer required
-  `wagoe.platform.shell.adapters.database.common.core` because there was
-  nothing else to require. Two namespaces replace it:
-
-  - `wagoe.platform.database` — executing queries. `execute-query!`,
-    `execute-one!`, `execute-update!`, `execute-ddl!`, `with-transaction`,
-    `table-exists?`, `get-table-info` and the query-building helpers.
-    Deliberately narrower than what it delegates to: connection-pool
-    lifecycle and adapter construction stay internal.
-  - `wagoe.platform.ports.database` — the `DBAdapter` protocol, moved out of
-    `shell/adapters/database/protocols.clj`. Four adapters implement it
-    (postgresql, mysql, sqlite, h2), so unlike the router abstraction ADR-037
-    removed, this seam is real.
-
-  **If you required either path, update the namespace; the function names and
-  arities are unchanged.** `bb scaffold` generates the new require, so
-  regenerated modules are already correct.
-
-  This clears the largest entry in `.wagoe/check-ports.edn` — 20 sites across
-  tenant, user, admin, workflow and devtools — and the matching built-in
-  exemption in `check:ports`, so the old coupling is now a gate failure rather
-  than a documented allowance. Tenant provisioning also stops calling
-  PostgreSQL's metadata namespace directly and goes through the port.
-
-- **Feature flags no longer read the environment from the functional core**
-  (BOU-302). `wagoe.core.config.feature-flags` promised "Pure functions: No
-  side effects" in its docstring while five of its functions had a convenience
-  arity calling `(System/getenv)`. The environment map is now always a
-  parameter, and the convenience moved to
-  `wagoe.platform.shell.feature-flags`, which may read it.
-
-  **Breaking, if you called a 1-arity.** `(flags/enabled? :devex-validation)`
-  becomes either `(flags/enabled? :devex-validation env-map)` or
-  `(shell-flags/enabled? :devex-validation)`. The two-argument forms are
-  unchanged.
-
-  `bb check:fcis` now refuses `System/getenv` in a core namespace, beside
-  `getProperty` and `currentTimeMillis` — which is how the five were found.
-
-- **One clock read per library instead of eleven** (BOU-302).
-  `current-timestamp` was defined eleven times across seven libraries, and two
-  of them were public — a one-line clock read in the API surface. They are
-  private now, and the duplicates within a library share one helper
-  (`wagoe.tenant.shell.time`, `wagoe.platform.shell.utils.time`,
-  `wagoe.observability.logging.shell.time`). No behaviour changes: every call
-  site was already in a shell namespace, which is the layer allowed to read a
-  clock.
-
-- **`bb check:fcis` reads code instead of lines, and its require list is now an
-  allowlist** (BOU-301). The gate the architecture claim rests on could be
-  switched off by pressing return: the scan matched `(\s*throw` one line at a
-  time, so `(\n throw …)` — the same call to the reader — matched nothing.
-  `(apply swap! reg …)` was invisible for the same reason. Both are caught now,
-  and a violation is reported at the symbol rather than at the paren.
-
-  The require check was a list of eleven forbidden namespaces, which could only
-  name the I/O libraries somebody had thought of. A core namespace shelling out
-  through `babashka.process`, holding process state in a `core.async` channel,
-  or using any datastore client not on the list passed clean. It is inverted: a
-  core namespace may require pure libraries (`clojure.string`/`set`/`walk`/
-  `edn`, malli, hiccup, cheshire, `buddy.core`, `honey.sql`, rewrite-clj) and
-  its own core/schema/ports, and anything else is a violation.
-
-  On this repository the inversion produced exactly one finding, and it is a
-  real exception rather than a false positive: `wagoe.core.validation.behavior`
-  is a DSL whose output is `deftest` forms. `.wagoe/check-fcis.edn` gained
-  `:allow-require`, per namespace and per require, with a mandatory `:why` — the
-  rule check-ports already applies to its own allowlist.
-
-- **A generated project's own code lives under its own namespace** (BOU-360).
-  `wagoe new shop` put the application's wiring in `wagoe.system-config` and
-  `bb scaffold generate product` put the module in `wagoe.product` — a project
-  called shop defining namespaces in the framework's root. Now:
-
-  ```
-  src/shop/system_config.clj      ; ns shop.system-config
-  src/shop/product/…              ; ns shop.product.*
-  ```
-
-  Config keys are unchanged: `:wagoe/product` still switches the module on,
-  beside `:wagoe/http` and `:wagoe/h2`. The key names the module to the
-  framework; the namespace says whose code it is.
-
-  **Existing projects need no changes.** Module discovery resolves
-  `<project-ns>.<module>.shell.module-wiring` and falls back to
-  `wagoe.<module>.shell.module-wiring`, so a project generated on an earlier
-  beta keeps booting as it is. To move a module across, move the directory and
-  rename the namespaces — nothing else refers to them.
-
-  `--base-ns` now works rather than being refused: `bb scaffold` passes the
-  project's namespace by default, and `field`, `endpoint` and `adapter` accept
-  the flag that only `generate` had.
-
 ### Added
 
 - **`examples/shop` — a generated application you can read and run** (BOU-300).
-  Between `examples/todo` (200 lines, no framework) and an external examples
-  repository that tracked no release, there was nothing showing what a Wagoe
-  app looks like. `examples/shop` is `wagoe new` plus one scaffolded module,
-  committed as generator output:
+  Regenerated by `bb example:regen`, booted and asserted in CI, so it cannot drift.
 
-  ```bash
-  cd examples/shop
-  WAG_ENV=test JWT_SECRET=$(openssl rand -hex 32) clojure -M:run
-  curl localhost:3000/api/v1/products     # => []
-  ```
+- **`wagoe doctor`** (BOU-324). One diagnostic front door — environment, config,
+  commands, setup — ending in a single next action.
 
-  It is regenerated rather than maintained — `bb example:regen`, with
-  `bb example:regen --check` in CI — so it cannot drift into describing a
-  project shape nobody gets. CI also boots it and asserts the scaffolded
-  module answers, and its dependencies resolve through `:local/root`, so a
-  green run means *this commit* works rather than the last release.
-
-### Changed
-
-- **Modules emit Reitit route data; the normalized format is gone** (BOU-331,
-  [ADR-037](dev-docs/adr/ADR-037-reitit-routes-directly.adoc)). **Breaking.**
-  A route was `{:path "/users" :methods {:get {:handler 'ns/fn}}}` and is now
-  `["/users" {:get {:handler ns/fn}}]`. Modules keep contributing
-  `{:api [..] :web [..] :static [..]}`, and paths stay relative — the platform
-  still adds `/api/v1` and `/web`.
-
-  ADR-008 introduced the format so modules would not depend on Reitit; ADR-009
-  then made Reitit the only router, and the second implementation was never
-  built. What was left was 341 lines translating one EDN shape into another,
-  and three things given up for it: Reitit's route conflict detection, reverse
-  routing by name, and handlers as vars. The last of those is yours today — a
-  typo in a handler was a boot failure and is now a lint error. The other two
-  are now possible rather than delivered: conflict detection is still switched
-  off (BOU-356), and reverse routing needs routes to carry `:name`.
-
-  To migrate, turn each route map inside out: the `:path` becomes the first
-  element, `:methods` and `:meta` merge into the data map, and quoted handler
-  symbols become the vars themselves.
-
-- **A library can serve HTTP without platform knowing it exists** (BOU-330).
-  `:wagoe/http-handler` destructured six named route slots — user, admin,
-  tenant, membership, workflow, search — each followed by its own copy of the
-  same prefix-and-normalise block. Every module's mount point and doc
-  visibility lived in platform, so a 31st library could not contribute a route
-  without editing platform: the inversion the library split was meant to remove.
-  Middleware was given injection in BOU-131; routes have it now.
-
-  Routes arrive as one collection. A module returns `:routes` from its
-  `ig-config` and says where its web routes mount with `:web-prefix` — admin,
-  workflow and search say `/web/admin`, everyone else gets `/web`. Admin's
-  slash redirect (`/web/admin` → `/web/admin/`) moved with it, as
-  `:extra-web`, because it is admin's route.
-
-  Module discovery asks any module for its own graph, not only the ones in
-  platform's table, so a library with components of its own needs no entry
-  anywhere in platform. A test proves it: `wagoe.widgets` is built, mounted and
-  served, and the test fails if any platform source ever mentions it.
-
-  The `:wagoe/http-handler` init-key is 106 lines, from 370. Platform
-  endpoints, the security configuration, the interceptor services and the
-  middleware pipeline are each their own function now. Both fail-loud
-  bootguards — CSRF enabled with a blank secret, rate limiting without a shared
-  cache in prod — were carried over whole and still refuse the boot.
-
-  Verified by diffing the route table: 99 routes before and after, identical
-  set, every path distinct so the concat order cannot change what matches.
-
-- **A scaffolded module's web routes mount under `/web`, as the scaffolder always
-  said they would** (BOU-330). `bb scaffold generate` writes
-  `normalized-web-routes` with the docstring *"WITHOUT /web prefix… these routes
-  will be mounted under /web by the top-level router"* — and the router did not.
-  Framework modules were prefixed; discovered ones were passed through raw, so a
-  generated module's web UI answered at `/products` while its own generated
-  comment said `/web/products`. Folding every contribution through one path
-  fixes it: measured in a generated project, `/web/products` now serves 200
-  where it was a 404.
-
-  **If you have a scaffolded module with web routes, its URLs move** — from
-  `/<path>` to `/web/<path>`. That is the documented contract finally being
-  kept, but it is a change to live URLs.
-
-  One regression, caught by an existing test: `service <module>` prunes refs to
-  the keys it dropped, and did so only for refs that were map values. With
-  routes in a collection, `service user` kept `:module-routes` pointing at
-  admin's and tenant's route keys, and Integrant refuses to build a config with
-  dangling refs — so the service died at boot. Pruning now reaches into
-  vectors, lists and sets.
-
-  Two more found in review, both mine: `discovered-route-refs` referenced
-  `:wagoe/<name>-routes` for every discovered module by convention, which was
-  safe only while all of them went through the scaffolder's four-key shape. A
-  module with a graph of its own need not serve HTTP — a background-jobs
-  library is exactly the kind this welcomes — and referencing routes it never
-  built is the same dangling ref, at boot. Refs are filtered against what the
-  modules actually built.
-
-
-### Fixed
-
-- **The quickstart's last step 404'd** (BOU-328). It ended on
-  `http://localhost:3000/admin/products`, which was wrong twice: the admin
-  module is not in a generated project's `:active`, and admin mounts at
-  `/web/admin`, not `/admin`. The final instruction of the framework's first
-  page sent every new user to a 404.
-
-  It ends on `curl http://localhost:3000/api/v1/products` returning `[]` —
-  checked by scaffolding a module into a generated project and booting it — and
-  says why `[]` is the right answer: the generated handlers are stubs, and
-  wiring them up is your first edit. Adding the admin UI is a step of its own,
-  with the `bb create-admin` that `wagoe add admin` itself tells you to run.
-
-  The page also never named `bb quickstart`, the command `wagoe new` prints as
-  your next step, while describing the same eight steps by hand. Both are named
-  now, and a test keeps the page's URLs and that command in step.
-
-- **Two guides were unreachable, and 29 ADRs did not say what they were**
-  (BOU-329). `migrations.adoc` (304 lines, the largest guide) and
-  `deployment-patterns.adoc` were in no nav and linked from nowhere under
-  `docs/` — written, accurate, and invisible in the published site. Both are in
-  the guides nav now, and linked from where a reader is standing when they need
-  them: the quickstart's migration step, the tutorial's, and the deployment
-  guide.
-
-  Thirteen ADRs declared no status at all; sixteen sat on `Proposed` over code
-  that had shipped and was in daily use — devtools, the dev dashboard, the MCP
-  server, audience segmentation. Each is now `Accepted` and names the
-  implementation, so the claim can be checked rather than taken.
-
-  Three places said it and could disagree: the `:status:` attribute, the page's
-  own Status section, and the index in `dev-docs/adr/README.adoc`, which
-  repeated fourteen stale ones. A test holds the three together.
-
-- **The getting-started tutorial showed code the scaffolder does not write**
-  (BOU-327). `your-first-module.adoc` is the framework's flagship tutorial, and
-  a reader following it hit a compile error on their first edit: it named
-  `prepare-product` (really `prepare-new-product`), repository methods
-  `find-product-by-id` and `list-products` (really `find-by-id` and
-  `find-all`), and a `ProductInput` schema (really `CreateProductRequest`). Its
-  core function validated its input and generated a UUID — the real one does
-  neither, and the page's own lesson about keeping the clock in the shell
-  contradicted the snippet above it.
-
-  Rewritten against the generator's actual output, and a test calls the
-  generators and checks that every name the page shows exists. It matches
-  identifiers rather than formatting, so a rewrapped docstring does not fail the
-  build; putting `find-product-by-id` back does, naming it.
-
-  The page also said wiring a module into `deps.edn`/`tests.edn` "assumes the
-  monorepo layout". `bb scaffold integrate` says the opposite and is right: a
-  module under `src/` is already on the project's paths and its tests run under
-  plain `clojure -M:test`.
-
-  It now says plainly what the generator leaves undone — the generated service
-  persists without validating, and `core/validate-product` is written but
-  uncalled — with the edit that wires it in. That was the most useful thing the
-  page could have said and the one thing it did not.
-
-
-### Fixed
-
-- **The e2e suite runs in CI again, and a red e2e test blocks the merge**
-  (BOU-297). 52 tests over login, registration, MFA, sessions and admin CRUD —
-  the flows a new user meets first — sat behind `if: false`, with
-  `continue-on-error: true` under it for good measure. The reason given was that
-  they need a live server on :3100 which CI does not start; the job's own steps
-  run `bb e2e`, which starts one and tears it down. The reason had stopped being
-  true and nothing noticed, because a parked job reports as skipped.
-
-  Turning it on found real flakiness rather than a clean suite: three runs gave
-  one pass and two failures, in `admin-users` and `admin-tenants` search. Both
-  waited for a one-shot `htmx:afterSettle` listener, which fires for any swap
-  anywhere on the page and could resolve on something else — leaving the
-  assertion to read the previous search's rows. Its ten-second timeout resolved
-  the promise to `false`, and nobody read it, so a swap that never happened was
-  indistinguishable from one that happened and returned nothing.
-
-  The helpers now mark what the request is about to replace and wait for that
-  mark to go, with the timeout raised as an error naming the selector.
-
-  `bb check:branch-protection` gained the other half of how this happened.
-  It detected `if: false` and had no concept of `continue-on-error: true` —
-  which is what the e2e job's run step actually carried, and which is worse: the
-  job stays in the required context's `needs:` looking guarded while reporting
-  success whatever the tests did. Both the job-level and step-level forms now
-  fail the check, naming the step.
-
-  Verified by breaking it: point the search button's `hx-target` at an element
-  that does not exist and four tests report `HTMX never replaced
-  #entity-table-container` — where the old mechanism failed two of them on a
-  confusing assertion and let the other two pass over an app that was broken.
-
-
-### Added
-
-- **`wagoe doctor`** (BOU-324) — one answer to "something is wrong". Six commands
-  could tell you (`bb doctor`, `bb doctor:env`, `bb doctor --all`, `bb check`,
-  `bb smoke-check`, `bb guide next`) and nothing said which to reach for first.
-  This runs the diagnostic ones in the order their answers depend on each other
-  — environment, configuration, commands, project setup — and ends with a single
-  next action.
-
-  A failure in one of the first two stops the run and says so: a broken
-  `config.edn` makes every command that boots the system fail for that one
-  reason, and reporting the third symptom wastes the trip.
-
-  The `bb` tasks are unchanged and remain the machinery; CI still calls them
-  directly with `--ci`. They gained a `--edn` mode, which is what makes one next
-  action possible — picking it out of formatted terminal output would mean
-  parsing colour codes and column padding. Against a project pinned to an older
-  wagoe-tools, `wagoe doctor` says so once and tells you what to bump, rather
-  than reporting checks it could not read as passing.
-
-
-### Changed
-
-- **A healthy project produces no diagnostic noise** (BOU-324). Four checks
-  warned about things that are not problems, and a warning you cannot clear is
-  what teaches a reader to skim past the ones that matter.
-
-  * `bb guide next` reported `wagoe-cli` and `wagoe-mcp` as "unintegrated
-    modules" in the framework repository and told you to run `bb scaffold
-    integrate` on them. Both are deliberately standalone, and the monorepo puts
-    its libraries on `:paths` rather than in `:deps` — the question does not
-    apply there. It was suppressed by a hand-maintained list of names to skip,
-    which had never heard of the two added since.
-  * A missing seed file and a missing `resources/migrations/` are both normal:
-    seeding is optional, and `wagoe new` writes no migrations because the user
-    module creates its tables through `:wagoe/user-db-schema`. Every fresh
-    project carried two warnings it could only clear by making directories it
-    did not need.
-  * `bb doctor --env prod` reported "config.edn could not be parsed" about a
-    file Aero reads without complaint, and told the reader to repair syntax that
-    was never broken. Its reader table listed twelve Aero tags and not
-    `#boolean`, which `acc` and `prod` both use; CI only ever ran `--env dev`, so
-    the two profiles where it mattered were the two nothing checked. An unknown
-    tag is now its own value rather than an exception.
-  * `bb doctor`'s `wiring-requires` check told you to require
-    `wagoe.dev-error-enricher.shell.module-wiring` — a namespace that does not
-    exist. It checked BOU-171's contract, which BOU-326 replaced; a module whose
-    library is genuinely missing now throws at boot, naming the library and both
-    ways out. Removed, along with the half of `upgrade-wiring` that policed
-    tenant middleware an application can no longer get wrong.
-
-- **A generated `config.clj` is 63 lines instead of 404** (BOU-326). It used to
-  carry the Integrant graph of every framework module it might enable — 41
-  components, their refs, and the eighteen boolean flags that gated them —
-  which meant the first file a new user opened was mostly framework plumbing
-  they had no reason to edit. A module now describes its own graph
-  (`ig-config` in its `module-wiring` namespace), and
-  `wagoe.platform.shell.system.config/system-config` assembles what the config
-  switches on. What is left in the generated file is the user module, the admin
-  schemas, and a comment showing where your own components go.
-
-  Nothing to do for an existing project: the file is yours, and the old one
-  still works. To adopt the shorter version, replace `ig-config` with a call to
-  `system-config` and keep whatever you added.
-
-  `{{project-ns}}.system` is now empty too. The seven `ig/init-key` methods it
-  defined belong to the libraries that own those keys, and four of those
-  libraries (`jobs`, `reports`, `calendar`, `ui-style`) had no wiring namespace
-  at all — so an application that enabled one of them and had not copied the
-  defmethod failed the boot with `No such namespace: wagoe`.
-
-### Fixed
-
-- **`wagoe add workflow` created a module whose tables did not exist**
-  (BOU-326). `libs/workflow` defines `:wagoe/workflow-db-schema`, which creates
-  them, and documents it in the first lines of its wiring namespace. Neither
-  the generated `config.clj` nor this repository's own system config wired it —
-  the same omission in two hand-maintained copies of a graph the module already
-  described. The workflow component logged `started without :db-schema
-  dependency` and carried on.
-
-- **The monorepo ran the tenant module whether or not it was configured**
-  (BOU-326), and never wired `:wagoe/settings` or the AI service it had
-  switched on. All three were the same class of defect: a component list
-  maintained by hand next to a config that had moved on.
-
-- **A module can no longer ship a component nothing wires** (BOU-326). The gate
-  that catches the defect above, generalised: for every framework module, each
-  `ig/init-key` it defines must be emitted by some application, or carry a
-  written reason why not. It ships with seven exemptions and three of them are
-  the same defect in another module — push enqueues jobs whose handlers are
-  never registered, audience and storage ship HTTP routes nothing mounts.
-  Emptying that list is BOU-346.
-
-- **Two admin helpers had never worked** (BOU-326).
-  `wagoe.admin.shell.module-wiring/admin-system-config` and
-  `start-admin-only-system`, documented for REPL and integration use, built
-  their graph against `:wagoe/database-context`, `:wagoe/logger` and
-  `:wagoe/error-reporter` — keys no application wires. Removed; the module's
-  real graph is `ig-config`.
-
-### Fixed
-
-- **A generated project no longer ships `bb deploy`** (BOU-325). It published
-  *Wagoe's* libraries to Clojars, from a user's project, and `bb guide` printed
-  a whole Deployment section advertising it. Both are gone downstream; the
-  monorepo keeps them, and a test asserts the section appears in one context and
-  not the other.
-
-- **`bb check:deps` was a green row that could not fail — or worse** (BOU-325).
-  It walks `libs/*`, which a generated project never has, so it reported "0
-  libraries scanned, 0 violations" in every project. Give a project a `libs/`
-  directory of its own and it does something worse than nothing: it reports the
-  project's own namespaces as undeclared dependencies and tells the reader to
-  edit a private var inside Wagoe's source. It is a framework-only check now,
-  and `bb check` names it among the eleven it skips.
-
-  `bb check --help` listed it too, along with the rest of a hardcoded list; it
-  reads the registry now, so it describes the checks this project actually
-  runs.
-
-  A second lockstep test came with it. The existing one proves the template
-  defines every task `bb check` calls; the new one proves it defines nothing
-  framework-shaped — no task a monorepo-only check owns, and nothing that
-  publishes. The template's copy of the task list has broken twice through
-  registry drift (BOU-259, BOU-264); this closes the other direction.
-
-- **One validation API instead of three** (BOU-323). `wagoe.core.validation` and
-  `wagoe.core.utils.validation` each defined `validate-with-transform`,
-  `validate-cli-args`, `validate-request` and a set of result accessors — same
-  names, different implementations — and the first also re-exported the
-  constructors from `wagoe.core.validation.result`. Nothing outside their own tests called any of them: the three real consumers —
-  the user module's web handlers, the user CLI and the todo example — use the
-  compiled-schema cache and one value predicate.
-
-  The version in `wagoe.core.validation` also chose its *return shape* at
-  runtime from the `WAG_DEVEX_VALIDATION` flag — `{:valid? true :data …}` with
-  the flag off, a structured result with it on. A function whose result shape
-  depends on an environment variable cannot be typed, tested or documented, and
-  it had no test covering either branch. ADR-036 §2 settles the shape, so the
-  fork is deleted rather than ported, along with the flag's only reader.
-
-  What is left is one job per namespace: `wagoe.core.validation` caches
-  compiled Malli validators (which is worth roughly ten runs each),
-  `wagoe.core.validation.result` owns the result shape, and
-  `wagoe.core.utils.validation` keeps the two predicates the user CLI uses. The
-  cache had no tests at all; it does now.
-
-  Not settled by this change: `failure-result` still returns `:errors` as a
-  vector, and ADR-036 §2 asks for a map of field to messages. That migration is
-  open, and pointing new code at `validation.result` points it at the shape
-  that will move.
-
-- **The error-shape allowlist is empty** (BOU-323, last migration step). It
-  shipped with 81 findings on 18 August; the remaining 13 are gone.
-
-  The string `:type` values in the outbound adapters are keywords —
-  `"SmtpError"` became `:smtp-error`, and so on for IMAP, Twilio, the email and
-  report job integrations, and the jobs worker's `:no-handler`. That change
-  crossed a library boundary, which is why it went last: `wagoe-email`'s SMTP
-  adapter reads the `:type` out of `wagoe-external`'s result — including as the
-  default of a `get-in` — and `wagoe-email`'s tests cover `wagoe-external`'s
-  code, so the two libraries had to move together.
-
-  Two Malli schemas moved with them. `wagoe.jobs.schema/Job` and
-  `wagoe.external.schema/EmailSendResult` declared `[:type :string]`, so the
-  libraries' own published validators rejected the values their own adapters
-  had started producing. `wagoe-jobs` also stored `:error` as JSON without
-  restoring that keyword, so a consumer matching `:no-handler` matched against
-  the in-memory store and missed against Redis; and its worker used the one
-  field for two things — a failure kind (`:no-handler`) and a thrown
-  exception's class name. The class has its own key now.
-
-  `wagoe-push` came along, though the gate cannot see it: its adapters build
-  `:error` from a computed value, and its `ports.clj` had documented
-  ":error map" while the adapters returned a string.
-
-  The dev dashboard's config-apply returned `:error` as a bare string in five
-  branches; they carry `{:type … :message …}` now, and the page renders the
-  message rather than the map.
-
-  `wagoe.core.validation.result/normalize-result` and `legacy-result?` are
-  deleted. They coerced between two result shapes at runtime, in the namespace
-  that defines the one shape, and nothing outside their own tests called them.
-
-  What the gate protects from here is a new violation, not a backlog: an entry
-  added to the allowlist needs a `:why` and a `:count`, and an entry that stops
-  exempting anything fails the build. It reads shapes, not intent — a computed
-  `:type` is outside what any static check can see, which is why the push
-  adapters above were found by reading rather than by the gate.
-
-- **58 exceptions thrown at boundaries now say what kind of failure they are**
-  (BOU-323; the untyped-throw step, which ADR-036 numbers first). ADR-022 required a `:type` on every
-  `ex-info` reaching the HTTP boundary in April; the gate added last week
-  measured 59 throws in `shell/` namespaces without one (58 after the user
-  library's step). They are typed:
-  `:configuration-error` for missing or unusable config (Datadog keys, Sentry
-  DSN, an unknown AI or geo provider, a CSRF secret that is blank while CSRF is
-  enabled), `:db/error` and `:database-error` for the database adapters,
-  `:migration-failed` for the migration commands, `:storage-error` for the S3,
-  GCS, local and image adapters, plus `:validation-error`, `:not-found`,
-  `:conflict`, `:forbidden` and `:port-unavailable` where those fit.
-
-  This is not bookkeeping. The HTTP layer maps `:type` to a status code, so an
-  untyped throw on a request path is a 500 that could have said 404 or 400.
-
-  It also fixed the classifier that reads `:type`. It walked to the *root
-  cause* first, so a wrapped database failure was read as its `SQLException`
-  and every one of them — a constraint violation, a syntax error — came back as
-  `BND-303 "Database Connection Failed — verify the database is running"`. The
-  type the thrower chose now wins over the class of what it wrapped, a failed
-  query has its own code (`BND-304`), and `BND-102` ("Unknown Provider") has a
-  producer at last.
-
-  Which surfaced a fourth thing: the same mistake had four spellings across the
-  module wirings — `:internal-error` in payments, `:configuration-error` in
-  events, `:config-error` in the payments adapters, and `:validation-error` in
-  storage, which the HTTP layer maps to **400**, telling a caller they sent a
-  bad request when the server was misconfigured. All of them are
-  `:unknown-provider` now.
-
-  The allowlist is down from 71 findings to 13 — what is left is the
-  `{:success? false}` normalisation of ADR-036 §3, which is the step ADR-036
-  numbers second.
-
-- **The user library's authentication and MFA results carry a typed error**
-  (BOU-323, first migration step). `auth/authenticate-user` answered
-  `{:error :authentication-failed :message "…"}` and the MFA shell answered
-  `{:error "Invalid verification code"}` — a keyword in one place, a bare string
-  in another, for the same idea. Both are `{:error {:type <keyword> :message
-  <string>}}` now, the shape ADR-036 §3 decided, so a caller that wants to
-  escalate can rethrow the `:error` map as a typed `ex-info` without inventing
-  a taxonomy.
-
-  Public behaviour is unchanged, and now tested rather than asserted:
-  `IUserService/authenticate-user` still answers
-  `{:authenticated false :reason … :message … :retry-after …}` — including its
-  MFA-required branch, which the first version of this change broke silently
-  because nothing in the repository reads that `:message` — and the three MFA
-  endpoints still answer `{"error": "<message>"}`, which had no test at all
-  until now. Direct callers of the two shell namespaces are affected; see
-  UPGRADING.md.
-
-  The deprecated `:wagoe/user-http-handler` init-key throws with
-  `:type :configuration-error` instead of an untyped `ex-info`.
-
-  `auth/change-user-password` is deleted rather than migrated. It had no
-  callers, and it could not have had working ones: it called `update-user` with
-  three arguments where the protocol takes two, so any call ended in an arity
-  error. Ten of the 81 findings in `.wagoe/check-error-shape.edn` are gone with
-  this step.
-
-- **`bb check:error-shape`** (BOU-323). ADR-022 required a `:type` on every
-  exception thrown at a boundary, in April; nothing checked it, and 59 `ex-info`
-  throws in `shell/` namespaces had none by August (58 after the first
-  migration step below). Roughly half sit on a
-  request path, where the HTTP layer maps `:type` to a status code — so each of
-  those is a 500 that could have been a 404 or a 400; the rest are startup, CLI
-  and dev-only paths that never reach a response. ADR-036 added the return
-  shapes: a `{:success? false}` carries `{:error {:type <keyword> :message …}}`,
-  not a bare string, not a keyword, and not nothing.
-
-  The gate shipped with 81 existing violations in
-  `.wagoe/check-error-shape.edn`, each with a `:why` and a `:count` (71 after
-  the first migration step below). The count
-  is what makes it a burn-down list: an entry exempts the violations a file
-  had, not the file, so a new one in an already-listed file fails the build and
-  fixing one makes the entry stale — which fails it too. It reads shapes, not
-  intent: a computed `:type` is left alone rather than guessed at.
-
-- **The MCP server advertised seven resources and could serve none of them in a
-  project** (BOU-320). `.mcp.json` ships in every generated project, so an
-  editor agent connects and asks — and got `:unavailable` from all seven.
-  `wagoe://conventions` read `resources/agents/knowledge.edn`, a path that
-  exists in this repository and in no project; `wagoe://module-graph` walked a
-  `libs/` directory only this repository has; the rest wait on the nREPL bridge.
-
-  The knowledge base ships in the `wagoe-tools` jar now and is read from the
-  classpath, so the resource that explains how to write Wagoe code answers
-  wherever the server runs (a project can still override it with its own
-  `resources/agents/knowledge.edn`). The module graph answers for a project:
-  the `com.wagoe` libraries it depends on, which of those are dev-only, and the
-  `:wagoe/*` modules its config switches on — from the config text, so a module
-  named in a comment is not reported as running.
-
-  And `resources/list` now advertises only what the project can serve. An
-  advertisement that always answers "not available in the current context"
-  costs the agent a round trip to learn nothing.
-
-- **A malformed request answered 500, and no error carried a BND code**
-  (BOU-321). Reitit applies a `:middleware` vector first-to-outermost, and the
-  exception middleware sat last — *inside* request coercion. So a POST missing a
-  required field threw past every handler in the chain: the app answered 500 to
-  a request the client got wrong, and said nothing about which field. It is a
-  400 now, naming the fields (`{"email": ["missing required key"]}`) but not the
-  schema they were checked against.
-
-  On top of that, in dev the response carries the BND code and where to read
-  about it. The pipeline that produces it lives in devtools and reached no
-  generated project; its classifier also did not recognise `:validation-error`,
-  the type the platform HTTP boundary requires and every Wagoe handler raises —
-  so the most common error in a Wagoe app was the one error it could not name.
-
-  Production returns the same shape without the `dev` block, and its `details`
-  name only the fields that were wrong: the full messages describe the schema
-  (`"should be either \"admin\" or \"auditor\""` hands a caller every enum member
-  it never knew about), so they are dev-only too. A 5xx still says only
-  "Internal Server Error" with everything else in the log.
-
-  Three conditions gate it — the `:wagoe/dev-error-enricher` key, which
-  `wagoe new` writes into the dev config and nowhere else; a dev-like profile,
-  which the wiring now passes to the interceptors (they read only `WAG_ENV`
-  before, which a generated project never sets, so the check answered
-  "development" wherever it ran); and devtools on the classpath, which the
-  `:repl` alias keeps out of `-M:run`, the uberjar and the Docker image.
-  Platform takes the enricher as an injected function and still has no
-  dependency on devtools.
-
-  Along the way: error responses no longer set their own `Content-Type`, so
-  Muuntaja encodes them like any other body. An EDN or transit client can read
-  them now, and an `Accept: text/html` request no longer hands Ring a raw map —
-  the `PersistentArrayMap` crash `libs/admin/AGENTS.md` documents.
-
-- **The first thing `bb quickstart` tells you to run did not exist** (BOU-319).
-  Quickstart closes with "run `(status)`, run `(commands)`", and both lived only
-  in this repository's own `dev/repl/user.clj`. The generated one was thirteen
-  lines of `go`/`reset`/`halt`, so the first instruction a new user follows
-  answered `Unable to resolve symbol: status`. A generated `dev/user.clj` now
-  has `(status)`, `(modules)`, `(routes)`, `(config)`, `(fix!)` and
-  `(commands)`, and `(go)` and `(reset)` print the startup dashboard the same
-  text promises — listing the modules you added rather than every Integrant key
-  the framework wired.
-
-  The implementations live in `wagoe.devtools.shell.project-repl` rather than in
-  the template — a template is compiled by nothing until someone generates a
-  project and boots it, which is how this survived. `(commands)` lists what a
-  generated project has, not this repository's palette of `(lint)`,
-  `(check-all)` and `(scaffold!)`. Take devtools out of the `:repl` alias and
-  the helpers print one line saying so: they resolve at call time, so a missing
-  devtools cannot take `(go)` down with it.
-
-- **devtools reached generated projects nowhere, and `wagoe add ai` wrote
-  nothing** (BOU-318). The error pipeline with its BND codes, `(fix!)` and the
-  dev dashboard existed only in the monorepo: `wagoe-devtools` was in no
-  template dependency and in no catalogue entry, so `wagoe add devtools` failed
-  with "Unknown module". The jar is now in the `:repl` alias of a generated
-  `deps.edn` — dev-only on purpose, so it stays out of the uberjar and the
-  Docker image — and in the catalogue as the first `:scope :dev` module, which
-  `wagoe add` puts in that alias rather than in `:deps`. The classpath is what
-  this fixes: the dashboard still needs `:wagoe/dashboard` in your config, and
-  the generated `dev/user.clj` has no `(fix!)` yet (BOU-319).
-
-  Finding that surfaced a second defect: `wagoe add` searched the whole
-  `deps.edn` as text for the coordinate. The generated `:mcp` alias names five
-  wagoe libs it launches the MCP server with, so `wagoe add ai`, `jobs`,
-  `scaffolder` and `tools` all read as already installed — the command printed
-  success and left `:deps` untouched. It reads the file as EDN now and looks
-  where the module belongs.
-
-- **A scaffolded module booted but served nothing in a generated project**
-  (BOU-312). `wagoe new`'s config template discovered scaffolded modules and
-  wired their components, but never passed their routes to the HTTP handler, so
-  `/api/v1/<module>` was a 404 in every generated project while `bb quickstart`
-  reported 8/8 Done. The first-run smoke could not see it either: it asserted
-  that `/api-docs/` returns 200, which the framework serves in a project with no
-  module at all. The smoke now curls the module quickstart scaffolded, requires
-  a 2xx with a JSON body, and requires an unknown sibling path to 404 — a router
-  that answers everything would otherwise pass. The nightly first-run matrix
-  inherits all three.
-
-- **A pull request from a fork ran no tests at all** (BOU-315). `ci.yml`
-  triggered on `push:` alone, so same-repo branches were covered and fork PRs
-  started zero jobs — leaving `All Tests Passed`, the one context branch
-  protection requires, permanently *pending* rather than failing. Pending is not
-  red, so nothing announced that the code had never been tested. CI now also
-  triggers on `pull_request:`, with `push:` scoped to `main` so a same-repo PR
-  runs the pipeline once rather than twice.
-
-- **A tag on an untested commit could publish 30 immutable artifacts**
-  (BOU-314). `publish.yml` verified that the tag agreed with source, that a
-  re-run did not double-publish, and that everything landed — all properties of
-  the *shape* of a release, none of them asking whether the code works. It now
-  requires a completed, successful `All Tests Passed` on the tagged commit
-  before any deploy step runs. Clojars coordinates cannot be recalled, so this
-  aborts in seconds, before the release does any other work.
-
-- **Stale install instructions on the first page users copy from** (BOU-313).
-  `installation.adoc` pinned four coordinates to `1.0.1-alpha-42`, a
-  discontinued line that Maven sorts *newer* than every beta, so anyone
-  following it — or resolving a range — landed on unsupported jars. The manual
-  install steps also asked for Java 17 while `install.sh` has required 21 since
-  `1.0.0-beta-5`, in prose and in all four package-manager commands. Getting
-  Started described bootstrapping "from the starter repository", which does not
-  exist; it names `wagoe new` now.
-
- ### Removed
-
-- **`realtime`'s `UserJWTAdapter`** (BOU-305). It resolved
-  `wagoe.user.shell.auth` at runtime without declaring the dependency, so it
-  worked in the monorepo and threw on first JWT verification for anyone using
-  `wagoe-realtime` from Clojars — realtime's only verifier. Nothing wired it
-  outside realtime's own tests. `IJWTVerifier` already exists as a port; the
-  application supplies the implementation, since it knows what issues its
-  tokens. `TestJWTAdapter` is unchanged.
-
-### Fixed
-
-- **`bb scaffold generate` no longer overwrites an existing module without
-  asking** (BOU-308). The write path `spit`-ed every file unconditionally, so
-  re-running the framework's most-recommended command after a day of editing
-  replaced every file it had written — no prompt, no backup, exit 0. `--force` was
-  declared in the CLI and threaded into the request; nothing read it. Generation
-  now refuses before writing anything, listing the files it would have replaced,
-  and exits non-zero. With `--force` it overwrites and reports those files as
-  `:overwrite` rather than `:create`. A dry run never refuses, since it writes
-  nothing. `--force` reuses the module's existing migration id rather than
-  adding a second `create-<table>` pair, and the MCP `scaffold-module` tool
-  gained the flag — without it, the verify-and-re-invoke loop that tool
-  documents was a dead end. `bb scaffold adapter` had the same unconditional
-  write, ignored `--output-dir`, and reported `:create` for a dry run.
-
-### Added
-
-- **`bb scaffold integrate` writes the config key, and `--dry-run` works**
-  (BOU-310). It printed guidance and said so in its own header, while `bb.edn`,
-  the generated `AGENTS.md` and `bb scaffold --help` all described it as wiring
-  things up — and `--dry-run` was parsed and never read. It now writes
-  `:wagoe/<module>` into `resources/conf/{dev,test}/config.edn`, reports what it
-  did per file, and is a no-op on a second run. Since discovery loads the wiring
-  namespace by convention (BOU-311), that key is the whole registration: no
-  require to add by hand. The brace-balanced config editor `bb quickstart` had
-  is now shared rather than duplicated, and reads `config.edn` with a real lexer:
-  a brace inside a string or comment used to shift the depth count and place the
-  key in the wrong section, silently, since the result still parsed. `--base-ns`
-  is refused rather than writing a key discovery cannot resolve.
-
-- **Scaffolded modules are discovered, and an unknown module key fails the boot**
-  (BOU-311). `ig-config` built from a fixed list of module keys, so adding
-  `:wagoe/tasks` after `bb scaffold generate tasks` produced nothing: no
-  init-key, no route, no warning. `bb quickstart` reported success over a module
-  that could not be reached. Any `:wagoe/<module>` carrying `:enabled?` — the
-  shape `bb scaffold integrate` prints — is now wired from its
-  `wagoe.<module>.shell.module-wiring`, and its routes reach `:wagoe/http-handler`
-  through `:module-routes`, because the handler names its route keys one by one
-  and cannot name a generated module. (In the framework's own app root only —
-  generated projects got the `:module-routes` half in BOU-312, below.) A key whose wiring namespace will not load
-  throws at boot naming the key, the namespace it looked for, and the fix; a
-  misspelled key used to look exactly like a working one.
-
-- **The scaffolder emits `shell/module_wiring.clj`** (BOU-309). It generated
-  every file a module needs except the one its own integrate step requires, so
-  `bb scaffold integrate` always reported that the module had no wiring yet and
-  the user hand-wrote the Integrant keys the framework says never to hand-write.
-  A generated module now ships `:wagoe/<module>-repository`, `-service`,
-  `-routes` and the `:wagoe/<module>` key discovery looks for, each with a
-  `halt-key!`. The dead next-step telling you to add the module to
-  `[:active :wagoe/settings :modules]` — a path nothing reads, and one that
-  contradicted `integrate` — is replaced by the command that does the work.
-
-- **`com.wagoe/wagoe-config` — configuration loading as a library** (BOU-306).
-  Four published libraries read settings through a `wagoe.config` namespace they
-  resolved at runtime and nobody declared. It worked because the monorepo has
-  one and `wagoe new` generates one, so the coupling was a convention rather
-  than a dependency — in one case resting on a *private* var, meaning renaming
-  it would have broken `wagoe-user` at runtime with nothing to catch it. Anyone
-  assembling a Wagoe application by hand had no such namespace at all. The
-  loading and the typed accessors now ship as a library that `ai` and `user`
-  declare; `platform`'s `start!`/`restart!` and the devtools dashboard take the
-  Integrant config as an argument instead of reaching for the application's
-  composition root. This makes it 31 libraries.
-
-### Changed
-
-- **`check:ports` catches any reach into another module's shell, not two named
-  suffixes** (BOU-307). The rule matched exactly `.shell.persistence` and
-  `.shell.service`, and every real coupling in the tree went around it —
-  database adapters, i18n render helpers, auth middleware. It now flags any
-  foreign `*.shell.*` require, with composition roots exempt in code, because
-  wiring is the one job that has to name concrete implementations; without that
-  exemption 39 of the 62 cross-module requires would be the system assembling
-  its own adapters. `.wagoe/check-ports.edn` gains
-  `:allow-cross-module-shell`, a burn-down list of 9 target prefixes — one entry
-  per decision rather than one per call site — each with a mandatory
-  `:target-prefix` and `:why`, and each reported when it stops exempting
-  anything. A malformed allowlist now throws instead of being read as empty.
-  Framework gaps a downstream project cannot close — platform's database
-  adapters, its interceptor pipelines, i18n's render helpers — are exempt
-  everywhere rather than by file, so `bb check` still passes on a freshly
-  scaffolded module.
-
-- **The monorepo's `wagoe.config` is now `wagoe.system-config`, and `wagoe new`
-  generates `system_config.clj`** (BOU-306). Assembling an Integrant system is
-  an application's decision, and the name now says so — but the practical reason
-  is that `wagoe.config` is a published library, and two namespaces of that name
-  on one classpath shadow each other.
+- **`bb check:error-shape`** (BOU-323). Fails a boundary throw with no `:type`, and
+  a `{:success? false}` whose `:error` is not `{:type … :message …}`.
 
 - **`bb check:isolation`, and an isolated build per library in CI** (BOU-304).
-  "30 independently publishable libraries" was documented and never checked — no
-  CI job had ever built a library against its own `deps.edn`. The new matrix job
-  loads every namespace of each library against only its own dependencies. That
-  turned out not to be enough on its own: 30 of 31 libraries already compile
-  clean in isolation, `realtime` among them, because its require of
-  `wagoe.user.shell.auth` sits inside a `try`/`catch` that swallows the failure.
-  The namespace loads and the adapter throws on first use, from Clojars, in a
-  user's application. So the gate reads the loading forms themselves — `require`,
-  `requiring-resolve`, `the-ns`, `resolve` — and fails when a library reaches for
-  a namespace it neither owns nor declares — written as a static `:require`, a
-  fully qualified call, or any dynamic load. `libs/tools` cannot be a matrix cell
-  because its runtime is Babashka rather than the JVM, so it gets the equivalent
-  load under `bb` instead. It ships with a justified burn-down list in
-  `.wagoe/check-isolation.edn` — 14 entries covering 26 sites — which BOU-305,
-  BOU-306 and BOU-307 empty; an entry that stops exempting anything also fails
-  the build, so the list cannot quietly become a drawer.
+  Proves "independently publishable libraries" rather than asserting it.
 
-- **`bb bump <version>`** (BOU-316). The release bump was a global
-  `find | xargs sed` copied out of the README, and three things were wrong with
-  it at once: the snippet set `OLD` and `NEW` to the *same string*, so a
-  copy-paste run rewrote nothing and reported success — with a verification step
-  of `grep -r "$OLD"`, which then found nothing and agreed; `sed -i ''` is
-  macOS-only, so the documented command fails on Linux and in CI; and it
-  replaced *every* occurrence of the version string, including third-party pins
-  and fixtures that happened to match. `bb bump` rewrites exactly the locations
-  `check:versions` discovers — the same code, not a second list — prints a diff,
-  and verifies the result against the version it just wrote. `--dry-run` lists
-  the files and writes nothing, a plain re-run is a no-op, and a leading `v` is
-  refused rather than written into 96 places where every location would then
-  agree.
+- **`bb bump <version>`** (BOU-316). Rewrites exactly the locations `check:versions`
+  finds, prints a diff, and verifies the result. The README snippet rewrote nothing.
 
-### Fixed
+- **`com.wagoe/wagoe-config`** (BOU-306). Config loading and the typed accessors as
+  a library, so libraries stop resolving `wagoe.config` at runtime. Makes it 31.
 
-- **The documentation version scanner read one match per line, and attributed
-  `--tag` too widely** (BOU-317 follow-up; found in review, neither reachable
-  from the tree as it stands). Two `com.wagoe` coordinates on one line — routine
-  Clojure formatting — left the second ungated, and therefore stale after a
-  `bb bump` that then verified clean, because the check had the identical blind
-  spot. Separately, `--tag` was attributed to any block mentioning this
-  repository, so a third party's `--tag` in the same block would be read as a
-  stale suite version and rewritten to ours, breaking the documented command. A
-  tag now belongs to the nearest install URL at or above it, and every match on
-  a line is a finding.
+- **`bb scaffold integrate` writes the config key, and `--dry-run` works** (BOU-310).
+  That key is the whole registration — no require to add by hand.
+
+- **Scaffolded modules are discovered, and an unknown module key fails the boot**
+  (BOU-311). A misspelled key used to look exactly like a working one.
+
+- **The scaffolder emits `shell/module_wiring.clj`** (BOU-309). The one file its own
+  integrate step required and it did not write.
 
 ### Changed
 
-- **`check:versions` now covers documentation as well as source** (BOU-317). It
-  read 59 code locations and no `.md`/`.adoc`, so roughly 40% of the version
-  surface was ungated — and it was the half users copy from, which is how
-  `installation.adoc` sat 43 releases behind through every bump and every green
-  run. It now also reads `com.wagoe` coordinates, `--tag v…` install recipes for
-  this repository, and release-pinned prose such as "NEW in v…": 96 locations
-  rather than 59. Historical documents are excluded by path, each with a stated
-  reason, and documentation is checked *against* the version the source declares
-  rather than being allowed to vote on it — otherwise a wholly stale
-  documentation set would report the correctly-bumped files as the offenders.
+- **`:wagoe/router` settings now reach the router** (BOU-357). `:adapter` is gone,
+  and an unrecognised `:coercion` fails the boot instead of silently giving you Malli.
 
-- **`check:branch-protection` also verifies that CI can run at all.** Coverage
-  of every job is worth nothing on a run that never starts, so the gate now
-  reports a missing `pull_request:` trigger and an unscoped `push:` that would
-  double every run — and, because a release path that routes around CI makes the
-  merge gate optional in practice, a `publish.yml` whose CI guard is missing or
-  sequenced after the deploy.
+- **Two routes that can both match a request now fail the boot** (BOU-356).
+  `:wagoe/router {:conflicts nil}` restores the old behaviour if you must ship first.
+
+- **Platform has a database port** (BOU-303). Require `wagoe.platform.database` or
+  `wagoe.platform.ports.database`; function names and arities are unchanged.
+
+- **Feature flags take the environment as a parameter** (BOU-302). **Breaking:**
+  1-arity calls move to `wagoe.platform.shell.feature-flags`.
+
+- **Modules emit Reitit route data; the normalized format is gone** (BOU-331,
+  ADR-037). **Breaking:** a route map becomes `["/users" {:get {:handler ns/fn}}]`.
+
+- **A library can serve HTTP without platform knowing it exists** (BOU-330). Routes
+  arrive as one collection, and a module names its own `:web-prefix`.
+
+- **A scaffolded module's web routes mount under `/web`** (BOU-330). **Their URLs
+  move**, from `/<path>` to `/web/<path>` — the documented contract, finally kept.
+
+- **A generated project's own code lives under its own namespace** (BOU-360).
+  Existing projects keep booting: discovery falls back to `wagoe.<module>`.
+
+- **A generated `config.clj` is 63 lines instead of 404** (BOU-326). Each module
+  describes its own graph. Nothing to do for an existing project.
+
+- **A healthy project produces no diagnostic noise** (BOU-324). Four checks warned
+  about things that are not problems, which teaches readers to skim past the rest.
+
+- **`bb check:fcis` reads code rather than lines, and its requires are an allowlist**
+  (BOU-301). A newline between `(` and `throw` no longer hides the call.
+
+- **`check:ports` catches any reach into another module's shell** (BOU-307), not two
+  named suffixes. Composition roots stay exempt, since wiring must name adapters.
+
+- **`check:versions` covers documentation as well as source** (BOU-317). 96 locations
+  rather than 59 — the ungated half was the half users copy from.
+
+- **`check:branch-protection` also verifies that CI can run at all** (BOU-315).
+  A missing `pull_request:` trigger, or a release path that routes around CI.
+
+- **The monorepo's `wagoe.config` is now `wagoe.system-config`** (BOU-306). Two
+  namespaces of that name on one classpath shadow each other.
+
+- **One clock read per library instead of eleven** (BOU-302). All private now; every
+  call site was already in a shell namespace, so no behaviour changes.
+
+### Removed
+
+- **`wagoe.platform.shell.interfaces.http.routes`** (BOU-358). A second, documented
+  route builder nothing wired — and it applied no security stack. Use module contributions.
+
+- **`realtime`'s `UserJWTAdapter`** (BOU-305). It reached into `wagoe.user.shell.auth`
+  undeclared and threw from Clojars. Supply your own `IJWTVerifier`.
+
+### Fixed
+
+- **`bb scaffold field`/`endpoint`/`adapter` fail when the module is not there**
+  (BOU-364). `field` left a migration behind for a column its schema would reject.
+
+- **`bb scaffold --output-dir` reads the namespace from the project it edits**
+  (BOU-364), not the one you run it from.
+
+- **`bb scaffold generate` no longer overwrites a module without asking** (BOU-308).
+  `--force` was declared, threaded, and read by nothing.
+
+- **`:tenant-membership` was nil on every request** (BOU-373), so `require-tenant-member`
+  refused all of them. Authentication now runs ahead of the middleware that needs it.
+
+- **A malformed request answered 500** (BOU-321). It is a 400 naming the fields, and
+  in dev it carries the BND code — which had no name for `:validation-error`.
+
+- **58 exceptions thrown at boundaries say what kind of failure they are** (BOU-323).
+  An untyped throw on a request path is a 500 that could have been a 404 or a 400.
+
+- **The user library's authentication and MFA results carry a typed error** (BOU-323).
+  Direct callers of the two shell namespaces are affected; see UPGRADING.md.
+
+- **The error-shape allowlist is empty** (BOU-323). It shipped with 81 findings on
+  18 August; what the gate protects from here is a new violation, not a backlog.
+
+- **One validation API instead of three** (BOU-323). One of them chose its return
+  shape at runtime from an environment variable; that fork is deleted.
+
+- **`wagoe add workflow` created a module whose tables did not exist** (BOU-326).
+  Two hand-maintained copies of a graph the module already described.
+
+- **A module can no longer ship a component nothing wires** (BOU-326). Seven
+  exemptions remain, three of them the same defect elsewhere; emptying it is BOU-346.
+
+- **The monorepo ran the tenant module whether or not it was configured** (BOU-326),
+  and wired neither `:wagoe/settings` nor the AI service it had switched on.
+
+- **Two admin helpers had never worked** (BOU-326). They built their graph against
+  three keys no application wires. Removed; the module's real graph is `ig-config`.
+
+- **The e2e suite runs in CI again, and a red e2e test blocks the merge** (BOU-297).
+  52 tests sat behind `if: false`; turning them on found real flakiness, now fixed.
+
+- **A pull request from a fork ran no tests at all** (BOU-315), leaving the one
+  required context pending rather than failing. Pending is not red.
+
+- **A tag on an untested commit could publish 30 immutable artifacts** (BOU-314).
+  Publishing now requires a green `All Tests Passed` on the tagged commit.
+
+- **A scaffolded module booted but served nothing in a generated project** (BOU-312).
+  The first-run smoke now curls the module it scaffolded and requires a 2xx.
+
+- **devtools reached generated projects nowhere, and `wagoe add ai` wrote nothing**
+  (BOU-318). `wagoe add` searched `deps.edn` as text and matched the `:mcp` alias.
+
+- **The first thing `bb quickstart` tells you to run did not exist** (BOU-319).
+  A generated `dev/user.clj` now has `(status)`, `(modules)`, `(routes)`, `(fix!)`.
+
+- **The MCP server advertised seven resources and could serve none in a project**
+  (BOU-320). The knowledge base ships in the jar and is read from the classpath.
+
+- **The quickstart's last step 404'd** (BOU-328). It ended on a path in a module a
+  generated project does not enable, at a prefix admin does not use.
+
+- **The getting-started tutorial showed code the scaffolder does not write** (BOU-327).
+  A test now calls the generators and checks every name the page shows exists.
+
+- **Two guides were unreachable, and 29 ADRs did not say what they were** (BOU-329).
+  Both are in the nav; every ADR states a status and names its implementation.
+
+- **Stale install instructions on the first page users copy from** (BOU-313). It
+  pinned a discontinued line that Maven sorts newer than every beta.
+
+- **A generated project no longer ships `bb deploy`** (BOU-325). It published
+  *Wagoe's* libraries to Clojars, from a user's project.
+
+- **`bb check:deps` was a green row that could not fail — or worse** (BOU-325). In a
+  project with its own `libs/`, it reported the project's namespaces as violations.
+
+- **The documentation version scanner read one match per line** (BOU-317 follow-up),
+  so a second coordinate on the same line stayed stale through a verified `bb bump`.
+
+### Security
+
+- **MFA secrets and backup codes no longer reach handlers** (BOU-373). Session
+  authentication put the whole user record on `:user`; only `:password-hash` was stripped.
+
+- **Any `Authorization: Bearer` value authenticated** (BOU-374). **Upgrade if you use
+  JWT auth.**
 
 ## [1.0.0-beta-5] — 2026-08-16
 
@@ -1001,321 +231,133 @@ to be watching.
 
 ### Removed
 
-- **Three HikariCP pool keys that no build has ever applied** (BOU-89).
-  `:keepalive-time-ms`, `:validation-timeout-ms` and
-  `:leak-detection-threshold-ms` were documented and accepted by nothing: the
-  pool map is a `:closed` Malli schema and the builder applies five keys, so a
-  config setting any of them failed the boot at `:wagoe/db-context`. Removed
-  rather than implemented — the prod and acc profiles shipped with them and
-  could not start.
+- **Three HikariCP pool keys that no build has ever applied** (BOU-89). The pool
+  schema is `:closed`, so a config setting any of them failed the boot.
 
-- **Integrant config for four libraries that register none** (BOU-284,
-  BOU-286). `wagoe add jobs|calendar|reports|ui-style` wrote
-  `:wagoe/<lib> {:provider :in-memory}` into generated projects, and nothing
-  reads it; `ui-style`'s own AGENTS.md says it has no Integrant keys.
-  `:post-install` now says how each library is actually used. `wagoe add push`
-  wrote one key where the library registers seven `:wagoe.push/*`, so the
-  generated `config.clj` assembles them properly instead.
+- **Integrant config for four libraries that register none** (BOU-284, BOU-286).
+  `wagoe add jobs|calendar|reports|ui-style` wrote a key nothing reads.
 
-- **`bb scaffold new` / `wagoe scaffolder new`** (BOU-259). Projects were
-  generated by two independent implementations: the `wagoe new` templates in
-  `libs/wagoe-cli`, and a second copy inside the scaffolder. The copy had
-  drifted until it no longer produced a Wagoe project — 7 files against the
-  CLI's 20, with no `com.wagoe` dependencies, no `main.clj`/`system.clj`, no
-  `build.clj`, no `tests.edn` and no `.env`, so the result could not boot, test
-  or build. Both commands now print the replacement (`wagoe new my-app`) rather
-  than failing as an unknown command, and both exit non-zero so a script that
-  still calls them cannot read the redirect as a generated project — including
-  `--help`, which the scaffolder CLI briefly answered with root help and exit 0,
-  making the removed command look available to anything probing for it.
-  Supersedes ADR-002.
+- **`bb scaffold new` / `wagoe scaffolder new`** (BOU-259). A second project
+  generator, drifted until it could not boot, test or build. Use `wagoe new`.
 
 ### Added
 
 - **A module can run in another process without its callers knowing** (BOU-90).
-  `wagoe.platform.shell.rpc` serves any module's protocol over HTTP, and
-  `remote-adapter` returns a value implementing that same protocol by calling
-  it — so a call site keeps using the port it already used. transit+json on the
-  wire (JSON has no keywords), a required `x-rpc-service-key` compared in
-  constant time, and the server resolves an operation against the protocol's
-  own `:sigs`, so the endpoint cannot become a general-purpose remote eval.
+  `wagoe.platform.shell.rpc` serves any port over HTTP; call sites do not change.
 
-- **`service` launch mode** (BOU-91). `java -jar wagoe.jar service payments`
-  boots only the modules named plus the platform they need; several can share
-  one process. Declared in `config.edn`, on its own listener. The counterpart
-  to the remote-port adapter: one of them slices a module out, the other calls
-  it.
+- **`service` launch mode** (BOU-91). `java -jar wagoe.jar service payments` boots
+  only the modules named, plus the platform they need.
 
-- **Reference deployment topologies** (BOU-89).
-  `deploy/compose/multi-instance.yml` (N replicas behind nginx, Redis-backed
-  cache, sessions and rate limiting), `deploy/compose/per-service.yml` (one
-  module as its own service), `deploy/k8s/wagoe.yaml`, and
-  `docs/modules/architecture/pages/deployment-topologies.adoc` describing when
-  each applies.
+- **Reference deployment topologies** (BOU-89). Compose files for replicas and for
+  per-service, a Kubernetes manifest, and a page on when each applies.
 
-- **`libs/events` — an asynchronous event bus** (BOU-93). The other half of the
-  cross-process story: a publisher does not know who is listening, does not
-  wait, and is unaffected if a consumer is down. Two adapters — in-memory, and
-  Redis Streams with consumer groups, at-least-once delivery, reclaim of
-  abandoned entries and a dead-letter stream after `:max-deliveries`. Three
-  protocols rather than one, so a module that only emits does not depend on
-  subscription machinery it never calls.
+- **`libs/events` — an asynchronous event bus** (BOU-93). In-memory and Redis
+  Streams, with consumer groups, at-least-once delivery and a dead-letter stream.
 
-- **A circuit breaker for the remote-port adapter** (BOU-285). Retries bound
-  the damage of one call; this bounds the damage of many. State lives in the
-  cache port, so replicas share one breaker rather than each discovering the
-  outage separately, and a `set-if-absent!` lease lets exactly one replica
-  probe when the window elapses instead of all of them. Trips on consecutive
-  `:rpc/unavailable` and `:rpc/timeout` — failures where the call did not reach
-  the service — and returns `:rpc/circuit-open` with `:retry-after-ms`, which a
-  log can tell apart from "tried and could not reach it". Opt-in: without a
-  `:cache` there is no breaker and the client behaves as before.
+- **A circuit breaker for the remote-port adapter** (BOU-285). State lives in the
+  cache port, so replicas share one breaker. Opt-in: no `:cache`, no breaker.
 
-- **`wagoe new --no-user`** (BOU-234). The scaffold wired the user chain
-  unconditionally, so every generated application carried authentication and
-  four tables whether or not it had accounts. Platform has been decoupled from
-  user since BOU-171; this makes the scaffold's default a choice.
+- **`wagoe new --no-user`** (BOU-234). Authentication and its four tables are now a
+  choice rather than the only option.
 
-- **Realtime topics accept in-process subscribers** (BOU-233). Every subscriber
-  had to be a WebSocket connection, so an application wanting an event to reach
-  server-side code ran a second pub/sub beside this one.
+- **Realtime topics accept in-process subscribers** (BOU-233), so server-side code
+  no longer needs a second pub/sub beside this one.
+
+- **Adapter contract suites for cache and jobs** (BOU-288, BOU-289). One sweep per
+  library against every adapter; they found twenty-one divergences.
+
+- **`bb check:changelog`** — a branch changing shipped `src/` must add an entry.
+  Thirty PRs had merged in eleven days without one between them.
+
+- **Gates** — required checks verified against the job names CI emits (BOU-277),
+  and every third-party namespace a library requires must be declared (BOU-273, BOU-276).
+
+- **Nightly first-run matrix, and three more cells** (BOU-232). Ubuntu, Fedora and
+  Arch, plus an old-JDK machine and one with no network.
 
 - **Four dev-workflow Claude Code skills** (BOU-235) — `wagoe-doctor`,
-  `wagoe-migrate`, `wagoe-scaffold` and `wagoe-debug`, beside the existing
-  `wagoe` and `wagoe-setup`. Closes BOU-237, BOU-238, BOU-240 and BOU-242.
-
-- **Adapter contract suites for cache and jobs** (BOU-288, BOU-289). Each
-  library's adapters had separate test suites sharing no cases, so nothing said
-  they behave alike — and they did not. One sweep per library now runs the port
-  against every adapter; between them they found twenty-one divergences that
-  the per-adapter suites had been passing over. `libs/events` gained the same
-  thing with BOU-93.
-
-- **`bb check:changelog`.** A branch that changes shipped `src/` must add an
-  entry here. Thirty pull requests merged in the eleven days to 2026-08-16
-  without one between them — a new library, a new launch mode, a removed config
-  key and a change to the order jobs are dispatched in. Nothing checked. Tests,
-  docs, CI and dev tooling are out of scope, and `[no changelog]` in a commit
-  message waives it for a source change nobody will notice.
-
-- **Gates.** Required status checks are verified against the job names CI emits
-  (BOU-277) with no repository secret; every third-party namespace a library
-  requires must be declared, and the allowlist is empty (BOU-273, BOU-276); a
-  library with a `build.clj` must have a documentation page (BOU-93).
-
-- **Three more first-run matrix cells** (BOU-232). A machine with a JDK too old
-  to use and a machine with no network, both in `first-run-preconditions.sh`;
-  and zsh alongside bash and fish in the adversarial suite, which had been
-  verified by hand once and never since. The old-JDK cell found the `install.sh`
-  defect below. The offline cell pins behaviour that was already correct: the
-  installer fails with something actionable rather than raw curl output.
-
-- **Nightly first-run matrix** (BOU-232). The broad first-run coverage —
-  Ubuntu, Fedora and Arch for the install-to-serving-app path, plus the
-  adversarial cases on Ubuntu and Fedora — now runs on a schedule and on
-  demand, rather than only when someone remembers. The fast single-image smoke
-  test stays on every push. `workflow_dispatch` makes the same matrix the
-  pre-release gate.
+  `wagoe-migrate`, `wagoe-scaffold`, `wagoe-debug`. Closes BOU-237, BOU-238, BOU-240, BOU-242.
 
 ### Changed
 
 - **Job dispatch is FIFO within a priority, on every backend** (BOU-289).
-  *Behaviour change.* The three `IJobQueue` backends had three different
-  answers: the DB adapter was FIFO, the in-memory adapter ran critical, high
-  and normal newest-first, and Redis ran `:low` newest-first. Anything relying
-  on the old dispatch order in development or on Redis `:low` will see a
-  different order. The DB adapter's `ORDER BY priority_rank, created_at` is now
-  what all three do.
+  *Behaviour change:* the three backends had three different orders.
 
-- **The cache adapters agree about expiry, batch reads and patterns**
-  (BOU-288). *Behaviour change.* An expired key now reads as absent from every
-  operation rather than only from `get-value`: `delete-key!` and `expire!`
-  return false for one, `keys-matching` omits it, and `compare-and-swap!`
-  matches `nil` against it. `ttl` rounds up, as Redis does, instead of
-  reporting 29 for a key set to 30 a millisecond earlier. `get-many` returns
-  keys holding `false` or `nil` instead of dropping them. `compare-and-swap!`
-  on Redis keeps the key's TTL. And the in-memory pattern matcher treats
-  everything but `*`, `?` and `[…]` literally — it compiled the glob straight
-  to a regex, so `a.b` matched `axb`.
+- **The cache adapters agree about expiry, batch reads and patterns** (BOU-288).
+  *Behaviour change:* an expired key now reads as absent from every operation.
 
-- **Heavy test dependencies moved out of the shared `:test` alias** (BOU-260).
-  Embedded PostgreSQL's two platform binaries, the OpenTelemetry in-memory
-  exporters and clj-http-lite sat in `:test`, which all 27 per-library CI jobs
-  resolve, so one flaky artifact failed them all under an innocent library's
-  name. They now live in `:test/pg`, `:test/pg-mac`, `:test/otel` and
-  `:test/http`; `:test/all` composes them for a full local run.
+- **Heavy test dependencies moved out of the shared `:test` alias** (BOU-260). They
+  live in `:test/pg`, `:test/otel`, `:test/http`; `:test/all` composes them.
 
-- **platform no longer requires any module's wiring** (BOU-131). The system
-  wiring statically required ten module-wiring namespaces, so every consumer of
-  platform had to ship every one of those jars whether it used them or not, and
-  a missing one was a `FileNotFoundException` at load. The layer that emits a
-  key now registers it.
+- **platform no longer requires any module's wiring** (BOU-131). A consumer ships
+  only the jars it uses; the layer that emits a key registers it.
 
 ### Fixed
 
-- **`install.sh` accepted any JDK, including ones too old to run Wagoe**
-  (BOU-232). The check was `java -version | grep -q "version"`, which every JDK
-  back to 8 passes, while the installer's own text says JDK 21+. On a machine
-  with an older JDK it reported "JVM already installed" and carried on, and the
-  failure surfaced much later as a class-file-version error out of the Clojure
-  compiler — which tells a newcomer nothing. It now reads the major version,
-  says which one it found and which is needed, installs a current JDK, and
-  verifies the result rather than assuming it: an older JDK still first on PATH
-  is a loud failure naming the one that is winning, not a silent success.
+- **`install.sh` accepted any JDK, including ones too old to run Wagoe** (BOU-232).
+  It reads the major version now and verifies what it installed.
 
-- **A deleted job stayed on the queue** (BOU-289). Redis and the in-memory
-  backend removed the job data but left its id in the list, so it still counted
-  towards `queue-size` and the dequeue that reached it found nothing and
-  returned nil — work queued behind a deleted job waited for a poll that might
-  not come. `peek-job` on Redis read only the `:normal` list, so a queue holding
-  a critical job peeked as empty and disagreed with the very next dequeue.
-  `list-queues` returned a Redis queue once per priority in use, and named
-  in-memory queues that had been fully drained.
+- **The prod and acc profiles could not boot** (BOU-89). `:port` arrived as a string
+  against a `pos-int?` schema, on top of the three pool keys above.
 
-- **The in-memory cache lost concurrent writes while reclaiming expired
-  entries** (BOU-288). `delete-key!` and `expire!` read the entry and then wrote
-  based on what the read said, so a value written in between was deleted while
-  the caller was told there had been nothing there; `expire!` could also
-  recreate a key deleted since the read as an entry with an expiry and no value,
-  which `exists?` reported as present and `get-value` threw on. Both are one
-  `swap-vals!` now.
+- **A deleted job stayed on the queue** (BOU-289), still counting towards
+  `queue-size`, and work behind it waited for a poll that might not come.
 
-- **A BigInteger beyond 64 bits was silently lost by the Redis cache**
-  (BOU-288). It took the native-integer path, where reading it back overflows
-  `Long/parseLong` and the decimal bytes are not Nippy either — so the write
-  reported success and the read reported a miss. `get-many` and `delete-many!`
-  also handed an empty collection straight to MGET and DEL, which is an error
-  rather than an empty answer.
+- **The in-memory cache lost concurrent writes while reclaiming expired entries**
+  (BOU-288). `delete-key!` and `expire!` are one `swap-vals!` now.
 
-- **The prod and acc profiles could not boot** (BOU-89). `:port` came from
-  `#env POSTGRES_PORT` as a string against a `[:port pos-int?]` schema, on top
-  of the three pool keys above.
+- **A BigInteger beyond 64 bits was silently lost by the Redis cache** (BOU-288).
+  The write reported success and the read reported a miss.
 
-- **The documented way to run `wagoe-mcp` corrupts the protocol** (BOU-105).
-  Fixed along with the docs that described it.
+- **`bb create-admin` could not create a user at all** (BOU-266). Without an admin
+  user the admin UI redirects to a login nobody can pass.
 
-- **The AI CLI discarded unknown options and swallowed the failures it was
-  built to report** (BOU-279, BOU-280). Every subcommand destructured
-  `parse-opts` without reading `:errors`, so a typo'd flag was ignored rather
-  than rejected; failures named neither the provider that failed nor the
-  endpoint that was configured, and an exhausted balance was reported as a rate
-  limit.
+- **H2 is now file-backed in dev** (BOU-265). In-memory H2 is private to one JVM, so
+  migrations, the admin user and the app each got their own empty database.
 
-- **`bb ai gen-tests` emitted tests that did not compile** (BOU-239), and
-  **`bb i18n:scan` — a required CI job — could not report anything** (BOU-241).
+- **Scaffolded modules now pass `bb check`** (BOU-267). Two of the 36 warnings were
+  real: a protocol method declared twice, and a service calling a method that is not there.
 
-- **The documented ways to run the app now run the app** (BOU-243).
-  `clojure -M:repl-clj` could not start the system.
-
-- **`bb migrate create` wrote to a shadowed directory** (BOU-274). Migrations
-  under a `migrations/` that lost the classloader race were skipped silently;
-  it now fails loudly. **`bb scaffold field` listed a file it never opened**
-  (BOU-275).
-
-- **Five quality items, each with a gate behind it** (BOU-92, BOU-151, BOU-61,
-  BOU-253, BOU-245). The dependency allowlist is empty; platform no longer
-  makes the SMTP/IMAP/Twilio adapters a mandatory dependency of the HTTP layer.
-
-- **The scaling and deployment documentation described a system from several
-  tickets ago.** Two entries told a reader to do something that breaks, and the
-  rest was drift — launch modes documented as absent, shipped adapters
-  described as unbuilt, and `libs/events` missing from the readiness matrix.
-
-- **Every `bb ai` subcommand failed in a generated project** (BOU-272).
-  `wagoe.tools.ai` shelled a plain `clojure -M -m wagoe.ai.shell.cli-entry`,
-  but generated projects carry `com.wagoe/wagoe-ai` only in their `:mcp` alias,
-  never in `:deps` — so `explain`, `gen-tests`, `sql`, `docs` and
-  `admin-entity` all died with a FileNotFoundException. All five are listed in
-  the generated `bb.edn`, the generated `AGENTS.md`, and the shipped `wagoe`
-  Claude Code skill. The dependency is now injected via `-Sdeps`, matching what
-  `bb scaffold` has always done, with a `WAGOE_AI_ROOT` override for exercising
-  unreleased AI code from a generated project.
-
-- **`bb migrate create` threw a ClassCastException** (BOU-271). The migration
-  config carries `:migration-dir` as the discovered *vector* of every directory
-  on the classpath; `up`, `status` and `rollback` accept that, but
-  `migratus/create` casts it to String. So the documented way to add a
-  migration failed for everyone, pushing people onto hand-written files — the
-  exact path BOU-256 was filed against, because that filename format is easy to
-  get wrong and silently invisible to migratus. Creation now receives the
-  project's own `migrations/` as a string.
+- **`bb check` reported failures a user could not act on** (BOU-264). Five checks are
+  framework-only; they are skipped outside this repo, and named when skipped.
 
 - **`bb check`'s Config doctor gate could never fail** (BOU-270). It invoked
-  `bb doctor` without `--ci`, and doctor prints its errors but exits 0 unless
-  that flag is set — so the row reported `✓` for every config, including one
-  that did not parse. It now passes `--ci`. Every other checker in the registry
-  already exits non-zero on violations; doctor was the only flag-gated one.
+  `bb doctor` without `--ci`, which prints errors and exits 0.
 
-- **Scaffolded modules now pass `bb check`** (BOU-267). Generated source
-  produced 36 clj-kondo warnings, and clj-kondo exits non-zero on warnings, so
-  `bb check` failed the moment a user scaffolded their first module. Two of
-  those were real defects rather than lint noise: `update-<entity>` was
-  declared in *both* the repository and service protocols in one namespace, so
-  the second silently overwrote the first and `ports/update-<entity>` carried
-  the wrong arity; and the generated service called `.list-<plural>` on its
-  repository, which only declares `find-all`, so listing failed at runtime. The
-  repository method is now `update-entity`, the service calls `find-all`, and
-  the remaining warnings — unused `this`/`req`/`config` bindings, an unused
-  require, a partially-reified protocol — are gone. `bb check` on a freshly
-  scaffolded module is 9/9.
+- **Every `bb ai` subcommand failed in a generated project** (BOU-272). The
+  dependency is injected via `-Sdeps` now, as `bb scaffold` already did.
 
-- **`wagoe new` into a directory you cannot write surfaced a stack trace**
-  instead of a permissions message (BOU-232). The pre-flight directory check
-  cannot catch it — the target does not exist yet, so the failure comes out of
-  `clojure.java.io/writer` partway through generating. Found by the adversarial
-  suite's read-only case, which had never actually run: it skipped whenever the
-  container was root, because `chmod` does not restrict uid 0. It now uses a
-  read-only bind mount, which the kernel enforces for every uid, so the whole
-  suite runs with nothing skipped for the first time.
-- **`bb check` reported failures a user could not act on** (BOU-264). It runs
-  each check as a subprocess (`bb check:fcis`, …), but five of them only mean
-  something in the Wagoe repository — `doc-counts` and `poms` compare against
-  the published library set, `agents` diffs `knowledge.edn`, `no-boundary` is a
-  rename gate for this repo's history, and `docs:lint` lives on the `dev/` path.
-  Generated projects define none of those tasks, so `bb` exited 1 on "File does
-  not exist" and they were reported as violations. Checks now declare a scope
-  and the framework-only ones are skipped outside this repo — and **named** in
-  the output, because a silently shorter list reads as a clean run. Generated
-  projects also gain `check:test-meta`, `check:test-tags` and `check:hygiene`,
-  which were monorepo-only despite being useful anywhere.
+- **`bb migrate create` threw a ClassCastException** (BOU-271), so the documented way
+  to add a migration failed for everyone; it also wrote to a shadowed directory (BOU-274).
 
-- **`bb create-admin` could not create a user at all** (BOU-266). The
-  `:user-cli` alias ran the CLI through `-e` reading `*command-line-args*`, and
-  `clojure.main` takes the first non-option argument as a script path — so the
-  `create` verb was dropped and the CLI rejected `--email` as an unknown global
-  option. Without an admin user the admin UI redirects to a login nobody can
-  pass. The alias now uses `-m` against a new `-main` on
-  `wagoe.user.shell.cli-entry`. Existing generated projects pick this up when
-  they move to a release containing it.
-- Generated projects were missing the `check:ports` bb task while `bb check`
-  shelled out to it, so the hexagonal gate BOU-80 requires — and that the
-  generated `AGENTS.md` documents — could not run in a new project. Found
-  while reconciling the two generators.
-- **H2 is now file-backed in dev** (BOU-265). `bb setup --database h2` wrote
-  `:memory true` for every environment, and an in-memory H2 database is private
-  to the JVM that opened it. `bb migrate up`, `bb create-admin` and the app are
-  three separate processes, so each got its own empty database: migrations
-  applied nowhere, the admin user was written nowhere, and the app booted
-  unmigrated — with every step exiting 0. `bb quickstart --preset minimal`, the
-  first-listed preset, could not produce a working app. Dev and other non-test
-  environments now use `./<env>-h2-database`; the test profile keeps in-memory
-  H2, which is correct for a single JVM. The path is explicitly relative
-  because H2 2.x rejects an implicitly-relative one.
-- The root README said a new project gets "H2 in-memory database
-  (zero-config)". It gets SQLite, and has since before the rename.
+- **`bb scaffold field` listed a file it never opened** (BOU-275), and generated
+  projects lacked the `check:ports` task `bb check` shells out to (BOU-80).
+
+- **The AI CLI discarded unknown options and swallowed the failures it was built to
+  report** (BOU-279, BOU-280). An exhausted balance was reported as a rate limit.
+
+- **`wagoe new` into a directory you cannot write surfaced a stack trace** (BOU-232)
+  instead of a permissions message.
+
+- **The documented ways to run the app now run the app** (BOU-243), and the documented
+  way to run `wagoe-mcp` no longer corrupts the protocol (BOU-105).
+
+- **`bb ai gen-tests` emitted tests that did not compile** (BOU-239), and `bb i18n:scan`
+  — a required CI job — could not report anything (BOU-241).
+
+- **The scaling and deployment documentation described a system from several tickets
+  ago.** Two entries told a reader to do something that breaks.
+
+- **Five quality items, each with a gate behind it** (BOU-92, BOU-151, BOU-61,
+  BOU-253, BOU-245). The dependency allowlist is empty.
 
 ### Security
 
 - **A failed production boot no longer logs the database password** (BOU-244).
-  `wagoe.main` logged the exception on any startup failure, and Integrant's
-  ex-data carries `:value` — the config map for the key that failed, which for
-  `:wagoe/db-context` is the database configuration.
+  Integrant's ex-data carries the config map for the key that failed.
 
 - **js-yaml and brace-expansion advisories cleared in the docs build**
-  (GHSA-5p4m-2wfm-xmqj, GHSA-mh99-v99m-4gvg, GHSA-rgw5-rvv9-x895). Both are
-  dev-only transitive dependencies of Antora, which parses only our own
-  playbook, so the exposure was theoretical; the override pinning js-yaml did
-  not exclude the affected release.
+  (GHSA-5p4m-2wfm-xmqj, GHSA-mh99-v99m-4gvg, GHSA-rgw5-rvv9-x895). Dev-only.
 
 ## [1.0.0-beta-4] — 2026-08-01
 
@@ -1325,50 +367,33 @@ no database table — and reported success while doing it.
 
 ### Fixed
 
-- **Scaffolded migrations are now applied.** The scaffolder emitted
-  `001_create_tasks.sql`; migratus discovers `<id>-<name>.up.sql`, so the file
-  sat on disk and `bb migrate status` reported "0 pending" while
-  `bb quickstart` reported 8/8 Done — running zero migrations succeeds. Also
-  fixes the id: the counter scanned `resources/migrations` while writing to
-  `migrations/` and parsed ids with `Integer/parseInt`, which overflows on
-  14-digit timestamps, so every module got `001`. Ids are now UTC timestamps
-  that step forward on collision, and each migration gets a matching
-  `.down.sql`. `wagoe scaffold field` had the same defect.
+- **Scaffolded migrations are now applied** (BOU-256). The scaffolder emitted a
+  filename migratus does not discover, so `bb quickstart` reported 8/8 over zero migrations.
+
 - **`bb doctor` no longer passes configs the application cannot load.** An
-  unparseable `config.edn`, or `:active` misspelled, both left every check
-  inspecting an empty map and reporting a pass — `bb doctor --ci`, a CI gate,
-  exited 0 on a config that fails at runtime with `No active database
-  configured`.
-- **`install.sh` supports Fedora and the RHEL family.** Previously
-  "Unsupported OS" with no path forward. `which` also joins the prerequisite
-  check: babashka's installer calls it and minimal Fedora images do not ship
-  it, so the run died inside a third-party script.
+  unparseable `config.edn` left every check inspecting an empty map and passing.
+
+- **`install.sh` supports Fedora and the RHEL family**, and checks for `which`,
+  which babashka's installer calls and minimal Fedora images do not ship.
+
 - The admin UI is reachable at `/web/admin` without the trailing slash, and
   `wagoe add admin` now says that `bb create-admin` is needed to log in.
 
 ### Added
 
-- **`bb db:seed`.** Previously advertised in `bb.edn` and printed "not yet
-  implemented". Seed files are EDN — a map of table → rows, or a vector of
-  `[table rows]` pairs when order matters. Inserts run in one transaction, and
-  seeding refuses outside development environments unless `--force` is given.
-- **A production build path for generated projects**: `src/<ns>/main.clj`,
-  a `:run` alias for foreground start, a `:build` alias producing an uberjar,
-  and a Dockerfile. Previously a generated project could only be started from
-  an editor-connected REPL, so it could not be containerised or supervised.
-  Shutdown is graceful — a container stop drains the server and closes the
-  pool.
-- A first-run smoke test in CI that walks install → `wagoe new` →
-  `bb quickstart` → serving app inside a bare container, asserting on HTTP
-  rather than exit codes.
+- **`bb db:seed`.** Previously advertised and printed "not yet implemented". EDN
+  seed files, one transaction, refused outside development unless `--force`.
+
+- **A production build path for generated projects** — `main.clj`, `:run` and
+  `:build` aliases, a Dockerfile, and graceful shutdown on container stop.
+
+- A first-run smoke test in CI walking install → `wagoe new` → `bb quickstart` →
+  serving app in a bare container, asserting on HTTP rather than exit codes.
 
 ### Changed
 
-- The published quickstart told newcomers to run `clojure -M:repl-clj` and
-  `export WAG_ENV="development"`. Neither works in a generated project: the
-  alias exists only in the monorepo, and there is no `conf/development`
-  profile. Corrected across the getting-started, index, repl-workflow and
-  monorepo pages.
+- The published quickstart told newcomers to run `clojure -M:repl-clj` and export
+  `WAG_ENV="development"`. Neither exists in a generated project.
 
 ## [1.0.0-beta-3] — 2026-07-31
 
@@ -1379,42 +404,28 @@ container, not inferred.
 
 ### Changed
 
-- **New projects default to SQLite** (previously H2). SQLite needs no server
-  and, unlike in-memory H2, the data survives a restart. `org.xerial/sqlite-jdbc`
-  now ships in a generated project's `deps.edn`, and the generated config reader
-  gained the `:wagoe/sqlite` branch it previously lacked.
-- `bb setup` defaults to SQLite on **all three** entry points — interactive menu,
-  `bb setup ai`, and flag invocations such as `bb setup --payment mock`.
-- `bb quickstart` no longer runs the configuration wizard over a config that
-  `wagoe new` has just written. Pass `--preset <name>` to reconfigure deliberately.
+- **New projects default to SQLite** (previously H2). It needs no server and, unlike
+  in-memory H2, the data survives a restart.
+
+- `bb setup` defaults to SQLite on all three entry points — interactive menu,
+  `bb setup ai`, and flag invocations.
+
+- `bb quickstart` no longer runs the configuration wizard over a config `wagoe new`
+  has just written. Pass `--preset <name>` to reconfigure deliberately.
+
 - `bb quickstart`'s banner says it will *verify* rather than *start*; it never
-  started the app, and claiming otherwise sent people hunting for a failure that
-  had not happened.
+  started the app, and claiming otherwise sent people hunting a failure that had not happened.
 
 ### Fixed
 
-- **`install.sh` failed three separate ways on clean Linux** (BOU-226):
-  - no prerequisite check, so a bare image died in ~1s on sdkman's own
-    "Please install unzip" — an error about a tool the user never asked for,
-    printed under a screenful of sdkman ASCII art, never naming Wagoe. Now
-    checks `curl`/`git`/`unzip`/`zip` up front and prints the exact command for
-    the detected OS.
-  - sourcing sdkman's init script under `set -euo pipefail` aborted with
-    `SDKMAN_CANDIDATES_API: unbound variable` *immediately after* sdkman printed
-    "All done!". The source and `sdk install` now run under `set +u`.
-  - `sudo` was assumed to exist, which it does not in containers or minimal
-    images. Worse, the steps were written `sudo ./installer && rm installer`, and
-    `set -e` exempts the failure of any command in an `&&` list except the last —
-    so a failed install fell through and printed `✓ Clojure CLI installed` having
-    installed nothing. Adds `as_root()` and reachable `|| fail` handling.
-- **A new project could not complete its own quickstart** (BOU-228). The setup
-  wizard listed PostgreSQL first and defaulted to it, so both a non-interactive
-  run and a user pressing Enter selected a database server that was not installed
-  and whose driver was not on the classpath. Migration died on
-  `ClassNotFoundException: org.postgresql.Driver` and nothing ever served.
-- The generated config used `:database-path` where the platform's config reader
-  looks for `:db`, yielding `database-path nil` and a Malli validation abort at
-  migration time.
+- **`install.sh` failed three separate ways on clean Linux** (BOU-226): no
+  prerequisite check, an unbound variable under `set -u`, and an assumed `sudo`.
+
+- **A new project could not complete its own quickstart** (BOU-228). The wizard
+  defaulted to PostgreSQL, which was not installed and not on the classpath.
+
+- The generated config used `:database-path` where the platform's reader looks for
+  `:db`, yielding a Malli validation abort at migration time.
 
 ### Known gaps
 
@@ -1430,9 +441,8 @@ First release under the Wagoe name, on the **`com.wagoe`** Clojars group.
 ### Changed
 
 - **Clojars coordinates are now `com.wagoe/wagoe-<lib>`** (previously
-  `org.boundary-app/boundary-<lib>`). The group matches `wagoe.com`; `org.wagoe`
-  was never claimable, since Clojars verifies a reverse-domain group against its
-  matching domain and `wagoe.org` was not owned at the time.
+  `org.boundary-app/boundary-<lib>`). `org.wagoe` was never claimable.
+
 - Website moved to `framework.wagoe.com`, and subsequently to `wagoe.org` with the
   older hostnames kept as permanent redirects.
 
@@ -1524,20 +534,14 @@ Framework Quality (Phase 0–2, 2026-07):
 
 ### Changed
 
-- **Performance, tier 1** (#232): framework-wide hot-path fixes, all benchmarked (criterium) before implementation.
-  - **Malli validators compiled once**: `m/validate`/`m/explain` with a raw schema re-parse the schema and rebuild the predicate on every call — measured **8.6–9.9× overhead**. All 121 static-schema call sites across 43 files (login, per-request handlers, per-WebSocket-message `:pre` checks) now use `m/validator`/`m/explainer` defs compiled at namespace load. `boundary.core.validation` memoizes validator/explainer/decoder compilation for schema-as-argument callers, and the scaffolder template emits compiled validators in generated modules.
-  - **`boundary-platform`**: reflective `(.info logger …)` interop in the HTTP/service interceptors (fired on enter+leave of every request) replaced with `ILogger` protocol calls — measured **~90×** per call; `*warn-on-reflection*` enabled in both namespaces.
-- **Performance, tier 2** (#233):
-  - **`boundary-platform`**: DB result keys are converted snake→kebab **in the next.jdbc builder-fn** (`as-unqualified-kebab-maps`, column names converted once per result set) instead of a second full per-row map rebuild — ~1.7× on 100-row results; redundant third conversions removed from user `db->user-entity` and six admin service sites.
-  - **`boundary-admin`**: entity config and table metadata cached in the long-lived `SchemaRepository` component — previously every admin page issued 2×N `information_schema` queries (N = registered entities). `reset-cache!` provided for post-migration invalidation.
-  - **`boundary-platform`**: static-resource middleware no longer does a classloader lookup on every request — gated to GET/HEAD URIs with a file extension; duplicate query/form param parsing removed (global `wrap-params` dropped in favour of reitit's `parameters-middleware`).
-  - **`boundary-i18n`**: `resolve-markers` postwalk replaced with a structural-sharing transform that returns original nodes when no descendant changed — **82.4µs → 25.0µs (3.3×)** on a 50-row table page, full render ~1.9×; `translate/t` no longer re-runs `satisfies?` per locale per key.
-  - **`boundary-audience`** / **`boundary-user`**: N+1 write patterns batched. `save-memberships!`: exists-SELECT + single-row INSERT per user (50k-user audience = 100k statements) → one SELECT + in-memory diff + chunked 500-row multi-row INSERTs (~102 statements, portable H2/PG). `update-users-batch`: per-user UPDATEs → `next.jdbc/execute-batch!` grouped by column shape. Signatures, return values and transaction semantics unchanged.
-- **Performance, tier 3**:
-  - **`boundary-platform`**: CSRF fast paths — `http-csrf-protection` short-circuits before any binding/cookie work when disabled (the default), and `wrap-csrf` decides at wrap time, returning the raw handler unwrapped. When enabled, a request already carrying a valid token for the current binding gets it re-exposed instead of a fresh CSPRNG draw + HMAC sign per request (tokens have no expiry/rotation requirement; binding model, cookie attributes, constant-time compare and 403 semantics unchanged — security suite green).
-  - **`boundary-platform`**: correlation ids generated from `ThreadLocalRandom` instead of `UUID/randomUUID`'s shared, contended `SecureRandom` (internal trace ids, not security tokens); `http-request-metrics` no longer computes a per-request duration it then discards; interceptor leave/error phases use `rseq` instead of `reverse`; version headers built once at wrap time instead of per response.
-  - **`boundary-user`**: JWT signing secret resolved from the environment once per process instead of a `System/getenv` call on every token sign/verify.
-  - **`boundary-jobs`**: worker Redis heartbeat throttled to `:heartbeat-interval-ms` (default 5000 ms, key TTL 60 s) instead of one round-trip per loop iteration — under load the loop spins once per job.
+- **Performance, tier 1** (#232): Malli validators compiled once (8.6–9.9× on
+  121 call sites), and reflective logger interop replaced with protocol calls (~90×).
+
+- **Performance, tier 2** (#233): snake→kebab conversion moved into the JDBC
+  builder, admin metadata cached, i18n postwalk shares structure, N+1 writes batched.
+
+- **Performance, tier 3**: CSRF fast paths, cheaper correlation ids, `rseq` in
+  interceptor leave phases, JWT secret resolved once, throttled jobs heartbeat.
 
 Framework Quality (Phase 0–2, 2026-07) — architecture & FC/IS:
 
@@ -1609,38 +613,22 @@ Framework Quality (Phase 0–2, 2026-07):
 
 ### Security
 
-- **`boundary-platform`**: Real CSRF protection for session-authenticated, state-changing requests (POST/PUT/DELETE/PATCH), replacing a stub that always passed (BOU-43). Enforcement is **opt-in** — the library default is `:enabled? false`, so upgrading the framework cannot start rejecting requests from consumers that do not yet emit tokens; each app enables it explicitly after emitting tokens (BOU-56). When enabled, a request is validated — `403` on a missing or invalid token — when the path is not exempt and the request is either session-authenticated (`session-token` cookie / `X-Session-Token` header) or a `/web` route. This protects `/web`, `/web/admin`, and any session-authenticated `/api` route; token-auth API clients that send no session cookie are not CSRF-vulnerable and are not checked. Details:
-  - Tokens are signed, session-bound double-submit values (`base64url(nonce).base64url(HMAC-SHA256(secret, nonce ‖ binding))`); authenticated requests bind to the session, unauthenticated `/web` flows (login, register, MFA) bind to a `SameSite=Strict` `csrf-session` cookie minted on the page GET.
-  - Tokens are emitted with no per-handler wiring. HTMX requests pick up the token either from `(boundary.platform.core.csrf/hx-headers)` merged onto an element (e.g. `<body>`, inherited by all `hx-*` requests) or from the shared page layout's `<meta name="csrf-token">` tag plus a global `htmx:configRequest` listener that attaches `X-CSRF-Token` to every HTMX request. Plain `<form method=post>` forms include a hidden field via `(boundary.platform.core.csrf/hidden-field)`.
-  - Configured under `:boundary/http :security :csrf {:enabled? :secret :exempt-paths}`; the library default is opt-in (`:enabled? false`). The bundled app enables it explicitly in dev/prod/acc (prod/acc require `JWT_SECRET` from the environment); the secret otherwise falls back to `JWT_SECRET`. List webhooks/callbacks (which cannot carry a token) under `:exempt-paths` (a trailing `/*` matches by path-segment prefix). Startup **fails loud**: if CSRF is enabled with a blank secret the system wiring throws and the app refuses to boot, rather than starting with the interceptor failing open (running unvalidated). **BREAKING (BOU-56):** this replaces the previous warn-and-continue behavior — an app that set `:enabled? true` but left `JWT_SECRET`/`:secret` unset used to boot (CSRF silently disabled) and will now fail to start. Set the secret in the environment before upgrading.
+- **`boundary-platform`**: Real CSRF protection, replacing a stub that always
+  passed (BOU-43). Opt-in. **BREAKING (BOU-56):** enabled with a blank secret now
+  refuses to boot rather than failing open.
+
 
 ## [1.0.1-alpha-26] - 2026-05-30
 
 ### Added
 
-- **`boundary-audience`**: New audience segmentation library (`libs/audience/`) with declarative, rule-based segment definitions. Features include:
-  - `defaudience` macro for code-defined segments with seven built-in filter types (demographics, location, role, account-tenure, last-active, behavior, feature-usage)
-  - Hybrid SQL + predicate evaluation pipeline — SQL-eligible filters are pushed to the database, remaining filters run as Clojure predicates over the candidate set
-  - AND/OR/NOT segment composition with circular-reference detection
-  - Dynamic (DB-persisted) segments via JSON with schema validation that rejects fn-typed values
-  - Cached membership results in `audience_memberships` table with configurable per-segment TTL
-  - Builder UI served via HTMX with Replicant widget mount points for filter panel and composition builder
-  - REST + web endpoints: CRUD, preview with count + sample, evaluate + cache, member listing
-  - Custom filter type extensibility via `filter->sql` and `filter->predicate` multimethods
-  - Integrant wiring with `IAudienceResolver`, `IAudienceRepository`, and `IAudienceCache` components
+- **`boundary-audience`**: New audience segmentation library — `defaudience`,
+  seven filter types, a hybrid SQL + predicate pipeline, and a cached membership table.
+
 - **`boundary-realtime`**: Optional `:on-open` callback for `websocket-handler` — `(fn [connection-id])` invoked after a successful connect, for subscribing connections to topics based on the authenticated user's roles. Exceptions thrown by the callback are logged and swallowed, so they do not abort the connection.
-- **`boundary-push`**: New push notification library (`libs/push/`) with multi-platform delivery via FCM (Firebase Cloud Messaging) and APNs (Apple Push Notification service). Features include:
-  - `defpush` macro for declarative notification definitions with i18n locale maps, deep links, priority, TTL, collapse keys, and retry configuration
-  - Platform-specific provider protocols (`IFCMProvider`, `IAPNsProvider`) behind unified `IPushService` orchestrator
-  - Device token management — registration, rotation, soft-deactivation, and stale token cleanup
-  - HMAC-secured analytics callback endpoint for client-reported delivery/open tracking
-  - Error classification (retryable/permanent/token-invalid/rate-limited) for intelligent retry decisions
-  - Async parallel delivery via `sendAsync` + `CompletableFuture` for both FCM and APNs
-  - Job-based reliable delivery via hard dependency on `boundary-jobs`
-  - REST endpoints: device CRUD (`/api/push/devices`), callback (`/api/push/callback`), stats (`/api/push/stats/:id`)
-  - Database migrations for `push_device_tokens`, `push_send_log`, `push_analytics_events` with multi-tenant support
-  - Mock providers for dev/test, Integrant wiring for all components
-  - 41 tests, 118 assertions covering unit, integration, and contract layers
+- **`boundary-push`**: New push notification library — FCM and APNs behind one
+  `IPushService`, device token management, and job-based reliable delivery.
+
 - **`boundary-user`**: Welcome email on admin user creation — optional `send-welcome` checkbox triggers email via `ISmtpProvider` with graceful failure handling.
 - **`boundary-user`**: Dashboard extensibility via `:dashboard-extra-cards` config for injecting custom Hiccup cards into the user dashboard.
 - **`boundary-ui-style`**: Cross-page toast notification system via `X-Toast` response header + `sessionStorage`, works across all page layouts (base, pilot, admin-pilot).
