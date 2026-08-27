@@ -118,6 +118,11 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **The brand logo is Wagoe's** (BOU-379). The four assets behind `brand-logo`
+  were renamed to `wagoe-*` but still drew the Boundary mark and wordmark. The
+  dark variant was not lighter than the light one, and `:variant :icon` was
+  byte-identical to the full lockup. `bb check:no-boundary` cannot see artwork.
+
 - **`bb scaffold field`/`endpoint`/`adapter` fail when the module is not there**
   (BOU-364). `field` left a migration behind for a column its schema would reject.
 
