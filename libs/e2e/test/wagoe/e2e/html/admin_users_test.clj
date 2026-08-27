@@ -148,6 +148,60 @@
           "Success notification should be visible after saving"))))
 
 ;; ---------------------------------------------------------------------------
+;; Validation feedback
+;; ---------------------------------------------------------------------------
+
+(deftest ^:integration ^:e2e create-form-shows-server-validation-errors
+  (testing "A password the server rejects produces a visible error on the form"
+    ;; The server always rendered this error and returned it with a 400. htmx
+    ;; does not swap 4xx by default, so it never reached the page: pressing
+    ;; Create appeared to do nothing at all — no message, no change. The handler
+    ;; test asserting that 400 passed throughout (BOU-381), which is exactly why
+    ;; this one drives a browser and asserts on what a person can see.
+    ;;
+    ;; The email is deliberately well-formed. type="email" means a malformed one
+    ;; never reaches the server at all — that path is the test below.
+    (spel/with-testing-page [pg]
+      (admin/login-as-admin! pg fx/*seed*)
+      (page/navigate pg (admin/app-url "/web/users/new"))
+      (page/wait-for-load-state pg)
+      (loc/fill (page/locator pg "#name") "Lisa Hendriks")
+      (loc/fill (page/locator pg "#email") "lisa.hendriks@meridian.dev")
+      (loc/fill (page/locator pg "#password") "secret")
+      (loc/click (page/locator pg "#create-user-form button[type='submit']"))
+      (page/wait-for-selector pg "#create-user-form .validation-errors" {:timeout 10000.0})
+      ;; Read through the DOM rather than a locator: mid-settle htmx has both the
+      ;; outgoing and the incoming #create-user-form in the document, and a
+      ;; strict-mode locator refuses the ambiguity.
+      (let [shown (page/evaluate pg "() => document.body.innerText")]
+        (is (str/includes? shown "at least 8 characters")
+            "The password error the server rendered should be visible")
+        ;; The requirements list took its cue from a nil violations argument and
+        ;; ticked every rule as met, so a six-character password came back with a
+        ;; green "At least 8 characters" beside the error saying it was not.
+        (is (pos? (page/evaluate pg "() => document.querySelectorAll('.requirement-unmet').length"))
+            "The unmet requirement should not still be ticked as met")))))
+
+(deftest ^:integration ^:e2e create-form-reports-malformed-email
+  (testing "A malformed email is reported rather than silently dropped"
+    ;; htmx checks HTML5 validity before issuing a request and aborts when it
+    ;; fails; reportValidityOfForms defaults to false, so the browser's message
+    ;; was suppressed too and the button did nothing at all (BOU-381).
+    ;;
+    ;; The native bubble cannot be queried, but reportValidity focuses the first
+    ;; invalid control, and that is observable.
+    (spel/with-testing-page [pg]
+      (admin/login-as-admin! pg fx/*seed*)
+      (page/navigate pg (admin/app-url "/web/users/new"))
+      (page/wait-for-load-state pg)
+      (loc/fill (page/locator pg "#name") "Lisa Hendriks")
+      (loc/fill (page/locator pg "#email") "not-an-email")
+      (loc/fill (page/locator pg "#password") "Str0ng-Pass-2026")
+      (loc/click (page/locator pg "#create-user-form button[type='submit']"))
+      (is (= "email" (page/evaluate pg "() => document.activeElement && document.activeElement.id"))
+          "The invalid field should be focused and reported, not silently ignored"))))
+
+;; ---------------------------------------------------------------------------
 ;; Access control
 ;; ---------------------------------------------------------------------------
 

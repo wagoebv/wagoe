@@ -33,11 +33,18 @@
 
 (def base-js
   "Base JavaScript stack.
-   components.js must load before alpine.min.js to register shared Alpine components."
+   components.js must load before alpine.min.js to register shared Alpine components.
+
+   forms.js is here rather than in the admin bundle because it makes htmx swap
+   the re-rendered form a 400 carries, and every htmx form needs that — not just
+   the ones under /web/admin. It shipped admin-only, so the create-user form at
+   /web/users/new discarded its own validation errors and pressing Create looked
+   like it did nothing (BOU-381)."
   ["/js/theme.js"
    "/js/components.js"
    "/js/alpine.min.js"
-   "/js/htmx.min.js"])
+   "/js/htmx.min.js"
+   "/js/forms.js"])
 
 (def pilot-js
   "Pilot JavaScript stack."
@@ -53,7 +60,7 @@
    "/js/alpine.min.js"
    "/js/htmx.min.js"
    "/js/forms.js"
-   "/js/keyboard.js"])
+   "/js/keyboard.js"]) ;; forms.js is also in base-js; the two bundles are alternatives, not layers
 
 (def js-bundles
   "Registry of known JavaScript bundles."

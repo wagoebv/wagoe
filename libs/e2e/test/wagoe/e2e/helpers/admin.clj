@@ -14,6 +14,15 @@
   [path]
   (str base-url "/web/admin" path))
 
+(defn app-url
+  "Build a full app URL from an absolute path.
+
+   `admin-url` covers /web/admin; some admin flows live outside it — the
+   create-user form is served from /web/users/new — and those callers should not
+   have to reach for base-url through a `../..` walk."
+  [path]
+  (str base-url path))
+
 (defn login-as-admin!
   "Navigate to /web/login, fill seed admin credentials, wait for redirect
    to /web/admin/users. Returns the page for chaining."

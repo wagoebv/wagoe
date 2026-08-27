@@ -16,6 +16,7 @@
             [wagoe.shared.ui.core.layout :as layout]
             [wagoe.shared.ui.core.validation :as validation]
             [wagoe.platform.shell.web.table :as web-table]
+            [wagoe.user.core.authentication :as auth-core]
             [wagoe.user.core.ui :as user-ui]
             [wagoe.user.core.profile-ui :as profile-ui]
             [wagoe.user.ports :as user-ports]
@@ -743,11 +744,22 @@
                          :password (get form-data "password")
                          :role (keyword (get form-data "role"))
                          :send-welcome send-welcome?}
-          [valid? validation-errors _] (validate-request-data user-schema/CreateUserRequest prepared-data)]
+          [valid? validation-errors _] (validate-request-data user-schema/CreateUserRequest prepared-data)
+          password-policy {:min-length 8 :require-numbers true}]
       (if-not valid?
         (html-response request
-                       (user-ui/create-user-form prepared-data validation-errors nil
-                                                 {:min-length 8 :require-numbers true}
+                       (user-ui/create-user-form prepared-data validation-errors
+                                                 ;; Passing nil here made the requirements list
+                                                 ;; render every rule as met, so a six-character
+                                                 ;; password came back with a green "At least 8
+                                                 ;; characters" beside the error saying it was not
+                                                 ;; (BOU-381).
+                                                 (:violations
+                                                  (auth-core/meets-password-policy?
+                                                   (or (:password prepared-data) "")
+                                                   password-policy
+                                                   nil))
+                                                 password-policy
                                                  {:return-to return-to})
                        400)
         (try
