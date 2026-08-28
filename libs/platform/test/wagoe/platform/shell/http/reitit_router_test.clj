@@ -445,7 +445,12 @@
                           :body-params {:role "peasant" :age 4}})
         raw     (slurp (:body resp))]
     (is (= 400 (:status resp)))
-    (doseq [secret ["superuser" "internal-auditor" "should be at least 18" "120"]]
+    ;; Each of these is a phrase Malli only produces when humanizing the schema.
+    ;; A bare "120" was here too and made this test flaky: the body carries a
+    ;; random correlation-id UUID, and roughly one run in a hundred contains
+    ;; those three hex characters by coincidence (BOU-377).
+    (doseq [secret ["superuser" "internal-auditor"
+                    "should be at least 18" "should be at most 120"]]
       (is (not (str/includes? raw secret))
           (str "leaked schema detail: " secret)))
     (is (= {:role ["invalid"] :age ["invalid"]} (:details (json/parse-string raw true))))))

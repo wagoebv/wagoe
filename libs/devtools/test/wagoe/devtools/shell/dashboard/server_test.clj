@@ -10,29 +10,34 @@
   (with-open [s (ServerSocket. 0)]
     (.getLocalPort s)))
 
-(defn- start-on-free-port
-  "Start the dashboard on a free port, retrying when it is taken.
+(defn- start-dashboard
+  "Start the dashboard and return `{:server … :port <the port it actually bound>}`.
 
    `free-port` closes its socket before the server binds, so the port can be
-   gone by the time it is used — the race that failed the full suite
-   intermittently (BOU-377)."
+   gone by the time it is used (BOU-377). `:wagoe/dashboard` handles that
+   itself — it scans `port` … `port+10` — so the port to talk to is the one it
+   reports, not the one we asked for. Reading the candidate back instead sent
+   every request in this namespace to a port nothing was listening on.
+
+   It answers nil rather than throwing when all eleven are busy, which is the
+   only case worth retrying."
   [attempts]
   (loop [remaining attempts]
-    (let [port   (free-port)
-          result (try
-                   {:server (ig/init-key :wagoe/dashboard {:port port}) :port port}
-                   (catch Exception e
-                     (when (<= remaining 1) (throw e))))]
-      (or result (recur (dec remaining))))))
+    (let [result (ig/init-key :wagoe/dashboard {:port (free-port)})]
+      (cond
+        result            result
+        (<= remaining 1)  (throw (ex-info "dashboard could not bind any port"
+                                          {:attempts attempts}))
+        :else             (recur (dec remaining))))))
 
 (def ^:dynamic *server* nil)
 (def ^:dynamic *port* nil)
 
 (use-fixtures :once
   (fn [f]
-    (let [{srv :server port :port} (start-on-free-port 5)]
-      (binding [*server* srv *port* port]
-        (try (f) (finally (ig/halt-key! :wagoe/dashboard srv)))))))
+    (let [{:keys [port] :as started} (start-dashboard 5)]
+      (binding [*server* started *port* port]
+        (try (f) (finally (ig/halt-key! :wagoe/dashboard started)))))))
 
 (deftest ^:integration dashboard-pages-return-200
   (doseq [path ["/dashboard" "/dashboard/routes" "/dashboard/requests"
@@ -48,3 +53,20 @@
     (let [resp (http/get (str "http://localhost:" *port* "/assets/dashboard.css") {:throw-exceptions false})]
       (is (= 200 (:status resp)))
       (is (str/includes? (:body resp) "--bg-base")))))
+
+(deftest ^:integration the-fixture-talks-to-the-port-the-dashboard-bound
+  ;; :wagoe/dashboard falls back to a later port when the one it is given is
+  ;; busy, and reports which. The fixture used to keep the port it asked for, so
+  ;; on any fallback every request in this namespace went somewhere nothing was
+  ;; listening — the retry added for BOU-377 never fired either, because this
+  ;; component answers nil rather than throwing.
+  (with-open [squatter (ServerSocket. 0 50 (java.net.InetAddress/getByName "127.0.0.1"))]
+    (let [taken   (.getLocalPort squatter)
+          started (ig/init-key :wagoe/dashboard {:port taken})]
+      (try
+        (is (some? started) "it found a port despite the first being taken")
+        (is (not= taken (:port started)) "and it is not the one we asked for")
+        (is (= 200 (:status (http/get (str "http://localhost:" (:port started) "/dashboard")
+                                      {:throw-exceptions false})))
+            "the port it reports is the one serving")
+        (finally (ig/halt-key! :wagoe/dashboard started))))))

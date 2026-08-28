@@ -376,8 +376,19 @@
       wrap-content-type
       wrap-params))
 
+(defn- port-in-use?
+  "Whether `e` is Jetty's way of saying the port is taken.
+
+   It is not a `BindException`: Jetty wraps that in a plain
+   `java.io.IOException: Failed to bind to …`, so a `(catch BindException …)`
+   never matched and the scan below has never actually run. A busy port was a
+   hard failure rather than the documented fallback (BOU-377)."
+  [^Exception e]
+  (and (instance? java.io.IOException e)
+       (instance? java.net.BindException (.getCause e))))
+
 (defn- try-start-jetty
-  "Attempt to start Jetty on the given port. On BindException, try up to
+  "Attempt to start Jetty on the given port. When it is in use, try up to
    max-port before giving up. Returns {:server s :port p} or nil."
   [handler host port max-port]
   (loop [p port]
@@ -385,7 +396,9 @@
       (let [result (try
                      {:server (jetty/run-jetty handler {:port p :host host :join? false})
                       :port   p}
-                     (catch java.net.BindException _
+                     (catch Exception e
+                       (when-not (port-in-use? e)
+                         (throw e))
                        (log/debugf "Dashboard port %d in use, trying %d" p (inc p))
                        nil))]
         (or result (recur (inc p)))))))
