@@ -58,15 +58,31 @@
   ;; :wagoe/dashboard falls back to a later port when the one it is given is
   ;; busy, and reports which. The fixture used to keep the port it asked for, so
   ;; on any fallback every request in this namespace went somewhere nothing was
-  ;; listening — the retry added for BOU-377 never fired either, because this
-  ;; component answers nil rather than throwing.
-  (with-open [squatter (ServerSocket. 0 50 (java.net.InetAddress/getByName "127.0.0.1"))]
-    (let [taken   (.getLocalPort squatter)
-          started (ig/init-key :wagoe/dashboard {:port taken})]
-      (try
-        (is (some? started) "it found a port despite the first being taken")
-        (is (not= taken (:port started)) "and it is not the one we asked for")
-        (is (= 200 (:status (http/get (str "http://localhost:" (:port started) "/dashboard")
-                                      {:throw-exceptions false})))
-            "the port it reports is the one serving")
-        (finally (ig/halt-key! :wagoe/dashboard started))))))
+  ;; listening (BOU-377).
+  ;;
+  ;; The squatter is a running dashboard, not a bare ServerSocket. A plain
+  ;; socket does not reliably stop Jetty binding the same port — address reuse
+  ;; makes it JDK- and OS-dependent, and `ring_jetty_server_test` documents two
+  ;; drafts where Jetty bound straight through one.
+  (let [squatter (start-dashboard 5)
+        taken    (:port squatter)]
+    (try
+      (is (= 200 (:status (http/get (str "http://localhost:" taken "/dashboard")
+                                    {:throw-exceptions false})))
+          "the squatter really holds the port")
+      (let [started (ig/init-key :wagoe/dashboard {:port taken})]
+        (try
+          (is (some? started) "it found a port despite the first being taken")
+          (is (not= taken (:port started)) "and it is not the one we asked for")
+          (is (= 200 (:status (http/get (str "http://localhost:" (:port started) "/dashboard")
+                                        {:throw-exceptions false})))
+              "the port it reports is the one serving")
+          (finally (ig/halt-key! :wagoe/dashboard started))))
+      (finally (ig/halt-key! :wagoe/dashboard squatter)))))
+
+(deftest ^:integration a-bind-failure-that-is-not-a-busy-port-is-not-retried
+  ;; An unroutable :host raises a BindException too — "Can't assign requested
+  ;; address" — and treating that as a busy port scanned eleven of them and then
+  ;; reported "all in use", which is not what went wrong (BOU-377).
+  (is (thrown? java.io.IOException
+               (ig/init-key :wagoe/dashboard {:port 0 :host "10.255.255.1"}))))

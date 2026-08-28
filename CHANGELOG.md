@@ -124,9 +124,8 @@ for what is public API, what is internal, and how deprecations are announced.
 - **Two tests bound a port they had already released** (BOU-377), failing the
   full suite intermittently. `bb test:all` now names what exited non-zero.
 
-- **The dev dashboard's busy-port fallback never ran** (BOU-377). It caught
-  `BindException`; Jetty throws an `IOException` wrapping one, so 9999 being in
-  use was a hard failure instead of a scan to 10009.
+- **The dev dashboard's busy-port fallback never ran** (BOU-377). A busy 9999
+  was a hard failure instead of the documented scan to 10009.
 
 - **A security test rejected one run in a hundred** (BOU-377). It searched the
   response for `"120"`, which the random correlation-id UUID sometimes contains.

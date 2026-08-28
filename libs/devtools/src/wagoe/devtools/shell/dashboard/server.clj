@@ -13,6 +13,7 @@
             [wagoe.jobs.ports :as job-ports]
             [wagoe.user.ports :as user-ports]
             [clojure.edn :as edn]
+            [clojure.string :as str]
             [integrant.core :as ig]
             [reitit.core]
             [reitit.ring :as ring]
@@ -377,15 +378,24 @@
       wrap-params))
 
 (defn- port-in-use?
-  "Whether `e` is Jetty's way of saying the port is taken.
+  "Whether `e` is Jetty's way of saying *this port* is taken.
 
-   It is not a `BindException`: Jetty wraps that in a plain
-   `java.io.IOException: Failed to bind to …`, so a `(catch BindException …)`
-   never matched and the scan below has never actually run. A busy port was a
-   hard failure rather than the documented fallback (BOU-377)."
+   Two things it is not. It is not a `BindException` — Jetty wraps that in a
+   plain `java.io.IOException: Failed to bind to …`, so a
+   `(catch BindException …)` never matched and the scan below has never actually
+   run; a busy port was a hard failure rather than the documented fallback.
+
+   And not every `BindException` is a busy port: an unroutable `:host` raises
+   one too, reading \"Can't assign requested address\" (\"Cannot\" on Linux).
+   Scanning eleven ports for that only turns a clear error into a misleading
+   \"all in use\" warning, so the message has to be read (BOU-377)."
   [^Exception e]
-  (and (instance? java.io.IOException e)
-       (instance? java.net.BindException (.getCause e))))
+  (let [cause (.getCause e)]
+    (and (instance? java.io.IOException e)
+         (instance? java.net.BindException cause)
+         (some-> (.getMessage cause)
+                 str/lower-case
+                 (str/includes? "already in use")))))
 
 (defn- try-start-jetty
   "Attempt to start Jetty on the given port. When it is in use, try up to
