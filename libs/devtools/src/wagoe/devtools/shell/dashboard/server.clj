@@ -13,7 +13,6 @@
             [wagoe.jobs.ports :as job-ports]
             [wagoe.user.ports :as user-ports]
             [clojure.edn :as edn]
-            [clojure.string :as str]
             [integrant.core :as ig]
             [reitit.core]
             [reitit.ring :as ring]
@@ -377,41 +376,42 @@
       wrap-content-type
       wrap-params))
 
-(defn- port-in-use?
-  "Whether `e` is Jetty's way of saying *this port* is taken.
+(def ^:private max-tcp-port 65535)
 
-   Two things it is not. It is not a `BindException` — Jetty wraps that in a
-   plain `java.io.IOException: Failed to bind to …`, so a
-   `(catch BindException …)` never matched and the scan below has never actually
-   run; a busy port was a hard failure rather than the documented fallback.
-
-   And not every `BindException` is a busy port: an unroutable `:host` raises
-   one too, reading \"Can't assign requested address\" (\"Cannot\" on Linux).
-   Scanning eleven ports for that only turns a clear error into a misleading
-   \"all in use\" warning, so the message has to be read (BOU-377)."
+(defn- bind-failure?
+  "Whether `e` is Jetty failing to bind — it wraps `BindException` in a plain
+   `IOException`, so `(catch BindException …)` never matched (BOU-377)."
   [^Exception e]
-  (let [cause (.getCause e)]
-    (and (instance? java.io.IOException e)
-         (instance? java.net.BindException cause)
-         (some-> (.getMessage cause)
-                 str/lower-case
-                 (str/includes? "already in use")))))
+  (and (instance? java.io.IOException e)
+       (instance? java.net.BindException (.getCause e))))
+
+(defn- check-host-bindable!
+  "Throw unless `host` is an address this machine can bind.
+
+   Asks for any free port, so a failure here is the address rather than a busy
+   one — which is what lets the scan below skip reading the (localised)
+   exception message (BOU-377)."
+  [host]
+  (with-open [_ (java.net.ServerSocket. 0 0 (java.net.InetAddress/getByName host))]
+    nil))
 
 (defn- try-start-jetty
-  "Attempt to start Jetty on the given port. When it is in use, try up to
-   max-port before giving up. Returns {:server s :port p} or nil."
+  "Start Jetty on `port`, scanning up to `max-port` while ports are busy.
+   Returns {:server s :port p}, or nil when every port in range is taken."
   [handler host port max-port]
-  (loop [p port]
-    (when (<= p max-port)
-      (let [result (try
-                     {:server (jetty/run-jetty handler {:port p :host host :join? false})
-                      :port   p}
-                     (catch Exception e
-                       (when-not (port-in-use? e)
-                         (throw e))
-                       (log/debugf "Dashboard port %d in use, trying %d" p (inc p))
-                       nil))]
-        (or result (recur (inc p)))))))
+  (check-host-bindable! host)
+  (let [ceiling (min max-port max-tcp-port)]
+    (loop [p port]
+      (when (<= p ceiling)
+        (let [result (try
+                       {:server (jetty/run-jetty handler {:port p :host host :join? false})
+                        :port   p}
+                       (catch Exception e
+                         (when-not (bind-failure? e)
+                           (throw e))
+                         (log/debugf "Dashboard port %d in use, trying %d" p (inc p))
+                         nil))]
+          (or result (recur (inc p))))))))
 
 (defmethod ig/init-key :wagoe/dashboard [_ {:keys [port host] :as config}]
   (let [port   (or port 9999)
