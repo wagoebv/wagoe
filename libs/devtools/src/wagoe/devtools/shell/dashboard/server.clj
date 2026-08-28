@@ -378,6 +378,11 @@
 
 (def ^:private max-tcp-port 65535)
 
+(def ^:private first-unprivileged-port
+  "Below this, binding needs root — a failure there is a permission problem, not
+   a busy port, and no amount of scanning fixes it."
+  1024)
+
 (defn- bind-failure?
   "Whether `e` is Jetty failing to bind — it wraps `BindException` in a plain
    `IOException`, so `(catch BindException …)` never matched (BOU-377)."
@@ -395,10 +400,29 @@
   (with-open [_ (java.net.ServerSocket. 0 0 (java.net.InetAddress/getByName host))]
     nil))
 
+(defn- check-port-usable!
+  "Throw when `port` is not a port this component can scan from.
+
+   Out of range is a configuration error, and used to be one — Jetty rejected it
+   before the scan was capped at 65535, after which it silently answered \"all
+   ports busy\" instead. Privileged ports are refused for the other reason: a
+   bind failure there is EACCES rather than EADDRINUSE, which Java reports as
+   the same `BindException`, so scanning would report eleven busy ports for a
+   permission problem (BOU-377)."
+  [port]
+  (when-not (<= 1 port max-tcp-port)
+    (throw (ex-info (str "Dashboard port " port " is outside 1–" max-tcp-port)
+                    {:type :configuration-error :port port})))
+  (when (< port first-unprivileged-port)
+    (throw (ex-info (str "Dashboard port " port " needs root; choose one at or above "
+                         first-unprivileged-port)
+                    {:type :configuration-error :port port}))))
+
 (defn- try-start-jetty
   "Start Jetty on `port`, scanning up to `max-port` while ports are busy.
    Returns {:server s :port p}, or nil when every port in range is taken."
   [handler host port max-port]
+  (check-port-usable! port)
   (check-host-bindable! host)
   (let [ceiling (min max-port max-tcp-port)]
     (loop [p port]

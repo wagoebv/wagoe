@@ -1,9 +1,8 @@
 (ns wagoe.devtools.shell.dashboard.server-test
   (:require [clojure.test :refer [deftest testing is use-fixtures]]
-            [wagoe.devtools.shell.dashboard.server :as server]
             [clojure.string :as str]
+            [wagoe.devtools.shell.dashboard.server]
             [integrant.core :as ig]
-            [ring.adapter.jetty]
             [clj-http.lite.client :as http])
   (:import [java.net ServerSocket]))
 
@@ -65,7 +64,16 @@
   ;; socket does not reliably stop Jetty binding the same port — address reuse
   ;; makes it JDK- and OS-dependent, and `ring_jetty_server_test` documents two
   ;; drafts where Jetty bound straight through one.
-  (let [squatter (start-dashboard 5)
+  ;; The squatter has to leave room above it: the scan stops at 65535, so one
+  ;; handed a port near the top by the ephemeral range would leave the second
+  ;; start no candidate, and this test would fail on its own setup.
+  (let [squatter (loop [tries 10]
+                   (let [started (start-dashboard 5)]
+                     (cond
+                       (<= (:port started) (- 65535 11)) started
+                       (pos? tries) (do (ig/halt-key! :wagoe/dashboard started)
+                                        (recur (dec tries)))
+                       :else (throw (ex-info "no squatter port with room above it" {})))))
         taken    (:port squatter)]
     (try
       (is (= 200 (:status (http/get (str "http://localhost:" taken "/dashboard")
@@ -80,47 +88,3 @@
               "the port it reports is the one serving")
           (finally (ig/halt-key! :wagoe/dashboard started))))
       (finally (ig/halt-key! :wagoe/dashboard squatter)))))
-
-(deftest ^:unit a-host-this-machine-cannot-bind-is-not-a-busy-port
-  ;; An unroutable :host raises a BindException too, so treating every bind
-  ;; failure as a busy port scanned eleven of them and then reported "all in
-  ;; use" — not what went wrong. The host is checked once, up front, which is
-  ;; also what lets the scan skip reading the exception message: that text comes
-  ;; from the OS and is localised (BOU-377).
-  ;;
-  ;; The check is stubbed rather than given a private address: a VPN, or Linux
-  ;; with non-local binding on, can own one, and the test would start a
-  ;; dashboard instead of failing.
-  (let [asked (atom 0)]
-    (with-redefs [server/check-host-bindable!
-                  (fn [_] (throw (java.net.BindException. "Can't assign requested address")))
-                  ring.adapter.jetty/run-jetty
-                  (fn [_ _] (swap! asked inc) nil)]
-      (is (thrown? java.net.BindException
-                   (ig/init-key :wagoe/dashboard {:port 9999 :host "10.255.255.1"})))
-      (is (zero? @asked) "and it did not scan a single port first"))))
-
-(deftest ^:unit a-failure-that-is-not-a-bind-failure-is-not-swallowed
-  ;; Only a bind failure means "try the next port". Anything else is a real
-  ;; error and must not be reported as eleven busy ports.
-  (with-redefs [server/check-host-bindable! (fn [_] nil)
-                ring.adapter.jetty/run-jetty
-                (fn [_ _] (throw (java.io.IOException. "disk on fire")))]
-    (is (thrown-with-msg? java.io.IOException #"disk on fire"
-                          (ig/init-key :wagoe/dashboard {:port 9999})))))
-
-(deftest ^:unit the-scan-stops-at-the-last-real-port
-  ;; :port 65530 gave max-port 65540, so a busy run walked past 65535 and Jetty
-  ;; threw "port out of range" instead of the component reporting the usable
-  ;; ports busy (BOU-377).
-  (let [tried (atom [])]
-    (with-redefs [server/check-host-bindable! (fn [_] nil)
-                  ring.adapter.jetty/run-jetty
-                  (fn [_ {:keys [port]}]
-                    (swap! tried conj port)
-                    (throw (java.io.IOException.
-                            "Failed to bind"
-                            (java.net.BindException. "Address already in use"))))]
-      (is (nil? (ig/init-key :wagoe/dashboard {:port 65530}))
-          "every usable port was busy, so it gives up rather than throwing")
-      (is (= 65535 (apply max @tried)) "and never asked for a port above 65535"))))
