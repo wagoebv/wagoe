@@ -6,10 +6,37 @@
    tests are selected, so these would have needed a socket even under
    `--focus-meta :unit` — the surface AGENTS.md documents as needing nothing
    installed (BOU-377)."
-  (:require [clojure.test :refer [deftest is]]
+  (:require [clojure.test :refer [deftest testing is are]]
             [wagoe.devtools.shell.dashboard.server :as server]
             [integrant.core :as ig]
             [ring.adapter.jetty]))
+
+(deftest ^:unit the-port-plan-says-what-to-try-and-what-running-out-means
+  ;; The policy, as data. Every defect in this area was a decision tangled up
+  ;; with a socket call, so it is decided here and bound elsewhere (BOU-377).
+  (are [port expected] (= expected (server/port-plan port))
+    ;; Not a TCP port. Jetty used to reject this; capping the scan at 65535 once
+    ;; turned it into a silent "all ports busy" instead.
+    0      {:error :out-of-range}
+    65536  {:error :out-of-range}
+    -1     {:error :out-of-range}
+
+    ;; Below 1024: one attempt, and the failure is told rather than scanned
+    ;; past — it may be EACCES, which Java reports as the same BindException as
+    ;; EADDRINUSE. Refusing these outright was wrong: root,
+    ;; CAP_NET_BIND_SERVICE, Windows and ip_unprivileged_port_start all make
+    ;; them legitimate.
+    80     {:ports [80]   :on-exhausted :raise}
+    1023   {:ports [1023] :on-exhausted :raise})
+
+  (testing "an ordinary port scans eleven, and gives up rather than raising"
+    (let [{:keys [ports on-exhausted]} (server/port-plan 9999)]
+      (is (= (range 9999 10010) ports))
+      (is (= :give-up on-exhausted))))
+
+  (testing "the scan never proposes a port above 65535"
+    (is (= [65533 65534 65535] (:ports (server/port-plan 65533))))
+    (is (= [65535] (:ports (server/port-plan 65535))))))
 
 (deftest ^:unit a-host-this-machine-cannot-bind-is-not-a-busy-port
   ;; An unroutable :host raises a BindException too, so treating every bind
@@ -38,32 +65,6 @@
                 (fn [_ _] (throw (java.io.IOException. "disk on fire")))]
     (is (thrown-with-msg? java.io.IOException #"disk on fire"
                           (ig/init-key :wagoe/dashboard {:port 9999})))))
-
-(deftest ^:unit the-scan-stops-at-the-last-real-port
-  ;; :port 65530 gave max-port 65540, so a busy run walked past 65535 and Jetty
-  ;; threw "port out of range" instead of the component reporting the usable
-  ;; ports busy (BOU-377).
-  (let [tried (atom [])]
-    (with-redefs [server/check-host-bindable! (fn [_] nil)
-                  ring.adapter.jetty/run-jetty
-                  (fn [_ {:keys [port]}]
-                    (swap! tried conj port)
-                    (throw (java.io.IOException.
-                            "Failed to bind"
-                            (java.net.BindException. "Address already in use"))))]
-      (is (nil? (ig/init-key :wagoe/dashboard {:port 65530}))
-          "every usable port was busy, so it gives up rather than throwing")
-      (is (= 65535 (apply max @tried)) "and never asked for a port above 65535"))))
-
-(deftest ^:unit a-port-outside-the-tcp-range-is-a-configuration-error
-  ;; Capping the scan at 65535 made {:port 65536} answer nil — "all ports busy"
-  ;; — where Jetty had rejected it outright. Out of range is a config error and
-  ;; has to keep saying so (BOU-377).
-  (doseq [port [0 65536 70000]]
-    (let [e (try (ig/init-key :wagoe/dashboard {:port port}) nil
-                 (catch clojure.lang.ExceptionInfo e e))]
-      (is (some? e) (str "port " port " must be refused"))
-      (is (= :configuration-error (:type (ex-data e)))))))
 
 (deftest ^:unit a-privileged-port-is-tried-once-and-its-failure-surfaces
   ;; Below 1024 a bind failure may be EACCES rather than EADDRINUSE, and Java

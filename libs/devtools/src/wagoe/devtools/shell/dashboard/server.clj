@@ -377,12 +377,34 @@
       wrap-params))
 
 (def ^:private max-tcp-port 65535)
+(def ^:private first-unprivileged-port 1024)
+(def ^:private scan-span
+  "How many ports past the requested one to try when it is busy."
+  10)
 
-(def ^:private first-unprivileged-port
-  "Below this, a bind failure may be EACCES rather than EADDRINUSE, and Java
-   reports both as `BindException` — so such a port is tried, but never scanned
-   past."
-  1024)
+(defn port-plan
+  "Which ports to try for `port`, in order, and what running out of them means.
+
+   Pure, and separate from the binding, because every defect in this area has
+   been a policy decision tangled up with a socket call (BOU-377):
+
+     {:error :out-of-range}                    not a TCP port
+     {:ports [p]        :on-exhausted :raise}  below 1024 — a bind failure there
+                                               may be EACCES, which Java does not
+                                               distinguish from EADDRINUSE, so it
+                                               is tried once and the failure told
+     {:ports [p … p+10] :on-exhausted :give-up} otherwise, capped at 65535"
+  [port]
+  (cond
+    (not (<= 1 port max-tcp-port))
+    {:error :out-of-range}
+
+    (< port first-unprivileged-port)
+    {:ports [port] :on-exhausted :raise}
+
+    :else
+    {:ports        (range port (inc (min (+ port scan-span) max-tcp-port)))
+     :on-exhausted :give-up}))
 
 (defn- bind-failure?
   "Whether `e` is Jetty failing to bind — it wraps `BindException` in a plain
@@ -395,53 +417,43 @@
   "Throw unless `host` is an address this machine can bind.
 
    Asks for any free port, so a failure here is the address rather than a busy
-   one — which is what lets the scan below skip reading the (localised)
+   one — which is what lets the walk below skip reading the (localised)
    exception message (BOU-377)."
   [host]
   (with-open [_ (java.net.ServerSocket. 0 0 (java.net.InetAddress/getByName host))]
     nil))
 
-(defn- check-port-range!
-  "Throw when `port` is not a TCP port.
-
-   Jetty used to reject this; capping the scan at 65535 turned it into a silent
-   \"all ports busy\" instead (BOU-377)."
-  [port]
-  (when-not (<= 1 port max-tcp-port)
-    (throw (ex-info (str "Dashboard port " port " is outside 1–" max-tcp-port)
-                    {:type :configuration-error :port port}))))
-
 (defn- try-start-jetty
-  "Start Jetty on `port`, scanning up to `max-port` while ports are busy.
-   Returns {:server s :port p}, or nil when every port in range is taken."
-  [handler host port max-port]
-  (check-port-range! port)
-  (check-host-bindable! host)
-  (if (< port first-unprivileged-port)
-    ;; One attempt, and its failure propagates. Whether the OS allows a low port
-    ;; depends on the machine — root, CAP_NET_BIND_SERVICE, Windows,
-    ;; ip_unprivileged_port_start — so the bind decides rather than a guess here.
-    ;; What we do not do is scan: a failure at this end may be EACCES, and
-    ;; reporting eleven busy ports for a permission problem hides the cause.
-    {:server (jetty/run-jetty handler {:port port :host host :join? false})
-     :port   port}
-    (let [ceiling (min max-port max-tcp-port)]
-      (loop [p port]
-      (when (<= p ceiling)
-        (let [result (try
-                       {:server (jetty/run-jetty handler {:port p :host host :join? false})
-                        :port   p}
-                       (catch Exception e
-                         (when-not (bind-failure? e)
-                           (throw e))
-                           (log/debugf "Dashboard port %d in use, trying %d" p (inc p))
-                           nil))]
-            (or result (recur (inc p)))))))))
+  "Walk `port-plan` binding Jetty, and return {:server s :port p}.
+
+   nil when every port in a scanning plan was busy; a plan that says `:raise`
+   hands its last bind failure back instead."
+  [handler host port]
+  (let [{:keys [ports on-exhausted error]} (port-plan port)]
+    (when error
+      (throw (ex-info (str "Dashboard port " port " is outside 1–" max-tcp-port)
+                      {:type :configuration-error :port port})))
+    (check-host-bindable! host)
+    (loop [[p & more] ports]
+      (let [started (try
+                      {:server (jetty/run-jetty handler {:port p :host host :join? false})
+                       :port   p}
+                      (catch Exception e
+                        (when-not (bind-failure? e)
+                          (throw e))
+                        (when (and (empty? more) (= :raise on-exhausted))
+                          (throw e))
+                        (log/debugf "Dashboard port %d in use" p)
+                        nil))]
+        (cond
+          started    started
+          (seq more) (recur more)
+          :else      nil)))))
 
 (defmethod ig/init-key :wagoe/dashboard [_ {:keys [port host] :as config}]
   (let [port   (or port 9999)
         host   (or host "127.0.0.1")
-        result (try-start-jetty (make-handler config) host port (+ port 10))]
+        result (try-start-jetty (make-handler config) host port)]
     (if result
       (do
         (log/infof "Dev dashboard started on http://%s:%d/dashboard" host (:port result))
