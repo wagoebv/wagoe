@@ -379,8 +379,9 @@
 (def ^:private max-tcp-port 65535)
 
 (def ^:private first-unprivileged-port
-  "Below this, binding needs root — a failure there is a permission problem, not
-   a busy port, and no amount of scanning fixes it."
+  "Below this, a bind failure may be EACCES rather than EADDRINUSE, and Java
+   reports both as `BindException` — so such a port is tried, but never scanned
+   past."
   1024)
 
 (defn- bind-failure?
@@ -400,32 +401,32 @@
   (with-open [_ (java.net.ServerSocket. 0 0 (java.net.InetAddress/getByName host))]
     nil))
 
-(defn- check-port-usable!
-  "Throw when `port` is not a port this component can scan from.
+(defn- check-port-range!
+  "Throw when `port` is not a TCP port.
 
-   Out of range is a configuration error, and used to be one — Jetty rejected it
-   before the scan was capped at 65535, after which it silently answered \"all
-   ports busy\" instead. Privileged ports are refused for the other reason: a
-   bind failure there is EACCES rather than EADDRINUSE, which Java reports as
-   the same `BindException`, so scanning would report eleven busy ports for a
-   permission problem (BOU-377)."
+   Jetty used to reject this; capping the scan at 65535 turned it into a silent
+   \"all ports busy\" instead (BOU-377)."
   [port]
   (when-not (<= 1 port max-tcp-port)
     (throw (ex-info (str "Dashboard port " port " is outside 1–" max-tcp-port)
-                    {:type :configuration-error :port port})))
-  (when (< port first-unprivileged-port)
-    (throw (ex-info (str "Dashboard port " port " needs root; choose one at or above "
-                         first-unprivileged-port)
                     {:type :configuration-error :port port}))))
 
 (defn- try-start-jetty
   "Start Jetty on `port`, scanning up to `max-port` while ports are busy.
    Returns {:server s :port p}, or nil when every port in range is taken."
   [handler host port max-port]
-  (check-port-usable! port)
+  (check-port-range! port)
   (check-host-bindable! host)
-  (let [ceiling (min max-port max-tcp-port)]
-    (loop [p port]
+  (if (< port first-unprivileged-port)
+    ;; One attempt, and its failure propagates. Whether the OS allows a low port
+    ;; depends on the machine — root, CAP_NET_BIND_SERVICE, Windows,
+    ;; ip_unprivileged_port_start — so the bind decides rather than a guess here.
+    ;; What we do not do is scan: a failure at this end may be EACCES, and
+    ;; reporting eleven busy ports for a permission problem hides the cause.
+    {:server (jetty/run-jetty handler {:port port :host host :join? false})
+     :port   port}
+    (let [ceiling (min max-port max-tcp-port)]
+      (loop [p port]
       (when (<= p ceiling)
         (let [result (try
                        {:server (jetty/run-jetty handler {:port p :host host :join? false})
@@ -433,9 +434,9 @@
                        (catch Exception e
                          (when-not (bind-failure? e)
                            (throw e))
-                         (log/debugf "Dashboard port %d in use, trying %d" p (inc p))
-                         nil))]
-          (or result (recur (inc p))))))))
+                           (log/debugf "Dashboard port %d in use, trying %d" p (inc p))
+                           nil))]
+            (or result (recur (inc p)))))))))
 
 (defmethod ig/init-key :wagoe/dashboard [_ {:keys [port host] :as config}]
   (let [port   (or port 9999)

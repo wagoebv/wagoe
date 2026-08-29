@@ -65,12 +65,27 @@
       (is (some? e) (str "port " port " must be refused"))
       (is (= :configuration-error (:type (ex-data e)))))))
 
-(deftest ^:unit a-privileged-port-is-refused-rather-than-scanned-past
-  ;; Binding below 1024 without root fails with EACCES, which Java reports as
-  ;; the same BindException as EADDRINUSE — so a scan would report eleven busy
-  ;; ports for a permission problem. Refused up front instead (BOU-377).
-  (let [e (try (ig/init-key :wagoe/dashboard {:port 80}) nil
-               (catch clojure.lang.ExceptionInfo e e))]
-    (is (some? e))
-    (is (= :configuration-error (:type (ex-data e))))
-    (is (re-find #"root" (ex-message e)) "and says why")))
+(deftest ^:unit a-privileged-port-is-tried-once-and-its-failure-surfaces
+  ;; Below 1024 a bind failure may be EACCES rather than EADDRINUSE, and Java
+  ;; reports both as BindException — so scanning would claim eleven busy ports
+  ;; for a permission problem. It is tried once and the real failure propagates.
+  ;; Refusing it outright was wrong: root, CAP_NET_BIND_SERVICE, Windows and
+  ;; ip_unprivileged_port_start all make low ports legitimate (BOU-377).
+  (let [tried (atom [])]
+    (with-redefs [server/check-host-bindable! (fn [_] nil)
+                  ring.adapter.jetty/run-jetty
+                  (fn [_ {:keys [port]}]
+                    (swap! tried conj port)
+                    (throw (java.io.IOException.
+                            "Failed to bind"
+                            (java.net.BindException. "Permission denied"))))]
+      (is (thrown? java.io.IOException (ig/init-key :wagoe/dashboard {:port 80}))
+          "the real failure reaches the caller")
+      (is (= [80] @tried) "and only that port was tried"))))
+
+(deftest ^:unit a-privileged-port-the-os-allows-simply-works
+  ;; The bind decides, not a guess about privileges.
+  (with-redefs [server/check-host-bindable! (fn [_] nil)
+                ring.adapter.jetty/run-jetty (fn [_ _] ::server)]
+    (is (= {:server ::server :port 80}
+           (ig/init-key :wagoe/dashboard {:port 80})))))
