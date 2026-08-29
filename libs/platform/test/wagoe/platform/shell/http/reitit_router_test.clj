@@ -440,20 +440,32 @@
                                                  :parameters {:body [:map {:closed true}
                                                                      [:role [:enum "admin" "superuser" "internal-auditor"]]
                                                                      [:age [:int {:min 18 :max 120}]]]}}}]]
-                                       {})
-        resp    (handler {:request-method :post :uri "/users" :headers {}
-                          :body-params {:role "peasant" :age 4}})
-        raw     (slurp (:body resp))]
-    (is (= 400 (:status resp)))
-    ;; Each of these is a phrase Malli only produces when humanizing the schema.
-    ;; A bare "120" was here too and made this test flaky: the body carries a
-    ;; random correlation-id UUID, and roughly one run in a hundred contains
-    ;; those three hex characters by coincidence (BOU-377).
-    (doseq [secret ["superuser" "internal-auditor"
-                    "should be at least 18" "should be at most 120"]]
-      (is (not (str/includes? raw secret))
-          (str "leaked schema detail: " secret)))
-    (is (= {:role ["invalid"] :age ["invalid"]} (:details (json/parse-string raw true))))))
+                                        {})
+        raw-for (fn [body-params]
+                  (let [resp (handler {:request-method :post :uri "/users" :headers {}
+                                       :body-params body-params})]
+                    (is (= 400 (:status resp)))
+                    (slurp (:body resp))))]
+    ;; One request per bound. Malli emits "at least" for a low age and "at most"
+    ;; for a high one, so asserting both against a single low-age request looks
+    ;; thorough and tests nothing: the phrase it searches for is one that input
+    ;; never produced.
+    ;;
+    ;; The phrases are matched rather than a bare "120", which was here before
+    ;; and made this test flaky — the body carries a random correlation-id UUID,
+    ;; and roughly one run in a hundred contains those three hex characters by
+    ;; coincidence (BOU-377).
+    (doseq [[params secrets]
+            [[{:role "peasant" :age 4}
+              ["superuser" "internal-auditor" "should be at least 18"]]
+             [{:role "peasant" :age 200}
+              ["superuser" "internal-auditor" "should be at most 120"]]]]
+      (let [raw (raw-for params)]
+        (doseq [secret secrets]
+          (is (not (str/includes? raw secret))
+              (str "leaked schema detail for " params ": " secret)))
+        (is (= {:role ["invalid"] :age ["invalid"]}
+               (:details (json/parse-string raw true))))))))
 
 (deftest ^:unit dev-gets-the-explanation-production-does-not
   (let [handler (fn [system]
