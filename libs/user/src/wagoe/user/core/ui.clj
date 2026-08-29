@@ -365,8 +365,12 @@
   ([data errors password-violations policy opts]
    [:div#create-user-form
     [:h2 [:t :user/form-create-title]]
+    ;; outerHTML: the response is itself a #create-user-form, so an innerHTML
+    ;; swap nests one inside the other and leaves a duplicate id behind
+    ;; (BOU-381).
     [:form {:hx-post   "/web/users"
             :hx-target "#create-user-form"
+            :hx-swap   "outerHTML"
             :class     "form-card"}
      (when-let [return-to (:return-to opts)]
        [:input {:type "hidden" :name "return-to" :value return-to}])

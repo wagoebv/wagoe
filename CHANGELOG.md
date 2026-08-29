@@ -118,11 +118,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
-- **Form validation errors reach the screen** (BOU-381). The create-user form
-  rendered them correctly and answered with a 400, which htmx discards by
-  default — so pressing Create did nothing at all. A malformed email never left
-  the browser, also silently. And the requirements list ticked every rule as met
-  while the error beside it said otherwise.
+- **Form validation errors reach the screen** (BOU-381). htmx discarded the 400
+  that carried them, so pressing Create did nothing at all.
 
 - **The brand logo is Wagoe's** (BOU-379). The four assets behind `brand-logo`
   were renamed to `wagoe-*` but still drew the Boundary mark and wordmark. The

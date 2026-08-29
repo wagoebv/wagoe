@@ -170,9 +170,6 @@
       (loc/fill (page/locator pg "#password") "secret")
       (loc/click (page/locator pg "#create-user-form button[type='submit']"))
       (page/wait-for-selector pg "#create-user-form .validation-errors" {:timeout 10000.0})
-      ;; Read through the DOM rather than a locator: mid-settle htmx has both the
-      ;; outgoing and the incoming #create-user-form in the document, and a
-      ;; strict-mode locator refuses the ambiguity.
       (let [shown (page/evaluate pg "() => document.body.innerText")]
         (is (str/includes? shown "at least 8 characters")
             "The password error the server rendered should be visible")
@@ -180,16 +177,25 @@
         ;; ticked every rule as met, so a six-character password came back with a
         ;; green "At least 8 characters" beside the error saying it was not.
         (is (pos? (page/evaluate pg "() => document.querySelectorAll('.requirement-unmet').length"))
-            "The unmet requirement should not still be ticked as met")))))
+            "The unmet requirement should not still be ticked as met")
+        ;; The response is itself a #create-user-form, so the default innerHTML
+        ;; swap nested one inside the other: two elements with the same id, which
+        ;; breaks every later locator on this page. hx-swap="outerHTML" replaces
+        ;; instead (BOU-381).
+        (is (= 1 (page/evaluate pg "() => document.querySelectorAll('#create-user-form').length"))
+            "exactly one create-user-form after the swap")))))
 
 (deftest ^:integration ^:e2e create-form-reports-malformed-email
-  (testing "A malformed email is reported rather than silently dropped"
-    ;; htmx checks HTML5 validity before issuing a request and aborts when it
-    ;; fails; reportValidityOfForms defaults to false, so the browser's message
-    ;; was suppressed too and the button did nothing at all (BOU-381).
+  (testing "A malformed email is reported by the browser rather than silently dropped"
+    ;; No JavaScript of ours involved. htmx binds the form's submit event, and
+    ;; native constraint validation runs before that event fires — so an invalid
+    ;; type="email" blocks the submit, the browser reports it, and htmx never
+    ;; runs at all.
     ;;
-    ;; The native bubble cannot be queried, but reportValidity focuses the first
-    ;; invalid control, and that is observable.
+    ;; BOU-381 claimed this path was silent and added an htmx:validation:halted
+    ;; listener to report it. That listener never fired, because htmx never gets
+    ;; the event; removing it changed nothing. This test pins the behaviour that
+    ;; is actually there.
     (spel/with-testing-page [pg]
       (admin/login-as-admin! pg fx/*seed*)
       (page/navigate pg (admin/app-url "/web/users/new"))
@@ -198,8 +204,14 @@
       (loc/fill (page/locator pg "#email") "not-an-email")
       (loc/fill (page/locator pg "#password") "Str0ng-Pass-2026")
       (loc/click (page/locator pg "#create-user-form button[type='submit']"))
+      (is (false? (page/evaluate pg "() => document.querySelector('#email').validity.valid"))
+          "The browser should consider the field invalid")
+      (is (not (str/blank? (page/evaluate pg "() => document.querySelector('#email').validationMessage")))
+          "and have a message to report")
       (is (= "email" (page/evaluate pg "() => document.activeElement && document.activeElement.id"))
-          "The invalid field should be focused and reported, not silently ignored"))))
+          "and focus it")
+      (is (zero? (page/evaluate pg "() => document.querySelectorAll('.validation-errors').length"))
+          "No request was made, so no server-rendered errors appear"))))
 
 ;; ---------------------------------------------------------------------------
 ;; Access control
