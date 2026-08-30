@@ -863,3 +863,73 @@
            (get-in head-r [:headers "ETag"])))
     (is (some? (get-in head-r [:headers "ETag"])))
     (is (nil? (:body head-r)) "a HEAD still carries no body")))
+
+(deftest ^:contract a-metadata-only-revalidation-cannot-win-a-304
+  ;; Ring decides a 304 on whichever validators the request carries, and when
+  ;; only If-Modified-Since is present that is mtime alone — `cached-response?`
+  ;; ORs the two checks unless both headers are sent. So a rebuild that left
+  ;; mtime untouched answered 304 with the old bytes even though the content
+  ;; digest had changed. The population this matters for is precisely the one
+  ;; BOU-389 exists to un-stick: a browser holding an asset cached before any
+  ;; ETag existed has none to send, and revalidates exactly this way.
+  (let [resp (static-asset-response
+              {:headers {"if-modified-since" "Sat, 01 Jan 2050 00:00:00 GMT"}})]
+    (is (= 200 (:status resp))
+        "a far-future If-Modified-Since must not be honoured on its own")
+    (is (some? (:body resp)) "and the bytes must actually be sent"))
+
+  (testing "sending both validators still resolves on the digest"
+    (let [etag (get-in (static-asset-response) [:headers "ETag"])]
+      (is (= 304 (:status (static-asset-response
+                           {:headers {"if-none-match"     etag
+                                      "if-modified-since" "Sat, 01 Jan 2050 00:00:00 GMT"}})))))))
+
+(deftest ^:contract hashing-a-packaged-asset-closes-the-stream-it-read
+  ;; From an uberjar `resource-request` hands back an InputStream. Hashing read
+  ;; it without closing, and the response then replaced it with a fresh stream,
+  ;; so nothing else would ever close it — one leaked jar entry handle per asset
+  ;; request.
+  (let [closed (atom false)
+        body   (proxy [java.io.ByteArrayInputStream] [(.getBytes "console.log(1)" "UTF-8")]
+                 (close []
+                   (reset! closed true)
+                   (proxy-super close)))
+        resp   (#'reitit/cache-headers {:status 200 :headers {} :body body})]
+    (is @closed "the stream that was hashed should be closed")
+    (is (some? (get-in resp [:headers "ETag"])) "and it should still have produced a digest")
+    (is (not (identical? body (:body resp)))
+        "the served body is a fresh stream, which is why the original needs closing")))
+
+(deftest ^:contract a-file-asset-is-not-read-into-memory
+  ;; Hashing used to buffer every asset on every request, including one about to
+  ;; answer 304, and replace ring's streamable body with the copy. A large file
+  ;; under resources/public then cost its own size in heap per concurrent
+  ;; request. A file is streamed through the digest instead, so ring's body
+  ;; survives untouched and nothing holds the asset whole.
+  (let [resp ((reitit/compile-routes simple-routes {})
+              {:request-method :get :uri "/bou389/asset.js" :headers {}})]
+    (is (instance? java.io.File (:body resp))
+        "ring's File body should be handed on, not swapped for a buffer")
+    (is (some? (get-in resp [:headers "ETag"])))))
+
+(deftest ^:contract a-packaged-asset-is-hashed-once
+  ;; A jar entry has to be read to be hashed, so the answer is remembered per
+  ;; path; the archive cannot change under a running process. Without this every
+  ;; revalidation re-read the entry.
+  (let [reads (atom 0)
+        stream (fn [] (proxy [java.io.ByteArrayInputStream]
+                             [(.getBytes "console.log(1)" "UTF-8")]
+                        (read
+                          ([] (swap! reads inc) (proxy-super read))
+                          ([b] (swap! reads inc) (proxy-super read b))
+                          ([b off len] (swap! reads inc) (proxy-super read b off len)))))
+        call  #(#'reitit/cache-headers {:status 200 :headers {} :body (stream)}
+                                       "/packaged/one.js")
+        first-resp  (call)
+        after-first @reads
+        second-resp (call)]
+    (is (= (get-in first-resp [:headers "ETag"])
+           (get-in second-resp [:headers "ETag"]))
+        "the same path must keep the same validator")
+    (is (= after-first @reads)
+        "the second request must not read the entry again")))

@@ -6,6 +6,7 @@
    exception handling, the coercion error shape, the Swagger routes, gzip, and
    the interceptor stack each route is decorated with."
   (:require [cheshire.core :as json]
+            [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
             [malli.error :as me]
@@ -23,7 +24,6 @@
             [ring.middleware.resource :refer [resource-request]]
             [wagoe.platform.shell.http.interceptors :as http-interceptors])
   (:import [java.io ByteArrayInputStream ByteArrayOutputStream]
-           [java.nio.file Files]
            [java.security MessageDigest]
            [java.util.zip GZIPOutputStream]))
 
@@ -487,21 +487,59 @@
   (and (contains? #{:get :head} (:request-method request))
        (str/includes? (or (:uri request) "") ".")))
 
-(defn- read-body-bytes
-  "The response body as bytes, for the two shapes a classpath resource takes:
-   a File on a directory entry, an InputStream from inside a jar."
-  ^bytes [body]
-  (cond
-    (instance? java.io.File body)        (Files/readAllBytes (.toPath ^java.io.File body))
-    (instance? java.io.InputStream body) (.readAllBytes ^java.io.InputStream body)))
+(defn- without-header
+  "Drop a header from a request or response map, whatever casing it was written
+   in — ring lower-cases request headers, but nothing guarantees a producer did."
+  [m header]
+  (update m :headers
+          (fn [headers]
+            (into {} (remove #(.equalsIgnoreCase ^String (name (key %)) header)) headers))))
 
 (defn- digest-hex
-  "First 16 bytes of the SHA-256 of `bs`, hex-encoded."
-  [^bytes bs]
-  (->> (.digest (MessageDigest/getInstance "SHA-256") bs)
+  "First 16 bytes of a SHA-256, hex-encoded."
+  [^MessageDigest md]
+  (->> (.digest md)
        (take 16)
        (map #(format "%02x" (bit-and % 0xff)))
        (apply str)))
+
+(defn- digest-stream
+  "Digest of everything `in` yields, read in chunks and never held whole."
+  [^java.io.InputStream in]
+  (let [md  (MessageDigest/getInstance "SHA-256")
+        buf (byte-array 8192)]
+    (loop []
+      (let [n (.read in buf)]
+        (when (pos? n)
+          (.update md buf 0 n)
+          (recur))))
+    (digest-hex md)))
+
+(def ^:private packaged-digests
+  "Digests of resources that cannot change while the process runs.
+
+   A jar entry is fixed once the archive is open, so hashing it a second time
+   can only produce the same answer. Directory-backed resources are excluded:
+   those are the ones a developer edits under a running server, and a cached
+   digest there would serve the staleness this whole change is about."
+  (atom {}))
+
+(defn- packaged-digest
+  "Digest for a jar-backed resource, computed once per path.
+
+   Returns `[digest body]` — the body is the bytes read on the first call,
+   because hashing a stream consumes it and something still has to be served."
+  [uri ^java.io.InputStream in]
+  (if-let [cached (and uri (get @packaged-digests uri))]
+    ;; Nothing to read: ring's stream is handed straight on as the body, and the
+    ;; response writer closes it.
+    [cached in]
+    (let [bs (with-open [^java.io.InputStream s in] (.readAllBytes s))
+          d  (digest-stream (java.io.ByteArrayInputStream. bs))]
+      ;; No uri means no key to remember it under — hash it again next time
+      ;; rather than let unrelated resources share an entry.
+      (when uri (swap! packaged-digests assoc uri d))
+      [d (java.io.ByteArrayInputStream. bs)])))
 
 (defn- cache-headers
   "Mark a static asset cacheable but always revalidated, with a digest of the
@@ -510,18 +548,26 @@
    Size and mtime are not enough: a rebuild producing a same-length file inside
    one second reuses the validator, so the 304 path keeps serving the old asset
    (BOU-389). `max-age`/`immutable` is wrong for the same reason — these
-   filenames carry no content hash, so any lifetime is a window in which a
-   shipped fix cannot reach a browser that already holds the old bytes."
-  [response]
-  (let [bs (read-body-bytes (:body response))
-        with-cc (assoc-in response [:headers "Cache-Control"] "no-cache")]
-    (if bs
-      (-> with-cc
-          ;; Read once and handed back, because the jar case is a stream that
-          ;; hashing would otherwise consume.
-          (assoc :body (java.io.ByteArrayInputStream. bs))
-          (assoc-in [:headers "ETag"] (str "\"" (digest-hex bs) "\"")))
-      with-cc)))
+   filenames carry no content hash.
+
+   A file is hashed by streaming it, leaving ring's own body to be streamed out
+   in turn, so no asset is held in memory whole. A jar entry has to be read to
+   be hashed, so that answer is remembered per path instead."
+  ([response] (cache-headers response nil))
+  ([response uri]
+   (let [body    (:body response)
+         with-cc (assoc-in response [:headers "Cache-Control"] "no-cache")
+         etag    (fn [r d] (assoc-in r [:headers "ETag"] (str "\"" d "\"")))]
+     (cond
+       (instance? java.io.File body)
+       (etag with-cc (with-open [in (io/input-stream ^java.io.File body)]
+                       (digest-stream in)))
+
+       (instance? java.io.InputStream body)
+       (let [[d served] (packaged-digest uri body)]
+         (-> with-cc (assoc :body served) (etag d)))
+
+       :else with-cc))))
 
 (defn- wrap-static-resources
   "Serve classpath resources from resources/public/, with revalidation headers.
@@ -536,8 +582,17 @@
           ;; body, and the validator is a digest of the body, so a HEAD would
           ;; otherwise carry no ETag while the GET it stands in for does.
           (some-> (resource-request (assoc request :request-method :get) "public")
-                  cache-headers
-                  (not-modified-response request)
+                  (cache-headers (:uri request))
+                  ;; The digest decides, so If-Modified-Since gets no vote.
+                  ;; Ring resolves a 304 from whichever validators the request
+                  ;; carries, and for If-Modified-Since alone that is mtime — a
+                  ;; rebuild leaving mtime untouched answered 304 with the old
+                  ;; bytes. A browser holding an asset cached before any ETag
+                  ;; existed revalidates exactly that way. Stripped from the
+                  ;; request rather than dropping Last-Modified from the
+                  ;; response, which would also deny a 304 to a client sending
+                  ;; both validators, ETag included (BOU-389).
+                  (not-modified-response (without-header request "if-modified-since"))
                   (cond-> (= :head (:request-method request)) (assoc :body nil))))
         (handler request))))
 
