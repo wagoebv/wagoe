@@ -756,3 +756,47 @@
               (ex-info "nope" {:type :not-found})
               {:headers {"x-correlation-id" "given-by-the-caller"}})]
     (is (= "given-by-the-caller" (get-in resp [:headers "X-Correlation-ID"])))))
+
+;; =============================================================================
+;; Static asset caching
+;; =============================================================================
+
+(defn- static-asset-response
+  "Fetch the test fixture at public/bou389/asset.js through the full chain."
+  ([] (static-asset-response {}))
+  ([extra]
+   ((reitit/compile-routes simple-routes {})
+    (merge {:request-method :get :uri "/bou389/asset.js" :headers {}} extra))))
+
+(deftest ^:contract static-assets-revalidate-rather-than-cache-blind
+  ;; Nothing set Cache-Control on any asset, so browsers fell back to heuristic
+  ;; caching and kept a stale copy for days — a deployed fix did not reach a
+  ;; returning user (BOU-389). Two separate reasons, both live at once: the
+  ;; header was gated on the URI containing "/public/", which is a classpath
+  ;; prefix and never appears in a request path, and the middleware that set it
+  ;; sat *inside* wrap-resource, which returns a resource hit without calling
+  ;; the handler it wraps.
+  (let [resp (static-asset-response)]
+    (testing "the fixture is actually served, or the rest asserts nothing"
+      (is (= 200 (:status resp))))
+    (testing "caching is allowed but must be revalidated"
+      ;; Not max-age/immutable: these filenames carry no content hash, so a
+      ;; long lifetime makes the next fix unreachable for exactly as long.
+      (is (= "no-cache" (get-in resp [:headers "Cache-Control"]))))
+    (testing "revalidation has something to compare against"
+      (is (some? (get-in resp [:headers "ETag"]))))))
+
+(deftest ^:contract a-matching-etag-answers-304
+  ;; no-cache is only cheap if revalidation is cheap; without this every reload
+  ;; re-sends the whole asset.
+  (let [etag (get-in (static-asset-response) [:headers "ETag"])
+        resp (static-asset-response {:headers {"if-none-match" etag}})]
+    (is (= 304 (:status resp)))
+    (is (nil? (:body resp)))))
+
+(deftest ^:contract dynamic-responses-are-left-alone
+  ;; The header belongs to assets. A route response must not inherit it.
+  (let [resp ((reitit/compile-routes simple-routes {})
+              {:request-method :get :uri "/api/items" :headers {}})]
+    (is (= 200 (:status resp)))
+    (is (nil? (get-in resp [:headers "Cache-Control"])))))

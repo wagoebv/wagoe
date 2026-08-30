@@ -19,7 +19,8 @@
             [reitit.swagger :as swagger]
             [reitit.swagger-ui :as swagger-ui]
             [ring.middleware.cookies :refer [wrap-cookies]]
-            [ring.middleware.resource :refer [wrap-resource]]
+            [ring.middleware.not-modified :refer [not-modified-response]]
+            [ring.middleware.resource :refer [resource-request]]
             [wagoe.platform.shell.http.interceptors :as http-interceptors])
   (:import [java.io ByteArrayInputStream ByteArrayOutputStream]
            [java.util.zip GZIPOutputStream]))
@@ -477,30 +478,64 @@
 ;; Static Asset Caching Middleware
 ;; =============================================================================
 
+(defn- asset-request?
+  "GET/HEAD for a URI with a file extension — the only shape a classpath asset
+   can have. Checked before touching the classloader, because a lookup on every
+   request would put one in front of every API call too."
+  [request]
+  (and (contains? #{:get :head} (:request-method request))
+       (str/includes? (or (:uri request) "") ".")))
+
+(defn- asset-etag
+  "A weak validator built from what ring already knows about the resource.
+
+   Content-Length and Last-Modified are set for both shapes a classpath
+   resource takes — a file on a directory entry, a stream from inside a jar —
+   so this works for a checked-out repo and a released artifact alike. Weak
+   because it identifies the bytes by size and mtime rather than hashing them."
+  [response]
+  (let [headers (:headers response)
+        len     (get headers "Content-Length")
+        modified (get headers "Last-Modified")]
+    (when (or len modified)
+      (format "W/\"%s-%s\"" (or len "0") (hash (or modified ""))))))
+
+(defn- cache-headers
+  "Cache-Control and a validator for a static asset response.
+
+   `no-cache` means \"store it, but ask before reusing it\" — not \"do not
+   store\". With a validator the ask is a 304 carrying no body, so the bytes
+   travel once and every later load costs a conditional request.
+
+   Deliberately not `max-age`/`immutable`: these filenames carry no content
+   hash. `app.css` changes meaning under a fixed name, so any lifetime is a
+   window in which a shipped fix cannot reach a browser that already has the
+   old one. That was not hypothetical — the header was absent entirely, browsers
+   applied heuristic caching, and a days-old forms.js kept being served over a
+   deployed fix (BOU-389). `immutable` belongs with hashed filenames, and is
+   worth revisiting when they exist."
+  [response]
+  (cond-> (assoc-in response [:headers "Cache-Control"] "no-cache")
+    (asset-etag response) (assoc-in [:headers "ETag"] (asset-etag response))))
+
 (defn- wrap-static-resources
-  "Serve classpath resources from resources/public/, but only for requests
-   that can actually be static assets: GET/HEAD with a file extension in the
-   URI. Plain ring.middleware.resource/wrap-resource does a classloader
-   lookup on EVERY request (including all API calls) before routing."
-  [handler]
-  (let [with-resources (wrap-resource handler "public")]
-    (fn [request]
-      (if (and (contains? #{:get :head} (:request-method request))
-               (str/includes? (:uri request) "."))
-        (with-resources request)
-        (handler request)))))
+  "Serve classpath resources from resources/public/, with revalidation headers.
 
-(defn- wrap-static-cache
-  "Adds Cache-Control headers to static asset responses.
-
-   Versioned/hashed assets under /public/ receive a 1-year immutable header.
-   All other responses are passed through unchanged."
+   `resource-request` is called directly rather than through `wrap-resource`,
+   so a hit is distinguishable from a miss: `wrap-resource` answers `(or
+   resource (handler request))`, which makes the two indistinguishable to
+   anything wrapping it. The cache headers used to live in a separate
+   middleware placed *inside* this one, and a resource hit returns without ever
+   calling the handler it wraps — so that middleware could not run for the only
+   responses it was written for. Setting them at the point the resource is
+   produced removes the ordering question rather than answering it."
   [handler]
   (fn [request]
-    (let [response (handler request)]
-      (if (and response (str/includes? (or (:uri request) "") "/public/"))
-        (assoc-in response [:headers "Cache-Control"] "public, max-age=31536000, immutable")
-        response))))
+    (or (when (asset-request? request)
+          (some-> (resource-request request "public")
+                  cache-headers
+                  (not-modified-response request)))
+        (handler request))))
 
 (def ^:private http-methods
   "The endpoint keys Reitit route data can carry."
@@ -601,7 +636,6 @@
           ;; parse them a second time for every request.
         handler (-> (ring/ring-handler router default-handler)
                     (wrap-gzip)
-                    (wrap-static-cache)
                     (wrap-static-resources)
                     (wrap-cookies))]
 
