@@ -800,3 +800,66 @@
               {:request-method :get :uri "/api/items" :headers {}})]
     (is (= 200 (:status resp)))
     (is (nil? (get-in resp [:headers "Cache-Control"])))))
+
+(deftest ^:contract shipped-nginx-config-does-not-override-the-asset-policy
+  ;; The middleware above is only half the policy in a real deployment. The
+  ;; reference proxy config had a static-extension location setting
+  ;; `expires 30d` and `Cache-Control: public, immutable`, and nginx applies
+  ;; both to what it proxies — so the revalidation header the app had just set
+  ;; was overwritten on the way out and a returning browser still held a stale
+  ;; asset for 30 days. Fixing the middleware alone would have shipped nothing
+  ;; (BOU-389).
+  (let [conf-file (java.io.File. "resources/deploy/nginx/wagoe.conf")]
+    (is (.exists conf-file)
+        "the reference nginx config should be where this test looks for it")
+    (let [conf (slurp conf-file)
+          ;; Comments explain why the policy is absent; only directives count.
+          directives (->> (str/split-lines conf)
+                          (map str/trim)
+                          (remove #(str/starts-with? % "#"))
+                          (str/join "\n"))]
+      (is (not (re-find #"(?i)expires\s" directives))
+          "no expires directive — it replaces the upstream Cache-Control")
+      (is (not (re-find #"(?i)immutable" directives))
+          "immutable is for content-hashed filenames, which these are not")
+      (is (not (re-find #"(?i)add_header\s+Cache-Control" directives))
+          "the app owns Cache-Control for its own assets"))))
+
+(deftest ^:contract etag-tracks-content-not-metadata
+  ;; Size and mtime are not enough to identify bytes. A rebuild that produces a
+  ;; same-length file inside the same second reuses the previous validator, so
+  ;; the 304 path keeps serving the old asset — the very staleness BOU-389 was
+  ;; raised to end. Both fixtures are forced to the same mtime and are the same
+  ;; length, so only their content can distinguish them.
+  (let [handler (reitit/compile-routes simple-routes {})
+        stamp   1767225600000 ; a fixed instant; the value itself is irrelevant
+        fetch   (fn [name]
+                  (let [f (java.io.File.
+                           (str "libs/platform/test/public/bou389/" name))]
+                    (.setLastModified f stamp)
+                    (handler {:request-method :get
+                              :uri (str "/bou389/" name)
+                              :headers {}})))
+        a (fetch "same-a.js")
+        b (fetch "same-b.js")]
+    (testing "the premise: identical length and mtime"
+      (is (= 200 (:status a) (:status b)))
+      (is (= (get-in a [:headers "Content-Length"])
+             (get-in b [:headers "Content-Length"])))
+      (is (= (get-in a [:headers "Last-Modified"])
+             (get-in b [:headers "Last-Modified"]))))
+    (testing "different bytes must not share a validator"
+      (is (not= (get-in a [:headers "ETag"])
+                (get-in b [:headers "ETag"]))))))
+
+(deftest ^:contract head-carries-the-same-validators-as-get
+  ;; ring answers a HEAD with a nil body, and the validator is a digest of the
+  ;; body — so a HEAD used to carry no ETag while the GET it stands in for did.
+  (let [handler (reitit/compile-routes simple-routes {})
+        req     {:uri "/bou389/asset.js" :headers {}}
+        get-r   (handler (assoc req :request-method :get))
+        head-r  (handler (assoc req :request-method :head))]
+    (is (= (get-in get-r [:headers "ETag"])
+           (get-in head-r [:headers "ETag"])))
+    (is (some? (get-in head-r [:headers "ETag"])))
+    (is (nil? (:body head-r)) "a HEAD still carries no body")))

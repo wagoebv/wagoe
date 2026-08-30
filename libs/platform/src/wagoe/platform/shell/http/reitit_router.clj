@@ -23,6 +23,8 @@
             [ring.middleware.resource :refer [resource-request]]
             [wagoe.platform.shell.http.interceptors :as http-interceptors])
   (:import [java.io ByteArrayInputStream ByteArrayOutputStream]
+           [java.nio.file Files]
+           [java.security MessageDigest]
            [java.util.zip GZIPOutputStream]))
 
 ;; =============================================================================
@@ -479,62 +481,64 @@
 ;; =============================================================================
 
 (defn- asset-request?
-  "GET/HEAD for a URI with a file extension — the only shape a classpath asset
-   can have. Checked before touching the classloader, because a lookup on every
-   request would put one in front of every API call too."
+  "GET/HEAD for a URI with a file extension. Checked before the classloader, so
+   a resource lookup does not precede every API call too."
   [request]
   (and (contains? #{:get :head} (:request-method request))
        (str/includes? (or (:uri request) "") ".")))
 
-(defn- asset-etag
-  "A weak validator built from what ring already knows about the resource.
+(defn- read-body-bytes
+  "The response body as bytes, for the two shapes a classpath resource takes:
+   a File on a directory entry, an InputStream from inside a jar."
+  ^bytes [body]
+  (cond
+    (instance? java.io.File body)        (Files/readAllBytes (.toPath ^java.io.File body))
+    (instance? java.io.InputStream body) (.readAllBytes ^java.io.InputStream body)))
 
-   Content-Length and Last-Modified are set for both shapes a classpath
-   resource takes — a file on a directory entry, a stream from inside a jar —
-   so this works for a checked-out repo and a released artifact alike. Weak
-   because it identifies the bytes by size and mtime rather than hashing them."
-  [response]
-  (let [headers (:headers response)
-        len     (get headers "Content-Length")
-        modified (get headers "Last-Modified")]
-    (when (or len modified)
-      (format "W/\"%s-%s\"" (or len "0") (hash (or modified ""))))))
+(defn- digest-hex
+  "First 16 bytes of the SHA-256 of `bs`, hex-encoded."
+  [^bytes bs]
+  (->> (.digest (MessageDigest/getInstance "SHA-256") bs)
+       (take 16)
+       (map #(format "%02x" (bit-and % 0xff)))
+       (apply str)))
 
 (defn- cache-headers
-  "Cache-Control and a validator for a static asset response.
+  "Mark a static asset cacheable but always revalidated, with a digest of the
+   bytes as the validator.
 
-   `no-cache` means \"store it, but ask before reusing it\" — not \"do not
-   store\". With a validator the ask is a 304 carrying no body, so the bytes
-   travel once and every later load costs a conditional request.
-
-   Deliberately not `max-age`/`immutable`: these filenames carry no content
-   hash. `app.css` changes meaning under a fixed name, so any lifetime is a
-   window in which a shipped fix cannot reach a browser that already has the
-   old one. That was not hypothetical — the header was absent entirely, browsers
-   applied heuristic caching, and a days-old forms.js kept being served over a
-   deployed fix (BOU-389). `immutable` belongs with hashed filenames, and is
-   worth revisiting when they exist."
+   Size and mtime are not enough: a rebuild producing a same-length file inside
+   one second reuses the validator, so the 304 path keeps serving the old asset
+   (BOU-389). `max-age`/`immutable` is wrong for the same reason — these
+   filenames carry no content hash, so any lifetime is a window in which a
+   shipped fix cannot reach a browser that already holds the old bytes."
   [response]
-  (cond-> (assoc-in response [:headers "Cache-Control"] "no-cache")
-    (asset-etag response) (assoc-in [:headers "ETag"] (asset-etag response))))
+  (let [bs (read-body-bytes (:body response))
+        with-cc (assoc-in response [:headers "Cache-Control"] "no-cache")]
+    (if bs
+      (-> with-cc
+          ;; Read once and handed back, because the jar case is a stream that
+          ;; hashing would otherwise consume.
+          (assoc :body (java.io.ByteArrayInputStream. bs))
+          (assoc-in [:headers "ETag"] (str "\"" (digest-hex bs) "\"")))
+      with-cc)))
 
 (defn- wrap-static-resources
   "Serve classpath resources from resources/public/, with revalidation headers.
 
-   `resource-request` is called directly rather than through `wrap-resource`,
-   so a hit is distinguishable from a miss: `wrap-resource` answers `(or
-   resource (handler request))`, which makes the two indistinguishable to
-   anything wrapping it. The cache headers used to live in a separate
-   middleware placed *inside* this one, and a resource hit returns without ever
-   calling the handler it wraps — so that middleware could not run for the only
-   responses it was written for. Setting them at the point the resource is
-   produced removes the ordering question rather than answering it."
+   `resource-request` rather than `wrap-resource`, because the latter answers
+   `(or resource (handler request))` — a hit returns without calling what it
+   wraps, so headers set in an outer middleware could never reach it."
   [handler]
   (fn [request]
     (or (when (asset-request? request)
-          (some-> (resource-request request "public")
+          ;; Looked up as a GET even for a HEAD: ring answers a HEAD with a nil
+          ;; body, and the validator is a digest of the body, so a HEAD would
+          ;; otherwise carry no ETag while the GET it stands in for does.
+          (some-> (resource-request (assoc request :request-method :get) "public")
                   cache-headers
-                  (not-modified-response request)))
+                  (not-modified-response request)
+                  (cond-> (= :head (:request-method request)) (assoc :body nil))))
         (handler request))))
 
 (def ^:private http-methods
