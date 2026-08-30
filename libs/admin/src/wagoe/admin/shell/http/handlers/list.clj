@@ -81,7 +81,8 @@
 
       (support/html-response request
                              (admin-ui/admin-layout
-                              (admin-ui/entity-list-page entity-name records entity-config table-query total-count permissions options)
+                              (admin-ui/entity-list-page entity-name records entity-config table-query total-count permissions
+                                                        (assoc options :display (support/display-options config)))
                               {:user user
                                :current-entity entity-name
                                :entities entities
@@ -94,7 +95,7 @@
 
     Returns just the table HTML for dynamic updates.
     Used when sorting, filtering, or paginating without full page reload."
-  [admin-service schema-provider _config]
+  [admin-service schema-provider config]
   (fn [request]
     (let [user (support/require-admin-user! request)
           entity-name (support/get-entity-name request)
@@ -147,7 +148,9 @@
         (support/htmx-fragment-response request
                                         [:div#filter-table-container
                                          (admin-ui/render-filter-builder entity-name entity-config filters)
-                                         (admin-ui/entity-table entity-name records entity-config table-query total-count permissions filters)])
+                                         (admin-ui/entity-table entity-name records entity-config table-query total-count permissions filters
+                                                               (support/display-options config))])
          ; Search / sort / pagination: return just the table
         (support/htmx-fragment-response request
-                                        (admin-ui/entity-table entity-name records entity-config table-query total-count permissions filters))))))
+                                        (admin-ui/entity-table entity-name records entity-config table-query total-count permissions filters
+                                                               (support/display-options config)))))))

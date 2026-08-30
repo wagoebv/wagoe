@@ -54,10 +54,11 @@
      record: Entity record map
      entity-config: Entity configuration map
      permissions: Permission flags for this entity
+     display: Optional display options (zone/date patterns) for value rendering
 
    Returns:
      Hiccup table row"
-  [entity-name record entity-config permissions]
+  [entity-name record entity-config permissions & [display]]
   (let [list-fields (:list-fields entity-config)
         primary-key (:primary-key entity-config :id)
         record-id (get record primary-key)
@@ -89,11 +90,11 @@
                  :hx-target "this"
                  :hx-swap "innerHTML"
                  :title [:t :admin/cell-dblclick-hint]}
-            (base/render-field-value field value field-config)]
+            (base/render-field-value field value field-config display)]
            ; Non-editable cell
            [:td {:class (str "field-" (name field))
                  :data-label field-label}
-            (base/render-field-value field value field-config)])))
+            (base/render-field-value field value field-config display)])))
      [:td.actions-cell
       (when can-open?
         [:a.row-nav-hint
@@ -113,10 +114,11 @@
      total-count: Total number of records
      permissions: Permission flags
      filters: Optional search filters
+     display: Optional display options threaded to cell rendering
 
    Returns:
      Hiccup table structure"
-  [entity-name records entity-config table-query total-count permissions & [filters]]
+  [entity-name records entity-config table-query total-count permissions & [filters display]]
   (let [{:keys [sort dir page page-size]} table-query
         base-url (str "/web/admin/" (name entity-name) "/table")
         hx-target "#entity-table-container"
@@ -200,7 +202,7 @@
                [:th {:class "actions-header"} [:t :admin/column-actions]]]]
              [:tbody
               (for [record records]
-                (entity-table-row entity-name record entity-config permissions))]]]]
+                (entity-table-row entity-name record entity-config permissions display))]]]]
           pagination]))]))
 
 (defn entity-list-page
@@ -213,12 +215,12 @@
      table-query: Table query parameters
      total-count: Total number of records
      permissions: Permission flags
-     opts: Optional map with :search, :filters, :flash
+     opts: Optional map with :search, :filters, :flash, :display
 
    Returns:
      Hiccup page structure"
   [entity-name records entity-config table-query total-count permissions & [opts]]
-  (let [{:keys [search filters flash]} opts
+  (let [{:keys [search filters flash display]} opts
         label (:label entity-config)
         search-fields (:search-fields entity-config)
         has-search? (seq search-fields)
@@ -308,4 +310,4 @@
       ;; Filter builder (will be updated by HTMX)
       (filters/render-filter-builder entity-name entity-config filters)
       ;; Table (will also be updated by HTMX)
-      (entity-table entity-name records entity-config table-query total-count permissions filters)]]))
+      (entity-table entity-name records entity-config table-query total-count permissions filters display)]]))

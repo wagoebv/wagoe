@@ -16,10 +16,11 @@
      field: Keyword field name
      value: Current field value
      field-config: Field configuration map
+     display: Optional display options (zone/date patterns)
 
    Returns:
      Hiccup td element"
-  [entity-name record-id field value field-config]
+  [entity-name record-id field value field-config & [display]]
   (let [field-label (:label field-config (str/capitalize (name field)))]
     [:td {:class (str "field-" (name field) " editable")
           :data-label field-label
@@ -29,7 +30,7 @@
           :hx-swap "innerHTML"
           :title [:t :admin/cell-dblclick-hint]}
      [:span.cell-content
-      (base/render-field-value field value field-config)]
+      (base/render-field-value field value field-config display)]
      [:span.inline-edit-hint
       (icons/icon :pencil {:size 14})
       " " [:t :common/button-edit]]]))
