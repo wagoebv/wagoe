@@ -11,7 +11,6 @@
   (:require [wagoe.user.shell.http :as user-http]
             [wagoe.user.shell.mfa :as mfa]
             [wagoe.user.ports :as ports]
-            [wagoe.platform.shell.interfaces.http.middleware :as middleware]
             [clojure.test :refer [deftest testing is]]
             [cheshire.core :as json])
   (:import [java.util UUID]
@@ -21,19 +20,16 @@
 ;; Test Helpers
 ;; =============================================================================
 
-(defn wrap-handler-with-error-handling
-  "Wrap a handler with exception middleware for testing.
-   Adds correlation-id and exception handling to simulate production behavior."
-  [handler error-mappings]
-  (-> handler
-      (middleware/wrap-exception-handling error-mappings)
-      (middleware/wrap-correlation-id)))
-
 (defn call-handler
-  "Call a handler with error handling middleware applied."
-  [handler-fn request error-mappings]
-  (let [wrapped (wrap-handler-with-error-handling handler-fn error-mappings)]
-    (wrapped request)))
+  "Call a handler.
+
+   It used to be wrapped in `interfaces.http.middleware` first, under a helper
+   whose docstring said that simulated production. No application ran that
+   middleware — and it was not doing anything here either: these handlers run an
+   interceptor pipeline and return the RFC 7807 body themselves, which is what
+   the assertions below have always been reading (BOU-372)."
+  [handler-fn request _error-mappings]
+  (handler-fn request))
 
 ;; =============================================================================
 ;; Mock User Service

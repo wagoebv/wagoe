@@ -120,6 +120,14 @@
         {:keys [exit]} (apply process/shell
                               {:dir dir :extra-env (test-env) :continue true}
                               cmd)]
+    ;; Name what exited non-zero, and with what. A surface can fail without a
+    ;; failing test — an error in a fixture, a namespace that will not load — and
+    ;; "FAIL main suite" alone sent me looking for a failing test that was not
+    ;; there. It was `1 errors, 0 failures`, which reads as green if you grep for
+    ;; failures (BOU-377).
+    (when-not (zero? exit)
+      (println (red (format "   %s exited %d — look for `errors` as well as `failures` above"
+                            (str/join " " cmd) exit))))
     (assoc surface :exit exit :duration-ms (- (System/currentTimeMillis) start))))
 
 (defn- report [results]

@@ -110,6 +110,9 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Removed
 
+- **`wagoe.platform.shell.interfaces.http.middleware`** (BOU-372). A parallel
+  correlation-id / logging / exception stack no application ran. Use the interceptors.
+
 - **`wagoe.platform.shell.interfaces.http.routes`** (BOU-358). A second, documented
   route builder nothing wired — and it applied no security stack. Use module contributions.
 
@@ -119,7 +122,16 @@ for what is public API, what is internal, and how deprecations are announced.
 ### Fixed
 
 - **Form validation errors reach the screen** (BOU-381). htmx discarded the 400
-  that carried them, so pressing Create did nothing at all.
+  that carried them, so pressing Create or Save did nothing at all.
+
+- **Two tests bound a port they had already released** (BOU-377), failing the
+  full suite intermittently. `bb test:all` now names what exited non-zero.
+
+- **The dev dashboard's busy-port fallback never ran** (BOU-377). A busy 9999
+  was a hard failure instead of the documented scan to 10009.
+
+- **A security test rejected one run in a hundred** (BOU-377). It searched the
+  response for `"120"`, which the random correlation-id UUID sometimes contains.
 
 - **The brand logo is Wagoe's** (BOU-379). The four assets behind `brand-logo`
   were renamed to `wagoe-*` but still drew the Boundary mark and wordmark. The

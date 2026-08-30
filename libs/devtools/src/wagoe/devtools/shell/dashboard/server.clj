@@ -376,24 +376,84 @@
       wrap-content-type
       wrap-params))
 
+(def ^:private max-tcp-port 65535)
+(def ^:private first-unprivileged-port 1024)
+(def ^:private scan-span
+  "How many ports past the requested one to try when it is busy."
+  10)
+
+(defn port-plan
+  "Which ports to try for `port`, in order, and what running out of them means.
+
+   Pure, and separate from the binding, because every defect in this area has
+   been a policy decision tangled up with a socket call (BOU-377):
+
+     {:error :out-of-range}                    not a TCP port
+     {:ports [p]        :on-exhausted :raise}  below 1024 — a bind failure there
+                                               may be EACCES, which Java does not
+                                               distinguish from EADDRINUSE, so it
+                                               is tried once and the failure told
+     {:ports [p … p+10] :on-exhausted :give-up} otherwise, capped at 65535"
+  [port]
+  (cond
+    (not (<= 1 port max-tcp-port))
+    {:error :out-of-range}
+
+    (< port first-unprivileged-port)
+    {:ports [port] :on-exhausted :raise}
+
+    :else
+    {:ports        (range port (inc (min (+ port scan-span) max-tcp-port)))
+     :on-exhausted :give-up}))
+
+(defn- bind-failure?
+  "Whether `e` is Jetty failing to bind — it wraps `BindException` in a plain
+   `IOException`, so `(catch BindException …)` never matched (BOU-377)."
+  [^Exception e]
+  (and (instance? java.io.IOException e)
+       (instance? java.net.BindException (.getCause e))))
+
+(defn- check-host-bindable!
+  "Throw unless `host` is an address this machine can bind.
+
+   Asks for any free port, so a failure here is the address rather than a busy
+   one — which is what lets the walk below skip reading the (localised)
+   exception message (BOU-377)."
+  [host]
+  (with-open [_ (java.net.ServerSocket. 0 0 (java.net.InetAddress/getByName host))]
+    nil))
+
 (defn- try-start-jetty
-  "Attempt to start Jetty on the given port. On BindException, try up to
-   max-port before giving up. Returns {:server s :port p} or nil."
-  [handler host port max-port]
-  (loop [p port]
-    (when (<= p max-port)
-      (let [result (try
-                     {:server (jetty/run-jetty handler {:port p :host host :join? false})
-                      :port   p}
-                     (catch java.net.BindException _
-                       (log/debugf "Dashboard port %d in use, trying %d" p (inc p))
-                       nil))]
-        (or result (recur (inc p)))))))
+  "Walk `port-plan` binding Jetty, and return {:server s :port p}.
+
+   nil when every port in a scanning plan was busy; a plan that says `:raise`
+   hands its last bind failure back instead."
+  [handler host port]
+  (let [{:keys [ports on-exhausted error]} (port-plan port)]
+    (when error
+      (throw (ex-info (str "Dashboard port " port " is outside 1–" max-tcp-port)
+                      {:type :configuration-error :port port})))
+    (check-host-bindable! host)
+    (loop [[p & more] ports]
+      (let [started (try
+                      {:server (jetty/run-jetty handler {:port p :host host :join? false})
+                       :port   p}
+                      (catch Exception e
+                        (when-not (bind-failure? e)
+                          (throw e))
+                        (when (and (empty? more) (= :raise on-exhausted))
+                          (throw e))
+                        (log/debugf "Dashboard port %d in use" p)
+                        nil))]
+        (cond
+          started    started
+          (seq more) (recur more)
+          :else      nil)))))
 
 (defmethod ig/init-key :wagoe/dashboard [_ {:keys [port host] :as config}]
   (let [port   (or port 9999)
         host   (or host "127.0.0.1")
-        result (try-start-jetty (make-handler config) host port (+ port 10))]
+        result (try-start-jetty (make-handler config) host port)]
     (if result
       (do
         (log/infof "Dev dashboard started on http://%s:%d/dashboard" host (:port result))
