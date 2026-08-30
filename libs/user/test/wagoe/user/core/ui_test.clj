@@ -274,24 +274,28 @@
           form-content (str form)]
       (is (re-find #"field-password" form-content))))
 
-  (testing "does not tick unmet requirements when no violations are supplied"
+  (testing "requirements describe the rendered field, which is always blank"
     ;; nil violations used to read as an empty list, so every rule rendered as
     ;; met — on the empty form, and beside the error saying the password was
-    ;; too short (BOU-381).
+    ;; too short (BOU-381). Deriving them from the submitted password is just
+    ;; as wrong the other way: a valid password rejected for a duplicate email
+    ;; would come back with every rule ticked above an empty box.
     (let [policy {:min-length 8 :require-numbers true}
           empty-form (str (ui/create-user-form {} {} nil policy))
           short-pw   (str (ui/create-user-form {:password "secret"} {} nil policy))
           good-pw    (str (ui/create-user-form {:password "Str0ngPass"} {} nil policy))]
-      (is (re-find #"requirement-unmet" empty-form))
-      (is (re-find #"requirement-unmet" short-pw))
-      (is (not (re-find #"requirement-unmet" good-pw))
-          "a password that meets the policy leaves every rule ticked")))
+      (is (not (re-find #"value=\"Str0ngPass\"" good-pw))
+          "the password is never echoed back into the field")
+      (doseq [[label form] [["empty" empty-form] ["short" short-pw] ["valid" good-pw]]]
+        (is (re-find #"requirement-unmet" form)
+            (str "nothing is met yet on a blank field (" label ")"))
+        (is (not (re-find #"requirement-met" form))
+            (str "and no rule is ticked (" label ")")))))
 
   (testing "an explicit violations list still wins"
-    (let [form (str (ui/create-user-form {:password "Str0ngPass"} {}
-                                         [{:code :too-short :message "Must be at least 8 characters"}]
-                                         {:min-length 8 :require-numbers true}))]
-      (is (re-find #"requirement-unmet" form)))))
+    (let [form (str (ui/create-user-form {} {} [] {:min-length 8 :require-numbers true}))]
+      (is (not (re-find #"requirement-unmet" form))
+          "an empty violations list means the caller vouched for the password"))))
 
 ;; =============================================================================
 ;; Success Message Component Tests  

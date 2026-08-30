@@ -9,7 +9,8 @@
    - HTMX Handlers: Return HTML fragments for dynamic updates
 
    All handlers use the shared UI components and user shell services."
-  (:require [wagoe.core.validation :as cv]
+  (:require [wagoe.config :as wagoe-config]
+            [wagoe.core.validation :as cv]
             [wagoe.i18n.shell.middleware :as i18n-middleware]
             [wagoe.i18n.shell.render :as i18n]
             [wagoe.shared.ui.core.components :as ui]
@@ -73,6 +74,27 @@
            (not (str/starts-with? url "//")))
     url
     default))
+
+(defn- display-password-policy
+  "The password rules the create-user form should list.
+
+   Registration refuses a password on two counts, and both apply:
+   `validate-user-creation-request` reads the configured policy with
+   `?`-suffixed flags, and `meets-password-policy?` reads the same flags
+   without the `?` — so it never sees them and falls back to its own defaults.
+   Showing only one of the two advertises fewer rules than are enforced: on the
+   prod config that meant listing two while rejecting on four. Collapses to the
+   configured policy once BOU-388 makes the two readers agree."
+  [config]
+  (let [policy (:password-policy (wagoe-config/user-validation-config config) {})]
+    {:min-length            (max (get policy :min-length 8)
+                                 (:min-length user-ui/default-password-policy))
+     :max-length            (min (get policy :max-length 255) 255)
+     :require-uppercase     (boolean (get policy :require-uppercase? false))
+     :require-lowercase     (boolean (get policy :require-lowercase? false))
+     :require-numbers       (boolean (or (get policy :require-numbers? false)
+                                         (:require-numbers user-ui/default-password-policy)))
+     :require-special-chars (boolean (get policy :require-special-chars? false))}))
 
 (defn- validate-request-data
   "Validate request data against schema with transformation.
@@ -334,13 +356,16 @@
 
    Returns:
      Ring handler function"
-  [_config]
+  [config]
   (fn [request]
     (let [raw-return-to (get-in request [:query-params "return-to"])
           return-to (safe-return-url raw-return-to "/web/admin/users")
           page-opts {:user (get request :user)
                      :flash (get request :flash)
-                     :return-to return-to}]
+                     :return-to return-to
+                     ;; Same set the failed POST lists, so the rules do not
+                     ;; change between opening the form and submitting it.
+                     :password-policy (display-password-policy config)}]
       (html-response request (user-ui/create-user-page {} {} page-opts)))))
 
 ;; =============================================================================
@@ -753,7 +778,7 @@
                          :role (keyword (get form-data "role"))
                          :send-welcome send-welcome?}
           [valid? validation-errors _] (validate-request-data user-schema/CreateUserRequest prepared-data)
-          password-policy {:min-length 8 :require-numbers true}
+          password-policy (display-password-policy config)
           ;; nil violations lets the form derive them from the password it is
           ;; handed, which is what the requirements list has to reflect.
           rerender (fn [errors violations]
@@ -799,7 +824,10 @@
             (let [data (ex-data e)]
               (case (:type data)
                 :password-policy-violation
-                (rerender {:password (mapv :message (:violations data))} (:violations data))
+                ;; nil, not the violations: the password box comes back empty,
+                ;; so the tick list has to describe an empty field. What was
+                ;; wrong with the one submitted is in the message.
+                (rerender {:password (mapv :message (:violations data))} nil)
 
                 :user-exists
                 (rerender {:email [(or (:message data) (.getMessage e))]} nil)

@@ -229,6 +229,12 @@
      [:span.requirement-icon icon]
      [:span.requirement-text (:message requirement)]]))
 
+(def default-password-policy
+  "Fallback for callers that do not supply one. Matches what
+   `meets-password-policy?` enforces on its own defaults; the shell passes the
+   configured policy instead, which can be stricter."
+  {:min-length 8 :require-numbers true})
+
 (defn password-requirements-list
   "Display list of password requirements with current status.
    
@@ -372,60 +378,66 @@
    Returns:
      Hiccup structure for create user form"
   ([data errors password-violations policy opts]
-   [:div#create-user-form
-    [:h2 [:t :user/form-create-title]]
-    ;; outerHTML: the response is itself a #create-user-form, so an innerHTML
-    ;; swap nests one inside the other and leaves a duplicate id behind
-    ;; (BOU-381).
-    [:form {:hx-post   "/web/users"
-            :hx-target "#create-user-form"
-            :hx-swap   "outerHTML"
-            :class     "form-card"}
-     (when-let [return-to (:return-to opts)]
-       [:input {:type "hidden" :name "return-to" :value return-to}])
-     (ui/form-field :name [:t :common/label-name]
-                    (ui/text-input :name (:name data) {:required true})
-                    (:name errors))
-     (ui/form-field :email [:t :common/label-email]
-                    (ui/email-input :email (:email data) {:required true})
-                    (:email errors))
-     ;; Password field with validation feedback
-     [:div {:class "form-field"}
-      [:label {:for "password"} [:t :user/field-password]]
-      (ui/password-input :password "" {:required true})
-      ;; Show password requirements if policy provided. A nil violations
-      ;; argument is not "nothing is wrong": read as an empty list it ticked
-      ;; every rule as met — on the empty form, and beside the error saying the
-      ;; password was too short. Absent an explicit list, check the password
-      ;; that is in hand (BOU-381).
-      (when policy
-        (password-requirements-list
-         (or password-violations
-             (:violations (auth-core/meets-password-policy?
-                           (or (:password data) "") policy nil)))
-         policy))
-      ;; Show validation errors if present
-      (when (seq (:password errors))
-        [:div.validation-errors
-         (for [err (:password errors)]
-           [:p err])])]
-     (ui/form-field :role [:t :common/label-role]
-                    (ui/select-field :role
-                                     [[:user [:t :common/role-user]]
-                                      [:admin [:t :common/role-admin]]
-                                      [:viewer [:t :common/role-viewer]]]
-                                     (:role data))
-                    (:role errors))
-     (ui/form-field :send-welcome [:t :user/checkbox-send-welcome]
-                    (ui/checkbox :send-welcome (get data :send-welcome true))
-                    nil)
-     (ui/submit-button [:t :user/button-create] {:loading-text [:t :user/button-create-loading]})]])
+   ;; A password is never echoed back, so the field is always rendered blank.
+   ;; Bound once because the requirements list below has to describe the same
+   ;; value the user is looking at.
+   (let [rendered-password ""]
+     [:div#create-user-form
+      [:h2 [:t :user/form-create-title]]
+      ;; outerHTML: the response is itself a #create-user-form, so an innerHTML
+      ;; swap nests one inside the other and leaves a duplicate id behind
+      ;; (BOU-381).
+      [:form {:hx-post   "/web/users"
+              :hx-target "#create-user-form"
+              :hx-swap   "outerHTML"
+              :class     "form-card"}
+       (when-let [return-to (:return-to opts)]
+         [:input {:type "hidden" :name "return-to" :value return-to}])
+       (ui/form-field :name [:t :common/label-name]
+                      (ui/text-input :name (:name data) {:required true})
+                      (:name errors))
+       (ui/form-field :email [:t :common/label-email]
+                      (ui/email-input :email (:email data) {:required true})
+                      (:email errors))
+       ;; Password field with validation feedback
+       [:div {:class "form-field"}
+        [:label {:for "password"} [:t :user/field-password]]
+        (ui/password-input :password rendered-password {:required true})
+        ;; The list describes the field as rendered, and the field is never
+        ;; pre-filled — so on a re-render nothing is met yet, whatever was
+        ;; submitted. A nil violations argument used to read as an empty list
+        ;; and tick every rule instead, which put a green "At least 8
+        ;; characters" beside both an empty box and the error saying it was too
+        ;; short (BOU-381). What was wrong with the submitted password is said
+        ;; by the error under the field, not by these ticks.
+        (when policy
+          (password-requirements-list
+           (or password-violations
+               (:violations (auth-core/meets-password-policy?
+                             rendered-password policy nil)))
+           policy))
+        ;; Show validation errors if present
+        (when (seq (:password errors))
+          [:div.validation-errors
+           (for [err (:password errors)]
+             [:p err])])]
+       (ui/form-field :role [:t :common/label-role]
+                      (ui/select-field :role
+                                       [[:user [:t :common/role-user]]
+                                        [:admin [:t :common/role-admin]]
+                                        [:viewer [:t :common/role-viewer]]]
+                                       (:role data))
+                      (:role errors))
+       (ui/form-field :send-welcome [:t :user/checkbox-send-welcome]
+                      (ui/checkbox :send-welcome (get data :send-welcome true))
+                      nil)
+       (ui/submit-button [:t :user/button-create] {:loading-text [:t :user/button-create-loading]})]]))
   ([data errors password-violations policy]
    (create-user-form data errors password-violations policy nil))
   ([data errors]
-   (create-user-form data errors nil {:min-length 8 :require-numbers true} nil))
+   (create-user-form data errors nil default-password-policy nil))
   ([]
-   (create-user-form {} {} nil {:min-length 8 :require-numbers true} nil)))
+   (create-user-form {} {} nil default-password-policy nil)))
 
 ;; =============================================================================
 ;; User Success Messages
@@ -640,12 +652,15 @@
      errors: Optional validation errors
      opts: Optional page options. Supports :return-to for the 'Back to users'
            button target and to thread through the form as a hidden field so
-           the HTMX POST handler can redirect to the same URL on success.
+           the HTMX POST handler can redirect to the same URL on success, and
+           :password-policy for the rules the form lists — the shell reads that
+           from config, so the page and the failed POST advertise the same set.
 
    Returns:
      Complete HTML page for creating users"
   [& [data errors opts]]
-  (let [return-to (or (:return-to opts) "/web/admin/users")]
+  (let [return-to (or (:return-to opts) "/web/admin/users")
+        policy    (or (:password-policy opts) default-password-policy)]
     (page-layout
      [:t :user/page-create-user-title]
      [:div.create-user-page
@@ -653,8 +668,7 @@
        [:h1 [:t :user/form-create-title]]
        [:div.page-actions
         [:a.button {:href return-to} [:t :user/button-back-to-users]]]]
-      (create-user-form data errors nil {:min-length 8 :require-numbers true}
-                        {:return-to return-to})]
+      (create-user-form data errors nil policy {:return-to return-to})]
      opts)))
 
 ;; =============================================================================
@@ -861,14 +875,13 @@
       [:div {:class "form-field"}
        [:label {:for "password"} [:t :user/field-password]]
        (ui/password-input :password "" {:required true})
-        ;; Show password requirements if policy provided. Absent an explicit
-        ;; list, check the password in hand — nil is not "nothing is wrong"
-        ;; (BOU-381).
+        ;; The field is never pre-filled, so the list describes an empty
+        ;; password unless the caller says otherwise — a nil argument used to
+        ;; read as an empty list and tick every rule instead (BOU-381).
        (when policy
          (password-requirements-list
           (or password-violations
-              (:violations (auth-core/meets-password-policy?
-                            (or (:password data) "") policy nil)))
+              (:violations (auth-core/meets-password-policy? "" policy nil)))
           policy))
         ;; Show validation errors if present
        (when (seq (:password errors))
@@ -877,7 +890,7 @@
             [:p err])])]
       (ui/submit-button [:t :user/button-create-account] {:loading-text [:t :user/button-create-loading]})]]])
   ([data errors]
-   (register-form data errors nil {:min-length 8 :require-numbers true})))
+   (register-form data errors nil default-password-policy)))
 
 (defn register-page
   "Complete self-service registration page.

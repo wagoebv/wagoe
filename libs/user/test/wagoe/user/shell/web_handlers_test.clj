@@ -399,7 +399,48 @@
           request {:flash {:error "Previous creation failed"}}
           response (handler request)]
 
-      (is (= 200 (:status response))))))
+      (is (= 200 (:status response)))))
+
+  ;; The listed rules used to be hardcoded to min-length + numbers, so a prod
+  ;; config rejected on four rules while the form advertised two (BOU-381 review,
+  ;; underlying key mismatch tracked as BOU-388).
+  (testing "lists the rules the configured policy actually enforces"
+    (let [config {:active {:wagoe/settings
+                           {:user-validation
+                            {:password-policy {:min-length 8
+                                               :max-length 128
+                                               :require-uppercase? true
+                                               :require-lowercase? true
+                                               :require-numbers? true
+                                               :require-special-chars? true}}}}}
+          response ((web-handlers/create-user-page-handler config) {})]
+
+      (is (html-contains? response "password-requirement-uppercase"))
+      (is (html-contains? response "password-requirement-lowercase"))
+      (is (html-contains? response "password-requirement-special-char"))
+      (is (html-contains? response "password-requirement-number"))))
+
+  (testing "a laxer configured minimum does not undercut what is enforced anyway"
+    ;; dev config says 6 and no digit required, but meets-password-policy? still
+    ;; imposes 8 and a digit, so the form has to show the stricter of the two.
+    ;; The interpolated count only reaches the body through a real translator —
+    ;; the fallback drops params, which would make an assertion on it vacuous.
+    (let [config {:active {:wagoe/settings
+                           {:user-validation
+                            {:password-policy {:min-length 6
+                                               :require-numbers? false
+                                               :require-uppercase? false}}}}}
+          t-fn (fn ([k] (str k))
+                 ([k params] (str k " " (pr-str params)))
+                 ([k params _n] (str k " " (pr-str params))))
+          response ((web-handlers/create-user-page-handler config) {:i18n/t t-fn})]
+
+      (is (html-contains? response "password-requirement-number")
+          "still enforced by meets-password-policy?, so still listed")
+      (is (not (html-contains? response "password-requirement-uppercase")))
+      (is (html-contains? response "{:n 8}")
+          "the listed minimum should be 8, not the configured 6")
+      (is (not (html-contains? response "{:n 6}"))))))
 
 ;; =============================================================================
 ;; HTMX Fragment Handler Tests
