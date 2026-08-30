@@ -175,9 +175,12 @@
             "The password error the server rendered should be visible")
         ;; The requirements list took its cue from a nil violations argument and
         ;; ticked every rule as met, so a six-character password came back with a
-        ;; green "At least 8 characters" beside the error saying it was not.
-        (is (pos? (page/evaluate pg "() => document.querySelectorAll('.requirement-unmet').length"))
-            "The unmet requirement should not still be ticked as met")
+        ;; green "At least 8 characters" beside the error saying it was not. The
+        ;; box is blank after the swap, so the rules now carry no verdict at all
+        ;; — a tick against a field the user has to fill in again is the bug in
+        ;; either direction.
+        (is (zero? (page/evaluate pg "() => document.querySelectorAll('.requirement-met').length"))
+            "No requirement should be ticked as met above an empty password box")
         ;; The response is itself a #create-user-form, so the default innerHTML
         ;; swap nested one inside the other: two elements with the same id, which
         ;; breaks every later locator on this page. hx-swap="outerHTML" replaces

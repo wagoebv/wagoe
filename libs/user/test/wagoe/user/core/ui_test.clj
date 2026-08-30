@@ -274,28 +274,39 @@
           form-content (str form)]
       (is (re-find #"field-password" form-content))))
 
-  (testing "requirements describe the rendered field, which is always blank"
+  (testing "requirements are stated, not judged, while the field is blank"
     ;; nil violations used to read as an empty list, so every rule rendered as
     ;; met — on the empty form, and beside the error saying the password was
-    ;; too short (BOU-381). Deriving them from the submitted password is just
-    ;; as wrong the other way: a valid password rejected for a duplicate email
-    ;; would come back with every rule ticked above an empty box.
+    ;; too short (BOU-381). Deriving them from the submitted password is just as
+    ;; wrong the other way round: a valid password rejected for a duplicate
+    ;; email came back with every rule ticked above an empty box, and a fresh
+    ;; form opened with every rule already crossed out.
     (let [policy {:min-length 8 :require-numbers true}
           empty-form (str (ui/create-user-form {} {} nil policy))
-          short-pw   (str (ui/create-user-form {:password "secret"} {} nil policy))
-          good-pw    (str (ui/create-user-form {:password "Str0ngPass"} {} nil policy))]
-      (is (not (re-find #"value=\"Str0ngPass\"" good-pw))
+          submitted  (str (ui/create-user-form {:password "Str0ngPass"} {} nil policy))]
+      ;; (str hiccup) prints the data, so a leaked value shows as :value "..."
+      ;; — matching on rendered HTML attribute syntax would pass either way.
+      (is (not (re-find #"\"Str0ngPass\"" submitted))
           "the password is never echoed back into the field")
-      (doseq [[label form] [["empty" empty-form] ["short" short-pw] ["valid" good-pw]]]
-        (is (re-find #"requirement-unmet" form)
-            (str "nothing is met yet on a blank field (" label ")"))
+      (doseq [[label form] [["empty" empty-form] ["submitted" submitted]]]
+        (is (re-find #"requirement-pending" form)
+            (str "no verdict on a field the server cannot see (" label ")"))
         (is (not (re-find #"requirement-met" form))
-            (str "and no rule is ticked (" label ")")))))
+            (str "nothing ticked (" label ")"))
+        (is (not (re-find #"requirement-unmet" form))
+            (str "and nothing crossed out (" label ")")))))
 
-  (testing "an explicit violations list still wins"
-    (let [form (str (ui/create-user-form {} {} [] {:min-length 8 :require-numbers true}))]
-      (is (not (re-find #"requirement-unmet" form))
-          "an empty violations list means the caller vouched for the password"))))
+  (testing "a violations list is honoured when the caller has one"
+    (let [policy {:min-length 8 :require-numbers true}
+          checked (str (ui/create-user-form {} {} [{:code :missing-number :message "x"}] policy))]
+      (is (re-find #"requirement-unmet" checked) "the failed rule is crossed out")
+      (is (re-find #"requirement-met" checked) "the satisfied one is ticked")
+      (is (not (re-find #"requirement-pending" checked)))))
+
+  (testing "renders errors the service reported against no particular field"
+    (let [form (str (ui/create-user-form {} {:form ["Something the form must still say"]}))]
+      (is (re-find #"Something the form must still say" form))
+      (is (re-find #"validation-errors" form)))))
 
 ;; =============================================================================
 ;; Success Message Component Tests  

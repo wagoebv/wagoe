@@ -421,8 +421,9 @@
       (is (html-contains? response "password-requirement-number"))))
 
   (testing "a laxer configured minimum does not undercut what is enforced anyway"
-    ;; dev config says 6 and no digit required, but meets-password-policy? still
-    ;; imposes 8 and a digit, so the form has to show the stricter of the two.
+    ;; dev config says 6 and no digit required, but CreateUserRequest requires 8
+    ;; and meets-password-policy? requires a digit (it never sees
+    ;; :require-numbers?), so the form has to show the stricter of the three.
     ;; The interpolated count only reaches the body through a real translator —
     ;; the fallback drops params, which would make an assertion on it vacuous.
     (let [config {:active {:wagoe/settings
@@ -575,8 +576,10 @@
       (is (= 400 (:status response)))
       (is (html-contains? response "create-user-form"))
       (is (html-contains? response "Must contain at least one number"))
-      ;; and the requirements list marks the rule it failed
-      (is (html-contains? response "requirement-unmet"))))
+      ;; The box comes back empty, so the rules carry no verdict — the message
+      ;; above is what says why it was refused.
+      (is (html-contains? response "requirement-pending"))
+      (is (not (html-contains? response "requirement-met")))))
 
   (testing "handles service errors"
     (let [service (reify ports/IUserService

@@ -9,7 +9,6 @@
             [wagoe.shared.ui.core.table :as table-ui]
             [wagoe.shared.ui.core.icons :as icons]
             [wagoe.platform.core.csrf :as csrf]
-            [wagoe.user.core.authentication :as auth-core]
             [clojure.string :as str]))
 
 ;; ---------------------------------------------------------------------------
@@ -216,22 +215,26 @@
   "Display a single password requirement with status indicator.
    
    Args:
-     requirement - map with :met?, :message
-     
+     requirement - map with :met?, :message. A nil :met? means the state is not
+                   known — the server cannot see what is in the field — and
+                   renders as a neutral bullet rather than a ✓ or a ✗.
+
    Returns:
-     Hiccup list item with checkmark/x indicator
-     
+     Hiccup list item with status indicator
+
    Pure: true"
   [requirement]
-  (let [icon (if (:met? requirement) "✓" "✗")
-        class (if (:met? requirement) "requirement-met" "requirement-unmet")]
+  (let [[icon class] (case (:met? requirement)
+                       true  ["✓" "requirement-met"]
+                       false ["✗" "requirement-unmet"]
+                       ["•" "requirement-pending"])]
     [:li {:class class}
      [:span.requirement-icon icon]
      [:span.requirement-text (:message requirement)]]))
 
 (def default-password-policy
-  "Fallback for callers that do not supply one. Matches what
-   `meets-password-policy?` enforces on its own defaults; the shell passes the
+  "Fallback for callers that do not supply one: the schema minimum, and the
+   digit `meets-password-policy?` requires by default. The shell passes the
    configured policy instead, which can be stricter."
   {:min-length 8 :require-numbers true})
 
@@ -239,32 +242,39 @@
   "Display list of password requirements with current status.
    
    Args:
-     violations - vector of violation maps from meets-password-policy?
+     violations - vector of violation maps from meets-password-policy?, or nil
+                  when nothing has been checked. nil is not an empty list: a
+                  password box is never pre-filled, so on a re-render the server
+                  has no idea what is in it, and the rules render as neither met
+                  nor unmet. Reading nil as \"no violations\" ticked every rule
+                  green above an empty field (BOU-381).
      policy     - password policy configuration map
-     
+
    Returns:
      Hiccup list of requirements
-     
+
    Pure: true"
   [violations policy]
-  (let [violation-codes (set (map :code violations))
+  (let [checked?        (some? violations)
+        violation-codes (set (map :code violations))
+        met?            (fn [code] (when checked? (not (contains? violation-codes code))))
         requirements [{:code :too-short
-                       :met? (not (contains? violation-codes :too-short))
+                       :met? (met? :too-short)
                        :message [:t :user/password-requirement-min-length {:n (get policy :min-length 8)}]}
                       {:code :missing-uppercase
-                       :met? (not (contains? violation-codes :missing-uppercase))
+                       :met? (met? :missing-uppercase)
                        :message [:t :user/password-requirement-uppercase]
                        :required? (get policy :require-uppercase false)}
                       {:code :missing-lowercase
-                       :met? (not (contains? violation-codes :missing-lowercase))
+                       :met? (met? :missing-lowercase)
                        :message [:t :user/password-requirement-lowercase]
                        :required? (get policy :require-lowercase false)}
                       {:code :missing-number
-                       :met? (not (contains? violation-codes :missing-number))
+                       :met? (met? :missing-number)
                        :message [:t :user/password-requirement-number]
                        :required? (get policy :require-numbers true)}
                       {:code :missing-special-char
-                       :met? (not (contains? violation-codes :missing-special-char))
+                       :met? (met? :missing-special-char)
                        :message [:t :user/password-requirement-special-char]
                        :required? (get policy :require-special-chars false)}]
         active-requirements (filter #(not= false (:required? %)) requirements)]
@@ -393,6 +403,13 @@
               :class     "form-card"}
        (when-let [return-to (:return-to opts)]
          [:input {:type "hidden" :name "return-to" :value return-to}])
+       ;; Errors the service reported against no particular field. Without this
+       ;; they were collected and then never rendered, so the form swapped back
+       ;; in carrying nothing.
+       (when (seq (:form errors))
+         [:div.validation-errors
+          (for [err (:form errors)]
+            [:p err])])
        (ui/form-field :name [:t :common/label-name]
                       (ui/text-input :name (:name data) {:required true})
                       (:name errors))
@@ -403,19 +420,12 @@
        [:div {:class "form-field"}
         [:label {:for "password"} [:t :user/field-password]]
         (ui/password-input :password rendered-password {:required true})
-        ;; The list describes the field as rendered, and the field is never
-        ;; pre-filled — so on a re-render nothing is met yet, whatever was
-        ;; submitted. A nil violations argument used to read as an empty list
-        ;; and tick every rule instead, which put a green "At least 8
-        ;; characters" beside both an empty box and the error saying it was too
-        ;; short (BOU-381). What was wrong with the submitted password is said
-        ;; by the error under the field, not by these ticks.
+        ;; Passed straight through: with a blank field and no violations to go
+        ;; on, the rules render as neither met nor unmet. What was wrong with
+        ;; the submitted password is said by the error below, not by ticks
+        ;; against a box the user has to fill in again (BOU-381).
         (when policy
-          (password-requirements-list
-           (or password-violations
-               (:violations (auth-core/meets-password-policy?
-                             rendered-password policy nil)))
-           policy))
+          (password-requirements-list password-violations policy))
         ;; Show validation errors if present
         (when (seq (:password errors))
           [:div.validation-errors
@@ -875,14 +885,10 @@
       [:div {:class "form-field"}
        [:label {:for "password"} [:t :user/field-password]]
        (ui/password-input :password "" {:required true})
-        ;; The field is never pre-filled, so the list describes an empty
-        ;; password unless the caller says otherwise — a nil argument used to
-        ;; read as an empty list and tick every rule instead (BOU-381).
+        ;; nil violations render as neither met nor unmet — the field is never
+        ;; pre-filled, so there is nothing to report against (BOU-381).
        (when policy
-         (password-requirements-list
-          (or password-violations
-              (:violations (auth-core/meets-password-policy? "" policy nil)))
-          policy))
+         (password-requirements-list password-violations policy))
         ;; Show validation errors if present
        (when (seq (:password errors))
          [:div.validation-errors

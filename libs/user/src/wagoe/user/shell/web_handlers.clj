@@ -78,22 +78,29 @@
 (defn- display-password-policy
   "The password rules the create-user form should list.
 
-   Registration refuses a password on two counts, and both apply:
-   `validate-user-creation-request` reads the configured policy with
-   `?`-suffixed flags, and `meets-password-policy?` reads the same flags
-   without the `?` — so it never sees them and falls back to its own defaults.
-   Showing only one of the two advertises fewer rules than are enforced: on the
-   prod config that meant listing two while rejecting on four. Collapses to the
-   configured policy once BOU-388 makes the two readers agree."
+   Three things refuse a password and the form has to show all of them, or it
+   advertises fewer rules than it enforces — on the prod config that meant
+   listing two while rejecting on four:
+
+   - `CreateUserRequest` requires at least 8 characters, whatever the config
+     says. The dev config's `:min-length 6` never applies.
+   - `validate-user-creation-request` reads the configured flags, which are
+     `?`-suffixed.
+   - `meets-password-policy?` reads those same flags without the `?`, so it
+     never sees them and falls back to requiring a digit.
+
+   The last of those is BOU-388; once the two readers agree this collapses to
+   the configured policy plus the schema minimum."
   [config]
-  (let [policy (:password-policy (wagoe-config/user-validation-config config) {})]
-    {:min-length            (max (get policy :min-length 8)
-                                 (:min-length user-ui/default-password-policy))
+  (let [policy        (:password-policy (wagoe-config/user-validation-config config) {})
+        schema-minimum 8]
+    {:min-length            (max (get policy :min-length schema-minimum) schema-minimum)
      :max-length            (min (get policy :max-length 255) 255)
      :require-uppercase     (boolean (get policy :require-uppercase? false))
      :require-lowercase     (boolean (get policy :require-lowercase? false))
-     :require-numbers       (boolean (or (get policy :require-numbers? false)
-                                         (:require-numbers user-ui/default-password-policy)))
+     ;; meets-password-policy? defaults this to true and never reads
+     ;; :require-numbers?, so a digit is required no matter what config says.
+     :require-numbers       true
      :require-special-chars (boolean (get policy :require-special-chars? false))}))
 
 (defn- validate-request-data
@@ -739,12 +746,27 @@
                     "You can log in at any time.\n\n"
                     "— " app-name)})))
 
+(defn- error-field-key
+  "The form keys errors by field keyword, but a service :validation-error mixes
+   two shapes: business rules report `:field :password`, while schema failures
+   come from `humanized-errors->error-maps` as a path vector, `:field
+   [:password]`. Keyed as-is, the vector ones land under `[:password]` and the
+   form — which looks up `:password` — renders nothing at all."
+  [field]
+  (cond
+    (keyword? field)             field
+    (and (sequential? field)
+         (keyword? (last field))) (last field)
+    :else                        :form))
+
 (defn- service-errors->field-errors
   "Group a service :validation-error's `:errors` — a vector of
-   {:field :code :message} — into the field -> messages map the form takes."
+   {:field :code :message} — into the field -> messages map the form takes.
+   Anything without a usable field lands under :form, which the form renders as
+   an unattached block."
   [errors]
   (reduce (fn [acc {:keys [field message]}]
-            (update acc (or field :form) (fnil conj []) message))
+            (update acc (error-field-key field) (fnil conj []) message))
           {}
           errors))
 
