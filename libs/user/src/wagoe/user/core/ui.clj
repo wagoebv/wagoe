@@ -232,10 +232,13 @@
      [:span.requirement-icon icon]
      [:span.requirement-text (:message requirement)]]))
 
+;; Fallback for callers that do not supply a policy: the schema minimum, and
+;; the digit `meets-password-policy?` requires by default. The shell passes the
+;; configured policy instead, which can be stricter. Written as a comment
+;; rather than a docstring because `bb i18n:scan` does not treat a string in
+;; `def` position as one — `(def title "Users")` is the literal it exists to
+;; catch.
 (def default-password-policy
-  "Fallback for callers that do not supply one: the schema minimum, and the
-   digit `meets-password-policy?` requires by default. The shell passes the
-   configured policy instead, which can be stricter."
   {:min-length 8 :require-numbers true})
 
 (defn password-requirements-list
