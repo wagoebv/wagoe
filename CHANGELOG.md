@@ -121,9 +121,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
-- **Static assets revalidate instead of being cached blind** (BOU-389). Nothing
-  set `Cache-Control`, so a browser served a stale `forms.js` or logo over a
-  deployed fix. Now `no-cache` with an `ETag`, answered by a 304.
+- **Static assets revalidate instead of being cached blind** (BOU-389). A browser
+  no longer serves a stale `forms.js` or logo over a deployed fix.
 
 - **Form validation errors reach the screen** (BOU-381). htmx discarded the 400
   that carried them, so pressing Create or Save did nothing at all.
