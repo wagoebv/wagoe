@@ -1988,6 +1988,17 @@ button.full-width {
   background: var(--status-error-bg);
 }
 
+/* Neither met nor unmet: the server cannot see what is in the password box,
+   so on a fresh or re-rendered form the rules are stated, not judged. */
+.requirement-pending .requirement-icon {
+  color: var(--text-faint);
+  background: transparent;
+}
+
+.requirement-pending .requirement-text {
+  color: var(--text-muted);
+}
+
 .requirement-met .requirement-text {
   color: var(--status-success);
 }

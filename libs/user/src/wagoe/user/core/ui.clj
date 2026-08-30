@@ -215,49 +215,69 @@
   "Display a single password requirement with status indicator.
    
    Args:
-     requirement - map with :met?, :message
-     
+     requirement - map with :met?, :message. A nil :met? means the state is not
+                   known — the server cannot see what is in the field — and
+                   renders as a neutral bullet rather than a ✓ or a ✗.
+
    Returns:
-     Hiccup list item with checkmark/x indicator
-     
+     Hiccup list item with status indicator
+
    Pure: true"
   [requirement]
-  (let [icon (if (:met? requirement) "✓" "✗")
-        class (if (:met? requirement) "requirement-met" "requirement-unmet")]
+  (let [[icon class] (case (:met? requirement)
+                       true  ["✓" "requirement-met"]
+                       false ["✗" "requirement-unmet"]
+                       ["•" "requirement-pending"])]
     [:li {:class class}
      [:span.requirement-icon icon]
      [:span.requirement-text (:message requirement)]]))
+
+;; Fallback for callers that do not supply a policy: the schema minimum, and
+;; the digit `meets-password-policy?` requires by default. The shell passes the
+;; configured policy instead, which can be stricter. Written as a comment
+;; rather than a docstring because `bb i18n:scan` does not treat a string in
+;; `def` position as one — `(def title "Users")` is the literal it exists to
+;; catch.
+(def default-password-policy
+  {:min-length 8 :require-numbers true})
 
 (defn password-requirements-list
   "Display list of password requirements with current status.
    
    Args:
-     violations - vector of violation maps from meets-password-policy?
+     violations - vector of violation maps from meets-password-policy?, or nil
+                  when nothing has been checked. nil is not an empty list: a
+                  password box is never pre-filled, so on a re-render the server
+                  has no idea what is in it, and the rules render as neither met
+                  nor unmet. Reading nil as \"no violations\" ticked every rule
+                  green above an empty field (BOU-381).
      policy     - password policy configuration map
-     
+
    Returns:
      Hiccup list of requirements
-     
+
    Pure: true"
   [violations policy]
-  (let [violation-codes (set (map :code violations))
+  (let [checked?        (some? violations)
+        violation-codes (set (map :code violations))
+        met?            (fn [code] (when checked? (not (contains? violation-codes code))))
         requirements [{:code :too-short
-                       :met? (not (contains? violation-codes :too-short))
+                       :met? (met? :too-short)
                        :message [:t :user/password-requirement-min-length {:n (get policy :min-length 8)}]}
                       {:code :missing-uppercase
-                       :met? (not (contains? violation-codes :missing-uppercase))
+                       :met? (met? :missing-uppercase)
                        :message [:t :user/password-requirement-uppercase]
                        :required? (get policy :require-uppercase false)}
                       {:code :missing-lowercase
-                       :met? (not (contains? violation-codes :missing-lowercase))
+                       :met? (met? :missing-lowercase)
                        :message [:t :user/password-requirement-lowercase]
                        :required? (get policy :require-lowercase false)}
                       {:code :missing-number
-                       :met? (not (contains? violation-codes :missing-number))
+                       :met? (met? :missing-number)
                        :message [:t :user/password-requirement-number]
                        :required? (get policy :require-numbers true)}
                       {:code :missing-special-char
-                       :met? (not (contains? violation-codes :missing-special-char))
+                       :met? (met? :missing-special-char)
                        :message [:t :user/password-requirement-special-char]
                        :required? (get policy :require-special-chars false)}]
         active-requirements (filter #(not= false (:required? %)) requirements)]
@@ -301,54 +321,62 @@
 
 (defn user-detail-form
   "Generate a form for viewing/editing user details based on User schema.
-   
+
    Args:
-     user: User entity map (from User schema)
-     
+     user:   User entity map (from User schema)
+     errors: Optional validation errors map, field keyword -> messages
+     opts:   Optional map; :notice is rendered at the top of the form
+
    Returns:
      Hiccup structure for user detail form"
-  [user]
-  (let [active? (boolean (:active user))]
-    [:div#user-detail
-     [:h2 [:t :user/form-detail-title]]
-     [:form {:hx-put    (str "/web/users/" (:id user))
-             :hx-target "#user-detail"
-             :class     "form-card"}
-      (ui/form-field :name [:t :common/label-name]
-                     (ui/text-input :name (:name user) {:required true})
-                     nil)
-      (ui/form-field :email [:t :common/label-email]
-                     (ui/email-input :email (:email user) {:required true})
-                     nil)
-      (ui/form-field :role [:t :common/label-role]
-                     (ui/select-field :role
-                                      [[:admin [:t :common/role-admin]]
-                                       [:user [:t :common/role-user]]
-                                       [:viewer [:t :common/role-viewer]]]
-                                      (:role user))
-                     nil)
-      (ui/form-field :active [:t :user/field-active]
-                     (ui/checkbox :active active?)
-                     nil)
-      [:div.form-actions
-       (ui/submit-button [:t :user/button-update] {:loading-text [:t :user/button-update-loading]})
-       ;; Show appropriate action button based on active status
-       (if active?
-         [:button.button.danger
-          {:type "button"
-           :onclick (str "if(confirm('Are you sure you want to deactivate this user?')) {"
-                         "fetch('/web/users/" (:id user) "', {method: 'DELETE', headers: {'HX-Request': 'true'}});"
-                         "window.location.href='/web/users';"
-                         "}")}
-          [:t :user/button-deactivate]]
-         ;; Reactivate button for inactive users - uses the same update endpoint but sets active=true
-         [:button.button.primary
-          {:type "button"
-           :onclick (str "const form = this.closest('form');"
-                         "const activeCheckbox = form.querySelector('input[name=active]');"
-                         "activeCheckbox.checked = true;"
-                         "form.requestSubmit();")}
-          [:t :user/button-reactivate]])]]]))
+  ([user] (user-detail-form user nil nil))
+  ([user errors] (user-detail-form user errors nil))
+  ([user errors opts]
+   (let [active? (boolean (:active user))]
+     [:div#user-detail
+      [:h2 [:t :user/form-detail-title]]
+      ;; outerHTML: the response is itself a #user-detail, so an innerHTML swap
+      ;; nests one inside the other and leaves a duplicate id behind (BOU-381).
+      [:form {:hx-put    (str "/web/users/" (:id user))
+              :hx-target "#user-detail"
+              :hx-swap   "outerHTML"
+              :class     "form-card"}
+       (:notice opts)
+       (ui/form-field :name [:t :common/label-name]
+                      (ui/text-input :name (:name user) {:required true})
+                      (:name errors))
+       (ui/form-field :email [:t :common/label-email]
+                      (ui/email-input :email (:email user) {:required true})
+                      (:email errors))
+       (ui/form-field :role [:t :common/label-role]
+                      (ui/select-field :role
+                                       [[:admin [:t :common/role-admin]]
+                                        [:user [:t :common/role-user]]
+                                        [:viewer [:t :common/role-viewer]]]
+                                       (:role user))
+                      (:role errors))
+       (ui/form-field :active [:t :user/field-active]
+                      (ui/checkbox :active active?)
+                      (:active errors))
+       [:div.form-actions
+        (ui/submit-button [:t :user/button-update] {:loading-text [:t :user/button-update-loading]})
+        ;; Show appropriate action button based on active status
+        (if active?
+          [:button.button.danger
+           {:type "button"
+            :onclick (str "if(confirm('Are you sure you want to deactivate this user?')) {"
+                          "fetch('/web/users/" (:id user) "', {method: 'DELETE', headers: {'HX-Request': 'true'}});"
+                          "window.location.href='/web/users';"
+                          "}")}
+           [:t :user/button-deactivate]]
+          ;; Reactivate button for inactive users - uses the same update endpoint but sets active=true
+          [:button.button.primary
+           {:type "button"
+            :onclick (str "const form = this.closest('form');"
+                          "const activeCheckbox = form.querySelector('input[name=active]');"
+                          "activeCheckbox.checked = true;"
+                          "form.requestSubmit();")}
+           [:t :user/button-reactivate]])]]])))
 
 (defn create-user-form
   "Generate a form for creating new users based on CreateUserRequest schema.
@@ -363,48 +391,66 @@
    Returns:
      Hiccup structure for create user form"
   ([data errors password-violations policy opts]
-   [:div#create-user-form
-    [:h2 [:t :user/form-create-title]]
-    [:form {:hx-post   "/web/users"
-            :hx-target "#create-user-form"
-            :class     "form-card"}
-     (when-let [return-to (:return-to opts)]
-       [:input {:type "hidden" :name "return-to" :value return-to}])
-     (ui/form-field :name [:t :common/label-name]
-                    (ui/text-input :name (:name data) {:required true})
-                    (:name errors))
-     (ui/form-field :email [:t :common/label-email]
-                    (ui/email-input :email (:email data) {:required true})
-                    (:email errors))
-     ;; Password field with validation feedback
-     [:div {:class "form-field"}
-      [:label {:for "password"} [:t :user/field-password]]
-      (ui/password-input :password "" {:required true})
-      ;; Show password requirements if policy provided
-      (when policy
-        (password-requirements-list (or password-violations []) policy))
-      ;; Show validation errors if present
-      (when (seq (:password errors))
-        [:div.validation-errors
-         (for [err (:password errors)]
-           [:p err])])]
-     (ui/form-field :role [:t :common/label-role]
-                    (ui/select-field :role
-                                     [[:user [:t :common/role-user]]
-                                      [:admin [:t :common/role-admin]]
-                                      [:viewer [:t :common/role-viewer]]]
-                                     (:role data))
-                    (:role errors))
-     (ui/form-field :send-welcome [:t :user/checkbox-send-welcome]
-                    (ui/checkbox :send-welcome (get data :send-welcome true))
-                    nil)
-     (ui/submit-button [:t :user/button-create] {:loading-text [:t :user/button-create-loading]})]])
+   ;; A password is never echoed back, so the field is always rendered blank.
+   ;; Bound once because the requirements list below has to describe the same
+   ;; value the user is looking at.
+   (let [rendered-password ""]
+     [:div#create-user-form
+      [:h2 [:t :user/form-create-title]]
+      ;; outerHTML: the response is itself a #create-user-form, so an innerHTML
+      ;; swap nests one inside the other and leaves a duplicate id behind
+      ;; (BOU-381).
+      [:form {:hx-post   "/web/users"
+              :hx-target "#create-user-form"
+              :hx-swap   "outerHTML"
+              :class     "form-card"}
+       (when-let [return-to (:return-to opts)]
+         [:input {:type "hidden" :name "return-to" :value return-to}])
+       ;; Errors the service reported against no particular field. Without this
+       ;; they were collected and then never rendered, so the form swapped back
+       ;; in carrying nothing.
+       (when (seq (:form errors))
+         [:div.validation-errors
+          (for [err (:form errors)]
+            [:p err])])
+       (ui/form-field :name [:t :common/label-name]
+                      (ui/text-input :name (:name data) {:required true})
+                      (:name errors))
+       (ui/form-field :email [:t :common/label-email]
+                      (ui/email-input :email (:email data) {:required true})
+                      (:email errors))
+       ;; Password field with validation feedback
+       [:div {:class "form-field"}
+        [:label {:for "password"} [:t :user/field-password]]
+        (ui/password-input :password rendered-password {:required true})
+        ;; Passed straight through: with a blank field and no violations to go
+        ;; on, the rules render as neither met nor unmet. What was wrong with
+        ;; the submitted password is said by the error below, not by ticks
+        ;; against a box the user has to fill in again (BOU-381).
+        (when policy
+          (password-requirements-list password-violations policy))
+        ;; Show validation errors if present
+        (when (seq (:password errors))
+          [:div.validation-errors
+           (for [err (:password errors)]
+             [:p err])])]
+       (ui/form-field :role [:t :common/label-role]
+                      (ui/select-field :role
+                                       [[:user [:t :common/role-user]]
+                                        [:admin [:t :common/role-admin]]
+                                        [:viewer [:t :common/role-viewer]]]
+                                       (:role data))
+                      (:role errors))
+       (ui/form-field :send-welcome [:t :user/checkbox-send-welcome]
+                      (ui/checkbox :send-welcome (get data :send-welcome true))
+                      nil)
+       (ui/submit-button [:t :user/button-create] {:loading-text [:t :user/button-create-loading]})]]))
   ([data errors password-violations policy]
    (create-user-form data errors password-violations policy nil))
   ([data errors]
-   (create-user-form data errors nil {:min-length 8 :require-numbers true} nil))
+   (create-user-form data errors nil default-password-policy nil))
   ([]
-   (create-user-form {} {} nil {:min-length 8 :require-numbers true} nil)))
+   (create-user-form {} {} nil default-password-policy nil)))
 
 ;; =============================================================================
 ;; User Success Messages
@@ -619,12 +665,15 @@
      errors: Optional validation errors
      opts: Optional page options. Supports :return-to for the 'Back to users'
            button target and to thread through the form as a hidden field so
-           the HTMX POST handler can redirect to the same URL on success.
+           the HTMX POST handler can redirect to the same URL on success, and
+           :password-policy for the rules the form lists — the shell reads that
+           from config, so the page and the failed POST advertise the same set.
 
    Returns:
      Complete HTML page for creating users"
   [& [data errors opts]]
-  (let [return-to (or (:return-to opts) "/web/admin/users")]
+  (let [return-to (or (:return-to opts) "/web/admin/users")
+        policy    (or (:password-policy opts) default-password-policy)]
     (page-layout
      [:t :user/page-create-user-title]
      [:div.create-user-page
@@ -632,8 +681,7 @@
        [:h1 [:t :user/form-create-title]]
        [:div.page-actions
         [:a.button {:href return-to} [:t :user/button-back-to-users]]]]
-      (create-user-form data errors nil {:min-length 8 :require-numbers true}
-                        {:return-to return-to})]
+      (create-user-form data errors nil policy {:return-to return-to})]
      opts)))
 
 ;; =============================================================================
@@ -840,9 +888,10 @@
       [:div {:class "form-field"}
        [:label {:for "password"} [:t :user/field-password]]
        (ui/password-input :password "" {:required true})
-        ;; Show password requirements if policy provided
+        ;; nil violations render as neither met nor unmet — the field is never
+        ;; pre-filled, so there is nothing to report against (BOU-381).
        (when policy
-         (password-requirements-list (or password-violations []) policy))
+         (password-requirements-list password-violations policy))
         ;; Show validation errors if present
        (when (seq (:password errors))
          [:div.validation-errors
@@ -850,7 +899,7 @@
             [:p err])])]
       (ui/submit-button [:t :user/button-create-account] {:loading-text [:t :user/button-create-loading]})]]])
   ([data errors]
-   (register-form data errors nil {:min-length 8 :require-numbers true})))
+   (register-form data errors nil default-password-policy)))
 
 (defn register-page
   "Complete self-service registration page.

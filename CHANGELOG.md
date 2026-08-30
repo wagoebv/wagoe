@@ -121,6 +121,9 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Form validation errors reach the screen** (BOU-381). htmx discarded the 400
+  that carried them, so pressing Create or Save did nothing at all.
+
 - **Two tests bound a port they had already released** (BOU-377), failing the
   full suite intermittently. `bb test:all` now names what exited non-zero.
 

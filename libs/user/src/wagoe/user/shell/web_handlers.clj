@@ -9,7 +9,8 @@
    - HTMX Handlers: Return HTML fragments for dynamic updates
 
    All handlers use the shared UI components and user shell services."
-  (:require [wagoe.core.validation :as cv]
+  (:require [wagoe.config :as wagoe-config]
+            [wagoe.core.validation :as cv]
             [wagoe.i18n.shell.middleware :as i18n-middleware]
             [wagoe.i18n.shell.render :as i18n]
             [wagoe.shared.ui.core.components :as ui]
@@ -73,6 +74,34 @@
            (not (str/starts-with? url "//")))
     url
     default))
+
+(defn- display-password-policy
+  "The password rules the create-user form should list.
+
+   Three things refuse a password and the form has to show all of them, or it
+   advertises fewer rules than it enforces — on the prod config that meant
+   listing two while rejecting on four:
+
+   - `CreateUserRequest` requires at least 8 characters, whatever the config
+     says. The dev config's `:min-length 6` never applies.
+   - `validate-user-creation-request` reads the configured flags, which are
+     `?`-suffixed.
+   - `meets-password-policy?` reads those same flags without the `?`, so it
+     never sees them and falls back to requiring a digit.
+
+   The last of those is BOU-388; once the two readers agree this collapses to
+   the configured policy plus the schema minimum."
+  [config]
+  (let [policy        (:password-policy (wagoe-config/user-validation-config config) {})
+        schema-minimum 8]
+    {:min-length            (max (get policy :min-length schema-minimum) schema-minimum)
+     :max-length            (min (get policy :max-length 255) 255)
+     :require-uppercase     (boolean (get policy :require-uppercase? false))
+     :require-lowercase     (boolean (get policy :require-lowercase? false))
+     ;; meets-password-policy? defaults this to true and never reads
+     ;; :require-numbers?, so a digit is required no matter what config says.
+     :require-numbers       true
+     :require-special-chars (boolean (get policy :require-special-chars? false))}))
 
 (defn- validate-request-data
   "Validate request data against schema with transformation.
@@ -334,13 +363,16 @@
 
    Returns:
      Ring handler function"
-  [_config]
+  [config]
   (fn [request]
     (let [raw-return-to (get-in request [:query-params "return-to"])
           return-to (safe-return-url raw-return-to "/web/admin/users")
           page-opts {:user (get request :user)
                      :flash (get request :flash)
-                     :return-to return-to}]
+                     :return-to return-to
+                     ;; Same set the failed POST lists, so the rules do not
+                     ;; change between opening the form and submitting it.
+                     :password-policy (display-password-policy config)}]
       (html-response request (user-ui/create-user-page {} {} page-opts)))))
 
 ;; =============================================================================
@@ -714,6 +746,30 @@
                     "You can log in at any time.\n\n"
                     "— " app-name)})))
 
+(defn- error-field-key
+  "The form keys errors by field keyword, but a service :validation-error mixes
+   two shapes: business rules report `:field :password`, while schema failures
+   come from `humanized-errors->error-maps` as a path vector, `:field
+   [:password]`. Keyed as-is, the vector ones land under `[:password]` and the
+   form — which looks up `:password` — renders nothing at all."
+  [field]
+  (cond
+    (keyword? field)             field
+    (and (sequential? field)
+         (keyword? (last field))) (last field)
+    :else                        :form))
+
+(defn- service-errors->field-errors
+  "Group a service :validation-error's `:errors` — a vector of
+   {:field :code :message} — into the field -> messages map the form takes.
+   Anything without a usable field lands under :form, which the form renders as
+   an unattached block."
+  [errors]
+  (reduce (fn [acc {:keys [field message]}]
+            (update acc (error-field-key field) (fnil conj []) message))
+          {}
+          errors))
+
 (defn create-user-htmx-handler
   "HTMX handler for creating a new user (POST /web/users).
 
@@ -743,13 +799,18 @@
                          :password (get form-data "password")
                          :role (keyword (get form-data "role"))
                          :send-welcome send-welcome?}
-          [valid? validation-errors _] (validate-request-data user-schema/CreateUserRequest prepared-data)]
+          [valid? validation-errors _] (validate-request-data user-schema/CreateUserRequest prepared-data)
+          password-policy (display-password-policy config)
+          ;; nil violations lets the form derive them from the password it is
+          ;; handed, which is what the requirements list has to reflect.
+          rerender (fn [errors violations]
+                     (html-response request
+                                    (user-ui/create-user-form prepared-data errors violations
+                                                              password-policy
+                                                              {:return-to return-to})
+                                    400))]
       (if-not valid?
-        (html-response request
-                       (user-ui/create-user-form prepared-data validation-errors nil
-                                                 {:min-length 8 :require-numbers true}
-                                                 {:return-to return-to})
-                       400)
+        (rerender validation-errors nil)
         (try
           (let [user-data (dissoc prepared-data :send-welcome)
                 user-result (user-ports/register-user user-service user-data)
@@ -777,6 +838,27 @@
             (-> (response/response body)
                 (response/status 200)
                 (response/header "Content-Type" "text/html; charset=utf-8")))
+          (catch clojure.lang.ExceptionInfo e
+            ;; A duplicate email and a password the policy rejects both pass the
+            ;; request schema and are refused by the service. They used to reach
+            ;; the catch below and leave as a 500 carrying no form, which htmx
+            ;; discards — pressing Create did nothing at all (BOU-381).
+            (let [data (ex-data e)]
+              (case (:type data)
+                :password-policy-violation
+                ;; nil, not the violations: the password box comes back empty,
+                ;; so the tick list has to describe an empty field. What was
+                ;; wrong with the one submitted is in the message.
+                (rerender {:password (mapv :message (:violations data))} nil)
+
+                :user-exists
+                (rerender {:email [(or (:message data) (.getMessage e))]} nil)
+
+                :validation-error
+                (rerender (service-errors->field-errors (:errors data)) nil)
+
+                (do (log/error e "Create user failed")
+                    (html-response request (ui/error-message (.getMessage e)) 500)))))
           (catch Exception e
             (log/error e "Create user failed")
             (html-response request (ui/error-message (.getMessage e)) 500)))))))
@@ -805,9 +887,14 @@
                            :role (when-let [role (get form-data "role")] (keyword role))
                            :active (= "on" (get form-data "active"))}
             _ (log/info "Prepared data for update" {:prepared-data prepared-data})
-            [valid? _validation-errors _] (validate-request-data user-schema/UpdateUserRequest prepared-data)]
+            [valid? validation-errors _] (validate-request-data user-schema/UpdateUserRequest prepared-data)]
         (if-not valid?
-          (html-response request (user-ui/user-detail-form (assoc prepared-data :id (UUID/fromString user-id))) 400)
+          ;; The errors were discarded here, so the form swapped back in said
+          ;; nothing about why the save was refused (BOU-381).
+          (html-response request
+                         (user-ui/user-detail-form (assoc prepared-data :id (UUID/fromString user-id))
+                                                   validation-errors)
+                         400)
           (try
             ;; Fetch existing user and merge updates
             (let [uuid (UUID/fromString user-id)
@@ -818,13 +905,16 @@
                       user-data (merge existing-user
                                        (select-keys prepared-data [:name :email :role :active]))
                       user-result (user-ports/update-user-profile user-service user-data)]
-                  ;; Re-render the form with updated user data and a success indicator
+                  ;; Re-render the form with updated user data and a success
+                  ;; indicator. The banner goes inside the form's own
+                  ;; #user-detail: the swap is outerHTML, so a wrapper around it
+                  ;; would be left behind on every save.
                   (html-response
                    request
-                   [:div
-                    [:div.success-banner {:style "background: #d4edda; color: #155724; padding: 10px; margin-bottom: 15px; border-radius: 4px;"}
-                     "✓ User updated successfully"]
-                    (user-ui/user-detail-form user-result)]
+                   (user-ui/user-detail-form
+                    user-result nil
+                    {:notice [:div.success-banner {:style "background: #d4edda; color: #155724; padding: 10px; margin-bottom: 15px; border-radius: 4px;"}
+                              "✓ User updated successfully"]})
                    200
                    {"HX-Trigger" "userUpdated"}))))
             (catch Exception e

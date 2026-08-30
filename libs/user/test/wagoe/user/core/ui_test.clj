@@ -211,7 +211,22 @@
       (let [attrs (second form-element)]
         ;; New URLs: /web/users/*
         (is (= "/web/users/123" (:hx-put attrs)))
-        (is (= "#user-detail" (:hx-target attrs))))))
+        (is (= "#user-detail" (:hx-target attrs)))
+        ;; The response is itself a #user-detail; innerHTML would nest one
+        ;; inside the other and leave a duplicate id behind (BOU-381).
+        (is (= "outerHTML" (:hx-swap attrs))))))
+
+  (testing "renders validation errors for the fields that have them"
+    (let [form-str (str (ui/user-detail-form sample-user {:name ["Name is required"]}))]
+      (is (re-find #"Name is required" form-str))
+      (is (re-find #"field-errors" form-str))))
+
+  (testing "renders a notice inside the swapped element, not around it"
+    (let [form (ui/user-detail-form sample-user nil {:notice [:div.success-banner "Saved"]})]
+      ;; An outerHTML swap replaces #user-detail, so a wrapper around it would
+      ;; accumulate on every save.
+      (is (= :div#user-detail (first form)))
+      (is (re-find #"Saved" (str form)))))
 
   (testing "pre-fills form fields with user data"
     (let [form (ui/user-detail-form sample-user)
@@ -257,7 +272,41 @@
   (testing "includes password field (not in detail form)"
     (let [form (ui/create-user-form)
           form-content (str form)]
-      (is (re-find #"field-password" form-content)))))
+      (is (re-find #"field-password" form-content))))
+
+  (testing "requirements are stated, not judged, while the field is blank"
+    ;; nil violations used to read as an empty list, so every rule rendered as
+    ;; met — on the empty form, and beside the error saying the password was
+    ;; too short (BOU-381). Deriving them from the submitted password is just as
+    ;; wrong the other way round: a valid password rejected for a duplicate
+    ;; email came back with every rule ticked above an empty box, and a fresh
+    ;; form opened with every rule already crossed out.
+    (let [policy {:min-length 8 :require-numbers true}
+          empty-form (str (ui/create-user-form {} {} nil policy))
+          submitted  (str (ui/create-user-form {:password "Str0ngPass"} {} nil policy))]
+      ;; (str hiccup) prints the data, so a leaked value shows as :value "..."
+      ;; — matching on rendered HTML attribute syntax would pass either way.
+      (is (not (re-find #"\"Str0ngPass\"" submitted))
+          "the password is never echoed back into the field")
+      (doseq [[label form] [["empty" empty-form] ["submitted" submitted]]]
+        (is (re-find #"requirement-pending" form)
+            (str "no verdict on a field the server cannot see (" label ")"))
+        (is (not (re-find #"requirement-met" form))
+            (str "nothing ticked (" label ")"))
+        (is (not (re-find #"requirement-unmet" form))
+            (str "and nothing crossed out (" label ")")))))
+
+  (testing "a violations list is honoured when the caller has one"
+    (let [policy {:min-length 8 :require-numbers true}
+          checked (str (ui/create-user-form {} {} [{:code :missing-number :message "x"}] policy))]
+      (is (re-find #"requirement-unmet" checked) "the failed rule is crossed out")
+      (is (re-find #"requirement-met" checked) "the satisfied one is ticked")
+      (is (not (re-find #"requirement-pending" checked)))))
+
+  (testing "renders errors the service reported against no particular field"
+    (let [form (str (ui/create-user-form {} {:form ["Something the form must still say"]}))]
+      (is (re-find #"Something the form must still say" form))
+      (is (re-find #"validation-errors" form)))))
 
 ;; =============================================================================
 ;; Success Message Component Tests  

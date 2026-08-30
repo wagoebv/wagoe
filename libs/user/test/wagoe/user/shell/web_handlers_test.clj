@@ -182,6 +182,29 @@
   ([initial-state]
    (->MockUserService (atom initial-state))))
 
+(defn create-service-rejecting-registration
+  "A user service whose register-user throws `ex` — the shape the real service
+   uses to refuse a duplicate email or a password the policy rejects."
+  [ex]
+  (reify ports/IUserService
+    (register-user [_ _] (throw ex))
+    (register-or-authenticate-user [_ _ _] (throw (UnsupportedOperationException.)))
+    (claim-user-identity [_ _] (throw (UnsupportedOperationException.)))
+    (get-user-by-id [_ _] nil)
+    (get-user-by-email [_ _] nil)
+    (list-users [_ _] {:users [] :total-count 0})
+    (update-user-profile [_ _] (throw (UnsupportedOperationException.)))
+    (deactivate-user [_ _] (throw (UnsupportedOperationException.)))
+    (permanently-delete-user [_ _] (throw (UnsupportedOperationException.)))
+    (authenticate-user [_ _] (throw (UnsupportedOperationException.)))
+    (validate-session [_ _] nil)
+    (logout-user [_ _] false)
+    (logout-user-everywhere [_ _] 0)
+    (get-user-sessions [_ _] [])
+    (list-audit-logs [_ _] {:audit-logs [] :total-count 0})
+    (get-audit-logs-for-user [_ _ _] [])
+    (change-password [_ _ _ _] false)))
+
 (defn create-test-user
   "Create a test user entity."
   [overrides]
@@ -376,7 +399,49 @@
           request {:flash {:error "Previous creation failed"}}
           response (handler request)]
 
-      (is (= 200 (:status response))))))
+      (is (= 200 (:status response)))))
+
+  ;; The listed rules used to be hardcoded to min-length + numbers, so a prod
+  ;; config rejected on four rules while the form advertised two (BOU-381 review,
+  ;; underlying key mismatch tracked as BOU-388).
+  (testing "lists the rules the configured policy actually enforces"
+    (let [config {:active {:wagoe/settings
+                           {:user-validation
+                            {:password-policy {:min-length 8
+                                               :max-length 128
+                                               :require-uppercase? true
+                                               :require-lowercase? true
+                                               :require-numbers? true
+                                               :require-special-chars? true}}}}}
+          response ((web-handlers/create-user-page-handler config) {})]
+
+      (is (html-contains? response "password-requirement-uppercase"))
+      (is (html-contains? response "password-requirement-lowercase"))
+      (is (html-contains? response "password-requirement-special-char"))
+      (is (html-contains? response "password-requirement-number"))))
+
+  (testing "a laxer configured minimum does not undercut what is enforced anyway"
+    ;; dev config says 6 and no digit required, but CreateUserRequest requires 8
+    ;; and meets-password-policy? requires a digit (it never sees
+    ;; :require-numbers?), so the form has to show the stricter of the three.
+    ;; The interpolated count only reaches the body through a real translator —
+    ;; the fallback drops params, which would make an assertion on it vacuous.
+    (let [config {:active {:wagoe/settings
+                           {:user-validation
+                            {:password-policy {:min-length 6
+                                               :require-numbers? false
+                                               :require-uppercase? false}}}}}
+          t-fn (fn ([k] (str k))
+                 ([k params] (str k " " (pr-str params)))
+                 ([k params _n] (str k " " (pr-str params))))
+          response ((web-handlers/create-user-page-handler config) {:i18n/t t-fn})]
+
+      (is (html-contains? response "password-requirement-number")
+          "still enforced by meets-password-policy?, so still listed")
+      (is (not (html-contains? response "password-requirement-uppercase")))
+      (is (html-contains? response "{:n 8}")
+          "the listed minimum should be 8, not the configured 6")
+      (is (not (html-contains? response "{:n 6}"))))))
 
 ;; =============================================================================
 ;; HTMX Fragment Handler Tests
@@ -473,6 +538,48 @@
 
       (is (= 400 (:status response)))
       (is (html-contains? response "create-user-form"))))
+
+  ;; Both of these used to leave as a 500 carrying no form, which htmx discards:
+  ;; pressing Create did nothing at all. The request schema passes in each case,
+  ;; so only the service can refuse them (BOU-381).
+  (testing "an already-registered email comes back as a form, not a 500"
+    (let [service (create-service-rejecting-registration
+                   (ex-info "User already exists"
+                            {:type :user-exists
+                             :message "A user with this email already exists"}))
+          config {:active {:wagoe/settings {:user-limits {:max-users 1000}}}}
+          handler (web-handlers/create-user-htmx-handler service nil config)
+          request {:form-params {"name" "Test User"
+                                 "email" "taken@example.com"
+                                 "password" "password123"
+                                 "role" "user"}}
+          response (handler request)]
+
+      (is (= 400 (:status response)))
+      (is (html-contains? response "create-user-form"))
+      (is (html-contains? response "A user with this email already exists"))))
+
+  (testing "a password the policy rejects comes back as a form, not a 500"
+    (let [service (create-service-rejecting-registration
+                   (ex-info "Password does not meet requirements"
+                            {:type :password-policy-violation
+                             :violations [{:code :missing-number
+                                           :message "Must contain at least one number"}]}))
+          config {:active {:wagoe/settings {:user-limits {:max-users 1000}}}}
+          handler (web-handlers/create-user-htmx-handler service nil config)
+          request {:form-params {"name" "Test User"
+                                 "email" "new@example.com"
+                                 "password" "abcdefgh"
+                                 "role" "user"}}
+          response (handler request)]
+
+      (is (= 400 (:status response)))
+      (is (html-contains? response "create-user-form"))
+      (is (html-contains? response "Must contain at least one number"))
+      ;; The box comes back empty, so the rules carry no verdict — the message
+      ;; above is what says why it was refused.
+      (is (html-contains? response "requirement-pending"))
+      (is (not (html-contains? response "requirement-met")))))
 
   (testing "handles service errors"
     (let [service (reify ports/IUserService

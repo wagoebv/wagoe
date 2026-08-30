@@ -148,6 +148,86 @@
           "Success notification should be visible after saving"))))
 
 ;; ---------------------------------------------------------------------------
+;; Validation feedback
+;; ---------------------------------------------------------------------------
+
+(deftest ^:integration ^:e2e create-form-shows-server-validation-errors
+  (testing "A password the server rejects produces a visible error on the form"
+    ;; The server always rendered this error and returned it with a 400. htmx
+    ;; does not swap 4xx by default, so it never reached the page: pressing
+    ;; Create appeared to do nothing at all — no message, no change. The handler
+    ;; test asserting that 400 passed throughout (BOU-381), which is exactly why
+    ;; this one drives a browser and asserts on what a person can see.
+    ;;
+    ;; The email is deliberately well-formed. type="email" means a malformed one
+    ;; never reaches the server at all — that path is the test below.
+    (spel/with-testing-page [pg]
+      (admin/login-as-admin! pg fx/*seed*)
+      (page/navigate pg (admin/app-url "/web/users/new"))
+      (page/wait-for-load-state pg)
+      (loc/fill (page/locator pg "#name") "Lisa Hendriks")
+      (loc/fill (page/locator pg "#email") "lisa.hendriks@meridian.dev")
+      (loc/fill (page/locator pg "#password") "secret")
+      (loc/click (page/locator pg "#create-user-form button[type='submit']"))
+      (page/wait-for-selector pg "#create-user-form .validation-errors" {:timeout 10000.0})
+      (let [shown (page/evaluate pg "() => document.body.innerText")]
+        (is (str/includes? shown "at least 8 characters")
+            "The password error the server rendered should be visible")
+        ;; The requirements list took its cue from a nil violations argument and
+        ;; ticked every rule as met, so a six-character password came back with a
+        ;; green "At least 8 characters" beside the error saying it was not. The
+        ;; box is blank after the swap, so the rules now carry no verdict at all
+        ;; — a tick against a field the user has to fill in again is the bug in
+        ;; either direction.
+        (is (zero? (page/evaluate pg "() => document.querySelectorAll('.requirement-met').length"))
+            "No requirement should be ticked as met above an empty password box")
+        ;; The response is itself a #create-user-form, so the default innerHTML
+        ;; swap nested one inside the other: two elements with the same id, which
+        ;; breaks every later locator on this page. hx-swap="outerHTML" replaces
+        ;; instead (BOU-381).
+        (is (= 1 (page/evaluate pg "() => document.querySelectorAll('#create-user-form').length"))
+            "exactly one create-user-form after the swap")))))
+
+(deftest ^:integration ^:e2e create-form-reports-malformed-email
+  (testing "A malformed email is reported by the browser rather than silently dropped"
+    ;; No JavaScript of ours involved. htmx binds the form's submit event, and
+    ;; native constraint validation runs before that event fires — so an invalid
+    ;; type="email" blocks the submit, the browser reports it, and htmx never
+    ;; runs at all.
+    ;;
+    ;; BOU-381 claimed this path was silent and added an htmx:validation:halted
+    ;; listener to report it. That listener never fired, because htmx never gets
+    ;; the event; removing it changed nothing. This test pins the behaviour that
+    ;; is actually there.
+    (spel/with-testing-page [pg]
+      (admin/login-as-admin! pg fx/*seed*)
+      (page/navigate pg (admin/app-url "/web/users/new"))
+      (page/wait-for-load-state pg)
+      (loc/fill (page/locator pg "#name") "Lisa Hendriks")
+      (loc/fill (page/locator pg "#email") "not-an-email")
+      (loc/fill (page/locator pg "#password") "Str0ng-Pass-2026")
+      ;; Count requests rather than assert on the absence of a response: a
+      ;; request that did go out would still be in flight at this point, so
+      ;; "no errors on the page yet" would pass either way.
+      (page/evaluate pg (str "() => { window.__htmxRequests = 0;"
+                             " document.body.addEventListener('htmx:beforeRequest',"
+                             " () => { window.__htmxRequests++; }); return null; }"))
+      (loc/click (page/locator pg "#create-user-form button[type='submit']"))
+      ;; Constraint validation focuses the offending field — the one observable
+      ;; effect of the click, and what there is to wait for.
+      (is (not (map? (page/wait-for-function
+                      pg
+                      "document.activeElement && document.activeElement.id === 'email'"
+                      {:timeout 5000.0 :polling 50.0})))
+          "The browser should move focus to the invalid field")
+      (is (false? (page/evaluate pg "() => document.querySelector('#email').validity.valid"))
+          "The browser should consider the field invalid")
+      (is (not (str/blank? (page/evaluate pg "() => document.querySelector('#email').validationMessage")))
+          "and have a message to report")
+      (is (zero? (page/evaluate pg "() => window.__htmxRequests"))
+          "htmx should never have sent a request"))))
+
+;; ---------------------------------------------------------------------------
 ;; Access control
 ;; ---------------------------------------------------------------------------
 
