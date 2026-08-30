@@ -22,6 +22,9 @@
             [ring.middleware.cookies :refer [wrap-cookies]]
             [ring.middleware.not-modified :refer [not-modified-response]]
             [ring.middleware.resource :refer [resource-request]]
+            [ring.util.codec :as codec]
+            [ring.util.io :as ring-io]
+            [ring.util.request :as ring-request]
             [wagoe.platform.shell.http.interceptors :as http-interceptors])
   (:import [java.io ByteArrayInputStream ByteArrayOutputStream]
            [java.security MessageDigest]
@@ -521,25 +524,23 @@
    A jar entry is fixed once the archive is open, so hashing it a second time
    can only produce the same answer. Directory-backed resources are excluded:
    those are the ones a developer edits under a running server, and a cached
-   digest there would serve the staleness this whole change is about."
+   digest there would serve the staleness this whole change is about.
+
+   Keyed by the decoded resource path, never the request URI: ring URL-decodes
+   before it looks anything up, so `/js/forms.js` and `/js/%66orms.js` are one
+   asset that an unauthenticated caller could otherwise spell without limit,
+   each spelling a fresh entry and a fresh read of the whole asset."
   (atom {}))
 
-(defn- packaged-digest
-  "Digest for a jar-backed resource, computed once per path.
+(def ^:private max-cached-digests
+  "Ceiling on `packaged-digests`, since it is filled from request paths.
 
-   Returns `[digest body]` — the body is the bytes read on the first call,
-   because hashing a stream consumes it and something still has to be served."
-  [uri ^java.io.InputStream in]
-  (if-let [cached (and uri (get @packaged-digests uri))]
-    ;; Nothing to read: ring's stream is handed straight on as the body, and the
-    ;; response writer closes it.
-    [cached in]
-    (let [bs (with-open [^java.io.InputStream s in] (.readAllBytes s))
-          d  (digest-stream (java.io.ByteArrayInputStream. bs))]
-      ;; No uri means no key to remember it under — hash it again next time
-      ;; rather than let unrelated resources share an entry.
-      (when uri (swap! packaged-digests assoc uri d))
-      [d (java.io.ByteArrayInputStream. bs)])))
+   Decoding collapses the spellings above, but a bound is what makes the size
+   independent of anything a caller sends rather than dependent on having
+   anticipated every alias. An application serves tens of assets; past this the
+   map is dropped and refills, so the worst case is the hashing cost that
+   existed before it was cached, not unbounded heap."
+  512)
 
 (defn- cache-headers
   "Mark a static asset cacheable but always revalidated, with a digest of the
@@ -550,24 +551,59 @@
    (BOU-389). `max-age`/`immutable` is wrong for the same reason — these
    filenames carry no content hash.
 
-   A file is hashed by streaming it, leaving ring's own body to be streamed out
-   in turn, so no asset is held in memory whole. A jar entry has to be read to
-   be hashed, so that answer is remembered per path instead."
-  ([response] (cache-headers response nil))
-  ([response uri]
-   (let [body    (:body response)
-         with-cc (assoc-in response [:headers "Cache-Control"] "no-cache")
-         etag    (fn [r d] (assoc-in r [:headers "ETag"] (str "\"" d "\"")))]
-     (cond
-       (instance? java.io.File body)
-       (etag with-cc (with-open [in (io/input-stream ^java.io.File body)]
-                       (digest-stream in)))
+   Nothing is ever held in memory whole. A file is hashed by streaming it,
+   leaving ring's own body to be streamed out in turn. Hashing a jar entry
+   consumes the stream, so the resource is looked up a second time for the body
+   — `reopen` repeats the lookup that produced this response rather than
+   rebuilding a path, which would have to re-derive ring's decoding and
+   traversal rules. Reading the entry into a byte array instead would let each
+   concurrent first request for a large asset allocate its full size.
 
-       (instance? java.io.InputStream body)
-       (let [[d served] (packaged-digest uri body)]
-         (-> with-cc (assoc :body served) (etag d)))
+   That second lookup happens once per path: a jar entry cannot change while the
+   archive is open, so the digest is remembered and later requests hand ring's
+   stream straight on."
+  [response request reopen]
+  (let [body    (:body response)
+        ;; Derived here rather than by the caller, so the key cannot be raw:
+        ;; ring resolves a resource from the decoded path-info, and any spelling
+        ;; that reaches the same asset has to reach the same entry. A malformed
+        ;; escape throws out of the decoder — no key then, which costs a rehash
+        ;; rather than a wrong answer.
+        uri     (try (codec/url-decode (ring-request/path-info request))
+                     (catch Exception _ nil))
+        with-cc (assoc-in response [:headers "Cache-Control"] "no-cache")
+        etag    (fn [r d] (assoc-in r [:headers "ETag"] (str "\"" d "\"")))]
+    (cond
+      (instance? java.io.File body)
+      (etag with-cc (with-open [in (io/input-stream ^java.io.File body)]
+                      (digest-stream in)))
 
-       :else with-cc))))
+      (instance? java.io.InputStream body)
+      (if-let [cached (and uri (get @packaged-digests uri))]
+        ;; Nothing to read: ring's stream is the body, and the writer closes it.
+        (etag with-cc cached)
+        (let [d (with-open [^java.io.InputStream in body] (digest-stream in))]
+          ;; No key means nothing to remember it under — hash it again next time
+          ;; rather than let unrelated resources share an entry.
+          (when uri
+            (swap! packaged-digests
+                   (fn [m]
+                     (assoc (if (>= (count m) max-cached-digests) {} m) uri d))))
+          (when-let [fresh (:body (reopen))]
+            (-> with-cc (assoc :body fresh) (etag d)))))
+
+      :else with-cc)))
+
+(defn- drop-body-for-head
+  "A HEAD carries no body. Closed before it is dropped: once the digest for a
+   path is remembered, a HEAD hands ring's jar stream through untouched, and
+   replacing it with nil is the last reference anything holds — so every HEAD
+   leaked a jar entry. A File body is not Closeable and `close!` ignores it."
+  [response request]
+  (if (= :head (:request-method request))
+    (do (ring-io/close! (:body response))
+        (assoc response :body nil))
+    response))
 
 (defn- wrap-static-resources
   "Serve classpath resources from resources/public/, with revalidation headers.
@@ -581,8 +617,9 @@
           ;; Looked up as a GET even for a HEAD: ring answers a HEAD with a nil
           ;; body, and the validator is a digest of the body, so a HEAD would
           ;; otherwise carry no ETag while the GET it stands in for does.
-          (some-> (resource-request (assoc request :request-method :get) "public")
-                  (cache-headers (:uri request))
+          (let [lookup #(resource-request (assoc request :request-method :get) "public")]
+            (some-> (lookup)
+                    (cache-headers request lookup)
                   ;; The digest decides, so If-Modified-Since gets no vote.
                   ;; Ring resolves a 304 from whichever validators the request
                   ;; carries, and for If-Modified-Since alone that is mtime — a
@@ -592,8 +629,8 @@
                   ;; request rather than dropping Last-Modified from the
                   ;; response, which would also deny a 304 to a client sending
                   ;; both validators, ETag included (BOU-389).
-                  (not-modified-response (without-header request "if-modified-since"))
-                  (cond-> (= :head (:request-method request)) (assoc :body nil))))
+                    (not-modified-response (without-header request "if-modified-since"))
+                    (drop-body-for-head request))))
         (handler request))))
 
 (def ^:private http-methods

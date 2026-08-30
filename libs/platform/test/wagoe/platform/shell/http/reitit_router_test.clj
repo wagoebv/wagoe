@@ -894,11 +894,14 @@
                  (close []
                    (reset! closed true)
                    (proxy-super close)))
-        resp   (#'reitit/cache-headers {:status 200 :headers {} :body body})]
+        reopened (java.io.ByteArrayInputStream. (.getBytes "console.log(1)" "UTF-8"))
+        resp   (#'reitit/cache-headers {:status 200 :headers {} :body body}
+                                       "/bou389/packaged.js"
+                                       (fn [] {:status 200 :headers {} :body reopened}))]
     (is @closed "the stream that was hashed should be closed")
     (is (some? (get-in resp [:headers "ETag"])) "and it should still have produced a digest")
-    (is (not (identical? body (:body resp)))
-        "the served body is a fresh stream, which is why the original needs closing")))
+    (is (identical? reopened (:body resp))
+        "the body served is the reopened stream, not bytes held from the first read")))
 
 (deftest ^:contract a-file-asset-is-not-read-into-memory
   ;; Hashing used to buffer every asset on every request, including one about to
@@ -923,8 +926,11 @@
                           ([] (swap! reads inc) (proxy-super read))
                           ([b] (swap! reads inc) (proxy-super read b))
                           ([b off len] (swap! reads inc) (proxy-super read b off len)))))
+        plain (fn [] {:status 200 :headers {}
+                      :body (java.io.ByteArrayInputStream.
+                             (.getBytes "console.log(1)" "UTF-8"))})
         call  #(#'reitit/cache-headers {:status 200 :headers {} :body (stream)}
-                                       "/packaged/one.js")
+                                       {:uri "/packaged/one.js"} plain)
         first-resp  (call)
         after-first @reads
         second-resp (call)]
@@ -933,3 +939,77 @@
         "the same path must keep the same validator")
     (is (= after-first @reads)
         "the second request must not read the entry again")))
+
+(deftest ^:security encoded-aliases-share-one-digest-entry
+  ;; The packaged-digest cache is process-wide and was keyed by the raw URI,
+  ;; while ring URL-decodes before looking a resource up. /js/%66orms.js and
+  ;; /js/forms.js are therefore the same asset under different keys, and an
+  ;; unauthenticated caller can mint encodings without limit — every one a fresh
+  ;; entry and a fresh full read of the asset (BOU-389).
+  (reset! @#'reitit/packaged-digests {})
+  (let [reads  (atom 0)
+        stream (fn [] (proxy [java.io.ByteArrayInputStream]
+                             [(.getBytes "console.log(1)" "UTF-8")]
+                        (read
+                          ([] (swap! reads inc) (proxy-super read))
+                          ([b] (swap! reads inc) (proxy-super read b))
+                          ([b off len] (swap! reads inc) (proxy-super read b off len)))))
+        plain  (fn [] {:status 200 :headers {}
+                       :body (java.io.ByteArrayInputStream.
+                              (.getBytes "console.log(1)" "UTF-8"))})
+        fetch  (fn [uri] (#'reitit/cache-headers
+                          {:status 200 :headers {} :body (stream)} {:uri uri} plain))
+        a (fetch "/js/forms.js")
+        after-first @reads
+        b (fetch "/js/%66orms.js")
+        c (fetch "/js/f%6frms.js")]
+    (is (= (get-in a [:headers "ETag"]) (get-in b [:headers "ETag"])
+           (get-in c [:headers "ETag"]))
+        "the same asset must keep one validator whatever the spelling")
+    (is (= 1 (count @@#'reitit/packaged-digests))
+        "and must occupy one cache entry, not one per encoding")
+    (is (= after-first @reads)
+        "an aliased request must not re-read the asset")))
+
+(deftest ^:security the-digest-cache-cannot-grow-without-bound
+  ;; Belt and braces for whatever alias the decoding above does not collapse:
+  ;; the map is capped, so the worst an attacker gets is the hashing cost that
+  ;; was there before the cache existed.
+  (reset! @#'reitit/packaged-digests {})
+  (dotimes [i (+ 50 @#'reitit/max-cached-digests)]
+    (#'reitit/cache-headers
+     {:status 200 :headers {} :body (java.io.ByteArrayInputStream.
+                                     (.getBytes "x" "UTF-8"))}
+     {:uri (str "/js/" i "-" (random-uuid) ".js")}
+     (fn [] {:status 200 :headers {}
+             :body (java.io.ByteArrayInputStream. (.getBytes "x" "UTF-8"))})))
+  (is (<= (count @@#'reitit/packaged-digests) @#'reitit/max-cached-digests)))
+
+(deftest ^:contract a-head-closes-the-body-it-drops
+  ;; Once a path's digest is remembered, a packaged asset's stream is handed
+  ;; through untouched — and a HEAD then replaced it with nil, which was the
+  ;; last reference anything held. Every HEAD leaked a jar entry.
+  (let [closed (atom false)
+        body   (proxy [java.io.ByteArrayInputStream] [(.getBytes "x" "UTF-8")]
+                 (close []
+                   (reset! closed true)
+                   (proxy-super close)))
+        resp   (#'reitit/drop-body-for-head {:status 200 :headers {} :body body}
+                                            {:request-method :head})]
+    (is @closed "the dropped stream should be closed")
+    (is (nil? (:body resp)) "and the HEAD still carries no body"))
+
+  (testing "a GET keeps its body, closed by the response writer as usual"
+    (let [closed (atom false)
+          body   (proxy [java.io.ByteArrayInputStream] [(.getBytes "x" "UTF-8")]
+                   (close [] (reset! closed true) (proxy-super close)))
+          resp   (#'reitit/drop-body-for-head {:status 200 :headers {} :body body}
+                                              {:request-method :get})]
+      (is (not @closed))
+      (is (identical? body (:body resp)))))
+
+  (testing "a File body is not Closeable and is dropped without complaint"
+    (let [f    (java.io.File. "deps.edn")
+          resp (#'reitit/drop-body-for-head {:status 200 :headers {} :body f}
+                                            {:request-method :head})]
+      (is (nil? (:body resp))))))
