@@ -16,7 +16,6 @@
             [wagoe.shared.ui.core.layout :as layout]
             [wagoe.shared.ui.core.validation :as validation]
             [wagoe.platform.shell.web.table :as web-table]
-            [wagoe.user.core.authentication :as auth-core]
             [wagoe.user.core.ui :as user-ui]
             [wagoe.user.core.profile-ui :as profile-ui]
             [wagoe.user.ports :as user-ports]
@@ -715,6 +714,15 @@
                     "You can log in at any time.\n\n"
                     "— " app-name)})))
 
+(defn- service-errors->field-errors
+  "Group a service :validation-error's `:errors` — a vector of
+   {:field :code :message} — into the field -> messages map the form takes."
+  [errors]
+  (reduce (fn [acc {:keys [field message]}]
+            (update acc (or field :form) (fnil conj []) message))
+          {}
+          errors))
+
 (defn create-user-htmx-handler
   "HTMX handler for creating a new user (POST /web/users).
 
@@ -745,23 +753,17 @@
                          :role (keyword (get form-data "role"))
                          :send-welcome send-welcome?}
           [valid? validation-errors _] (validate-request-data user-schema/CreateUserRequest prepared-data)
-          password-policy {:min-length 8 :require-numbers true}]
+          password-policy {:min-length 8 :require-numbers true}
+          ;; nil violations lets the form derive them from the password it is
+          ;; handed, which is what the requirements list has to reflect.
+          rerender (fn [errors violations]
+                     (html-response request
+                                    (user-ui/create-user-form prepared-data errors violations
+                                                              password-policy
+                                                              {:return-to return-to})
+                                    400))]
       (if-not valid?
-        (html-response request
-                       (user-ui/create-user-form prepared-data validation-errors
-                                                 ;; Passing nil here made the requirements list
-                                                 ;; render every rule as met, so a six-character
-                                                 ;; password came back with a green "At least 8
-                                                 ;; characters" beside the error saying it was not
-                                                 ;; (BOU-381).
-                                                 (:violations
-                                                  (auth-core/meets-password-policy?
-                                                   (or (:password prepared-data) "")
-                                                   password-policy
-                                                   nil))
-                                                 password-policy
-                                                 {:return-to return-to})
-                       400)
+        (rerender validation-errors nil)
         (try
           (let [user-data (dissoc prepared-data :send-welcome)
                 user-result (user-ports/register-user user-service user-data)
@@ -789,6 +791,24 @@
             (-> (response/response body)
                 (response/status 200)
                 (response/header "Content-Type" "text/html; charset=utf-8")))
+          (catch clojure.lang.ExceptionInfo e
+            ;; A duplicate email and a password the policy rejects both pass the
+            ;; request schema and are refused by the service. They used to reach
+            ;; the catch below and leave as a 500 carrying no form, which htmx
+            ;; discards — pressing Create did nothing at all (BOU-381).
+            (let [data (ex-data e)]
+              (case (:type data)
+                :password-policy-violation
+                (rerender {:password (mapv :message (:violations data))} (:violations data))
+
+                :user-exists
+                (rerender {:email [(or (:message data) (.getMessage e))]} nil)
+
+                :validation-error
+                (rerender (service-errors->field-errors (:errors data)) nil)
+
+                (do (log/error e "Create user failed")
+                    (html-response request (ui/error-message (.getMessage e)) 500)))))
           (catch Exception e
             (log/error e "Create user failed")
             (html-response request (ui/error-message (.getMessage e)) 500)))))))
@@ -817,9 +837,14 @@
                            :role (when-let [role (get form-data "role")] (keyword role))
                            :active (= "on" (get form-data "active"))}
             _ (log/info "Prepared data for update" {:prepared-data prepared-data})
-            [valid? _validation-errors _] (validate-request-data user-schema/UpdateUserRequest prepared-data)]
+            [valid? validation-errors _] (validate-request-data user-schema/UpdateUserRequest prepared-data)]
         (if-not valid?
-          (html-response request (user-ui/user-detail-form (assoc prepared-data :id (UUID/fromString user-id))) 400)
+          ;; The errors were discarded here, so the form swapped back in said
+          ;; nothing about why the save was refused (BOU-381).
+          (html-response request
+                         (user-ui/user-detail-form (assoc prepared-data :id (UUID/fromString user-id))
+                                                   validation-errors)
+                         400)
           (try
             ;; Fetch existing user and merge updates
             (let [uuid (UUID/fromString user-id)
@@ -830,13 +855,16 @@
                       user-data (merge existing-user
                                        (select-keys prepared-data [:name :email :role :active]))
                       user-result (user-ports/update-user-profile user-service user-data)]
-                  ;; Re-render the form with updated user data and a success indicator
+                  ;; Re-render the form with updated user data and a success
+                  ;; indicator. The banner goes inside the form's own
+                  ;; #user-detail: the swap is outerHTML, so a wrapper around it
+                  ;; would be left behind on every save.
                   (html-response
                    request
-                   [:div
-                    [:div.success-banner {:style "background: #d4edda; color: #155724; padding: 10px; margin-bottom: 15px; border-radius: 4px;"}
-                     "✓ User updated successfully"]
-                    (user-ui/user-detail-form user-result)]
+                   (user-ui/user-detail-form
+                    user-result nil
+                    {:notice [:div.success-banner {:style "background: #d4edda; color: #155724; padding: 10px; margin-bottom: 15px; border-radius: 4px;"}
+                              "✓ User updated successfully"]})
                    200
                    {"HX-Trigger" "userUpdated"}))))
             (catch Exception e

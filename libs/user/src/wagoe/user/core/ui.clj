@@ -9,6 +9,7 @@
             [wagoe.shared.ui.core.table :as table-ui]
             [wagoe.shared.ui.core.icons :as icons]
             [wagoe.platform.core.csrf :as csrf]
+            [wagoe.user.core.authentication :as auth-core]
             [clojure.string :as str]))
 
 ;; ---------------------------------------------------------------------------
@@ -301,54 +302,62 @@
 
 (defn user-detail-form
   "Generate a form for viewing/editing user details based on User schema.
-   
+
    Args:
-     user: User entity map (from User schema)
-     
+     user:   User entity map (from User schema)
+     errors: Optional validation errors map, field keyword -> messages
+     opts:   Optional map; :notice is rendered at the top of the form
+
    Returns:
      Hiccup structure for user detail form"
-  [user]
-  (let [active? (boolean (:active user))]
-    [:div#user-detail
-     [:h2 [:t :user/form-detail-title]]
-     [:form {:hx-put    (str "/web/users/" (:id user))
-             :hx-target "#user-detail"
-             :class     "form-card"}
-      (ui/form-field :name [:t :common/label-name]
-                     (ui/text-input :name (:name user) {:required true})
-                     nil)
-      (ui/form-field :email [:t :common/label-email]
-                     (ui/email-input :email (:email user) {:required true})
-                     nil)
-      (ui/form-field :role [:t :common/label-role]
-                     (ui/select-field :role
-                                      [[:admin [:t :common/role-admin]]
-                                       [:user [:t :common/role-user]]
-                                       [:viewer [:t :common/role-viewer]]]
-                                      (:role user))
-                     nil)
-      (ui/form-field :active [:t :user/field-active]
-                     (ui/checkbox :active active?)
-                     nil)
-      [:div.form-actions
-       (ui/submit-button [:t :user/button-update] {:loading-text [:t :user/button-update-loading]})
-       ;; Show appropriate action button based on active status
-       (if active?
-         [:button.button.danger
-          {:type "button"
-           :onclick (str "if(confirm('Are you sure you want to deactivate this user?')) {"
-                         "fetch('/web/users/" (:id user) "', {method: 'DELETE', headers: {'HX-Request': 'true'}});"
-                         "window.location.href='/web/users';"
-                         "}")}
-          [:t :user/button-deactivate]]
-         ;; Reactivate button for inactive users - uses the same update endpoint but sets active=true
-         [:button.button.primary
-          {:type "button"
-           :onclick (str "const form = this.closest('form');"
-                         "const activeCheckbox = form.querySelector('input[name=active]');"
-                         "activeCheckbox.checked = true;"
-                         "form.requestSubmit();")}
-          [:t :user/button-reactivate]])]]]))
+  ([user] (user-detail-form user nil nil))
+  ([user errors] (user-detail-form user errors nil))
+  ([user errors opts]
+   (let [active? (boolean (:active user))]
+     [:div#user-detail
+      [:h2 [:t :user/form-detail-title]]
+      ;; outerHTML: the response is itself a #user-detail, so an innerHTML swap
+      ;; nests one inside the other and leaves a duplicate id behind (BOU-381).
+      [:form {:hx-put    (str "/web/users/" (:id user))
+              :hx-target "#user-detail"
+              :hx-swap   "outerHTML"
+              :class     "form-card"}
+       (:notice opts)
+       (ui/form-field :name [:t :common/label-name]
+                      (ui/text-input :name (:name user) {:required true})
+                      (:name errors))
+       (ui/form-field :email [:t :common/label-email]
+                      (ui/email-input :email (:email user) {:required true})
+                      (:email errors))
+       (ui/form-field :role [:t :common/label-role]
+                      (ui/select-field :role
+                                       [[:admin [:t :common/role-admin]]
+                                        [:user [:t :common/role-user]]
+                                        [:viewer [:t :common/role-viewer]]]
+                                       (:role user))
+                      (:role errors))
+       (ui/form-field :active [:t :user/field-active]
+                      (ui/checkbox :active active?)
+                      (:active errors))
+       [:div.form-actions
+        (ui/submit-button [:t :user/button-update] {:loading-text [:t :user/button-update-loading]})
+        ;; Show appropriate action button based on active status
+        (if active?
+          [:button.button.danger
+           {:type "button"
+            :onclick (str "if(confirm('Are you sure you want to deactivate this user?')) {"
+                          "fetch('/web/users/" (:id user) "', {method: 'DELETE', headers: {'HX-Request': 'true'}});"
+                          "window.location.href='/web/users';"
+                          "}")}
+           [:t :user/button-deactivate]]
+          ;; Reactivate button for inactive users - uses the same update endpoint but sets active=true
+          [:button.button.primary
+           {:type "button"
+            :onclick (str "const form = this.closest('form');"
+                          "const activeCheckbox = form.querySelector('input[name=active]');"
+                          "activeCheckbox.checked = true;"
+                          "form.requestSubmit();")}
+           [:t :user/button-reactivate]])]]])))
 
 (defn create-user-form
   "Generate a form for creating new users based on CreateUserRequest schema.
@@ -384,9 +393,17 @@
      [:div {:class "form-field"}
       [:label {:for "password"} [:t :user/field-password]]
       (ui/password-input :password "" {:required true})
-      ;; Show password requirements if policy provided
+      ;; Show password requirements if policy provided. A nil violations
+      ;; argument is not "nothing is wrong": read as an empty list it ticked
+      ;; every rule as met — on the empty form, and beside the error saying the
+      ;; password was too short. Absent an explicit list, check the password
+      ;; that is in hand (BOU-381).
       (when policy
-        (password-requirements-list (or password-violations []) policy))
+        (password-requirements-list
+         (or password-violations
+             (:violations (auth-core/meets-password-policy?
+                           (or (:password data) "") policy nil)))
+         policy))
       ;; Show validation errors if present
       (when (seq (:password errors))
         [:div.validation-errors
@@ -844,9 +861,15 @@
       [:div {:class "form-field"}
        [:label {:for "password"} [:t :user/field-password]]
        (ui/password-input :password "" {:required true})
-        ;; Show password requirements if policy provided
+        ;; Show password requirements if policy provided. Absent an explicit
+        ;; list, check the password in hand — nil is not "nothing is wrong"
+        ;; (BOU-381).
        (when policy
-         (password-requirements-list (or password-violations []) policy))
+         (password-requirements-list
+          (or password-violations
+              (:violations (auth-core/meets-password-policy?
+                            (or (:password data) "") policy nil)))
+          policy))
         ;; Show validation errors if present
        (when (seq (:password errors))
          [:div.validation-errors

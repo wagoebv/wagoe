@@ -203,15 +203,26 @@
       (loc/fill (page/locator pg "#name") "Lisa Hendriks")
       (loc/fill (page/locator pg "#email") "not-an-email")
       (loc/fill (page/locator pg "#password") "Str0ng-Pass-2026")
+      ;; Count requests rather than assert on the absence of a response: a
+      ;; request that did go out would still be in flight at this point, so
+      ;; "no errors on the page yet" would pass either way.
+      (page/evaluate pg (str "() => { window.__htmxRequests = 0;"
+                             " document.body.addEventListener('htmx:beforeRequest',"
+                             " () => { window.__htmxRequests++; }); return null; }"))
       (loc/click (page/locator pg "#create-user-form button[type='submit']"))
+      ;; Constraint validation focuses the offending field — the one observable
+      ;; effect of the click, and what there is to wait for.
+      (is (not (map? (page/wait-for-function
+                      pg
+                      "document.activeElement && document.activeElement.id === 'email'"
+                      {:timeout 5000.0 :polling 50.0})))
+          "The browser should move focus to the invalid field")
       (is (false? (page/evaluate pg "() => document.querySelector('#email').validity.valid"))
           "The browser should consider the field invalid")
       (is (not (str/blank? (page/evaluate pg "() => document.querySelector('#email').validationMessage")))
           "and have a message to report")
-      (is (= "email" (page/evaluate pg "() => document.activeElement && document.activeElement.id"))
-          "and focus it")
-      (is (zero? (page/evaluate pg "() => document.querySelectorAll('.validation-errors').length"))
-          "No request was made, so no server-rendered errors appear"))))
+      (is (zero? (page/evaluate pg "() => window.__htmxRequests"))
+          "htmx should never have sent a request"))))
 
 ;; ---------------------------------------------------------------------------
 ;; Access control
