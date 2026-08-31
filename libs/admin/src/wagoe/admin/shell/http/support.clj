@@ -366,6 +366,64 @@
       (ring-response/header "HX-Trigger" "entityListUpdated")))
 
 ;; =============================================================================
+;; Display Options
+;; =============================================================================
+
+(defn valid-date-pattern
+  "The pattern, or nil with a warning when `DateTimeFormatter` rejects it.
+   Dropping it means one bad character in `config.edn` costs a column its
+   formatting rather than the whole page — the renderer falls back to its
+   default pattern.
+
+   Called once from the module wiring, not per request: a misconfigured
+   application should say so at boot, rather than log the same warning on every
+   admin page load and every HTMX table refresh for the life of the process."
+  [pattern]
+  (cond
+    (nil? pattern) nil
+
+    ;; `ofPattern` takes a String and casts; `:date-format :iso` in config.edn
+    ;; would throw a ClassCastException with no `:type` and 500 every admin page.
+    (not (string? pattern))
+    (do (log/warn "Ignoring non-string admin date pattern" {:pattern pattern})
+        nil)
+
+    :else
+    (try
+      (java.time.format.DateTimeFormatter/ofPattern pattern)
+      pattern
+      (catch IllegalArgumentException e
+        (log/warn "Ignoring invalid admin date pattern"
+                  {:pattern pattern :reason (ex-message e)})
+        nil))))
+
+(defn- request-locale
+  "The locale the i18n middleware resolved for this request, as a
+   `java.util.Locale`. Textual patterns (`dd MMM yyyy`) render month and day
+   names through it; without it they follow the server's JVM default while the
+   rest of the page is translated."
+  [request]
+  (when-let [loc (or (first (:i18n/locale-chain request))
+                     (:i18n/default-locale request))]
+    (java.util.Locale/forLanguageTag (name loc))))
+
+(defn display-options
+  "Zone, locale and date patterns for rendering stored timestamps in the admin UI.
+
+   The clock's zone is read here because `wagoe.admin.core.ui.base` may not:
+   check:fcis bans `ZoneId/systemDefault` in a core namespace. The patterns
+   come from the application's `:wagoe/settings`, which the module wiring
+   threads into the admin config — before BOU-382 nothing read them and every
+   timestamp rendered as the raw database value. They arrive already checked by
+   `valid-date-pattern`; a pattern that reaches the renderer anyway (a route
+   built without the wiring) still cannot throw — the renderer falls back."
+  [config request]
+  {:zone-id          (java.time.ZoneId/systemDefault)
+   :locale           (request-locale request)
+   :date-time-format (:date-time-format config)
+   :date-format      (:date-format config)})
+
+;; =============================================================================
 ;; Entity Detail Options (shared by detail + crud handlers)
 ;; =============================================================================
 
@@ -377,19 +435,23 @@
      :entities       - all available entity names
      :entity-configs - map of entity-name -> entity-config
      :page-opts      - opts map for entity-detail-page
-                       (related-records, return-to, parent-context, sibling-nav)"
-  [admin-service schema-provider entity-name entity-config record request]
+                       (related-records, return-to, parent-context, sibling-nav,
+                        display)"
+  [admin-service schema-provider config entity-name entity-config record request]
   (let [entities        (ports/list-available-entities schema-provider)
         entity-configs  (into {} (map (fn [e] [e (ports/get-entity-config schema-provider e)])) entities)
 
-        ; Related records for has-many relationships on this entity
+        ; Related records for has-many relationships on this entity.
+        ; The related entity's config rides along so its table can render each
+        ; cell by field type rather than printing the stored value (BOU-382).
         primary-key     (:primary-key entity-config :id)
         record-id       (str (get record primary-key))
         has-many-rels   (get entity-config :has-many [])
         parent-url      (str "/web/admin/" (name entity-name) "/" record-id)
         related-records (when (seq has-many-rels)
                           (mapv (fn [rel]
-                                  [(cond-> rel (:editable rel) (assoc :return-to parent-url))
+                                  [(cond-> (assoc rel :entity-config (get entity-configs (:entity rel)))
+                                     (:editable rel) (assoc :return-to parent-url))
                                    (ports/list-related-entities admin-service entity-name record-id rel)])
                                 has-many-rels))
 
@@ -438,56 +500,5 @@
      :page-opts      {:related-records related-records
                       :return-to       return-to
                       :parent-context  parent-context
-                      :sibling-nav     sibling-nav}}))
-
-;; =============================================================================
-;; Display Options
-;; =============================================================================
-
-(defn- valid-pattern
-  "The pattern, or nil with a warning when `DateTimeFormatter` rejects it.
-   Dropping it here means one bad character in `config.edn` costs a column its
-   formatting rather than the whole page — the renderer falls back to its
-   default pattern."
-  [pattern]
-  (cond
-    (nil? pattern) nil
-
-    ;; `ofPattern` takes a String and casts; `:date-format :iso` in config.edn
-    ;; would throw a ClassCastException with no `:type` and 500 every admin page.
-    (not (string? pattern))
-    (do (log/warn "Ignoring non-string admin date pattern" {:pattern pattern})
-        nil)
-
-    :else
-    (try
-      (java.time.format.DateTimeFormatter/ofPattern pattern)
-      pattern
-      (catch IllegalArgumentException e
-        (log/warn "Ignoring invalid admin date pattern"
-                  {:pattern pattern :reason (ex-message e)})
-        nil))))
-
-(defn- request-locale
-  "The locale the i18n middleware resolved for this request, as a
-   `java.util.Locale`. Textual patterns (`dd MMM yyyy`) render month and day
-   names through it; without it they follow the server's JVM default while the
-   rest of the page is translated."
-  [request]
-  (when-let [loc (or (first (:i18n/locale-chain request))
-                     (:i18n/default-locale request))]
-    (java.util.Locale/forLanguageTag (name loc))))
-
-(defn display-options
-  "Zone, locale and date patterns for rendering stored timestamps in the admin UI.
-
-   The clock's zone is read here because `wagoe.admin.core.ui.base` may not:
-   check:fcis bans `ZoneId/systemDefault` in a core namespace. The patterns
-   come from the application's `:wagoe/settings`, which the module wiring
-   threads into the admin config — before BOU-382 nothing read them and every
-   timestamp rendered as the raw database value."
-  [config request]
-  {:zone-id          (java.time.ZoneId/systemDefault)
-   :locale           (request-locale request)
-   :date-time-format (valid-pattern (:date-time-format config))
-   :date-format      (valid-pattern (:date-format config))})
+                      :sibling-nav     sibling-nav
+                      :display         (display-options config request)}}))

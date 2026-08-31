@@ -926,6 +926,48 @@
         ;; Should have create title i18n key
         (is (str/includes? (str page) ":admin/page-create-title"))))))
 
+(def ^:private sample-relationship
+  {:label         "Order Items"
+   :entity        :order-items
+   :fields        [:sku :created-at]
+   :entity-config {:fields {:sku        {:type :string}
+                            :created-at {:type :instant}}}})
+
+(def ^:private sample-related-records
+  [{:id 1 :sku "ABC-1" :created-at "2026-08-27T06:12:50.459979Z"}])
+
+(deftest ^:unit related-records-table-test
+  ;; The has-many table on a detail page printed whatever the database handed
+  ;; back, the same bug the list table had (BOU-382).
+  (testing "cells render by field type, not as the raw stored value"
+    (let [html (str (ui/related-records-table sample-relationship sample-related-records))]
+      (is (str/includes? html "2026-08-27 06:12"))
+      (is (not (str/includes? html "2026-08-27T06:12:50.459979Z")))
+      (is (str/includes? html "ABC-1") "other field types are untouched")))
+
+  (testing "the display options reach the cells"
+    (let [html (str (ui/related-records-table sample-relationship sample-related-records
+                                              {:date-time-format "yyyy-MM-dd HH:mm:ss"
+                                               :zone-id (java.time.ZoneId/of "Europe/Amsterdam")}))]
+      (is (str/includes? html "2026-08-27 08:12:50"))))
+
+  (testing "a missing value still renders the placeholder"
+    (let [html (str (ui/related-records-table sample-relationship
+                                              [{:id 1 :sku nil :created-at nil}]))]
+      (is (str/includes? html "—"))))
+
+  (testing "a relationship without an entity config still renders"
+    (let [html (str (ui/related-records-table (dissoc sample-relationship :entity-config)
+                                              sample-related-records))]
+      (is (str/includes? html "ABC-1")))))
+
+(deftest ^:unit entity-detail-page-threads-display-to-related-tables-test
+  (let [page (ui/entity-detail-page :users sample-entity-config sample-record
+                                    nil sample-permissions
+                                    {:related-records [[sample-relationship sample-related-records]]
+                                     :display         {:date-time-format "yyyy-MM-dd HH:mm:ss"}})]
+    (is (str/includes? (str page) "2026-08-27 06:12:50"))))
+
 (deftest ^:unit entity-new-page-test
   (testing "Entity creation page (convenience wrapper)"
     (let [page (ui/entity-new-page :users sample-entity-config nil sample-permissions nil)]

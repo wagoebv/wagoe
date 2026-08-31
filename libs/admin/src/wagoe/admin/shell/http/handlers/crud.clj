@@ -161,7 +161,7 @@
         ; Update entity and re-render detail page with success flash
         (let [updated-record (ports/update-entity admin-service entity-name id form-data)
               permissions    (permissions/get-entity-permissions user entity-name entity-config)
-              ctx             (support/build-entity-detail-opts admin-service schema-provider entity-name entity-config updated-record request)]
+              ctx             (support/build-entity-detail-opts admin-service schema-provider config entity-name entity-config updated-record request)]
 
           (support/html-response request
                                  (admin-ui/admin-layout
@@ -180,7 +180,7 @@
               errors      (ui-validation/explain->field-errors (:errors validation-result))
               ; Merge form data with original record for display
               record      (merge (ports/get-entity admin-service entity-name id) form-data)
-              ctx         (support/build-entity-detail-opts admin-service schema-provider entity-name entity-config record request)]
+              ctx         (support/build-entity-detail-opts admin-service schema-provider config entity-name entity-config record request)]
 
           (support/html-response request
                                  (admin-ui/admin-layout

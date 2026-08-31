@@ -13,7 +13,8 @@
    [integrant.core :as ig]
    [wagoe.admin.shell.schema-repository :as schema-repo]
    [wagoe.admin.shell.service :as service]
-   [wagoe.admin.shell.http :as http]))
+   [wagoe.admin.shell.http :as http]
+   [wagoe.admin.shell.http.support :as support]))
 
 ;; =============================================================================
 ;; Admin Config Component (pass-through holder referenced by other components)
@@ -67,6 +68,16 @@
 ;; Module graph
 ;; =============================================================================
 
+(defn- check-date-patterns
+  "Drop the configured date patterns that `DateTimeFormatter` rejects, warning
+   once here at boot rather than on every admin page load."
+  [config]
+  (reduce (fn [cfg k]
+            (cond-> cfg
+              (contains? cfg k) (assoc k (support/valid-date-pattern (get cfg k)))))
+          config
+          [:date-format :date-time-format]))
+
 (defn ig-config
   "This module's Integrant entries, for `wagoe.platform.shell.system.config`.
 
@@ -83,8 +94,9 @@
   ;; the whole application config to the routes, which would let any handler
   ;; reach anything.
   (let [app-settings  (get-in ctx [:config :active :wagoe/settings])
-        routes-config (merge (select-keys app-settings [:date-format :date-time-format])
-                             settings)]
+        routes-config (-> (merge (select-keys app-settings [:date-format :date-time-format])
+                                 settings)
+                          (check-date-patterns))]
     {:components
      {:wagoe/admin-schema-provider {:db-ctx (ig/ref :wagoe/db-context)
                                     :config settings}
