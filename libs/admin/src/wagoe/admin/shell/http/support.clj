@@ -11,6 +11,7 @@
    [wagoe.i18n.shell.render :as i18n]
    [wagoe.platform.core.http.problem-details :as problem-details]
    [clojure.string :as str]
+   [clojure.tools.logging :as log]
    [ring.util.response :as ring-response])
   (:import [java.util UUID]))
 
@@ -108,19 +109,6 @@
                      current)))))
      {}
      filter-entries)))
-
-(defn display-options
-  "Zone and date patterns for rendering stored timestamps in the admin UI.
-
-   The clock's zone is read here because `wagoe.admin.core.ui.base` may not:
-   check:fcis bans `ZoneId/systemDefault` in a core namespace. The patterns come
-   from the application's `:wagoe/settings`, which the module wiring threads into
-   the admin config — before BOU-382 nothing read them and every timestamp
-   rendered as the raw database value."
-  [config]
-  {:zone-id          (java.time.ZoneId/systemDefault)
-   :date-time-format (:date-time-format config)
-   :date-format      (:date-format config)})
 
 (defn parse-query-params
   "Parse query parameters into admin service options.
@@ -451,3 +439,46 @@
                       :return-to       return-to
                       :parent-context  parent-context
                       :sibling-nav     sibling-nav}}))
+
+;; =============================================================================
+;; Display Options
+;; =============================================================================
+
+(defn- valid-pattern
+  "The pattern, or nil with a warning when `DateTimeFormatter` rejects it.
+   Dropping it here means one bad character in `config.edn` costs a column its
+   formatting rather than the whole page — the renderer falls back to its
+   default pattern."
+  [pattern]
+  (when pattern
+    (try
+      (java.time.format.DateTimeFormatter/ofPattern pattern)
+      pattern
+      (catch IllegalArgumentException e
+        (log/warn "Ignoring invalid admin date pattern"
+                  {:pattern pattern :reason (ex-message e)})
+        nil))))
+
+(defn- request-locale
+  "The locale the i18n middleware resolved for this request, as a
+   `java.util.Locale`. Textual patterns (`dd MMM yyyy`) render month and day
+   names through it; without it they follow the server's JVM default while the
+   rest of the page is translated."
+  [request]
+  (when-let [loc (or (first (:i18n/locale-chain request))
+                     (:i18n/default-locale request))]
+    (java.util.Locale/forLanguageTag (name loc))))
+
+(defn display-options
+  "Zone, locale and date patterns for rendering stored timestamps in the admin UI.
+
+   The clock's zone is read here because `wagoe.admin.core.ui.base` may not:
+   check:fcis bans `ZoneId/systemDefault` in a core namespace. The patterns
+   come from the application's `:wagoe/settings`, which the module wiring
+   threads into the admin config — before BOU-382 nothing read them and every
+   timestamp rendered as the raw database value."
+  [config request]
+  {:zone-id          (java.time.ZoneId/systemDefault)
+   :locale           (request-locale request)
+   :date-time-format (valid-pattern (:date-time-format config))
+   :date-format      (valid-pattern (:date-format config))})

@@ -77,7 +77,8 @@
             ; Return list page HTML with success message
             (support/html-response request
                                    (admin-ui/admin-layout
-                                    (admin-ui/entity-list-page entity-name records entity-config table-query total-count permissions {})
+                                    (admin-ui/entity-list-page entity-name records entity-config table-query total-count permissions
+                                                               {:display (support/display-options config request)})
                                     {:user user
                                      :current-entity entity-name
                                      :entities entities

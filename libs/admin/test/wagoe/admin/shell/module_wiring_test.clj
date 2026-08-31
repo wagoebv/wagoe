@@ -43,12 +43,29 @@
 (deftest ^:unit display-options-carry-a-zone-and-the-configured-patterns
   (testing "the zone is read in the shell, which core may not do"
     (let [opts (support/display-options {:date-time-format "yyyy-MM-dd HH:mm:ss"
-                                         :date-format      "yyyy-MM-dd"})]
+                                         :date-format      "yyyy-MM-dd"}
+                                        {})]
       (is (instance? java.time.ZoneId (:zone-id opts)))
       (is (= "yyyy-MM-dd HH:mm:ss" (:date-time-format opts)))
       (is (= "yyyy-MM-dd" (:date-format opts)))))
 
   (testing "an unconfigured application leaves the patterns to the renderer"
-    (let [opts (support/display-options {})]
+    (let [opts (support/display-options {} {})]
       (is (instance? java.time.ZoneId (:zone-id opts)))
-      (is (nil? (:date-time-format opts))))))
+      (is (nil? (:date-time-format opts)))))
+
+  (testing "an invalid pattern is dropped, not carried to a formatter that throws"
+    ;; `ofPattern` throws on an unknown pattern letter, and it would throw once
+    ;; per cell from a core namespace — 500ing every list page over one typo.
+    (let [opts (support/display-options {:date-time-format "yyyy-MM-dd bb"
+                                         :date-format      "yyyy-QQQQQQ"}
+                                        {})]
+      (is (nil? (:date-time-format opts)))
+      (is (nil? (:date-format opts)))))
+
+  (testing "the request's locale reaches the renderer, so textual patterns match the page"
+    (is (= (java.util.Locale/forLanguageTag "nl")
+           (:locale (support/display-options {} {:i18n/locale-chain [:nl :en]}))))
+    (is (= (java.util.Locale/forLanguageTag "en")
+           (:locale (support/display-options {} {:i18n/default-locale :en}))))
+    (is (nil? (:locale (support/display-options {} {}))))))

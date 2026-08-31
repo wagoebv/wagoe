@@ -9,8 +9,9 @@
             [wagoe.shared.ui.core.components :as ui]
             [wagoe.shared.ui.core.table :as table-ui]
             [clojure.string :as str])
-  (:import (java.time ZoneId)
-           (java.time.format DateTimeFormatter)))
+  (:import (java.time DateTimeException LocalDate LocalDateTime ZoneId)
+           (java.time.format DateTimeFormatter DateTimeParseException)
+           (java.util Locale)))
 
 ;; =============================================================================
 ;; URL Helpers
@@ -83,36 +84,105 @@
 
 ;; The list table showed whatever the database handed back — for a timestamp
 ;; column that is `2026-08-27T06:12:50.459979Z`, microseconds and all (BOU-382).
-;; Patterns are overridable because the application configures them; UTC is the
-;; fallback zone rather than the machine's, which core may not read.
+;; Patterns are overridable per render because the application configures them;
+;; UTC is the fallback zone rather than the machine's, which core may not read.
 (def default-instant-format "yyyy-MM-dd HH:mm")
 (def default-date-format "yyyy-MM-dd")
 
+(def ^:private utc (ZoneId/of "UTC"))
+
 (defn- display-zone
   ^ZoneId [display]
-  (or (:zone-id display) (ZoneId/of "UTC")))
+  (or (:zone-id display) utc))
 
-(defn- format-stored
-  "Render a stored timestamp in `display`'s zone and `pattern`.
+(def ^:private compile-formatter
+  ;; Cached: the pattern is the same for every cell of every row, and
+  ;; `ofPattern` parses it each time it is called. An unknown pattern letter
+  ;; yields nil rather than an IllegalArgumentException — core must not throw,
+  ;; and a typo in `config.edn` should cost a column its formatting rather than
+  ;; 500 the whole list page.
+  (memoize
+   (fn [pattern ^Locale locale]
+     (try
+       (if locale
+         (DateTimeFormatter/ofPattern pattern locale)
+         (DateTimeFormatter/ofPattern pattern))
+       (catch IllegalArgumentException _ nil)))))
 
-   The value is whatever JDBC produced — `list-entities` does no read-side
-   coercion, so it is a String, java.sql.Timestamp or OffsetDateTime depending
-   on the driver. Anything unparseable is passed through as-is rather than
-   blanked, so a format nobody anticipated stays visible."
-  [value display pattern]
-  (if-let [instant (tc/string->instant value)]
-    (.format (DateTimeFormatter/ofPattern pattern) (.atZone instant (display-zone display)))
-    (str value)))
+(defn- formatter
+  "Formatter for `pattern-key` in `display`, falling back to `fallback` when the
+   configured pattern is absent or invalid."
+  ^DateTimeFormatter [display pattern-key fallback]
+  (let [locale (:locale display)]
+    (or (some-> (get display pattern-key) (compile-formatter locale))
+        (compile-formatter fallback locale))))
+
+(defn- safe-format
+  "Format `temporal`, or nil when it is missing or the pattern asks it for a
+   field it does not have (a zone pattern against a zone-less value)."
+  [^DateTimeFormatter fmt temporal]
+  (when (and fmt temporal)
+    (try
+      (.format fmt temporal)
+      (catch DateTimeException _ nil))))
+
+(defn- ->zoned
+  "Coerce a stored timestamp that carries an instant into `zone`."
+  [value ^ZoneId zone]
+  (some-> (tc/string->instant value) (.atZone zone)))
+
+(defn- ->naive
+  "Coerce a zone-less stored timestamp: the LocalDateTime a driver reading
+   TIMESTAMP columns as local hands back, or the `2026-08-27 06:12:50` string
+   SQLite keeps in a TEXT column. Nothing is shifted — a value with no zone is
+   reformatted where it stands rather than moved into one."
+  ^LocalDateTime [value]
+  (cond
+    (instance? LocalDateTime value) value
+
+    (string? value)
+    (try
+      (LocalDateTime/parse (str/replace-first value " " "T"))
+      (catch DateTimeParseException _ nil))))
+
+(defn- ->local-date
+  "Coerce a stored date to a LocalDate. A date carries no zone, so a timestamp
+   shape is read at UTC: reading `2026-01-09T00:00Z` in a zone west of
+   Greenwich would move it to the 8th."
+  ^LocalDate [value]
+  (cond
+    (instance? LocalDate value)     value
+    (instance? LocalDateTime value) (.toLocalDate ^LocalDateTime value)
+    (instance? java.sql.Date value) (.toLocalDate ^java.sql.Date value)
+
+    :else
+    (or (when (string? value)
+          (try
+            (LocalDate/parse value)
+            (catch DateTimeParseException _ nil)))
+        (some-> (->naive value) (.toLocalDate))
+        (some-> (->zoned value utc) (.toLocalDate)))))
 
 (defn format-instant
-  "A stored timestamp, formatted for display."
+  "Render a stored timestamp for display, in `display`'s zone and pattern.
+
+   The value is whatever JDBC produced — `list-entities` does no read-side
+   coercion, so it is a String, java.sql.Timestamp, OffsetDateTime or
+   LocalDateTime depending on the driver. Anything unparseable is passed
+   through as-is rather than swallowed, so a format nobody anticipated stays
+   visible."
   [value display]
-  (format-stored value display (or (:date-time-format display) default-instant-format)))
+  (let [fmt (formatter display :date-time-format default-instant-format)]
+    (or (safe-format fmt (->zoned value (display-zone display)))
+        (safe-format fmt (->naive value))
+        (str value))))
 
 (defn format-date
-  "A stored date, formatted for display."
+  "Render a stored date for display. Same passthrough rule as `format-instant`."
   [value display]
-  (format-stored value display (or (:date-format display) default-date-format)))
+  (or (safe-format (formatter display :date-format default-date-format)
+                   (->local-date value))
+      (str value)))
 
 (defn render-field-value
   "Render field value for display in table or detail view.
