@@ -63,6 +63,13 @@
       (is (nil? (:date-time-format opts)))
       (is (nil? (:date-format opts)))))
 
+  (testing "a pattern that is not a string is dropped, not cast"
+    ;; `ofPattern` takes a String: `:date-format :iso` in config.edn threw a
+    ;; ClassCastException with no `:type`, 500ing every admin page.
+    (let [opts (support/display-options {:date-time-format :iso :date-format 42} {})]
+      (is (nil? (:date-time-format opts)))
+      (is (nil? (:date-format opts)))))
+
   (testing "the request's locale reaches the renderer, so textual patterns match the page"
     (is (= (java.util.Locale/forLanguageTag "nl")
            (:locale (support/display-options {} {:i18n/locale-chain [:nl :en]}))))

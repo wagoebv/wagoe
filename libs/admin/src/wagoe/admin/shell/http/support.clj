@@ -450,7 +450,16 @@
    formatting rather than the whole page — the renderer falls back to its
    default pattern."
   [pattern]
-  (when pattern
+  (cond
+    (nil? pattern) nil
+
+    ;; `ofPattern` takes a String and casts; `:date-format :iso` in config.edn
+    ;; would throw a ClassCastException with no `:type` and 500 every admin page.
+    (not (string? pattern))
+    (do (log/warn "Ignoring non-string admin date pattern" {:pattern pattern})
+        nil)
+
+    :else
     (try
       (java.time.format.DateTimeFormatter/ofPattern pattern)
       pattern

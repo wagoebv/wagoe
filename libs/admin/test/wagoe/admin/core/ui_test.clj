@@ -264,6 +264,17 @@
              (ui/render-field-value :created-at "2026-08-27T06:12:50Z" {:type :instant}
                                     {:date-time-format "yyyy-MM-dd bb"}))))
 
+    (testing "a pattern the value cannot satisfy falls back to the default pattern"
+      ;; `yyyy-MM-dd HH:mm z` compiles, but a zone-less LocalDateTime has no
+      ;; zone to print. Formatting it threw a DateTimeException that dropped the
+      ;; cell to the raw database value — the bug BOU-382 fixes, reachable
+      ;; through a perfectly legal config.
+      (is (= "2026-08-27 06:12"
+             (ui/render-field-value :created-at
+                                    (java.time.LocalDateTime/parse "2026-08-27T06:12:50")
+                                    {:type :instant}
+                                    {:date-time-format "yyyy-MM-dd HH:mm z"}))))
+
     (testing "textual patterns follow the supplied locale, not the JVM default"
       (is (= "27 augustus 2026"
              (ui/render-field-value :created-at "2026-08-27T06:12:50Z" {:type :instant}

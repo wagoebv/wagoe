@@ -86,17 +86,17 @@
         routes-config (merge (select-keys app-settings [:date-format :date-time-format])
                              settings)]
     {:components
-   {:wagoe/admin-schema-provider {:db-ctx (ig/ref :wagoe/db-context)
-                                  :config settings}
-    :wagoe/admin-service         {:db-ctx          (ig/ref :wagoe/db-context)
-                                  :schema-provider (ig/ref :wagoe/admin-schema-provider)
-                                  :logger          (ig/ref :wagoe/logging)
-                                  :error-reporter  (ig/ref :wagoe/error-reporting)
-                                  :config          settings}
-    :wagoe/admin-routes          {:admin-service   (ig/ref :wagoe/admin-service)
-                                  :schema-provider (ig/ref :wagoe/admin-schema-provider)
-                                  :user-service    (ig/ref :wagoe/user-service)
-                                  :config          routes-config}}
+     {:wagoe/admin-schema-provider {:db-ctx (ig/ref :wagoe/db-context)
+                                    :config settings}
+      :wagoe/admin-service         {:db-ctx          (ig/ref :wagoe/db-context)
+                                    :schema-provider (ig/ref :wagoe/admin-schema-provider)
+                                    :logger          (ig/ref :wagoe/logging)
+                                    :error-reporter  (ig/ref :wagoe/error-reporting)
+                                    :config          settings}
+      :wagoe/admin-routes          {:admin-service   (ig/ref :wagoe/admin-service)
+                                    :schema-provider (ig/ref :wagoe/admin-schema-provider)
+                                    :user-service    (ig/ref :wagoe/user-service)
+                                    :config          routes-config}}
      ;; A ref in a collection, not a named slot on the handler: platform holds
      ;; no list of which modules may contribute routes (BOU-330).
      :routes [(ig/ref :wagoe/admin-routes)]}))

@@ -9,7 +9,7 @@
             [wagoe.shared.ui.core.components :as ui]
             [wagoe.shared.ui.core.table :as table-ui]
             [clojure.string :as str])
-  (:import (java.time DateTimeException LocalDate LocalDateTime ZoneId)
+  (:import (java.time DateTimeException Instant LocalDate LocalDateTime ZoneId ZonedDateTime)
            (java.time.format DateTimeFormatter DateTimeParseException)
            (java.util Locale)))
 
@@ -91,31 +91,42 @@
 
 (def ^:private utc (ZoneId/of "UTC"))
 
+;; `DateTimeFormatter` is immutable, so the fallbacks are built once at load.
+;; A configured pattern is compiled per render rather than cached: a cache here
+;; would be process-lifetime mutable state in core, keyed on caller-supplied
+;; data, and parsing a pattern costs microseconds against a page of cells.
+(def ^:private default-instant-formatter (DateTimeFormatter/ofPattern default-instant-format))
+(def ^:private default-date-formatter (DateTimeFormatter/ofPattern default-date-format))
+
 (defn- display-zone
   ^ZoneId [display]
   (or (:zone-id display) utc))
 
-(def ^:private compile-formatter
-  ;; Cached: the pattern is the same for every cell of every row, and
-  ;; `ofPattern` parses it each time it is called. An unknown pattern letter
-  ;; yields nil rather than an IllegalArgumentException — core must not throw,
-  ;; and a typo in `config.edn` should cost a column its formatting rather than
-  ;; 500 the whole list page.
-  (memoize
-   (fn [pattern ^Locale locale]
-     (try
-       (if locale
-         (DateTimeFormatter/ofPattern pattern locale)
-         (DateTimeFormatter/ofPattern pattern))
-       (catch IllegalArgumentException _ nil)))))
+(defn- with-locale
+  ^DateTimeFormatter [^DateTimeFormatter fmt ^Locale locale]
+  (if locale (.withLocale fmt locale) fmt))
 
-(defn- formatter
-  "Formatter for `pattern-key` in `display`, falling back to `fallback` when the
-   configured pattern is absent or invalid."
-  ^DateTimeFormatter [display pattern-key fallback]
+(defn- compile-formatter
+  "An unknown pattern letter yields nil rather than an IllegalArgumentException
+   — core must not throw, and a typo in `config.edn` should cost a column its
+   formatting rather than 500 the whole list page. A pattern that is not a
+   string is not a pattern."
+  ^DateTimeFormatter [pattern ^Locale locale]
+  (when (string? pattern)
+    (try
+      (with-locale (DateTimeFormatter/ofPattern pattern) locale)
+      (catch IllegalArgumentException _ nil))))
+
+(defn- formatters
+  "The formatters to try for `pattern-key`, the configured one first. The
+   default is kept as a second chance rather than only as a compile-time
+   fallback: a pattern can be valid and still be unable to format the value it
+   is handed (a zone pattern against a zone-less timestamp), and dropping
+   straight to the raw database value there is the bug BOU-382 fixes."
+  [display pattern-key ^DateTimeFormatter default]
   (let [locale (:locale display)]
-    (or (some-> (get display pattern-key) (compile-formatter locale))
-        (compile-formatter fallback locale))))
+    (remove nil? [(compile-formatter (get display pattern-key) locale)
+                  (with-locale default locale)])))
 
 (defn- safe-format
   "Format `temporal`, or nil when it is missing or the pattern asks it for a
@@ -128,8 +139,9 @@
 
 (defn- ->zoned
   "Coerce a stored timestamp that carries an instant into `zone`."
-  [value ^ZoneId zone]
-  (some-> (tc/string->instant value) (.atZone zone)))
+  ^ZonedDateTime [value ^ZoneId zone]
+  (when-let [^Instant inst (tc/string->instant value)]
+    (.atZone inst zone)))
 
 (defn- ->naive
   "Coerce a zone-less stored timestamp: the LocalDateTime a driver reading
@@ -172,17 +184,19 @@
    through as-is rather than swallowed, so a format nobody anticipated stays
    visible."
   [value display]
-  (let [fmt (formatter display :date-time-format default-instant-format)]
-    (or (safe-format fmt (->zoned value (display-zone display)))
-        (safe-format fmt (->naive value))
+  (let [temporal (or (->zoned value (display-zone display))
+                     (->naive value))]
+    (or (some #(safe-format % temporal)
+              (formatters display :date-time-format default-instant-formatter))
         (str value))))
 
 (defn format-date
   "Render a stored date for display. Same passthrough rule as `format-instant`."
   [value display]
-  (or (safe-format (formatter display :date-format default-date-format)
-                   (->local-date value))
-      (str value)))
+  (let [temporal (->local-date value)]
+    (or (some #(safe-format % temporal)
+              (formatters display :date-format default-date-formatter))
+        (str value))))
 
 (defn render-field-value
   "Render field value for display in table or detail view.
