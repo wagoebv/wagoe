@@ -211,6 +211,40 @@
         (is (string? result))
         (is (str/includes? result "2026-01-09"))))
 
+    (testing "a stored timestamp loses the ISO plumbing and the microseconds"
+      ;; The column showed the raw database value, microseconds and all
+      ;; (BOU-382). The stored shape is a string, not an Instant — list-entities
+      ;; does no read-side coercion.
+      (is (= "2026-08-27 06:12"
+             (ui/render-field-value :created-at "2026-08-27T06:12:50.459979Z"
+                                    {:type :instant}))))
+
+    (testing "the shell's zone and pattern are honoured"
+      (let [value "2026-08-27T06:12:50.459979Z"]
+        (is (= "2026-08-27 08:12"
+               (ui/render-field-value :created-at value {:type :instant}
+                                      {:zone-id (java.time.ZoneId/of "Europe/Amsterdam")}))
+            "rendered in the zone the shell supplies, not UTC")
+        (is (= "2026-08-27 06:12:50"
+               (ui/render-field-value :created-at value {:type :instant}
+                                      {:date-time-format "yyyy-MM-dd HH:mm:ss"}))
+            "and in the configured pattern")))
+
+    (testing "the driver's timestamp shapes all render"
+      ;; H2 and PostgreSQL hand back java.sql.Timestamp / OffsetDateTime rather
+      ;; than a string, so formatting has to coerce before it formats.
+      (let [instant (Instant/parse "2026-08-27T06:12:50Z")]
+        (doseq [[label value] [["Instant" instant]
+                               ["java.sql.Timestamp" (java.sql.Timestamp/from instant)]
+                               ["OffsetDateTime" (.atOffset instant java.time.ZoneOffset/UTC)]]]
+          (is (= "2026-08-27 06:12"
+                 (ui/render-field-value :created-at value {:type :instant}))
+              (str "should format a " label)))))
+
+    (testing "a value that is not a timestamp is left alone, not swallowed"
+      (is (= "not-a-timestamp"
+             (ui/render-field-value :created-at "not-a-timestamp" {:type :instant}))))
+
     (testing "Date values"
       (let [result (ui/render-field-value :birth-date "2026-01-09" {:type :date})]
         (is (string? result))

@@ -93,7 +93,7 @@
   "Handler for PATCH /:entity/:id/:field - updates single field.
 
    Validates and updates single field, returns updated cell HTML."
-  [admin-service schema-provider _config]
+  [admin-service schema-provider config]
   (fn [request]
     (let [user (support/require-admin-user! request)
           entity-name (support/get-entity-name request)
@@ -129,7 +129,8 @@
 
           ; Return updated cell HTML with success indicator
           (-> (support/html-response request
-                                     (admin-ui/render-inline-edit-cell entity-name id field new-value field-config))
+                                     (admin-ui/render-inline-edit-cell entity-name id field new-value field-config
+                                                                       (support/display-options config)))
               (ring-response/header "HX-Trigger" "entityUpdated")))
 
         (catch Exception e
@@ -147,7 +148,7 @@
   "Handler for GET /:entity/:id/:field/cancel - cancels inline edit.
 
    Returns the original cell HTML without changes."
-  [admin-service schema-provider _config]
+  [admin-service schema-provider config]
   (fn [request]
     (let [_user (support/require-admin-user! request)
           entity-name (support/get-entity-name request)
@@ -169,4 +170,5 @@
 
       ; Return original cell HTML
       (support/html-response request
-                             (admin-ui/render-inline-edit-cell entity-name id field current-value field-config)))))
+                             (admin-ui/render-inline-edit-cell entity-name id field current-value field-config
+                                                               (support/display-options config))))))
