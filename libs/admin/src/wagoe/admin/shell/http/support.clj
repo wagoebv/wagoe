@@ -109,6 +109,19 @@
      {}
      filter-entries)))
 
+(defn display-options
+  "Zone and date patterns for rendering stored timestamps in the admin UI.
+
+   The clock's zone is read here because `wagoe.admin.core.ui.base` may not:
+   check:fcis bans `ZoneId/systemDefault` in a core namespace. The patterns come
+   from the application's `:wagoe/settings`, which the module wiring threads into
+   the admin config — before BOU-382 nothing read them and every timestamp
+   rendered as the raw database value."
+  [config]
+  {:zone-id          (java.time.ZoneId/systemDefault)
+   :date-time-format (:date-time-format config)
+   :date-format      (:date-format config)})
+
 (defn parse-query-params
   "Parse query parameters into admin service options.
 

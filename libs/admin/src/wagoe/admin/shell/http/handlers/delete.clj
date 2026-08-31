@@ -72,7 +72,7 @@
 
    Expects form with 'ids[]' parameter containing entity IDs.
    Returns HTMX fragment triggering table refresh."
-  [admin-service schema-provider _config]
+  [admin-service schema-provider config]
   (fn [request]
     (let [user (support/require-admin-user! request)
           entity-name (support/get-entity-name request)
@@ -118,5 +118,6 @@
 
       ; Return table HTML fragment with toast via showToast event
       (-> (support/htmx-fragment-response request
-                                          (admin-ui/entity-table entity-name records entity-config table-query total-count permissions {}))
+                                          (admin-ui/entity-table entity-name records entity-config table-query total-count permissions {}
+                                                                 (support/display-options config)))
           (ring-response/header "HX-Trigger" (str "{\"showToast\":" toast-json ",\"entityListUpdated\":{}}"))))))

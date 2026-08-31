@@ -5,9 +5,12 @@
    heuristics, and small formatting/label utilities. Must NOT require any
    other wagoe.admin.core.ui.* implementation namespace — it is the
    dependency root that the focused sections build on."
-  (:require [wagoe.shared.ui.core.components :as ui]
+  (:require [wagoe.core.utils.type-conversion :as tc]
+            [wagoe.shared.ui.core.components :as ui]
             [wagoe.shared.ui.core.table :as table-ui]
-            [clojure.string :as str]))
+            [clojure.string :as str])
+  (:import (java.time ZoneId)
+           (java.time.format DateTimeFormatter)))
 
 ;; =============================================================================
 ;; URL Helpers
@@ -78,6 +81,39 @@
 ;; Field Value Rendering
 ;; =============================================================================
 
+;; The list table showed whatever the database handed back — for a timestamp
+;; column that is `2026-08-27T06:12:50.459979Z`, microseconds and all (BOU-382).
+;; Patterns are overridable because the application configures them; UTC is the
+;; fallback zone rather than the machine's, which core may not read.
+(def default-instant-format "yyyy-MM-dd HH:mm")
+(def default-date-format "yyyy-MM-dd")
+
+(defn- display-zone
+  ^ZoneId [display]
+  (or (:zone-id display) (ZoneId/of "UTC")))
+
+(defn- format-stored
+  "Render a stored timestamp in `display`'s zone and `pattern`.
+
+   The value is whatever JDBC produced — `list-entities` does no read-side
+   coercion, so it is a String, java.sql.Timestamp or OffsetDateTime depending
+   on the driver. Anything unparseable is passed through as-is rather than
+   blanked, so a format nobody anticipated stays visible."
+  [value display pattern]
+  (if-let [instant (tc/string->instant value)]
+    (.format (DateTimeFormatter/ofPattern pattern) (.atZone instant (display-zone display)))
+    (str value)))
+
+(defn format-instant
+  "A stored timestamp, formatted for display."
+  [value display]
+  (format-stored value display (or (:date-time-format display) default-instant-format)))
+
+(defn format-date
+  "A stored date, formatted for display."
+  [value display]
+  (format-stored value display (or (:date-format display) default-date-format)))
+
 (defn render-field-value
   "Render field value for display in table or detail view.
 
@@ -85,44 +121,49 @@
      field-name: Keyword field name
      value: Field value to render
      field-config: Field configuration map
+     display: Optional {:zone-id :date-time-format :date-format} from the shell.
+              Absent, timestamps render at UTC in the default patterns — core
+              may not read the machine's clock or zone.
 
     Returns:
       Hiccup structure or string for display"
-  [_field-name value field-config]
-  (let [field-type (:type field-config :string)]
-    (cond
-      (nil? value)
-      [:span.null-value {:class "badge ui-badge ui-badge-neutral null-value"} "—"]
+  ([field-name value field-config]
+   (render-field-value field-name value field-config nil))
+  ([_field-name value field-config display]
+   (let [field-type (:type field-config :string)]
+     (cond
+       (nil? value)
+       [:span.null-value {:class "badge ui-badge ui-badge-neutral null-value"} "—"]
 
-      (= field-type :boolean)
-      (ui/badge (if value [:t :common/option-yes] [:t :common/option-no])
-                {:variant (if value :success :neutral)
-                 :class (str "admin-bool-badge "
-                             (if value "admin-bool-badge-true" "admin-bool-badge-false"))})
+       (= field-type :boolean)
+       (ui/badge (if value [:t :common/option-yes] [:t :common/option-no])
+                 {:variant (if value :success :neutral)
+                  :class (str "admin-bool-badge "
+                              (if value "admin-bool-badge-true" "admin-bool-badge-false"))})
 
-      (= field-type :instant)
-      (str value)
+       (= field-type :instant)
+       (format-instant value display)
 
-      (= field-type :date)
-      (str value)
+       (= field-type :date)
+       (format-date value display)
 
-      (= field-type :uuid)
-      [:span.uuid-value {:class "font-mono text-xs opacity-80"} (str value)]
+       (= field-type :uuid)
+       [:span.uuid-value {:class "font-mono text-xs opacity-80"} (str value)]
 
-      (= field-type :enum)
-      [:span.enum-badge {:class "badge ui-badge ui-badge-outline enum-badge"}
-       (str/capitalize (name value))]
+       (= field-type :enum)
+       [:span.enum-badge {:class "badge ui-badge ui-badge-outline enum-badge"}
+        (str/capitalize (name value))]
 
-      (= field-type :json)
-      [:code (str value)]
+       (= field-type :json)
+       [:code (str value)]
 
-      (string? value)
-      (if (> (count value) 50)
-        (str (subs value 0 47) "...")
-        value)
+       (string? value)
+       (if (> (count value) 50)
+         (str (subs value 0 47) "...")
+         value)
 
-      :else
-      (str value))))
+       :else
+       (str value)))))
 
 ;; =============================================================================
 ;; List Column Width Heuristics

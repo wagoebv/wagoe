@@ -75,8 +75,17 @@
    that used to live here built the same graph against `:wagoe/database-context`
    and `:wagoe/logger` — keys no application wires — so they had never run
    (BOU-326)."
-  [settings _ctx]
-  {:components
+  [settings ctx]
+  ;; A module's `settings` is its own `:active` section, so `:date-format` and
+  ;; `:date-time-format` — which live under `:wagoe/settings` — were out of reach
+  ;; of every admin handler. Nothing read them anywhere and the list table
+  ;; rendered raw database timestamps (BOU-382). Copied in rather than handing
+  ;; the whole application config to the routes, which would let any handler
+  ;; reach anything.
+  (let [app-settings  (get-in ctx [:config :active :wagoe/settings])
+        routes-config (merge (select-keys app-settings [:date-format :date-time-format])
+                             settings)]
+    {:components
    {:wagoe/admin-schema-provider {:db-ctx (ig/ref :wagoe/db-context)
                                   :config settings}
     :wagoe/admin-service         {:db-ctx          (ig/ref :wagoe/db-context)
@@ -87,7 +96,7 @@
     :wagoe/admin-routes          {:admin-service   (ig/ref :wagoe/admin-service)
                                   :schema-provider (ig/ref :wagoe/admin-schema-provider)
                                   :user-service    (ig/ref :wagoe/user-service)
-                                  :config          settings}}
-   ;; A ref in a collection, not a named slot on the handler: platform holds no
-   ;; list of which modules may contribute routes (BOU-330).
-   :routes [(ig/ref :wagoe/admin-routes)]})
+                                  :config          routes-config}}
+     ;; A ref in a collection, not a named slot on the handler: platform holds
+     ;; no list of which modules may contribute routes (BOU-330).
+     :routes [(ig/ref :wagoe/admin-routes)]}))
