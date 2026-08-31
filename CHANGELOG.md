@@ -121,6 +121,9 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Static assets revalidate instead of caching blind** (BOU-389). No asset sent
+  `Cache-Control`, so a deployed fix could go unseen for days.
+
 - **Form validation errors reach the screen** (BOU-381). htmx discarded the 400
   that carried them, so pressing Create or Save did nothing at all.
 

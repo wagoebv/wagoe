@@ -6,6 +6,7 @@
    exception handling, the coercion error shape, the Swagger routes, gzip, and
    the interceptor stack each route is decorated with."
   (:require [cheshire.core :as json]
+            [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
             [malli.error :as me]
@@ -19,9 +20,14 @@
             [reitit.swagger :as swagger]
             [reitit.swagger-ui :as swagger-ui]
             [ring.middleware.cookies :refer [wrap-cookies]]
-            [ring.middleware.resource :refer [wrap-resource]]
+            [ring.middleware.not-modified :refer [not-modified-response]]
+            [ring.middleware.resource :refer [resource-request]]
+            [ring.util.codec :as codec]
+            [ring.util.io :as ring-io]
+            [ring.util.request :as ring-request]
             [wagoe.platform.shell.http.interceptors :as http-interceptors])
   (:import [java.io ByteArrayInputStream ByteArrayOutputStream]
+           [java.security MessageDigest]
            [java.util.zip GZIPOutputStream]))
 
 ;; =============================================================================
@@ -477,30 +483,154 @@
 ;; Static Asset Caching Middleware
 ;; =============================================================================
 
+(defn- asset-request?
+  "GET/HEAD for a URI with a file extension — the only shape a classpath asset
+   can have. Checked before the classloader, so a resource lookup does not
+   precede every API call too."
+  [request]
+  (and (contains? #{:get :head} (:request-method request))
+       (str/includes? (or (:uri request) "") ".")))
+
+(defn- digest-stream
+  "SHA-256 of everything `in` yields, read in chunks and never held whole.
+
+   Truncated to 16 bytes: this is a cache validator, not a signature. Collisions
+   only matter to an attacker who can already write the assets."
+  [^java.io.InputStream in]
+  (let [md  (MessageDigest/getInstance "SHA-256")
+        buf (byte-array 8192)]
+    (loop []
+      (let [n (.read in buf)]
+        (when (pos? n)
+          (.update md buf 0 n)
+          (recur))))
+    (->> (.digest md) (take 16) (map #(format "%02x" (bit-and % 0xff))) (apply str))))
+
+(def ^:private max-cached-digests
+  "Ceiling on `packaged-digests`, which is filled from request paths.
+
+   The key is derived the way ring derives it, so the spellings of one asset
+   collapse to one entry — but a bound is what makes the size independent of
+   anything a caller sends, rather than dependent on having anticipated every
+   alias. An application serves tens of assets; past this the map is dropped and
+   refills, so the worst case is the hashing cost from before it was cached."
+  512)
+
+(def ^:private packaged-digests
+  "Digests of resources that cannot change while the process runs.
+
+   A jar entry is fixed once the archive is open, so hashing it again can only
+   give the same answer, and a revalidation would otherwise re-read the whole
+   asset to answer a 304 that carries no body. Directory-backed resources are
+   deliberately absent: those are the ones a developer edits under a running
+   server, and a remembered digest there would serve the staleness this whole
+   change is about."
+  (atom {}))
+
+(defn- remember-digest!
+  [path digest]
+  (swap! packaged-digests
+         (fn [m] (assoc (if (>= (count m) max-cached-digests) {} m) path digest)))
+  digest)
+
+(defn- cache-headers
+  "Mark a static asset cacheable but always revalidated, with a digest of its
+   bytes as the validator.
+
+   `no-cache` means \"store it, but ask before reusing it\" — not \"do not
+   store\". With a validator the ask is a 304 carrying no body, so the bytes
+   travel once.
+
+   Deliberately not `max-age`/`immutable`: these filenames carry no content
+   hash. `app.css` changes meaning under a fixed name, so any lifetime is a
+   window in which a shipped fix cannot reach a browser that already holds the
+   old one. Nor size-and-mtime, which the ticket first proposed — a rebuild
+   producing a same-length file in the same second reuses the validator and the
+   304 path keeps serving the old asset.
+
+   Nothing is held in memory whole. A file is hashed by streaming it, leaving
+   ring's own body to be streamed out in turn. Hashing a jar entry consumes the
+   stream, so `reopen` repeats the lookup that produced this response — rather
+   than rebuilding a path, which would mean re-deriving ring's decoding and
+   traversal rules."
+  [response path reopen]
+  (let [body    (:body response)
+        with-cc (assoc-in response [:headers "Cache-Control"] "no-cache")
+        etag    (fn [r d] (assoc-in r [:headers "ETag"] (str "\"" d "\"")))]
+    (cond
+      (instance? java.io.File body)
+      (etag with-cc (with-open [in (io/input-stream ^java.io.File body)]
+                      (digest-stream in)))
+
+      (instance? java.io.InputStream body)
+      (if-let [cached (and path (get @packaged-digests path))]
+        ;; Nothing to read: ring's stream is the body, and the writer closes it.
+        (etag with-cc cached)
+        (let [d (with-open [^java.io.InputStream in body] (digest-stream in))]
+          ;; No path means no key to remember it under — hash it again next time
+          ;; rather than let unrelated resources share an entry.
+          (when path (remember-digest! path d))
+          (when-let [fresh (:body (reopen))]
+            (-> with-cc (assoc :body fresh) (etag d)))))
+
+      :else with-cc)))
+
+(defn- without-header
+  "Drop a header from a request or response map, whatever casing it was written
+   in — ring lower-cases request headers, but nothing guarantees a producer did."
+  [m header]
+  (update m :headers
+          (fn [headers]
+            (into {} (remove #(.equalsIgnoreCase ^String (name (key %)) header)) headers))))
+
+(defn- drop-body-for-head
+  "A HEAD carries no body. Closed before it is dropped: once a path's digest is
+   remembered, a packaged asset's stream is handed through untouched, and
+   replacing it with nil is the last reference anything holds — so every HEAD
+   would leak a jar entry. A File body is not Closeable and `close!` ignores it."
+  [response request]
+  (if (= :head (:request-method request))
+    (do (ring-io/close! (:body response))
+        (assoc response :body nil))
+    response))
+
 (defn- wrap-static-resources
-  "Serve classpath resources from resources/public/, but only for requests
-   that can actually be static assets: GET/HEAD with a file extension in the
-   URI. Plain ring.middleware.resource/wrap-resource does a classloader
-   lookup on EVERY request (including all API calls) before routing."
-  [handler]
-  (let [with-resources (wrap-resource handler "public")]
-    (fn [request]
-      (if (and (contains? #{:get :head} (:request-method request))
-               (str/includes? (:uri request) "."))
-        (with-resources request)
-        (handler request)))))
+  "Serve classpath resources from resources/public/, with revalidation headers.
 
-(defn- wrap-static-cache
-  "Adds Cache-Control headers to static asset responses.
-
-   Versioned/hashed assets under /public/ receive a 1-year immutable header.
-   All other responses are passed through unchanged."
+   `resource-request` is called directly rather than through `wrap-resource`,
+   which answers `(or resource (handler request))` — a hit returns without ever
+   calling what it wraps, so a cache middleware placed outside could not run for
+   the only responses it was written for. Setting the headers where the resource
+   is produced removes the ordering question instead of answering it (BOU-389)."
   [handler]
   (fn [request]
-    (let [response (handler request)]
-      (if (and response (str/includes? (or (:uri request) "") "/public/"))
-        (assoc-in response [:headers "Cache-Control"] "public, max-age=31536000, immutable")
-        response))))
+    (or (when (asset-request? request)
+          ;; Looked up as a GET even for a HEAD: ring answers a HEAD with a nil
+          ;; body, and the validator is a digest of the body, so a HEAD would
+          ;; otherwise carry no ETag while the GET it stands in for does.
+          (let [lookup #(resource-request (assoc request :request-method :get) "public")
+                ;; The path ring itself resolves, derived the way ring derives
+                ;; it, so every spelling of one asset lands on one cache entry:
+                ;; `/js/forms.js` and `/js/%66orms.js` are the same resource, and
+                ;; an unauthenticated caller can mint encodings without limit.
+                ;; A malformed escape throws out of the decoder; no key then,
+                ;; which costs a rehash rather than a wrong answer.
+                path   (try (codec/url-decode (ring-request/path-info request))
+                            (catch Exception _ nil))]
+            (some-> (lookup)
+                    (cache-headers path lookup)
+                    ;; The digest decides, so If-Modified-Since gets no vote.
+                    ;; Ring resolves a 304 from whichever validators the request
+                    ;; carries, and for If-Modified-Since alone that is mtime —
+                    ;; a rebuild leaving mtime untouched would answer 304 with
+                    ;; the old bytes, and a browser holding an asset cached
+                    ;; before any ETag existed revalidates exactly that way.
+                    ;; Stripped from the request rather than dropping
+                    ;; Last-Modified from the response, which would also deny a
+                    ;; 304 to a client sending both validators, ETag included.
+                    (not-modified-response (without-header request "if-modified-since"))
+                    (drop-body-for-head request))))
+        (handler request))))
 
 (def ^:private http-methods
   "The endpoint keys Reitit route data can carry."
@@ -601,7 +731,6 @@
           ;; parse them a second time for every request.
         handler (-> (ring/ring-handler router default-handler)
                     (wrap-gzip)
-                    (wrap-static-cache)
                     (wrap-static-resources)
                     (wrap-cookies))]
 
