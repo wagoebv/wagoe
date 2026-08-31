@@ -123,6 +123,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **Admin tables show readable timestamps** (BOU-382), not raw
   `2026-08-27T06:12:50.459979Z`. Set `:date-time-format` to choose the pattern.
+- **Static assets revalidate instead of caching blind** (BOU-389). No asset sent
+  `Cache-Control`, so a deployed fix could go unseen for days.
 
 - **Form validation errors reach the screen** (BOU-381). htmx discarded the 400
   that carried them, so pressing Create or Save did nothing at all.

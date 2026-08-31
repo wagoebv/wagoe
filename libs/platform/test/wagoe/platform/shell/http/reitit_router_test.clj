@@ -3,7 +3,9 @@
   (:require [wagoe.platform.shell.http.reitit-router :as reitit]
             [cheshire.core :as json]
             [clojure.string :as str]
-            [clojure.test :refer [deftest testing is]]))
+            [clojure.test :refer [deftest testing is]]
+            [ring.util.codec :as codec]
+            [ring.util.request :as ring-request]))
 
 ;; =============================================================================
 ;; Test Helpers
@@ -756,3 +758,193 @@
               (ex-info "nope" {:type :not-found})
               {:headers {"x-correlation-id" "given-by-the-caller"}})]
     (is (= "given-by-the-caller" (get-in resp [:headers "X-Correlation-ID"])))))
+
+;; =============================================================================
+;; Static asset caching (BOU-389)
+;; =============================================================================
+
+(defn- static-asset-response
+  "Fetch the fixture at public/bou389/asset.js through the full chain."
+  ([] (static-asset-response {}))
+  ([extra]
+   ((reitit/compile-routes simple-routes {})
+    (merge {:request-method :get :uri "/bou389/asset.js" :headers {}} extra))))
+
+(deftest ^:contract static-assets-revalidate-rather-than-cache-blind
+  ;; No asset carried Cache-Control, so browsers fell back to heuristic caching
+  ;; and kept a stale copy for days — a deployed fix did not reach a returning
+  ;; user (BOU-389). Two independent reasons, both live: the header was gated on
+  ;; the URI containing "/public/", which is a classpath prefix and never
+  ;; appears in a request path, and the middleware that set it sat *inside*
+  ;; wrap-resource, which returns a resource hit without calling what it wraps.
+  (let [resp (static-asset-response)]
+    (testing "the fixture is served at all, or the rest asserts nothing"
+      (is (= 200 (:status resp))))
+    (testing "caching is allowed but must be revalidated"
+      ;; Not max-age/immutable: these filenames carry no content hash, so a long
+      ;; lifetime makes the next fix unreachable for exactly that long.
+      (is (= "no-cache" (get-in resp [:headers "Cache-Control"])))
+      (is (not (str/includes? (str (get-in resp [:headers "Cache-Control"])) "immutable"))))
+    (testing "and carry a validator, so revalidating costs no body"
+      (is (some? (get-in resp [:headers "ETag"]))))))
+
+(deftest ^:contract a-matching-validator-answers-304-without-a-body
+  (let [etag (get-in (static-asset-response) [:headers "ETag"])
+        resp (static-asset-response {:headers {"if-none-match" etag}})]
+    (is (= 304 (:status resp)))
+    (is (nil? (:body resp))))
+
+  (testing "a stale validator gets the bytes"
+    (let [resp (static-asset-response {:headers {"if-none-match" "\"not-the-current-one\""}})]
+      (is (= 200 (:status resp)))
+      (is (some? (:body resp))))))
+
+(deftest ^:contract the-validator-is-derived-from-content-not-metadata
+  ;; The ticket first proposed Content-Length + Last-Modified. Both survive a
+  ;; rebuild that produces a same-length file in the same second, so the 304
+  ;; path would keep serving the old asset. Two payloads of equal length must
+  ;; not share a validator.
+  (let [digest (fn [^String s]
+                 (#'reitit/digest-stream
+                  (java.io.ByteArrayInputStream. (.getBytes s "UTF-8"))))]
+    (is (not= (digest "console.log(1)") (digest "console.log(2)"))
+        "same length, different bytes — the validator must differ")
+    (is (= (digest "console.log(1)") (digest "console.log(1)"))
+        "and the same bytes must always give the same answer")))
+
+(deftest ^:contract a-metadata-only-revalidation-cannot-win-a-304
+  ;; Ring resolves a 304 from whichever validators the request carries, ORing
+  ;; the two checks unless both are present — so If-Modified-Since alone is
+  ;; decided on mtime and the content digest is never consulted. The population
+  ;; that matters is the one this ticket exists to un-stick: a browser holding
+  ;; an asset cached before any ETag existed has none to send.
+  (let [resp (static-asset-response
+              {:headers {"if-modified-since" "Sat, 01 Jan 2050 00:00:00 GMT"}})]
+    (is (= 200 (:status resp)) "a far-future If-Modified-Since is not honoured alone")
+    (is (some? (:body resp))))
+
+  (testing "sending both validators still resolves on the digest"
+    (let [etag (get-in (static-asset-response) [:headers "ETag"])]
+      (is (= 304 (:status (static-asset-response
+                           {:headers {"if-none-match"     etag
+                                      "if-modified-since" "Sat, 01 Jan 2050 00:00:00 GMT"}})))))))
+
+(deftest ^:contract a-head-carries-the-validator-its-get-would
+  ;; Ring answers a HEAD with a nil body, and the validator is a digest of the
+  ;; body — so a HEAD looked up as a HEAD would carry no ETag at all.
+  (let [resp (static-asset-response {:request-method :head})]
+    (is (= 200 (:status resp)))
+    (is (nil? (:body resp)))
+    (is (= (get-in (static-asset-response) [:headers "ETag"])
+           (get-in resp [:headers "ETag"])))))
+
+(deftest ^:contract dynamic-responses-are-left-alone
+  ;; The header belongs to assets. A route response must not inherit it.
+  (let [resp ((reitit/compile-routes simple-routes {})
+              {:request-method :get :uri "/api/items" :headers {}})]
+    (is (= 200 (:status resp)))
+    (is (nil? (get-in resp [:headers "Cache-Control"])))
+    (is (nil? (get-in resp [:headers "ETag"])))))
+
+;; A checkout serves assets as Files, so the packaged (jar) path below is
+;; exercised directly rather than through the fixture: in an uberjar
+;; `resource-request` hands back an InputStream, and that is where the stream
+;; handling and the digest cache live.
+
+(defn- counting-stream
+  "A stream that records whether it was closed."
+  [^String content closed]
+  (proxy [java.io.ByteArrayInputStream] [(.getBytes content "UTF-8")]
+    (close [] (reset! closed true) (proxy-super close))))
+
+(defn- packaged [content] {:status 200 :headers {} :body (java.io.ByteArrayInputStream.
+                                                          (.getBytes ^String content "UTF-8"))})
+
+(deftest ^:contract hashing-a-packaged-asset-closes-and-reopens-rather-than-buffering
+  ;; Reading the entry into a byte array would let each concurrent first request
+  ;; for a large asset allocate its full size. And the stream that was hashed is
+  ;; not the one served, so nothing else would ever close it — from an uberjar
+  ;; that leaks a jar entry handle per request.
+  (reset! @#'reitit/packaged-digests {})
+  (let [closed   (atom false)
+        reopened (java.io.ByteArrayInputStream. (.getBytes "console.log(1)" "UTF-8"))
+        resp     (#'reitit/cache-headers
+                  {:status 200 :headers {} :body (counting-stream "console.log(1)" closed)}
+                  "/bou389/packaged.js"
+                  (fn [] {:status 200 :headers {} :body reopened}))]
+    (is @closed "the stream that was hashed should be closed")
+    (is (some? (get-in resp [:headers "ETag"])) "and it should still have produced a digest")
+    (is (identical? reopened (:body resp))
+        "the body served is the reopened stream, not bytes held from the first read")))
+
+(deftest ^:contract a-remembered-digest-is-not-recomputed
+  ;; A jar entry cannot change while the archive is open, so re-reading it to
+  ;; answer a revalidation is pure cost — and a 304 carries no body, so without
+  ;; this every revalidation costs as much as serving the asset.
+  (reset! @#'reitit/packaged-digests {})
+  (let [reopens (atom 0)
+        fetch   #(#'reitit/cache-headers (packaged "console.log(1)") "/bou389/same.js"
+                                         (fn [] (swap! reopens inc) (packaged "console.log(1)")))
+        first-etag (get-in (fetch) [:headers "ETag"])
+        after-first @reopens
+        second-etag (get-in (fetch) [:headers "ETag"])]
+    (is (= first-etag second-etag) "the same path keeps the same validator")
+    (is (= 1 after-first) "the first request reopens once, for the body")
+    (is (= after-first @reopens) "the second must not read the entry again")))
+
+(deftest ^:security ^:unit encoded-spellings-share-one-digest-entry
+  ;; The cache is process-wide and filled from request paths. Keyed by the raw
+  ;; URI, /js/%66orms.js and /js/forms.js are one asset under two keys, and an
+  ;; unauthenticated caller can mint encodings without limit — each a fresh
+  ;; entry and a fresh full read.
+  (let [decode #(try (codec/url-decode (ring-request/path-info {:uri %})) (catch Exception _ nil))]
+    (is (= (decode "/js/forms.js") (decode "/js/%66orms.js") (decode "/js/f%6frms.js"))
+        "every spelling must resolve to the one path ring looks the resource up by")))
+
+(deftest ^:security ^:unit the-digest-cache-cannot-grow-without-bound
+  ;; Belt and braces for any alias the decoding does not collapse: the map is
+  ;; capped, so the worst an attacker gets is the hashing cost that existed
+  ;; before the cache did.
+  (reset! @#'reitit/packaged-digests {})
+  (dotimes [i (+ 50 @#'reitit/max-cached-digests)]
+    (#'reitit/cache-headers (packaged "x") (str "/js/" i "-" (random-uuid) ".js")
+                            (fn [] (packaged "x"))))
+  (is (<= (count @@#'reitit/packaged-digests) @#'reitit/max-cached-digests)
+      "the cache must stay bounded whatever paths are thrown at it"))
+
+(deftest ^:contract a-head-closes-the-body-it-drops
+  (let [closed (atom false)
+        resp   (#'reitit/drop-body-for-head
+                {:status 200 :headers {} :body (counting-stream "x" closed)}
+                {:request-method :head})]
+    (is @closed "the dropped stream should be closed")
+    (is (nil? (:body resp))))
+
+  (testing "a GET keeps its body, closed by the response writer as usual"
+    (let [closed (atom false)
+          body   (counting-stream "x" closed)
+          resp   (#'reitit/drop-body-for-head {:status 200 :headers {} :body body}
+                                              {:request-method :get})]
+      (is (not @closed))
+      (is (identical? body (:body resp))))))
+
+(deftest ^:contract shipped-nginx-config-does-not-override-the-asset-policy
+  ;; The middleware is only half the policy in a real deployment. The reference
+  ;; proxy config had a static-extension location setting `expires 30d` and
+  ;; `Cache-Control: public, immutable`, and nginx applies both to what it
+  ;; proxies — so the header the app had just set was overwritten on the way out
+  ;; and a returning browser still held a stale asset for 30 days. Fixing the
+  ;; middleware alone would have shipped nothing.
+  (let [conf-file (java.io.File. "resources/deploy/nginx/wagoe.conf")]
+    (is (.exists conf-file) "the reference nginx config should be where this looks for it")
+    (let [;; Comments explain why the policy is absent; only directives count.
+          directives (->> (str/split-lines (slurp conf-file))
+                          (map str/trim)
+                          (remove #(str/starts-with? % "#"))
+                          (str/join "\n"))]
+      (is (not (re-find #"(?i)expires\s" directives))
+          "no expires directive — it replaces the upstream Cache-Control")
+      (is (not (re-find #"(?i)immutable" directives))
+          "immutable is for content-hashed filenames, which these are not")
+      (is (not (re-find #"(?i)add_header\s+Cache-Control" directives))
+          "the app owns Cache-Control for its own assets"))))
