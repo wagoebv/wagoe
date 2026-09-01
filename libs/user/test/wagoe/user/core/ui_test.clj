@@ -247,8 +247,13 @@
     (let [form (ui/create-user-form)]
       (is (vector? form))
       ;; New structure: div with ID instead of class
-      (is (= :div#create-user-form (first form)))
-      (is (= [:h2 [:t :user/form-create-title]] (second form)))))
+      (is (= :div#create-user-form (first form)))))
+
+  (testing "leaves the heading to the page around it"
+    ;; The page header already renders this title as the h1, so an h2 here put
+    ;; it on screen twice (BOU-393).
+    (let [form (ui/create-user-form)]
+      (is (not (re-find #":h2" (str form))))))
 
   (testing "accepts data and errors parameters"
     (let [form (ui/create-user-form create-user-data validation-errors)]
@@ -257,7 +262,7 @@
 
   (testing "includes HTMX form attributes"
     (let [form (ui/create-user-form)
-          form-element (nth form 2)]
+          form-element (nth form 1)]
       (is (= :form (first form-element)))
       (let [attrs (second form-element)]
         ;; New URLs: /web/users
@@ -306,7 +311,18 @@
   (testing "renders errors the service reported against no particular field"
     (let [form (str (ui/create-user-form {} {:form ["Something the form must still say"]}))]
       (is (re-find #"Something the form must still say" form))
-      (is (re-find #"validation-errors" form)))))
+      (is (re-find #"validation-errors" form))))
+
+  (testing "a password error looks like every other field's error"
+    ;; It used to render in `.validation-errors`, the form-level style, so the
+    ;; password complaint arrived as a full-width panel next to an email
+    ;; complaint that was a line of small red text (BOU-393).
+    (let [form (str (ui/create-user-form {} {:password ["Password must be at least 8 characters"]
+                                             :email    ["Invalid email format"]}))]
+      (is (re-find #"Password must be at least 8 characters" form))
+      (is (re-find #"field-errors" form))
+      (is (not (re-find #"validation-errors" form))
+          "no form-level panel when every error belongs to a field"))))
 
 ;; =============================================================================
 ;; Success Message Component Tests  
