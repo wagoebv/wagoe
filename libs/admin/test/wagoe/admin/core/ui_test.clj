@@ -275,6 +275,16 @@
                                     {:type :instant}
                                     {:date-time-format "yyyy-MM-dd HH:mm z"}))))
 
+    (testing "a pattern that formats to nothing falls back rather than blanking the cell"
+      ;; `""` and an optional-only pattern format successfully and return an
+      ;; empty string. `""` is truthy, so it was accepted and the value vanished.
+      (is (= "2026-08-27 06:12"
+             (ui/render-field-value :created-at "2026-08-27T06:12:50Z" {:type :instant}
+                                    {:date-time-format ""})))
+      (is (= "2026-01-09"
+             (ui/render-field-value :birth-date "2026-01-09" {:type :date}
+                                    {:date-format "[HH:mm]"}))))
+
     (testing "textual patterns follow the supplied locale, not the JVM default"
       (is (= "27 augustus 2026"
              (ui/render-field-value :created-at "2026-08-27T06:12:50Z" {:type :instant}

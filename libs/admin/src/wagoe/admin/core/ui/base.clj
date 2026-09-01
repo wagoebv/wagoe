@@ -129,13 +129,20 @@
                   (with-locale default locale)])))
 
 (defn- safe-format
-  "Format `temporal`, or nil when it is missing or the pattern asks it for a
-   field it does not have (a zone pattern against a zone-less value)."
+  "Format `temporal`, or nil when it is missing, when the pattern asks it for a
+   field it does not have (a zone pattern against a zone-less value), or when it
+   produces nothing at all.
+
+   Blank output counts as failure: `\"\"` and an optional-only pattern such as
+   `[HH:mm]` against a date format successfully and return an empty string, and
+   an empty cell hides the value rather than misformatting it."
   [^DateTimeFormatter fmt temporal]
   (when (and fmt temporal)
-    (try
-      (.format fmt temporal)
-      (catch DateTimeException _ nil))))
+    (let [formatted (try
+                      (.format fmt temporal)
+                      (catch DateTimeException _ nil))]
+      (when-not (str/blank? formatted)
+        formatted))))
 
 (defn- ->zoned
   "Coerce a stored timestamp that carries an instant into `zone`."
