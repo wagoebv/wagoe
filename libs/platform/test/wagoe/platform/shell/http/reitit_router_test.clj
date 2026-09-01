@@ -582,7 +582,31 @@
     (is (some? (reitit/compile-routes
                 [["/a" {:get {:handler identity}}]
                  ["/b" {:get {:handler identity}}]]
-                {})))))
+                {}))))
+
+  ;; BOU-392: the literal that settles a pair is not always in the last
+  ;; segment. `search` beats `:entity` at the third segment, and once it has,
+  ;; what the fourth and fifth segments are named cannot bring the ambiguity
+  ;; back — Reitit never reaches them undecided.
+  (testing "a literal decides the pair from the segment it appears in"
+    (let [answer  (fn [who] {:get {:handler (fn [_] {:status 200 :body {:who who}})}})
+          handler (reitit/compile-routes
+                   [["/web/admin/search/:index-id"   (answer "search")]
+                    ["/web/admin/:entity/:id"        (answer "admin")]
+                    ["/web/admin/:entity/:id/:field" (answer "admin-field")]]
+                   {})]
+      (testing "the pair builds at all"
+        (is (some? handler)))
+
+      (testing "and the literal segment is the one that answers"
+        (is (= "search" (:who (response-body-as-map
+                               (handler {:request-method :get
+                                         :uri "/web/admin/search/orders"}))))))
+
+      (testing "while the parameter still takes everything else"
+        (is (= "admin" (:who (response-body-as-map
+                              (handler {:request-method :get
+                                        :uri "/web/admin/users/42"})))))))))
 
 (deftest ^:unit routes-nothing-decides-between-fail-the-boot
   ;; Detection was off entirely, so these built a router and the first one
@@ -608,6 +632,15 @@
                  (reitit/compile-routes
                   [["/files/*path" {:get {:handler identity}}]
                    ["/files/:name" {:get {:handler identity}}]]
+                  {}))))
+
+  (testing "and an earlier deciding literal does not excuse a later catch-all"
+    ;; `search` settles the third segment, but `*rest` still swallows whatever
+    ;; the other route would have matched below it (BOU-392).
+    (is (thrown? clojure.lang.ExceptionInfo
+                 (reitit/compile-routes
+                  [["/web/admin/search/*rest" {:get {:handler identity}}]
+                   ["/web/admin/:entity/:id"  {:get {:handler identity}}]]
                   {})))))
 
 (deftest ^:unit an-application-can-still-choose-its-own-conflict-policy

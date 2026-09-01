@@ -281,24 +281,35 @@
    Reitit matches the literal first, always, so which handler runs is not in
    question — the pair is reported only because the paths overlap.
 
-   False when both sides are parameters in the same position — `/users/:id`
+   False when no position pits a literal against a parameter — `/users/:id`
    and `/users/:uid` are the same route written twice, and which one answers
    depends on the order they happened to be concatenated in. That is the case
    worth failing a boot over.
 
-   Catch-alls count as parameters and so are never treated as decided: `*path`
-   swallowing a sibling is exactly the kind of accident this should report."
+   One such position is enough, and it need not be the last (BOU-392). Reitit
+   walks the path a segment at a time and takes the literal branch before the
+   parameter one, so `/web/admin/search/:index-id` and `/web/admin/:entity/:id`
+   are settled at `search` — that the fourth segments are then two differently
+   named parameters cannot reintroduce a choice Reitit has already made. The
+   earlier reading asked every segment to be equal-or-literal-beside-parameter,
+   which failed that pair and stopped any application running both the admin
+   and the search module from booting at all.
+
+   Catch-alls are never treated as decided, wherever they sit: `*path`
+   swallows everything below it, so a literal earlier in the path settles
+   which branch is entered without settling how much of the request it eats."
   [path-a path-b]
   (let [a (str/split path-a #"/")
         b (str/split path-b #"/")]
     (and (= (count a) (count b))
-         (every? (fn [[x y]]
-                   (or (= x y)
-                       ;; Exactly one side parameterised — the literal wins.
-                       (and (not= (parameter-segment? x) (parameter-segment? y))
-                            (not (str/starts-with? x "*"))
-                            (not (str/starts-with? y "*")))))
-                 (map vector a b)))))
+         (not-any? #(str/starts-with? % "*") (concat a b))
+         (boolean
+          (some (fn [[x y]]
+                  ;; Exactly one side parameterised — the literal wins here,
+                  ;; and with it the pair.
+                  (and (not= x y)
+                       (not= (parameter-segment? x) (parameter-segment? y))))
+                (map vector a b))))))
 
 (defn- report-ambiguous-routes
   "Reitit's `:conflicts` handler: throw on pairs precedence does not decide.
