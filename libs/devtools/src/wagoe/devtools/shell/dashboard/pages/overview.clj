@@ -10,6 +10,26 @@
   #{"db-context" "http-server" "http-handler" "router" "logging" "metrics"
     "error-reporting" "cache" "dashboard" "i18n"})
 
+(defn adapter-label
+  "A readable name for the database adapter — \"PostgreSQL\", not its class.
+
+   On a running system `(:adapter db-ctx)` is the adapter record rather than a
+   keyword, so the non-keyword branch is the normal path and not the fallback
+   it looks like. `(str (type x))` there put
+   `class wagoe.platform.shell.adapters.database.postgresql.core.PostgreSQLAdapter`
+   on the dashboard, three lines of it (BOU-396).
+
+   The record is named after the database it speaks to, so its simple name
+   without the `Adapter` suffix is the answer."
+  [a]
+  (cond
+    (nil? a)     nil
+    (keyword? a) (name a)
+    :else        (let [simple (-> a type .getSimpleName)]
+                   (if (str/ends-with? simple "Adapter")
+                     (subs simple 0 (- (count simple) (count "Adapter")))
+                     simple))))
+
 (defn- active-modules [sys]
   (when sys
     (->> (keys sys)
@@ -41,9 +61,7 @@
                        handler  (conj {:name "http-handler" :status :running})
                        db-ctx   (conj {:name "db-context" :status :running})
                        true     (conj {:name "dashboard" :status :running})))
-        adapter  (when db-ctx
-                   (let [a (:adapter db-ctx)]
-                     (if (keyword? a) (name a) (str (type a)))))
+        adapter  (when db-ctx (adapter-label (:adapter db-ctx)))
         host     (when db-ctx (or (get-in db-ctx [:options :host])
                                   (get-in db-ctx [:host])
                                   "localhost"))]
