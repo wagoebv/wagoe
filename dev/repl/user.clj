@@ -194,8 +194,15 @@
       (let [cfg        (config)
             http-port  (actual-http-port)
             http-host  (or (get-in cfg [:wagoe/http :host]) "localhost")
-            admin-cfg  (get cfg :wagoe/admin)
-            admin-path (or (:base-path admin-cfg) "/admin")
+            ;; The prefix the router actually mounted admin under, read off the
+            ;; running component. `(get cfg :wagoe/admin)` was always nil — cfg
+            ;; is the ig-config, where the module appears as
+            ;; `:wagoe/admin-service` and `:wagoe/admin-routes` — so the
+            ;; `"/admin"` fallback was the normal path, and it 404s (BOU-394).
+            ;; nil when admin is not running, and then no line is printed:
+            ;; `project-repl/status-text` reached the same conclusion, that a
+            ;; guessed URL is worse than none.
+            admin-path (get-in sys [:wagoe/admin-routes :web-prefix])
             base-url   (str "http://" (if (= http-host "0.0.0.0") "localhost" http-host)
                             ":" http-port)
             components (count sys)
@@ -209,7 +216,7 @@
                   {:components     components
                    :errors         0
                    :web-url        base-url
-                   :admin-url      (str base-url admin-path)
+                   :admin-url      (when admin-path (str base-url admin-path))
                    :nrepl-port     7888
                    :modules        modules
                    :guidance-level level}))))))
