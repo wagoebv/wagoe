@@ -245,10 +245,80 @@
       (is (= "not-a-timestamp"
              (ui/render-field-value :created-at "not-a-timestamp" {:type :instant}))))
 
+    (testing "a zone-less timestamp is reformatted where it stands"
+      ;; H2 via next.jdbc's read-as-local, and a SQLite TEXT column, both yield
+      ;; a value with no zone. They used to fall through to the raw passthrough
+      ;; — the exact bug BOU-382 fixes. Nothing is shifted: the wall clock is
+      ;; all the value carries.
+      (is (= "2026-08-27 06:12"
+             (ui/render-field-value :created-at
+                                    (java.time.LocalDateTime/parse "2026-08-27T06:12:50")
+                                    {:type :instant})))
+      (is (= "2026-08-27 06:12"
+             (ui/render-field-value :created-at "2026-08-27 06:12:50" {:type :instant}))))
+
+    (testing "an unparseable configured pattern falls back instead of throwing"
+      ;; `ofPattern` throws on an unknown pattern letter, from a core namespace,
+      ;; once per cell — one typo in config.edn would 500 the whole list page.
+      (is (= "2026-08-27 06:12"
+             (ui/render-field-value :created-at "2026-08-27T06:12:50Z" {:type :instant}
+                                    {:date-time-format "yyyy-MM-dd bb"}))))
+
+    (testing "a pattern the value cannot satisfy falls back to the default pattern"
+      ;; `yyyy-MM-dd HH:mm z` compiles, but a zone-less LocalDateTime has no
+      ;; zone to print. Formatting it threw a DateTimeException that dropped the
+      ;; cell to the raw database value — the bug BOU-382 fixes, reachable
+      ;; through a perfectly legal config.
+      (is (= "2026-08-27 06:12"
+             (ui/render-field-value :created-at
+                                    (java.time.LocalDateTime/parse "2026-08-27T06:12:50")
+                                    {:type :instant}
+                                    {:date-time-format "yyyy-MM-dd HH:mm z"}))))
+
+    (testing "a pattern that formats to nothing falls back rather than blanking the cell"
+      ;; `""` and an optional-only pattern format successfully and return an
+      ;; empty string. `""` is truthy, so it was accepted and the value vanished.
+      (is (= "2026-08-27 06:12"
+             (ui/render-field-value :created-at "2026-08-27T06:12:50Z" {:type :instant}
+                                    {:date-time-format ""})))
+      (is (= "2026-01-09"
+             (ui/render-field-value :birth-date "2026-01-09" {:type :date}
+                                    {:date-format "[HH:mm]"}))))
+
+    (testing "textual patterns follow the supplied locale, not the JVM default"
+      (is (= "27 augustus 2026"
+             (ui/render-field-value :created-at "2026-08-27T06:12:50Z" {:type :instant}
+                                    {:date-time-format "dd MMMM yyyy"
+                                     :locale (java.util.Locale/forLanguageTag "nl")})))
+      (is (= "27 August 2026"
+             (ui/render-field-value :created-at "2026-08-27T06:12:50Z" {:type :instant}
+                                    {:date-time-format "dd MMMM yyyy"
+                                     :locale (java.util.Locale/forLanguageTag "en")}))))
+
     (testing "Date values"
       (let [result (ui/render-field-value :birth-date "2026-01-09" {:type :date})]
         (is (string? result))
         (is (= "2026-01-09" result))))
+
+    (testing "the configured date pattern applies to date-only values"
+      ;; `:date-format` was inert: every realistic date shape failed the
+      ;; instant coercion and took the raw passthrough (BOU-382 follow-up).
+      (doseq [[label value] [["ISO string"  "2026-01-09"]
+                             ["LocalDate"   (java.time.LocalDate/parse "2026-01-09")]
+                             ["java.sql.Date" (java.sql.Date/valueOf "2026-01-09")]]]
+        (is (= "09/01/2026"
+               (ui/render-field-value :birth-date value {:type :date}
+                                      {:date-format "dd/MM/yyyy"}))
+            (str "should format a " label))))
+
+    (testing "a date is not moved across midnight by the display zone"
+      ;; A date carries no zone; rendering UTC midnight in New York would show
+      ;; the previous day.
+      (is (= "2026-01-09"
+             (ui/render-field-value :birth-date
+                                    (java.sql.Timestamp/from (Instant/parse "2026-01-09T00:00:00Z"))
+                                    {:type :date}
+                                    {:zone-id (java.time.ZoneId/of "America/New_York")}))))
 
     (testing "UUID values"
       (let [uuid (UUID/randomUUID)
@@ -865,6 +935,48 @@
 
         ;; Should have create title i18n key
         (is (str/includes? (str page) ":admin/page-create-title"))))))
+
+(def ^:private sample-relationship
+  {:label         "Order Items"
+   :entity        :order-items
+   :fields        [:sku :created-at]
+   :entity-config {:fields {:sku        {:type :string}
+                            :created-at {:type :instant}}}})
+
+(def ^:private sample-related-records
+  [{:id 1 :sku "ABC-1" :created-at "2026-08-27T06:12:50.459979Z"}])
+
+(deftest ^:unit related-records-table-test
+  ;; The has-many table on a detail page printed whatever the database handed
+  ;; back, the same bug the list table had (BOU-382).
+  (testing "cells render by field type, not as the raw stored value"
+    (let [html (str (ui/related-records-table sample-relationship sample-related-records))]
+      (is (str/includes? html "2026-08-27 06:12"))
+      (is (not (str/includes? html "2026-08-27T06:12:50.459979Z")))
+      (is (str/includes? html "ABC-1") "other field types are untouched")))
+
+  (testing "the display options reach the cells"
+    (let [html (str (ui/related-records-table sample-relationship sample-related-records
+                                              {:date-time-format "yyyy-MM-dd HH:mm:ss"
+                                               :zone-id (java.time.ZoneId/of "Europe/Amsterdam")}))]
+      (is (str/includes? html "2026-08-27 08:12:50"))))
+
+  (testing "a missing value still renders the placeholder"
+    (let [html (str (ui/related-records-table sample-relationship
+                                              [{:id 1 :sku nil :created-at nil}]))]
+      (is (str/includes? html "—"))))
+
+  (testing "a relationship without an entity config still renders"
+    (let [html (str (ui/related-records-table (dissoc sample-relationship :entity-config)
+                                              sample-related-records))]
+      (is (str/includes? html "ABC-1")))))
+
+(deftest ^:unit entity-detail-page-threads-display-to-related-tables-test
+  (let [page (ui/entity-detail-page :users sample-entity-config sample-record
+                                    nil sample-permissions
+                                    {:related-records [[sample-relationship sample-related-records]]
+                                     :display         {:date-time-format "yyyy-MM-dd HH:mm:ss"}})]
+    (is (str/includes? (str page) "2026-08-27 06:12:50"))))
 
 (deftest ^:unit entity-new-page-test
   (testing "Entity creation page (convenience wrapper)"

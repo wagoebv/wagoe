@@ -632,6 +632,38 @@
                                           :where [:= :id original-id]})]
             (is (= original-id (:id updated)))))))))
 
+(deftest ^:contract create-entity-list-page-formats-timestamps-test
+  (testing "the list page the create handler re-renders honours the configured pattern"
+    ;; The handler renders the list itself rather than redirecting to it, and
+    ;; did so without the display options — so the row just created showed the
+    ;; raw database timestamp until the next refresh (BOU-382).
+    (let [config          (-> admin-config
+                              (assoc-in [:entities :test-users :list-fields] [:email :created-at])
+                              (assoc :date-time-format "yyyy-MM-dd HH:mm:ss"))
+          stub-service    (reify admin-ports/IAdminService
+                            (validate-entity-data [_ _ data] {:valid? true :data data})
+                            (create-entity [_ _ data] data)
+                            (list-entities [_ _ _]
+                              {:records     [{:id         (UUID/randomUUID)
+                                              :email      "new@example.com"
+                                              :created-at (Instant/parse "2026-08-27T06:12:50Z")}]
+                               :total-count 1
+                               :page-size   50
+                               :page-number 1}))
+          schema-provider (schema-repo/create-schema-repository *db-ctx* config)
+          handler         (admin-http/create-entity-handler stub-service schema-provider config)
+          request         (make-request :post "/web/admin/test-users" admin-user
+                                        {:path {:entity "test-users"}
+                                         :form {"email" "new@example.com"
+                                                "name" "New User"
+                                                "password-hash" "hash123"}})
+          body            (let [b (:body (handler request))]
+                            (if (vector? b) (ui-components/render-html b) (str b)))]
+      (is (not (str/includes? body "2026-08-27T06:12:50Z"))
+          "the raw stored value must not reach the page")
+      (is (re-find #"2026-08-2[678] \d{2}:\d{2}:50" body)
+          "rendered in the configured pattern, in the server's zone"))))
+
 (deftest ^:contract ^:security create-entity-error-flash-no-leak-test
   (testing "raw exception during create never echoes its message to the client (BOU-182)"
     (let [secret          "SECRET-DB-DETAIL-XYZ-123"

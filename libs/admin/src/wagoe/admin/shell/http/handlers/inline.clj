@@ -130,7 +130,7 @@
           ; Return updated cell HTML with success indicator
           (-> (support/html-response request
                                      (admin-ui/render-inline-edit-cell entity-name id field new-value field-config
-                                                                       (support/display-options config)))
+                                                                       (support/display-options config request)))
               (ring-response/header "HX-Trigger" "entityUpdated")))
 
         (catch Exception e
@@ -171,4 +171,4 @@
       ; Return original cell HTML
       (support/html-response request
                              (admin-ui/render-inline-edit-cell entity-name id field current-value field-config
-                                                               (support/display-options config))))))
+                                                               (support/display-options config request))))))

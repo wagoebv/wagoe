@@ -382,12 +382,16 @@
    When :editable true, adds an Edit link per row.
 
    Args:
-     relationship: {:label \"Order Items\" :fields [...] :editable true}
+     relationship: {:label \"Order Items\" :fields [...] :editable true
+                    :entity-config {...}} — the related entity's config, which
+                   gives each cell its field type
      records:      vector of record maps (kebab-case keys)
+     display:      Optional display options (zone/date patterns) for value
+                   rendering
 
    Returns:
      Hiccup table structure"
-  [relationship records]
+  [relationship records & [display]]
   (let [fields    (:fields relationship)
         label     (:label relationship)
         editable? (:editable relationship)
@@ -408,7 +412,11 @@
           (for [record records]
             [:tr
              (for [f fields]
-               [:td (or (get record f) "—")])
+               ;; Rendered by field type, like a list table: a timestamp here
+               ;; used to print as the raw database value (BOU-382).
+               [:td (if-some [v (get record f)]
+                      (base/render-field-value f v (get-in relationship [:entity-config :fields f]) display)
+                      "—")])
              (when editable?
                [:td
                 [:a.button.secondary
@@ -426,7 +434,7 @@
      record: Entity record (nil for create)
      errors: Optional validation errors
      permissions: Permission flags
-     opts: Optional map with :flash and :related-records
+     opts: Optional map with :flash, :related-records and :display
 
    Returns:
      Hiccup page structure"
@@ -510,7 +518,7 @@
      (entity-form entity-name entity-config record errors permissions list-url)
      (when-let [related-records (:related-records opts)]
        (for [[rel records] related-records]
-         (related-records-table rel records)))]))
+         (related-records-table rel records (:display opts))))]))
 
 (defn entity-new-page
   "Entity creation page (convenience wrapper).

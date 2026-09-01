@@ -41,7 +41,7 @@
                                :id id})))
 
           permissions (permissions/get-entity-permissions user entity-name entity-config)
-          ctx         (support/build-entity-detail-opts admin-service schema-provider entity-name entity-config record request)]
+          ctx         (support/build-entity-detail-opts admin-service schema-provider config entity-name entity-config record request)]
 
       (support/html-response request
                              (admin-ui/admin-layout

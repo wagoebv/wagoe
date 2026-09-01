@@ -9,8 +9,9 @@
             [wagoe.shared.ui.core.components :as ui]
             [wagoe.shared.ui.core.table :as table-ui]
             [clojure.string :as str])
-  (:import (java.time ZoneId)
-           (java.time.format DateTimeFormatter)))
+  (:import (java.time DateTimeException Instant LocalDate LocalDateTime ZoneId ZonedDateTime)
+           (java.time.format DateTimeFormatter DateTimeParseException)
+           (java.util Locale)))
 
 ;; =============================================================================
 ;; URL Helpers
@@ -83,36 +84,126 @@
 
 ;; The list table showed whatever the database handed back — for a timestamp
 ;; column that is `2026-08-27T06:12:50.459979Z`, microseconds and all (BOU-382).
-;; Patterns are overridable because the application configures them; UTC is the
-;; fallback zone rather than the machine's, which core may not read.
+;; Patterns are overridable per render because the application configures them;
+;; UTC is the fallback zone rather than the machine's, which core may not read.
 (def default-instant-format "yyyy-MM-dd HH:mm")
 (def default-date-format "yyyy-MM-dd")
 
+(def ^:private utc (ZoneId/of "UTC"))
+
+;; `DateTimeFormatter` is immutable, so the fallbacks are built once at load.
+;; A configured pattern is compiled per render rather than cached: a cache here
+;; would be process-lifetime mutable state in core, keyed on caller-supplied
+;; data, and parsing a pattern costs microseconds against a page of cells.
+(def ^:private default-instant-formatter (DateTimeFormatter/ofPattern default-instant-format))
+(def ^:private default-date-formatter (DateTimeFormatter/ofPattern default-date-format))
+
 (defn- display-zone
   ^ZoneId [display]
-  (or (:zone-id display) (ZoneId/of "UTC")))
+  (or (:zone-id display) utc))
 
-(defn- format-stored
-  "Render a stored timestamp in `display`'s zone and `pattern`.
+(defn- with-locale
+  ^DateTimeFormatter [^DateTimeFormatter fmt ^Locale locale]
+  (if locale (.withLocale fmt locale) fmt))
 
-   The value is whatever JDBC produced — `list-entities` does no read-side
-   coercion, so it is a String, java.sql.Timestamp or OffsetDateTime depending
-   on the driver. Anything unparseable is passed through as-is rather than
-   blanked, so a format nobody anticipated stays visible."
-  [value display pattern]
-  (if-let [instant (tc/string->instant value)]
-    (.format (DateTimeFormatter/ofPattern pattern) (.atZone instant (display-zone display)))
-    (str value)))
+(defn- compile-formatter
+  "An unknown pattern letter yields nil rather than an IllegalArgumentException
+   — core must not throw, and a typo in `config.edn` should cost a column its
+   formatting rather than 500 the whole list page. A pattern that is not a
+   string is not a pattern."
+  ^DateTimeFormatter [pattern ^Locale locale]
+  (when (string? pattern)
+    (try
+      (with-locale (DateTimeFormatter/ofPattern pattern) locale)
+      (catch IllegalArgumentException _ nil))))
+
+(defn- formatters
+  "The formatters to try for `pattern-key`, the configured one first. The
+   default is kept as a second chance rather than only as a compile-time
+   fallback: a pattern can be valid and still be unable to format the value it
+   is handed (a zone pattern against a zone-less timestamp), and dropping
+   straight to the raw database value there is the bug BOU-382 fixes."
+  [display pattern-key ^DateTimeFormatter default]
+  (let [locale (:locale display)]
+    (remove nil? [(compile-formatter (get display pattern-key) locale)
+                  (with-locale default locale)])))
+
+(defn- safe-format
+  "Format `temporal`, or nil when it is missing, when the pattern asks it for a
+   field it does not have (a zone pattern against a zone-less value), or when it
+   produces nothing at all.
+
+   Blank output counts as failure: `\"\"` and an optional-only pattern such as
+   `[HH:mm]` against a date format successfully and return an empty string, and
+   an empty cell hides the value rather than misformatting it."
+  [^DateTimeFormatter fmt temporal]
+  (when (and fmt temporal)
+    (let [formatted (try
+                      (.format fmt temporal)
+                      (catch DateTimeException _ nil))]
+      (when-not (str/blank? formatted)
+        formatted))))
+
+(defn- ->zoned
+  "Coerce a stored timestamp that carries an instant into `zone`."
+  ^ZonedDateTime [value ^ZoneId zone]
+  (when-let [^Instant inst (tc/string->instant value)]
+    (.atZone inst zone)))
+
+(defn- ->naive
+  "Coerce a zone-less stored timestamp: the LocalDateTime a driver reading
+   TIMESTAMP columns as local hands back, or the `2026-08-27 06:12:50` string
+   SQLite keeps in a TEXT column. Nothing is shifted — a value with no zone is
+   reformatted where it stands rather than moved into one."
+  ^LocalDateTime [value]
+  (cond
+    (instance? LocalDateTime value) value
+
+    (string? value)
+    (try
+      (LocalDateTime/parse (str/replace-first value " " "T"))
+      (catch DateTimeParseException _ nil))))
+
+(defn- ->local-date
+  "Coerce a stored date to a LocalDate. A date carries no zone, so a timestamp
+   shape is read at UTC: reading `2026-01-09T00:00Z` in a zone west of
+   Greenwich would move it to the 8th."
+  ^LocalDate [value]
+  (cond
+    (instance? LocalDate value)     value
+    (instance? LocalDateTime value) (.toLocalDate ^LocalDateTime value)
+    (instance? java.sql.Date value) (.toLocalDate ^java.sql.Date value)
+
+    :else
+    (or (when (string? value)
+          (try
+            (LocalDate/parse value)
+            (catch DateTimeParseException _ nil)))
+        (some-> (->naive value) (.toLocalDate))
+        (some-> (->zoned value utc) (.toLocalDate)))))
 
 (defn format-instant
-  "A stored timestamp, formatted for display."
+  "Render a stored timestamp for display, in `display`'s zone and pattern.
+
+   The value is whatever JDBC produced — `list-entities` does no read-side
+   coercion, so it is a String, java.sql.Timestamp, OffsetDateTime or
+   LocalDateTime depending on the driver. Anything unparseable is passed
+   through as-is rather than swallowed, so a format nobody anticipated stays
+   visible."
   [value display]
-  (format-stored value display (or (:date-time-format display) default-instant-format)))
+  (let [temporal (or (->zoned value (display-zone display))
+                     (->naive value))]
+    (or (some #(safe-format % temporal)
+              (formatters display :date-time-format default-instant-formatter))
+        (str value))))
 
 (defn format-date
-  "A stored date, formatted for display."
+  "Render a stored date for display. Same passthrough rule as `format-instant`."
   [value display]
-  (format-stored value display (or (:date-format display) default-date-format)))
+  (let [temporal (->local-date value)]
+    (or (some #(safe-format % temporal)
+              (formatters display :date-format default-date-formatter))
+        (str value))))
 
 (defn render-field-value
   "Render field value for display in table or detail view.
