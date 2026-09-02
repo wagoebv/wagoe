@@ -122,15 +122,20 @@
 (defn status-text
   "The startup dashboard, or nil when nothing is running.
 
-   No admin URL: `ig-config` never emits a `:wagoe/admin` key — the admin
-   module arrives as `:wagoe/admin-service` and `:wagoe/admin-routes` — so
-   there is nothing here to read a base path from, and a guessed URL that 404s
-   is worse than none."
+   The admin URL comes off the running system, not the config: `ig-config`
+   never emits a `:wagoe/admin` key — the admin module arrives as
+   `:wagoe/admin-service` and `:wagoe/admin-routes` — so reading a base path
+   from the config yields nothing, and a guessed URL that 404s is worse than
+   none. `:wagoe/admin-routes` carries the `:web-prefix` the router actually
+   mounted, which is the question answered without guessing. Absent when the
+   admin module is not running, and then the line is not printed (BOU-394)."
   [{:keys [system base-url]}]
   (when system
     (guidance/format-startup-dashboard
      {:components (count system)
       :errors     0
       :web-url    base-url
+      :admin-url  (when-let [prefix (get-in system [:wagoe/admin-routes :web-prefix])]
+                    (str base-url prefix))
       :nrepl-port 7888
       :modules    (module-names system)})))
