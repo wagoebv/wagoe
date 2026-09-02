@@ -54,7 +54,11 @@
   (doseq [k [:wagoe/settings :wagoe/logging :wagoe/metrics :wagoe/tracing
              :wagoe/error-reporting :wagoe/db-context :wagoe/router
              :wagoe/http-server :wagoe/http-handler :wagoe/i18n
-             :wagoe/i18n-http-middleware :wagoe/email]]
+             :wagoe/i18n-http-middleware :wagoe/email
+             ;; devtools' own components, present whenever the tooling is on
+             ;; the classpath — a developer asking which modules are running
+             ;; did not add the tool they are asking through (BOU-399).
+             :wagoe/dashboard :wagoe/dev-error-enricher]]
     (is (= [] (sut/module-names {k {}})) (str k " is plumbing"))))
 
 (deftest ^:unit the-dashboard-shows-the-url-and-the-modules
