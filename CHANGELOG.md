@@ -121,6 +121,15 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **An application using both the admin and the search module starts again**
+  (BOU-392). Their routes overlap — `/web/admin/search/:index-id` against
+  admin's generic `/web/admin/:entity/:id` — and the boot-time conflict check
+  refused the pair, so the whole application failed to start. Reitit settles
+  those at `search`, taking the literal segment before the parameter one; the
+  check now decides a pair at the first segment that separates them instead of
+  requiring every segment to. Genuinely ambiguous pairs and catch-alls still
+  fail the boot.
+
 - **Admin tables reliably format date and timestamp values** (BOU-382), including
   date-only/zone-less shapes. Set `:date-time-format`; invalid patterns fall back.
 - **Static assets revalidate instead of caching blind** (BOU-389). No asset sent
@@ -128,6 +137,13 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **Form validation errors reach the screen** (BOU-381). htmx discarded the 400
   that carried them, so pressing Create or Save did nothing at all.
+
+- **…and they arrive as one kind of message** (BOU-393). On the create-user and
+  registration forms a password error rendered in the form-level panel while the
+  email error beside it was a line of inline text, so a single submission
+  produced two unrelated styles of complaint. The create-user form is also
+  centred rather than pinned to the left edge of the page, and no longer repeats
+  the page header's title beneath it.
 
 - **Two tests bound a port they had already released** (BOU-377), failing the
   full suite intermittently. `bb test:all` now names what exited non-zero.
@@ -147,6 +163,16 @@ for what is public API, what is internal, and how deprecations are announced.
   The Environment panel read `class wagoe.platform.shell.adapters.database.` …
   `PostgreSQLAdapter @ localhost`, over three lines. It now reads
   `PostgreSQL @ localhost`.
+
+- **The dev dashboard sees the system you actually started** (BOU-400). It read
+  the running system from `integrant.repl.state/system`, which only a REPL
+  `(go)` fills, so every ordinary server start — `clojure -M:run server`,
+  `bb quickstart`, a generated project — left it looking at the three
+  components it could reach through its own wiring. It reported those as
+  "3 components · all healthy" while forty more ran unseen. `wagoe.main` now
+  starts through `wiring/start!`, which records the system, and the dashboard
+  reads that when there is no REPL. Its module list comes from the same place
+  as `(status)`'s, so the two no longer disagree.
 
 - **`bb scaffold field`/`endpoint`/`adapter` fail when the module is not there**
   (BOU-364). `field` left a migration behind for a column its schema would reject.

@@ -1722,9 +1722,14 @@ button.full-width {
   color: var(--color-primary-600);
 }
 
+/* Centred, not merely narrow: capping the width without the auto margins left
+   a 600px form pinned to the left edge of a full-width page, so most of a
+   desktop viewport read as missing content rather than as whitespace
+   (BOU-393). */
 .user-detail-page form,
 .create-user-page form {
   max-width: 600px;
+  margin-inline: auto;
 }
 
 /* =============================================================================
