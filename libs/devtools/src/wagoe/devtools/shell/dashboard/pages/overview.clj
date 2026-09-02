@@ -3,26 +3,56 @@
             [wagoe.devtools.shell.dashboard.components :as c]
             [wagoe.devtools.shell.dashboard.pages.errors :as dashboard-errors]
             [wagoe.devtools.shell.repl :as devtools-repl]
+            [wagoe.devtools.core.project-repl :as project-repl]
+            [wagoe.platform.system :as platform-system]
             [clojure.string :as str]
             [integrant.repl.state :as state]))
 
-(def ^:private infra-keys
-  #{"db-context" "http-server" "http-handler" "router" "logging" "metrics"
-    "error-reporting" "cache" "dashboard" "i18n"})
+;; An `infra-keys` blocklist lived here and `active-modules` reported every key
+;; that was not in it, by raw name — the third copy of that idea in the tree,
+;; and the same one BOU-319 replaced with `project-repl/module-names`. It was
+;; invisible while this page could not see the system at all: with `sys` nil it
+;; fell through to the route-derived list. Reading the real system (BOU-400)
+;; made it answer, and it answered with 34 "modules" that were the Integrant
+;; keys of about eight (BOU-399).
+
+(defn adapter-label
+  "A readable name for the database adapter — \"PostgreSQL\", not its class.
+
+   On a running system `(:adapter db-ctx)` is the adapter record rather than a
+   keyword, so the non-keyword branch is the normal path and not the fallback
+   it looks like. `(str (type x))` there put
+   `class wagoe.platform.shell.adapters.database.postgresql.core.PostgreSQLAdapter`
+   on the dashboard, three lines of it (BOU-396).
+
+   The record is named after the database it speaks to, so its simple name
+   without the `Adapter` suffix is the answer."
+  [a]
+  (cond
+    (nil? a)     nil
+    (keyword? a) (name a)
+    :else        (let [simple (-> a type .getSimpleName)]
+                   (if (str/ends-with? simple "Adapter")
+                     (subs simple 0 (- (count simple) (count "Adapter")))
+                     simple))))
 
 (defn- active-modules [sys]
   (when sys
-    (->> (keys sys)
-         (filter keyword?)
-         (map name)
-         (remove infra-keys)
-         sort)))
+    (seq (project-repl/module-names sys))))
 
 (defn- system-data
   "Gather system info. Uses injected context refs when available,
-   falls back to integrant.repl.state/system for supplementary data."
+   falls back to the running system for supplementary data.
+
+   Two places hold that system and only one of them is a REPL:
+   `integrant.repl.state/system` is filled by `(go)`, `platform-system/running` by any
+   start through `wagoe.main`. Reading only the first meant every ordinary
+   server start left `sys` nil, and the component list fell back to the three
+   this page can reach through its own Integrant refs — reported as
+   \"3 components · all healthy\" on a system of forty-three (BOU-400)."
   [ctx]
-  (let [sys      (try state/system (catch Exception _ nil))
+  (let [sys      (or (try state/system (catch Exception _ nil))
+                     (try (platform-system/running) (catch Exception _ nil)))
         handler  (or (:http-handler ctx) (when sys (get sys :wagoe/http-handler)))
         db-ctx   (or (:db-context ctx) (when sys (get sys :wagoe/db-context)))
         routes   (when handler
@@ -41,9 +71,7 @@
                        handler  (conj {:name "http-handler" :status :running})
                        db-ctx   (conj {:name "db-context" :status :running})
                        true     (conj {:name "dashboard" :status :running})))
-        adapter  (when db-ctx
-                   (let [a (:adapter db-ctx)]
-                     (if (keyword? a) (name a) (str (type a)))))
+        adapter  (when db-ctx (adapter-label (:adapter db-ctx)))
         host     (when db-ctx (or (get-in db-ctx [:options :host])
                                   (get-in db-ctx [:host])
                                   "localhost"))]

@@ -175,6 +175,21 @@ for what is public API, what is internal, and how deprecations are announced.
   dark variant was not lighter than the light one, and `:variant :icon` was
   byte-identical to the full lockup. `bb check:no-boundary` cannot see artwork.
 
+- **The dev dashboard names your database instead of its Java class** (BOU-396).
+  The Environment panel read `class wagoe.platform.shell.adapters.database.` …
+  `PostgreSQLAdapter @ localhost`, over three lines. It now reads
+  `PostgreSQL @ localhost`.
+
+- **The dev dashboard sees the system you actually started** (BOU-400). It read
+  the running system from `integrant.repl.state/system`, which only a REPL
+  `(go)` fills, so every ordinary server start — `clojure -M:run server`,
+  `bb quickstart`, a generated project — left it looking at the three
+  components it could reach through its own wiring. It reported those as
+  "3 components · all healthy" while forty more ran unseen. `wagoe.main` now
+  starts through `wiring/start!`, which records the system, and the dashboard
+  reads that when there is no REPL. Its module list comes from the same place
+  as `(status)`'s, so the two no longer disagree.
+
 - **`bb scaffold field`/`endpoint`/`adapter` fail when the module is not there**
   (BOU-364). `field` left a migration behind for a column its schema would reject.
 
