@@ -324,8 +324,21 @@
       (is (not (re-find #"validation-errors" form))
           "no form-level panel when every error belongs to a field"))))
 
+(deftest ^:unit register-form-errors-test
+  ;; `/web/register` carried the same split as the admin create form: name and
+  ;; email through `ui/form-field`, the password in the form-level panel. The
+  ;; first pass at BOU-393 fixed one path and left its neighbour (BOU-393).
+  (testing "a password error looks like every other field's error"
+    (let [form (str (ui/register-form {} {:password ["Password must be at least 8 characters"]
+                                          :email    ["Invalid email format"]}))]
+      (is (re-find #"Password must be at least 8 characters" form))
+      (is (re-find #"Invalid email format" form))
+      (is (re-find #"field-errors" form))
+      (is (not (re-find #"validation-errors" form))
+          "no form-level panel when every error belongs to a field"))))
+
 ;; =============================================================================
-;; Success Message Component Tests  
+;; Success Message Component Tests
 ;; =============================================================================
 
 (deftest ^:unit user-created-success-test

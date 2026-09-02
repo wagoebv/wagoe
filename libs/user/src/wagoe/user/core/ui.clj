@@ -900,11 +900,14 @@
         ;; pre-filled, so there is nothing to report against (BOU-381).
        (when policy
          (password-requirements-list password-violations policy))
-        ;; Show validation errors if present
+        ;; `.field-errors`, as on the create-user form and for the same reason:
+        ;; the name and email errors above come from `ui/form-field` in that
+        ;; shape, so a password error in the form-level panel made one
+        ;; submission answer in two different voices (BOU-393).
        (when (seq (:password errors))
-         [:div.validation-errors
+         [:div.field-errors
           (for [err (:password errors)]
-            [:p err])])]
+            [:span.error err])])]
       (ui/submit-button [:t :user/button-create-account] {:loading-text [:t :user/button-create-loading]})]]])
   ([data errors]
    (register-form data errors nil default-password-policy)))
