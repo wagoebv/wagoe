@@ -831,6 +831,15 @@
   (stop!)
   (start! ig-cfg))
 
+(defn system
+  "The running system map, or nil when nothing was started through `start!`.
+
+   Introspection tools read `integrant.repl.state/system`, which only a REPL
+   `(go)` fills. A server started by `wagoe.main` is just as running and just
+   as worth inspecting, so this is where that answer lives (BOU-400)."
+  []
+  @system-state)
+
 ;; =============================================================================
 ;; Integrant REPL Setup
 ;; =============================================================================

@@ -497,3 +497,27 @@
     (is (< (.indexOf ^java.util.List stack auth)
            (.indexOf ^java.util.List stack tenant))
         "and runs before the tenant middleware that depends on it")))
+
+(defmethod ig/init-key ::probe [_ v] (assoc v :started true))
+(defmethod ig/halt-key! ::probe [_ _] nil)
+
+(deftest ^:unit the-running-system-is-readable-without-a-repl
+  ;; Introspection used to read `integrant.repl.state/system`, which only a
+  ;; REPL `(go)` fills, so a server started by `wagoe.main` was invisible to it
+  ;; — the dev dashboard reported three components for a system of forty-three
+  ;; (BOU-400). `start!` already kept the system; this is the way to ask.
+  (let [wiring (requiring-resolve 'wagoe.platform.shell.system.wiring/system)
+        start! (requiring-resolve 'wagoe.platform.shell.system.wiring/start!)
+        stop!  (requiring-resolve 'wagoe.platform.shell.system.wiring/stop!)]
+    (stop!)
+    (is (nil? (wiring)) "nothing started, nothing to read")
+
+    (testing "a started system is readable, and is the one that was started"
+      (let [started (start! {::probe {}})]
+        (try
+          (is (= started (wiring)))
+          (is (contains? (wiring) ::probe))
+          (finally (stop!)))))
+
+    (testing "and stopping clears it, so nothing reads a torn-down system"
+      (is (nil? (wiring))))))

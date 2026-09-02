@@ -16,7 +16,7 @@
      java -jar wagoe-standalone.jar cli [args]        # Run CLI commands"
   (:require [wagoe.config :as config]
             [wagoe.system-config :as sys-config]
-            [wagoe.platform.shell.system.wiring] ; Required for Integrant init functions
+            [wagoe.platform.shell.system.wiring :as wiring] ; Integrant init functions, and start!/stop!
             ;; Load feature modules' Integrant init/halt methods at the app layer
             ;; so platform does not depend on the feature libs (BOU-171 / BOU-192).
             [wagoe.user.shell.module-wiring]
@@ -75,20 +75,29 @@
   "Init `ig-config`, install a shutdown hook that halts it gracefully, and block
    until the JVM is signalled to stop."
   [what ig-config]
-  (let [system (ig/init ig-config)]
-    (log/info (str "Wagoe " what " started successfully"))
-    (log/info "Press Ctrl+C to stop")
-    (.addShutdownHook
-     (Runtime/getRuntime)
-     (Thread. (fn []
-                (log/info "Shutdown signal received, stopping...")
-                (try
-                  (ig/halt! system)
-                  (log/info "Stopped gracefully")
-                  (catch Exception e
-                    (log/error e "Error during shutdown"))))))
-    ;; Block forever (until Ctrl+C / SIGTERM)
-    @(promise)))
+  ;; Through `wiring/start!` rather than `ig/init` directly, so the system is
+  ;; recorded where introspection can find it. The dev dashboard read the
+  ;; running system from `integrant.repl.state/system`, which only a REPL
+  ;; `(go)` fills — so on every ordinary server start it fell back to the three
+  ;; components it could reach through its own Integrant refs and reported "3
+  ;; components · all healthy" for a system of forty-three (BOU-400).
+  (wiring/start! ig-config)
+  (log/info (str "Wagoe " what " started successfully"))
+  (log/info "Press Ctrl+C to stop")
+  (.addShutdownHook
+   (Runtime/getRuntime)
+   (Thread. (fn []
+              (log/info "Shutdown signal received, stopping...")
+              (try
+                ;; `wiring/stop!` rather than `ig/halt!` on a captured system:
+                ;; it halts the same one and clears the record, so nothing
+                ;; later reads a system that has been torn down.
+                (wiring/stop!)
+                (log/info "Stopped gracefully")
+                (catch Exception e
+                  (log/error e "Error during shutdown"))))))
+  ;; Block forever (until Ctrl+C / SIGTERM)
+  @(promise))
 
 (defn root-cause
   "The innermost cause of `e`."
