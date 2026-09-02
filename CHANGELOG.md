@@ -138,6 +138,12 @@ for what is public API, what is internal, and how deprecations are announced.
 - **Form validation errors reach the screen** (BOU-381). htmx discarded the 400
   that carried them, so pressing Create or Save did nothing at all.
 
+- **…and they arrive as one kind of message** (BOU-393). On the create-user form
+  a password error rendered in the form-level panel while the email error beside
+  it was a line of inline text, so a single submission produced two unrelated
+  styles of complaint. The form is also centred rather than pinned to the left
+  edge of the page, and no longer repeats the page header's title beneath it.
+
 - **Two tests bound a port they had already released** (BOU-377), failing the
   full suite intermittently. `bb test:all` now names what exited non-zero.
 
