@@ -121,6 +121,15 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **An application using both the admin and the search module starts again**
+  (BOU-392). Their routes overlap — `/web/admin/search/:index-id` against
+  admin's generic `/web/admin/:entity/:id` — and the boot-time conflict check
+  refused the pair, so the whole application failed to start. Reitit settles
+  those at `search`, taking the literal segment before the parameter one; the
+  check now decides a pair at the first segment that separates them instead of
+  requiring every segment to. Genuinely ambiguous pairs and catch-alls still
+  fail the boot.
+
 - **Admin tables reliably format date and timestamp values** (BOU-382), including
   date-only/zone-less shapes. Set `:date-time-format`; invalid patterns fall back.
 - **Static assets revalidate instead of caching blind** (BOU-389). No asset sent
