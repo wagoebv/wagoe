@@ -396,7 +396,11 @@
    ;; value the user is looking at.
    (let [rendered-password ""]
      [:div#create-user-form
-      [:h2 [:t :user/form-create-title]]
+      ;; No heading of its own: both callers sit under a page header that
+      ;; already renders `:user/form-create-title` as the `h1`, so carrying an
+      ;; `h2` here put "Create New User" on the screen twice — the second one
+      ;; left-aligned beside the centred form, which reads as a stray label
+      ;; rather than a heading (BOU-393).
       ;; outerHTML: the response is itself a #create-user-form, so an innerHTML
       ;; swap nests one inside the other and leaves a duplicate id behind
       ;; (BOU-381).
@@ -429,11 +433,15 @@
         ;; against a box the user has to fill in again (BOU-381).
         (when policy
           (password-requirements-list password-violations policy))
-        ;; Show validation errors if present
+        ;; `.field-errors`, the same shape `ui/form-field` gives every other
+        ;; field — `.validation-errors` is the form-level style used above for
+        ;; errors that belong to no field, and rendering a password error in it
+        ;; put a full-width panel under the field while the email error beside
+        ;; it was a line of small red text (BOU-393).
         (when (seq (:password errors))
-          [:div.validation-errors
+          [:div.field-errors
            (for [err (:password errors)]
-             [:p err])])]
+             [:span.error err])])]
        (ui/form-field :role [:t :common/label-role]
                       (ui/select-field :role
                                        [[:user [:t :common/role-user]]
@@ -892,11 +900,14 @@
         ;; pre-filled, so there is nothing to report against (BOU-381).
        (when policy
          (password-requirements-list password-violations policy))
-        ;; Show validation errors if present
+        ;; `.field-errors`, as on the create-user form and for the same reason:
+        ;; the name and email errors above come from `ui/form-field` in that
+        ;; shape, so a password error in the form-level panel made one
+        ;; submission answer in two different voices (BOU-393).
        (when (seq (:password errors))
-         [:div.validation-errors
+         [:div.field-errors
           (for [err (:password errors)]
-            [:p err])])]
+            [:span.error err])])]
       (ui/submit-button [:t :user/button-create-account] {:loading-text [:t :user/button-create-loading]})]]])
   ([data errors]
    (register-form data errors nil default-password-policy)))
