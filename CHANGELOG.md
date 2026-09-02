@@ -190,6 +190,13 @@ for what is public API, what is internal, and how deprecations are announced.
 - **A malformed request answered 500** (BOU-321). It is a 400 naming the fields, and
   in dev it carries the BND code — which had no name for `:validation-error`.
 
+- **"Your code" in an error means your code** (BOU-395). The stack-trace filter
+  recognised the framework by listing four of its libraries, so the rest of them
+  were reported to you as yours — while your own namespaces, matching nothing,
+  were folded away under "Framework (N frames)". An error thrown in an
+  application's own code answered "No user code frames found". The framework is
+  now the side that gets enumerated, and anything else is yours.
+
 - **58 exceptions thrown at boundaries say what kind of failure they are** (BOU-323).
   An untyped throw on a request path is a 500 that could have been a 404 or a 400.
 
