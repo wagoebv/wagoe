@@ -22,6 +22,7 @@
             [wagoe.search.shell.module-wiring]
             [wagoe.tenant.shell.module-wiring]
             [wagoe.devtools.core.guidance :as guidance]
+            [wagoe.devtools.core.project-repl :as project-repl]
             [wagoe.devtools.core.introspection :as introspection]
             [wagoe.devtools.core.schema-tools :as schema-tools]
             [wagoe.devtools.core.documentation :as docs]
@@ -164,11 +165,12 @@
          level)
      (println (str "Invalid level. Use one of: " (pr-str guidance/levels))))))
 
-(def ^:private infra-keys
-  "Integrant keys that are infrastructure, not application modules."
-  #{"settings" "postgresql" "sqlite" "mysql" "h2" "http" "router"
-    "api-versioning" "pagination" "logging" "metrics" "error-reporting"
-    "http-server" "db-context"})
+;; An `infra-keys` blocklist lived here, and `(status)` and `(modules)` each
+;; filtered the system's keys against it and reported the rest, by raw key name.
+;; That is the shape BOU-319 replaced in `project-repl/module-names`, which
+;; takes the stem of each key and deduplicates — so `:wagoe/admin-routes` and
+;; `:wagoe/admin-schema-provider` are the `admin` module rather than two
+;; modules. This copy never got that fix and listed the pieces (BOU-399).
 
 (defn- actual-http-port
   "Get the actual port the HTTP server is listening on.
@@ -194,22 +196,24 @@
       (let [cfg        (config)
             http-port  (actual-http-port)
             http-host  (or (get-in cfg [:wagoe/http :host]) "localhost")
-            admin-cfg  (get cfg :wagoe/admin)
-            admin-path (or (:base-path admin-cfg) "/admin")
+            ;; The prefix the router actually mounted admin under, read off the
+            ;; running component. `(get cfg :wagoe/admin)` was always nil — cfg
+            ;; is the ig-config, where the module appears as
+            ;; `:wagoe/admin-service` and `:wagoe/admin-routes` — so the
+            ;; `"/admin"` fallback was the normal path, and it 404s (BOU-394).
+            ;; nil when admin is not running, and then no line is printed:
+            ;; `project-repl/status-text` reached the same conclusion, that a
+            ;; guessed URL is worse than none.
+            admin-path (get-in sys [:wagoe/admin-routes :web-prefix])
             base-url   (str "http://" (if (= http-host "0.0.0.0") "localhost" http-host)
                             ":" http-port)
             components (count sys)
-            modules    (->> (keys sys)
-                            (filter #(and (keyword? %)
-                                          (= "wagoe" (namespace %))
-                                          (not (contains? infra-keys (name %)))))
-                            (map #(name %))
-                            sort)]
+            modules    (project-repl/module-names sys)]
         (println (guidance/format-startup-dashboard
                   {:components     components
                    :errors         0
                    :web-url        base-url
-                   :admin-url      (str base-url admin-path)
+                   :admin-url      (when admin-path (str base-url admin-path))
                    :nrepl-port     7888
                    :modules        modules
                    :guidance-level level}))))))
@@ -218,13 +222,7 @@
   "List active modules."
   []
   (when-let [sys (system)]
-    (->> (keys sys)
-         (filter #(and (keyword? %)
-                       (= "wagoe" (namespace %))
-                       (not (contains? infra-keys (name %)))))
-         (map #(name %))
-         sort
-         vec)))
+    (project-repl/module-names sys)))
 
 (defn commands
   "Show all available REPL commands."

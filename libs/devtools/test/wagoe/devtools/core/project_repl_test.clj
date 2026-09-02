@@ -54,7 +54,11 @@
   (doseq [k [:wagoe/settings :wagoe/logging :wagoe/metrics :wagoe/tracing
              :wagoe/error-reporting :wagoe/db-context :wagoe/router
              :wagoe/http-server :wagoe/http-handler :wagoe/i18n
-             :wagoe/i18n-http-middleware :wagoe/email]]
+             :wagoe/i18n-http-middleware :wagoe/email
+             ;; devtools' own components, present whenever the tooling is on
+             ;; the classpath — a developer asking which modules are running
+             ;; did not add the tool they are asking through (BOU-399).
+             :wagoe/dashboard :wagoe/dev-error-enricher]]
     (is (= [] (sut/module-names {k {}})) (str k " is plumbing"))))
 
 (deftest ^:unit the-dashboard-shows-the-url-and-the-modules
@@ -71,6 +75,29 @@
             widths (set (map count lines))]
         (is (= 1 (count widths))
             (str "box lines have different widths: " (sort widths)))))))
+
+(deftest ^:unit the-admin-url-is-the-prefix-the-router-mounted
+  ;; It used to be left out entirely, on the grounds that the config has no
+  ;; `:wagoe/admin` key to read a base path from — true of the config, but the
+  ;; running system carries the prefix the router actually used (BOU-394).
+  (testing "shown when the admin module is running"
+    (let [text (sut/status-text
+                {:system   (assoc (system-of fresh-project)
+                                  :wagoe/admin-routes {:web-prefix "/web/admin"})
+                 :base-url "http://localhost:3001"})]
+      (is (str/includes? text "http://localhost:3001/web/admin"))))
+
+  (testing "and absent, rather than guessed, when it is not"
+    ;; `/admin` is what a guess produces, and it 404s.
+    (let [text (sut/status-text {:system   (system-of fresh-project)
+                                 :base-url "http://localhost:3001"})]
+      (is (not (str/includes? text "Admin:")))))
+
+  (testing "a mounted module with no prefix is not a URL either"
+    (let [text (sut/status-text
+                {:system   (assoc (system-of fresh-project) :wagoe/admin-routes {})
+                 :base-url "http://localhost:3001"})]
+      (is (not (str/includes? text "Admin:"))))))
 
 (deftest ^:unit nothing-running-has-no-dashboard
   ;; nil rather than an empty box: the caller prints "start it with (go)".

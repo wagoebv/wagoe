@@ -151,6 +151,22 @@ for what is public API, what is internal, and how deprecations are announced.
 - **The dev dashboard's busy-port fallback never ran** (BOU-377). A busy 9999
   was a hard failure instead of the documented scan to 10009.
 
+- **`(status)` points at the admin UI that is running, and closes its box**
+  (BOU-394). In a generated project it named no admin URL at all; in this
+  repository's REPL it advertised `/admin`, which 404s — the path was read from
+  a config key that never exists, so the fallback was the only route it ever
+  took. Both now read the prefix the router actually mounted, and say nothing
+  when the admin module is not running. The panel's title row was also three
+  characters narrower than the rows beneath it.
+
+- **`(status)` and `(modules)` list modules, not Integrant keys** (BOU-399).
+  They filtered the system's keys against a blocklist and reported the rest by
+  raw name, so one module arrived as several of its parts —
+  `admin-routes, admin-schema-provider, …` rather than `admin`. That is the
+  shape BOU-319 replaced elsewhere; this copy never got it, and now shares the
+  one implementation. Devtools' own components no longer count as modules
+  either: you did not add the tool you are asking through.
+
 - **A security test rejected one run in a hundred** (BOU-377). It searched the
   response for `"120"`, which the random correlation-id UUID sometimes contains.
 

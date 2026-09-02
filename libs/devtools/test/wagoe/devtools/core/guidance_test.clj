@@ -38,7 +38,29 @@
                    :guidance-level :minimal})]
       (is (string? result))
       (is (clojure.string/includes? result "3 components"))
-      (is (clojure.string/includes? result "none")))))
+      (is (clojure.string/includes? result "none"))))
+
+  (testing "the box closes"
+    ;; The title row was three characters short of the rows below it, so the
+    ;; right-hand border stepped inwards on the first line (BOU-394).
+    (let [lines  (clojure.string/split-lines
+                  (guidance/format-startup-dashboard
+                   {:components     12
+                    :errors         0
+                    :database       "PostgreSQL @ localhost:5432/wagoe_dev"
+                    :web-url        "http://localhost:3000"
+                    :admin-url      "http://localhost:3000/web/admin"
+                    :nrepl-port     7888
+                    :modules        ["user" "admin" "payments"]
+                    :guidance-level :full}))
+          widths (set (map count lines))]
+      (is (= 1 (count widths))
+          (str "every row is the same width, got " widths))))
+
+  (testing "an admin URL is printed only when there is one"
+    (let [without (guidance/format-startup-dashboard
+                   {:components 3 :modules [] :web-url "http://localhost:3000"})]
+      (is (not (clojure.string/includes? without "Admin:"))))))
 
 (deftest ^:unit format-post-scaffold-guidance-test
   (testing "renders scaffold guidance with module name"
