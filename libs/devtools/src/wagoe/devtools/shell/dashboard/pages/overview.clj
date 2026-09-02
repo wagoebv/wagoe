@@ -4,7 +4,7 @@
             [wagoe.devtools.shell.dashboard.pages.errors :as dashboard-errors]
             [wagoe.devtools.shell.repl :as devtools-repl]
             [wagoe.devtools.core.project-repl :as project-repl]
-            [wagoe.platform.shell.system.wiring :as wiring]
+            [wagoe.platform.system :as platform-system]
             [clojure.string :as str]
             [integrant.repl.state :as state]))
 
@@ -45,14 +45,14 @@
    falls back to the running system for supplementary data.
 
    Two places hold that system and only one of them is a REPL:
-   `integrant.repl.state/system` is filled by `(go)`, `wiring/system` by any
+   `integrant.repl.state/system` is filled by `(go)`, `platform-system/running` by any
    start through `wagoe.main`. Reading only the first meant every ordinary
    server start left `sys` nil, and the component list fell back to the three
    this page can reach through its own Integrant refs — reported as
    \"3 components · all healthy\" on a system of forty-three (BOU-400)."
   [ctx]
   (let [sys      (or (try state/system (catch Exception _ nil))
-                     (try (wiring/system) (catch Exception _ nil)))
+                     (try (platform-system/running) (catch Exception _ nil)))
         handler  (or (:http-handler ctx) (when sys (get sys :wagoe/http-handler)))
         db-ctx   (or (:db-context ctx) (when sys (get sys :wagoe/db-context)))
         routes   (when handler
