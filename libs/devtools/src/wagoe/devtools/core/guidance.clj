@@ -53,12 +53,20 @@
         border-h  (apply str (repeat width "\u2500"))
         line      (fn [content]
                     (str "\u2502 " (pad-right content (- width 2)) " \u2502"))
+        ;; Every row is `width` wide between the two border characters, so the
+        ;; title row has to fill the same span after its label. Counted from
+        ;; the label rather than written as a literal: the previous `width - 15`
+        ;; was three short of the rows below it, and a hand-kept number goes
+        ;; wrong again the moment the title changes (BOU-394).
+        title     "\u250C\u2500 Wagoe Dev "
         mod-str   (if (seq modules)
                     (str (clojure.string/join ", " (take 5 modules))
                          (when (> (count modules) 5)
                            (str " (+" (- (count modules) 5) " more)")))
                     "none")
-        lines     (cond-> [(str "\u250C\u2500 Wagoe Dev " (apply str (repeat (- width 15) "\u2500")) "\u2510")
+        lines     (cond-> [(str title
+                                (apply str (repeat (- (+ width 2) (count title) 1) "\u2500"))
+                                "\u2510")
                            (line (str "System:    running (" components " components, " errors " errors)"))
                            (when database (line (str "Database:  " database)))
                            (when web-url (line (str "Web:       " web-url)))

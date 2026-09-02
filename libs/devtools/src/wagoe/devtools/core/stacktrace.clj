@@ -4,22 +4,38 @@
   (:require [clojure.string :as str]))
 
 (def ^:private framework-prefixes
-  "Namespace prefixes classified as framework code."
-  #{"wagoe.platform." "wagoe.observability." "wagoe.devtools."
-    "wagoe.core." "ring." "reitit." "integrant." "malli."})
+  "Namespace prefixes classified as framework code.
+
+   `wagoe.` entire, rather than a list of the libraries under it. Naming them
+   one by one meant every library left off the list — `wagoe.user.`,
+   `wagoe.admin.`, `wagoe.search.`, `wagoe.tenant.` — fell through to the
+   `:user` branch and was presented to the developer as their own code
+   (BOU-395)."
+  #{"wagoe." "ring." "reitit." "integrant." "malli."})
 
 (def ^:private jvm-prefixes
-  "Namespace prefixes classified as JVM internals."
-  #{"java." "javax." "clojure.lang." "clojure.core"})
+  "Namespace prefixes classified as JVM internals.
+
+   `clojure.` entire rather than `clojure.lang.` and `clojure.core`. With
+   :user as the fallthrough, every other Clojure runtime namespace — and
+   `clojure.main` is in the trace of anything started from a REPL or a `-M`
+   — would otherwise be listed as the developer's own code."
+  #{"java." "javax." "clojure."})
 
 (defn classify-frame
-  "Classify a namespace string as :user, :framework, or :jvm."
+  "Classify a namespace string as :user, :framework, or :jvm.
+
+   `:user` is the fallthrough, not a prefix match. An application's namespaces
+   are its own — `examples/shop`, this repository's `wagoe new` output, is
+   `shop.*` — and nothing here can know them in advance. Matching a prefix
+   instead meant application frames landed in `:framework` and were folded
+   away under \"Framework (N frames)\", leaving \"No user code frames found\"
+   for an error thrown in the application's own code."
   [ns-str]
   (cond
     (some #(str/starts-with? ns-str %) jvm-prefixes)       :jvm
     (some #(str/starts-with? ns-str %) framework-prefixes)  :framework
-    (str/starts-with? ns-str "wagoe.")                   :user
-    :else                                                   :framework))
+    :else                                                   :user))
 
 (defn- stack-element->map
   "Convert a StackTraceElement to a map."

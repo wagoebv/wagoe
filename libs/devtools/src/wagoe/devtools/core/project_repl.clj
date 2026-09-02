@@ -21,10 +21,17 @@
    "-schema" "-store"])
 
 (def ^:private infra-stems
-  "Stems that are plumbing every project has, not something the user added."
+  "Stems that are plumbing every project has, not something the user added.
+
+   `dashboard` and `dev-error-enricher` are devtools' own components. They only
+   appear when devtools is on the classpath, which is why nothing listed them
+   until this namespace started answering `(modules)` for a profile that runs
+   it — and a developer who asks which modules are running did not add the tool
+   they are asking through (BOU-399)."
   #{"settings" "postgresql" "sqlite" "mysql" "h2" "http" "router" "db"
     "api-versioning" "pagination" "logging" "metrics" "tracing" "email"
-    "error-reporting" "i18n" "module"})
+    "error-reporting" "i18n" "module"
+    "dashboard" "dev-error-enricher"})
 
 (def ^:private module-of
   "Components that belong to a module whose name they do not carry.
@@ -122,15 +129,20 @@
 (defn status-text
   "The startup dashboard, or nil when nothing is running.
 
-   No admin URL: `ig-config` never emits a `:wagoe/admin` key — the admin
-   module arrives as `:wagoe/admin-service` and `:wagoe/admin-routes` — so
-   there is nothing here to read a base path from, and a guessed URL that 404s
-   is worse than none."
+   The admin URL comes off the running system, not the config: `ig-config`
+   never emits a `:wagoe/admin` key — the admin module arrives as
+   `:wagoe/admin-service` and `:wagoe/admin-routes` — so reading a base path
+   from the config yields nothing, and a guessed URL that 404s is worse than
+   none. `:wagoe/admin-routes` carries the `:web-prefix` the router actually
+   mounted, which is the question answered without guessing. Absent when the
+   admin module is not running, and then the line is not printed (BOU-394)."
   [{:keys [system base-url]}]
   (when system
     (guidance/format-startup-dashboard
      {:components (count system)
       :errors     0
       :web-url    base-url
+      :admin-url  (when-let [prefix (get-in system [:wagoe/admin-routes :web-prefix])]
+                    (str base-url prefix))
       :nrepl-port 7888
       :modules    (module-names system)})))
