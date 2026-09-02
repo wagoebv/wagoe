@@ -84,7 +84,9 @@
       (page/wait-for-load-state pg)
       (is (str/includes? (page/url pg) "/web/register")
           "Should remain on /web/register with a weak password")
-      ;; Validation errors should be visible
-      (let [errors (page/locator pg ".validation-errors")]
+      ;; Visible against the field that caused it: the password error used to
+      ;; render in `.validation-errors`, the form-level panel, while the name
+      ;; and email errors beside it were inline `.field-errors` (BOU-393).
+      (let [errors (page/locator pg ".field-errors")]
         (is (loc/is-visible? errors)
             "Validation errors should be shown for weak password")))))
