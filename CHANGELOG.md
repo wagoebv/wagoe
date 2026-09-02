@@ -143,6 +143,11 @@ for what is public API, what is internal, and how deprecations are announced.
   dark variant was not lighter than the light one, and `:variant :icon` was
   byte-identical to the full lockup. `bb check:no-boundary` cannot see artwork.
 
+- **The dev dashboard names your database instead of its Java class** (BOU-396).
+  The Environment panel read `class wagoe.platform.shell.adapters.database.` …
+  `PostgreSQLAdapter @ localhost`, over three lines. It now reads
+  `PostgreSQL @ localhost`.
+
 - **`bb scaffold field`/`endpoint`/`adapter` fail when the module is not there**
   (BOU-364). `field` left a migration behind for a column its schema would reject.
 
