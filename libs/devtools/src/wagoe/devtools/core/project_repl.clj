@@ -21,10 +21,17 @@
    "-schema" "-store"])
 
 (def ^:private infra-stems
-  "Stems that are plumbing every project has, not something the user added."
+  "Stems that are plumbing every project has, not something the user added.
+
+   `dashboard` and `dev-error-enricher` are devtools' own components. They only
+   appear when devtools is on the classpath, which is why nothing listed them
+   until this namespace started answering `(modules)` for a profile that runs
+   it — and a developer who asks which modules are running did not add the tool
+   they are asking through (BOU-399)."
   #{"settings" "postgresql" "sqlite" "mysql" "h2" "http" "router" "db"
     "api-versioning" "pagination" "logging" "metrics" "tracing" "email"
-    "error-reporting" "i18n" "module"})
+    "error-reporting" "i18n" "module"
+    "dashboard" "dev-error-enricher"})
 
 (def ^:private module-of
   "Components that belong to a module whose name they do not carry.
