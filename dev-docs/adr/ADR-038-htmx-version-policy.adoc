@@ -1,0 +1,121 @@
+= ADR-038: Stay on htmx 2.x
+:status: Accepted
+:date: 2026-09-01
+:deciders: wagoe-team
+
+== Status
+
+Accepted. Records a version policy for the vendored htmx in
+xref:ADR-006-web-ui-architecture-htmx-hiccup.adoc[ADR-006]; supersedes nothing.
+
+== Context
+
+htmx 4.0.0 was released on 2026-08-28, skipping 3 entirely. It is a hard break:
+`fetch()` replaces `XMLHttpRequest`, attribute inheritance becomes explicit,
+events are renamed to `htmx:phase:action`, and 4xx/5xx responses swap by default.
+
+The framework vendors htmx 2.0.8 at
+`libs/ui-style/resources/public/js/htmx.min.js` and ships it in every JS bundle
+(`libs/ui-style/src/wagoe/ui_style.clj`), so this is not a per-project choice —
+it is made once, on behalf of every generated project.
+
+There is no deadline. htmx 4 is published under the npm `next` tag until early
+2027 precisely so unversioned CDN URLs do not force-upgrade anyone, and htmx 2
+is supported indefinitely.
+
+=== What the upgrade would cost
+
+Measured against the tree at the time of writing, not estimated.
+
+The attribute layer is already htmx-4 shaped and needs almost nothing. hx-*
+attributes are written per element, with `hx-target` beside `hx-get`/`hx-post`
+on the same element — `libs/admin/src/wagoe/admin/core/ui/list.clj` and
+`filters.clj` are representative. There are no out-of-band swaps, no `hx-vars`,
+`hx-disable`, `hx-disabled-elt`, `hx-prompt`, `hx-ext`, `hx-disinherit` or
+`hx-inherit`, no `queue:` trigger modifier, and no htmx SSE/WS extensions. Two
+`hx-swap` values are in use.
+
+The cost is in the JavaScript and in two request-header consumers.
+
+[cols="1,2,3"]
+|===
+| Surface | Where | What breaks
+
+| CSRF listener
+| `libs/ui-style/resources/public/js/init.js` (line 13)
+| `htmx:configRequest` → `htmx:config:request`. Silent: every state-changing
+  request loses its token.
+
+| Admin UX
+| `libs/ui-style/resources/public/js/admin-ux.js`
+| Seven listeners renamed; `sendError`/`timeout`/`swapError` consolidate into
+  `htmx:error`; `issueRequest()` on `htmx:confirm`.
+
+| 4xx form swap
+| `libs/ui-style/resources/public/js/forms.js`
+| Reads `event.detail.xhr.status`, and XHR is gone. htmx 4 swaps 4xx by
+  default, so the BOU-381 fix this file exists for becomes native and the file
+  likely deletes.
+
+| Redirect timing
+| `libs/ui-style/resources/public/js/components.js` (lines 32–38)
+| Keyed to `htmx:afterRequest` firing relative to `HX-Redirect`.
+
+| `HX-Target` consumers
+| `libs/admin/src/wagoe/admin/shell/http/handlers/list.clj` (line 143),
+  `libs/user/src/wagoe/user/shell/web_handlers.clj` (line 1262)
+| Header format becomes `tagName#id`. Both branch on exact strings
+  (`"filter-table-container"`, `"#profile-info-card"`) and fall silently to the
+  wrong branch.
+
+| CSRF via `<body>`
+| `libs/platform/src/wagoe/platform/core/csrf.clj` (lines 135–149)
+| `:hx-headers` on `<body>` is the one place that relies on inheritance; needs
+  `hx-headers:inherited`.
+
+| Inline JS
+| `libs/admin/src/wagoe/admin/core/ui/detail.clj` (line 293), CSP note at
+  `libs/platform/src/wagoe/platform/shell/http/interceptors.clj` (line 957)
+| `hx-on::afterRequest` event naming.
+
+| e2e
+| `libs/e2e/test/wagoe/e2e/html/admin_users_test.clj` (line 213),
+  `libs/e2e/test/wagoe/e2e/helpers/admin.clj` (lines 54, 157)
+| Old event names in page-injected listeners.
+|===
+
+Defaults also flip: `defaultTimeout` 0 → 60000, `defaultSettleDelay` 20 → 1,
+`hx-delete` stops including the enclosing form, the `HX-Trigger` *request*
+header becomes `HX-Source`, and `HX-Trigger-Name` is removed. `HX-Trigger` as a
+*response* header — which admin and user handlers set — is unchanged.
+
+One thing this scan did not verify: whether htmx 4 still emits the
+`htmx-request` / `htmx-indicator` classes that roughly twenty rules in
+`app.css` and `admin.css` style. Check it first if the migration ever runs.
+
+== Decision
+
+Stay on vendored htmx 2.0.8. Do not adopt htmx 4 while it is on the `next` tag
+and htmx 2 is supported.
+
+== Consequences
+
+* The framework keeps a supported htmx and spends nothing now. The eight
+  surfaces above are the sizing for when it does.
+* Revisit when any of these happen: htmx 4 takes the npm `latest` tag (expected
+  early 2027), a 2.x security advisory lands, or we want streaming responses or
+  built-in morphing badly enough to pay for them.
+* Two aids exist for that day. `npx htmx.org@4.0.0 upgrade-check` scans
+  templates for removed and renamed attributes, and the `htmx-2-compat`
+  extension restores htmx 2 event names and implicit inheritance, which makes an
+  incremental migration possible rather than one flag-day diff.
+* Staying put has a cost of its own: every htmx 4 feature written about from
+  here on is one we do not have, and the migration gets no cheaper by waiting.
+
+== References
+
+* xref:ADR-006-web-ui-architecture-htmx-hiccup.adoc[ADR-006] — chose HTMX +
+  Hiccup and vendored the asset this ADR pins
+* https://four.htmx.org/docs/whats-new-in-htmx-4[What's New in htmx 4]
+* https://four.htmx.org/announcements/2026-08-28-htmx-4.0.0-is-released[htmx
+  4.0.0 release announcement]
