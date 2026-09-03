@@ -34,6 +34,12 @@ for what is public API, what is internal, and how deprecations are announced.
 - **`SMOKE_TARGET=released`, nightly** (BOU-402). Runs the first-run smoke against the
   published tag as a visitor gets it — beta-5 shipped a broken `(status)` for weeks.
 
+### Fixed
+
+- **`check:versions` reads the claim that says which version this is** (BOU-317).
+  `roadmap.adoc` opened with "Wagoe is at `1.0.0-beta-5`" on the day beta-6 shipped —
+  in scope for the gate, matched by none of its three rules. 96 locations become 101.
+
 ## [1.0.0-beta-6] — 2026-09-03
 
 A generated project works end to end. `1.0.0-beta-5` could create one, but the
