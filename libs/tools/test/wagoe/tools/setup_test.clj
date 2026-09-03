@@ -1,7 +1,16 @@
 (ns wagoe.tools.setup-test
   (:require [clojure.test :refer [deftest is testing]]
             [wagoe.tools.setup :as setup]
+            [clojure.java.io :as io]
+            [clojure.set :as set]
             [clojure.string :as str]))
+
+(defn- lib-source
+  "Source of `path` under libs/, from the repo root or from libs/tools."
+  [path]
+  (or (some #(when (.exists (io/file %)) (slurp %))
+            [(str "libs/" path) (str "../" path)])
+      (throw (ex-info (str path " not found — cannot compare") {}))))
 
 ;; =============================================================================
 ;; build-config — dev environment
@@ -224,6 +233,72 @@
     (doseq [k [:database :ai-provider :payment :cache :email]]
       (is (seq (setup/spec-errors (assoc minimal-spec k :bogus)))
           (str "unknown " k " must be reported")))))
+
+;; =============================================================================
+;; The four provider lists agree (BOU-411, same hazard as BOU-281)
+;; =============================================================================
+
+(deftest ^:unit setup-offers-every-provider-the-code-can-build
+  ;; `build-provider` is the registry. doctor mirrors it (pinned by
+  ;; doctor-knows-every-ai-provider-the-code-dispatches-on), and these two
+  ;; mirror it again: the wizard's choices and the AI prompt's enum.
+  (let [src        (lib-source "ai/src/wagoe/ai/shell/module_wiring.clj")
+        dispatched (set (map (comp keyword second)
+                             (re-seq #"(?m)^\s+:([a-z-]+)\s+\([a-z-]+/create-" src)))
+        ;; :no-op is the registry's way to disable AI; :none is the wizard's,
+        ;; and it writes no :wagoe/ai-service block at all. Neither is a
+        ;; provider a user picks by name.
+        buildable  (disj dispatched :no-op)
+        offered    (set (remove #{:none} (get setup/valid-choices :ai-provider)))]
+
+    (testing "the source parsed — otherwise this passes vacuously"
+      (is (<= 4 (count dispatched))
+          (str "only found " (pr-str dispatched) " in build-provider")))
+
+    (testing "the wizard offers every provider the code can build"
+      (is (empty? (set/difference buildable offered))
+          (str "build-provider handles " (pr-str (set/difference buildable offered))
+               " but bb setup cannot write them")))
+
+    (testing "and offers none the code cannot build"
+      (is (empty? (set/difference offered buildable))
+          (str "bb setup offers " (pr-str (set/difference offered buildable))
+               " but build-provider would throw")))))
+
+(deftest ^:unit setup-prompt-offers-every-provider-test
+  ;; The AI path's enum. Omitting a provider here is worse than rejecting it:
+  ;; `none` is a valid answer, so a description asking for Replicate came back
+  ;; as "AI disabled" and no validation could fire (BOU-411).
+  (let [src      (lib-source "ai/src/wagoe/ai/core/prompts.clj")
+        enum     (second (re-find #"\\\"ai-provider\\\": \\\"([a-z|-]+)\\\"" src))
+        in-prompt (set (map keyword (str/split (or enum "") #"\|")))
+        offered   (set (get setup/valid-choices :ai-provider))]
+
+    (testing "the prompt parsed — otherwise this passes vacuously"
+      (is (<= 4 (count in-prompt))
+          (str "found " (pr-str in-prompt) " in the setup-parse prompt")))
+
+    (testing "the prompt names exactly the choices bb setup accepts"
+      (is (= offered in-prompt)
+          (str "prompt-only: " (pr-str (set/difference in-prompt offered))
+               ", setup-only: " (pr-str (set/difference offered in-prompt)))))
+
+    (testing "and its database default is one that boots unaided (BOU-228)"
+      (is (str/includes? src "database defaults to \\\"sqlite\\\"")
+          "the AI path must not default to a database needing a server"))))
+
+(deftest ^:unit ai-path-accepts-replicate-test
+  ;; The NL path end to end from the JSON a provider returns: the parse must
+  ;; keep `replicate` and the config must then render.
+  (let [parse #'setup/parse-ai-result
+        spec  (parse "{\"project-name\":\"shop\",\"database\":\"sqlite\",\"ai-provider\":\"replicate\"}")]
+    (is (= :replicate (:ai-provider spec)))
+    (is (str/includes? (setup/build-config spec "dev") ":provider :replicate"))
+    (is (str/includes? (setup/build-config spec "dev") "REPLICATE_API_TOKEN")))
+
+  (testing "a provider that answers with something unbuildable is refused, not written"
+    (let [parse #'setup/parse-ai-result]
+      (is (nil? (parse "{\"ai-provider\":\"gemini\"}"))))))
 
 (deftest ^:unit from-flags-refuses-unknown-value-test
   (testing "exits non-zero and writes nothing"
