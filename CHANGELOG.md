@@ -121,6 +121,9 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **`bb scaffold ai` works in a generated project** (BOU-401). It never resolved
+  `wagoe-ai` and died on the classpath; `bb setup ai` failed the same way, silently.
+
 - **An application using both the admin and the search module starts again**
   (BOU-392). Their routes overlap — `/web/admin/search/:index-id` against
   admin's generic `/web/admin/:entity/:id` — and the boot-time conflict check

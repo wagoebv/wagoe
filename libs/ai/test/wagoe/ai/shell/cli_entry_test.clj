@@ -176,7 +176,7 @@
       (is (<= 3 (count ;; Pattern/quote rather than an inline literal: `?` is a regex
           ;; quantifier, and escaping it through two layers of tooling is how
           ;; this assertion first matched nothing and passed as zero.
-          (re-seq (re-pattern (java.util.regex.Pattern/quote ":configured? true")) src)))
+                 (re-seq (re-pattern (java.util.regex.Pattern/quote ":configured? true")) src)))
           "expected the anthropic, openai-base-url and openai-key branches"))
 
     (testing "config.edn counts as chosen"
@@ -184,6 +184,33 @@
 
     (testing "and the bare fallback is only chosen when OLLAMA_URL says so"
       (is (str/includes? src ":configured? (boolean (System/getenv \"OLLAMA_URL\"))")))))
+
+(deftest ^:unit a-provider-named-in-config-outranks-an-exported-key
+  ;; The env chain used to be consulted first, so any exported provider key beat
+  ;; :wagoe/ai-service. A dead ANTHROPIC_API_KEY left in a shell profile
+  ;; silently overrode a config entry that had just been edited to :replicate,
+  ;; and nothing reported that the config was ignored (BOU-401).
+  ;;
+  ;; The env is not read here: the branch is what matters, and reading it would
+  ;; make the result depend on what the developer happens to have exported —
+  ;; the fault this fixes.
+  (let [from-env {:configured? true :provider ::came-from-env}]
+    (testing "a config entry naming a provider decides"
+      (with-redefs [wagoe.ai.shell.cli-entry/config-provider
+                    (fn [] {:provider :ollama :base-url "http://config-wins:1"})
+                    wagoe.ai.shell.cli-entry/make-service-from-env
+                    (fn [] from-env)]
+        (let [service (#'sut/make-service-from-config)]
+          (is (not= ::came-from-env (:provider service))
+              "an exported key must no longer outrank a named provider")
+          (is (true? (:configured? service))))))
+
+    (testing "no usable config entry falls through to the env chain"
+      ;; Generated projects ship no :wagoe/ai-service, and :no-op means the same
+      ;; thing here — exporting a key has to keep working for them.
+      (with-redefs [wagoe.ai.shell.cli-entry/config-provider (fn [] nil)
+                    wagoe.ai.shell.cli-entry/make-service-from-env (fn [] from-env)]
+        (is (= ::came-from-env (:provider (#'sut/make-service-from-config))))))))
 
 (deftest ^:unit unknown-options-are-reported-rather-than-dropped
   ;; parse-or-exit! exits the process on a bad flag, so the assertion is on

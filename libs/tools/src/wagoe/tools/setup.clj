@@ -9,7 +9,8 @@
 ;;   bb setup --database postgresql --payment stripe       # Non-interactive flags
 
 (ns wagoe.tools.setup
-  (:require [wagoe.tools.ansi :refer [bold green red cyan yellow dim]]
+  (:require [wagoe.tools.ai :as ai]
+            [wagoe.tools.ansi :refer [bold green red cyan yellow dim]]
             [cheshire.core :as json]
             [clojure.java.io :as io]
             [clojure.string :as str]
@@ -467,21 +468,22 @@
   "Parse AI setup-parse JSON result into a setup spec."
   [json-str]
   (try
-    (let [clean (-> json-str str/trim
-                    (str/replace #"^```json\s*" "")
-                    (str/replace #"\s*```$" ""))
-          data  (json/parse-string clean)]
-      {:project-name (or (get data "project-name") "my-app")
-       ;; Fall back to sqlite, not postgresql: an unparsed/absent choice must
-       ;; still yield a project that boots without a database server (BOU-228).
-       :database     (keyword (or (get data "database") "sqlite"))
-       :ai-provider  (keyword (or (get data "ai-provider") "none"))
-       :payment      (keyword (or (get data "payment") "none"))
-       :cache        (keyword (or (get data "cache") "none"))
-       :email        (keyword (or (get data "email") "none"))
-       :admin-ui     (if (some? (get data "admin-ui"))
-                       (boolean (get data "admin-ui"))
-                       true)})
+    ;; Not the whole capture: the CLI is a JVM logging to the console, and in a
+    ;; generated project — which ships no logback config — its own log lines sit
+    ;; on stdout above the JSON (BOU-401).
+    (let [data (some-> (ai/json-line json-str) json/parse-string)]
+      (when (map? data)
+        ;; Fall back to sqlite, not postgresql: an unparsed/absent choice must
+        ;; still yield a project that boots without a database server (BOU-228).
+        {:project-name (or (get data "project-name") "my-app")
+         :database     (keyword (or (get data "database") "sqlite"))
+         :ai-provider  (keyword (or (get data "ai-provider") "none"))
+         :payment      (keyword (or (get data "payment") "none"))
+         :cache        (keyword (or (get data "cache") "none"))
+         :email        (keyword (or (get data "email") "none"))
+         :admin-ui     (if (some? (get data "admin-ui"))
+                         (boolean (get data "admin-ui"))
+                         true)}))
     (catch Exception e
       (println (red (str "Failed to parse AI response: " (.getMessage e))))
       nil)))
@@ -492,10 +494,9 @@
   (println (dim (str "Parsing: " description)))
   (println)
   (try
-    (let [result (shell {:out :string :err :string}
-                        "clojure" "-M" "-m" "wagoe.ai.shell.cli-entry"
-                        "setup-parse" description)
-          spec   (parse-ai-result (:out result))]
+    (let [result (apply shell {:out :string :err :string :continue true}
+                        (ai/ai-command ["setup-parse" description]))
+          spec   (when (zero? (:exit result)) (parse-ai-result (:out result)))]
       (if spec
         (do
           (display-summary spec)
@@ -505,6 +506,10 @@
             (println (yellow "Cancelled."))))
         (do
           (println (red "Could not parse AI response. Falling back to interactive mode."))
+          ;; The CLI explains itself on stderr, which is captured here — a
+          ;; rejected API key must not read as "the AI is unavailable".
+          (when-not (str/blank? (str (:err result)))
+            (println (dim (str/trim (str (:err result))))))
           (let [spec (wizard-interactive)]
             (display-summary spec)
             (println)

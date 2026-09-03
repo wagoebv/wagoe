@@ -7,7 +7,8 @@
 ;; Invoked via: bb ai admin-entity "products with name, price, status"
 
 (ns wagoe.tools.admin-entity
-  (:require [wagoe.tools.ansi :refer [bold red dim]]
+  (:require [wagoe.tools.ai :as ai]
+            [wagoe.tools.ansi :refer [bold red dim]]
             [clojure.string :as str]
             [babashka.process :refer [shell]]))
 
@@ -27,9 +28,9 @@
   (println)
 
   (try
-    (if yes?
-      (shell "clojure" "-M" "-m" "wagoe.ai.shell.cli-entry" "admin-entity" "--yes" description)
-      (shell "clojure" "-M" "-m" "wagoe.ai.shell.cli-entry" "admin-entity" description))
+    (apply shell (ai/ai-command (cond-> ["admin-entity"]
+                                  yes? (conj "--yes")
+                                  :always (conj description))))
     (catch Exception e
       (println (red (str "Admin entity generator exited with error: " (.getMessage e))))
       (System/exit 1))))
