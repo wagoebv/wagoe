@@ -194,6 +194,35 @@
                  "The 1.0.1-alpha line is discontinued and receives no fixes.\n")))))
 
 ;; =============================================================================
+;; Rule 4 — prose that claims the current version
+;; =============================================================================
+
+(deftest ^:unit a-current-version-claim-is-found
+  ;; `docs/modules/ROOT/pages/roadmap.adoc` opened with "Wagoe is at
+  ;; `1.0.0-beta-5`" on the day 1.0.0-beta-6 shipped. The file was in scope and
+  ;; the three rules above matched none of it.
+  (testing "\"Wagoe is at\" is reported"
+    (let [[f] (sut/doc-version-findings
+               "docs/modules/ROOT/pages/roadmap.adoc"
+               "Wagoe is at `1.0.0-beta-5`. This page is the public view.\n")]
+      (is (= "1.0.0-beta-5" (:version f)))
+      (is (= "current-version claim" (:what f)))))
+
+  (testing "\"the current release is\" is reported"
+    (let [[f] (sut/doc-version-findings
+               "README.md"
+               "The current release is v1.0.0-beta-5.\n")]
+      (is (= "1.0.0-beta-5" (:version f)))
+      (is (= "current-version claim" (:what f)))))
+
+  (testing "a sentence explaining version drift is left alone"
+    ;; Same boundary as rule 3: the pages that must keep naming old releases are
+    ;; the ones explaining why the numbers moved.
+    (is (empty? (sut/doc-version-findings
+                 "x.adoc"
+                 "Maven sorts 1.0.0-beta-1 below 1.0.1-alpha-42.\n")))))
+
+;; =============================================================================
 ;; Consensus — documentation is checked, it does not vote
 ;; =============================================================================
 

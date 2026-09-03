@@ -150,6 +150,23 @@
   (re-pattern (str "(?i)\\b(?:new|added|introduced|available)\\s+in\\s+v?("
                    version-pattern ")\\b")))
 
+(def ^:private current-version-re
+  "A version presented as the one Wagoe is on right now.
+
+   The novelty phrasings above rot silently; these rot loudly, on the pages a
+   visitor reads first. `docs/modules/ROOT/pages/roadmap.adoc` opened with
+   \"Wagoe is at `1.0.0-beta-5`\" on the day `1.0.0-beta-6` shipped: in scope for
+   this gate, matched by none of its three rules, because a current-version claim
+   is neither a coordinate, a tag pin, nor a novelty marker.
+
+   Narrow for the same reason `prose-pin-re` is. \"is at\" and \"current/latest
+   version|release is\" are assertions about the present and cannot be true of an
+   old release; the sentences that explain version drift say \"the 1.0.1-alpha
+   line is discontinued\", which this does not match."
+  (re-pattern (str "(?i)\\b(?:wagoe\\s+is\\s+at|(?:current|latest)\\s+"
+                   "(?:version|release)\\s+is)\\s+[`']?v?("
+                   version-pattern ")\\b")))
+
 (def ^:private github-repo-re
   "The owner/name of whatever repository a line points at, if any."
   #"github\.com/([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+?)(?:\.git)?(?:[/\s\\]|$)")
@@ -203,7 +220,8 @@
         [[idx line] owner] (map vector block (tag-ownership block))
         [what re] [["com.wagoe pin"        coordinate-re]
                    ["git tag pin"          (when (= our-repo owner) tag-pin-re)]
-                   ["release-pinned prose" prose-pin-re]]
+                   ["release-pinned prose" prose-pin-re]
+                   ["current-version claim" current-version-re]]
         :when re
         m     (re-seq re line)
         :let  [matched (if (vector? m) (first m) m)

@@ -12,7 +12,7 @@ in beta, and the honest summary is that *no API is frozen yet*.
 | |
 
 | Current version
-| `1.0.0-beta-5`
+| `1.0.0-beta-6`
 
 | Stability
 | Beta — breaking changes are permitted between beta releases

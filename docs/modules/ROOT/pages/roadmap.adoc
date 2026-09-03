@@ -1,7 +1,7 @@
 = Roadmap
 :description: Where Wagoe is today, what stands between here and 1.0.0, and what comes after.
 
-Wagoe is at `1.0.0-beta-5`. This page is the public view of what is built, what
+Wagoe is at `1.0.0-beta-6`. This page is the public view of what is built, what
 is left before a stable `1.0.0`, and what we intend to build after it.
 
 It is a statement of intent, not a delivery commitment. Dates are deliberately
