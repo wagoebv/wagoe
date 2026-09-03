@@ -79,35 +79,78 @@ jobs:
           sha="$(git rev-parse HEAD)"
           echo "Requiring a successful \"$SUMMARY_CHECK\" on $sha"
 
-          # No `|| true`: an API failure must abort the release, not read as
-          # "no successful run" and land in the same branch as a red CI. The
-          # two need different messages — one is a broken token, the other is
-          # broken code.
-          statuses="$(gh api \
-            --method GET \
-            "repos/${GITHUB_REPOSITORY}/commits/${sha}/check-runs" \
-            -f "check_name=${SUMMARY_CHECK}" \
-            -f per_page=100 \
-            --jq '.check_runs[] | "\(.status):\(.conclusion // "no-conclusion")"')"
+          # Wait for a verdict rather than demanding one immediately. Both
+          # workflows are triggered by the release: publish.yml by the tag push,
+          # ci.yml by the push to main that the tag points at. Nothing orders
+          # them, so the guard read an empty check list and reported "CI never
+          # ran" while CI was queued — 1.0.0-beta-6 failed here at 09:19:09 and
+          # the summary went green at 09:22:08, three minutes later.
+          #
+          # "Not finished" and "never started" were the same branch, which is
+          # what made a timing accident indistinguishable from an untested
+          # commit. Three outcomes now, and the wait only ever delays the two
+          # that are already going to succeed:
+          #
+          #   completed:success  -> publish
+          #   completed:<other>  -> fail NOW; a red run will not turn green
+          #   absent/in progress -> keep looking, up to DEADLINE_MIN
+          #
+          # The safety property is unchanged: a commit whose CI never runs still
+          # fails, it just costs the timeout to say so.
+          DEADLINE_MIN=25
+          INTERVAL=20
+          deadline=$(( $(date +%s) + DEADLINE_MIN * 60 ))
 
-          if [ -z "$statuses" ]; then
-            echo "::error::No \"$SUMMARY_CHECK\" run exists for $sha — CI never ran on this commit."
-            echo ""
-            echo "Publishing would ship 30 immutable Clojars coordinates built from"
-            echo "source nothing has tested. Push the commit to a branch, open a PR,"
-            echo "and re-tag once the pipeline is green."
-            exit 1
-          fi
+          while :; do
+            # No `|| true`: an API failure must abort the release, not read as
+            # "no successful run" and land in the same branch as a red CI. The
+            # two need different messages — one is a broken token, the other is
+            # broken code.
+            statuses="$(gh api \
+              --method GET \
+              "repos/${GITHUB_REPOSITORY}/commits/${sha}/check-runs" \
+              -f "check_name=${SUMMARY_CHECK}" \
+              -f per_page=100 \
+              --jq '.check_runs[] | "\(.status):\(.conclusion // "no-conclusion")"')"
 
-          if ! printf '%s\n' "$statuses" | grep -qx 'completed:success'; then
-            echo "::error::\"$SUMMARY_CHECK\" did not succeed on $sha."
-            echo ""
-            echo "Runs found for this commit:"
-            printf '%s\n' "$statuses" | sed 's/^/  /'
-            exit 1
-          fi
+            if printf '%s\n' "$statuses" | grep -qx 'completed:success'; then
+              echo "\"$SUMMARY_CHECK\" passed on $sha — proceeding."
+              break
+            fi
 
-          echo "\"$SUMMARY_CHECK\" passed on $sha — proceeding."
+            # A conclusion that is not success is final. Waiting out the
+            # deadline would report a timeout for a run that already answered,
+            # and send the reader looking for a queue that is not there.
+            decided="$(printf '%s\n' "$statuses" | grep '^completed:' || true)"
+            if [ -n "$decided" ]; then
+              echo "::error::\"$SUMMARY_CHECK\" did not succeed on $sha."
+              echo ""
+              echo "Runs found for this commit:"
+              printf '%s\n' "$statuses" | sed 's/^/  /'
+              exit 1
+            fi
+
+            if [ "$(date +%s)" -ge "$deadline" ]; then
+              echo "::error::\"$SUMMARY_CHECK\" reached no conclusion on $sha within ${DEADLINE_MIN}m."
+              echo ""
+              if [ -z "$statuses" ]; then
+                echo "No run exists for this commit at all. Publishing would ship"
+                echo "31 immutable Clojars coordinates built from source nothing"
+                echo "has tested. Push the commit to a branch, open a PR, and"
+                echo "re-tag once the pipeline is green."
+              else
+                echo "Runs found, none concluded:"
+                printf '%s\n' "$statuses" | sed 's/^/  /'
+                echo ""
+                echo "CI is stuck or far slower than usual. Re-run this workflow"
+                echo "once it finishes — the tag does not need to move."
+              fi
+              exit 1
+            fi
+
+            echo "  ${statuses:-no run yet}; waiting ${INTERVAL}s ($(( (deadline - $(date +%s)) / 60 ))m left)"
+            sleep "$INTERVAL"
+          done
 
       - name: Setup Clojure
         uses: DeLaGuardo/setup-clojure@13.6.1
