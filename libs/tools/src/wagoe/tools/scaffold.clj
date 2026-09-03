@@ -14,7 +14,9 @@
 
 (ns wagoe.tools.scaffold
   (:require [wagoe.tools.ansi :as ansi :refer [bold green cyan red yellow dim]]
+            [wagoe.tools.ai :as ai]
             [wagoe.tools.project :as project]
+            [cheshire.core :as json]
             [clojure.java.io :as io]
             [clojure.string :as str]
             [babashka.process :refer [shell]]))
@@ -502,20 +504,90 @@
 ;; AI-powered NL scaffolding
 ;; =============================================================================
 
-(defn wizard-ai [description yes?]
+(defn- json-line
+  "The JSON object in `out`, which carries more than the answer.
+
+   The subprocess is a JVM: logback prints its own configuration status to
+   stdout before the CLI says anything, so parsing the whole capture fails on
+   the first line. Providers also wrap JSON in ``` fences. Read the last line
+   that looks like an object."
+  [out]
+  (->> (str/split-lines (str out))
+       (map #(-> % str/trim
+                 (str/replace #"^```json\s*" "")
+                 (str/replace #"\s*```$" "")))
+       (filter #(and (str/starts-with? % "{") (str/ends-with? % "}")))
+       last))
+
+(defn- parse-ai-module-spec
+  "Read the JSON module spec `bb ai scaffold-parse` writes to stdout.
+
+   Returns the argument map `build-generate-args` takes, or nil if the output
+   holds no spec \u2014 a provider that answered with prose, or one that named no
+   module."
+  [out]
+  (try
+    (let [data  (json/parse-string (json-line out) true)
+          spec  {:module (:module-name data)
+                 :entity (:entity data)
+                 :fields (vec (:fields data))
+                 :http   (boolean (:http data))
+                 :web    (boolean (:web data))}]
+      (when (and (valid-kebab? (:module spec)) (valid-pascal? (:entity spec)))
+        spec))
+    (catch Exception _ nil)))
+
+(defn wizard-ai
+  "Parse a description with the AI CLI, then scaffold through the normal path.
+
+   The AI CLI used to preview, confirm and generate on its own. It could not be
+   reached at all from a generated project \u2014 `clojure -M` without the injected
+   dependency (BOU-401) \u2014 and once reachable it shelled the scaffolder without
+   rewrite-clj or `--base-ns`. It now parses and nothing else: generation goes
+   through `run-clojure!`, the same call `bb scaffold generate` makes."
+  [description yes?]
   (println)
   (println (bold "\u2746 Wagoe AI Scaffolder \u2014 Natural Language Module Generation"))
   (println)
   (println (dim (str "Parsing: " description)))
   (println)
-  ;; Delegate to the AI CLI which previews, confirms, and runs scaffolder generation.
-  (try
-    (if yes?
-      (shell "clojure" "-M" "-m" "wagoe.ai.shell.cli-entry" "scaffold-ai" "--yes" description)
-      (shell "clojure" "-M" "-m" "wagoe.ai.shell.cli-entry" "scaffold-ai" description))
-    (catch Exception e
-      (println (red (str "AI scaffolder exited with error: " (.getMessage e))))
-      (*exit!* 1))))
+  (let [result (try
+                 (apply shell {:out :string :continue true}
+                        (ai/ai-command ["scaffold-parse" description]))
+                 (catch Exception e
+                   (println (red (str "AI scaffolder exited with error: " (.getMessage e))))
+                   (*exit!* 1)
+                   nil))
+        spec   (when (and result (zero? (:exit result)))
+                 (parse-ai-module-spec (:out result)))]
+    (cond
+      (nil? result)
+      nil
+
+      (not (zero? (:exit result)))
+      (do (println (red "AI scaffolder could not parse the description."))
+          ;; The CLI's own message may be on stdout, which is captured for the
+          ;; spec — reprinted, or a failure explains itself to nobody.
+          (when-not (str/blank? (str (:out result)))
+            (println (dim (str/trim (str (:out result))))))
+          (*exit!* 1))
+
+      (nil? spec)
+      (do (println (red "AI scaffolder returned no usable module spec."))
+          (println (dim (str/trim (str (:out result)))))
+          (*exit!* 1))
+
+      :else
+      (let [{:keys [module entity fields http web]} spec
+            args (build-generate-args spec)]
+        (display-generate-summary module entity fields http web)
+        (println)
+        (println (dim (str "Command: clojure -M -m wagoe.scaffolder.shell.cli-entry "
+                           (str/join " " args))))
+        (println)
+        (if (or yes? (confirm "Generate this module?" true))
+          (run-clojure! args)
+          (println (yellow "Cancelled. No files were generated.")))))))
 
 ;; =============================================================================
 ;; Help text

@@ -59,21 +59,36 @@
      (str "{:deps {com.wagoe/wagoe-ai " ai-coord " "
           "org.clojure/tools.cli {:mvn/version \"" tools-cli-version "\"}}}"))))
 
-(defn- run-clojure!
-  "Shell out to the Clojure AI CLI with given args. Streams output to terminal.
+(defn ai-command
+  "The command vector that runs the AI CLI with `args`.
 
    In generated projects (no libs/ai directory) the dependency is injected via
    -Sdeps. In the monorepo libs/ai/src is already on the classpath, so -Sdeps is
    skipped to avoid forcing Maven resolution of an artifact that may not yet be
-   published."
+   published.
+
+   Public because `bb ai` is not the only caller: `bb scaffold ai`, `bb setup ai`
+   and `bb admin-entity` shell the same CLI, and each of them hardcoded a plain
+   `clojure -M -m wagoe.ai.shell.cli-entry` that could not resolve the namespace
+   in a generated project (BOU-401). One builder, so the next call site cannot
+   miss the injection.
+
+   `in-monorepo?` is a parameter as well as a directory probe so a test can
+   reach the injecting branch from inside this repository, where the probe is
+   always true."
+  ([args] (ai-command args (.exists (io/file "libs/ai"))))
+  ([args in-monorepo?]
+   (let [base-cmd (if in-monorepo?
+                    ["clojure" "-M" "-m" "wagoe.ai.shell.cli-entry"]
+                    ["clojure" "-Sdeps" (ai-deps)
+                     "-M" "-m" "wagoe.ai.shell.cli-entry"])]
+     (vec (concat base-cmd args)))))
+
+(defn- run-clojure!
+  "Shell out to the Clojure AI CLI with given args. Streams output to terminal."
   [args]
   (try
-    (let [in-monorepo? (.exists (io/file "libs/ai"))
-          base-cmd     (if in-monorepo?
-                         ["clojure" "-M" "-m" "wagoe.ai.shell.cli-entry"]
-                         ["clojure" "-Sdeps" (ai-deps)
-                          "-M" "-m" "wagoe.ai.shell.cli-entry"])]
-      (apply shell (concat base-cmd args)))
+    (apply shell (ai-command args))
     (catch Exception e
       (println (red (str "AI CLI exited with error: " (.getMessage e))))
       (System/exit 1))))

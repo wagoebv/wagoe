@@ -9,7 +9,8 @@
 ;;   bb setup --database postgresql --payment stripe       # Non-interactive flags
 
 (ns wagoe.tools.setup
-  (:require [wagoe.tools.ansi :refer [bold green red cyan yellow dim]]
+  (:require [wagoe.tools.ai :as ai]
+            [wagoe.tools.ansi :refer [bold green red cyan yellow dim]]
             [cheshire.core :as json]
             [clojure.java.io :as io]
             [clojure.string :as str]
@@ -492,9 +493,8 @@
   (println (dim (str "Parsing: " description)))
   (println)
   (try
-    (let [result (shell {:out :string :err :string}
-                        "clojure" "-M" "-m" "wagoe.ai.shell.cli-entry"
-                        "setup-parse" description)
+    (let [result (apply shell {:out :string :err :string}
+                        (ai/ai-command ["setup-parse" description]))
           spec   (parse-ai-result (:out result))]
       (if spec
         (do

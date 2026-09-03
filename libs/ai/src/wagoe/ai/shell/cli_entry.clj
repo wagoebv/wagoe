@@ -5,14 +5,13 @@
      clojure -M -m wagoe.ai.shell.cli-entry <subcommand> [args]
 
    Subcommands:
-     scaffold-ai <description>                 -- NL module scaffolding
+     scaffold-parse <description>              -- NL module spec, as JSON
      explain [--file path] [--stdin]           -- error explainer
      gen-tests <source-file>                   -- test generator
      sql <description>                         -- SQL copilot
      docs --module <path> --type <type>        -- documentation wizard"
   (:require [wagoe.config :as config]
             [wagoe.ai.core.context :as ctx]
-            [wagoe.ai.core.parsing :as parsing]
             [wagoe.ai.shell.module-wiring]
             [wagoe.ai.shell.providers.anthropic :as anthropic]
             [wagoe.ai.shell.providers.ollama :as ollama]
@@ -21,7 +20,6 @@
             [wagoe.ai.shell.service :as svc]
             [cheshire.core :as json]
             [clojure.java.io :as io]
-            [clojure.java.shell :as sh]
             [clojure.string :as str]
             [clojure.tools.cli :as cli]
             [integrant.core :as ig])
@@ -37,10 +35,6 @@
 (defn- cyan  [s] (str "\033[36m" s "\033[0m"))
 (defn- yellow [s] (str "\033[33m" s "\033[0m"))
 (defn- dim   [s] (str "\033[2m"  s "\033[0m"))
-
-;; Must match libs/tools/src/wagoe/tools/scaffold.clj scaffolder-version.
-;; Update both together on each release.
-(def ^:private scaffolder-version "1.0.0-beta-5")
 
 ;; =============================================================================
 ;; Service bootstrap
@@ -250,12 +244,11 @@
         (make-service-from-env)))))
 
 ;; =============================================================================
-;; Subcommand: scaffold-ai
+;; Subcommand: scaffold-parse
 ;; =============================================================================
 
-(def scaffold-ai-opts
+(def scaffold-parse-opts
   [["-r" "--root ROOT" "Project root" :default "."]
-   ["-y" "--yes" "Skip confirmation and generate immediately"]
    ["-h" "--help"]])
 
 (defn- confirm?
@@ -266,49 +259,31 @@
   (let [input (-> (or (read-line) "") str/trim str/lower-case)]
     (or (empty? input) (= input "y") (= input "yes"))))
 
-(defn cmd-scaffold-ai [args]
-  (let [{:keys [options arguments]} (parse-or-exit! args scaffold-ai-opts "Usage: bb scaffold ai <description> [--yes] [--dry-run]")
+(defn cmd-scaffold-parse
+  "Turn a natural-language description into a module spec on stdout, as JSON.
+
+   Parsing only: the preview, the confirmation and the scaffolder run belong to
+   `bb scaffold ai`, which already injects wagoe-scaffolder, its rewrite-clj
+   dependency, `--base-ns` and the WAGOE_SCAFFOLDER_ROOT override. Generating
+   from here reproduced none of that, so the module either failed to build or
+   landed under `wagoe.*` (BOU-401). Same split as `setup-parse`.
+
+   Stdout carries the JSON and nothing else \u2014 diagnostics go to stderr."
+  [args]
+  (let [{:keys [options arguments]} (parse-or-exit! args scaffold-parse-opts "Usage: bb scaffold ai <description>")
         description (str/join " " arguments)]
     (when (or (:help options) (str/blank? description))
       (println "Usage: bb scaffold ai <description>")
       (println "  Example: bb scaffold ai \"product module with name, price, stock\"")
       (System/exit 0))
-    (println (bold "\u2746 Wagoe AI Scaffolder"))
-    (println)
-    (println (dim (str "Parsing: " description)))
-    (println)
     (let [service (make-service-from-config)
           result  (svc/scaffold-from-description service description (:root options))]
       (if (:error result)
-        (do (println (red (explain-provider-error result service))) (System/exit 1))
-        (do
-          (println (cyan "\u250c\u2500 Preview \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510"))
-          (println (str (cyan "\u2502") " Module:  " (bold (:module-name result))))
-          (println (str (cyan "\u2502") " Entity:  " (bold (:entity result))))
-          (println (str (cyan "\u2502") " Fields:"))
-          (doseq [{:keys [name type required unique]} (:fields result)]
-            (let [mods (str/join ", " (filter some? [(when required "required") (when unique "unique")]))]
-              (println (str (cyan "\u2502") "   " (format "%-14s" name) (format "%-10s" type)
-                            (when (seq mods) (str " (" mods ")"))))))
-          (println (str (cyan "\u2502") " HTTP: " (if (:http result) (green "\u2713") (red "\u2717"))
-                        "  Web: " (if (:web result) (green "\u2713") (red "\u2717"))))
-          (println (cyan "\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518"))
-          (println)
-          (if (or (:yes options) (confirm? "Generate this module?"))
-            (let [cli-args     (parsing/module-spec->cli-args result)
-                  in-monorepo? (.exists (io/file "libs/scaffolder"))
-                  base-cmd     (if in-monorepo?
-                                 ["clojure" "-M" "-m" "wagoe.scaffolder.shell.cli-entry"]
-                                 ["clojure"
-                                  "-Sdeps"
-                                  (str "{:deps {com.wagoe/wagoe-scaffolder "
-                                       "{:mvn/version \"" scaffolder-version "\"}}}")
-                                  "-M" "-m" "wagoe.scaffolder.shell.cli-entry"])
-                  {:keys [exit out err]} (apply sh/sh (concat base-cmd cli-args))]
-              (when (seq out) (print out))
-              (when (seq err) (binding [*out* *err*] (print err)))
-              (System/exit exit))
-            (println (yellow "Cancelled. No files were generated."))))))))
+        (do (binding [*out* *err*]
+              (println (red (explain-provider-error result service))))
+            (System/exit 1))
+        (println (json/generate-string
+                  (select-keys result [:module-name :entity :fields :http :web])))))))
 
 ;; =============================================================================
 ;; Subcommand: explain
@@ -551,6 +526,7 @@
        "  bb ai docs --module <path> [--type t]        Documentation wizard\n"
        "  bb ai admin-entity <description>             Admin entity EDN generator\n"
        "  bb ai setup-parse <description>              Parse NL setup description\n"
+       "  bb ai scaffold-parse <description>           Parse NL module description\n"
        "\n"
        "Provider selection (via environment variables):\n"
        "  ANTHROPIC_API_KEY   \u2192 Anthropic (Claude)\n"
@@ -567,8 +543,8 @@
       (or (nil? sub) (contains? #{"-h" "--help" "help"} sub))
       (println help-text)
 
-      (= sub "scaffold-ai")
-      (cmd-scaffold-ai rest-args)
+      (= sub "scaffold-parse")
+      (cmd-scaffold-parse rest-args)
 
       (= sub "explain")
       (cmd-explain rest-args)
