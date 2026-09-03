@@ -184,11 +184,17 @@
   ;; provider here would make a fresh checkout fail on a missing token, and
   ;; would send source code to a third party by default.
   ;;
-  ;; To use a hosted provider, export one of ANTHROPIC_API_KEY,
-  ;; OPENAI_API_KEY, OPENAI_BASE_URL or REPLICATE_API_TOKEN — the env chain in
-  ;; wagoe.ai.shell.cli-entry takes precedence over this block, so opting in
-  ;; needs no config edit. Or replace :provider below; the supported set is
-  ;; :ollama :anthropic :openai :replicate :no-op.
+  ;; This block decides: a :provider named here outranks ANTHROPIC_API_KEY,
+  ;; OPENAI_BASE_URL, OPENAI_API_KEY and REPLICATE_API_TOKEN, which are only
+  ;; consulted when no :wagoe/ai-service names one (BOU-401). To use a hosted
+  ;; provider, edit :provider below — the supported set is :ollama :anthropic
+  ;; :openai :replicate :no-op — and keep its key in the environment:
+  ;;
+  ;;   {:provider :replicate
+  ;;    :api-key  #or [#env REPLICATE_API_TOKEN ""]   ; a default, or bb doctor --ci fails
+  ;;    :model    #or [#env AI_MODEL "anthropic/claude-4.5-haiku"]}
+  ;;
+  ;; Keep that edit local — the committed default stays Ollama.
   :wagoe/ai-service
   {:provider :ollama
    :base-url #or [#env OLLAMA_URL "http://localhost:11434"]

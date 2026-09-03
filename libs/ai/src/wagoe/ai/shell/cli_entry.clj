@@ -203,46 +203,53 @@
                     :model    (or (System/getenv "AI_MODEL") "qwen2.5-coder:7b")})
      :configured? (boolean (System/getenv "OLLAMA_URL"))}))
 
-(defn- provider-env-vars-set?
-  "Returns true when the developer has explicitly configured a provider via
-   environment variables, indicating their intent to use a specific backend."
+(defn- config-provider
+  "The :wagoe/ai-service entry from resources/conf/{env}/config.edn, when it
+   names a provider to use. nil when there is no config, no such key, or the
+   key selects :no-op — each of which means the env chain decides."
   []
-  (or (System/getenv "ANTHROPIC_API_KEY")
-      (System/getenv "OPENAI_BASE_URL")
-      (System/getenv "OPENAI_API_KEY")
-      (System/getenv "REPLICATE_API_TOKEN")))
+  (let [config (try
+                 (config/load-config)
+                 (catch Exception e
+                   ;; Config resources absent (external consumer without
+                   ;; resources/conf/<env>/config.edn) — fall back to env vars.
+                   ;; Pinned to the exact message so Aero env-var resolution
+                   ;; errors ("Environment variable not found: X") are NOT
+                   ;; swallowed — those mean a broken config, which should
+                   ;; surface immediately.
+                   (if (= (str (.getMessage e)) "Configuration file not found")
+                     nil
+                     (throw e))))
+        ai-cfg (when config (get-in config [:active :wagoe/ai-service]))]
+    (when (and ai-cfg (not= (:provider ai-cfg) :no-op))
+      ai-cfg)))
 
 (defn- make-service-from-config
   "Build an AI service from the Aero config file (resources/conf/{env}/config.edn).
 
    Priority:
-     1. Explicit provider env vars (ANTHROPIC_API_KEY, OPENAI_BASE_URL, OPENAI_API_KEY)
-        — developer intent always wins over project config.
-     2. :wagoe/ai-service from config, when present and not :no-op.
-     3. make-service-from-env fallback (config absent, resources missing, or :no-op).
+     1. :wagoe/ai-service from config, when it names a provider other than :no-op.
+     2. Provider env vars (ANTHROPIC_API_KEY, OPENAI_BASE_URL, OPENAI_API_KEY,
+        REPLICATE_API_TOKEN), in that order.
+     3. The bare Ollama fallback.
+
+   The env chain used to come first, on the reasoning that an exported key is
+   developer intent. It outranked a provider written into config.edn by name,
+   which is at least as deliberate and much harder to lose track of: a stale
+   ANTHROPIC_API_KEY in a shell profile silently beat a config entry someone had
+   just edited, and nothing said the config had been ignored. Naming a provider
+   in config.edn now decides.
+
+   Generated projects ship no :wagoe/ai-service key, so exporting a key is still
+   all they need — that path is unchanged.
 
    Errors from a present but broken config still surface immediately."
   []
-  (if (provider-env-vars-set?)
-    (make-service-from-env)
-    (let [config (try
-                   (config/load-config)
-                   (catch Exception e
-                     ;; Config resources absent (external consumer without
-                     ;; resources/conf/<env>/config.edn) — fall back to env vars.
-                     ;; Pinned to the exact message so Aero env-var resolution
-                     ;; errors ("Environment variable not found: X") are NOT
-                     ;; swallowed — those mean a broken config, which should
-                     ;; surface immediately.
-                     (if (= (str (.getMessage e)) "Configuration file not found")
-                       nil
-                       (throw e))))
-          ai-cfg (when config (get-in config [:active :wagoe/ai-service]))]
-      (if (and ai-cfg (not= (:provider ai-cfg) :no-op))
-        ;; Chosen in resources/conf/<env>/config.edn — a supported path, and as
-        ;; deliberate as an environment variable.
-        (assoc (ig/init-key :wagoe/ai-service ai-cfg) :configured? true)
-        (make-service-from-env)))))
+  (if-let [ai-cfg (config-provider)]
+    ;; Chosen in resources/conf/<env>/config.edn — a supported path, and as
+    ;; deliberate as an environment variable.
+    (assoc (ig/init-key :wagoe/ai-service ai-cfg) :configured? true)
+    (make-service-from-env)))
 
 ;; =============================================================================
 ;; Subcommand: scaffold-parse
