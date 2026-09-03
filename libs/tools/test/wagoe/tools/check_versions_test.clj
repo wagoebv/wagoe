@@ -43,6 +43,33 @@
     (is (not (sut/doc-in-scope? "libs/tools/target/classes/README.md")))))
 
 ;; =============================================================================
+;; Injected pins — the artifacts one library shells for another
+;; =============================================================================
+
+(deftest ^:unit an-injected-pin-is-told-from-a-third-party-one
+  ;; `ai-version` and `scaffolder-version` shipped 1.0.0-beta-5 inside the
+  ;; 1.0.0-beta-6 release, so a beta-6 project ran a beta-5 AI CLI and
+  ;; `bb scaffold ai` died on `Unknown subcommand: scaffold-parse`. The gate
+  ;; reported every location in agreement, because it read neither.
+  (let [libs #{"ai" "scaffolder" "tools" "wagoe-mcp" "wagoe-cli"}]
+    (testing "a def naming a Wagoe library is a suite pin"
+      (is (sut/injected-pin-name? "ai" libs))
+      (is (sut/injected-pin-name? "scaffolder" libs)))
+
+    (testing "both spellings of the prefix resolve to the same library"
+      ;; wagoe-tools-version names libs/tools; wagoe-mcp-version names
+      ;; libs/wagoe-mcp. The directory carries the prefix in one case only.
+      (is (sut/injected-pin-name? "wagoe-tools" libs))
+      (is (sut/injected-pin-name? "wagoe-mcp" libs)))
+
+    (testing "a third-party pin is not a suite version"
+      ;; tools-cli-version "1.4.256" sits four lines above ai-version, and
+      ;; `bb bump` rewrites whatever this reports — so a false positive here
+      ;; would break the tools.cli pin rather than merely over-report.
+      (is (not (sut/injected-pin-name? "tools-cli" libs)))
+      (is (not (sut/injected-pin-name? "rewrite-clj" libs))))))
+
+;; =============================================================================
 ;; Rule 1 — coordinates users copy
 ;; =============================================================================
 

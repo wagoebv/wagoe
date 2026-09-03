@@ -39,6 +39,45 @@
     {:line (inc idx) :excerpt matched :version v
      :groups (if (vector? m) m [m])}))
 
+(defn publishable-libs
+  "The library names `libs/*/build.clj` says are published.
+
+   Read off the filesystem rather than listed, for the reason every other rule
+   here is: a hand-kept list is the thing that drifts. Used to tell a suite
+   version pin from a third-party one — see `injected-pin-name?`."
+  []
+  (->> (fs/glob root-dir "libs/*/build.clj")
+       (map #(str (fs/file-name (fs/parent %))))
+       set))
+
+(defn injected-pin-name?
+  "True when a `(def <name>-version \"…\")` names a Wagoe artifact.
+
+   `libs/tools` shells other Wagoe CLIs into generated projects with `-Sdeps`,
+   pinning them from a bare def: `ai-version` in `wagoe.tools.ai` and
+   `scaffolder-version` in `wagoe.tools.scaffold`. Both shipped `1.0.0-beta-5`
+   in the `1.0.0-beta-6` release, so a beta-6 project ran a beta-5 scaffolder
+   and a beta-5 AI CLI — `bb scaffold ai` died on `Unknown subcommand:
+   scaffold-parse`, a subcommand beta-6 has and beta-5 does not.
+
+   The gate reported 101 locations in agreement while those two disagreed,
+   because nothing read them. The comment above `ai-version` asked a human to
+   \"update with the other release pins\", which is the arrangement this gate
+   exists to replace.
+
+   Matching every `-version` def instead would sweep in third-party pins —
+   `tools-cli-version \"1.4.256\"` sits four lines above `ai-version` — and
+   `bb bump` rewrites what this discovers, so a false positive here does not
+   merely over-report, it breaks the tools.cli pin. The library set decides:
+   `ai` and `scaffolder` are directories under `libs/`, `tools-cli` is not.
+   Tried with and without the `wagoe-` prefix because both spellings are in
+   use — `wagoe-tools-version` names `libs/tools`, `wagoe-mcp-version` names
+   `libs/wagoe-mcp`."
+  [name libs]
+  (boolean (some libs [name
+                       (str/replace name #"^wagoe-" "")
+                       (str "wagoe-" name)])))
+
 (defn version-sources
   "Every file that hard-codes the suite version, and the version it names.
 
@@ -79,6 +118,18 @@
                          (re-pattern (str "(:[a-z-]*version[a-z-]*)\\s+\""
                                           version-pattern "\"")))]
        (assoc m :file f :what (second (:groups m))))
+
+     ;; Artifacts one library pins for another and injects with -Sdeps. Not in
+     ;; any deps.edn, so no rule above can see them: the version is a bare def
+     ;; interpolated into a coordinate string at call time.
+     (let [libs (publishable-libs)]
+       (for [f     (sort (map str (fs/glob root-dir "libs/*/src/**/*.clj")))
+             m     (matches-in (read* f)
+                               (re-pattern (str "\\(def\\s+(?:\\^:private\\s+)?"
+                                                "([a-z][a-z0-9-]*)-version\\s+\""
+                                                version-pattern "\"")))
+             :when (injected-pin-name? (second (:groups m)) libs)]
+         (assoc m :file (rel f) :what "injected pin")))
 
      ;; Any com.wagoe/* Maven pin, in deps.edn or bb.edn, anywhere in the tree.
      ;; This is the shape the ticket is named for: bb.edn pins are separate
