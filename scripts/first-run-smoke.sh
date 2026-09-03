@@ -15,11 +15,26 @@
 #      conditions no maintainer's laptop and no GitHub runner reproduces. Run
 #      this on the runner directly and it silently proves nothing.
 #
-#   2. It tests THIS checkout, not the last release. install.sh installs the
+#   2. It knows WHICH Wagoe it is testing, and says so. install.sh installs the
 #      CLI from the published tag, and generated projects pin
 #      com.wagoe/wagoe-tools from Clojars — so a naive run exercises shipped
-#      code and passes while the branch is broken. The :local/root rewrites
-#      below are what make it a test of the working tree.
+#      code and passes while the branch is broken. SMOKE_TARGET picks the one
+#      under test, and each mode asserts that it got what it asked for:
+#
+#        worktree (default) — rewrite every com.wagoe pin to :local/root, then
+#          fail if any pin survived. Gates every push, in ci.yml.
+#        released           — leave the pins alone, then fail if any :local/root
+#          crept in. Runs the published tag exactly as a visitor gets it.
+#
+# Why `released` exists (BOU-402). The worktree mode is the configuration in
+# which a stale release passes: 1.0.0-beta-5 shipped the pre-BOU-319 dev/user.clj
+# — thirteen lines of go/reset/halt — so `bb quickstart` closed by telling users
+# to run (status), and (status) did not resolve. main had the fix; the tag
+# predated it, and nothing exercised the tag. The same run catches BOU-401.
+#
+# Both modes run the installer and the assertions from THIS checkout. Only the
+# artifacts differ. Curling get.wagoe.org instead would make steps 1-2 test a CDN
+# rather than scripts/install.sh, and stop reporting installer defects.
 #
 # Asserting on exit codes is not enough: `bb quickstart` reported 8/8 Done and
 # exit 0 while the app was not running (BOU-226) and while the sample module's
@@ -28,7 +43,13 @@
 set -euo pipefail
 
 IMAGE="${SMOKE_IMAGE:-ubuntu:24.04}"
+TARGET="${SMOKE_TARGET:-worktree}"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+case "$TARGET" in
+  worktree|released) ;;
+  *) echo "SMOKE_TARGET must be worktree or released, got: $TARGET" >&2; exit 2 ;;
+esac
 
 # The archlinux image publishes amd64 only, so covering Arch from an Apple
 # Silicon machine needs emulation. Opt-in rather than automatic: an emulated run
@@ -38,14 +59,16 @@ PLATFORM_ARG=()
 [ -n "${SMOKE_PLATFORM:-}" ] && PLATFORM_ARG=(--platform "$SMOKE_PLATFORM")
 
 echo "── First-run smoke test"
-echo "   image: $IMAGE${SMOKE_PLATFORM:+  (platform: $SMOKE_PLATFORM)}"
-echo "   repo:  $REPO_ROOT"
+echo "   image:  $IMAGE${SMOKE_PLATFORM:+  (platform: $SMOKE_PLATFORM)}"
+echo "   repo:   $REPO_ROOT"
+echo "   target: $TARGET"
 echo
 
 docker run --rm \
   ${PLATFORM_ARG[@]+"${PLATFORM_ARG[@]}"} \
   -v "$REPO_ROOT:/repo:ro" \
   -e REPO=/repo \
+  -e "TARGET=$TARGET" \
   "$IMAGE" bash -euo pipefail -c '
 fail() { echo; echo "SMOKE FAILURE: $*"; exit 1; }
 ok()   { echo "  ok — $*"; }
@@ -117,57 +140,108 @@ bash /repo/scripts/install.sh >/tmp/install.log 2>&1 || {
 for t in java clojure bb wagoe; do
   bash -ic "command -v $t" >/dev/null 2>&1 || fail "$t not on PATH after install"
 done
-ok "installed; java, clojure, bb, wagoe all resolve"
+# Separate assert, separate message. install.sh installs this one with `|| true`
+# and reports "AI agent tooling installed" either way, so a failed bbin clone is
+# silent here and resurfaces at step 8 as "(go) failed" — which sends you to
+# debug the application. Say it where it happened.
+bash -ic "command -v clj-nrepl-eval" >/dev/null 2>&1 \
+  || fail "clj-nrepl-eval not on PATH after install (install.sh installs it with || true, so this is a failed bbin install, not a Wagoe defect — usually GitHub throttling)"
+# Name the tag. In released mode it IS the thing under test, and a red cell that
+# does not say which release it tested sends the reader to the Actions log to
+# find out. install.sh resolves it from the GitHub releases API, so it is not
+# derivable from this checkout.
+# install.sh colours that line and ends it with an ellipsis, so the raw match is
+# "1.0.0-beta-5...<ESC>[0m". Strip both, or the tag reported is not a tag.
+# `|| true` is load-bearing under `set -euo pipefail`: a grep that matches
+# nothing exits 1, and the exit status of a command substitution is the
+# assignment/s, so a changed install.sh message would kill the run here with no
+# output at all. Reporting an unknown tag is the correct failure for a cosmetic
+# line.
+WAGOE_TAG=$(grep -oE "Installing wagoe CLI @ .*" /tmp/install.log \
+              | head -1 \
+              | sed -E "s/.*@ //; s/\x1B\[[0-9;]*[a-zA-Z]//g; s/[.[:space:]]+$//" || true)
+ok "installed; java, clojure, bb, wagoe all resolve (published tag: ${WAGOE_TAG:-unknown})"
 
-# ── 3. generate a project from THIS checkout ────────────────────────────────
-echo "[3/8] wagoe new"
-cp -r /repo /work
+# ── 3. generate a project ───────────────────────────────────────────────────
+# worktree: drive the CLI out of the copied checkout, so the generator under
+#           test is this branch.
+# released: use the `wagoe` on PATH, which install.sh built from the latest
+#           published tag. That wrapper is the whole point of this mode — it
+#           runs the templates in that tag, which is where BOU-402 lived.
+echo "[3/8] wagoe new  (target: $TARGET)"
 cd /root
-bash -ic "bb --config /work/bb.edn -e \"(require (quote wagoe.cli.main)) (wagoe.cli.main/-main \\\"new\\\" \\\"demo\\\")\"" \
-  >/tmp/new.log 2>&1 || { tail -20 /tmp/new.log; fail "wagoe new failed"; }
+if [ "$TARGET" = worktree ]; then
+  cp -r /repo /work
+  bash -ic "bb --config /work/bb.edn -e \"(require (quote wagoe.cli.main)) (wagoe.cli.main/-main \\\"new\\\" \\\"demo\\\")\"" \
+    >/tmp/new.log 2>&1 || { tail -20 /tmp/new.log; fail "wagoe new failed"; }
+else
+  bash -ic "wagoe new demo" </dev/null >/tmp/new.log 2>&1 \
+    || { tail -20 /tmp/new.log; fail "wagoe new failed"; }
+fi
 cd /root/demo
 grep -vE "^\s*;;" resources/conf/dev/config.edn | grep -q ":wagoe/sqlite" \
   || fail "generated project does not default to sqlite (BOU-228)"
 ok "project generated, defaults to sqlite"
 
-# Point EVERY com.wagoe dep at this checkout. Overriding only a couple is not
-# enough and fails quietly: the first version of this script rewrote platform
-# and tools, and the run still exercised the *published* scaffolder, so a fixed
-# migration-naming bug appeared unfixed.
-#
-# Artifact id maps to a directory under libs/: wagoe-core -> libs/core,
-# wagoe-tools -> libs/tools, but wagoe-cli -> libs/wagoe-cli. Try the stripped
-# name first, then the full one, and leave the pin alone if neither exists.
-for d in /work/libs/*/; do
-  name=$(basename "$d")
-  case "$name" in
-    wagoe-*) art="$name" ;;
-    *)       art="wagoe-$name" ;;
-  esac
-  sed -E -i "s|com\.wagoe/${art}([[:space:]]+)\{:mvn/version \"[^\"]+\"\}|com.wagoe/${art}\1{:local/root \"${d%/}\"}|g" \
-    deps.edn bb.edn
-done
+if [ "$TARGET" = worktree ]; then
+  # Point EVERY com.wagoe dep at this checkout. Overriding only a couple is not
+  # enough and fails quietly: the first version of this script rewrote platform
+  # and tools, and the run still exercised the *published* scaffolder, so a fixed
+  # migration-naming bug appeared unfixed.
+  #
+  # Artifact id maps to a directory under libs/: wagoe-core -> libs/core,
+  # wagoe-tools -> libs/tools, but wagoe-cli -> libs/wagoe-cli. Try the stripped
+  # name first, then the full one, and leave the pin alone if neither exists.
+  for d in /work/libs/*/; do
+    name=$(basename "$d")
+    case "$name" in
+      wagoe-*) art="$name" ;;
+      *)       art="wagoe-$name" ;;
+    esac
+    sed -E -i "s|com\.wagoe/${art}([[:space:]]+)\{:mvn/version \"[^\"]+\"\}|com.wagoe/${art}\1{:local/root \"${d%/}\"}|g" \
+      deps.edn bb.edn
+  done
 
-# Assert on what is LEFT, not on what is present. Checking merely that some
-# :local/root exists would pass with one com.wagoe artifact still pinned to a
-# published version — and that single pin is enough to test released code while
-# the run reports success, which is the whole failure mode this guards against.
-for f in deps.edn bb.edn; do
-  STILL_PINNED=$(grep -oE "com\.wagoe/[a-z0-9-]+[[:space:]]*\{:mvn/version" "$f" || true)
-  [ -z "$STILL_PINNED" ] \
-    || fail "$f still pins published com.wagoe artifacts, so this run would test the release:
+  # Assert on what is LEFT, not on what is present. Checking merely that some
+  # :local/root exists would pass with one com.wagoe artifact still pinned to a
+  # published version — and that single pin is enough to test released code while
+  # the run reports success, which is the whole failure mode this guards against.
+  for f in deps.edn bb.edn; do
+    STILL_PINNED=$(grep -oE "com\.wagoe/[a-z0-9-]+[[:space:]]*\{:mvn/version" "$f" || true)
+    [ -z "$STILL_PINNED" ] \
+      || fail "$f still pins published com.wagoe artifacts, so this run would test the release:
 $STILL_PINNED"
-done
-LEFT=$(grep -c ":mvn/version" deps.edn || true)
-ok "no com.wagoe dep left on a published version ($LEFT third-party pins untouched)"
+  done
+  LEFT=$(grep -c ":mvn/version" deps.edn || true)
+  ok "no com.wagoe dep left on a published version ($LEFT third-party pins untouched)"
+else
+  # The mirror image, and it has to be asserted rather than assumed. A run that
+  # silently picked up a :local/root would report a green release while proving
+  # only that the working tree is fine — the exact blindness this mode exists to
+  # remove. Assert a published pin is actually present too: a template that
+  # stopped emitting com.wagoe deps would satisfy a no-:local/root check alone.
+  for f in deps.edn bb.edn; do
+    LOCAL=$(grep -oE "com\.wagoe/[a-z0-9-]+[[:space:]]*\{:local/root" "$f" || true)
+    [ -z "$LOCAL" ] \
+      || fail "$f points com.wagoe deps at a local checkout, so this run would NOT test the release:
+$LOCAL"
+  done
+  PINNED=$(grep -cE "com\.wagoe/[a-z0-9-]+[[:space:]]*\{:mvn/version" deps.edn || true)
+  [ "${PINNED:-0}" -ge 1 ] \
+    || fail "deps.edn pins no published com.wagoe artifact at all — nothing released is under test"
+  ok "every com.wagoe dep is a published version ($PINNED in deps.edn)"
+fi
 
 # ── 4. quickstart ───────────────────────────────────────────────────────────
 echo "[4/8] bb quickstart"
 set -a; . ./.env 2>/dev/null || true; set +a
 # The scaffolder is injected via -Sdeps at a hardcoded version rather than read
 # from deps.edn, so the :local/root rewrite above cannot reach it. Without this
-# the scaffolding step silently runs the released scaffolder.
-export WAGOE_SCAFFOLDER_ROOT=/work/libs/scaffolder
+# the scaffolding step silently runs the released scaffolder — which is exactly
+# what the released target wants, so only worktree sets it.
+if [ "$TARGET" = worktree ]; then
+  export WAGOE_SCAFFOLDER_ROOT=/work/libs/scaffolder
+fi
 bash -ic "bb quickstart" </dev/null >/tmp/quickstart.log 2>&1 \
   || { tail -25 /tmp/quickstart.log; fail "bb quickstart exited non-zero"; }
 grep -vE "^\s*;;" resources/conf/dev/config.edn | grep -q ":wagoe/sqlite" \
@@ -342,14 +416,24 @@ ok "wagoe-devtools loads from the :repl alias"
 # lines of go/reset/halt, so the first instruction a new user follows answered
 # "Unable to resolve symbol: status" (BOU-319).
 #
+# This is the step the released target exists for. BOU-319 fixed the template on
+# main and this assertion has passed ever since — on the working tree. The tag
+# users actually install kept generating the thirteen-line version for another
+# three weeks, and no run was configured to notice (BOU-402).
+#
 # Asserted on a computed value again — clj-nrepl-eval echoes the code it is
 # given, so any literal in the expression is already in the output. The
 # dashboard box is drawn by devtools from the running system.
+#
+# The exit code is not the assert. clj-nrepl-eval returns 0 for an eval that
+# errored — against 1.0.0-beta-5 it exits 0 and prints "No such var:
+# user/status" — so the `|| fail` below catches a broken connection and nothing
+# else. What discriminates is whether the dashboard is in the output.
 bash -ic "clj-nrepl-eval -p 7888 \"(with-out-str (user/status))\"" >/tmp/status.log 2>&1 \
-  || { tail -15 /tmp/status.log; fail "(status) threw"; }
+  || { tail -15 /tmp/status.log; fail "could not reach the nREPL to evaluate (status)"; }
 grep -q "Wagoe Dev" /tmp/status.log \
   || { tail -15 /tmp/status.log
-       fail "(status) printed no dashboard — it resolved to something that is not the devtools helper"; }
+       fail "(status) printed no dashboard — it does not exist, or resolved to something that is not the devtools helper"; }
 grep -q "tasks" /tmp/status.log \
   || { tail -15 /tmp/status.log
        fail "(status) does not list the scaffolded module among the running ones"; }
@@ -386,5 +470,9 @@ grep -q "BND-" /tmp/badreq.json \
 ok "a malformed request answers 400 with a BND code"
 
 echo
-echo "First-run smoke passed in $((T1-T0))s (install to serving app)."
+if [ "$TARGET" = released ]; then
+  echo "First-run smoke passed in $((T1-T0))s (install to serving app), target: released ${WAGOE_TAG:-unknown}."
+else
+  echo "First-run smoke passed in $((T1-T0))s (install to serving app), target: worktree."
+fi
 '
