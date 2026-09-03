@@ -261,7 +261,9 @@ libs/storage/src/wagoe/storage/
 - **Validation feedback**: Inline field errors displayed in form fragments
 
 **Static Assets:**
-- ✅ **HTMX v1.9.12** - Vendored locally at `/js/htmx.min.js` (BSD 2-Clause license)
+- ✅ **HTMX v2.0.8** - Vendored locally at `/js/htmx.min.js` (BSD 2-Clause license).
+  The 2.x pin is a decision, not an accident — see
+  xref:ADR-038-htmx-version-policy.adoc[ADR-038]
 - ✅ **Pico CSS v2.0** - Vendored locally at `/css/pico.min.css` (MIT license)
 - ✅ **Module CSS** - User-specific styles at `/modules/user/css/user.css`
 - ✅ **License attribution** - `.LICENSE` files for all vendored assets

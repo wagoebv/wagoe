@@ -413,3 +413,10 @@ ADR-037-reitit-routes-directly.adoc
 Supersedes ADR-008's abstraction half. 341 lines translated one EDN route format
 into another for a seam with one implementation, and cost conflict detection,
 reverse routing and lint-visible handlers to do it.
+
+==== ADR-038: Stay on htmx 2.x [Accepted]
+ADR-038-htmx-version-policy.adoc
+
+The framework keeps vendoring htmx 2.0.8. htmx 4 breaks the transport, the event
+names and inheritance; the attribute layer survives, the JavaScript and two
+`HX-Target` consumers do not.
