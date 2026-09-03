@@ -11,7 +11,7 @@ Unified observability stack with pluggable adapters for logging, metrics, and er
 
 **deps.edn** (recommended):
 ```clojure
-{:deps {com.wagoe/wagoe-observability {:mvn/version "1.0.0-beta-5"}}}
+{:deps {com.wagoe/wagoe-observability {:mvn/version "1.0.0-beta-6"}}}
 ```
 
 **Leiningen**:

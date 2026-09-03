@@ -9,7 +9,7 @@ application's job, not this library's.
 
 [source,clojure]
 ----
-{:deps {com.wagoe/wagoe-config {:mvn/version "1.0.0-beta-5"}}}
+{:deps {com.wagoe/wagoe-config {:mvn/version "1.0.0-beta-6"}}}
 ----
 
 == Key namespaces

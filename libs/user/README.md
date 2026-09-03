@@ -11,7 +11,7 @@ Complete user management and authentication system with MFA support, session man
 
 **deps.edn** (recommended):
 ```clojure
-{:deps {com.wagoe/wagoe-user {:mvn/version "1.0.0-beta-5"}}}
+{:deps {com.wagoe/wagoe-user {:mvn/version "1.0.0-beta-6"}}}
 ```
 
 **Leiningen**:

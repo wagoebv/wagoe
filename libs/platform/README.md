@@ -11,7 +11,7 @@ Core infrastructure for web applications: database, HTTP routing, pagination, se
 
 **deps.edn** (recommended):
 ```clojure
-{:deps {com.wagoe/wagoe-platform {:mvn/version "1.0.0-beta-5"}
+{:deps {com.wagoe/wagoe-platform {:mvn/version "1.0.0-beta-6"}
         ;; Choose your database driver
         org.postgresql/postgresql {:mvn/version "42.7.12"}}}
 ```

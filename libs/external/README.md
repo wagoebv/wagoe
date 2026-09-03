@@ -13,7 +13,7 @@ Adapters for external services: Twilio SMS/WhatsApp, SMTP transport, and IMAP ma
 ## Installation
 
 ```clojure
-{:deps {com.wagoe/wagoe-external {:mvn/version "1.0.0-beta-5"}}}
+{:deps {com.wagoe/wagoe-external {:mvn/version "1.0.0-beta-6"}}}
 ```
 
 ## Features
