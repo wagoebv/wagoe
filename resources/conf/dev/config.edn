@@ -179,20 +179,19 @@
 
   ;; AI tooling — powers `bb ai` and `bb scaffold ai`.
   ;;
-  ;; Offline-first by design: Ollama runs locally, so no prompt leaves the
-  ;; machine unless the developer opts in (libs/ai/AGENTS.md). A hosted
-  ;; provider here would make a fresh checkout fail on a missing token, and
-  ;; would send source code to a third party by default.
+  ;; Hosted by default: this needs REPLICATE_API_TOKEN, and prompts (including
+  ;; source code sent by `bb ai gen-tests` and `bb ai docs`) leave the machine.
+  ;; For an offline checkout, set :provider :ollama with
+  ;; :base-url #or [#env OLLAMA_URL "http://localhost:11434"] and a local model.
   ;;
-  ;; To use a hosted provider, export one of ANTHROPIC_API_KEY,
-  ;; OPENAI_API_KEY, OPENAI_BASE_URL or REPLICATE_API_TOKEN — the env chain in
-  ;; wagoe.ai.shell.cli-entry takes precedence over this block, so opting in
-  ;; needs no config edit. Or replace :provider below; the supported set is
-  ;; :ollama :anthropic :openai :replicate :no-op.
+  ;; The env chain in wagoe.ai.shell.cli-entry takes precedence over this block,
+  ;; so exporting ANTHROPIC_API_KEY, OPENAI_API_KEY or OPENAI_BASE_URL switches
+  ;; provider without a config edit. Supported: :ollama :anthropic :openai
+  ;; :replicate :no-op.
   :wagoe/ai-service
-  {:provider :ollama
-   :base-url #or [#env OLLAMA_URL "http://localhost:11434"]
-   :model    #or [#env AI_MODEL "qwen2.5-coder:7b"]}
+  {:provider :replicate
+   :api-key  #env REPLICATE_API_TOKEN
+   :model    #or [#env AI_MODEL "anthropic/claude-4.5-haiku"]}
 
   ;; Developer dashboard — live system introspection UI (dev only)
   :wagoe/dashboard {:port 9999}
