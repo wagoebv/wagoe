@@ -12,6 +12,7 @@
      docs --module <path> --type <type>        -- documentation wizard"
   (:require [wagoe.config :as config]
             [wagoe.ai.core.context :as ctx]
+            [wagoe.ai.core.parsing :as parsing]
             [wagoe.ai.shell.module-wiring]
             [wagoe.ai.shell.providers.anthropic :as anthropic]
             [wagoe.ai.shell.providers.ollama :as ollama]
@@ -500,17 +501,11 @@
     (let [service (make-service-from-config)
           result  (svc/parse-setup-description service description)]
       (if (:error result)
-        (do (println (red (explain-provider-error result service))) (System/exit 1))
+        (do (binding [*out* *err*]
+              (println (red (explain-provider-error result service))))
+            (System/exit 1))
         ;; Output the JSON data to stdout for the Babashka setup wizard to consume
-        (let [data   (:data result)
-              output {"project-name" (get data "project-name" "my-app")
-                      "database"     (get data "database" "postgresql")
-                      "ai-provider"  (get data "ai-provider" "none")
-                      "payment"      (get data "payment" "none")
-                      "cache"        (get data "cache" "none")
-                      "email"        (get data "email" "none")
-                      "admin-ui"     (get data "admin-ui" true)}]
-          (println (json/generate-string output)))))))
+        (println (json/generate-string (parsing/normalise-setup-spec (:data result))))))))
 
 ;; =============================================================================
 ;; Main

@@ -504,21 +504,6 @@
 ;; AI-powered NL scaffolding
 ;; =============================================================================
 
-(defn- json-line
-  "The JSON object in `out`, which carries more than the answer.
-
-   The subprocess is a JVM: logback prints its own configuration status to
-   stdout before the CLI says anything, so parsing the whole capture fails on
-   the first line. Providers also wrap JSON in ``` fences. Read the last line
-   that looks like an object."
-  [out]
-  (->> (str/split-lines (str out))
-       (map #(-> % str/trim
-                 (str/replace #"^```json\s*" "")
-                 (str/replace #"\s*```$" "")))
-       (filter #(and (str/starts-with? % "{") (str/ends-with? % "}")))
-       last))
-
 (defn- parse-ai-module-spec
   "Read the JSON module spec `bb ai scaffold-parse` writes to stdout.
 
@@ -527,7 +512,7 @@
    module."
   [out]
   (try
-    (let [data  (json/parse-string (json-line out) true)
+    (let [data  (json/parse-string (ai/json-line out) true)
           spec  {:module (:module-name data)
                  :entity (:entity data)
                  :fields (vec (:fields data))

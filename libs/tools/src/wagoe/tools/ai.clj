@@ -14,6 +14,7 @@
 (ns wagoe.tools.ai
   (:require [wagoe.tools.ansi :refer [bold red]]
             [clojure.java.io :as io]
+            [clojure.string :as str]
             [babashka.process :refer [shell]]))
 
 ;; =============================================================================
@@ -83,6 +84,24 @@
                     ["clojure" "-Sdeps" (ai-deps)
                      "-M" "-m" "wagoe.ai.shell.cli-entry"])]
      (vec (concat base-cmd args)))))
+
+(defn json-line
+  "The JSON object in `out`, which carries more than the answer.
+
+   The AI CLI runs in a JVM that logs to the console — logback announces its own
+   configuration on stdout before the CLI prints anything, and a generated
+   project ships no logback config at all, so its application logs land there
+   too. Parsing the whole capture fails on the first line and throws away a
+   correct answer (BOU-401). Providers also wrap JSON in ``` fences.
+
+   Returns the last line that looks like an object, or nil."
+  [out]
+  (->> (str/split-lines (str out))
+       (map #(-> % str/trim
+                 (str/replace #"^```json\s*" "")
+                 (str/replace #"\s*```$" "")))
+       (filter #(and (str/starts-with? % "{") (str/ends-with? % "}")))
+       last))
 
 (defn- run-clojure!
   "Shell out to the Clojure AI CLI with given args. Streams output to terminal."

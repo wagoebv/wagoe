@@ -22,7 +22,8 @@
             [babashka.fs :as fs]
             [babashka.process :as process]
             [wagoe.tools.ai :as ai]
-            [wagoe.tools.scaffold :as scaffold]))
+            [wagoe.tools.scaffold :as scaffold]
+            [wagoe.tools.setup :as setup]))
 
 (def ^:private spec-json
   (str "{\"module-name\":\"product\",\"entity\":\"Product\","
@@ -135,6 +136,25 @@
                                             {:exit 0}])]
       (is (= 2 (count calls)))
       (is (nil? exit)))))
+
+(deftest ^:unit the-setup-wizard-reads-the-same-noisy-stdout
+  ;; `bb setup ai` reached the provider for the first time with this patch, and
+  ;; landed straight on the same problem one layer down: it handed the whole
+  ;; capture to the JSON parser, so a successful answer was discarded and the
+  ;; wizard fell back to asking the questions by hand — the failure mode this
+  ;; command has always had, now for a different reason.
+  (let [noisy (str "07:00:17,575 |-INFO in ch.qos.logback.classic.LoggerContext[default]\n"
+                   "{\"project-name\":\"shop\",\"database\":\"postgresql\",\"admin-ui\":true}\n")
+        spec  (#'setup/parse-ai-result noisy)]
+    (is (= "shop" (:project-name spec)))
+    (is (= :postgresql (:database spec))))
+
+  (testing "output holding no JSON is still a failed parse"
+    ;; Not a spec of defaults: `(get nil \"database\")` is nil, so a provider
+    ;; answering in prose would have produced a plausible-looking config nobody
+    ;; asked for, instead of falling back to the interactive wizard.
+    (is (nil? (#'setup/parse-ai-result "I need more detail about the project.")))
+    (is (nil? (#'setup/parse-ai-result "")))))
 
 (deftest ^:unit the-jvm-s-own-noise-on-stdout-is-not-the-answer
   ;; Found by running it: the subprocess is a JVM, and logback announces its

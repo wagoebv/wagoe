@@ -117,6 +117,28 @@
         no-web     (when-not web  ["--no-web"])]
     (vec (concat base field-args no-http no-web))))
 
+(defn normalise-setup-spec
+  "The seven setup choices, with a default for every one the provider omitted.
+
+   Keys are read in both forms. `parse-json-response` keywordizes, and the
+   caller read string keys, so every answer fell through to its default — the
+   description reached the provider, came back parsed, and was then thrown away
+   (BOU-401). Returns string keys: this is written straight out as JSON.
+
+   The database default is sqlite, not postgresql: an absent choice must still
+   yield a project that boots without a database server (BOU-228)."
+  [data]
+  (let [choice (fn [k fallback]
+                 (let [v (get data (keyword k) (get data k))]
+                   (if (some? v) v fallback)))]
+    {"project-name" (choice "project-name" "my-app")
+     "database"     (choice "database" "sqlite")
+     "ai-provider"  (choice "ai-provider" "none")
+     "payment"      (choice "payment" "none")
+     "cache"        (choice "cache" "none")
+     "email"        (choice "email" "none")
+     "admin-ui"     (boolean (choice "admin-ui" true))}))
+
 ;; =============================================================================
 ;; Feature 4: SQL Copilot response parsing
 ;; =============================================================================

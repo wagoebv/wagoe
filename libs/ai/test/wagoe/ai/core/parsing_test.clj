@@ -88,6 +88,35 @@
           args (parsing/module-spec->cli-args spec)]
       (is (some #{"--no-web"} args)))))
 
+(deftest ^:unit normalise-setup-spec-test
+  ;; `parse-json-response` keywordizes, and the setup CLI read string keys, so
+  ;; `bb setup ai "PostgreSQL with Stripe"` printed the defaults — every answer
+  ;; the provider gave was dropped. Nothing looked broken: the defaults are a
+  ;; plausible config (BOU-401).
+  (testing "the provider's answers survive, whichever key form they arrive in"
+    (doseq [[label data] [["keyword keys" {:project-name "shop" :database "postgresql"
+                                           :payment "stripe" :admin-ui false}]
+                          ["string keys"  {"project-name" "shop" "database" "postgresql"
+                                           "payment" "stripe" "admin-ui" false}]]]
+      (let [out (parsing/normalise-setup-spec data)]
+        (is (= "shop" (get out "project-name")) label)
+        (is (= "postgresql" (get out "database")) label)
+        (is (= "stripe" (get out "payment")) label)
+        (is (false? (get out "admin-ui"))
+            (str label ": a chosen false must not read as an absent choice")))))
+
+  (testing "an omitted choice falls back"
+    (let [out (parsing/normalise-setup-spec {})]
+      (is (= "my-app" (get out "project-name")))
+      (is (= "sqlite" (get out "database"))
+          "the default must boot without a database server (BOU-228)")
+      (is (= "none" (get out "payment")))
+      (is (true? (get out "admin-ui")))))
+
+  (testing "every key the setup wizard reads is present"
+    (is (= #{"project-name" "database" "ai-provider" "payment" "cache" "email" "admin-ui"}
+           (set (keys (parsing/normalise-setup-spec {})))))))
+
 (deftest ^:unit parse-sql-response-test
   (testing "parses SQL response JSON"
     (let [json   "{\"honeysql\": \"{:select [:*]}\", \"explanation\": \"selects all\", \"raw-sql\": \"SELECT *\"}"
