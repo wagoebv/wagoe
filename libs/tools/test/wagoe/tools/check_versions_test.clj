@@ -43,6 +43,33 @@
     (is (not (sut/doc-in-scope? "libs/tools/target/classes/README.md")))))
 
 ;; =============================================================================
+;; Injected pins — the artifacts one library shells for another
+;; =============================================================================
+
+(deftest ^:unit an-injected-pin-is-told-from-a-third-party-one
+  ;; `ai-version` and `scaffolder-version` shipped 1.0.0-beta-5 inside the
+  ;; 1.0.0-beta-6 release, so a beta-6 project ran a beta-5 AI CLI and
+  ;; `bb scaffold ai` died on `Unknown subcommand: scaffold-parse`. The gate
+  ;; reported every location in agreement, because it read neither.
+  (let [libs #{"ai" "scaffolder" "tools" "wagoe-mcp" "wagoe-cli"}]
+    (testing "a def naming a Wagoe library is a suite pin"
+      (is (sut/injected-pin-name? "ai" libs))
+      (is (sut/injected-pin-name? "scaffolder" libs)))
+
+    (testing "both spellings of the prefix resolve to the same library"
+      ;; wagoe-tools-version names libs/tools; wagoe-mcp-version names
+      ;; libs/wagoe-mcp. The directory carries the prefix in one case only.
+      (is (sut/injected-pin-name? "wagoe-tools" libs))
+      (is (sut/injected-pin-name? "wagoe-mcp" libs)))
+
+    (testing "a third-party pin is not a suite version"
+      ;; tools-cli-version "1.4.256" sits four lines above ai-version, and
+      ;; `bb bump` rewrites whatever this reports — so a false positive here
+      ;; would break the tools.cli pin rather than merely over-report.
+      (is (not (sut/injected-pin-name? "tools-cli" libs)))
+      (is (not (sut/injected-pin-name? "rewrite-clj" libs))))))
+
+;; =============================================================================
 ;; Rule 1 — coordinates users copy
 ;; =============================================================================
 
@@ -192,6 +219,35 @@
     (is (empty? (sut/doc-version-findings
                  "x.adoc"
                  "The 1.0.1-alpha line is discontinued and receives no fixes.\n")))))
+
+;; =============================================================================
+;; Rule 4 — prose that claims the current version
+;; =============================================================================
+
+(deftest ^:unit a-current-version-claim-is-found
+  ;; `docs/modules/ROOT/pages/roadmap.adoc` opened with "Wagoe is at
+  ;; `1.0.0-beta-5`" on the day 1.0.0-beta-6 shipped. The file was in scope and
+  ;; the three rules above matched none of it.
+  (testing "\"Wagoe is at\" is reported"
+    (let [[f] (sut/doc-version-findings
+               "docs/modules/ROOT/pages/roadmap.adoc"
+               "Wagoe is at `1.0.0-beta-5`. This page is the public view.\n")]
+      (is (= "1.0.0-beta-5" (:version f)))
+      (is (= "current-version claim" (:what f)))))
+
+  (testing "\"the current release is\" is reported"
+    (let [[f] (sut/doc-version-findings
+               "README.md"
+               "The current release is v1.0.0-beta-5.\n")]
+      (is (= "1.0.0-beta-5" (:version f)))
+      (is (= "current-version claim" (:what f)))))
+
+  (testing "a sentence explaining version drift is left alone"
+    ;; Same boundary as rule 3: the pages that must keep naming old releases are
+    ;; the ones explaining why the numbers moved.
+    (is (empty? (sut/doc-version-findings
+                 "x.adoc"
+                 "Maven sorts 1.0.0-beta-1 below 1.0.1-alpha-42.\n")))))
 
 ;; =============================================================================
 ;; Consensus — documentation is checked, it does not vote

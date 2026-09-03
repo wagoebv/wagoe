@@ -129,9 +129,10 @@
 ;; Run Clojure scaffolder
 ;; =============================================================================
 
-;; Must match libs/tools/build.clj version and libs/scaffolder/build.clj version.
-;; Update all three together on each release.
-(def ^:private scaffolder-version "1.0.0-beta-5")
+;; The wagoe-scaffolder a generated project runs. `bb bump` rewrites it and
+;; `check:versions` gates it as an "injected pin"; it is no longer a pin anyone
+;; has to remember, which is how it shipped a release behind.
+(def ^:private scaffolder-version "1.0.0-beta-6")
 
 ;; Match libs/scaffolder/deps.edn and the monorepo's own pin.
 (def ^:private rewrite-clj-version "1.2.55")

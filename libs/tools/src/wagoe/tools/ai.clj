@@ -21,10 +21,11 @@
 ;; Run Clojure AI CLI
 ;; =============================================================================
 
-;; Must match libs/tools/build.clj and libs/ai/build.clj. Update with the other
-;; release pins — scaffolder-version in scaffold.clj, and the two in
-;; libs/wagoe-cli/src/wagoe/cli/new.clj.
-(def ^:private ai-version "1.0.0-beta-5")
+;; The wagoe-ai a generated project runs. `bb bump` rewrites it and
+;; `check:versions` gates it as an "injected pin" — it used to ask a human to
+;; update it alongside scaffolder-version and the two in new.clj, and that is
+;; how it shipped 1.0.0-beta-5 inside the 1.0.0-beta-6 release.
+(def ^:private ai-version "1.0.0-beta-6")
 
 ;; Match libs/ai/deps.edn and the monorepo's own pin.
 (def ^:private tools-cli-version "1.4.256")
