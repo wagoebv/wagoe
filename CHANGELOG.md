@@ -29,6 +29,17 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ## [Unreleased]
 
+## [1.0.0-beta-6] — 2026-09-03
+
+A generated project works end to end. `1.0.0-beta-5` could create one, but the
+first commands it told you to run did not: `(status)` was undefined, the module
+`bb quickstart` scaffolded answered 404, devtools reached no classpath, and
+`bb scaffold ai` died resolving `wagoe-ai`. Most of the 42 fixes are on that path.
+
+**Upgrade if you use JWT auth** — any `Authorization: Bearer` value authenticated
+(BOU-374). Two breaking changes besides: modules emit Reitit route data, and a
+module's web routes mount under `/web`. The Changed section says what moves.
+
 ### Added
 
 - **`examples/shop` — a generated application you can read and run** (BOU-300).

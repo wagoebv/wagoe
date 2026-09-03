@@ -13,7 +13,7 @@ It prevents per-library style drift by making layout namespaces consume the same
 
 [source,clojure]
 ----
-{:deps {com.wagoe/wagoe-ui-style {:mvn/version "1.0.0-beta-5"}}}
+{:deps {com.wagoe/wagoe-ui-style {:mvn/version "1.0.0-beta-6"}}}
 ----
 
 == API

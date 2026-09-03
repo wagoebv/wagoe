@@ -6,10 +6,10 @@
             [wagoe.cli.templates :as templates]))
 
 ;; Keep in sync with libs/tools/build.clj version
-(def ^:private wagoe-tools-version "1.0.0-beta-5")
+(def ^:private wagoe-tools-version "1.0.0-beta-6")
 
 ;; Keep in sync with libs/wagoe-mcp/build.clj version (release-bumped with wagoe-tools-version)
-(def ^:private wagoe-mcp-version "1.0.0-beta-5")
+(def ^:private wagoe-mcp-version "1.0.0-beta-6")
 
 (defn validate-name [n]
   (cond
