@@ -104,6 +104,23 @@
 
     (is (nil? exit) "a successful run does not exit non-zero")))
 
+(deftest ^:unit typing-the-whole-word-still-confirms
+  ;; The AI wizard used to run its own prompt, which took "y" or "yes". The
+  ;; shared one took "y" only, so moving the confirmation here would have read
+  ;; a typed "yes" as a no and cancelled the run.
+  (let [answer! (fn [in default-yes?]
+                  (with-in-str (str in "\n")
+                    (with-out-str (print (scaffold/confirm "Generate this module?" default-yes?)))))]
+    (doseq [[in expected] {"yes" "true" "y" "true" "" "true"
+                           "no" "false" "n" "false" "x" "false"}]
+      (is (str/ends-with? (answer! in true) expected)
+          (str "answer: " (pr-str in))))
+
+    (testing "and a no-default prompt reads the same words"
+      (doseq [[in expected] {"yes" "true" "y" "true" "" "false" "no" "false"}]
+        (is (str/ends-with? (answer! in false) expected)
+            (str "answer: " (pr-str in)))))))
+
 (deftest ^:unit a-declined-confirmation-generates-nothing
   (with-redefs [scaffold/confirm (fn [_ _] false)]
     (let [{:keys [calls out]} (run-wizard "product module" false

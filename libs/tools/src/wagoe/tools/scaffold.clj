@@ -63,7 +63,11 @@
        input))))
 
 (defn confirm
-  "Y/n or y/N prompt. Returns boolean."
+  "Y/n or y/N prompt. Returns boolean.
+
+   `yes` counts as yes: only `y` did, so anyone typing the whole word had their
+   answer read as a no. `bb scaffold ai` inherited this prompt from a wizard of
+   its own that accepted both (BOU-401)."
   ([label] (confirm label true))
   ([label default-yes?]
    (let [hint (if default-yes? "Y/n" "y/N")]
@@ -72,7 +76,7 @@
      (let [input (str/trim (str/lower-case (or (read-line) "")))]
        (if (empty? input)
          default-yes?
-         (= input "y"))))))
+         (contains? #{"y" "yes"} input))))))
 
 ;; =============================================================================
 ;; Menu selection
