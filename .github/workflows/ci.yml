@@ -1466,7 +1466,13 @@ jobs:
       # Running it on the runner would hide exactly the defects it exists to
       # catch — the runner already has java, git, unzip and sudo, so install.sh
       # never takes the branch where BOU-226's three blockers lived.
+      # Explicit, though it is the default: this job gates the branch and must
+      # test the branch. The released target lives in first-run-matrix.yml,
+      # where a red cell means "the current release is stale" — which is not a
+      # reason to block a pull request (BOU-402).
       - name: Run first-run smoke test
+        env:
+          SMOKE_TARGET: worktree
         run: ./scripts/first-run-smoke.sh
 
   test-summary:
