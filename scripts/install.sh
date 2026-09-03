@@ -306,13 +306,73 @@ export PATH="$BBIN_BIN:$PATH"
 
 # ── wagoe CLI ──────────────────────────────────────────────
 info "Fetching latest Wagoe release tag..."
-WAGOE_TAG=$(curl -fsSL https://api.github.com/repos/wagoebv/wagoe/releases/latest \
-  | grep '"tag_name"' \
-  | sed 's/.*"tag_name": "\(.*\)".*/\1/') \
-  || fail "Failed to fetch latest release tag. Check your internet connection."
+
+# `curl -f` collapses every outcome into exit 22, so this used to blame the
+# user's connection for a working one: GitHub allows 60 unauthenticated API
+# requests per hour per IP, and a shared address — CI runner, office NAT, VPN
+# exit — burns that between users. Read the status and the rate-limit headers
+# instead, and tell them apart (BOU-410).
+RELEASES_API="https://api.github.com/repos/wagoebv/wagoe/releases/latest"
+TAG_HEADERS="$(mktemp)"
+TAG_BODY="$(mktemp)"
+trap 'rm -f "$TAG_HEADERS" "$TAG_BODY"' EXIT
+
+# A token raises the limit to 5000/hour. CI has one; honouring it costs nothing
+# and keeps the nightly matrix off the shared budget.
+GH_AUTH_ARGS=()
+GH_API_TOKEN="${GITHUB_TOKEN:-${GH_TOKEN:-}}"
+if [[ -n "$GH_API_TOKEN" ]]; then
+  GH_AUTH_ARGS=(-H "Authorization: Bearer $GH_API_TOKEN")
+fi
+
+set +e
+HTTP_CODE="$(curl -sSL -D "$TAG_HEADERS" -o "$TAG_BODY" -w '%{http_code}' \
+  ${GH_AUTH_ARGS[@]+"${GH_AUTH_ARGS[@]}"} "$RELEASES_API" 2>/dev/null)"
+CURL_RC=$?
+set -e
+
+# curl itself failing — DNS, refused, timeout — is the only case that really is
+# the connection.
+if [[ $CURL_RC -ne 0 ]]; then
+  fail "Could not reach $RELEASES_API (curl exit $CURL_RC). Check your internet connection."
+fi
+
+# `|| true`: an absent header is normal, and this runs under `set -e` where a
+# grep miss inside an assignment would end the script instead of the branch.
+header_value() { grep -i "^$1:" "$TAG_HEADERS" | tail -1 | tr -d '\r' | awk '{print $2}' || true; }
+
+if [[ "$HTTP_CODE" == "403" || "$HTTP_CODE" == "429" ]]; then
+  if [[ "$(header_value x-ratelimit-remaining)" == "0" ]]; then
+    RESET_AT="$(header_value x-ratelimit-reset)"
+    WAIT_MIN="?"
+    if [[ "$RESET_AT" =~ ^[0-9]+$ ]]; then
+      # Minutes from now, not a formatted timestamp: `date -d @epoch` is GNU and
+      # `date -r epoch` is BSD, and this script runs on both.
+      WAIT_MIN=$(( (RESET_AT - $(date +%s) + 59) / 60 ))
+      [[ $WAIT_MIN -lt 1 ]] && WAIT_MIN=1
+    fi
+    fail "GitHub's API rate limit is used up for this IP address, so the release
+  lookup was refused. Your connection is fine.
+    Retry in ${WAIT_MIN} min, or raise the limit now by exporting a token:
+    export GITHUB_TOKEN=<personal access token>   # 5000 requests/hour"
+  fi
+  fail "GitHub refused the release lookup with HTTP $HTTP_CODE.
+    If you are behind a proxy that inspects HTTPS, that is the usual cause."
+fi
+
+if [[ "$HTTP_CODE" != "200" ]]; then
+  fail "GitHub answered HTTP $HTTP_CODE for the release lookup at $RELEASES_API.
+    Check https://www.githubstatus.com, then re-run this installer."
+fi
+
+# `|| true` is load-bearing under `set -o pipefail`: a body with no tag_name
+# makes grep exit 1, which would abort the script before the message below.
+WAGOE_TAG=$(grep '"tag_name"' "$TAG_BODY" \
+  | sed 's/.*"tag_name": "\(.*\)".*/\1/' || true)
 
 if [[ -z "$WAGOE_TAG" ]]; then
-  fail "Could not determine latest Wagoe release tag."
+  fail "Could not determine latest Wagoe release tag: the API answered 200 but
+    named no tag_name. Re-run, or install a specific tag by hand."
 fi
 
 info "Installing wagoe CLI @ $WAGOE_TAG..."
