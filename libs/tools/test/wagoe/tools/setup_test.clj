@@ -174,6 +174,68 @@
       (is (not (str/includes? env "REDIS_HOST"))))))
 
 ;; =============================================================================
+;; Replicate — a provider the rest of the stack already supports (BOU-411)
+;; =============================================================================
+
+(deftest ^:unit replicate-is-configurable-test
+  (testing "dev config names the provider and its token"
+    (let [config (setup/build-config (assoc minimal-spec :ai-provider :replicate) "dev")]
+      (is (str/includes? config ":wagoe/ai-service"))
+      (is (str/includes? config ":provider :replicate"))
+      (is (str/includes? config "REPLICATE_API_TOKEN"))))
+
+  (testing "the token has no default, like the other hosted providers"
+    ;; `#or [#env X \"\"]` would satisfy doctor with an empty key and fail at the
+    ;; provider instead. A bare #env makes `doctor --ci` say which variable to
+    ;; export, which is the contract :anthropic and :openai already have.
+    (let [config (setup/build-config (assoc minimal-spec :ai-provider :replicate) "dev")]
+      (is (str/includes? config ":api-key  #env REPLICATE_API_TOKEN"))
+      (is (not (str/includes? config "#or [#env REPLICATE_API_TOKEN")))))
+
+  (testing "test profile stays on the no-op provider"
+    (let [config (setup/build-config (assoc minimal-spec :ai-provider :replicate) "test")]
+      (is (str/includes? config ":provider :no-op"))
+      (is (not (str/includes? config ":provider :replicate")))))
+
+  (testing ".env.example names the token"
+    (let [env (setup/build-env-example (assoc minimal-spec :ai-provider :replicate))]
+      (is (str/includes? env "REPLICATE_API_TOKEN="))
+      (is (str/includes? env "AI_MODEL=")))))
+
+;; =============================================================================
+;; Unknown enum values are refused, not thrown at (BOU-411)
+;; =============================================================================
+
+(deftest ^:unit spec-errors-test
+  (testing "a valid spec has no errors"
+    (is (empty? (setup/spec-errors full-spec)))
+    (is (empty? (setup/spec-errors (assoc minimal-spec :ai-provider :replicate)))))
+
+  (testing "an unknown value names the flag, the value and the valid set"
+    (let [[msg :as errors] (setup/spec-errors (assoc minimal-spec :ai-provider :bogus))]
+      (is (= 1 (count errors)))
+      (is (str/includes? msg "--ai-provider"))
+      (is (str/includes? msg "bogus"))
+      (is (str/includes? msg "replicate"))))
+
+  (testing "every enum flag is covered — each template is a case with no default"
+    ;; Before BOU-411 any of these reached `case` and died on "No matching
+    ;; clause", a Clojure internal error naming neither the flag nor the choices.
+    (doseq [k [:database :ai-provider :payment :cache :email]]
+      (is (seq (setup/spec-errors (assoc minimal-spec k :bogus)))
+          (str "unknown " k " must be reported")))))
+
+(deftest ^:unit from-flags-refuses-unknown-value-test
+  (testing "exits non-zero and writes nothing"
+    (let [exits (atom [])]
+      (binding [setup/*exit!* (fn [code] (swap! exits conj code))]
+        (let [out (with-out-str (setup/from-flags {:ai-provider "bogus"}))]
+          (is (= [1] @exits))
+          (is (str/includes? out "bogus"))
+          ;; The summary belongs to a run that is going to write files.
+          (is (not (str/includes? out "Generated"))))))))
+
+;; =============================================================================
 ;; Settings template env parameter
 ;; =============================================================================
 
