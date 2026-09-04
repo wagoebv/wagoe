@@ -38,6 +38,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **`install.sh` blamed your connection for GitHub's rate limit** (BOU-410). It now says
   how long until the limit clears, and honours `GITHUB_TOKEN` for 5000 requests/hour.
+- **`bb setup` could not configure Replicate** (BOU-411). Pick it in the wizard, pass
+  `--ai-provider replicate`, or ask for it in `bb setup ai`.
 
 - **`bb scaffold ai` and `bb scaffold` ran a release-old CLI in a generated project**
   (BOU-317). `ai-version` and `scaffolder-version` are injected with `-Sdeps` rather
