@@ -32,11 +32,8 @@
 (def valid-choices
   "The values each enum flag accepts, and the order the help text lists them in.
 
-   Every template below is a `case` with no default clause, so an unrecognised
-   value used to reach it and die on `No matching clause: :bogus` — an error
-   naming neither the flag nor the alternatives. `:replicate` was such a value
-   for its whole life: `libs/ai` ships the adapter, `wagoe doctor` accepts it,
-   and this wizard could not write it (BOU-411)."
+   Every template below is a `case` with no default, so a value that is not
+   validated here dies on `No matching clause` without naming the flag (BOU-411)."
   {:database    [:postgresql :sqlite :h2 :mysql]
    :ai-provider [:none :ollama :anthropic :openai :replicate]
    :payment     [:none :mock :stripe :mollie]
