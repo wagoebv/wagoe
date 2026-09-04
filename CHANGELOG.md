@@ -36,6 +36,9 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **`bb setup` could not configure Replicate** (BOU-411). Pick it in the wizard, pass
+  `--ai-provider replicate`, or ask for it in `bb setup ai`.
+
 - **`bb scaffold ai` and `bb scaffold` ran a release-old CLI in a generated project**
   (BOU-317). `ai-version` and `scaffolder-version` are injected with `-Sdeps` rather
   than written into any `deps.edn`, so no rule read them and both shipped

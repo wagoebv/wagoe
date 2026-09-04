@@ -17,6 +17,45 @@
             [babashka.process :refer [shell]]))
 
 ;; =============================================================================
+;; Process exit
+;; =============================================================================
+
+(def ^:dynamic *exit!*
+  "Terminates the process with `code`. Indirection so tests can observe the exit
+   code of a command instead of killing the test JVM."
+  (fn [code] (System/exit code)))
+
+;; =============================================================================
+;; Choices
+;; =============================================================================
+
+(def valid-choices
+  "The values each enum flag accepts, and the order the help text lists them in.
+
+   Every template below is a `case` with no default clause, so an unrecognised
+   value used to reach it and die on `No matching clause: :bogus` — an error
+   naming neither the flag nor the alternatives. `:replicate` was such a value
+   for its whole life: `libs/ai` ships the adapter, `wagoe doctor` accepts it,
+   and this wizard could not write it (BOU-411)."
+  {:database    [:postgresql :sqlite :h2 :mysql]
+   :ai-provider [:none :ollama :anthropic :openai :replicate]
+   :payment     [:none :mock :stripe :mollie]
+   :cache       [:none :redis :in-memory]
+   :email       [:none :smtp]})
+
+(defn spec-errors
+  "Messages for every enum value in `spec` that no template can render.
+
+   Empty when the spec is renderable. Keyed by the flag the user typed, not by
+   the internal key, so the message is actionable from the command line."
+  [spec]
+  (for [[k allowed] valid-choices
+        :let  [v (get spec k)]
+        :when (and (some? v) (not (some #{v} allowed)))]
+    (str "Unknown value for --" (name k) ": " (name v)
+         "\n  Valid: " (str/join ", " (map name allowed)))))
+
+;; =============================================================================
 ;; Input helpers (follows scaffold.clj pattern)
 ;; =============================================================================
 
@@ -196,7 +235,17 @@
       (str "  :wagoe/ai-service\n"
            "  {:provider :openai\n"
            "   :model    #or [#env AI_MODEL \"gpt-4o-mini\"]\n"
-           "   :api-key  #env OPENAI_API_KEY}\n"))))
+           "   :api-key  #env OPENAI_API_KEY}\n"))
+    ;; Bare #env, as above: `doctor --ci` then names the variable to export
+    ;; rather than passing with an empty key that fails at the provider.
+    :replicate
+    (if (= env "test")
+      (str "  :wagoe/ai-service\n"
+           "  {:provider :no-op}\n")
+      (str "  :wagoe/ai-service\n"
+           "  {:provider :replicate\n"
+           "   :model    #or [#env AI_MODEL \"anthropic/claude-4.5-haiku\"]\n"
+           "   :api-key  #env REPLICATE_API_TOKEN}\n"))))
 
 (defn- payment-template [provider env]
   (case provider
@@ -320,6 +369,7 @@
    :anthropic  ["ANTHROPIC_API_KEY"]
    :openai     ["OPENAI_API_KEY"]
    :ollama     ["OLLAMA_URL"]
+   :replicate  ["REPLICATE_API_TOKEN"]
    :redis      ["REDIS_HOST" "REDIS_PORT" "REDIS_PASSWORD"]
    :smtp       ["SMTP_HOST" "SMTP_PORT" "SMTP_FROM"]})
 
@@ -386,6 +436,7 @@
                                    [[:ollama    "Local AI via Ollama (no API key needed)"]
                                     [:anthropic "Anthropic Claude (requires ANTHROPIC_API_KEY)"]
                                     [:openai    "OpenAI GPT (requires OPENAI_API_KEY)"]
+                                    [:replicate "Hosted models via Replicate (requires REPLICATE_API_TOKEN)"]
                                     [:none      "Disable AI tooling"]])
 
         payment (select-option "Payment provider"
@@ -471,19 +522,28 @@
     ;; Not the whole capture: the CLI is a JVM logging to the console, and in a
     ;; generated project — which ships no logback config — its own log lines sit
     ;; on stdout above the JSON (BOU-401).
-    (let [data (some-> (ai/json-line json-str) json/parse-string)]
-      (when (map? data)
-        ;; Fall back to sqlite, not postgresql: an unparsed/absent choice must
-        ;; still yield a project that boots without a database server (BOU-228).
-        {:project-name (or (get data "project-name") "my-app")
-         :database     (keyword (or (get data "database") "sqlite"))
-         :ai-provider  (keyword (or (get data "ai-provider") "none"))
-         :payment      (keyword (or (get data "payment") "none"))
-         :cache        (keyword (or (get data "cache") "none"))
-         :email        (keyword (or (get data "email") "none"))
-         :admin-ui     (if (some? (get data "admin-ui"))
-                         (boolean (get data "admin-ui"))
-                         true)}))
+    (let [data (some-> (ai/json-line json-str) json/parse-string)
+          spec (when (map? data)
+                 ;; Fall back to sqlite, not postgresql: an unparsed/absent choice must
+                 ;; still yield a project that boots without a database server (BOU-228).
+                 {:project-name (or (get data "project-name") "my-app")
+                  :database     (keyword (or (get data "database") "sqlite"))
+                  :ai-provider  (keyword (or (get data "ai-provider") "none"))
+                  :payment      (keyword (or (get data "payment") "none"))
+                  :cache        (keyword (or (get data "cache") "none"))
+                  :email        (keyword (or (get data "email") "none"))
+                  :admin-ui     (if (some? (get data "admin-ui"))
+                                  (boolean (get data "admin-ui"))
+                                  true)})
+          errors (when spec (spec-errors spec))]
+      ;; A provider is free to answer "gemini", or "claude" where the choice is
+      ;; named "anthropic". Rejecting it here hands the caller its existing
+      ;; fallback to the interactive wizard, instead of carrying an unrenderable
+      ;; value into a `case` (BOU-411).
+      (if (seq errors)
+        (do (doseq [e errors] (println (red e)))
+            nil)
+        spec))
     (catch Exception e
       (println (red (str "Failed to parse AI response: " (.getMessage e))))
       nil)))
@@ -554,10 +614,17 @@
               :payment      (keyword (or (:payment opts) "none"))
               :cache        (keyword (or (:cache opts) "none"))
               :email        (keyword (or (:email opts) "none"))
-              :admin-ui     (not= "false" (or (:admin-ui opts) "true"))}]
-    (display-summary spec)
-    (println)
-    (write-config-files! spec)))
+              :admin-ui     (not= "false" (or (:admin-ui opts) "true"))}
+        errors (spec-errors spec)]
+    (if (seq errors)
+      ;; Before the templates, not inside them: a `case` fall-through reported
+      ;; "No matching clause: :bogus" and named neither the flag nor the
+      ;; choices (BOU-411).
+      (do (doseq [e errors] (println (red e)))
+          (*exit!* 1))
+      (do (display-summary spec)
+          (println)
+          (write-config-files! spec)))))
 
 ;; =============================================================================
 ;; Help
@@ -574,7 +641,7 @@
   (println "Options (non-interactive mode):")
   (println "  --project-name NAME    Project name (default: my-app)")
   (println "  --database DB          postgresql, sqlite, h2, mysql")
-  (println "  --ai-provider PROV     ollama, anthropic, openai, none")
+  (println "  --ai-provider PROV     ollama, anthropic, openai, replicate, none")
   (println "  --payment PAY          none, mock, stripe, mollie")
   (println "  --cache CACHE          none, redis, in-memory")
   (println "  --email EMAIL          none, smtp")

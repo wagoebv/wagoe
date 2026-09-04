@@ -438,6 +438,9 @@ Only add :width when field semantics differ from these defaults:
 (defn build-setup-parse-system-prompt
   "Build the system prompt for parsing NL config descriptions into setup specs.
 
+   Its enums and defaults must match `wagoe.tools.setup/valid-choices`, which
+   `setup-prompt-offers-every-provider-test` pins (BOU-411, BOU-228).
+
    Returns a string."
   []
   (str framework-system-context "
@@ -448,7 +451,7 @@ Output ONLY valid JSON with this exact structure:
 {
   \"project-name\": \"kebab-case-name\",
   \"database\": \"postgresql|sqlite|h2|mysql\",
-  \"ai-provider\": \"ollama|anthropic|openai|none\",
+  \"ai-provider\": \"ollama|anthropic|openai|replicate|none\",
   \"payment\": \"none|mock|stripe|mollie\",
   \"cache\": \"none|redis|in-memory\",
   \"email\": \"none|smtp\",
@@ -457,7 +460,7 @@ Output ONLY valid JSON with this exact structure:
 
 Rules:
 - project-name defaults to \"my-app\" if not mentioned
-- database defaults to \"postgresql\" if not mentioned
+- database defaults to \"sqlite\" if not mentioned
 - ai-provider defaults to \"none\" if not mentioned
 - payment defaults to \"none\" if not mentioned
 - cache defaults to \"none\" if not mentioned
