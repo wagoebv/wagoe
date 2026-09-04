@@ -438,18 +438,8 @@ Only add :width when field semantics differ from these defaults:
 (defn build-setup-parse-system-prompt
   "Build the system prompt for parsing NL config descriptions into setup specs.
 
-   The enums below are a fourth copy of choices that also live in
-   `wagoe.ai.shell.module-wiring/build-provider`, `wagoe.tools.doctor`'s
-   `known-providers` and `wagoe.tools.setup/valid-choices`. A copy drifts: this
-   one omitted `replicate` while every other layer accepted it, and since
-   `none` is itself valid, a description asking for Replicate came back as
-   \"AI disabled\" rather than as an error anything could catch (BOU-411).
-   `setup-prompt-offers-every-provider-test` pins it.
-
-   The database default is sqlite for the reason the wizard and the flag path
-   share: a spec that names no database must still boot without a database
-   server (BOU-228). This prompt said postgresql, so the AI path was the one
-   entry point that could still produce that failure.
+   Its enums and defaults must match `wagoe.tools.setup/valid-choices`, which
+   `setup-prompt-offers-every-provider-test` pins (BOU-411, BOU-228).
 
    Returns a string."
   []
