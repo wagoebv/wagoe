@@ -36,6 +36,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **`install.sh` blamed your connection for GitHub's rate limit** (BOU-410). It now says
+  how long until the limit clears, and honours `GITHUB_TOKEN` for 5000 requests/hour.
 - **`bb setup` could not configure Replicate** (BOU-411). Pick it in the wizard, pass
   `--ai-provider replicate`, or ask for it in `bb setup ai`.
 
