@@ -211,6 +211,61 @@
     (is (empty? (sut/doc-version-findings "x.adoc" "  --tag v9.9.9\n")))))
 
 ;; =============================================================================
+;; Rule 2, continued — the tag spelling this repository actually publishes
+;; =============================================================================
+
+(deftest ^:unit a-tag-pin-is-found-with-or-without-the-v-prefix
+  ;; BOU-412. Our release tags carry no `v`: they are `1.0.0-beta-7`, and
+  ;; publish.yml reads the version straight off the ref before checking it
+  ;; against every build.clj, so a prefixed tag would fail the publish guard.
+  ;;
+  ;; The rule required the `v` anyway, and `bb bump` rewrites what the rule
+  ;; matches — so cli.adoc documented `--tag v1.0.0-beta-N` through every beta,
+  ;; a command resolving no ref, its number bumped faithfully once per release.
+  ;; The gate was not blind to the line; it was verifying the broken form.
+  (testing "the bare tag this repository publishes is found"
+    (let [[f] (sut/doc-version-findings
+               "docs/modules/libraries/pages/cli.adoc"
+               (str "bbin install https://github.com/wagoebv/wagoe \\\n"
+                    "  --tag 1.0.0-beta-7 \\\n"
+                    "  --as wagoe\n"))]
+      (is (= "1.0.0-beta-7" (:version f)))
+      (is (= "git tag pin" (:what f)))))
+
+  (testing "a prefixed tag is still found"
+    ;; v1.0.0-alpha and the v1.0.1-alpha-* line really were prefixed, so a
+    ;; document naming an old tag is naming a real one. Dropping support would
+    ;; un-gate those lines rather than correct them.
+    (let [[f] (sut/doc-version-findings
+               "x.adoc"
+               "bbin install https://github.com/wagoebv/wagoe --tag v1.0.1-alpha-42\n")]
+      (is (= "1.0.1-alpha-42" (:version f)))))
+
+  (testing "a bump leaves the bare form bare"
+    ;; The defect is not the stale number — it is that the bump preserved the
+    ;; `v`, so the documented command stayed broken across every release while
+    ;; the gate reported agreement.
+    (let [content  (str "bbin install https://github.com/wagoebv/wagoe \\\n"
+                        "  --tag 1.0.0-beta-7 \\\n")
+          findings (sut/doc-version-findings "cli.adoc" content)
+          bumped   (bump/rewrite content findings "1.0.0-beta-8")]
+      (is (str/includes? bumped "--tag 1.0.0-beta-8"))
+      (is (not (str/includes? bumped "v1.0.0-beta-8")))))
+
+  (testing "a third party's tag is still not ours, prefixed or bare"
+    ;; Accepting the bare spelling makes tag-ownership load-bearing rather than
+    ;; incidental: `bb bump` rewrites what this reports, so a false positive
+    ;; here breaks someone else's documented install command rather than merely
+    ;; over-reporting.
+    (is (empty? (sut/doc-version-findings
+                 "AGENTS.md"
+                 (str "bbin install https://github.com/bhauman/clojure-mcp-light.git"
+                      " --tag v0.2.2 --as clj-nrepl-eval\n"))))
+    (is (empty? (sut/doc-version-findings
+                 "AGENTS.md"
+                 "bbin install https://github.com/someone/else --tag 1.0.0-beta-7\n")))))
+
+;; =============================================================================
 ;; Rule 3 — prose that pins a version
 ;; =============================================================================
 

@@ -35,6 +35,10 @@ for what is public API, what is internal, and how deprecations are announced.
   in the `1.0.0-beta-7` release, lagging one release every release. The page was excluded
   from `check:versions` wholesale to protect the old versions it exists to explain;
   exemptions are now per rule, so the explanation stays and the claim is gated.
+- **The documented `bbin install` pinned a tag that does not exist** (BOU-412). `cli.adoc`
+  said `--tag v1.0.0-beta-7`; our tags carry no `v`, so the command resolved no ref. It
+  had been wrong for every beta — `check:versions` required the prefix, so each release
+  bumped the number and preserved it.
 
 ## [1.0.0-beta-7] — 2026-09-05
 
