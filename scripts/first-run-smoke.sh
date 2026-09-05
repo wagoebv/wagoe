@@ -280,8 +280,10 @@ set +e
 bash -ic "cd /root/demo && bb check --ci" >/tmp/check.log 2>&1
 CHECK_RC=$?
 set -e
+# Print the whole log, not the ✗ lines. A gate names the violation underneath
+# the ✗, and filtering it out left a red nightly saying only "Ports / hexagonal".
 [ "$CHECK_RC" -eq 0 ] \
-  || { grep -E "✗|Summary" /tmp/check.log | head -12
+  || { cat /tmp/check.log
        fail "bb check failed on a freshly scaffolded module (BOU-267)"; }
 # Assert the summary too, not only the exit code. One exit code is exactly what
 # hid this, and a future change to when --ci exits would silently disarm the
