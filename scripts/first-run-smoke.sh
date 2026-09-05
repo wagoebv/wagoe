@@ -103,7 +103,7 @@ echo "     package manager: $PKG"
 pkg_install curl ca-certificates
 
 # ── 1. bare image: prerequisites must be reported, not delegated ────────────
-echo "[1/8] prerequisite detection on a bare image"
+echo "[1/9] prerequisite detection on a bare image"
 set +e
 PREREQ_OUT="$(bash /repo/scripts/install.sh 2>&1)"
 PREREQ_RC=$?
@@ -118,7 +118,7 @@ grep -qi -- "$EXPECT_HINT" <<<"$PREREQ_OUT" \
 ok "names the missing tools and the $PKG command to install them"
 
 # ── 2. install ──────────────────────────────────────────────────────────────
-echo "[2/8] install.sh"
+echo "[2/9] install.sh"
 pkg_install git unzip zip which
 if [ "$PKG" = pacman ]; then
   # install.sh:122 installs the JVM with a plain `pacman -S`, and pacman cannot
@@ -168,7 +168,7 @@ ok "installed; java, clojure, bb, wagoe all resolve (published tag: ${WAGOE_TAG:
 # released: use the `wagoe` on PATH, which install.sh built from the latest
 #           published tag. That wrapper is the whole point of this mode — it
 #           runs the templates in that tag, which is where BOU-402 lived.
-echo "[3/8] wagoe new  (target: $TARGET)"
+echo "[3/9] wagoe new  (target: $TARGET)"
 cd /root
 if [ "$TARGET" = worktree ]; then
   cp -r /repo /work
@@ -233,7 +233,7 @@ $LOCAL"
 fi
 
 # ── 4. quickstart ───────────────────────────────────────────────────────────
-echo "[4/8] bb quickstart"
+echo "[4/9] bb quickstart"
 set -a; . ./.env 2>/dev/null || true; set +a
 # The scaffolder is injected via -Sdeps at a hardcoded version rather than read
 # from deps.edn, so the :local/root rewrite above cannot reach it. Without this
@@ -251,7 +251,7 @@ ok "completed without clobbering the config"
 # ── 5. the scaffolded migration must actually apply ─────────────────────────
 # `bb quickstart` reports 8/8 Done even when zero migrations run, which is how
 # BOU-256 stayed hidden: the sample module had no table.
-echo "[5/8] scaffolded migration applied"
+echo "[5/9] scaffolded migration applied"
 if ls migrations/*.sql >/dev/null 2>&1; then
   STATUS="$(bash -ic "bb migrate status" 2>&1 || true)"
   APPLIED="$(grep -oE "Applied migrations: [0-9]+" <<<"$STATUS" | grep -oE "[0-9]+" | tail -1)"
@@ -269,7 +269,7 @@ fi
 # in it. The combination was the gap, and it hid untagged deftests, an
 # `(is true)`, 36 lint warnings, a protocol method declared twice, and a service
 # calling a repository method that did not exist (BOU-267).
-echo "[6/8] bb check on the scaffolded module"
+echo "[6/9] bb check on the scaffolded module"
 # --ci is load-bearing. Without it `bb check` prints its ✗ lines and still exits
 # 0 — it only calls System/exit on failure when :ci is set (check.clj). The
 # first version of this step omitted it and was therefore a gate that could
@@ -303,7 +303,7 @@ ok "gates pass, and the skipped framework-only checks are named"
 # user CLI call run-cli! directly with a well-formed vector, which is precisely
 # the step the alias got wrong. Assert on the outcome, not the exit code.
 # (No apostrophes below: this whole body is a single-quoted docker argument.)
-echo "[7/8] bb create-admin"
+echo "[7/9] bb create-admin"
 ADMIN_PW="Str0ng-Dev-Pass-x9"
 set +e
 printf "%s\n%s\n" "$ADMIN_PW" "$ADMIN_PW" \
@@ -326,7 +326,7 @@ grep -q "Admin user created successfully" /tmp/admin.log \
 ok "admin user created"
 
 # ── 7. does it actually serve? ──────────────────────────────────────────────
-echo "[8/8] app serves HTTP"
+echo "[8/9] app serves HTTP"
 bash -ic "cd /root/demo && set -a && . ./.env && set +a && clojure -M:repl" >/tmp/repl.log 2>&1 &
 for _ in $(seq 1 90); do (echo > /dev/tcp/127.0.0.1/7888) 2>/dev/null && break; sleep 2; done
 (echo > /dev/tcp/127.0.0.1/7888) 2>/dev/null || { tail -25 /tmp/repl.log; fail "nREPL never came up"; }
@@ -470,6 +470,38 @@ grep -q "BND-" /tmp/badreq.json \
 # wagoe.platform.shell.http.reitit-router-test and interceptors-test instead,
 # with the profile the wiring passes through.
 ok "a malformed request answers 400 with a BND code"
+
+# ── 9. is there anywhere to type (go)? ──────────────────────────────────────
+# `bb repl` started a headless nREPL server and nothing else, so the quickstart
+# instruction "start the REPL and eval (go)" left a user staring at one line of
+# output with no prompt (BOU-403). --port is not incidental: 7888 is taken by
+# the system started above, and forwarding it proves the task passes
+# *command-line-args*, which the old :task could not.
+#
+# No apostrophes or single quotes below: this whole script body is one
+# single-quoted string handed to docker, and either would terminate it.
+echo "[9/9] bb repl gives a prompt"
+printf "(+ 1 2)\n:repl/quit\n" \
+  | bash -ic "cd /root/demo && set -a && . ./.env && set +a && bb repl --port 7999" \
+    >/tmp/replprompt.log 2>&1 || true
+# Order matters. A task that drops *command-line-args* never sees --port, so it
+# reaches for 7888, which the system above is already holding, and dies at bind
+# before it can demonstrate anything about prompts. Checking that first means
+# the first failure names the actual defect instead of a symptom of it.
+if grep -q "Address already in use" /tmp/replprompt.log; then
+  tail -20 /tmp/replprompt.log
+  fail "bb repl ignored --port and collided with the running system — the task drops *command-line-args* (BOU-403)"
+fi
+grep -q "nREPL server started on port 7999" /tmp/replprompt.log \
+  || { tail -20 /tmp/replprompt.log
+       fail "bb repl did not forward --port to nREPL"; }
+grep -q "user=>" /tmp/replprompt.log \
+  || { tail -20 /tmp/replprompt.log
+       fail "bb repl printed no prompt — headless again, nowhere to eval (go) (BOU-403)"; }
+grep -q "user=> 3" /tmp/replprompt.log \
+  || { tail -20 /tmp/replprompt.log
+       fail "bb repl showed a prompt but did not evaluate (+ 1 2)"; }
+ok "prompt evaluates, and --port reached nREPL"
 
 echo
 if [ "$TARGET" = released ]; then
