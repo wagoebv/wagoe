@@ -188,7 +188,29 @@
                    version-pattern "\"")))
 
 (def ^:private tag-pin-re
-  (re-pattern (str "--tag\\s+v(" version-pattern ")\\b")))
+  "A git tag of this repository, pinned in an install command.
+
+   The `v` is optional because our tags do not carry one: releases are tagged
+   `1.0.0-beta-7`, and `publish.yml` reads the version straight off the ref with
+   `version=\"${GITHUB_REF#refs/tags/}\"` before checking it against every
+   `build.clj`. A `v`-prefixed tag would fail that guard.
+
+   Requiring it here is why `cli.adoc` documented `--tag v1.0.0-beta-7` through
+   every beta (BOU-412). The rule matched only the prefixed spelling, `bb bump`
+   rewrites what the rule matches, so each release bumped the number and
+   carefully preserved a prefix that resolves no ref. The gate was not blind to
+   the line — it was verifying the broken form.
+
+   Optional rather than forbidden for two reasons. The `v1.0.1-alpha-*` line and
+   `v1.0.0-alpha` really are prefixed, so a document naming an old tag is still
+   naming a real one. And a bare tag has to match, or correcting the `.adoc`
+   would drop the line out of the gate's sight — trading a wrong version for an
+   unwatched one, which is the worse of the two.
+
+   This does not widen what third-party tags match: `--tag v0.2.2` matched
+   before, the `v` being the literal and `0.2.2` the version. `tag-ownership` is
+   what keeps someone else's tag out, and that is unchanged."
+  (re-pattern (str "--tag\\s+v?(" version-pattern ")\\b")))
 
 (def ^:private prose-pin-re
   "A version presented as the release something arrived in.
