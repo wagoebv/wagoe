@@ -156,32 +156,66 @@
 ;; ran `sed` over `.md`/`.adoc` as well as source, so documentation was in scope
 ;; for the mutation and out of scope for the verification.
 
-(def doc-excluded-paths
-  "Path prefixes whose versions are historical and must NOT be rewritten.
+(def doc-exempt-rules
+  "Path prefix -> the rules that must not run on it, or `:all` for the file.
 
    Same principle as `check-doc-counts/excluded-paths`: a CHANGELOG entry naming
    alpha-32 was true at that release, and an ADR records a decision as of a
-   date. Rewriting either would be a lie about the past.
+   date. Rewriting either would be a lie about the past, so they are exempt
+   from everything.
 
-   `stability.adoc` is here for a different reason, and it is the interesting
-   one: the page exists to explain that `1.0.0-beta-1` sorts *older* than
-   `1.0.1-alpha-42`. Those two strings are its subject. Bumping them would
-   delete the explanation while leaving the prose that refers to it."
-  ["CHANGELOG.md"
-   "dev-docs/adr/"
-   "dev-docs/roadmap.adoc"
-   "dev-docs/presentations/"
-   "dev-docs/reference/historical-docs-triage.adoc"
-   "docs/superpowers/"
-   "docs/modules/ROOT/pages/stability.adoc"])
+   `stability.adoc` is the interesting one, and the reason this is a map rather
+   than the list it used to be (BOU-413). The page exists to explain that
+   `1.0.0-beta-1` sorts *older* than `1.0.1-alpha-42`; those strings are its
+   subject, and bumping them would delete the explanation. It also says
+   `1.0.0` several times meaning the future stable release — which
+   `version-pattern` matches, so a naive un-exclusion would rewrite those too.
+
+   But it opens with a `| Current version` cell, and excluding the whole file
+   left that ungated: it read `1.0.0-beta-6` in the `1.0.0-beta-7` release, and
+   `1.0.0-beta-5` in beta-6, lagging exactly one release every release on the
+   page a visitor opens to find out what the current version is (BOU-413).
+
+   A file-level exemption was protecting particular *lines*. So the exemption is
+   per-rule: this page stays exempt from the three rules that would damage it,
+   and is subject to the current-version rules, which are the only ones that can
+   read the cell. A historical claim and a current-version claim are opposites —
+   nothing that must not be rewritten can be phrased as \"this is the version
+   right now\"."
+  {"CHANGELOG.md"                                   :all
+   "dev-docs/adr/"                                  :all
+   "dev-docs/roadmap.adoc"                          :all
+   "dev-docs/presentations/"                        :all
+   "dev-docs/reference/historical-docs-triage.adoc" :all
+   "docs/superpowers/"                              :all
+   "docs/modules/ROOT/pages/stability.adoc"         #{"com.wagoe pin"
+                                                      "git tag pin"
+                                                      "release-pinned prose"}})
+
+(defn exempt-rules
+  "The rules exempt on `path`: `:all`, or a set of rule names (possibly empty).
+
+   Prefixes are unioned rather than first-match, so adding a broad exemption
+   cannot silently narrow a specific one already in the map."
+  [path]
+  (let [matched (keep (fn [[prefix rules]]
+                        (when (str/starts-with? path prefix) rules))
+                      doc-exempt-rules)]
+    (if (some #{:all} matched)
+      :all
+      (reduce into #{} matched))))
 
 (defn doc-in-scope?
-  "True when `path` is live documentation this gate governs."
+  "True when `path` is documentation this gate reads at all.
+
+   In scope no longer means every rule applies — see `doc-exempt-rules`. A file
+   exempt from some rules is still read, and `doc-version-findings` decides
+   which rules run on it."
   [path]
   (and (or (str/ends-with? path ".md")
            (str/ends-with? path ".adoc"))
        (not (str/includes? path "/target/"))
-       (not-any? #(str/starts-with? path %) doc-excluded-paths)))
+       (not= :all (exempt-rules path))))
 
 (def ^:private coordinate-re
   (re-pattern (str "com\\.wagoe/[a-z0-9-]+\\s*\\{:mvn/version\\s+\""
@@ -217,6 +251,29 @@
   (re-pattern (str "(?i)\\b(?:wagoe\\s+is\\s+at|(?:current|latest)\\s+"
                    "(?:version|release)\\s+is)\\s+[`']?v?("
                    version-pattern ")\\b")))
+
+(def ^:private current-version-label-re
+  "An AsciiDoc table cell whose text labels the next cell as the current version."
+  #"(?i)^\s*\|\s*current\s+version\s*$")
+
+(def ^:private current-version-cell-re
+  "The value cell beneath a `| Current version` label.
+
+   `current-version-re` cannot read this, and that is the whole of BOU-413: it
+   wants the label and the version in one sentence, and an AsciiDoc table row is
+   two lines —
+
+       | Current version
+       | `1.0.0-beta-7`
+
+   so the claim on `stability.adoc` matched nothing even once the page was in
+   scope. The label is what makes the version a claim about the present, exactly
+   as `wagoe is at` does in prose; it just sits on the line above.
+
+   Anchored to the cell rather than the bare version so `bb bump`, which
+   rewrites the excerpt this produces, edits the cell and not some other
+   version-shaped string that happens to share the line."
+  (re-pattern (str "\\|\\s*[`']?v?(" version-pattern ")[`']?")))
 
 (def ^:private github-repo-re
   "The owner/name of whatever repository a line points at, if any."
@@ -256,6 +313,17 @@
                    nil)
        rest))
 
+(defn- current-version-cells
+  "For each line of `block`, whether the line above it is a `| Current version` label.
+
+   The same shape as `tag-ownership` and for the same reason: the thing that
+   makes a version a claim is not on the version's own line."
+  [block]
+  (->> block
+       (map (fn [[_ line]] (boolean (re-matches current-version-label-re line))))
+       (cons false)
+       butlast))
+
 (defn doc-version-findings
   "Every suite version `text` names, as {:file :line :version :what :excerpt}.
 
@@ -264,25 +332,35 @@
    and, because `bb bump` rewrites what this discovers, stale after a bump that
    then verified clean.
 
+   Rules exempt on `path` are skipped rather than filtered afterwards, so an
+   exempt rule cannot contribute a finding that `bb bump` would then rewrite —
+   see `doc-exempt-rules`.
+
    Pure and public so the gate can be proven to fire without a repository to
    break."
   [path text]
-  (for [block (blocks text)
-        [[idx line] owner] (map vector block (tag-ownership block))
-        [what re] [["com.wagoe pin"        coordinate-re]
-                   ["git tag pin"          (when (= our-repo owner) tag-pin-re)]
-                   ["release-pinned prose" prose-pin-re]
-                   ["current-version claim" current-version-re]]
-        :when re
-        m     (re-seq re line)
-        :let  [matched (if (vector? m) (first m) m)
-               v       (re-find version-pattern matched)]
-        :when v]
-    {:file    path
-     :line    (inc idx)
-     :version v
-     :what    what
-     :excerpt (str/trim matched)}))
+  (let [exempt  (exempt-rules path)
+        exempt? (if (= :all exempt) (constantly true) exempt)]
+    (for [block (blocks text)
+          [[idx line] owner cell?] (map vector
+                                        block
+                                        (tag-ownership block)
+                                        (current-version-cells block))
+          [what re] [["com.wagoe pin"         coordinate-re]
+                     ["git tag pin"           (when (= our-repo owner) tag-pin-re)]
+                     ["release-pinned prose"  prose-pin-re]
+                     ["current-version claim" current-version-re]
+                     ["current-version claim" (when cell? current-version-cell-re)]]
+          :when (and re (not (exempt? what)))
+          m     (re-seq re line)
+          :let  [matched (if (vector? m) (first m) m)
+                 v       (re-find version-pattern matched)]
+          :when v]
+      {:file    path
+       :line    (inc idx)
+       :version v
+       :what    what
+       :excerpt (str/trim matched)})))
 
 (defn tracked-docs
   "Tracked `.md`/`.adoc` files in scope.

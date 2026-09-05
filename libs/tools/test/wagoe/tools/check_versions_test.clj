@@ -28,10 +28,21 @@
     (is (not (sut/doc-in-scope? "dev-docs/presentations/fc-is-hexagonal-nl.adoc")))
     (is (not (sut/doc-in-scope? "docs/superpowers/specs/2026-04-29-cli-design.md"))))
 
-  (testing "the stability page is excluded because the old versions are its subject"
-    ;; It exists to explain that 1.0.0-beta-1 sorts older than 1.0.1-alpha-42.
-    ;; Bumping those two strings would delete the explanation.
-    (is (not (sut/doc-in-scope? "docs/modules/ROOT/pages/stability.adoc"))))
+  (testing "the stability page is exempt from the rules that would damage it"
+    ;; It exists to explain that 1.0.0-beta-1 sorts older than 1.0.1-alpha-42,
+    ;; and bumping those strings would delete the explanation. It is read all
+    ;; the same, because its "Current version" cell must not lag (BOU-413).
+    (let [p "docs/modules/ROOT/pages/stability.adoc"]
+      (is (sut/doc-in-scope? p))
+      (is (= #{"com.wagoe pin" "git tag pin" "release-pinned prose"}
+             (sut/exempt-rules p)))))
+
+  (testing "a wholly historical document is exempt from every rule"
+    (is (= :all (sut/exempt-rules "CHANGELOG.md")))
+    (is (= :all (sut/exempt-rules "dev-docs/adr/ADR-015-wagoe-tools.adoc"))))
+
+  (testing "a document with no entry is exempt from nothing"
+    (is (= #{} (sut/exempt-rules "README.md"))))
 
   (testing "live documentation is in scope"
     (is (sut/doc-in-scope? "README.md"))
@@ -248,6 +259,85 @@
     (is (empty? (sut/doc-version-findings
                  "x.adoc"
                  "Maven sorts 1.0.0-beta-1 below 1.0.1-alpha-42.\n")))))
+
+;; =============================================================================
+;; Rule 4, continued — the claim that lives in a table cell
+;; =============================================================================
+
+(def ^:private stability-page
+  "The shape of stability.adoc: one live claim among several that must not move."
+  (str "| Current version\n"
+       "| `1.0.0-beta-6`\n"
+       "\n"
+       "| Stability\n"
+       "| Beta — breaking changes are permitted\n"
+       "\n"
+       "Releases are `1.0.0-beta-N`. This replaced the older `1.0.1-alpha-N` scheme.\n"
+       "\n"
+       "Under Maven ordering `1.0.0` sorts below `1.0.1`, so `1.0.0-beta-1`\n"
+       "compares as older than `1.0.1-alpha-42`.\n"
+       "\n"
+       "Getting the surface up to this standard is part of the road to `1.0.0`.\n"))
+
+(deftest ^:unit the-current-version-cell-is-a-claim-about-the-present
+  ;; BOU-413. stability.adoc read 1.0.0-beta-6 in the beta-7 release, and
+  ;; beta-5 in beta-6 — lagging exactly one release, every release, on the page
+  ;; a visitor opens to find out what the current version is.
+  ;;
+  ;; Two things hid it. The file was excluded wholesale, and the exclusion was
+  ;; right about the lines it was protecting and wrong about this one. And even
+  ;; in scope, current-version-re wants the label and the version in one
+  ;; sentence, while an AsciiDoc table row is two lines.
+  (testing "the cell beneath a Current version label is found"
+    (let [[f :as fs] (sut/doc-version-findings
+                      "docs/modules/ROOT/pages/stability.adoc" stability-page)]
+      (is (= 1 (count fs)) "exactly the live claim, none of the explanation")
+      (is (= 2 (:line f)))
+      (is (= "1.0.0-beta-6" (:version f)))
+      (is (= "current-version claim" (:what f)))))
+
+  (testing "the explanation of why the numbers moved is left alone"
+    ;; The reason the file was excluded in the first place. These strings are
+    ;; the page's subject; rewriting them deletes the explanation.
+    (let [versions (set (map :version
+                             (sut/doc-version-findings
+                              "docs/modules/ROOT/pages/stability.adoc" stability-page)))]
+      (is (not (contains? versions "1.0.1-alpha-42")))
+      (is (not (contains? versions "1.0.0-beta-1")))
+      (is (not (contains? versions "1.0.0"))
+          "the bare 1.0.0 means the future stable release, and matches version-pattern")))
+
+  (testing "a bump rewrites the cell and nothing else on the page"
+    ;; The assertion that matters: bb bump rewrites what this discovers, so a
+    ;; rule that over-reported here would corrupt the page rather than merely
+    ;; annoy. Line 2 moves; every other version string stays put.
+    (let [findings (sut/doc-version-findings
+                    "docs/modules/ROOT/pages/stability.adoc" stability-page)
+          bumped   (bump/rewrite stability-page findings "1.0.0-beta-7")]
+      (is (str/includes? bumped "| `1.0.0-beta-7`"))
+      (is (not (str/includes? bumped "| `1.0.0-beta-6`")))
+      (is (str/includes? bumped "compares as older than `1.0.1-alpha-42`"))
+      (is (str/includes? bumped "so `1.0.0-beta-1`"))
+      (is (str/includes? bumped "the road to `1.0.0`"))))
+
+  (testing "an exempt rule contributes nothing even when its pattern matches"
+    ;; The page carries no coordinate today, but nothing stops one arriving.
+    ;; Exemption is per rule, so the coordinate stays unread while the cell
+    ;; above it is still claimed.
+    (let [text (str "| Current version\n| `1.0.0-beta-6`\n"
+                    "\n"
+                    "{:deps {com.wagoe/wagoe-core {:mvn/version \"1.0.1-alpha-42\"}}}\n")]
+      (is (= ["current-version claim"]
+             (map :what (sut/doc-version-findings
+                         "docs/modules/ROOT/pages/stability.adoc" text))))
+      (is (= 2 (count (sut/doc-version-findings "README.md" text)))
+          "the same text elsewhere yields both, so the exemption is what differs")))
+
+  (testing "a version cell with no label above it is not a claim"
+    ;; The label is what makes it a claim about the present, exactly as
+    ;; \"wagoe is at\" does in prose.
+    (is (empty? (sut/doc-version-findings
+                 "x.adoc" "| Stability\n| `1.0.0-beta-6`\n")))))
 
 ;; =============================================================================
 ;; Consensus — documentation is checked, it does not vote
