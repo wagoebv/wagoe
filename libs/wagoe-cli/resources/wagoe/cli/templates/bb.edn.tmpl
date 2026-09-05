@@ -64,9 +64,13 @@
                      :task (check-hygiene/-main)}
 
   ;; Development
-  repl              {:doc "Start the nREPL server on port 7888 (clojure -M:repl)"
+  ;; --interactive adds nREPL's own client on top of the server, so this gives
+  ;; both a `user=>` prompt to eval (go) at and port 7888 for an editor. Without
+  ;; it the task printed "nREPL server started" and left the user with nowhere
+  ;; to type (BOU-403). `clojure -M:repl` stays headless for editors and CI.
+  repl              {:doc "Start the REPL: prompt + nREPL server on port 7888 (bb repl [nrepl-args])"
                      :override-builtin true
-                     :task (clojure "-M:repl")}
+                     :task (apply clojure "-M:repl" "--interactive" *command-line-args*)}
   test              {:doc "Run tests via Kaocha (clojure -M:test [args])"
                      :task (apply clojure "-M:test" *command-line-args*)}
 
