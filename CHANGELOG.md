@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **`bb setup --ai-provider` or `--database postgresql`/`mysql` made a project that
+  could not boot** (BOU-414). Those libraries now ship in the generated `deps.edn`.
 - **`bb repl` gave you no prompt to type `(go)` into** (BOU-403). It now starts the
   prompt and the nREPL server; `clojure -M:repl` stays headless for editors.
 - **The stability page said the wrong current version** (BOU-413). It read `1.0.0-beta-6`

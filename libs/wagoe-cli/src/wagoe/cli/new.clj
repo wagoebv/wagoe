@@ -73,6 +73,7 @@
                      :external-version      (:version (cat/find-module "external"))
                      :payments-version      (:version (cat/find-module "payments"))
                      :i18n-version          (:version (cat/find-module "i18n"))
+                     :ai-version            (:version (cat/find-module "ai"))
                      ;; Dev-only, and it lands in the :repl alias — see
                      ;; deps.edn.tmpl.
                      :devtools-version      (:version (cat/find-module "devtools"))}

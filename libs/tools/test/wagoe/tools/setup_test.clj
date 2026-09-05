@@ -320,3 +320,58 @@
           test-config (setup/build-config minimal-spec "test")]
       (is (str/includes? dev-config "\"my-app-dev\""))
       (is (str/includes? test-config "\"my-app-test\"")))))
+
+;; =============================================================================
+;; What bb setup enables must be on the classpath the app boots on
+;; =============================================================================
+
+(def ^:private generated-deps-path
+  "wagoe-cli/resources/wagoe/cli/templates/deps.edn.tmpl")
+
+(defn- top-level-deps
+  "The `:deps` map of the generated deps.edn, as text.
+
+   Aliases are excluded deliberately: `-M:run` and `(go)` see only `:deps`, and
+   a library parked in an alias is exactly how BOU-414 shipped."
+  []
+  (let [src (lib-source generated-deps-path)]
+    (subs src 0 (str/index-of src ":aliases"))))
+
+(def ^:private choice->coordinate
+  "The dependency each `bb setup` value needs once it writes its config key.
+
+   Keyed by the value the user passes, so a new provider added to
+   `valid-choices` without a dependency shows up here as a gap."
+  {[:database :postgresql] "org.postgresql/postgresql"
+   [:database :mysql]      "com.mysql/mysql-connector-j"
+   [:database :sqlite]     "org.xerial/sqlite-jdbc"
+   [:database :h2]         "com.h2database/h2"
+   [:ai-provider :ollama]    "com.wagoe/wagoe-ai"
+   [:ai-provider :anthropic] "com.wagoe/wagoe-ai"
+   [:ai-provider :openai]    "com.wagoe/wagoe-ai"
+   [:ai-provider :replicate] "com.wagoe/wagoe-ai"
+   [:payment :mock]        "com.wagoe/wagoe-payments"
+   [:payment :stripe]      "com.wagoe/wagoe-payments"
+   [:payment :mollie]      "com.wagoe/wagoe-payments"
+   [:cache :redis]         "com.wagoe/wagoe-cache"
+   [:cache :in-memory]     "com.wagoe/wagoe-cache"})
+
+(deftest ^:unit setup-choices-resolve-in-a-generated-project-test
+  (testing "every value bb setup accepts has its dependency in top-level :deps"
+    (let [deps (top-level-deps)]
+      (doseq [[[flag value] coordinate] choice->coordinate]
+        (is (str/includes? deps coordinate)
+            (str "bb setup --" (name flag) " " (name value)
+                 " writes a config key, but " coordinate
+                 " is not in the generated project's top-level :deps."
+                 " The project will not boot (BOU-414)")))))
+
+  (testing "the table covers every choice, so a new provider cannot slip through"
+    (doseq [[flag values] setup/valid-choices
+            value         values
+            ;; :none writes no config key, and :email writes no module key.
+            :when (and (not= :none value) (not= :email flag))]
+      (is (contains? choice->coordinate [flag value])
+          (str "bb setup --" (name flag) " " (name value)
+               " is accepted but this test names no dependency for it —"
+               " add one, or confirm it needs none")))))
