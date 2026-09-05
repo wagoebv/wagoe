@@ -11,7 +11,7 @@ File storage abstraction with local filesystem and S3 backends, including upload
 
 **deps.edn** (recommended):
 ```clojure
-{:deps {com.wagoe/wagoe-storage {:mvn/version "1.0.0-beta-6"}}}
+{:deps {com.wagoe/wagoe-storage {:mvn/version "1.0.0-beta-7"}}}
 ```
 
 **Leiningen**:

@@ -25,7 +25,7 @@
 ;; `check:versions` gates it as an "injected pin" — it used to ask a human to
 ;; update it alongside scaffolder-version and the two in new.clj, and that is
 ;; how it shipped 1.0.0-beta-5 inside the 1.0.0-beta-6 release.
-(def ^:private ai-version "1.0.0-beta-6")
+(def ^:private ai-version "1.0.0-beta-7")
 
 ;; Match libs/ai/deps.edn and the monorepo's own pin.
 (def ^:private tools-cli-version "1.4.256")
