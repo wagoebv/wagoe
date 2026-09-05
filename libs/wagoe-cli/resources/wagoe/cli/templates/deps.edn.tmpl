@@ -17,11 +17,26 @@
          com.wagoe/wagoe-external      {:mvn/version "{{external-version}}"}
          com.wagoe/wagoe-payments      {:mvn/version "{{payments-version}}"}
          com.wagoe/wagoe-i18n          {:mvn/version "{{i18n-version}}"}
+         ;; Here rather than only in :mcp because `bb setup --ai-provider`
+         ;; writes :wagoe/ai-service into :active, and the boot resolves module
+         ;; wiring on the default classpath — so a project configured for AI
+         ;; from the alias could not start at all (BOU-414). Its own deps are
+         ;; clj-http and cheshire, which platform and external already bring.
+         com.wagoe/wagoe-ai            {:mvn/version "{{ai-version}}"}
          ;; SQLite drives the default dev config; H2 backs the test profile.
          ;; Both ship by default so a fresh project boots and tests with no
          ;; external database server.
+         ;;
+         ;; PostgreSQL and MySQL ship for the same reason wagoe-ai does:
+         ;; `bb setup --database postgresql` switches the adapter in config.edn
+         ;; alone, and these lived only in the :user-cli alias — so an app
+         ;; started with `-M:run` or `(go)` died on `Class org.postgresql.Driver
+         ;; not found` (BOU-414). Every value `bb setup --database` accepts has
+         ;; to resolve from the classpath the app actually boots on.
          org.xerial/sqlite-jdbc                  {:mvn/version "3.53.0.0"}
-         com.h2database/h2                       {:mvn/version "2.4.240"}}
+         com.h2database/h2                       {:mvn/version "2.4.240"}
+         org.postgresql/postgresql               {:mvn/version "42.7.12"}
+         com.mysql/mysql-connector-j             {:mvn/version "9.6.0"}}
  :aliases
  {:repl     {:extra-paths ["dev"]
              ;; wagoe-devtools is dev-only on purpose: it carries a dashboard
