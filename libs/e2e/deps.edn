@@ -26,7 +26,7 @@
  :aliases
  {:test {:extra-paths ["test"]
          :extra-deps  {lambdaisland/kaocha {:mvn/version "1.91.1392"}
-                       com.h2database/h2   {:mvn/version "2.4.240"}
+                       com.h2database/h2 {:mvn/version "2.5.250"}
                        ;; Used by helper namespaces for POST /test/reset
                        clj-http/clj-http   {:mvn/version "3.13.1"}
                        ;; TOTP helper (already used elsewhere in the repo)

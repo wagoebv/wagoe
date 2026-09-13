@@ -75,6 +75,69 @@
     (testing "the scaffolder's template directory stays out"
       (is (not-any? #(str/includes? % "existing-dir") paths)))))
 
+;; --- the newest-release lookup (BOU-474) -------------------------------------
+
+(def ^:private clojars-latest #'deps/clojars-latest)
+(def ^:private maven-central-latest #'deps/maven-central-latest)
+
+(def ^:private reitit-from-clojars
+  "Recorded 2026-09-13. `latest_release` is itself a release candidate, which is
+   why reitit was offered as an upgrade for months."
+  (json/generate-string
+   {:latest_release "0.11.0-rc1"
+    :latest_version "0.11.0-rc1"
+    :recent_versions [{:version "0.11.0-rc1"} {:version "0.10.1"} {:version "0.10.0"}
+                      {:version "0.9.2"} {:version "0.9.2-rc1"} {:version "0.9.1"}]}))
+
+(defn- metadata-xml [release versions]
+  (str "<metadata><versioning><release>" release "</release><versions>"
+       (apply str (map #(str "<version>" % "</version>") versions))
+       "</versions></versioning></metadata>"))
+
+(def ^:private awssdk-from-central
+  "Abridged from the real 1844-entry document. solrsearch answered 2.46.7 for
+   this coordinate while Central had 2.54.17."
+  (metadata-xml "2.54.17" ["2.46.7" "2.50.0" "2.54.16" "2.54.17"]))
+
+(def ^:private clojure-from-central
+  "Central's own <release> field is 1.13.0-alpha6 here, so it cannot be used
+   as the answer — it is not release-only either."
+  (metadata-xml "1.13.0-alpha6" ["1.12.0" "1.12.6" "1.13.0-alpha5" "1.13.0-alpha6"]))
+
+(deftest ^:unit a-prerelease-is-not-an-upgrade-target
+  (let [respond (fn [body] (fn [_url & _] {:status 200 :body body}))]
+
+    (testing "Clojars: recent_versions is scanned, because latest_release is not
+              release-only — reitit's is a release candidate"
+      (with-redefs [http/get (respond reitit-from-clojars)]
+        (is (= [:ok "0.10.1"] (clojars-latest "metosin" "reitit-core")))))
+
+    (testing "Central: the newest stable in the version list, not <release>"
+      (with-redefs [http/get (respond awssdk-from-central)]
+        (is (= [:ok "2.54.17"] (maven-central-latest "software.amazon.awssdk" "s3"))))
+
+      (with-redefs [http/get (respond clojure-from-central)]
+        (is (= [:ok "1.12.6"] (maven-central-latest "org.clojure" "clojure"))
+            "took Central's <release>, which is an alpha")))
+
+    (testing "and --prereleases asks for them deliberately"
+      (binding [deps/*prereleases?* true]
+        (with-redefs [http/get (respond reitit-from-clojars)]
+          (is (= [:ok "0.11.0-rc1"] (clojars-latest "metosin" "reitit-core"))))
+        (with-redefs [http/get (respond clojure-from-central)]
+          (is (= [:ok "1.13.0-alpha6"] (maven-central-latest "org.clojure" "clojure"))))))
+
+    (testing "a coordinate that has only ever shipped prereleases still reports one"
+      ;; Otherwise it silently drops out of the sweep entirely.
+      (with-redefs [http/get (respond (metadata-xml "0.1.0-alpha2" ["0.1.0-alpha1" "0.1.0-alpha2"]))]
+        (is (= [:ok "0.1.0-alpha2"] (maven-central-latest "only" "alphas")))))
+
+    (testing "the version shapes this repo actually pins are not mistaken for prereleases"
+      (doseq [v ["1.12.6" "3.53.4.0" "26.7.0" "2.5.250" "42.7.13" "1.6.3"]]
+        (is (not (#'deps/prerelease? v)) (str v " was treated as a prerelease")))
+      (doseq [v ["0.11.0-rc1" "0.5.243-ALPHA" "3.9.0-beta1" "1.13.0-alpha6" "2.0.0-SNAPSHOT"]]
+        (is (#'deps/prerelease? v) (str v " was treated as a release"))))))
+
 (deftest ^:unit neither-command-reports-success-after-a-failed-sweep
   ;; Table-driven over both modes on purpose. cmd-check was fixed and cmd-update
   ;; was not, so `--update` went on exiting 0 and printing "All dependencies are

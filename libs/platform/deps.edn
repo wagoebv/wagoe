@@ -61,7 +61,7 @@
               ;; and its PSP clients to every consumer of platform, which is
               ;; what BOU-131 just finished removing.
               :extra-deps  {lambdaisland/kaocha {:mvn/version "1.91.1392"}
-                            com.h2database/h2   {:mvn/version "2.4.240"}
+                            com.h2database/h2 {:mvn/version "2.5.250"}
                             wagoe/payments      {:local/root "../payments"}}
               :main-opts   ["-m" "kaocha.runner"]}
 
