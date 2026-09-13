@@ -43,21 +43,33 @@ jobs:
       - name: Sweep every deps.edn
         shell: bash
         run: |
-          # Never fail: this reports, it does not gate.
-          bb upgrade-outdated > raw.txt 2>&1 || true
+          # Never fail, but keep the status: the task exits 0 when it finds
+          # outdated pins, so a non-zero exit means the sweep itself did not
+          # run — a Maven or Clojars outage, most likely. Discarding that and
+          # parsing the empty output would report an unavailable sweep as
+          # "everything is current", which is the one answer it must not give.
+          # `|| status=$?` rather than a bare call plus `$?`: GitHub runs this
+          # with `-e`, so a failing command aborts the step before the next
+          # line and the branch below would never be reached.
+          status=0
+          bb upgrade-outdated > raw.txt 2>&1 || status=$?
 
           # Strip the ANSI the task writes for a terminal.
           sed -e $'s/\033\\[[0-9;]*m//g' raw.txt > report.txt
 
-          # One line per outdated pin: "↑ coord old → new". Collapse to the
-          # distinct coordinates, since a build-tool bump shows up once per
-          # library and 31 identical rows say the same thing once.
+          # One line per outdated pin: "↑ coord old → new". The trailing
+          # "↑ N outdated dependencies found." carries the same marker, so it
+          # is dropped here and in the count — with it, the total is one more
+          # than the pins that exist. Collapse to distinct coordinates: a
+          # build-tool bump shows up once per library and 31 identical rows say
+          # the same thing once.
           grep -E '↑ ' report.txt \
-            | grep -v 'outdated dependencies found' \
-            | awk '{print $2, $3, $4, $5}' \
+            | grep -v 'outdated dependencies found' > pins.txt || true
+
+          awk '{print $2, $3, $4, $5}' pins.txt \
             | sort | uniq -c | sort -rn > coords.txt || true
 
-          pins=$(grep -cE '↑ ' report.txt || true)
+          pins=$(grep -c . pins.txt || true)
           coords=$(grep -c . coords.txt || true)
 
           {
@@ -65,12 +77,24 @@ jobs:
             echo
             echo "\`bb upgrade-outdated\` across every \`deps.edn\` in the repo."
             echo
+            if [ "$status" -ne 0 ]; then
+              echo "> **The sweep did not complete** — \`bb upgrade-outdated\` exited"
+              echo "> \`$status\`. The counts below are from partial output and mean"
+              echo "> nothing; this is not a report that everything is current."
+              echo
+              echo '```'
+              tail -30 report.txt
+              echo '```'
+              echo
+            fi
             echo "| | |"
             echo "|---|---|"
             echo "| Outdated pins | $pins |"
             echo "| Distinct coordinates | $coords |"
             echo
-            if [ "$coords" -eq 0 ]; then
+            if [ "$status" -ne 0 ]; then
+              : # already explained above; say nothing about currency
+            elif [ "$coords" -eq 0 ]; then
               echo "Everything is at its newest release."
             else
               echo "Read the version before acting: depot offers prereleases, and"
@@ -83,4 +107,8 @@ jobs:
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
-          echo "Dependency canary: $pins pins across $coords coordinates (report only)."
+          if [ "$status" -ne 0 ]; then
+            echo "::warning::Dependency canary: the sweep exited $status; the counts are meaningless."
+          else
+            echo "Dependency canary: $pins pins across $coords coordinates (report only)."
+          fi
