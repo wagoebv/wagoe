@@ -191,6 +191,26 @@ rather than a commit message.
 * Database schemas of the framework's own tables, other than through migrations
   we ship.
 
+== The HTTP server is Jetty
+
+`:wagoe/http-server` starts Jetty through `ring/ring-jetty-adapter` (Jetty 12).
+That is a decision, not a default that nobody wrote down:
+
+* It is the adapter the Ring maintainers ship and support themselves, which
+  matters more to a framework with a stability promise than a benchmark does.
+* It carries the standard Ring WebSocket API that `wagoe-realtime` is built on,
+  HTTP/2, async handlers for streaming responses, and a virtual-thread executor.
+  Nothing on the roadmap needs a capability Jetty lacks.
+* The alternatives each cost something without solving a problem we have:
+  http-kit has its own WebSocket API and no HTTP/2; Aleph brings Netty and a
+  second concurrency model; Undertow adds nothing over Jetty 12.
+
+What this means for the promise: there is no server port. `:wagoe/http-server`
+is Jetty, its options map is Jetty's, and swapping the server is not a supported
+configuration. If a real need for another server appears, the answer is a port
+with a conformance suite — the same route every other adapter in the framework
+takes — not a config flag.
+
 == Deprecation, in practice
 
 A deprecation is three things, and it is not a deprecation without all three:
