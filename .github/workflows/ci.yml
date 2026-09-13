@@ -891,6 +891,9 @@ jobs:
       - name: Run tests
         env:
           JWT_SECRET: "ci-test-secret-minimum-32-characters"
+          # This job started MinIO above, so a skipped S3 case here is a
+          # failure. Only this job sets it — see when-s3 in s3_test.clj.
+          WAGOE_REQUIRE_S3: "1"
         run: clojure -M:test :storage
 
   test-cache:
