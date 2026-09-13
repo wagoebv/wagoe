@@ -1,6 +1,7 @@
 name: Dependency canary
 
-# Report-only drift check across every deps.edn (BOU-443).
+# Report-only drift check over the root, libs/*/deps.edn and
+# examples/*/deps.edn (BOU-443).
 #
 # Nothing reported this. `bb upgrade-outdated` existed and no job ran it, so
 # the answer to "are we current" was whoever last measured it by hand — and
@@ -44,10 +45,11 @@ jobs:
         shell: bash
         run: |
           # Never fail, but keep the status: the task exits 0 when it finds
-          # outdated pins, so a non-zero exit means the sweep itself did not
-          # run — a Maven or Clojars outage, most likely. Discarding that and
-          # parsing the empty output would report an unavailable sweep as
-          # "everything is current", which is the one answer it must not give.
+          # outdated pins and non-zero only when a registry could not be
+          # reached — it tracks failed lookups rather than folding them into
+          # "nothing newer". Discarding that and parsing the output would
+          # report an unavailable sweep as "everything is current", which is
+          # the one answer it must not give.
           # `|| status=$?` rather than a bare call plus `$?`: GitHub runs this
           # with `-e`, so a failing command aborts the step before the next
           # line and the branch below would never be reached.
