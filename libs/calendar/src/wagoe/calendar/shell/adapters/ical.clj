@@ -117,7 +117,9 @@
    which always carries the original IANA timezone name."
   [vevent]
   (when-let [p (find-prop vevent "DTSTART")]
-    (when-let [text (str p)]
+    ;; `str` never returns nil, so this was a `when-let` that always took its
+    ;; branch — a guard reading as if a property could stringify to nothing.
+    (let [text (str p)]
       (when-let [m (re-find #"TZID=([^;:\r\n]+)" text)]
         (str/trim (second m))))))
 

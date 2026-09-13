@@ -1,0 +1,116 @@
+name: Dependency canary
+
+# Report-only drift check over the root, libs/*/deps.edn and
+# examples/*/deps.edn (BOU-443).
+#
+# Nothing reported this. `bb upgrade-outdated` existed and no job ran it, so
+# the answer to "are we current" was whoever last measured it by hand — and
+# that sweep found 76 stale pins across 30 of 34 files, including a library
+# two versions behind on the SQL layer it compiles every query with.
+#
+# This job NEVER fails. A non-zero count is not automatically action: depot
+# offers prereleases, and the standing ones (reitit 0.11.0-rc1, criterium
+# 0.5.x-ALPHA) are deliberately not taken. The point is that the number is
+# visible weekly instead of rediscovered yearly.
+#
+# Deliberately not part of CI: on a pull request an upstream release nobody
+# in that PR caused is noise, and making it blocking would hand the repo's
+# green status to a third party's release schedule.
+
+on:
+  schedule:
+    # Mondays, 06:30 UTC — half an hour after the brand canary, so a
+    # Monday-morning failure points at one job.
+    - cron: '30 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  outdated:
+    name: Outdated dependency sweep (report only)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Clojure + Babashka
+        uses: DeLaGuardo/setup-clojure@13.6.1
+        with:
+          bb: latest
+          cli: latest
+
+      - name: Sweep every deps.edn
+        shell: bash
+        run: |
+          # Never fail, but keep the status: the task exits 0 when it finds
+          # outdated pins and non-zero only when a registry could not be
+          # reached — it tracks failed lookups rather than folding them into
+          # "nothing newer". Discarding that and parsing the output would
+          # report an unavailable sweep as "everything is current", which is
+          # the one answer it must not give.
+          # `|| status=$?` rather than a bare call plus `$?`: GitHub runs this
+          # with `-e`, so a failing command aborts the step before the next
+          # line and the branch below would never be reached.
+          status=0
+          bb upgrade-outdated > raw.txt 2>&1 || status=$?
+
+          # Strip the ANSI the task writes for a terminal.
+          sed -e $'s/\033\\[[0-9;]*m//g' raw.txt > report.txt
+
+          # One line per outdated pin: "↑ coord old → new". The trailing
+          # "↑ N outdated dependencies found." carries the same marker, so it
+          # is dropped here and in the count — with it, the total is one more
+          # than the pins that exist. Collapse to distinct coordinates: a
+          # build-tool bump shows up once per library and 31 identical rows say
+          # the same thing once.
+          grep -E '↑ ' report.txt \
+            | grep -v 'outdated dependencies found' > pins.txt || true
+
+          awk '{print $2, $3, $4, $5}' pins.txt \
+            | sort | uniq -c | sort -rn > coords.txt || true
+
+          pins=$(grep -c . pins.txt || true)
+          coords=$(grep -c . coords.txt || true)
+
+          {
+            echo "## Dependency canary"
+            echo
+            echo "\`bb upgrade-outdated\` across every \`deps.edn\` in the repo."
+            echo
+            if [ "$status" -ne 0 ]; then
+              echo "> **The sweep did not complete** — \`bb upgrade-outdated\` exited"
+              echo "> \`$status\`. The counts below are from partial output and mean"
+              echo "> nothing; this is not a report that everything is current."
+              echo
+              echo '```'
+              tail -30 report.txt
+              echo '```'
+              echo
+            fi
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Outdated pins | $pins |"
+            echo "| Distinct coordinates | $coords |"
+            echo
+            if [ "$status" -ne 0 ]; then
+              : # already explained above; say nothing about currency
+            elif [ "$coords" -eq 0 ]; then
+              echo "Everything is at its newest release."
+            else
+              echo "Read the version before acting: depot offers prereleases, and"
+              echo "some are deliberately not taken. A coordinate appearing once per"
+              echo "library is usually build tooling, not application surface."
+              echo
+              echo '```'
+              cat coords.txt
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$status" -ne 0 ]; then
+            echo "::warning::Dependency canary: the sweep exited $status; the counts are meaningless."
+          else
+            echo "Dependency canary: $pins pins across $coords coordinates (report only)."
+          fi

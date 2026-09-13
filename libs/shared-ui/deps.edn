@@ -1,6 +1,6 @@
 {:paths ["src"]
 
- :deps  {org.clojure/clojure {:mvn/version "1.12.5"}
+ :deps  {org.clojure/clojure {:mvn/version "1.12.6"}
          wagoe/platform   {:local/root "../platform"}
          wagoe/ui-style   {:local/root "../ui-style"}
          metosin/malli {:mvn/version "0.20.1"}
@@ -8,5 +8,5 @@
 
  :aliases
  {:build {:replace-deps {io.github.clojure/tools.build {:git/tag "v0.10.13" :git/sha "3a3c177d"}
-                         slipset/deps-deploy           {:mvn/version "0.2.3"}}
+                         slipset/deps-deploy           {:mvn/version "0.2.5"}}
           :ns-default   build}}}

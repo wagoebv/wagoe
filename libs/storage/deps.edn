@@ -1,6 +1,6 @@
 {:paths ["src" "resources"]
 
- :deps  {org.clojure/clojure                        {:mvn/version "1.12.5"}
+ :deps  {org.clojure/clojure                        {:mvn/version "1.12.6"}
          wagoe/platform                          {:local/root "../platform"}
          wagoe/observability                     {:local/root "../observability"}
          integrant/integrant {:mvn/version "1.0.1"}
@@ -8,22 +8,22 @@
          org.clojure/tools.logging {:mvn/version "1.3.1"}
 
          ;; AWS SDK for S3
-         software.amazon.awssdk/s3                  {:mvn/version "2.46.9"}
-         software.amazon.awssdk/s3-transfer-manager {:mvn/version "2.46.9"}
+         software.amazon.awssdk/s3                  {:mvn/version "2.54.17"}
+         software.amazon.awssdk/s3-transfer-manager {:mvn/version "2.54.17"}
 
          ;; Google Cloud Storage (GCS adapter)
-         com.google.cloud/google-cloud-storage      {:mvn/version "2.44.1"}}
+         com.google.cloud/google-cloud-storage      {:mvn/version "2.73.0"}}
 
  :aliases
  {:test      {:extra-paths ["test"]
               :extra-deps  {lambdaisland/kaocha        {:mvn/version "1.91.1392"}
                             ;; In-memory Storage fake for GCS adapter tests
-                            com.google.cloud/google-cloud-nio {:mvn/version "0.127.28"}}
+                            com.google.cloud/google-cloud-nio {:mvn/version "0.137.0"}}
               :main-opts   ["-m" "kaocha.runner"]}
 
-  :clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2026.05.25"}}
+  :clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2026.08.04"}}
               :main-opts    ["-m" "clj-kondo.main"]}
 
   :build     {:replace-deps {io.github.clojure/tools.build {:git/tag "v0.10.13" :git/sha "3a3c177d"}
-                             slipset/deps-deploy           {:mvn/version "0.2.3"}}
+                             slipset/deps-deploy           {:mvn/version "0.2.5"}}
               :ns-default   build}}}

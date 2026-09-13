@@ -1,11 +1,11 @@
 {:paths ["src" "resources"]
 
- :deps {org.clojure/clojure          {:mvn/version "1.12.5"}
+ :deps {org.clojure/clojure          {:mvn/version "1.12.6"}
         cheshire/cheshire            {:mvn/version "6.2.0"}   ;; JSON-RPC codec (shell only)
         org.clojure/tools.logging    {:mvn/version "1.3.1"}
         ;; SLF4J binding so server logs actually reach stderr (stdout is
         ;; reserved for the protocol stream). Without it logging is a no-op.
-        ch.qos.logback/logback-classic {:mvn/version "1.5.34"}
+        ch.qos.logback/logback-classic {:mvn/version "1.6.3"}
         ;; Reused by the Tier 0 tools (ai.core.context / ai.core.parsing) and the
         ;; sql-preview IAIProvider seam.
         wagoe/ai               {:local/root "../ai"}
@@ -13,7 +13,7 @@
         ;; payloads + explain-error code lookup. Used only from shell.
         wagoe/devtools         {:local/root "../devtools"}
         ;; Runtime clj-kondo for the `lint` tool (structured findings).
-        clj-kondo/clj-kondo       {:mvn/version "2026.05.25"}
+        clj-kondo/clj-kondo       {:mvn/version "2026.08.04"}
         ;; Tier 1 generate tools (BOU-101): the scaffolder service does the
         ;; codegen; wagoe/tools supplies the FC/IS per-file checker the
         ;; closed verify loop reuses. Both are dev tooling — the MCP server is
@@ -30,9 +30,9 @@
           :extra-deps  {lambdaisland/kaocha {:mvn/version "1.91.1392"}}
           :main-opts   ["-m" "kaocha.runner"]}
 
-  :clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2026.05.25"}}
+  :clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2026.08.04"}}
               :main-opts    ["-m" "clj-kondo.main"]}
 
   :build {:replace-deps {io.github.clojure/tools.build {:git/tag "v0.10.13" :git/sha "3a3c177d"}
-                         slipset/deps-deploy           {:mvn/version "0.2.3"}}
+                         slipset/deps-deploy           {:mvn/version "0.2.5"}}
           :ns-default   build}}}

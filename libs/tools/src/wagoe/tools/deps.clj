@@ -21,7 +21,6 @@
 ;; ANSI helpers
 ;; =============================================================================
 
-
 ;; =============================================================================
 ;; File discovery
 ;; =============================================================================
@@ -35,25 +34,42 @@
         rel    (str (.relativize (.toPath root-dir) (.toPath parent)))]
     (if (= rel "") "(root)" rel)))
 
+(def ^:private generated-deps-files
+  "Manifests a generator writes. Reported, never rewritten.
+
+   `examples/shop` comes from the wagoe-cli template, so a version written here
+   is undone by the next `bb example:regen` and fails `bb example:regen --check`
+   until then. Bump the template instead."
+  #{"examples/shop"})
+
+(defn- manifests-under
+  "Every <dir>/*/deps.edn, sorted by directory name."
+  [dir-name]
+  (let [dir (io/file root-dir dir-name)]
+    (when (.exists dir)
+      (->> (.listFiles dir)
+           (filter #(.isDirectory %))
+           (sort-by #(.getName %))
+           (map #(io/file % "deps.edn"))
+           (filter #(.exists %))
+           ;; skip scaffolder template dir
+           (remove #(str/includes? (.getPath %) "existing-dir"))))))
+
 (defn- find-deps-files
-  "Returns all relevant deps.edn files: root + every lib (sorted by label)."
+  "Returns all relevant deps.edn files: root + every lib + every example."
   ([] (find-deps-files nil))
   ([only-lib]
    (let [root-file (io/file root-dir "deps.edn")
-         libs-dir  (io/file root-dir "libs")
-         lib-files (when (.exists libs-dir)
-                     (->> (.listFiles libs-dir)
-                          (filter #(.isDirectory %))
-                          (sort-by #(.getName %))
-                          (map #(io/file % "deps.edn"))
-                          (filter #(.exists %))
-                          ;; skip scaffolder template dir
-                          (remove #(str/includes? (.getPath %) "existing-dir"))))]
+         lib-files (manifests-under "libs")
+         ;; Examples are real manifests someone copies from, and nothing else
+         ;; reports them: examples/todo sat two Clojure releases behind and was
+         ;; found by hand (BOU-443).
+         example-files (manifests-under "examples")]
      (if only-lib
        (->> lib-files
             (filter #(= (.getName (.getParentFile %)) only-lib))
             (into [root-file]))
-       (cons root-file lib-files)))))
+       (concat [root-file] lib-files example-files)))))
 
 ;; =============================================================================
 ;; Coord extraction
@@ -91,29 +107,44 @@
         [g a] (str/split s #"/")]
     [g (or a g)]))
 
-(defn- clojars-latest [group artifact]
+(defn- ask
+  "[:ok version], [:absent], or [:unavailable].
+
+   The three used to be one nil, so a registry nobody could reach read as
+   \"nothing newer\" and the whole repo reported current (BOU-443 review)."
+  [url extract]
   (try
-    (let [url  (str "https://clojars.org/api/artifacts/" group "/" artifact)
-          resp (http/get url {:throw false})]
-      (when (= 200 (:status resp))
-        (-> resp :body (json/parse-string true) :latest_release)))
-    (catch Exception _ nil)))
+    (let [resp (http/get url {:throw false})]
+      (cond
+        (= 200 (:status resp)) (if-let [v (extract (:body resp))] [:ok v] [:absent])
+        (= 404 (:status resp)) [:absent]
+        :else [:unavailable]))
+    (catch Exception _ [:unavailable])))
+
+(defn- clojars-latest [group artifact]
+  (ask (str "https://clojars.org/api/artifacts/" group "/" artifact)
+       #(-> % (json/parse-string true) :latest_release)))
 
 (defn- maven-central-latest [group artifact]
-  (try
-    (let [url  (str "https://search.maven.org/solrsearch/select"
-                    "?q=g:" group "+AND+a:" artifact
-                    "&rows=1&wt=json")
-          resp (http/get url {:throw false})]
-      (when (= 200 (:status resp))
-        (some-> resp :body (json/parse-string true)
-                :response :docs first :latestVersion)))
-    (catch Exception _ nil)))
+  (ask (str "https://search.maven.org/solrsearch/select"
+            "?q=g:" group "+AND+a:" artifact
+            "&rows=1&wt=json")
+       #(some-> % (json/parse-string true) :response :docs first :latestVersion)))
 
-(defn- latest-version [coord]
-  (let [[g a] (coord-parts coord)]
-    (or (clojars-latest g a)
-        (maven-central-latest g a))))
+(defn- latest-version
+  "A version string, `::absent` when no registry carries the coordinate, or
+   `::unavailable` when one could not be reached."
+  [coord]
+  (let [[g a]  (coord-parts coord)
+        [cs cv] (clojars-latest g a)]
+    (if (= :ok cs)
+      cv
+      (let [[ms mv] (maven-central-latest g a)]
+        (cond
+          (= :ok ms)                             mv
+          (or (= :unavailable cs)
+              (= :unavailable ms))               ::unavailable
+          :else                                  ::absent)))))
 
 (defn- fetch-all-latest
   "Looks up latest versions for all unique coords in parallel.
@@ -138,10 +169,17 @@
                           (repeat "0"))))))
 
 (defn- newer?
-  "True when latest is strictly newer than current (numeric comparison)."
+  "True when latest is strictly newer than current (numeric comparison).
+
+   `string?`, not `some?`: ::unavailable and ::absent are answers, not versions."
   [latest current]
-  (when (and latest current)
+  (when (and (string? latest) current)
     (pos? (compare (numeric-parts latest) (numeric-parts current)))))
+
+(defn- unresolved
+  "Coordinates whose newest version could not be looked up at all."
+  [latest-map]
+  (sort-by str (keys (filter #(= ::unavailable (val %)) latest-map))))
 
 ;; =============================================================================
 ;; Report
@@ -160,20 +198,25 @@
 (defn- print-location
   "Prints the result for one location. Returns count of outdated deps."
   [label coords latest-map]
-  (let [outdated (outdated-for coords latest-map)
-        up-to-date (- (count coords) (count outdated))]
+  (let [outdated   (outdated-for coords latest-map)
+        ;; A coordinate nobody could look up is not up to date; it is unknown.
+        ;; Counting it as current is how an outage read as a clean repo.
+        unknown    (count (filter #(= ::unavailable (get latest-map (key %))) coords))
+        up-to-date (- (count coords) (count outdated) unknown)
+        tally      (str up-to-date " up to date"
+                        (when (pos? unknown) (str ", " unknown " not checked")))]
     (println)
     (print (bold (str "  " label)))
     (if (empty? outdated)
-      (println (dim (str "  (" (count coords) " up to date)")))
+      (println (dim (str "  (" tally ")")))
       (do
         (println)
         (doseq [[coord current latest] outdated]
           (println (str "    " (yellow "↑") " "
                         (cyan (str coord)) "  "
                         current "  →  " (bold latest))))
-        (when (pos? up-to-date)
-          (println (dim (str "    ✓ " up-to-date " up to date"))))))
+        (when (pos? (+ up-to-date unknown))
+          (println (dim (str "    ✓ " tally))))))
     (count outdated)))
 
 ;; =============================================================================
@@ -214,8 +257,24 @@
 ;; Commands
 ;; =============================================================================
 
+(defn- report-unresolved!
+  "Print the lookups that did not happen. Returns how many there were."
+  [latest-map]
+  (let [failed (unresolved latest-map)]
+    (when (seq failed)
+      (println)
+      (println (yellow (bold (str "! " (count failed) " lookup"
+                                  (when (not= 1 (count failed)) "s")
+                                  " failed — this run cannot say those are current."))))
+      (doseq [c failed] (println (dim (str "    " c))))
+      (println (dim "  A registry was unreachable. Re-run before trusting a clean report.")))
+    (count failed)))
+
 (defn cmd-check
-  "Check all (or one) locations and report outdated deps."
+  "Check all (or one) locations and report outdated deps.
+
+   Returns the number of lookups that failed, so a caller can tell an
+   unfinished sweep from a clean one."
   [only-lib]
   (println (bold "\nChecking dependencies..."))
   (let [files       (vec (find-deps-files only-lib))
@@ -226,42 +285,81 @@
         (reduce (fn [acc [f coords]]
                   (+ acc (print-location (relative-label f) coords latest-map)))
                 0
-                by-file)]
+                by-file)
+        failed (count (unresolved latest-map))]
     (println)
-    (if (zero? total-outdated)
+    (cond
+      ;; Order matters: "up to date" is a claim about every coordinate, and
+      ;; during an outage most of them were never looked at.
+      (pos? failed)
+      (println (yellow (bold (str "? Cannot say whether dependencies are current — "
+                                  failed " of " (count latest-map)
+                                  " lookups did not complete."))))
+
+      (zero? total-outdated)
       (println (green (bold "✓ All dependencies are up to date.")))
+
+      :else
       (do
         (println (yellow (bold (str "↑ " total-outdated " outdated "
                                     (if (= 1 total-outdated) "dependency" "dependencies")
                                     " found."))))
         (println (dim "  Run 'bb upgrade-outdated --update' to apply."))))
-    (println)))
+    (report-unresolved! latest-map)
+    (println)
+    failed))
 
 (defn cmd-update
-  "Check all (or one) locations, apply version upgrades in-place."
+  "Check all (or one) locations, apply version upgrades in-place.
+
+   Returns the number of lookups that failed, like `cmd-check`: a sweep that
+   could not reach a registry upgraded only part of what it should have."
   [only-lib]
   (println (bold "\nChecking and upgrading dependencies across the monorepo..."))
   (let [files       (vec (find-deps-files only-lib))
         by-file     (map (fn [f] [f (coords-from-file f)]) files)
         all-coords  (mapcat (comp keys second) by-file)
         latest-map  (fetch-all-latest all-coords)
-        total-outdated
+        {:keys [upgraded skipped]}
         (reduce (fn [acc [f coords]]
-                  (let [n (count (outdated-for coords latest-map))]
-                    (when (pos? n)
-                      (println)
-                      (println (bold (str "  " (relative-label f))))
-                      (upgrade-file! f coords latest-map))
-                    (+ acc n)))
-                0
-                by-file)]
+                  (let [label (relative-label f)
+                        n     (count (outdated-for coords latest-map))]
+                    (if (zero? n)
+                      acc
+                      (do
+                        (println)
+                        (println (bold (str "  " label)))
+                        (if (generated-deps-files label)
+                          (do (println (dim (str "    generated — not rewritten; bump the "
+                                                 "template and run bb example:regen")))
+                              (update acc :skipped + n))
+                          (do (upgrade-file! f coords latest-map)
+                              (update acc :upgraded + n)))))))
+                {:upgraded 0 :skipped 0}
+                by-file)
+        failed (count (unresolved latest-map))]
     (println)
-    (if (zero? total-outdated)
+    (cond
+      ;; Same order as cmd-check, and for the same reason: "already up to date"
+      ;; is a claim about every coordinate, and during an outage most were
+      ;; never looked at.
+      (pos? failed)
+      (println (yellow (bold (str "? Upgraded " upgraded " of what could be checked — "
+                                  failed " of " (count latest-map)
+                                  " lookups did not complete."))))
+
+      (zero? (+ upgraded skipped))
       (println (green (bold "✓ All dependencies are already up to date.")))
-      (println (green (bold (str "✓ " total-outdated " "
-                                 (if (= 1 total-outdated) "dependency" "dependencies")
+
+      :else
+      (println (green (bold (str "✓ " upgraded " "
+                                 (if (= 1 upgraded) "dependency" "dependencies")
                                  " upgraded.")))))
-    (println)))
+    (when (pos? skipped)
+      (println (yellow (str "  " skipped " left in generated files — change the template."))))
+    (report-unresolved! latest-map)
+    (println)
+    failed))
 
 (defn print-help []
   (println (bold "bb upgrade-outdated") "— Check and upgrade Maven dependencies across the monorepo")
@@ -272,9 +370,13 @@
   (println "  bb upgrade-outdated --lib <name> Only check a specific library (e.g. tenant)")
   (println)
   (println "Notes:")
+  (println "  • Covers root, libs/*/deps.edn and examples/*/deps.edn")
   (println "  • Checks :deps and all alias :extra-deps / :replace-deps entries")
   (println "  • Git deps (:git/url, :local/root) are skipped")
+  (println "  • examples/shop is generated — reported, never rewritten")
   (println "  • Queries Clojars first, Maven Central as fallback")
+  (println "  • Exits non-zero when a registry could not be reached, so an")
+  (println "    unfinished sweep is not mistaken for a clean one")
   (println "  • All network calls run in parallel")
   (println))
 
@@ -289,10 +391,14 @@
         lib-idx  (.indexOf (vec args) "--lib")
         only-lib (when (and (>= lib-idx 0) (< (inc lib-idx) (count args)))
                    (nth args (inc lib-idx)))]
-    (cond
-      help?   (print-help)
-      update? (cmd-update only-lib)
-      :else   (cmd-check only-lib))))
+    (if help?
+      (print-help)
+      ;; One exit path for both commands. Non-zero when a registry could not be
+      ;; reached: a caller that sees 0 is entitled to conclude the sweep
+      ;; finished. Giving each mode its own branch is exactly how --update went
+      ;; on reporting success after looking at nothing (BOU-443 review).
+      (let [failed ((if update? cmd-update cmd-check) only-lib)]
+        (when (pos? failed) (System/exit 1))))))
 
 (when (= *file* (System/getProperty "babashka.file"))
   (apply -main *command-line-args*))

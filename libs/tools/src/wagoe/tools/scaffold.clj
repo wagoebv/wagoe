@@ -136,7 +136,7 @@
 (def ^:private scaffolder-version "1.0.0-beta-8")
 
 ;; Match libs/scaffolder/deps.edn and the monorepo's own pin.
-(def ^:private rewrite-clj-version "1.2.55")
+(def ^:private rewrite-clj-version "1.2.57")
 
 (defn- scaffolder-deps
   "The -Sdeps argument used to make the scaffolder namespace resolvable.

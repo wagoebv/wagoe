@@ -1,6 +1,6 @@
 {:paths ["src"]
 
- :deps  {org.clojure/clojure                {:mvn/version "1.12.5"}
+ :deps  {org.clojure/clojure                {:mvn/version "1.12.6"}
 
          ;; Wagoe core — pulled straight from this repository via :local/root,
          ;; so the example runs against the checked-out source with no publish
@@ -9,7 +9,7 @@
          com.wagoe/wagoe-core    {:local/root "../../libs/core"}
 
          ;; H2 (in-memory) + next.jdbc for the persistence shell.
-         com.github.seancorfield/next.jdbc {:mvn/version "1.3.1108"}
+         com.github.seancorfield/next.jdbc {:mvn/version "1.3.1118"}
          com.h2database/h2                 {:mvn/version "2.4.240"}}
 
  :aliases

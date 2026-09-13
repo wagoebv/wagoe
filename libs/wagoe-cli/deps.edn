@@ -5,5 +5,5 @@
           :extra-deps  {lambdaisland/kaocha {:mvn/version "1.91.1392"}}
           :main-opts   ["-m" "kaocha.runner"]}
   :build {:replace-deps {io.github.clojure/tools.build {:git/tag "v0.10.13" :git/sha "3a3c177d"}
-                         slipset/deps-deploy {:mvn/version "0.2.3"}}
+                         slipset/deps-deploy {:mvn/version "0.2.5"}}
           :ns-default   build}}}

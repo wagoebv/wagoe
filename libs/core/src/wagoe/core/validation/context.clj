@@ -386,7 +386,10 @@
       (cond-> error
         message (assoc :message message)
         suggestion (assoc :suggestion suggestion)
-        formatted-steps (assoc :next-steps formatted-steps)
+        ;; `seq`, not the string itself: format-next-steps returns "" when
+        ;; there are no steps, and "" is truthy — so every contextual error
+        ;; carried :next-steps "" instead of carrying no such key.
+        (seq formatted-steps) (assoc :next-steps formatted-steps)
         example (assoc :example example)))
     (catch Exception _e
       ;; Non-breaking: preserve original error

@@ -50,10 +50,10 @@
          ;; started with `-M:run` or `(go)` died on `Class org.postgresql.Driver
          ;; not found` (BOU-414). Every value `bb setup --database` accepts has
          ;; to resolve from the classpath the app actually boots on.
-         org.xerial/sqlite-jdbc                  {:mvn/version "3.53.0.0"}
+         org.xerial/sqlite-jdbc                  {:mvn/version "3.53.2.0"}
          com.h2database/h2                       {:mvn/version "2.4.240"}
          org.postgresql/postgresql               {:mvn/version "42.7.12"}
-         com.mysql/mysql-connector-j             {:mvn/version "9.6.0"}}
+         com.mysql/mysql-connector-j             {:mvn/version "9.7.0"}}
  :aliases
  {:repl     {:extra-paths ["dev"]
              ;; wagoe-devtools is dev-only on purpose: it carries a dashboard
@@ -61,8 +61,8 @@
              ;; In the alias, so `clojure -M:repl` has it and `-M:run`, the
              ;; uberjar and the Dockerfile do not.
              :extra-deps {com.wagoe/wagoe-devtools {:mvn/version "{{devtools-version}}"}
-                          nrepl/nrepl {:mvn/version "1.3.0"}
-                          cider/cider-nrepl {:mvn/version "0.50.2"}}
+                          nrepl/nrepl {:mvn/version "1.7.0"}
+                          cider/cider-nrepl {:mvn/version "0.62.2"}}
              :main-opts  ["-m" "nrepl.cmdline" "--middleware" "[cider.nrepl/cider-middleware]"
                           "--port" "7888"]
              :jvm-opts   ["-Duser.timezone=UTC"]}
@@ -78,7 +78,7 @@
   :run      {:main-opts ["-m" "{{project-ns}}.main"]
              :jvm-opts  ["-Duser.timezone=UTC"]}
   ;; Uberjar. `clojure -T:build uber` -> target/{{project-name}}-<version>.jar
-  :build    {:extra-deps {io.github.clojure/tools.build {:mvn/version "0.10.9"}}
+  :build    {:extra-deps {io.github.clojure/tools.build {:mvn/version "0.10.14"}}
              :ns-default build}
   :migrate  {:main-opts ["-m" "wagoe.platform.shell.database.cli-migrations"]
              :jvm-opts  ["-Duser.timezone=UTC"]}
@@ -89,12 +89,12 @@
              :jvm-opts  ["-Duser.timezone=UTC"]}
   ;; clj-kondo static analysis. Isolated via :replace-deps so it pulls only the
   ;; linter, not the project's deps. Used by the .githooks/pre-commit gate.
-  :clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2026.04.15"}}
+  :clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2026.08.04"}}
               :main-opts    ["-m" "clj-kondo.main"]}
-  :user-cli {:extra-deps {org.xerial/sqlite-jdbc      {:mvn/version "3.53.0.0"}
+  :user-cli {:extra-deps {org.xerial/sqlite-jdbc      {:mvn/version "3.53.2.0"}
                           org.postgresql/postgresql   {:mvn/version "42.7.12"}
                           com.h2database/h2           {:mvn/version "2.4.240"}
-                          com.mysql/mysql-connector-j {:mvn/version "9.6.0"}}
+                          com.mysql/mysql-connector-j {:mvn/version "9.7.0"}}
              ;; -m, not -e: with -e the first non-option argument is taken as a
              ;; script path and *command-line-args* holds only what follows, so
              ;; `create` in `bb create-admin` was dropped and the CLI rejected

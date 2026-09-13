@@ -165,7 +165,10 @@
   (let [en-keys (flat-keys (load-locale :en))
         locales [:nl]
         found-missing? (atom false)]
-    (when-not en-keys
+    ;; `empty?`, not `when-not`: flat-keys is (set (keys m)) and returns #{}
+    ;; for a missing catalogue, so this guard never fired and the command
+    ;; reported every key as missing instead of saying the catalogue was absent.
+    (when (empty? en-keys)
       (println "No Wagoe i18n catalogue found.")
       (System/exit 1))
     (doseq [locale locales]
@@ -198,7 +201,10 @@
                                      k))
                                  en-keys))
         unused   (set/difference en-keys used)]
-    (when-not en-keys
+    ;; `empty?`, not `when-not`: flat-keys is (set (keys m)) and returns #{}
+    ;; for a missing catalogue, so this guard never fired and the command
+    ;; reported every key as missing instead of saying the catalogue was absent.
+    (when (empty? en-keys)
       (println "No Wagoe i18n catalogue found.")
       (System/exit 1))
     (if (seq unused)

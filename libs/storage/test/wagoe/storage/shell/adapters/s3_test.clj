@@ -125,18 +125,23 @@
 (defmacro when-s3
   "Run `body` against MinIO, or record a skip.
 
-   In CI the skip is a failure: this suite reported 62 tests passing for months
-   while the adapter it covers could not be constructed, because every case
-   skipped itself and said so only in a passing assertion (BOU-444). Locally it
-   prints, so a developer without MinIO is not blocked."
+   Where an endpoint was promised the skip is a failure: this suite reported 62
+   tests passing for months while the adapter it covers could not be
+   constructed, because every case skipped itself and said so only in a passing
+   assertion (BOU-444).
+
+   Keyed on WAGOE_REQUIRE_S3, which the job that starts MinIO sets, and not on
+   CI: the `:unit` suite runs this namespace too, from a job with no MinIO and
+   no reason to have one, and a bare CI check made every job in the workflow
+   answer for an endpoint only one of them provides."
   [& body]
   `(if (s3-available?)
      (do ~@body)
-     (if (System/getenv "CI")
+     (if (System/getenv "WAGOE_REQUIRE_S3")
        (is false
            (str "no S3-compatible endpoint on " test-endpoint
-                " — in CI these cases must run, or this suite reports green "
-                "for an adapter nothing built"))
+                " — this job starts MinIO, so reaching it is the point; "
+                "without it the suite reports green for an adapter nothing built"))
        (do
          ;; Visible with `--no-capture-output`, and not otherwise: kaocha
          ;; replaces the JVM's streams and shows captured output only for a

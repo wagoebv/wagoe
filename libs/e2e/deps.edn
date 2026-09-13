@@ -11,11 +11,11 @@
 ;; library layout (`bb check:deps`, `build`, etc.) doesn't choke on it.
 {:paths ["src"]
 
- :deps  {org.clojure/clojure {:mvn/version "1.12.5"}
+ :deps  {org.clojure/clojure {:mvn/version "1.12.6"}
 
          ;; The whole point: Clojure wrapper around Playwright Java.
          ;; Provides browser + API testing helpers with shared traces.
-         com.blockether/spel {:mvn/version "0.9.8"}
+         com.blockether/spel {:mvn/version "0.9.34"}
 
          ;; Monorepo libraries the e2e suite depends on for helper data
          ;; and protocol access (e.g. generating admin tokens directly,
@@ -30,6 +30,6 @@
                        ;; Used by helper namespaces for POST /test/reset
                        clj-http/clj-http   {:mvn/version "3.13.1"}
                        ;; TOTP helper (already used elsewhere in the repo)
-                       one-time/one-time   {:mvn/version "0.8.0"
+                       one-time/one-time   {:mvn/version "0.9.0"
                                             :exclusions  [com.github.kenglxn.qrgen/javase]}}
          :main-opts   ["-m" "kaocha.runner"]}}}

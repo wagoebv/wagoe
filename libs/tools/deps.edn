@@ -1,12 +1,12 @@
 {:paths ["src" "resources"]
- :deps  {org.clojure/clojure {:mvn/version "1.12.5"}
+ :deps  {org.clojure/clojure {:mvn/version "1.12.6"}
          cheshire/cheshire {:mvn/version "6.2.0"}
                          ;; Built into Babashka, but a JVM consumer of the
                          ;; published artifact resolves through the POM (BOU-378).
          org.clojure/tools.cli {:mvn/version "1.4.256"}
          ;; Also bundled in Babashka; declared for the published POM (BOU-365).
-         borkdude/edamame {:mvn/version "1.4.32"}}
+         borkdude/edamame {:mvn/version "1.6.43"}}
  :aliases
  {:build {:replace-deps {io.github.clojure/tools.build {:git/tag "v0.10.13" :git/sha "3a3c177d"}
-                         slipset/deps-deploy           {:mvn/version "0.2.3"}}
+                         slipset/deps-deploy           {:mvn/version "0.2.5"}}
           :ns-default   build}}}

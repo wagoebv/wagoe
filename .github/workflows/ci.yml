@@ -891,6 +891,9 @@ jobs:
       - name: Run tests
         env:
           JWT_SECRET: "ci-test-secret-minimum-32-characters"
+          # This job started MinIO above, so a skipped S3 case here is a
+          # failure. Only this job sets it — see when-s3 in s3_test.clj.
+          WAGOE_REQUIRE_S3: "1"
         run: clojure -M:test :storage
 
   test-cache:
@@ -1065,6 +1068,19 @@ jobs:
     name: Test wagoe/realtime
     runs-on: ubuntu-latest
     needs: [lint, test-platform]
+
+    services:
+      # Without one, every `when-redis` body skips and the pub/sub bus — the
+      # thing this library is — is covered by nothing (BOU-443).
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
 
     steps:
       - uses: actions/checkout@v6
