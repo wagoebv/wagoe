@@ -66,6 +66,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **`bb upgrade-outdated` under-reported drift** (BOU-474). It read an index that lags,
+  hiding the H2, MySQL, PostgreSQL and SQLite drivers; prereleases are no longer offered.
 - **The S3 adapter threw on every S3-compatible endpoint** (BOU-444). MinIO, Spaces and
   the like could not be used at all; set `:endpoint` and it works now.
 - **Dependencies brought up to date** (BOU-443). 34 coordinates across 34 `deps.edn`,

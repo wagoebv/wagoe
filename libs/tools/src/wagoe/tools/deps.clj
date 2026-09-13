@@ -121,15 +121,45 @@
         :else [:unavailable]))
     (catch Exception _ [:unavailable])))
 
-(defn- clojars-latest [group artifact]
-  (ask (str "https://clojars.org/api/artifacts/" group "/" artifact)
-       #(-> % (json/parse-string true) :latest_release)))
+(def ^:dynamic *prereleases?*
+  "Offer alphas, betas, release candidates and milestones as upgrade targets."
+  false)
 
-(defn- maven-central-latest [group artifact]
-  (ask (str "https://search.maven.org/solrsearch/select"
-            "?q=g:" group "+AND+a:" artifact
-            "&rows=1&wt=json")
-       #(some-> % (json/parse-string true) :response :docs first :latestVersion)))
+(defn- prerelease? [v]
+  (boolean (re-find #"(?i)alpha|beta|-rc|\.rc|-M\d|snapshot|preview|-ea\b" (str v))))
+
+(defn- newest
+  "The first acceptable version in `versions`, which must be newest-first.
+
+   Falls back to the newest of all when every one is a prerelease, so a library
+   that has only ever shipped alphas still reports something."
+  [versions]
+  (let [vs (remove str/blank? versions)]
+    (or (when-not *prereleases?* (first (remove prerelease? vs)))
+        (first vs))))
+
+(defn- clojars-latest
+  "Clojars' own `latest_release` is not release-only: it is 0.11.0-rc1 for
+   reitit and 0.5.243-ALPHA for criterium, which is why both showed up as
+   upgrade targets. `recent_versions` is newest-first, so scan that (BOU-474)."
+  [group artifact]
+  (ask (str "https://clojars.org/api/artifacts/" group "/" artifact)
+       #(let [parsed (json/parse-string % true)]
+          (or (newest (map :version (:recent_versions parsed)))
+              (:latest_release parsed)))))
+
+(defn- maven-central-latest
+  "maven-metadata.xml, not search.maven.org/solrsearch.
+
+   solrsearch's `latestVersion` was stale for 27 of the 29 coordinates this
+   repo resolves through Central — awssdk 2.46.7 against a real 2.54.17,
+   HikariCP 6.3.0 against 7.1.0 — so the sweep reported current what was not
+   (BOU-474). The metadata lists every version in release order; its own
+   `<release>` field is no help, being 1.13.0-alpha6 for Clojure."
+  [group artifact]
+  (ask (str "https://repo1.maven.org/maven2/"
+            (str/replace group "." "/") "/" artifact "/maven-metadata.xml")
+       #(newest (reverse (map second (re-seq #"<version>([^<]+)</version>" %))))))
 
 (defn- latest-version
   "A version string, `::absent` when no registry carries the coordinate, or
@@ -368,13 +398,15 @@
   (println "  bb upgrade-outdated              Check all deps.edn files, report outdated")
   (println "  bb upgrade-outdated --update     Apply version upgrades in-place")
   (println "  bb upgrade-outdated --lib <name> Only check a specific library (e.g. tenant)")
+  (println "  bb upgrade-outdated --prereleases Offer alphas, betas and RCs too")
   (println)
   (println "Notes:")
   (println "  • Covers root, libs/*/deps.edn and examples/*/deps.edn")
   (println "  • Checks :deps and all alias :extra-deps / :replace-deps entries")
   (println "  • Git deps (:git/url, :local/root) are skipped")
   (println "  • examples/shop is generated — reported, never rewritten")
-  (println "  • Queries Clojars first, Maven Central as fallback")
+  (println "  • Queries Clojars first, then Maven Central's maven-metadata.xml")
+  (println "  • Prereleases are not upgrade targets unless --prereleases is given")
   (println "  • Exits non-zero when a registry could not be reached, so an")
   (println "    unfinished sweep is not mistaken for a clean one")
   (println "  • All network calls run in parallel")
@@ -397,7 +429,8 @@
       ;; reached: a caller that sees 0 is entitled to conclude the sweep
       ;; finished. Giving each mode its own branch is exactly how --update went
       ;; on reporting success after looking at nothing (BOU-443 review).
-      (let [failed ((if update? cmd-update cmd-check) only-lib)]
+      (let [failed (binding [*prereleases?* (contains? arg-set "--prereleases")]
+                     ((if update? cmd-update cmd-check) only-lib))]
         (when (pos? failed) (System/exit 1))))))
 
 (when (= *file* (System/getProperty "babashka.file"))

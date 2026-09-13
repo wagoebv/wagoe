@@ -10,7 +10,7 @@
  :aliases
  {:test  {:extra-paths ["test"]
           :extra-deps  {lambdaisland/kaocha {:mvn/version "1.91.1392"}
-                        com.h2database/h2   {:mvn/version "2.4.240"}}}
+                        com.h2database/h2 {:mvn/version "2.5.250"}}}
   :build {:replace-deps {io.github.clojure/tools.build {:git/tag "v0.10.13" :git/sha "3a3c177d"}
                          slipset/deps-deploy           {:mvn/version "0.2.5"}}
           :ns-default   build}}}

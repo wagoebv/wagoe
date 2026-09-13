@@ -50,10 +50,10 @@
          ;; started with `-M:run` or `(go)` died on `Class org.postgresql.Driver
          ;; not found` (BOU-414). Every value `bb setup --database` accepts has
          ;; to resolve from the classpath the app actually boots on.
-         org.xerial/sqlite-jdbc                  {:mvn/version "3.53.2.0"}
-         com.h2database/h2                       {:mvn/version "2.4.240"}
-         org.postgresql/postgresql               {:mvn/version "42.7.12"}
-         com.mysql/mysql-connector-j             {:mvn/version "9.7.0"}}
+         org.xerial/sqlite-jdbc                  {:mvn/version "3.53.4.0"}
+         com.h2database/h2                       {:mvn/version "2.5.250"}
+         org.postgresql/postgresql               {:mvn/version "42.7.13"}
+         com.mysql/mysql-connector-j             {:mvn/version "26.7.0"}}
  :aliases
  {:repl     {:extra-paths ["dev"]
              ;; wagoe-devtools is dev-only on purpose: it carries a dashboard
@@ -91,10 +91,10 @@
   ;; linter, not the project's deps. Used by the .githooks/pre-commit gate.
   :clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2026.08.04"}}
               :main-opts    ["-m" "clj-kondo.main"]}
-  :user-cli {:extra-deps {org.xerial/sqlite-jdbc      {:mvn/version "3.53.2.0"}
-                          org.postgresql/postgresql   {:mvn/version "42.7.12"}
-                          com.h2database/h2           {:mvn/version "2.4.240"}
-                          com.mysql/mysql-connector-j {:mvn/version "9.7.0"}}
+  :user-cli {:extra-deps {org.xerial/sqlite-jdbc      {:mvn/version "3.53.4.0"}
+                          org.postgresql/postgresql   {:mvn/version "42.7.13"}
+                          com.h2database/h2           {:mvn/version "2.5.250"}
+                          com.mysql/mysql-connector-j {:mvn/version "26.7.0"}}
              ;; -m, not -e: with -e the first non-option argument is taken as a
              ;; script path and *command-line-args* holds only what follows, so
              ;; `create` in `bb create-admin` was dropped and the CLI rejected
