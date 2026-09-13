@@ -310,7 +310,10 @@
     failed))
 
 (defn cmd-update
-  "Check all (or one) locations, apply version upgrades in-place."
+  "Check all (or one) locations, apply version upgrades in-place.
+
+   Returns the number of lookups that failed, like `cmd-check`: a sweep that
+   could not reach a registry upgraded only part of what it should have."
   [only-lib]
   (println (bold "\nChecking and upgrading dependencies across the monorepo..."))
   (let [files       (vec (find-deps-files only-lib))
@@ -333,18 +336,30 @@
                           (do (upgrade-file! f coords latest-map)
                               (update acc :upgraded + n)))))))
                 {:upgraded 0 :skipped 0}
-                by-file)]
+                by-file)
+        failed (count (unresolved latest-map))]
     (println)
-    (if (zero? (+ upgraded skipped))
+    (cond
+      ;; Same order as cmd-check, and for the same reason: "already up to date"
+      ;; is a claim about every coordinate, and during an outage most were
+      ;; never looked at.
+      (pos? failed)
+      (println (yellow (bold (str "? Upgraded " upgraded " of what could be checked — "
+                                  failed " of " (count latest-map)
+                                  " lookups did not complete."))))
+
+      (zero? (+ upgraded skipped))
       (println (green (bold "✓ All dependencies are already up to date.")))
-      (do
-        (println (green (bold (str "✓ " upgraded " "
-                                   (if (= 1 upgraded) "dependency" "dependencies")
-                                   " upgraded."))))
-        (when (pos? skipped)
-          (println (yellow (str "  " skipped " left in generated files — change the template."))))))
+
+      :else
+      (println (green (bold (str "✓ " upgraded " "
+                                 (if (= 1 upgraded) "dependency" "dependencies")
+                                 " upgraded.")))))
+    (when (pos? skipped)
+      (println (yellow (str "  " skipped " left in generated files — change the template."))))
     (report-unresolved! latest-map)
-    (println)))
+    (println)
+    failed))
 
 (defn print-help []
   (println (bold "bb upgrade-outdated") "— Check and upgrade Maven dependencies across the monorepo")
@@ -376,14 +391,14 @@
         lib-idx  (.indexOf (vec args) "--lib")
         only-lib (when (and (>= lib-idx 0) (< (inc lib-idx) (count args)))
                    (nth args (inc lib-idx)))]
-    (cond
-      help?   (print-help)
-      update? (cmd-update only-lib)
-      ;; Non-zero when a registry could not be reached: a caller that sees 0
-      ;; and no findings is entitled to conclude the repo is current, and
-      ;; before this it was not (BOU-443 review).
-      :else   (let [failed (cmd-check only-lib)]
-                (when (pos? failed) (System/exit 1))))))
+    (if help?
+      (print-help)
+      ;; One exit path for both commands. Non-zero when a registry could not be
+      ;; reached: a caller that sees 0 is entitled to conclude the sweep
+      ;; finished. Giving each mode its own branch is exactly how --update went
+      ;; on reporting success after looking at nothing (BOU-443 review).
+      (let [failed ((if update? cmd-update cmd-check) only-lib)]
+        (when (pos? failed) (System/exit 1))))))
 
 (when (= *file* (System/getProperty "babashka.file"))
   (apply -main *command-line-args*))

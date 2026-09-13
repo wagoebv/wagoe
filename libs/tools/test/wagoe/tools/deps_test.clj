@@ -75,6 +75,40 @@
     (testing "the scaffolder's template directory stays out"
       (is (not-any? #(str/includes? % "existing-dir") paths)))))
 
+(deftest ^:unit neither-command-reports-success-after-a-failed-sweep
+  ;; Table-driven over both modes on purpose. cmd-check was fixed and cmd-update
+  ;; was not, so `--update` went on exiting 0 and printing "All dependencies are
+  ;; already up to date" after reaching no registry at all (BOU-443 review).
+  ;; Anything added here has to answer for both.
+  (doseq [[mode cmd] [["check"  #'deps/cmd-check]
+                      ["update" #'deps/cmd-update]]]
+    (testing mode
+
+      (let [run (fn [answer]
+                  ;; Returns [return-value printed-output]. upgrade-file! is
+                  ;; stubbed so --update never writes during a test.
+                  (let [result (atom nil)
+                        out (with-redefs-fn
+                              {#'deps/fetch-all-latest
+                               (fn [coords] (into {} (map (fn [c] [c answer]) coords)))
+                               #'deps/upgrade-file! (fn [& _] nil)}
+                              (fn [] (with-out-str (reset! result (cmd nil)))))]
+                    [@result out]))]
+
+        (testing "an unreachable registry is counted and returned, so -main exits non-zero"
+          (let [[failed out] (run ::deps/unavailable)]
+            (is (pos? failed)
+                "returned zero, so the caller cannot tell this sweep from a clean one")
+            (is (not (str/includes? out "up to date."))
+                (str "claimed currency after reaching no registry:\n" out))
+            (is (str/includes? out "lookups failed")
+                "said nothing about the lookups that did not happen")))
+
+        (testing "and a sweep that did reach everything returns zero"
+          (let [[failed _] (run "0.0.1")]
+            (is (zero? failed)
+                "a reachable sweep must return zero, or the exit code is always non-zero")))))))
+
 (deftest ^:unit a-generated-manifest-is-reported-but-not-rewritten
   (testing "examples/shop comes from the wagoe-cli template, so writing a
             version into it is undone by the next bb example:regen and fails
