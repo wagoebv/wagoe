@@ -18,6 +18,19 @@
    does not recognise writes 96 locations the gate then cannot read."
   #"\d+\.\d+\.\d+(?:-[a-z]+-\d+)?")
 
+(defn prerelease-of-a-patch?
+  "Whether `v` is a pre-release cut from a patch version — `1.0.1-alpha-1`.
+
+   Maven orders `1.0.1-alpha-1` *above* `1.0.0`, so such a version outranks the
+   release it precedes for anything resolving \"newest\". That is not
+   hypothetical: the `1.0.1-alpha-N` line outranked every `1.0.0-beta-N` and
+   users had to pin exact versions (BOU-176). Pre-releases belong to the next
+   minor — `1.1.0-alpha-1` — and patch versions are only ever final (BOU-435)."
+  [v]
+  (boolean
+   (when-let [[_ patch] (re-matches #"\d+\.\d+\.(\d+)-[a-z]+-\d+" (str v))]
+     (pos? (parse-long patch)))))
+
 (defn matches-in
   "Every match of `re` in `content`, as {:line :excerpt :version :groups}.
 

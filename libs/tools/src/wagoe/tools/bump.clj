@@ -37,10 +37,14 @@
 
    Anchored, so `v1.0.0-beta-6` is refused rather than accepted with the tag
    prefix baked into 96 locations. That would be worse than failing: every
-   location would agree, so `check:versions` would go green on it."
+   location would agree, so `check:versions` would go green on it.
+
+   A pre-release of a patch is refused for a different reason: it is a valid
+   shape that sorts wrong (BOU-435)."
   [v]
   (boolean (and (string? v)
-                (re-matches (re-pattern (str check-versions/version-pattern)) v))))
+                (re-matches (re-pattern (str check-versions/version-pattern)) v)
+                (not (check-versions/prerelease-of-a-patch? v)))))
 
 ;; =============================================================================
 ;; Mutation
@@ -125,14 +129,28 @@
 
     (when-not (valid-version? new-version)
       (binding [*out* *err*]
-        (println (ansi/red (if new-version
-                             (str "Not a suite version: " (pr-str new-version))
-                             "No version given")))
-        (println)
-        (println "  Expected 1.0.0-beta-6, 1.0.1-alpha-43 or 2.0.0 — no leading \"v\",")
-        (println "  and a numbered pre-release if there is one. A tag prefix written")
-        (println "  into every location would leave them all agreeing, so the check")
-        (println "  would pass on it.")
+        (if (check-versions/prerelease-of-a-patch? new-version)
+          (do
+            (println (ansi/red (str "A pre-release of a patch version: " (pr-str new-version))))
+            (println)
+            (println "  Maven sorts it above the release it precedes, so anything")
+            (println (str "  resolving \"newest\" would prefer it over " (str/replace new-version #"-.*" "")
+                          " and every"))
+            (println "  earlier release. Cut pre-releases from the next minor instead:")
+            (println (str "  " (str/replace new-version
+                                            #"^(\d+)\.(\d+)\.\d+-(.*)$"
+                                            (fn [[_ major minor pre]]
+                                              (str major "." (inc (parse-long minor)) ".0-" pre)))
+                          ". Patch versions are only ever final.")))
+          (do
+            (println (ansi/red (if new-version
+                                 (str "Not a suite version: " (pr-str new-version))
+                                 "No version given")))
+            (println)
+            (println "  Expected 1.0.0-beta-6, 1.1.0-alpha-1 or 2.0.0 — no leading \"v\",")
+            (println "  and a numbered pre-release if there is one. A tag prefix written")
+            (println "  into every location would leave them all agreeing, so the check")
+            (println "  would pass on it.")))
         (println))
       (usage)
       (System/exit 2))

@@ -19,12 +19,12 @@
             [clojure.java.io :as io]
             [babashka.http-client :as http]
             [babashka.process :as p]
-            [wagoe.tools.check-poms :as check-poms]))
+            [wagoe.tools.check-poms :as check-poms]
+            [wagoe.tools.check-versions :as check-versions]))
 
 ;; =============================================================================
 ;; ANSI helpers
 ;; =============================================================================
-
 
 ;; =============================================================================
 ;; Library registry (membership only — publish ORDER is derived, see below)
@@ -282,11 +282,19 @@
 
 (defn cmd-check-versions
   "Pre-deploy guard: assert every lib's build.clj version equals `expected` (the
-   release tag). Exits 1 on any mismatch so the publish workflow aborts before
-   shipping a version that disagrees with the tag/source."
+   release tag), and that the tag is a version we are willing to publish. Exits
+   1 on either, so the publish workflow aborts before shipping."
   [expected]
   (when (str/blank? expected)
     (println (red "Error: --check-versions requires a version argument."))
+    (System/exit 1))
+  ;; Clojars is immutable, so this has to be refused before the upload rather
+  ;; than corrected after it: a pre-release cut from a patch outranks the
+  ;; release it precedes for anything resolving "newest" (BOU-435).
+  (when (check-versions/prerelease-of-a-patch? expected)
+    (println (red (str "✗ " expected " is a pre-release of a patch version.")))
+    (println "  It would sort above the release it precedes. Cut pre-releases")
+    (println "  from the next minor; patch versions are only ever final.")
     (System/exit 1))
   (let [mismatches (version-mismatches expected)]
     (if (empty? mismatches)
