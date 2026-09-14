@@ -254,6 +254,13 @@
               (patch-config! dir "resources/conf/test/config.edn" (:test-config-snippet module))
               (patch-agents-md! dir module)
               (println (str "\n" module-name " added"))
+              ;; Said at install time, not left on a page the user reads later:
+              ;; an incubating library is published and usable but outside the
+              ;; breaking-change guarantee (BOU-432).
+              (when (= :incubating (:tier module))
+                (println (str "  Tier: incubating — usable and published, but its API may "
+                              "break in a minor release.\n"
+                              "        https://wagoe.org/docs/stability.html#tiers")))
               ;; Module-specific next steps, from the catalogue rather than
               ;; special-cased here, so any module can carry them.
               (when-let [lines (seq (:post-install module))]
