@@ -225,12 +225,32 @@
       (catch Exception e
         (warn (or (.getMessage e) (.getSimpleName (class e))))))))
 
+(defn refuse-patch-prerelease!
+  "Abort when `version` is a pre-release cut from a patch.
+
+   On every path that can reach Clojars, not only the workflow's
+   --check-versions: `bb deploy --all`, `--missing` and a named library all
+   publish straight from build.clj, and a coordinate cannot be withdrawn once
+   it is up — only superseded by burning a version (BOU-435).
+
+   Throws rather than exiting, so it can be tested: a guard that kills the JVM
+   can only be proven by trusting the source, which is how the first version of
+   this one ended up reachable from one command. `-main` turns it into an exit."
+  [version where]
+  (when (check-versions/prerelease-of-a-patch? version)
+    (throw (ex-info (str version " is a pre-release of a patch version (" where "). "
+                         "It would sort above the release it precedes. Cut "
+                         "pre-releases from the next minor; patch versions are "
+                         "only ever final.")
+                    {:type :wagoe/unpublishable-version :version version}))))
+
 (defn deploy-lib! [lib]
   (let [dir     (lib-dir lib)
         version (read-version lib)]
     (when-not version
       (println (red (str "Error: could not read version from " (lib-dir lib) "/build.clj")))
       (System/exit 1))
+    (refuse-patch-prerelease! version (str (artifact-name lib) "/build.clj"))
     (println (bold (str "\nDeploying " (artifact-name lib) " " version "...")))
     (p/shell {:dir dir} "clojure" "-T:build" "clean")
     (p/shell {:dir dir} "clojure" "-T:build" "deploy")
@@ -288,14 +308,9 @@
   (when (str/blank? expected)
     (println (red "Error: --check-versions requires a version argument."))
     (System/exit 1))
-  ;; Clojars is immutable, so this has to be refused before the upload rather
-  ;; than corrected after it: a pre-release cut from a patch outranks the
-  ;; release it precedes for anything resolving "newest" (BOU-435).
-  (when (check-versions/prerelease-of-a-patch? expected)
-    (println (red (str "✗ " expected " is a pre-release of a patch version.")))
-    (println "  It would sort above the release it precedes. Cut pre-releases")
-    (println "  from the next minor; patch versions are only ever final.")
-    (System/exit 1))
+  ;; Refused here as well as in deploy-lib!, so the workflow fails before it
+  ;; builds anything rather than on the first artifact.
+  (refuse-patch-prerelease! expected "the release tag")
   (let [mismatches (version-mismatches expected)]
     (if (empty? mismatches)
       (println (green (str "✓ All " (count all-libs) " libs at " expected)))
@@ -343,13 +358,19 @@
 ;; =============================================================================
 
 (defn -main [& args]
-  (cond
-    (or (empty? args) (contains? (set args) "--help")) (print-help)
-    (= args ["--all"])                                  (cmd-all)
-    (= args ["--missing"])                              (cmd-missing)
-    (= args ["--verify"])                               (cmd-verify)
-    (= (first args) "--check-versions")                 (cmd-check-versions (second args))
-    :else                                               (cmd-specific args)))
+  (try
+    (cond
+      (or (empty? args) (contains? (set args) "--help")) (print-help)
+      (= args ["--all"])                                 (cmd-all)
+      (= args ["--missing"])                             (cmd-missing)
+      (= args ["--verify"])                              (cmd-verify)
+      (= (first args) "--check-versions")                (cmd-check-versions (second args))
+      :else                                              (cmd-specific args))
+    (catch clojure.lang.ExceptionInfo e
+      (if (= :wagoe/unpublishable-version (:type (ex-data e)))
+        (do (println (red (str "✗ " (ex-message e))))
+            (System/exit 1))
+        (throw e)))))
 
 (when (= *file* (System/getProperty "babashka.file"))
   (apply -main *command-line-args*))
