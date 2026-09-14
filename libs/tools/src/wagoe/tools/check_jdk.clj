@@ -16,35 +16,43 @@
             [wagoe.tools.ansi :as ansi]
             [wagoe.tools.doctor-env :as doctor-env]))
 
-(def locations
-  "Where the baseline is written, and how to read the major version out.
+(def jdk-re
+  "Every way this repository names a JDK version.
 
-   Every regex may match more than once in a file — a Dockerfile names a JDK in
+   One pattern rather than one per file: the review that found `publish.yml`
+   unpinned also found `BUILD.md` telling users to install 17, in three
+   different spellings. A gate with a narrow pattern per location is a gate
+   that stops looking the moment a file says it a new way."
+  #"(?:clojure:temurin-|clojure:openjdk-|eclipse-temurin:|java-version:\s*[\"']|JAVA_MIN=|Java )(\d+)")
+
+(def locations
+  "Where the baseline is written.
+
+   `jdk-re` may match more than once in a file — a Dockerfile names a JDK in
    both its build and its runtime stage — and every match must agree. A file
    listed here and missing from disk is a failure, not a skip: a gate that
    quietly stops looking at a renamed file reports clean because it looked at
    nothing."
-  [{:path "Dockerfile"
-    :re   #"(?:clojure:temurin-|eclipse-temurin:)(\d+)"
-    :what "production image"}
-   {:path "resources/conf/dev/Dockerfile"
-    :re   #"(?:clojure:temurin-|eclipse-temurin:)(\d+)"
-    :what "dev image"}
-   {:path "examples/shop/Dockerfile"
-    :re   #"(?:clojure:temurin-|eclipse-temurin:)(\d+)"
-    :what "examples/shop"}
+  [{:path "Dockerfile" :what "production image"}
+   {:path "resources/conf/dev/Dockerfile" :what "dev image"}
+   {:path "examples/shop/Dockerfile" :what "examples/shop"}
    {:path "libs/wagoe-cli/resources/wagoe/cli/templates/Dockerfile.tmpl"
-    :re   #"(?:clojure:temurin-|eclipse-temurin:)(\d+)"
     :what "generated project image"}
-   {:path "scripts/install.sh"
-    :re   #"JAVA_MIN=(\d+)"
-    :what "installer"}
+   ;; Its own pattern: the installer explains that "1.8.0_402" is how a JDK
+   ;; before Java 9 spells its version, and the shared prose rule reads that
+   ;; sentence as a second baseline.
+   {:path "scripts/install.sh" :re #"JAVA_MIN=(\d+)" :what "installer"}
    {:path ".github/actions/clojure-deps/action.yml"
-    :re   #"java-version:\s*\"(\d+)\""
     :what "CI (every job that resolves deps)"}
-   {:path ".github/workflows/ci.yml"
-    :re   #"java-version:\s*\"(\d+)\""
-    :what "CI (jobs with their own setup-java)"}])
+   {:path ".github/workflows/ci.yml" :what "CI (jobs with their own setup-java)"}
+   ;; The released artifacts are compiled here, and this workflow set up no JDK
+   ;; at all — `bb deploy` ran `clojure -T:build` on the runner default while
+   ;; the gate watched only ci.yml and reported green.
+   {:path ".github/workflows/publish.yml" :what "release build"}
+   ;; What a user is told to install. BUILD.md said 17 in prose, in a Dockerfile
+   ;; example and in a workflow example.
+   {:path "BUILD.md" :what "build instructions"}
+   {:path "libs/jobs/README.md" :what "jobs deployment example"}])
 
 (defn- read-file [path]
   (when (fs/exists? path) (slurp path)))
@@ -53,12 +61,13 @@
   "Locations whose written version disagrees with `expected`, plus locations
    that could not be read at all.
 
-   Pure in `read-file`, so a test can drive it without touching the repo."
+   Pure in `read-file`, so a test can drive it without touching the repo. A
+   location may override `jdk-re` with its own `:re`."
   [expected locs read-file]
   (reduce
    (fn [acc {:keys [path re what]}]
      (if-let [content (read-file path)]
-       (let [versions (map (comp parse-long second) (re-seq re content))]
+       (let [versions (map (comp parse-long second) (re-seq (or re jdk-re) content))]
          (cond
            (empty? versions)
            (conj acc {:path path :what what

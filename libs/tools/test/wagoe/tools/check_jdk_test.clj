@@ -34,6 +34,30 @@
                                     (stub {"Dockerfile"         "FROM eclipse-temurin:21-jre"
                                            "scripts/install.sh" "JAVA_MIN=21"}))))))
 
+(deftest ^:unit the-shared-pattern-reads-every-spelling-in-use
+  ;; publish.yml pinned nothing and BUILD.md said 17 three different ways, both
+  ;; while the gate reported green — it had a narrow pattern per file and those
+  ;; files were not in the list at all (BOU-446 review).
+  (testing "prose, a Dockerfile FROM and a workflow pin"
+    (doseq [[what text] [["prose"      "- Java 17 or higher"]
+                         ["image"      "FROM eclipse-temurin:17-jre-alpine"]
+                         ["build image" "FROM clojure:temurin-17-tools-deps"]
+                         ["workflow"   "          java-version: '17'"]
+                         ["workflow"   "          java-version: \"17\""]
+                         ["installer"  "JAVA_MIN=17"]]]
+      (is (= [17] (map (comp parse-long second) (re-seq check-jdk/jdk-re text)))
+          (str what " went unread: " text))))
+
+  (testing "a location may override the shared pattern"
+    ;; install.sh explains that a JDK before Java 9 spells its version
+    ;; \"1.8.0_402\"; the prose rule reads that sentence as a second baseline.
+    (let [sh "JAVA_MIN=21\n# Two spellings: since Java 9, and 1.8.0_402 before it."]
+      (is (seq (check-jdk/findings 21 [{:path "i" :what "x"}] (fn [_] sh)))
+          "the shared pattern should trip on the explanation")
+      (is (empty? (check-jdk/findings 21
+                                      [{:path "i" :re #"JAVA_MIN=(\d+)" :what "x"}]
+                                      (fn [_] sh)))))))
+
 (deftest ^:unit a-location-that-cannot-be-read-is-a-failure-not-a-skip
   (testing "a file that moved or was renamed"
     (let [found (check-jdk/findings 21 locs (stub {"scripts/install.sh" "JAVA_MIN=21"}))]
@@ -49,7 +73,7 @@
   (testing "each configured location exists and carries a version"
     ;; Runs against the real tree: the unit cases above would all pass with an
     ;; empty `locations`, which is the gate going quiet.
-    (is (<= 7 (count check-jdk/locations)))
+    (is (<= 10 (count check-jdk/locations)))
     (is (empty? (check-jdk/findings doctor-env/java-min
                                     check-jdk/locations
                                     #(when (.exists (java.io.File. ^String %)) (slurp %))))))

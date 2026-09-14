@@ -256,7 +256,7 @@
   (println "  bb doctor:env --edn        Print results as data (what `wagoe doctor` reads)")
   (println)
   (println "Checks:")
-  (println "  java              Java >= 17 installed")
+  (println (str "  java              Java >= " java-min " installed"))
   (println "  clojure-cli       Clojure CLI installed")
   (println "  babashka          Babashka installed")
   (println "  node              Node.js installed (warn only)")
