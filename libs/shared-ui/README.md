@@ -34,10 +34,16 @@ Pure functions from data to Hiccup. No I/O, no state, no HTTP.
 ```clojure
 (require '[wagoe.shared.ui.core.components :as ui])
 
+;; Each input takes the field key and its current value, then an options map.
+;; form-field wraps one in its label and any validation errors.
 [:form {:method "post" :action "/users"}
- (ui/text-input {:name "name" :label "Name" :required true})
- (ui/email-input {:name "email" :label "Email"})
- (ui/button {:type "submit" :label "Save"})]
+ (ui/form-field :name "Name"
+                (ui/text-input :name (:name params) {:required true})
+                (:name errors))
+ (ui/form-field :email "Email"
+                (ui/email-input :email (:email params))
+                (:email errors))
+ (ui/button "Save" {:type "submit"})]
 ```
 
 ## A note on the public surface

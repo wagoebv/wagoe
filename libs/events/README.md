@@ -39,12 +39,18 @@ A port is for getting an answer; this is for the other case.
 ```
 
 ```clojure
-(require '[wagoe.events.ports :as events])
+(require '[wagoe.events.ports :as events]
+         '[wagoe.events.shell.publisher :as publisher])
 
-(events/publish! bus :order/placed {:order-id id :total 42.00})
+;; emit! wraps the payload in the envelope the bus requires — :id, :type,
+;; :source and :published-at — and publishes it to a topic. Publishing a bare
+;; map instead returns {:error {:type :events/invalid}}.
+(publisher/emit! bus :orders :order/placed :checkout {:order-id id :total 42.00})
 
-(events/subscribe! bus :order/placed
-                   (fn [event] (send-confirmation! (:order-id event))))
+;; The handler receives the whole event; the map you published is its :payload.
+(events/subscribe! bus :orders
+                   (fn [event]
+                     (send-confirmation! (:order-id (:payload event)))))
 ```
 
 Events are statements of fact in the past tense — `:order/placed`, not
