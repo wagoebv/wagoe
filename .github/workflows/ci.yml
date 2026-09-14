@@ -371,6 +371,21 @@ jobs:
       - name: Check documented library counts and publishing claims
         run: bb check:doc-counts
 
+  check-jdk:
+    name: JDK Baseline Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Babashka
+        uses: DeLaGuardo/setup-clojure@13.6.1
+        with:
+          bb: latest
+
+      - name: Every Dockerfile, workflow and installer names the same JDK
+        run: bb check:jdk
+
   # =============================================================================
   # "30 independently publishable libraries" — the static half
   #
@@ -626,6 +641,14 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
+
+      # This job boots the generated app, so it answers for the JDK baseline
+      # too; it does not use the clojure-deps action, where the pin lives.
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
 
       - name: Setup Clojure
         uses: DeLaGuardo/setup-clojure@13.6.1
@@ -1383,12 +1406,6 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Setup Java
-        uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: "21"
-
       # The composite action rather than a hand-rolled setup + cache. This job
       # had its own of both: an unretried `clojure -P`, and a cache key on the
       # un-versioned prefix the action abandoned — the one a job with a small
@@ -1616,7 +1633,7 @@ jobs:
   test-summary:
     name: All Tests Passed
     runs-on: ubuntu-latest
-    needs: [lint, branch-protection, first-run-smoke, build-ui-assets, docs-lint, agents-links, command-smoke, config-doctor, i18n-scan, check-fcis, check-placeholder-tests, check-test-meta, check-test-tags, check-deps, check-ports, check-hygiene, check-changelog, check-doc-counts, check-versions, check-isolation, check-error-shape, check-isolation-matrix, check-poms, check-agents, check-no-boundary, build-uberjar, test-tools, example-smoke, test-i18n, test-config, test-app, test-core, test-observability, test-platform, test-user, test-admin, test-ui-style, test-storage, test-cache, test-events, test-jobs, test-tenant, test-audience, test-devtools, test-email, test-realtime, test-workflow, test-search, test-scaffolder, test-external, test-payments, test-push, test-calendar, test-reports, test-geo, test-ai, test-mcp, test-wagoe-cli, test-shared-ui, e2e]
+    needs: [lint, branch-protection, first-run-smoke, build-ui-assets, docs-lint, agents-links, command-smoke, config-doctor, i18n-scan, check-fcis, check-placeholder-tests, check-test-meta, check-test-tags, check-deps, check-ports, check-hygiene, check-changelog, check-doc-counts, check-jdk, check-versions, check-isolation, check-error-shape, check-isolation-matrix, check-poms, check-agents, check-no-boundary, build-uberjar, test-tools, example-smoke, test-i18n, test-config, test-app, test-core, test-observability, test-platform, test-user, test-admin, test-ui-style, test-storage, test-cache, test-events, test-jobs, test-tenant, test-audience, test-devtools, test-email, test-realtime, test-workflow, test-search, test-scaffolder, test-external, test-payments, test-push, test-calendar, test-reports, test-geo, test-ai, test-mcp, test-wagoe-cli, test-shared-ui, e2e]
 
     steps:
       - name: Summary

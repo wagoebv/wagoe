@@ -105,6 +105,13 @@
     :scope :monorepo
     :label "Suite version consistency"
     :cmd   ["bb" "check:versions"]}
+   ;; :monorepo, because the locations it reads — the root and dev Dockerfiles,
+   ;; the CI action, the installer — are this repository's. A generated project
+   ;; gets the baseline through the template Dockerfile, which is checked here.
+   {:id    :jdk
+    :scope :monorepo
+    :label "JDK baseline"
+    :cmd   ["bb" "check:jdk"]}
    ;; Thirty PRs merged in eleven days without one CHANGELOG entry between
    ;; them, including a new library, a removed config key and a change to the
    ;; order jobs are dispatched in. :monorepo because a generated project keeps
