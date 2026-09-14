@@ -48,6 +48,9 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **Libraries carry a stability tier** (BOU-432). Eight are `incubating` — published
+  and usable, but outside the breaking-change guarantee; `wagoe list modules` shows it.
+
 - **Expired sessions are pruned** (BOU-429). `:wagoe/session-pruner` deletes them
   30 days after expiry; set `:enable-pruning false` to keep the rows.
 - **CI runs the `:unit` suite** (BOU-422). The root `test/` tree — two wiring gates among

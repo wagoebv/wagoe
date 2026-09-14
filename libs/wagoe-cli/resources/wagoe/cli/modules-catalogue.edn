@@ -7,6 +7,7 @@
    :clojars             com.wagoe/wagoe-config
    :version             "1.0.0-beta-8"
    :category            :core
+   :tier                :incubating
    :config-snippet      ""
    :test-config-snippet ""
    :add-command         "wagoe add config"
@@ -17,6 +18,7 @@
    :clojars             com.wagoe/wagoe-core
    :version             "1.0.0-beta-8"
    :category            :core
+   :tier                :stable
    :config-snippet      ""
    :test-config-snippet ""
    :add-command         "wagoe add core"
@@ -27,6 +29,7 @@
    :clojars             com.wagoe/wagoe-observability
    :version             "1.0.0-beta-8"
    :category            :core
+   :tier                :stable
    :config-snippet      "  :wagoe/metrics\n  {:provider :no-op}\n\n  :wagoe/error-reporting\n  {:provider :no-op}\n"
    :test-config-snippet "  :wagoe/metrics\n  {:provider :no-op}\n\n  :wagoe/error-reporting\n  {:provider :no-op}\n"
    :add-command         "wagoe add observability"
@@ -37,6 +40,7 @@
    :clojars             com.wagoe/wagoe-platform
    :version             "1.0.0-beta-8"
    :category            :core
+   :tier                :stable
    :config-snippet      "  :wagoe/http\n  {:port #or [#env HTTP_PORT 3000] :host \"0.0.0.0\" :join? false}\n\n  :wagoe/router\n  {:coercion :malli :middleware []}\n"
    :test-config-snippet ""
    :add-command         "wagoe add platform"
@@ -47,6 +51,7 @@
    :clojars             com.wagoe/wagoe-user
    :version             "1.0.0-beta-8"
    :category            :core
+   :tier                :stable
    :config-snippet      ""
    :test-config-snippet ""
    :add-command         "wagoe add user"
@@ -58,6 +63,7 @@
    :clojars             com.wagoe/wagoe-payments
    :version             "1.0.0-beta-8"
    :category            :optional
+   :tier                :incubating
    :config-snippet      "  :wagoe/payment-provider\n  {:provider :mock}\n"
    :test-config-snippet "  :wagoe/payment-provider\n  {:provider :mock}\n"
    :add-command         "wagoe add payments"
@@ -68,6 +74,7 @@
    :clojars             com.wagoe/wagoe-storage
    :version             "1.0.0-beta-8"
    :category            :optional
+   :tier                :stable
    :config-snippet      "  :wagoe/storage\n  {:provider :local :root \"uploads\"}\n"
    :test-config-snippet "  :wagoe/storage\n  {:provider :local :root \"/tmp/boundary-test-uploads\"}\n"
    :add-command         "wagoe add storage"
@@ -78,6 +85,7 @@
    :clojars             com.wagoe/wagoe-jobs
    :version             "1.0.0-beta-8"
    :category            :optional
+   :tier                :stable
    :config-snippet      "  :wagoe/jobs\n  {:provider :memory :workers {:count 1}}\n"
    :test-config-snippet "  :wagoe/jobs\n  {:provider :memory :workers {:count 0}}\n"
    :add-command         "wagoe add jobs"
@@ -91,6 +99,7 @@
    :clojars             com.wagoe/wagoe-email
    :version             "1.0.0-beta-8"
    :category            :optional
+   :tier                :stable
    :config-snippet      "  :wagoe.external/smtp\n  {:host #or [#env SMTP_HOST \"localhost\"] :port 1025 :tls? false :from \"no-reply@localhost\"}\n"
    :test-config-snippet "  :wagoe.external/smtp\n  {:host \"localhost\" :port 1025 :tls? false :from \"test@localhost\"}\n"
    :add-command         "wagoe add email"
@@ -101,6 +110,7 @@
    :clojars             com.wagoe/wagoe-cache
    :version             "1.0.0-beta-8"
    :category            :optional
+   :tier                :stable
    :config-snippet      "  :wagoe/cache\n  {:provider :memory :default-ttl 300}\n"
    :test-config-snippet "  :wagoe/cache\n  {:provider :memory :default-ttl 300}\n"
    :add-command         "wagoe add cache"
@@ -111,6 +121,7 @@
    :clojars             com.wagoe/wagoe-search
    :version             "1.0.0-beta-8"
    :category            :optional
+   :tier                :stable
    :config-snippet      "  :wagoe/search\n  {}\n"
    :test-config-snippet "  :wagoe/search\n  {}\n"
    :add-command         "wagoe add search"
@@ -121,6 +132,7 @@
    :clojars             com.wagoe/wagoe-realtime
    :version             "1.0.0-beta-8"
    :category            :optional
+   :tier                :stable
    :config-snippet      "  :wagoe/realtime\n  {:provider :memory}\n"
    :test-config-snippet "  :wagoe/realtime\n  {:provider :memory}\n"
    :add-command         "wagoe add realtime"
@@ -131,6 +143,7 @@
    :clojars             com.wagoe/wagoe-tenant
    :version             "1.0.0-beta-8"
    :category            :optional
+   :tier                :stable
    :config-snippet      "  :wagoe/tenant\n  {:strategy :schema-per-tenant}\n"
    :test-config-snippet "  :wagoe/tenant\n  {:strategy :schema-per-tenant}\n"
    :add-command         "wagoe add tenant"
@@ -141,6 +154,7 @@
    :clojars             com.wagoe/wagoe-ai
    :version             "1.0.0-beta-8"
    :category            :optional
+   :tier                :incubating
    :config-snippet      "  :wagoe/ai-service\n  {:provider :ollama :model #or [#env AI_MODEL \"qwen2.5-coder:7b\"] :base-url #or [#env OLLAMA_URL \"http://localhost:11434\"]}\n"
    :test-config-snippet "  :wagoe/ai-service\n  {:provider :no-op}\n"
    :add-command         "wagoe add ai"
@@ -151,6 +165,7 @@
    :clojars             com.wagoe/wagoe-external
    :version             "1.0.0-beta-8"
    :category            :optional
+   :tier                :incubating
    :config-snippet      ""
    :test-config-snippet ""
    :add-command         "wagoe add external"
@@ -161,6 +176,7 @@
    :clojars             com.wagoe/wagoe-workflow
    :version             "1.0.0-beta-8"
    :category            :optional
+   :tier                :incubating
    :config-snippet      "  :wagoe/workflow\n  {}\n"
    :test-config-snippet "  :wagoe/workflow\n  {}\n"
    :add-command         "wagoe add workflow"
@@ -171,6 +187,7 @@
    :clojars             com.wagoe/wagoe-reports
    :version             "1.0.0-beta-8"
    :category            :optional
+   :tier                :incubating
    :config-snippet      "  ;; Report definitions are registered in code with `defreport`.\n  :wagoe/reports\n  {:enabled? true}\n"
    :test-config-snippet "  :wagoe/reports\n  {:enabled? true}\n"
    :add-command         "wagoe add reports"
@@ -183,6 +200,7 @@
    :clojars             com.wagoe/wagoe-calendar
    :version             "1.0.0-beta-8"
    :category            :optional
+   :tier                :stable
    :config-snippet      "  :wagoe/calendar\n  {:enabled? true}\n"
    :test-config-snippet "  :wagoe/calendar\n  {:enabled? true}\n"
    :add-command         "wagoe add calendar"
@@ -195,6 +213,7 @@
    :clojars             com.wagoe/wagoe-geo
    :version             "1.0.0-beta-8"
    :category            :optional
+   :tier                :incubating
    :config-snippet      "  :wagoe/geo-service\n  {:provider :openstreetmap}\n"
    :test-config-snippet "  :wagoe/geo-service\n  {:provider :openstreetmap}\n"
    :add-command         "wagoe add geo"
@@ -205,6 +224,7 @@
    :clojars             com.wagoe/wagoe-i18n
    :version             "1.0.0-beta-8"
    :category            :optional
+   :tier                :stable
    :config-snippet      "  :wagoe/i18n\n  {:default-locale :en}\n"
    :test-config-snippet "  :wagoe/i18n\n  {:default-locale :en}\n"
    :add-command         "wagoe add i18n"
@@ -215,6 +235,7 @@
    :clojars             com.wagoe/wagoe-push
    :version             "1.0.0-beta-8"
    :category            :optional
+   :tier                :stable
    :config-snippet      "  :wagoe/push\n  {:fcm-credentials  {:project-id       #env WAG_PUSH_FCM_PROJECT_ID\n                     :credentials-path #env WAG_PUSH_FCM_CREDENTIALS_PATH}\n   :apns-credentials {:team-id   #env WAG_PUSH_APNS_TEAM_ID\n                      :key-id    #env WAG_PUSH_APNS_KEY_ID\n                      :key-path  #env WAG_PUSH_APNS_KEY_PATH\n                      :bundle-id #env WAG_PUSH_APNS_BUNDLE_ID}}\n"
    :test-config-snippet "  :wagoe/push\n  {:provider :mock}\n"
    :add-command         "wagoe add push"
@@ -225,6 +246,7 @@
    :clojars             com.wagoe/wagoe-events
    :version             "1.0.0-beta-8"
    :category            :optional
+   :tier                :stable
    :config-snippet      "  :wagoe/events\n  {:provider :redis\n   :host     #env REDIS_HOST\n   :port     #long #or [#env REDIS_PORT 6379]\n   :password #env REDIS_PASSWORD\n   :group    \"my-app\"}\n"
    :test-config-snippet "  :wagoe/events\n  {:provider :memory}\n"
    :add-command         "wagoe add events"
@@ -235,6 +257,7 @@
    :clojars             com.wagoe/wagoe-audience
    :version             "1.0.0-beta-8"
    :category            :optional
+   :tier                :incubating
    :config-snippet      "  ;; Segments the users table. :users-table and :users-field-mapping\n  ;; say where to read and what the filter columns are called there.\n  :wagoe/audience\n  {:enabled? true}\n"
    :test-config-snippet "  :wagoe/audience\n  {:enabled? true}\n"
    :add-command         "wagoe add audience"
@@ -248,6 +271,7 @@
    :clojars             com.wagoe/wagoe-admin
    :version             "1.0.0-beta-8"
    :category            :optional
+   :tier                :stable
    :config-snippet      "  :wagoe/admin\n  {:enabled? true :base-path \"/web/admin\" :require-role :admin}\n"
    :test-config-snippet "  :wagoe/admin\n  {:enabled? true :base-path \"/web/admin\" :require-role :admin}\n"
    :add-command         "wagoe add admin"
@@ -267,6 +291,7 @@
    :clojars             com.wagoe/wagoe-ui-style
    :version             "1.0.0-beta-8"
    :category            :optional
+   :tier                :stable
    :config-snippet      ""
    :test-config-snippet ""
    :add-command         "wagoe add ui-style"
@@ -279,6 +304,7 @@
    :clojars             com.wagoe/wagoe-devtools
    :version             "1.0.0-beta-8"
    :category            :optional
+   :tier                :tooling
    ;; Dev-only. `wagoe add devtools` puts this in the :repl alias, not :deps —
    ;; it pulls a Jetty adapter and a dashboard, and none of it belongs in a
    ;; production uberjar. `wagoe new` already writes it into :repl.

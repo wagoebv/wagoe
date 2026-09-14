@@ -1,0 +1,72 @@
+# wagoe/events
+
+[![Status](https://img.shields.io/badge/status-stable-brightgreen)]()
+[![Clojure](https://img.shields.io/badge/clojure-1.12+-blue)]()
+[![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
+[![Clojars Project](https://img.shields.io/clojars/v/com.wagoe/wagoe-events.svg)](https://clojars.org/com.wagoe/wagoe-events)
+
+An event bus for telling other modules something happened. The publisher does
+not know who is listening, does not wait, and is unaffected if a consumer is
+down.
+
+A port is for getting an answer; this is for the other case.
+
+## Installation
+
+**deps.edn**:
+```clojure
+{:deps {com.wagoe/wagoe-events {:mvn/version "1.0.0-beta-8"}}}
+```
+
+## Features
+
+| Feature | Description |
+|---------|-------------|
+| **Two adapters** | `:memory` for one process, `:redis` (Redis Streams) across replicas |
+| **At-least-once** | An event is redelivered until acknowledged, so consumers must be idempotent |
+| **Consumer groups** | Each event reaches exactly one member of a group, and every group |
+| **Dead-letter** | After `:max-deliveries` an event is moved to `<stream>:dead` rather than stalling its topic |
+| **History** | `IEventHistory` replays what a topic has seen, within stream retention |
+
+## Quick Start
+
+```clojure
+;; config.edn, under :active
+:wagoe/events
+{:provider :redis            ; or :memory for one process
+ :host     #env REDIS_HOST
+ :group    "my-app"}         ; one per logical consumer
+```
+
+```clojure
+(require '[wagoe.events.ports :as events])
+
+(events/publish! bus :order/placed {:order-id id :total 42.00})
+
+(events/subscribe! bus :order/placed
+                   (fn [event] (send-confirmation! (:order-id event))))
+```
+
+Events are statements of fact in the past tense — `:order/placed`, not
+`:place-order`. A command with one recipient belongs on a port; work to be done
+later belongs in `wagoe-jobs`.
+
+## Testing
+
+```bash
+clojure -M:test :events
+```
+
+The Redis cases need a Redis on `localhost:6379`; without one they are skipped,
+and CI runs them against a `redis:7-alpine` service.
+
+## Documentation
+
+- [AGENTS.md](AGENTS.md) — module reference: config, delivery semantics, adapter differences, pitfalls.
+- [events library guide](../../docs/modules/libraries/pages/events.adoc) — narrative documentation.
+
+## License
+
+Copyright © 2024-2026 Thijs Creemers
+
+Distributed under the Eclipse Public License version 2.0.

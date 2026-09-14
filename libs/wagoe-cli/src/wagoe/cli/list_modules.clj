@@ -10,19 +10,25 @@
 
 (defn print-table []
   (let [modules (cat/optional-modules)
-        fmt     "  %-12s  %-50s  %s"]
+        fmt     "  %-12s  %-11s  %-50s  %s"]
     (println)
-    (println (format fmt "Module" "Description" "Command"))
+    (println (format fmt "Module" "Tier" "Description" "Command"))
     (println (format fmt (apply str (repeat 12 "-"))
+                     (apply str (repeat 11 "-"))
                      (apply str (repeat 50 "-"))
                      (apply str (repeat 28 "-"))))
-    (doseq [{:keys [name description add-command scope]} modules]
+    (doseq [{:keys [name description add-command scope tier]} modules]
       ;; The scope is the difference between a dep in :deps and one in a dev
       ;; alias, which is the difference between shipping a dashboard in the
-      ;; uberjar and not.
+      ;; uberjar and not. The tier is whether the breaking-change guarantee
+      ;; covers it (BOU-432) — both belong here rather than in a footnote.
       (println (format fmt (pad name 12)
+                       (pad (clojure.core/name (or tier :stable)) 11)
                        (pad (if (= :dev scope) (str description " [dev-only]") description) 50)
                        add-command)))
+    (println)
+    (println "  incubating — published and usable, but outside the breaking-change")
+    (println "               guarantee: https://wagoe.org/docs/stability.html#tiers")
     (println)))
 
 ;; print-json includes all modules (core + optional) so AI tools can discover
@@ -35,6 +41,7 @@
                           :clojars          (str (:clojars m))
                           :version          (:version m)
                           :category         (name (:category m))
+                          :tier             (name (or (:tier m) :stable))
                           ;; Omitted, an agent reads devtools as an ordinary
                           ;; runtime dep and puts it in :deps.
                           :scope            (some-> (:scope m) name)

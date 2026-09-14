@@ -203,6 +203,58 @@ rather than a commit message.
 * Deprecated vars carry `^:deprecated` metadata with a pointer to the
   replacement, so your editor and `clj-kondo` can flag them.
 
+=== Not every library, though: tiers
+
+The promise above covers *stable* libraries. A second tier, *incubating*, is
+published and usable but outside the breaking-change guarantee, because we
+already know its API is not finished. Saying so is cheaper for you than a major
+version bump for a fix we could see coming.
+
+.Incubating at 1.0.0
+[cols="1,3",options="header"]
+|===
+| Library | Why
+
+| `payments`
+| The Mollie adapter throws "not implemented yet" for `create-off-session-payment`
+  and `expire-checkout-session`, so the PSP adapters are not interchangeable —
+  which is the whole point of the port
+
+| `config`
+| 263 lines of source against 37 of test, on the boot path of every application
+
+| `ai`
+| Five providers, no sweep proving they answer alike
+
+| `geo`
+| Three geocoding providers, same gap
+
+| `external`
+| Three adapters — SMTP, IMAP, Twilio — same gap
+
+| `reports`
+| Three exporters, same gap
+
+| `audience`
+| The newest library here, and the least exercised
+
+| `workflow`
+| Its guard and transition API is still moving
+|===
+
+Everything else published is stable. `wagoe-tools`, `wagoe-devtools`, `wagoe-cli`
+and `wagoe-mcp` are tooling and carry no tier — see _What is not covered_ below.
+
+*A library is promoted when two things are true:* every port with more than one
+adapter has a sweep that runs the same assertions against each of them, and its
+documentation matches what it does — a README, a page on this site, and an
+`AGENTS.md` that is not describing an older shape. Promotion is not a breaking
+change and can happen in any release; demotion cannot happen at all, because a
+stable library that turns out to need a break gets the major version instead.
+
+`wagoe list modules` and `wagoe add` print the tier, so you learn it before you
+depend on it rather than from this page afterwards.
+
 === What is not covered
 
 * `wagoe-tools`, `wagoe-devtools`, `wagoe-cli` and `wagoe-mcp` are development
