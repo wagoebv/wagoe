@@ -843,11 +843,42 @@
                    {"dev-docs/roadmap.adoc"
                     (str "Moved to " check-roadmap/roadmap-path)}))))
 
+    (testing "a short phase plan does not become a redirect by linking to one"
+      ;; The line count and the pointer were both satisfiable while the file
+      ;; went on planning: nineteen lines of phases under a `see …` footer.
+      (is (= ["dev-docs/roadmap.adoc"]
+             (map :path (check-roadmap/duplicate-findings
+                         ["dev-docs/roadmap.adoc"]
+                         {"dev-docs/roadmap.adoc"
+                          (str "= Roadmap\n\n== Phase 2\n\n* Ship the thing\n\n"
+                               "See " check-roadmap/roadmap-path)})))))
+
+    (testing "and a second roadmap is read for stale plans like any other"
+      (is (= ["dev-docs/roadmap.adoc"]
+             (map :path (filter #(= :stale (:rule %))
+                                (with-redefs [check-roadmap/tracked-files
+                                              (constantly [check-roadmap/roadmap-path
+                                                           "dev-docs/roadmap.adoc"])]
+                                  (check-roadmap/findings
+                                   {:read-file
+                                    {check-roadmap/shipped-source scaling
+                                     check-roadmap/roadmap-path   "= Roadmap\n"
+                                     "dev-docs/roadmap.adoc"
+                                     (str "A service launch mode is planned.\n\nSee "
+                                          check-roadmap/roadmap-path)}})))))))
+
     (testing "a short file that points nowhere is still a second opinion"
       (is (= ["dev-docs/roadmap.adoc"]
              (map :path (check-roadmap/duplicate-findings
                          ["dev-docs/roadmap.adoc"]
                          {"dev-docs/roadmap.adoc" "Phase 2 is complete."})))))
+
+    (testing "a canonical roadmap that moved is a finding, not silence"
+      (is (= [:missing]
+             (map :rule
+                  (with-redefs [check-roadmap/tracked-files (constantly ["README.md"])]
+                    (check-roadmap/findings
+                     {:read-file {check-roadmap/shipped-source scaling}}))))))
 
     (testing "the gate reads the real tree and it is clean"
       (is (empty? (check-roadmap/findings {}))))))

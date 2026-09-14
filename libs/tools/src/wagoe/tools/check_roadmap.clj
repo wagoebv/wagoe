@@ -182,17 +182,38 @@
   [tracked]
   (filter #(re-find #"(?i)roadmap\.(adoc|md)$" %) tracked))
 
+(def plan-line-re
+  "A line that plans something: a list item, a checkbox, or a section heading.
+
+   This is what separates a redirect from a roadmap. Counting lines alone let a
+   twenty-line phase plan through as long as it carried a `see …/roadmap.adoc`
+   footer somewhere — the pointer says where the roadmap is, not that this file
+   has stopped being one."
+  #"(?m)^\s*(?:[*.]{1,5}\s|-\s|=={1,4}\s)")
+
+(defn redirect?
+  "True when `text` is a pointer to the canonical roadmap and nothing else.
+
+   Three conditions, because each alone is bypassable: short enough, naming the
+   canonical page, and carrying no plan of its own. A document title (`= …`) is
+   allowed; anything deeper is a section, and sections hold opinions."
+  [text]
+  (and (<= (count (str/split-lines text)) redirect-max-lines)
+       (str/includes? text roadmap-path)
+       (not (re-find plan-line-re text))))
+
 (defn duplicate-findings
   "Roadmap files other than the canonical one that are more than a redirect."
   [files read-file]
   (for [path files
         :when (not= path roadmap-path)
-        :let [text  (read-file path)
-              lines (count (str/split-lines text))]
-        :when (or (> lines redirect-max-lines)
-                  (not (str/includes? text roadmap-path)))]
-    {:rule :duplicate :path path :lines lines
-     :points-here? (str/includes? text roadmap-path)}))
+        :let [text (read-file path)]
+        :when (not (redirect? text))]
+    {:rule         :duplicate
+     :path         path
+     :lines        (count (str/split-lines text))
+     :points-here? (str/includes? text roadmap-path)
+     :plans?       (boolean (re-find plan-line-re text))}))
 
 ;; =============================================================================
 ;; Entry point
@@ -211,11 +232,23 @@
     (remove str/blank? (str/split-lines out))))
 
 (defn findings
+  "Every roadmap is read for stale plans, not only the canonical one.
+
+   Checking that file alone left the rule bypassable from the other side: a
+   second roadmap short enough to pass rule 2 could still plan shipped work,
+   and nothing read it."
   [{:keys [read-file] :or {read-file slurp}}]
-  (let [tracked (tracked-files)]
-    (concat (map #(assoc % :path roadmap-path)
-                 (stale-findings (read-file roadmap-path) (read-file shipped-source)))
-            (duplicate-findings (roadmap-files tracked) read-file))))
+  (let [files   (roadmap-files (tracked-files))
+        scaling (read-file shipped-source)]
+    (concat (when-not (some #{roadmap-path} files)
+              ;; Otherwise moving the canonical page makes this gate pass by
+              ;; having nothing left to read (BOU-250).
+              [{:rule :missing :path roadmap-path}])
+            (mapcat (fn [path]
+                      (map #(assoc % :path path)
+                           (stale-findings (read-file path) scaling)))
+                    files)
+            (duplicate-findings files read-file))))
 
 (defn- report-stale [{:keys [path line title context]}]
   (println (str "  " (ansi/bold path) ":" line))
@@ -226,18 +259,23 @@
                                    (str (subs context 0 100) "…")
                                    context)))))
 
-(defn- report-duplicate [{:keys [path lines points-here?]}]
-  (println (str "  " (ansi/bold path)))
-  (println (str "    " (ansi/red (str lines " lines"))
-                (if points-here?
-                  " — a redirect, but long enough to hold its own opinion"
-                  (str " — and no pointer to " roadmap-path)))))
+(defn- report-duplicate [{:keys [path lines points-here? plans?]}]
+  (println (str "  " (ansi/bold path) " (" lines " lines)"))
+  (println (str "    " (ansi/red (cond
+                                   (not points-here?) (str "no pointer to " roadmap-path)
+                                   plans?             "a redirect, but it still lists work"
+                                   :else              "too long to be only a pointer")))))
 
 (defn -main [& _args]
   (let [fs (findings {})
-        {stale :stale dupes :duplicate} (group-by :rule fs)]
+        {stale :stale dupes :duplicate missing :missing} (group-by :rule fs)]
     (if (seq fs)
       (do
+        (when (seq missing)
+          (println (ansi/red (str roadmap-path " is not tracked — the gate has "
+                                  "nothing to read. Point `roadmap-path` at wherever "
+                                  "the roadmap moved to.")))
+          (println))
         (when (seq stale)
           (println (ansi/red "The roadmap plans work that is already shipped:"))
           (println)
