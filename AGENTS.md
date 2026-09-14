@@ -141,6 +141,7 @@ bb check:placeholder-tests                         # Detect (is true) placeholde
 bb check:deps                                      # Dependency direction + cycles + undeclared third-party deps
 bb check:ports                                     # Hexagonal: modules must define ports.clj; shell/web must not bypass protocols
 bb check:poms                                      # Published POMs must carry inter-Wagoe deps (build-shared rewrite + pom-basis)
+bb check:roadmap                                   # One roadmap, and it may not plan what scaling.adoc marks shipped
 bb check:error-shape                               # Errors carry the shape ADR-022/ADR-036 decided: :type on a thrown ex-info, {:error {:type <kw>}} on a {:success? false}
 clojure -M:test --focus-meta :security             # Security-focused tests (error mapping, CSRF, XSS, SQL)
 ```
@@ -957,7 +958,7 @@ separate and unchanged.
 
 ## Quality Gates
 
-Automated safeguards run in CI (and `check:fcis` + `check:ports` in pre-commit) to prevent regressions caught during QA review (PRs #108–#116). `bb check` runs the full set — currently 20 — and `wagoe.tools.check/all-checks` is its registry; the table below covers the ones with non-obvious rules.
+Automated safeguards run in CI (and `check:fcis` + `check:ports` in pre-commit) to prevent regressions caught during QA review (PRs #108–#116). `bb check` runs the full set — currently 21 — and `wagoe.tools.check/all-checks` is its registry; the table below covers the ones with non-obvious rules.
 
 | Gate | Command | What it catches | Hard fail? |
 |------|---------|-----------------|------------|
@@ -968,6 +969,7 @@ Automated safeguards run in CI (and `check:fcis` + `check:ports` in pre-commit) 
 | **POM dep completeness** | `bb check:poms` | Published POMs dropping inter-Wagoe deps: `build_shared` losing the `:local/root`→mvn rewrite, a publishable `build.clj` bypassing `pom-basis`, or a referenced wagoe dep that is not itself publishable | Yes |
 | **Branch protection** | `bb check:branch-protection` | Branch protection requires one context, `All Tests Passed`. Fails when a job can run without that summary depending on it (so it could fail without blocking a merge), or when the summary is renamed out from under the required context. Reads `ci.yml` only — no API, no token | Yes |
 | **Documented library counts** | `bb check:doc-counts` | Prose disagreeing with `wagoe.tools.deploy/all-libs`: a documented library/artifact count that is not the real number, or a document calling a published library unpublished | Yes |
+| **Roadmap agreement** | `bb check:roadmap` | The public roadmap planning something `scaling.adoc` marks `✅` shipped (titles are discovered there, not listed in the gate), or a second roadmap file that is more than a redirect | Yes |
 | **Security tests** | `clojure -M:test --focus-meta :security` | Error→HTTP mapping, CSRF routing, XSS escaping, SQL injection, sensitive field leaks | Yes (test failure) |
 | **clj-kondo lint** | `clojure -M:clj-kondo --lint ...` | Static analysis (existing gate) | Yes |
 | **Config doctor** | `bb doctor --env dev --ci` | Configuration errors (existing gate) | Yes |
@@ -1092,6 +1094,7 @@ Clojure's `{:or {limit 20 offset 0}}` destructuring only fires for **absent** ke
 | `wagoe.tools.check-deps` | `bb check:deps` — dependency direction linting, cycle detection, third-party declaration completeness |
 | `wagoe.tools.check-ports` | `bb check:ports` — hexagonal boundary enforcement (ports.clj presence + protocol usage) |
 | `wagoe.tools.check-poms` | `bb check:poms` — published-POM dependency completeness (build-shared rewrite + pom-basis usage + publishable deps) |
+| `wagoe.tools.check-roadmap` | `bb check:roadmap` — one roadmap, and it may not plan what `scaling.adoc` marks shipped |
 | `wagoe.tools.check-branch-protection` | `bb check:branch-protection` — the one required status check must cover every job |
 | `wagoe.tools.parsing` | Shared source-parsing utilities for quality-gate checkers |
 

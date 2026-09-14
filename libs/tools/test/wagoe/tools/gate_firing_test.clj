@@ -39,6 +39,7 @@
             [wagoe.tools.check-error-shape :as check-error-shape]
             [wagoe.tools.check-poms :as check-poms]
             [wagoe.tools.check-ports :as check-ports]
+            [wagoe.tools.check-roadmap :as check-roadmap]
             [wagoe.tools.check-tests :as check-tests]
             [wagoe.tools.docs-lint :as docs-lint]
             [wagoe.tools.doctor :as doctor]
@@ -762,7 +763,80 @@
   #{:hygiene :deps :fcis :placeholder-tests :docs-lint
     :test-meta :test-tags :ports :poms :agents :doctor :linting :no-boundary
     :doc-counts :branch-protection :versions :changelog :isolation
-    :error-shape :jdk})
+    :error-shape :jdk :roadmap})
+
+;; =============================================================================
+;; check:roadmap
+;; =============================================================================
+
+(deftest ^:unit roadmap-gate-fires-test
+  ;; BOU-434. The published roadmap listed the remote-port adapter, the service
+  ;; launch mode and the event bus under "After 1.0.0" while scaling.adoc
+  ;; marked all three ✅ shipped — and a third roadmap in dev-docs/ contradicted
+  ;; both from April.
+  (let [scaling "* ✅ *Service launch mode* — shipped in BOU-91.\n"]
+
+    (testing "a shipped item listed as future work is a finding"
+      (is (= ["Service launch mode"]
+             (map :title
+                  (check-roadmap/stale-findings
+                   "== After 1.0.0\n* A service launch mode that boots a named subset\n"
+                   scaling)))))
+
+    (testing "the same item under the shipped heading is not"
+      (is (empty? (check-roadmap/stale-findings
+                   "== Shipped in 1.0\n* A service launch mode that boots a named subset\n"
+                   scaling))))
+
+    (testing "the shipped section ends at the next section"
+      (is (= 1 (count (check-roadmap/stale-findings
+                       (str "== Shipped in 1.0\n* done\n\n== After 1.0.0\n"
+                            "* A service launch mode that boots a named subset\n")
+                       scaling)))))
+
+    (testing "prose that rewords a title still matches it"
+      ;; The two lists in scaling.adoc already disagree on wording, and prose
+      ;; inflects. Matching the literal title would have caught none of the
+      ;; three real cases.
+      (is (seq (check-roadmap/stale-findings
+                "== After 1.0.0\n* Deployment topologies for reference\n"
+                "* ✅ *Deploy topology reference* — done.\n"))))
+
+    (testing "an unrelated line is not"
+      (is (empty? (check-roadmap/stale-findings
+                   "== After 1.0.0\n* A forms library with validation\n"
+                   scaling))))
+
+    (testing "a ✅ at the end of a line does not swallow the paragraph after it"
+      ;; `[^*]+` spanning newlines paired a table cell's ✅ with an unclosed `*`
+      ;; three lines later and read the whole paragraph between them as a title.
+      (is (= ["Service launch mode"]
+             (check-roadmap/shipped-titles
+              (str "| Replica-safe ✅\n| Some cell with an *unclosed emphasis\n"
+                   scaling)))))
+
+    (testing "a second roadmap that is more than a redirect is a finding"
+      (let [long-one (str/join "\n" (repeat 40 "phase two is complete"))]
+        (is (= ["dev-docs/roadmap.adoc"]
+               (map :path (check-roadmap/duplicate-findings
+                           [check-roadmap/roadmap-path "dev-docs/roadmap.adoc"]
+                           {check-roadmap/roadmap-path "the roadmap"
+                            "dev-docs/roadmap.adoc" long-one}))))))
+
+    (testing "a redirect pointing at the canonical page is not"
+      (is (empty? (check-roadmap/duplicate-findings
+                   ["dev-docs/roadmap.adoc"]
+                   {"dev-docs/roadmap.adoc"
+                    (str "Moved to " check-roadmap/roadmap-path)}))))
+
+    (testing "a short file that points nowhere is still a second opinion"
+      (is (= ["dev-docs/roadmap.adoc"]
+             (map :path (check-roadmap/duplicate-findings
+                         ["dev-docs/roadmap.adoc"]
+                         {"dev-docs/roadmap.adoc" "Phase 2 is complete."})))))
+
+    (testing "the gate reads the real tree and it is clean"
+      (is (empty? (check-roadmap/findings {}))))))
 
 ;; =============================================================================
 ;; check:error-shape

@@ -40,7 +40,7 @@ remaining work before `1.0.0` is about trust rather than capability.
 
 | Async
 | Background jobs over Redis or a durable database-backed queue, with
-  transactional enqueue; WebSocket real-time messaging
+  transactional enqueue; an event bus; WebSocket real-time messaging
 
 | Integrations
 | Payments (Mollie, Stripe, Mock), file storage (local, S3, GCS), email over
@@ -64,12 +64,60 @@ remaining work before `1.0.0` is about trust rather than capability.
   editor agents
 |===
 
+== Shipped in 1.0
+
+Work that earlier drafts of this page listed as future. It is done, in `main`,
+and covered by tests.
+
+=== Scaling out
+
+Wagoe scales vertically through configuration, and the `ports.clj` seam is what
+makes scaling out tractable: swap an in-process adapter for a distributed one
+without touching business logic.
+
+* *Generic remote-port adapter + RPC envelope* — any module protocol can be
+  implemented by a call to another process, built from the protocol's own
+  signatures, with correlation-id, tenant and auth riding the headers the
+  interceptor pipeline already uses.
+* *Service launch mode* — `java -jar wagoe.jar service <module>…` boots a named
+  subset of modules as its own service, with its RPC endpoint on its own port.
+* *Event-bus port + adapter* — `wagoe-events`, with a Redis Streams adapter
+  (at-least-once, consumer groups) and an in-process one.
+* *Break allowlisted dependency cycles* — no module pair is blocked from
+  separation by a cycle any more; `bb check:deps` now fails on any cycle at all.
+* *Realtime Redis pub/sub adapter*, *graceful connection draining*, *default
+  rate-limit wiring*, *jobs hardening* and a *deploy topology reference* —
+  the replica-safety work.
+
+What is still missing for full functional decomposition — service discovery and
+the data-ownership decision — and the readiness matrix behind all of the above,
+are in xref:architecture:scaling.adoc[Sizing & Scaling]. That page is the source
+of truth for what scales; this one does not restate it.
+
+=== Stability surface
+
+The xref:stability.adoc[stability policy] defines what is public, what is
+internal, how deprecations work, and which libraries are incubating rather than
+covered by the `1.0` promise.
+
 == The road to 1.0.0
 
-`1.0.0` means the API is one we are willing to be held to. Everything below is
+`1.0.0` means the API is one we are willing to be held to. What is left is
 about earning that, not adding surface.
 
-=== 1. First-run experience
+=== 1. Finish the release gate
+
+One JDK baseline, one provider vocabulary, jars that cannot ship stale classes,
+and a version scheme in which a pre-release can never outrank a release — those
+have landed. What remains is the changelog freeze: an explicit decision on every
+breaking change that is still open, so `1.0.0` ships no surprise.
+
+=== 2. A release candidate that is actually exercised
+
+`1.0.0-rc-1` is published first and smoke-tested from Clojars on a clean
+machine, rather than tagged on the strength of a green build. Only then `1.0.0`.
+
+=== 3. First-run experience
 
 The bulk of this has landed: `install.sh` with prerequisite detection, a
 `wagoe new` scaffold that produces a project which boots, a setup wizard needing
@@ -78,73 +126,70 @@ and a CI smoke test that walks install → new project → serving app inside a 
 container and asserts on HTTP rather than exit codes.
 
 What remains is deliberate QA: the same path exercised across an environment
-matrix and by people who did not write it. A framework gets one first
-impression.
-
-=== 2. API stability
-
-The xref:stability.adoc[stability policy] now defines what is public, what is
-internal, and how deprecations work. Bringing the existing surface up to that
-standard is the work — auditing protocols for changes we would not want to make
-after `1.0.0`, and adding the `^:deprecated` metadata and changelog headings the
-policy requires.
-
-=== 3. Architectural loose ends
-
-A small number of module dependency cycles are still tolerated by an allowlist
-rather than resolved. Module wiring and platform system wiring are more coupled
-than they should be — several optional libraries are effectively mandatory
-dependencies of the platform. Both are the kind of thing that is cheap to fix
-before a stability promise and expensive after.
-
-=== 4. Assistant tooling
-
-Wagoe has strong conventions, which makes it well suited to coding assistants
-that know them. Planned: guided skills for project setup, scaffolding,
-migrations, configuration preflight and debugging, so an assistant follows the
-framework's own workflow instead of guessing at it.
-
-=== 5. Showing rather than telling
-
-A showcase application built on the framework, and a migration guide for people
-arriving from Kit or Luminus. Then the community launch — announcements, a chat
-channel, and a demo.
+matrix and by people who did not write it. This gates the public launch rather
+than the tag — a framework gets one first impression.
 
 == After 1.0.0
 
-=== Scaling out
+Grouped by the release they would ship in. `1.x` work keeps the stability
+promise; `2.0` is where the things that cannot are collected.
 
-Wagoe already scales vertically through configuration, and the `ports.clj` seam
-is what makes scaling out tractable: swap an in-process adapter for a distributed
-one without touching business logic. Cache, jobs, auth and tenancy are already
-replica-safe. The remaining pieces:
+=== 1.1 — Enterprise login and correctness
 
-* A generic remote-port adapter and RPC envelope, so a module can be moved out
-  of the monolith without rewriting its callers
-* A service launch mode that boots a named subset of modules as its own service
-* An event bus adapter over Redis Streams or Kafka
-* Reference deployment topologies for Docker Compose and Kubernetes
+* OIDC / OAuth2 login (authorization code + PKCE)
+* A transactional outbox, so publishing an event is decoupled from the database
+  transaction that produced it
+* A decision on multi-tenancy: PostgreSQL-only, or row-level tenancy as an
+  adapter capability
+* Dependency vulnerability scanning and coverage actually running in CI
 
-See xref:architecture:scaling.adoc[Sizing & Scaling] for the current readiness
-matrix.
+=== 1.2 — Contracts
 
-=== More libraries
+* A database-adapter port with a conformance suite across all four adapters
+* A PSP conformance sweep, finishing the Mollie adapter
+* `wagoe-external` sharing the retry and circuit breaker of the RPC client
+* Finishing the metrics and error-reporting stubs, or removing them and
+  correcting the documentation
 
-* A forms library — dynamic form definitions, validation and rendering
-* Datomic and XTDB as alternative persistence backends
+=== 1.3 — Batteries
 
-=== Faster starts
+* Recurring and cron-scheduled jobs, with an idempotency-key store
+* Server-driven per-field form validation from Malli schemas
+* A `#secret` config reader with pluggable backends (env, file, vault, SOPS)
+* OpenAPI 3.1 instead of Swagger 2.0
+* A realtime-to-UI bridge: SSE plus out-of-band fragment responses
+* A test kit for consumer applications — test system, test tenant, Ring client,
+  job draining
+* Outbound webhooks: signed, retried, per-tenant
+* GDPR data export per user and per tenant, and retention policies
 
-* Application templates: API-only, admin dashboard, and a SaaS preset wiring
-  login, storage, admin and payments together
-* A plugin or extension mechanism, so third-party modules install the way the
-  first-party ones do
+=== Ongoing through 1.x
+
+* Component gaps in the shared UI library — dialog, combobox, toast region,
+  sortable tables
+* `wagoe upgrade`: a codemod for deprecated config keys, requires and functions.
+  This ships before the first `2.0` pre-release, not after it
+* A showcase application and a migration guide for people arriving from Kit or
+  Luminus
+
+=== 2.0
+
+* Removing the deprecated provider aliases and the duplicate choices that 1.x
+  deprecates — one HTTP client, one config layer, one CSS system, one mail
+  library
+* Virtual threads for request handling and the jobs worker pool
+* A decision on the front-end stack
 
 == How this page is maintained
 
-This roadmap is reviewed alongside each beta release. Work is tracked publicly
-on https://github.com/wagoebv/wagoe[GitHub]; the shipped detail of every release
-is in https://github.com/wagoebv/wagoe/blob/main/CHANGELOG.md[CHANGELOG.md].
+This roadmap is the only one. It is reviewed alongside each release; work is
+tracked on https://github.com/wagoebv/wagoe[GitHub], and the shipped detail of
+every release is in
+https://github.com/wagoebv/wagoe/blob/main/CHANGELOG.md[CHANGELOG.md].
+
+A CI gate (`bb check:roadmap`) fails the build if this page plans something
+xref:architecture:scaling.adoc[Sizing & Scaling] already marks as shipped, which
+is how the three-way contradiction it replaced went unnoticed for months.
 
 If something here matters to you, saying so is the most effective way to move it
 up the list.
