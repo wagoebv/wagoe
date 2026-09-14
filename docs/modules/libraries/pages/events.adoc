@@ -90,7 +90,7 @@ replay history.
 ----
 ;; config.edn — under :active
 :wagoe/events
-{:provider       :redis-streams
+{:provider       :redis
  :host           #env REDIS_HOST
  :port           #long #or [#env REDIS_PORT 6379]
  :password       #env REDIS_PASSWORD
@@ -101,7 +101,7 @@ replay history.
 
 ;; test / single process
 :wagoe/events
-{:provider :in-memory}
+{:provider :memory}
 ----
 
 == Delivery semantics
@@ -129,12 +129,12 @@ Ordering is per topic. Two topics have no relative order.
 |===
 | Provider | Crosses processes | History | Use
 
-| `:redis-streams`
+| `:redis`
 | yes
 | within stream retention
 | production
 
-| `:in-memory`
+| `:memory`
 | no
 | bounded buffer, dies with the process
 | development, tests

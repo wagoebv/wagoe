@@ -2,7 +2,7 @@
   "Integrant wiring for the realtime module.
 
    Config key: :wagoe/realtime
-     {:provider :in-memory | :redis
+     {:provider :memory | :redis        ; :in-memory is the pre-1.0 spelling
       ;; redis only:
       :host \"localhost\" :port 6379
       :password \"...\" :database 0        ; auth + db selection (production)
@@ -31,10 +31,25 @@
             [clojure.tools.logging :as log]
             [integrant.core :as ig]))
 
+(defn normalize-provider
+  "The provider keyword in the vocabulary cache, realtime, events and jobs
+   share. This module implements `:memory` | `:redis`; `:db` exists only where a
+   module has a database adapter.
+
+   `:in-memory` is accepted as `:memory` and warns. Removal no earlier than 2.0
+   (BOU-436). nil keeps the documented default, which is in-process."
+  [provider]
+  (case provider
+    nil :memory
+    :in-memory (do (log/warn "Realtime :provider :in-memory is now spelled :memory")
+                   :memory)
+    provider))
+
 (defmethod ig/init-key :wagoe/realtime
   [_ {:keys [provider jwt-verifier] :as config}]
   (log/info "Initializing realtime component" {:provider provider})
-  (let [conn-registry (registry/create-in-memory-registry)
+  (let [provider (normalize-provider provider)
+        conn-registry (registry/create-in-memory-registry)
         [pubsub-manager bus pool]
         (case provider
           :redis
@@ -46,10 +61,17 @@
              (redis-bus/create-redis-bus config)
              pool])
 
-          ;; default :in-memory
+          :memory
           [(atom-pubsub/create-pubsub-manager)
            (in-memory-bus/create-in-memory-bus)
-           nil])
+           nil]
+
+          ;; Not a fallback: an unrecognised provider used to land here, so a
+          ;; node meant to share a bus with its replicas ran a node-local one.
+          (throw (ex-info (str "Unknown realtime provider: " (pr-str provider))
+                          {:type     :unknown-provider
+                           :provider provider
+                           :known    [:memory :redis]})))
         svc (service/create-realtime-service conn-registry jwt-verifier
                                              :pubsub-manager pubsub-manager
                                              :bus bus)]

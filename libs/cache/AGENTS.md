@@ -63,7 +63,7 @@ supports every method below.
 | **redis** | Jedis pool + Nippy | production, multi-replica, microservices | environments without a Redis instance |
 
 Selection happens in `module-wiring` via the config `:provider` key
-(`:redis` or `:in-memory`). Unknown/absent providers fall back to in-memory with
+(`:redis` or `:memory`). An absent provider means `:memory`; an unknown one throws, where it used to fall back with
 a warning.
 
 ## Integrant Wiring
@@ -86,7 +86,7 @@ Component key: **`:wagoe/cache`**. Config is passed straight to the adapter.
 
 ;; In-memory (dev without Docker / tests)
 :wagoe/cache
-{:provider     :in-memory
+{:provider     :memory
  :default-ttl  300
  :max-size     10000         ; entries before LRU eviction
  :track-stats? true}

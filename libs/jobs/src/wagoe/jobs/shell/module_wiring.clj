@@ -83,9 +83,26 @@
   (let [{:keys [queue store stats]} (mem/create-in-memory-jobs-system)]
     {:queue queue :store store :stats stats :close! (fn [] nil)}))
 
+(defn normalize-provider
+  "The provider keyword in the vocabulary cache, realtime, events and jobs
+   share: `:memory` | `:redis`, and `:db` — which this is the only module to
+   have, because it is the only one with a database adapter.
+
+   Jobs already spelled it this way; `:in-memory` and `:database` are accepted
+   because the other three modules used them, and a user moving between config
+   blocks should not have to remember which is which (BOU-436)."
+  [provider]
+  (case provider
+    nil :memory
+    :in-memory (do (log/warn "Jobs :provider :in-memory is spelled :memory")
+                   :memory)
+    :database (do (log/warn "Jobs :provider :database is spelled :db")
+                  :db)
+    provider))
+
 (defmethod ig/init-key :wagoe/jobs-runtime
   [_ {:keys [provider db-ctx lease-ms redis]}]
-  (let [provider (or provider :memory)]
+  (let [provider (normalize-provider provider)]
     (log/info "Jobs: initializing runtime" {:provider provider})
     (case provider
       :memory (memory-runtime)

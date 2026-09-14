@@ -858,8 +858,9 @@ all in `config.edn` + env). Horizontal scaling rides on the `ports.clj` seam: sw
 an in-process adapter for a distributed one. Cache, jobs, auth, tenancy, realtime,
 rate limiting and the event bus are all replica-safe via Redis/DB — each still has
 a single-process in-memory adapter, so the work is activating them, not building
-them. Mind the provider keyword: `:redis` for cache and realtime, `:redis-streams`
-for events (which has no default and throws on anything else). The same seam allows
+them. One provider vocabulary across cache, realtime, events and jobs: `:memory` and
+`:redis` everywhere, plus `:db` where a module has a database adapter — today
+only jobs. Events has no default and throws on anything else. The same seam allows
 functional decomposition: `java -jar wagoe.jar service <module>...` boots a module
 alone, `wagoe.platform.shell.rpc` gives any port a remote implementation, and no
 dependency cycles remain to block slicing. What is not done is service discovery

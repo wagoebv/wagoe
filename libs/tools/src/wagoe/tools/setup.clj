@@ -37,7 +37,10 @@
   {:database    [:postgresql :sqlite :h2 :mysql]
    :ai-provider [:none :ollama :anthropic :openai :replicate]
    :payment     [:none :mock :stripe :mollie]
-   :cache       [:none :redis :in-memory]
+   ;; :in-memory is the pre-1.0 spelling of :memory, still accepted here so a
+   ;; script that passes it keeps working; the template writes :memory either
+   ;; way (BOU-436).
+   :cache       [:none :redis :memory :in-memory]
    :email       [:none :smtp]})
 
 (defn spec-errors
@@ -285,18 +288,21 @@
            "  {:provider :mollie\n"
            "   :api-key  #env MOLLIE_API_KEY}\n"))))
 
+(def ^:private in-process-cache
+  ;; :memory, not :in-memory: the generator is the canonical way to write a
+  ;; config, so emitting the deprecated spelling would greet a new project with
+  ;; its own deprecation warning (BOU-436).
+  (str "  :wagoe/cache\n"
+       "  {:provider    :memory\n"
+       "   :default-ttl 300}\n"))
+
 (defn- cache-template [provider env]
   (case provider
     :none ""
-    :in-memory
-    (str "  :wagoe/cache\n"
-         "  {:provider    :in-memory\n"
-         "   :default-ttl 300}\n")
+    (:memory :in-memory) in-process-cache
     :redis
     (if (= env "test")
-      (str "  :wagoe/cache\n"
-           "  {:provider    :in-memory\n"
-           "   :default-ttl 300}\n")
+      in-process-cache
       (str "  :wagoe/cache\n"
            "  {:provider    :redis\n"
            "   :host        #or [#env REDIS_HOST \"localhost\"]\n"
@@ -474,7 +480,7 @@
         cache (select-option "Cache"
                              [[:none      "No caching"]
                               [:redis     "Redis (requires running Redis instance)"]
-                              [:in-memory "In-memory cache (no external deps)"]])
+                              [:memory    "In-process cache (no external deps)"]])
 
         email (select-option "Email"
                              [[:none "No email"]
@@ -674,7 +680,7 @@
   (println "  --database DB          postgresql, sqlite, h2, mysql")
   (println "  --ai-provider PROV     ollama, anthropic, openai, replicate, none")
   (println "  --payment PAY          none, mock, stripe, mollie")
-  (println "  --cache CACHE          none, redis, in-memory")
+  (println "  --cache CACHE          none, redis, memory")
   (println "  --email EMAIL          none, smtp")
   (println "  --admin-ui BOOL        true, false")
   (println)

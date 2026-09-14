@@ -33,11 +33,33 @@
    ;; drifts: adding :replicate there left doctor rejecting a provider that
    ;; worked. A test pins the two together (BOU-281).
    :wagoe/ai-service       #{:ollama :anthropic :openai :replicate :no-op}
-   :wagoe/cache            #{:redis :in-memory}
+   ;; One vocabulary for the four modules that choose a backend rather than a
+   ;; vendor. :memory and :redis everywhere; :db only where a module has a
+   ;; database adapter, which is jobs (BOU-436).
+   :wagoe/cache            #{:redis :memory}
+   :wagoe/realtime         #{:redis :memory}
+   :wagoe/jobs             #{:redis :memory :db}
    ;; Mirrors the case in wagoe.events.shell.module-wiring/init-key. Same
    ;; copy-drift hazard as :wagoe/ai-service above, and the same reason: doctor
    ;; runs on Babashka and cannot load the lib to ask it.
-   :wagoe/events           #{:redis-streams :in-memory}})
+   :wagoe/events           #{:redis :memory}})
+
+(def deprecated-providers
+  "Pre-1.0 spellings, per component, and what they mean now.
+
+   Per component, not global: only events ever spelled Redis `:redis-streams`,
+   and only jobs spelled the database `:database`. A global map warned about
+   `:wagoe/cache {:provider :redis-streams}` — a config whose normalizer does
+   not accept it, so `bb doctor --ci` passed and the boot threw
+   :unknown-provider.
+
+   Reported as a warning rather than an error: these configs work, and telling
+   someone their working config is broken is its own defect. Removal no earlier
+   than 2.0 (BOU-436)."
+  {:wagoe/cache    {:in-memory :memory}
+   :wagoe/realtime {:in-memory :memory}
+   :wagoe/jobs     {:in-memory :memory :database :db}
+   :wagoe/events   {:in-memory :memory :redis-streams :redis}})
 
 ;; =============================================================================
 ;; Pure check functions
@@ -121,21 +143,27 @@
 
 (defn check-providers
   "Check that :provider values in the config are known/valid.
-   Accepts parsed EDN config (the :active map)."
+   Accepts parsed EDN config (the :active map).
+
+   A pre-1.0 spelling is a warning, not an error — it still boots."
   [active-config]
-  (let [errors (for [[config-key valid-set] known-providers
-                     :let [provider-val (get-in active-config [config-key :provider])]
-                     :when (and provider-val (not (contains? valid-set provider-val)))]
-                 {:config-key config-key
-                  :value      provider-val
-                  :valid      valid-set})]
-    (if (seq errors)
-      (mapv (fn [{:keys [config-key value valid]}]
-              {:id    :providers
-               :level :error
-               :msg   (str config-key " has unknown provider " value)
-               :fix   (str "Valid providers: " (str/join ", " (sort (map name valid))))})
-            errors)
+  (let [findings (for [[config-key valid-set] known-providers
+                       :let [value (get-in active-config [config-key :provider])
+                             now   (get-in deprecated-providers [config-key value])]
+                       :when (and value (not (contains? valid-set value)))]
+                   (if (contains? valid-set now)
+                     {:id    :providers
+                      :level :warn
+                      :msg   (str config-key " uses the old provider name " value)
+                      :fix   (str "Rename it to " now " — " value
+                                  " is accepted until 2.0 and no longer after")}
+                     {:id    :providers
+                      :level :error
+                      :msg   (str config-key " has unknown provider " value)
+                      :fix   (str "Valid providers: "
+                                  (str/join ", " (sort (map name valid-set))))}))]
+    (if (seq findings)
+      (vec findings)
       [{:id    :providers
         :level :pass
         :msg   "All provider values are known"}])))
@@ -463,20 +491,20 @@
         :msg   (str "Config file not found: " (config-path env))
         :fix   (str "Create " (config-path env) ", or pass --env <profile> for one that exists.")}]
       (let [parsed       (parse-config-minimal config-text)
-          active       (or (:active parsed) {})
-          active-text  (extract-active-section config-text)
-          src-text     (load-app-source-text)
-          dev-admin    (or (list-admin-files "dev") [])
-          test-admin   (or (list-admin-files "test") [])]
-      (concat
-       (check-config-loadable parsed)
-       (check-env-refs active-text env-map)
-       (check-providers active)
-       (check-jwt-secret active env-map)
-       (check-admin-parity dev-admin test-admin)
-       (check-prod-placeholders config-text env)
-       (check-reset-endpoint-flag (or parsed {}) env)
-       (check-upgrade-wiring src-text))))))
+            active       (or (:active parsed) {})
+            active-text  (extract-active-section config-text)
+            src-text     (load-app-source-text)
+            dev-admin    (or (list-admin-files "dev") [])
+            test-admin   (or (list-admin-files "test") [])]
+        (concat
+         (check-config-loadable parsed)
+         (check-env-refs active-text env-map)
+         (check-providers active)
+         (check-jwt-secret active env-map)
+         (check-admin-parity dev-admin test-admin)
+         (check-prod-placeholders config-text env)
+         (check-reset-endpoint-flag (or parsed {}) env)
+         (check-upgrade-wiring src-text))))))
 
 ;; =============================================================================
 ;; Output formatting

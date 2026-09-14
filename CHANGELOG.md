@@ -35,11 +35,16 @@ for what is public API, what is internal, and how deprecations are announced.
   deprecated; use `:wagoe/user-routes` with the top-level `:wagoe/http-handler`.
 - **Ten methods dropped from the user repository ports** (BOU-366), none of which had a
   caller. Delete them from your implementation; `wagoe.user.ports` lists what remains.
+- **An unknown `:provider` on `:wagoe/cache` or `:wagoe/realtime` now throws** (BOU-436).
+  It used to fall back to an in-process adapter, so a typo ran a node-local cache or bus.
 
 ### Deprecated
 
 - **The `:wagoe/admin` and `:wagoe/auth-user-repository` Integrant components** (BOU-346).
   Drop them from hand-written wiring — `:wagoe/admin` in `:active` stays the module switch.
+
+- **`:provider :in-memory`, `:redis-streams` and `:database`** (BOU-436). One vocabulary:
+  `:memory` and `:redis` everywhere, `:db` where a module has one; old names warn until 2.0.
 
 ### Added
 
