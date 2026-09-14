@@ -5,7 +5,7 @@ This document describes how to build and run the Wagoe application as a standalo
 ## Prerequisites
 
 - Clojure CLI tools (1.12+)
-- Java 17 or higher
+- Java 21 or higher
 - Git (for version numbering)
 
 ## Building the Uberjar
@@ -171,7 +171,7 @@ java \
 Create a `Dockerfile`:
 
 ```dockerfile
-FROM eclipse-temurin:17-jre-alpine
+FROM eclipse-temurin:21-jre-alpine
 
 WORKDIR /app
 
@@ -269,7 +269,7 @@ jobs:
       - uses: actions/checkout@v3
       - uses: actions/setup-java@v3
         with:
-          java-version: '17'
+          java-version: '21'
       - uses: DeLaGuardo/setup-clojure@12.5
         with:
           cli: 1.12.4.1597
