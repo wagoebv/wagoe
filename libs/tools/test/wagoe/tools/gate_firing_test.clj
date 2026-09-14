@@ -34,6 +34,8 @@
             [wagoe.tools.check-doc-counts :as check-doc-counts]
             [wagoe.tools.check-versions :as check-versions]
             [wagoe.tools.check-isolation :as check-isolation]
+            [wagoe.tools.check-jdk :as check-jdk]
+            [wagoe.tools.doctor-env :as doctor-env]
             [wagoe.tools.check-error-shape :as check-error-shape]
             [wagoe.tools.check-poms :as check-poms]
             [wagoe.tools.check-ports :as check-ports]
@@ -705,6 +707,36 @@
   (testing "every finding in the tree is on the burn-down list"
     (is (empty? (check-isolation/unexplained-findings)))))
 
+;; =============================================================================
+;; check:jdk
+;; =============================================================================
+
+(deftest ^:unit jdk-gate-fires-test
+  ;; BOU-446. The baseline was written in seven places and four of them
+  ;; disagreed — including the production image, which built and ran 17 while
+  ;; the installer refused anything under 21.
+  (let [stub (fn [m] (fn [path] (get m path)))
+        docker {:path "Dockerfile" :re #"eclipse-temurin:(\d+)" :what "image"}]
+
+    (testing "an older JDK in one location is a finding"
+      (is (= ["Dockerfile"]
+             (map :path (check-jdk/findings 21 [docker]
+                                            (stub {"Dockerfile" "FROM eclipse-temurin:17-jre"}))))))
+
+    (testing "a location that stopped naming a JDK is a finding, not a pass"
+      (is (seq (check-jdk/findings 21 [docker] (stub {"Dockerfile" "FROM debian:bookworm"})))))
+
+    (testing "a location that no longer exists is a finding, not a skip"
+      (is (= ["file not found"]
+             (map :problem (check-jdk/findings 21 [docker] (stub {}))))))
+
+    (testing "the gate reads the real tree, not an empty location list"
+      ;; The BOU-250 shape again: seven locations, all read from disk.
+      (is (<= 7 (count check-jdk/locations)))
+      (is (every? #(.exists (java.io.File. ^String (:path %))) check-jdk/locations))
+      (is (empty? (check-jdk/findings doctor-env/java-min check-jdk/locations
+                                      #(when (.exists (java.io.File. ^String %)) (slurp %))))))))
+
 (def gates-with-firing-tests
   "Gate ids from `check/all-checks` that this namespace proves can still fire.
 
@@ -714,7 +746,7 @@
   #{:hygiene :deps :fcis :placeholder-tests :docs-lint
     :test-meta :test-tags :ports :poms :agents :doctor :linting :no-boundary
     :doc-counts :branch-protection :versions :changelog :isolation
-    :error-shape})
+    :error-shape :jdk})
 
 ;; =============================================================================
 ;; check:error-shape
