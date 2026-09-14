@@ -47,6 +47,10 @@
    "libs/wagoe-cli/resources/wagoe/cli/templates/Dockerfile.tmpl"
    "what `wagoe new` writes"
    "scripts/install.sh"                  "what the installer enforces"
+   ;; Its dev-tools image is a JVM someone develops against. Retagged to
+   ;; `clojure:latest` it would name no version, discovery would find nothing,
+   ;; and this gate would pass while that environment drifted.
+   "docker-compose.yml"                  "the dev-tools container"
    ".github/actions/clojure-deps/action.yml"
    "every CI job that resolves deps"
    ;; Not covered by the action above: example-smoke boots the generated app
@@ -54,7 +58,13 @@
    ;; the job would silently return to the runner default.
    ".github/workflows/ci.yml"            "the CI jobs with their own setup-java"
    ".github/workflows/publish.yml"       "the release build"
-   "BUILD.md"                            "what a user is told to install"})
+   "BUILD.md"                            "what a user is told to install"
+   ;; The pages a newcomer actually reads. BUILD.md was in this set from the
+   ;; start and these were not, which is the same omission one file along.
+   "docs/modules/getting-started/pages/index.adoc"
+   "the quickstart's prerequisites"
+   "docs/modules/getting-started/pages/installation.adoc"
+   "the manual install instructions"})
 
 (def exempt
   "Files that name a JDK for some reason other than the baseline, and why.
