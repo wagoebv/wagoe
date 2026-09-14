@@ -140,7 +140,9 @@
     (let [config (setup/build-config full-spec "test")]
       (is (str/includes? config ":provider :no-op"))    ;; AI
       (is (str/includes? config ":provider :mock"))      ;; Payment
-      (is (str/includes? config ":provider    :in-memory"))))) ;; Cache
+      ;; :memory, not :in-memory — the generator writes the canonical spelling,
+      ;; so a new project does not start out warning about its own config.
+      (is (str/includes? config ":provider    :memory"))))) ;; Cache
 
 ;; =============================================================================
 ;; build-env-example
@@ -366,6 +368,8 @@
    [:payment :stripe]      "com.wagoe/wagoe-payments"
    [:payment :mollie]      "com.wagoe/wagoe-payments"
    [:cache :redis]         "com.wagoe/wagoe-cache"
+   [:cache :memory]        "com.wagoe/wagoe-cache"
+   ;; still accepted, so a script that passes the old spelling keeps working
    [:cache :in-memory]     "com.wagoe/wagoe-cache"
    [:email :smtp]          "com.wagoe/wagoe-external"})
 
@@ -448,3 +452,15 @@
           (str "bb setup regenerates the whole config, so a key it lacks is "
                "un-shipped for anyone who runs it. Missing: "
                (set/difference template setup*))))))
+
+(deftest ^:unit the-generator-never-writes-a-deprecated-provider
+  ;; The generator is the canonical way to write a config, so anything it emits
+  ;; must be what the runtime wants today — not a spelling that boots with a
+  ;; deprecation warning (BOU-436 review).
+  (doseq [cache [:memory :in-memory :redis]
+          env   ["dev" "test"]]
+    (let [config (setup/build-config (assoc full-spec :cache cache) env)]
+      (is (not (str/includes? config ":provider    :in-memory"))
+          (str "--cache " cache " (" env ") wrote the deprecated spelling"))
+      (is (not (str/includes? config ":redis-streams"))
+          (str "--cache " cache " (" env ") wrote the deprecated events spelling")))))

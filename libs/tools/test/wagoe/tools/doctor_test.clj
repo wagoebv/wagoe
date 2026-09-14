@@ -433,3 +433,35 @@
                  (#'doctor/parse-config-minimal
                   "{:active {:wagoe/settings {:name #udf/whatever \"x\"}}}"))]
     (is (= :pass (:level (first results))))))
+
+(deftest ^:unit provider-aliases-match-what-each-module-actually-accepts
+  ;; doctor keeps its own copy of the aliases, because it runs on Babashka and
+  ;; cannot load the libs to ask them — the same copy-drift hazard as
+  ;; :wagoe/ai-service. A global alias map warned about
+  ;; `:wagoe/cache {:provider :redis-streams}`, which cache's normalizer
+  ;; rejects: `bb doctor --ci` passed and the boot threw (BOU-436 review).
+  (let [wiring {:wagoe/cache    "libs/cache/src/wagoe/cache/shell/module_wiring.clj"
+                :wagoe/realtime "libs/realtime/src/wagoe/realtime/shell/module_wiring.clj"
+                :wagoe/events   "libs/events/src/wagoe/events/shell/module_wiring.clj"
+                :wagoe/jobs     "libs/jobs/src/wagoe/jobs/shell/module_wiring.clj"}]
+    (doseq [[k path] wiring]
+      (let [src (or (some #(when (.exists (io/file %)) (slurp %))
+                          [path (str "../../" path)])
+                    (throw (ex-info (str path " not found — cannot compare") {})))
+            ;; The arms of normalize-provider that rename something.
+            accepted (set (map (comp keyword second)
+                               (re-seq #"(?m)^\s+:([a-z-]+)\s+\(do\s+\(log/warn" src)))
+            claimed  (set (keys (get doctor/deprecated-providers k)))]
+
+        (testing (str k " — the source parsed, otherwise this passes vacuously")
+          (is (seq accepted) (str "found no renaming arms in " path)))
+
+        (testing (str k " — doctor claims no alias the module would reject")
+          (is (empty? (clojure.set/difference claimed accepted))
+              (str "doctor accepts " (pr-str (clojure.set/difference claimed accepted))
+                   " for " k ", which its normalizer does not")))
+
+        (testing (str k " — and knows every alias the module accepts")
+          (is (empty? (clojure.set/difference accepted claimed))
+              (str path " accepts " (pr-str (clojure.set/difference accepted claimed))
+                   " which doctor would reject")))))))

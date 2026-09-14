@@ -44,14 +44,21 @@
    :wagoe/events           #{:redis :memory}})
 
 (def deprecated-providers
-  "Pre-1.0 spellings each module still accepts, and what they mean now.
+  "Pre-1.0 spellings, per component, and what they mean now.
 
-   Reported as a warning rather than an error: the config works, and telling
+   Per component, not global: only events ever spelled Redis `:redis-streams`,
+   and only jobs spelled the database `:database`. A global map warned about
+   `:wagoe/cache {:provider :redis-streams}` — a config whose normalizer does
+   not accept it, so `bb doctor --ci` passed and the boot threw
+   :unknown-provider.
+
+   Reported as a warning rather than an error: these configs work, and telling
    someone their working config is broken is its own defect. Removal no earlier
    than 2.0 (BOU-436)."
-  {:in-memory     :memory
-   :redis-streams :redis
-   :database      :db})
+  {:wagoe/cache    {:in-memory :memory}
+   :wagoe/realtime {:in-memory :memory}
+   :wagoe/jobs     {:in-memory :memory :database :db}
+   :wagoe/events   {:in-memory :memory :redis-streams :redis}})
 
 ;; =============================================================================
 ;; Pure check functions
@@ -141,7 +148,7 @@
   [active-config]
   (let [findings (for [[config-key valid-set] known-providers
                        :let [value (get-in active-config [config-key :provider])
-                             now   (get deprecated-providers value)]
+                             now   (get-in deprecated-providers [config-key value])]
                        :when (and value (not (contains? valid-set value)))]
                    (if (contains? valid-set now)
                      {:id    :providers
