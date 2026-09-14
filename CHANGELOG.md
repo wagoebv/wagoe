@@ -69,6 +69,9 @@ for what is public API, what is internal, and how deprecations are announced.
 - **The production image built and ran on JDK 17** (BOU-446), while the installer
   demanded 21. Java 21 is the baseline everywhere; rebuild your images.
 
+- **A locally built library jar could carry a previous build's namespaces** (BOU-445).
+  `jar` now cleans first; the published artifacts were checked and are unaffected.
+
 - **`bb upgrade-outdated` under-reported drift** (BOU-474). It read an index that lags,
   hiding the H2, MySQL, PostgreSQL and SQLite drivers; prereleases are no longer offered.
 - **The S3 adapter threw on every S3-compatible endpoint** (BOU-444). MinIO, Spaces and
