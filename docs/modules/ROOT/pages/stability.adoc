@@ -27,6 +27,12 @@ in beta, and the honest summary is that *no API is frozen yet*.
 
 | Versioning
 | Lockstep — every library carries the same version and is released together
+
+| Java baseline
+| JDK 21. Not a recommendation: the installer refuses an older JDK, the images
+  build and run on 21, and every CI job that starts a JVM uses it.
+  `bb check:jdk` holds those to one number, so a JDK written in one place and
+  not another cannot ship.
 |===
 
 Lockstep versioning means you never have to work out which `wagoe-user` goes

@@ -741,7 +741,7 @@ clojure -M:test --focus wagoe.jobs.shell.tenant-context-test
 
 **Dockerfile:**
 ```dockerfile
-FROM clojure:temurin-17-tools-deps
+FROM clojure:temurin-21-tools-deps
 
 WORKDIR /app
 COPY . .
