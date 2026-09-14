@@ -7,6 +7,7 @@
             [clojure.java.io :as io]
             [clojure.string :as str]
             [babashka.http-client]
+            [babashka.process]
             [wagoe.tools.deploy :as deploy]))
 
 (deftest ^:unit artifact-name-test
@@ -146,3 +147,28 @@
   (testing "a compiled class from somewhere else counts too"
     (is (= ["other/Thing.class"]
            (deploy/foreign-code-entries ["wagoe/core.clj" "other/Thing.class"])))))
+
+(deftest ^:unit no-deploy-path-can-publish-a-patch-prerelease
+  ;; --check-versions is the workflow's guard, and `bb deploy --all`,
+  ;; `--missing` and a named library never reach it: they publish straight from
+  ;; build.clj. A Clojars coordinate cannot be withdrawn, so each path has to
+  ;; refuse before it builds (BOU-435 review).
+  (testing "the guard fires on the shape that caused it"
+    (doseq [v ["1.0.1-alpha-1" "1.0.1-beta-3" "2.3.7-rc-1"]]
+      (is (thrown? Throwable (deploy/refuse-patch-prerelease! v "test"))
+          (str v " was allowed through"))))
+
+  (testing "and passes what may be published"
+    (doseq [v ["1.0.0-beta-9" "1.0.0-rc-1" "1.1.0-alpha-1" "1.0.1" "2.0.0"]]
+      (is (nil? (deploy/refuse-patch-prerelease! v "test"))
+          (str v " was refused"))))
+
+  (testing "deploy-lib! consults it before shelling out to the build"
+    ;; Asserted through deploy-lib!, not by reading the source: the first
+    ;; version of this guard existed and was reachable from one command only.
+    (with-redefs [deploy/read-version (constantly "1.0.1-alpha-1")]
+      (let [shelled (atom [])]
+        (with-redefs [babashka.process/shell (fn [& args] (swap! shelled conj args) nil)]
+          (is (thrown? Throwable (deploy/deploy-lib! "core"))))
+        (is (empty? @shelled)
+            "it shelled out to the build before refusing the version")))))
