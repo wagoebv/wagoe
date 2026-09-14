@@ -25,15 +25,27 @@
             [wagoe.tools.doctor-env :as doctor-env]))
 
 (def jdk-re
-  "Every way this repository names a JDK version.
+  "Every way this repository names a JDK version, digit last.
 
    One pattern, because a gate with a narrow pattern per file stops looking the
    moment a file says it a new way — BUILD.md said 17 in three spellings.
 
    The quote around a YAML scalar is optional: `java-version: 17` is valid and
    `actions/setup-java` accepts it, and requiring the quote made that spelling
-   invisible."
-  #"(?:clojure:temurin-|clojure:openjdk-|eclipse-temurin:|java-version:\s*[\"']?|JAVA_MIN=|Java |JDK )(\d+)")
+   invisible. The package forms are here because installation.adoc tells four
+   package managers which JDK to install, and each spells it differently —
+   `openjdk@21`, `openjdk-21-jdk`, `openjdk21` — so all four could have drifted
+   under prose that still said 21."
+  #"(?:clojure:temurin-|clojure:openjdk-|eclipse-temurin:|java-version:\s*[\"']?|JAVA_MIN=|Java |JDK |openjdk@|openjdk-|openjdk|temurin@)(\d+)")
+
+(def jdk-infix-re
+  "The one package spelling that puts the version in the middle:
+   `java-21-openjdk` (dnf/yum)."
+  #"java-(\d+)-openjdk")
+
+(def patterns
+  "Read with all of these, because no single regex covers both digit positions."
+  [jdk-re jdk-infix-re])
 
 (def must-name-a-jdk
   "Files that have to pin the baseline, not merely agree with it.
@@ -106,18 +118,19 @@
    "dev-docs/reference/launch/" "launch material, written for one moment"})
 
 (def overrides
-  "Per-file patterns, where the shared one reads something that is not a pin."
-  {"scripts/install.sh" #"JAVA_MIN=(\d+)"})
+  "Per-file patterns, where the shared ones read something that is not a pin."
+  {"scripts/install.sh" [#"JAVA_MIN=(\d+)"]})
 
 (defn- exempt? [path]
   (or (contains? exempt path)
       (some (fn [[prefix _]] (str/starts-with? path prefix)) exempt-prefixes)))
 
 (defn versions-in
-  "Every JDK major named in `content`, using `path`'s pattern."
+  "Every JDK major named in `content`, using `path`'s patterns."
   [path content]
-  (->> (re-seq (get overrides path jdk-re) content)
-       (map (comp parse-long second))))
+  (for [re (get overrides path patterns)
+        m  (re-seq re content)]
+    (parse-long (second m))))
 
 (defn tracked-files
   "Every file git tracks.

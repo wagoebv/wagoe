@@ -103,9 +103,22 @@
                          ["old image"   "image: clojure:openjdk-17-tools-deps"]
                          ["workflow"    "          java-version: '17'"]
                          ["workflow"    "          java-version: \"17\""]
-                         ["installer"   "JAVA_MIN=17"]]]
+                         ["installer"   "JAVA_MIN=17"]
+                         ;; installation.adoc tells four package managers which
+                         ;; JDK to install, each in its own spelling. All four
+                         ;; could have drifted under prose that still said 21.
+                         ["brew"        "brew install openjdk@17 clojure"]
+                         ["apt"         "sudo apt-get install -y openjdk-17-jdk"]
+                         ["scoop"       "scoop install openjdk17"]
+                         ["brew cask"   "brew install temurin@17"]]]
       (is (= [17] (check-jdk/versions-in "any/file" text))
           (str what " went unread: " text))))
+
+  (testing "the one spelling with the version in the middle"
+    ;; dnf: java-21-openjdk. The digit is not last, so it needs its own pattern.
+    (is (= [17 17] (check-jdk/versions-in
+                    "docs/x.adoc"
+                    "dnf install -y java-17-openjdk java-17-openjdk-devel"))))
 
   (testing "a file may override the shared pattern"
     ;; install.sh explains that a JDK before Java 9 spells its version
