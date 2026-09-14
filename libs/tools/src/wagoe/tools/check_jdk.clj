@@ -28,8 +28,12 @@
   "Every way this repository names a JDK version.
 
    One pattern, because a gate with a narrow pattern per file stops looking the
-   moment a file says it a new way — BUILD.md said 17 in three spellings."
-  #"(?:clojure:temurin-|clojure:openjdk-|eclipse-temurin:|java-version:\s*[\"']|JAVA_MIN=|Java |JDK )(\d+)")
+   moment a file says it a new way — BUILD.md said 17 in three spellings.
+
+   The quote around a YAML scalar is optional: `java-version: 17` is valid and
+   `actions/setup-java` accepts it, and requiring the quote made that spelling
+   invisible."
+  #"(?:clojure:temurin-|clojure:openjdk-|eclipse-temurin:|java-version:\s*[\"']?|JAVA_MIN=|Java |JDK )(\d+)")
 
 (def must-name-a-jdk
   "Files that have to pin the baseline, not merely agree with it.
@@ -45,6 +49,10 @@
    "scripts/install.sh"                  "what the installer enforces"
    ".github/actions/clojure-deps/action.yml"
    "every CI job that resolves deps"
+   ;; Not covered by the action above: example-smoke boots the generated app
+   ;; and sets up its own JDK. Without this entry that pin could be deleted and
+   ;; the job would silently return to the runner default.
+   ".github/workflows/ci.yml"            "the CI jobs with their own setup-java"
    ".github/workflows/publish.yml"       "the release build"
    "BUILD.md"                            "what a user is told to install"})
 
@@ -56,8 +64,8 @@
   {"CHANGELOG.md"
    "records which JDK past releases ran on"
 
-   "scripts/install.sh"
-   "explains that a JDK before Java 9 spells its version 1.8.0_402; :re below reads JAVA_MIN"
+   "dev-docs/scaling-guide.adoc"
+   "says which JDK made a JVM flag the default — a fact about the JVM, not an instruction"
 
    "scripts/first-run-preconditions.sh"
    "asserts the installer REFUSES an older JDK — the old number is the fixture"
@@ -78,9 +86,14 @@
    "fixture prose that happens to contain a version-shaped phrase"})
 
 (def exempt-prefixes
-  "Whole trees that describe what was true when they were written."
-  {"dev-docs/"         "ADRs, talks and launch material are historical"
-   "docs/superpowers/" "delivered specs, not instructions"})
+  "Whole trees that describe what was true when they were written.
+
+   Deliberately narrower than `dev-docs/`: that tree also holds operator
+   instructions — a deployment snippet added to `dev-docs/reference/` is a real
+   instruction, and a blanket exemption would hide it."
+  {"dev-docs/adr/"              "decision records describe the state at the time"
+   "dev-docs/presentations/"    "delivered talks"
+   "dev-docs/reference/launch/" "launch material, written for one moment"})
 
 (def overrides
   "Per-file patterns, where the shared one reads something that is not a pin."
@@ -118,8 +131,9 @@
 (defn findings
   "Everything that disagrees with `expected`, given a file list and a reader.
 
-   Three kinds: a scanned file naming another JDK, a file that must pin one and
-   does not, and an exemption that no longer matches anything."
+   Four kinds: a scanned file naming another JDK, a file that must pin one and
+   does not, and an exemption — file or prefix — that no longer matches
+   anything."
   [expected files read-file]
   (let [scanned  (for [path  files
                        :when (not (exempt? path))
@@ -144,8 +158,19 @@
                        :when (or (nil? content)
                                  (empty? (versions-in path content)))]
                    {:path path :what why
-                    :problem "exempt, but no longer names a JDK — drop the exemption"})]
-    (vec (concat scanned unpinned stale))))
+                    :problem "exempt, but no longer names a JDK — drop the exemption"})
+        ;; The same burn-down for whole trees. Without it a prefix could go on
+        ;; exempting nothing, which is a claim about files that have moved.
+        stale-prefixes (for [[prefix why] exempt-prefixes
+                             :when (not-any? (fn [path]
+                                               (and (str/starts-with? path prefix)
+                                                    (some-> (read-file path)
+                                                            (->> (versions-in path))
+                                                            seq)))
+                                             files)]
+                         {:path prefix :what why
+                          :problem "exempt prefix, but nothing under it names a JDK — drop it"})]
+    (vec (concat scanned unpinned stale stale-prefixes))))
 
 (defn -main [& _args]
   (let [expected doctor-env/java-min

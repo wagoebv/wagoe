@@ -585,3 +585,18 @@
             (str (name job-name) " runs clojure in " d
                  " but warms " (pr-str warmed)
                  " — that resolution is not the retried one"))))))
+
+(deftest ^:unit the-documented-number-of-checks-is-the-real-one
+  ;; AGENTS.md says how many gates `bb check` runs. It said 19 the moment
+  ;; check:jdk made it 20, and nothing was watching the number (BOU-446 review).
+  (let [agents (or (some #(when (.exists (io/file %)) (slurp %))
+                         ["AGENTS.md" "../../AGENTS.md"])
+                   (throw (ex-info "AGENTS.md not found — cannot compare" {})))
+        stated (some-> (re-find #"`bb check` runs the full set — currently (\d+)" agents)
+                       second
+                       parse-long)]
+    (is (some? stated)
+        "AGENTS.md no longer states a check count in the shape this reads — update both")
+    (is (= (count check/all-checks) stated)
+        (str "AGENTS.md says " stated " checks; all-checks has "
+             (count check/all-checks)))))

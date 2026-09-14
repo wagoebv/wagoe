@@ -722,19 +722,25 @@
                        (zipmap (keys check-jdk/exempt) (repeat "Java 17"))
                        ;; install.sh is in both sets, and its pattern reads
                        ;; JAVA_MIN rather than prose.
-                       {"scripts/install.sh" "JAVA_MIN=21\n# and Java 8 before that"})]
+                       {"scripts/install.sh" "JAVA_MIN=21\n# and Java 8 before that"}
+                       ;; One file under each exempt prefix: a prefix that
+                       ;; exempts nothing is a finding of its own.
+                       (zipmap (map #(str % "x.adoc") (keys check-jdk/exempt-prefixes))
+                               (repeat "Java 17")))
+        prefixed (fn [& paths] (into (mapv #(str % "x.adoc") (keys check-jdk/exempt-prefixes))
+                                     paths))]
 
     (testing "a discovered file naming an older JDK is a finding"
       (is (= ["some/Dockerfile"]
              (map :path (check-jdk/findings
-                         21 ["some/Dockerfile"]
+                         21 (prefixed "some/Dockerfile")
                          (stub (assoc healthy "some/Dockerfile" "FROM eclipse-temurin:17-jre")))))))
 
     (testing "a file that must pin one and stopped is a finding, not a pass"
       ;; Discovery cannot see this: no match reads as nothing to check.
       (is (= [".github/workflows/publish.yml"]
              (map :path (check-jdk/findings
-                         21 []
+                         21 (prefixed)
                          (stub (assoc healthy ".github/workflows/publish.yml" "steps: []")))))))
 
     (testing "the gate discovers the real tree, not an empty file list"
