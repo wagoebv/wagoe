@@ -203,6 +203,7 @@ rather than a commit message.
 * Deprecated vars carry `^:deprecated` metadata with a pointer to the
   replacement, so your editor and `clj-kondo` can flag them.
 
+[#tiers]
 === Not every library, though: tiers
 
 The promise above covers *stable* libraries. A second tier, *incubating*, is

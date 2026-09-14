@@ -20,13 +20,18 @@ A port is for getting an answer; this is for the other case.
 
 ## Features
 
-| Feature | Description |
-|---------|-------------|
-| **Two adapters** | `:memory` for one process, `:redis` (Redis Streams) across replicas |
-| **At-least-once** | An event is redelivered until acknowledged, so consumers must be idempotent |
-| **Consumer groups** | Each event reaches exactly one member of a group, and every group |
-| **Dead-letter** | After `:max-deliveries` an event is moved to `<stream>:dead` rather than stalling its topic |
-| **History** | `IEventHistory` replays what a topic has seen, within stream retention |
+| Feature | Adapter | Description |
+|---------|---------|-------------|
+| **Two adapters** | both | `:memory` for one process, `:redis` (Redis Streams) across replicas |
+| **At-least-once** | `:redis` | An event is redelivered until acknowledged, so consumers must be idempotent |
+| **Consumer groups** | `:redis` | Each event reaches exactly one member of a group, and every group |
+| **Dead-letter** | `:redis` | After `:max-deliveries` an event is moved to `<stream>:dead` rather than stalling its topic |
+| **History** | both | `IEventHistory` replays what a topic has seen — within stream retention, or the in-process buffer |
+
+Under `:memory` there is no acknowledgement and no retry: a handler that throws
+is logged and the event is dropped, and nothing survives the process. That is
+the right trade for a test or a single node, and the wrong one to build on —
+use `:redis` where delivery has to be reliable.
 
 ## Quick Start
 
