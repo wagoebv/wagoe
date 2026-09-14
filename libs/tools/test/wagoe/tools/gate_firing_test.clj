@@ -802,6 +802,20 @@
                 "== After 1.0.0\n* Deployment topologies for reference\n"
                 "* ✅ *Deploy topology reference* — done.\n"))))
 
+    (testing "a title split across a wrapped bullet is still a finding"
+      ;; Reading line by line missed this: neither half carries every word, and
+      ;; a roadmap bullet longer than a line is wrapped as a matter of course.
+      (let [f (check-roadmap/stale-findings
+               "== After 1.0.0\n* A service launch\n  mode that boots a named subset\n"
+               scaling)]
+        (is (= ["Service launch mode"] (map :title f)))
+        (is (= [2] (map :line f)) "reported at the line the entry starts on")))
+
+    (testing "a blank line ends an entry, so two paragraphs do not merge"
+      (is (empty? (check-roadmap/stale-findings
+                   "== After 1.0.0\n* A service launch\n\nmode that boots a named subset\n"
+                   scaling))))
+
     (testing "an unrelated line is not"
       (is (empty? (check-roadmap/stale-findings
                    "== After 1.0.0\n* A forms library with validation\n"

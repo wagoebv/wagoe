@@ -93,13 +93,13 @@
              (< (count long) (* 2 (count short)))))))
 
 (defn line-claims?
-  "True when `line` says the same thing as `title`.
+  "True when `text` says the same thing as `title`.
 
    Every significant word of the title must be present. A partial overlap is how
-   a gate like this starts reporting any line about adapters."
-  [title line]
-  (let [line-words (significant-words line)]
-    (every? (fn [w] (some #(word-match? w %) line-words))
+   a gate like this starts reporting any entry about adapters."
+  [title text]
+  (let [words (significant-words text)]
+    (every? (fn [w] (some #(word-match? w %) words))
             (significant-words title))))
 
 (defn future-section
@@ -117,6 +117,37 @@
       (remove (fn [[n _]] (and (>= n start) (or (nil? end) (< n end)))) lines)
       lines)))
 
+(defn continuation?
+  "True when `line` continues the entry above rather than starting one.
+
+   AsciiDoc wraps a list item onto indented lines carrying no marker of their
+   own, which is how every bullet on the roadmap longer than a line is written."
+  [line]
+  (and (not (str/blank? line))
+       (not (re-find #"^\s*(?:[*.]{1,5}\s|-\s|\||=|\[|//)" line))))
+
+(defn entries
+  "`[line-number line]` pairs folded into the entries they belong to.
+
+   Matching line by line missed a title split across a wrap: `* A service
+   launch` / `mode that boots …` contains every word of `Service launch mode`
+   and neither of its lines does. A blank line ends an entry, so a wrapped
+   bullet joins up and two unrelated paragraphs do not."
+  [numbered]
+  (->> numbered
+       (reduce (fn [acc [n line]]
+                 (cond
+                   (str/blank? line)
+                   (conj acc nil)
+
+                   (and (some? (peek acc)) (continuation? line))
+                   (update acc (dec (count acc)) update :text str " " (str/trim line))
+
+                   :else
+                   (conj acc {:line n :text (str/trim line)})))
+               [])
+       (keep identity)))
+
 (defn shipped-titles
   "The titles scaling.adoc marks ✅, deduplicated.
 
@@ -127,12 +158,12 @@
   (distinct (map second (re-seq shipped-entry-re scaling))))
 
 (defn stale-findings
-  "Lines of `roadmap` that plan something `scaling` says is shipped."
+  "Entries of `roadmap` that plan something `scaling` says is shipped."
   [roadmap scaling]
   (for [title (shipped-titles scaling)
-        [n line] (future-section roadmap)
-        :when (and (seq (str/trim line)) (line-claims? title line))]
-    {:rule :stale :line n :title title :context (str/trim line)}))
+        {:keys [line text]} (entries (future-section roadmap))
+        :when (and (seq text) (line-claims? title text))]
+    {:rule :stale :line line :title title :context text}))
 
 ;; =============================================================================
 ;; Rule 2 — one roadmap, and the rest are redirects
@@ -190,7 +221,10 @@
   (println (str "  " (ansi/bold path) ":" line))
   (println (str "    plans " (ansi/red title)
                 ", which " shipped-source " marks ✅ shipped"))
-  (println (str "    " (ansi/dim context))))
+  ;; A wrapped bullet is one entry, so the context can be several lines long.
+  (println (str "    " (ansi/dim (if (> (count context) 100)
+                                   (str (subs context 0 100) "…")
+                                   context)))))
 
 (defn- report-duplicate [{:keys [path lines points-here?]}]
   (println (str "  " (ansi/bold path)))
