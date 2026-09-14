@@ -32,6 +32,16 @@ inputs:
 runs:
   using: composite
   steps:
+    # Pinned here rather than per job: only `e2e` set up a JDK at all, so the
+    # other jobs ran on whatever the runner image happens to default to — which
+    # is not the baseline the installer, the Dockerfiles and `wagoe doctor`
+    # require. `bb check:jdk` holds this number to the rest (BOU-446).
+    - name: Setup Java
+      uses: actions/setup-java@v5
+      with:
+        distribution: temurin
+        java-version: "21"
+
     - name: Setup Clojure
       uses: DeLaGuardo/setup-clojure@13.6.1
       with:

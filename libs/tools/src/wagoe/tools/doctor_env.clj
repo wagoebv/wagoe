@@ -64,8 +64,16 @@
 ;; Pure check functions
 ;; =============================================================================
 
+(def java-min
+  "The JDK major version Wagoe requires.
+
+   The one place the baseline is written as a value rather than as text;
+   `bb check:jdk` reads it from here and holds every Dockerfile, workflow and
+   installer to it. Four of those disagreed before it existed (BOU-446)."
+  21)
+
 (defn check-java
-  "Verify Java >= 17 is installed."
+  "Verify Java >= `java-min` is installed."
   []
   (let [;; java -version prints to stderr
         stderr (run-cmd-stderr "java" "-version")
@@ -74,18 +82,20 @@
     (if-not output
       {:id :java :level :error
        :msg "Java not found"
-       :fix "Install Java 17+: https://adoptium.net/ or `brew install openjdk@17`"}
+       :fix (str "Install Java " java-min "+: https://adoptium.net/ or "
+                 "`brew install openjdk@" java-min "`")}
       (let [major (parse-version output #"(?:version\s+\"?)(\d+)")]
         (cond
           (nil? major)
           {:id :java :level :warn
            :msg (str "Java found but could not parse version: " (first (str/split-lines output)))
-           :fix "Ensure Java >= 17 is installed"}
+           :fix (str "Ensure Java >= " java-min " is installed")}
 
-          (< major 17)
+          (< major java-min)
           {:id :java :level :error
-           :msg (str "Java " major " found, but >= 17 is required")
-           :fix "Upgrade Java: https://adoptium.net/ or `brew install openjdk@17`"}
+           :msg (str "Java " major " found, but >= " java-min " is required")
+           :fix (str "Upgrade Java: https://adoptium.net/ or "
+                     "`brew install openjdk@" java-min "`")}
 
           :else
           {:id :java :level :pass

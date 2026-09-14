@@ -11,7 +11,7 @@
 # =============================================================================
 # Build stage — produce target/wagoe-<version>-standalone.jar
 # =============================================================================
-FROM clojure:temurin-17-tools-deps AS builder
+FROM clojure:temurin-21-tools-deps AS builder
 
 WORKDIR /app
 
@@ -29,7 +29,7 @@ RUN clojure -T:build uber
 # =============================================================================
 # Runtime stage — slim JRE, non-root, no build tooling
 # =============================================================================
-FROM eclipse-temurin:17-jre AS runtime
+FROM eclipse-temurin:21-jre AS runtime
 
 # curl only, for the container HEALTHCHECK.
 RUN apt-get update \
