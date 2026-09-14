@@ -85,7 +85,8 @@
 
 (defn normalize-provider
   "The provider keyword in the vocabulary cache, realtime, events and jobs
-   share: `:memory` | `:redis` | `:db`.
+   share: `:memory` | `:redis`, and `:db` — which this is the only module to
+   have, because it is the only one with a database adapter.
 
    Jobs already spelled it this way; `:in-memory` and `:database` are accepted
    because the other three modules used them, and a user moving between config

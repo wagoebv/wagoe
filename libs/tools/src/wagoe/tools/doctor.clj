@@ -34,7 +34,8 @@
    ;; worked. A test pins the two together (BOU-281).
    :wagoe/ai-service       #{:ollama :anthropic :openai :replicate :no-op}
    ;; One vocabulary for the four modules that choose a backend rather than a
-   ;; vendor: :memory | :redis | :db (BOU-436).
+   ;; vendor. :memory and :redis everywhere; :db only where a module has a
+   ;; database adapter, which is jobs (BOU-436).
    :wagoe/cache            #{:redis :memory}
    :wagoe/realtime         #{:redis :memory}
    :wagoe/jobs             #{:redis :memory :db}

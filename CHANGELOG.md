@@ -43,8 +43,8 @@ for what is public API, what is internal, and how deprecations are announced.
 - **The `:wagoe/admin` and `:wagoe/auth-user-repository` Integrant components** (BOU-346).
   Drop them from hand-written wiring — `:wagoe/admin` in `:active` stays the module switch.
 
-- **`:provider :in-memory`, `:redis-streams` and `:database`** (BOU-436). Cache, realtime,
-  events and jobs all take `:memory` | `:redis` | `:db`; the old names warn until 2.0.
+- **`:provider :in-memory`, `:redis-streams` and `:database`** (BOU-436). One vocabulary:
+  `:memory` and `:redis` everywhere, `:db` where a module has one; old names warn until 2.0.
 
 ### Added
 

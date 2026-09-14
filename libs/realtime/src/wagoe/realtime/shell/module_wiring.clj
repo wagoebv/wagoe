@@ -33,7 +33,8 @@
 
 (defn normalize-provider
   "The provider keyword in the vocabulary cache, realtime, events and jobs
-   share: `:memory` | `:redis` | `:db`.
+   share. This module implements `:memory` | `:redis`; `:db` exists only where a
+   module has a database adapter.
 
    `:in-memory` is accepted as `:memory` and warns. Removal no earlier than 2.0
    (BOU-436). nil keeps the documented default, which is in-process."

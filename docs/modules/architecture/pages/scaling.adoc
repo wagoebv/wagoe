@@ -64,9 +64,10 @@ concrete adapter. That seam is the scaling lever: swap an in-process adapter for
 a *distributed* one — Redis, a queue, a remote service — without touching the
 functional core.
 
-Several libraries already ship both adapters, and they select one the same
-way: `:provider :memory | :redis | :db`. The pre-1.0 spellings — `:in-memory`,
-`:redis-streams`, `:database` — still work and warn (BOU-436):
+Several libraries already ship both adapters, and they select one the same way.
+`:memory` and `:redis` mean the same thing in each; `:db` exists where a module
+has a database adapter, which today is jobs alone. The pre-1.0 spellings —
+`:in-memory`, `:redis-streams`, `:database` — still work and warn (BOU-436):
 
 [source,clojure]
 ----
