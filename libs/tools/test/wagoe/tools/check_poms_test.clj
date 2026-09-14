@@ -160,3 +160,35 @@
     (let [results [{:lib "e2e" :publishable? false :wagoe-deps [(dep-entry 'wagoe/user)]}
                    {:lib "user" :publishable? true :wagoe-deps []}]]
       (is (empty? (poms/unpublishable-deps results))))))
+
+;; ---------------------------------------------------------------------------
+;; jar-cleans-first? — regression mode D (no stale target/classes in a jar)
+;; ---------------------------------------------------------------------------
+
+(deftest ^:unit jar-must-empty-target-before-packaging-it
+  (testing "the shape every lib now has"
+    (is (poms/jar-cleans-first?
+         "(defn clean [_] (b/delete {:path \"target\"}))\n(defn jar [_]\n  (clean nil)\n  (b/copy-dir {}))")))
+
+  (testing "a comment between the arglist and the call is fine"
+    (is (poms/jar-cleans-first?
+         "(defn jar [_]\n  ;; why\n  (clean nil)\n  (b/copy-dir {}))")))
+
+  (testing "deleting the directory inline counts too"
+    (is (poms/jar-cleans-first?
+         "(defn jar [_]\n  (b/delete {:path \"target\"})\n  (b/copy-dir {}))")))
+
+  (testing "the shape that shipped 322 stale sources: clean exists, jar never calls it"
+    (is (not (poms/jar-cleans-first?
+              "(defn clean [_] (b/delete {:path \"target\"}))\n(defn jar [_]\n  (b/copy-dir {}))"))))
+
+  (testing "cleaning after copy-dir is not cleaning — the merge already happened"
+    (is (not (poms/jar-cleans-first?
+              "(defn jar [_]\n  (b/copy-dir {})\n  (clean nil))")))))
+
+(deftest ^:unit every-publishable-lib-cleans-before-packaging
+  ;; Against the real tree, so a lib added later without the call is caught
+  ;; here and not on Clojars.
+  (let [results (map poms/check-lib (#'poms/lib-dirs))]
+    (is (seq (filter :publishable? results)) "no publishable libs found — this would pass vacuously")
+    (is (empty? (map :lib (filter :stale-risk? results))))))

@@ -128,6 +128,26 @@
       (is (str/includes? src "wagoe.tools.deploy")
           "scripts/deploy.clj should delegate to the canonical namespace"))))
 
+(deftest ^:unit a-jar-may-only-carry-its-own-code
+  (testing "the pre-rename tree a stale target/classes packages beside the current one"
+    (is (= ["boundary/core/validation.clj" "boundary/user/ports.clj"]
+           (deploy/foreign-code-entries
+            ["META-INF/MANIFEST.MF" "wagoe/core/validation.clj"
+             "boundary/user/ports.clj" "boundary/core/validation.clj"]))))
+
+  (testing "resources are not code — these are shipped on purpose"
+    ;; ui-style ships public/ and tailwind/, devtools a dashboard/, wagoe-mcp a
+    ;; logback.xml. Verified against the published beta-8 jars, which the rule
+    ;; must not reject.
+    (is (empty? (deploy/foreign-code-entries
+                 ["META-INF/maven/com.wagoe/wagoe-ui-style/pom.xml"
+                  "public/css/pilot.css" "tailwind/input.css" "logback.xml"
+                  "dashboard/index.html" "wagoe/ui_style/core.clj"]))))
+
+  (testing "a compiled class from somewhere else counts too"
+    (is (= ["other/Thing.class"]
+           (deploy/foreign-code-entries ["wagoe/core.clj" "other/Thing.class"])))))
+
 (deftest ^:unit no-deploy-path-can-publish-a-patch-prerelease
   ;; --check-versions is the workflow's guard, and `bb deploy --all`,
   ;; `--missing` and a named library never reach it: they publish straight from
