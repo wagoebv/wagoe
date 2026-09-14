@@ -32,25 +32,42 @@
               ^String (when-not (str/blank? (str password)) password)
               ^int (int (or database 0))))
 
+(defn normalize-provider
+  "The provider keyword in the vocabulary cache, realtime, events and jobs
+   share: `:memory` | `:redis` | `:db`.
+
+   `:redis-streams` and `:in-memory` are the pre-1.0 spellings; both are
+   accepted and warn. Removal no earlier than 2.0 (BOU-436). nil is left alone
+   so it still throws: this module has never had a default, because picking one
+   silently would decide whether events survive a restart."
+  [provider]
+  (case provider
+    :redis-streams (do (log/warn "Events :provider :redis-streams is now spelled :redis")
+                       :redis)
+    :in-memory (do (log/warn "Events :provider :in-memory is now spelled :memory")
+                   :memory)
+    provider))
+
 (defmethod ig/init-key :wagoe/events
   [_ {:keys [provider] :as config}]
   (log/info "Initializing event bus" {:provider provider})
-  (let [bus (case provider
-              :redis-streams (redis-streams/create-redis-streams-bus
-                              (redis-pool config)
+  (let [provider (normalize-provider provider)
+        bus (case provider
+              :redis (redis-streams/create-redis-streams-bus
+                      (redis-pool config)
                               ;; Every documented knob, not a subset. Dropping
                               ;; :max-deliveries here meant a config that asked
                               ;; to retry forever silently dead-lettered after
                               ;; five attempts — the documentation and the
                               ;; behaviour disagreeing, with nothing to say so.
-                              (select-keys config [:prefix :group :max-len
-                                                   :max-deliveries :min-idle-ms]))
-              :in-memory     (in-memory/create-in-memory-bus
-                              (select-keys config [:history-limit]))
+                      (select-keys config [:prefix :group :max-len
+                                           :max-deliveries :min-idle-ms]))
+              :memory (in-memory/create-in-memory-bus
+                       (select-keys config [:history-limit]))
               (throw (ex-info (str "Unknown event bus provider: " (pr-str provider))
                               {:type     :unknown-provider
                                :provider provider
-                               :known    [:redis-streams :in-memory]})))]
+                               :known    [:memory :redis]})))]
     (log/info "Event bus initialized" {:provider provider})
     (assoc bus :wagoe.events/provider provider)))
 
@@ -58,8 +75,11 @@
   [_ bus]
   (when bus
     (log/info "Stopping event bus")
+    ;; The normalised provider, which is what init stored — dispatching on the
+    ;; configured spelling here would have skipped the pool close for anyone
+    ;; still writing :redis-streams.
     (case (:wagoe.events/provider bus)
-      :redis-streams
+      :redis
       (do (redis-streams/stop! bus)
           ;; This namespace made the pool, so this namespace closes it.
           ;; Without it every `ig-repl/reset` and every service restart leaves
@@ -70,5 +90,5 @@
                  (catch Exception e
                    (log/warn e "could not close the event bus Redis pool")))))
 
-      :in-memory (in-memory/stop! bus)
+      :memory (in-memory/stop! bus)
       nil)))

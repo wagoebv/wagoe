@@ -101,7 +101,7 @@ Summary: 4 passed, 1 warning, 1 error
  :wagoe/error-reporting  #{:no-op :sentry}
  :wagoe/payment-provider #{:mock :mollie :stripe}
  :wagoe/ai-service       #{:ollama :anthropic :openai :no-op}
- :wagoe/cache            #{:redis :in-memory}}
+ :wagoe/cache            #{:redis :memory}}
 ```
 
 **CI integration example** (GitHub Actions):

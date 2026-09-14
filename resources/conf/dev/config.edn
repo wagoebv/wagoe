@@ -221,7 +221,7 @@
  :inactive
  {;; Cache configuration — move :wagoe/cache to :active to enable Redis caching.
   ;; Requires a Redis instance (e.g. `docker run -p 6379:6379 redis:7-alpine`).
-  ;; With :in-memory provider no Redis is needed (useful for local dev without Docker).
+  ;; With the :memory provider no Redis is needed (useful for local dev without Docker).
   :wagoe/cache
   {:provider    :redis
    :host        #or [#env REDIS_HOST "localhost"]

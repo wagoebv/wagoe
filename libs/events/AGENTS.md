@@ -49,7 +49,7 @@ wants a port call, not an event.
 ```clojure
 ;; config.edn — under :active
 :wagoe/events
-{:provider       :redis-streams
+{:provider       :redis
  :host           #env REDIS_HOST
  :port           #long #or [#env REDIS_PORT 6379]
  :password       #env REDIS_PASSWORD
@@ -60,7 +60,7 @@ wants a port call, not an event.
 
 ;; test / single process
 :wagoe/events
-{:provider :in-memory}
+{:provider :memory}
 ```
 
 Requires `[wagoe.events.shell.module-wiring]` in the namespace that builds your
@@ -137,8 +137,8 @@ roughly half, at random.
 
 | Provider | Crosses processes | History | Use |
 |---|---|---|---|
-| `:redis-streams` | yes | yes, within stream retention | production, multi-process |
-| `:in-memory` | no | bounded buffer, dies with the process | development, tests |
+| `:redis` | yes | yes, within stream retention | production, multi-process |
+| `:memory` | no | bounded buffer, dies with the process | development, tests |
 
 `history` returns oldest-first, `{:limit n}` means the **most recent** n — which
 is what a consumer replaying after a restart wants — and `{:since t}` is

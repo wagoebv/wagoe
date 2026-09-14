@@ -76,7 +76,7 @@ The `:on-open` callback runs after a successful `realtime-ports/connect`. Use it
 
 | Provider | Default | Replica-safe |
 |----------|---------|--------------|
-| `:in-memory` | yes | No — single process only; use sticky sessions |
+| `:memory` | yes | No — single process only; use sticky sessions |
 | `:redis` | no | Yes — scales across replicas via Redis pub/sub |
 
 ### Relay model (`:redis` provider)
@@ -112,7 +112,7 @@ uses its own dedicated connection (not the publish pool), so a blocking
 
 ### Return-value caveat
 
-Under `:redis`, `send-to-user`, `send-to-role`, `broadcast`, `publish-to-topic`, and `send-to-connection` all return `nil` — delivery is async (fire-and-forget via the pub/sub relay). Under `:in-memory` these functions return recipient counts or booleans. Do not branch on the return value in application code.
+Under `:redis`, `send-to-user`, `send-to-role`, `broadcast`, `publish-to-topic`, and `send-to-connection` all return `nil` — delivery is async (fire-and-forget via the pub/sub relay). Under `:memory` these functions return recipient counts or booleans. Do not branch on the return value in application code.
 
 ### Wiring note
 
@@ -122,7 +122,7 @@ See [ADR-035](../../dev-docs/adr/ADR-035-realtime-redis-scaling.adoc) for the fu
 
 ## Gotchas
 
-1. **Provider determines replica-safety** — the default `:in-memory` provider stores the connection registry and pub/sub state in process-local atoms; it is single-server only and requires sticky sessions when load-balanced. The `:redis` provider (shipped in BOU-85) scales across replicas — use it for any multi-instance deployment.
+1. **Provider determines replica-safety** — the default `:memory` provider stores the connection registry and pub/sub state in process-local atoms; it is single-server only and requires sticky sessions when load-balanced. The `:redis` provider (shipped in BOU-85) scales across replicas — use it for any multi-instance deployment.
 2. **JWT adapter uses optional dependency** on wagoe/user - `requiring-resolve` at load time. Throws `:type :internal-error` if user module unavailable
 3. **Messages get JSON-encoded** via Cheshire before sending over WebSocket
 4. **Topic subscriptions are server-side only** - no client-side subscribe/unsubscribe protocol messages

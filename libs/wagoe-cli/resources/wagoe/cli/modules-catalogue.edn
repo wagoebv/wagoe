@@ -101,8 +101,8 @@
    :clojars             com.wagoe/wagoe-cache
    :version             "1.0.0-beta-8"
    :category            :optional
-   :config-snippet      "  :wagoe/cache\n  {:provider :in-memory :default-ttl 300}\n"
-   :test-config-snippet "  :wagoe/cache\n  {:provider :in-memory :default-ttl 300}\n"
+   :config-snippet      "  :wagoe/cache\n  {:provider :memory :default-ttl 300}\n"
+   :test-config-snippet "  :wagoe/cache\n  {:provider :memory :default-ttl 300}\n"
    :add-command         "wagoe add cache"
    :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/cache/AGENTS.md"}
 
@@ -111,8 +111,8 @@
    :clojars             com.wagoe/wagoe-search
    :version             "1.0.0-beta-8"
    :category            :optional
-   :config-snippet      "  :wagoe/search\n  {:provider :in-memory}\n"
-   :test-config-snippet "  :wagoe/search\n  {:provider :in-memory}\n"
+   :config-snippet      "  :wagoe/search\n  {}\n"
+   :test-config-snippet "  :wagoe/search\n  {}\n"
    :add-command         "wagoe add search"
    :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/search/AGENTS.md"}
 
@@ -121,8 +121,8 @@
    :clojars             com.wagoe/wagoe-realtime
    :version             "1.0.0-beta-8"
    :category            :optional
-   :config-snippet      "  :wagoe/realtime\n  {:provider :in-memory}\n"
-   :test-config-snippet "  :wagoe/realtime\n  {:provider :in-memory}\n"
+   :config-snippet      "  :wagoe/realtime\n  {:provider :memory}\n"
+   :test-config-snippet "  :wagoe/realtime\n  {:provider :memory}\n"
    :add-command         "wagoe add realtime"
    :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/realtime/AGENTS.md"}
 
@@ -161,8 +161,8 @@
    :clojars             com.wagoe/wagoe-workflow
    :version             "1.0.0-beta-8"
    :category            :optional
-   :config-snippet      "  :wagoe/workflow\n  {:provider :in-memory}\n"
-   :test-config-snippet "  :wagoe/workflow\n  {:provider :in-memory}\n"
+   :config-snippet      "  :wagoe/workflow\n  {}\n"
+   :test-config-snippet "  :wagoe/workflow\n  {}\n"
    :add-command         "wagoe add workflow"
    :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/workflow/AGENTS.md"}
 
@@ -225,8 +225,8 @@
    :clojars             com.wagoe/wagoe-events
    :version             "1.0.0-beta-8"
    :category            :optional
-   :config-snippet      "  :wagoe/events\n  {:provider :redis-streams\n   :host     #env REDIS_HOST\n   :port     #long #or [#env REDIS_PORT 6379]\n   :password #env REDIS_PASSWORD\n   :group    \"my-app\"}\n"
-   :test-config-snippet "  :wagoe/events\n  {:provider :in-memory}\n"
+   :config-snippet      "  :wagoe/events\n  {:provider :redis\n   :host     #env REDIS_HOST\n   :port     #long #or [#env REDIS_PORT 6379]\n   :password #env REDIS_PASSWORD\n   :group    \"my-app\"}\n"
+   :test-config-snippet "  :wagoe/events\n  {:provider :memory}\n"
    :add-command         "wagoe add events"
    :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/events/AGENTS.md"}
 

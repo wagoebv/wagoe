@@ -69,10 +69,14 @@ Provides in-memory (development/tests) and Redis (production) backends.
 [source,clojure]
 ----
 ;; In-memory (development)
-:wagoe/cache {:backend :in-memory :max-size 10000}
+:wagoe/cache {:provider :memory :max-size 10000}
 
 ;; Redis (production)
-:wagoe/cache {:backend :redis :url #env REDIS_URL :pool-size 10}
+:wagoe/cache {:provider :redis
+              :host #or [#env REDIS_HOST "localhost"]
+              :port #long #or [#env REDIS_PORT 6379]
+              :password #env REDIS_PASSWORD
+              :max-total 20}
 ----
 
 == Testing

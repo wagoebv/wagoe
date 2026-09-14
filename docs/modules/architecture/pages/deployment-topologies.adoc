@@ -71,7 +71,7 @@ Redis. That is an edit to your own config file; no environment variable does
 it, which is why the compose reference deploys Redis but leaves
 `HTTP_RATE_LIMIT_ENABLED` off.
 
-*Realtime pub/sub needs `:provider :redis`.* Under the default `:in-memory`
+*Realtime pub/sub needs `:provider :redis`.* Under the default `:memory`
 provider a WebSocket connected to replica A does not see an event published on
 replica B, and sticky sessions do not fix it — the publisher and the subscriber
 are different connections. The Redis provider (BOU-85, ADR-035) fans routing
@@ -82,20 +82,19 @@ under both providers; only the bus and the pub/sub manager differ.
 Note what "configuration" means here: `:wagoe/realtime` under `:active` is the
 whole of it — `system-config` loads `wagoe.realtime.shell.module-wiring` and
 emits the key because the config names the module. Getting the settings wrong is
-quiet, though: a config with no `:provider` gets `:in-memory`, and the
-single-node behaviour is a default rather than an error. Config shape is in that
+quiet, though: a config with no `:provider` gets `:memory`, and the
+single-node behaviour is a default rather than an error. An unrecognised one
+now throws rather than quietly serving a node-local bus. Config shape is in that
 namespace's docstring.
 
-*The event bus needs `:provider :redis-streams`* (BOU-93, `libs/events`) —
-`:redis-streams`, not `:redis`, which is the cache's and realtime's spelling and
-not this one's. Redis Streams with consumer groups delivers an event once per
+*The event bus needs `:provider :redis`* (BOU-93, `libs/events`). Redis Streams with consumer groups delivers an event once per
 logical subscriber across replicas; the in-memory adapter delivers it only
 within the publishing process.
 
 Two ways this differs from realtime above. `:wagoe/events` *is* wired from
 config — move it into `:active` and the component is emitted — though it is
 absent from the shipped prod profile, so it is off until you add it. And it has
-no default: any provider other than `:redis-streams` or `:in-memory`, including
+no default: any provider other than `:redis` or `:memory`, including
 none at all, throws `Unknown event bus provider` at boot. Loud rather than
 quiet, which is the better of the two failures here.
 
