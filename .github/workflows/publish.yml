@@ -152,6 +152,15 @@ jobs:
             sleep "$INTERVAL"
           done
 
+      # The released artifacts are compiled here, so this job answers for the
+      # JDK baseline more than any CI job does. Without it `bb deploy` ran
+      # `clojure -T:build` on whatever the runner image defaults to.
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
       - name: Setup Clojure
         uses: DeLaGuardo/setup-clojure@13.6.1
         with:

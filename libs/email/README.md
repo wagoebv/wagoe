@@ -978,7 +978,7 @@ Register email job handler with jobs module.
 2. **Check Java version:**
    ```bash
    java -version
-   # Ensure Java 11+ for modern TLS support
+   # Wagoe requires Java 21+, which has the modern TLS stack
    ```
 
 3. **Trust certificate (last resort):**

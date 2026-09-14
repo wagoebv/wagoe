@@ -34,6 +34,8 @@
             [wagoe.tools.check-doc-counts :as check-doc-counts]
             [wagoe.tools.check-versions :as check-versions]
             [wagoe.tools.check-isolation :as check-isolation]
+            [wagoe.tools.check-jdk :as check-jdk]
+            [wagoe.tools.doctor-env :as doctor-env]
             [wagoe.tools.check-error-shape :as check-error-shape]
             [wagoe.tools.check-poms :as check-poms]
             [wagoe.tools.check-ports :as check-ports]
@@ -705,6 +707,52 @@
   (testing "every finding in the tree is on the burn-down list"
     (is (empty? (check-isolation/unexplained-findings)))))
 
+;; =============================================================================
+;; check:jdk
+;; =============================================================================
+
+(deftest ^:unit jdk-gate-fires-test
+  ;; BOU-446. The baseline was written in ten places and four of them
+  ;; disagreed — including the production image, which built and ran 17 while
+  ;; the installer refused anything under 21.
+  (let [stub    (fn [m] (fn [path] (get m path)))
+        ;; Every file that must pin one, and every exempt file, answering with
+        ;; the baseline — so only the file under test can produce a finding.
+        healthy (merge (zipmap (keys check-jdk/must-name-a-jdk) (repeat "Java 21"))
+                       (zipmap (keys check-jdk/exempt) (repeat "Java 17"))
+                       ;; install.sh is in both sets, and its pattern reads
+                       ;; JAVA_MIN rather than prose.
+                       {"scripts/install.sh" "JAVA_MIN=21\n# and Java 8 before that"}
+                       ;; One file under each exempt prefix: a prefix that
+                       ;; exempts nothing is a finding of its own.
+                       (zipmap (map #(str % "x.adoc") (keys check-jdk/exempt-prefixes))
+                               (repeat "Java 17")))
+        prefixed (fn [& paths] (into (mapv #(str % "x.adoc") (keys check-jdk/exempt-prefixes))
+                                     paths))]
+
+    (testing "a discovered file naming an older JDK is a finding"
+      (is (= ["some/Dockerfile"]
+             (map :path (check-jdk/findings
+                         21 (prefixed "some/Dockerfile")
+                         (stub (assoc healthy "some/Dockerfile" "FROM eclipse-temurin:17-jre")))))))
+
+    (testing "a file that must pin one and stopped is a finding, not a pass"
+      ;; Discovery cannot see this: no match reads as nothing to check.
+      (is (= [".github/workflows/publish.yml"]
+             (map :path (check-jdk/findings
+                         21 (prefixed)
+                         (stub (assoc healthy ".github/workflows/publish.yml" "steps: []")))))))
+
+    (testing "the gate discovers the real tree, not an empty file list"
+      ;; The BOU-250 shape: a live check scanning nothing reports clean forever.
+      ;; Two reviews of the listed version each found a file missing from the
+      ;; list, which is why this reads git rather than a vector.
+      (let [files (check-jdk/tracked-files)]
+        (is (< 500 (count files)) "git ls-files returned almost nothing")
+        (is (some #(= "docker-compose.yml" %) files))
+        (is (empty? (check-jdk/findings doctor-env/java-min files
+                                        #(when (.exists (java.io.File. ^String %)) (slurp %)))))))))
+
 (def gates-with-firing-tests
   "Gate ids from `check/all-checks` that this namespace proves can still fire.
 
@@ -714,7 +762,7 @@
   #{:hygiene :deps :fcis :placeholder-tests :docs-lint
     :test-meta :test-tags :ports :poms :agents :doctor :linting :no-boundary
     :doc-counts :branch-protection :versions :changelog :isolation
-    :error-shape})
+    :error-shape :jdk})
 
 ;; =============================================================================
 ;; check:error-shape

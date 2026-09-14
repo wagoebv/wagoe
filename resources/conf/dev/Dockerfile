@@ -4,7 +4,7 @@
 # =============================================================================
 # Build Stage
 # =============================================================================
-FROM clojure:openjdk-17-tools-deps AS builder
+FROM clojure:temurin-21-tools-deps AS builder
 
 WORKDIR /app
 
@@ -28,7 +28,7 @@ RUN clojure -T:build ${BUILD_TARGET}
 # =============================================================================
 # Runtime Stage  
 # =============================================================================
-FROM eclipse-temurin:17-jre AS runtime
+FROM eclipse-temurin:21-jre AS runtime
 
 # Install useful utilities for development
 RUN apt-get update && \
