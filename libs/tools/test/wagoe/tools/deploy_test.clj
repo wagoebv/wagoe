@@ -7,6 +7,7 @@
             [clojure.java.io :as io]
             [clojure.string :as str]
             [babashka.http-client]
+            [babashka.process]
             [wagoe.tools.deploy :as deploy]))
 
 (deftest ^:unit artifact-name-test
