@@ -106,23 +106,39 @@
         (re-find #":basis\s+basis\b" src)
         (not (str/includes? src "create-basis")))))
 
+(defn jar-cleans-first?
+  "Regression mode D guard. True when `jar` empties target before copying into
+   it. `b/copy-dir` merges, so a jar built over a stale target/classes carries
+   whatever was there — 322 pre-rename sources, in the case that prompted this
+   (BOU-445). Comment lines between the arglist and the call are allowed; a
+   `clean` further down the body is not, since copy-dir would already have run."
+  [src]
+  (boolean
+   (and src
+        (re-find #"\(defn jar \[_\]\s*(?:;[^\n]*\n\s*)*\((?:clean nil|b/delete)" src))))
+
 (defn check-lib
   "Regression mode B: a build.clj that generates a pom (calls write-pom) must
-   feed it the rewritten basis via build-shared/pom-basis. Returns a map:
-   {:lib :publishable? :uses-pom-basis? :wagoe-deps :violation?}."
+   feed it the rewritten basis via build-shared/pom-basis. Mode D: its `jar`
+   must clean first. Returns a map:
+   {:lib :publishable? :uses-pom-basis? :cleans-first? :wagoe-deps :violation?
+    :stale-risk?}."
   [[lib-name lib-dir]]
   (let [build-file    (io/file lib-dir "build.clj")
         src           (when (.exists build-file) (slurp build-file))
         publishable?  (boolean (and src (str/includes? src "write-pom")))
         uses-pom-basis? (pom-basis-wired? src)
+        cleans-first? (jar-cleans-first? src)
         wagoe-deps (wagoe-local-deps lib-dir)]
     {:lib             lib-name
      :publishable?    publishable?
      :uses-pom-basis? uses-pom-basis?
+     :cleans-first?   cleans-first?
      :wagoe-deps   wagoe-deps
      ;; A publishable lib that skips pom-basis will silently drop its wagoe
      ;; deps from the pom. A non-publishable lib (no write-pom) is exempt.
-     :violation?      (and publishable? (not uses-pom-basis?))}))
+     :violation?      (and publishable? (not uses-pom-basis?))
+     :stale-risk?     (and publishable? (not cleans-first?))}))
 
 (defn unpublishable-deps
   "Regression mode C: every boundary dep a POM declares must itself be a
@@ -147,6 +163,7 @@
         shared-issues  (check-build-shared)
         results        (map check-lib libs)
         violations     (filter :violation? results)
+        stale-risks    (filter :stale-risk? results)
         unpublishable  (unpublishable-deps results)
         with-deps      (filter #(and (:publishable? %) (seq (:wagoe-deps %))) results)]
     ;; Informational: the wagoe closure each pom will declare.
@@ -155,7 +172,7 @@
       (doseq [{:keys [lib wagoe-deps]} with-deps]
         (println (str "  " lib " -> " (str/join ", " (map (comp str :coord) wagoe-deps)))))
       (println))
-    (if (or (seq shared-issues) (seq violations) (seq unpublishable))
+    (if (or (seq shared-issues) (seq violations) (seq stale-risks) (seq unpublishable))
       (do
         (println (ansi/red "POM dependency completeness violations found:"))
         (println)
@@ -171,12 +188,17 @@
           (println (str "  VIOLATION: " (ansi/red lib)
                         "/build.clj calls write-pom without build-shared/pom-basis"
                         " — its wagoe deps will be omitted from the published POM")))
+        (doseq [{:keys [lib]} stale-risks]
+          (println (str "  VIOLATION: " (ansi/red lib)
+                        "/build.clj's jar does not clean target first"
+                        " — it will package whatever a previous build left there")))
         (doseq [{:keys [lib dep]} unpublishable]
           (println (str "  VIOLATION: " (ansi/red lib) "'s POM declares " (ansi/red (str dep))
                         " but that lib is not publishable (no build.clj with write-pom+pom-basis)"
                         " — downstream resolution will fail")))
         (println)
-        (println (str (+ (count shared-issues) (count violations) (count unpublishable))
+        (println (str (+ (count shared-issues) (count violations)
+                         (count stale-risks) (count unpublishable))
                       " violation(s) found."))
         (System/exit 1))
       (do

@@ -11,6 +11,8 @@
 (defn clean [_] (b/delete {:path "target"}))
 
 (defn jar [_]
+  ;; copy-dir merges into target/classes rather than replacing it (BOU-445).
+  (clean nil)
   (b/write-pom {:class-dir class-dir :lib lib :version version :basis basis
                 :src-dirs ["src"]
                 :scm {:url "https://github.com/wagoebv/wagoe"

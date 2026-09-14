@@ -25,7 +25,6 @@
 ;; ANSI helpers
 ;; =============================================================================
 
-
 ;; =============================================================================
 ;; Library registry (membership only — publish ORDER is derived, see below)
 ;; =============================================================================
@@ -225,6 +224,49 @@
       (catch Exception e
         (warn (or (.getMessage e) (.getSimpleName (class e))))))))
 
+(defn foreign-code-entries
+  "Jar entries that are code outside the `wagoe/` tree.
+
+   Resources are not code and are left alone: ui-style ships `public/` and
+   `tailwind/`, devtools a `dashboard/`, wagoe-mcp a `logback.xml`. What must
+   never appear is a namespace the library does not own — which is what a jar
+   built over a stale `target/classes` contains (BOU-445)."
+  [entry-names]
+  (->> entry-names
+       (filter #(re-find #"\.(?:clj[cs]?|class)$" %))
+       (remove #(str/starts-with? % "wagoe/"))
+       sort))
+
+(defn jar-entries
+  "Every entry name in `jar-file`."
+  [jar-file]
+  (with-open [zip (java.util.zip.ZipFile. (io/file jar-file))]
+    (mapv #(.getName ^java.util.zip.ZipEntry %)
+          (enumeration-seq (.entries zip)))))
+
+(defn verify-jar!
+  "Refuse to publish a jar carrying code the library does not own.
+
+   Runs between `jar` and `deploy`, because Clojars is immutable: a bad artifact
+   cannot be withdrawn, only superseded by burning a version. `deploy` rebuilds
+   the jar from the same cleaned tree, so what this proves about the inspected
+   bytes holds for the uploaded ones."
+  [lib dir]
+  (let [jars (->> (.listFiles (io/file dir "target"))
+                  (filter #(str/ends-with? (.getName ^java.io.File %) ".jar")))]
+    (when (empty? jars)
+      (println (red (str "Error: " lib " built no jar to verify")))
+      (System/exit 1))
+    (doseq [jar jars]
+      (when-let [foreign (seq (foreign-code-entries (jar-entries jar)))]
+        (println (red (str "Error: " (.getName ^java.io.File jar)
+                           " contains code outside wagoe/:")))
+        (doseq [e (take 20 foreign)] (println (str "  " e)))
+        (when (< 20 (count foreign))
+          (println (str "  … and " (- (count foreign) 20) " more")))
+        (println "Nothing was published. Run `clojure -T:build clean` in the lib and retry.")
+        (System/exit 1)))))
+
 (defn deploy-lib! [lib]
   (let [dir     (lib-dir lib)
         version (read-version lib)]
@@ -233,6 +275,8 @@
       (System/exit 1))
     (println (bold (str "\nDeploying " (artifact-name lib) " " version "...")))
     (p/shell {:dir dir} "clojure" "-T:build" "clean")
+    (p/shell {:dir dir} "clojure" "-T:build" "jar")
+    (verify-jar! lib dir)
     (p/shell {:dir dir} "clojure" "-T:build" "deploy")
     (println (green (str "✓ " (artifact-name lib) " " version " deployed")))
     (patch-catalogue-version! lib version)
