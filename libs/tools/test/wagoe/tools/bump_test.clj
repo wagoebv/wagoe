@@ -29,7 +29,9 @@
   ;; outcome than refusing, because check:versions would then agree with itself.
   (testing "accepted forms"
     (is (sut/valid-version? "1.0.0-beta-6"))
-    (is (sut/valid-version? "1.0.1-alpha-43"))
+    ;; Was `1.0.1-alpha-43` until BOU-435: the shape parses, but a pre-release
+    ;; cut from a patch outranks the release it precedes. See the test below.
+    (is (sut/valid-version? "1.1.0-alpha-43"))
     (is (sut/valid-version? "2.0.0")))
 
   (testing "refused forms"
@@ -119,3 +121,22 @@
     (testing "every discovered location already names it, so nothing changes"
       (is (empty? (sut/changed-files (sut/plan current)))
           "a re-run of the same bump must be a no-op"))))
+
+(deftest ^:unit a-prerelease-of-a-patch-is-refused
+  ;; BOU-435. `1.0.1-alpha-42` sorted newer than every `1.0.0-beta-N`, so anyone
+  ;; resolving "newest" got the discontinued alpha line and had to pin exact
+  ;; versions. The shape is legal; what it is cut from is not.
+  (testing "the shape that caused it, and its neighbours"
+    (is (not (sut/valid-version? "1.0.1-alpha-1")))
+    (is (not (sut/valid-version? "1.0.1-beta-3")))
+    (is (not (sut/valid-version? "2.3.7-rc-1"))))
+
+  (testing "a pre-release of the next minor is the supported way to cut one"
+    (is (sut/valid-version? "1.1.0-alpha-1"))
+    (is (sut/valid-version? "1.0.0-beta-9"))
+    (is (sut/valid-version? "1.0.0-rc-1"))
+    (is (sut/valid-version? "2.0.0-alpha-1")))
+
+  (testing "a final patch release is fine — the rule is about pre-releases"
+    (is (sut/valid-version? "1.0.1"))
+    (is (sut/valid-version? "1.0.0"))))

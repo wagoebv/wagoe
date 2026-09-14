@@ -456,3 +456,25 @@
         (str "locations naming a different version: "
              (pr-str (map (juxt :file :version)
                           (:offenders (sut/disagreements all (:version (first code))))))))))
+
+(deftest ^:unit prerelease-of-a-patch-is-recognised
+  ;; Verified against Maven's own ordering (org.apache.maven.artifact.versioning
+  ;; .ComparableVersion): 1.0.0-beta-8 < 1.0.0-rc-1 < 1.0.0 < 1.0.1-alpha-1.
+  ;; The last comparison is the defect — the pre-release outranks the release.
+  (testing "cut from a patch"
+    (is (sut/prerelease-of-a-patch? "1.0.1-alpha-1"))
+    (is (sut/prerelease-of-a-patch? "1.0.1-alpha-42"))
+    (is (sut/prerelease-of-a-patch? "10.4.2-rc-7")))
+
+  (testing "cut from a minor or major — the supported shape"
+    (is (not (sut/prerelease-of-a-patch? "1.1.0-alpha-1")))
+    (is (not (sut/prerelease-of-a-patch? "1.0.0-beta-8")))
+    (is (not (sut/prerelease-of-a-patch? "2.0.0-rc-1"))))
+
+  (testing "final releases, patch included"
+    (is (not (sut/prerelease-of-a-patch? "1.0.1")))
+    (is (not (sut/prerelease-of-a-patch? "1.0.0"))))
+
+  (testing "nothing at all"
+    (is (not (sut/prerelease-of-a-patch? nil)))
+    (is (not (sut/prerelease-of-a-patch? "v1.0.1-alpha-1")))))

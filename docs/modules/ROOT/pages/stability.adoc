@@ -71,6 +71,22 @@ change: `1.0.1-alpha-41` reads as a patch release of a shipped `1.0`. Nothing
 called `1.0` had ever been released. `1.0.0-beta-N` says what is true — work
 leading up to a first `1.0.0`.
 
+=== Pre-releases are cut from the next minor
+
+So that it cannot happen again:
+
+* A pre-release is always `<major>.<minor+1>.0-<stage>-N` — `1.1.0-alpha-1`,
+  `1.1.0-rc-2`. Never from a patch version.
+* Patch versions are only ever final. There is no `1.0.1-alpha-1`.
+
+The reason is Maven's ordering, which puts `1.0.1-alpha-1` *above* `1.0.0`: a
+pre-release of a patch outranks the release it precedes, for anyone resolving
+"newest". A pre-release of the next minor sorts below that minor and above
+everything already out, which is what a pre-release should do.
+
+`bb bump` refuses the first shape and `bb deploy --check-versions` — which the
+publish workflow runs before any upload — refuses to publish under it.
+
 [NOTE]
 ====
 `CHANGELOG.md` has no separate `1.0.0-beta-1` entry. Its changes were still

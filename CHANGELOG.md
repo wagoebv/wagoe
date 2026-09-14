@@ -72,6 +72,9 @@ for what is public API, what is internal, and how deprecations are announced.
 - **A locally built library jar could carry a previous build's namespaces** (BOU-445).
   `jar` now cleans first; the published artifacts were checked and are unaffected.
 
+- **A pre-release could again outrank a release** (BOU-435). Pre-releases are cut
+  from the next minor now; `bb bump` and the publish guard refuse `1.0.1-alpha-1`.
+
 - **`bb upgrade-outdated` under-reported drift** (BOU-474). It read an index that lags,
   hiding the H2, MySQL, PostgreSQL and SQLite drivers; prereleases are no longer offered.
 - **The S3 adapter threw on every S3-compatible endpoint** (BOU-444). MinIO, Spaces and

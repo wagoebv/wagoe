@@ -19,7 +19,8 @@
             [clojure.java.io :as io]
             [babashka.http-client :as http]
             [babashka.process :as p]
-            [wagoe.tools.check-poms :as check-poms]))
+            [wagoe.tools.check-poms :as check-poms]
+            [wagoe.tools.check-versions :as check-versions]))
 
 ;; =============================================================================
 ;; ANSI helpers
@@ -267,12 +268,32 @@
         (println "Nothing was published. Run `clojure -T:build clean` in the lib and retry.")
         (System/exit 1)))))
 
+(defn refuse-patch-prerelease!
+  "Abort when `version` is a pre-release cut from a patch.
+
+   On every path that can reach Clojars, not only the workflow's
+   --check-versions: `bb deploy --all`, `--missing` and a named library all
+   publish straight from build.clj, and a coordinate cannot be withdrawn once
+   it is up — only superseded by burning a version (BOU-435).
+
+   Throws rather than exiting, so it can be tested: a guard that kills the JVM
+   can only be proven by trusting the source, which is how the first version of
+   this one ended up reachable from one command. `-main` turns it into an exit."
+  [version where]
+  (when (check-versions/prerelease-of-a-patch? version)
+    (throw (ex-info (str version " is a pre-release of a patch version (" where "). "
+                         "It would sort above the release it precedes. Cut "
+                         "pre-releases from the next minor; patch versions are "
+                         "only ever final.")
+                    {:type :wagoe/unpublishable-version :version version}))))
+
 (defn deploy-lib! [lib]
   (let [dir     (lib-dir lib)
         version (read-version lib)]
     (when-not version
       (println (red (str "Error: could not read version from " (lib-dir lib) "/build.clj")))
       (System/exit 1))
+    (refuse-patch-prerelease! version (str (artifact-name lib) "/build.clj"))
     (println (bold (str "\nDeploying " (artifact-name lib) " " version "...")))
     (p/shell {:dir dir} "clojure" "-T:build" "clean")
     (p/shell {:dir dir} "clojure" "-T:build" "jar")
@@ -326,12 +347,15 @@
 
 (defn cmd-check-versions
   "Pre-deploy guard: assert every lib's build.clj version equals `expected` (the
-   release tag). Exits 1 on any mismatch so the publish workflow aborts before
-   shipping a version that disagrees with the tag/source."
+   release tag), and that the tag is a version we are willing to publish. Exits
+   1 on either, so the publish workflow aborts before shipping."
   [expected]
   (when (str/blank? expected)
     (println (red "Error: --check-versions requires a version argument."))
     (System/exit 1))
+  ;; Refused here as well as in deploy-lib!, so the workflow fails before it
+  ;; builds anything rather than on the first artifact.
+  (refuse-patch-prerelease! expected "the release tag")
   (let [mismatches (version-mismatches expected)]
     (if (empty? mismatches)
       (println (green (str "✓ All " (count all-libs) " libs at " expected)))
@@ -379,13 +403,19 @@
 ;; =============================================================================
 
 (defn -main [& args]
-  (cond
-    (or (empty? args) (contains? (set args) "--help")) (print-help)
-    (= args ["--all"])                                  (cmd-all)
-    (= args ["--missing"])                              (cmd-missing)
-    (= args ["--verify"])                               (cmd-verify)
-    (= (first args) "--check-versions")                 (cmd-check-versions (second args))
-    :else                                               (cmd-specific args)))
+  (try
+    (cond
+      (or (empty? args) (contains? (set args) "--help")) (print-help)
+      (= args ["--all"])                                 (cmd-all)
+      (= args ["--missing"])                             (cmd-missing)
+      (= args ["--verify"])                              (cmd-verify)
+      (= (first args) "--check-versions")                (cmd-check-versions (second args))
+      :else                                              (cmd-specific args))
+    (catch clojure.lang.ExceptionInfo e
+      (if (= :wagoe/unpublishable-version (:type (ex-data e)))
+        (do (println (red (str "✗ " (ex-message e))))
+            (System/exit 1))
+        (throw e)))))
 
 (when (= *file* (System/getProperty "babashka.file"))
   (apply -main *command-line-args*))
