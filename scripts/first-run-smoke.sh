@@ -468,14 +468,22 @@ bash -ic "clj-nrepl-eval -p 7888 \"(with-out-str (user/status))\"" >/tmp/status.
 grep -q "Wagoe Dev" /tmp/status.log \
   || { tail -15 /tmp/status.log
        fail "(status) printed no dashboard — it does not exist, or resolved to something that is not the devtools helper"; }
-grep -q "tasks" /tmp/status.log \
-  || { tail -15 /tmp/status.log
-       fail "(status) does not list the scaffolded module among the running ones"; }
+# Asked of the system rather than read off the dashboard. The dashboard draws a
+# fixed-width box and `pad-right` truncates any line that would push the border
+# out — by design, and the module list is the line that routinely overflows. One
+# extra module (SMOKE_AI=ollama) elided the list at "admin, admin-only, ai,
+# email-queue, t..." and this assertion read the cut-off `tasks` as a module that
+# was not running, while the same output said "33 components, 0 errors".
+bash -ic "clj-nrepl-eval -p 7888 \"(user/modules)\"" >/tmp/modules.log 2>&1 \
+  || { tail -15 /tmp/modules.log; fail "could not reach the nREPL to evaluate (modules)"; }
+grep -q "tasks" /tmp/modules.log \
+  || { tail -15 /tmp/modules.log
+       fail "(modules) does not list the scaffolded module among the running ones"; }
 bash -ic "clj-nrepl-eval -p 7888 \"(with-out-str (user/commands))\"" >/tmp/commands.log 2>&1 \
   || { tail -15 /tmp/commands.log; fail "(commands) threw"; }
 grep -q "SYSTEM:" /tmp/commands.log \
   || { tail -15 /tmp/commands.log; fail "(commands) printed no palette"; }
-ok "(status) and (commands) work in the generated project"
+ok "(status), (modules) and (commands) work in the generated project"
 
 # ── does a bad request explain itself? ──────────────────────────────────────
 # A validation failure used to answer "Validation failed" and nothing else. The
