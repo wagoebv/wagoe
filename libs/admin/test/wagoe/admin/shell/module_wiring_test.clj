@@ -1,6 +1,8 @@
 (ns wagoe.admin.shell.module-wiring-test
   "The admin module's Integrant graph, and what its handlers can reach."
   (:require [clojure.test :refer [deftest testing is]]
+            [clojure.tools.logging.test :as log-test]
+            [integrant.core :as ig]
             [wagoe.admin.shell.http.support :as support]
             [wagoe.admin.shell.module-wiring :as wiring]))
 
@@ -88,3 +90,19 @@
     (is (= (java.util.Locale/forLanguageTag "en")
            (:locale (support/display-options {} {:i18n/default-locale :en}))))
     (is (nil? (:locale (support/display-options {} {}))))))
+
+(deftest ^:unit the-deprecated-component-says-so-when-it-is-wired
+  ;; A `### Deprecated` entry the running system says nothing about is an
+  ;; announcement to whoever already read it (BOU-433). The module contributes
+  ;; admin-schema-provider/-service/-routes and not this key, so init only runs
+  ;; for a hand-wired one.
+  (testing "init warns, naming the removal"
+    (log-test/with-log
+      (ig/init-key :wagoe/admin {:logo-url "/logo.svg"})
+      (is (log-test/logged? 'wagoe.admin.shell.module-wiring :warn #"DEPRECATED"))
+      (is (log-test/logged? 'wagoe.admin.shell.module-wiring :warn #"removed in 2\.0"))))
+
+  (testing "and switching the module on does not reach it"
+    (is (not (contains? (:components (wiring/ig-config {} {:config {:active {}}}))
+                        :wagoe/admin))
+        "a warning on every correct application is a warning nobody reads")))

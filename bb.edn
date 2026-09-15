@@ -143,7 +143,7 @@
                  :task (check-jdk/-main)}
   check:roadmap {:doc "One roadmap, and it may not plan what scaling.adoc marks shipped (bb check:roadmap)"
                  :task (check-roadmap/-main)}
-  check:changelog {:doc "A branch changing shipped src/ must add a CHANGELOG.md entry (bb check:changelog)"
+  check:changelog {:doc "A branch changing shipped src/ must add a CHANGELOG.md entry, and every ^:deprecated var must be announced in one (bb check:changelog)"
                    :task (check-changelog/-main)}
   check:no-boundary {:doc "Rename gate: scan for residual boundary tokens (ns/keys/coords/env/dirs/urls); args select groups (bb check:no-boundary)"
                      :task (apply check-no-boundary/-main *command-line-args*)}

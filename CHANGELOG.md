@@ -29,6 +29,11 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ## [Unreleased]
 
+> **The breaking list is frozen** (BOU-433). All three below ship in `1.0.0` and are
+> exercised by the published `1.0.0-rc-1` first; nothing further lands as Breaking
+> before the tag. Deprecations are deferred to `2.0` — see the
+> [Stability policy](https://wagoe.org/docs/stability.html).
+
 ### Breaking
 
 - **`:wagoe/user-http-handler` is removed** (BOU-346). It has thrown on init since it was
@@ -46,7 +51,13 @@ for what is public API, what is internal, and how deprecations are announced.
 - **`:provider :in-memory`, `:redis-streams` and `:database`** (BOU-436). One vocabulary:
   `:memory` and `:redis` everywhere, `:db` where a module has one; old names warn until 2.0.
 
+- **`wagoe.jobs.shell.adapters.db/enqueue-in-tx!`** (BOU-433). Call
+  `wagoe.jobs.ports/enqueue-in-tx!` on the queue component instead; removed in 2.0.
+
 ### Added
+
+- **`service tenant` and `service push` can be called over RPC** (BOU-426). Every other
+  service records why it offers nothing remote instead of leaving it unanswered.
 
 - **Published docs cite pull requests, not tickets** (BOU-437). Linear is private, so
   `docs/modules/**` now carries no `BOU-nnn`; `bb docs:lint` fails on one.
@@ -72,11 +83,6 @@ for what is public API, what is internal, and how deprecations are announced.
   the wagoe-site repository; this was a second renderer nothing ran.
 - **The per-engine `query`, `metadata` and `utils` namespaces under `adapters.database`**
   (BOU-367), plus `config-factory`. Build adapters with `factory/db-context`.
-
-### Added
-
-- **`service tenant` and `service push` can be called over RPC** (BOU-426). Every other
-  service records why it offers nothing remote instead of leaving it unanswered.
 
 ### Fixed
 

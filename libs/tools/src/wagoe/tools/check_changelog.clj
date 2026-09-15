@@ -17,6 +17,7 @@
 (ns wagoe.tools.check-changelog
   (:require [clojure.string :as str]
             [babashka.process :as process]
+            [edamame.core :as e]
             [wagoe.tools.ansi :as ansi]))
 
 (def changelog-path "CHANGELOG.md")
@@ -48,6 +49,134 @@
                (not opted-out?)
                (not (some #{changelog-path} changed-files)))
       {:files (sort shipped)})))
+
+;; =============================================================================
+;; Rule 2 — a deprecation nobody announced
+;; =============================================================================
+
+(defn- parse-forms
+  "`raw` as data, read by edamame — the reader, not a lexer imitating one.
+
+   Token adjacency cannot answer this question. `(defn ^:private ^:deprecated f
+   [])` deprecates the var and `(def x ^:deprecated {:a 1})` does not, and a
+   regex sees the same two tokens in both. Reading the form puts the metadata
+   where Clojure puts it."
+  [raw]
+  (e/parse-string-all raw
+                      {:all          true
+                       :auto-resolve (fn [a] (if (= a :current) (symbol "this.ns") (symbol (str a))))
+                       :readers      (fn [_tag] identity)
+                       :features     #{:clj :bb}
+                       :read-cond    :allow}))
+
+(defn- deprecated-sym
+  "`sym` name when it is a symbol Clojure would mark deprecated."
+  [sym]
+  (when (and (symbol? sym) (:deprecated (meta sym)))
+    (name sym)))
+
+(defn- protocol-methods
+  "The method-declaration heads of a `defprotocol` / `definterface` form.
+
+   A declaration is `(name [args] docstring?)`, so the head of any list in the
+   body. The policy covers \"the var, protocol or method\", and a method
+   deprecated inside a live protocol carries no `def` of its own."
+  [form]
+  (when (and (seq? form)
+             (symbol? (first form))
+             (#{"defprotocol" "definterface"} (name (first form))))
+    (keep #(when (seq? %) (first %)) form)))
+
+(defn- ns-name-of
+  "The namespace `content` declares, as a string, or nil."
+  [forms]
+  (some (fn [form]
+          (when (and (seq? form) (= 'ns (first form)) (symbol? (second form)))
+            (str (second form))))
+        forms))
+
+(defn deprecated-vars
+  "What Clojure would mark `:deprecated` in `content`, as `{:ns :name}`.
+
+   The namespace is carried because the name alone is not the var: two shipped
+   namespaces deprecating the same `foo` would each be satisfied by an entry
+   naming only the other one.
+
+   Throws when the file does not parse. A gate that swallowed that would report
+   clean because it could not look, which is the shape BOU-250 is about; the
+   caller turns it into a finding."
+  [content]
+  (let [top   (parse-forms content)
+        forms (tree-seq coll? seq top)
+        nsn   (ns-name-of top)]
+    (->> (concat (->> forms
+                      (keep (fn [form]
+                              (when (and (seq? form)
+                                         (symbol? (first form))
+                                         (str/starts-with? (name (first form)) "def"))
+                                (deprecated-sym (second form))))))
+                 (->> forms (mapcat protocol-methods) (keep deprecated-sym)))
+         distinct
+         (map (fn [n] {:ns nsn :name n})))))
+
+(def deprecated-section-re
+  "The body of every `### Deprecated` section in a changelog.
+
+   Scoped rather than searching the whole file, because a bare name matches
+   anywhere — an older `### Fixed` entry, or ordinary prose. Not scoped to
+   `[Unreleased]` alone, though: a var announced three releases ago and still
+   carrying the metadata is announced, and requiring it again every release
+   would make the gate demand a lie."
+  #"(?ms)^###\s+Deprecated\s*$(.*?)(?=^#{2,3}\s|\z)")
+
+(defn- qualifier-fits?
+  "Whether a qualifier written in front of the name refers to `ns-str`.
+
+   Nothing in front is the common prose case and counts. A qualifier counts
+   when it is the namespace or a trailing part of it, so both
+   `wagoe.jobs.shell.adapters.db/enqueue-in-tx!` and the shorthand
+   `db/enqueue-in-tx!` do. A *different* namespace does not — that entry is
+   about another var that happens to share the name."
+  [ns-str qualifier]
+  (or (str/blank? qualifier)
+      (nil? ns-str)
+      (= qualifier ns-str)
+      (str/ends-with? ns-str (str "." qualifier))))
+
+(defn announced-in
+  "True when `changelog` announces `{:ns :name}` in a `### Deprecated` section.
+
+   Whole-identifier, so `create` does not match `create-user`, and any
+   namespace written in front of it must be this var's."
+  [changelog {:keys [ns name]}]
+  (let [boundary "[a-zA-Z0-9*+!_'?<>=-]"
+        re       (re-pattern (str "(?<!" boundary ")"
+                                  "(?:([a-zA-Z0-9*+!_'?<>=.-]+)/)?"
+                                  (java.util.regex.Pattern/quote name)
+                                  "(?!" boundary ")"))]
+    (boolean (some (fn [[_ section]]
+                     (some (fn [[_ qualifier]] (qualifier-fits? ns qualifier))
+                           (re-seq re section)))
+                   (re-seq deprecated-section-re changelog)))))
+
+(defn undocumented-deprecations
+  "Deprecated vars in shipped source that `changelog` never announces.
+
+   Stability policy makes a deprecation three things — metadata, a changelog
+   entry, and a replacement that exists. Only the metadata was ever checked, so
+   `enqueue-in-tx!` carried `^:deprecated` for months while `CHANGELOG.md` had
+   never used the heading (BOU-433). Pure, so a test can prove it still fires."
+  [files read-file changelog]
+  (mapcat (fn [path]
+            (try
+              (for [v     (deprecated-vars (read-file path))
+                    :when (not (announced-in changelog v))]
+                {:rule :undocumented-deprecation :path path
+                 :var  (if (:ns v) (str (:ns v) "/" (:name v)) (:name v))})
+              (catch Exception e
+                [{:rule :unreadable :path path :var (str "does not parse: "
+                                                         (.getMessage e))}])))
+          (filter shipped-source? files)))
 
 (defn- git
   [& args]
@@ -87,11 +216,41 @@
     (str/includes? (git "log" "--format=%B" (str merge-base "..HEAD"))
                    opt-out-marker)))
 
+(defn tracked-source
+  "Every tracked file, for the whole-repo deprecation rule."
+  []
+  (lines (git "ls-files")))
+
+(defn- report-deprecations
+  "Prints the unannounced deprecations and returns whether there were any."
+  []
+  (let [changelog (slurp changelog-path)
+        findings  (undocumented-deprecations (tracked-source) slurp changelog)]
+    (let [{unread :unreadable undoc :undocumented-deprecation} (group-by :rule findings)]
+      (when (seq undoc)
+        (println (ansi/red (str "Deprecated vars that " changelog-path " never names:")))
+        (println)
+        (doseq [{:keys [path var]} undoc]
+          (println (str "  " (ansi/bold path) " — " (ansi/red var))))
+        (println)
+        (println (str "A deprecation is metadata, a `### Deprecated` entry, and a replacement "
+                      "that exists.")))
+      (when (seq unread)
+        (when (seq undoc) (println))
+        (println (ansi/red "Shipped source this gate could not read:"))
+        (println)
+        (doseq [{:keys [path var]} unread]
+          (println (str "  " (ansi/bold path) " — " (ansi/red var))))))
+    (boolean (seq findings))))
+
 (defn -main [& _args]
   (if-let [base (base-ref)]
-    (let [changed (changed-since base)]
-      (if-let [{:keys [files]} (verdict changed (opted-out? base))]
-        (do
+    (let [changed     (changed-since base)
+          missing     (verdict changed (opted-out? base))
+          undocumented (report-deprecations)]
+      (when missing
+        (let [{:keys [files]} missing]
+          (when undocumented (println))
           (println (ansi/red (str "Shipped source changed with no " changelog-path " entry:")))
           (println)
           (doseq [f (take 10 files)] (println (str "  " f)))
@@ -101,10 +260,12 @@
           (println "Add an entry under [Unreleased] describing what a user of the")
           (println (str "framework will notice. If they will notice nothing, say so with "
                         opt-out-marker))
-          (println "in a commit message on this branch.")
-          (System/exit 1))
+          (println "in a commit message on this branch.")))
+      (if (or missing undocumented)
+        (System/exit 1)
         (do
-          (println (ansi/green (str changelog-path " is up to date with this branch.")))
+          (println (ansi/green (str changelog-path " is up to date with this branch, "
+                                    "and announces every deprecation.")))
           (System/exit 0))))
     (do
       ;; No base means no comparison, and a gate that passes because it could

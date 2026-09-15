@@ -1,6 +1,8 @@
 (ns wagoe.user.shell.module-wiring-test
   (:require [wagoe.user.shell.module-wiring :as sut]
             [clojure.test :refer [deftest is testing]]
+            [clojure.tools.logging.test :as log-test]
+            [wagoe.user.shell.auth-persistence]
             [integrant.core :as ig]))
 
 (deftest ^:unit user-http-middleware-is-a-seq-the-handler-can-thread
@@ -28,3 +30,17 @@
     (is (= (ig/ref :wagoe/user-http-middleware) (:auth-middleware http)))
     (is (not (contains? http :extra-middleware))
         "tenant owns that key; a second contributor would silently replace it")))
+
+(deftest ^:unit the-deprecated-repository-says-so-when-it-is-wired
+  ;; A `### Deprecated` entry the running system says nothing about is an
+  ;; announcement to whoever already read it (BOU-433). The module contributes
+  ;; :wagoe/user-repository and not this key, so init only runs for a
+  ;; hand-wired one.
+  (testing "init warns, naming the replacement and the removal"
+    (log-test/with-log
+      (with-redefs [wagoe.user.shell.auth-persistence/create-auth-user-repository
+                    (constantly ::repo)]
+        (is (= ::repo (ig/init-key :wagoe/auth-user-repository {:ctx ::ctx}))))
+      (is (log-test/logged? 'wagoe.user.shell.module-wiring :warn #"DEPRECATED"))
+      (is (log-test/logged? 'wagoe.user.shell.module-wiring :warn #":wagoe/user-repository"))
+      (is (log-test/logged? 'wagoe.user.shell.module-wiring :warn #"removed in 2\.0")))))

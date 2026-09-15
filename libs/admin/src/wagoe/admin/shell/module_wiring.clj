@@ -10,6 +10,7 @@
    Dependencies are injected via Integrant refs, maintaining FC/IS separation
    and enabling testability with mock implementations."
   (:require
+   [clojure.tools.logging :as log]
    [integrant.core :as ig]
    [wagoe.admin.shell.schema-repository :as schema-repo]
    [wagoe.admin.shell.service :as service]
@@ -31,7 +32,14 @@
 ;;
 ;; The `:wagoe/admin` key in `:active` is a different thing and is not
 ;; deprecated: it is how an application switches the admin module on.
-(defmethod ig/init-key :wagoe/admin [_ config] config)
+(defmethod ig/init-key :wagoe/admin [_ config]
+  ;; The module contributes admin-schema-provider/-service/-routes and not this
+  ;; key, so init only runs for a hand-wired one. Switching the module on with
+  ;; `:wagoe/admin` under `:active` does not reach here.
+  (log/warn "DEPRECATED :wagoe/admin component — a settings passthrough with no"
+            "consumer; admin's components take the settings map directly."
+            "Drop it from your wiring; removed in 2.0.")
+  config)
 
 (defmethod ig/halt-key! :wagoe/admin [_ _] nil)
 

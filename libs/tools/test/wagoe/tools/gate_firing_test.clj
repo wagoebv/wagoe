@@ -1052,7 +1052,122 @@
                ["docs/modules/architecture/pages/scaling.adoc"
                 "libs/cache/test/wagoe/cache/adapter_surface_test.clj"
                 ".github/workflows/ci.yml"]
-               false)))))
+               false))))
+
+  ;; BOU-433. The other half of the same promise: an entry is required when
+  ;; source changes, and a deprecation is required to have one at all.
+  (testing "a deprecated var the changelog never names is reported"
+    (is (= [{:rule :undocumented-deprecation
+             :path "libs/jobs/src/wagoe/jobs/shell/adapters/db.clj"
+             :var  "enqueue-in-tx!"}]
+           (check-changelog/undocumented-deprecations
+            ["libs/jobs/src/wagoe/jobs/shell/adapters/db.clj"]
+            {"libs/jobs/src/wagoe/jobs/shell/adapters/db.clj"
+             "(defn ^:deprecated enqueue-in-tx! [tx q job] nil)"}
+            "### Deprecated\n\n- something else\n"))))
+
+  (testing "and is not once a `### Deprecated` section names it"
+    (is (empty? (check-changelog/undocumented-deprecations
+                 ["libs/jobs/src/wagoe/jobs/shell/adapters/db.clj"]
+                 {"libs/jobs/src/wagoe/jobs/shell/adapters/db.clj"
+                  "(defn ^:deprecated enqueue-in-tx! [tx q job] nil)"}
+                 (str "### Deprecated\n\n- `wagoe.jobs.shell.adapters.db/"
+                      "enqueue-in-tx!` — use the port.\n")))))
+
+  (testing "a name that appears only in unrelated prose does not announce it"
+    ;; `str/includes?` over the whole file made any common name pass: an older
+    ;; `### Fixed` entry mentioning it counted as an announcement.
+    (is (= ["create"]
+           (map :var (check-changelog/undocumented-deprecations
+                      ["src/wagoe/x.clj"]
+                      {"src/wagoe/x.clj" "(defn ^:deprecated create [] nil)"}
+                      (str "### Fixed\n\n- `create` stopped throwing.\n\n"
+                           "### Deprecated\n\n- something else\n"))))))
+
+  (testing "an announcement in an older release still counts"
+    ;; Scoping to [Unreleased] would make the gate demand that every past
+    ;; deprecation be re-announced in every release.
+    (is (empty? (check-changelog/undocumented-deprecations
+                 ["src/wagoe/x.clj"]
+                 {"src/wagoe/x.clj" "(defn ^:deprecated old-thing [] nil)"}
+                 (str "## [Unreleased]\n\n### Added\n\n- something\n\n"
+                      "## [1.0.0-beta-3]\n\n### Deprecated\n\n- `old-thing`\n")))))
+
+  (testing "a longer name is not announced by a prefix of it"
+    (is (= ["create-user"]
+           (map :var (check-changelog/undocumented-deprecations
+                      ["src/wagoe/x.clj"]
+                      {"src/wagoe/x.clj" "(defn ^:deprecated create-user [] nil)"}
+                      "### Deprecated\n\n- `create` is going away\n")))))
+
+  (testing "a deprecated protocol method is a finding"
+    ;; The def-form pattern reads the metadata next to the `defprotocol` name
+    ;; only, so a method deprecated inside a live protocol was invisible.
+    (is (= ["old-method"]
+           (map :var (check-changelog/undocumented-deprecations
+                      ["libs/user/src/wagoe/user/ports.clj"]
+                      {"libs/user/src/wagoe/user/ports.clj"
+                       "(defprotocol IUsers\n  (^:deprecated old-method [this id])\n  (find-user [this id]))"}
+                      "### Deprecated\n\n- nothing relevant\n")))))
+
+  (testing "an example in a docstring is prose, not a deprecation"
+    ;; A regex over raw text read both alike: this gate's own docstring shows
+    ;; `defn ^:deprecated f` and it duly demanded a changelog entry for `f`.
+    (is (empty? (check-changelog/deprecated-vars
+                 "(defn explain\n  \"Write (defn ^:deprecated f [x] ...) to deprecate.\"\n  [] nil)")))
+    (is (empty? (check-changelog/deprecated-vars
+                 ";; (defn ^:deprecated f [x] ...) is the shape\n(defn g [] nil)"))))
+
+  (testing "an entry for another namespace's var of the same name announces nothing"
+    ;; `.` and `/` are not identifier boundaries, so a qualified entry used to
+    ;; satisfy every deprecated var sharing its last segment.
+    (is (= ["other.ns/foo"]
+           (map :var (check-changelog/undocumented-deprecations
+                      ["src/wagoe/x.clj"]
+                      {"src/wagoe/x.clj" "(ns other.ns)\n(defn ^:deprecated foo [] nil)"}
+                      "### Deprecated\n\n- `some.other.ns/foo` is going away\n")))))
+
+  (testing "and the var's own namespace, or a trailing part of it, does"
+    (let [src "(ns wagoe.jobs.shell.adapters.db)\n(defn ^:deprecated foo [] nil)"]
+      (doseq [entry ["`wagoe.jobs.shell.adapters.db/foo`" "`db/foo`" "`foo`"]]
+        (is (empty? (check-changelog/undocumented-deprecations
+                     ["src/wagoe/x.clj"] {"src/wagoe/x.clj" src}
+                     (str "### Deprecated\n\n- " entry "\n")))
+            (str entry " should announce it")))))
+
+  (testing "combined metadata still deprecates the var"
+    ;; `^:private ^:deprecated f` is one of two shapes a regex on token
+    ;; adjacency cannot tell apart from the other; Clojure marks this one.
+    (is (= ["old-thing"]
+           (map :var (check-changelog/undocumented-deprecations
+                      ["src/wagoe/x.clj"]
+                      {"src/wagoe/x.clj" "(defn ^:private ^:deprecated old-thing [] nil)"}
+                      "")))))
+
+  (testing "metadata on the value does not deprecate the var"
+    ;; `(def x ^:deprecated {:a 1})` attaches it to the map. Verified against
+    ;; Clojure: (meta #'x) carries no :deprecated.
+    (is (empty? (check-changelog/deprecated-vars "(def old-thing ^:deprecated {:a 1})"))))
+
+  (testing "a file that does not parse is a finding, not a pass"
+    ;; A gate that swallows a read failure reports clean because it could not
+    ;; look (BOU-250).
+    (is (= [:unreadable]
+           (map :rule (check-changelog/undocumented-deprecations
+                       ["src/wagoe/x.clj"] {"src/wagoe/x.clj" "(defn ["} "")))))
+
+  (testing "a deprecation outside shipped source is not the changelog's business"
+    (is (empty? (check-changelog/undocumented-deprecations
+                 ["libs/jobs/test/wagoe/jobs/db_test.clj" "dev/wagoe/x.clj"]
+                 (constantly "(defn ^:deprecated helper [] nil)")
+                 ""))))
+
+  (testing "the rule reads the real tree, and it is clean"
+    ;; The BOU-250 shape: a scan over nothing reports clean forever.
+    (let [files (check-changelog/tracked-source)]
+      (is (< 500 (count files)) "git ls-files returned almost nothing")
+      (is (empty? (check-changelog/undocumented-deprecations
+                   files slurp (slurp check-changelog/changelog-path)))))))
 
 (deftest ^:unit versions-gate-fires-test
   ;; The shape the ticket names: a bump covers deps.edn and misses bb.edn, so
