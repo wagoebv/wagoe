@@ -3,7 +3,8 @@
 
 This page states what you can rely on, what you cannot, and how a change that
 breaks you will reach you. It describes the framework as it is today — Wagoe is
-in beta, and the honest summary is that *no API is frozen yet*.
+at its release candidate for `1.0.0`, and the surface below is the one `1.0.0`
+will promise.
 
 == Current status
 
@@ -12,10 +13,12 @@ in beta, and the honest summary is that *no API is frozen yet*.
 | |
 
 | Current version
-| `1.0.0-beta-8`
+| `1.0.0-rc-1`
 
 | Stability
-| Beta — breaking changes are permitted between beta releases
+| Release candidate. The `1.0.0` surface is frozen: no breaking change lands
+  between `1.0.0-rc-1` and `1.0.0`. Everything deprecated is deferred to `2.0`
+  — see <<_deferred_to_2_0,Deferred to 2.0>>.
 
 | Artifacts
 | 31 libraries on Clojars, all in the `com.wagoe` group. Artifact ids are
@@ -42,8 +45,9 @@ because something else in the suite did.
 
 == The version scheme
 
-Releases are `1.0.0-beta-N`, incrementing `N` per release. This replaced the
-older `1.0.1-alpha-N` scheme.
+Releases were `1.0.0-beta-N`, incrementing `N` per release, and are now
+`1.0.0-rc-N` on the way to `1.0.0`. Both replaced the older `1.0.1-alpha-N`
+scheme.
 
 .The alpha → beta transition
 [cols="1,1,2",options="header"]
@@ -183,11 +187,12 @@ rather than a commit message.
 
 == What we promise, and when
 
-=== Now (beta)
+=== Now (release candidate)
 
-* *Nothing is frozen.* Any release may change any API, including protocols.
-* Breaking changes are announced in `CHANGELOG.md` under a `### Breaking`
-  heading, naming the affected library and the migration.
+* *The surface is frozen.* `1.0.0` is `1.0.0-rc-1` plus whatever the candidate
+  turns up; nothing further lands under `### Breaking` before the tag.
+* Breaking changes that already shipped are in `CHANGELOG.md` under a
+  `### Breaking` heading, naming the affected library and the migration.
 * Deprecations are announced under `### Deprecated`.
 * We will not remove something in the same release that first deprecates it,
   unless it is broken enough that leaving it in place is worse. That case is

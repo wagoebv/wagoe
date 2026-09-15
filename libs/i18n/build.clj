@@ -2,10 +2,13 @@
   (:require [clojure.tools.build.api :as b]))
 
 (def lib 'com.wagoe/wagoe-i18n)
-(def version "1.0.0-beta-8")
+(def version "1.0.0-rc-1")
 (def class-dir "target/classes")
 (load-file "../build_shared.clj")
-(def basis (build-shared/pom-basis version))
+;; A delay: creating the basis resolves the rewritten com.wagoe coords, which
+;; do not exist until the suite is published. As a top-level value even
+;; `clean` needed the network (BOU-433 follow-up).
+(def basis (delay (build-shared/pom-basis version)))
 (def jar-file (format "target/%s-%s.jar" (name lib) version))
 
 (defn clean [_]
@@ -17,7 +20,7 @@
   (b/write-pom {:class-dir class-dir
                 :lib lib
                 :version version
-                :basis basis
+                :basis @basis
                 :src-dirs ["src"]
                 :scm {:url "https://github.com/wagoebv/wagoe"
                       :connection "scm:git:git://github.com/wagoebv/wagoe.git"
@@ -36,7 +39,7 @@
 
 (defn install [_]
   (jar nil)
-  (b/install {:basis basis
+  (b/install {:basis @basis
               :lib lib
               :version version
               :jar-file jar-file

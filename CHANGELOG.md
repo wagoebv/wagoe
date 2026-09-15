@@ -29,9 +29,19 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ## [Unreleased]
 
-> **The breaking list is frozen** (BOU-433). All three below ship in `1.0.0` and are
-> exercised by the published `1.0.0-rc-1` first; nothing further lands as Breaking
-> before the tag. Deprecations are deferred to `2.0` — see the
+### Fixed
+
+- **A release could stop half-published** (BOU-433). Each artifact installs to `~/.m2`
+  before Clojars, so the run no longer sleeps 30s per library hoping for indexing.
+
+- **`clojure -T:build` needed the network after a version bump.** `bb deploy
+  --install-local` primes `~/.m2`; even `clean` used to resolve unpublished coordinates.
+
+## [1.0.0-rc-1] — 2026-09-15
+
+> **The release candidate for `1.0.0`.** The breaking list below is frozen (BOU-433):
+> all three ship in `1.0.0` and are exercised here first; nothing further lands as
+> Breaking before the tag. Deprecations are deferred to `2.0` — see the
 > [Stability policy](https://wagoe.org/docs/stability.html).
 
 ### Breaking

@@ -172,3 +172,29 @@
           (is (thrown? Throwable (deploy/deploy-lib! "core"))))
         (is (empty? @shelled)
             "it shelled out to the build before refusing the version")))))
+
+(deftest ^:unit a-lib-is-installed-locally-before-it-is-published
+  ;; Each lib's build.clj resolves its wagoe deps at the suite version, so
+  ;; before this the next lib in the sequence resolved its predecessor from
+  ;; Clojars and the run had to sleep for indexing — a guess that, when wrong,
+  ;; leaves the suite half published.
+  (let [shelled (atom [])]
+    (with-redefs [deploy/read-version        (constantly "1.0.0-rc-1")
+                  deploy/verify-jar!         (constantly nil)
+                  deploy/request-cljdoc-build! (constantly nil)
+                  babashka.process/shell     (fn [_opts & args] (swap! shelled conj (vec args)) nil)]
+      (deploy/deploy-lib! "core"))
+    (let [tasks (map last @shelled)]
+      (is (= ["clean" "jar" "install" "deploy"] tasks))
+      (is (< (.indexOf (vec tasks) "install") (.indexOf (vec tasks) "deploy"))
+          "publishing before installing leaves the next lib resolving over the network"))))
+
+(deftest ^:unit the-sequence-does-not-pause-between-libraries
+  ;; The 30s-per-lib sleep is gone with the network dependency that needed it.
+  ;; Timed rather than asserted on the absent var: what matters is that a
+  ;; 31-artifact release no longer spends a quarter of an hour asleep.
+  (with-redefs [deploy/deploy-lib! (constantly nil)]
+    (let [start (System/currentTimeMillis)]
+      (deploy/deploy-sequence! ["core" "observability" "platform"])
+      (is (< (- (System/currentTimeMillis) start) 1000)
+          "deploy-sequence! is sleeping between libraries"))))
