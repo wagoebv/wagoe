@@ -125,7 +125,7 @@
    ;; its own changelog, if any, on its own terms.
    {:id    :changelog
     :scope :monorepo
-    :label "Changelog covers shipped source"
+    :label "Changelog covers source and deprecations"
     :cmd   ["bb" "check:changelog"]}
    ;; "30 independently publishable libraries" was documented and never
    ;; checked. The CI matrix job compiles each library against its own

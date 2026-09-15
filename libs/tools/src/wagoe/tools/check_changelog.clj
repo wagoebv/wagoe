@@ -49,6 +49,38 @@
                (not (some #{changelog-path} changed-files)))
       {:files (sort shipped)})))
 
+;; =============================================================================
+;; Rule 2 — a deprecation nobody announced
+;; =============================================================================
+
+(def deprecated-var-re
+  "`^:deprecated` on a def form, and the name it applies to.
+
+   Metadata can sit either side of the name (`defn ^:deprecated f` and
+   `defn f ^:deprecated`), and Clojure accepts both."
+  #"\(def[a-z-]*\s+(?:\^:deprecated\s+([a-zA-Z0-9*+!_'?<>=/.-]+)|([a-zA-Z0-9*+!_'?<>=/.-]+)\s+\^:deprecated)")
+
+(defn deprecated-vars
+  "The names carrying `^:deprecated` in `content`."
+  [content]
+  (->> (re-seq deprecated-var-re content)
+       (map (fn [[_ a b]] (or a b)))
+       (remove nil?)))
+
+(defn undocumented-deprecations
+  "Deprecated vars in shipped source that `changelog` never names.
+
+   Stability policy makes a deprecation three things — metadata, a changelog
+   entry, and a replacement that exists. Only the metadata was ever checked, so
+   `enqueue-in-tx!` carried `^:deprecated` for months while `CHANGELOG.md` had
+   never used the heading (BOU-433). Pure, so a test can prove it still fires."
+  [files read-file changelog]
+  (for [path  files
+        :when (shipped-source? path)
+        var-name (deprecated-vars (read-file path))
+        :when (not (str/includes? changelog var-name))]
+    {:rule :undocumented-deprecation :path path :var var-name}))
+
 (defn- git
   [& args]
   (let [{:keys [exit out err]} (apply process/shell
@@ -87,11 +119,34 @@
     (str/includes? (git "log" "--format=%B" (str merge-base "..HEAD"))
                    opt-out-marker)))
 
+(defn tracked-source
+  "Every tracked file, for the whole-repo deprecation rule."
+  []
+  (lines (git "ls-files")))
+
+(defn- report-deprecations
+  "Prints the unannounced deprecations and returns whether there were any."
+  []
+  (let [changelog (slurp changelog-path)
+        findings  (undocumented-deprecations (tracked-source) slurp changelog)]
+    (when (seq findings)
+      (println (ansi/red (str "Deprecated vars that " changelog-path " never names:")))
+      (println)
+      (doseq [{:keys [path var]} findings]
+        (println (str "  " (ansi/bold path) " — " (ansi/red var))))
+      (println)
+      (println (str "A deprecation is metadata, a `### Deprecated` entry, and a replacement "
+                    "that exists.")))
+    (boolean (seq findings))))
+
 (defn -main [& _args]
   (if-let [base (base-ref)]
-    (let [changed (changed-since base)]
-      (if-let [{:keys [files]} (verdict changed (opted-out? base))]
-        (do
+    (let [changed     (changed-since base)
+          missing     (verdict changed (opted-out? base))
+          undocumented (report-deprecations)]
+      (when missing
+        (let [{:keys [files]} missing]
+          (when undocumented (println))
           (println (ansi/red (str "Shipped source changed with no " changelog-path " entry:")))
           (println)
           (doseq [f (take 10 files)] (println (str "  " f)))
@@ -101,10 +156,12 @@
           (println "Add an entry under [Unreleased] describing what a user of the")
           (println (str "framework will notice. If they will notice nothing, say so with "
                         opt-out-marker))
-          (println "in a commit message on this branch.")
-          (System/exit 1))
+          (println "in a commit message on this branch.")))
+      (if (or missing undocumented)
+        (System/exit 1)
         (do
-          (println (ansi/green (str changelog-path " is up to date with this branch.")))
+          (println (ansi/green (str changelog-path " is up to date with this branch, "
+                                    "and announces every deprecation.")))
           (System/exit 0))))
     (do
       ;; No base means no comparison, and a gate that passes because it could

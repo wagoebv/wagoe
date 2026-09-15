@@ -24,7 +24,12 @@
 ;; working key in the release that first deprecates it.
 (defmethod ig/init-key :wagoe/auth-user-repository
   [_ {:keys [ctx]}]
-  (log/info "Initializing auth user repository")
+  ;; The module does not contribute this key, so init only runs for a
+  ;; hand-wired one — the deprecated use. A changelog entry nothing says at
+  ;; runtime is an announcement to whoever already read it.
+  (log/warn "DEPRECATED :wagoe/auth-user-repository — no consumer;"
+            ":wagoe/auth-service takes :wagoe/user-repository."
+            "Drop it from your wiring; removed in 2.0.")
   (auth-persistence/create-auth-user-repository ctx))
 
 (defmethod ig/halt-key! :wagoe/auth-user-repository

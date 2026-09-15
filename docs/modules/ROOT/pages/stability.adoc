@@ -304,14 +304,37 @@ A deprecation is three things, and it is not a deprecation without all three:
   ...)
 ----
 
-[NOTE]
-====
-This convention is new as of this page, and the codebase does not yet meet it
-everywhere — at the time of writing exactly one var carries `^:deprecated`, and
-`CHANGELOG.md` has never used a `### Deprecated` heading. Breaking changes
-during the Framework Quality work shipped without one. Bringing the existing
-surface up to this standard is part of the road to `1.0.0`.
-====
+An Integrant component key cannot carry metadata, so for one the first point is
+a `WARN` on init naming the replacement. A changelog entry that the running
+system says nothing about is an announcement to whoever already read it.
+
+CI enforces the second point: a var carrying `^:deprecated` that `CHANGELOG.md`
+never names fails the build.
+
+=== Deferred to 2.0
+
+Everything currently deprecated, and what replaces it. None of these is removed
+in a `1.x` release.
+
+[cols="2,3",options="header"]
+|===
+| Deprecated | Use instead
+
+| `:provider :in-memory`, `:redis-streams`, `:database`
+| `:memory`, `:redis`, `:db`. The old names still work and warn.
+
+| The `:wagoe/admin` Integrant component
+| Nothing — admin's components take the settings map directly. `:wagoe/admin`
+  under `:active` is a different thing and is *not* deprecated; it is how an
+  application switches the module on.
+
+| The `:wagoe/auth-user-repository` component
+| `:wagoe/user-repository`, which `:wagoe/auth-service` already takes.
+
+| `wagoe.jobs.shell.adapters.db/enqueue-in-tx!`
+| `wagoe.jobs.ports/enqueue-in-tx!` on the queue component, so callers stay on
+  the port rather than knowing which adapter they have.
+|===
 
 == HTTP API versioning is a separate thing
 

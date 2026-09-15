@@ -1052,7 +1052,46 @@
                ["docs/modules/architecture/pages/scaling.adoc"
                 "libs/cache/test/wagoe/cache/adapter_surface_test.clj"
                 ".github/workflows/ci.yml"]
-               false)))))
+               false))))
+
+  ;; BOU-433. The other half of the same promise: an entry is required when
+  ;; source changes, and a deprecation is required to have one at all.
+  (testing "a deprecated var the changelog never names is reported"
+    (is (= [{:rule :undocumented-deprecation
+             :path "libs/jobs/src/wagoe/jobs/shell/adapters/db.clj"
+             :var  "enqueue-in-tx!"}]
+           (check-changelog/undocumented-deprecations
+            ["libs/jobs/src/wagoe/jobs/shell/adapters/db.clj"]
+            {"libs/jobs/src/wagoe/jobs/shell/adapters/db.clj"
+             "(defn ^:deprecated enqueue-in-tx! [tx q job] nil)"}
+            "### Deprecated\n\n- something else\n"))))
+
+  (testing "and is not once it does"
+    (is (empty? (check-changelog/undocumented-deprecations
+                 ["libs/jobs/src/wagoe/jobs/shell/adapters/db.clj"]
+                 {"libs/jobs/src/wagoe/jobs/shell/adapters/db.clj"
+                  "(defn ^:deprecated enqueue-in-tx! [tx q job] nil)"}
+                 "- `wagoe.jobs.shell.adapters.db/enqueue-in-tx!` is deprecated\n"))))
+
+  (testing "metadata after the name counts too — Clojure accepts both"
+    (is (= ["old-thing"]
+           (map :var (check-changelog/undocumented-deprecations
+                      ["src/wagoe/x.clj"]
+                      {"src/wagoe/x.clj" "(def old-thing ^:deprecated {:a 1})"}
+                      "")))))
+
+  (testing "a deprecation outside shipped source is not the changelog's business"
+    (is (empty? (check-changelog/undocumented-deprecations
+                 ["libs/jobs/test/wagoe/jobs/db_test.clj" "dev/wagoe/x.clj"]
+                 (constantly "(defn ^:deprecated helper [] nil)")
+                 ""))))
+
+  (testing "the rule reads the real tree, and it is clean"
+    ;; The BOU-250 shape: a scan over nothing reports clean forever.
+    (let [files (check-changelog/tracked-source)]
+      (is (< 500 (count files)) "git ls-files returned almost nothing")
+      (is (empty? (check-changelog/undocumented-deprecations
+                   files slurp (slurp check-changelog/changelog-path)))))))
 
 (deftest ^:unit versions-gate-fires-test
   ;; The shape the ticket names: a bump covers deps.edn and misses bb.edn, so
