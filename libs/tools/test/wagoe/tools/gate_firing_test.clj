@@ -253,6 +253,29 @@
               {:warnings [{:type :unknown-alias :file "AGENTS.md" :line 1
                            :message "Unknown deps.edn alias: :db/h2"}]}))))
 
+  (testing "a tracker id on a published page is a failing finding"
+    ;; BOU-437. Linear is private, so on wagoe.org these resolve to nothing.
+    (is (= [{:type :ticket-ref :file "docs/modules/ROOT/pages/x.adoc" :line 1
+             :message (str "BOU-90 is a private tracker id — cite the pull request "
+                           "instead, which resolves for readers")
+             :context "shipped in BOU-90."}]
+           (docs-lint/check-ticket-refs "docs/modules/ROOT/pages/x.adoc"
+                                        "shipped in BOU-90.\n")))
+    (is (seq (docs-lint/failing-warnings
+              {:warnings (docs-lint/check-ticket-refs
+                          "docs/modules/ROOT/pages/x.adoc" "(BOU-90)\n")}))))
+
+  (testing "the same id outside the published tree is left alone"
+    ;; dev-docs, ADRs, AGENTS.md and the burn-down files are read by people
+    ;; with tracker access, where the id is the audit trail.
+    (is (empty? (docs-lint/check-ticket-refs "dev-docs/adr/ADR-021.adoc" "(BOU-90)\n")))
+    (is (empty? (docs-lint/check-ticket-refs "libs/jobs/AGENTS.md" "(BOU-88)\n"))))
+
+  (testing "an identifier that does resolve for a reader is not a tracker id"
+    ;; `[A-Z]+-\d+` would take ADR-021 and RFC-7231 with it.
+    (is (empty? (docs-lint/check-ticket-refs
+                 "docs/modules/ROOT/pages/x.adoc" "See ADR-021 and RFC-7231.\n"))))
+
   (testing "broken links and unknown namespaces are reported but do not fail"
     ;; Deliberate: that debt is BOU-253's, and failing on it would hold CI red
     ;; without anyone able to clear it in passing.

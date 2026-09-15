@@ -142,6 +142,14 @@ For changes to core architecture:
 - Update relevant files in [docs/modules/architecture/pages/](docs/modules/architecture/pages/)
 - Update architecture diagrams if structural changes occur
 
+#### Citing work in published docs
+
+`docs/modules/**` is rendered on wagoe.org, where our tracker is not readable —
+cite the pull request (`#384`), which GitHub resolves for anyone. `bb docs:lint`
+fails on a tracker id there. Everywhere else — docstrings, ADRs, `CHANGELOG.md`,
+`dev-docs/`, the `.wagoe/*.edn` burn-down files — keep the ticket id; that is the
+audit trail, and readers of those files have access to it.
+
 ## Module Development Guidelines
 
 ### 🏗️ **Creating a New Module**

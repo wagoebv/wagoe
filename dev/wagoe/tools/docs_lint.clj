@@ -293,6 +293,41 @@
          (remove nil?))))
 
 ;; =============================================================================
+;; Check: Tracker Ticket References in Published Docs
+;; =============================================================================
+
+(def published-docs-prefix
+  "The Antora module tree — the pages wagoe.org renders. Everything else this
+   linter scans (dev-docs, libs/*/AGENTS.md, docstrings by way of the repo) is
+   read by people with tracker access, where a ticket id is the audit trail."
+  "docs/modules/")
+
+(def ticket-ref-pattern
+  "A Linear ticket id. Deliberately not `[A-Z]+-\\d+`, which also matches
+   `ADR-021` and `RFC-7231` — those resolve for any reader and must stay."
+  #"\b(?:BOU|ZZP)-\d+\b")
+
+(defn check-ticket-refs
+  "Tracker ticket ids in pages the public site renders.
+
+   Linear is a private tracker, so `(BOU-90)` on a published page is a dead
+   reference for every outside reader — it looks like a citation and resolves
+   to nothing. A pull request number does resolve: GitHub renders `#384` as a
+   link, and the PR carries the same reasoning."
+  [file-path content]
+  (when (str/starts-with? file-path published-docs-prefix)
+    (->> (str/split-lines content)
+         (map-indexed (fn [idx line]
+                        (for [m (re-seq ticket-ref-pattern line)]
+                          {:type    :ticket-ref
+                           :file    file-path
+                           :line    (inc idx)
+                           :message (str m " is a private tracker id — cite the pull "
+                                         "request instead, which resolves for readers")
+                           :context (str/trim line)})))
+         (apply concat))))
+
+;; =============================================================================
 ;; Check: Stale/Pre-split Paths
 ;; =============================================================================
 
@@ -416,6 +451,7 @@
         (println "  Scanning:" file-path))
       (concat
        (check-internal-links file-path content)
+       (check-ticket-refs file-path content)
        (check-stale-paths file-path content)
        (check-namespace-references file-path content known-namespaces)
        (check-command-aliases file-path content known-aliases known-libs)))
@@ -428,17 +464,20 @@
   "The findings in `report` that make this a failing run, as opposed to a
    report of pre-existing debt.
 
-   Only `:unknown-alias` qualifies. It is objectively decidable — the alias is
-   in deps.edn or it is not — so there are no false positives to argue with,
-   and its failure mode is silent: `clojure -M:test:db/h2` on a dropped alias
-   does not error, it warns and skips every test. That is how 264 documented
-   commands stayed broken for months (BOU-257). Broken links and unknown
+   `:unknown-alias` and `:ticket-ref` qualify. Both are objectively decidable —
+   the alias is in deps.edn or it is not; the id is a tracker id or it is not —
+   so there are no false positives to argue with. The alias failure mode is
+   silent: `clojure -M:test:db/h2` on a dropped alias does not error, it warns
+   and skips every test. That is how 264 documented commands stayed broken for
+   months (BOU-257). `:ticket-ref` fails because the surface is clean today and
+   the point of the gate is that it stays that way (BOU-437); anything else
+   would reintroduce the debt one page at a time. Broken links and unknown
    namespaces stay warn-only; that debt is BOU-253's.
 
    Exposed separately from `run-lint` so a caller can decide what to do about
    a failure — exit, aggregate, or ignore — without `run-lint` deciding for it."
   [report]
-  (filter #(= :unknown-alias (:type %)) (:warnings report)))
+  (filter #(#{:unknown-alias :ticket-ref} (:type %)) (:warnings report)))
 
 (defn run-lint []
   (println "Wagoe Docs Lint")
@@ -546,16 +585,24 @@
       ;; alias does not error, it warns and skips every test. That is how 264
       ;; documented commands stayed broken for months (BOU-257). A warning in a
       ;; report nobody opens was not enough.
-      (let [failing (failing-warnings report)]
-        (when (seq failing)
+      (let [failing (failing-warnings report)
+            ;; Two kinds fail now, and one heading for both reported 27 ticket
+            ;; ids as "commands naming a missing alias".
+            by-type {:unknown-alias
+                     [" documented command(s) name a deps.edn alias that does not exist:"
+                      "Fix the command, or add the alias to deps.edn."]
+                     :ticket-ref
+                     [" private tracker id(s) on pages the public site renders:"
+                      "Cite the pull request instead — GitHub resolves it for readers."]}]
+        (doseq [[type ws] (group-by :type failing)
+                :let [[heading advice] (by-type type)]]
           (println)
-          (println (str "FAIL: " (count failing)
-                        " documented command(s) name a deps.edn alias that does not exist:"))
-          (doseq [w failing]
+          (println (str "FAIL: " (count ws) heading))
+          (doseq [w ws]
             (println (str "  " (:file w) (when (:line w) (str ":" (:line w)))
                           " — " (:message w))))
           (println)
-          (println "Fix the command, or add the alias to deps.edn.")))
+          (println advice)))
 
       ;; Returns the report and leaves the process alone. Exiting from here
       ;; would tear down the JVM under any programmatic caller — a REPL
