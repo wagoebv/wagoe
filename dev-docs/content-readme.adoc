@@ -78,7 +78,7 @@ templates, plus launch material under `reference/launch/`.
 
 * link:README.adoc[dev-docs README] - what belongs in this directory
 * link:DECISIONS.adoc[Decisions] - decisions too small for an ADR
-* link:roadmap.adoc[Roadmap]
+* link:roadmap.adoc[Roadmap] - moved; the roadmap is published under `docs/`
 * link:scaling-guide.adoc[Scaling guide] - vertical and horizontal scaling
 * link:security-checklist.adoc[Security checklist]
 * link:DOCKER_DEVELOPMENT.adoc[Docker development]

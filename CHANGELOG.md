@@ -48,6 +48,9 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **One roadmap** (BOU-434). The public page listed four shipped features as future work;
+  `bb check:roadmap` now fails the build if a roadmap plans what `scaling.adoc` marks shipped.
+
 - **Libraries carry a stability tier** (BOU-432). Eight are `incubating` — published
   and usable, but outside the breaking-change guarantee; `wagoe list modules` shows it.
 

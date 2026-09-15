@@ -291,7 +291,8 @@
     ;; will invoke it, so the task must exist in bb.edn.tmpl first — which the
     ;; test below enforces.
     (is (= #{:doc-counts :versions :agents :poms :no-boundary :docs-lint
-             :branch-protection :changelog :isolation :error-shape :deps :jdk}
+             :branch-protection :changelog :isolation :error-shape :deps :jdk
+             :roadmap}
            (set (map :id (remove #(= :any (:scope %)) check/all-checks)))))))
 
 (deftest ^:unit the-template-defines-no-task-a-user-has-no-business-running

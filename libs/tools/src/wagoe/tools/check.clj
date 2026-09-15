@@ -112,6 +112,13 @@
     :scope :monorepo
     :label "JDK baseline"
     :cmd   ["bb" "check:jdk"]}
+   ;; :monorepo, because it compares two pages of this repository's own docs.
+   ;; Three roadmaps disagreed at once — the public one listed four shipped
+   ;; things as future work and called the module graph cyclic (BOU-434).
+   {:id    :roadmap
+    :scope :monorepo
+    :label "One roadmap, agreeing with the code"
+    :cmd   ["bb" "check:roadmap"]}
    ;; Thirty PRs merged in eleven days without one CHANGELOG entry between
    ;; them, including a new library, a removed config key and a change to the
    ;; order jobs are dispatched in. :monorepo because a generated project keeps

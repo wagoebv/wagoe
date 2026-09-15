@@ -77,7 +77,7 @@ Key tools:
 * link:DOCKER_DEVELOPMENT.adoc[Docker Development] — Docker-based development setup
 * link:DOCS_LINT.adoc[Docs Lint] — Documentation linting tooling and rules
 * link:alpha-release-checklist.adoc[Alpha Release Checklist] — Pre-release checklist
-* link:roadmap.adoc[Roadmap] — Project roadmap and planned features
+* link:roadmap.adoc[Roadmap] — moved; the roadmap is published under `docs/`
 
 === link:reference/[Internal Reference]
 
