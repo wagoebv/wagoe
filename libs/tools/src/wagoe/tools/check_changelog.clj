@@ -87,21 +87,37 @@
              (#{"defprotocol" "definterface"} (name (first form))))
     (keep #(when (seq? %) (first %)) form)))
 
+(defn- ns-name-of
+  "The namespace `content` declares, as a string, or nil."
+  [forms]
+  (some (fn [form]
+          (when (and (seq? form) (= 'ns (first form)) (symbol? (second form)))
+            (str (second form))))
+        forms))
+
 (defn deprecated-vars
-  "The names Clojure would mark `:deprecated` in `content`.
+  "What Clojure would mark `:deprecated` in `content`, as `{:ns :name}`.
+
+   The namespace is carried because the name alone is not the var: two shipped
+   namespaces deprecating the same `foo` would each be satisfied by an entry
+   naming only the other one.
 
    Throws when the file does not parse. A gate that swallowed that would report
    clean because it could not look, which is the shape BOU-250 is about; the
    caller turns it into a finding."
   [content]
-  (let [forms (tree-seq coll? seq (parse-forms content))]
-    (distinct (concat (->> forms
-                           (keep (fn [form]
-                                   (when (and (seq? form)
-                                              (symbol? (first form))
-                                              (str/starts-with? (name (first form)) "def"))
-                                     (deprecated-sym (second form))))))
-                      (->> forms (mapcat protocol-methods) (keep deprecated-sym))))))
+  (let [top   (parse-forms content)
+        forms (tree-seq coll? seq top)
+        nsn   (ns-name-of top)]
+    (->> (concat (->> forms
+                      (keep (fn [form]
+                              (when (and (seq? form)
+                                         (symbol? (first form))
+                                         (str/starts-with? (name (first form)) "def"))
+                                (deprecated-sym (second form))))))
+                 (->> forms (mapcat protocol-methods) (keep deprecated-sym)))
+         distinct
+         (map (fn [n] {:ns nsn :name n})))))
 
 (def deprecated-section-re
   "The body of every `### Deprecated` section in a changelog.
@@ -113,18 +129,34 @@
    would make the gate demand a lie."
   #"(?ms)^###\s+Deprecated\s*$(.*?)(?=^#{2,3}\s|\z)")
 
-(defn announced-in
-  "True when `changelog` names `var-name` in a `### Deprecated` section.
+(defn- qualifier-fits?
+  "Whether a qualifier written in front of the name refers to `ns-str`.
 
-   Whole-identifier, so `create` does not match `create-user`. `/` and `.` are
-   not boundaries, so the qualified `…adapters.db/enqueue-in-tx!` the entry
-   actually writes still counts."
-  [changelog var-name]
+   Nothing in front is the common prose case and counts. A qualifier counts
+   when it is the namespace or a trailing part of it, so both
+   `wagoe.jobs.shell.adapters.db/enqueue-in-tx!` and the shorthand
+   `db/enqueue-in-tx!` do. A *different* namespace does not — that entry is
+   about another var that happens to share the name."
+  [ns-str qualifier]
+  (or (str/blank? qualifier)
+      (nil? ns-str)
+      (= qualifier ns-str)
+      (str/ends-with? ns-str (str "." qualifier))))
+
+(defn announced-in
+  "True when `changelog` announces `{:ns :name}` in a `### Deprecated` section.
+
+   Whole-identifier, so `create` does not match `create-user`, and any
+   namespace written in front of it must be this var's."
+  [changelog {:keys [ns name]}]
   (let [boundary "[a-zA-Z0-9*+!_'?<>=-]"
         re       (re-pattern (str "(?<!" boundary ")"
-                                  (java.util.regex.Pattern/quote var-name)
+                                  "(?:([a-zA-Z0-9*+!_'?<>=.-]+)/)?"
+                                  (java.util.regex.Pattern/quote name)
                                   "(?!" boundary ")"))]
-    (boolean (some #(re-find re (second %))
+    (boolean (some (fn [[_ section]]
+                     (some (fn [[_ qualifier]] (qualifier-fits? ns qualifier))
+                           (re-seq re section)))
                    (re-seq deprecated-section-re changelog)))))
 
 (defn undocumented-deprecations
@@ -137,9 +169,10 @@
   [files read-file changelog]
   (mapcat (fn [path]
             (try
-              (for [var-name (deprecated-vars (read-file path))
-                    :when    (not (announced-in changelog var-name))]
-                {:rule :undocumented-deprecation :path path :var var-name})
+              (for [v     (deprecated-vars (read-file path))
+                    :when (not (announced-in changelog v))]
+                {:rule :undocumented-deprecation :path path
+                 :var  (if (:ns v) (str (:ns v) "/" (:name v)) (:name v))})
               (catch Exception e
                 [{:rule :unreadable :path path :var (str "does not parse: "
                                                          (.getMessage e))}])))

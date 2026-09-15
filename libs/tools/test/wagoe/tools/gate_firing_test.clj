@@ -1118,6 +1118,23 @@
     (is (empty? (check-changelog/deprecated-vars
                  ";; (defn ^:deprecated f [x] ...) is the shape\n(defn g [] nil)"))))
 
+  (testing "an entry for another namespace's var of the same name announces nothing"
+    ;; `.` and `/` are not identifier boundaries, so a qualified entry used to
+    ;; satisfy every deprecated var sharing its last segment.
+    (is (= ["other.ns/foo"]
+           (map :var (check-changelog/undocumented-deprecations
+                      ["src/wagoe/x.clj"]
+                      {"src/wagoe/x.clj" "(ns other.ns)\n(defn ^:deprecated foo [] nil)"}
+                      "### Deprecated\n\n- `some.other.ns/foo` is going away\n")))))
+
+  (testing "and the var's own namespace, or a trailing part of it, does"
+    (let [src "(ns wagoe.jobs.shell.adapters.db)\n(defn ^:deprecated foo [] nil)"]
+      (doseq [entry ["`wagoe.jobs.shell.adapters.db/foo`" "`db/foo`" "`foo`"]]
+        (is (empty? (check-changelog/undocumented-deprecations
+                     ["src/wagoe/x.clj"] {"src/wagoe/x.clj" src}
+                     (str "### Deprecated\n\n- " entry "\n")))
+            (str entry " should announce it")))))
+
   (testing "combined metadata still deprecates the var"
     ;; `^:private ^:deprecated f` is one of two shapes a regex on token
     ;; adjacency cannot tell apart from the other; Clojure marks this one.
