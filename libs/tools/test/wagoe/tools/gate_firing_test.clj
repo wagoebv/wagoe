@@ -1066,12 +1066,57 @@
              "(defn ^:deprecated enqueue-in-tx! [tx q job] nil)"}
             "### Deprecated\n\n- something else\n"))))
 
-  (testing "and is not once it does"
+  (testing "and is not once a `### Deprecated` section names it"
     (is (empty? (check-changelog/undocumented-deprecations
                  ["libs/jobs/src/wagoe/jobs/shell/adapters/db.clj"]
                  {"libs/jobs/src/wagoe/jobs/shell/adapters/db.clj"
                   "(defn ^:deprecated enqueue-in-tx! [tx q job] nil)"}
-                 "- `wagoe.jobs.shell.adapters.db/enqueue-in-tx!` is deprecated\n"))))
+                 (str "### Deprecated\n\n- `wagoe.jobs.shell.adapters.db/"
+                      "enqueue-in-tx!` — use the port.\n")))))
+
+  (testing "a name that appears only in unrelated prose does not announce it"
+    ;; `str/includes?` over the whole file made any common name pass: an older
+    ;; `### Fixed` entry mentioning it counted as an announcement.
+    (is (= ["create"]
+           (map :var (check-changelog/undocumented-deprecations
+                      ["src/wagoe/x.clj"]
+                      {"src/wagoe/x.clj" "(defn ^:deprecated create [] nil)"}
+                      (str "### Fixed\n\n- `create` stopped throwing.\n\n"
+                           "### Deprecated\n\n- something else\n"))))))
+
+  (testing "an announcement in an older release still counts"
+    ;; Scoping to [Unreleased] would make the gate demand that every past
+    ;; deprecation be re-announced in every release.
+    (is (empty? (check-changelog/undocumented-deprecations
+                 ["src/wagoe/x.clj"]
+                 {"src/wagoe/x.clj" "(defn ^:deprecated old-thing [] nil)"}
+                 (str "## [Unreleased]\n\n### Added\n\n- something\n\n"
+                      "## [1.0.0-beta-3]\n\n### Deprecated\n\n- `old-thing`\n")))))
+
+  (testing "a longer name is not announced by a prefix of it"
+    (is (= ["create-user"]
+           (map :var (check-changelog/undocumented-deprecations
+                      ["src/wagoe/x.clj"]
+                      {"src/wagoe/x.clj" "(defn ^:deprecated create-user [] nil)"}
+                      "### Deprecated\n\n- `create` is going away\n")))))
+
+  (testing "a deprecated protocol method is a finding"
+    ;; The def-form pattern reads the metadata next to the `defprotocol` name
+    ;; only, so a method deprecated inside a live protocol was invisible.
+    (is (= ["old-method"]
+           (map :var (check-changelog/undocumented-deprecations
+                      ["libs/user/src/wagoe/user/ports.clj"]
+                      {"libs/user/src/wagoe/user/ports.clj"
+                       "(defprotocol IUsers\n  (^:deprecated old-method [this id])\n  (find-user [this id]))"}
+                      "### Deprecated\n\n- nothing relevant\n")))))
+
+  (testing "an example in a docstring is prose, not a deprecation"
+    ;; A regex over raw text reads both alike: this gate's own docstring shows
+    ;; `defn ^:deprecated f` and it duly demanded a changelog entry for `f`.
+    (is (empty? (check-changelog/deprecated-vars
+                 "(defn explain\n  \"Write (defn ^:deprecated f [x] ...) to deprecate.\"\n  [] nil)")))
+    (is (empty? (check-changelog/deprecated-vars
+                 ";; (defn ^:deprecated f [x] ...) is the shape\n(defn g [] nil)"))))
 
   (testing "metadata after the name counts too — Clojure accepts both"
     (is (= ["old-thing"]

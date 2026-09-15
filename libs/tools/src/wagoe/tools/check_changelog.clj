@@ -17,7 +17,8 @@
 (ns wagoe.tools.check-changelog
   (:require [clojure.string :as str]
             [babashka.process :as process]
-            [wagoe.tools.ansi :as ansi]))
+            [wagoe.tools.ansi :as ansi]
+            [wagoe.tools.parsing :as parsing]))
 
 (def changelog-path "CHANGELOG.md")
 
@@ -53,22 +54,64 @@
 ;; Rule 2 — a deprecation nobody announced
 ;; =============================================================================
 
+(def ^:private name-chars "a-zA-Z0-9*+!_'?<>=/.-")
+
 (def deprecated-var-re
   "`^:deprecated` on a def form, and the name it applies to.
 
    Metadata can sit either side of the name (`defn ^:deprecated f` and
    `defn f ^:deprecated`), and Clojure accepts both."
-  #"\(def[a-z-]*\s+(?:\^:deprecated\s+([a-zA-Z0-9*+!_'?<>=/.-]+)|([a-zA-Z0-9*+!_'?<>=/.-]+)\s+\^:deprecated)")
+  (re-pattern (str "\\(def[a-z-]*\\s+(?:\\^:deprecated\\s+([" name-chars "]+)"
+                   "|([" name-chars "]+)\\s+\\^:deprecated)")))
+
+(def deprecated-method-re
+  "`^:deprecated` on a protocol method — `(^:deprecated old [this])`.
+
+   The policy covers \"the var, protocol or method\", and the def-form pattern
+   sees only the metadata next to the outer `defprotocol` name, so a method
+   deprecated inside a live protocol was invisible to this gate. Keyed on the
+   argument vector, which is what distinguishes a method declaration from the
+   `(defn ^:deprecated f` the pattern above already reads."
+  (re-pattern (str "\\(\\^:deprecated\\s+([" name-chars "]+)\\s*\\[")))
 
 (defn deprecated-vars
-  "The names carrying `^:deprecated` in `content`."
+  "The names carrying `^:deprecated` in `content`, vars and protocol methods.
+
+   Comments and string literals are blanked first. A regex over raw text reads
+   prose as code: this namespace's own docstring shows `defn ^:deprecated f` as
+   an example, and the gate duly demanded a changelog entry for `f`."
   [content]
-  (->> (re-seq deprecated-var-re content)
-       (map (fn [[_ a b]] (or a b)))
-       (remove nil?)))
+  (let [code (parsing/strip-comments-and-strings content)]
+    (distinct (concat (->> (re-seq deprecated-var-re code)
+                           (keep (fn [[_ a b]] (or a b))))
+                      (map second (re-seq deprecated-method-re code))))))
+
+(def deprecated-section-re
+  "The body of every `### Deprecated` section in a changelog.
+
+   Scoped rather than searching the whole file, because a bare name matches
+   anywhere — an older `### Fixed` entry, or ordinary prose. Not scoped to
+   `[Unreleased]` alone, though: a var announced three releases ago and still
+   carrying the metadata is announced, and requiring it again every release
+   would make the gate demand a lie."
+  #"(?ms)^###\s+Deprecated\s*$(.*?)(?=^#{2,3}\s|\z)")
+
+(defn announced-in
+  "True when `changelog` names `var-name` in a `### Deprecated` section.
+
+   Whole-identifier, so `create` does not match `create-user`. `/` and `.` are
+   not boundaries, so the qualified `…adapters.db/enqueue-in-tx!` the entry
+   actually writes still counts."
+  [changelog var-name]
+  (let [boundary "[a-zA-Z0-9*+!_'?<>=-]"
+        re       (re-pattern (str "(?<!" boundary ")"
+                                  (java.util.regex.Pattern/quote var-name)
+                                  "(?!" boundary ")"))]
+    (boolean (some #(re-find re (second %))
+                   (re-seq deprecated-section-re changelog)))))
 
 (defn undocumented-deprecations
-  "Deprecated vars in shipped source that `changelog` never names.
+  "Deprecated vars in shipped source that `changelog` never announces.
 
    Stability policy makes a deprecation three things — metadata, a changelog
    entry, and a replacement that exists. Only the metadata was ever checked, so
@@ -78,7 +121,7 @@
   (for [path  files
         :when (shipped-source? path)
         var-name (deprecated-vars (read-file path))
-        :when (not (str/includes? changelog var-name))]
+        :when (not (announced-in changelog var-name))]
     {:rule :undocumented-deprecation :path path :var var-name}))
 
 (defn- git
