@@ -167,10 +167,6 @@
     (println (red "Error: CLOJARS_USERNAME and CLOJARS_PASSWORD must be set."))
     (System/exit 1)))
 
-(defn wait-for-indexing []
-  (println (dim "  Waiting 30s for Clojars indexing..."))
-  (Thread/sleep 30000))
-
 ;; =============================================================================
 ;; Deploy
 ;; =============================================================================
@@ -298,16 +294,25 @@
     (p/shell {:dir dir} "clojure" "-T:build" "clean")
     (p/shell {:dir dir} "clojure" "-T:build" "jar")
     (verify-jar! lib dir)
+    ;; Into the local repository before Clojars, so the libs that depend on this
+    ;; one resolve it from ~/.m2 on the next iteration. Without it each lib
+    ;; resolved its predecessor over the network and the sequence had to sleep
+    ;; for Clojars to index — a guess that, when wrong, leaves the suite half
+    ;; published. Verified: installed rather than published deps still produce a
+    ;; POM naming every inter-Wagoe dep.
+    (p/shell {:dir dir} "clojure" "-T:build" "install")
     (p/shell {:dir dir} "clojure" "-T:build" "deploy")
     (println (green (str "✓ " (artifact-name lib) " " version " deployed")))
     (patch-catalogue-version! lib version)
     (request-cljdoc-build! lib version)))
 
 (defn deploy-sequence! [libs]
-  (doseq [[i lib] (map-indexed vector libs)]
-    (deploy-lib! lib)
-    (when (< i (dec (count libs)))
-      (wait-for-indexing))))
+  ;; No pause between libs: `deploy-lib!` installs into ~/.m2 first, so the next
+  ;; lib never waits on Clojars indexing to resolve its dependencies. cljdoc is
+  ;; asked for a build at the end of each lib, which was already before the old
+  ;; sleep rather than after it.
+  (doseq [lib libs]
+    (deploy-lib! lib)))
 
 ;; =============================================================================
 ;; Commands
@@ -335,6 +340,21 @@
         (println (bold (str "\nDeploying " (count missing) " missing artifacts...")))
         (deploy-sequence! missing)
         (println (green "\n✓ Done."))))))
+
+(defn cmd-install-local
+  "Build and install every artifact into ~/.m2, in publish order, without
+   touching Clojars.
+
+   After a version bump nothing in the suite is published at the new version,
+   and a lib's build.clj resolves its wagoe deps at exactly that version — so
+   `clojure -T:build jar` in any dependent library fails until this has run.
+   Needs no credentials; it is the local half of `--all`."
+  []
+  (println (bold (str "Installing all " (count publish-order) " artifacts into ~/.m2...")))
+  (doseq [lib publish-order]
+    (println (bold (str "\n" (artifact-name lib) " " (read-version lib) "...")))
+    (p/shell {:dir (lib-dir lib)} "clojure" "-T:build" "install"))
+  (println (green (str "\n✓ All " (count publish-order) " artifacts installed locally."))))
 
 (defn cmd-specific [libs]
   (check-env!)
@@ -388,6 +408,7 @@
   (println "  bb deploy --missing             Deploy only artifacts not yet on Clojars")
   (println "  bb deploy --check-versions VER  Guard: every build.clj == VER (no deploy)")
   (println "  bb deploy --verify              Check every artifact is live on Clojars")
+  (println "  bb deploy --install-local       Build + install all into ~/.m2 (no Clojars, no credentials)")
   (println "  bb deploy <lib> [lib...]        Deploy specific libraries")
   (println)
   (println "Available artifacts (in publish order):")
@@ -409,6 +430,7 @@
       (= args ["--all"])                                 (cmd-all)
       (= args ["--missing"])                             (cmd-missing)
       (= args ["--verify"])                              (cmd-verify)
+      (= args ["--install-local"])                       (cmd-install-local)
       (= (first args) "--check-versions")                (cmd-check-versions (second args))
       :else                                              (cmd-specific args))
     (catch clojure.lang.ExceptionInfo e

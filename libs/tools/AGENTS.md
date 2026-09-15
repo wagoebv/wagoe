@@ -363,8 +363,13 @@ Deploys the 31 published Wagoe libraries to Clojars — `wagoe-tools` among them
 bb deploy --help                    # Show help
 bb deploy --all                     # Deploy all 31 published artifacts
 bb deploy --missing                 # Deploy only unpublished artifacts
+bb deploy --install-local           # Build + install all into ~/.m2 (no Clojars, no credentials)
 bb deploy core platform user        # Deploy specific libraries
 ```
+
+Run `--install-local` right after a version bump. Each `build.clj` resolves its
+Wagoe dependencies at the suite version, so until something is published at the
+new version `clojure -T:build jar` in any dependent library cannot resolve them.
 
 Required environment variables:
 - `CLOJARS_USERNAME` — your Clojars username
@@ -374,6 +379,7 @@ Important release note:
 - `bb deploy --all` publishes every artifact listed in `wagoe.tools.deploy/all-libs`. `wagoe-tools` is the first entry in that list, not an exclusion. The only directory under `libs/` that `all-libs` omits is `e2e`, which is a test harness rather than a library.
 - A Git tag only triggers the GitHub Actions workflow; actual artifact versions still come from each artifact's `build.clj`.
 - For a tagged full release, bump every included artifact to an unpublished version first, otherwise the workflow will fail on the first duplicate version.
+- Each artifact is installed into `~/.m2` before it is deployed, so the next library in the sequence resolves it locally. The run used to sleep 30s per artifact waiting for Clojars to index — a guess that, when wrong, left the suite half published.
 
 ### `bb migrate` — Database migrations
 

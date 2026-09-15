@@ -73,6 +73,21 @@
                (def raw (b/create-basis {:project \"deps.edn\"}))
                (defn jar [_] (b/write-pom {:basis raw}))")))))
 
+(deftest ^:unit pom-basis-wired?-accepts-a-delayed-basis
+  ;; Creating the basis resolves coordinates that do not exist until the suite
+  ;; is published, so as a top-level value even `clean` needed the network. The
+  ;; binding is a delay and write-pom is fed `@basis`; the POM is identical.
+  (is (poms/pom-basis-wired?
+       "(def basis (delay (build-shared/pom-basis version)))
+        (defn jar [_] (b/write-pom {:class-dir class-dir :lib lib :basis @basis}))")))
+
+(deftest ^:unit pom-basis-wired?-still-rejects-a-delayed-decoy
+  (testing "a delayed pom-basis bound but not passed is the same hole"
+    (is (not (poms/pom-basis-wired?
+              "(def basis (delay (build-shared/pom-basis version)))
+               (def raw (b/create-basis {:project \"deps.edn\"}))
+               (defn jar [_] (b/write-pom {:basis raw}))")))))
+
 (deftest ^:unit pom-basis-wired?-nil-source
   (is (not (poms/pom-basis-wired? nil))))
 

@@ -98,12 +98,16 @@
    build-shared/pom-basis but actually binds `basis` from it AND feeds that
    `basis` to write-pom — and never falls back to a raw create-basis. This
    rejects a build.clj that computes pom-basis but hands write-pom a different
-   basis (which would silently drop the boundary deps from the pom)."
+   basis (which would silently drop the boundary deps from the pom).
+
+   The binding may be a `delay`, and then write-pom is fed `@basis`: creating
+   the basis resolves coordinates that do not exist until the suite is
+   published, so as a top-level value even `clean` needed the network."
   [src]
   (boolean
    (and src
-        (re-find #"\(def\s+basis\s+\(\s*build-shared/pom-basis" src)
-        (re-find #":basis\s+basis\b" src)
+        (re-find #"\(def\s+basis\s+\(\s*(?:delay\s+\(\s*)?build-shared/pom-basis" src)
+        (re-find #":basis\s+@?basis\b" src)
         (not (str/includes? src "create-basis")))))
 
 (defn jar-cleans-first?

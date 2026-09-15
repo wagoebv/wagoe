@@ -1,7 +1,7 @@
 = Roadmap
 :description: Where Wagoe is today, what stands between here and 1.0.0, and what comes after.
 
-Wagoe is at `1.0.0-beta-8`. This page is the public view of what is built, what
+Wagoe is at `1.0.0-rc-1`. This page is the public view of what is built, what
 is left before a stable `1.0.0`, and what we intend to build after it.
 
 It is a statement of intent, not a delivery commitment. Dates are deliberately
@@ -105,12 +105,12 @@ covered by the `1.0` promise.
 `1.0.0` means the API is one we are willing to be held to. What is left is
 about earning that, not adding surface.
 
-=== 1. Finish the release gate
+=== 1. The release gate — done
 
 One JDK baseline, one provider vocabulary, jars that cannot ship stale classes,
-and a version scheme in which a pre-release can never outrank a release — those
-have landed. What remains is the changelog freeze: an explicit decision on every
-breaking change that is still open, so `1.0.0` ships no surprise.
+a version scheme in which a pre-release can never outrank a release, library
+tiers, and a frozen changelog carrying an explicit decision on every open
+breaking change. `1.0.0` ships no surprise.
 
 === 2. A release candidate that is actually exercised
 
@@ -198,5 +198,5 @@ up the list.
 
 * xref:stability.adoc[Stability & Versioning] — what `1.0.0` will actually
   promise
-* xref:getting-started:index.adoc[Getting Started] — try the current beta
+* xref:getting-started:index.adoc[Getting Started] — try the release candidate
 * xref:architecture:scaling.adoc[Sizing & Scaling] — what scales today
