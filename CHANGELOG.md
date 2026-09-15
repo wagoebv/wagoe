@@ -48,6 +48,9 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **Published docs cite pull requests, not tickets** (BOU-437). Linear is private, so
+  `docs/modules/**` now carries no `BOU-nnn`; `bb docs:lint` fails on one.
+
 - **One roadmap** (BOU-434). The public page listed four shipped features as future work;
   `bb check:roadmap` now fails the build if a roadmap plans what `scaling.adoc` marks shipped.
 

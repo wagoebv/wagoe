@@ -65,7 +65,7 @@ short spellings — `production` and `prod` name the same directory.
 
 == Why it is a library
 
-Four published libraries read configuration. Until BOU-306 they did it with
+Four published libraries read configuration. Until it was extracted (https://github.com/wagoebv/wagoe/pull/412[#412]) they did it with
 `requiring-resolve` against a `wagoe.config` namespace that the monorepo and
 `wagoe new` both happened to generate — a convention nothing declared and
 nothing checked, resting in one case on a private var. Anyone assembling a

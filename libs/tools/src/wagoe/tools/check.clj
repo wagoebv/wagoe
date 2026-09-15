@@ -170,7 +170,7 @@
    ;; every local `bb check` (BOU-257).
    {:id    :docs-lint
     :scope :monorepo
-    :label "Docs drift (commands name real aliases)"
+    :label "Docs drift (real aliases, no tracker ids)"
     :cmd   ["bb" "docs:lint"]}
    {:id    :linting
     :scope :any

@@ -106,3 +106,24 @@ data
 * Generate parts of reference docs from code (deps.edn → commands.adoc)
 * Collect onboarding feedback and iterate
 * Consider Antora migration for full documentation portal
+
+== Ticket References in Documentation
+
+*Date:* 2026-09-15 +
+*Status:* Active
+
+Linear is a private tracker, so a `BOU-nnn` reference on a published page is a
+dead citation for every outside reader. Of the three options weighed — publish a
+read-only issue view, scrub the public surfaces only, or scrub everything — the
+middle one was taken (BOU-437).
+
+* *`docs/modules/**`* is rendered on wagoe.org and carries *no* tracker ids.
+  Cite the pull request instead: GitHub resolves `#384` for anyone, and the PR
+  carries the same reasoning. `bb docs:lint` fails on one.
+* *Everywhere else* — docstrings, ADRs, `CHANGELOG.md`, `dev-docs/`, and the
+  `.wagoe/*.edn` burn-down files — keeps the ticket id. It is the audit trail,
+  and the people reading those files can resolve it.
+
+Scrubbing everything was rejected because a PR number is a weaker record than a
+ticket: one ticket can span several PRs, and the burn-down files reference work
+that has not been done yet, which has no PR at all.

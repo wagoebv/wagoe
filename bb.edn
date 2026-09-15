@@ -147,7 +147,7 @@
                    :task (check-changelog/-main)}
   check:no-boundary {:doc "Rename gate: scan for residual boundary tokens (ns/keys/coords/env/dirs/urls); args select groups (bb check:no-boundary)"
                      :task (apply check-no-boundary/-main *command-line-args*)}
-  docs:lint     {:doc "Documentation drift: fails when a documented command names a deps.edn alias that does not exist; reports broken links + unknown namespaces (bb docs:lint)"
+  docs:lint     {:doc "Documentation drift: fails on a documented command naming a deps.edn alias that does not exist, or a tracker id on a published page; reports broken links + unknown namespaces (bb docs:lint)"
                  :task (apply docs-lint/-main *command-line-args*)}
   ;; Namespaces are DISCOVERED, not listed. The previous version kept two
   ;; parallel hardcoded lists — one to `require`, one to `run-tests` — so adding

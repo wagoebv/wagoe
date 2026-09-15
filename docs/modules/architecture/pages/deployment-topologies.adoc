@@ -74,7 +74,7 @@ it, which is why the compose reference deploys Redis but leaves
 *Realtime pub/sub needs `:provider :redis`.* Under the default `:memory`
 provider a WebSocket connected to replica A does not see an event published on
 replica B, and sticky sessions do not fix it — the publisher and the subscriber
-are different connections. The Redis provider (BOU-85, ADR-035) fans routing
+are different connections. The Redis provider (https://github.com/wagoebv/wagoe/pull/213[#213], ADR-035) fans routing
 envelopes out over a pub/sub channel and keeps topic subscriptions in Redis
 sets, so a broadcast reaches clients on any replica. Sockets stay node-local
 under both providers; only the bus and the pub/sub manager differ.
@@ -87,7 +87,7 @@ single-node behaviour is a default rather than an error. An unrecognised one
 now throws rather than quietly serving a node-local bus. Config shape is in that
 namespace's docstring.
 
-*The event bus needs `:provider :redis`* (BOU-93, `libs/events`). Redis Streams with consumer groups delivers an event once per
+*The event bus needs `:provider :redis`* (https://github.com/wagoebv/wagoe/pull/387[#387], `libs/events`). Redis Streams with consumer groups delivers an event once per
 logical subscriber across replicas; the in-memory adapter delivers it only
 within the publishing process.
 
@@ -101,7 +101,7 @@ quiet, which is the better of the two failures here.
 Scheduled jobs are *not* on this list, contrary to the usual expectation.
 Promotion of a due job is an atomic claim — `ZREM` on the scheduled sorted set,
 and only the worker whose `ZREM` returns 1 owns it — so N workers polling
-concurrently promote each due job exactly once (BOU-88). There is no recurring
+concurrently promote each due job exactly once (https://github.com/wagoebv/wagoe/pull/220[#220]). There is no recurring
 or cron scheduler in the framework, so there is nothing that fires per process
 at start-up either. Running more than one worker is safe; job handlers must be
 idempotent for the ordinary at-least-once reason, not because of duplicate
@@ -133,7 +133,7 @@ are already served; the manifests wire them.
 
 The prod profile reads these. Names matter: `POSTGRES_*`, not `DB_*` — the wrong
 name fails the boot at `:wagoe/db-context` with "Invalid database
-configuration", and until BOU-89 the shipped manifests had it wrong.
+configuration", and the shipped manifests had it wrong until https://github.com/wagoebv/wagoe/pull/386[#386].
 
 [cols="1,3",options="header"]
 |===
@@ -152,7 +152,7 @@ configuration", and until BOU-89 the shipped manifests had it wrong.
   naming Redis, which sends you to look at the server instead of the variable.
   The reference topologies give their bundled Redis a password and match it.
   `:database` in the cache config is honoured whether or not there is a
-  password; it was not before BOU-89, so a passwordless deployment isolating
+  password; it was not before https://github.com/wagoebv/wagoe/pull/386[#386], so a passwordless deployment isolating
   environments by Redis database was writing to DB 0.
 
 | `SENTRY_DSN`
