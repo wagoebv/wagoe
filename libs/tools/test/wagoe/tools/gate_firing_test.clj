@@ -1111,19 +1111,33 @@
                       "### Deprecated\n\n- nothing relevant\n")))))
 
   (testing "an example in a docstring is prose, not a deprecation"
-    ;; A regex over raw text reads both alike: this gate's own docstring shows
+    ;; A regex over raw text read both alike: this gate's own docstring shows
     ;; `defn ^:deprecated f` and it duly demanded a changelog entry for `f`.
     (is (empty? (check-changelog/deprecated-vars
                  "(defn explain\n  \"Write (defn ^:deprecated f [x] ...) to deprecate.\"\n  [] nil)")))
     (is (empty? (check-changelog/deprecated-vars
                  ";; (defn ^:deprecated f [x] ...) is the shape\n(defn g [] nil)"))))
 
-  (testing "metadata after the name counts too — Clojure accepts both"
+  (testing "combined metadata still deprecates the var"
+    ;; `^:private ^:deprecated f` is one of two shapes a regex on token
+    ;; adjacency cannot tell apart from the other; Clojure marks this one.
     (is (= ["old-thing"]
            (map :var (check-changelog/undocumented-deprecations
                       ["src/wagoe/x.clj"]
-                      {"src/wagoe/x.clj" "(def old-thing ^:deprecated {:a 1})"}
+                      {"src/wagoe/x.clj" "(defn ^:private ^:deprecated old-thing [] nil)"}
                       "")))))
+
+  (testing "metadata on the value does not deprecate the var"
+    ;; `(def x ^:deprecated {:a 1})` attaches it to the map. Verified against
+    ;; Clojure: (meta #'x) carries no :deprecated.
+    (is (empty? (check-changelog/deprecated-vars "(def old-thing ^:deprecated {:a 1})"))))
+
+  (testing "a file that does not parse is a finding, not a pass"
+    ;; A gate that swallows a read failure reports clean because it could not
+    ;; look (BOU-250).
+    (is (= [:unreadable]
+           (map :rule (check-changelog/undocumented-deprecations
+                       ["src/wagoe/x.clj"] {"src/wagoe/x.clj" "(defn ["} "")))))
 
   (testing "a deprecation outside shipped source is not the changelog's business"
     (is (empty? (check-changelog/undocumented-deprecations

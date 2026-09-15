@@ -17,8 +17,8 @@
 (ns wagoe.tools.check-changelog
   (:require [clojure.string :as str]
             [babashka.process :as process]
-            [wagoe.tools.ansi :as ansi]
-            [wagoe.tools.parsing :as parsing]))
+            [edamame.core :as e]
+            [wagoe.tools.ansi :as ansi]))
 
 (def changelog-path "CHANGELOG.md")
 
@@ -54,37 +54,54 @@
 ;; Rule 2 — a deprecation nobody announced
 ;; =============================================================================
 
-(def ^:private name-chars "a-zA-Z0-9*+!_'?<>=/.-")
+(defn- parse-forms
+  "`raw` as data, read by edamame — the reader, not a lexer imitating one.
 
-(def deprecated-var-re
-  "`^:deprecated` on a def form, and the name it applies to.
+   Token adjacency cannot answer this question. `(defn ^:private ^:deprecated f
+   [])` deprecates the var and `(def x ^:deprecated {:a 1})` does not, and a
+   regex sees the same two tokens in both. Reading the form puts the metadata
+   where Clojure puts it."
+  [raw]
+  (e/parse-string-all raw
+                      {:all          true
+                       :auto-resolve (fn [a] (if (= a :current) (symbol "this.ns") (symbol (str a))))
+                       :readers      (fn [_tag] identity)
+                       :features     #{:clj :bb}
+                       :read-cond    :allow}))
 
-   Metadata can sit either side of the name (`defn ^:deprecated f` and
-   `defn f ^:deprecated`), and Clojure accepts both."
-  (re-pattern (str "\\(def[a-z-]*\\s+(?:\\^:deprecated\\s+([" name-chars "]+)"
-                   "|([" name-chars "]+)\\s+\\^:deprecated)")))
+(defn- deprecated-sym
+  "`sym` name when it is a symbol Clojure would mark deprecated."
+  [sym]
+  (when (and (symbol? sym) (:deprecated (meta sym)))
+    (name sym)))
 
-(def deprecated-method-re
-  "`^:deprecated` on a protocol method — `(^:deprecated old [this])`.
+(defn- protocol-methods
+  "The method-declaration heads of a `defprotocol` / `definterface` form.
 
-   The policy covers \"the var, protocol or method\", and the def-form pattern
-   sees only the metadata next to the outer `defprotocol` name, so a method
-   deprecated inside a live protocol was invisible to this gate. Keyed on the
-   argument vector, which is what distinguishes a method declaration from the
-   `(defn ^:deprecated f` the pattern above already reads."
-  (re-pattern (str "\\(\\^:deprecated\\s+([" name-chars "]+)\\s*\\[")))
+   A declaration is `(name [args] docstring?)`, so the head of any list in the
+   body. The policy covers \"the var, protocol or method\", and a method
+   deprecated inside a live protocol carries no `def` of its own."
+  [form]
+  (when (and (seq? form)
+             (symbol? (first form))
+             (#{"defprotocol" "definterface"} (name (first form))))
+    (keep #(when (seq? %) (first %)) form)))
 
 (defn deprecated-vars
-  "The names carrying `^:deprecated` in `content`, vars and protocol methods.
+  "The names Clojure would mark `:deprecated` in `content`.
 
-   Comments and string literals are blanked first. A regex over raw text reads
-   prose as code: this namespace's own docstring shows `defn ^:deprecated f` as
-   an example, and the gate duly demanded a changelog entry for `f`."
+   Throws when the file does not parse. A gate that swallowed that would report
+   clean because it could not look, which is the shape BOU-250 is about; the
+   caller turns it into a finding."
   [content]
-  (let [code (parsing/strip-comments-and-strings content)]
-    (distinct (concat (->> (re-seq deprecated-var-re code)
-                           (keep (fn [[_ a b]] (or a b))))
-                      (map second (re-seq deprecated-method-re code))))))
+  (let [forms (tree-seq coll? seq (parse-forms content))]
+    (distinct (concat (->> forms
+                           (keep (fn [form]
+                                   (when (and (seq? form)
+                                              (symbol? (first form))
+                                              (str/starts-with? (name (first form)) "def"))
+                                     (deprecated-sym (second form))))))
+                      (->> forms (mapcat protocol-methods) (keep deprecated-sym))))))
 
 (def deprecated-section-re
   "The body of every `### Deprecated` section in a changelog.
@@ -118,11 +135,15 @@
    `enqueue-in-tx!` carried `^:deprecated` for months while `CHANGELOG.md` had
    never used the heading (BOU-433). Pure, so a test can prove it still fires."
   [files read-file changelog]
-  (for [path  files
-        :when (shipped-source? path)
-        var-name (deprecated-vars (read-file path))
-        :when (not (announced-in changelog var-name))]
-    {:rule :undocumented-deprecation :path path :var var-name}))
+  (mapcat (fn [path]
+            (try
+              (for [var-name (deprecated-vars (read-file path))
+                    :when    (not (announced-in changelog var-name))]
+                {:rule :undocumented-deprecation :path path :var var-name})
+              (catch Exception e
+                [{:rule :unreadable :path path :var (str "does not parse: "
+                                                         (.getMessage e))}])))
+          (filter shipped-source? files)))
 
 (defn- git
   [& args]
@@ -172,14 +193,21 @@
   []
   (let [changelog (slurp changelog-path)
         findings  (undocumented-deprecations (tracked-source) slurp changelog)]
-    (when (seq findings)
-      (println (ansi/red (str "Deprecated vars that " changelog-path " never names:")))
-      (println)
-      (doseq [{:keys [path var]} findings]
-        (println (str "  " (ansi/bold path) " — " (ansi/red var))))
-      (println)
-      (println (str "A deprecation is metadata, a `### Deprecated` entry, and a replacement "
-                    "that exists.")))
+    (let [{unread :unreadable undoc :undocumented-deprecation} (group-by :rule findings)]
+      (when (seq undoc)
+        (println (ansi/red (str "Deprecated vars that " changelog-path " never names:")))
+        (println)
+        (doseq [{:keys [path var]} undoc]
+          (println (str "  " (ansi/bold path) " — " (ansi/red var))))
+        (println)
+        (println (str "A deprecation is metadata, a `### Deprecated` entry, and a replacement "
+                      "that exists.")))
+      (when (seq unread)
+        (when (seq undoc) (println))
+        (println (ansi/red "Shipped source this gate could not read:"))
+        (println)
+        (doseq [{:keys [path var]} unread]
+          (println (str "  " (ansi/bold path) " — " (ansi/red var))))))
     (boolean (seq findings))))
 
 (defn -main [& _args]
