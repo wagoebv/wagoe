@@ -109,7 +109,9 @@
 (deftest ^:integration the-sweep-covers-every-backend
   ;; With a backend missing, everything below agrees with whatever is left.
   (is (= 3 (count (backends)))
-      "Redis is not reachable on localhost:6379 — this run compared two backends, not three"))
+      (str "Redis is not reachable on localhost:6379 — this run compared "
+           (count (backends)) " backends, not three.\n"
+           "  Start it with `bb test:services up`.")))
 
 ;; =============================================================================
 ;; Round trip
@@ -392,7 +394,9 @@
 
 (deftest ^:integration the-store-sweep-covers-every-backend
   (is (= 3 (count (stores)))
-      "Redis is not reachable on localhost:6379 — this run compared two stores, not three"))
+      (str "Redis is not reachable on localhost:6379 — this run compared "
+           (count (stores)) " stores, not three.\n"
+           "  Start it with `bb test:services up`.")))
 
 (deftest ^:integration a-saved-job-comes-back-as-it-went-in
   (each-store

@@ -22,7 +22,8 @@
   (:require [babashka.fs :as fs]
             [babashka.process :as process]
             [clojure.string :as str]
-            [wagoe.tools.ansi :refer [bold green red yellow dim]]))
+            [wagoe.tools.ansi :refer [bold green red yellow dim]]
+            [wagoe.tools.test-services :as test-services]))
 
 ;; =============================================================================
 ;; Surfaces
@@ -144,9 +145,15 @@
   (println)
   (let [failed (remove (comp zero? :exit) results)]
     (if (seq failed)
-      (println (red (format "%d of %d surface(s) failed: %s"
-                            (count failed) (count results)
-                            (str/join ", " (map (comp name :id) failed)))))
+      (do
+        (println (red (format "%d of %d surface(s) failed: %s"
+                              (count failed) (count results)
+                              (str/join ", " (map (comp name :id) failed)))))
+        ;; Repeated here because the preflight scrolled past minutes ago, and
+        ;; this is the line someone reads.
+        (when-let [absent (seq (test-services/missing))]
+          (println (yellow (format "  %s not reachable — some of those failures are the sweeps refusing to compare fewer adapters. `bb test:services up`"
+                                   (str/join ", " (map (comp name :id) absent)))))))
       (println (green (format "All %d surfaces passed." (count results)))))
     (count failed)))
 
@@ -158,7 +165,13 @@
   (println)
   (println (bold "Deliberately excluded:"))
   (doseq [{:keys [label reason]} excluded]
-    (println (format "  %-52s %s" label reason))))
+    (println (format "  %-52s %s" label reason)))
+  (println)
+  (println (bold "Backing services the adapter sweeps need:"))
+  (doseq [{:keys [id host port needed-by]} test-services/services]
+    (println (format "  %-52s %s   %s" (str host ":" port " (" (name id) ")")
+                     "bb test:services up"
+                     (dim (str/join ", " needed-by))))))
 
 (defn -main [& args]
   (if (some #{"--list"} args)
@@ -166,6 +179,10 @@
     (do
       (println (bold "Running every test surface"))
       (println (dim "A green main suite alone does not cover wagoe-cli, wagoe-mcp or tools."))
+      ;; Before anything runs, not after: the adapter sweeps fail on a count
+      ;; four minutes in, and `expected 3, actual 2` does not look like an
+      ;; absent container (BOU-419).
+      (test-services/print-preflight)
       ;; Fail fast on a missing directory rather than reporting a confusing
       ;; non-zero exit from the shell.
       (doseq [{:keys [dir label]} surfaces]

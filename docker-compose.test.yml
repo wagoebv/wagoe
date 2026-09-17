@@ -1,0 +1,39 @@
+# Services the adapter sweeps need.
+#
+# The sweeps in libs/{jobs,cache}/test/.../adapter_surface_test.clj and
+# test/wagoe/audience_dialect_test.clj compare every backend they can reach, and
+# fail rather than pass when one is missing — a sweep that quietly compares two
+# adapters instead of three reports green while proving less (BOU-419).
+#
+# `bb test:services up` starts these; `bb test:all` names the missing ones before
+# it runs anything. The registry is wagoe.tools.test-services/services, and a
+# test pins it to this file.
+#
+# The images match the `services:` containers in .github/workflows/ci.yml, so a
+# sweep that passes locally is comparing the same backends CI compares. A test
+# pins them together.
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: wagoe-test-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+  mysql:
+    image: mysql:8
+    container_name: wagoe-test-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: probe
+      MYSQL_DATABASE: audience
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-pprobe"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
