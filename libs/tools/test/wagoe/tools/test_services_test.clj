@@ -56,6 +56,18 @@
                " vs " ts/compose-file " " (pr-str (sort declared))
                " — add the missing side")))))
 
+(deftest ^:unit a-configurable-port-is-configurable-on-both-sides
+  (testing "a service whose port comes from an env var is published on that var"
+    ;; Otherwise `WAGOE_TEST_MYSQL_PORT=3307 bb test:services up` starts MySQL on
+    ;; 3306, probes 3307, and reports the container it just started as down.
+    (let [text (compose-text)]
+      (doseq [{:keys [id port-env]} ts/services
+              :when port-env]
+        (is (true? (str/includes? text (str "${" port-env)))
+            (str ts/compose-file " hardcodes the " (name id) " host port, but the"
+                 " registry probes " port-env " — publish on \"${" port-env
+                 ":-<default>}:<container port>\""))))))
+
 (deftest ^:unit local-images-match-the-ones-ci-runs
   (testing "every image in the compose file is a service image in ci.yml"
     ;; A sweep is only worth running locally if it compares what CI compares.

@@ -31,7 +31,10 @@ services:
       MYSQL_ROOT_PASSWORD: probe
       MYSQL_DATABASE: audience
     ports:
-      - "3306:3306"
+      # The audience sweep reads WAGOE_TEST_MYSQL_PORT, so the registry probes it
+      # and this must publish there — otherwise `WAGOE_TEST_MYSQL_PORT=3307 bb
+      # test:services up` starts a container on 3306 and then reports it down.
+      - "${WAGOE_TEST_MYSQL_PORT:-3306}:3306"
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-pprobe"]
       interval: 3s
