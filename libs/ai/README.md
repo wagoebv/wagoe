@@ -16,7 +16,7 @@ Framework-aware AI tooling for Wagoe applications — offline-first via Ollama, 
 
 **Leiningen**:
 ```clojure
-[com.wagoe/wagoe-ai "1.0.0-beta-5"]
+[com.wagoe/wagoe-ai "1.0.0-rc-1"]
 ```
 
 ## Features

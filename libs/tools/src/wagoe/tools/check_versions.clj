@@ -91,6 +91,50 @@
                        (str/replace name #"^wagoe-" "")
                        (str "wagoe-" name)])))
 
+(def version-banner-re
+  "A suite version printed to the user as the version of a Wagoe tool.
+
+   `wagoe version` answered `1.0.0-beta-5` four releases after beta-5, from a
+   string literal in `wagoe/cli/main.clj`. Every rule above reads a coordinate,
+   a `(def … -version)`, a tag or a documented claim; a banner is none of those,
+   so the one number a user asks the tool for directly was the only number
+   nothing checked.
+
+   `wagoe` must precede `version` on the line, which is what keeps someone
+   else's out: `\"text/plain; version=0.0.4\"` is Prometheus' content type and
+   `\"version:1.0.0\"` a Datadog tag example, both in this tree, and `bb bump`
+   rewrites whatever this reports. `[^\"\\n]*` keeps the match inside one string
+   literal rather than running across the code between two."
+  (re-pattern (str "(?i)\\bwagoe\\b[^\"\\n]*?\\bversion\\b\\s+v?(" version-pattern ")")))
+
+(defn banner-findings
+  "Every version banner `text` prints, as {:line :excerpt :version :groups}.
+
+   Pure and public so the rule can be proven to fire without a file to break —
+   the repository is meant to carry none of these (see `hardcoded-banners`)."
+  [text]
+  (matches-in text version-banner-re))
+
+(defn- source-files
+  "Every Clojure source file a version could be hardcoded in."
+  []
+  (sort (mapcat #(map str (fs/glob root-dir %))
+                ["libs/*/src/**/*.clj" "src/**/*.clj" "scripts/**/*.clj"])))
+
+(defn hardcoded-banners
+  "Source files that print a suite version from a literal instead of reading one.
+
+   A separate verdict from the agreement check, because agreement is the wrong
+   question here: the CLI ships `modules-catalogue.edn`, which already carries
+   `:cli-version` and is already gated, so a banner has a single source to read
+   and does not need a second copy kept in step with it. Reported rather than
+   bumped — bumping it would keep the duplicate alive at the right number, which
+   is how it survived four releases at the wrong one."
+  []
+  (for [f (source-files)
+        m (banner-findings (try (slurp (fs/file f)) (catch Exception _ "")))]
+    (assoc m :file (str (fs/relativize root-dir (fs/absolutize f))))))
+
 (defn version-sources
   "Every file that hard-codes the suite version, and the version it names.
 
@@ -233,6 +277,44 @@
 (def ^:private coordinate-re
   (re-pattern (str "com\\.wagoe/[a-z0-9-]+\\s*\\{:mvn/version\\s+\""
                    version-pattern "\"")))
+
+(def ^:private lein-coordinate-re
+  "The Leiningen vector spelling of a coordinate: `[com.wagoe/wagoe-core \"…\"]`.
+
+   The same pin as `coordinate-re`, written the way ten library READMEs open —
+   three lines into the page, under \"Installation\". Nine of them sat on
+   `1.0.0-beta-5` for four releases while the gate reported every location in
+   agreement, because it read the tools.deps map form only.
+
+   The group prefix is optional because the READMEs write it both ways."
+  (re-pattern (str "\\[(?:com\\.)?wagoe/[a-z0-9-]+\\s+\"" version-pattern "\"\\]")))
+
+(def ^:private dep-table-row-re
+  "A coordinate split across two cells of a dependency table.
+
+   Five READMEs close with one — `| `wagoe/observability` | 1.0.0-beta-5 |
+   Logging, metrics |`. Still a pin, and still where a reader gets the version
+   from, but neither coordinate rule can see it: the artifact and the version are
+   separated by a cell boundary rather than by `{:mvn/version`.
+
+   The artifact cell is what makes the next cell a version of ours, so it is part
+   of the match — a bare `| 1.3.1048 |` in the same table belongs to next.jdbc."
+  (re-pattern (str "\\|\\s*[`']?(?:com\\.)?wagoe/[a-z0-9-]+[`']?\\s*\\|\\s*[`']?v?("
+                   version-pattern ")")))
+
+(def ^:private version-header-re
+  "A `**Version:**` header, which states the version as of right now.
+
+   `libs/tools/AGENTS.md` opens with one, `libs/external/README.md` and
+   `libs/realtime/README.md` too, and all three read `1.0.0-beta-5` four
+   releases on. Same defect as the `| Current version` cell (BOU-413) in a
+   different notation: a header asserting the version cannot be true of an old
+   release, and none of the four rules read it.
+
+   The bold marker is required. `Version: 1.2.3` in running text is as likely to
+   be a third party's, and `bb bump` rewrites what this reports. Both spellings
+   are in use — the colon inside the marker and outside it."
+  (re-pattern (str "(?i)\\*\\*version:?\\*\\*:?\\s*[`']?v?(" version-pattern ")")))
 
 (def ^:private tag-pin-re
   "A git tag of this repository, pinned in an install command.
@@ -382,9 +464,12 @@
                                         (tag-ownership block)
                                         (current-version-cells block))
           [what re] [["com.wagoe pin"         coordinate-re]
+                     ["com.wagoe pin"         lein-coordinate-re]
+                     ["com.wagoe pin"         dep-table-row-re]
                      ["git tag pin"           (when (= our-repo owner) tag-pin-re)]
                      ["release-pinned prose"  prose-pin-re]
                      ["current-version claim" current-version-re]
+                     ["current-version claim" version-header-re]
                      ["current-version claim" (when cell? current-version-cell-re)]]
           :when (and re (not (exempt? what)))
           m     (re-seq re line)
@@ -454,9 +539,20 @@
   "Fail when the repository names more than one suite version."
   []
   (println "Verifying every hard-coded suite version agrees")
-  (let [code (version-sources)
-        docs (doc-sources)]
+  (let [code    (version-sources)
+        docs    (doc-sources)
+        banners (hardcoded-banners)]
     (cond
+      (seq banners)
+      (do (binding [*out* *err*]
+            (println (str "  ✗ " (count banners)
+                          " source file(s) print a suite version from a literal"))
+            (doseq [{:keys [file line version]} banners]
+              (println (str "      " file ":" line "  prints " version)))
+            (println "    Read it from a gated single source instead —")
+            (println "    modules-catalogue.edn carries :cli-version."))
+          (System/exit 1))
+
       (empty? code)
       (do (binding [*out* *err*]
             (println "  ✗ found no version strings in source at all — the check is not looking at anything"))

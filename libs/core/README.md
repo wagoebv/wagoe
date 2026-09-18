@@ -16,7 +16,7 @@ Foundation library providing validation, utilities, and interceptor framework fo
 
 **Leiningen**:
 ```clojure
-[com.wagoe/wagoe-core "1.0.0-beta-5"]
+[com.wagoe/wagoe-core "1.0.0-rc-1"]
 ```
 
 ## Features

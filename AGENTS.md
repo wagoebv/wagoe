@@ -1117,4 +1117,4 @@ See `libs/tools/AGENTS.md` for the full command reference.
 ---
 
 **Last Updated**: 2026-04-20
-**Version**: 5.2.0 (quality gate improvements, i18n library documentation, wagoe.tools.parsing extraction)
+**Document version**: 5.2.0 (quality gate improvements, i18n library documentation, wagoe.tools.parsing extraction)

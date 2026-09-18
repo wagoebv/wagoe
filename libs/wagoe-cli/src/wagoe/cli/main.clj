@@ -1,4 +1,10 @@
-(ns wagoe.cli.main)
+(ns wagoe.cli.main
+  ;; The catalogue is the only version the CLI has — `:cli-version` there is
+  ;; gated by `bb check:versions` and rewritten by `bb bump`. A literal here
+  ;; answered `1.0.0-beta-5` for four releases after beta-5, because no rule
+  ;; reads a printed banner. Required eagerly rather than per-command like the
+  ;; rest: it loads the catalogue behind a delay, so nothing is read until asked.
+  (:require [wagoe.cli.catalogue :as catalogue]))
 
 (defn- usage []
   (println "wagoe — Wagoe Framework project tool")
@@ -28,7 +34,8 @@
                       ((resolve 'wagoe.cli.agents-update/-main) (rest rest-args)))
                   (do (println "Usage: wagoe agents update [--check]")
                       (System/exit 1)))
-      "version" (println "wagoe CLI version 1.0.0-beta-5")
+      "version" (println (str "wagoe CLI version "
+                              (:cli-version (catalogue/load-catalogue))))
       (do (when cmd (println (str "Unknown command: " cmd "\n")))
           (usage)
           (System/exit (if cmd 1 0))))))
