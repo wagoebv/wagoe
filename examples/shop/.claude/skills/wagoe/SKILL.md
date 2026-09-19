@@ -31,8 +31,9 @@ consistent.
 | Quality gates (FC/IS, deps, lint) | `bb check` |
 | Unsure what to do next | `bb guide next` — error codes: `bb guide error BND-003` |
 
-Field spec format: `name:type[:required][:unique]` with types
+Field spec format: `name:type[:values=a,b,c][:required][:unique]` with types
 `string text integer decimal boolean email uuid enum date datetime json`.
+An `enum` must name its values: `status:enum:values=draft,sent,paid`.
 
 ## Rules
 

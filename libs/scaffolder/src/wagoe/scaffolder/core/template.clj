@@ -43,6 +43,23 @@
   [s]
   (str/replace (name s) #"-" "_"))
 
+(defn ns->path
+  "Filesystem path for a namespace: dots become slashes, hyphens underscores.
+
+   The rule Clojure itself uses to find a namespace's file. A module called
+   `invoice-line-item` has namespaces `<base>.invoice-line-item.*`, so its
+   sources have to live in `invoice_line_item/` — written with the hyphen they
+   were unloadable (BOU-447).
+
+   Pure: true
+
+   Example:
+     (ns->path \"my-app.invoice-line-item\") => \"my_app/invoice_line_item\""
+  [s]
+  (-> (name s)
+      (str/replace "." "/")
+      (str/replace "-" "_")))
+
 (defn pluralize
   "Simple pluralization (just adds 's' for now).
    
@@ -191,8 +208,11 @@
         base-ns (or (:base-ns request) "wagoe")]
     {:module-name module-name
      :module-pascal (kebab->pascal module-name)
+     ;; Namespace segment vs directory name: `:module-name` goes into the `ns`
+     ;; form, `:module-path` on disk. They differ for any kebab-case module.
+     :module-path (kebab->snake module-name)
      :base-ns base-ns
-     :base-ns-path (str/replace base-ns "." "/")
+     :base-ns-path (ns->path base-ns)
      :entities (mapv #(build-entity-context % module-name) entities)
      :interfaces (:interfaces request)
      :features (merge {:audit false :soft-delete false :pagination true}

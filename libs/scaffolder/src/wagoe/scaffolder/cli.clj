@@ -33,7 +33,7 @@
    [nil "--entity NAME" "Entity name (PascalCase) (required)"
     :validate [#(re-matches #"^[A-Z][a-zA-Z0-9]*$" %)
                "Must be PascalCase"]]
-   [nil "--field SPEC" "Field specification: name:type[:required][:unique] (can be repeated)"
+   [nil "--field SPEC" "Field specification: name:type[:values=a,b,c][:required][:unique] (can be repeated)"
     :multi true
     :default []
     :update-fn conj]
@@ -73,6 +73,7 @@
     :validate [#(contains? #{"string" "text" "integer" "int" "decimal" "boolean"
                              "email" "uuid" "enum" "date" "datetime" "inst" "json"} %)
                "Must be a valid field type"]]
+   [nil "--enum-values LIST" "Comma-separated values, required when --type enum"]
    [nil "--required" "Field cannot be null"
     :default false]
    [nil "--unique" "Field must be unique"
@@ -140,19 +141,35 @@
 ;; Field Parsing
 ;; =============================================================================
 
+(defn parse-enum-values
+  "Parse a comma-separated enum value list into keywords.
+
+   Returns a vector of keywords, or nil when `s` is blank."
+  [s]
+  (when-not (str/blank? s)
+    (->> (str/split s #",")
+         (map str/trim)
+         (remove str/blank?)
+         (mapv keyword))))
+
 (defn parse-field-spec
   "Parse a field specification string into a field map.
-  
-   Format: name:type[:required][:unique]
-   
+
+   Format: name:type[:values=a,b,c][:required][:unique]
+
    Examples:
      email:email:required:unique
      name:string:required
      age:integer
-     status:enum
-     
+     status:enum:values=draft,sent,paid:required
+
+   An `enum` needs its values: without them the generated schema was
+   `[:enum]`, which matches nothing, so every write of that field failed
+   validation (BOU-447).
+
    Returns:
-     Map with keys: :name, :type, :required, :unique, or error map"
+     Map with keys: :name, :type, :required, :unique, :enum-values,
+     or error map"
   [field-spec]
   (let [parts (str/split field-spec #":")
         [name-str type-str & flags] parts
@@ -164,7 +181,11 @@
                       "datetime" :inst
                       "text" :text
                       "json" :json}
-        type-kw (get type-mapping type-str (keyword type-str))]
+        type-kw (get type-mapping type-str (keyword type-str))
+        values-flag (some #(when (str/starts-with? % "values=")
+                             (subs % (count "values=")))
+                          flags)
+        enum-values (parse-enum-values values-flag)]
     (cond
       (< (count parts) 2)
       {:error (str "Invalid field spec: " field-spec " (expected format: name:type[:required][:unique])")}
@@ -175,11 +196,20 @@
       (not (contains? valid-types type-str))
       {:error (str "Invalid field type: " type-str " (must be one of: " (str/join ", " (sort valid-types)) ")")}
 
+      (and (= :enum type-kw) (empty? enum-values))
+      {:error (str "Enum field " name-str " needs its values: "
+                   name-str ":enum:values=first,second,third")}
+
+      (and (seq enum-values) (not= :enum type-kw))
+      {:error (str "values= is only meaningful on an enum field, and " name-str
+                   " is a " type-str)}
+
       :else
-      {:name (keyword name-str)
-       :type type-kw
-       :required (boolean (some #(= % "required") flags))
-       :unique (boolean (some #(= % "unique") flags))})))
+      (cond-> {:name (keyword name-str)
+               :type type-kw
+               :required (boolean (some #(= % "required") flags))
+               :unique (boolean (some #(= % "unique") flags))}
+        enum-values (assoc :enum-values enum-values)))))
 
 (defn parse-all-fields
   "Parse all field specifications.
@@ -329,7 +359,12 @@
                  (not (:name opts))
                  (conj "Missing required option: --name")
                  (not (:type opts))
-                 (conj "Missing required option: --type"))]
+                 (conj "Missing required option: --type")
+                 ;; `--type enum` without values generated `[:enum]`, a schema
+                 ;; nothing validates against (BOU-447).
+                 (and (= "enum" (:type opts))
+                      (empty? (parse-enum-values (:enum-values opts))))
+                 (conj "Missing required option: --enum-values (e.g. --enum-values draft,sent,paid)"))]
     [(empty? errors) errors]))
 
 (defn validate-endpoint-options
@@ -415,10 +450,12 @@
             field-type (get type-mapping (:type opts) (keyword (:type opts)))
             request {:module-name (:module-name opts)
                      :entity (:entity opts)
-                     :field {:name (keyword (:name opts))
-                             :type field-type
-                             :required (:required opts false)
-                             :unique (:unique opts false)}
+                     :field (cond-> {:name (keyword (:name opts))
+                                     :type field-type
+                                     :required (:required opts false)
+                                     :unique (:unique opts false)}
+                              (= :enum field-type)
+                              (assoc :enum-values (parse-enum-values (:enum-values opts))))
                      :output-dir (:output-dir opts)
                      :dry-run (:dry-run opts)
                      :base-ns (:base-ns opts)}
@@ -578,7 +615,7 @@ Required Options:
   --field SPEC         Field specification (can be repeated)
 
 Field Specification Format:
-  name:type[:required][:unique]
+  name:type[:values=a,b,c][:required][:unique]
 
 Field Types:
   string     - Text field
@@ -587,13 +624,14 @@ Field Types:
   boolean    - True/false
   email      - Email address (validated)
   uuid       - UUID value
-  enum       - Enumeration (specify values in code)
+  enum       - Enumeration (values= is required)
   date       - Date only
   datetime   - Date and time
 
 Field Flags:
-  required   - Field cannot be null
-  unique     - Field must be unique across all records
+  values=a,b,c  Allowed values, required on an enum field
+  required      Field cannot be null
+  unique        Field must be unique across all records
 
 Interface Options (default: all enabled):
   --http               Enable HTTP (REST API) interface
@@ -617,7 +655,8 @@ Examples:
     --field name:string:required \\
     --field sku:string:required:unique \\
     --field price:decimal:required \\
-    --field active:boolean:required
+    --field active:boolean:required \\
+    --field status:enum:values=draft,live,archived:required
 
   # Generate a customer module with email
   wagoe scaffolder generate \\
@@ -650,6 +689,7 @@ Required Options:
   --type TYPE          Field type (string, text, integer, etc.)
 
 Optional Flags:
+  --enum-values LIST   Comma-separated values, required when --type enum
   --required           Field cannot be null
   --unique             Field must be unique
   --dry-run            Show what would be generated

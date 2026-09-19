@@ -36,12 +36,29 @@
 (defn- root-dir [] (System/getProperty "user.dir"))
 
 (defn base-ns-path
-  "Filesystem path segment for a base namespace: dots become slashes.
+  "Filesystem path segment for a base namespace: dots become slashes, hyphens
+   underscores — the rule Clojure uses to find a namespace's file.
 
    Defaults to the project's own namespace, which is where `bb scaffold
    generate` writes a module (BOU-360)."
   ([base-ns] (base-ns-path base-ns (project/base-ns)))
-  ([base-ns default] (str/replace (or base-ns default) "." "/")))
+  ([base-ns default] (-> (or base-ns default)
+                         (str/replace "." "/")
+                         (str/replace "-" "_"))))
+
+(defn module-dir-name
+  "Directory a module's sources live in.
+
+   `invoice-line-item` is the namespace segment; `invoice_line_item` is the
+   directory. Looking for the hyphenated name meant integrate could not find a
+   correctly-named module at all (BOU-447)."
+  [module-name]
+  (str/replace module-name "-" "_"))
+
+(defn module-ns-name
+  "Namespace segment for a module, given either spelling of its name."
+  [module-name]
+  (str/replace module-name "_" "-"))
 
 (defn discover-module
   "Discover a scaffolded module under `<root>/src/<base-ns-path>/<module>/` —
@@ -54,18 +71,20 @@
    ;; BOU-360 is still under wagoe.<module>, and integrating it must keep
    ;; working. When they are the same there is one place to look.
    (let [candidates (distinct [(or base-ns (project/base-ns root)) "wagoe"])
-         found      (first (filter #(.exists (io/file root "src" (base-ns-path % "wagoe") module-name))
+         dir-name   (module-dir-name module-name)
+         ns-name    (module-ns-name module-name)
+         found      (first (filter #(.exists (io/file root "src" (base-ns-path % "wagoe") dir-name))
                                    candidates))
          resolved   (or found (first candidates))
          bnp        (base-ns-path resolved "wagoe")
-         src-dir    (io/file root "src" bnp module-name)
-         test-dir   (io/file root "test" bnp module-name)]
+         src-dir    (io/file root "src" bnp dir-name)
+         test-dir   (io/file root "test" bnp dir-name)]
      (when (.exists src-dir)
        {:name        module-name
         :base-ns     resolved
-        :module-ns   (str resolved "." module-name)
-        :src-path    (str "src/" bnp "/" module-name)
-        :test-path   (str "test/" bnp "/" module-name)
+        :module-ns   (str resolved "." ns-name)
+        :src-path    (str "src/" bnp "/" dir-name)
+        :test-path   (str "test/" bnp "/" dir-name)
         :src-dir     (.getPath src-dir)
         :test-dir    (.getPath test-dir)
         :has-routes? (.exists (io/file src-dir "shell" "http.clj"))
@@ -84,7 +103,7 @@
    pasted it into `ig-config` and wrong now that it is written into config.edn,
    where `(ig/ref …)` is a list and `config` is a bare symbol."
   [module-name has-routes?]
-  (let [ns-name (str/replace module-name "_" "-")]
+  (let [ns-name (module-ns-name module-name)]
     (str "  ;; " (str/capitalize ns-name) " module (bb scaffold integrate)\n"
          "  :wagoe/" ns-name "\n"
          "  {:enabled? true"
@@ -102,7 +121,8 @@
   [module-name {:keys [base-ns dry-run?]}]
   (let [module (discover-module module-name base-ns)]
     (when-not module
-      (println (red (str "Module not found: src/" (base-ns-path base-ns) "/" module-name "/")))
+      (println (red (str "Module not found: src/" (base-ns-path base-ns) "/"
+                         (module-dir-name module-name) "/")))
       (println (dim (str "Run `bb scaffold generate --module-name " module-name
                          (when base-ns (str " --base-ns " base-ns)) " ...` first.")))
       (System/exit 1))
@@ -143,7 +163,7 @@
       (System/exit 1))
 
     (let [snippet (generate-config-snippet module-name (:has-routes? module))
-          key-str (str ":wagoe/" (str/replace module-name "_" "-"))]
+          key-str (str ":wagoe/" (module-ns-name module-name))]
 
       (println (bold (if dry-run? "Would write:" "Writing:")))
       (println)

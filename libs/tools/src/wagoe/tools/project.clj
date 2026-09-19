@@ -47,7 +47,10 @@
    project's own namespace for a module about to be created."
   ([module] (module-base-ns module (System/getProperty "user.dir")))
   ([module root]
-   (let [project (base-ns root)]
-     (or (first (filter #(.isDirectory (io/file root "src" (str/replace % "." "/") module))
+   (let [project (base-ns root)
+         ;; Directory name, not namespace segment: `invoice-line-item` lives in
+         ;; `invoice_line_item/` (BOU-447).
+         dir     (str/replace module "-" "_")]
+     (or (first (filter #(.isDirectory (io/file root "src" (str/replace % "." "/") dir))
                         (distinct [project "wagoe"])))
          project))))

@@ -158,7 +158,7 @@ clojure -M:dev -m wagoe.scaffolder.shell.cli-entry new --name myapp --dry-run
 
 ### Field Definitions
 
-Format: `name:type[:modifier...]`
+Format: `name:type[:modifier...]`, e.g. `status:enum:values=draft,sent:required`
 
 **Types**:
 
@@ -176,6 +176,7 @@ Format: `name:type[:modifier...]`
 
 | Modifier | Description |
 |----------|-------------|
+| `values=a,b,c` | Allowed values; required on an `enum` field |
 | `required` | Non-nullable field |
 | `optional` | Nullable field (default) |
 | `unique` | Unique constraint |

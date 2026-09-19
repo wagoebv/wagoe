@@ -21,8 +21,9 @@ bb scaffold adapter  --module-name product --port IProductNotifier --adapter-nam
 bb scaffold ai "product module with name, price, stock" --yes    # needs an AI provider
 ```
 
-Field spec: `name:type[:required][:unique]`, types `string text integer decimal
-boolean email uuid enum date datetime json`.
+Field spec: `name:type[:values=a,b,c][:required][:unique]`, types `string text
+integer decimal boolean email uuid enum date datetime json`. An `enum` must name
+its values: `status:enum:values=draft,sent,paid`.
 
 `--dry-run` works on `generate`, `field`, `endpoint` and `adapter` — it lists
 the files and writes none.

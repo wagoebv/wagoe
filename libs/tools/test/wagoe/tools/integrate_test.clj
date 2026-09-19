@@ -123,3 +123,33 @@
   (is (= "myapp" (:base-ns (integrate/parse-args ["product" "--base-ns" "myapp"]))))
   (is (true? (:dry-run? (integrate/parse-args ["product" "--dry-run"]))))
   (is (true? (:help (integrate/parse-args ["--help"])))))
+
+;; =============================================================================
+;; BOU-447: namespace segment vs directory name
+;; =============================================================================
+
+(deftest ^:unit discover-module-finds-a-kebab-case-module
+  ;; `bb scaffold generate --module-name invoice-line-item` writes
+  ;; src/<ns>/invoice_line_item/, because that is where Clojure loads
+  ;; <ns>.invoice-line-item.* from. Integrate looked for the hyphenated path and
+  ;; so could not find a correctly-named module at all.
+  (let [root (tmp-root)]
+    (touch! root "src" "wagoe" "invoice_line_item" "schema.clj")
+    (touch! root "src" "wagoe" "invoice_line_item" "shell" "module_wiring.clj")
+    (let [m (integrate/discover-module "invoice-line-item" nil root)]
+      (is (some? m))
+      (is (= "wagoe.invoice-line-item" (:module-ns m)))
+      (is (= "src/wagoe/invoice_line_item" (:src-path m)))
+      (is (= "test/wagoe/invoice_line_item" (:test-path m)))
+      (is (true? (:has-wiring? m))))))
+
+(deftest ^:unit base-ns-path-munges-hyphens
+  ;; A project whose own namespace has a hyphen loads from an underscored path
+  ;; for the same reason.
+  (is (= "my_app" (integrate/base-ns-path "my-app")))
+  (is (= "com/my_app" (integrate/base-ns-path "com.my-app"))))
+
+(deftest ^:unit config-key-keeps-the-namespace-spelling
+  ;; The config key is read as a keyword, not as a path, so it stays kebab.
+  (is (re-find #":wagoe/invoice-line-item"
+               (integrate/generate-config-snippet "invoice-line-item" false))))

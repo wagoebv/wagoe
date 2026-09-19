@@ -97,6 +97,12 @@
   [module-spec]
   (parse-module-spec (json/generate-string module-spec)))
 
+(defn- enum-value->str
+  "An enum value as the CLI spells it. Provider JSON gives strings, a
+   hand-built spec gives keywords."
+  [v]
+  (if (keyword? v) (name v) (str v)))
+
 (defn module-spec->cli-args
   "Convert a parsed module spec map into CLI args for the scaffolder.
 
@@ -107,9 +113,15 @@
      Vector of string args for wagoe.scaffolder.shell.cli-entry."
   [{:keys [module-name entity fields http web]}]
   (let [base       ["generate" "--module-name" module-name "--entity" entity]
-        field-args (mapcat (fn [{:keys [name type required unique]}]
+        ;; `values=` carries the enum's values through. Without it the spec said
+        ;; only `status:enum` and the generated schema was `[:enum]`, which
+        ;; matches nothing — the values were parsed and then dropped (BOU-447).
+        field-args (mapcat (fn [{:keys [name type required unique enum-values]}]
                              ["--field" (str/join ":"
                                                   (filter some? [name type
+                                                                 (when (seq enum-values)
+                                                                   (str "values="
+                                                                        (str/join "," (map enum-value->str enum-values))))
                                                                  (when required "required")
                                                                  (when unique "unique")]))])
                            fields)

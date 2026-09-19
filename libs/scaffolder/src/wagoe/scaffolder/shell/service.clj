@@ -8,7 +8,8 @@
             [wagoe.scaffolder.core.generators :as generators]
             [clojure.java.io :as io]
             [clojure.string :as str]
-            [malli.core :as m]))
+            [malli.core :as m]
+            [malli.error :as me]))
 
 (defn- resolve-path
   "Where a reported path actually lands, given `output-dir`.
@@ -140,18 +141,24 @@
 
   (generate-module [_ request]
     (try
-      ;; Validate request
+      ;; Validate request. The humanized explanation goes into the message,
+      ;; not only into ex-data: the catch below reports `(.getMessage e)` and
+      ;; nothing else, so "Invalid module generation request" was the whole of
+      ;; what a user saw for, say, an enum field with no values.
       (when-not (module-generation-request-validator request)
-        (throw (ex-info "Invalid module generation request"
-                        {:type :validation-error
-                         :errors (module-generation-request-explainer request)})))
+        (let [explanation (me/humanize (module-generation-request-explainer request))]
+          (throw (ex-info (str "Invalid module generation request: " (pr-str explanation))
+                          {:type :validation-error
+                           :errors explanation}))))
 
       ;; Build template context
       (let [ctx (template/build-module-context request)
             module-name (:module-name ctx)
+            ;; Directory name, not namespace segment — see template/ns->path.
+            module-path (:module-path ctx)
             base-ns-path (:base-ns-path ctx)
             entity (first (:entities ctx))
-            entity-kebab (:entity-kebab entity)
+            entity-path (:entity-snake entity)
             dry-run? (:dry-run request false)
             force?   (:force request false)
             output-dir (:output-dir request ".")
@@ -188,34 +195,34 @@
             service-test-content (generators/generate-service-test-file ctx)
 
             ;; Define file paths
-            files [{:path (format "src/%s/%s/schema.clj" base-ns-path module-name)
+            files [{:path (format "src/%s/%s/schema.clj" base-ns-path module-path)
                     :content schema-content
                     :action :create}
-                   {:path (format "src/%s/%s/ports.clj" base-ns-path module-name)
+                   {:path (format "src/%s/%s/ports.clj" base-ns-path module-path)
                     :content ports-content
                     :action :create}
-                   {:path (format "src/%s/%s/core/%s.clj" base-ns-path module-name entity-kebab)
+                   {:path (format "src/%s/%s/core/%s.clj" base-ns-path module-path entity-path)
                     :content core-content
                     :action :create}
-                   {:path (format "src/%s/%s/core/ui.clj" base-ns-path module-name)
+                   {:path (format "src/%s/%s/core/ui.clj" base-ns-path module-path)
                     :content ui-content
                     :action :create}
-                   {:path (format "src/%s/%s/shell/service.clj" base-ns-path module-name)
+                   {:path (format "src/%s/%s/shell/service.clj" base-ns-path module-path)
                     :content service-content
                     :action :create}
-                   {:path (format "src/%s/%s/shell/persistence.clj" base-ns-path module-name)
+                   {:path (format "src/%s/%s/shell/persistence.clj" base-ns-path module-path)
                     :content persistence-content
                     :action :create}
-                   {:path (format "src/%s/%s/shell/http.clj" base-ns-path module-name)
+                   {:path (format "src/%s/%s/shell/http.clj" base-ns-path module-path)
                     :content http-content
                     :action :create}
-                   {:path (format "src/%s/%s/shell/web_handlers.clj" base-ns-path module-name)
+                   {:path (format "src/%s/%s/shell/web_handlers.clj" base-ns-path module-path)
                     :content web-handlers-content
                     :action :create}
                    ;; Without this, `bb scaffold integrate` reported that the
                    ;; module had no wiring and the user hand-wrote the Integrant
                    ;; keys the framework says never to hand-write (BOU-309).
-                   {:path (format "src/%s/%s/shell/module_wiring.clj" base-ns-path module-name)
+                   {:path (format "src/%s/%s/shell/module_wiring.clj" base-ns-path module-path)
                     :content module-wiring-content
                     :action :create}
                    ;; migratus discovers `<id>-<name>.up.sql` / `.down.sql`. The old
@@ -230,13 +237,13 @@
                                   migration-number (:entity-plural entity))
                     :content (generators/generate-migration-down-file ctx)
                     :action :create}
-                   {:path (format "test/%s/%s/core/%s_test.clj" base-ns-path module-name entity-kebab)
+                   {:path (format "test/%s/%s/core/%s_test.clj" base-ns-path module-path entity-path)
                     :content core-test-content
                     :action :create}
-                   {:path (format "test/%s/%s/shell/%s_repository_test.clj" base-ns-path module-name entity-kebab)
+                   {:path (format "test/%s/%s/shell/%s_repository_test.clj" base-ns-path module-path entity-path)
                     :content persistence-test-content
                     :action :create}
-                   {:path (format "test/%s/%s/shell/service_test.clj" base-ns-path module-name)
+                   {:path (format "test/%s/%s/shell/service_test.clj" base-ns-path module-path)
                     :content service-test-content
                     :action :create}]
 
@@ -322,7 +329,8 @@
   (add-field [_this request]
     (try
       (let [{:keys [module-name entity field dry-run]} request
-            base-ns-path (str/replace (or (:base-ns request) "wagoe") "." "/")
+            base-ns-path (template/ns->path (or (:base-ns request) "wagoe"))
+            module-path (template/kebab->snake module-name)
             output-dir (:output-dir request ".")
             migration-number (get-next-migration-number output-dir)
 
@@ -347,7 +355,7 @@
                     :content (format "-- Rollback: drop %s from %s\n\nALTER TABLE %s DROP COLUMN %s;\n"
                                      field-name-snake table-name table-name field-name-snake)
                     :action :create}]
-            schema-path (format "src/%s/%s/schema.clj" base-ns-path module-name)
+            schema-path (format "src/%s/%s/schema.clj" base-ns-path module-path)
 
             ;; Before anything is written. The migration and the schema entry
             ;; are the two halves this command exists to keep in step, and the
@@ -511,7 +519,7 @@
                                       (.getPath (resolve-path
                                                  output-dir
                                                  (format "src/%s/%s/shell/persistence.clj"
-                                                         base-ns-path module-name))))
+                                                         base-ns-path module-path))))
                               ;; And the commands run against whatever project
                               ;; the shell is in, which is not the generated one
                               ;; when --output-dir points elsewhere.
@@ -537,10 +545,11 @@
   (add-endpoint [_this request]
     (try
       (let [{:keys [module-name path method handler-name dry-run]} request
-            base-ns-path (str/replace (or (:base-ns request) "wagoe") "." "/")
+            base-ns-path (template/ns->path (or (:base-ns request) "wagoe"))
+            module-path  (template/kebab->snake module-name)
             output-dir   (:output-dir request ".")
 
-            http-path (format "src/%s/%s/shell/http.clj" base-ns-path module-name)
+            http-path (format "src/%s/%s/shell/http.clj" base-ns-path module-path)
 
             ;; This command writes nothing — it returns instructions. Pointing
             ;; them at a file nobody can open is the same false success in a
@@ -578,14 +587,15 @@
     (try
       (let [{:keys [module-name port adapter-name methods dry-run]} request
             base-ns      (or (:base-ns request) "wagoe")
-            base-ns-path (str/replace base-ns "." "/")
+            base-ns-path (template/ns->path base-ns)
+            module-path  (template/kebab->snake module-name)
             output-dir   (:output-dir request ".")
 
             ;; The module, not the adapter: the adapter file is the one being
             ;; created. Checked before `.mkdirs` below, which otherwise builds
             ;; the tree for whatever name it is given (BOU-364).
             _ (require-existing-dir!
-               (resolve-path output-dir (format "src/%s/%s" base-ns-path module-name))
+               (resolve-path output-dir (format "src/%s/%s" base-ns-path module-path))
                (str "Cannot add an adapter to " module-name ": there is no such module."))
 
             ;; Generate adapter file content
@@ -595,7 +605,8 @@
                              base-ns)
 
             adapter-path (format "src/%s/%s/shell/adapters/%s.clj"
-                                 base-ns-path module-name adapter-name)
+                                 base-ns-path module-path
+                                 (template/kebab->snake adapter-name))
             files [{:path adapter-path
                     :content adapter-content
                     ;; :skip on a dry run — it reported :create for a file it
