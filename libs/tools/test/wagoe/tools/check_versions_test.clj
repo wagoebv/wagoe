@@ -139,6 +139,20 @@
   (testing "a stray quote in a comment cannot make prose look quoted"
     (is (empty? (sut/banner-findings "(println \"header\") ;; wagoe version 1.1.0\n"))))
 
+  (testing "building a string is not printing one"
+    ;; `print-str` and `println-str` return a string and write nothing, so a call
+    ;; to either prints no banner. They were in the operator set on the strength
+    ;; of their names, which made a formatter a hard CI failure.
+    (is (empty? (sut/banner-findings "(print-str \"wagoe CLI version 1.2.3\")\n")))
+    (is (empty? (sut/banner-findings "(println-str \"wagoe CLI version 1.2.3\")\n"))))
+
+  (testing "and printing what one built still is"
+    ;; Nothing is lost by dropping them: the literal is collected at any depth
+    ;; under an operator that does print.
+    (is (= ["1.2.3"]
+           (map :version (sut/banner-findings
+                          "(println (print-str \"wagoe CLI version 1.2.3\"))\n")))))
+
   (testing "a banner assembled from a value is already correct"
     ;; What the fix looks like: nothing to find, because there is no literal.
     (is (empty? (sut/banner-findings

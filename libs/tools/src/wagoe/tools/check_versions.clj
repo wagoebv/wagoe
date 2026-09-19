@@ -101,8 +101,18 @@
   (re-pattern (str "(?i)\\bwagoe\\b.*?\\bversion\\b\\s+v?(" version-pattern ")")))
 
 (def ^:private print-ops
-  "Operators whose arguments reach a user's terminal."
-  #{"println" "print" "printf" "pr" "prn" "print-str" "println-str" "pprint"})
+  "Operators whose arguments reach a user's terminal.
+
+   `print-str` and `println-str` are deliberately absent: they return a string
+   and write nothing, so a formatter built from one prints no banner and is not
+   this gate's business. They were here on the strength of their names.
+
+   Nothing is lost by leaving them out — `printed-strings` collects literals at
+   any depth, so `(println (print-str \"…\"))` is still one print. What remains
+   uncovered is a banner built here and printed from somewhere else entirely,
+   which is the same gap as a `def`'d string and covered from the other side by
+   `wagoe.cli.main-test`."
+  #{"println" "print" "printf" "pr" "prn" "pprint"})
 
 (defn- unevaluated-head?
   "Whether `head` is the `quote` or `comment` operator — forms neither runs.
