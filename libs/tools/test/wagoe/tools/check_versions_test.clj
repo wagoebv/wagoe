@@ -97,11 +97,16 @@
       (is (= "1.0.0-beta-5" (:version f)))
       (is (= 1 (:line f)))))
 
-  (testing "a bump rewrites the banner and nothing else on the line"
-    (let [content  "(println \"wagoe CLI version 1.0.0-beta-5\")\n"
-          findings (sut/banner-findings content)]
-      (is (= "(println \"wagoe CLI version 1.0.0-rc-1\")\n"
-             (bump/rewrite content findings "1.0.0-rc-1")))))
+  (testing "a banner nested in an evaluated form is still printed"
+    (is (= ["1.0.0-beta-5"]
+           (map :version (sut/banner-findings
+                          "(binding [*out* *err*] (println (str \"wagoe CLI version 1.0.0-beta-5\")))\n")))))
+
+  (testing "a banner is rejected rather than bumped"
+    ;; It is deliberately absent from `version-sources`, so `bb bump` cannot
+    ;; quietly correct it. Bumping a duplicate keeps it alive at the right
+    ;; number, which is how the CLI shipped the wrong one for four releases.
+    (is (not-any? #(= "version banner" (:what %)) (sut/version-sources))))
 
   (testing "a version-shaped string that is not ours is left alone"
     ;; `bb bump` rewrites what this reports. The Prometheus content type and the
@@ -112,21 +117,26 @@
     (is (empty? (sut/banner-findings ":tags [\"team:backend\" \"version:1.0.0\"]\n")))
     (is (empty? (sut/banner-findings "\"A suite version: 1.0.0-beta-5, 2.0.0.\"\n"))))
 
-  (testing "prose about a release is not a banner"
-    ;; The first version of this rule read the line, not the expression on it, so
-    ;; a comment or a docstring naming a release tripped a gate that has no
-    ;; escape hatch — a hard CI failure over a sentence, and nothing a bump could
-    ;; even fix. Nothing here prints anything.
-    (doseq [line [";; wagoe version 1.1.0 dropped the shim"
-                  "  ;; See the wagoe version 1.1.0 migration notes."
-                  "  \"Explains what wagoe version 1.1.0 changed.\""
-                  "  \"Wagoe version 1.1.0 renamed this key.\""
-                  ";; (println \"wagoe CLI version 1.1.0\") — how it used to read"]]
-      (is (empty? (sut/banner-findings (str line "\n"))) line)))
+  (testing "nothing that does not run is a banner"
+    ;; Two rounds of review, both the same defect: a scanner reading text cannot
+    ;; tell what executes. This rule has no escape hatch and no version to
+    ;; disagree with — it fails on presence — so each false positive was a hard CI
+    ;; failure over a sentence, and nothing a bump could even fix.
+    ;;
+    ;; The reader decides now. It elides `#_`, never yields `comment` bodies as
+    ;; calls, and hands back a docstring as the string it is rather than as the
+    ;; code it quotes.
+    (doseq [src [";; wagoe version 1.1.0 dropped the shim"
+                 "  ;; See the wagoe version 1.1.0 migration notes."
+                 "(defn f \"Explains what wagoe version 1.1.0 changed.\" [] nil)"
+                 "(defn f \"Prints (println \\\"wagoe CLI version 1.1.0\\\").\" [] nil)"
+                 ";; (println \"wagoe CLI version 1.1.0\") — how it used to read"
+                 "#_(println \"wagoe CLI version 1.1.0\")"
+                 "(comment (println \"wagoe CLI version 1.1.0\"))"
+                 "'(println \"wagoe CLI version 1.1.0\")"]]
+      (is (empty? (sut/banner-findings (str src "\n"))) src)))
 
-  (testing "an unterminated literal is not one"
-    ;; The version has to sit inside a closed string, or a stray quote earlier on
-    ;; the line makes the prose after it look quoted.
+  (testing "a stray quote in a comment cannot make prose look quoted"
     (is (empty? (sut/banner-findings "(println \"header\") ;; wagoe version 1.1.0\n"))))
 
   (testing "a banner assembled from a value is already correct"

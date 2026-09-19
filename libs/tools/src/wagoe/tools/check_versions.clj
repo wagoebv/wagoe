@@ -6,7 +6,8 @@
 (ns wagoe.tools.check-versions
   (:require [babashka.fs :as fs]
             [babashka.process :as process]
-            [clojure.string :as str]))
+            [clojure.string :as str]
+            [edamame.core :as e]))
 
 (def ^:private root-dir (fs/file (System/getProperty "user.dir")))
 
@@ -91,65 +92,98 @@
                        (str/replace name #"^wagoe-" "")
                        (str "wagoe-" name)])))
 
-(def version-banner-re
-  "A suite version printed to the user as the version of a Wagoe tool.
+(def banner-text-re
+  "A string that announces a Wagoe tool's own version.
 
-   `wagoe version` answered `1.0.0-beta-5` four releases after beta-5, from a
-   string literal in `wagoe/cli/main.clj`. Every rule above reads a coordinate,
-   a `(def … -version)`, a tag or a documented claim; a banner is none of those,
-   so the one number a user asks the tool for directly was the only number
-   nothing checked.
+   `wagoe` must precede `version`, which keeps someone else's out:
+   `\"text/plain; version=0.0.4\"` is Prometheus' content type and
+   `\"version:1.0.0\"` a Datadog tag example, both in this tree."
+  (re-pattern (str "(?i)\\bwagoe\\b.*?\\bversion\\b\\s+v?(" version-pattern ")")))
 
-   Three things have to be true, and the first two are what keep prose out. This
-   rule is the one verdict here with no bump to fix it and no version to
-   disagree with — it fails on *presence* — so a false positive is a hard CI
-   failure over a sentence. The first version of it read the line rather than the
-   expression on it, and `;; wagoe version 1.1.0 dropped the shim` was a defect.
+(def ^:private print-ops
+  "Operators whose arguments reach a user's terminal."
+  #{"println" "print" "printf" "pr" "prn" "print-str" "println-str" "pprint"})
 
-     - a print form on the line, so a comment or docstring naming a release is
-       not a banner;
-     - a closed string literal around the version, so a stray quote earlier on
-       the line cannot make the prose after it look quoted;
-     - `wagoe` before `version` inside that literal, which keeps someone else's
-       out — `\"text/plain; version=0.0.4\"` is Prometheus' content type and
-       `\"version:1.0.0\"` a Datadog tag example, both in this tree.
+(defn- unevaluated-head?
+  "Whether `head` is the `quote` or `comment` operator — forms neither runs.
 
-   Narrow in two directions on purpose. A banner printed across two lines, or
-   from a `def`'d string, is not matched: the shapes this misses are silent, and
-   the shape it would otherwise invent is loud. `wagoe.cli.main-test` asserts the
-   command's output against the catalogue, which covers the miss from the other
-   side."
-  (re-pattern (str "(?i)\\b(?:println|print|printf)\\b[^\"\\n]*\""
-                   "[^\"\\n]*?\\bwagoe\\b[^\"\\n]*?\\bversion\\b\\s+v?("
-                   version-pattern ")[^\"\\n]*\"")))
+   Same judgement as `check-tests/unevaluated-head?`. A qualified
+   `(foo/comment …)` is an ordinary call whose arguments do run."
+  [head]
+  (and (symbol? head)
+       (contains? #{"quote" "comment"} (name head))
+       (contains? #{nil "clojure.core"} (namespace head))))
 
-(defn- code-only
-  "`line` with a trailing `;` comment removed, ignoring a `;` inside a string."
-  [line]
-  (let [end (loop [i 0, in-string? false]
+(defn- printed-strings
+  "Every string literal `form` can hand to a print operator, with the call's row.
+
+   Nested at any depth rather than direct arguments only, so
+   `(println (str \"wagoe CLI version \" v))` is read as the one print it is."
+  [form]
+  (let [out (volatile! [])]
+    (letfn [(collect [row x]
               (cond
-                (>= i (count line))                    nil
-                (= \\ (.charAt line i))                (recur (+ i 2) in-string?)
-                (= \" (.charAt line i))                (recur (inc i) (not in-string?))
-                (and (not in-string?)
-                     (= \; (.charAt line i)))          i
-                :else                                  (recur (inc i) in-string?)))]
-    (if end (subs line 0 end) line)))
+                (string? x)             (vswap! out conj [row x])
+                (and (coll? x)
+                     (not (unevaluated-head? (when (seq? x) (first x)))))
+                (run! #(collect row %) (seq x))))
+            (walk [x]
+              (when (coll? x)
+                (let [head (when (seq? x) (first x))]
+                  (cond
+                    (unevaluated-head? head)
+                    nil
+
+                    (and (symbol? head) (contains? print-ops (name head)))
+                    (run! #(collect (or (:row (meta x)) 0) %) (rest x))
+
+                    :else (run! walk (seq x))))))]
+      (walk form))
+    @out))
 
 (defn banner-findings
-  "Every version banner `text` prints, as {:line :excerpt :version :groups}.
+  "Every version banner `text` prints, as {:line :excerpt :version}.
 
-   Comments are cut before matching rather than filtered afterwards, so a
-   commented-out banner is not one. Blanked in place, so the line numbers still
-   name the line the reader has to open.
+   `wagoe version` answered `1.0.0-beta-5` four releases after beta-5, from a
+   string literal in `wagoe/cli/main.clj`. Every other rule here reads a
+   coordinate, a `(def … -version)`, a tag or a documented claim; a banner is
+   none of those, so the one number a user asks the tool for directly was the
+   only number nothing checked.
+
+   Read by the reader, not scanned. Two rounds of review found the same defect in
+   a textual scan — a comment, then a docstring quoting an example `println` —
+   and this rule is the one verdict here that fails on *presence*, with no
+   version to disagree with and no bump to correct it. Every false positive is
+   therefore a hard CI failure over a sentence. The same argument moved
+   `check-tests` off a lexer in BOU-365: only the reader knows what executes.
+   `#_` never arrives, a `comment` body is not a call, quoted code is data, and a
+   docstring is the string it is rather than the code it quotes.
+
+   Unparseable source throws rather than returning nothing — a file this cannot
+   read is one it cannot clear.
 
    Pure and public so the rule can be proven to fire without a file to break —
    the repository is meant to carry none of these (see `hardcoded-banners`)."
   [text]
-  (matches-in (->> (str/split-lines text)
-                   (map code-only)
-                   (str/join "\n"))
-              version-banner-re))
+  (let [forms (try
+                ;; :features because libs/tools and scripts/ run under Babashka,
+                ;; whose reader enables both. A banner behind a reader
+                ;; conditional is not a shape anyone writes; taking the :clj
+                ;; branch is enough to read the file.
+                (e/parse-string-all text {:all true
+                                          :features  #{:clj :bb}
+                                          :read-cond :allow
+                                          :readers   (fn [_tag] identity)
+                                          :auto-resolve (fn [_] 'this.ns)})
+                (catch Exception e
+                  (throw (ex-info (str "could not read source, so it cannot be "
+                                       "cleared of hardcoded version banners")
+                                  {:cause (ex-message e)} e))))]
+    (for [form            forms
+          [row literal]   (printed-strings form)
+          :let            [m (re-find banner-text-re literal)]
+          :when           m]
+      {:line row :excerpt (first m) :version (second m)})))
 
 (defn- source-files
   "Every Clojure source file a version could be hardcoded in."
@@ -167,9 +201,16 @@
    bumped — bumping it would keep the duplicate alive at the right number, which
    is how it survived four releases at the wrong one."
   []
-  (for [f (source-files)
-        m (banner-findings (try (slurp (fs/file f)) (catch Exception _ "")))]
-    (assoc m :file (str (fs/relativize root-dir (fs/absolutize f))))))
+  (into []
+        (mapcat (fn [f]
+                  (let [path (str (fs/relativize root-dir (fs/absolutize f)))]
+                    (try
+                      (map #(assoc % :file path)
+                           (banner-findings (slurp (fs/file f))))
+                      (catch Exception e
+                        (throw (ex-info (str path ": " (ex-message e))
+                                        {:file path} e)))))))
+        (source-files)))
 
 (defn version-sources
   "Every file that hard-codes the suite version, and the version it names.
