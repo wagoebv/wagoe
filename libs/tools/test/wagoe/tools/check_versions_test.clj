@@ -81,6 +81,94 @@
       (is (not (sut/injected-pin-name? "rewrite-clj" libs))))))
 
 ;; =============================================================================
+;; Version banners — the number a user is shown when they ask
+;; =============================================================================
+
+(deftest ^:unit a-printed-version-banner-is-found
+  ;; `wagoe version` printed `1.0.0-beta-5` from a string literal in
+  ;; `wagoe/cli/main.clj` four releases after beta-5. Every rule reads a
+  ;; coordinate, a def, a tag or a documented claim, and a banner is none of
+  ;; those — so the one number a user asks the tool for directly was the only
+  ;; number nothing checked.
+  (testing "a banner naming this suite is a version location"
+    (let [[f :as fs] (sut/banner-findings
+                      "      \"version\" (println \"wagoe CLI version 1.0.0-beta-5\")\n")]
+      (is (= 1 (count fs)))
+      (is (= "1.0.0-beta-5" (:version f)))
+      (is (= 1 (:line f)))))
+
+  (testing "a banner nested in an evaluated form is still printed"
+    (is (= ["1.0.0-beta-5"]
+           (map :version (sut/banner-findings
+                          "(binding [*out* *err*] (println (str \"wagoe CLI version 1.0.0-beta-5\")))\n")))))
+
+  (testing "a banner is rejected rather than bumped"
+    ;; It is deliberately absent from `version-sources`, so `bb bump` cannot
+    ;; quietly correct it. Bumping a duplicate keeps it alive at the right
+    ;; number, which is how the CLI shipped the wrong one for four releases.
+    (is (not-any? #(= "version banner" (:what %)) (sut/version-sources))))
+
+  (testing "a version-shaped string that is not ours is left alone"
+    ;; `bb bump` rewrites what this reports. The Prometheus content type and the
+    ;; Datadog tag example both put a version next to the word "version" and
+    ;; neither is the suite's.
+    (is (empty? (sut/banner-findings
+                 "{\"Content-Type\" \"text/plain; version=0.0.4; charset=utf-8\"}\n")))
+    (is (empty? (sut/banner-findings ":tags [\"team:backend\" \"version:1.0.0\"]\n")))
+    (is (empty? (sut/banner-findings "\"A suite version: 1.0.0-beta-5, 2.0.0.\"\n"))))
+
+  (testing "nothing that does not run is a banner"
+    ;; Two rounds of review, both the same defect: a scanner reading text cannot
+    ;; tell what executes. This rule has no escape hatch and no version to
+    ;; disagree with — it fails on presence — so each false positive was a hard CI
+    ;; failure over a sentence, and nothing a bump could even fix.
+    ;;
+    ;; The reader decides now. It elides `#_`, never yields `comment` bodies as
+    ;; calls, and hands back a docstring as the string it is rather than as the
+    ;; code it quotes.
+    (doseq [src [";; wagoe version 1.1.0 dropped the shim"
+                 "  ;; See the wagoe version 1.1.0 migration notes."
+                 "(defn f \"Explains what wagoe version 1.1.0 changed.\" [] nil)"
+                 "(defn f \"Prints (println \\\"wagoe CLI version 1.1.0\\\").\" [] nil)"
+                 ";; (println \"wagoe CLI version 1.1.0\") — how it used to read"
+                 "#_(println \"wagoe CLI version 1.1.0\")"
+                 "(comment (println \"wagoe CLI version 1.1.0\"))"
+                 "'(println \"wagoe CLI version 1.1.0\")"]]
+      (is (empty? (sut/banner-findings (str src "\n"))) src)))
+
+  (testing "a stray quote in a comment cannot make prose look quoted"
+    (is (empty? (sut/banner-findings "(println \"header\") ;; wagoe version 1.1.0\n"))))
+
+  (testing "building a string is not printing one"
+    ;; `print-str` and `println-str` return a string and write nothing, so a call
+    ;; to either prints no banner. They were in the operator set on the strength
+    ;; of their names, which made a formatter a hard CI failure.
+    (is (empty? (sut/banner-findings "(print-str \"wagoe CLI version 1.2.3\")\n")))
+    (is (empty? (sut/banner-findings "(println-str \"wagoe CLI version 1.2.3\")\n"))))
+
+  (testing "and printing what one built still is"
+    ;; Nothing is lost by dropping them: the literal is collected at any depth
+    ;; under an operator that does print.
+    (is (= ["1.2.3"]
+           (map :version (sut/banner-findings
+                          "(println (print-str \"wagoe CLI version 1.2.3\"))\n")))))
+
+  (testing "a banner assembled from a value is already correct"
+    ;; What the fix looks like: nothing to find, because there is no literal.
+    (is (empty? (sut/banner-findings
+                 "(println (str \"wagoe CLI version \" (:cli-version c)))\n")))))
+
+(deftest ^:unit no-source-file-hardcodes-a-version-banner
+  ;; The banner rule above would keep a hardcoded banner in agreement, but the
+  ;; CLI need not hardcode one at all: `modules-catalogue.edn` ships with it and
+  ;; already carries `:cli-version`, which this gate reads. One source cannot
+  ;; drift from itself.
+  (let [offenders (sut/hardcoded-banners)]
+    (is (empty? offenders)
+        (str "read the version from a single source instead: "
+             (pr-str (map (juxt :file :line :version) offenders))))))
+
+;; =============================================================================
 ;; Rule 1 — coordinates users copy
 ;; =============================================================================
 
@@ -103,6 +191,91 @@
                      (str "{:deps {com.wagoe/wagoe-platform {:mvn/version \"1.0.0-beta-5\"}\n"
                           "        com.wagoe/wagoe-user     {:mvn/version \"1.0.0-beta-5\"}\n"
                           "        com.wagoe/wagoe-admin    {:mvn/version \"1.0.0-beta-5\"}}}\n")))))))
+
+(deftest ^:unit a-coordinate-counts-in-both-spellings-users-copy
+  ;; BOU-45x. The rule read the tools.deps map form only, so the Leiningen
+  ;; vector — the spelling ten library READMEs open with, three lines into the
+  ;; page — matched nothing. Nine of them sat on 1.0.0-beta-5 through four
+  ;; releases while the gate reported every location in agreement.
+  (testing "a Leiningen vector coordinate is a com.wagoe pin"
+    (let [[f :as fs] (sut/doc-version-findings
+                      "libs/core/README.md"
+                      "```clojure\n[com.wagoe/wagoe-core \"1.0.0-beta-5\"]\n```\n")]
+      (is (= 1 (count fs)))
+      (is (= "1.0.0-beta-5" (:version f)))
+      (is (= 2 (:line f)))
+      (is (= "com.wagoe pin" (:what f)))))
+
+  (testing "the group prefix is optional, as the READMEs write it both ways"
+    (is (= ["1.0.0-beta-5"]
+           (map :version (sut/doc-version-findings
+                          "libs/user/README.md"
+                          "[wagoe/user \"1.0.0-beta-5\"]\n")))))
+
+  (testing "somebody else's vector coordinate is not ours"
+    ;; `bb bump` rewrites what this reports, so a false positive rewrites a
+    ;; third-party pin in a documented snippet.
+    (is (empty? (sut/doc-version-findings
+                 "libs/core/README.md"
+                 "[metosin/malli \"0.19.1\"]\n"))))
+
+  (testing "a dependency table row naming a Wagoe artifact is a pin"
+    ;; Five READMEs close with a "Dependencies" table — `| `wagoe/core` |
+    ;; 1.0.0-beta-5 | Utilities |`. A coordinate split across two table cells is
+    ;; still a coordinate, and it is what a reader copies the version from.
+    (let [[f :as fs] (sut/doc-version-findings
+                      "libs/platform/README.md"
+                      "| `wagoe/observability` | 1.0.0-beta-5 | Logging, metrics |\n")]
+      (is (= 1 (count fs)))
+      (is (= "1.0.0-beta-5" (:version f)))
+      (is (= "com.wagoe pin" (:what f)))))
+
+  (testing "a table row about something else is left alone"
+    (is (empty? (sut/doc-version-findings
+                 "x.md"
+                 "| `next.jdbc` | 1.3.1048 | Database |\n")))
+    (is (empty? (sut/doc-version-findings
+                 "x.md"
+                 "| Beta | 1.0.0-beta-1 sorts below 1.0.1-alpha-42 |\n"))))
+
+  (testing "a bump rewrites the version cell and not the artifact cell"
+    (let [content  "| `wagoe/core` | 1.0.0-beta-5 | Utilities |\n"
+          findings (sut/doc-version-findings "libs/scaffolder/README.md" content)]
+      (is (= "| `wagoe/core` | 1.0.0-rc-1 | Utilities |\n"
+             (bump/rewrite content findings "1.0.0-rc-1"))))))
+
+(deftest ^:unit a-version-header-is-a-claim-about-the-present
+  ;; `libs/tools/AGENTS.md` opens with `**Version:** 1.0.0-beta-5`, and
+  ;; `libs/external/README.md` and `libs/realtime/README.md` do the same. Same
+  ;; defect as the `| Current version` cell (BOU-413): a header stating the
+  ;; version cannot be true of an old release, and none of the four rules read it.
+  (testing "both spellings of the header are found"
+    (doseq [line ["**Version:** `1.0.0-beta-5`"
+                  "**Version**: 1.0.0-beta-5"
+                  "**Version:** 1.0.0-beta-5"]]
+      (let [[f :as fs] (sut/doc-version-findings "libs/tools/AGENTS.md" (str line "\n"))]
+        (is (= 1 (count fs)) line)
+        (is (= "1.0.0-beta-5" (:version f)) line)
+        (is (= "current-version claim" (:what f)) line))))
+
+  (testing "a version mentioned in ordinary bold prose is not a header"
+    (is (empty? (sut/doc-version-findings
+                 "x.md"
+                 "**Note:** the 1.0.1-alpha line is discontinued.\n"))))
+
+  (testing "a document's own revision number is not the suite's version"
+    ;; `AGENTS.md` closed with `**Version**: 5.2.0`, which is the revision of
+    ;; that file. Identical notation, different subject, and `bb bump` would have
+    ;; rewritten it to the suite version. The footer now says what it means.
+    (is (empty? (sut/doc-version-findings
+                 "AGENTS.md"
+                 "**Document version**: 5.2.0 (quality gate improvements)\n"))))
+
+  (testing "a bump rewrites the header"
+    (let [content  "**Version:** `1.0.0-beta-5`\n"
+          findings (sut/doc-version-findings "libs/tools/AGENTS.md" content)]
+      (is (= "**Version:** `1.0.0-rc-1`\n"
+             (bump/rewrite content findings "1.0.0-rc-1"))))))
 
 ;; =============================================================================
 ;; Rule 2 — install commands that pin a git tag

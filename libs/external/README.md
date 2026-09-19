@@ -6,7 +6,7 @@
 [![Clojars Project](https://img.shields.io/clojars/v/com.wagoe/wagoe-external.svg)](https://clojars.org/com.wagoe/wagoe-external)
 
 **Status:** Active (not production-ready)  
-**Version:** 1.0.0-beta-5
+**Version:** 1.0.0-rc-1
 
 Adapters for external services: Twilio SMS/WhatsApp, SMTP transport, and IMAP mailbox.
 

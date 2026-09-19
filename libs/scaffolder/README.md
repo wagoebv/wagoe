@@ -340,7 +340,7 @@ resources/scaffolder/templates/
 
 | Dependency | Version | Purpose |
 |------------|---------|---------|
-| `wagoe/core` | 1.0.0-beta-5 | Utilities |
+| `wagoe/core` | 1.0.0-rc-1 | Utilities |
 | `org.clojure/tools.cli` | 1.3.250 | CLI parsing |
 
 ## Relationship to Other Libraries

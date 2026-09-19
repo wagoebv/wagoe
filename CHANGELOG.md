@@ -36,6 +36,11 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **`wagoe version` printed `1.0.0-beta-5` four releases on.** It now reads
+  `:cli-version` from the shipped catalogue, which `bb check:versions` gates.
+
+- **17 documented versions were stale.** `bb check:versions` now also reads
+  Leiningen coordinates, dependency-table rows and `**Version:**` headers.
 - **The installer reinstalled a JVM it already had** when `JAVA_TOOL_OPTIONS` was set
   (BOU-475). On macOS that meant a sudo prompt no piped install could answer.
 

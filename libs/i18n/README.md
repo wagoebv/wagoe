@@ -16,7 +16,7 @@ Marker-based internationalisation for Wagoe apps — translation keys live as `[
 
 **Leiningen**:
 ```clojure
-[com.wagoe/wagoe-i18n "1.0.0-beta-5"]
+[com.wagoe/wagoe-i18n "1.0.0-rc-1"]
 ```
 
 ## Features

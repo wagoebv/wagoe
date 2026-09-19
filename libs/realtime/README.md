@@ -1069,5 +1069,5 @@ Distributed under the Eclipse Public License version 2.0.
 ---
 
 **Last Updated**: 2026-02-04  
-**Version**: 1.0.0-beta-5  
+**Version**: 1.0.0-rc-1  
 **Status**: Production Ready (Single-Server)

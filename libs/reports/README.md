@@ -16,7 +16,7 @@ Report generation library for the Wagoe Framework — produce PDF, Excel, and Wo
 
 **Leiningen**:
 ```clojure
-[com.wagoe/wagoe-reports "1.0.0-beta-5"]
+[com.wagoe/wagoe-reports "1.0.0-rc-1"]
 ```
 
 ## Features
