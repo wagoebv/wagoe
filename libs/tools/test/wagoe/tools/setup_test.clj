@@ -464,3 +464,35 @@
           (str "--cache " cache " (" env ") wrote the deprecated spelling"))
       (is (not (str/includes? config ":redis-streams"))
           (str "--cache " cache " (" env ") wrote the deprecated events spelling")))))
+
+;; =============================================================================
+;; BOU-447: the generated config has to work on a local HTTP dev box
+;; =============================================================================
+
+(deftest ^:unit generated-settings-turn-off-secure-cookies
+  ;; :secure-cookies? defaults to true (HTTPS-only), and both configs setup
+  ;; writes are served over plain HTTP — so omitting the key sent the session
+  ;; cookie with Secure and nobody could stay logged in. `wagoe new` writes it
+  ;; for the same reason.
+  (doseq [env ["dev" "test"]]
+    (let [config (setup/build-config minimal-spec env)]
+      (is (str/includes? config ":secure-cookies?")
+          (str env " config must decide this rather than inherit the HTTPS default"))
+      (is (re-find #":secure-cookies\?\s+false" config)
+          (str env " config is served over HTTP")))))
+
+(deftest ^:unit every-include-the-config-names-is-written
+  ;; `#include "admin/users.edn"` was emitted without the file, and Aero throws
+  ;; on a missing include — so an admin-enabled project could not read its own
+  ;; config.
+  (doseq [env ["dev" "test"]]
+    (let [config   (setup/build-config (assoc minimal-spec :admin-ui true) env)
+          includes (map second (re-seq #"#include\s+\"([^\"]+)\"" config))]
+      (is (seq includes) "admin config should reference the entity file")
+      (doseq [inc includes]
+        (is (some? (io/resource (str "wagoe/tools/" inc)))
+            (str inc " is included by the " env " config but wagoe-tools ships no such resource")))))
+
+  (testing "and the resource is readable EDN naming the entity"
+    (let [entity (read-string (slurp (io/resource "wagoe/tools/admin/users.edn")))]
+      (is (contains? entity :users)))))

@@ -88,6 +88,21 @@
 
 (def http-methods ["GET" "POST" "PUT" "DELETE" "PATCH"])
 
+(defn prompt-enum-values
+  "Ask for an enum's values until at least one is given.
+
+   An enum without values generates `[:enum]`, which matches nothing — so the
+   wizard cannot let it through unanswered (BOU-447)."
+  []
+  (loop []
+    (let [raw    (prompt "  Values (comma-separated, e.g. draft,sent,paid)")
+          values (->> (str/split (or raw "") #",")
+                      (map str/trim)
+                      (remove str/blank?))]
+      (if (seq values)
+        (vec values)
+        (do (println (red "  An enum needs at least one value")) (recur))))))
+
 (defn select-from-menu
   "Print a numbered menu of items and return the chosen item. Loops on invalid input."
   [items]
@@ -113,9 +128,11 @@
 ;; =============================================================================
 
 (defn field->spec
-  "Convert a field map to CLI spec: name:type[:required][:unique]"
-  [{:keys [name type required unique]}]
+  "Convert a field map to CLI spec: name:type[:values=a,b,c][:required][:unique]"
+  [{:keys [name type required unique enum-values]}]
   (str/join ":" (filter some? [name type
+                               (when (seq enum-values)
+                                 (str "values=" (str/join "," enum-values)))
                                (when required "required")
                                (when unique "unique")])))
 
@@ -309,11 +326,13 @@
                        (do
                          (println "  Type:")
                          (let [ftype    (select-from-menu field-types)
+                               values   (when (= "enum" ftype) (prompt-enum-values))
                                required (confirm "  Required?" true)
                                unique   (confirm "  Unique?" false)]
                            (println)
-                           (recur (conj acc {:name fname :type ftype
-                                             :required required :unique unique}))))))))
+                           (recur (conj acc (cond-> {:name fname :type ftype
+                                                     :required required :unique unique}
+                                              (seq values) (assoc :enum-values values))))))))))
 
         _ (display-generate-summary module entity fields http web)
 
@@ -379,12 +398,14 @@
 
         _ (println "Field type:")
         ftype    (select-from-menu field-types)
+        values   (when (= "enum" ftype) (prompt-enum-values))
         required (confirm "Required?" true)
         unique   (confirm "Unique?" false)
         dry-run  (confirm "Dry run?" false)
 
         args (cond-> ["field" "--module-name" module "--entity" entity
                       "--name" fname "--type" ftype]
+               (seq values) (conj "--enum-values" (str/join "," values))
                required (conj "--required")
                unique   (conj "--unique")
                dry-run  (conj "--dry-run"))]

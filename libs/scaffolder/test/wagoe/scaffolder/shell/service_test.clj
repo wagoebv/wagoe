@@ -960,3 +960,98 @@
                          :output-dir (.getPath dir) :dry-run false})]
         (is (true? (:success result))))
       (finally (delete-tree! dir)))))
+
+;; =============================================================================
+;; Namespace segment vs directory name (BOU-447)
+;; =============================================================================
+
+(deftest ^:unit a-kebab-case-module-is-written-to-an-underscored-directory
+  ;; Clojure loads `shop.invoice-line-item.schema` from
+  ;; shop/invoice_line_item/schema.clj. Written with the hyphen, every file in
+  ;; the module was unloadable and had to be renamed by hand.
+  (let [dir (temp-dir)]
+    (try
+      (let [result (ports/generate-module
+                    (service/create-scaffolder-service)
+                    {:module-name "invoice-line-item"
+                     :base-ns "shop"
+                     :entities [{:name "InvoiceLineItem"
+                                 :fields [{:name :amount :type :decimal :required true}]}]
+                     :interfaces {:http true :cli true :web true}
+                     :features {:audit true :pagination true}
+                     :output-dir (.getPath dir)
+                     :dry-run false})
+            on-disk (files-on-disk dir)]
+        (is (true? (:success result)))
+        (is (contains? on-disk "src/shop/invoice_line_item/schema.clj"))
+        (is (contains? on-disk "src/shop/invoice_line_item/shell/module_wiring.clj"))
+        (is (contains? on-disk "test/shop/invoice_line_item/shell/service_test.clj"))
+        (is (empty? (filter #(str/includes? % "invoice-line-item") on-disk))
+            "no path carries the namespace spelling")
+        (is (str/includes? (slurp (io/file dir "src/shop/invoice_line_item/schema.clj"))
+                           "(ns shop.invoice-line-item.schema")
+            "while the namespace keeps the hyphen"))
+      (finally (delete-tree! dir)))))
+
+(deftest ^:unit field-and-endpoint-find-a-kebab-case-module
+  ;; Both resolve the module's files by path, so both were blind to a
+  ;; correctly-named module until the path was munged too.
+  (let [dir (temp-dir)]
+    (try
+      (let [svc (service/create-scaffolder-service)
+            _   (ports/generate-module
+                 svc {:module-name "invoice-line-item"
+                      :base-ns "shop"
+                      :entities [{:name "InvoiceLineItem"
+                                  :fields [{:name :amount :type :decimal :required true}]}]
+                      :interfaces {:http true :cli true :web true}
+                      :features {:audit true :pagination true}
+                      :output-dir (.getPath dir) :dry-run false})
+            field (ports/add-field
+                   svc {:module-name "invoice-line-item" :entity "InvoiceLineItem"
+                        :base-ns "shop"
+                        :field {:name :vat :type :decimal :required false :unique false}
+                        :output-dir (.getPath dir) :dry-run false})
+            endpoint (ports/add-endpoint
+                      svc {:module-name "invoice-line-item" :base-ns "shop"
+                           :path "/totals" :method "GET" :handler-name "totals"
+                           :output-dir (.getPath dir) :dry-run false})]
+        (is (true? (:success field)) (pr-str (:errors field)))
+        (is (true? (:success endpoint)) (pr-str (:errors endpoint))))
+      (finally (delete-tree! dir)))))
+
+(deftest ^:unit an-enum-field-without-values-is-refused
+  ;; [:enum] is a Malli schema nothing satisfies, so a module generated with one
+  ;; rejected every write of that field.
+  (let [dir (temp-dir)]
+    (try
+      (let [result (ports/generate-module
+                    (service/create-scaffolder-service)
+                    {:module-name "invoice"
+                     :entities [{:name "Invoice"
+                                 :fields [{:name :status :type :enum :required true}]}]
+                     :interfaces {:http true :cli true :web true}
+                     :features {:audit true :pagination true}
+                     :output-dir (.getPath dir)
+                     :dry-run false})]
+        (is (false? (:success result)))
+        (is (empty? (files-on-disk dir)) "and nothing is written"))
+      (finally (delete-tree! dir)))))
+
+(deftest ^:unit an-enum-field-with-values-generates-a-usable-schema
+  (let [dir (temp-dir)]
+    (try
+      (let [result (ports/generate-module
+                    (service/create-scaffolder-service)
+                    {:module-name "invoice"
+                     :entities [{:name "Invoice"
+                                 :fields [{:name :status :type :enum :required true
+                                           :enum-values [:draft :sent :paid]}]}]
+                     :interfaces {:http true :cli true :web true}
+                     :features {:audit true :pagination true}
+                     :output-dir (.getPath dir)
+                     :dry-run false})]
+        (is (true? (:success result)) (pr-str (:errors result)))
+        (is (str/includes? (slurp (io/file dir "src/wagoe/invoice/schema.clj"))
+                           "[:enum :draft :sent :paid]")))
+      (finally (delete-tree! dir)))))

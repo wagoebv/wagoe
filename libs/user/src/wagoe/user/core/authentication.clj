@@ -9,7 +9,8 @@
    
    All functions are pure and deterministic - no I/O operations.
    Password hashing and token operations are handled in the shell layer."
-  (:require [wagoe.user.schema :as schema]
+  (:require [wagoe.user.core.password-policy :as password-policy]
+            [wagoe.user.schema :as schema]
             [clojure.string :as str]
             [malli.core :as m])
   (:import (java.time Duration)))
@@ -212,33 +213,36 @@
      
    Pure - password policy validation."
   [password policy user-context]
-  (let [violations (cond-> []
+  (let [{:keys [min-length max-length require-uppercase? require-lowercase?
+                require-numbers? require-special-chars? forbidden-patterns]}
+        (password-policy/normalize policy)
+        violations (cond-> []
                      ;; Length requirements
-                     (< (count password) (get policy :min-length 8))
+                     (< (count password) min-length)
                      (conj {:code :too-short
-                            :message (str "Must be at least " (get policy :min-length 8) " characters")})
+                            :message (str "Must be at least " min-length " characters")})
 
-                     (> (count password) (get policy :max-length 255))
+                     (> (count password) max-length)
                      (conj {:code :too-long
-                            :message (str "Must be no more than " (get policy :max-length 255) " characters")})
+                            :message (str "Must be no more than " max-length " characters")})
 
                      ;; Character requirements
-                     (and (get policy :require-uppercase false)
+                     (and require-uppercase?
                           (not (re-find #"[A-Z]" password)))
                      (conj {:code :missing-uppercase
                             :message "Must contain at least one uppercase letter"})
 
-                     (and (get policy :require-lowercase false)
+                     (and require-lowercase?
                           (not (re-find #"[a-z]" password)))
                      (conj {:code :missing-lowercase
                             :message "Must contain at least one lowercase letter"})
 
-                     (and (get policy :require-numbers true)
+                     (and require-numbers?
                           (not (re-find #"\d" password)))
                      (conj {:code :missing-number
                             :message "Must contain at least one number"})
 
-                     (and (get policy :require-special-chars false)
+                     (and require-special-chars?
                           (not (re-find #"[!@#$%^&*(),.?\":{}|<>]" password)))
                      (conj {:code :missing-special-char
                             :message "Must contain at least one special character"})
@@ -246,7 +250,7 @@
                      ;; Common password checks
                      (some #(str/includes? (str/lower-case password)
                                            (str/lower-case %))
-                           (get policy :forbidden-patterns #{}))
+                           forbidden-patterns)
                      (conj {:code :common-password
                             :message "Password is too common or predictable"})
 

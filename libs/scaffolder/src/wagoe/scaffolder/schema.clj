@@ -19,8 +19,8 @@
    :json                                                    ; JSON/map data
    :decimal])                                               ; Decimal number
 
-(def FieldDefinition
-  "Schema for a field definition in an entity."
+(def FieldShape
+  "The keys a field definition may carry."
   [:map {:title "Field Definition"}
    [:name :keyword]                                         ; Field name (kebab-case)
    [:type FieldType]                                        ; Field type
@@ -31,6 +31,18 @@
    [:min {:optional true} :int]                             ; Min length/value
    [:max {:optional true} :int]                             ; Max length/value
    [:description {:optional true} :string]])                ; Field documentation
+
+(def FieldDefinition
+  "Schema for a field definition in an entity.
+
+   An `:enum` field must name its values: `[:enum]` is a Malli schema nothing
+   satisfies, so a module generated without them rejected every write of that
+   field (BOU-447)."
+  [:and
+   FieldShape
+   [:fn {:error/message "an enum field needs a non-empty :enum-values"}
+    (fn [{:keys [type enum-values]}]
+      (or (not= :enum type) (seq enum-values)))]])
 
 (def EntityDefinition
   "Schema for an entity definition."

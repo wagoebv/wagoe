@@ -107,7 +107,7 @@ bb scaffold adapter \
 
 ## Field Specification Format
 
-Fields are specified as `name:type[:required][:unique]`:
+Fields are specified as `name:type[:values=a,b,c][:required][:unique]`:
 
 | Type | Maps to Malli | Notes |
 |------|--------------|-------|
@@ -118,7 +118,7 @@ Fields are specified as `name:type[:required][:unique]`:
 | `boolean` | `:boolean` | |
 | `email` | `[:re email-regex]` | |
 | `uuid` | `:uuid` | |
-| `enum` | `[:enum ...]` | Add values after generation |
+| `enum` | `[:enum ...]` | `values=` is required — `[:enum]` validates nothing |
 | `date` / `datetime` / `inst` | `inst?` | |
 | `json` | `:map` | |
 
@@ -128,7 +128,7 @@ Examples:
 --field email:email:required:unique
 --field name:string:required
 --field age:integer
---field status:enum
+--field status:enum:values=draft,sent,paid
 --field price:decimal:required
 --field active:boolean
 --field notes:text
@@ -297,7 +297,7 @@ Configure the provider via environment variables: `ANTHROPIC_API_KEY`, `OPENAI_A
 |------|---------|-------------|
 | `--module-name` | — | Module name in lowercase kebab-case (required) |
 | `--entity` | — | Entity name in PascalCase (required) |
-| `--field` | — | Repeatable: `name:type[:required][:unique]` |
+| `--field` | — | Repeatable: `name:type[:values=a,b,c][:required][:unique]` |
 | `--http` | true | Generate HTTP interface |
 | `--cli` | true | Generate CLI interface |
 | `--web` | true | Generate Web UI interface |

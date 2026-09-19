@@ -105,3 +105,47 @@
            ["--module-name" "box" "--entity" "Box" "--name" "h" "--type" "string"]
            cli/field-options)]
       (is (= "." (:output-dir options))))))
+
+;; =============================================================================
+;; BOU-447: an enum field has to name its values
+;; =============================================================================
+
+(deftest ^:unit enum-fields-carry-their-values
+  (testing "`status:enum` alone is refused, with the syntax in the message"
+    (let [{:keys [error]} (cli/parse-field-spec "status:enum")]
+      (is (some? error))
+      (is (str/includes? error "values="))))
+
+  (testing "values= parses into keywords and survives the other flags"
+    (is (= {:name :status :type :enum :required true :unique false
+            :enum-values [:draft :sent :paid]}
+           (cli/parse-field-spec "status:enum:values=draft,sent,paid:required"))))
+
+  (testing "a non-enum field may not carry values="
+    (is (some? (:error (cli/parse-field-spec "name:string:values=a,b")))))
+
+  (testing "every other field spec is unchanged"
+    (is (= {:name :email :type :email :required true :unique true}
+           (cli/parse-field-spec "email:email:required:unique")))))
+
+(deftest ^:unit field-command-requires-enum-values
+  (testing "--type enum without --enum-values is refused"
+    (let [[valid? errors] (cli/validate-field-options
+                           {:module-name "invoice" :entity "Invoice"
+                            :name "status" :type "enum"})]
+      (is (false? valid?))
+      (is (some #(str/includes? % "--enum-values") errors))))
+
+  (testing "and with them it reaches the request as keywords"
+    (let [seen (atom nil)
+          svc  (reify wagoe.scaffolder.ports/IScaffolderService
+                 (generate-module [_ _] (throw (ex-info "not under test" {})))
+                 (add-endpoint [_ _] (throw (ex-info "not under test" {})))
+                 (add-adapter [_ _] (throw (ex-info "not under test" {})))
+                 (add-field [_ request]
+                   (reset! seen request)
+                   {:success true :files [] :next-steps []}))]
+      (cli/execute-field svc {:module-name "invoice" :entity "Invoice"
+                              :name "status" :type "enum"
+                              :enum-values "draft, sent ,paid"})
+      (is (= [:draft :sent :paid] (get-in @seen [:field :enum-values]))))))

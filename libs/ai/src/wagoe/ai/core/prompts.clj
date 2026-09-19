@@ -52,7 +52,7 @@ Output ONLY valid JSON with this exact structure:
   \"module-name\": \"kebab-case-name\",
   \"entity\": \"PascalCaseName\",
   \"fields\": [
-    {\"name\": \"field-name\", \"type\": \"string|text|int|decimal|boolean|email|uuid|enum|date|json\", \"required\": true|false, \"unique\": false}
+    {\"name\": \"field-name\", \"type\": \"string|text|int|decimal|boolean|email|uuid|enum|date|json\", \"required\": true|false, \"unique\": false, \"enum-values\": [\"draft\", \"sent\"]}
   ],
   \"http\": true,
   \"web\": true
@@ -63,6 +63,7 @@ Rules:
 - entity MUST be PascalCase (e.g. Product, OrderItem, UserProfile)
 - field names MUST be kebab-case
 - valid field types: string, text, int, decimal, boolean, email, uuid, enum, date, json
+- an \"enum\" field MUST also carry \"enum-values\": a non-empty array of kebab-case strings
 - default required=true, unique=false unless stated otherwise
 - default http=true, web=true unless stated otherwise
 - respond with ONLY the JSON object, no explanation, no markdown fences"))

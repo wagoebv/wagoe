@@ -401,3 +401,35 @@
 
       ;; No errors should be captured
       (is (empty? (get-captured-errors error-reporter))))))
+;; =============================================================================
+;; BOU-447: a rule violation is not a missing field
+;; =============================================================================
+
+(deftest ^:unit validation-errors-are-classified-by-code
+  (testing "a policy violation is reported as the violation, not as an absent field"
+    (let [ctx (interceptors/convert-exception-to-response
+               {:exception (ex-info "Invalid user data"
+                                    {:type :validation-error
+                                     :errors [{:field :password
+                                               :code :password-policy-violation
+                                               :message "Password must have: at least one number"}]})
+                :error-mappings {}})
+          body (get-in ctx [:response :body])]
+      (is (empty? (:missing-fields body))
+          "the caller did send a password — reporting it missing sends them the wrong way")
+      (is (= [{:field :password
+               :code :password-policy-violation
+               :message "Password must have: at least one number"}]
+             (:field-errors body)))))
+
+  (testing "a genuinely absent key still lands in :missing-fields"
+    (let [ctx (interceptors/convert-exception-to-response
+               {:exception (ex-info "Invalid user data"
+                                    {:type :validation-error
+                                     :errors [{:field [:email]
+                                               :code :missing-required-field
+                                               :message "missing required key"}]})
+                :error-mappings {}})
+          body (get-in ctx [:response :body])]
+      (is (= [:email] (:missing-fields body)))
+      (is (empty? (:field-errors body))))))

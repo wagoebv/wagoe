@@ -17,6 +17,7 @@
             [wagoe.shared.ui.core.layout :as layout]
             [wagoe.shared.ui.core.validation :as validation]
             [wagoe.platform.shell.web.table :as web-table]
+            [wagoe.user.core.password-policy :as password-policy]
             [wagoe.user.core.ui :as user-ui]
             [wagoe.user.core.profile-ui :as profile-ui]
             [wagoe.user.ports :as user-ports]
@@ -78,30 +79,21 @@
 (defn- display-password-policy
   "The password rules the create-user form should list.
 
-   Three things refuse a password and the form has to show all of them, or it
-   advertises fewer rules than it enforces — on the prod config that meant
-   listing two while rejecting on four:
-
-   - `CreateUserRequest` requires at least 8 characters, whatever the config
-     says. The dev config's `:min-length 6` never applies.
-   - `validate-user-creation-request` reads the configured flags, which are
-     `?`-suffixed.
-   - `meets-password-policy?` reads those same flags without the `?`, so it
-     never sees them and falls back to requiring a digit.
-
-   The last of those is BOU-388; once the two readers agree this collapses to
-   the configured policy plus the schema minimum."
+   The configured policy, plus one rule config cannot relax:
+   `CreateUserRequest` requires at least 8 characters whatever the config says,
+   so the dev config's `:min-length 6` never applies and the form must not
+   advertise it. Both validators now read the same policy (BOU-388), so there
+   is nothing else to reconcile."
   [config]
-  (let [policy        (:password-policy (wagoe-config/user-validation-config config) {})
+  (let [policy         (password-policy/normalize
+                        (:password-policy (wagoe-config/user-validation-config config)))
         schema-minimum 8]
-    {:min-length            (max (get policy :min-length schema-minimum) schema-minimum)
-     :max-length            (min (get policy :max-length 255) 255)
-     :require-uppercase     (boolean (get policy :require-uppercase? false))
-     :require-lowercase     (boolean (get policy :require-lowercase? false))
-     ;; meets-password-policy? defaults this to true and never reads
-     ;; :require-numbers?, so a digit is required no matter what config says.
-     :require-numbers       true
-     :require-special-chars (boolean (get policy :require-special-chars? false))}))
+    {:min-length            (max (:min-length policy) schema-minimum)
+     :max-length            (min (:max-length policy) 255)
+     :require-uppercase     (:require-uppercase? policy)
+     :require-lowercase     (:require-lowercase? policy)
+     :require-numbers       (:require-numbers? policy)
+     :require-special-chars (:require-special-chars? policy)}))
 
 (defn- validate-request-data
   "Validate request data against schema with transformation.

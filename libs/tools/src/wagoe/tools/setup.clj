@@ -109,6 +109,12 @@
        "   :date-format       \"yyyy-MM-dd\"\n"
        "   :date-time-format  \"yyyy-MM-dd HH:mm:ss\"\n"
        "   :currency/iso-code \"EUR\"\n"
+       ;; Defaults to true when unset, and both configs this writes are served
+       ;; over plain HTTP — so omitting it sent the session cookie with Secure
+       ;; and nobody could stay logged in locally (BOU-447). `wagoe new` writes
+       ;; it for the same reason (dev-config.edn.tmpl).
+       "   ;; Auth cookies omit Secure for local HTTP; set true behind TLS.\n"
+       "   :secure-cookies?   false\n"
        "   :features          {:user-web-ui {:enabled? true}}}\n"))
 
 (defn- postgresql-template [env]
@@ -327,6 +333,15 @@
            "   :tls? false\n"
            "   :from #or [#env SMTP_FROM \"no-reply@localhost\"]}\n"))))
 
+(def ^:private admin-users-entity
+  "The `:users` entity config the admin `#include` points at.
+
+   Shipped as a resource rather than composed here: it describes the
+   framework's own auth_users/users split, which a project does not choose.
+   Writing the `#include` without the file it names left every generated
+   config unreadable — Aero threw on the missing resource at boot (BOU-447)."
+  (delay (some-> (io/resource "wagoe/tools/admin/users.edn") slurp)))
+
 (defn- admin-template [enabled? _env]
   (if-not enabled?
     ""
@@ -521,6 +536,18 @@
     (println (green "✓") " Generated " (cyan "resources/conf/dev/config.edn"))
     (println (green "✓") " Generated " (cyan "resources/conf/test/config.edn"))
     (println (green "✓") " Generated " (cyan ".env.example"))
+
+    ;; The file the admin key's `#include` names. Written for both envs, and
+    ;; only when the config references it.
+    (when (:admin-ui spec)
+      (if-let [entity @admin-users-entity]
+        (doseq [env ["dev" "test"]]
+          (let [f (io/file (root-dir) "resources" "conf" env "admin" "users.edn")]
+            (io/make-parents f)
+            (spit f entity)
+            (println (green "✓") " Generated " (cyan (str "resources/conf/" env "/admin/users.edn")))))
+        (println (yellow "!") " Admin entity config missing from wagoe-tools;"
+                 (cyan "#include \"admin/users.edn\"") "will not resolve.")))
     (println)
     (println (dim "Next steps:"))
     (println (dim "  1. Copy .env.example to .env and fill in your values"))

@@ -4,7 +4,8 @@
    This namespace contains comprehensive validation functions that implement
    business rules beyond basic schema validation. All functions are pure
    and follow FC/IS architectural principles."
-  (:require [wagoe.user.schema :as schema]
+  (:require [wagoe.user.core.password-policy :as password-policy]
+            [wagoe.user.schema :as schema]
             [clojure.string :as str]
             [malli.core :as m]
             [malli.error :as me]))
@@ -37,25 +38,28 @@
   ([humanized]
    (humanized-errors->error-maps [] humanized))
   ([path humanized]
-   (cond
-     (map? humanized)
-     (mapcat (fn [[k v]]
-               (humanized-errors->error-maps (conj path k) v))
-             humanized)
+   (letfn [(error-map [msg]
+             {:field (vec path)
+              ;; An absent key and a malformed one are different problems with
+              ;; different fixes, and the CLI reported both as "Missing fields"
+              ;; because nothing distinguished them (BOU-447).
+              :code (if (= "missing required key" (str msg))
+                      :missing-required-field
+                      :schema-validation-failed)
+              :message (str msg)})]
+     (cond
+       (map? humanized)
+       (mapcat (fn [[k v]]
+                 (humanized-errors->error-maps (conj path k) v))
+               humanized)
 
-     ;; Common case: vector of messages
-     (sequential? humanized)
-     (map (fn [msg]
-            {:field (vec path)
-             :code :schema-validation-failed
-             :message (str msg)})
-          humanized)
+       ;; Common case: vector of messages
+       (sequential? humanized)
+       (map error-map humanized)
 
-     ;; Fallback: a single message/value
-     :else
-     [{:field (vec path)
-       :code :schema-validation-failed
-       :message (str humanized)}])))
+       ;; Fallback: a single message/value
+       :else
+       [(error-map humanized)]))))
 
 (defn format-schema-errors
   "Pure function: Convert Malli explain data to structured domain error format.
@@ -216,14 +220,9 @@
 (defn valid-password?
   "Pure function: Check if password meets policy requirements."
   [password validation-config]
-  (let [policy (get-in validation-config [:password-policy] {})
-        min-length (get policy :min-length 8)
-        require-uppercase? (get policy :require-uppercase? false)
-        require-lowercase? (get policy :require-lowercase? false)
-        require-numbers? (get policy :require-numbers? true)
-        require-special-chars? (get policy :require-special-chars? false)
-        forbidden-patterns (get policy :forbidden-patterns [])
-        max-length (get policy :max-length 255)]
+  (let [{:keys [min-length max-length require-uppercase? require-lowercase?
+                require-numbers? require-special-chars? forbidden-patterns]}
+        (password-policy/normalize (get-in validation-config [:password-policy]))]
     (and (>= (count password) min-length)
          (<= (count password) max-length)
          (or (not require-uppercase?) (re-find #"[A-Z]" password))
@@ -235,14 +234,9 @@
 (defn validate-password-constraint
   "Pure function: Generate detailed error for invalid password."
   [password validation-config]
-  (let [policy (get-in validation-config [:password-policy] {})
-        min-length (get policy :min-length 8)
-        require-uppercase? (get policy :require-uppercase? false)
-        require-lowercase? (get policy :require-lowercase? false)
-        require-numbers? (get policy :require-numbers? true)
-        require-special-chars? (get policy :require-special-chars? false)
-        forbidden-patterns (get policy :forbidden-patterns [])
-        max-length (get policy :max-length 255)
+  (let [{:keys [min-length max-length require-uppercase? require-lowercase?
+                require-numbers? require-special-chars? forbidden-patterns]}
+        (password-policy/normalize (get-in validation-config [:password-policy]))
 
         violations (cond-> []
                      (< (count password) min-length)

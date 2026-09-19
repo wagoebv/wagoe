@@ -280,9 +280,20 @@
   "Format error message based on output format."
   [format-type error-data]
   (let [message (or (:message error-data) (:detail error-data) "Unknown error")
+        ;; The violations, then whatever is genuinely absent. Every validation
+        ;; error used to be printed as "Missing fields: :password", so a
+        ;; password the policy rejected read as one the user had not typed
+        ;; (BOU-447).
+        violations (seq (:field-errors error-data))
+        missing (seq (:missing-fields error-data))
         details (or (:details error-data)
-                    (when (:validation-details error-data)
-                      (str "Missing fields: " (str/join ", " (:missing-fields error-data)))))]
+                    (when (or violations missing)
+                      (str/join "; "
+                                (concat (for [{:keys [field message]} violations]
+                                          (str field ": " message))
+                                        (when missing
+                                          [(str "missing fields: "
+                                                (str/join ", " missing))])))))]
     (case format-type
       :json (format-json {:error error-data})
       :table (str "Error: " message
