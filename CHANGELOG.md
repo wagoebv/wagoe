@@ -36,6 +36,16 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **A kebab-case module was scaffolded into an unloadable directory** (BOU-447).
+  `bb scaffold generate`/`field`/`endpoint`/`adapter` and `bb scaffold integrate` now use `invoice_line_item/`.
+- **`--field status:enum` generated `[:enum]`, which nothing validates** (BOU-447).
+  Name the values: `--field status:enum:values=draft,sent,paid` (or `--enum-values` on `bb scaffold field`).
+- **`bb setup` wrote a config that could not log in or be read** (BOU-447).
+  It now writes `:secure-cookies? false` and the `admin/users.edn` its `#include` names.
+- **A rejected password was reported as a missing field** (BOU-447).
+  Validation errors now print the rule they broke; only absent keys are listed as missing.
+- **Password-policy config reached one validator and not the other** (BOU-388).
+  `:require-numbers?` and friends now apply everywhere — a policy you switched off is off.
 - **`wagoe version` printed `1.0.0-beta-5` four releases on.** It now reads
   `:cli-version` from the shipped catalogue, which `bb check:versions` gates.
 

@@ -125,7 +125,6 @@
                 :context-keys (keys (dissoc ctx :system :exception))}))
             ctx)})
 
-
 (def error-normalize
   "Generic error normalization interceptor that works with context error mappings.
    This runs in the :error phase when actual exceptions are thrown during pipeline execution."
@@ -171,15 +170,25 @@
       ;; Handle validation errors with enhanced field extraction
       (= error-type :validation-error)
       (let [errors (:errors error-data)
-            ;; Extract field-level information from validation errors
-            field-info (reduce (fn [acc error]
-                                 (let [field (:field error)
-                                       field-keyword (cond
-                                                       (keyword? field) field
-                                                       (vector? field) (first field)
-                                                       :else (keyword (str field)))]
-                                   (update acc :missing-fields (fnil conj []) field-keyword)))
-                               {:missing-fields []}
+            field-of (fn [error]
+                       (let [field (:field error)]
+                         (cond
+                           (keyword? field) field
+                           (vector? field) (first field)
+                           :else (keyword (str field)))))
+            ;; Only errors that really are an absent key. Every validation
+            ;; error used to land here, so a password rejected by the policy
+            ;; was reported as "Missing fields: :password" — a rule violation
+            ;; described as a field the caller forgot to send (BOU-447).
+            missing-fields (into [] (comp (filter #(= :missing-required-field (:code %)))
+                                          (map field-of))
+                                 errors)
+            ;; Field + message for everything else, so a consumer has the
+            ;; violation itself and not just the name of the field it is about.
+            field-errors (into [] (comp (remove #(= :missing-required-field (:code %)))
+                                        (map (fn [e] {:field (field-of e)
+                                                      :code (:code e)
+                                                      :message (:message e)})))
                                errors)
             ;; Try to get provided fields from the original data in error context
             provided-fields (when-let [original-data (:original-data error-data)]
@@ -191,7 +200,8 @@
                              :status 400
                              :detail error-message
                              :correlationId correlation-id
-                             :missing-fields (:missing-fields field-info)
+                             :missing-fields missing-fields
+                             :field-errors field-errors
                              :provided-fields (or provided-fields [])
                              :interface-type (:interface-type error-data :cli)
                              :validation-details errors ; Include original error details
@@ -386,7 +396,8 @@
                   (if (>= status 400)
                     ;; Error response - extract detailed error info
                     (let [error-details (:detail body)
-                          missing-fields (:missing-fields body)
+                          missing-fields (seq (:missing-fields body))
+                          field-errors (seq (:field-errors body))
                           provided-fields (:provided-fields body)
                           interface-type (:interface-type body)
 
@@ -394,6 +405,13 @@
                           detailed-message (str error-details
                                                 (when missing-fields
                                                   (str "\nMissing required fields: " (str/join ", " missing-fields)))
+                                                ;; The violation itself, which
+                                                ;; a bare field name never said.
+                                                (when field-errors
+                                                  (str "\n"
+                                                       (str/join "\n"
+                                                                 (for [{:keys [field message]} field-errors]
+                                                                   (str "  " field ": " message)))))
                                                 (when provided-fields
                                                   (str "\nProvided fields: " (str/join ", " provided-fields)))
                                                 (when interface-type

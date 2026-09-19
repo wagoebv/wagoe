@@ -421,9 +421,9 @@
       (is (html-contains? response "password-requirement-number"))))
 
   (testing "a laxer configured minimum does not undercut what is enforced anyway"
-    ;; dev config says 6 and no digit required, but CreateUserRequest requires 8
-    ;; and meets-password-policy? requires a digit (it never sees
-    ;; :require-numbers?), so the form has to show the stricter of the three.
+    ;; dev config says 6, but CreateUserRequest requires 8, so the form shows 8.
+    ;; The flags it switches off are off: both validators read the same policy
+    ;; since BOU-388.
     ;; The interpolated count only reaches the body through a real translator —
     ;; the fallback drops params, which would make an assertion on it vacuous.
     (let [config {:active {:wagoe/settings
@@ -436,8 +436,8 @@
                  ([k params _n] (str k " " (pr-str params))))
           response ((web-handlers/create-user-page-handler config) {:i18n/t t-fn})]
 
-      (is (html-contains? response "password-requirement-number")
-          "still enforced by meets-password-policy?, so still listed")
+      (is (not (html-contains? response "password-requirement-number"))
+          ":require-numbers? false now reaches both validators, so it is not listed")
       (is (not (html-contains? response "password-requirement-uppercase")))
       (is (html-contains? response "{:n 8}")
           "the listed minimum should be 8, not the configured 6")
