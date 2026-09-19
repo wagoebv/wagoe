@@ -10,6 +10,7 @@
 (ns wagoe.tools.doctor-env
   (:require [wagoe.tools.ansi :refer [bold]]
             [wagoe.tools.report :as report]
+            [wagoe.tools.test-services :as test-services]
             [clojure.string :as str]
             [babashka.process :as process]))
 
@@ -214,6 +215,27 @@
                   "OPENAI_BASE_URL, REPLICATE_API_TOKEN or OLLAMA_URL, or start "
                   "Ollama with `ollama serve`")}))))
 
+(defn check-test-services
+  "Report the backing services the adapter sweeps need. Warn level only.
+
+   They are not prerequisites for developing — most of the suite runs without
+   them — but a full `bb test:all` fails without them, and the failure arrives
+   four minutes in as a count mismatch. Naming them here is how you find out
+   before starting (BOU-419)."
+  []
+  (let [absent (test-services/missing)]
+    (if (seq absent)
+      {:id :test-services :level :warn
+       :msg (str "Not reachable: "
+                 (str/join ", " (map (fn [{:keys [id host port]}]
+                                       (str (name id) " (" host ":" port ")"))
+                                     absent))
+                 " — the jobs, cache and audience adapter sweeps fail without them")
+       :fix "bb test:services up"}
+      {:id :test-services :level :pass
+       :msg (str "Test services reachable: "
+                 (str/join ", " (map (comp name :id) test-services/services)))})))
+
 ;; =============================================================================
 ;; Check orchestration
 ;; =============================================================================
@@ -227,7 +249,8 @@
    (check-node)
    (check-ports)
    (check-clj-kondo)
-   (check-ai-providers)])
+   (check-ai-providers)
+   (check-test-services)])
 
 ;; =============================================================================
 ;; Output formatting
@@ -262,7 +285,8 @@
   (println "  node              Node.js installed (warn only)")
   (println "  ports             Dev ports 3000, 7888, 9999 available")
   (println "  clj-kondo         clj-kondo linter installed (warn only)")
-  (println "  ai-providers      A provider env var is set, or Ollama / MLX is running (warn only)"))
+  (println "  ai-providers      A provider env var is set, or Ollama / MLX is running (warn only)")
+  (println "  test-services     Redis / MySQL the adapter sweeps need (warn only)"))
 
 ;; =============================================================================
 ;; Main entry point

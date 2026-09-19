@@ -16,6 +16,7 @@
              [wagoe.tools.ai          :as ai]
              [wagoe.tools.deps        :as deps]
              [wagoe.tools.test-all    :as test-all]
+             [wagoe.tools.test-services :as test-services]
              [wagoe.tools.i18n        :as i18n]
              [wagoe.tools.admin       :as admin]
              [wagoe.tools.deploy      :as deploy]
@@ -180,6 +181,10 @@
   test:all
   {:doc "Run EVERY test surface — main + tools + agents + wagoe-cli + wagoe-mcp (bb test:all [--list])"
    :task (apply test-all/-main *command-line-args*)}
+
+  test:services
+  {:doc "Backing services the adapter sweeps need — Redis, MySQL (bb test:services [status|up|down])"
+   :task (apply test-services/-main *command-line-args*)}
   run-e2e-server
   {:doc "Start the Wagoe app on :test profile (port 3100) for Playwright/spel e2e runs"
    :task (let [proc (process/process

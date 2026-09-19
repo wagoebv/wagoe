@@ -29,6 +29,11 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ## [Unreleased]
 
+### Added
+
+- **`bb test:services` starts the Redis and MySQL the adapter sweeps need** (BOU-419).
+  `bb test:all` and `bb doctor:env` now name a missing one up front instead of failing mid-run.
+
 ### Fixed
 
 - **The installer reinstalled a JVM it already had** when `JAVA_TOOL_OPTIONS` was set
