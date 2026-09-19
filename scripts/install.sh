@@ -103,12 +103,15 @@ JAVA_MIN=21
 # major is the second component. Both appear in the wild — the second is what a
 # machine with a long-lived JDK 8 reports.
 java_major() {
-  local line raw major
-  line=$(java -version 2>&1 | head -1) || return 1
+  local out raw major
+  # The whole output, not `head -1`: with JAVA_TOOL_OPTIONS or _JAVA_OPTIONS
+  # set, every JVM prints "Picked up …" before its banner, so the first line
+  # carries no version and a working JDK read as none at all (BOU-475).
+  out=$(java -version 2>&1) || return 1
   # Require the quoted form. Anything else — "command not found", a wrapper
   # printing its own banner — must read as "no usable java", not as a version
   # number parsed out of an error message.
-  [[ "$line" =~ version\ \"([^\"]+)\" ]] || return 1
+  [[ "$out" =~ version\ \"([^\"]+)\" ]] || return 1
   raw="${BASH_REMATCH[1]}"
   case "$raw" in
     1.*) major=${raw#1.}; major=${major%%.*} ;;
