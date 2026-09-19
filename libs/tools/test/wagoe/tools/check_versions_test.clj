@@ -110,7 +110,29 @@
     (is (empty? (sut/banner-findings
                  "{\"Content-Type\" \"text/plain; version=0.0.4; charset=utf-8\"}\n")))
     (is (empty? (sut/banner-findings ":tags [\"team:backend\" \"version:1.0.0\"]\n")))
-    (is (empty? (sut/banner-findings "\"A suite version: 1.0.0-beta-5, 2.0.0.\"\n")))))
+    (is (empty? (sut/banner-findings "\"A suite version: 1.0.0-beta-5, 2.0.0.\"\n"))))
+
+  (testing "prose about a release is not a banner"
+    ;; The first version of this rule read the line, not the expression on it, so
+    ;; a comment or a docstring naming a release tripped a gate that has no
+    ;; escape hatch — a hard CI failure over a sentence, and nothing a bump could
+    ;; even fix. Nothing here prints anything.
+    (doseq [line [";; wagoe version 1.1.0 dropped the shim"
+                  "  ;; See the wagoe version 1.1.0 migration notes."
+                  "  \"Explains what wagoe version 1.1.0 changed.\""
+                  "  \"Wagoe version 1.1.0 renamed this key.\""
+                  ";; (println \"wagoe CLI version 1.1.0\") — how it used to read"]]
+      (is (empty? (sut/banner-findings (str line "\n"))) line)))
+
+  (testing "an unterminated literal is not one"
+    ;; The version has to sit inside a closed string, or a stray quote earlier on
+    ;; the line makes the prose after it look quoted.
+    (is (empty? (sut/banner-findings "(println \"header\") ;; wagoe version 1.1.0\n"))))
+
+  (testing "a banner assembled from a value is already correct"
+    ;; What the fix looks like: nothing to find, because there is no literal.
+    (is (empty? (sut/banner-findings
+                 "(println (str \"wagoe CLI version \" (:cli-version c)))\n")))))
 
 (deftest ^:unit no-source-file-hardcodes-a-version-banner
   ;; The banner rule above would keep a hardcoded banner in agreement, but the

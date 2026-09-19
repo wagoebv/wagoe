@@ -100,20 +100,56 @@
    so the one number a user asks the tool for directly was the only number
    nothing checked.
 
-   `wagoe` must precede `version` on the line, which is what keeps someone
-   else's out: `\"text/plain; version=0.0.4\"` is Prometheus' content type and
-   `\"version:1.0.0\"` a Datadog tag example, both in this tree, and `bb bump`
-   rewrites whatever this reports. `[^\"\\n]*` keeps the match inside one string
-   literal rather than running across the code between two."
-  (re-pattern (str "(?i)\\bwagoe\\b[^\"\\n]*?\\bversion\\b\\s+v?(" version-pattern ")")))
+   Three things have to be true, and the first two are what keep prose out. This
+   rule is the one verdict here with no bump to fix it and no version to
+   disagree with — it fails on *presence* — so a false positive is a hard CI
+   failure over a sentence. The first version of it read the line rather than the
+   expression on it, and `;; wagoe version 1.1.0 dropped the shim` was a defect.
+
+     - a print form on the line, so a comment or docstring naming a release is
+       not a banner;
+     - a closed string literal around the version, so a stray quote earlier on
+       the line cannot make the prose after it look quoted;
+     - `wagoe` before `version` inside that literal, which keeps someone else's
+       out — `\"text/plain; version=0.0.4\"` is Prometheus' content type and
+       `\"version:1.0.0\"` a Datadog tag example, both in this tree.
+
+   Narrow in two directions on purpose. A banner printed across two lines, or
+   from a `def`'d string, is not matched: the shapes this misses are silent, and
+   the shape it would otherwise invent is loud. `wagoe.cli.main-test` asserts the
+   command's output against the catalogue, which covers the miss from the other
+   side."
+  (re-pattern (str "(?i)\\b(?:println|print|printf)\\b[^\"\\n]*\""
+                   "[^\"\\n]*?\\bwagoe\\b[^\"\\n]*?\\bversion\\b\\s+v?("
+                   version-pattern ")[^\"\\n]*\"")))
+
+(defn- code-only
+  "`line` with a trailing `;` comment removed, ignoring a `;` inside a string."
+  [line]
+  (let [end (loop [i 0, in-string? false]
+              (cond
+                (>= i (count line))                    nil
+                (= \\ (.charAt line i))                (recur (+ i 2) in-string?)
+                (= \" (.charAt line i))                (recur (inc i) (not in-string?))
+                (and (not in-string?)
+                     (= \; (.charAt line i)))          i
+                :else                                  (recur (inc i) in-string?)))]
+    (if end (subs line 0 end) line)))
 
 (defn banner-findings
   "Every version banner `text` prints, as {:line :excerpt :version :groups}.
 
+   Comments are cut before matching rather than filtered afterwards, so a
+   commented-out banner is not one. Blanked in place, so the line numbers still
+   name the line the reader has to open.
+
    Pure and public so the rule can be proven to fire without a file to break —
    the repository is meant to carry none of these (see `hardcoded-banners`)."
   [text]
-  (matches-in text version-banner-re))
+  (matches-in (->> (str/split-lines text)
+                   (map code-only)
+                   (str/join "\n"))
+              version-banner-re))
 
 (defn- source-files
   "Every Clojure source file a version could be hardcoded in."
