@@ -1,0 +1,113 @@
+{:users
+ {:label           "Users"
+  ;; Keep the list view compact but include the most important identity fields.
+  :list-fields     [:email :name :role :active :created-at]
+  :search-fields   [:email :name]
+  ;; Hide sensitive and internal fields in admin UI.
+  :hide-fields     #{:password-hash
+                     :mfa-secret
+                     :mfa-backup-codes
+                     :mfa-backup-codes-used
+                     :deleted-at}
+  ;; UPDATE targets the users (profile) table for primary fields.
+  ;; email and active live in auth_users and are routed there via :split-table-update.
+  ;; mfa-enabled is controlled by the MFA enrollment flow, not the generic edit form.
+  :table-name      :users
+  :soft-delete     true
+  :readonly-fields #{:id :mfa-enabled :created-at :updated-at}
+
+  ;; Split-table update: fields listed under :secondary-fields are written to
+  ;; :secondary-table instead of the primary :table-name.  Both UPDATEs run in
+  ;; a single transaction so they commit or roll back atomically.
+  :split-table-update {:secondary-table :auth_users
+                       :secondary-fields #{:email :active}}
+
+  ;; Split-table entities cannot be created via the generic admin create flow
+  ;; (it only writes to :table-name).  Delegate creation to the user module's
+  ;; dedicated create-user page which hashes the password and writes both
+  ;; auth_users and users atomically via register-user.
+  :create-redirect-url "/web/users/new"
+
+  ;; Field filter config — drives the "Add filter" dropdown in the admin list view.
+  ;; Fields not listed here (e.g. :email, :name) are covered by the free-text search.
+  :fields
+  {:email      {:label [:t :admin.users/field-email]      :filterable false}
+   :name       {:label [:t :admin.users/field-name]       :filterable false}
+   :role       {:type :enum
+                :label [:t :admin.users/field-role]
+                :options [[:admin [:t :common/role-admin]]
+                          [:user  [:t :common/role-user]]
+                          [:viewer [:t :common/role-viewer]]]
+                :filterable true}
+   :active     {:type :boolean :label [:t :admin.users/field-active]  :filterable true}
+   :created-at {:type :instant :label [:t :admin.users/field-created] :filterable true}
+   :theme      {:type :enum
+                :label [:t :admin.users/field-theme]
+                :options [[:light [:t :admin.users/theme-light]]
+                          [:dark  [:t :admin.users/theme-dark]]
+                          [:auto  [:t :admin.users/theme-auto]]]}
+   :language   {:type :enum
+                :label [:t :admin.users/field-language]
+                :options [[:en [:t :admin.users/language-en]]
+                          [:nl [:t :admin.users/language-nl]]]}
+   :timezone   {:label [:t :admin.users/field-timezone]}
+   :date-format {:type :enum
+                 :label [:t :admin.users/field-date-format]
+                 :options [[:iso [:t :admin.users/date-format-iso]]
+                           [:us  [:t :admin.users/date-format-us]]
+                           [:eu  [:t :admin.users/date-format-eu]]]}
+   :time-format {:type :enum
+                 :label [:t :admin.users/field-time-format]
+                 :options [[:12h [:t :admin.users/time-format-12h]]
+                           [:24h [:t :admin.users/time-format-24h]]]}
+   :notifications-email {:label [:t :admin.users/field-notifications-email]}
+   :notifications-push  {:label [:t :admin.users/field-notifications-push]}
+   :notifications-sms   {:label [:t :admin.users/field-notifications-sms]}}
+
+  ;; Field ordering - fields appear in this order, others follow
+  :field-order     [:email
+                    :name
+                    :role
+                    :active
+                    :theme
+                    :language
+                    :timezone
+                    :date-format
+                    :time-format
+                    :notifications-email
+                    :notifications-push
+                    :notifications-sms
+                    :created-at
+                    :updated-at]
+
+  ;; Field grouping - organize form fields into sections
+  :field-groups
+  [{:id :identity      :label [:t :admin.users/group-identity]      :fields [:email :name]}
+   {:id :access        :label [:t :admin.users/group-access]        :fields [:role :active]}
+   {:id :preferences   :label [:t :admin.users/group-preferences]   :fields [:theme
+                                                                             :language
+                                                                             :timezone
+                                                                             :date-format
+                                                                             :time-format]}
+   {:id :notifications :label [:t :admin.users/group-notifications] :fields [:notifications-email
+                                                                             :notifications-push
+                                                                             :notifications-sms]}]
+
+  ;; Multi-table JOIN: email lives in auth_users, profile fields in users
+  :query-overrides
+  {:from             [[:auth_users :a]]
+   :join             [[:users :u] [:= :a.id :u.id]]
+   :select           [:a.id :a.email :a.active :a.mfa_enabled
+                      :a.created_at :a.updated_at :a.deleted_at
+                      :u.name :u.role :u.tenant_id :u.avatar_url
+                      :u.login_count :u.last_login
+                      :u.notifications_email :u.notifications_push :u.notifications_sms
+                      :u.theme :u.language :u.timezone :u.date_format :u.time_format]
+   :field-aliases    {:id         :a.id
+                      :email      :a.email
+                      :active     :a.active
+                      :deleted-at :a.deleted_at
+                      :created-at :a.created_at
+                      :name       :u.name
+                      :role       :u.role}
+   :soft-delete-table :auth_users}}}
