@@ -71,7 +71,8 @@
   ;; Everything below reads as passing when only one adapter is in the list,
   ;; which is exactly when it is proving nothing.
   (is (= 2 (count (adapters)))
-      "Redis is not reachable on localhost:6379 — this run compared nothing"))
+      (str "Redis is not reachable on localhost:6379 — this run compared nothing.\n"
+           "  Start it with `bb test:services up`.")))
 
 ;; =============================================================================
 ;; Values

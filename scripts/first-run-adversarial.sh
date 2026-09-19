@@ -392,6 +392,25 @@ else
   SKIPPED=$((SKIPPED+1))
 fi
 
+# ── 9. a JVM already on PATH, behind banner noise ───────────────────────────
+# With JAVA_TOOL_OPTIONS set, every JVM prints "Picked up JAVA_TOOL_OPTIONS: …"
+# ahead of its version banner. install.sh parsed only the first line of
+# java -version, so on such a machine a working JDK read as no JDK at all and
+# the installer went off to install one — on macOS a cask that asks for a sudo
+# password no piped install has a TTY to answer (BOU-475).
+head_ "[9] install.sh with JAVA_TOOL_OPTIONS set"
+# bash -ic, because sdkman puts java on PATH from ~/.bashrc and a
+# non-interactive shell never reads it — without this the case would pass for
+# the wrong reason on the images where java comes from sdkman.
+OUT="$(bash -ic "export JAVA_TOOL_OPTIONS=-Djava.awt.headless=true; bash /repo/scripts/install.sh" 2>&1 || true)"
+if grep -q "JVM already installed" <<<"$OUT"; then
+  ok "recognised the JVM that is already on PATH"
+elif grep -qE "Installing JVM|Installing sdkman" <<<"$OUT"; then
+  fail "installed a JVM although one is on PATH — JAVA_TOOL_OPTIONS hid the version line"
+else
+  fail "case not exercised: install.sh reported neither an existing nor a new JVM"
+fi
+
 echo
 SUMMARY="$FAILED failed, $SKIPPED skipped"
 if [ "$FAILED" -eq 0 ]; then

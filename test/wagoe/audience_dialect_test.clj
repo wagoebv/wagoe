@@ -41,15 +41,15 @@
   []
   (cond->
    [["h2"     (fn [] [(jdbc/get-datasource
-                      {:dbtype "h2:mem"
-                       :dbname (str "aud_" (System/nanoTime) ";DB_CLOSE_DELAY=-1")})
-                     (fn [] nil)])]
-   ["sqlite" (fn [] (let [f (str (System/getProperty "java.io.tmpdir")
-                                 "/aud-" (System/nanoTime) ".db")]
-                      [(jdbc/get-datasource {:dbtype "sqlite" :dbname f})
-                       (fn [] (.delete (java.io.File. f)))]))]
-   ["postgresql" (fn [] (let [pg (epg/start!)]
-                          [(epg/datasource pg) (fn [] (epg/stop! pg))]))]]
+                       {:dbtype "h2:mem"
+                        :dbname (str "aud_" (System/nanoTime) ";DB_CLOSE_DELAY=-1")})
+                      (fn [] nil)])]
+    ["sqlite" (fn [] (let [f (str (System/getProperty "java.io.tmpdir")
+                                  "/aud-" (System/nanoTime) ".db")]
+                       [(jdbc/get-datasource {:dbtype "sqlite" :dbname f})
+                        (fn [] (.delete (java.io.File. f)))]))]
+    ["postgresql" (fn [] (let [pg (epg/start!)]
+                           [(epg/datasource pg) (fn [] (epg/stop! pg))]))]]
     ;; MySQL needs a server, so it joins when one is reachable — and the case
     ;; below says so loudly when it is not, rather than reporting three
     ;; adapters as if that were the whole set.
@@ -64,8 +64,7 @@
   (is (= 4 (count (backends)))
       (str "MySQL is not reachable on 127.0.0.1:" mysql-port
            " — this run compared " (count (backends)) " adapters, not four.\n"
-           "  docker run -d --rm --name wagoe-mysql -e MYSQL_ROOT_PASSWORD=probe "
-           "-e MYSQL_DATABASE=audience -p 3306:3306 mysql:8\n"
+           "  Start it with `bb test:services up`,\n"
            "  or point the sweep elsewhere with WAGOE_TEST_MYSQL_PORT.")))
 
 (deftest ^:integration a-definition-round-trips-on-every-adapter

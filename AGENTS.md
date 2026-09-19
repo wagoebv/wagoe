@@ -26,6 +26,8 @@ bb scaffold integrate product                      # Write a scaffolded module's
 # Testing - EVERY test surface (use this before committing / claiming green)
 bb test:all                                              # main + tools + agents + wagoe-cli + wagoe-mcp
 bb test:all --list                                       # show the surfaces, and what is deliberately excluded
+bb test:services up                                      # Redis + MySQL the adapter sweeps need (docker compose, waits for healthy)
+bb test:services                                         # which of them are up; `down` stops them
 
 # Testing - main suite only (does NOT cover the standalone libs — see below)
 clojure -M:test:test/all                           # every tests.edn suite (H2 in-memory by default)
@@ -488,6 +490,25 @@ None of the surfaces enumerate namespaces: the standalone libs let kaocha
 discover `test/`, and the rest discover from disk. An earlier `bb test:wagoe-cli`
 hardcoded four requires and had already drifted, silently skipping
 `wagoe.cli.agents-update-test`.
+
+### Backing services — `bb test:services`
+
+The adapter sweeps (`libs/{jobs,cache}/test/.../adapter_surface_test.clj`,
+`test/wagoe/audience_dialect_test.clj`) compare every backend they can reach and
+**fail** rather than pass when one is absent, because a sweep that quietly
+compares two adapters instead of three reports green while proving less. So a
+full run needs Redis and MySQL:
+
+```bash
+bb test:services up     # docker compose -f docker-compose.test.yml, waits for healthy
+bb test:services        # what is up; `down` stops them
+```
+
+`bb test:all` names the missing ones before it runs anything, and `bb doctor:env`
+reports them as a warning. The registry is `wagoe.tools.test-services/services`;
+a test pins it to `docker-compose.test.yml` and to the suites that need it, so
+adding a service to one and not the other fails. PostgreSQL is not here — those
+suites run embedded (`support.embedded-pg`).
 
 ### Custom Test Reporter
 

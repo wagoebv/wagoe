@@ -29,6 +29,11 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ## [Unreleased]
 
+### Added
+
+- **`bb test:services` starts the Redis and MySQL the adapter sweeps need** (BOU-419).
+  `bb test:all` and `bb doctor:env` now name a missing one up front instead of failing mid-run.
+
 ### Fixed
 
 - **`wagoe version` printed `1.0.0-beta-5` four releases on.** It now reads
@@ -36,6 +41,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **17 documented versions were stale.** `bb check:versions` now also reads
   Leiningen coordinates, dependency-table rows and `**Version:**` headers.
+- **The installer reinstalled a JVM it already had** when `JAVA_TOOL_OPTIONS` was set
+  (BOU-475). On macOS that meant a sudo prompt no piped install could answer.
 
 - **A release could stop half-published** (BOU-433). Each artifact installs to `~/.m2`
   before Clojars, so the run no longer sleeps 30s per library hoping for indexing.
