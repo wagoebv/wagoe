@@ -48,13 +48,16 @@ a non-interactive shell never sources it. **Every** command from here on must
 carry both lines:
 
 ```bash
-export PATH="$HOME/.babashka/bbin/bin:$PATH"
+export PATH="$HOME/.local/bin:$HOME/.babashka/bbin/bin:$PATH"
 set +u; [ -s "$HOME/.sdkman/bin/sdkman-init.sh" ] && . "$HOME/.sdkman/bin/sdkman-init.sh"; set -u
 ```
 
 Two separate mechanisms, and both are needed:
 
-- `~/.babashka/bbin/bin` holds `wagoe`, `bb` and `clojure`. Without it every
+- `~/.local/bin` holds `wagoe`, `clj-nrepl-eval` and `clj-paren-repair` — it is
+  where bbin 0.2.x writes its scripts. Both directories are listed because an
+  installation predating that change still uses `~/.babashka/bbin/bin`, and
+  `install.sh` follows whichever one `bbin bin` reports. Without them every
   command fails with `command not found`.
 - The JVM comes from **sdkman**, which puts `java` on PATH only via its init
   script. Without it `wagoe new` succeeds and then `bb quickstart` dies with

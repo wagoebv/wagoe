@@ -46,9 +46,9 @@ docker run --rm "$IMAGE" bash -euo pipefail -c '
 
   echo
   echo "=== CHECK 2: non-interactive shell WITH only the bbin PATH export ==="
-  bash -c "export PATH=\"\$HOME/.babashka/bbin/bin:\$PATH\"; command -v wagoe" \
+  bash -c "export PATH=\"\$HOME/.local/bin:\$HOME/.babashka/bbin/bin:\$PATH\"; command -v wagoe" \
     || { echo "FAIL: bbin export does not make wagoe resolvable"; exit 1; }
-  if bash -c "export PATH=\"\$HOME/.babashka/bbin/bin:\$PATH\"; command -v java" >/dev/null 2>&1; then
+  if bash -c "export PATH=\"\$HOME/.local/bin:\$HOME/.babashka/bbin/bin:\$PATH\"; command -v java" >/dev/null 2>&1; then
     echo "RESULT: java also resolves — the sdkman line would be unnecessary"
   else
     echo "RESULT: wagoe resolves but java does NOT — sdkman init is also required"
@@ -57,13 +57,13 @@ docker run --rm "$IMAGE" bash -euo pipefail -c '
   echo
   echo "=== CHECK 3: Step 3 in full (bbin PATH + sdkman init) ==="
   bash -c "
-    export PATH=\"\$HOME/.babashka/bbin/bin:\$PATH\"
+    export PATH=\"\$HOME/.local/bin:\$HOME/.babashka/bbin/bin:\$PATH\"
     set +u; [ -s \"\$HOME/.sdkman/bin/sdkman-init.sh\" ] && . \"\$HOME/.sdkman/bin/sdkman-init.sh\"; set -u
     command -v wagoe && command -v java" \
     || { echo "FAIL: full Step 3 does not resolve both wagoe and java"; exit 1; }
   echo "RESULT: full Step 3 resolves wagoe and java"
 
-  export PATH="$HOME/.babashka/bbin/bin:$PATH"
+  export PATH="$HOME/.local/bin:$HOME/.babashka/bbin/bin:$PATH"
   set +u; [ -s "$HOME/.sdkman/bin/sdkman-init.sh" ] && . "$HOME/.sdkman/bin/sdkman-init.sh"; set -u
 
   echo

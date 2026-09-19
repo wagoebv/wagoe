@@ -36,6 +36,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **The installer asked for a sudo password to upgrade a bbin that was fine** (BOU-476).
+  bbin now installs pinned into `~/.local/bin`; the version gate it could never satisfy is gone.
+- **The installer put the wrong directory on your PATH** (BOU-476). It asks `bbin bin`
+  instead of assuming `~/.babashka/bbin/bin`, which bbin 0.2.x deprecated.
 - **A kebab-case module was scaffolded into an unloadable directory** (BOU-447).
   `bb scaffold generate`/`field`/`endpoint`/`adapter` and `bb scaffold integrate` now use `invoice_line_item/`.
 - **`--field status:enum` generated `[:enum]`, which nothing validates** (BOU-447).
