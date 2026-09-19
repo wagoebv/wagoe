@@ -270,26 +270,76 @@ else
 fi
 
 # ── bbin ─────────────────────────────────────────────────────
+# Where a user's own executables go, and where bbin 0.2.x writes its scripts
+# (XDG) — so on a fresh machine this is one directory rather than two.
+USER_BIN="$HOME/.local/bin"
+
+# Pinned, to a tag that exists. The install used to try
+#   :git/sha "HEAD"
+# which tools.deps refuses outright —
+#   Library io.github.babashka/bbin has prefix sha, use full sha or add tag
+# — so it could never succeed, and the fallback it dropped into moved the
+# script into /usr/local/bin as root: a sudo password no piped install has a
+# TTY to answer. The released `bbin` is a self-contained script with a `bb`
+# shebang, so fetching it into a user directory needs no root and no classpath
+# resolution at all (BOU-476).
+BBIN_VERSION="v0.2.5"
+
 install_bbin() {
-  bb -e "(babashka.deps/add-deps {:deps '{io.github.babashka/bbin {:git/url \"https://github.com/babashka/bbin\" :git/sha \"HEAD\"}}}) (require 'bbin.cli) (bbin.cli/install! \"bbin\")" 2>/dev/null \
-    || { retry_fetch "bbin download" curl -fsSL -o /tmp/bbin https://raw.githubusercontent.com/babashka/bbin/master/bbin && chmod +x /tmp/bbin && as_root mv /tmp/bbin /usr/local/bin/bbin; } \
-    || fail "Failed to install bbin"
+  mkdir -p "$USER_BIN"
+  retry_fetch "bbin download" \
+    curl -fsSL -o "$USER_BIN/bbin" \
+    "https://raw.githubusercontent.com/babashka/bbin/$BBIN_VERSION/bbin" \
+    || fail "Could not download bbin $BBIN_VERSION after 3 attempts."
+  chmod +x "$USER_BIN/bbin"
 }
 
-if ! command -v bbin &>/dev/null; then
-  info "Installing bbin..."
-  install_bbin
-  ok "bbin installed"
-elif ! bbin install --help 2>&1 | grep -q -- '--git/root'; then
-  info "Upgrading bbin (current version does not support --git/root)..."
-  install_bbin
-  ok "bbin upgraded"
-else
+# Only whether bbin is there, with no version gate. There used to be one:
+#
+#   elif ! bbin install --help 2>&1 | grep -q -- '--git/root'
+#
+# which can never be satisfied. bbin has no per-command help — both
+# `bbin install --help` and `bbin help install` print the top-level command
+# list — so no flag name ever matches, and every machine that already had bbin
+# took the upgrade branch, ran the install above and was asked for a sudo
+# password. Nothing here needs `--git/root` in any case: the wagoe CLI is a
+# wrapper written further down, and the two `bbin install` calls at the end use
+# only --tag/--as/--main-opts, which every 0.2.x has (BOU-476).
+BBIN_IN_USER_BIN=""
+if command -v bbin &>/dev/null; then
   ok "bbin already installed"
+elif [[ -x "$USER_BIN/bbin" ]]; then
+  # On disk but not on PATH. This installer is usually run non-interactively
+  # (`curl … | bash`), which never reads the rc file the PATH line went into —
+  # so on a re-run `command -v` alone said "no bbin" and downloaded it again.
+  export PATH="$USER_BIN:$PATH"
+  hash -r 2>/dev/null || true
+  BBIN_IN_USER_BIN="$USER_BIN"
+  ok "bbin already installed"
+else
+  info "Installing bbin $BBIN_VERSION..."
+  install_bbin
+  BBIN_IN_USER_BIN="$USER_BIN"
+  # It has to be callable before the next step, which asks bbin itself where it
+  # writes scripts.
+  export PATH="$USER_BIN:$PATH"
+  hash -r 2>/dev/null || true
+  command -v bbin &>/dev/null \
+    || fail "Installed bbin into $USER_BIN but it is still not on PATH."
+  ok "bbin installed"
 fi
 
 # ── PATH ─────────────────────────────────────────────────────
-BBIN_BIN="$HOME/.babashka/bbin/bin"
+# Ask bbin where it writes scripts instead of assuming. This was hardcoded to
+# ~/.babashka/bbin/bin, which 0.2.x deprecates in favour of ~/.local/bin — so on
+# a fresh machine the wagoe wrapper and the PATH line went to a directory bbin
+# does not use, while anything `bbin install` put down landed somewhere this
+# script never added to PATH (BOU-476). Its warnings go to stderr and the path
+# to stdout, so 2>/dev/null leaves just the path.
+BBIN_BIN="$(bbin bin 2>/dev/null | tail -1)"
+if [[ -z "$BBIN_BIN" ]]; then
+  fail "\`bbin bin\` named no directory. Check \`bbin version\` and re-run."
+fi
 
 # Pick the file the user's shell actually reads, and the syntax it actually
 # understands. Defaulting every non-bash shell to ~/.zshrc sent fish users'
@@ -298,38 +348,53 @@ BBIN_BIN="$HOME/.babashka/bbin/bin"
 case "${SHELL:-}" in
   *fish*)
     SHELL_RC="$HOME/.config/fish/config.fish"
-    PATH_LINE="fish_add_path \"$BBIN_BIN\""
+    path_line() { echo "fish_add_path \"$1\""; }
     mkdir -p "$(dirname "$SHELL_RC")"
     ;;
   *bash*)
     SHELL_RC="$HOME/.bashrc"
-    PATH_LINE="export PATH=\"$BBIN_BIN:\$PATH\""
+    path_line() { echo "export PATH=\"$1:\$PATH\""; }
     ;;
   *zsh*)
     SHELL_RC="$HOME/.zshrc"
-    PATH_LINE="export PATH=\"$BBIN_BIN:\$PATH\""
+    path_line() { echo "export PATH=\"$1:\$PATH\""; }
     ;;
   *)
     # Unknown shell: ~/.profile is the widest-read POSIX location. Better a
     # file the shell probably reads than one it definitely does not.
     SHELL_RC="$HOME/.profile"
-    PATH_LINE="export PATH=\"$BBIN_BIN:\$PATH\""
+    path_line() { echo "export PATH=\"$1:\$PATH\""; }
     ;;
 esac
 
-# Check the FILE, not just $PATH. The old guard tested the current process
-# environment, which in a fresh non-interactive shell never has the entry — so
-# every re-run appended another copy, and N runs left N lines (BOU-263).
-if ! grep -qF "$BBIN_BIN" "$SHELL_RC" 2>/dev/null; then
-  echo "$PATH_LINE" >> "$SHELL_RC"
-  ok "Added $BBIN_BIN to PATH in $SHELL_RC"
-  info "Run: source $SHELL_RC   (or open a new terminal)"
-elif [[ ":$PATH:" != *":$BBIN_BIN:"* ]]; then
-  ok "$SHELL_RC already sets the PATH entry"
-  info "Run: source $SHELL_RC   (or open a new terminal)"
-fi
+ensure_on_path() {
+  local dir="$1"
+  # Check the FILE, not just $PATH. The old guard tested the current process
+  # environment, which in a fresh non-interactive shell never has the entry — so
+  # every re-run appended another copy, and N runs left N lines (BOU-263).
+  if ! grep -qF "$dir" "$SHELL_RC" 2>/dev/null; then
+    path_line "$dir" >> "$SHELL_RC"
+    ok "Added $dir to PATH in $SHELL_RC"
+    info "Run: source $SHELL_RC   (or open a new terminal)"
+  elif [[ ":$PATH:" != *":$dir:"* ]]; then
+    ok "$SHELL_RC already sets the PATH entry for $dir"
+    info "Run: source $SHELL_RC   (or open a new terminal)"
+  fi
+  if [[ ":$PATH:" != *":$dir:"* ]]; then
+    export PATH="$dir:$PATH"
+  fi
+}
 
-export PATH="$BBIN_BIN:$PATH"
+# bbin's script directory, and the directory holding bbin itself when that is a
+# different one. They are the same on a fresh bbin and differ on an installation
+# predating the XDG move.
+PATH_DIRS=("$BBIN_BIN")
+if [[ -n "$BBIN_IN_USER_BIN" && "$BBIN_IN_USER_BIN" != "$BBIN_BIN" ]]; then
+  PATH_DIRS+=("$BBIN_IN_USER_BIN")
+fi
+for dir in "${PATH_DIRS[@]}"; do
+  ensure_on_path "$dir"
+done
 
 # ── wagoe CLI ──────────────────────────────────────────────
 info "Fetching latest Wagoe release tag..."

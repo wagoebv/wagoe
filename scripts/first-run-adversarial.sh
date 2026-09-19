@@ -112,9 +112,15 @@ new_project() {
 # A newcomer who interrupts the installer, or who is not sure it finished, runs
 # it again. That must converge, not accumulate.
 head_ "[1] install.sh re-run (idempotency)"
-RC_BEFORE=$(grep -c "babashka/bbin/bin" "$HOME/.bashrc" 2>/dev/null || echo 0)
+# The directory bbin itself reports, not a hardcoded one: 0.2.x writes to
+# ~/.local/bin and only older installations to ~/.babashka/bbin/bin, so a fixed
+# string here counts zero on both runs and the duplicate check passes without
+# checking anything (BOU-476).
+BBIN_DIR=$(bash -ic "bbin bin" 2>/dev/null | tail -1)
+[ -n "$BBIN_DIR" ] || { echo "setup: bbin named no bin directory"; exit 1; }
+RC_BEFORE=$(grep -cF "$BBIN_DIR" "$HOME/.bashrc" 2>/dev/null || echo 0)
 bash /repo/scripts/install.sh >/tmp/install2.log 2>&1 || fail "second install.sh run exited non-zero"
-RC_AFTER=$(grep -c "babashka/bbin/bin" "$HOME/.bashrc" 2>/dev/null || echo 0)
+RC_AFTER=$(grep -cF "$BBIN_DIR" "$HOME/.bashrc" 2>/dev/null || echo 0)
 if [ "$RC_AFTER" -gt "$RC_BEFORE" ]; then
   fail "re-running install.sh appended another PATH line to ~/.bashrc ($RC_BEFORE -> $RC_AFTER); N runs leave N copies"
 else
@@ -343,9 +349,9 @@ if command -v fish >/dev/null 2>&1; then
     fail "wagoe still not on PATH in a fresh fish session"
   fi
   # Re-run under fish too — the idempotency guard has to hold per shell.
-  BEFORE=$(grep -c "babashka/bbin/bin" "$FISH_RC" 2>/dev/null || echo 0)
+  BEFORE=$(grep -cF "$BBIN_DIR" "$FISH_RC" 2>/dev/null || echo 0)
   SHELL=$(command -v fish) bash /repo/scripts/install.sh >/dev/null 2>&1 || true
-  AFTER=$(grep -c "babashka/bbin/bin" "$FISH_RC" 2>/dev/null || echo 0)
+  AFTER=$(grep -cF "$BBIN_DIR" "$FISH_RC" 2>/dev/null || echo 0)
   [ "$AFTER" -gt "$BEFORE" ] \
     && fail "fish config gained a duplicate PATH line on re-run ($BEFORE -> $AFTER)" \
     || ok "no duplicate in the fish config on re-run"
@@ -381,9 +387,9 @@ if command -v zsh >/dev/null 2>&1; then
   else
     fail "wagoe still not on PATH for zsh after sourcing $ZSH_RC"
   fi
-  BEFORE=$(grep -c "babashka/bbin/bin" "$ZSH_RC" 2>/dev/null || echo 0)
+  BEFORE=$(grep -cF "$BBIN_DIR" "$ZSH_RC" 2>/dev/null || echo 0)
   SHELL=$(command -v zsh) bash /repo/scripts/install.sh >/dev/null 2>&1 || true
-  AFTER=$(grep -c "babashka/bbin/bin" "$ZSH_RC" 2>/dev/null || echo 0)
+  AFTER=$(grep -cF "$BBIN_DIR" "$ZSH_RC" 2>/dev/null || echo 0)
   [ "$AFTER" -gt "$BEFORE" ] \
     && fail "~/.zshrc gained a duplicate PATH line on re-run ($BEFORE -> $AFTER)" \
     || ok "no duplicate in ~/.zshrc on re-run"
@@ -409,6 +415,36 @@ elif grep -qE "Installing JVM|Installing sdkman" <<<"$OUT"; then
   fail "installed a JVM although one is on PATH — JAVA_TOOL_OPTIONS hid the version line"
 else
   fail "case not exercised: install.sh reported neither an existing nor a new JVM"
+fi
+
+# ── 10. a bbin already on PATH is left alone ────────────────────────────────
+# install.sh gated an upgrade on `bbin install --help | grep -- --git/root`.
+# bbin has no per-command help, so that string can never appear and the gate
+# fired on every machine that already had bbin: it ran an install pinned to
+# :git/sha "HEAD" (which tools.deps refuses), then fell back to moving a script
+# into /usr/local/bin as root — a sudo password no piped install can answer
+# (BOU-476).
+head_ "[10] install.sh with bbin already installed"
+BBIN_BEFORE="$(bash -ic "command -v bbin" 2>/dev/null | tail -1)"
+OUT="$(bash -ic "bash /repo/scripts/install.sh" 2>&1 || true)"
+if grep -qE "Upgrading bbin" <<<"$OUT"; then
+  fail "tried to upgrade a bbin that is already installed"
+elif grep -q "bbin already installed" <<<"$OUT"; then
+  ok "left the installed bbin alone"
+else
+  fail "case not exercised: install.sh reported neither an existing nor a new bbin"
+fi
+# The fallback wrote here, and only ever as root.
+if [ -e /usr/local/bin/bbin ]; then
+  fail "install.sh wrote /usr/local/bin/bbin — that path needs root"
+else
+  ok "nothing was written to /usr/local/bin"
+fi
+BBIN_AFTER="$(bash -ic "command -v bbin" 2>/dev/null | tail -1)"
+if [ "$BBIN_BEFORE" != "$BBIN_AFTER" ]; then
+  fail "bbin moved from $BBIN_BEFORE to $BBIN_AFTER across a re-run"
+else
+  ok "bbin still resolves to $BBIN_AFTER"
 fi
 
 echo

@@ -165,18 +165,30 @@ my-app/
 └── AGENTS.md         # AI agent context file
 ----
 
-== Manual bbin install (advanced)
+== Manual install (advanced)
 
-If you prefer to manage your own bbin installation:
+`bbin install` cannot be used for this. `libs/wagoe-cli` is a sub-project of a
+monorepo, and bbin resolves the repository root, so the installed script starts
+and then fails with `Could not locate wagoe/cli/main.clj on classpath`. What the
+installer does instead — and what to do by hand — is clone the tag and write a
+wrapper with an explicit classpath:
 
 [source,bash]
 ----
-bbin install https://github.com/wagoebv/wagoe \
-  --tag 1.0.0-rc-1 \
-  --git/root libs/wagoe-cli \
-  --main-opts '["-m" "wagoe.cli.main"]' \
-  --as wagoe
+TAG=1.0.0-rc-1
+git clone --depth 1 --branch "$TAG" https://github.com/wagoebv/wagoe.git \
+  "$HOME/.wagoe/releases/$TAG"
+
+mkdir -p "$(bbin bin)"
+cat > "$(bbin bin)/wagoe" <<EOF
+#!/usr/bin/env bash
+exec bb --classpath "$HOME/.wagoe/releases/$TAG/libs/wagoe-cli/src:$HOME/.wagoe/releases/$TAG/libs/wagoe-cli/resources" -m wagoe.cli.main "\$@"
+EOF
+chmod +x "$(bbin bin)/wagoe"
 ----
+
+`bbin bin` is asked rather than assumed: bbin 0.2.x writes to `~/.local/bin`,
+and `~/.babashka/bbin/bin` only on installations that predate that change.
 
 == AI agent tooling
 
