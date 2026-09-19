@@ -31,6 +31,9 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **The installer reinstalled a JVM it already had** when `JAVA_TOOL_OPTIONS` was set
+  (BOU-475). On macOS that meant a sudo prompt no piped install could answer.
+
 - **A release could stop half-published** (BOU-433). Each artifact installs to `~/.m2`
   before Clojars, so the run no longer sleeps 30s per library hoping for indexing.
 
