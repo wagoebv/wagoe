@@ -269,9 +269,14 @@
                            ; Default: keep as string
                          :else normalized-value)]
 
-       (if (or typed-value (= field-type :boolean))
-         (assoc acc field-keyword typed-value)
-         acc)))
+       ;; A submitted field is kept even when it is empty, as nil. Dropping it
+       ;; made "cleared this field" indistinguishable from "did not submit
+       ;; it": an optional field could not be emptied — the old value survived
+       ;; the write — and a required field emptied by mistake passed
+       ;; validation instead of being rejected (BOU-477). A field the form did
+       ;; not submit is still absent, which is what makes a partial update
+       ;; partial.
+       (assoc acc field-keyword typed-value)))
    {}
    params))
 
