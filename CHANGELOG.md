@@ -49,7 +49,7 @@ for what is public API, what is internal, and how deprecations are announced.
 - **An admin PUT to an id that does not exist answered 200** (BOU-477).
   It answers 404; it used to validate the form and write zero rows.
 - **`--field price:decimal` scaffolded money as a float** (BOU-477). It generates
-  `DECIMAL(19,4)` and `decimal?`; already-scaffolded columns need a migration to change.
+  `DECIMAL(19,4)` and `decimal?`; a column already scaffolded keeps DOUBLE until you ALTER it.
 - **The installer asked for a sudo password to upgrade a bbin that was fine** (BOU-476).
   bbin now installs pinned into `~/.local/bin`; the version gate it could never satisfy is gone.
 - **The installer put the wrong directory on your PATH** (BOU-476). It asks `bbin bin`
