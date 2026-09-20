@@ -52,14 +52,45 @@
 ;; Module graph
 ;; =============================================================================
 
+(defn- dashboard-config
+  "The dev dashboard, wired to the running system.
+
+   `:wagoe/dashboard {:port 9999}` in a config produced nothing at all: no
+   assembler claimed the key, so it was neither built nor complained about.
+   This repository worked only because its own `system_config.clj` assembled
+   the component by hand, which a generated project has no reason to do
+   (BOU-477).
+
+   `:ig-config-fn` is deliberately absent. Rebuilding the Integrant config
+   means knowing which components the application runs, which a library cannot
+   — an application that wants the dashboard's config editor merges it in. The
+   dashboard says so when it is missing rather than failing."
+  [settings]
+  ;; Required here, not at the top: it starts a Jetty of its own, and a project
+  ;; that wants only the error enricher should not pay for loading it.
+  (require 'wagoe.devtools.shell.dashboard.server)
+  {:components
+   {:wagoe/dashboard (merge {:port 9999}
+                            settings
+                            {:http-handler (ig/ref :wagoe/http-handler)
+                             :http-server  (ig/ref :wagoe/http-server)
+                             :db-context   (ig/ref :wagoe/db-context)
+                             :router       (ig/ref :wagoe/router)
+                             :logging      (ig/ref :wagoe/logging)})}})
+
 (defn ig-config
   "This module's Integrant entries, for `wagoe.platform.shell.system.config`.
 
-   Dev-only: an error over HTTP answers with its BND code and the fix instead of
-   \"Validation failed\". devtools lives in the `:repl` alias, so a project
-   running `clojure -M:run` against the dev config has the key and not the
-   library — the assembler treats this module as optional and skips it rather
-   than failing the boot."
-  [settings _ctx]
-  {:components {:wagoe/dev-error-enricher settings}
-   :http       {:error-enricher (ig/ref :wagoe/dev-error-enricher)}})
+   Two keys, so it dispatches on `:module-key`: the HTTP error enricher, which
+   makes an error over HTTP answer with its BND code and the fix instead of
+   \"Validation failed\", and the dev dashboard.
+
+   Both are dev-only. devtools lives in the `:repl` alias, so a project running
+   `clojure -M:run` against the dev config has the keys and not the library —
+   the assembler treats them as optional and skips them rather than failing the
+   boot."
+  [settings {:keys [module-key]}]
+  (if (= :wagoe/dashboard module-key)
+    (dashboard-config settings)
+    {:components {:wagoe/dev-error-enricher settings}
+     :http       {:error-enricher (ig/ref :wagoe/dev-error-enricher)}}))

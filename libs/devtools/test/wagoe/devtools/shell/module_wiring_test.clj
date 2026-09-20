@@ -7,6 +7,7 @@
    which uses a stub (BOU-321)."
   (:require [clojure.test :refer [deftest is testing]]
             [integrant.core :as ig]
+            [wagoe.platform.shell.system.config :as sys]
             [wagoe.devtools.shell.module-wiring :as sut]))
 
 (deftest ^:unit a-validation-failure-gets-its-code-and-its-fix
@@ -37,3 +38,32 @@
     (is (fn? enrich))
     (is (= "BND-201" (:code (enrich (ex-info "x" {:type :validation-error :errors {}})))))
     (is (nil? (ig/halt-key! :wagoe/dev-error-enricher enrich)))))
+
+(deftest ^:unit the-dashboard-is-assembled-from-config
+  ;; `:wagoe/dashboard {:port 9999}` in `:active` used to produce nothing and
+  ;; say nothing: no assembler claimed the key, and this module wired only the
+  ;; error enricher. The framework's own repo worked because
+  ;; `src/wagoe/system_config.clj` built the component by hand, which a
+  ;; generated project does not have (BOU-477).
+  (let [m (sys/system-config {:wagoe/profile :dev
+                              :active {:wagoe/settings  {}
+                                       :wagoe/h2        {:memory true}
+                                       :wagoe/dashboard {:port 9123}}})
+        dashboard (:wagoe/dashboard m)]
+
+    (is (some? dashboard) "the key in :active produced a component")
+    (is (= 9123 (:port dashboard)) "and kept what the config said")
+
+    (testing "wired to the components it reads the running system through"
+      (is (= (ig/ref :wagoe/http-handler) (:http-handler dashboard)))
+      (is (= (ig/ref :wagoe/http-server) (:http-server dashboard)))
+      (is (= (ig/ref :wagoe/db-context) (:db-context dashboard)))
+      (is (= (ig/ref :wagoe/router) (:router dashboard)))
+      (is (= (ig/ref :wagoe/logging) (:logging dashboard))))
+
+    (testing "but not to an :ig-config-fn — only the application knows its own graph"
+      (is (nil? (:ig-config-fn dashboard))))
+
+    (testing "and the error enricher is still wired from its own key"
+      (is (not (contains? m :wagoe/dev-error-enricher))
+          "which this config did not ask for"))))
