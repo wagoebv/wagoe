@@ -36,6 +36,20 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Admin's `/:entity` answered every sibling module's `/web/admin` route** (BOU-477).
+  Web and API routes are now ordered by specificity, so a literal path beats another module's wildcard.
+- **`:wagoe/dashboard` in a config started nothing, silently** (BOU-477). devtools
+  assembles it now; add `:ig-config-fn` yourself only if you want its config editor.
+- **`:secure-cookies? false` did not drop the `Secure` attribute** (BOU-477).
+  Auth cookies over plain HTTP now work in dev; `curl` against a dev server keeps its session.
+- **An admin PUT with some of the fields wrote nothing and returned 200** (BOU-477).
+  Updates validate the merged record, read JSON bodies, and answer 422 when rejected.
+- **An admin field could not be cleared — the old value survived the write** (BOU-477).
+  An emptied field is now written as NULL, and emptying a required one is rejected.
+- **An admin PUT to an id that does not exist answered 200** (BOU-477).
+  It answers 404; it used to validate the form and write zero rows.
+- **`--field price:decimal` scaffolded money as a float** (BOU-477). It generates
+  `DECIMAL(19,4)` and `decimal?`; already-scaffolded columns need a migration to change.
 - **The installer asked for a sudo password to upgrade a bbin that was fine** (BOU-476).
   bbin now installs pinned into `~/.local/bin`; the version gate it could never satisfy is gone.
 - **The installer put the wrong directory on your PATH** (BOU-476). It asks `bbin bin`
@@ -79,6 +93,8 @@ for what is public API, what is internal, and how deprecations are announced.
   caller. Delete them from your implementation; `wagoe.user.ports` lists what remains.
 - **An unknown `:provider` on `:wagoe/cache` or `:wagoe/realtime` now throws** (BOU-436).
   It used to fall back to an in-process adapter, so a typo ran a node-local cache or bus.
+- **A `:wagoe/*` key in `:active` that nothing assembles now fails the boot** (BOU-477).
+  Give a module `:enabled? true`; name your own settings blocks in `:wagoe/config-keys`.
 
 ### Deprecated
 

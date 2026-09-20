@@ -108,7 +108,10 @@
     :date [:re {:error/message "Must be an ISO date (YYYY-MM-DD)"}
            #"^\d{4}-\d{2}-\d{2}$"]
     :json :map
-    :decimal :double))
+    ;; BigDecimal, not :double. `--field price:decimal` is what anyone reaches
+    ;; for when scaffolding money, and this used to generate binary floating
+    ;; point in both the schema and the column (BOU-477).
+    :decimal 'decimal?))
 
 (defn field-type->sql
   "Convert scaffolder field type to SQL type.
@@ -139,7 +142,7 @@
     :inst "TIMESTAMPTZ"
     :date "DATE"
     :json "JSONB"
-    :decimal "DOUBLE PRECISION"))
+    :decimal "DECIMAL(19,4)"))
 
 ;; =============================================================================
 ;; Template Context Building

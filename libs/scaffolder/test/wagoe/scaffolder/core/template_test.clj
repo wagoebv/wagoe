@@ -1,5 +1,6 @@
 (ns wagoe.scaffolder.core.template-test
   (:require [clojure.test :refer [deftest testing is]]
+            [malli.core :as m]
             [wagoe.scaffolder.core.template :as template]))
 
 (deftest ^:unit kebab->pascal-test
@@ -24,7 +25,13 @@
     (is (= :string (template/field-type->malli {:type :string})))
     (is (= :uuid (template/field-type->malli {:type :uuid})))
     (is (= [:enum :active :inactive]
-           (template/field-type->malli {:type :enum :enum-values [:active :inactive]})))))
+           (template/field-type->malli {:type :enum :enum-values [:active :inactive]})))
+
+    (testing "decimal is BigDecimal, not a double — the type people scaffold money with"
+      (let [schema (template/field-type->malli {:type :decimal})]
+        (is (= 'decimal? schema))
+        (is (m/validate schema 19.99M))
+        (is (not (m/validate schema 19.99)))))))
 
 (deftest ^:unit field-type->sql-test
   (testing "converts field types to SQL types"
@@ -37,7 +44,10 @@
     (is (= "VARCHAR(50)" (template/field-type->sql {:type :enum})))
     (is (= "TIMESTAMPTZ" (template/field-type->sql {:type :inst})))
     (is (= "JSONB" (template/field-type->sql {:type :json})))
-    (is (= "DOUBLE PRECISION" (template/field-type->sql {:type :decimal})))))
+    ;; Not DOUBLE PRECISION: `--field price:decimal` is what anyone reaches
+    ;; for when scaffolding money, and binary floating point is the wrong
+    ;; representation for it (BOU-477).
+    (is (= "DECIMAL(19,4)" (template/field-type->sql {:type :decimal})))))
 
 (deftest ^:unit build-entity-context-test
   (testing "builds entity context for templates"
