@@ -845,5 +845,3 @@
                                              {:path {:entity "test-users" :id (str user-id)}})
                 delete-response (*handler* delete-request)]
             (is (= 200 (:status delete-response)))))))))
-
-

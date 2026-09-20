@@ -392,18 +392,39 @@
   #{:wagoe/email :wagoe/i18n})
 
 (def dev-only-modules
-  "Modules that refuse to assemble outside `:wagoe/profile :dev`.
+  "Modules that refuse to assemble outside `:wagoe/profile :dev`, and why.
 
-   The dev dashboard serves the configuration, the database and an editor that
-   rebuilds the system, unauthenticated, so it throws rather than start
-   anywhere else — see `wagoe.devtools.shell.module-wiring`.
+   Enforced here rather than in the module, because the module's library may
+   not be on the classpath — and `optional-modules` would then skip the key
+   with a log line before anything looked at the profile. A production config
+   naming the dev dashboard booted in silence, and would have started one the
+   day devtools reached `:deps`. Absent from the classpath is not a guard
+   (BOU-477).
 
-   Named here because three test families enumerate `framework-modules` and
-   assert that every one of them assembles, is selectable as a service, or
-   boots from its documented config. None of those is true of a module that is
-   not deployable, and each needs to skip these rather than the one key, so
-   that a second dev-only module is covered by adding it here (BOU-477)."
-  #{:wagoe/dashboard})
+   The reason is in the message an operator reads at boot, so it is data here.
+
+   Also what three test families skip when they enumerate `framework-modules`
+   to assert every module assembles, is selectable as a service, or boots from
+   its documented config: none of that is true of a module that is not
+   deployable. `every-dev-only-module-really-refuses` keeps that exemption
+   honest."
+  {:wagoe/dashboard
+   (str "it serves the configuration, the database and an editor that rebuilds"
+        " the system, with no authentication in front of any of it")})
+
+(defn- assert-profile-allows!
+  "Throw when `k` is dev-only and `profile` is not `:dev`.
+
+   Loud rather than skipped, the way `:test/reset-endpoint-enabled?` outside
+   `:test`/`:dev` is loud: a production safety net, not graceful degradation."
+  [k profile]
+  (when-let [why (and (not= :dev profile) (get dev-only-modules k))]
+    (throw (ex-info
+            (str k " cannot run under the " profile " profile:\n  " why ".\n"
+                 "Remove it from :active in this profile's config.edn.")
+            {:type    :configuration-error
+             :profile profile
+             :key     k}))))
 
 (def optional-modules
   "Modules whose library may legitimately be absent at runtime.
@@ -468,6 +489,9 @@
     (reduce
      (fn [acc [k lib]]
        (let [wiring (symbol (str "wagoe." lib ".shell.module-wiring"))]
+         ;; Before the branches, so that `optional-modules` cannot skip a
+         ;; dev-only module past it on a machine where its library is absent.
+         (assert-profile-allows! k (:wagoe/profile (:config ctx)))
          (cond
            (load-wiring! wiring)
            (let [{:keys [components http routes job-handlers]}

@@ -224,7 +224,7 @@
   ;; becomes a way to opt out of those checks (BOU-477).
   (is (seq modules/dev-only-modules) "nothing to check if the set is empty")
 
-  (doseq [k       modules/dev-only-modules
+  (doseq [k       (keys modules/dev-only-modules)
           profile [:prod :acc :test]]
     (is (thrown? clojure.lang.ExceptionInfo
                  (sys-config/ig-config (assoc (base-config)

@@ -74,12 +74,13 @@
   ;; gated on `:wagoe/profile :dev` by the application; moving it into this
   ;; module must not drop that (BOU-477).
   ;;
-  ;; Loudly, the way `:test/reset-endpoint-enabled?` outside :test/:dev is
-  ;; loud: a production safety net, not graceful degradation. Dropping the key
-  ;; in silence is how it got here.
+  ;; The refusal itself is platform's — `modules/dev-only-modules` — because
+  ;; devtools ships in the :repl alias and a guard that only runs when the
+  ;; library is present is not a guard. This is the end-to-end check that the
+  ;; key reaches it.
   (doseq [profile [:prod :acc :test]]
     (let [e (is (thrown-with-msg?
-                 clojure.lang.ExceptionInfo #"dev dashboard"
+                 clojure.lang.ExceptionInfo #":wagoe/dashboard cannot run"
                  (sys/system-config {:wagoe/profile profile
                                      :active {:wagoe/settings  {}
                                               :wagoe/h2        {:memory true}

@@ -273,3 +273,38 @@
             'wagoe.search.shell.module-wiring]
            (sort @loaded))
         "only the always-on modules and the one the config switched on")))
+
+;; =============================================================================
+;; Dev-only modules (BOU-477)
+;; =============================================================================
+
+(defn- assemble-dashboard
+  "Assemble `:wagoe/dashboard` under `profile`, with devtools present or not."
+  [profile devtools-present?]
+  (sut/framework-module-config
+   {:wagoe/dashboard {:port 9999}}
+   {:config {:wagoe/profile profile :active {:wagoe/dashboard {:port 9999}}}
+    :extra-modules #{}}
+   (constantly devtools-present?)
+   (constantly nil)))
+
+(deftest ^:unit ^:security a-dev-only-module-is-refused-before-its-library-is-looked-for
+  ;; The dashboard is optional, because devtools ships in the :repl alias — so
+  ;; the optional branch skipped it with a log line, before anything could look
+  ;; at the profile. A production config naming the dev dashboard booted in
+  ;; silence and would have started one, unauthenticated, the day devtools
+  ;; reached :deps. Absent from the classpath is not a guard (BOU-477).
+  (doseq [profile           [:prod :acc :test]
+          devtools-present? [true false]]
+    (testing (str profile ", devtools " (if devtools-present? "present" "absent"))
+      (let [e (is (thrown? clojure.lang.ExceptionInfo
+                           (assemble-dashboard profile devtools-present?)))]
+        (is (= :configuration-error (:type (ex-data e))))
+        (is (= profile (:profile (ex-data e))))
+        (is (= :wagoe/dashboard (:key (ex-data e))))))))
+
+(deftest ^:unit a-dev-only-module-is-still-optional-in-dev
+  ;; The reason it is optional in the first place: `clojure -M:run` against the
+  ;; dev config has the key and not the jar, and that must not stop the boot.
+  (is (empty? (:components (assemble-dashboard :dev false)))
+      "skipped, not thrown, when devtools is genuinely absent in dev"))
