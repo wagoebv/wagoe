@@ -16,9 +16,11 @@ will promise.
 | `1.0.0-rc-2`
 
 | Stability
-| Release candidate. The `1.0.0` surface is frozen: no breaking change lands
-  between `1.0.0-rc-1` and `1.0.0`. Everything deprecated is deferred to `2.0`
-  — see <<_deferred_to_2_0,Deferred to 2.0>>.
+| Release candidate. The `1.0.0` surface is frozen: a breaking change lands
+  between `1.0.0-rc-1` and `1.0.0` only where the candidate turns one up, and
+  then in an RC, never in `1.0.0` itself. One has — see
+  <<_now_release_candidate,What we promise, and when>>. Everything deprecated
+  is deferred to `2.0` — see <<_deferred_to_2_0,Deferred to 2.0>>.
 
 | Artifacts
 | 31 libraries on Clojars, all in the `com.wagoe` group. Artifact ids are
@@ -190,7 +192,13 @@ rather than a commit message.
 === Now (release candidate)
 
 * *The surface is frozen.* `1.0.0` is `1.0.0-rc-1` plus whatever the candidate
-  turns up; nothing further lands under `### Breaking` before the tag.
+  turns up. A break lands after `rc-1` only when the candidate finds one that
+  has to, and then in a release candidate rather than in `1.0.0`, so that it is
+  exercised before the tag.
+* *One has, in `1.0.0-rc-2`:* a `:wagoe/*` key in `:active` that nothing
+  assembles now fails the boot instead of being ignored. Name your own settings
+  blocks in `:wagoe/config-keys`. That is the only addition to the three frozen
+  at `rc-1`; the list is four, not three.
 * Breaking changes that already shipped are in `CHANGELOG.md` under a
   `### Breaking` heading, naming the affected library and the migration.
 * Deprecations are announced under `### Deprecated`.
