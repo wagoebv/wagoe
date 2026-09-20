@@ -29,6 +29,18 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ## [Unreleased]
 
+## [1.0.0-rc-2] — 2026-09-20
+
+> **One more Breaking entry than rc-1 froze** (BOU-433). The list went from three
+> to four: a `:wagoe/*` key in `:active` that nothing assembles now fails the boot.
+> It is here rather than in `1.0.0` so it is exercised before the tag, which is what
+> the freeze asks of a break that has to land. Nothing else was added to the list.
+
+### Breaking
+
+- **A `:wagoe/*` key in `:active` that nothing assembles now fails the boot** (BOU-477).
+  Give a module `:enabled? true`; name your own settings blocks in `:wagoe/config-keys`.
+
 ### Added
 
 - **`bb test:services` starts the Redis and MySQL the adapter sweeps need** (BOU-419).
@@ -93,8 +105,6 @@ for what is public API, what is internal, and how deprecations are announced.
   caller. Delete them from your implementation; `wagoe.user.ports` lists what remains.
 - **An unknown `:provider` on `:wagoe/cache` or `:wagoe/realtime` now throws** (BOU-436).
   It used to fall back to an in-process adapter, so a typo ran a node-local cache or bus.
-- **A `:wagoe/*` key in `:active` that nothing assembles now fails the boot** (BOU-477).
-  Give a module `:enabled? true`; name your own settings blocks in `:wagoe/config-keys`.
 
 ### Deprecated
 

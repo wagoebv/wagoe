@@ -13,7 +13,7 @@ will promise.
 | |
 
 | Current version
-| `1.0.0-rc-1`
+| `1.0.0-rc-2`
 
 | Stability
 | Release candidate. The `1.0.0` surface is frozen: no breaking change lands

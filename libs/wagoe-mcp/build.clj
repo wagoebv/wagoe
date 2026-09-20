@@ -2,7 +2,7 @@
   (:require [clojure.tools.build.api :as b]))
 
 (def lib 'com.wagoe/wagoe-mcp)
-(def version "1.0.0-rc-1")
+(def version "1.0.0-rc-2")
 (def class-dir "target/classes")
 (load-file "../build_shared.clj")
 ;; A delay: creating the basis resolves the rewritten com.wagoe coords, which
