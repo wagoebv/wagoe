@@ -41,9 +41,14 @@
   "Whether auth cookies should carry the `Secure` attribute (HTTPS-only).
    Read from config; defaults to true (fail-secure) so a production deployment
    that forgets to set it still gets Secure cookies. Set to false only for
-   local development over plain HTTP."
+   local development over plain HTTP.
+
+   Through `app-config`, not a `get-in` of its own: the config handed to these
+   handlers is the whole loaded map, and reading `[:wagoe/settings ...]`
+   straight off it missed every time, so the fail-secure default won even where
+   the dev profile said false (BOU-477)."
   [config]
-  (get-in config [:wagoe/settings :secure-cookies?] true))
+  (get (wagoe-config/app-config config) :secure-cookies? true))
 
 (defn- escape-js-string
   "Escape a string for safe embedding inside a JavaScript single-quoted

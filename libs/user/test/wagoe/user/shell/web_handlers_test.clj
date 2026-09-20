@@ -855,11 +855,18 @@
           cookie-secure (fn [config]
                           (-> ((web-handlers/login-submit-handler auth-svc config) request)
                               (get-in [:cookies "session-token" :secure])))]
+      ;; The shape the system actually supplies: `:wagoe/user-routes` is handed
+      ;; the whole loaded config, `:active` and all. This test used to pass a
+      ;; bare `{:wagoe/settings ...}` — the shape the function happened to read
+      ;; — so it confirmed the lookup instead of checking it, and
+      ;; `:secure-cookies? false` in the dev config never reached the cookie
+      ;; (BOU-477).
       (testing "secure when config enables it (e.g. prod/acc over HTTPS)"
-        (is (true? (cookie-secure {:wagoe/settings {:secure-cookies? true}}))))
+        (is (true? (cookie-secure {:active {:wagoe/settings {:secure-cookies? true}}}))))
       (testing "insecure when config disables it (local HTTP dev)"
-        (is (false? (cookie-secure {:wagoe/settings {:secure-cookies? false}}))))
+        (is (false? (cookie-secure {:active {:wagoe/settings {:secure-cookies? false}}}))))
       (testing "defaults to secure when unset (fail-secure)"
+        (is (true? (cookie-secure {:active {:wagoe/settings {}}})))
         (is (true? (cookie-secure {})))))))
 
 (deftest ^:contract ^:security login-cookie-hardening-test
