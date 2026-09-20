@@ -34,19 +34,19 @@
   []
   {:active
    {:wagoe/settings {:name "Wagoe Test"
-                        :version "0.1.0"
-                        :user-validation {:password-policy {:min-length 12}}}
+                     :version "0.1.0"
+                     :user-validation {:password-policy {:min-length 12}}}
     :wagoe/http {:port 3000
-                    :host "127.0.0.1"
-                    :join? false
-                    :port-range {:start 3000 :end 3010}}
+                 :host "127.0.0.1"
+                 :join? false
+                 :port-range {:start 3000 :end 3010}}
     :wagoe/router {:coercion :malli}
     :wagoe/logging {:provider :no-op}
     :wagoe/metrics {:provider :no-op}
     :wagoe/error-reporting {:provider :no-op}
     :wagoe/cache {:provider :memory}
     :wagoe/sqlite {:db "dev-database.db"
-                      :pool {:maximum-pool-size 5}}}})
+                   :pool {:maximum-pool-size 5}}}})
 
 (deftest ^:unit db-spec-selects-active-adapter-test
   (testing "sqlite config is converted to a DB spec"
@@ -57,7 +57,7 @@
 
   (testing "h2 in-memory mode expands to a memory DSN"
     (let [config {:active {:wagoe/h2 {:memory true
-                                         :pool {:maximum-pool-size 3}}}}]
+                                      :pool {:maximum-pool-size 3}}}}]
       (is (= {:adapter :h2
               :database-path "mem:wagoe;DB_CLOSE_DELAY=-1"
               :pool {:maximum-pool-size 3}}
@@ -216,6 +216,24 @@
             (str k " is emitted conditionally but its wiring is not required "
                  "where it is emitted"))))))
 
+(deftest ^:integration ^:security every-dev-only-module-really-refuses
+  ;; Three enumerations below skip `dev-only-modules`, on the grounds that a
+  ;; module which is not deployable cannot be asserted to assemble, to be
+  ;; selectable as a service, or to boot from its config. That exemption is
+  ;; only honest while each entry does refuse — otherwise the set quietly
+  ;; becomes a way to opt out of those checks (BOU-477).
+  (is (seq modules/dev-only-modules) "nothing to check if the set is empty")
+
+  (doseq [k       modules/dev-only-modules
+          profile [:prod :acc :test]]
+    (is (thrown? clojure.lang.ExceptionInfo
+                 (sys-config/ig-config (assoc (base-config)
+                                              :wagoe/profile profile
+                                              :active (assoc (:active (base-config))
+                                                             k {:enabled? true}))))
+        (str k " assembled under " profile " — it is not dev-only, so it does "
+             "not belong in dev-only-modules"))))
+
 (deftest ^:integration every-emitted-key-has-an-init-key
   ;; The generated config used to enumerate 41 Integrant keys and separately
   ;; require the wiring that registered each one. Forgetting one half produced
@@ -226,7 +244,10 @@
   ;; framework module enabled, and ask Integrant whether it could build each key.
   (let [everything (reduce (fn [c k] (assoc-in c [:active k] {:enabled? true}))
                            (base-config)
-                           (keys modules/framework-modules))
+                           ;; Minus the dev-only ones: they refuse to assemble
+                           ;; outside :dev, and this config has no profile.
+                           (remove modules/dev-only-modules
+                                   (keys modules/framework-modules)))
         ig-config  (sys-config/ig-config everything)
         missing    (remove #(contains? (methods ig/init-key) %) (keys ig-config))]
 
@@ -273,7 +294,10 @@
 
         everything (reduce (fn [c k] (assoc-in c [:active k] {:enabled? true}))
                            (base-config)
-                           (keys modules/framework-modules))
+                           ;; See above: a dev-only module will not assemble
+                           ;; under a config with no profile.
+                           (remove modules/dev-only-modules
+                                   (keys modules/framework-modules)))
         emitted    (set (keys (sys-config/ig-config everything)))
         unwired    (remove (some-fn emitted not-assembled) (keys defined))]
 

@@ -247,9 +247,11 @@
   ;; failure the docstring above describes, reached by drift rather than by
   ;; omission (BOU-424). The BOU-326 gate next door already builds its config
   ;; this way.
+  ;; Minus the dev-only ones. A dev dashboard is not part of any service, and
+  ;; it refuses to assemble under this profile (BOU-477).
   (reduce (fn [cfg k] (assoc-in cfg [:active k] {:enabled? true}))
           (test-config)
-          (keys modules/framework-modules)))
+          (remove modules/dev-only-modules (keys modules/framework-modules))))
 
 (deftest ^:integration no-module-component-is-mistaken-for-the-platform
   (let [config    (everything-enabled-config)

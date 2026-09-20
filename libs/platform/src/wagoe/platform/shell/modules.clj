@@ -391,6 +391,20 @@
    wiring lives in their own library, and platform depends on neither."
   #{:wagoe/email :wagoe/i18n})
 
+(def dev-only-modules
+  "Modules that refuse to assemble outside `:wagoe/profile :dev`.
+
+   The dev dashboard serves the configuration, the database and an editor that
+   rebuilds the system, unauthenticated, so it throws rather than start
+   anywhere else — see `wagoe.devtools.shell.module-wiring`.
+
+   Named here because three test families enumerate `framework-modules` and
+   assert that every one of them assembles, is selectable as a service, or
+   boots from its documented config. None of those is true of a module that is
+   not deployable, and each needs to skip these rather than the one key, so
+   that a second dev-only module is covered by adding it here (BOU-477)."
+  #{:wagoe/dashboard})
+
 (def optional-modules
   "Modules whose library may legitimately be absent at runtime.
 
