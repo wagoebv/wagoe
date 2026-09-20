@@ -39,7 +39,7 @@ for what is public API, what is internal, and how deprecations are announced.
 - **Admin's `/:entity` answered every sibling module's `/web/admin` route** (BOU-477).
   Web and API routes are now ordered by specificity, so a literal path beats another module's wildcard.
 - **`:wagoe/dashboard` in a config started nothing, silently** (BOU-477). devtools
-  assembles it now; add `:ig-config-fn` yourself only if you want its config editor.
+  assembles it, in `:dev` only — the key in any other profile now fails the boot.
 - **`:secure-cookies? false` did not drop the `Secure` attribute** (BOU-477).
   Auth cookies over plain HTTP now work in dev; `curl` against a dev server keeps its session.
 - **An admin PUT with some of the fields wrote nothing and returned 200** (BOU-477).

@@ -52,6 +52,29 @@
 ;; Module graph
 ;; =============================================================================
 
+(defn- assert-dev-profile!
+  "Throw unless `profile` is `:dev`.
+
+   The dashboard serves the configuration, the database and an editor that
+   rebuilds the system, with no authentication in front of any of it. It was
+   the application that kept it to dev; moving assembly into this module must
+   not quietly drop that (BOU-477).
+
+   Loud rather than skipped, the way `:test/reset-endpoint-enabled?` outside
+   `:test`/`:dev` is loud — a production safety net, not graceful degradation.
+   Dropping the key without a word is the failure mode this whole ticket is
+   about."
+  [profile]
+  (when-not (= :dev profile)
+    (throw (ex-info
+            (str "The dev dashboard cannot run under the " profile " profile.\n"
+                 "It exposes configuration, the database and a system-rebuild\n"
+                 "editor, unauthenticated. Remove :wagoe/dashboard from :active\n"
+                 "in this profile's config.edn.")
+            {:type    :configuration-error
+             :profile profile
+             :key     :wagoe/dashboard}))))
+
 (defn- dashboard-config
   "The dev dashboard, wired to the running system.
 
@@ -65,7 +88,8 @@
    means knowing which components the application runs, which a library cannot
    — an application that wants the dashboard's config editor merges it in. The
    dashboard says so when it is missing rather than failing."
-  [settings]
+  [settings profile]
+  (assert-dev-profile! profile)
   ;; Required here, not at the top: it starts a Jetty of its own, and a project
   ;; that wants only the error enricher should not pay for loading it.
   (require 'wagoe.devtools.shell.dashboard.server)
@@ -88,9 +112,10 @@
    Both are dev-only. devtools lives in the `:repl` alias, so a project running
    `clojure -M:run` against the dev config has the keys and not the library —
    the assembler treats them as optional and skips them rather than failing the
-   boot."
-  [settings {:keys [module-key]}]
+   boot. Being absent from a production classpath is not a guard, though: the
+   dashboard checks the profile and refuses."
+  [settings {:keys [module-key config]}]
   (if (= :wagoe/dashboard module-key)
-    (dashboard-config settings)
+    (dashboard-config settings (:wagoe/profile config))
     {:components {:wagoe/dev-error-enricher settings}
      :http       {:error-enricher (ig/ref :wagoe/dev-error-enricher)}}))

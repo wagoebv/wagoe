@@ -67,3 +67,23 @@
     (testing "and the error enricher is still wired from its own key"
       (is (not (contains? m :wagoe/dev-error-enricher))
           "which this config did not ask for"))))
+
+(deftest ^:unit ^:security the-dashboard-refuses-to-assemble-outside-dev
+  ;; It serves the config, the database and a config editor that rebuilds the
+  ;; system, with no authentication in front of any of it. Assembly used to be
+  ;; gated on `:wagoe/profile :dev` by the application; moving it into this
+  ;; module must not drop that (BOU-477).
+  ;;
+  ;; Loudly, the way `:test/reset-endpoint-enabled?` outside :test/:dev is
+  ;; loud: a production safety net, not graceful degradation. Dropping the key
+  ;; in silence is how it got here.
+  (doseq [profile [:prod :acc :test]]
+    (let [e (is (thrown-with-msg?
+                 clojure.lang.ExceptionInfo #"dev dashboard"
+                 (sys/system-config {:wagoe/profile profile
+                                     :active {:wagoe/settings  {}
+                                              :wagoe/h2        {:memory true}
+                                              :wagoe/dashboard {:port 9123}}}))
+                (str "assembled under " profile))]
+      (is (= :configuration-error (:type (ex-data e))))
+      (is (= profile (:profile (ex-data e)))))))
