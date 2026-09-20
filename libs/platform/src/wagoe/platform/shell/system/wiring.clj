@@ -156,6 +156,50 @@
                 children))
         routes))
 
+(defn- segment-kind
+  "0 for a literal segment, 1 for a parameter, 2 for a catch-all."
+  [seg]
+  (cond
+    (str/starts-with? seg "*") 2
+    (str/starts-with? seg ":") 1
+    :else                      0))
+
+(defn- specificity
+  "A sort key that puts the route matching fewest requests first.
+
+   Only routes with the same number of segments can both match a request, and
+   for those the vector of segment kinds decides: a literal beats a parameter
+   at the first position where they differ, which is the order Reitit's
+   segment router would apply on its own.
+
+   Catch-alls are the exception — they match at every depth below their prefix,
+   so segment count does not separate them from a deeper literal route. They go
+   last, deepest first. `report-ambiguous-routes` refuses such a pair outright,
+   so this only decides an order the boot never reaches."
+  [path]
+  (let [segs       (str/split path #"/")
+        kinds      (mapv segment-kind segs)
+        catch-all? (boolean (some #{2} kinds))]
+    [(if catch-all? 1 0)
+     (if catch-all? (- (count segs)) (count segs))
+     kinds]))
+
+(defn- by-specificity
+  "`routes` ordered most specific first, ties keeping the order they came in.
+
+   Reitit prefers a literal segment over a parameter only in its
+   `:segment-router`. As soon as any pair of routes conflicts it builds a
+   `:quarantine-router`, which matches the quarantined set linearly, in
+   declaration order — so the module that happened to be folded first answered
+   for the ones after it. Three modules mount under `/web/admin`, admin
+   contributes `/:entity`, and `/web/admin/workflows` reached admin as an
+   unknown entity while the workflow module's own UI was unreachable (BOU-477).
+
+   Sorting here rather than leaving it to the router makes the route table say
+   what it means, whatever router Reitit picks for it."
+  [routes]
+  (vec (sort-by (comp specificity first) routes)))
+
 (defn module-route-contributions
   "Fold every module's routes into {:static [..] :web [..] :api [..]}.
 
@@ -172,19 +216,23 @@
    matched nothing and 404'd on a feature that works (BOU-229). That route is
    admin's, is already absolutely pathed, and must not be prefixed again.
 
-   Order is the caller's: contributions are folded in the order given, and
-   within a contribution static comes before web. Public so a test can drive it
-   without an Integrant system."
+   `:web` and `:api` come back ordered most specific first, so which handler
+   answers a request does not depend on which module was folded first — see
+   `by-specificity`. Contribution order still decides between routes of equal
+   specificity, and `:static` is left alone: it is mounted as written.
+   Public so a test can drive it without an Integrant system."
   [contributions]
-  (reduce (fn [acc {:keys [static web api web-prefix extra-web]}]
-            (-> acc
-                (update :static into (or static []))
-                (update :web into (mount-web-routes (or web-prefix default-web-prefix)
-                                                    (or web [])))
-                (update :web into (or extra-web []))
-                (update :api into (or api []))))
-          {:static [] :web [] :api []}
-          (remove nil? contributions)))
+  (-> (reduce (fn [acc {:keys [static web api web-prefix extra-web]}]
+                (-> acc
+                    (update :static into (or static []))
+                    (update :web into (mount-web-routes (or web-prefix default-web-prefix)
+                                                        (or web [])))
+                    (update :web into (or extra-web []))
+                    (update :api into (or api []))))
+              {:static [] :web [] :api []}
+              (remove nil? contributions))
+      (update :web by-specificity)
+      (update :api by-specificity)))
 
 (defn- build-test-reset-routes
   "Return a one-element vector containing the POST /test/reset reitit route

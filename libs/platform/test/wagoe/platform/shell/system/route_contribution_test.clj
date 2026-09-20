@@ -14,6 +14,7 @@
             [clojure.test :refer [deftest is testing]]
             [wagoe.platform.shell.system.config :as sys]
             [integrant.core]
+            [wagoe.platform.shell.http.reitit-router :as reitit-router]
             [wagoe.platform.shell.system.wiring :as wiring]))
 
 (def ^:private platform-sources
@@ -62,6 +63,85 @@
                         {:api [["/second" {}]]}])]
     (is (= ["/first" "/second"] (mapv first api))
         "and a nil contribution — a module that is off — is skipped")))
+
+;; =============================================================================
+;; Specificity ordering (BOU-477)
+;; =============================================================================
+
+(defn- marker-route
+  "A route at `path` whose handler answers with `body`, on `method`."
+  ([path body] (marker-route path :get body))
+  ([path method body]
+   [path {method {:handler (fn [_] {:status 200 :body body})}}]))
+
+(def ^:private admin-contribution
+  "The shapes `libs/admin/src/wagoe/admin/shell/http.clj` contributes."
+  {:web-prefix "/web/admin"
+   :web        [(marker-route "/:entity/new" "admin-new")
+                (marker-route "/:entity/:id/:field" :patch "admin-inline")
+                (marker-route "/:entity" "admin-list")
+                (marker-route "/:entity/:id" "admin-detail")]})
+
+(def ^:private workflow-contribution
+  "What the workflow module mounts under the same prefix."
+  {:web-prefix "/web/admin"
+   :web        [(marker-route "/workflows" "workflow-list")
+                (marker-route "/workflows/:id" "workflow-detail")]})
+
+(def ^:private app-contribution
+  "An application's own page below an admin entity — the case that 405'd."
+  {:web-prefix "/web/admin"
+   :web        [(marker-route "/invoices/:id/workflow" "app-page")]})
+
+(defn- answers
+  "What the mounted handler returns for a GET of each path in `paths`."
+  [contributions paths]
+  (let [handler (reitit-router/compile-routes
+                 (:web (#'wiring/module-route-contributions contributions))
+                 {:swagger-enabled false})]
+    (into {} (for [p paths]
+               [p (:body (handler {:request-method :get :uri p}))]))))
+
+(deftest ^:unit a-literal-route-wins-over-a-sibling-modules-wildcard
+  ;; Reitit prefers a literal segment over a parameter only in its
+  ;; `:segment-router`. The moment any pair of routes conflicts it builds a
+  ;; `:quarantine-router` instead, and that one matches the quarantined set
+  ;; linearly, in declaration order. Three modules mount under /web/admin and
+  ;; admin contributes `/:entity`, so whichever module folded first answered
+  ;; everything: /web/admin/workflows 500'd as an unknown entity, and an
+  ;; application page below an entity got admin's PATCH-only inline-edit route
+  ;; and a 405 (BOU-477).
+  (let [paths ["/web/admin/workflows"
+               "/web/admin/workflows/7"
+               "/web/admin/invoices/9/workflow"
+               "/web/admin/users"
+               "/web/admin/users/new"]
+        expected {"/web/admin/workflows"           "workflow-list"
+                  "/web/admin/workflows/7"         "workflow-detail"
+                  "/web/admin/invoices/9/workflow" "app-page"
+                  "/web/admin/users"               "admin-list"
+                  "/web/admin/users/new"           "admin-new"}]
+
+    (testing "admin folded first"
+      (is (= expected (answers [admin-contribution workflow-contribution
+                                app-contribution]
+                               paths))))
+
+    (testing "and the answer does not depend on which module folded first"
+      (is (= expected (answers [app-contribution workflow-contribution
+                                admin-contribution]
+                               paths))))))
+
+(deftest ^:unit a-catch-all-beside-a-deeper-literal-still-fails-the-boot
+  ;; Ordering settles pairs where one segment is literal and the other a
+  ;; parameter. A catch-all is not that case — it matches at every depth below
+  ;; its prefix — so it stays what it was: a boot failure, not a silent win.
+  (is (thrown-with-msg?
+       clojure.lang.ExceptionInfo #"can both match the same request"
+       (answers [{:web-prefix "/static"
+                  :web        [(marker-route "/*path" "the-catch-all")
+                               (marker-route "/css/app.css" "the-stylesheet")]}]
+                ["/static/css/app.css"]))))
 
 (deftest ^:integration a-library-platform-never-heard-of-serves-http
   (let [cfg {:wagoe/profile :test

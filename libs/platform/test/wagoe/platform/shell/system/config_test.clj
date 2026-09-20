@@ -79,6 +79,37 @@
     (is (= 4000 (:port (:wagoe/http-server c))))
     (is (not (contains? c :wagoe/http)))))
 
+(deftest ^:unit a-key-nothing-will-assemble-fails-the-boot
+  ;; `:wagoe/dashboard {:port 9999}` produced no component and no message: it
+  ;; is not a core key, no module claimed it, and without `:enabled?` it was
+  ;; not discovered either, so it fell through every branch (BOU-477). The
+  ;; silence is the defect — a misspelled module key looks exactly the same.
+  (testing "the key is named, and so is each way out"
+    (let [e (is (thrown-with-msg?
+                 clojure.lang.ExceptionInfo #":wagoe/dashbaord"
+                 (sut/system-config (config :wagoe/dashbaord {:port 9999}))))]
+      (is (= :wagoe/unclaimed-config-keys (:type (ex-data e))))
+      (is (= [:wagoe/dashbaord] (:keys (ex-data e))))))
+
+  (testing "a module says so with :enabled?, and is looked for by name"
+    ;; Not this check's error any more: it reaches module discovery, which
+    ;; reports the missing wiring namespace.
+    (is (thrown-with-msg?
+         clojure.lang.ExceptionInfo #"No wiring for module"
+         (sut/system-config (config :wagoe/dashbaord {:enabled? true})))))
+
+  (testing "an application names its own settings blocks and is left alone"
+    (let [c (sut/system-config (config :wagoe/config-keys #{:wagoe/billing-limits}
+                                       :wagoe/billing-limits {:max 10}))]
+      (is (not (contains? c :wagoe/billing-limits))
+          "declared settings are read by their owner, not assembled here")))
+
+  (testing "and the framework's own settings blocks need no declaring"
+    ;; Each is read with `get-in` by a component wired under another key.
+    (doseq [k [:wagoe/api-versioning :wagoe/pagination :wagoe/session-pruner
+               :wagoe/rpc :wagoe/services]]
+      (is (map? (sut/system-config (config k {}))) (str k " fails the boot")))))
+
 (deftest ^:unit the-handler-and-the-server-agree-on-the-port
   ;; The server takes the http settings twice — once as its own config and once
   ;; nested — because the graceful-drain path reads the second.

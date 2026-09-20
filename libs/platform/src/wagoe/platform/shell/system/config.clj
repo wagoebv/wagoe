@@ -80,6 +80,10 @@
   ([config {:keys [extra-modules base-ns] :or {extra-modules #{} base-ns "wagoe"}}]
    (let [active     (:active config)
          known      (into core-keys (keys modules/framework-modules))
+         ;; Before anything is built: a key that reaches no component is a
+         ;; feature the config asks for and does not get, and it used to say
+         ;; nothing at all (BOU-477).
+         _          (modules/assert-every-key-claimed! active known)
          {:keys [components http routes job-handlers]}
          (modules/framework-module-config
           active

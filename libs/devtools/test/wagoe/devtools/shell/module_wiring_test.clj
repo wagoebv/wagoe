@@ -7,6 +7,7 @@
    which uses a stub (BOU-321)."
   (:require [clojure.test :refer [deftest is testing]]
             [integrant.core :as ig]
+            [wagoe.platform.shell.system.config :as sys]
             [wagoe.devtools.shell.module-wiring :as sut]))
 
 (deftest ^:unit a-validation-failure-gets-its-code-and-its-fix
@@ -37,3 +38,53 @@
     (is (fn? enrich))
     (is (= "BND-201" (:code (enrich (ex-info "x" {:type :validation-error :errors {}})))))
     (is (nil? (ig/halt-key! :wagoe/dev-error-enricher enrich)))))
+
+(deftest ^:unit the-dashboard-is-assembled-from-config
+  ;; `:wagoe/dashboard {:port 9999}` in `:active` used to produce nothing and
+  ;; say nothing: no assembler claimed the key, and this module wired only the
+  ;; error enricher. The framework's own repo worked because
+  ;; `src/wagoe/system_config.clj` built the component by hand, which a
+  ;; generated project does not have (BOU-477).
+  (let [m (sys/system-config {:wagoe/profile :dev
+                              :active {:wagoe/settings  {}
+                                       :wagoe/h2        {:memory true}
+                                       :wagoe/dashboard {:port 9123}}})
+        dashboard (:wagoe/dashboard m)]
+
+    (is (some? dashboard) "the key in :active produced a component")
+    (is (= 9123 (:port dashboard)) "and kept what the config said")
+
+    (testing "wired to the components it reads the running system through"
+      (is (= (ig/ref :wagoe/http-handler) (:http-handler dashboard)))
+      (is (= (ig/ref :wagoe/http-server) (:http-server dashboard)))
+      (is (= (ig/ref :wagoe/db-context) (:db-context dashboard)))
+      (is (= (ig/ref :wagoe/router) (:router dashboard)))
+      (is (= (ig/ref :wagoe/logging) (:logging dashboard))))
+
+    (testing "but not to an :ig-config-fn — only the application knows its own graph"
+      (is (nil? (:ig-config-fn dashboard))))
+
+    (testing "and the error enricher is still wired from its own key"
+      (is (not (contains? m :wagoe/dev-error-enricher))
+          "which this config did not ask for"))))
+
+(deftest ^:unit ^:security the-dashboard-refuses-to-assemble-outside-dev
+  ;; It serves the config, the database and a config editor that rebuilds the
+  ;; system, with no authentication in front of any of it. Assembly used to be
+  ;; gated on `:wagoe/profile :dev` by the application; moving it into this
+  ;; module must not drop that (BOU-477).
+  ;;
+  ;; The refusal itself is platform's — `modules/dev-only-modules` — because
+  ;; devtools ships in the :repl alias and a guard that only runs when the
+  ;; library is present is not a guard. This is the end-to-end check that the
+  ;; key reaches it.
+  (doseq [profile [:prod :acc :test]]
+    (let [e (is (thrown-with-msg?
+                 clojure.lang.ExceptionInfo #":wagoe/dashboard cannot run"
+                 (sys/system-config {:wagoe/profile profile
+                                     :active {:wagoe/settings  {}
+                                              :wagoe/h2        {:memory true}
+                                              :wagoe/dashboard {:port 9123}}}))
+                (str "assembled under " profile))]
+      (is (= :configuration-error (:type (ex-data e))))
+      (is (= profile (:profile (ex-data e)))))))

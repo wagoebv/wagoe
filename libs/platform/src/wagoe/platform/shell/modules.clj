@@ -151,6 +151,65 @@
        (remove (set known-keys))
        sort))
 
+(def settings-keys
+  "`:active` keys that configure a component wired under some other key.
+
+   Neither modules nor core components: each is a settings block that a
+   component reads with `get-in`, so nothing assembles them and nothing should.
+   The value names the reader, so an entry that has outlived it can be found.
+
+   Listed rather than inferred, because `unclaimed-keys` cannot otherwise tell
+   a settings block from a module key somebody misspelled — and telling those
+   apart is the whole point of it. An application names its own settings blocks
+   in `:wagoe/config-keys`."
+  {:wagoe/api-versioning "wagoe.platform.shell.http.versioning"
+   :wagoe/pagination     "wagoe.user.shell.module-wiring, for the audit repository"
+   :wagoe/session-pruner "wagoe.user.shell.module-wiring"
+   :wagoe/rpc            "the application's rpc-config"
+   :wagoe/services       "the application's service-catalogue"
+   :wagoe/config-keys    "this check, for an application's own settings blocks"})
+
+(defn unclaimed-keys
+  "`:active` keys under the `wagoe` namespace that nothing will assemble.
+
+   A key reaches a component one of four ways: it is a core key, a framework
+   module, a settings block something reads, or it carries `:enabled?` and is
+   discovered as a scaffolded module. `:wagoe/dashboard {:port 9999}` was none
+   of them, so it produced no component and no message — and a misspelled
+   module key falls through the same gap, looking exactly like a feature that
+   does not work (BOU-477).
+
+   Only the bare `wagoe` namespace: `:wagoe.external/smtp` is a provider's
+   settings, and `:test/reset-endpoint-enabled?` is not ours at all."
+  [active known-keys]
+  (let [declared (set (get active :wagoe/config-keys))
+        known    (set known-keys)]
+    (->> active
+         (keep (fn [[k v]]
+                 (when (and (= "wagoe" (namespace k))
+                            (not (contains? known k))
+                            (not (contains? settings-keys k))
+                            (not (contains? declared k))
+                            (not (and (map? v) (contains? v :enabled?))))
+                   k)))
+         sort
+         vec)))
+
+(defn assert-every-key-claimed!
+  "Throw when `:active` names a `wagoe` key nothing will assemble."
+  [active known-keys]
+  (when-let [orphans (seq (unclaimed-keys active known-keys))]
+    (throw (ex-info
+            (str ":active names " (count orphans) " key(s) nothing will assemble:\n"
+                 (str/join "\n" (map #(str "  " %) orphans))
+                 "\n\n  A module?   Give it :enabled? true — bb scaffold integrate"
+                 " writes that.\n"
+                 "  Settings one of your own components reads? Name it:\n"
+                 "                :wagoe/config-keys #{" (str/join " " orphans) "}\n"
+                 "  A typo?     That is what this check is for.")
+            {:type :wagoe/unclaimed-config-keys
+             :keys (vec orphans)}))))
+
 (defn wiring-candidates
   "Where a module's wiring namespace may live, most preferred first.
 
@@ -315,7 +374,8 @@
          :wagoe.external/smtp       "external"
          :wagoe.external/imap       "external"
          :wagoe.external/twilio     "external"
-         :wagoe/dev-error-enricher  "devtools"}
+         :wagoe/dev-error-enricher  "devtools"
+         :wagoe/dashboard           "devtools"}
         (map (juxt #(keyword "wagoe" %) identity))
         ["email" "i18n" "user" "cache" "tenant" "admin" "workflow" "search" "events"
          "push" "audience" "storage" "jobs" "realtime" "reports" "calendar"
@@ -331,14 +391,49 @@
    wiring lives in their own library, and platform depends on neither."
   #{:wagoe/email :wagoe/i18n})
 
+(def dev-only-modules
+  "Modules that refuse to assemble outside `:wagoe/profile :dev`, and why.
+
+   Enforced here rather than in the module, because the module's library may
+   not be on the classpath — and `optional-modules` would then skip the key
+   with a log line before anything looked at the profile. A production config
+   naming the dev dashboard booted in silence, and would have started one the
+   day devtools reached `:deps`. Absent from the classpath is not a guard
+   (BOU-477).
+
+   The reason is in the message an operator reads at boot, so it is data here.
+
+   Also what three test families skip when they enumerate `framework-modules`
+   to assert every module assembles, is selectable as a service, or boots from
+   its documented config: none of that is true of a module that is not
+   deployable. `every-dev-only-module-really-refuses` keeps that exemption
+   honest."
+  {:wagoe/dashboard
+   (str "it serves the configuration, the database and an editor that rebuilds"
+        " the system, with no authentication in front of any of it")})
+
+(defn- assert-profile-allows!
+  "Throw when `k` is dev-only and `profile` is not `:dev`.
+
+   Loud rather than skipped, the way `:test/reset-endpoint-enabled?` outside
+   `:test`/`:dev` is loud: a production safety net, not graceful degradation."
+  [k profile]
+  (when-let [why (and (not= :dev profile) (get dev-only-modules k))]
+    (throw (ex-info
+            (str k " cannot run under the " profile " profile:\n  " why ".\n"
+                 "Remove it from :active in this profile's config.edn.")
+            {:type    :configuration-error
+             :profile profile
+             :key     k}))))
+
 (def optional-modules
   "Modules whose library may legitimately be absent at runtime.
 
-   `:wagoe/dev-error-enricher` comes from wagoe-devtools, which lives in the
-   `:repl` alias — so `clojure -M:run` against the dev config has the key and
-   not the jar. A dev-only nicety must not stop the app from booting; every
-   other missing library is a real error and throws."
-  #{:wagoe/dev-error-enricher})
+   Both come from wagoe-devtools, which lives in the `:repl` alias — so
+   `clojure -M:run` against the dev config has the keys and not the jar. A
+   dev-only nicety must not stop the app from booting; every other missing
+   library is a real error and throws."
+  #{:wagoe/dev-error-enricher :wagoe/dashboard})
 
 (defn- module-entries
   "The framework modules `active` switches on, as [key lib] pairs.
@@ -357,10 +452,14 @@
 
    A module with no components of its own — `:wagoe/storage`, `:wagoe/jobs` —
    defines no `ig-config`, and its `:active` value *is* its Integrant value.
-   That default is why 13 of the 21 modules need no code at all."
+   That default is why 13 of the 21 modules need no code at all.
+
+   `:module-key` is in `ctx` because a library may own more than one key —
+   devtools owns both the error enricher and the dashboard — and otherwise its
+   `ig-config` is called once per key with no way to tell them apart."
   [resolve-var k lib settings ctx]
   (if-let [build (resolve-var (symbol (str "wagoe." lib ".shell.module-wiring") "ig-config"))]
-    (build settings ctx)
+    (build settings (assoc ctx :module-key k))
     {:components {k settings}}))
 
 (defn framework-module-config
@@ -390,6 +489,9 @@
     (reduce
      (fn [acc [k lib]]
        (let [wiring (symbol (str "wagoe." lib ".shell.module-wiring"))]
+         ;; Before the branches, so that `optional-modules` cannot skip a
+         ;; dev-only module past it on a machine where its library is absent.
+         (assert-profile-allows! k (:wagoe/profile (:config ctx)))
          (cond
            (load-wiring! wiring)
            (let [{:keys [components http routes job-handlers]}

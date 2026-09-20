@@ -12,7 +12,7 @@
    [:id :uuid]
    [:name :string]
    [:sku :string]
-   [:price {:optional true} :double]
+   [:price {:optional true} decimal?]
    [:created-at inst?]
    [:updated-at {:optional true} [:maybe inst?]]
    [:deleted-at {:optional true} [:maybe inst?]]])
@@ -26,14 +26,14 @@
   [:map {:title "Create Product Request"}
    [:name :string]
    [:sku :string]
-   [:price {:optional true} :double]])
+   [:price {:optional true} decimal?]])
 
 (def UpdateProductRequest
   "Schema for update product API requests."
   [:map {:title "Update Product Request"}
    [:name {:optional true} :string]
    [:sku {:optional true} :string]
-   [:price {:optional true} :double]])
+   [:price {:optional true} decimal?]])
 
 ;; =============================================================================
 ;; Validation Functions

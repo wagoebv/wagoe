@@ -129,7 +129,8 @@
       (is (< 15 (count by-lib)))
       (is (< 15 (count modules/framework-modules))))
 
-    (doseq [[k lib] (sort-by val modules/framework-modules)
+    (doseq [[k lib] (sort-by val (apply dissoc modules/framework-modules
+                                        (keys modules/dev-only-modules)))
             :let    [entry    (get by-lib lib)
                      settings (snippet-settings (:config-snippet entry))
                      active   (or settings {k {:enabled? true}})]]

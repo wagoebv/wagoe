@@ -4,8 +4,8 @@
    Reading configuration is `wagoe.config`; assembling the components every
    Wagoe app has, plus whichever modules the config switches on, is
    `wagoe.platform.shell.system.config`. What is left here is what only this
-   application knows — which entities its admin UI manages, and the devtools
-   dashboard it runs in dev.
+   application knows — which entities its admin UI manages, and the way back
+   into this namespace that the devtools dashboard's config editor needs.
 
    Until BOU-326 this file enumerated the Integrant graph of every framework
    module by hand, 553 lines of it, and the generated `config.clj` carried a
@@ -20,38 +20,25 @@
    Usage:
      (require 'wagoe.main)                 ; registers the unconditional init-keys
      (ig-config (wagoe.config/load-config))"
-  (:require [integrant.core :as ig]
-            [wagoe.config :as config]
+  (:require [wagoe.config :as config]
             [wagoe.platform.shell.system.config :as system]
             [wagoe.user.schema :as user-schema]))
 
 ;; The devtools dashboard is handed a thunk that rebuilds this map.
 (declare ig-config)
 
-(defn- dashboard-config
-  "The devtools dashboard, in dev only.
+(defn- with-dashboard-rebuild
+  "Hand the dashboard a way back to this application's own Integrant config.
 
-   Not a framework module: it needs a way to rebuild the very map it appears
-   in, so it cannot be assembled by something that does not know this
-   namespace. Wrapped in a try because devtools lives in the :repl alias, and
-   `wagoe.main` boots without it."
-  [config]
-  (when-let [cfg (and (= (:wagoe/profile config) :dev)
-                      (get-in config [:active :wagoe/dashboard]))]
-    (try
-      (require 'wagoe.devtools.shell.dashboard.server)
-      {:wagoe/dashboard
-       {:port         (:port cfg 9999)
-        ;; The dashboard rebuilds the system when you edit a config value, so
-        ;; it needs a way back here. Passed in rather than resolved: which
-        ;; components an application runs is the application's to know.
-        :ig-config-fn #(ig-config (config/load-config))
-        :http-handler (ig/ref :wagoe/http-handler)
-        :http-server  (ig/ref :wagoe/http-server)
-        :db-context   (ig/ref :wagoe/db-context)
-        :router       (ig/ref :wagoe/router)
-        :logging      (ig/ref :wagoe/logging)}}
-      (catch Exception _ nil))))
+   devtools assembles the component itself from `:wagoe/dashboard` in the
+   config (BOU-477); this is the one part of it a library cannot supply, since
+   which components an application runs is the application's to know. The
+   dashboard reports the absence rather than failing, so an application that
+   does not want the config editor leaves this out."
+  [system-cfg]
+  (cond-> system-cfg
+    (contains? system-cfg :wagoe/dashboard)
+    (assoc-in [:wagoe/dashboard :ig-config-fn] #(ig-config (config/load-config)))))
 
 (defn- dev-http-extras
   "What the dashboard needs from the HTTP handler, in dev only.
@@ -72,7 +59,7 @@
       (cond-> (get-in config [:active :wagoe/admin])
         (assoc-in [:wagoe/admin-schema-provider :malli-schemas]
                   {:users user-schema/User}))
-      (merge (dashboard-config config))
+      with-dashboard-rebuild
       (update :wagoe/http-handler merge (dev-http-extras config))))
 
 ;; =============================================================================

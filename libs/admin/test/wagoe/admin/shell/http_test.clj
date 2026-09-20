@@ -87,7 +87,11 @@
            active BOOLEAN NOT NULL DEFAULT true,
            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
            updated_at TIMESTAMP,
-           deleted_at TIMESTAMP)"}))
+           deleted_at TIMESTAMP,
+           -- Nullable, optional, and carrying no meaning to the admin module:
+           -- `deleted_at` is the soft-delete marker, so it cannot stand in for
+           -- an ordinary optional field (BOU-477).
+           nickname VARCHAR(255))"}))
 
 (defn drop-test-table!
   "Drop test users table"
@@ -510,7 +514,15 @@
 
           ;; Should redirect to list page with success flash
           (is (or (= 302 (:status response))
-                  (= 200 (:status response))))))
+                  (= 200 (:status response))))
+
+          ;; A 2xx that wrote nothing was how BOU-477 stayed hidden: the
+          ;; assertions above hold whether or not the row changed.
+          (is (= "Updated Name"
+                 (:name (db/execute-one! *db-ctx*
+                                         {:select [:*] :from [:test-users]
+                                          :where  [:= :id user-id]})))
+              "the row is what the request said")))
 
       (testing "Update non-existent entity returns error"
         (let [fake-id (UUID/randomUUID)
@@ -518,8 +530,72 @@
                                     {:path {:entity "test-users" :id (str fake-id)}
                                      :form {"name" "Test"}})
               response (*handler* request)]
-          ;; Should return error
-          (is (some? response)))))))
+          (is (= 404 (:status response))
+              "not a 200 with nothing written"))))))
+
+(deftest ^:contract a-rejected-write-does-not-answer-200
+  ;; Both write handlers re-render the form when validation fails, and both did
+  ;; so with a 200 — indistinguishable from a successful write to anything that
+  ;; is not a browser reading the flash text (BOU-477).
+  (testing "create without the fields the entity requires"
+    (let [response (*handler*
+                    (make-request :post "/web/admin/test-users" admin-user
+                                  {:path {:entity "test-users"}
+                                   :form {"name" "No Email"}}))]
+      (is (= 422 (:status response)))
+      (is (nil? (db/execute-one! *db-ctx*
+                                 {:select [:*] :from [:test-users]
+                                  :where  [:= :name "No Email"]}))
+          "and nothing was created")))
+
+  (testing "update that empties a required field"
+    (let [user (create-test-user! "clear@example.com" "Clear User" true)
+          response (*handler*
+                    (make-request :put (str "/web/admin/test-users/" (:id user)) admin-user
+                                  {:path {:entity "test-users" :id (str (:id user))}
+                                   :form {"email" ""}}))]
+      (is (= 422 (:status response)))
+      (is (= "clear@example.com"
+             (:email (db/execute-one! *db-ctx*
+                                      {:select [:*] :from [:test-users]
+                                       :where  [:= :id (:id user)]})))
+          "and the row is untouched"))))
+
+(deftest ^:contract an-emptied-optional-field-is-cleared
+  ;; `parse-form-params` dropped a field whose submitted value was blank
+  ;; instead of nulling it, so clearing an optional field through the admin UI
+  ;; was impossible: the old value silently survived the write, and a required
+  ;; field emptied by mistake read as "not submitted" rather than as an error
+  ;; (BOU-477).
+  (let [user (create-test-user! "optional@example.com" "Optional User" true)
+        id   (:id user)]
+    (db/execute-update! *db-ctx* {:update :test-users
+                                  :set    {:nickname "Nick"}
+                                  :where  [:= :id id]})
+
+    (*handler* (make-request :put (str "/web/admin/test-users/" id) admin-user
+                             {:path {:entity "test-users" :id (str id)}
+                              :form {"nickname" ""}}))
+
+    (is (nil? (:nickname (db/execute-one! *db-ctx*
+                                          {:select [:*] :from [:test-users]
+                                           :where  [:= :id id]}))))))
+
+(deftest ^:contract update-entity-reads-a-decoded-body
+  ;; A JSON PUT carries its fields in :body-params, and Ring still puts an
+  ;; empty :form-params on the request. The handler chose between them with
+  ;; `or`, and `{}` is truthy, so the body was never read: the update wrote
+  ;; nothing and answered 200 with the unchanged record (BOU-477).
+  (let [user    (create-test-user! "body@example.com" "Body User" true)
+        user-id (:id user)
+        request (-> (make-request :put (str "/web/admin/test-users/" user-id) admin-user
+                                  {:path {:entity "test-users" :id (str user-id)}})
+                    (assoc :body-params {"name" "From The Body"}))]
+    (*handler* request)
+    (is (= "From The Body"
+           (:name (db/execute-one! *db-ctx*
+                                   {:select [:*] :from [:test-users]
+                                    :where  [:= :id user-id]}))))))
 
 ;; =============================================================================
 ;; Delete Entity Endpoint Tests

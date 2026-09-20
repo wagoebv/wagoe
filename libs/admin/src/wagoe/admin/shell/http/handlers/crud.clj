@@ -26,6 +26,17 @@
       (when (and status (< status 500))
         (ex-message e)))))
 
+(defn- submitted-params
+  "The fields the request carries, whichever decoder put them there.
+
+   Ring leaves an empty `:form-params` on a request with a decoded body, and
+   `{}` is truthy, so an `or` chain starting there never reached
+   `:body-params`: a JSON write was read as no fields at all (BOU-477)."
+  [request]
+  (or (some #(when (seq %) %)
+            [(:form-params request) (:body-params request) (:params request)])
+      {}))
+
 (defn create-entity-handler
   "Handler for creating new entity.
 
@@ -46,12 +57,7 @@
           ; Check permissions
           _ (shell-permissions/assert-can-create-entity! user entity-name entity-config)
 
-          ; Parse form data - support both :form-params (GET/POST) and :params/:body-params (PUT/PATCH)
-          raw-params (or (:form-params request)
-                         (:body-params request)
-                         (:params request)
-                         {})
-          form-data (support/parse-form-params raw-params entity-config)
+          form-data (support/parse-form-params (submitted-params request) entity-config)
 
           ; Validate data
           validation-result (ports/validate-entity-data admin-service entity-name form-data)]
@@ -114,16 +120,20 @@
               permissions (permissions/get-entity-permissions user entity-name entity-config)
               errors (ui-validation/explain->field-errors (:errors validation-result))]
 
-          (support/html-response request
-                                 (admin-ui/admin-layout
-                                  (admin-ui/entity-detail-page entity-name entity-config form-data errors permissions {})
-                                  {:user user
-                                   :current-entity entity-name
-                                   :entities entities
-                                   :entity-configs entity-configs
-                                   :logo-url (:logo-url config)
-                                   :flash {:type :error
-                                           :message [:t :admin/flash-validation-errors]}})))))))
+          (-> (support/html-response request
+                                     (admin-ui/admin-layout
+                                      (admin-ui/entity-detail-page entity-name entity-config form-data errors permissions {})
+                                      {:user user
+                                       :current-entity entity-name
+                                       :entities entities
+                                       :entity-configs entity-configs
+                                       :logo-url (:logo-url config)
+                                       :flash {:type :error
+                                               :message [:t :admin/flash-validation-errors]}}))
+              ;; A form that was rejected is not a 200. The page is the same
+              ;; either way, so the status is all that tells a caller —
+              ;; anything that is not a browser — that nothing was written.
+              (assoc :status 422)))))))
 
 (defn update-entity-handler
   "Handler for updating existing entity.
@@ -146,16 +156,28 @@
           ; Check permissions
           _ (shell-permissions/assert-can-edit-entity! user entity-name entity-config)
 
-          ; Parse form data - for PUT requests, params might be in :params or :body-params
-          raw-params (or (:form-params request)
-                         (:body-params request)
-                         (:params request)
-                         {})
+          form-data (support/parse-form-params (submitted-params request) entity-config)
 
-          form-data (support/parse-form-params raw-params entity-config)
+          ;; An update is validated as the entity it would leave behind, not as
+          ;; the fields the request happened to carry. Validating `form-data`
+          ;; alone failed every partial write on the fields it did not mention
+          ;; — and the rejection branch answered 200, so the caller saw success
+          ;; and an unchanged record (BOU-477).
+          existing (ports/get-entity admin-service entity-name id)
 
-          ; Validate data
-          validation-result (ports/validate-entity-data admin-service entity-name form-data)]
+          ;; A PUT to an id that is not there used to validate the form, write
+          ;; zero rows and answer 200. It is a 404, and saying so is also what
+          ;; keeps the merge below honest: merging into nothing would report a
+          ;; missing row as a form full of missing fields.
+          _ (when-not existing
+              (throw (ex-info "Entity not found"
+                              {:type        :not-found
+                               :entity-name entity-name
+                               :id          id})))
+
+          merged   (merge existing form-data)
+
+          validation-result (ports/validate-entity-data admin-service entity-name merged)]
 
       (if (:valid? validation-result)
         ; Update entity and re-render detail page with success flash
@@ -178,18 +200,17 @@
         ; Validation errors - re-render form with flash inside page content
         (let [permissions (permissions/get-entity-permissions user entity-name entity-config)
               errors      (ui-validation/explain->field-errors (:errors validation-result))
-              ; Merge form data with original record for display
-              record      (merge (ports/get-entity admin-service entity-name id) form-data)
-              ctx         (support/build-entity-detail-opts admin-service schema-provider config entity-name entity-config record request)]
+              ctx         (support/build-entity-detail-opts admin-service schema-provider config entity-name entity-config merged request)]
 
-          (support/html-response request
-                                 (admin-ui/admin-layout
-                                  (admin-ui/entity-detail-page entity-name entity-config record errors permissions
-                                                               (assoc (:page-opts ctx) :flash
-                                                                      {:type :error
-                                                                       :message [:t :admin/flash-validation-errors]}))
-                                  {:user user
-                                   :current-entity entity-name
-                                   :entities (:entities ctx)
-                                   :entity-configs (:entity-configs ctx)
-                                   :logo-url (:logo-url config)})))))))
+          (-> (support/html-response request
+                                     (admin-ui/admin-layout
+                                      (admin-ui/entity-detail-page entity-name entity-config merged errors permissions
+                                                                   (assoc (:page-opts ctx) :flash
+                                                                          {:type :error
+                                                                           :message [:t :admin/flash-validation-errors]}))
+                                      {:user user
+                                       :current-entity entity-name
+                                       :entities (:entities ctx)
+                                       :entity-configs (:entity-configs ctx)
+                                       :logo-url (:logo-url config)}))
+              (assoc :status 422)))))))
