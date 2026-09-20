@@ -182,6 +182,13 @@
     (with-redefs [deploy/read-version        (constantly "1.0.0-rc-1")
                   deploy/verify-jar!         (constantly nil)
                   deploy/request-cljdoc-build! (constantly nil)
+                  ;; Stubbed like the rest: deploy-lib! ends by writing the
+                  ;; version it deployed into the real modules-catalogue.edn,
+                  ;; a tracked file. Left live, this test rewrote wagoe-core's
+                  ;; :version to the fixture above every time the suite ran —
+                  ;; invisible while the fixture matched the repo, and a
+                  ;; silently half-reverted catalogue right after a bump.
+                  deploy/patch-catalogue-version! (constantly nil)
                   babashka.process/shell     (fn [_opts & args] (swap! shelled conj (vec args)) nil)]
       (deploy/deploy-lib! "core"))
     (let [tasks (map last @shelled)]

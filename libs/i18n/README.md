@@ -11,12 +11,12 @@ Marker-based internationalisation for Wagoe apps — translation keys live as `[
 
 **deps.edn** (recommended):
 ```clojure
-{:deps {com.wagoe/wagoe-i18n {:mvn/version "1.0.0-rc-1"}}}
+{:deps {com.wagoe/wagoe-i18n {:mvn/version "1.0.0-rc-2"}}}
 ```
 
 **Leiningen**:
 ```clojure
-[com.wagoe/wagoe-i18n "1.0.0-rc-1"]
+[com.wagoe/wagoe-i18n "1.0.0-rc-2"]
 ```
 
 ## Features
