@@ -105,10 +105,24 @@
     ;; no separate `clojure -M:migrate up` can reach — have tables at all
     ;; (BOU-485).
     ;;
-    ;; Not caught: an application whose schema did not apply fails on its first
-    ;; query instead, with an error far from the cause.
+    ;; Rethrown, not swallowed: an application whose schema did not apply fails
+    ;; on its first query instead, with an error far from the cause. Closed
+    ;; first, because Integrant only halts the components that finished
+    ;; initialising — this one did not, so its context never reaches Integrant
+    ;; and `halt-key!` is never called for it. The Hikari pool, its threads and
+    ;; any SQLite file lock would outlive the failed boot (BOU-485).
     (when (:migrate-on-start? config)
-      (migrations/migrate-datasource! (:datasource ctx)))
+      (try
+        (migrations/migrate-datasource! (:datasource ctx))
+        (catch Throwable t
+          (log/error t "Boot migration failed; closing the database context")
+          ;; Its own try: a pool that fails to close must not replace the
+          ;; migration error with itself, which is the one the operator needs.
+          (try
+            (db-factory/close-db-context! ctx)
+            (catch Throwable close-error
+              (log/error close-error "Closing the database context failed too")))
+          (throw t))))
     (log/info "Database context initialized successfully"
               {:adapter (:adapter config)})
     ctx))

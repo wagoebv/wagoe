@@ -53,13 +53,47 @@
   ;; `auto-migrate` caught, logged and returned false. An application whose
   ;; schema did not apply then fails on its first query instead, with an error
   ;; far from the cause.
+  (let [closed (atom [])]
+    (is (thrown-with-msg?
+         clojure.lang.ExceptionInfo #"Migration failed"
+         (with-redefs [db-factory/db-context (fn [_] {:datasource ::pool})
+                       db-factory/close-db-context! (fn [ctx] (swap! closed conj ctx))
+                       migrations/refuse-shadowed-migration-dirs! (fn [] nil)
+                       migrations/discover-migration-dirs (fn [] ["migrations"])
+                       migratus/migrate (fn [_] (throw (Exception. "syntax error")))]
+           (ig/init-key :wagoe/db-context {:adapter :h2 :migrate-on-start? true}))))
+
+    (testing "and the pool it had already opened is closed on the way out"
+      ;; Integrant halts the components that finished initialising. This one
+      ;; did not, so its context never reaches Integrant and `halt-key!` is
+      ;; never called for it — the Hikari pool, its threads and any SQLite
+      ;; file lock would outlive the failed boot (BOU-485 review).
+      (is (= [{:datasource ::pool}] @closed)))))
+
+(deftest ^:unit a-pool-that-will-not-close-does-not-hide-why-the-boot-failed
+  ;; The migration error is the one the operator needs; a failure to close the
+  ;; pool on the way out must not replace it.
   (is (thrown-with-msg?
        clojure.lang.ExceptionInfo #"Migration failed"
        (with-redefs [db-factory/db-context (fn [_] {:datasource ::pool})
+                     db-factory/close-db-context! (fn [_] (throw (Exception. "pool stuck")))
                      migrations/refuse-shadowed-migration-dirs! (fn [] nil)
                      migrations/discover-migration-dirs (fn [] ["migrations"])
                      migratus/migrate (fn [_] (throw (Exception. "syntax error")))]
          (ig/init-key :wagoe/db-context {:adapter :h2 :migrate-on-start? true})))))
+
+(deftest ^:unit a-successful-boot-does-not-close-anything
+  ;; The counterpart, so the cleanup above cannot be satisfied by closing the
+  ;; pool on every path.
+  (let [closed (atom [])]
+    (with-redefs [db-factory/db-context (fn [_] {:datasource ::pool})
+                  db-factory/close-db-context! (fn [ctx] (swap! closed conj ctx))
+                  migrations/refuse-shadowed-migration-dirs! (fn [] nil)
+                  migrations/discover-migration-dirs (fn [] ["migrations"])
+                  migratus/migrate (fn [_] nil)]
+      (is (= {:datasource ::pool}
+             (ig/init-key :wagoe/db-context {:adapter :h2 :migrate-on-start? true}))))
+    (is (empty? @closed))))
 
 (deftest ^:unit migrate-datasource-keeps-the-discovery-rules
   ;; The directory set and the shadowed-directory refusal are what make
