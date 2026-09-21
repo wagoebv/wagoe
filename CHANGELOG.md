@@ -51,6 +51,16 @@ for what is public API, what is internal, and how deprecations are announced.
   `web-routes` mounts the generated handler; new projects declare `hiccup`.
 - **`i18n/render` accepts a nil `t-fn`**, rendering each marker as its key name
   (BOU-484). Callers no longer need their own fallback.
+- **Multi-word entities lost their word boundaries** (BOU-480). `InvoiceLineItem`
+  scaffolded table `invoicelineitems`; it is `invoice_line_items` now.
+- **Generated persistence queried the wrong table name** (BOU-486). It used the
+  PascalCase entity (`:Products`) where the migration created `products`.
+
+### Added
+
+- **`--field x:relation:references=entity`** scaffolds a foreign key (BOU-480):
+  an `<x>_id` column, `REFERENCES`, and an index. `on-delete=` defaults to
+  `cascade`.
 
 ## [1.0.0-rc-2] — 2026-09-20
 

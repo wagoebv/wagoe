@@ -8,28 +8,28 @@
   ports/IProductRepository
   (create [_this entity]
     (db/execute-one! db-ctx
-      (sql/format {:insert-into :Products
+      (sql/format {:insert-into :products
                    :values [entity]
                    :returning [:*]})))
   (find-by-id [_this id]
     (db/execute-one! db-ctx
       (sql/format {:select [:*]
-                   :from [:Products]
+                   :from [:products]
                    :where [:= :id id]})))
   (find-all [_this opts]
     (db/execute-query! db-ctx
       (sql/format {:select [:*]
-                   :from [:Products]
+                   :from [:products]
                    :limit (:limit opts 20)})))
   (update-entity [_this entity]
     (db/execute-one! db-ctx
-      (sql/format {:update :Products
+      (sql/format {:update :products
                    :set (dissoc entity :id)
                    :where [:= :id (:id entity)]
                    :returning [:*]})))
   (delete [_this id]
     (db/execute-one! db-ctx
-      (sql/format {:delete-from :Products
+      (sql/format {:delete-from :products
                    :where [:= :id id]}))))
 
 (defn create-repository [db-ctx]

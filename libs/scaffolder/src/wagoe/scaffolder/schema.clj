@@ -1,5 +1,6 @@
 (ns wagoe.scaffolder.schema
-  "Scaffolder module schemas for module generation inputs and outputs.")
+  "Scaffolder module schemas for module generation inputs and outputs."
+  (:require [clojure.string :as str]))
 
 ;; =============================================================================
 ;; Field and Entity Definitions
@@ -17,7 +18,8 @@
    :enum                                                    ; Enumeration
    :inst                                                    ; Instant/timestamp
    :json                                                    ; JSON/map data
-   :decimal])                                               ; Decimal number
+   :decimal                                                 ; Decimal number
+   :relation])                                              ; Foreign key to another entity
 
 (def FieldShape
   "The keys a field definition may carry."
@@ -30,6 +32,9 @@
    [:enum-values {:optional true} [:vector :keyword]]       ; For enum type
    [:min {:optional true} :int]                             ; Min length/value
    [:max {:optional true} :int]                             ; Max length/value
+   [:references {:optional true} :string]                   ; For relation type: entity referenced
+   [:on-delete {:optional true}                             ; For relation type
+    [:enum :cascade :restrict :set-null :no-action]]
    [:description {:optional true} :string]])                ; Field documentation
 
 (def FieldDefinition
@@ -37,12 +42,17 @@
 
    An `:enum` field must name its values: `[:enum]` is a Malli schema nothing
    satisfies, so a module generated without them rejected every write of that
-   field (BOU-447)."
+   field (BOU-447). A `:relation` must name what it references, for the same
+   reason — without it there is nothing to generate but a bare UUID column
+   (BOU-480)."
   [:and
    FieldShape
    [:fn {:error/message "an enum field needs a non-empty :enum-values"}
     (fn [{:keys [type enum-values]}]
-      (or (not= :enum type) (seq enum-values)))]])
+      (or (not= :enum type) (seq enum-values)))]
+   [:fn {:error/message "a relation field needs :references"}
+    (fn [{:keys [type references]}]
+      (or (not= :relation type) (not (str/blank? references))))]])
 
 (def EntityDefinition
   "Schema for an entity definition."

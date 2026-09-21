@@ -986,8 +986,14 @@
         (is (contains? on-disk "src/shop/invoice_line_item/schema.clj"))
         (is (contains? on-disk "src/shop/invoice_line_item/shell/module_wiring.clj"))
         (is (contains? on-disk "test/shop/invoice_line_item/shell/service_test.clj"))
-        (is (empty? (filter #(str/includes? % "invoice-line-item") on-disk))
-            "no path carries the namespace spelling")
+        ;; Clojure source paths only. Migration *names* are hyphenated by
+        ;; convention — `create-products`, `geo-cache` — and migratus reads
+        ;; everything after the id as the name, so `create-invoice-line-items`
+        ;; is right there (BOU-480).
+        (is (empty? (->> on-disk
+                         (filter #(re-find #"^(src|test)/" %))
+                         (filter #(str/includes? % "invoice-line-item"))))
+            "a Clojure source path carries the namespace spelling")
         (is (str/includes? (slurp (io/file dir "src/shop/invoice_line_item/schema.clj"))
                            "(ns shop.invoice-line-item.schema")
             "while the namespace keeps the hyphen"))

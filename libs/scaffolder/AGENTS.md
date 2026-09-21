@@ -107,7 +107,7 @@ bb scaffold adapter \
 
 ## Field Specification Format
 
-Fields are specified as `name:type[:values=a,b,c][:required][:unique]`:
+Fields are specified as `name:type[:values=a,b,c][:references=entity][:on-delete=x][:required][:unique]`:
 
 | Type | Maps to Malli | Notes |
 |------|--------------|-------|
@@ -121,6 +121,11 @@ Fields are specified as `name:type[:values=a,b,c][:required][:unique]`:
 | `enum` | `[:enum ...]` | `values=` is required — `[:enum]` validates nothing |
 | `date` / `datetime` / `inst` | `inst?` | |
 | `json` | `:map` | |
+| `relation` | `:uuid` | `references=` is required. The column is `<name>_id`, gets `REFERENCES <target>(id)` and an index; `on-delete=` is `cascade` (default), `restrict`, `set-null` or `no-action` |
+
+A relation names the entity it points at, not the table:
+`--field invoice:relation:references=invoice:required` on an `InvoiceLineItem`
+writes `invoice_id UUID NOT NULL REFERENCES invoices(id) ON DELETE CASCADE`.
 
 Examples:
 
@@ -297,7 +302,7 @@ Configure the provider via environment variables: `ANTHROPIC_API_KEY`, `OPENAI_A
 |------|---------|-------------|
 | `--module-name` | — | Module name in lowercase kebab-case (required) |
 | `--entity` | — | Entity name in PascalCase (required) |
-| `--field` | — | Repeatable: `name:type[:values=a,b,c][:required][:unique]` |
+| `--field` | — | Repeatable: `name:type[:values=a,b,c][:references=entity][:on-delete=x][:required][:unique]` |
 | `--[no-]http` | true | Generate the HTTP (REST API) routes |
 | `--[no-]web` | true | Generate the Web UI: `core/ui.clj`, `shell/web_handlers.clj`, and the module's `:web` route contribution |
 | `--audit` | true | Include audit logging |
