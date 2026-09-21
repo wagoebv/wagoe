@@ -13,7 +13,7 @@ will promise.
 | |
 
 | Current version
-| `1.0.0-rc-2`
+| `1.0.0-rc-3`
 
 | Stability
 | Release candidate. The `1.0.0` surface is frozen: a breaking change lands
@@ -197,8 +197,11 @@ rather than a commit message.
   exercised before the tag.
 * *One has, in `1.0.0-rc-2`:* a `:wagoe/*` key in `:active` that nothing
   assembles now fails the boot instead of being ignored. Name your own settings
-  blocks in `:wagoe/config-keys`. That is the only addition to the three frozen
-  at `rc-1`; the list is four, not three.
+  blocks in `:wagoe/config-keys`.
+* *One more, in `1.0.0-rc-3`:* `bb scaffold generate --cli` is gone. It named an
+  interface the scaffolder has never had a generator for, so no value of the
+  flag ever produced one; only a script that passes it is affected. Two
+  additions to the three frozen at `rc-1`, so the list is five.
 * Breaking changes that already shipped are in `CHANGELOG.md` under a
   `### Breaking` heading, naming the affected library and the migration.
 * Deprecations are announced under `### Deprecated`.
