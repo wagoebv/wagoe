@@ -48,7 +48,7 @@ for what is public API, what is internal, and how deprecations are announced.
   `--no-web` to skip `core/ui.clj` and `shell/web_handlers.clj`, which were
   written into every module with nothing mounting them.
 - **A scaffolded module's web page now serves its own rows** (BOU-484).
-  `web-routes` mounts the generated handler instead of an HTML stub.
+  `web-routes` mounts the generated handler; new projects declare `hiccup`.
 - **`i18n/render` accepts a nil `t-fn`**, rendering each marker as its key name
   (BOU-484). Callers no longer need their own fallback.
 

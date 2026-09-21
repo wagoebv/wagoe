@@ -17,14 +17,14 @@
               ;; reitit-core so a test can build a router from the routes the
               ;; generator writes. Nothing checked their shape, and they sat in
               ;; a format the framework had stopped reading (BOU-331).
-              ;; reitit-ring and i18n because the generated web UI is tested by
-              ;; serving it: the module's web handler renders Hiccup through
-              ;; wagoe.i18n.shell.render, and nothing checked that the body it
-              ;; returns is something Ring can write (BOU-484).
+              ;; reitit-ring and hiccup because the generated web UI is tested
+              ;; by serving it: the module's web handler renders its Hiccup
+              ;; with hiccup2, and nothing checked that the body it returns is
+              ;; something Ring can write (BOU-484).
               :extra-deps  {lambdaisland/kaocha  {:mvn/version "1.91.1392"}
                             metosin/reitit-core  {:mvn/version "0.10.1"}
                             metosin/reitit-ring  {:mvn/version "0.10.1"}
-                            wagoe/i18n           {:local/root "../i18n"}}
+                            hiccup/hiccup        {:mvn/version "2.0.0"}}
               :main-opts   ["-m" "kaocha.runner"]}
 
   :clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2026.08.04"}}

@@ -81,6 +81,28 @@
         (is (not (str/includes? body "Web UI"))
             "still the inline stub — web-routes does not call the generated handler")))))
 
+(deftest ^:unit the-generated-web-ui-requires-no-optional-wagoe-library
+  ;; It rendered through `wagoe.i18n.shell.render`, and `wagoe-i18n` is a
+  ;; module a project is invited to drop — libs/i18n/AGENTS.md says an app that
+  ;; translates nothing need not ship it, and the generated deps.edn says each
+  ;; of those modules is independent. So the default `--web` output could not
+  ;; load in a project that took that advice, to render a page with no
+  ;; translation markers in it (BOU-484 review).
+  ;;
+  ;; The rule is the one a generated module can actually keep: its web layer
+  ;; requires its own namespaces and third-party libraries, nothing else from
+  ;; the framework.
+  (doseq [[label source] [["web-handlers" (gen/generate-web-handlers-file ctx)]
+                          ["ui"           (gen/generate-ui-file ctx)]
+                          ["http"         (gen/generate-http-file ctx)]]]
+    (let [foreign (->> (re-seq #"\[(wagoe\.[a-z0-9.-]+)" source)
+                       (map second)
+                       (remove #(str/starts-with? % "wagoe.gizmo."))
+                       set)]
+      (is (empty? foreign)
+          (str label " requires " (vec foreign)
+               " — a generated module must not depend on a droppable framework library")))))
+
 (deftest ^:unit the-web-route-is-wired-to-the-generated-handler
   ;; The assertion above could be satisfied by inlining the whole page into
   ;; http.clj, which would leave web_handlers.clj just as dead. The point of

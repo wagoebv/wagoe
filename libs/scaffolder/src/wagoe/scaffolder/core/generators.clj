@@ -687,21 +687,24 @@ DROP TABLE IF EXISTS %s;
          "  \"Web UI handlers for " module-name " module.\"\n"
          "  (:require [" base-ns "." module-name ".core.ui :as ui]\n"
          "            [" base-ns "." module-name ".ports :as ports]\n"
-         "            [wagoe.i18n.shell.middleware :as i18n-middleware]\n"
-         "            [wagoe.i18n.shell.render :as i18n]))\n"
+         "            [hiccup2.core :as h]))\n"
          "\n"
          "(defn " entity-lower "-list-handler [service _config]\n"
-         "  (fn [request]\n"
+         "  (fn [_request]\n"
          "    (let [items (ports/list-" entity-plural " service {})]\n"
          "      {:status 200\n"
          "       :headers {\"Content-Type\" \"text/html; charset=utf-8\"}\n"
-         ;; `render`, not the Hiccup tree itself: Ring cannot write a vector,
-         ;; so returning the page directly produced a response no adapter
-         ;; could serve (BOU-484). `resolve-t-fn` is nil until the i18n
-         ;; middleware has run, and render then falls back to the key name —
-         ;; so a [:t ...] marker added to ui.clj renders either way.
-         "       :body (i18n/render (ui/" entity-lower "-list-page items {})\n"
-         "                          (i18n-middleware/resolve-t-fn request))})))\n")))
+         ;; A string, not the Hiccup tree: Ring cannot write a vector, so
+         ;; returning the page directly produced a response no adapter could
+         ;; serve (BOU-484).
+         ;;
+         ;; hiccup2 rather than wagoe.i18n's renderer, which resolves [:t ...]
+         ;; markers as well: i18n is a module a project may drop, and a
+         ;; generated module that cannot load without it is a hard dependency
+         ;; bought for a page that has no markers in it. Adding markers means
+         ;; adding wagoe-i18n and rendering through
+         ;; `wagoe.i18n.shell.render/render` instead.
+         "       :body (str (h/html (ui/" entity-lower "-list-page items {})))})))\n")))
 
 ;; =============================================================================
 ;; Test File Generators
