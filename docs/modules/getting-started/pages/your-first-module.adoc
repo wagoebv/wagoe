@@ -162,7 +162,7 @@ Where the impure things happen:
   ports/IProductService
   (create-product [_this data]
     (let [prepared (core/prepare-new-product data (generate-product-id) (current-time))]
-      (.create repository prepared)))
+      (ports/create repository prepared)))
   ...)
 ----
 
@@ -179,7 +179,7 @@ edit:
 (create-product [_this data]
   (let [[valid? errors] (core/validate-product data)]
     (if valid?
-      (.create repository (core/prepare-new-product data (generate-product-id) (current-time)))
+      (ports/create repository (core/prepare-new-product data (generate-product-id) (current-time)))
       (throw (ex-info "Validation failed" {:type :validation-error :errors errors})))))
 ----
 

@@ -15,15 +15,15 @@
   ports/IProductService
   (create-product [_this data]
     (let [prepared (core/prepare-new-product data (generate-product-id) (current-time))]
-      (.create repository prepared)))
+      (ports/create repository prepared)))
   (get-product [_this id]
-    (.find-by-id repository id))
+    (ports/find-by-id repository id))
   (list-products [_this opts]
-    (.find-all repository opts))
+    (ports/find-all repository opts))
   (update-product [_this id data]
-    (.update-entity repository (assoc data :id id)))
+    (ports/update-entity repository (assoc data :id id)))
   (delete-product [_this id]
-    (.delete repository id)))
+    (ports/delete repository id)))
 
 (defn create-service [repository]
   (->ProductService repository))

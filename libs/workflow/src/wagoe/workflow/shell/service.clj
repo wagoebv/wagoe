@@ -18,6 +18,23 @@
            [java.time Instant]))
 
 ;; =============================================================================
+;; Rejection messages
+;; =============================================================================
+
+(defn- describe
+  "A printable name for a value that may be nil.
+
+   The rejection message is built from what the caller asked for, and a caller
+   can ask for nothing: `(name nil)` threw out of the rejection branch, so a
+   request that should have been refused with a 422 was a 500 instead
+   (BOU-478)."
+  [x]
+  (cond
+    (nil? x)     "(none)"
+    (keyword? x) (name x)
+    :else        (str x)))
+
+;; =============================================================================
 ;; Lifecycle hook execution
 ;; =============================================================================
 
@@ -158,16 +175,16 @@
                :error    {:type    (or (:reason check) :forbidden)
                           :message (case (:reason check)
                                      :transition-not-found
-                                     (str "Transition '" (name transition)
+                                     (str "Transition '" (describe transition)
                                           "' is not allowed from state '"
-                                          (name (:current-state instance)) "'")
+                                          (describe (:current-state instance)) "'")
                                      :insufficient-permissions
                                      (str "Actor does not have required permissions: "
-                                          (mapv name (:required check)))
+                                          (mapv describe (:required check)))
                                      :guard-rejected
-                                     (str "Guard '" (name (:guard check)) "' rejected the transition")
+                                     (str "Guard '" (describe (:guard check)) "' rejected the transition")
                                      :guard-not-registered
-                                     (str "Guard '" (name (:guard check)) "' is not registered")
+                                     (str "Guard '" (describe (:guard check)) "' is not registered")
                                      "Transition not allowed")}})
 
             (let [t-def        (:transition-def check)

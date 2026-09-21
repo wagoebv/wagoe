@@ -499,20 +499,25 @@ DROP TABLE IF EXISTS %s;
          ;; _this everywhere: none of these bodies use it, and an unused binding
          ;; is a clj-kondo warning — which fails `bb check` in the generated
          ;; project, since kondo exits non-zero on warnings (BOU-267).
+         ;; `ports/create`, not `(.create repository …)`. Interop asks the
+         ;; reflector for a method on whatever the repository happens to be:
+         ;; every call is reflective, and nothing ties the service to the port
+         ;; it is written against. The protocol function is the way through a
+         ;; port (BOU-478).
          "  (create-" entity-lower " [_this data]\n"
          "    (let [prepared (core/prepare-new-" entity-lower " data (generate-" entity-lower "-id) (current-time))]\n"
-         "      (.create repository prepared)))\n"
+         "      (ports/create repository prepared)))\n"
          "  (get-" entity-lower " [_this id]\n"
-         "    (.find-by-id repository id))\n"
+         "    (ports/find-by-id repository id))\n"
          ;; find-all, not list-<plural>: the repository port has no
          ;; list-<plural> method, so this called something that does not exist
          ;; and blew up at runtime the first time anyone listed anything.
          "  (list-" (template/pluralize entity-lower) " [_this opts]\n"
-         "    (.find-all repository opts))\n"
+         "    (ports/find-all repository opts))\n"
          "  (update-" entity-lower " [_this id data]\n"
-         "    (.update-entity repository (assoc data :id id)))\n"
+         "    (ports/update-entity repository (assoc data :id id)))\n"
          "  (delete-" entity-lower " [_this id]\n"
-         "    (.delete repository id)))\n"
+         "    (ports/delete repository id)))\n"
          "\n"
          "(defn create-service [repository]\n"
          "  (->" entity-name "Service repository))\n")))
