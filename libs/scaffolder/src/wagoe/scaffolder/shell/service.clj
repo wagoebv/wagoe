@@ -177,6 +177,12 @@
             migration-number (or existing-migration
                                  (get-next-migration-number output-dir))
 
+            ;; `--no-web` means no web UI files. They were written either way,
+            ;; and nothing mounted them: `http.clj`'s web route served an
+            ;; inline stub, so `core/ui.clj` and `shell/web_handlers.clj`
+            ;; arrived dead in every project (BOU-479).
+            web? (get-in ctx [:interfaces :web] true)
+
             ;; Generate source file contents
             schema-content (generators/generate-schema-file ctx)
             ports-content (generators/generate-ports-file ctx)
@@ -185,9 +191,7 @@
             service-content (generators/generate-service-file ctx)
             persistence-content (generators/generate-persistence-file ctx)
             http-content (generators/generate-http-file ctx)
-            web-handlers-content (generators/generate-web-handlers-file ctx)
             module-wiring-content (generators/generate-module-wiring-file ctx)
-            ui-content (generators/generate-ui-file ctx)
 
             ;; Generate test file contents
             core-test-content (generators/generate-core-test-file ctx)
@@ -204,9 +208,6 @@
                    {:path (format "src/%s/%s/core/%s.clj" base-ns-path module-path entity-path)
                     :content core-content
                     :action :create}
-                   {:path (format "src/%s/%s/core/ui.clj" base-ns-path module-path)
-                    :content ui-content
-                    :action :create}
                    {:path (format "src/%s/%s/shell/service.clj" base-ns-path module-path)
                     :content service-content
                     :action :create}
@@ -215,9 +216,6 @@
                     :action :create}
                    {:path (format "src/%s/%s/shell/http.clj" base-ns-path module-path)
                     :content http-content
-                    :action :create}
-                   {:path (format "src/%s/%s/shell/web_handlers.clj" base-ns-path module-path)
-                    :content web-handlers-content
                     :action :create}
                    ;; Without this, `bb scaffold integrate` reported that the
                    ;; module had no wiring and the user hand-wrote the Integrant
@@ -246,6 +244,15 @@
                    {:path (format "test/%s/%s/shell/service_test.clj" base-ns-path module-path)
                     :content service-test-content
                     :action :create}]
+
+            files (cond-> files
+                    web?
+                    (conj {:path (format "src/%s/%s/core/ui.clj" base-ns-path module-path)
+                           :content (generators/generate-ui-file ctx)
+                           :action :create}
+                          {:path (format "src/%s/%s/shell/web_handlers.clj" base-ns-path module-path)
+                           :content (generators/generate-web-handlers-file ctx)
+                           :action :create}))
 
             ;; Which of them are already on disk. Checked before anything is
             ;; written: a re-run of the framework's most-recommended command

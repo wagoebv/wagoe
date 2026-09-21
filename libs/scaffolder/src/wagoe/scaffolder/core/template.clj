@@ -217,6 +217,10 @@
      :base-ns base-ns
      :base-ns-path (ns->path base-ns)
      :entities (mapv #(build-entity-context % module-name) entities)
-     :interfaces (:interfaces request)
+     ;; Defaulted here rather than at each reader, so "absent means yes" is
+     ;; decided once. Passed straight through before, and read by nobody
+     ;; (BOU-479).
+     :interfaces (merge {:http true :web true}
+                        (:interfaces request {}))
      :features (merge {:audit false :soft-delete false :pagination true}
                       (:features request {}))}))

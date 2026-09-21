@@ -29,6 +29,11 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ## [Unreleased]
 
+### Breaking
+
+- **`bb scaffold generate --cli` is removed** (BOU-479). It named an interface
+  the scaffolder has never generated. Drop it from any script that passes it.
+
 ### Fixed
 
 - **Workflow transitions with `:required-permissions` were always refused**
@@ -39,6 +44,9 @@ for what is public API, what is internal, and how deprecations are announced.
 - **Generated services reached their repository reflectively** (BOU-478). They
   call the protocol functions now; regenerate or replace `(.find-by-id repo id)`
   with `(ports/find-by-id repo id)`.
+- **`bb scaffold generate` ignored `--http` and `--web`** (BOU-479). Use
+  `--no-web` to skip `core/ui.clj` and `shell/web_handlers.clj`, which were
+  written into every module with nothing mounting them.
 
 ## [1.0.0-rc-2] — 2026-09-20
 

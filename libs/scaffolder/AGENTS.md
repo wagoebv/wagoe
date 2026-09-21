@@ -298,9 +298,8 @@ Configure the provider via environment variables: `ANTHROPIC_API_KEY`, `OPENAI_A
 | `--module-name` | — | Module name in lowercase kebab-case (required) |
 | `--entity` | — | Entity name in PascalCase (required) |
 | `--field` | — | Repeatable: `name:type[:values=a,b,c][:required][:unique]` |
-| `--http` | true | Generate HTTP interface |
-| `--cli` | true | Generate CLI interface |
-| `--web` | true | Generate Web UI interface |
+| `--[no-]http` | true | Generate the HTTP (REST API) routes |
+| `--[no-]web` | true | Generate the Web UI: `core/ui.clj`, `shell/web_handlers.clj`, and the module's `:web` route contribution |
 | `--audit` | true | Include audit logging |
 | `--pagination` | true | Include pagination support |
 | `--output-dir` | `.` | Output directory |

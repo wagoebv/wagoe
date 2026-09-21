@@ -169,7 +169,7 @@
   (let [svc (:scaffolder deps)
         req {:module-name module
              :entities    (mapv entity->scaffolder entities)
-             :interfaces  (select-keys (or interfaces {}) [:http :cli :web])
+             :interfaces  (select-keys (or interfaces {}) [:http :web])
              :dry-run     (boolean preview)
              ;; Without this the verify-and-re-invoke loop this tool documents
              ;; is a dead end: the first call writes the files, so every later
