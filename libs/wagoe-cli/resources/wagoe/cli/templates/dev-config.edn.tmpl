@@ -17,9 +17,15 @@
    ;; (adapters/database/config.clj). :database-path is the *adapter* key it
    ;; derives, not the config key; using it here yields database-path nil and
    ;; a Malli "Invalid database configuration" failure at migrate time.
+   ;; :migrate-on-start? applies pending migrations when the app boots, so a
+   ;; scaffolded module's tables exist without a separate `bb migrate up`. Set
+   ;; here and in the test profile, deliberately not in production: there a
+   ;; migration is a reviewed deploy step, and concurrent replicas would race
+   ;; each other to run it (BOU-485).
    :wagoe/sqlite
-   {:db   "{{project-name}}-dev.db"
-    :pool {:minimum-idle 1 :maximum-pool-size 10}}
+   {:db                "{{project-name}}-dev.db"
+    :migrate-on-start? true
+    :pool              {:minimum-idle 1 :maximum-pool-size 10}}
 
    :wagoe/http
    {:port       #or [#env HTTP_PORT 3000]

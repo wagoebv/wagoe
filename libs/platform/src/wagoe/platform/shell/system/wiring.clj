@@ -24,6 +24,7 @@
      (def system (ig/init cfg))
      (ig/halt! system)"
   (:require [wagoe.platform.shell.adapters.database.factory :as db-factory]
+            [wagoe.platform.shell.database.migrations :as migrations]
             [wagoe.observability.logging.shell.adapters.no-op :as logging-no-op]
             [wagoe.observability.metrics.shell.adapters.no-op :as metrics-no-op]
             [wagoe.observability.metrics.shell.adapters.datadog :as metrics-datadog]
@@ -93,6 +94,21 @@
   [_ config]
   (log/info "Initializing database context" {:adapter (:adapter config)})
   (let [ctx (db-factory/db-context config)]
+    ;; `:migrate-on-start?` here rather than as its own component: Integrant
+    ;; orders by refs, so a sibling that also refs :wagoe/db-context gives no
+    ;; guarantee it runs before the repositories do. Migrating inside this
+    ;; init means everything that refs the context sees a migrated schema.
+    ;;
+    ;; Off unless asked, so no existing application starts migrating on deploy
+    ;; because it upgraded. Generated dev and test configs set it, which is
+    ;; what makes a fresh project — and the `test` profile's in-memory H2, which
+    ;; no separate `clojure -M:migrate up` can reach — have tables at all
+    ;; (BOU-485).
+    ;;
+    ;; Not caught: an application whose schema did not apply fails on its first
+    ;; query instead, with an error far from the cause.
+    (when (:migrate-on-start? config)
+      (migrations/migrate-datasource! (:datasource ctx)))
     (log/info "Database context initialized successfully"
               {:adapter (:adapter config)})
     ctx))

@@ -79,5 +79,18 @@ CODE=$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:$PORT/api/produc
   || fail "/api/products returned $CODE, expected a 307 to the versioned path"
 ok "unversioned /api/products redirects to /api/v1"
 
+# The web route renders core/ui.clj from rows the service read out of the
+# database, so this is the one assertion here that needs a schema. It could not
+# be made until :migrate-on-start? existed: the test profile is in-memory H2
+# inside this process, so no separate `clojure -M:migrate up` can reach it, and
+# the request answered 500 with `Table "products" not found` (BOU-484, BOU-485).
+WEB=$(curl -fsS "http://localhost:$PORT/web/products") \
+  || { tail -30 /tmp/shop-smoke.log; fail "/web/products did not answer"; }
+case "$WEB" in
+  *"<h1>Products</h1>"*) ;;
+  *) fail "/web/products returned '$WEB', not the generated page" ;;
+esac
+ok "the scaffolded module's web page renders, so migrations ran at boot"
+
 echo
 echo "✅ examples/todo and examples/shop both run against this checkout"

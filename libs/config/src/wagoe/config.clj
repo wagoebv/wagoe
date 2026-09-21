@@ -96,15 +96,57 @@
       (throw (ex-info "No active database adapter found in configuration"
                       {:active-keys (keys (:active config))}))))
 
+(defn- db-spec-for-adapter
+  "The adapter-specific half of `db-spec`.
+
+   Above its caller: Clojure compiles top to bottom, so a private helper
+   placed below the function that calls it does not resolve (AGENTS.md
+   pitfall 10)."
+  [adapter adapter-config]
+  (case adapter
+    :sqlite
+    {:adapter :sqlite
+     :database-path (:db adapter-config)
+     :pool (:pool adapter-config)}
+
+    :h2
+    {:adapter :h2
+     :database-path (if (:memory adapter-config)
+                      "mem:wagoe;DB_CLOSE_DELAY=-1"
+                      (:db adapter-config))
+     :pool (:pool adapter-config)}
+
+    :postgresql
+    {:adapter :postgresql
+     :host (:host adapter-config)
+     :port (:port adapter-config)
+     :name (:dbname adapter-config)
+     :username (:user adapter-config)
+     :password (:password adapter-config)
+     :pool (:pool adapter-config)}
+
+    :mysql
+    {:adapter :mysql
+     :host (:host adapter-config)
+     :port (:port adapter-config)
+     :name (:dbname adapter-config)
+     :username (:user adapter-config)
+     :password (:password adapter-config)
+     :pool (:pool adapter-config)}
+
+    (throw (ex-info "Unsupported database adapter"
+                    {:adapter adapter
+                     :supported [:sqlite :h2 :postgresql :mysql]}))))
+
 (defn db-spec
   "Extract database specification from config for the active adapter.
-   
+
    Args:
      config: Configuration map from load-config
-   
+
    Returns:
      Database spec map appropriate for the adapter
-   
+
    Example:
      {:adapter :sqlite :database-path \"dev-database.db\"}"
   [config]
@@ -120,40 +162,13 @@
                        :adapter-key adapter-key
                        :slash-key slash-key})))
 
-    (case adapter
-      :sqlite
-      {:adapter :sqlite
-       :database-path (:db adapter-config)
-       :pool (:pool adapter-config)}
-
-      :h2
-      {:adapter :h2
-       :database-path (if (:memory adapter-config)
-                        "mem:wagoe;DB_CLOSE_DELAY=-1"
-                        (:db adapter-config))
-       :pool (:pool adapter-config)}
-
-      :postgresql
-      {:adapter :postgresql
-       :host (:host adapter-config)
-       :port (:port adapter-config)
-       :name (:dbname adapter-config)
-       :username (:user adapter-config)
-       :password (:password adapter-config)
-       :pool (:pool adapter-config)}
-
-      :mysql
-      {:adapter :mysql
-       :host (:host adapter-config)
-       :port (:port adapter-config)
-       :name (:dbname adapter-config)
-       :username (:user adapter-config)
-       :password (:password adapter-config)
-       :pool (:pool adapter-config)}
-
-      (throw (ex-info "Unsupported database adapter"
-                      {:adapter adapter
-                       :supported [:sqlite :h2 :postgresql :mysql]})))))
+    (cond-> (db-spec-for-adapter adapter adapter-config)
+      ;; Carried through for every adapter: `:wagoe/db-context` runs pending
+      ;; migrations at boot when it is set, and this map is the only thing it
+      ;; is given. Absent means off, so an existing application does not start
+      ;; migrating because it upgraded (BOU-485).
+      (:migrate-on-start? adapter-config)
+      (assoc :migrate-on-start? true))))
 
 (defn http-config
   "Extract HTTP server configuration.
