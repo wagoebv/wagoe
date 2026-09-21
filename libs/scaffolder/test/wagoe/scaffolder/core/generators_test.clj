@@ -379,7 +379,9 @@
     ;; It called (.list-<plural> repository opts), but the repository port has
     ;; find-all — so listing blew up at runtime the first time anyone tried it.
     (let [declared (repository-protocol-methods (gen/generate-ports-file base-ctx))
-          called   (set (map second (re-seq #"\(\.(\S+)\s+repository"
+          ;; `(ports/find-all repository opts)` since BOU-478 — the service
+          ;; goes through the protocol functions rather than Java interop.
+          called   (set (map second (re-seq #"\(ports/(\S+)\s+repository"
                                             (gen/generate-service-file base-ctx))))
           missing  (remove declared called)]
       (is (seq called) "the service calls nothing on its repository")

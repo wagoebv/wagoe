@@ -29,6 +29,17 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Workflow transitions with `:required-permissions` were always refused**
+  (BOU-478). The actor was read from a request key nothing has set since
+  BOU-373.
+- **Workflow POSTs answered 500 to a malformed body** (BOU-478). The routes now
+  declare their body schema, so a bad request is a 400.
+- **Generated services reached their repository reflectively** (BOU-478). They
+  call the protocol functions now; regenerate or replace `(.find-by-id repo id)`
+  with `(ports/find-by-id repo id)`.
+
 ## [1.0.0-rc-2] — 2026-09-20
 
 > **One more Breaking entry than rc-1 froze** (BOU-433). The list went from three

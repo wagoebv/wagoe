@@ -199,6 +199,24 @@
     (testing "error type is :transition-not-found"
       (is (= :transition-not-found (get-in result [:error :type]))))))
 
+(deftest ^:unit transition-nil-is-refused-not-thrown
+  ;; The rejection message was built with `(name transition)`, so rejecting a
+  ;; nil transition threw out of the branch that exists to reject it — and the
+  ;; HTTP boundary turned a refusable request into a 500 (BOU-478). The route
+  ;; schema now stops a bodyless POST earlier, but the engine is callable from
+  ;; anywhere and has to answer rather than throw.
+  (let [instance (ports/start-workflow! *service*
+                                        {:workflow-id :order-workflow
+                                         :entity-type :order
+                                         :entity-id   (UUID/randomUUID)})
+        result   (ports/transition! *service*
+                                    {:instance-id (:id instance)
+                                     :transition  nil
+                                     :actor-roles [:admin]})]
+    (is (false? (:success? result)))
+    (is (= :transition-not-found (get-in result [:error :type])))
+    (is (string? (get-in result [:error :message])))))
+
 (deftest ^:unit transition-instance-not-found-test
   (let [ghost-id (UUID/randomUUID)]
     (testing "throws not-found when instance does not exist"
