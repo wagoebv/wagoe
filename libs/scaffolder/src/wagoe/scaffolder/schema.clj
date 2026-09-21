@@ -1,6 +1,7 @@
 (ns wagoe.scaffolder.schema
   "Scaffolder module schemas for module generation inputs and outputs."
-  (:require [clojure.string :as str]))
+  (:require [clojure.string :as str]
+            [wagoe.scaffolder.core.template :as template]))
 
 ;; =============================================================================
 ;; Field and Entity Definitions
@@ -32,7 +33,14 @@
    [:enum-values {:optional true} [:vector :keyword]]       ; For enum type
    [:min {:optional true} :int]                             ; Min length/value
    [:max {:optional true} :int]                             ; Max length/value
-   [:references {:optional true} :string]                   ; For relation type: entity referenced
+   ;; Both are interpolated into DDL, so both are allowlisted rather than
+   ;; merely non-blank. Here and not only in the CLI parser: `generate-module`
+   ;; validates every request against this schema, so the MCP tool and any
+   ;; direct caller pass through it too (BOU-480 review).
+   [:references {:optional true}                            ; For relation type: entity referenced
+    [:re template/entity-name-pattern]]
+   [:references-table {:optional true}                      ; For relation type: target's table, when it is not the default plural
+    [:re template/table-name-pattern]]
    [:on-delete {:optional true}                             ; For relation type
     [:enum :cascade :restrict :set-null :no-action]]
    [:description {:optional true} :string]])                ; Field documentation

@@ -59,6 +59,57 @@
       (is (nil? (:error (parse (str "invoice:relation:references=invoice:required:on-delete=" action))))
           action))))
 
+(deftest ^:unit a-relation-target-has-to-be-an-identifier
+  ;; `references` was checked for blankness and then interpolated straight into
+  ;; DDL. `invoice);drop/**/table/**/users;--` survives pascal->kebab intact,
+  ;; closes the CREATE TABLE at `invoice)` and leaves a DROP behind it — in a
+  ;; file someone then runs with `bb migrate up`. Reachable from
+  ;; `bb scaffold ai`, where the spec comes from a model, and from the MCP
+  ;; scaffold-module tool, where it comes from an agent (BOU-480 review).
+  (testing "an entity name is letters, digits and single hyphens"
+    (doseq [ok ["invoice" "Invoice" "InvoiceLineItem" "invoice-line-item"]]
+      (is (nil? (:error (parse (str "x:relation:references=" ok)))) ok)))
+
+  (testing "anything else is refused before it reaches the DDL"
+    (doseq [bad ["invoice);drop/**/table/**/users;--"
+                 "invoice users"
+                 "invoice;"
+                 "invoice(id)"
+                 "-invoice"
+                 "1invoice"]]
+      (let [result (parse (str "x:relation:references=" bad))]
+        (is (:error result) (str "accepted " (pr-str bad)))))))
+
+(deftest ^:unit a-target-whose-table-is-not-the-default-plural
+  ;; `references=` names an entity, and the table is derived by pluralising it.
+  ;; An entity that declared `:plural "people"` has table `people`, so a
+  ;; relation to it generated a foreign key to `persons`, which nothing
+  ;; creates (BOU-480 review).
+  (testing "the derivation is the default, and it is wrong here"
+    (is (= "persons" (template/relation-table "person"))))
+
+  (testing "references-table= says what the table actually is"
+    (is (= {:name :owner :type :relation :required false :unique false
+            :references "person" :references-table "people" :on-delete :cascade}
+           (parse "owner:relation:references=person:references-table=people"))))
+
+  (testing "and that is what reaches the DDL"
+    (let [ctx (template/build-module-context
+               {:module-name "hr"
+                :entities [{:name "Badge"
+                            :fields [{:name :owner :type :relation
+                                      :references "person" :references-table "people"}]}]})]
+      (is (str/includes? (gen/generate-migration-file ctx "1")
+                         "REFERENCES people(id)"))))
+
+  (testing "an override that is not a table identifier is refused"
+    (doseq [bad ["people;drop table x" "People" "people(id)" ""]]
+      (is (:error (parse (str "owner:relation:references=person:references-table=" bad)))
+          (str "accepted " (pr-str bad)))))
+
+  (testing "references-table= is only meaningful on a relation"
+    (is (:error (parse "name:string:references-table=people")))))
+
 (deftest ^:unit the-request-schema-refuses-the-contradiction-too
   ;; The CLI is not the only way in — the MCP tool and any direct
   ;; `generate-module` caller are validated by the schema alone, and would
@@ -66,6 +117,14 @@
   (let [valid? (fn [field] (m/validate schema/FieldDefinition field))]
     (is (not (valid? {:name :invoice :type :relation :references "invoice"
                       :on-delete :set-null :required true})))
+
+    (testing "and the target identifier, which the CLI is not the only way to set"
+      (is (not (valid? {:name :invoice :type :relation
+                        :references "invoice);drop/**/table/**/users;--"})))
+      (is (not (valid? {:name :invoice :type :relation :references "invoice"
+                        :references-table "people;drop table x"})))
+      (is (valid? {:name :invoice :type :relation :references "invoice"
+                   :references-table "people"})))
     (is (valid? {:name :invoice :type :relation :references "invoice"
                  :on-delete :set-null :required false}))
     (is (valid? {:name :invoice :type :relation :references "invoice"

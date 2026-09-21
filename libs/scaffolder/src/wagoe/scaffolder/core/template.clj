@@ -186,19 +186,62 @@
    :set-null "SET NULL"
    :no-action "NO ACTION"})
 
-(defn relation-table
-  "The table a relation references, given the entity name it names.
+(def entity-name-pattern
+  "What a relation may name as its target.
 
-   `references=invoice` and `references=InvoiceLineItem` both work: the target
-   is an entity, and its table is derived the way its own module derives it.
+   `references` is interpolated into DDL, so it is an allowlist rather than a
+   blocklist: letters, digits and single interior hyphens, starting with a
+   letter. `invoice);drop/**/table/**/users;--` passed a blankness check, came
+   through `pascal->kebab` intact, and closed the CREATE TABLE at `invoice)`
+   with a DROP behind it (BOU-480 review)."
+  #"^[A-Za-z][A-Za-z0-9]*(-[A-Za-z0-9]+)*$")
+
+(def table-name-pattern
+  "What `references-table` may be: a lowercase SQL identifier."
+  #"^[a-z][a-z0-9_]*$")
+
+(defn valid-entity-name?
+  "Whether `s` is something a relation may reference.
+
+   Pure: true"
+  [s]
+  (boolean (and (string? s) (re-matches entity-name-pattern s))))
+
+(defn valid-table-name?
+  "Whether `s` is something that may be written as a table identifier.
+
+   Pure: true"
+  [s]
+  (boolean (and (string? s) (re-matches table-name-pattern s))))
+
+(defn relation-table
+  "The table a relation references.
+
+   `references` names an entity — `invoice` and `InvoiceLineItem` both work —
+   and the table is the default pluralisation of it, which is what the target
+   module's own generator would have produced.
+
+   `references-table` overrides that. An entity is free to declare a
+   `:plural`, and the scaffolder generates one module at a time, so it cannot
+   see that a `Person` in another module decided its table is `people` rather
+   than `persons` (BOU-480 review).
+
+   Returns nil for anything that is not a valid identifier; the request schema
+   refuses those before generation, and core does not throw.
 
    Pure: true
 
    Example:
-     (relation-table \"invoice\")         => \"invoices\"
-     (relation-table \"InvoiceLineItem\") => \"invoice_line_items\""
-  [references]
-  (kebab->snake (pluralize (pascal->kebab references))))
+     (relation-table \"invoice\" nil)         => \"invoices\"
+     (relation-table \"InvoiceLineItem\" nil) => \"invoice_line_items\"
+     (relation-table \"person\" \"people\")     => \"people\""
+  ([references] (relation-table references nil))
+  ([references references-table]
+   (cond
+     (valid-table-name? references-table) references-table
+     (some? references-table)             nil
+     (valid-entity-name? references)      (kebab->snake (pluralize (pascal->kebab references)))
+     :else                                nil)))
 
 ;; =============================================================================
 ;; Template Context Building
@@ -233,7 +276,8 @@
              :sql-type (field-type->sql field-def)}
       relation?
       (assoc :references     (:references field-def)
-             :relation-table (relation-table (:references field-def))
+             :relation-table (relation-table (:references field-def)
+                                             (:references-table field-def))
              :on-delete      (get field-def :on-delete :cascade)))))
 
 (defn build-entity-context

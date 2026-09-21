@@ -192,7 +192,14 @@
                            flags))
         values-flag (flag-value "values=")
         enum-values (parse-enum-values values-flag)
-        references (flag-value "references=")
+        ;; Longest prefix first: "references=" is a prefix of nothing, but
+        ;; `flag-value "references="` would happily match "references-table=x"
+        ;; if the order were reversed.
+        references-table (flag-value "references-table=")
+        references (some #(when (and (str/starts-with? % "references=")
+                                     (not (str/starts-with? % "references-table=")))
+                            (subs % (count "references=")))
+                         flags)
         on-delete-flag (flag-value "on-delete=")
         on-delete (if on-delete-flag (keyword on-delete-flag) :cascade)]
     (cond
@@ -225,6 +232,25 @@
       {:error (str "references= is only meaningful on a relation field, and "
                    name-str " is a " type-str)}
 
+      (and references-table (not= :relation type-kw))
+      {:error (str "references-table= is only meaningful on a relation field, and "
+                   name-str " is a " type-str)}
+
+      ;; The target goes into DDL, so it is allowlisted rather than merely
+      ;; non-blank (BOU-480 review).
+      (and (= :relation type-kw)
+           (not (template/valid-entity-name? references)))
+      {:error (str "Invalid references= on " name-str ": " (pr-str references)
+                   ". It names an entity — letters, digits and single hyphens, "
+                   "e.g. references=invoice or references=InvoiceLineItem.")}
+
+      (and (= :relation type-kw)
+           (some? references-table)
+           (not (template/valid-table-name? references-table)))
+      {:error (str "Invalid references-table= on " name-str ": " (pr-str references-table)
+                   ". It is a table name — lowercase letters, digits and "
+                   "underscores, e.g. references-table=people.")}
+
       (and on-delete-flag (not= :relation type-kw))
       {:error (str "on-delete= is only meaningful on a relation field, and "
                    name-str " is a " type-str)}
@@ -253,8 +279,9 @@
                :type type-kw
                :required (boolean (some #(= % "required") flags))
                :unique (boolean (some #(= % "unique") flags))}
-        enum-values          (assoc :enum-values enum-values)
-        (= :relation type-kw) (assoc :references references :on-delete on-delete)))))
+        enum-values           (assoc :enum-values enum-values)
+        (= :relation type-kw) (assoc :references references :on-delete on-delete)
+        references-table      (assoc :references-table references-table)))))
 
 (defn parse-all-fields
   "Parse all field specifications.
@@ -658,7 +685,7 @@ Required Options:
   --field SPEC         Field specification (can be repeated)
 
 Field Specification Format:
-  name:type[:values=a,b,c][:references=entity][:on-delete=x][:required][:unique]
+  name:type[:values=a,b,c][:references=entity][:references-table=t][:on-delete=x][:required][:unique]
 
 Field Types:
   string     - Text field
@@ -676,6 +703,8 @@ Field Flags:
   values=a,b,c      Allowed values, required on an enum field
   references=entity The entity a relation points at; the column is <name>_id,
                     and it gets an index
+  references-table=t The target's table, when it is not the default plural of
+                    the entity — a Person whose table is people, not persons
   on-delete=x       cascade (default), restrict, set-null or no-action.
                     set-null needs a nullable column, so not with `required`
   required          Field cannot be null

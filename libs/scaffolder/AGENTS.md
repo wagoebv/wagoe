@@ -132,6 +132,19 @@ writes `invoice_id UUID NOT NULL REFERENCES invoices(id) ON DELETE CASCADE`.
 because the foreign key action sets a column the table forbids to be null. Use
 `on-delete=restrict` to refuse the delete instead, or drop `required`.
 
+The table is the default pluralisation of the entity named — `invoice` gives
+`invoices`. An entity that declared a `:plural` does not match that, and the
+scaffolder generates one module at a time so it cannot see the target's
+definition. Say so with `references-table=`:
+
+```
+--field owner:relation:references=person:references-table=people
+```
+
+Both are validated before they reach the DDL: `references=` is an entity name
+(letters, digits, single hyphens) and `references-table=` a lowercase SQL
+identifier. Anything else is refused rather than interpolated.
+
 Examples:
 
 ```bash
