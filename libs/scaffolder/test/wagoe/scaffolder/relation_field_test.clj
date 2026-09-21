@@ -218,6 +218,51 @@
                         "1")
                        "REFERENCES people(id)"))))
 
+(deftest ^:unit add-field-validates-the-field-it-is-given
+  ;; `generate-module` checks every field against the request schema; add-field
+  ;; checked nothing, so the CLI and the MCP tool were covered when creating a
+  ;; module and neither was when adding to one. Validated in the service rather
+  ;; than in each caller: it is the one place every path goes through
+  ;; (BOU-480 review).
+  (let [dir (.toFile (java.nio.file.Files/createTempDirectory
+                      "wagoe-add-field-validation"
+                      (make-array java.nio.file.attribute.FileAttribute 0)))
+        svc (service/create-scaffolder-service)
+        add (fn [field]
+              (ports/add-field svc {:module-name "invoicing" :base-ns "app"
+                                    :entity "InvoiceLineItem" :field field
+                                    :output-dir (.getPath dir)}))]
+    (try
+      (ports/generate-module svc {:module-name "invoicing" :base-ns "app"
+                                  :entities [{:name "InvoiceLineItem"
+                                              :fields [{:name :quantity :type :int}]}]
+                                  :output-dir (.getPath dir)})
+
+      (testing "a relation naming no target — it wrote a bare UUID column"
+        (is (false? (:success (add {:name :invoice :type :relation})))))
+
+      (testing "an unknown on-delete — it silently became CASCADE"
+        (is (false? (:success (add {:name :invoice :type :relation
+                                    :references "invoice" :on-delete :explode})))))
+
+      (testing "required with set-null — the migration failed on parent delete"
+        (is (false? (:success (add {:name :invoice :type :relation
+                                    :references "invoice" :on-delete :set-null
+                                    :required true})))))
+
+      (testing "a target that is not an identifier"
+        (is (false? (:success (add {:name :invoice :type :relation
+                                    :references "invoice);drop table users;--"})))))
+
+      (testing "an enum with no values, which was equally unchecked here"
+        (is (false? (:success (add {:name :status :type :enum})))))
+
+      (testing "and a field that is fine still goes through"
+        (is (true? (:success (add {:name :invoice :type :relation
+                                   :references "invoice" :on-delete :restrict
+                                   :required true})))))
+      (finally (doseq [f (reverse (file-seq dir))] (.delete f))))))
+
 (deftest ^:unit the-request-schema-refuses-the-contradiction-too
   ;; The CLI is not the only way in — the MCP tool and any direct
   ;; `generate-module` caller are validated by the schema alone, and would

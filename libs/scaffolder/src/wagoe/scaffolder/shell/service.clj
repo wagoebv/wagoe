@@ -136,6 +136,16 @@
 (def ^:private module-generation-request-validator (m/validator schema/ModuleGenerationRequest))
 (def ^:private module-generation-request-explainer (m/explainer schema/ModuleGenerationRequest))
 
+;; `add-field` validated nothing. `generate-module` checks every field against
+;; ModuleGenerationRequest, so the CLI and the MCP tool were both covered
+;; there — and both bypassed it when adding a field to a module that already
+;; existed. A relation arriving here could name no target (a bare UUID column
+;; with no foreign key), an unknown `:on-delete` (silently CASCADE), or
+;; `:required` with `:set-null` (a migration the database accepts and then
+;; refuses every parent delete against) (BOU-480 review).
+(def ^:private field-definition-validator (m/validator schema/FieldDefinition))
+(def ^:private field-definition-explainer (m/explainer schema/FieldDefinition))
+
 (defrecord ScaffolderService []
   ports/IScaffolderService
 
@@ -336,6 +346,11 @@
   (add-field [_this request]
     (try
       (let [{:keys [module-name entity field dry-run]} request
+            _ (when-not (field-definition-validator field)
+                (let [explanation (me/humanize (field-definition-explainer field))]
+                  (throw (ex-info (str "Invalid field definition: " (pr-str explanation))
+                                  {:type :validation-error
+                                   :errors explanation}))))
             base-ns-path (template/ns->path (or (:base-ns request) "wagoe"))
             module-path (template/kebab->snake module-name)
             output-dir (:output-dir request ".")
