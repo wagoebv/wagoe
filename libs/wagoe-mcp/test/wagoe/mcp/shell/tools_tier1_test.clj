@@ -4,6 +4,7 @@
    audited soft-guardrail override."
   (:require [wagoe.mcp.shell.audit :as audit]
             [wagoe.mcp.shell.tools :as tools]
+            [wagoe.mcp.core.tools :as tools-catalog]
             [wagoe.scaffolder.ports :as scaffold]
             [clojure.java.io :as io]
             [clojure.test :refer [deftest is testing use-fixtures]])
@@ -122,3 +123,84 @@
                             (tools/run d "add-field" {:module "../x" :entity "Thing" :field {:name "a" :type "int"}})))
       (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Invalid entity name"
                             (tools/run d "gen-migration" {:module "tmp" :entity "../x" :fields [{:name "t" :type "string"}]}))))))
+
+;; ===========================================================================
+;; Relation fields through the adapter (BOU-480 review)
+;; ===========================================================================
+
+(defn- recording-scaffolder
+  "Captures the request each port method is handed, so a test can see what the
+   MCP adapter forwarded rather than what it was given."
+  [seen]
+  (reify scaffold/IScaffolderService
+    (generate-module [_ req]
+      (reset! seen req)
+      {:success true :module-name (:module-name req)
+       :files [{:path (core-path) :content clean-core :action :create}]})
+    (add-field [_ req]
+      (reset! seen req)
+      {:success true :module-name (:module-name req) :files []})
+    (add-endpoint [_ _] {:success true :files []})
+    (add-adapter [_ _] {:success true :files []})))
+
+(deftest ^:unit relation-metadata-survives-the-mcp-adapter
+  ;; `field->scaffolder` allowlisted the keys it forwarded, and the relation
+  ;; keys were not on the list. Module generation then refused the field for a
+  ;; missing :references, and add-field wrote a bare UUID column with no
+  ;; foreign key — the whole relation type, unreachable through MCP.
+  (let [seen (atom nil)
+        d    (deps (recording-scaffolder seen))
+        relation {:name "invoice" :type "relation" :references "invoice"
+                  :references-table "invoices" :on-delete "restrict"
+                  :required true}]
+
+    (testing "scaffold-module forwards the target, the table and the action"
+      (tools/run d "scaffold-module"
+                 {:module "tmp" :entities [{:name "Thing" :fields [relation]}]})
+      (let [field (first (:fields (first (:entities @seen))))]
+        (is (= :invoice (:name field)))
+        (is (= :relation (:type field)))
+        (is (= "invoice" (:references field)))
+        (is (= "invoices" (:references-table field)))
+        (is (= :restrict (:on-delete field))
+            "on-delete arrives as a string over JSON and must reach the schema as a keyword")))
+
+    (testing "add-field forwards them too"
+      (reset! seen nil)
+      (tools/run d "add-field" {:module "tmp" :entity "Thing" :field relation})
+      (let [field (:field @seen)]
+        (is (= "invoice" (:references field)))
+        (is (= "invoices" (:references-table field)))
+        (is (= :restrict (:on-delete field)))))
+
+    (testing "a relation with no on-delete gets the default rather than nil"
+      (reset! seen nil)
+      (tools/run d "add-field"
+                 {:module "tmp" :entity "Thing"
+                  :field {:name "invoice" :type "relation" :references "invoice"}})
+      (is (= :cascade (:on-delete (:field @seen)))))))
+
+(deftest ^:unit the-mcp-schema-advertises-the-relation-keys
+  ;; The inputSchema is what a client reads before it calls. Advertising a
+  ;; field type whose required argument is not in the schema is the same
+  ;; defect as advertising `cli` was (BOU-484 review).
+  (let [field-props (fn [tool-name path]
+                      (->> tools-catalog/catalog
+                           (filter #(= tool-name (:name %)))
+                           first
+                           :inputSchema
+                           (#(get-in % path))
+                           keys
+                           set))]
+    (testing "scaffold-module's entity fields"
+      (let [props (field-props "scaffold-module"
+                               [:properties "entities" :items :properties "fields" :items :properties])]
+        (is (contains? props "references") props)
+        (is (contains? props "references-table") props)
+        (is (contains? props "on-delete") props)))
+
+    (testing "add-field's field"
+      (let [props (field-props "add-field" [:properties "field" :properties])]
+        (is (contains? props "references") props)
+        (is (contains? props "references-table") props)
+        (is (contains? props "on-delete") props)))))

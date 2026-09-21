@@ -27,6 +27,33 @@
        (map str/capitalize)
        (str/join "")))
 
+(defn pascal->kebab
+  "Convert PascalCase to kebab-case.
+
+   The inverse of `kebab->pascal`, and the thing `str/lower-case` cannot do:
+   lowercasing `InvoiceLineItem` gives `invoicelineitem`, and every name
+   derived from that — the table, the core file, the protocol methods — lost
+   the word boundaries the entity name carried (BOU-480).
+
+   A run of capitals is one word, so `HTTPRequest` is `http-request` rather
+   than `h-t-t-p-request`. Digits stay attached to the word they follow.
+
+   Pure: true
+
+   Example:
+     (pascal->kebab \"InvoiceLineItem\") => \"invoice-line-item\"
+     (pascal->kebab \"HTTPRequest\")     => \"http-request\"
+     (pascal->kebab \"Product\")         => \"product\""
+  [s]
+  (-> (name s)
+      ;; Split a capital run from the word it heads: HTTPRequest -> HTTP-Request
+      (str/replace #"([A-Z]+)([A-Z][a-z])" "$1-$2")
+      ;; Split a word from the capital that follows it: LineItem -> Line-Item
+      (str/replace #"([a-z0-9])([A-Z])" "$1-$2")
+      ;; Whitespace and underscores are word boundaries too: "Line Item"
+      (str/replace #"[\s_]+" "-")
+      (str/lower-case)))
+
 (defn kebab->snake
   "Convert kebab-case to snake_case.
    
@@ -111,7 +138,10 @@
     ;; BigDecimal, not :double. `--field price:decimal` is what anyone reaches
     ;; for when scaffolding money, and this used to generate binary floating
     ;; point in both the schema and the column (BOU-477).
-    :decimal 'decimal?))
+    :decimal 'decimal?
+    ;; A relation is the referenced row's id, and every scaffolded table keys
+    ;; on a UUID (BOU-480).
+    :relation :uuid))
 
 (defn field-type->sql
   "Convert scaffolder field type to SQL type.
@@ -142,7 +172,76 @@
     :inst "TIMESTAMPTZ"
     :date "DATE"
     :json "JSONB"
-    :decimal "DECIMAL(19,4)"))
+    :decimal "DECIMAL(19,4)"
+    :relation "UUID"))
+
+(def on-delete-clauses
+  "The `ON DELETE` actions a relation field may ask for.
+
+   An unknown one is refused at parse time rather than pasted into the DDL,
+   where it would fail at migration time in whatever words the database
+   chooses."
+  {:cascade  "CASCADE"
+   :restrict "RESTRICT"
+   :set-null "SET NULL"
+   :no-action "NO ACTION"})
+
+(def entity-name-pattern
+  "What a relation may name as its target.
+
+   `references` is interpolated into DDL, so it is an allowlist rather than a
+   blocklist: letters, digits and single interior hyphens, starting with a
+   letter. `invoice);drop/**/table/**/users;--` passed a blankness check, came
+   through `pascal->kebab` intact, and closed the CREATE TABLE at `invoice)`
+   with a DROP behind it (BOU-480 review)."
+  #"^[A-Za-z][A-Za-z0-9]*(-[A-Za-z0-9]+)*$")
+
+(def table-name-pattern
+  "What `references-table` may be: a lowercase SQL identifier."
+  #"^[a-z][a-z0-9_]*$")
+
+(defn valid-entity-name?
+  "Whether `s` is something a relation may reference.
+
+   Pure: true"
+  [s]
+  (boolean (and (string? s) (re-matches entity-name-pattern s))))
+
+(defn valid-table-name?
+  "Whether `s` is something that may be written as a table identifier.
+
+   Pure: true"
+  [s]
+  (boolean (and (string? s) (re-matches table-name-pattern s))))
+
+(defn relation-table
+  "The table a relation references.
+
+   `references` names an entity — `invoice` and `InvoiceLineItem` both work —
+   and the table is the default pluralisation of it, which is what the target
+   module's own generator would have produced.
+
+   `references-table` overrides that. An entity is free to declare a
+   `:plural`, and the scaffolder generates one module at a time, so it cannot
+   see that a `Person` in another module decided its table is `people` rather
+   than `persons` (BOU-480 review).
+
+   Returns nil for anything that is not a valid identifier; the request schema
+   refuses those before generation, and core does not throw.
+
+   Pure: true
+
+   Example:
+     (relation-table \"invoice\" nil)         => \"invoices\"
+     (relation-table \"InvoiceLineItem\" nil) => \"invoice_line_items\"
+     (relation-table \"person\" \"people\")     => \"people\""
+  ([references] (relation-table references nil))
+  ([references references-table]
+   (cond
+     (valid-table-name? references-table) references-table
+     (some? references-table)             nil
+     (valid-entity-name? references)      (kebab->snake (pluralize (pascal->kebab references)))
+     :else                                nil)))
 
 ;; =============================================================================
 ;; Template Context Building
@@ -159,15 +258,27 @@
    
    Pure: true"
   [field-def]
-  {:field-name (name (:name field-def))
-   :field-name-kebab (name (:name field-def))
-   :field-name-snake (kebab->snake (:name field-def))
-   :field-name-pascal (kebab->pascal (:name field-def))
-   :field-type (:type field-def)
-   :field-required (get field-def :required true)
-   :field-unique (get field-def :unique false)
-   :malli-type (field-type->malli field-def)
-   :sql-type (field-type->sql field-def)})
+  (let [relation? (= :relation (:type field-def))
+        ;; `--field invoice:relation:...` is about the relationship; the
+        ;; column and the key are `invoice-id`. Naming it here means every
+        ;; generator — schema, migration, persistence — sees the same name
+        ;; without knowing the rule (BOU-480).
+        field-name (cond-> (name (:name field-def))
+                     relation? (str "-id"))]
+    (cond-> {:field-name field-name
+             :field-name-kebab field-name
+             :field-name-snake (kebab->snake field-name)
+             :field-name-pascal (kebab->pascal field-name)
+             :field-type (:type field-def)
+             :field-required (get field-def :required true)
+             :field-unique (get field-def :unique false)
+             :malli-type (field-type->malli field-def)
+             :sql-type (field-type->sql field-def)}
+      relation?
+      (assoc :references     (:references field-def)
+             :relation-table (relation-table (:references field-def)
+                                             (:references-table field-def))
+             :on-delete      (get field-def :on-delete :cascade)))))
 
 (defn build-entity-context
   "Build template context for an entity.
@@ -182,13 +293,20 @@
    Pure: true"
   [entity-def module-name]
   (let [entity-name (:name entity-def)
-        entity-lower (str/lower-case entity-name)
-        entity-plural (or (:plural entity-def) (pluralize entity-lower))]
+        ;; Through pascal->kebab, not str/lower-case. Everything below is
+        ;; derived from this one value, so lowercasing here is what turned
+        ;; InvoiceLineItem into the table `invoicelineitems` and the method
+        ;; `create-invoicelineitem` (BOU-480).
+        entity-kebab (pascal->kebab entity-name)
+        entity-plural (or (:plural entity-def) (pluralize entity-kebab))]
     {:module-name module-name
      :entity-name entity-name
-     :entity-lower entity-lower
-     :entity-kebab (str/replace entity-lower #"\s+" "-")
-     :entity-snake (kebab->snake entity-lower)
+     ;; `:entity-lower` is the kebab form: it names Clojure vars
+     ;; (`create-<entity-lower>`), where a run-together word is wrong and a
+     ;; hyphen is right. It is not `str/lower-case` of anything any more.
+     :entity-lower entity-kebab
+     :entity-kebab entity-kebab
+     :entity-snake (kebab->snake entity-kebab)
      :entity-plural entity-plural
      :entity-plural-snake (kebab->snake entity-plural)
      :entity-table (kebab->snake entity-plural)

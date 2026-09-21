@@ -82,6 +82,22 @@ bb scaffold field \
   --required
 ```
 
+A relation is added the same way, and writes the same foreign key, `ON DELETE`
+and index that module generation does:
+
+```bash
+bb scaffold field \
+  --module-name invoicing \
+  --entity InvoiceLineItem \
+  --name invoice \
+  --type relation \
+  --references invoice \
+  --required
+```
+
+`--references-table` and `--on-delete` are available here too, with the same
+rules as the `--field` spec below.
+
 ### `endpoint` — Add an Endpoint to an Existing Module
 
 ```bash
@@ -107,7 +123,7 @@ bb scaffold adapter \
 
 ## Field Specification Format
 
-Fields are specified as `name:type[:values=a,b,c][:required][:unique]`:
+Fields are specified as `name:type[:values=a,b,c][:references=entity][:on-delete=x][:required][:unique]`:
 
 | Type | Maps to Malli | Notes |
 |------|--------------|-------|
@@ -121,6 +137,29 @@ Fields are specified as `name:type[:values=a,b,c][:required][:unique]`:
 | `enum` | `[:enum ...]` | `values=` is required — `[:enum]` validates nothing |
 | `date` / `datetime` / `inst` | `inst?` | |
 | `json` | `:map` | |
+| `relation` | `:uuid` | `references=` is required. The column is `<name>_id`, gets `REFERENCES <target>(id)` and an index; `on-delete=` is `cascade` (default), `restrict`, `set-null` or `no-action` |
+
+A relation names the entity it points at, not the table:
+`--field invoice:relation:references=invoice:required` on an `InvoiceLineItem`
+writes `invoice_id UUID NOT NULL REFERENCES invoices(id) ON DELETE CASCADE`.
+
+`required` and `on-delete=set-null` are refused together: the database accepts
+`NOT NULL … ON DELETE SET NULL` and then fails every delete of a parent row,
+because the foreign key action sets a column the table forbids to be null. Use
+`on-delete=restrict` to refuse the delete instead, or drop `required`.
+
+The table is the default pluralisation of the entity named — `invoice` gives
+`invoices`. An entity that declared a `:plural` does not match that, and the
+scaffolder generates one module at a time so it cannot see the target's
+definition. Say so with `references-table=`:
+
+```
+--field owner:relation:references=person:references-table=people
+```
+
+Both are validated before they reach the DDL: `references=` is an entity name
+(letters, digits, single hyphens) and `references-table=` a lowercase SQL
+identifier. Anything else is refused rather than interpolated.
 
 Examples:
 
@@ -297,7 +336,7 @@ Configure the provider via environment variables: `ANTHROPIC_API_KEY`, `OPENAI_A
 |------|---------|-------------|
 | `--module-name` | — | Module name in lowercase kebab-case (required) |
 | `--entity` | — | Entity name in PascalCase (required) |
-| `--field` | — | Repeatable: `name:type[:values=a,b,c][:required][:unique]` |
+| `--field` | — | Repeatable: `name:type[:values=a,b,c][:references=entity][:on-delete=x][:required][:unique]` |
 | `--[no-]http` | true | Generate the HTTP (REST API) routes |
 | `--[no-]web` | true | Generate the Web UI: `core/ui.clj`, `shell/web_handlers.clj`, and the module's `:web` route contribution |
 | `--audit` | true | Include audit logging |

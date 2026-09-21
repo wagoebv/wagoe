@@ -54,6 +54,10 @@
         module-name (:module-name ctx)
         entity (first (:entities ctx))
         entity-name (:entity-name entity)
+        ;; Names the `validate-<x>` / `explain-<x>` vars the core file calls,
+        ;; so it has to be the same derivation the core file uses — kebab, not
+        ;; a lowercased run of words (BOU-480).
+        entity-lower (template/pascal->kebab entity-name)
         fields (:fields entity)
         field-schemas (str/join "\n" (map generate-field-schema fields))
         ;; Every field optional, whatever it is on the entity. An update
@@ -119,28 +123,28 @@
             entity-name
             field-schemas
             entity-name
-            (str/lower-case entity-name)
+            entity-lower
             entity-name
             field-schemas
             entity-name
-            (str/lower-case entity-name)
+            entity-lower
             entity-name
             update-field-schemas
-            (str/lower-case entity-name)
+            entity-lower
             entity-name
-            (str/lower-case entity-name)
+            entity-lower
             entity-name
-            (str/lower-case entity-name)
-            (str/lower-case entity-name)
+            entity-lower
+            entity-lower
             entity-name
-            (str/lower-case entity-name)
-            (str/lower-case entity-name)
-            (str/lower-case entity-name)
-            (str/lower-case entity-name)
-            (str/lower-case entity-name)
-            (str/lower-case entity-name)
-            (str/lower-case entity-name)
-            (str/lower-case entity-name))))
+            entity-lower
+            entity-lower
+            entity-lower
+            entity-lower
+            entity-lower
+            entity-lower
+            entity-lower
+            entity-lower)))
 
 ;; =============================================================================
 ;; Ports File Generator
@@ -369,8 +373,17 @@
         required (:field-required field-ctx)
         unique (:field-unique field-ctx)
         null-clause (if required " NOT NULL" "")
-        unique-clause (if unique " UNIQUE" "")]
-    (format "  %s %s%s%s" field-name sql-type null-clause unique-clause)))
+        unique-clause (if unique " UNIQUE" "")
+        ;; A relation carries its REFERENCES inline. Written by hand before,
+        ;; every time, because there was no field type that meant it (BOU-480).
+        references-clause (if-let [table (:relation-table field-ctx)]
+                            (format " REFERENCES %s(id) ON DELETE %s"
+                                    table
+                                    (get template/on-delete-clauses
+                                         (:on-delete field-ctx)
+                                         "CASCADE"))
+                            "")]
+    (format "  %s %s%s%s%s" field-name sql-type null-clause unique-clause references-clause)))
 
 (defn generate-migration-file
   "Generate migration SQL file content.
@@ -387,7 +400,16 @@
   (let [entity (first (:entities ctx))
         table-name (:entity-table entity)
         fields (:fields entity)
-        field-sqls (str/join ",\n" (map generate-migration-field fields))]
+        field-sqls (str/join ",\n" (map generate-migration-field fields))
+        ;; Every foreign key gets one: it is what a join reads, and what the
+        ;; database scans on each cascading delete of the parent.
+        relation-indexes (->> fields
+                              (filter :relation-table)
+                              (map (fn [f]
+                                     (format "CREATE INDEX IF NOT EXISTS idx_%s_%s ON %s(%s);"
+                                             table-name (:field-name-snake f)
+                                             table-name (:field-name-snake f))))
+                              (str/join "\n"))]
     (format "-- Migration %s: Create %s table
 
 CREATE TABLE IF NOT EXISTS %s (
@@ -400,13 +422,14 @@ CREATE TABLE IF NOT EXISTS %s (
 
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_%s_created_at ON %s(created_at);
-"
+%s"
             migration-number
             table-name
             table-name
             field-sqls
             table-name
-            table-name)))
+            table-name
+            (if (str/blank? relation-indexes) "" (str relation-indexes "\n")))))
 
 (defn generate-migration-down-file
   "Generate the rollback SQL matching `generate-migration-file`.
@@ -445,7 +468,7 @@ DROP TABLE IF EXISTS %s;
         module-name (:module-name ctx)
         entity (first (:entities ctx))
         entity-name (:entity-name entity)
-        entity-lower (str/lower-case entity-name)
+        entity-lower (template/pascal->kebab entity-name)
         entity-plural (template/pluralize entity-lower)]
     (str "(ns " base-ns "." module-name ".core.ui\n"
          "  \"Pure UI generation for " module-name " module - Hiccup templates.\")\n"
@@ -479,7 +502,7 @@ DROP TABLE IF EXISTS %s;
         module-name (:module-name ctx)
         entity (first (:entities ctx))
         entity-name (:entity-name entity)
-        entity-lower (str/lower-case entity-name)
+        entity-lower (template/pascal->kebab entity-name)
         entity-kebab (str/replace entity-lower #"\s+" "-")]
     (str "(ns " base-ns "." module-name ".shell.service\n"
          "  \"Service layer for " module-name " module.\"\n"
@@ -544,7 +567,12 @@ DROP TABLE IF EXISTS %s;
         ;; entity-lower was only used to build the repository's
         ;; `update-<entity>` method name, which is now the literal
         ;; `update-entity` (BOU-267).
-        table-name (template/pluralize (template/kebab->snake entity-name))]
+        ;;
+        ;; `:entity-table` rather than a derivation of its own: this built the
+        ;; table from the PascalCase name, so it queried `Products` while the
+        ;; migration created `products` — which worked only because neither H2
+        ;; nor PostgreSQL distinguishes unquoted identifiers by case (BOU-486).
+        table-name (:entity-table entity)]
     (str "(ns " base-ns "." module-name ".shell.persistence\n"
          "  \"Persistence layer for " module-name " module.\"\n"
          "  (:require [" base-ns "." module-name ".ports :as ports]\n"
@@ -601,7 +629,7 @@ DROP TABLE IF EXISTS %s;
         module-name (:module-name ctx)
         entity (first (:entities ctx))
         entity-name (:entity-name entity)
-        entity-lower (str/lower-case entity-name)
+        entity-lower (template/pascal->kebab entity-name)
         entity-plural (template/pluralize entity-lower)
         ;; `:interfaces` decides what this file defines and what the
         ;; contribution carries. A module generated with --no-web has no web
@@ -681,7 +709,7 @@ DROP TABLE IF EXISTS %s;
         module-name (:module-name ctx)
         entity (first (:entities ctx))
         entity-name (:entity-name entity)
-        entity-lower (str/lower-case entity-name)
+        entity-lower (template/pascal->kebab entity-name)
         entity-plural (template/pluralize entity-lower)]
     (str "(ns " base-ns "." module-name ".shell.web-handlers\n"
          "  \"Web UI handlers for " module-name " module.\"\n"
@@ -725,7 +753,7 @@ DROP TABLE IF EXISTS %s;
         module-name (:module-name ctx)
         entity (first (:entities ctx))
         entity-name (:entity-name entity)
-        entity-lower (str/lower-case entity-name)]
+        entity-lower (template/pascal->kebab entity-name)]
     (str "(ns " base-ns "." module-name ".core." entity-lower "-test\n"
          "  (:require [clojure.test :refer [deftest testing is]]\n"
          "            [" base-ns "." module-name ".core." entity-lower " :as core])\n"
@@ -762,7 +790,7 @@ DROP TABLE IF EXISTS %s;
         module-name (:module-name ctx)
         entity (first (:entities ctx))
         entity-name (:entity-name entity)
-        entity-lower (str/lower-case entity-name)]
+        entity-lower (template/pascal->kebab entity-name)]
     (str "(ns " base-ns "." module-name ".shell.service-test\n"
          "  (:require [clojure.test :refer [deftest testing is]]\n"
          "            [" base-ns "." module-name ".shell.service :as service]\n"
@@ -800,7 +828,7 @@ DROP TABLE IF EXISTS %s;
         module-name (:module-name ctx)
         entity (first (:entities ctx))
         entity-name (:entity-name entity)
-        entity-lower (str/lower-case entity-name)]
+        entity-lower (template/pascal->kebab entity-name)]
     (str "(ns " base-ns "." module-name ".shell." entity-lower "-repository-test\n"
          "  (:require [clojure.test :refer [deftest testing is]]\n"
          "            [" base-ns "." module-name ".shell.persistence :as persistence]\n"
@@ -954,16 +982,32 @@ DROP TABLE IF EXISTS %s;
    
    Pure: true"
   [_module-name entity-name field migration-number]
-  (let [table-name (template/kebab->snake (template/pluralize (str/lower-case entity-name)))
+  (let [table-name (template/kebab->snake (template/pluralize (template/pascal->kebab entity-name)))
         field-ctx (template/build-field-context field)
         field-name (:field-name-snake field-ctx)
         sql-type (:sql-type field-ctx)
         not-null (if (:field-required field-ctx) " NOT NULL" "")
-        unique-clause (if (:field-unique field-ctx) " UNIQUE" "")]
+        unique-clause (if (:field-unique field-ctx) " UNIQUE" "")
+        ;; The same clause and index `generate-migration-file` gives a
+        ;; relation. Without them a relation added to an existing entity got a
+        ;; bare UUID column: no referential integrity, and no index for the
+        ;; joins and cascades that read it (BOU-480 review).
+        relation-table (:relation-table field-ctx)
+        references-clause (if relation-table
+                            (format " REFERENCES %s(id) ON DELETE %s"
+                                    relation-table
+                                    (get template/on-delete-clauses
+                                         (:on-delete field-ctx)
+                                         "CASCADE"))
+                            "")
+        index-sql (if relation-table
+                    (format "\nCREATE INDEX IF NOT EXISTS idx_%s_%s ON %s(%s);\n"
+                            table-name field-name table-name field-name)
+                    "")]
     (format "-- Migration %s: Add %s to %s table
 
-ALTER TABLE %s ADD COLUMN %s %s%s%s;
-"
+ALTER TABLE %s ADD COLUMN %s %s%s%s%s;
+%s"
             migration-number
             field-name
             table-name
@@ -971,7 +1015,9 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s;
             field-name
             sql-type
             not-null
-            unique-clause)))
+            unique-clause
+            references-clause
+            index-sql)))
 
 (defn schema-field-entry
   "The Malli entry line for `field`, without indentation.

@@ -8,6 +8,7 @@
    - Format output (list files, success/error messages)
    - Handle errors and exit codes"
   (:require [wagoe.scaffolder.ports :as ports]
+            [wagoe.scaffolder.core.template :as template]
             [cheshire.core :as json]
             [clojure.string :as str]
             [clojure.tools.cli :as cli]))
@@ -74,9 +75,16 @@
                "Must be lowercase with hyphens only"]]
    [nil "--type TYPE" "Field type (required)"
     :validate [#(contains? #{"string" "text" "integer" "int" "decimal" "boolean"
-                             "email" "uuid" "enum" "date" "datetime" "inst" "json"} %)
+                             "email" "uuid" "enum" "date" "datetime" "inst" "json"
+                             "relation"} %)
                "Must be a valid field type"]]
    [nil "--enum-values LIST" "Comma-separated values, required when --type enum"]
+   ;; A relation reachable only while a module is being created is a relation
+   ;; you cannot add once you have a module — and `field` is the command for
+   ;; an entity that already exists (BOU-480 review).
+   [nil "--references ENTITY" "Entity a relation points at, required when --type relation"]
+   [nil "--references-table TABLE" "The target's table, when it is not the default plural"]
+   [nil "--on-delete ACTION" "cascade (default), restrict, set-null or no-action"]
    [nil "--required" "Field cannot be null"
     :default false]
    [nil "--unique" "Field must be unique"
@@ -176,7 +184,7 @@
   [field-spec]
   (let [parts (str/split field-spec #":")
         [name-str type-str & flags] parts
-        valid-types #{"string" "text" "integer" "int" "decimal" "boolean" "email" "uuid" "enum" "date" "datetime" "inst" "json"}
+        valid-types #{"string" "text" "integer" "int" "decimal" "boolean" "email" "uuid" "enum" "date" "datetime" "inst" "json" "relation"}
         ;; Map CLI type names to schema type names
         type-mapping {"integer" :int
                       "int" :int
@@ -185,10 +193,22 @@
                       "text" :text
                       "json" :json}
         type-kw (get type-mapping type-str (keyword type-str))
-        values-flag (some #(when (str/starts-with? % "values=")
-                             (subs % (count "values=")))
-                          flags)
-        enum-values (parse-enum-values values-flag)]
+        flag-value (fn [prefix]
+                     (some #(when (str/starts-with? % prefix)
+                              (subs % (count prefix)))
+                           flags))
+        values-flag (flag-value "values=")
+        enum-values (parse-enum-values values-flag)
+        ;; Longest prefix first: "references=" is a prefix of nothing, but
+        ;; `flag-value "references="` would happily match "references-table=x"
+        ;; if the order were reversed.
+        references-table (flag-value "references-table=")
+        references (some #(when (and (str/starts-with? % "references=")
+                                     (not (str/starts-with? % "references-table=")))
+                            (subs % (count "references=")))
+                         flags)
+        on-delete-flag (flag-value "on-delete=")
+        on-delete (if on-delete-flag (keyword on-delete-flag) :cascade)]
     (cond
       (< (count parts) 2)
       {:error (str "Invalid field spec: " field-spec " (expected format: name:type[:required][:unique])")}
@@ -207,12 +227,68 @@
       {:error (str "values= is only meaningful on an enum field, and " name-str
                    " is a " type-str)}
 
+      ;; A relation needs its target for the same reason an enum needs its
+      ;; values: without one there is nothing to generate but a bare UUID
+      ;; column, which is the hand-written foreign key this type exists to
+      ;; remove (BOU-480).
+      (and (= :relation type-kw) (str/blank? references))
+      {:error (str "Relation field " name-str " needs the entity it references: "
+                   name-str ":relation:references=invoice")}
+
+      (and references (not= :relation type-kw))
+      {:error (str "references= is only meaningful on a relation field, and "
+                   name-str " is a " type-str)}
+
+      (and references-table (not= :relation type-kw))
+      {:error (str "references-table= is only meaningful on a relation field, and "
+                   name-str " is a " type-str)}
+
+      ;; The target goes into DDL, so it is allowlisted rather than merely
+      ;; non-blank (BOU-480 review).
+      (and (= :relation type-kw)
+           (not (template/valid-entity-name? references)))
+      {:error (str "Invalid references= on " name-str ": " (pr-str references)
+                   ". It names an entity — letters, digits and single hyphens, "
+                   "e.g. references=invoice or references=InvoiceLineItem.")}
+
+      (and (= :relation type-kw)
+           (some? references-table)
+           (not (template/valid-table-name? references-table)))
+      {:error (str "Invalid references-table= on " name-str ": " (pr-str references-table)
+                   ". It is a table name — lowercase letters, digits and "
+                   "underscores, e.g. references-table=people.")}
+
+      (and on-delete-flag (not= :relation type-kw))
+      {:error (str "on-delete= is only meaningful on a relation field, and "
+                   name-str " is a " type-str)}
+
+      (and (= :relation type-kw)
+           (not (contains? template/on-delete-clauses on-delete)))
+      {:error (str "Unknown on-delete " on-delete-flag " on " name-str
+                   " (must be one of: "
+                   (str/join ", " (sort (map name (keys template/on-delete-clauses))))
+                   ")")}
+
+      ;; A NOT NULL column whose foreign key sets it to null on a parent
+      ;; delete: the database takes the DDL and then refuses every such
+      ;; delete. Both halves were asked for, so neither is dropped silently
+      ;; (BOU-480 review).
+      (and (= :relation type-kw)
+           (= :set-null on-delete)
+           (some #(= % "required") flags))
+      {:error (str "Field " name-str " is required and on-delete=set-null, which contradict: "
+                   "the column cannot be NOT NULL and be set to null when "
+                   references " is deleted. Drop `required`, or use "
+                   "on-delete=restrict to refuse the delete instead.")}
+
       :else
       (cond-> {:name (keyword name-str)
                :type type-kw
                :required (boolean (some #(= % "required") flags))
                :unique (boolean (some #(= % "unique") flags))}
-        enum-values (assoc :enum-values enum-values)))))
+        enum-values           (assoc :enum-values enum-values)
+        (= :relation type-kw) (assoc :references references :on-delete on-delete)
+        references-table      (assoc :references-table references-table)))))
 
 (defn parse-all-fields
   "Parse all field specifications.
@@ -367,7 +443,51 @@
                  ;; nothing validates against (BOU-447).
                  (and (= "enum" (:type opts))
                       (empty? (parse-enum-values (:enum-values opts))))
-                 (conj "Missing required option: --enum-values (e.g. --enum-values draft,sent,paid)"))]
+                 (conj "Missing required option: --enum-values (e.g. --enum-values draft,sent,paid)")
+
+                 ;; The relation rules, the same ones `parse-field-spec`
+                 ;; applies to `--field x:relation:...` (BOU-480 review).
+                 (and (= "relation" (:type opts)) (str/blank? (:references opts)))
+                 (conj "Missing required option: --references (e.g. --references invoice)")
+
+                 (and (not= "relation" (:type opts)) (:references opts))
+                 (conj (str "--references is only meaningful on --type relation, and "
+                            (:name opts) " is a " (:type opts)))
+
+                 (and (not= "relation" (:type opts)) (:references-table opts))
+                 (conj (str "--references-table is only meaningful on --type relation, and "
+                            (:name opts) " is a " (:type opts)))
+
+                 (and (not= "relation" (:type opts)) (:on-delete opts))
+                 (conj (str "--on-delete is only meaningful on --type relation, and "
+                            (:name opts) " is a " (:type opts)))
+
+                 (and (= "relation" (:type opts))
+                      (not (str/blank? (:references opts)))
+                      (not (template/valid-entity-name? (:references opts))))
+                 (conj (str "Invalid --references " (pr-str (:references opts))
+                            ". It names an entity — letters, digits and single hyphens."))
+
+                 (and (= "relation" (:type opts))
+                      (:references-table opts)
+                      (not (template/valid-table-name? (:references-table opts))))
+                 (conj (str "Invalid --references-table " (pr-str (:references-table opts))
+                            ". It is a table name — lowercase letters, digits and underscores."))
+
+                 (and (= "relation" (:type opts))
+                      (:on-delete opts)
+                      (not (contains? template/on-delete-clauses (keyword (:on-delete opts)))))
+                 (conj (str "Unknown --on-delete " (pr-str (:on-delete opts)) " (must be one of: "
+                            (str/join ", " (sort (map name (keys template/on-delete-clauses)))) ")"))
+
+                 ;; NOT NULL with a foreign key that nulls the column: the
+                 ;; database takes the DDL and refuses every parent delete.
+                 (and (= "relation" (:type opts))
+                      (= "set-null" (:on-delete opts))
+                      (:required opts))
+                 (conj (str "--required and --on-delete set-null contradict: the column cannot be "
+                            "NOT NULL and be set to null when the parent is deleted. "
+                            "Drop --required, or use --on-delete restrict.")))]
     [(empty? errors) errors]))
 
 (defn validate-endpoint-options
@@ -457,7 +577,16 @@
                                      :required (:required opts false)
                                      :unique (:unique opts false)}
                               (= :enum field-type)
-                              (assoc :enum-values (parse-enum-values (:enum-values opts))))
+                              (assoc :enum-values (parse-enum-values (:enum-values opts)))
+
+                              (= :relation field-type)
+                              (assoc :references (:references opts)
+                                     :on-delete (if (:on-delete opts)
+                                                  (keyword (:on-delete opts))
+                                                  :cascade))
+
+                              (and (= :relation field-type) (:references-table opts))
+                              (assoc :references-table (:references-table opts)))
                      :output-dir (:output-dir opts)
                      :dry-run (:dry-run opts)
                      :base-ns (:base-ns opts)}
@@ -616,7 +745,7 @@ Required Options:
   --field SPEC         Field specification (can be repeated)
 
 Field Specification Format:
-  name:type[:values=a,b,c][:required][:unique]
+  name:type[:values=a,b,c][:references=entity][:references-table=t][:on-delete=x][:required][:unique]
 
 Field Types:
   string     - Text field
@@ -628,11 +757,21 @@ Field Types:
   enum       - Enumeration (values= is required)
   date       - Date only
   datetime   - Date and time
+  relation   - Foreign key to another entity (references= is required)
 
 Field Flags:
-  values=a,b,c  Allowed values, required on an enum field
-  required      Field cannot be null
-  unique        Field must be unique across all records
+  values=a,b,c      Allowed values, required on an enum field
+  references=entity The entity a relation points at; the column is <name>_id,
+                    and it gets an index
+  references-table=t The target's table, when it is not the default plural of
+                    the entity — a Person whose table is people, not persons
+  on-delete=x       cascade (default), restrict, set-null or no-action.
+                    set-null needs a nullable column, so not with `required`
+  required          Field cannot be null
+  unique            Field must be unique across all records
+
+  Example — an invoice line that dies with its invoice:
+    --field invoice:relation:references=invoice:required
 
 Interface Options (default: all enabled):
   --no-http            Skip the HTTP (REST API) routes
@@ -691,6 +830,12 @@ Required Options:
 
 Optional Flags:
   --enum-values LIST   Comma-separated values, required when --type enum
+  --references ENTITY  The entity a relation points at, required when
+                       --type relation. The column is <name>_id, and it gets
+                       a REFERENCES clause and an index
+  --references-table T The target's table, when it is not the default plural
+  --on-delete ACTION   cascade (default), restrict, set-null or no-action.
+                       set-null needs a nullable column, so not with --required
   --required           Field cannot be null
   --unique             Field must be unique
   --dry-run            Show what would be generated
