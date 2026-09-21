@@ -348,17 +348,22 @@
             ;; Define files
             field-name-snake (template/kebab->snake (name (:name field)))
             field-name-kebab (name (:name field))
-            table-name (template/kebab->snake (template/pluralize (str/lower-case entity)))
+            ;; Through pascal->kebab, the same derivation
+            ;; `generate-add-field-migration` uses for the up migration. It was
+            ;; `str/lower-case` here, so for a multi-word entity the up
+            ;; migration altered `invoice_line_items` and the down migration
+            ;; dropped the column from `invoicelineitems` — the migration
+            ;; applied and only failed on the way back (BOU-480).
+            entity-plural (template/pluralize (template/pascal->kebab entity))
+            table-name (template/kebab->snake entity-plural)
             ;; `<id>-<name>.up.sql` + `.down.sql` — same migratus discovery
             ;; requirement as module generation above (BOU-256).
             files [{:path (format "migrations/%s-add-%s-to-%s.up.sql"
-                                  migration-number field-name-kebab
-                                  (template/pluralize (str/lower-case entity)))
+                                  migration-number field-name-kebab entity-plural)
                     :content migration-content
                     :action :create}
                    {:path (format "migrations/%s-add-%s-to-%s.down.sql"
-                                  migration-number field-name-kebab
-                                  (template/pluralize (str/lower-case entity)))
+                                  migration-number field-name-kebab entity-plural)
                     :content (format "-- Rollback: drop %s from %s\n\nALTER TABLE %s DROP COLUMN %s;\n"
                                      field-name-snake table-name table-name field-name-snake)
                     :action :create}]

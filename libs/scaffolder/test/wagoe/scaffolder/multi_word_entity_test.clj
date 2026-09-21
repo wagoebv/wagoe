@@ -12,7 +12,9 @@
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [wagoe.scaffolder.core.generators :as gen]
-            [wagoe.scaffolder.core.template :as template]))
+            [wagoe.scaffolder.core.template :as template]
+            [wagoe.scaffolder.ports :as ports]
+            [wagoe.scaffolder.shell.service :as service]))
 
 (def ^:private ctx
   (template/build-module-context
@@ -77,6 +79,51 @@
                               ["http"        (gen/generate-http-file ctx)]]]
         (is (not (str/includes? source "invoicelineitem"))
             (str label " still carries the run-together name"))))))
+
+(deftest ^:unit add-field-writes-an-up-and-down-pair-for-the-same-table
+  ;; The up migration's SQL came from the generator, which learned the word
+  ;; boundaries; the down migration's SQL and both filenames were still built
+  ;; with `str/lower-case` in the shell. So `bb scaffold field --entity
+  ;; InvoiceLineItem` added a column to `invoice_line_items` and rolled it back
+  ;; off `invoicelineitems`, a table that does not exist — the migration
+  ;; applied and only failed on the way back (BOU-480 review).
+  (let [dir (.toFile (java.nio.file.Files/createTempDirectory
+                      "wagoe-add-field" (make-array java.nio.file.attribute.FileAttribute 0)))]
+    (try
+      ;; add-field refuses a module that is not there (BOU-364), so build one.
+      (ports/generate-module (service/create-scaffolder-service)
+                             {:module-name "invoicing"
+                              :base-ns     "app"
+                              :entities    [{:name "InvoiceLineItem"
+                                             :fields [{:name :quantity :type :int}]}]
+                              :output-dir  (.getPath dir)})
+      (let [result (ports/add-field (service/create-scaffolder-service)
+                                    {:module-name "invoicing"
+                                     :base-ns     "app"
+                                     :entity      "InvoiceLineItem"
+                                     :field       {:name :discount :type :decimal}
+                                     :output-dir  (.getPath dir)})
+            sql-for (fn [suffix]
+                      (->> (:files result)
+                           (filter #(str/ends-with? (:path %) suffix))
+                           first))]
+        (is (true? (:success result)) (pr-str (:errors result)))
+
+        (testing "both halves name the table the module actually created"
+          (doseq [suffix [".up.sql" ".down.sql"]]
+            (let [{:keys [path content]} (sql-for suffix)]
+              (is (some? path) suffix)
+              (is (str/includes? (or content (slurp path)) "invoice_line_items")
+                  (str suffix " does not name invoice_line_items"))
+              (is (not (str/includes? (or content (slurp path)) "invoicelineitems"))
+                  (str suffix " still carries the run-together table name")))))
+
+        (testing "and so do their filenames"
+          (doseq [suffix [".up.sql" ".down.sql"]]
+            (is (str/includes? (:path (sql-for suffix)) "invoice-line-items")
+                (str suffix " filename: " (:path (sql-for suffix)))))))
+      (finally
+        (doseq [f (reverse (file-seq dir))] (.delete f))))))
 
 (deftest ^:unit the-generated-clojure-names-read-as-clojure
   (let [ports   (gen/generate-ports-file ctx)
