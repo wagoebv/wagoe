@@ -25,6 +25,25 @@
     (is (= #{"run-migration"}
            (set (keep #(when (empty? (get-in % [:inputSchema :required])) (:name %)) tools/catalog))))))
 
+(deftest ^:unit the-advertised-interfaces-are-the-ones-scaffold-module-forwards
+  ;; The schema is the contract a client reads before it calls. It advertised
+  ;; `cli`, which the scaffolder had no generator for and BOU-479 removed, and
+  ;; said all interfaces "default false" while the generator defaults both to
+  ;; true — so a client that trusted it expected a module with neither
+  ;; interface and got both (BOU-484 review).
+  (let [schema (->> tools/catalog
+                    (filter #(= "scaffold-module" (:name %)))
+                    first
+                    :inputSchema)
+        advertised (set (keys (get-in schema [:properties "interfaces" :properties])))]
+    (is (= #{"http" "web"} advertised)
+        "the schema advertises an interface the scaffolder does not generate")
+
+    (testing "and the description does not claim a default the generator contradicts"
+      (let [described (get-in schema [:properties "interfaces" :description])]
+        (is (not (re-find #"(?i)default\s+false" described))
+            "absent means every interface, not none")))))
+
 (deftest ^:unit capability-lookup
   (is (= :read (tools/capability "lint")))
   (is (= :generate (tools/capability "scaffold-module")))

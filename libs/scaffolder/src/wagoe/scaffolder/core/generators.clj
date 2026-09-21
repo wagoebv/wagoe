@@ -612,11 +612,18 @@ DROP TABLE IF EXISTS %s;
     ;; `bb check` fails on warnings in the generated project (BOU-267). The
     ;; comment says what to add back when the stubs get bodies.
     (str "(ns " base-ns "." module-name ".shell.http\n"
-         "  \"HTTP routes for " module-name " module.\")\n"
+         "  \"HTTP routes for " module-name " module.\""
+         ;; Required only when there are web routes to mount. The API handlers
+         ;; below are stubs that call nothing, so requiring ports here would be
+         ;; an unused require — a clj-kondo warning, and `bb check` fails on
+         ;; warnings in the generated project (BOU-267).
+         (if web
+           (str "\n  (:require [" base-ns "." module-name ".shell.web-handlers :as web-handlers]))\n")
+           ")\n")
          "\n"
-         ";; The handlers below are stubs that return canned responses. When you\n"
-         ";; wire them to the service, add to the ns form above:\n"
-         ";;   (:require [" base-ns "." module-name ".ports :as ports])\n"
+         ";; The API handlers below are stubs that return canned responses. When\n"
+         ";; you wire them to the service, add to the ns form above:\n"
+         ";;   [" base-ns "." module-name ".ports :as ports]\n"
          "\n"
          (when http
            (str "(defn api-routes\n"
@@ -635,9 +642,9 @@ DROP TABLE IF EXISTS %s;
          (when web
            (str "(defn web-routes\n"
                 "  \"Mounted under /web — do not repeat the prefix here.\"\n"
-                "  [_service _config]\n"
+                "  [service config]\n"
                 "  [[\"/" entity-plural "\"\n"
-                "    {:get {:handler (fn [_req] {:status 200 :body \"<html><body>Web UI</body></html>\"})}}]])\n"
+                "    {:get {:handler (web-handlers/" entity-lower "-list-handler service config)}}]])\n"
                 "\n"))
          "(defn " module-name "-routes\n"
          "  \"This module's contribution to the application's route table.\n"
@@ -679,14 +686,25 @@ DROP TABLE IF EXISTS %s;
     (str "(ns " base-ns "." module-name ".shell.web-handlers\n"
          "  \"Web UI handlers for " module-name " module.\"\n"
          "  (:require [" base-ns "." module-name ".core.ui :as ui]\n"
-         "            [" base-ns "." module-name ".ports :as ports]))\n"
+         "            [" base-ns "." module-name ".ports :as ports]\n"
+         "            [hiccup2.core :as h]))\n"
          "\n"
          "(defn " entity-lower "-list-handler [service _config]\n"
          "  (fn [_request]\n"
          "    (let [items (ports/list-" entity-plural " service {})]\n"
          "      {:status 200\n"
-         "       :headers {\"Content-Type\" \"text/html\"}\n"
-         "       :body (ui/" entity-lower "-list-page items {})})))\n")))
+         "       :headers {\"Content-Type\" \"text/html; charset=utf-8\"}\n"
+         ;; A string, not the Hiccup tree: Ring cannot write a vector, so
+         ;; returning the page directly produced a response no adapter could
+         ;; serve (BOU-484).
+         ;;
+         ;; hiccup2 rather than wagoe.i18n's renderer, which resolves [:t ...]
+         ;; markers as well: i18n is a module a project may drop, and a
+         ;; generated module that cannot load without it is a hard dependency
+         ;; bought for a page that has no markers in it. Adding markers means
+         ;; adding wagoe-i18n and rendering through
+         ;; `wagoe.i18n.shell.render/render` instead.
+         "       :body (str (h/html (ui/" entity-lower "-list-page items {})))})))\n")))
 
 ;; =============================================================================
 ;; Test File Generators

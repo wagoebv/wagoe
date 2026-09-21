@@ -72,7 +72,7 @@
     (merge {:module-name module
             :entities [{:name entity
                         :fields [{:name :name :type :string :required true}]}]
-            :interfaces {:http true :cli true :web true}
+            :interfaces {:http true :web true}
             :features {:audit true :pagination true}
             :output-dir (.getPath dir)
             :dry-run false}
@@ -99,7 +99,7 @@
                                          :type :boolean
                                          :required true
                                          :default true}]}]
-                   :interfaces {:http true :cli true :web true}
+                   :interfaces {:http true :web true}
                    :features {:audit true :pagination true}
                    :dry-run true}  ;; Always dry-run in tests
 
@@ -409,7 +409,7 @@
                       {:module-name "widget"
                        :entities [{:name "Widget"
                                    :fields [{:name :label :type :string :required true}]}]
-                       :interfaces {:http true :cli true :web true}
+                       :interfaces {:http true :web true}
                        :features {:audit true :pagination true}
                        :output-dir (.getPath dir)
                        :dry-run false})]
@@ -427,7 +427,7 @@
                    svc {:module-name "widget"
                         :entities [{:name "Widget"
                                     :fields [{:name :label :type :string :required true}]}]
-                        :interfaces {:http true :cli true :web true}
+                        :interfaces {:http true :web true}
                         :features {:audit true :pagination true}
                         :output-dir (.getPath dir) :dry-run false})
               before (files-on-disk dir)
@@ -455,7 +455,7 @@
                    svc {:module-name "widget"
                         :entities [{:name "Widget"
                                     :fields [{:name :label :type :string :required true}]}]
-                        :interfaces {:http true :cli true :web true}
+                        :interfaces {:http true :web true}
                         :features {:audit true :pagination true}
                         :output-dir (.getPath dir) :dry-run false})
               before (files-on-disk dir)
@@ -484,7 +484,7 @@
                       svc {:module-name "widget"
                            :entities [{:name "Widget"
                                        :fields [{:name :label :type :string :required true}]}]
-                           :interfaces {:http true :cli true :web true}
+                           :interfaces {:http true :web true}
                            :features {:audit true :pagination true}
                            :output-dir (.getPath dir) :dry-run false})]
           (is (seq (files-on-disk dir)) "the target directory received the module")
@@ -509,7 +509,7 @@
                      svc {:module-name n
                           :entities [{:name (str/capitalize n)
                                       :fields [{:name :x :type :string :required true}]}]
-                          :interfaces {:http true :cli true :web true}
+                          :interfaces {:http true :web true}
                           :features {:audit true :pagination true}
                           :output-dir (.getPath dir) :dry-run false}))
               _   (dorun (map gen ["alpha" "beta" "gamma"]))
@@ -535,7 +535,7 @@
                       svc {:module-name "widget"
                            :entities [{:name "Widget"
                                        :fields [{:name :label :type :string :required true}]}]
-                           :interfaces {:http true :cli true :web true}
+                           :interfaces {:http true :web true}
                            :features {:audit true :pagination true}
                            :output-dir (.getPath dir) :dry-run true})]
           (is (every? #(str/starts-with? (:path %) (.getPath dir)) (:files result))
@@ -558,7 +558,7 @@
                    svc {:module-name "box"
                         :entities [{:name "Box"
                                     :fields [{:name :w :type :string :required true}]}]
-                        :interfaces {:http true :cli true :web true}
+                        :interfaces {:http true :web true}
                         :features {:audit true :pagination true}
                         :output-dir (.getPath dir) :dry-run false})
               schema (io/file dir "src/wagoe/box/schema.clj")
@@ -596,7 +596,7 @@
                    svc {:module-name "box"
                         :entities [{:name "Box"
                                     :fields [{:name :w :type :string :required true}]}]
-                        :interfaces {:http true :cli true :web true}
+                        :interfaces {:http true :web true}
                         :features {:audit true :pagination true}
                         :output-dir (.getPath dir) :dry-run false})
               before (slurp (io/file dir "src/wagoe/box/schema.clj"))
@@ -627,7 +627,7 @@
                    svc {:module-name "item"
                         :entities [{:name "Item"
                                     :fields [{:name :name :type :string :required true}]}]
-                        :interfaces {:http true :cli true :web true}
+                        :interfaces {:http true :web true}
                         :features {:audit true :pagination true}
                         :output-dir (.getPath dir) :dry-run false})
               schema (io/file dir "src/wagoe/item/schema.clj")
@@ -659,7 +659,7 @@
                    svc {:module-name "tag"
                         :entities [{:name "Tag"
                                     :fields [{:name :label :type :string :required true}]}]
-                        :interfaces {:http true :cli true :web true}
+                        :interfaces {:http true :web true}
                         :features {:audit true :pagination true}
                         :output-dir (.getPath dir) :dry-run false})
               result (ports/add-field
@@ -689,7 +689,7 @@
                    svc {:module-name "item"
                         :entities [{:name "Item"
                                     :fields [{:name :name :type :string :required true}]}]
-                        :interfaces {:http true :cli true :web true}
+                        :interfaces {:http true :web true}
                         :features {:audit true :pagination true}
                         :output-dir (.getPath dir) :dry-run false})
               schema (io/file dir "src/wagoe/item/schema.clj")
@@ -761,7 +761,7 @@
                    svc {:module-name "item"
                         :entities [{:name "Item"
                                     :fields [{:name :name :type :string :required true}]}]
-                        :interfaces {:http true :cli true :web true}
+                        :interfaces {:http true :web true}
                         :features {:audit true :pagination true}
                         :output-dir (.getPath dir) :dry-run false})
               result (ports/add-field
@@ -951,7 +951,7 @@
                  svc {:module-name "widget"
                       :entities [{:name "Widget"
                                   :fields [{:name :label :type :string :required true}]}]
-                      :interfaces {:http true :cli true :web true}
+                      :interfaces {:http true :web true}
                       :features {:audit true :pagination true}
                       :output-dir (.getPath dir) :dry-run false})
             result (ports/add-field
@@ -977,7 +977,7 @@
                      :base-ns "shop"
                      :entities [{:name "InvoiceLineItem"
                                  :fields [{:name :amount :type :decimal :required true}]}]
-                     :interfaces {:http true :cli true :web true}
+                     :interfaces {:http true :web true}
                      :features {:audit true :pagination true}
                      :output-dir (.getPath dir)
                      :dry-run false})
@@ -1004,7 +1004,7 @@
                       :base-ns "shop"
                       :entities [{:name "InvoiceLineItem"
                                   :fields [{:name :amount :type :decimal :required true}]}]
-                      :interfaces {:http true :cli true :web true}
+                      :interfaces {:http true :web true}
                       :features {:audit true :pagination true}
                       :output-dir (.getPath dir) :dry-run false})
             field (ports/add-field
@@ -1030,7 +1030,7 @@
                     {:module-name "invoice"
                      :entities [{:name "Invoice"
                                  :fields [{:name :status :type :enum :required true}]}]
-                     :interfaces {:http true :cli true :web true}
+                     :interfaces {:http true :web true}
                      :features {:audit true :pagination true}
                      :output-dir (.getPath dir)
                      :dry-run false})]
@@ -1047,7 +1047,7 @@
                      :entities [{:name "Invoice"
                                  :fields [{:name :status :type :enum :required true
                                            :enum-values [:draft :sent :paid]}]}]
-                     :interfaces {:http true :cli true :web true}
+                     :interfaces {:http true :web true}
                      :features {:audit true :pagination true}
                      :output-dir (.getPath dir)
                      :dry-run false})]

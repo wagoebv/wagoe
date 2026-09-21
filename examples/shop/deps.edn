@@ -50,6 +50,11 @@
          ;; started with `-M:run` or `(go)` died on `Class org.postgresql.Driver
          ;; not found` (BOU-414). Every value `bb setup --database` accepts has
          ;; to resolve from the classpath the app actually boots on.
+         ;; A scaffolded module's web UI renders its Hiccup with hiccup2, so a
+         ;; project that scaffolds one uses this directly rather than through a
+         ;; wagoe library. Declared here rather than left to arrive
+         ;; transitively through wagoe-user — `wagoe new --no-user` drops that.
+         hiccup/hiccup                           {:mvn/version "2.0.0"}
          org.xerial/sqlite-jdbc                  {:mvn/version "3.53.4.0"}
          com.h2database/h2                       {:mvn/version "2.5.250"}
          org.postgresql/postgresql               {:mvn/version "42.7.13"}

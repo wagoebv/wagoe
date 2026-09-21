@@ -41,11 +41,18 @@
   [node t-fn dev?]
   (let [[_ key params n] node
         params (or params {})
-        result (if n
-                 (t-fn key params n)
-                 (if (seq params)
-                   (t-fn key params)
-                   (t-fn key)))]
+        ;; No t-fn is not an error. `resolve-t-fn` answers nil when the request
+        ;; carries no catalogue, so every caller rendering from a request wrote
+        ;; the same three-arity key-name fallback by hand before calling in —
+        ;; and forgetting it was an NPE from inside the walk, at the first
+        ;; marker anyone added (BOU-484).
+        result (if (nil? t-fn)
+                 (if (keyword? key) (subs (str key) 1) (str key))
+                 (if n
+                   (t-fn key params n)
+                   (if (seq params)
+                     (t-fn key params)
+                     (t-fn key))))]
     (if dev?
       [:span {:data-i18n (str key)} result]
       result)))
@@ -138,7 +145,8 @@
 
    Args:
      hiccup - Hiccup data structure (nested vectors/maps)
-     t-fn   - translation function (key params? n?) → string
+     t-fn   - translation function (key params? n?) → string, or nil to resolve
+              each marker to its own key name
      opts   - (optional) map with :dev? boolean
 
    Returns:
@@ -159,7 +167,8 @@
 
    Args:
      hiccup - Hiccup data structure
-     t-fn   - translation function (key params? n?) → string
+     t-fn   - translation function (key params? n?) → string, or nil to render
+              each marker as its own key name
      opts   - (optional) map with :dev? boolean
 
    Returns:

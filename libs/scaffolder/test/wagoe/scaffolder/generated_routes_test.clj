@@ -13,11 +13,16 @@
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [reitit.core :as r]
-            [wagoe.scaffolder.core.generators :as gen]))
+            [wagoe.scaffolder.core.generators :as gen]
+            [wagoe.scaffolder.core.template :as template]))
 
 (def ^:private ctx
-  {:module-name "product"
-   :entities    [{:entity-name "Product" :fields []}]})
+  ;; Through build-module-context, not hand-built: http.clj requires the
+  ;; module's web-handlers namespace since BOU-484, so the namespaces it pulls
+  ;; in have to be generated from a context they can be generated from.
+  (template/build-module-context
+   {:module-name "product"
+    :entities    [{:name "Product" :fields []}]}))
 
 (defn- routes-fn
   "Load the generated http.clj and return its `<module>-routes` var.
@@ -25,11 +30,14 @@
    Evaluating the file is the point: `str/includes?` on the source cannot tell
    a route vector from a route map, which is how the old format survived."
   []
-  (let [source (gen/generate-http-file ctx)]
+  (doseq [generate [gen/generate-ports-file
+                    gen/generate-ui-file
+                    gen/generate-web-handlers-file
+                    gen/generate-http-file]]
     (binding [*ns* *ns*]
-      (doseq [form (read-string (str "[" source "]"))]
-        (eval form)))
-    (resolve 'wagoe.product.shell.http/product-routes)))
+      (doseq [form (read-string (str "[" (generate ctx) "]"))]
+        (eval form))))
+  (resolve 'wagoe.product.shell.http/product-routes))
 
 (deftest ^:unit the-generated-routes-build-a-reitit-router
   (let [contribution ((routes-fn) nil {})]
