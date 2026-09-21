@@ -1,9 +1,10 @@
 (ns shop.product.shell.http
-  "HTTP routes for product module.")
+  "HTTP routes for product module."
+  (:require [shop.product.shell.web-handlers :as web-handlers]))
 
-;; The handlers below are stubs that return canned responses. When you
-;; wire them to the service, add to the ns form above:
-;;   (:require [shop.product.ports :as ports])
+;; The API handlers below are stubs that return canned responses. When
+;; you wire them to the service, add to the ns form above:
+;;   [shop.product.ports :as ports]
 
 (defn api-routes
   "Reitit route data: [path data & children].
@@ -20,9 +21,9 @@
 
 (defn web-routes
   "Mounted under /web — do not repeat the prefix here."
-  [_service _config]
+  [service config]
   [["/products"
-    {:get {:handler (fn [_req] {:status 200 :body "<html><body>Web UI</body></html>"})}}]])
+    {:get {:handler (web-handlers/product-list-handler service config)}}]])
 
 (defn product-routes
   "This module's contribution to the application's route table.

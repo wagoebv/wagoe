@@ -92,3 +92,23 @@
           "should contain p tag")
       (is (.contains html "Hello")
           "should contain translated content"))))
+
+;; =============================================================================
+;; No translation function
+;; =============================================================================
+
+(deftest ^:unit rendering-without-a-translation-function-names-the-key
+  ;; `resolve-t-fn` answers nil when the request carries no catalogue, so every
+  ;; caller that renders from a request has had to write the same three-arity
+  ;; fallback by hand before calling in. Missing it is an NPE from inside a
+  ;; walk, at the first marker somebody adds (BOU-484).
+  (testing "a marker renders its key name rather than throwing"
+    (is (= [:p "user/sign-in"] (sut/resolve-markers [:p [:t :user/sign-in]] nil)))
+    (is (.contains (sut/render [:p [:t :user/sign-in]] nil) "user/sign-in")))
+
+  (testing "markers with params and a count still render"
+    (is (= [:p "user/greeting"] (sut/resolve-markers [:p [:t :user/greeting {:name "Alice"}]] nil)))
+    (is (= [:p "user/items"] (sut/resolve-markers [:p [:t :user/items {:n 5} 5]] nil))))
+
+  (testing "a tree with no markers is unaffected"
+    (is (= [:div [:p "Static text"]] (sut/resolve-markers [:div [:p "Static text"]] nil)))))

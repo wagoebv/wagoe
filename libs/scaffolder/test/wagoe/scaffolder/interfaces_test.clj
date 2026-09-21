@@ -67,14 +67,19 @@
 (defn- contribution
   "Load the generated http.clj for `interfaces` and call its route function."
   [interfaces]
-  (let [ctx    (template/build-module-context
-                (cond-> {:module-name "gadget"
-                         :entities    [{:name "Gadget" :fields []}]}
-                  (some? interfaces) (assoc :interfaces interfaces)))
-        source (gen/generate-http-file ctx)]
-    (binding [*ns* *ns*]
-      (doseq [form (read-string (str "[" source "]"))]
-        (eval form)))
+  (let [ctx (template/build-module-context
+             (cond-> {:module-name "gadget"
+                      :entities    [{:name "Gadget" :fields []}]}
+               (some? interfaces) (assoc :interfaces interfaces)))]
+    ;; ports/ui/web-handlers first: with :web on, http.clj requires the
+    ;; module's web-handlers namespace (BOU-484).
+    (doseq [generate [gen/generate-ports-file
+                      gen/generate-ui-file
+                      gen/generate-web-handlers-file
+                      gen/generate-http-file]]
+      (binding [*ns* *ns*]
+        (doseq [form (read-string (str "[" (generate ctx) "]"))]
+          (eval form))))
     ((resolve 'wagoe.gadget.shell.http/gadget-routes) nil {})))
 
 (deftest ^:unit the-route-contribution-follows-the-interfaces
