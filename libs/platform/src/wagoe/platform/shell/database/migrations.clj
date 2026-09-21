@@ -307,18 +307,16 @@
   [read-config]
   (assoc read-config :migration-dir project-migration-dir))
 
-(defn get-migration-config
-  "Gets migration configuration for the active database.
+(defn refuse-shadowed-migration-dirs!
+  "Throw when migrations sit in a directory nothing reads.
 
-   Returns:
-     Migratus configuration map
+   Public for the same reason `shadowed-migration-dirs` is: both `migrate` and
+   `migrate-datasource!` depend on it, and a test asserts neither opts out.
 
-   Throws:
-     Exception if database configuration cannot be loaded"
+   Outside the try in `get-migration-config`: that handler rewraps everything
+   as \"Migration configuration failed\" with the real message demoted into
+   ex-data, and the whole point of this check is the message."
   []
-  ;; Outside the try below: that handler rewraps everything as "Migration
-  ;; configuration failed" with the real message demoted into ex-data, and the
-  ;; whole point of this check is the message.
   (when-let [{:keys [root resources read-from]} (shadowed-migration-dirs)]
       ;; Refusing here rather than warning: the failure this replaces is a
       ;; migration that never runs while every command reports success, so a
@@ -344,7 +342,18 @@
             {:type                :migration-dir-conflict
              :read-from           read-from
              :ignored-migrations  root
-             :resource-migrations resources})))
+             :resource-migrations resources}))))
+
+(defn get-migration-config
+  "Gets migration configuration for the active database.
+
+   Returns:
+     Migratus configuration map
+
+   Throws:
+     Exception if database configuration cannot be loaded"
+  []
+  (refuse-shadowed-migration-dirs!)
   (try
     (let [db-config (db-config/get-active-db-config)]
       (log/info "Loading migration configuration" {:database (:database-type db-config)})
@@ -391,6 +400,42 @@
       (log/error e "Database migration failed")
       (throw (ex-info "Migration failed"
                       {:type :migration-failed
+                       :error (.getMessage e)}
+                      e)))))
+
+(defn migrate-datasource!
+  "Run pending migrations against `datasource`.
+
+   `migrate` finds its database by re-reading config.edn and taking the first
+   `:active` entry. That is right for the CLI, which has nothing else to go on,
+   and wrong at boot: the application already holds the pool it is about to
+   query, and an application with more than one active database would migrate
+   whichever came first rather than the one its context was built for.
+
+   Args:
+     datasource - the javax.sql.DataSource to migrate
+
+   Returns:
+     nil
+
+   Throws:
+     Exception if migration fails"
+  [datasource]
+  (refuse-shadowed-migration-dirs!)
+  (log/info "Running database migrations on the application's own datasource")
+  (try
+    (migratus/migrate {:store                :database
+                       :migration-dir        (discover-migration-dirs)
+                       :init-script          nil
+                       :init-in-transaction? false
+                       :migration-table-name "schema_migrations"
+                       :db                   {:datasource datasource}})
+    (log/info "Database migrations completed successfully")
+    (catch Exception e
+      (rethrow-config-conflict! e)
+      (log/error e "Database migration failed")
+      (throw (ex-info "Migration failed"
+                      {:type  :migration-failed
                        :error (.getMessage e)}
                       e)))))
 
@@ -606,6 +651,12 @@
 
    This function is safe to call on every startup - it only runs
    pending migrations and is idempotent.
+
+   Prefer `:migrate-on-start?` on `:wagoe/db-context`, which is what boots the
+   schema now. It migrates the pool the application is about to query rather
+   than re-reading config.edn for the first `:active` database, and it lets a
+   failure fail the boot — this swallows one and returns false, so the app
+   starts with whatever schema it happened to have (BOU-485).
 
    Returns:
      true if migrations ran successfully, false otherwise"

@@ -7,9 +7,14 @@
      :date-time-format "yyyy-MM-dd HH:mm:ss"
      :features         {}}
 
+   ;; :migrate-on-start? is what gives this profile any tables at all. The
+   ;; database is in-memory and lives inside the app's own JVM, so a separate
+   ;; `clojure -M:migrate up` cannot reach it — without this, every route that
+   ;; queries anything answers 500 (BOU-485).
    :wagoe/h2
-   {:memory true
-    :pool   {:minimum-idle 1 :maximum-pool-size 5}}
+   {:memory            true
+    :migrate-on-start? true
+    :pool              {:minimum-idle 1 :maximum-pool-size 5}}
 
    :wagoe/logging
    {:level :warn :console true}

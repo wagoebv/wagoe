@@ -58,6 +58,9 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **`:migrate-on-start?` on the database config** applies pending migrations at
+  boot (BOU-485). Set in generated dev/test configs; off elsewhere, so nothing
+  changes for an existing app.
 - **`--field x:relation:references=entity`** scaffolds a foreign key (BOU-480):
   an `<x>_id` column, `REFERENCES`, and an index. `on-delete=` defaults to
   `cascade`.

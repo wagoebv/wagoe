@@ -24,6 +24,7 @@
      (def system (ig/init cfg))
      (ig/halt! system)"
   (:require [wagoe.platform.shell.adapters.database.factory :as db-factory]
+            [wagoe.platform.shell.database.migrations :as migrations]
             [wagoe.observability.logging.shell.adapters.no-op :as logging-no-op]
             [wagoe.observability.metrics.shell.adapters.no-op :as metrics-no-op]
             [wagoe.observability.metrics.shell.adapters.datadog :as metrics-datadog]
@@ -93,6 +94,35 @@
   [_ config]
   (log/info "Initializing database context" {:adapter (:adapter config)})
   (let [ctx (db-factory/db-context config)]
+    ;; `:migrate-on-start?` here rather than as its own component: Integrant
+    ;; orders by refs, so a sibling that also refs :wagoe/db-context gives no
+    ;; guarantee it runs before the repositories do. Migrating inside this
+    ;; init means everything that refs the context sees a migrated schema.
+    ;;
+    ;; Off unless asked, so no existing application starts migrating on deploy
+    ;; because it upgraded. Generated dev and test configs set it, which is
+    ;; what makes a fresh project — and the `test` profile's in-memory H2, which
+    ;; no separate `clojure -M:migrate up` can reach — have tables at all
+    ;; (BOU-485).
+    ;;
+    ;; Rethrown, not swallowed: an application whose schema did not apply fails
+    ;; on its first query instead, with an error far from the cause. Closed
+    ;; first, because Integrant only halts the components that finished
+    ;; initialising — this one did not, so its context never reaches Integrant
+    ;; and `halt-key!` is never called for it. The Hikari pool, its threads and
+    ;; any SQLite file lock would outlive the failed boot (BOU-485).
+    (when (:migrate-on-start? config)
+      (try
+        (migrations/migrate-datasource! (:datasource ctx))
+        (catch Throwable t
+          (log/error t "Boot migration failed; closing the database context")
+          ;; Its own try: a pool that fails to close must not replace the
+          ;; migration error with itself, which is the one the operator needs.
+          (try
+            (db-factory/close-db-context! ctx)
+            (catch Throwable close-error
+              (log/error close-error "Closing the database context failed too")))
+          (throw t))))
     (log/info "Database context initialized successfully"
               {:adapter (:adapter config)})
     ctx))
