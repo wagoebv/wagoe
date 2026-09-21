@@ -12,7 +12,9 @@
             [wagoe.scaffolder.cli :as cli]
             [wagoe.scaffolder.core.generators :as gen]
             [wagoe.scaffolder.core.template :as template]
-            [wagoe.scaffolder.schema :as schema]))
+            [wagoe.scaffolder.ports :as ports]
+            [wagoe.scaffolder.schema :as schema]
+            [wagoe.scaffolder.shell.service :as service]))
 
 (defn- parse [spec]
   (cli/parse-field-spec spec))
@@ -109,6 +111,112 @@
 
   (testing "references-table= is only meaningful on a relation"
     (is (:error (parse "name:string:references-table=people")))))
+
+;; =============================================================================
+;; Adding a relation to an entity that already exists
+;; =============================================================================
+;;
+;; `bb scaffold field` is the other half of the contract: a field type that
+;; only works while a module is being created is a field type you cannot reach
+;; once you have a module (BOU-480 review).
+
+(deftest ^:unit the-field-command-accepts-a-relation
+  (let [parse-field (fn [args] (clojure.tools.cli/parse-opts args cli/field-options))
+        run (fn [args] (let [{:keys [options errors]} (parse-field args)]
+                         (if errors
+                           {:errors errors}
+                           (let [[ok? errs] (cli/validate-field-options options)]
+                             (if ok? {:ok options} {:errors errs})))))]
+
+    (testing "--type relation is a type the command knows"
+      (is (:ok (run ["--module-name" "inv" "--entity" "Line" "--name" "invoice"
+                     "--type" "relation" "--references" "invoice"]))))
+
+    (testing "and it needs its target, like --type enum needs its values"
+      (let [{:keys [errors]} (run ["--module-name" "inv" "--entity" "Line"
+                                   "--name" "invoice" "--type" "relation"])]
+        (is (seq errors))
+        (is (some #(str/includes? % "--references") errors) (pr-str errors))))
+
+    (testing "--references on a field that is not a relation is refused"
+      (let [{:keys [errors]} (run ["--module-name" "inv" "--entity" "Line" "--name" "title"
+                                   "--type" "string" "--references" "invoice"])]
+        (is (some #(str/includes? % "--references") errors) (pr-str errors))))
+
+    (testing "--required with --on-delete set-null is refused here too"
+      (let [{:keys [errors]} (run ["--module-name" "inv" "--entity" "Line" "--name" "invoice"
+                                   "--type" "relation" "--references" "invoice"
+                                   "--required" "--on-delete" "set-null"])]
+        (is (some #(str/includes? % "set-null") errors) (pr-str errors))))
+
+    (testing "and a target that is not an identifier never reaches the DDL"
+      (let [{:keys [errors]} (run ["--module-name" "inv" "--entity" "Line" "--name" "invoice"
+                                   "--type" "relation"
+                                   "--references" "invoice);drop/**/table/**/users;--"])]
+        (is (seq errors))))))
+
+(deftest ^:unit adding-a-relation-writes-its-foreign-key
+  ;; The migration emitted `ADD COLUMN invoice_id UUID` and stopped: no
+  ;; REFERENCES, no ON DELETE, no index. A relation added to an existing
+  ;; entity had none of the referential integrity the same field gets when the
+  ;; module is generated.
+  (let [sql (gen/generate-add-field-migration
+             "invoicing" "InvoiceLineItem"
+             {:name :invoice :type :relation :references "invoice"
+              :on-delete :cascade :required true}
+             "20260921000000")]
+
+    (testing "the column carries its constraint"
+      (is (str/includes? sql "ALTER TABLE invoice_line_items ADD COLUMN invoice_id UUID NOT NULL REFERENCES invoices(id) ON DELETE CASCADE;")
+          sql))
+
+    (testing "and the foreign key gets the same index module generation gives it"
+      (is (str/includes? sql "CREATE INDEX IF NOT EXISTS idx_invoice_line_items_invoice_id ON invoice_line_items(invoice_id);")
+          sql)))
+
+  (testing "a non-relation field is unchanged — no constraint, no index"
+    (let [sql (gen/generate-add-field-migration
+               "invoicing" "InvoiceLineItem"
+               {:name :discount :type :decimal} "1")]
+      ;; NOT NULL because build-field-context defaults :required to true.
+      (is (str/includes? sql "ADD COLUMN discount DECIMAL(19,4) NOT NULL;"))
+      (is (not (str/includes? sql "REFERENCES")))
+      (is (not (str/includes? sql "CREATE INDEX")))))
+
+  (testing "the down migration drops the column the up added"
+    ;; The up adds `invoice_id`; the down was built from the raw field name and
+    ;; dropped `invoice`, so the rollback failed on a column that never
+    ;; existed — the same up/down split as the table name (BOU-480).
+    (let [dir (.toFile (java.nio.file.Files/createTempDirectory
+                        "wagoe-rel-field" (make-array java.nio.file.attribute.FileAttribute 0)))]
+      (try
+        (ports/generate-module (service/create-scaffolder-service)
+                               {:module-name "invoicing" :base-ns "app"
+                                :entities [{:name "InvoiceLineItem"
+                                            :fields [{:name :quantity :type :int}]}]
+                                :output-dir (.getPath dir)})
+        (let [result (ports/add-field (service/create-scaffolder-service)
+                                      {:module-name "invoicing" :base-ns "app"
+                                       :entity "InvoiceLineItem"
+                                       :field {:name :invoice :type :relation
+                                               :references "invoice" :required true}
+                                       :output-dir (.getPath dir)})
+              down   (->> (:files result)
+                          (filter #(str/ends-with? (:path %) ".down.sql"))
+                          first)]
+          (is (true? (:success result)) (pr-str (:errors result)))
+          (is (str/includes? (or (:content down) (slurp (:path down)))
+                             "DROP COLUMN invoice_id;")
+              (or (:content down) (slurp (:path down)))))
+        (finally (doseq [f (reverse (file-seq dir))] (.delete f))))))
+
+  (testing "references-table= is honoured here too"
+    (is (str/includes? (gen/generate-add-field-migration
+                        "hr" "Badge"
+                        {:name :owner :type :relation :references "person"
+                         :references-table "people"}
+                        "1")
+                       "REFERENCES people(id)"))))
 
 (deftest ^:unit the-request-schema-refuses-the-contradiction-too
   ;; The CLI is not the only way in — the MCP tool and any direct

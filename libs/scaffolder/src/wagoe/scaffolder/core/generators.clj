@@ -987,11 +987,27 @@ DROP TABLE IF EXISTS %s;
         field-name (:field-name-snake field-ctx)
         sql-type (:sql-type field-ctx)
         not-null (if (:field-required field-ctx) " NOT NULL" "")
-        unique-clause (if (:field-unique field-ctx) " UNIQUE" "")]
+        unique-clause (if (:field-unique field-ctx) " UNIQUE" "")
+        ;; The same clause and index `generate-migration-file` gives a
+        ;; relation. Without them a relation added to an existing entity got a
+        ;; bare UUID column: no referential integrity, and no index for the
+        ;; joins and cascades that read it (BOU-480 review).
+        relation-table (:relation-table field-ctx)
+        references-clause (if relation-table
+                            (format " REFERENCES %s(id) ON DELETE %s"
+                                    relation-table
+                                    (get template/on-delete-clauses
+                                         (:on-delete field-ctx)
+                                         "CASCADE"))
+                            "")
+        index-sql (if relation-table
+                    (format "\nCREATE INDEX IF NOT EXISTS idx_%s_%s ON %s(%s);\n"
+                            table-name field-name table-name field-name)
+                    "")]
     (format "-- Migration %s: Add %s to %s table
 
-ALTER TABLE %s ADD COLUMN %s %s%s%s;
-"
+ALTER TABLE %s ADD COLUMN %s %s%s%s%s;
+%s"
             migration-number
             field-name
             table-name
@@ -999,7 +1015,9 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s;
             field-name
             sql-type
             not-null
-            unique-clause)))
+            unique-clause
+            references-clause
+            index-sql)))
 
 (defn schema-field-entry
   "The Malli entry line for `field`, without indentation.

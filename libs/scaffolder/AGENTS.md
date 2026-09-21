@@ -82,6 +82,22 @@ bb scaffold field \
   --required
 ```
 
+A relation is added the same way, and writes the same foreign key, `ON DELETE`
+and index that module generation does:
+
+```bash
+bb scaffold field \
+  --module-name invoicing \
+  --entity InvoiceLineItem \
+  --name invoice \
+  --type relation \
+  --references invoice \
+  --required
+```
+
+`--references-table` and `--on-delete` are available here too, with the same
+rules as the `--field` spec below.
+
 ### `endpoint` — Add an Endpoint to an Existing Module
 
 ```bash

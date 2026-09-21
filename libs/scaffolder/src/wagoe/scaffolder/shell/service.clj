@@ -346,7 +346,13 @@
                                module-name entity field migration-number)
 
             ;; Define files
-            field-name-snake (template/kebab->snake (name (:name field)))
+            ;; Through build-field-context, which knows a relation's column is
+            ;; the field name plus `-id`. Built from the raw field name, the
+            ;; down migration dropped `invoice` while the up added `invoice_id`
+            ;; (BOU-480).
+            field-name-snake (:field-name-snake (template/build-field-context field))
+            ;; The filename keeps the relationship's own name — `add-invoice-to-…`
+            ;; reads as what it does, and it is not an identifier.
             field-name-kebab (name (:name field))
             ;; Through pascal->kebab, the same derivation
             ;; `generate-add-field-migration` uses for the up migration. It was
