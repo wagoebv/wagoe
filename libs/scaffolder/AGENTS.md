@@ -127,6 +127,11 @@ A relation names the entity it points at, not the table:
 `--field invoice:relation:references=invoice:required` on an `InvoiceLineItem`
 writes `invoice_id UUID NOT NULL REFERENCES invoices(id) ON DELETE CASCADE`.
 
+`required` and `on-delete=set-null` are refused together: the database accepts
+`NOT NULL … ON DELETE SET NULL` and then fails every delete of a parent row,
+because the foreign key action sets a column the table forbids to be null. Use
+`on-delete=restrict` to refuse the delete instead, or drop `required`.
+
 Examples:
 
 ```bash

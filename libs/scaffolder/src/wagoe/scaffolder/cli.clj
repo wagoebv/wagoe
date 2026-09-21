@@ -236,6 +236,18 @@
                    (str/join ", " (sort (map name (keys template/on-delete-clauses))))
                    ")")}
 
+      ;; A NOT NULL column whose foreign key sets it to null on a parent
+      ;; delete: the database takes the DDL and then refuses every such
+      ;; delete. Both halves were asked for, so neither is dropped silently
+      ;; (BOU-480 review).
+      (and (= :relation type-kw)
+           (= :set-null on-delete)
+           (some #(= % "required") flags))
+      {:error (str "Field " name-str " is required and on-delete=set-null, which contradict: "
+                   "the column cannot be NOT NULL and be set to null when "
+                   references " is deleted. Drop `required`, or use "
+                   "on-delete=restrict to refuse the delete instead.")}
+
       :else
       (cond-> {:name (keyword name-str)
                :type type-kw
@@ -664,7 +676,8 @@ Field Flags:
   values=a,b,c      Allowed values, required on an enum field
   references=entity The entity a relation points at; the column is <name>_id,
                     and it gets an index
-  on-delete=x       cascade (default), restrict, set-null or no-action
+  on-delete=x       cascade (default), restrict, set-null or no-action.
+                    set-null needs a nullable column, so not with `required`
   required          Field cannot be null
   unique            Field must be unique across all records
 

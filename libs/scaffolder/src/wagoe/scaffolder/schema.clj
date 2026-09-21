@@ -52,7 +52,14 @@
       (or (not= :enum type) (seq enum-values)))]
    [:fn {:error/message "a relation field needs :references"}
     (fn [{:keys [type references]}]
-      (or (not= :relation type) (not (str/blank? references))))]])
+      (or (not= :relation type) (not (str/blank? references))))]
+   ;; `NOT NULL ... ON DELETE SET NULL` is accepted by the database and then
+   ;; fails on the first delete of a parent row: the foreign key action sets a
+   ;; column the table forbids to be null. Refused rather than silently
+   ;; dropping whichever of the two the caller meant less (BOU-480 review).
+   [:fn {:error/message ":on-delete :set-null needs a nullable column, so the field cannot be :required"}
+    (fn [{:keys [type on-delete required]}]
+      (not (and (= :relation type) (= :set-null on-delete) required)))]])
 
 (def EntityDefinition
   "Schema for an entity definition."

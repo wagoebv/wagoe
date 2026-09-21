@@ -8,9 +8,11 @@
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [clojure.tools.cli]
+            [malli.core :as m]
             [wagoe.scaffolder.cli :as cli]
             [wagoe.scaffolder.core.generators :as gen]
-            [wagoe.scaffolder.core.template :as template]))
+            [wagoe.scaffolder.core.template :as template]
+            [wagoe.scaffolder.schema :as schema]))
 
 (defn- parse [spec]
   (cli/parse-field-spec spec))
@@ -41,7 +43,33 @@
   (testing "an unknown on-delete is refused rather than pasted into the DDL"
     (let [result (parse "invoice:relation:references=invoice:on-delete=explode")]
       (is (:error result))
-      (is (str/includes? (:error result) "explode")))))
+      (is (str/includes? (:error result) "explode"))))
+
+  (testing "required with on-delete=set-null is refused — the two contradict"
+    ;; `invoice_id UUID NOT NULL ... ON DELETE SET NULL` is accepted by the
+    ;; database and then fails on the first parent delete: the FK action sets
+    ;; a column the table forbids to be null. Refused here rather than
+    ;; silently dropping one of the two things the caller asked for.
+    (let [result (parse "invoice:relation:references=invoice:required:on-delete=set-null")]
+      (is (:error result))
+      (is (str/includes? (:error result) "set-null"))))
+
+  (testing "required is fine with the actions that block the delete instead"
+    (doseq [action ["cascade" "restrict" "no-action"]]
+      (is (nil? (:error (parse (str "invoice:relation:references=invoice:required:on-delete=" action))))
+          action))))
+
+(deftest ^:unit the-request-schema-refuses-the-contradiction-too
+  ;; The CLI is not the only way in — the MCP tool and any direct
+  ;; `generate-module` caller are validated by the schema alone, and would
+  ;; otherwise still write DDL that cannot survive a parent delete.
+  (let [valid? (fn [field] (m/validate schema/FieldDefinition field))]
+    (is (not (valid? {:name :invoice :type :relation :references "invoice"
+                      :on-delete :set-null :required true})))
+    (is (valid? {:name :invoice :type :relation :references "invoice"
+                 :on-delete :set-null :required false}))
+    (is (valid? {:name :invoice :type :relation :references "invoice"
+                 :on-delete :cascade :required true}))))
 
 (deftest ^:unit the-cli-accepts-a-relation-field
   (let [opts (:options (clojure.tools.cli/parse-opts
