@@ -62,10 +62,13 @@
    [:module-name :string]                                   ; Module name (lowercase, e.g., "customer")
    [:base-ns {:optional true} :string]                      ; Base namespace + path (default: "wagoe")
    [:entities [:vector EntityDefinition]]                   ; Entities to generate
-   [:interfaces                                             ; Which interfaces to generate
+   ;; Which interfaces to generate. Optional, and every key in it optional:
+   ;; absent means yes, so leaving it out is the full module. It was required,
+   ;; while being read by nothing — and `:cli` named an interface the
+   ;; scaffolder has never had a generator for (BOU-479).
+   [:interfaces {:optional true}
     [:map
      [:http {:optional true} :boolean]
-     [:cli {:optional true} :boolean]
      [:web {:optional true} :boolean]]]
    [:features                                               ; Optional features
     {:optional true}

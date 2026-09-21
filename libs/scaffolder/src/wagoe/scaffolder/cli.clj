@@ -38,11 +38,14 @@
     :default []
     :update-fn conj]
    [nil "--base-ns NS" "Base namespace + path for the module (default: the project's own)"]
-   [nil "--http" "Enable HTTP (REST API) interface (default: true)"
+   ;; `--[no-]x`, not `--x`: a bare boolean flag with `:default true` has no
+   ;; way to say no — `--web false` set it to true and left "false" as a stray
+   ;; argument. `--cli` is gone entirely; the scaffolder has never had a CLI
+   ;; generator, so it promised an interface no value of the flag produced
+   ;; (BOU-479).
+   [nil "--[no-]http" "Generate the HTTP (REST API) interface (default: true)"
     :default true]
-   [nil "--cli" "Enable CLI interface (default: true)"
-    :default true]
-   [nil "--web" "Enable Web UI interface (default: true)"
+   [nil "--[no-]web" "Generate the Web UI interface (default: true)"
     :default true]
    [nil "--audit" "Enable audit logging (default: true)"
     :default true]
@@ -420,7 +423,6 @@
                                  :entities [{:name (:entity opts)
                                              :fields fields-or-errors}]
                                  :interfaces {:http (:http opts)
-                                              :cli (:cli opts)
                                               :web (:web opts)}
                                  :features {:audit (:audit opts)
                                             :pagination (:pagination opts)}
@@ -606,7 +608,6 @@ architecture including:
   - Service orchestration
   - Persistence layer
   - HTTP routes (REST API + Web UI)
-  - CLI commands
   - Database migrations
 
 Required Options:
@@ -634,9 +635,9 @@ Field Flags:
   unique        Field must be unique across all records
 
 Interface Options (default: all enabled):
-  --http               Enable HTTP (REST API) interface
-  --cli                Enable CLI interface
-  --web                Enable Web UI interface
+  --no-http            Skip the HTTP (REST API) routes
+  --no-web             Skip the Web UI: core/ui.clj, shell/web_handlers.clj
+                       and the module's :web route contribution
 
 Feature Options (default: all enabled):
   --audit              Enable audit logging

@@ -602,7 +602,11 @@ DROP TABLE IF EXISTS %s;
         entity (first (:entities ctx))
         entity-name (:entity-name entity)
         entity-lower (str/lower-case entity-name)
-        entity-plural (template/pluralize entity-lower)]
+        entity-plural (template/pluralize entity-lower)
+        ;; `:interfaces` decides what this file defines and what the
+        ;; contribution carries. A module generated with --no-web has no web
+        ;; UI files on disk, so it must not mount web routes either (BOU-479).
+        {:keys [http web]} (:interfaces ctx {:http true :web true})]
     ;; No :require at all. The handlers below are stubs that call nothing, so
     ;; requiring ports here was an unused require — a clj-kondo warning, and
     ;; `bb check` fails on warnings in the generated project (BOU-267). The
@@ -614,34 +618,40 @@ DROP TABLE IF EXISTS %s;
          ";; wire them to the service, add to the ns form above:\n"
          ";;   (:require [" base-ns "." module-name ".ports :as ports])\n"
          "\n"
-         "(defn api-routes\n"
-         "  \"Reitit route data: [path data & children].\n"
-         "\n"
-         "   Paths are relative — the platform mounts these under /api/v1.\"\n"
-         "  [_service]\n"
-         "  [[\"/" entity-plural "\"\n"
-         "    {:get  {:handler (fn [_req] {:status 200 :body []})}\n"
-         "     :post {:handler (fn [_req] {:status 201 :body {}})}}]\n"
-         "   [\"/" entity-plural "/:id\"\n"
-         "    {:get    {:handler (fn [_req] {:status 200 :body {}})}\n"
-         "     :put    {:handler (fn [_req] {:status 200 :body {}})}\n"
-         "     :delete {:handler (fn [_req] {:status 204})}}]])\n"
-         "\n"
-         "(defn web-routes\n"
-         "  \"Mounted under /web — do not repeat the prefix here.\"\n"
-         "  [_service _config]\n"
-         "  [[\"/" entity-plural "\"\n"
-         "    {:get {:handler (fn [_req] {:status 200 :body \"<html><body>Web UI</body></html>\"})}}]])\n"
-         "\n"
+         (when http
+           (str "(defn api-routes\n"
+                "  \"Reitit route data: [path data & children].\n"
+                "\n"
+                "   Paths are relative — the platform mounts these under /api/v1.\"\n"
+                "  [_service]\n"
+                "  [[\"/" entity-plural "\"\n"
+                "    {:get  {:handler (fn [_req] {:status 200 :body []})}\n"
+                "     :post {:handler (fn [_req] {:status 201 :body {}})}}]\n"
+                "   [\"/" entity-plural "/:id\"\n"
+                "    {:get    {:handler (fn [_req] {:status 200 :body {}})}\n"
+                "     :put    {:handler (fn [_req] {:status 200 :body {}})}\n"
+                "     :delete {:handler (fn [_req] {:status 204})}}]])\n"
+                "\n"))
+         (when web
+           (str "(defn web-routes\n"
+                "  \"Mounted under /web — do not repeat the prefix here.\"\n"
+                "  [_service _config]\n"
+                "  [[\"/" entity-plural "\"\n"
+                "    {:get {:handler (fn [_req] {:status 200 :body \"<html><body>Web UI</body></html>\"})}}]])\n"
+                "\n"))
          "(defn " module-name "-routes\n"
          "  \"This module's contribution to the application's route table.\n"
          "\n"
          "   :api    versioned, mounted under /api/v1\n"
          "   :web    mounted under /web\n"
          "   :static mounted as written\"\n"
-         "  [service config]\n"
-         "  {:api    (api-routes service)\n"
-         "   :web    (web-routes service config)\n"
+         ;; All three keys, always: the platform folds a contribution by
+         ;; looking each part up, and a missing one is not the same as an
+         ;; empty one to a reader trying to see what the module serves.
+         "  [" (if (or http web) "service" "_service") " "
+         (if web "config" "_config") "]\n"
+         "  {:api    " (if http "(api-routes service)" "[]") "\n"
+         "   :web    " (if web "(web-routes service config)" "[]") "\n"
          "   :static []})\n"
          "\n")))
 
