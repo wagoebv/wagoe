@@ -19,7 +19,10 @@
        request: Map conforming to schema/ModuleGenerationRequest
                 {:module-name \"customer\"
                  :entities [{:name \"Customer\" :fields [...]}]
-                 :interfaces {:http true :cli true :web true}
+                 ;; Optional, and every key in it optional: absent means
+                 ;; every interface. `:cli` is gone — the scaffolder has
+                 ;; never had a CLI generator (BOU-479).
+                 :interfaces {:http true :web true}
                  :dry-run false}
      
      Returns:
