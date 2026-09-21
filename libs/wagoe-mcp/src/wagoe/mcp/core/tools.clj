@@ -75,9 +75,12 @@
                                                                 "fields" {:type  "array"
                                                                           :items {:type       "object"
                                                                                   :properties {"name"     {:type "string" :description "Field name, kebab-case."}
-                                                                                               "type"     {:type "string" :description "One of: string, text, int, uuid, boolean, email, enum, inst, json, decimal."}
+                                                                                               "type"     {:type "string" :description "One of: string, text, int, uuid, boolean, email, enum, inst, json, decimal, relation."}
                                                                                                "required" {:type "boolean"}
-                                                                                               "unique"   {:type "boolean"}}
+                                                                                               "unique"   {:type "boolean"}
+                                                                                               "references" {:type "string" :description "Required when type is relation: the entity it points at. The column is <name>_id and gets a foreign key and an index."}
+                                                                                               "references-table" {:type "string" :description "The target's table, when it is not the default plural of the entity."}
+                                                                                               "on-delete" {:type "string" :enum ["cascade" "restrict" "set-null" "no-action"] :description "Relation only; defaults to cascade. set-null needs a nullable column, so not with required."}}
                                                                                   :required   ["name" "type"]}}}
                                                    :required   ["name" "fields"]}}
                                "interfaces" {:type       "object"
@@ -95,9 +98,12 @@
                                "entity" {:type "string" :description "Entity name (PascalCase)."}
                                "field"  {:type       "object"
                                          :properties {"name"     {:type "string" :description "Field name, kebab-case."}
-                                                      "type"     {:type "string" :description "Field type (string, int, uuid, ...)."}
+                                                      "type"     {:type "string" :description "Field type (string, int, uuid, relation, ...)."}
                                                       "required" {:type "boolean"}
-                                                      "unique"   {:type "boolean"}}
+                                                      "unique"   {:type "boolean"}
+                                                      "references" {:type "string" :description "Required when type is relation: the entity it points at. The column is <name>_id and gets a foreign key and an index."}
+                                                      "references-table" {:type "string" :description "The target's table, when it is not the default plural of the entity."}
+                                                      "on-delete" {:type "string" :enum ["cascade" "restrict" "set-null" "no-action"] :description "Relation only; defaults to cascade. set-null needs a nullable column, so not with required."}}
                                          :required   ["name" "type"]}
                                "allow"  {:type "boolean" :description "Audited override of soft guardrails."}}
                   :required   ["module" "entity" "field"]}}

@@ -131,11 +131,21 @@
   v)
 
 (defn- field->scaffolder
-  "MCP field map → scaffolder FieldDefinition: :name and :type become keywords."
-  [{:keys [name type] :as f}]
-  (-> f
-      (assoc :name (keyword name) :type (keyword type))
-      (select-keys [:name :type :required :unique :default :enum-values :min :max :description])))
+  "MCP field map → scaffolder FieldDefinition: :name and :type become keywords.
+
+   A relation carries three more keys, and the allowlist below did not have
+   them: module generation refused the field for a missing :references, and
+   add-field wrote a bare UUID column with no foreign key — the relation type
+   was unreachable through MCP (BOU-480 review). `:on-delete` arrives as a
+   string over JSON and the schema wants a keyword; absent, it is the same
+   `:cascade` the CLI defaults to."
+  [{:keys [name type on-delete] :as f}]
+  (cond-> (-> f
+              (assoc :name (keyword name) :type (keyword type))
+              (select-keys [:name :type :required :unique :default :enum-values
+                            :min :max :description :references :references-table]))
+    (= :relation (keyword type))
+    (assoc :on-delete (if on-delete (keyword on-delete) :cascade))))
 
 (defn- entity->scaffolder
   [{:keys [name plural fields]}]
