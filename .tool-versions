@@ -1,0 +1,5 @@
+java temurin-21.0.12+101.0.LTS
+clojure 1.12.6.1673
+babashka 1.13.223
+clj-kondo 2026.08.04
+nodejs 22.23.2
