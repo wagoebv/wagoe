@@ -13,7 +13,7 @@ Auto-generated CRUD admin interface with database schema introspection, filterin
 
 **deps.edn** (recommended):
 ```clojure
-{:deps {com.wagoe/wagoe-admin {:mvn/version "1.0.0-rc-2"}}}
+{:deps {com.wagoe/wagoe-admin {:mvn/version "1.0.0-rc-3"}}}
 ```
 
 ---

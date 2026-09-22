@@ -29,6 +29,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ## [Unreleased]
 
+## [1.0.0-rc-3] — 2026-09-21
+
 ### Breaking
 
 - **`bb scaffold generate --cli` is removed** (BOU-479). It named an interface
