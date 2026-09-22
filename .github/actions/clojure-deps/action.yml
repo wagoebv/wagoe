@@ -45,7 +45,7 @@ runs:
     - name: Setup Clojure
       uses: DeLaGuardo/setup-clojure@13.6.1
       with:
-        cli: 1.12.5.1654
+        cli: 1.12.6.1673
 
     # The `v2` segment is a manual invalidation lever, and it is load-bearing.
     #
