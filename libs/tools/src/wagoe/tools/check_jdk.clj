@@ -76,7 +76,10 @@
    "docs/modules/getting-started/pages/index.adoc"
    "the quickstart's prerequisites"
    "docs/modules/getting-started/pages/installation.adoc"
-   "the manual install instructions"})
+   "the manual install instructions"
+   ;; The asdf pin. It said corretto-25 for months while this gate passed:
+   ;; the spelling matched nothing, so it was neither read nor missed (BOU-488).
+   ".tool-versions"                      "what asdf puts on a developer's PATH"})
 
 (def exempt
   "Files that name a JDK for some reason other than the baseline, and why.
@@ -119,7 +122,11 @@
 
 (def overrides
   "Per-file patterns, where the shared ones read something that is not a pin."
-  {"scripts/install.sh" [#"JAVA_MIN=(\d+)"]})
+  {"scripts/install.sh" [#"JAVA_MIN=(\d+)"]
+   ;; `java <distribution>-<major>...` — temurin-21.0.12+101.0.LTS, corretto-25.0.3.9.1.
+   ;; One pattern for every distribution asdf-java offers; the major is the
+   ;; first digit run after the name.
+   ".tool-versions"     [#"(?m)^java\s+\S*?(\d+)"]})
 
 (defn- exempt? [path]
   (or (contains? exempt path)

@@ -32,7 +32,8 @@
   (merge (zipmap (keys check-jdk/must-name-a-jdk) (repeat (str "Java " expected)))
          (zipmap (keys check-jdk/exempt) (repeat "Java 17"))
          prefix-files
-         {"scripts/install.sh" (str "JAVA_MIN=" expected "\n# and Java 8 before that")}))
+         {"scripts/install.sh" (str "JAVA_MIN=" expected "\n# and Java 8 before that")
+          ".tool-versions"     (str "java temurin-" expected ".0.12+101.0.LTS\nclojure 1.12.6.1673")}))
 
 (defn- with-prefixes
   "`paths` plus the files the exempt prefixes need to still be exempting."
@@ -126,7 +127,17 @@
     (let [sh "JAVA_MIN=21\n# Two spellings: since Java 9, and 1.8.0_402 before it."]
       (is (= [21] (check-jdk/versions-in "scripts/install.sh" sh)))
       (is (= [21 9] (check-jdk/versions-in "any/other/file" sh))
-          "without the override the explanation reads as a second baseline"))))
+          "without the override the explanation reads as a second baseline")))
+
+  (testing "the asdf pin reads the major after any distribution name"
+    ;; BOU-488: `corretto-25` sat in this file while the gate passed, because
+    ;; no shared spelling covers `<distribution>-<major>`. Other tools on the
+    ;; same file must not read as JDKs.
+    (doseq [[text want] [["java temurin-17.0.12+101.0.LTS\nnodejs 22.23.2" [17]]
+                         ["java corretto-25.0.3.9.1\nclojure 1.12.6.1673"  [25]]
+                         ["java zulu-17.54.21\nbabashka 1.13.223"          [17]]
+                         ["nodejs 22.23.2\nclojure 1.12.6.1673"            []]]]
+      (is (= want (check-jdk/versions-in ".tool-versions" text)) text))))
 
 (deftest ^:unit the-gate-scans-the-real-tree
   (testing "discovery reaches the files, and the repository agrees with itself"
