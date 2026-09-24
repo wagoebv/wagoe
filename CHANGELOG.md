@@ -36,6 +36,16 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **`bb check:jdk` passed a `.tool-versions` that pinned another JDK** (BOU-488).
   It now reads the asdf spelling and requires the file to name one.
+- **The dashboard's Request Inspector captured nothing** (BOU-506). It now
+  records under the `:dev` profile; no config change needed.
+- **The dashboard reported `0 applied` migrations** (BOU-507). Applied
+  migrations are listed even when their files are not on the classpath.
+- **Security Status rendered a blank password tile and policy card**
+  (BOU-510). Both now say when no policy is configured.
+- **The dashboard's Schema Browser showed no application schemas** (BOU-509).
+  Any namespace ending in `.schema` is discovered, not only `wagoe.*`.
+- **Dashboard sub-pages reported `0 components` unless started from a REPL**
+  (BOU-508). They now read the running system however it was started.
 
 ## [1.0.0-rc-3] — 2026-09-21
 

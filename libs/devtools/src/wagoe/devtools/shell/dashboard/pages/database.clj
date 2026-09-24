@@ -58,6 +58,36 @@
                       dirs)]
     (->> files distinct sort)))
 
+(defn merge-migration-status
+  "Combine the migration files on disk with the ids the database says are applied.
+
+   `applied-ids` is nil when the database could not be read at all, which is
+   different from \"none applied\" — the files are then reported `:unknown`
+   rather than `:pending`.
+
+   The database is authoritative for what has been applied, so an applied id
+   with no matching file is still listed. Reporting only what file discovery
+   found meant the panel showed `0 applied` for any project keeping its
+   migrations outside `resources/` and off the classpath, while
+   `schema_migrations` held nine rows (BOU-507).
+
+   Each entry: {:name <string> :status :applied|:pending|:unknown}"
+  [applied-ids filenames]
+  (let [from-files (mapv (fn [fname-raw]
+                           (let [fname      (str/replace fname-raw #"\.up\.sql$" "")
+                                 numeric-id (re-find #"^\d+" fname)
+                                 status     (if applied-ids
+                                              (if (and numeric-id (contains? applied-ids numeric-id))
+                                                :applied
+                                                :pending)
+                                              :unknown)]
+                             {:name fname :status status :id numeric-id}))
+                         filenames)
+        seen-ids   (into #{} (keep :id) from-files)
+        from-db    (mapv (fn [id] {:name id :status :applied :id id})
+                         (sort (remove seen-ids (or applied-ids #{}))))]
+    (mapv #(dissoc % :id) (concat from-files from-db))))
+
 (defn- migration-data
   "Return a list of migration entries from all migration directories.
    Cross-references with schema_migrations table to determine actual status.
@@ -68,18 +98,7 @@
         ds     (when db-ctx (:datasource db-ctx))
         applied-ids (applied-migration-ids ds)
         filenames (discover-migration-files)]
-    (if (seq filenames)
-      (mapv (fn [fname-raw]
-              (let [fname (str/replace fname-raw #"\.up\.sql$" "")
-                    numeric-id (re-find #"^\d+" fname)
-                    status (if applied-ids
-                             (if (and numeric-id (contains? applied-ids numeric-id))
-                               :applied
-                               :pending)
-                             :unknown)]
-                {:name fname :status status}))
-            filenames)
-      [])))
+    (merge-migration-status applied-ids filenames)))
 
 (defn- pool-stats
   "Get HikariCP pool stats. Prefers injected :db-context, falls back to REPL state.
