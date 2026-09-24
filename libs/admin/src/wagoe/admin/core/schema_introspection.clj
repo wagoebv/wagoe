@@ -533,6 +533,19 @@
       (merge merged-auto manual-only))
     auto-fields))
 
+(defn derive-editable-fields
+  "The visible fields of `config` that are not read-only.
+
+   Kept separate from parse-table-metadata because it has to run again after a
+   manual config is merged in — see build-entity-config (BOU-498)."
+  [{:keys [detail-fields fields readonly-fields hide-fields]}]
+  (let [readonly (set readonly-fields)
+        hidden   (set hide-fields)]
+    (->> (or (seq detail-fields) (keys fields))
+         (remove readonly)
+         (remove hidden)
+         vec)))
+
 (defn build-entity-config
   "Build complete entity configuration by merging auto-detected with manual.
 
@@ -552,11 +565,21 @@
        {:label \"System Users\" :list-fields [:email :name :role]})"
   [auto-config manual-config]
   (if manual-config
-    (-> auto-config
-        (merge (dissoc manual-config :fields))  ; Merge all except :fields
-        (assoc :fields (merge-fields-config
-                        (:fields auto-config)
-                        (:fields manual-config))))
+    (let [merged (-> auto-config
+                     (merge (dissoc manual-config :fields))  ; Merge all except :fields
+                     (assoc :fields (merge-fields-config
+                                     (:fields auto-config)
+                                     (:fields manual-config))))]
+      ;; :editable-fields is derived from :readonly-fields, so it has to be
+      ;; recomputed once the manual config has had its say. The merge above
+      ;; left it at what parse-table-metadata computed from the auto-detected
+      ;; read-only columns alone, so a field named only in a manual
+      ;; :readonly-fields still rendered as a writable input and the form wrote
+      ;; a column the config called read-only (BOU-498). An explicit manual
+      ;; :editable-fields still wins.
+      (cond-> merged
+        (not (contains? manual-config :editable-fields))
+        (assoc :editable-fields (derive-editable-fields merged))))
     auto-config))
 
 ;; =============================================================================

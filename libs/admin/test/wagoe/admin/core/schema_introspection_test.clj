@@ -304,6 +304,33 @@
 
       (is (= auto-config merged)))))
 
+(deftest ^:unit manual-readonly-fields-are-not-editable-test
+  ;; Before BOU-498 :editable-fields was computed from the auto-detected
+  ;; read-only columns and then carried through the merge unchanged, so the form
+  ;; rendered a writable input for a field the config called read-only.
+  (testing "a field named only in a manual :readonly-fields is not editable"
+    (let [auto-config (introspection/parse-table-metadata :users sample-users-table-metadata)
+          merged      (introspection/build-entity-config
+                       auto-config {:readonly-fields #{:id :email :created-at :updated-at}})]
+      (is (contains? (set (:readonly-fields merged)) :email))
+      (is (not (contains? (set (:editable-fields merged)) :email))
+          ":email is read-only in the manual config, so it must not be editable")
+      (is (contains? (set (:editable-fields merged)) :name)
+          "fields the manual config says nothing about stay editable")))
+
+  (testing "an explicit manual :editable-fields wins over the derived one"
+    (let [auto-config (introspection/parse-table-metadata :users sample-users-table-metadata)
+          merged      (introspection/build-entity-config
+                       auto-config {:readonly-fields #{:id}
+                                    :editable-fields [:email]})]
+      (is (= [:email] (:editable-fields merged)))))
+
+  (testing "hidden fields are never editable"
+    (let [auto-config (introspection/parse-table-metadata :users sample-users-table-metadata)
+          merged      (introspection/build-entity-config
+                       auto-config {:hide-fields #{:password-hash}})]
+      (is (not (contains? (set (:editable-fields merged)) :password-hash))))))
+
 ;; =============================================================================
 ;; Relationship Detection Tests (Week 1 Stub)
 ;; =============================================================================
