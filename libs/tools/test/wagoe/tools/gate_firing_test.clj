@@ -746,7 +746,8 @@
                        (zipmap (keys check-jdk/exempt) (repeat "Java 17"))
                        ;; install.sh is in both sets, and its pattern reads
                        ;; JAVA_MIN rather than prose.
-                       {"scripts/install.sh" "JAVA_MIN=21\n# and Java 8 before that"}
+                       {"scripts/install.sh" "JAVA_MIN=21\n# and Java 8 before that"
+                        ".tool-versions"     "java temurin-21.0.12+101.0.LTS\nnodejs 22.23.2"}
                        ;; One file under each exempt prefix: a prefix that
                        ;; exempts nothing is a finding of its own.
                        (zipmap (map #(str % "x.adoc") (keys check-jdk/exempt-prefixes))
