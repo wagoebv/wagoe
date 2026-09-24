@@ -36,8 +36,9 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **`bb check:jdk` passed a `.tool-versions` that pinned another JDK** (BOU-488).
   It now reads the asdf spelling and requires the file to name one.
-- **`defworkflow` forced every project to add its own `:lint-as`** (BOU-503).
-  `wagoe-workflow` now ships a clj-kondo export; drop your local entry.
+- **Registry macros forced every project to add its own `:lint-as`**
+  (BOU-503). `defworkflow`, `defsearch`, `defreport`, `defevent` and `defpush`
+  now ship clj-kondo exports; drop your local entries.
 
 ## [1.0.0-rc-3] — 2026-09-21
 
