@@ -143,14 +143,34 @@
      [:span.schema-field-name (pr-str k)]
      [:span.schema-field-type type-str]]))
 
+(def ^:private example-max-lines
+  "Lines of generated example worth showing. Past this it is filler, not a hint."
+  14)
+
+(defn truncate-example
+  "`s` capped at `n` lines, with a count of what was dropped."
+  [s n]
+  (let [lines (str/split-lines s)]
+    (if (<= (count lines) n)
+      s
+      (str (str/join "\n" (take n lines))
+           "\n  \u2026 " (- (count lines) n) " more line(s)"))))
+
 (defn- generate-example-str
   "Try to generate a malli example. Returns nil if malli.generator is unavailable."
   [schema]
   (try
     (let [gen-fn (requiring-resolve 'malli.generator/generate)]
       (when gen-fn
-        (let [example (gen-fn (m/schema schema) {:seed 42})]
-          (with-out-str (pprint/pprint example)))))
+        ;; :size bounds the collections. Without it a `[:set keyword?]` field
+        ;; generates dozens of arbitrary keywords, and the example for a
+        ;; workflow definition ran to about sixty lines of noise — filling the
+        ;; page and teaching nothing, on exactly the schemas worth reading
+        ;; (BOU-517). The line cap is the backstop for schemas that are simply
+        ;; large.
+        (let [example (gen-fn (m/schema schema) {:seed 42 :size 3})]
+          (truncate-example (with-out-str (pprint/pprint example))
+                            example-max-lines))))
     (catch Exception _ nil)))
 
 (defn render-schema-detail

@@ -52,6 +52,8 @@ for what is public API, what is internal, and how deprecations are announced.
   Config Editor is read-only outside the REPL: Apply restarts components of
   the system `(go)` started, and against any other it had reported "Config
   applied successfully" while restarting nothing.
+- **The Schema Browser's example value ran to hundreds of lines** (BOU-517).
+  Collections are bounded and the example is capped.
 
 ## [1.0.0-rc-3] — 2026-09-21
 
