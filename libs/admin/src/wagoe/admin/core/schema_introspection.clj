@@ -13,6 +13,7 @@
    - Generate sensible defaults for labels and field ordering"
   (:require
    [clojure.string :as str]
+   [wagoe.admin.schema :as admin-schema]
    [wagoe.core.utils.case-conversion :as case-conversion]))
 
 ;; =============================================================================
@@ -502,7 +503,16 @@
                         {:widget :email-input :required true})"
   [auto-config manual-config]
   (if manual-config
-    (merge auto-config manual-config)
+    (let [merged (merge auto-config manual-config)]
+      ;; :widget is inferred from the *column* during introspection, so a manual
+      ;; :type has to re-derive it. Without this the declared type and the
+      ;; rendered widget disagree — a field given :type :instant kept the
+      ;; :date-input the column heuristics chose, and the form rendered a date
+      ;; picker for a timestamp (BOU-504).
+      (cond-> merged
+        (and (contains? manual-config :type)
+             (not (contains? manual-config :widget)))
+        (assoc :widget (admin-schema/get-default-widget (:type manual-config)))))
     auto-config))
 
 (defn merge-fields-config

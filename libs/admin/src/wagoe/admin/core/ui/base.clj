@@ -205,6 +205,38 @@
               (formatters display :date-format default-date-formatter))
         (str value))))
 
+;; -----------------------------------------------------------------------------
+;; Form-widget values
+;;
+;; `<input type="date">` and `<input type="datetime-local">` accept exactly one
+;; shape each and *silently discard* anything else — the field then renders
+;; empty, which reads as "the record failed to load" rather than as a format
+;; problem. The stored value is whatever JDBC produced, so it has to be coerced
+;; to the widget's shape rather than passed through (BOU-504).
+;; -----------------------------------------------------------------------------
+
+(def ^:private html-date-formatter (DateTimeFormatter/ofPattern "yyyy-MM-dd"))
+(def ^:private html-datetime-formatter (DateTimeFormatter/ofPattern "yyyy-MM-dd'T'HH:mm"))
+
+(defn format-for-date-input
+  "Coerce a stored value to the `YYYY-MM-DD` an `<input type=\"date\">` accepts.
+
+   Returns nil when the value cannot be read as a date, so the caller can leave
+   the input empty rather than feed it something the browser will drop."
+  [value]
+  (some->> (->local-date value) (safe-format html-date-formatter)))
+
+(defn format-for-datetime-input
+  "Coerce a stored value to the `YYYY-MM-DDTHH:mm` an
+   `<input type=\"datetime-local\">` accepts.
+
+   The widget carries no zone, so a zone-less value is reformatted where it
+   stands and an instant is read at UTC — the same rule `->local-date` uses."
+  [value]
+  (some->> (or (->naive value)
+               (some-> (->zoned value utc) (.toLocalDateTime)))
+           (safe-format html-datetime-formatter)))
+
 (defn render-field-value
   "Render field value for display in table or detail view.
 

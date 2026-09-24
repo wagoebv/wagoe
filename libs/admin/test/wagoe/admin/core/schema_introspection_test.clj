@@ -304,6 +304,32 @@
 
       (is (= auto-config merged)))))
 
+(deftest ^:unit manual-type-rederives-widget-test
+  ;; :widget is inferred from the column during introspection, so a manual
+  ;; :type has to re-derive it or the declared type and the rendered widget
+  ;; disagree (BOU-504).
+  (testing "a manual :type re-derives the widget"
+    (is (= :datetime-input
+           (:widget (introspection/merge-field-config
+                     {:name :issue-date :type :date :widget :date-input}
+                     {:type :instant}))))
+    (is (= :select
+           (:widget (introspection/merge-field-config
+                     {:name :status :type :string :widget :text-input}
+                     {:type :enum})))))
+
+  (testing "an explicit manual :widget still wins"
+    (is (= :textarea
+           (:widget (introspection/merge-field-config
+                     {:name :notes :type :string :widget :text-input}
+                     {:type :instant :widget :textarea})))))
+
+  (testing "a manual config that says nothing about :type leaves the widget alone"
+    (is (= :date-input
+           (:widget (introspection/merge-field-config
+                     {:name :issue-date :type :date :widget :date-input}
+                     {:label "Issue date"}))))))
+
 (deftest ^:unit manual-readonly-fields-are-not-editable-test
   ;; Before BOU-498 :editable-fields was computed from the auto-detected
   ;; read-only columns and then carried through the merge unchanged, so the form
