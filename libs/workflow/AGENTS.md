@@ -84,10 +84,20 @@ Both are supported. Prefer the port when you care about keeping
 `bb check:ports` clean without exemptions; prefer the macro for a quick
 definition in a project that is not policing boundaries.
 
-**Linting:** the macro defines a var clj-kondo cannot see from a published jar.
-`wagoe-workflow` ships a clj-kondo export that handles this, so a project on
-1.0.0-rc-4 or later needs no `:lint-as` entry of its own (BOU-503). On earlier
-versions, add:
+**Linting:** the macro defines a var clj-kondo cannot see from a published jar,
+so the bound name reads as an unresolved symbol. From 1.0.0-rc-4,
+`wagoe-workflow` ships a clj-kondo export carrying the rule (BOU-503) — but an
+export only applies once it has been copied into the project's
+`.clj-kondo/imports/`. clj-kondo does not read exports during an ordinary lint,
+and `bb check` passes source paths rather than the classpath. Import them once,
+and again after changing dependencies:
+
+```bash
+bb lint:imports     # writes .clj-kondo/imports/ — commit it
+```
+
+After that the project needs no `:lint-as` entry of its own. Before rc-4, or if
+you would rather not commit the imports, keep the rule local:
 
 ```clojure
 {:lint-as {wagoe.workflow.shell.registry/defworkflow clojure.core/def}}

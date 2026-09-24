@@ -90,6 +90,15 @@
         files       {"deps.edn"                            "deps.edn.tmpl"
                      "bb.edn"                              "bb.edn.tmpl"
                      ".gitignore"                          "gitignore.tmpl"
+                     ;; Must exist from the start, even holding only `{}`.
+                     ;; clj-kondo's --copy-configs — the only way a dependency's
+                     ;; exported linter config reaches this project — reports
+                     ;; "No configs copied because config dir (.clj-kondo) does
+                     ;; not exist" and exits 0 when it is missing. Generated
+                     ;; projects had no .clj-kondo/, so `bb lint:imports` would
+                     ;; have silently no-opped and the registry macros would
+                     ;; still lint as unresolved symbols (BOU-503).
+                     ".clj-kondo/config.edn"               "clj-kondo-config.edn.tmpl"
                      ".env"                                "env.tmpl"
                      ".env.example"                        "env.example.tmpl"
                      "tests.edn"                           "tests.edn.tmpl"

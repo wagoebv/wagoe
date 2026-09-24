@@ -38,7 +38,18 @@ for what is public API, what is internal, and how deprecations are announced.
   It now reads the asdf spelling and requires the file to name one.
 - **Registry macros forced every project to add its own `:lint-as`**
   (BOU-503). `defworkflow`, `defsearch`, `defreport`, `defevent` and `defpush`
-  now ship clj-kondo exports; drop your local entries.
+  now ship clj-kondo exports. Run `bb lint:imports` once to copy them into
+  `.clj-kondo/imports/`, commit that directory, and the local entries can go.
+  clj-kondo does not read exports during an ordinary lint, so the import step
+  is required rather than optional.
+
+### Added
+
+- **`bb lint:imports`** (BOU-503). Copies the clj-kondo configs a project's
+  dependencies export into `.clj-kondo/imports/`. Generated projects now ship a
+  `.clj-kondo/config.edn`: without that directory clj-kondo's `--copy-configs`
+  reports "No configs copied" and exits 0, so the import would have silently
+  done nothing.
 
 ## [1.0.0-rc-3] — 2026-09-21
 
