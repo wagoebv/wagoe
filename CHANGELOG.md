@@ -33,6 +33,11 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **`bb check:jdk` passed a `.tool-versions` that pinned another JDK** (BOU-488).
   It now reads the asdf spelling and requires the file to name one.
+- **`bb db:reset` prompted twice, so `echo y |` reported success over a reset
+  that never ran** (BOU-500). One prompt now, and failures are propagated.
+- **`bb scaffold` help omitted Replicate; `bb create-admin` help said the
+  password could not come from stdin** (BOU-496, BOU-501). Both now match the
+  code.
 
 ## [1.0.0-rc-3] — 2026-09-21
 

@@ -93,7 +93,8 @@
   (println "  -h, --help       Show this help")
   (println)
   (println (bold "Notes:"))
-  (println "  The password is always collected via a secure prompt (not echoed).")
+  (println "  The password is read from a secure prompt (not echoed), or from stdin")
+  (println "  when one is piped in — which is how a script creates the first admin.")
   (println "  Run database migrations first: clojure -M:migrate up"))
 
 ;; =============================================================================
