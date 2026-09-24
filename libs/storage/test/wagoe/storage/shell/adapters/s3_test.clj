@@ -1,7 +1,8 @@
 (ns wagoe.storage.shell.adapters.s3-test
   "Integration tests for the S3 storage adapter.
 
-   Tests run against a local S3-compatible service (MinIO or LocalStack).
+   Tests run against a local S3-compatible service. CI starts adobe/s3mock;
+   MinIO or LocalStack work too if you already run one.
    Expected configuration:
      - Endpoint: http://localhost:9000
      - Access key: minioadmin
@@ -23,7 +24,7 @@
             CreateBucketRequest HeadBucketRequest]))
 
 ;; =============================================================================
-;; S3/MinIO availability check
+;; S3 endpoint availability check
 ;; =============================================================================
 
 (def ^:private test-endpoint "http://localhost:9000")

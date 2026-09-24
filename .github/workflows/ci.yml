@@ -895,30 +895,37 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      # A step and not a `services:` entry: the MinIO image needs `server /data`
-      # as its command, and a service container takes no command. Waiting on the
-      # health endpoint here also means a MinIO that never came up fails this
-      # step, rather than letting the suite skip its way to green.
+      # A step and not a `services:` entry: waiting for the endpoint here means a
+      # server that never came up fails this step, rather than letting the suite
+      # skip its way to green.
       #
       # Why it must run at all: the S3 adapter's tests skip themselves when no
       # endpoint answers, and none did — so the suite reported 62 tests passing
       # with the adapter never constructed, while it could not be constructed
       # (BOU-444).
-      - name: Start MinIO
+      #
+      # adobe/s3mock rather than MinIO: MinIO withdrew its public images. Both
+      # `quay.io/minio/minio` (401 on the whole repository, not just a tag) and
+      # Docker Hub `minio/minio` (404) stopped being pullable on 2026-09-24,
+      # between 12:46 and 13:38 UTC, and every run after that failed at the pull
+      # with exit 125. Pinning a MinIO tag would not have helped — the repository
+      # itself requires authentication now.
+      #
+      # Pinned, not `:latest`: an unpinned tag is what turned an upstream
+      # distribution change into a surprise at 13:38 on a Thursday.
+      - name: Start S3 endpoint
         run: |
           set -euo pipefail
-          docker run -d --name minio -p 9000:9000 \
-            -e MINIO_ROOT_USER=minioadmin \
-            -e MINIO_ROOT_PASSWORD=minioadmin \
-            quay.io/minio/minio:latest server /data
+          # s3mock serves on 9090; the tests hardcode localhost:9000.
+          docker run -d --name s3mock -p 9000:9090 adobe/s3mock:5.2.3
           for i in $(seq 1 40); do
-            if curl -fsS --max-time 2 http://localhost:9000/minio/health/live >/dev/null; then
-              echo "MinIO ready after ${i}s"; exit 0
+            if curl -fsS --max-time 2 http://localhost:9000/ >/dev/null; then
+              echo "S3 endpoint ready after ${i}s"; exit 0
             fi
             sleep 1
           done
-          echo "::error::MinIO did not become ready; the S3 tests would silently skip"
-          docker logs minio || true
+          echo "::error::S3 endpoint did not become ready; the S3 tests would silently skip"
+          docker logs s3mock || true
           exit 1
 
       - name: Setup Clojure + warm deps
@@ -929,8 +936,8 @@ jobs:
       - name: Run tests
         env:
           JWT_SECRET: "ci-test-secret-minimum-32-characters"
-          # This job started MinIO above, so a skipped S3 case here is a
-          # failure. Only this job sets it — see when-s3 in s3_test.clj.
+          # This job started an S3 endpoint above, so a skipped S3 case here is
+          # a failure. Only this job sets it — see when-s3 in s3_test.clj.
           WAGOE_REQUIRE_S3: "1"
         run: clojure -M:test :storage
 

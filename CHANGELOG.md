@@ -31,6 +31,9 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **CI could not start an S3 endpoint** (BOU-518). MinIO withdrew its public
+  images; the storage job now uses a pinned `adobe/s3mock`.
+
 - **`bb check:jdk` passed a `.tool-versions` that pinned another JDK** (BOU-488).
   It now reads the asdf spelling and requires the file to name one.
 
