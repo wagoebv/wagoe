@@ -40,9 +40,25 @@
 (defn- clj-files [paths]
   (filter #(str/ends-with? % ".clj") paths))
 
-(defn- core-files [paths]
+(defn- test-path?
+  "Is `p` inside a test root? Either `test/...` or `.../test/...`."
+  [p]
+  (or (str/starts-with? p "test/")
+      (str/includes? p "/test/")))
+
+(defn- core-files
+  "The core sources among `paths`.
+
+   Test roots are excluded. The scaffolder writes a module's unit tests to
+   `test/<base>/<module>/core/`, so matching on `/core/` alone pulled the
+   generated test namespace in, and FC/IS then refused it with BND-806 for
+   requiring `clojure.test` — the verify loop failing a file the same call had
+   just written, and reporting `status: fail` on a correct generation
+   (BOU-515). `bb check:fcis` never had this problem because it walks `src/`."
+  [paths]
   (filter #(and (str/ends-with? % ".clj")
-                (str/includes? % "/core/"))
+                (str/includes? % "/core/")
+                (not (test-path? %)))
           paths))
 
 (defn- run-kondo [paths]

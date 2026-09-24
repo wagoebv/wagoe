@@ -65,3 +65,32 @@
         report (verify/verify-generated {} {:success true :module "tmp" :files [file]})]
     (is (= :pass (:status report)))
     (is (= :unavailable (get-in report [:steps :tests])))))
+
+(defn- test-file
+  "A generated unit test, where the scaffolder actually writes one:
+   test/<base>/<module>/core/<name>."
+  [name content]
+  (let [f (apply io/file *tmp* ["test" "wagoe" "tmp" "core" name])]
+    (.mkdirs (.getParentFile f))
+    (spit f content)
+    {:path (.getPath f) :action :create}))
+
+(deftest ^:unit a-generated-test-namespace-is-not-a-core-namespace
+  ;; The FC/IS step matched any path containing "/core/", so the module's own
+  ;; generated tests were checked as core code and BND-806 refused them for
+  ;; requiring clojure.test. scaffold-module then reported status "fail" on a
+  ;; correct generation — the verify loop failing a file the same call had just
+  ;; written (BOU-515).
+  (let [src  (core-file "thing.clj" "(ns wagoe.tmp.core.thing)\n(defn add [a b] (+ a b))\n")
+        tst  (test-file "thing_test.clj"
+                        (str "(ns wagoe.tmp.core.thing-test\n"
+                             "  (:require [clojure.test :refer [deftest is]]\n"
+                             "            [wagoe.tmp.core.thing :as sut]))\n"
+                             "(deftest ^:unit add-test (is (= 3 (sut/add 1 2))))\n"))
+        report (verify/verify-generated
+                {:test-runner passing-runner}
+                {:success true :module "tmp" :files [src tst]})]
+    (is (= :pass (:status report))
+        "a module and its generated tests verify clean")
+    (is (empty? (filter #(= :fcis (:step %)) (:issues report)))
+        "no FC/IS issue is raised against the test namespace")))

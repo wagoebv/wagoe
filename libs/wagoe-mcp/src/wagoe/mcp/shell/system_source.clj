@@ -145,6 +145,33 @@
                sort
                vec))))))
 
+(defn- project-modules
+  "The application's own modules: directories under `src/<base-ns>/` that carry
+   a `ports.clj`, which is what every Wagoe module has by convention.
+
+   The monorepo answer walks `libs/`. A generated project keeps its modules
+   under one base namespace instead, so `describe-module` found nothing and
+   answered `:available []` in a project whose entire `src/` is one module
+   (BOU-516).
+
+   Directory names are file-system spellings — `invoice_line_item` — and the
+   name an agent asks for is the module's own, so the underscores are folded
+   back to hyphens."
+  [root]
+  (let [src (io/file root "src")]
+    (when (.isDirectory src)
+      (->> (.listFiles src)
+           (filter #(.isDirectory ^java.io.File %))
+           (mapcat (fn [base]
+                     (for [d     (.listFiles ^java.io.File base)
+                           :when (.isDirectory ^java.io.File d)
+                           :when (.exists (io/file d "ports.clj"))]
+                       {:name       (str/replace (.getName ^java.io.File d) "_" "-")
+                        :base-ns    (str/replace (.getName ^java.io.File base) "_" "-")
+                        :has-ports? true})))
+           (sort-by :name)
+           vec))))
+
 (defn- project-module-graph
   "What a project created by `wagoe new` has: the wagoe libraries it depends on
    and the modules its config switches on.
@@ -172,6 +199,9 @@
       {:source        :project
        :libraries     libs
        :dev-libraries (vec (remove (set libs) dev-libs))
+       ;; Same key the monorepo graph uses, so describe-module and the
+       ;; module-graph resource read one shape rather than two (BOU-516).
+       :modules       (or (project-modules root) [])
        :config-keys   (active-config-keys root)})))
 
 (defn- module-graph [root]

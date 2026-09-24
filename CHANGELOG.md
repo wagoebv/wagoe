@@ -33,6 +33,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **`bb check:jdk` passed a `.tool-versions` that pinned another JDK** (BOU-488).
   It now reads the asdf spelling and requires the file to name one.
+- **MCP `describe-module` found no modules in a generated project** (BOU-516).
+  The project module graph now lists the application's own modules.
+- **MCP `scaffold-module` reported `fail` on its own output** (BOU-515). The
+  FC/IS step no longer treats a generated test namespace as core code.
 
 ## [1.0.0-rc-3] — 2026-09-21
 

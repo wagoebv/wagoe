@@ -118,3 +118,43 @@
         (is (= ["wagoe-core"] (:libraries graph)))
         (is (= ["wagoe-mcp"] (:dev-libraries graph))))
       (finally (rm-r dir)))))
+
+(deftest ^:integration a-projects-own-modules-are-in-the-module-graph
+  ;; describe-module reads (:modules graph). The project graph carried
+  ;; :libraries, :dev-libraries and :config-keys but no :modules at all, so in a
+  ;; project whose whole src/ is one module it answered
+  ;; {:status :not-found :available []} (BOU-516).
+  (let [dir (tmp-project!)]
+    (try
+      (.mkdirs (io/file dir "src/invoicing/invoice"))
+      (.mkdirs (io/file dir "src/invoicing/invoice_line_item"))
+      (spit (io/file dir "src/invoicing/invoice/ports.clj") "(ns invoicing.invoice.ports)")
+      (spit (io/file dir "src/invoicing/invoice_line_item/ports.clj")
+            "(ns invoicing.invoice-line-item.ports)")
+      ;; a directory without ports.clj is not a module
+      (.mkdirs (io/file dir "src/invoicing/util"))
+      (spit (io/file dir "src/invoicing/util/helpers.clj") "(ns invoicing.util.helpers)")
+
+      (let [graph   (resources/read-resource (sut/build-snapshot dir) "wagoe://module-graph")
+            modules (:modules graph)
+            names   (set (map :name modules))]
+        (is (= :project (:source graph)))
+        (is (contains? names "invoice"))
+        (is (contains? names "invoice-line-item")
+            "directory underscores are folded back to the module's own name")
+        (is (not (contains? names "util"))
+            "a directory without ports.clj is not a module")
+        (is (every? :has-ports? modules))
+        (is (= #{"invoicing"} (set (map :base-ns modules)))))
+      (finally (rm-r dir)))))
+
+(deftest ^:integration a-project-with-no-modules-yet-reports-an-empty-list
+  ;; Distinct from "no graph at all": a freshly generated project has libraries
+  ;; and config keys but no modules until the scaffolder runs.
+  (let [dir (tmp-project!)]
+    (try
+      (let [graph (resources/read-resource (sut/build-snapshot dir) "wagoe://module-graph")]
+        (is (= :project (:source graph)))
+        (is (= [] (:modules graph)))
+        (is (seq (:libraries graph)) "the graph is still useful"))
+      (finally (rm-r dir)))))
