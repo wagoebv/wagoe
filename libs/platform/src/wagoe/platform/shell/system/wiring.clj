@@ -859,6 +859,13 @@
 
 (defonce ^:private system-state (atom nil))
 
+;; The Integrant config the running system was built from. Kept beside the
+;; system because introspection tools need both: the dashboard's Config Editor
+;; renders the component configs, and read them only from
+;; `integrant.repl.state/config` — which a `(go)` fills and `wagoe.main` does
+;; not, so every non-REPL start showed "No config available" (BOU-508).
+(defonce ^:private started-config-state (atom nil))
+
 (declare stop!)
 
 (defn start!
@@ -879,6 +886,7 @@
   (log/info "Starting Wagoe system")
   (let [system (ig/init ig-cfg)]
     (reset! system-state system)
+    (reset! started-config-state ig-cfg)
     (log/info "Wagoe system started successfully")
     system))
 
@@ -895,6 +903,7 @@
     (log/info "Stopping Wagoe system")
     (ig/halt! system)
     (reset! system-state nil)
+    (reset! started-config-state nil)
     (log/info "Wagoe system stopped"))
   nil)
 
@@ -917,6 +926,15 @@
    as worth inspecting, so this is where that answer lives (BOU-400)."
   []
   @system-state)
+
+(defn started-config
+  "The Integrant config the running system was built from, or nil.
+
+   The companion to `system`, for the same reason: a tool that wants to show
+   what the application is configured to run should not have to have been
+   started from a REPL to find out (BOU-508)."
+  []
+  @started-config-state)
 
 ;; =============================================================================
 ;; Integrant REPL Setup

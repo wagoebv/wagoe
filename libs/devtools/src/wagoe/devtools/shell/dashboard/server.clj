@@ -11,6 +11,7 @@
             [wagoe.devtools.shell.dashboard.pages.config :as config-page]
             [wagoe.devtools.shell.dashboard.pages.security :as security-page]
             [wagoe.jobs.ports :as job-ports]
+            [wagoe.platform.system :as platform-system]
             [wagoe.user.ports :as user-ports]
             [clojure.edn :as edn]
             [integrant.core :as ig]
@@ -39,10 +40,16 @@
 
 (defn- build-context
   "Build a context map from the injected Integrant components.
-   Falls back to integrant.repl.state/system for component count (full system view),
-   but uses the injected refs for actual data access."
+
+   The running system is read from two places and only one of them is a REPL:
+   `integrant.repl.state/system` is filled by `(go)`, `platform-system/running`
+   by any start through `wagoe.main`. Reading only the first left every
+   sub-page reporting `0 components` and the Config Editor saying \"No config
+   available\" on a perfectly running server — while Overview, which already
+   had this fallback, looked healthy (BOU-508, after BOU-400)."
   [config]
-  (let [sys          (try @(resolve 'integrant.repl.state/system) (catch Exception _ nil))
+  (let [sys          (or (try @(resolve 'integrant.repl.state/system) (catch Exception _ nil))
+                         (try (platform-system/running) (catch Exception _ nil)))
         http-handler (:http-handler config)
         http-server  (:http-server config)
         db-context   (:db-context config)
@@ -70,7 +77,9 @@
                         (try (job-ports/job-stats job-stats-svc) (catch Exception _ nil)))
      :failed-jobs     (when job-store
                         (try (job-ports/failed-jobs job-store 20) (catch Exception _ nil)))
-     :config          (when sys (try @(resolve 'integrant.repl.state/config) (catch Exception _ nil)))
+     :config          (when sys
+                        (or (try @(resolve 'integrant.repl.state/config) (catch Exception _ nil))
+                            (try (platform-system/configuration) (catch Exception _ nil))))
      :active-sessions (when-let [session-repo (when sys (get sys :wagoe/session-repository))]
                         (try (let [now (java.time.Instant/now)]
                                (count (filter (fn [s]

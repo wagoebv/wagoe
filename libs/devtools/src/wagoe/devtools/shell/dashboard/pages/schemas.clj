@@ -9,22 +9,37 @@
 ;; Schema collection
 ;; =============================================================================
 
+(defn schema-namespace?
+  "Does `ns-sym` name a schema namespace?
+
+   Any namespace ending in `.schema`, not only the framework's own. The scan
+   used to match `wagoe.<module>.schema` exactly, so an application namespace
+   such as `invoicing.invoice.schema` could never appear — the browser listed
+   52 framework schemas and none of the developer's (BOU-509). The same regex
+   also missed nested framework namespaces like `wagoe.admin.core.schema`."
+  [ns-sym]
+  (boolean (re-find #"\.schema$" (str ns-sym))))
+
 (defn- discover-schema-namespaces
-  "Scan libs/ for modules that have a schema.clj file and derive namespace symbols.
-   Falls back to loaded namespaces matching wagoe.*.schema if libs/ is unavailable."
+  "Namespace symbols to collect Malli schemas from.
+
+   Two sources, unioned: the framework repository's own `libs/*/schema.clj`
+   when running inside it, and every already-loaded namespace ending in
+   `.schema` — which is how an application's modules are found, since a
+   generated project has no `libs/` directory."
   []
-  (let [libs-dir (java.io.File. "libs")]
-    (if (.isDirectory libs-dir)
-      (->> (.listFiles libs-dir)
-           (filter #(.isDirectory %))
-           (map #(symbol (str "wagoe." (.getName %) ".schema")))
-           (filterv (fn [ns-sym]
-                      (try (require ns-sym) true (catch Exception _ false)))))
-      ;; Fallback: scan already-loaded namespaces
-      (->> (all-ns)
-           (map ns-name)
-           (filter #(re-matches #"wagoe\.[^.]+\.schema" (str %)))
-           (mapv symbol)))))
+  (let [libs-dir (java.io.File. "libs")
+        from-libs (when (.isDirectory libs-dir)
+                    (->> (.listFiles libs-dir)
+                         (filter #(.isDirectory %))
+                         (map #(symbol (str "wagoe." (.getName %) ".schema")))
+                         (filter (fn [ns-sym]
+                                   (try (require ns-sym) true (catch Exception _ false))))))
+        from-loaded (->> (all-ns)
+                         (map ns-name)
+                         (filter schema-namespace?)
+                         (map symbol))]
+    (vec (distinct (concat from-libs from-loaded)))))
 
 (defn- malli-schema?
   "Return true if value looks like a Malli schema (vector or keyword)."
@@ -41,8 +56,11 @@
   (try
     (require ns-sym)
     (when-let [ns-obj (find-ns ns-sym)]
-      (let [;; Extract module name from ns: wagoe.user.schema -> user
-            module (second (re-find #"wagoe\.([^.]+)\.schema" (str ns-sym)))]
+      (let [;; The segment before `.schema`, whichever namespace it came from:
+            ;; wagoe.user.schema -> user, invoicing.invoice.schema -> invoice.
+            ;; Anchoring on `wagoe.` keyed every application schema as :core
+            ;; even once it was discovered (BOU-509).
+            module (second (re-find #"([^.]+)\.schema$" (str ns-sym)))]
         (into {}
               (for [[var-name var-ref] (ns-publics ns-obj)
                     :let [v (try (var-get var-ref) (catch Exception _ nil))]
