@@ -1,0 +1,18 @@
+;; clj-kondo configuration for shop.
+;;
+;; This file exists even when empty, and that is deliberate. clj-kondo's
+;; --copy-configs step — which is how a dependency's exported linter config
+;; reaches this project — prints
+;;
+;;   No configs copied because config dir (.clj-kondo) does not exist.
+;;
+;; and exits 0 when this directory is absent. A generated project had no
+;; .clj-kondo/, so the import silently did nothing and the Wagoe registry
+;; macros (defworkflow, defsearch, defreport, defevent, defpush) kept linting
+;; as unresolved symbols (BOU-503).
+;;
+;; Run `bb lint:imports` once, and again after changing dependencies. It
+;; populates .clj-kondo/imports/, which is committed alongside this file.
+;;
+;; Project-specific linter settings go here.
+{}
