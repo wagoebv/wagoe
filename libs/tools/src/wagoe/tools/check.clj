@@ -282,7 +282,7 @@
   (println "  bb check                 Run all quality checks")
   (println "  bb check --quick         Run the quick subset (fast)")
   (println "  bb check --fix           Pass --fix to kondo linter")
-  (println "  bb check --ci            Exit non-zero on any check failure")
+  (println "  bb check --ci            Accepted, no longer needed — a failure always exits non-zero")
   (println)
   ;; Listed from the registry, filtered the way `bb check` itself filters. The
   ;; hardcoded list included `deps`, which a generated project cannot run —
@@ -333,7 +333,12 @@
         (println (dim "  These check the Wagoe repository itself — its published"))
         (println (dim "  library set, AGENTS.md sync and rename history — not your project.")))
       (println)
-      (when (and (:ci opts) (pos? failed))
+      ;; A failing gate exits non-zero, always. This used to be gated on --ci,
+      ;; so `bb check` printed its ✗ lines and exited 0 — every `bb check && …`
+      ;; and every script trusting the exit code sailed past a real failure
+      ;; (BOU-495). --ci is still accepted so existing CI keeps working; it no
+      ;; longer changes the outcome.
+      (when (pos? failed)
         (System/exit 1)))))
 
 ;; Run when executed directly (not via bb.edn task)

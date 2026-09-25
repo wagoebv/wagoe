@@ -126,20 +126,27 @@
                      :class "form-control"
                      :rows (or (:rows field-config) 4)})
 
-       ;; Date/time inputs
+       ;; Date/time inputs. The stored value is coerced to the shape the widget
+       ;; accepts — handed a full ISO instant, a date input silently drops it
+       ;; and renders empty (BOU-504).
        (= widget-type :date-input)
-       (ui/text-input field-name value
+       (ui/text-input field-name (base/format-for-date-input value)
                       {:type "date"
                        :required required?
                        :readonly readonly?
                        :class "form-control"})
 
        (= widget-type :datetime-input)
-       (ui/text-input field-name value
-                      {:type "datetime-local"
-                       :required required?
-                       :readonly readonly?
-                       :class "form-control"})
+       (let [formatted (base/format-for-datetime-input value)]
+         (ui/text-input field-name formatted
+                        (cond-> {:type "datetime-local"
+                                 :required required?
+                                 :readonly readonly?
+                                 :class "form-control"}
+                          ;; Without it a value with seconds fails the
+                          ;; default step=60 and the form will not submit.
+                          (base/datetime-input-step formatted)
+                          (assoc :step (base/datetime-input-step formatted)))))
 
        ;; Color picker
        (= widget-type :color-input)

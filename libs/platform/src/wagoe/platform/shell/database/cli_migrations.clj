@@ -141,8 +141,11 @@
               (.printStackTrace e))
             1))
         (do
+          ;; Non-zero: a cancelled destructive operation is not success for
+          ;; whoever shelled out to us. Returning 0 let `bb db:reset` announce
+          ;; "Reset complete." over a reset that never ran (BOU-500).
           (println "\n❌ Reset cancelled")
-          0)))))
+          1)))))
 
 (defn cmd-init
   "Initializes the migration system."

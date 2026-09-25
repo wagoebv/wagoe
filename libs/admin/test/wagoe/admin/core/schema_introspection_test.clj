@@ -304,6 +304,109 @@
 
       (is (= auto-config merged)))))
 
+(deftest ^:unit manual-type-rederives-widget-test
+  ;; :widget is inferred from the column during introspection, so a manual
+  ;; :type has to re-derive it or the declared type and the rendered widget
+  ;; disagree (BOU-504).
+  (testing "a manual :type re-derives the widget"
+    (is (= :datetime-input
+           (:widget (introspection/merge-field-config
+                     {:name :issue-date :type :date :widget :date-input}
+                     {:type :instant}))))
+    (is (= :select
+           (:widget (introspection/merge-field-config
+                     {:name :status :type :string :widget :text-input}
+                     {:type :enum})))))
+
+  (testing "an explicit manual :widget still wins"
+    (is (= :textarea
+           (:widget (introspection/merge-field-config
+                     {:name :notes :type :string :widget :text-input}
+                     {:type :instant :widget :textarea})))))
+
+  (testing "a manual config that says nothing about :type leaves the widget alone"
+    (is (= :date-input
+           (:widget (introspection/merge-field-config
+                     {:name :issue-date :type :date :widget :date-input}
+                     {:label "Issue date"}))))))
+
+(deftest ^:unit manual-readonly-fields-are-not-editable-test
+  ;; Before BOU-498 :editable-fields was computed from the auto-detected
+  ;; read-only columns and then carried through the merge unchanged, so the form
+  ;; rendered a writable input for a field the config called read-only.
+  (testing "a field named only in a manual :readonly-fields is not editable"
+    (let [auto-config (introspection/parse-table-metadata :users sample-users-table-metadata)
+          merged      (introspection/build-entity-config
+                       auto-config {:readonly-fields #{:id :email :created-at :updated-at}})]
+      (is (contains? (set (:readonly-fields merged)) :email))
+      (is (not (contains? (set (:editable-fields merged)) :email))
+          ":email is read-only in the manual config, so it must not be editable")
+      (is (contains? (set (:editable-fields merged)) :name)
+          "fields the manual config says nothing about stay editable")))
+
+  (testing "an explicit manual :editable-fields wins over the derived one"
+    (let [auto-config (introspection/parse-table-metadata :users sample-users-table-metadata)
+          merged      (introspection/build-entity-config
+                       auto-config {:readonly-fields #{:id}
+                                    :editable-fields [:email]})]
+      (is (= [:email] (:editable-fields merged)))))
+
+  (testing "hidden fields are never editable"
+    (let [auto-config (introspection/parse-table-metadata :users sample-users-table-metadata)
+          merged      (introspection/build-entity-config
+                       auto-config {:hide-fields #{:password-hash}})]
+      (is (not (contains? (set (:editable-fields merged)) :password-hash))))))
+
+(deftest ^:unit deriving-editability-keeps-what-the-auto-config-excluded-test
+  ;; The first BOU-498 fix derived editability from the MERGED :readonly-fields
+  ;; and :detail-fields. `merge` replaces those, it does not union them, so a
+  ;; manual config that named one read-only field un-hid every auto-detected
+  ;; one — :id included — and one that narrowed the detail view emptied the
+  ;; edit form. Editability now starts from the auto-detected editable fields.
+  (let [auto-config (introspection/parse-table-metadata :users sample-users-table-metadata)]
+    (testing "a manual :readonly-fields does not make auto-detected read-only fields editable"
+      (let [editable (set (:editable-fields
+                           (introspection/build-entity-config
+                            auto-config {:readonly-fields #{:email}})))]
+        (is (not (contains? editable :email)))
+        (doseq [f [:id :created-at :updated-at :deleted-at]]
+          (is (not (contains? editable f))
+              (str f " is read-only by detection and must stay out of the form")))))
+
+    (testing ":detail-fields shapes the detail view, not which fields can be edited"
+      (is (= (:editable-fields auto-config)
+             (:editable-fields (introspection/build-entity-config
+                                auto-config {:detail-fields [:email]})))))
+
+    (testing "a manual config that says nothing about fields changes nothing"
+      (is (= (:editable-fields auto-config)
+             (:editable-fields (introspection/build-entity-config
+                                auto-config {:label "People"})))))))
+
+(deftest ^:unit manual-type-keeps-name-inferred-widgets-test
+  ;; BOU-504 re-derived :widget from a manual :type with the type's default
+  ;; widget, which ignores the name heuristics introspection used. Repeating
+  ;; the detected type then turned an email input into plain text and a
+  ;; password input into visible text; :password {:type :text} became a
+  ;; textarea.
+  (let [auto (fn [n] {:name n :type :string
+                      :widget (introspection/infer-widget-for-field n :string "VARCHAR")})
+        widget (fn [n manual] (:widget (introspection/merge-field-config (auto n) manual)))]
+    (testing "repeating the detected type keeps the inferred widget"
+      (is (= :email-input (widget :email {:type :string})))
+      (is (= :password-input (widget :password {:type :string})))
+      (is (= :url-input (widget :website {:type :string}))))
+
+    (testing "a changed type is re-derived with the name heuristics, not the bare type default"
+      (is (= :password-input (widget :password {:type :text}))
+          "a password must never render as visible text"))
+
+    (testing "a changed type still re-derives where the name says nothing (BOU-504)"
+      (is (= :datetime-input (widget :due-at {:type :instant}))))
+
+    (testing "an explicit manual :widget still wins"
+      (is (= :textarea (widget :email {:type :string :widget :textarea}))))))
+
 ;; =============================================================================
 ;; Relationship Detection Tests (Week 1 Stub)
 ;; =============================================================================
