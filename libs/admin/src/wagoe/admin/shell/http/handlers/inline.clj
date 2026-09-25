@@ -97,7 +97,8 @@
                                     entity-name id field field-value field-config
                                     (get parse-errors field)
                                     {:zone-id        (:input-zone zones)
-                                     :server-zone-id (:server-zone zones)}))
+                                     :server-zone-id (:server-zone zones)
+                                     :offsets        (:offsets zones)}))
             (assoc :status 422))
       (try
         ; Update single field
@@ -119,7 +120,8 @@
                                       entity-name id field field-value field-config
                                       (get-in error-data [:errors field] ["Validation failed"])
                                       {:zone-id        (:input-zone zones)
-                                       :server-zone-id (:server-zone zones)}))
+                                       :server-zone-id (:server-zone zones)
+                                       :offsets        (:offsets zones)}))
               ; Re-throw other errors
               (throw e)))))))))
 

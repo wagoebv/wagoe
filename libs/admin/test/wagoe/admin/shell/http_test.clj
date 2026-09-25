@@ -678,6 +678,23 @@
              "__zone" "America/New_York" "__offset.appointment-at" "-05:00"} nyc)
       (is (= (java.time.Instant/parse "2026-11-01T06:30:00Z") (instant))))
 
+    (testing "an unreadable date-time comes back as typed, next to its error"
+      (let [resp (put! {"appointment-at" "next tuesday" "__zone" "America/New_York"} nyc)]
+        (is (= 422 (:status resp)))
+        (is (str/includes? (:body resp) "value=\"next tuesday\""))))
+
+    (testing "a refused inline edit keeps the submitted offset in its error form"
+      (let [resp (*handler* (make-request :patch (str url "/appointment-at") admin-user
+                                          {:path    {:entity "test-users" :id (str id) :field "appointment-at"}
+                                           :form    {"appointment-at" "next tuesday"
+                                                     "__zone" "America/New_York"
+                                                     "__offset.appointment-at" "-05:00"}
+                                           :headers nyc}))]
+        (is (= 422 (:status resp)))
+        (is (str/includes? (:body resp) "value=\"next tuesday\""))
+        (is (str/includes? (:body resp) "name=\"__offset.appointment-at\""))
+        (is (str/includes? (:body resp) "value=\"-05:00\""))))
+
     (testing "the zone field never reaches the database as a column"
       (let [resp (put! {"nickname" "zone-only" "__zone" "Asia/Tokyo"
                         "__offset.appointment-at" "+09:00"} nyc)]
