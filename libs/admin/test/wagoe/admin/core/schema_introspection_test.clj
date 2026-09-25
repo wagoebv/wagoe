@@ -383,6 +383,30 @@
              (:editable-fields (introspection/build-entity-config
                                 auto-config {:label "People"})))))))
 
+(deftest ^:unit manual-type-keeps-name-inferred-widgets-test
+  ;; BOU-504 re-derived :widget from a manual :type with the type's default
+  ;; widget, which ignores the name heuristics introspection used. Repeating
+  ;; the detected type then turned an email input into plain text and a
+  ;; password input into visible text; :password {:type :text} became a
+  ;; textarea.
+  (let [auto (fn [n] {:name n :type :string
+                      :widget (introspection/infer-widget-for-field n :string "VARCHAR")})
+        widget (fn [n manual] (:widget (introspection/merge-field-config (auto n) manual)))]
+    (testing "repeating the detected type keeps the inferred widget"
+      (is (= :email-input (widget :email {:type :string})))
+      (is (= :password-input (widget :password {:type :string})))
+      (is (= :url-input (widget :website {:type :string}))))
+
+    (testing "a changed type is re-derived with the name heuristics, not the bare type default"
+      (is (= :password-input (widget :password {:type :text}))
+          "a password must never render as visible text"))
+
+    (testing "a changed type still re-derives where the name says nothing (BOU-504)"
+      (is (= :datetime-input (widget :due-at {:type :instant}))))
+
+    (testing "an explicit manual :widget still wins"
+      (is (= :textarea (widget :email {:type :string :widget :textarea}))))))
+
 ;; =============================================================================
 ;; Relationship Detection Tests (Week 1 Stub)
 ;; =============================================================================

@@ -488,6 +488,20 @@
 ;; Configuration Merging - Auto-detected + Manual Overrides
 ;; =============================================================================
 
+(defn- rederive-widget
+  "The widget for a field whose type a manual config changed to `field-type`.
+
+   For :string and :text the name heuristics apply, as they do during
+   introspection — email, password, url and colour inputs are refinements of a
+   text input, and :password {:type :text} must not become a visible textarea.
+   For any other type the type's own default wins. The heuristics are not
+   type-aware: they would send :issue-date {:type :instant} back to a date
+   picker, which is the disagreement BOU-504 fixed."
+  [field-name field-type]
+  (if (#{:string :text} field-type)
+    (infer-widget-for-field field-name field-type nil)
+    (admin-schema/get-default-widget field-type)))
+
 (defn merge-field-config
   "Merge auto-detected field config with manual overrides.
 
@@ -503,16 +517,23 @@
                         {:widget :email-input :required true})"
   [auto-config manual-config]
   (if manual-config
-    (let [merged (merge auto-config manual-config)]
+    (let [merged    (merge auto-config manual-config)
+          new-type  (:type manual-config)]
       ;; :widget is inferred from the *column* during introspection, so a manual
-      ;; :type has to re-derive it. Without this the declared type and the
-      ;; rendered widget disagree — a field given :type :instant kept the
-      ;; :date-input the column heuristics chose, and the form rendered a date
-      ;; picker for a timestamp (BOU-504).
+      ;; :type that CHANGES the type has to re-derive it. Without this the
+      ;; declared type and the rendered widget disagree — a field given :type
+      ;; :instant kept the :date-input the column heuristics chose, and the form
+      ;; rendered a date picker for a timestamp (BOU-504).
+      ;;
+      ;; Only when the type actually changes: repeating the detected type used
+      ;; to replace a name-inferred widget with the bare type default, so
+      ;; :email {:type :string} lost its email input and :password {:type
+      ;; :string} rendered as visible text.
       (cond-> merged
         (and (contains? manual-config :type)
-             (not (contains? manual-config :widget)))
-        (assoc :widget (admin-schema/get-default-widget (:type manual-config)))))
+             (not (contains? manual-config :widget))
+             (not= new-type (:type auto-config)))
+        (assoc :widget (rederive-widget (:name auto-config) new-type))))
     auto-config))
 
 (defn merge-fields-config
