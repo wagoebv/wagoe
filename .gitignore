@@ -19,6 +19,10 @@ test/reports
 # local and CI linting the same inputs.
 **/.clj-kondo/.cache/
 **/.clj-kondo/imports/
+# Except in examples/shop, which is a generated project and tracks its
+# imports as every generated project does: there the registry macros live in
+# jars, so the imported configs are lint config rather than noise (BOU-503).
+!examples/shop/.clj-kondo/imports/
 .lsp
 
 # IDE
