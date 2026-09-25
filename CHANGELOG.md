@@ -31,6 +31,11 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Admin edit forms shifted zone-less timestamps on a non-UTC server** (BOU-519). A
+  `TIMESTAMP` column read as `java.sql.Timestamp` rendered at UTC, so on an
+  Amsterdam server a stored 12:00 appeared as 10:00 and saving any other field
+  wrote 10:00 back; a date input could move to the previous day. The stored
+  wall time is now rendered as-is.
 - **CI could not start an S3 endpoint** (BOU-518). MinIO withdrew its public
   images; the storage job now uses a pinned `adobe/s3mock`.
 

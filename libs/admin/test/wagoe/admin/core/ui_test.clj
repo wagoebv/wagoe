@@ -1422,3 +1422,29 @@
       (let [html (render "2026-09-01T06:12:00Z")]
         (is (str/includes? html "2026-09-01T06:12"))
         (is (not (str/includes? html ":step")))))))
+
+(defn- in-zone
+  "Run `f` with the JVM default zone set to `zone-id`, restoring it after.
+   java.sql.Timestamp reads and writes wall time through the default zone, so
+   that is the zone a driver's Timestamp is built in."
+  [zone-id f]
+  (let [original (java.util.TimeZone/getDefault)]
+    (try
+      (java.util.TimeZone/setDefault (java.util.TimeZone/getTimeZone ^String zone-id))
+      (f)
+      (finally (java.util.TimeZone/setDefault original)))))
+
+(deftest ^:unit zone-less-sql-timestamps-keep-their-wall-time-test
+  ;; A TIMESTAMP WITHOUT TIME ZONE column comes back as java.sql.Timestamp
+  ;; holding the stored wall time. Converting it to an instant goes through
+  ;; the JVM zone, and the form then rendered that instant at UTC: on an
+  ;; Amsterdam server a stored 12:00 showed as 10:00, and saving any other
+  ;; field wrote 10:00 back. The date input moved 00:30 to the previous day.
+  (doseq [zone ["Europe/Amsterdam" "America/New_York" "UTC"]]
+    (in-zone zone
+             (fn []
+               (testing (str "JVM zone " zone)
+                 (is (= "2026-09-01T12:00:50"
+                        (ui/format-for-datetime-input (java.sql.Timestamp/valueOf "2026-09-01 12:00:50"))))
+                 (is (= "2026-09-01"
+                        (ui/format-for-date-input (java.sql.Timestamp/valueOf "2026-09-01 00:30:00")))))))))

@@ -152,12 +152,21 @@
 
 (defn- ->naive
   "Coerce a zone-less stored timestamp: the LocalDateTime a driver reading
-   TIMESTAMP columns as local hands back, or the `2026-08-27 06:12:50` string
-   SQLite keeps in a TEXT column. Nothing is shifted — a value with no zone is
-   reformatted where it stands rather than moved into one."
+   TIMESTAMP columns as local hands back, the java.sql.Timestamp most drivers
+   return for the same column, or the `2026-08-27 06:12:50` string SQLite keeps
+   in a TEXT column. Nothing is shifted — a value with no zone is reformatted
+   where it stands rather than moved into one.
+
+   java.sql.Timestamp belongs here, not with the instants. A driver builds it
+   from the stored wall time in the JVM zone, and `.toLocalDateTime` is the
+   exact inverse. Read as an instant it was shifted by the JVM's offset: on an
+   Amsterdam server a stored 12:00 reached the edit form as 10:00, and saving
+   any other field wrote 10:00 back. The form submits a zone-less string, which
+   the database reads as wall time — so wall time is what has to be rendered."
   ^LocalDateTime [value]
   (cond
     (instance? LocalDateTime value) value
+    (instance? java.sql.Timestamp value) (.toLocalDateTime ^java.sql.Timestamp value)
 
     (string? value)
     (try
