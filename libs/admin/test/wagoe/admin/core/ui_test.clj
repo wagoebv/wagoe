@@ -1345,3 +1345,106 @@
       (is (str/includes? form-str "Identity"))
       ;; Access Control group should NOT render (no editable fields)
       (is (not (str/includes? form-str "Access Control"))))))
+
+;; =============================================================================
+;; Date/time widget values (BOU-504)
+;; =============================================================================
+
+(deftest ^:unit format-for-date-input-test
+  (testing "an ISO instant becomes the YYYY-MM-DD a date input accepts"
+    (is (= "2026-09-01" (ui/format-for-date-input "2026-09-01T00:00:00Z"))))
+
+  (testing "a date-only string passes through unchanged"
+    (is (= "2026-09-01" (ui/format-for-date-input "2026-09-01"))))
+
+  (testing "the zone-less timestamp SQLite keeps in a TEXT column"
+    (is (= "2026-09-01" (ui/format-for-date-input "2026-09-01 06:12:50"))))
+
+  (testing "java.time and java.sql values"
+    (is (= "2026-09-01" (ui/format-for-date-input (java.time.LocalDate/of 2026 9 1))))
+    (is (= "2026-09-01" (ui/format-for-date-input (java.time.LocalDateTime/of 2026 9 1 6 12)))))
+
+  (testing "an unreadable value yields nil rather than something the browser drops"
+    (is (nil? (ui/format-for-date-input "not a date")))
+    (is (nil? (ui/format-for-date-input nil)))))
+
+(deftest ^:unit format-for-datetime-input-test
+  ;; This test used to assert "06:12:50" -> "06:12". The form submits every
+  ;; editable field, so an edit to any other field wrote the truncated value
+  ;; back and the seconds were lost. datetime-local accepts seconds and
+  ;; milliseconds; they are kept when present.
+  (testing "an ISO instant keeps its seconds"
+    (is (= "2026-09-01T06:12:50" (ui/format-for-datetime-input "2026-09-01T06:12:50Z"))))
+
+  (testing "a zone-less timestamp is reformatted where it stands, seconds included"
+    (is (= "2026-09-01T06:12:50" (ui/format-for-datetime-input "2026-09-01 06:12:50"))))
+
+  (testing "milliseconds are kept"
+    (is (= "2026-09-01T06:12:50.123" (ui/format-for-datetime-input "2026-09-01T06:12:50.123Z"))))
+
+  (testing "a value on the minute renders as before"
+    (is (= "2026-09-01T06:12" (ui/format-for-datetime-input "2026-09-01T06:12:00Z"))))
+
+  (testing "an unreadable value yields nil"
+    (is (nil? (ui/format-for-datetime-input "not a timestamp")))
+    (is (nil? (ui/format-for-datetime-input nil)))))
+
+(deftest ^:unit date-widgets-render-a-usable-value-test
+  (testing "a date widget handed a stored instant renders a value the browser keeps"
+    ;; Before BOU-504 the raw "2026-09-01T00:00:00Z" reached the input and the
+    ;; browser discarded it, so the field rendered blank.
+    (let [widget   (ui/render-field-widget :issue-date "2026-09-01T00:00:00Z"
+                                           {:type :date :widget :date-input} nil)
+          rendered (str widget)]
+      (is (str/includes? rendered "2026-09-01"))
+      (is (not (str/includes? rendered "T00:00:00Z"))))))
+
+(deftest ^:unit datetime-input-step-matches-the-precision-test
+  ;; A datetime-local defaults to step=60. Given a value with seconds the
+  ;; browser flags a step mismatch and refuses to submit the form — so keeping
+  ;; the seconds without widening the step would trade silent truncation for a
+  ;; form that cannot be saved.
+  (is (nil? (ui/datetime-input-step "2026-09-01T06:12")) "minute precision keeps the default")
+  (is (= "1" (ui/datetime-input-step "2026-09-01T06:12:50")))
+  (is (= "0.001" (ui/datetime-input-step "2026-09-01T06:12:50.123")))
+  (is (nil? (ui/datetime-input-step nil))))
+
+(deftest ^:unit datetime-widget-renders-seconds-with-a-matching-step-test
+  ;; The helpers above are only half of it: the rendered <input> has to carry
+  ;; both the seconds and the step, or the browser blocks the submit.
+  (let [render (fn [v] (str (ui/render-field-widget :due-at v
+                                                    {:type :instant :widget :datetime-input} nil)))]
+    (testing "seconds are in the value and the step allows them"
+      (let [html (render "2026-09-01T06:12:50Z")]
+        (is (str/includes? html "2026-09-01T06:12:50"))
+        (is (str/includes? html ":step \"1\""))))
+    (testing "a value on the minute keeps the browser's default step"
+      (let [html (render "2026-09-01T06:12:00Z")]
+        (is (str/includes? html "2026-09-01T06:12"))
+        (is (not (str/includes? html ":step")))))))
+
+(defn- in-zone
+  "Run `f` with the JVM default zone set to `zone-id`, restoring it after.
+   java.sql.Timestamp reads and writes wall time through the default zone, so
+   that is the zone a driver's Timestamp is built in."
+  [zone-id f]
+  (let [original (java.util.TimeZone/getDefault)]
+    (try
+      (java.util.TimeZone/setDefault (java.util.TimeZone/getTimeZone ^String zone-id))
+      (f)
+      (finally (java.util.TimeZone/setDefault original)))))
+
+(deftest ^:unit zone-less-sql-timestamps-keep-their-wall-time-test
+  ;; A TIMESTAMP WITHOUT TIME ZONE column comes back as java.sql.Timestamp
+  ;; holding the stored wall time. Converting it to an instant goes through
+  ;; the JVM zone, and the form then rendered that instant at UTC: on an
+  ;; Amsterdam server a stored 12:00 showed as 10:00, and saving any other
+  ;; field wrote 10:00 back. The date input moved 00:30 to the previous day.
+  (doseq [zone ["Europe/Amsterdam" "America/New_York" "UTC"]]
+    (in-zone zone
+             (fn []
+               (testing (str "JVM zone " zone)
+                 (is (= "2026-09-01T12:00:50"
+                        (ui/format-for-datetime-input (java.sql.Timestamp/valueOf "2026-09-01 12:00:50"))))
+                 (is (= "2026-09-01"
+                        (ui/format-for-date-input (java.sql.Timestamp/valueOf "2026-09-01 00:30:00")))))))))

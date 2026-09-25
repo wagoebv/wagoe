@@ -31,9 +31,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Admin forms shifted zone-less timestamps on non-UTC servers** (BOU-519).
+  The stored wall time is now shown and saved back unchanged.
 - **CI could not start an S3 endpoint** (BOU-518). MinIO withdrew its public
   images; the storage job now uses a pinned `adobe/s3mock`.
-
 - **`bb check:jdk` passed a `.tool-versions` that pinned another JDK** (BOU-488).
   It now reads the asdf spelling and requires the file to name one.
 - **Registry macros forced every project to add its own `:lint-as`**
@@ -50,6 +51,30 @@ for what is public API, what is internal, and how deprecations are announced.
   `.clj-kondo/config.edn`: without that directory clj-kondo's `--copy-configs`
   reports "No configs copied" and exits 0, so the import would have silently
   done nothing.
+- **MCP `describe-module` found no modules in a generated project** (BOU-516).
+  The project module graph now lists the application's own modules.
+- **MCP `scaffold-module` reported `fail` on its own output** (BOU-515). The
+  FC/IS step no longer treats a generated test namespace as core code.
+- **`bb db:reset` prompted twice, so `echo y |` reported success over a reset
+  that never ran** (BOU-500). One prompt now, and failures are propagated.
+- **`bb scaffold` and `bb create-admin` help were wrong** (BOU-496, BOU-501).
+  Replicate is listed, and the password can come from stdin.
+- **The dashboard's Request Inspector captured nothing** (BOU-506). It now
+  records under the `:dev` profile; no config change needed.
+- **The dashboard reported `0 applied` migrations** (BOU-507). Applied
+  migrations are listed even when their files are not on the classpath.
+- **Security Status rendered a blank password tile and policy card**
+  (BOU-510). Both now say when no policy is configured.
+- **The Schema Browser showed no application schemas** (BOU-509). All
+  `*.schema` namespaces are listed, keyed as `:wagoe.user.schema/User`.
+- **Dashboard pages reported `0 components` outside the REPL** (BOU-508). The
+  Config Editor is read-only there; start with `(go)` to edit.
+- **The Schema Browser's example value ran to hundreds of lines** (BOU-517).
+  Collections are bounded and the example is capped.
+- **A field named in `:readonly-fields` still rendered as a writable input**
+  (BOU-498). Drop any `:editable-fields` you added to work around it.
+- **Date and datetime fields rendered empty** (BOU-504). They now show the
+  stored value, seconds included.
 
 ## [1.0.0-rc-3] — 2026-09-21
 

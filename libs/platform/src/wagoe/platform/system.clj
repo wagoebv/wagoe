@@ -25,3 +25,12 @@
    reach through its own Integrant refs."
   []
   (wiring/system))
+
+(defn configuration
+  "The Integrant config the running system was built from, or nil.
+
+   Same rationale as `running`: introspection tools read
+   `integrant.repl.state/config`, which only a REPL `(go)` fills, so a server
+   started by `wagoe.main` had no config to show (BOU-508)."
+  []
+  (wiring/started-config))

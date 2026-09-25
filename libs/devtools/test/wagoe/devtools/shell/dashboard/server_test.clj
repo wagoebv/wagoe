@@ -3,6 +3,11 @@
             [clojure.string :as str]
             [wagoe.devtools.shell.dashboard.server]
             [integrant.core :as ig]
+            ;; Loaded as a dev start loads them (dev/user.clj requires
+            ;; integrant.repl). Without them Apply stops at an earlier
+            ;; "cannot resolve" branch and the case below is never reached.
+            [integrant.repl]
+            [wagoe.devtools.shell.repl]
             [clj-http.lite.client :as http])
   (:import [java.net ServerSocket]))
 
@@ -88,3 +93,46 @@
               "the port it reports is the one serving")
           (finally (ig/halt-key! :wagoe/dashboard started))))
       (finally (ig/halt-key! :wagoe/dashboard squatter)))))
+
+(deftest ^:integration config-apply-refuses-without-a-repl-system
+  ;; No (go) in this JVM, so integrant.repl.state/system is nil — the state of
+  ;; an app started by wagoe.main. restart-component answers a nil system with
+  ;; "not found" and returns nil without throwing, which Apply used to count as
+  ;; a restart: the response said "Config applied successfully" and nothing
+  ;; changed. It must refuse, and say why.
+  (let [{:keys [port] :as started}
+        (ig/init-key :wagoe/dashboard {:port         (free-port)
+                                       :ig-config-fn (fn [] {:wagoe/http {:port 3000}})})]
+    (try
+      (let [resp (http/post (str "http://localhost:" port "/dashboard/fragments/config-apply")
+                            {:form-params      {"config-:wagoe/http" "{:port 3001}"}
+                             :throw-exceptions false})]
+        (is (= 200 (:status resp)))
+        (is (not (str/includes? (:body resp) "applied successfully")))
+        (is (str/includes? (:body resp) "(go)")))
+      (finally (ig/halt-key! :wagoe/dashboard started)))))
+
+(defmethod ig/init-key ::probe [_ opts] opts)
+(defmethod ig/halt-key! ::probe [_ _] nil)
+
+(deftest ^:integration config-apply-still-restarts-under-a-repl-system
+  ;; The refusal above must not cost the case that works: with a system (go)
+  ;; started, Apply restarts the component with the edited config.
+  (let [state-sys  (resolve 'integrant.repl.state/system)
+        state-cfg  (resolve 'integrant.repl.state/config)
+        {:keys [port] :as started}
+        (ig/init-key :wagoe/dashboard {:port         (free-port)
+                                       :ig-config-fn (fn [] {::probe {:n 1}})})]
+    (try
+      (alter-var-root state-cfg (constantly {::probe {:n 1}}))
+      (alter-var-root state-sys (constantly {::probe {:n 1}}))
+      (let [resp (http/post (str "http://localhost:" port "/dashboard/fragments/config-apply")
+                            {:form-params      {(str "config-" ::probe) "{:n 2}"}
+                             :throw-exceptions false})]
+        (is (str/includes? (:body resp) "applied successfully"))
+        (is (= {:n 2} (get @state-sys ::probe)) "the live component was replaced"))
+      (finally
+        (alter-var-root state-sys (constantly nil))
+        (alter-var-root state-cfg (constantly nil))
+        (wagoe.devtools.shell.dashboard.server/clear-config-overrides!)
+        (ig/halt-key! :wagoe/dashboard started)))))

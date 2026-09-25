@@ -152,12 +152,21 @@
 
 (defn- ->naive
   "Coerce a zone-less stored timestamp: the LocalDateTime a driver reading
-   TIMESTAMP columns as local hands back, or the `2026-08-27 06:12:50` string
-   SQLite keeps in a TEXT column. Nothing is shifted — a value with no zone is
-   reformatted where it stands rather than moved into one."
+   TIMESTAMP columns as local hands back, the java.sql.Timestamp most drivers
+   return for the same column, or the `2026-08-27 06:12:50` string SQLite keeps
+   in a TEXT column. Nothing is shifted — a value with no zone is reformatted
+   where it stands rather than moved into one.
+
+   java.sql.Timestamp belongs here, not with the instants. A driver builds it
+   from the stored wall time in the JVM zone, and `.toLocalDateTime` is the
+   exact inverse. Read as an instant it was shifted by the JVM's offset: on an
+   Amsterdam server a stored 12:00 reached the edit form as 10:00, and saving
+   any other field wrote 10:00 back. The form submits a zone-less string, which
+   the database reads as wall time — so wall time is what has to be rendered."
   ^LocalDateTime [value]
   (cond
     (instance? LocalDateTime value) value
+    (instance? java.sql.Timestamp value) (.toLocalDateTime ^java.sql.Timestamp value)
 
     (string? value)
     (try
@@ -204,6 +213,65 @@
     (or (some #(safe-format % temporal)
               (formatters display :date-format default-date-formatter))
         (str value))))
+
+;; -----------------------------------------------------------------------------
+;; Form-widget values
+;;
+;; `<input type="date">` and `<input type="datetime-local">` accept exactly one
+;; shape each and *silently discard* anything else — the field then renders
+;; empty, which reads as "the record failed to load" rather than as a format
+;; problem. The stored value is whatever JDBC produced, so it has to be coerced
+;; to the widget's shape rather than passed through (BOU-504).
+;; -----------------------------------------------------------------------------
+
+(def ^:private html-date-formatter (DateTimeFormatter/ofPattern "yyyy-MM-dd"))
+(def ^:private html-datetime-minute-formatter (DateTimeFormatter/ofPattern "yyyy-MM-dd'T'HH:mm"))
+(def ^:private html-datetime-second-formatter (DateTimeFormatter/ofPattern "yyyy-MM-dd'T'HH:mm:ss"))
+(def ^:private html-datetime-milli-formatter  (DateTimeFormatter/ofPattern "yyyy-MM-dd'T'HH:mm:ss.SSS"))
+
+(defn format-for-date-input
+  "Coerce a stored value to the `YYYY-MM-DD` an `<input type=\"date\">` accepts.
+
+   Returns nil when the value cannot be read as a date, so the caller can leave
+   the input empty rather than feed it something the browser will drop."
+  [value]
+  (some->> (->local-date value) (safe-format html-date-formatter)))
+
+(defn format-for-datetime-input
+  "Coerce a stored value to a string an `<input type=\"datetime-local\">`
+   accepts, at the precision the value has: `YYYY-MM-DDTHH:mm` on the minute,
+   `…:ss` with seconds, `…:ss.SSS` with milliseconds.
+
+   Not always `HH:mm`. The form submits every editable field, so dropping the
+   seconds here meant an edit to any *other* field wrote the truncated value
+   back. The widget holds at most milliseconds; finer precision (Postgres keeps
+   microseconds) still cannot survive a round trip through it.
+
+   The widget carries no zone, so a zone-less value is reformatted where it
+   stands and an instant is read at UTC — the same rule `->local-date` uses.
+   Pair with `datetime-input-step`, or the browser rejects the seconds."
+  [value]
+  (when-let [^LocalDateTime ldt (or (->naive value)
+                                    (some-> (->zoned value utc) (.toLocalDateTime)))]
+    (safe-format (cond
+                   (pos? (quot (.getNano ldt) 1000000)) html-datetime-milli-formatter
+                   (pos? (.getSecond ldt))              html-datetime-second-formatter
+                   :else                                html-datetime-minute-formatter)
+                 ldt)))
+
+(defn datetime-input-step
+  "The `step` a datetime-local needs for `formatted`, the output of
+   `format-for-datetime-input`: nil on the minute, \"1\" with seconds,
+   \"0.001\" with milliseconds.
+
+   The default step is 60 seconds. A value with seconds is then a step
+   mismatch and the browser refuses to submit the form — keeping the seconds
+   without this would turn silent truncation into a form that cannot be saved."
+  [formatted]
+  (case (count formatted)
+    19 "1"
+    23 "0.001"
+    nil))
 
 (defn render-field-value
   "Render field value for display in table or detail view.

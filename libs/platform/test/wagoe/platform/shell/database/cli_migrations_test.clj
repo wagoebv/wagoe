@@ -35,9 +35,12 @@
   (testing "create rejects blank migration names"
     (is (= 1 (sut/cmd-create "   " {}))))
 
-  (testing "reset returns zero when cancelled"
+  (testing "reset returns non-zero when cancelled"
+    ;; A cancelled destructive operation is not success for a caller. Returning
+    ;; 0 let `bb db:reset` announce "Reset complete." over a reset that never
+    ;; ran (BOU-500).
     (with-redefs [read-line (fn [] "nope")]
-      (is (= 0 (sut/cmd-reset {})))))
+      (is (= 1 (sut/cmd-reset {})))))
 
   (testing "failing commands return one"
     (with-redefs [wagoe.platform.shell.database.migrations/migrate (fn [] (throw (ex-info "migrate boom" {})))
