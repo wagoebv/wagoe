@@ -643,7 +643,7 @@ When making UI changes, always test:
 Two field types, two rules (BOU-519):
 
 - **`:date`** is a calendar date: `YYYY-MM-DD`, no time part, no zone. A submitted value in any other shape is a field error (BOU-521).
-- **`:instant`** is an absolute moment. The form shows and reads it in one zone: the browser's (the `wagoe_tz` cookie that `init.js` sets), else `:time-zone` from `:wagoe/settings`, else the server's. Never a silent UTC. The zone is shown next to the input, and the form carries it back in a hidden `__zone` field, so a value is always parsed in the zone it was rendered in (BOU-523).
+- **`:instant`** is an absolute moment. The form shows and reads it in one zone: the browser's (the `wagoe_tz` cookie that `init.js` sets), else `:time-zone` from `:wagoe/settings`, else Europe/Amsterdam. That is presentation only: storage is zone-aware and the JVM runs in UTC (BOU-431), so the display zone never changes what is stored. The zone is shown next to the input, and the form carries it back in a hidden `__zone` field, so a value is always parsed in the zone it was rendered in (BOU-523).
 
 ```clojure
 ;; resources/conf/<env>/config.edn

@@ -108,6 +108,7 @@
        "   :version           \"0.1.0\"\n"
        "   :date-format       \"yyyy-MM-dd\"\n"
        "   :date-time-format  \"yyyy-MM-dd HH:mm:ss\"\n"
+       "   :time-zone         \"Europe/Amsterdam\"\n"
        "   :currency/iso-code \"EUR\"\n"
        ;; Defaults to true when unset, and both configs this writes are served
        ;; over plain HTTP — so omitting it sent the session cookie with Secure

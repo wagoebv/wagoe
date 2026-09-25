@@ -487,6 +487,13 @@
   "Set by init.js to the browser's IANA zone (`Intl…resolvedOptions().timeZone`)."
   "wagoe_tz")
 
+(def default-time-zone
+  "The zone timestamps are shown and entered in when neither the browser nor
+   `:time-zone` in :wagoe/settings names one. A presentation default only:
+   storage is zone-aware and the JVM runs in UTC (BOU-431), so this changes
+   what people see, never what is stored."
+  (java.time.ZoneId/of "Europe/Amsterdam"))
+
 (defn- ->zone
   "A ZoneId for `s`, or nil when it is blank or not a zone the JVM knows. The
    value comes from a cookie or a form field, so it is untrusted input."
@@ -514,7 +521,8 @@
    database reads a zone-less timestamp in, so the one such a value is read
    back in. `:zone-id` is the zone timestamps are shown and entered in: the
    browser's, from the `wagoe_tz` cookie; else the application's configured
-   `:time-zone`; else the server's. Never a hard-coded UTC.
+   `:time-zone`; else `default-time-zone`, Europe/Amsterdam. Not the server's:
+   that is UTC by design (BOU-431) and says nothing about the people using it.
 
    Read here because `wagoe.admin.core.ui.base` may not: check:fcis bans
    `ZoneId/systemDefault` in a core namespace. The patterns come from the
@@ -523,7 +531,7 @@
   (let [server (java.time.ZoneId/systemDefault)]
     {:zone-id          (or (->zone (cookie-value request zone-cookie))
                            (->zone (:time-zone config))
-                           server)
+                           default-time-zone)
      :server-zone-id   server
      :locale           (request-locale request)
      :date-time-format (:date-time-format config)
