@@ -13,6 +13,7 @@
    - Generate sensible defaults for labels and field ordering"
   (:require
    [clojure.string :as str]
+   [wagoe.admin.schema :as admin-schema]
    [wagoe.core.utils.case-conversion :as case-conversion]))
 
 ;; =============================================================================
@@ -487,6 +488,20 @@
 ;; Configuration Merging - Auto-detected + Manual Overrides
 ;; =============================================================================
 
+(defn- rederive-widget
+  "The widget for a field whose type a manual config changed to `field-type`.
+
+   For :string and :text the name heuristics apply, as they do during
+   introspection — email, password, url and colour inputs are refinements of a
+   text input, and :password {:type :text} must not become a visible textarea.
+   For any other type the type's own default wins. The heuristics are not
+   type-aware: they would send :issue-date {:type :instant} back to a date
+   picker, which is the disagreement BOU-504 fixed."
+  [field-name field-type]
+  (if (#{:string :text} field-type)
+    (infer-widget-for-field field-name field-type nil)
+    (admin-schema/get-default-widget field-type)))
+
 (defn merge-field-config
   "Merge auto-detected field config with manual overrides.
 
@@ -502,7 +517,23 @@
                         {:widget :email-input :required true})"
   [auto-config manual-config]
   (if manual-config
-    (merge auto-config manual-config)
+    (let [merged    (merge auto-config manual-config)
+          new-type  (:type manual-config)]
+      ;; :widget is inferred from the *column* during introspection, so a manual
+      ;; :type that CHANGES the type has to re-derive it. Without this the
+      ;; declared type and the rendered widget disagree — a field given :type
+      ;; :instant kept the :date-input the column heuristics chose, and the form
+      ;; rendered a date picker for a timestamp (BOU-504).
+      ;;
+      ;; Only when the type actually changes: repeating the detected type used
+      ;; to replace a name-inferred widget with the bare type default, so
+      ;; :email {:type :string} lost its email input and :password {:type
+      ;; :string} rendered as visible text.
+      (cond-> merged
+        (and (contains? manual-config :type)
+             (not (contains? manual-config :widget))
+             (not= new-type (:type auto-config)))
+        (assoc :widget (rederive-widget (:name auto-config) new-type))))
     auto-config))
 
 (defn merge-fields-config
@@ -533,6 +564,26 @@
       (merge merged-auto manual-only))
     auto-fields))
 
+(defn derive-editable-fields
+  "The fields of `merged` that can be edited, given the `auto-config` it was
+   built from.
+
+   Starts from the auto-detected :editable-fields and removes anything read-only
+   by detection OR by the manual config, and anything hidden. Both inputs matter
+   because `merge` replaces :readonly-fields rather than unioning it, and
+   :detail-fields is a view setting, not an editability one. Deriving from the
+   merged config alone made a manual `:readonly-fields #{:email}` un-hide :id
+   and every timestamp column, and a narrowed :detail-fields empty the edit
+   form. Kept separate from parse-table-metadata because it has to run again
+   after a manual config is merged in (BOU-498)."
+  [auto-config merged]
+  (let [readonly (into (set (:readonly-fields auto-config)) (:readonly-fields merged))
+        hidden   (set (:hide-fields merged))]
+    (->> (or (:editable-fields auto-config) (keys (:fields merged)))
+         (remove readonly)
+         (remove hidden)
+         vec)))
+
 (defn build-entity-config
   "Build complete entity configuration by merging auto-detected with manual.
 
@@ -552,11 +603,21 @@
        {:label \"System Users\" :list-fields [:email :name :role]})"
   [auto-config manual-config]
   (if manual-config
-    (-> auto-config
-        (merge (dissoc manual-config :fields))  ; Merge all except :fields
-        (assoc :fields (merge-fields-config
-                        (:fields auto-config)
-                        (:fields manual-config))))
+    (let [merged (-> auto-config
+                     (merge (dissoc manual-config :fields))  ; Merge all except :fields
+                     (assoc :fields (merge-fields-config
+                                     (:fields auto-config)
+                                     (:fields manual-config))))]
+      ;; :editable-fields is derived from :readonly-fields, so it has to be
+      ;; recomputed once the manual config has had its say. The merge above
+      ;; left it at what parse-table-metadata computed from the auto-detected
+      ;; read-only columns alone, so a field named only in a manual
+      ;; :readonly-fields still rendered as a writable input and the form wrote
+      ;; a column the config called read-only (BOU-498). An explicit manual
+      ;; :editable-fields still wins.
+      (cond-> merged
+        (not (contains? manual-config :editable-fields))
+        (assoc :editable-fields (derive-editable-fields auto-config merged))))
     auto-config))
 
 ;; =============================================================================
