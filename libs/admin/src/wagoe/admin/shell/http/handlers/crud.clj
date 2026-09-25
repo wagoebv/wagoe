@@ -57,7 +57,8 @@
           ; Check permissions
           _ (shell-permissions/assert-can-create-entity! user entity-name entity-config)
 
-          [form-data parse-errors] (support/parse-form-params-checked (submitted-params request) entity-config)
+          [zones params] (support/form-zone-options config request (submitted-params request))
+          [form-data parse-errors] (support/parse-form-params-checked params entity-config zones)
 
           ; Validate data
           validation-result (ports/validate-entity-data admin-service entity-name form-data)]
@@ -99,7 +100,7 @@
                   permissions (permissions/get-entity-permissions user entity-name entity-config)]
               (support/html-response request
                                      (admin-ui/admin-layout
-                                      (admin-ui/entity-detail-page entity-name entity-config form-data {} permissions {})
+                                      (admin-ui/entity-detail-page entity-name entity-config form-data {} permissions {:display (support/display-options config request)})
                                       {:user user
                                        :current-entity entity-name
                                        :entities entities
@@ -122,7 +123,7 @@
 
           (-> (support/html-response request
                                      (admin-ui/admin-layout
-                                      (admin-ui/entity-detail-page entity-name entity-config form-data errors permissions {})
+                                      (admin-ui/entity-detail-page entity-name entity-config form-data errors permissions {:display (support/display-options config request)})
                                       {:user user
                                        :current-entity entity-name
                                        :entities entities
@@ -156,7 +157,8 @@
           ; Check permissions
           _ (shell-permissions/assert-can-edit-entity! user entity-name entity-config)
 
-          [form-data parse-errors] (support/parse-form-params-checked (submitted-params request) entity-config)
+          [zones params] (support/form-zone-options config request (submitted-params request))
+          [form-data parse-errors] (support/parse-form-params-checked params entity-config zones)
 
           ;; An update is validated as the entity it would leave behind, not as
           ;; the fields the request happened to carry. Validating `form-data`

@@ -35,6 +35,42 @@
       (icons/icon :pencil {:size 14})
       " " [:t :common/button-edit]]]))
 
+(defn- temporal-inline-input
+  "The date or datetime input for an inline edit, or nil for any other widget.
+
+   These rendered as a text box holding the raw database value — for a
+   PostgreSQL timestamp `2026-09-01 12:00:50.0`, the server's wall time — which
+   was then parsed back in the browser's zone and moved the value (BOU-523).
+   They render as in the full form: the widget's own shape, in the zone the
+   hidden `__zone` field names."
+  [field widget-type value required? display extra-attrs]
+  (let [{:keys [input-zone server-zone]} (base/form-zones display)]
+    (case widget-type
+      :datetime-input
+      (let [formatted (if (string? value) value
+                          (base/format-for-datetime-input value input-zone server-zone))]
+        [:span.inline-temporal
+         [:input.inline-input
+          (cond-> (merge {:type "datetime-local" :name (name field) :value (str formatted)
+                          :required required? :autofocus true}
+                         extra-attrs)
+            (base/datetime-input-step formatted) (assoc :step (base/datetime-input-step formatted)))]
+         [:small.field-zone (str input-zone)]])
+
+      :date-input
+      [:input.inline-input
+       (merge {:type "date" :name (name field)
+               :value (str (if (string? value) value (base/format-for-date-input value)))
+               :required required? :autofocus true}
+              extra-attrs)]
+
+      nil)))
+
+(defn- zone-field
+  "The hidden field naming the zone a datetime above was rendered in."
+  [display]
+  [:input {:type "hidden" :name "__zone" :value (str (:input-zone (base/form-zones display)))}])
+
 (defn render-inline-edit-form
   "Render inline edit form for a single field.
 
@@ -47,7 +83,7 @@
 
    Returns:
      Hiccup form structure"
-  [entity-name record-id field value field-config]
+  [entity-name record-id field value field-config & [display]]
   (let [widget-type (:widget field-config :text-input)
         _field-type (:type field-config :string)
         required? (:required field-config false)
@@ -57,9 +93,13 @@
       :hx-target "closest td"
       :hx-swap "outerHTML"
       :onsubmit "event.preventDefault(); htmx.trigger(this, 'submit');"}
+     (zone-field display)
 
      ; Render appropriate input widget
      (cond
+       (#{:datetime-input :date-input} widget-type)
+       (temporal-inline-input field widget-type value required? display {})
+
        (= widget-type :checkbox)
        [:input {:type "checkbox"
                 :name (name field)
@@ -116,7 +156,7 @@
 
    Returns:
      Hiccup form structure with error display"
-  [entity-name record-id field value field-config errors]
+  [entity-name record-id field value field-config errors & [display]]
   (let [widget-type (:widget field-config :text-input)
         _field-type (:type field-config :string)
         required? (:required field-config false)]
@@ -125,9 +165,13 @@
       {:hx-patch (str "/web/admin/" (name entity-name) "/" record-id "/" (name field))
        :hx-target "closest td"
        :hx-swap "outerHTML"}
+      (zone-field display)
 
       ; Render input with error class
       (cond
+        (#{:datetime-input :date-input} widget-type)
+        (temporal-inline-input field widget-type value required? display {:class "error"})
+
         (= widget-type :checkbox)
         [:input {:type "checkbox"
                  :name (name field)

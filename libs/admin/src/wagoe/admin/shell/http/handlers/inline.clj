@@ -5,52 +5,13 @@
    [wagoe.admin.core.ui :as admin-ui]
    [wagoe.admin.shell.permissions :as shell-permissions]
    [wagoe.admin.shell.http.support :as support]
-   [clojure.string :as str]
-   [ring.util.response :as ring-response])
-  (:import [java.util UUID]))
-
-(defn parse-field-value
-  "Parse a single field value from string to appropriate type.
-
-   Helper function for inline editing - extracts type conversion logic
-   from parse-form-params.
-
-   Args:
-     value: String value from form
-     field-config: Field configuration map
-
-   Returns:
-     Typed value or nil"
-  [value field-config]
-  (let [field-type (:type field-config :string)]
-    (cond
-      ; Empty strings become nil
-      (str/blank? value) nil
-
-      ; Boolean checkbox values
-      (= field-type :boolean)
-      (contains? #{"on" "true" "1"} value)
-
-      ; Integer values
-      (= field-type :int)
-      (parse-long value)
-
-      ; Decimal values
-      (= field-type :decimal)
-      (bigdec value)
-
-      ; UUID values
-      (= field-type :uuid)
-      (UUID/fromString value)
-
-      ; Default: keep as string
-      :else value)))
+   [ring.util.response :as ring-response]))
 
 (defn inline-edit-widget-handler
   "Handler for GET /:entity/:id/:field/edit - returns inline edit form.
 
    Returns HTMX fragment with form widget for editing a single field."
-  [admin-service schema-provider _config]
+  [admin-service schema-provider config]
   (fn [request]
     (let [user (support/require-admin-user! request)
           entity-name (support/get-entity-name request)
@@ -87,7 +48,8 @@
 
       ; Return inline edit form fragment
       (support/html-response request
-                             (admin-ui/render-inline-edit-form entity-name id field current-value field-config)))))
+                             (admin-ui/render-inline-edit-form entity-name id field current-value field-config
+                                                            (support/display-options config request))))))
 
 (defn update-field-handler
   "Handler for PATCH /:entity/:id/:field - updates single field.
@@ -118,10 +80,25 @@
                          (:params request)
                          {})
 
-          ; Parse the field value using the same logic as full form parsing
-          field-value (get raw-params (name field))
-          parsed-value (parse-field-value field-value field-config)]
+          ;; The same parsing as the full form, in the zone the inline form
+          ;; was rendered in. This had its own copy of the conversions, and
+          ;; with it every bug the full form had: "forty" stored as NULL, a
+          ;; :date taking a time part, a datetime parsed in the wrong zone
+          ;; (BOU-521, BOU-523).
+          [zones params] (support/form-zone-options config request raw-params)
+          field-value    (get params (name field))
+          [data parse-errors] (support/parse-form-params-checked
+                               {(name field) field-value} entity-config zones)
+          parsed-value   (get data field)]
 
+      (if (seq parse-errors)
+        (-> (support/html-response request
+                                   (admin-ui/render-inline-edit-form-with-error
+                                    entity-name id field field-value field-config
+                                    (get parse-errors field)
+                                    {:zone-id        (:input-zone zones)
+                                     :server-zone-id (:server-zone zones)}))
+            (assoc :status 422))
       (try
         ; Update single field
         (let [updated-record (ports/update-entity-field admin-service entity-name id field parsed-value)
@@ -139,10 +116,12 @@
               ; Return inline form with error message
               (support/html-response request
                                      (admin-ui/render-inline-edit-form-with-error
-                                      entity-name id field parsed-value field-config
-                                      (get-in error-data [:errors field] ["Validation failed"])))
+                                      entity-name id field field-value field-config
+                                      (get-in error-data [:errors field] ["Validation failed"])
+                                      {:zone-id        (:input-zone zones)
+                                       :server-zone-id (:server-zone zones)}))
               ; Re-throw other errors
-              (throw e))))))))
+              (throw e)))))))))
 
 (defn cancel-inline-edit-handler
   "Handler for GET /:entity/:id/:field/cancel - cancels inline edit.

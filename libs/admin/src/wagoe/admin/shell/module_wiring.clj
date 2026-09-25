@@ -93,6 +93,21 @@
           config
           [:date-format :date-time-format]))
 
+(defn- check-time-zone
+  "Refuse to boot on a `:time-zone` the JVM does not know. It is the zone the
+   admin shows and reads timestamps in when the browser has not said which it
+   is in (BOU-523); falling back to the server's zone on a typo would make
+   every timestamp quietly depend on where the app happens to run."
+  [config]
+  (if-let [tz (:time-zone config)]
+    (try (java.time.ZoneId/of (str tz))
+         config
+         (catch java.time.DateTimeException _
+           (throw (ex-info (str "`:time-zone` in :wagoe/settings is not a known time zone: "
+                                (pr-str tz) " — use an IANA name such as \"Europe/Amsterdam\"")
+                           {:type :configuration-error :time-zone tz}))))
+    config))
+
 (defn ig-config
   "This module's Integrant entries, for `wagoe.platform.shell.system.config`.
 
@@ -109,9 +124,10 @@
   ;; the whole application config to the routes, which would let any handler
   ;; reach anything.
   (let [app-settings  (get-in ctx [:config :active :wagoe/settings])
-        routes-config (-> (merge (select-keys app-settings [:date-format :date-time-format])
+        routes-config (-> (merge (select-keys app-settings [:date-format :date-time-format :time-zone])
                                  settings)
-                          (check-date-patterns))]
+                          (check-date-patterns)
+                          (check-time-zone))]
     {:components
      {:wagoe/admin-schema-provider {:db-ctx (ig/ref :wagoe/db-context)
                                     :config settings}

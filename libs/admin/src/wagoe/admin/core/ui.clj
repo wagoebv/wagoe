@@ -38,6 +38,7 @@
 (def format-for-date-input base/format-for-date-input)
 (def format-for-datetime-input base/format-for-datetime-input)
 (def datetime-input-step base/datetime-input-step)
+(def parse-datetime-input base/parse-datetime-input)
 (def get-field-errors base/get-field-errors)
 
 ;; --- layout: shell, sidebar, home, error pages, confirmation dialog, url util ---

@@ -637,3 +637,17 @@ When making UI changes, always test:
 
 - [Library README](README.md) — full entity configuration reference (all keys, field types, filters, JOINs, has-many)
 - [Root AGENTS Guide](../../AGENTS.md)
+
+## Dates and times
+
+Two field types, two rules (BOU-519):
+
+- **`:date`** is a calendar date: `YYYY-MM-DD`, no time part, no zone. A submitted value in any other shape is a field error (BOU-521).
+- **`:instant`** is an absolute moment. The form shows and reads it in one zone: the browser's (the `wagoe_tz` cookie that `init.js` sets), else `:time-zone` from `:wagoe/settings`, else the server's. Never a silent UTC. The zone is shown next to the input, and the form carries it back in a hidden `__zone` field, so a value is always parsed in the zone it was rendered in (BOU-523).
+
+```clojure
+;; resources/conf/<env>/config.edn
+:wagoe/settings {:time-zone "Europe/Amsterdam"}   ; an IANA name; an unknown one fails at boot
+```
+
+Store instants in `TIMESTAMP WITH TIME ZONE` columns — the scaffolder does (BOU-522). On PostgreSQL a plain `TIMESTAMP` drops the zone of a value written into it, so its meaning depends on the server's zone.

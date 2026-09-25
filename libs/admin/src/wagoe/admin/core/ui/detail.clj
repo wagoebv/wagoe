@@ -33,10 +33,13 @@
      value: Current field value
      field-config: Field configuration map
      errors: Optional collection of error messages for this field
+     display: Optional display map; a datetime is shown in its zone (BOU-523)
 
    Returns:
      Hiccup form field structure"
-  [field-name value field-config errors]
+  ([field-name value field-config errors]
+   (render-field-widget field-name value field-config errors nil))
+  ([field-name value field-config errors display]
   (let [widget-type (:widget field-config :text-input)
         label (:label field-config (str/capitalize (name field-name)))
         required? (:required field-config false)
@@ -151,16 +154,20 @@
                        :class "form-control"})
 
        (= widget-type :datetime-input)
-       (let [formatted (base/format-for-datetime-input value)]
-         (ui/text-input field-name formatted
-                        (cond-> {:type "datetime-local"
-                                 :required required?
-                                 :readonly readonly?
-                                 :class "form-control"}
-                          ;; Without it a value with seconds fails the
-                          ;; default step=60 and the form will not submit.
-                          (base/datetime-input-step formatted)
-                          (assoc :step (base/datetime-input-step formatted)))))
+       (let [{:keys [input-zone server-zone]} (base/form-zones display)
+             formatted (base/format-for-datetime-input value input-zone server-zone)]
+         [:span.datetime-with-zone
+          (ui/text-input field-name formatted
+                         (cond-> {:type "datetime-local"
+                                  :required required?
+                                  :readonly readonly?
+                                  :class "form-control"}
+                           ;; Without it a value with seconds fails the
+                           ;; default step=60 and the form will not submit.
+                           (base/datetime-input-step formatted)
+                           (assoc :step (base/datetime-input-step formatted))))
+          ;; The widget carries no zone, so say which one it is in.
+          [:small.field-zone (str input-zone)]])
 
        ;; Color picker
        (= widget-type :color-input)
@@ -199,7 +206,7 @@
      (when (seq errors)
        [:div.field-errors
         (for [error errors]
-          [:span.error error])])]))
+          [:span.error error])])])))
 
 ;; =============================================================================
 ;; Field Grouping Helpers
@@ -254,7 +261,7 @@
 
    Returns:
      Hiccup fieldset/group structure"
-  [group entity-config record errors]
+  [group entity-config record errors & [display]]
   [:div.form-field-group {:class "form-field-group"
                           :data-group-id (name (:id group))}
    [:h3.form-section-title (:label group)]
@@ -263,7 +270,7 @@
       (let [field-config (get-in entity-config [:fields field-name])
             field-value (get record field-name)
             field-errors (get errors field-name)]
-        (render-field-widget field-name field-value field-config field-errors)))]])
+        (render-field-widget field-name field-value field-config field-errors display)))]])
 
 (defn entity-form
   "Render entity create/edit form.
@@ -281,7 +288,7 @@
    Notes:
      If :field-groups is configured, renders fields in grouped sections.
      Otherwise, renders flat list of editable fields."
-  [entity-name entity-config record errors _permissions & [cancel-url]]
+  [entity-name entity-config record errors _permissions & [cancel-url display]]
   (let [editable-fields (:editable-fields entity-config)
         field-groups (compute-field-groups entity-config)
         primary-key (:primary-key entity-config :id)
@@ -319,6 +326,11 @@
             (when is-edit?
               {:hx-push-url form-action}))
      ;; No longer need hidden _method field since HTMX sends proper HTTP method
+     ;; The zone the :instant fields above were rendered in. The handler parses
+     ;; them back in exactly this zone; reading it from the cookie instead would
+     ;; shift every value on the first visit, when the page was rendered before
+     ;; the cookie existed (BOU-523).
+     [:input {:type "hidden" :name "__zone" :value (str (:input-zone (base/form-zones display)))}]
      [:div.form-card {:class "form-card overflow-hidden"}
       [:div.form-card-body {:class "form-card-body space-y-4"}
        [:div.form-meta
@@ -328,7 +340,7 @@
          field-groups
          [:div.form-sections {:class "form-sections"}
           (for [group field-groups]
-            (render-field-group group entity-config record errors))]
+            (render-field-group group entity-config record errors display))]
 
          ;; Priority 2: Split into required/optional sections if both exist
          (and (seq required-fields) (seq optional-fields))
@@ -342,7 +354,7 @@
               (let [field-config (get-in entity-config [:fields field-name])
                     field-value (get record field-name)
                     field-errors (get errors field-name)]
-                (render-field-widget field-name field-value field-config field-errors)))]]
+                (render-field-widget field-name field-value field-config field-errors display)))]]
           [:details.form-section.form-section-optional
            {:class "form-section form-section-optional"
             :x-data (str "collapsibleOptionalFields('" optional-details-key "')")
@@ -360,7 +372,7 @@
               (let [field-config (get-in entity-config [:fields field-name])
                     field-value (get record field-name)
                     field-errors (get errors field-name)]
-                (render-field-widget field-name field-value field-config field-errors)))]]]
+                (render-field-widget field-name field-value field-config field-errors display)))]]]
 
          ;; Priority 3: Flat rendering (all fields in one section)
          :else
@@ -369,7 +381,7 @@
             (let [field-config (get-in entity-config [:fields field-name])
                   field-value (get record field-name)
                   field-errors (get errors field-name)]
-              (render-field-widget field-name field-value field-config field-errors)))])]
+              (render-field-widget field-name field-value field-config field-errors display)))])]
       [:div.form-actions {:class "form-actions justify-end border-t border-base-300 pt-4 mt-4"}
        [:button.button.primary {:class "gap-2" :type "submit"}
         (if is-edit? [:t :admin/button-update] [:t :admin/button-create])]
@@ -536,7 +548,7 @@
        (parent-context-banner ctx))
      (when (seq errors)
        (ui/validation-errors errors))
-     (entity-form entity-name entity-config record errors permissions list-url)
+     (entity-form entity-name entity-config record errors permissions list-url (:display opts))
      (when-let [related-records (:related-records opts)]
        (for [[rel records] related-records]
          (related-records-table rel records (:display opts))))]))
