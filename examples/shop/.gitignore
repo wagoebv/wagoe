@@ -4,3 +4,15 @@ target/
 *.db
 uploads/
 logs/
+
+# clj-kondo analysis cache — regenerated on every lint.
+.clj-kondo/.cache/
+
+# .clj-kondo/imports/ is deliberately NOT ignored here, which is the opposite
+# of the Wagoe repository's own .gitignore. The difference is real, not an
+# oversight: in that repo the registry macros are in-tree source, so clj-kondo
+# resolves them directly and the imported configs change no lint result. In
+# this project they live in a jar, and the export only applies once copied.
+# Ignoring imports/ would mean a fresh clone — and CI, which does not run
+# `bb lint:imports` — reports every defworkflow/defsearch/defreport/defevent/
+# defpush binding as an unresolved symbol (BOU-503).

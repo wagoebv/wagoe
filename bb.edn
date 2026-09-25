@@ -22,6 +22,7 @@
              [wagoe.tools.deploy      :as deploy]
              [wagoe.tools.relocate    :as relocate]
              [wagoe.tools.docs-lint   :as docs-lint]
+             [wagoe.tools.lint-imports :as lint-imports]
              [wagoe.tools.dev         :as dev]
              [wagoe.tools.doctor      :as doctor]
              [wagoe.tools.setup       :as setup]
@@ -61,6 +62,11 @@
                  :task (apply doctor-env/-main *command-line-args*)}
   check         {:doc "Run all quality checks: FC/IS, deps, placeholder-tests, kondo, doctor (bb check [--quick] [--fix] [--ci])"
                  :task (apply check/-main *command-line-args*)}
+  ;; Not part of `bb check`: it lints the whole classpath (~3s) and needs deps
+  ;; resolved, while `bb check` runs on every commit. Run it once per project
+  ;; and again after dependency changes — .clj-kondo/imports/ is committed.
+  lint:imports  {:doc "Import clj-kondo configs exported by dependencies into .clj-kondo/imports/ (run after dependency changes)"
+                 :task (apply lint-imports/-main *command-line-args*)}
   db:status     {:doc "Show database configuration, connection info, and migration status"
                  :task (db/-main "status")}
   db:reset      {:doc "Drop and recreate the database with all migrations (interactive confirmation)"

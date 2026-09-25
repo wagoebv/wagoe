@@ -36,6 +36,12 @@
       (testing "generates required files"
         (doseq [f ["deps.edn" "bb.edn" ".gitignore" ".env" ".env.example" "tests.edn"
                    "CLAUDE.md" "AGENTS.md"
+                   ;; Must exist even holding only `{}`. clj-kondo's
+                   ;; --copy-configs prints "No configs copied because config
+                   ;; dir (.clj-kondo) does not exist" and exits 0, so without
+                   ;; this file `bb lint:imports` silently did nothing and the
+                   ;; registry macros kept linting as unresolved (BOU-503).
+                   ".clj-kondo/config.edn"
                    ".claude/skills/wagoe/SKILL.md"
                    "resources/conf/dev/config.edn"
                    "resources/conf/test/config.edn"
@@ -72,6 +78,19 @@
                     (println "PARSE ERROR in" (str f) "—" (ex-message e))
                     false))
                 (str f " must parse cleanly and contain at least one form")))))
+
+      (testing ".gitignore keeps .clj-kondo/imports/ tracked, unlike the Wagoe repo"
+        ;; The framework's own .gitignore ignores imports/, and the reasoning
+        ;; there is sound: its registry macros are in-tree source, so the
+        ;; copied configs change no lint result. A generated project is the
+        ;; opposite case — the macro exists only inside a jar, and CI does not
+        ;; run `bb lint:imports`. Ignoring imports/ here would make every
+        ;; defworkflow binding unresolved on a fresh clone (BOU-503). Asserted
+        ;; so that "make it match the framework repo" fails loudly.
+        (let [content (slurp (io/file tmp ".gitignore"))]
+          (is (str/includes? content ".clj-kondo/.cache/"))
+          (is (not (re-find #"(?m)^\.clj-kondo/imports/" content))
+              ".clj-kondo/imports/ must stay tracked in a generated project")))
 
       (testing ".env has a generated JWT_SECRET (no unreplaced placeholder)"
         (let [content (slurp (io/file tmp ".env"))]
