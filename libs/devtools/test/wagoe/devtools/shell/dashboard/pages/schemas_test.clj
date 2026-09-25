@@ -1,5 +1,6 @@
 (ns wagoe.devtools.shell.dashboard.pages.schemas-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [clojure.string :as str]
+            [clojure.test :refer [deftest is testing]]
             [wagoe.devtools.shell.dashboard.pages.schemas :as schemas]))
 
 (deftest ^:unit schema-namespace?-test
@@ -35,3 +36,20 @@
   (testing "the key round-trips through the ?schema=<ns>/<name> query parameter"
     (let [k (schemas/schema-key 'invoicing.invoice.schema 'Invoice)]
       (is (= k (keyword (str (namespace k) "/" (name k))))))))
+
+(deftest ^:unit truncate-example-test
+  ;; The generated example ran to ~60 lines of arbitrary keywords for a
+  ;; workflow definition, filling the page with noise (BOU-517).
+  (testing "short examples pass through untouched"
+    (is (= "{:a 1}" (schemas/truncate-example "{:a 1}" 14))))
+
+  (testing "long examples are capped and say how much was dropped"
+    (let [long-str (str/join "\n" (map #(str "line " %) (range 40)))
+          out      (schemas/truncate-example long-str 14)
+          lines    (str/split-lines out)]
+      (is (= 15 (count lines)) "14 kept plus the marker")
+      (is (str/includes? (last lines) "26 more line(s)"))))
+
+  (testing "exactly at the cap is not truncated"
+    (let [s (str/join "\n" (map str (range 14)))]
+      (is (= s (schemas/truncate-example s 14))))))
