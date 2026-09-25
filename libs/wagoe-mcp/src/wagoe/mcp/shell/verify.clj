@@ -40,10 +40,48 @@
 (defn- clj-files [paths]
   (filter #(str/ends-with? % ".clj") paths))
 
-(defn- core-files [paths]
-  (filter #(and (str/ends-with? % ".clj")
-                (str/includes? % "/core/"))
-          paths))
+(defn- project-root
+  "The project root the MCP tools resolve every path against — the same
+   canonical `user.dir` as wagoe.mcp.shell.tools/project-root."
+  ^java.io.File []
+  (.getCanonicalFile (io/file (System/getProperty "user.dir"))))
+
+(defn test-path?
+  "Is `p` inside a test root, judged from `root`?
+
+   The path is made relative to the project root and the FIRST `src` or `test`
+   segment decides: `test/…`, `libs/<lib>/test/…` are tests; `src/…` is source,
+   even for a module named `test`. A path outside the root — which the tools'
+   confine-path does not produce — falls back to the LAST such segment.
+
+   Not a search for \"/test/\" in the path. The tools pass absolute, canonical
+   paths, so a project that merely lives under a directory named test —
+   ~/test/myapp, /tmp/test/… — had every core file classified as a test and
+   skipped: FC/IS reported a pass without checking anything."
+  [root p]
+  (let [root-path (.toPath (.getCanonicalFile (io/file (str root))))
+        path      (.toPath (io/file (str p)))
+        abs       (.normalize (if (.isAbsolute path) path (.resolve root-path path)))
+        inside?   (.startsWith abs root-path)
+        segments  (map str (if inside? (.relativize root-path abs) abs))
+        markers   (filter #{"src" "test"} segments)]
+    (= "test" (if inside? (first markers) (last markers)))))
+
+(defn- core-files
+  "The core sources among `paths`.
+
+   Test roots are excluded. The scaffolder writes a module's unit tests to
+   `test/<base>/<module>/core/`, so matching on `/core/` alone pulled the
+   generated test namespace in, and FC/IS then refused it with BND-806 for
+   requiring `clojure.test` — the verify loop failing a file the same call had
+   just written, and reporting `status: fail` on a correct generation
+   (BOU-515). `bb check:fcis` never had this problem because it walks `src/`."
+  [paths]
+  (let [root (project-root)]
+    (filter #(and (str/ends-with? % ".clj")
+                  (str/includes? % "/core/")
+                  (not (test-path? root %)))
+            paths)))
 
 (defn- run-kondo [paths]
   (when (seq paths)

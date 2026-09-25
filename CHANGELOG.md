@@ -37,6 +37,10 @@ for what is public API, what is internal, and how deprecations are announced.
   images; the storage job now uses a pinned `adobe/s3mock`.
 - **`bb check:jdk` passed a `.tool-versions` that pinned another JDK** (BOU-488).
   It now reads the asdf spelling and requires the file to name one.
+- **MCP `describe-module` found no modules in a generated project** (BOU-516).
+  The project module graph now lists the application's own modules.
+- **MCP `scaffold-module` reported `fail` on its own output** (BOU-515). The
+  FC/IS step no longer treats a generated test namespace as core code.
 - **`bb db:reset` prompted twice, so `echo y |` reported success over a reset
   that never ran** (BOU-500). One prompt now, and failures are propagated.
 - **`bb scaffold` and `bb create-admin` help were wrong** (BOU-496, BOU-501).
