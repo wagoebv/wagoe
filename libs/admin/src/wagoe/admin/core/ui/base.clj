@@ -9,7 +9,7 @@
             [wagoe.shared.ui.core.components :as ui]
             [wagoe.shared.ui.core.table :as table-ui]
             [clojure.string :as str])
-  (:import (java.time DateTimeException Instant LocalDate LocalDateTime ZoneId ZonedDateTime)
+  (:import (java.time DateTimeException Instant LocalDate LocalDateTime ZoneId ZoneOffset ZonedDateTime)
            (java.time.format DateTimeFormatter DateTimeParseException)
            (java.util Locale)))
 
@@ -102,6 +102,13 @@
   ^ZoneId [display]
   (or (:zone-id display) utc))
 
+(defn- server-zone
+  "The zone the database reads a zone-less timestamp in: the JVM zone, which is
+   also the PostgreSQL session zone and H2's. Supplied by the shell — core may
+   not read the clock's zone."
+  ^ZoneId [display]
+  (or (:server-zone-id display) (display-zone display)))
+
 (defn- with-locale
   ^DateTimeFormatter [^DateTimeFormatter fmt ^Locale locale]
   (if locale (.withLocale fmt locale) fmt))
@@ -173,6 +180,19 @@
       (LocalDateTime/parse (str/replace-first value " " "T"))
       (catch DateTimeParseException _ nil))))
 
+(defn- ->instant
+  "Coerce any stored timestamp to the Instant it denotes. Values that carry a
+   zone or offset (Instant, OffsetDateTime, `…Z`/`+02:00` strings) and
+   java.sql.Timestamp (built by the driver in the JVM zone) convert directly;
+   a zone-less value is read in `server-zone`, the zone the database itself
+   reads it in (BOU-523)."
+  ^Instant [value ^ZoneId server-zone]
+  (or (when-not (instance? java.sql.Timestamp value)
+        (when-let [ldt (when (or (instance? LocalDateTime value) (string? value))
+                         (->naive value))]
+          (.toInstant (.atZone ^LocalDateTime ldt server-zone))))
+      (tc/string->instant value)))
+
 (defn- ->local-date
   "Coerce a stored date to a LocalDate. A date carries no zone, so a timestamp
    shape is read at UTC: reading `2026-01-09T00:00Z` in a zone west of
@@ -200,8 +220,8 @@
    through as-is rather than swallowed, so a format nobody anticipated stays
    visible."
   [value display]
-  (let [temporal (or (->zoned value (display-zone display))
-                     (->naive value))]
+  (let [temporal (some-> (->instant value (server-zone display))
+                         (.atZone (display-zone display)))]
     (or (some #(safe-format % temporal)
               (formatters display :date-time-format default-instant-formatter))
         (str value))))
@@ -237,27 +257,82 @@
   [value]
   (some->> (->local-date value) (safe-format html-date-formatter)))
 
+(defn form-zones
+  "The zones a form renders and parses :instant fields in, from `display`:
+   `:input-zone` (the client's, else the configured, else the server's — chosen
+   by the shell) and `:server-zone`. Both come from the same map, so a form can
+   never show in one zone and save in another (BOU-523)."
+  [display]
+  {:input-zone  (display-zone display)
+   :server-zone (server-zone display)})
+
+(defn- ->offset
+  "A ZoneOffset from `s` (`-05:00`, `Z`), or nil. It arrives from a form field,
+   so anything unreadable is ignored rather than trusted."
+  ^ZoneOffset [s]
+  (when (and (string? s) (not (str/blank? s)))
+    (try (ZoneOffset/of (str/trim s)) (catch DateTimeException _ nil))))
+
+(defn datetime-input-offset
+  "The UTC offset `value` has when shown in `input-zone`, e.g. `-05:00`, or nil.
+   The form sends it back beside the wall time so `parse-datetime-input` can
+   tell the two occurrences of a repeated local time apart."
+  [value ^ZoneId input-zone ^ZoneId server-zone]
+  (some-> (->instant value server-zone) (.atZone input-zone) (.getOffset) (str)))
+
 (defn format-for-datetime-input
-  "Coerce a stored value to a string an `<input type=\"datetime-local\">`
-   accepts, at the precision the value has: `YYYY-MM-DDTHH:mm` on the minute,
-   `…:ss` with seconds, `…:ss.SSS` with milliseconds.
+  "Coerce a stored timestamp to what an `<input type=\"datetime-local\">`
+   accepts, as wall time in `input-zone`, at the precision the value has:
+   `YYYY-MM-DDTHH:mm` on the minute, `…:ss` with seconds, `…:ss.SSS` with
+   milliseconds.
 
-   Not always `HH:mm`. The form submits every editable field, so dropping the
-   seconds here meant an edit to any *other* field wrote the truncated value
-   back. The widget holds at most milliseconds; finer precision (Postgres keeps
-   microseconds) still cannot survive a round trip through it.
-
-   The widget carries no zone, so a zone-less value is reformatted where it
-   stands and an instant is read at UTC — the same rule `->local-date` uses.
-   Pair with `datetime-input-step`, or the browser rejects the seconds."
-  [value]
-  (when-let [^LocalDateTime ldt (or (->naive value)
-                                    (some-> (->zoned value utc) (.toLocalDateTime)))]
+   The value is read as the instant it denotes (see `->instant`) and shown in
+   `input-zone` — the zone the form is also parsed back in, which is what makes
+   an edit to another field leave it unchanged (BOU-519, BOU-523). Seconds are
+   kept because the form submits every editable field; finer than
+   milliseconds cannot survive the widget. Pair with `datetime-input-step`."
+  [value ^ZoneId input-zone ^ZoneId server-zone]
+  (when-let [^LocalDateTime ldt (some-> (->instant value server-zone)
+                                        (.atZone input-zone)
+                                        (.toLocalDateTime))]
     (safe-format (cond
                    (pos? (quot (.getNano ldt) 1000000)) html-datetime-milli-formatter
                    (pos? (.getSecond ldt))              html-datetime-second-formatter
                    :else                                html-datetime-minute-formatter)
                  ldt)))
+
+(def ^:private storage-formatter
+  (DateTimeFormatter/ofPattern "uuuu-MM-dd'T'HH:mm:ss.SSSXXX"))
+
+(defn parse-datetime-input
+  "Read what a datetime-local submitted — wall time in `input-zone` — and return
+   the instant as an ISO string carrying `server-zone`'s offset, or nil when it
+   is not a date-time.
+
+   The offset is the server's, not UTC's, on purpose. Measured: PostgreSQL
+   drops the zone of a value written into a TIMESTAMP column without one and
+   keeps the wall time, so `…10:00:50Z` read back as 08:00:50Z on an Amsterdam
+   server. With the server's offset the wall time is the server's own, which
+   is right for a zone-less column; zone-aware columns and SQLite read the
+   offset and get the exact instant either way (BOU-523)."
+  ([s input-zone server-zone] (parse-datetime-input s input-zone server-zone nil))
+  ([s ^ZoneId input-zone ^ZoneId server-zone preferred-offset]
+  (when (string? s)
+    ;; A value that already names its zone or offset — an API client sending
+    ;; `…Z` — is taken as exactly that instant; only a zone-less value, which
+    ;; is what the widget sends, is read in `input-zone`.
+    ;;
+    ;; When the clocks go back a local time happens twice, and `atZone` picks
+    ;; the earlier one: `2026-10-25T02:30` in Amsterdam, rendered from 01:30Z,
+    ;; was saved as 00:30Z by a form nobody changed. `preferred-offset` is the
+    ;; offset the value was rendered with, carried back by the form; ofLocal
+    ;; uses it only to choose within such an overlap.
+    (when-let [^Instant inst (or (tc/string->instant s)
+                                 (some-> ^LocalDateTime (->naive s)
+                                         (ZonedDateTime/ofLocal input-zone (->offset preferred-offset))
+                                         (.toInstant)))]
+      (.format ^DateTimeFormatter storage-formatter
+               (.toOffsetDateTime (.atZone inst server-zone)))))))
 
 (defn datetime-input-step
   "The `step` a datetime-local needs for `formatted`, the output of

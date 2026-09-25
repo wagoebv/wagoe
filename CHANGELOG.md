@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Admin timestamps were shown and entered in UTC** (BOU-523). They now use the
+  browser's zone, else `:time-zone` in `:wagoe/settings`, else Europe/Amsterdam.
 - **Admin forms answered 500 on an unreadable value and stored "forty" as NULL**
   (BOU-521). They now show a field error; a `:date` must be `YYYY-MM-DD`.
 - **MCP `describe-module` missed root and dotted-namespace modules** (BOU-516).

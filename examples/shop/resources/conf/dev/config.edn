@@ -5,6 +5,9 @@
      :version          "0.1.0"
      :date-format      "yyyy-MM-dd"
      :date-time-format "yyyy-MM-dd HH:mm:ss"
+     ;; The zone the admin shows and reads timestamps in when the browser has
+     ;; not said which it is in. Storage and the JVM stay UTC (BOU-431).
+     :time-zone        "Europe/Amsterdam"
      ;; Auth cookies omit the Secure attribute for local HTTP dev.
      ;; Defaults to true (HTTPS-only) when unset — set true behind TLS in prod.
      :secure-cookies?  false

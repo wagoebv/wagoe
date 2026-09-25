@@ -21,6 +21,8 @@
             [wagoe.observability.logging.shell.adapters.no-op :as logging-no-op]
             [wagoe.observability.errors.shell.adapters.no-op :as error-reporting-no-op]
             [wagoe.shared.ui.core.components :as ui-components]
+            [wagoe.admin.core.ui :as ui]
+            [wagoe.core.utils.type-conversion :as tc]
             [clojure.test :refer [deftest is testing use-fixtures]]
             [clojure.string :as str])
   (:import [java.util UUID]
@@ -93,7 +95,9 @@
            -- an ordinary optional field (BOU-477).
            nickname VARCHAR(255),
            -- A calendar date: YYYY-MM-DD, never a time part (BOU-521).
-           birthday DATE)"}))
+           birthday DATE,
+           -- An instant, stored zone-aware (BOU-523).
+           appointment_at TIMESTAMP WITH TIME ZONE)"}))
 
 (defn drop-test-table!
   "Drop test users table"
@@ -614,6 +618,70 @@
         (is (str/includes? (:body resp) "value=\"1990-05-18T10:00\"")
             "and shows what was rejected, not a date it made up from it")
         (is (= "1990-05-17" (str (:birthday (row)))) "the row is unchanged")))))
+
+(deftest ^:contract an-instant-round-trips-through-the-form-in-the-browsers-zone
+  ;; BOU-523: an :instant is shown and entered in the browser's zone (the
+  ;; wagoe_tz cookie), and the form is parsed in exactly the zone it was
+  ;; rendered in (the hidden __zone field). The stored instant is 10:00:50Z.
+  (let [user    (create-test-user! "tz@example.com" "Zone User" true)
+        id      (:id user)
+        stored  (java.time.Instant/parse "2026-09-01T10:00:50Z")
+        nyc     {"cookie" "theme=dark; wagoe_tz=America%2FNew_York"}
+        url     (str "/web/admin/test-users/" id)
+        put!    (fn [form headers]
+                  (*handler* (make-request :put url admin-user
+                                           {:path {:entity "test-users" :id (str id)}
+                                            :form form :headers headers})))
+        instant (fn [] (let [v (:appointment-at (db/execute-one! *db-ctx*
+                                                                 {:select [:*] :from [:test-users]
+                                                                  :where  [:= :id id]}))]
+                         (some-> v (tc/string->instant))))]
+    (db/execute-update! *db-ctx* {:update :test-users
+                                  :set    {:appointment-at (java.time.OffsetDateTime/parse "2026-09-01T10:00:50Z")}
+                                  :where  [:= :id id]})
+
+    (testing "the edit form shows the instant in the browser's zone, and names it"
+      (let [body (:body (*handler* (make-request :get url admin-user
+                                                 {:path {:entity "test-users" :id (str id)}
+                                                  :headers nyc})))]
+        (is (str/includes? body "value=\"2026-09-01T06:00:50\""))
+        (is (str/includes? body "name=\"__zone\""))
+        (is (str/includes? body "America/New_York"))))
+
+    (testing "saving another field leaves the instant where it was"
+      (put! {"nickname" "changed" "appointment-at" "2026-09-01T06:00:50" "__zone" "America/New_York"} nyc)
+      (is (= stored (instant))))
+
+    (testing "a page rendered before the cookie existed is still parsed in its own zone"
+      (let [server (java.time.ZoneId/systemDefault)
+            shown  (ui/format-for-datetime-input "2026-09-01T10:00:50Z" server server)]
+        (put! {"nickname" "again" "appointment-at" shown "__zone" (str server)} nyc)
+        (is (= stored (instant)))))
+
+    (testing "a new value is read in the zone the form names"
+      (put! {"appointment-at" "2026-09-01T09:15:00" "__zone" "Asia/Tokyo"} nyc)
+      (is (= (java.time.Instant/parse "2026-09-01T00:15:00Z") (instant))))
+
+    (testing "a repeated local time keeps its instant through an unchanged save"
+      ;; 01:30 happens twice in New York on 2026-11-01. The later one, 06:30Z,
+      ;; was saved as 05:30Z by a form nobody touched.
+      (db/execute-update! *db-ctx* {:update :test-users
+                                    :set    {:appointment-at (java.time.OffsetDateTime/parse "2026-11-01T06:30:00Z")}
+                                    :where  [:= :id id]})
+      (let [body (:body (*handler* (make-request :get url admin-user
+                                                 {:path {:entity "test-users" :id (str id)}
+                                                  :headers nyc})))]
+        (is (str/includes? body "value=\"2026-11-01T01:30\""))
+        (is (str/includes? body "name=\"__offset.appointment-at\""))
+        (is (str/includes? body "value=\"-05:00\"")))
+      (put! {"nickname" "dst" "appointment-at" "2026-11-01T01:30"
+             "__zone" "America/New_York" "__offset.appointment-at" "-05:00"} nyc)
+      (is (= (java.time.Instant/parse "2026-11-01T06:30:00Z") (instant))))
+
+    (testing "the zone field never reaches the database as a column"
+      (let [resp (put! {"nickname" "zone-only" "__zone" "Asia/Tokyo"
+                        "__offset.appointment-at" "+09:00"} nyc)]
+        (is (< (:status resp) 400) "neither __zone nor __offset.* is written as a column")))))
 
 (deftest ^:contract update-entity-reads-a-decoded-body
   ;; A JSON PUT carries its fields in :body-params, and Ring still puts an

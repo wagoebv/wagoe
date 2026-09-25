@@ -45,3 +45,20 @@
     (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Invalid integer value"
                           (support/parse-form-params {"age" bad} config))
         bad)))
+
+(deftest ^:unit the-display-zone-is-the-browsers-then-the-configured-then-amsterdam
+  ;; BOU-523 + BOU-519 decision: storage and the JVM stay UTC (BOU-431); the
+  ;; zone people see is the browser's, else :time-zone, else Europe/Amsterdam.
+  (let [zone   (fn [config headers] (str (:zone-id (support/display-options config {:headers headers}))))
+        cookie {"cookie" "a=b; wagoe_tz=America%2FNew_York"}]
+    (testing "the browser's zone wins"
+      (is (= "America/New_York" (zone {:time-zone "Asia/Tokyo"} cookie))))
+    (testing "then the configured zone"
+      (is (= "Asia/Tokyo" (zone {:time-zone "Asia/Tokyo"} {}))))
+    (testing "then Amsterdam — not the server's zone, which is UTC by design"
+      (is (= "Europe/Amsterdam" (zone {} {}))))
+    (testing "an unknown zone in the cookie is ignored, not trusted"
+      (is (= "Europe/Amsterdam" (zone {} {"cookie" "wagoe_tz=Mars%2FOlympus"})))))
+  (testing "the server zone is always the JVM's, whatever is displayed"
+    (is (= (java.time.ZoneId/systemDefault)
+           (:server-zone-id (support/display-options {:time-zone "Asia/Tokyo"} {:headers {}}))))))

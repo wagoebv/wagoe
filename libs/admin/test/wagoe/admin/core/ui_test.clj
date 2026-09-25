@@ -264,12 +264,12 @@
              (ui/render-field-value :created-at "2026-08-27T06:12:50Z" {:type :instant}
                                     {:date-time-format "yyyy-MM-dd bb"}))))
 
-    (testing "a pattern the value cannot satisfy falls back to the default pattern"
-      ;; `yyyy-MM-dd HH:mm z` compiles, but a zone-less LocalDateTime has no
-      ;; zone to print. Formatting it threw a DateTimeException that dropped the
-      ;; cell to the raw database value — the bug BOU-382 fixes, reachable
-      ;; through a perfectly legal config.
-      (is (= "2026-08-27 06:12"
+    (testing "a zone-less value is read in the server zone, so a zone pattern can print it"
+      ;; Before BOU-523 a zone-less LocalDateTime had no zone, `z` could not
+      ;; print it, and this fell back to the default pattern (BOU-382). It is now
+      ;; read in the server zone — here the display map's default, UTC — so the
+      ;; configured pattern applies in full.
+      (is (= "2026-08-27 06:12 UTC"
              (ui/render-field-value :created-at
                                     (java.time.LocalDateTime/parse "2026-08-27T06:12:50")
                                     {:type :instant}
@@ -1368,26 +1368,28 @@
     (is (nil? (ui/format-for-date-input "not a date")))
     (is (nil? (ui/format-for-date-input nil)))))
 
+(def ^:private utc (java.time.ZoneId/of "UTC"))
+
 (deftest ^:unit format-for-datetime-input-test
   ;; This test used to assert "06:12:50" -> "06:12". The form submits every
   ;; editable field, so an edit to any other field wrote the truncated value
   ;; back and the seconds were lost. datetime-local accepts seconds and
   ;; milliseconds; they are kept when present.
   (testing "an ISO instant keeps its seconds"
-    (is (= "2026-09-01T06:12:50" (ui/format-for-datetime-input "2026-09-01T06:12:50Z"))))
+    (is (= "2026-09-01T06:12:50" (ui/format-for-datetime-input "2026-09-01T06:12:50Z" utc utc))))
 
   (testing "a zone-less timestamp is reformatted where it stands, seconds included"
-    (is (= "2026-09-01T06:12:50" (ui/format-for-datetime-input "2026-09-01 06:12:50"))))
+    (is (= "2026-09-01T06:12:50" (ui/format-for-datetime-input "2026-09-01 06:12:50" utc utc))))
 
   (testing "milliseconds are kept"
-    (is (= "2026-09-01T06:12:50.123" (ui/format-for-datetime-input "2026-09-01T06:12:50.123Z"))))
+    (is (= "2026-09-01T06:12:50.123" (ui/format-for-datetime-input "2026-09-01T06:12:50.123Z" utc utc))))
 
   (testing "a value on the minute renders as before"
-    (is (= "2026-09-01T06:12" (ui/format-for-datetime-input "2026-09-01T06:12:00Z"))))
+    (is (= "2026-09-01T06:12" (ui/format-for-datetime-input "2026-09-01T06:12:00Z" utc utc))))
 
   (testing "an unreadable value yields nil"
-    (is (nil? (ui/format-for-datetime-input "not a timestamp")))
-    (is (nil? (ui/format-for-datetime-input nil)))))
+    (is (nil? (ui/format-for-datetime-input "not a timestamp" utc utc)))
+    (is (nil? (ui/format-for-datetime-input nil utc utc)))))
 
 (deftest ^:unit date-widgets-render-a-usable-value-test
   (testing "a date widget handed a stored instant renders a value the browser keeps"
@@ -1445,7 +1447,8 @@
              (fn []
                (testing (str "JVM zone " zone)
                  (is (= "2026-09-01T12:00:50"
-                        (ui/format-for-datetime-input (java.sql.Timestamp/valueOf "2026-09-01 12:00:50"))))
+                        (ui/format-for-datetime-input (java.sql.Timestamp/valueOf "2026-09-01 12:00:50")
+                                                    (java.time.ZoneId/systemDefault) (java.time.ZoneId/systemDefault))))
                  (is (= "2026-09-01"
                         (ui/format-for-date-input (java.sql.Timestamp/valueOf "2026-09-01 00:30:00")))))))))
 
@@ -1467,3 +1470,81 @@
     (testing "without an error the widgets are unchanged"
       (is (str/includes? (render :birthday "1990-05-17" {:type :date :widget :date-input} nil) "\"date\""))
       (is (str/includes? (render :age 41 {:type :int :widget :number-input} nil) "\"number\"")))))
+
+(def ^:private ams (java.time.ZoneId/of "Europe/Amsterdam"))
+(def ^:private nyc (java.time.ZoneId/of "America/New_York"))
+(def ^:private tokyo (java.time.ZoneId/of "Asia/Tokyo"))
+
+(deftest ^:unit datetime-input-shows-the-instant-in-the-input-zone-test
+  ;; BOU-523: an :instant is shown as wall time in the zone the form is also
+  ;; parsed back in — the client's, else the configured one — never silently
+  ;; UTC. The true instant below is 10:00:50Z.
+  (testing "values carrying a zone or offset"
+    (is (= "2026-09-01T06:00:50" (ui/format-for-datetime-input "2026-09-01T10:00:50Z" nyc ams)))
+    (is (= "2026-09-01T12:00:50" (ui/format-for-datetime-input "2026-09-01T12:00:50+02:00" ams ams)))
+    (is (= "2026-09-01T19:00:50"
+           (ui/format-for-datetime-input (java.time.OffsetDateTime/parse "2026-09-01T10:00:50Z") tokyo ams))))
+  (testing "a zone-less value is read in the server zone, as the database reads it"
+    (is (= "2026-09-01T06:00:50" (ui/format-for-datetime-input "2026-09-01 12:00:50" nyc ams)))
+    (is (= "2026-09-01T06:00:50"
+           (ui/format-for-datetime-input (java.time.LocalDateTime/parse "2026-09-01T12:00:50") nyc ams)))))
+
+(deftest ^:unit parse-datetime-input-writes-the-instant-with-the-server-offset-test
+  (testing "wall time in the input zone becomes the instant, carrying the server's offset"
+    (is (= "2026-09-01T12:00:50.000+02:00" (ui/parse-datetime-input "2026-09-01T06:00:50" nyc ams)))
+    (is (= "2026-09-01T10:00:50.000Z"      (ui/parse-datetime-input "2026-09-01T12:00:50" ams utc))))
+  (testing "a value that names its own zone is taken exactly, whatever the input zone"
+    (is (= "2026-09-01T12:00:50.000+02:00" (ui/parse-datetime-input "2026-09-01T10:00:50Z" nyc ams)))
+    (is (= "2026-09-01T12:00:50.000+02:00" (ui/parse-datetime-input "2026-09-01T15:00:50+05:00" nyc ams))))
+  (testing "not a date-time"
+    (is (nil? (ui/parse-datetime-input "tomorrow" ams ams)))
+    (is (nil? (ui/parse-datetime-input "" ams ams)))))
+
+(deftest ^:unit a-repeated-local-time-is-disambiguated-by-its-offset-test
+  (testing "the offset a value renders with"
+    (is (= "-05:00" (ui/datetime-input-offset "2026-11-01T06:30:00Z" nyc utc)))
+    (is (= "-04:00" (ui/datetime-input-offset "2026-11-01T05:30:00Z" nyc utc))))
+  (testing "01:30 in New York on 2026-11-01 happens twice; the offset picks one"
+    (is (= "2026-11-01T06:30:00.000Z" (ui/parse-datetime-input "2026-11-01T01:30" nyc utc "-05:00")))
+    (is (= "2026-11-01T05:30:00.000Z" (ui/parse-datetime-input "2026-11-01T01:30" nyc utc "-04:00"))))
+  (testing "outside an overlap the offset changes nothing, and a bad one is ignored"
+    (is (= "2026-09-01T10:00:50.000Z" (ui/parse-datetime-input "2026-09-01T12:00:50" ams utc "-05:00")))
+    (is (= "2026-09-01T10:00:50.000Z" (ui/parse-datetime-input "2026-09-01T12:00:50" ams utc "nonsense")))))
+
+(deftest ^:unit rendering-and-parsing-in-one-zone-round-trip-test
+  ;; The invariant BOU-519 broke: render a stored value, submit it untouched,
+  ;; and the stored instant must not move — for any client and server zone.
+  ;;
+  ;; The last four are the two occurrences of a repeated local time when the
+  ;; clocks go back — 01:30 twice in New York, 02:30 twice in Amsterdam. With
+  ;; only the wall time the later one was saved as the earlier; the form now
+  ;; carries the offset it rendered with.
+  (doseq [input [ams nyc tokyo utc]
+          server [ams utc nyc]
+          stored ["2026-09-01T10:00:50Z" "2026-03-29T01:30:00Z" "2026-12-31T23:59:59.250Z"
+                  "2026-11-01T05:30:00Z" "2026-11-01T06:30:00Z"
+                  "2026-10-25T00:30:00Z" "2026-10-25T01:30:00Z"]]
+    (let [shown   (ui/format-for-datetime-input stored input server)
+          offset  (ui/datetime-input-offset stored input server)
+          written (ui/parse-datetime-input shown input server offset)]
+      (is (= (java.time.Instant/parse stored)
+             (.toInstant (java.time.OffsetDateTime/parse written)))
+          (str stored " via " input " / server " server)))))
+
+(deftest ^:unit inline-datetime-formats-stored-strings-and-shows-rejected-ones-raw-test
+  ;; SQLite returns instants as strings. The inline form passed any string
+  ;; through unformatted, so `…Z` reached a datetime-local, which drops it and
+  ;; shows empty. Only a value the user just submitted is shown as typed.
+  (let [display {:zone-id nyc :server-zone-id utc}
+        cfg     {:type :instant :widget :datetime-input}]
+    (testing "a stored string is formatted into the browser's zone, with its offset"
+      (let [html (str (ui/render-inline-edit-form :things 1 :due-at "2026-11-01T06:30:00Z" cfg display))]
+        (is (str/includes? html "2026-11-01T01:30"))
+        (is (str/includes? html "datetime-local"))
+        (is (str/includes? html "__offset.due-at"))
+        (is (str/includes? html "-05:00"))))
+    (testing "a rejected value is shown exactly as it was typed"
+      (let [html (str (ui/render-inline-edit-form-with-error :things 1 :due-at "next tuesday" cfg
+                                                             ["must be a date and time"] display))]
+        (is (str/includes? html "next tuesday"))
+        (is (not (str/includes? html "datetime-local")))))))

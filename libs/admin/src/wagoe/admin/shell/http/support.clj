@@ -5,6 +5,7 @@
    error mappings, query/form parsing, and handler helpers used by the handler
    namespaces and the route definitions in `wagoe.admin.shell.http`."
   (:require
+   [wagoe.admin.core.ui.base :as ui-base]
    [wagoe.admin.ports :as ports]
    [wagoe.admin.shell.permissions :as shell-permissions]
    [wagoe.i18n.shell.middleware :as i18n-middleware]
@@ -209,7 +210,12 @@
 
      (parse-form-params {price 19.99 quantity 5} entity-config)
      => {:price 19.99 :quantity 5}"
-  [params entity-config]
+  ([params entity-config]
+   ;; No form zone: read a zone-less value in the server's zone, which is how
+   ;; the database would have read it anyway.
+   (let [server (java.time.ZoneId/systemDefault)]
+     (parse-form-params params entity-config {:input-zone server :server-zone server})))
+  ([params entity-config {:keys [input-zone server-zone offsets]}]
   (reduce-kv
    (fn [acc field-name value]
      (let [field-keyword (keyword field-name)
@@ -259,6 +265,19 @@
                                               :value normalized-value
                                               :message (str "Field '" (name field-keyword) "' must be a valid decimal")}))))
 
+                           ; An instant is entered as wall time in the form's zone and
+                           ; stored with the server's offset, so every database reads
+                           ; back the moment that was meant (BOU-523).
+                         (= field-type :instant)
+                         (or (ui-base/parse-datetime-input normalized-value input-zone server-zone
+                                                           (get offsets field-keyword))
+                             (throw (ex-info "Invalid date-time value"
+                                             {:type :validation-error
+                                              :field field-keyword
+                                              :value normalized-value
+                                              :message (str "Field '" (name field-keyword)
+                                                            "' must be a date and time")})))
+
                            ; A calendar date is exactly YYYY-MM-DD: no time part and no
                            ; zone (BOU-519 decision). The date widget only sends that
                            ; shape; anything else is a hand-crafted request and was
@@ -302,7 +321,7 @@
        ;; partial.
        (assoc acc field-keyword typed-value)))
    {}
-   params))
+   params)))
 
 ;; =============================================================================
 ;; Handler Helpers
@@ -319,11 +338,15 @@
    the form (BOU-521). Parsing field by field reports every bad field at once,
    in the {field [message]} shape the form already renders, and keeps what the
    user typed in `data` so the re-rendered form shows it."
-  [params entity-config]
+  ([params entity-config] (parse-form-params-checked params entity-config nil))
+  ([params entity-config zones]
   (reduce-kv
    (fn [[data errors] field-name value]
      (try
-       [(merge data (parse-form-params {field-name value} entity-config)) errors]
+       [(merge data (if zones
+                      (parse-form-params {field-name value} entity-config zones)
+                      (parse-form-params {field-name value} entity-config)))
+        errors]
        (catch clojure.lang.ExceptionInfo e
          (let [{:keys [type field message]} (ex-data e)]
            (if (= :validation-error type)
@@ -331,7 +354,7 @@
               (assoc errors field [message])]
              (throw e))))))
    [{} {}]
-   params))
+   params)))
 
 (defn get-current-user
   "Extract authenticated user from request.
@@ -461,21 +484,82 @@
                      (:i18n/default-locale request))]
     (java.util.Locale/forLanguageTag (name loc))))
 
-(defn display-options
-  "Zone, locale and date patterns for rendering stored timestamps in the admin UI.
+(def zone-cookie
+  "Set by init.js to the browser's IANA zone (`Intl…resolvedOptions().timeZone`)."
+  "wagoe_tz")
 
-   The clock's zone is read here because `wagoe.admin.core.ui.base` may not:
-   check:fcis bans `ZoneId/systemDefault` in a core namespace. The patterns
-   come from the application's `:wagoe/settings`, which the module wiring
-   threads into the admin config — before BOU-382 nothing read them and every
-   timestamp rendered as the raw database value. They arrive already checked by
-   `valid-date-pattern`; a pattern that reaches the renderer anyway (a route
-   built without the wiring) still cannot throw — the renderer falls back."
+(def default-time-zone
+  "The zone timestamps are shown and entered in when neither the browser nor
+   `:time-zone` in :wagoe/settings names one. A presentation default only:
+   storage is zone-aware and the JVM runs in UTC (BOU-431), so this changes
+   what people see, never what is stored."
+  (java.time.ZoneId/of "Europe/Amsterdam"))
+
+(defn- ->zone
+  "A ZoneId for `s`, or nil when it is blank or not a zone the JVM knows. The
+   value comes from a cookie or a form field, so it is untrusted input."
+  [s]
+  (when-not (str/blank? s)
+    (try (java.time.ZoneId/of (str/trim s))
+         (catch java.time.DateTimeException _ nil))))
+
+(defn- cookie-value
+  "The value of cookie `cookie-name` from the raw Cookie header. The admin
+   routes run without Ring's cookie middleware, so it is read here."
+  [request cookie-name]
+  (some (fn [pair]
+          (let [[k v] (str/split (str/trim pair) #"=" 2)]
+            ;; init.js writes it with encodeURIComponent: `America%2FNew_York`.
+            (when (and (= k cookie-name) v)
+              (try (java.net.URLDecoder/decode ^String v "UTF-8")
+                   (catch IllegalArgumentException _ nil)))))
+        (some-> (get-in request [:headers "cookie"]) (str/split #";"))))
+
+(defn display-options
+  "Zones, locale and date patterns for rendering stored timestamps in the admin UI.
+
+   Two zones (BOU-523). `:server-zone-id` is the JVM zone — the one the
+   database reads a zone-less timestamp in, so the one such a value is read
+   back in. `:zone-id` is the zone timestamps are shown and entered in: the
+   browser's, from the `wagoe_tz` cookie; else the application's configured
+   `:time-zone`; else `default-time-zone`, Europe/Amsterdam. Not the server's:
+   that is UTC by design (BOU-431) and says nothing about the people using it.
+
+   Read here because `wagoe.admin.core.ui.base` may not: check:fcis bans
+   `ZoneId/systemDefault` in a core namespace. The patterns come from the
+   application's `:wagoe/settings` (BOU-382)."
   [config request]
-  {:zone-id          (java.time.ZoneId/systemDefault)
-   :locale           (request-locale request)
-   :date-time-format (:date-time-format config)
-   :date-format      (:date-format config)})
+  (let [server (java.time.ZoneId/systemDefault)]
+    {:zone-id          (or (->zone (cookie-value request zone-cookie))
+                           (->zone (:time-zone config))
+                           default-time-zone)
+     :server-zone-id   server
+     :locale           (request-locale request)
+     :date-time-format (:date-time-format config)
+     :date-format      (:date-format config)}))
+
+(defn form-zone-options
+  "The zones to parse a submitted form's :instant fields in, and `params`
+   without the `__zone` field that carried them.
+
+   The form says which zone it was rendered in, and parsing uses exactly that:
+   deriving it from the cookie again would shift every value on the first
+   visit, when the page was rendered before the cookie existed. A missing or
+   unknown `__zone` falls back to the same resolution the page used."
+  [config request params]
+  (let [display      (display-options config request)
+        offset-param #(some-> % name (str/starts-with? "__offset."))
+        ;; `__offset.<field>`: the offset each datetime was rendered with, to
+        ;; tell the two occurrences of a repeated local time apart.
+        offsets      (into {}
+                           (keep (fn [[k v]]
+                                   (when (offset-param k)
+                                     [(keyword (subs (name k) (count "__offset."))) v])))
+                           params)]
+    [{:input-zone  (or (->zone (get params "__zone")) (:zone-id display))
+      :server-zone (:server-zone-id display)
+      :offsets     offsets}
+     (into {} (remove (fn [[k _]] (or (offset-param k) (#{"__zone" :__zone} k)))) params)]))
 
 ;; =============================================================================
 ;; Entity Detail Options (shared by detail + crud handlers)
