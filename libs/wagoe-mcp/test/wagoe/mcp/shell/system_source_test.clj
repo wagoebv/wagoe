@@ -158,3 +158,30 @@
         (is (= [] (:modules graph)))
         (is (seq (:libraries graph)) "the graph is still useful"))
       (finally (rm-r dir)))))
+
+(deftest ^:integration modules-are-found-by-ports-clj-at-any-depth
+  ;; The first version scanned exactly src/<base>/<module>/. A root module
+  ;; (examples/todo: src/todo/ports.clj) and a dotted base namespace
+  ;; (src/com/acme/invoice/ports.clj) both returned no modules, so
+  ;; describe-module still answered :not-found for them. "Every module MUST
+  ;; define ports.clj" (AGENTS.md) is the invariant, so that is what is found.
+  (let [dir (tmp-project!)
+        port! (fn [path ns-name]
+                (let [f (io/file dir path)]
+                  (.mkdirs (.getParentFile f))
+                  (spit f (str "(ns " ns-name ")"))))]
+    (try
+      (port! "src/todo/ports.clj" "todo.ports")
+      (port! "src/com/acme/invoice/ports.clj" "com.acme.invoice.ports")
+      (port! "src/com/acme/line_item/ports.clj" "com.acme.line-item.ports")
+      (let [graph (resources/read-resource (sut/build-snapshot dir) "wagoe://module-graph")
+            by-name (into {} (map (juxt :name identity) (:modules graph)))]
+        (testing "a root module has no base namespace"
+          (is (contains? by-name "todo"))
+          (is (nil? (:base-ns (by-name "todo")))))
+        (testing "a dotted base namespace is kept whole"
+          (is (= "com.acme" (:base-ns (by-name "invoice"))))
+          (is (= "com.acme" (:base-ns (by-name "line-item")))))
+        (testing "nothing else is a module"
+          (is (= #{"todo" "invoice" "line-item"} (set (keys by-name))))))
+      (finally (rm-r dir)))))

@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **MCP `describe-module` missed root and dotted-namespace modules** (BOU-516).
+  Any directory under `src/` with a `ports.clj` is now found.
 - **Admin forms shifted zone-less timestamps on non-UTC servers** (BOU-519).
   The stored wall time is now shown and saved back unchanged.
 - **CI could not start an S3 endpoint** (BOU-518). MinIO withdrew its public
