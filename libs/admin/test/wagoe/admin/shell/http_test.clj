@@ -599,11 +599,20 @@
         (is (< (:status resp) 400))
         (is (= "1990-05-17" (str (:birthday (row)))))))
 
+    (testing "an impossible calendar date is a field error, not a 500"
+      ;; `2024-02-31` has the right shape, so the regex let it through and the
+      ;; DATE column rejected it at the write.
+      (let [resp (put! "2024-02-31")]
+        (is (= 422 (:status resp)) (str "status was " (:status resp)))
+        (is (= "1990-05-17" (str (:birthday (row)))))))
+
     (testing "a date with a time part is refused, not stored, and not a 500"
       (let [resp (put! "1990-05-18T10:00")]
         (is (= 422 (:status resp)) (str "status was " (:status resp)))
         (is (str/includes? (:body resp) "must be a date as YYYY-MM-DD")
             "the form says which field and why")
+        (is (str/includes? (:body resp) "value=\"1990-05-18T10:00\"")
+            "and shows what was rejected, not a date it made up from it")
         (is (= "1990-05-17" (str (:birthday (row)))) "the row is unchanged")))))
 
 (deftest ^:contract update-entity-reads-a-decoded-body

@@ -264,7 +264,13 @@
                            ; shape; anything else is a hand-crafted request and was
                            ; written straight to the table (BOU-521).
                          (= field-type :date)
-                         (if (re-matches #"\d{4}-\d{2}-\d{2}" normalized-value)
+                         (if (and (re-matches #"\d{4}-\d{2}-\d{2}" normalized-value)
+                                  ;; The shape alone let `2024-02-31` through, and the
+                                  ;; DATE column rejected it at the write: a 500.
+                                  ;; ISO_LOCAL_DATE resolves strictly, so an impossible
+                                  ;; day is refused here instead.
+                                  (try (java.time.LocalDate/parse normalized-value) true
+                                       (catch java.time.format.DateTimeParseException _ false)))
                            normalized-value
                            (throw (ex-info "Invalid date value"
                                            {:type :validation-error

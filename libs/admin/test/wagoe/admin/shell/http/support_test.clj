@@ -10,7 +10,10 @@
 (deftest ^:unit a-date-is-exactly-yyyy-mm-dd
   ;; BOU-519 decision: a :date is a calendar date, never a time part (BOU-521).
   (is (= {:birthday "1990-05-17"} (support/parse-form-params {"birthday" "1990-05-17"} config)))
-  (doseq [bad ["1990-05-17T10:00" "1990-05-17 10:00:00" "1990-05-17T00:00:00Z" "17-05-1990"]]
+  (is (= {:birthday "2024-02-29"} (support/parse-form-params {"birthday" "2024-02-29"} config))
+      "a real leap day is a date")
+  (doseq [bad ["1990-05-17T10:00" "1990-05-17 10:00:00" "1990-05-17T00:00:00Z" "17-05-1990"
+               "2024-02-31" "2023-02-29" "2024-13-01" "2024-00-10"]]
     (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Invalid date value"
                           (support/parse-form-params {"birthday" bad} config))
         bad)))

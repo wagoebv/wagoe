@@ -57,6 +57,20 @@
       label
       (when required? [:span.required " *"])]
      (cond
+       ;; A rejected value, shown exactly as it was typed. A date, datetime or
+       ;; number input cannot hold arbitrary text: the date widget showed a
+       ;; rejected `1990-05-17T10:00` as `1990-05-17`, a number input showed
+       ;; `forty` as empty, and submitting again saved a value the user never
+       ;; typed (BOU-521 review). Plain text keeps the error and its cause
+       ;; side by side until the user fixes it.
+       (and has-errors? (string? value)
+            (#{:date-input :datetime-input :number-input} widget-type))
+       (ui/text-input field-name value
+                      {:required     required?
+                       :readonly     readonly?
+                       :class        "form-control"
+                       :aria-invalid "true"})
+
        ;; Text input widgets
        (= widget-type :text-input)
        (ui/text-input field-name value
