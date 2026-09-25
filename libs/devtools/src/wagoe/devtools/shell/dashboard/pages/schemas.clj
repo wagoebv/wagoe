@@ -9,22 +9,37 @@
 ;; Schema collection
 ;; =============================================================================
 
+(defn schema-namespace?
+  "Does `ns-sym` name a schema namespace?
+
+   Any namespace ending in `.schema`, not only the framework's own. The scan
+   used to match `wagoe.<module>.schema` exactly, so an application namespace
+   such as `invoicing.invoice.schema` could never appear — the browser listed
+   52 framework schemas and none of the developer's (BOU-509). The same regex
+   also missed nested framework namespaces like `wagoe.admin.core.schema`."
+  [ns-sym]
+  (boolean (re-find #"\.schema$" (str ns-sym))))
+
 (defn- discover-schema-namespaces
-  "Scan libs/ for modules that have a schema.clj file and derive namespace symbols.
-   Falls back to loaded namespaces matching wagoe.*.schema if libs/ is unavailable."
+  "Namespace symbols to collect Malli schemas from.
+
+   Two sources, unioned: the framework repository's own `libs/*/schema.clj`
+   when running inside it, and every already-loaded namespace ending in
+   `.schema` — which is how an application's modules are found, since a
+   generated project has no `libs/` directory."
   []
-  (let [libs-dir (java.io.File. "libs")]
-    (if (.isDirectory libs-dir)
-      (->> (.listFiles libs-dir)
-           (filter #(.isDirectory %))
-           (map #(symbol (str "wagoe." (.getName %) ".schema")))
-           (filterv (fn [ns-sym]
-                      (try (require ns-sym) true (catch Exception _ false)))))
-      ;; Fallback: scan already-loaded namespaces
-      (->> (all-ns)
-           (map ns-name)
-           (filter #(re-matches #"wagoe\.[^.]+\.schema" (str %)))
-           (mapv symbol)))))
+  (let [libs-dir (java.io.File. "libs")
+        from-libs (when (.isDirectory libs-dir)
+                    (->> (.listFiles libs-dir)
+                         (filter #(.isDirectory %))
+                         (map #(symbol (str "wagoe." (.getName %) ".schema")))
+                         (filter (fn [ns-sym]
+                                   (try (require ns-sym) true (catch Exception _ false))))))
+        from-loaded (->> (all-ns)
+                         (map ns-name)
+                         (filter schema-namespace?)
+                         (map symbol))]
+    (vec (distinct (concat from-libs from-loaded)))))
 
 (defn- malli-schema?
   "Return true if value looks like a Malli schema (vector or keyword)."
@@ -34,25 +49,38 @@
        (not (var? v))
        (try (m/schema v) true (catch Exception _ false))))
 
+(defn schema-key
+  "The browser's key for schema var `var-name` in namespace `ns-sym`: the
+   var's fully-qualified name as a keyword, e.g. :wagoe.user.schema/User.
+
+   Not :<module>/<Var>. That shorter key kept only the segment before
+   `.schema`, so acme.user.schema/User and wagoe.user.schema/User were both
+   :user/User, and every `*.core.schema` namespace landed on :core. Once the
+   scan took in every loaded `.schema` namespace (BOU-509) the collision became
+   reachable, and discover-all-schemas merges — one schema silently vanished
+   from the browser. The full namespace is the only name unique by
+   construction."
+  [ns-sym var-name]
+  (keyword (str ns-sym) (name var-name)))
+
 (defn- discover-schemas-from-ns
   "Try to require a namespace and collect its public Malli schema defs.
-   Returns a map of {:<module>/<VarName> schema-value} or nil."
+   Returns a map of {schema-key schema-value} or nil."
   [ns-sym]
   (try
     (require ns-sym)
     (when-let [ns-obj (find-ns ns-sym)]
-      (let [;; Extract module name from ns: wagoe.user.schema -> user
-            module (second (re-find #"wagoe\.([^.]+)\.schema" (str ns-sym)))]
-        (into {}
-              (for [[var-name var-ref] (ns-publics ns-obj)
-                    :let [v (try (var-get var-ref) (catch Exception _ nil))]
-                    :when (malli-schema? v)]
-                [(keyword (or module "core") (name var-name)) v]))))
+      (into {}
+            (for [[var-name var-ref] (ns-publics ns-obj)
+                  :let [v (try (var-get var-ref) (catch Exception _ nil))]
+                  :when (malli-schema? v)]
+              [(schema-key ns-sym var-name) v])))
     (catch Exception _ nil)))
 
 (defn- discover-all-schemas
-  "Scan all wagoe.*.schema namespaces and collect Malli schemas.
-   Returns a map of {qualified-key schema-value}."
+  "Scan every discovered `.schema` namespace and collect Malli schemas.
+   Returns a map of {schema-key schema-value}; keys cannot collide, see
+   `schema-key`."
   []
   (reduce (fn [acc ns-sym]
             (if-let [schemas (discover-schemas-from-ns ns-sym)]
@@ -115,14 +143,34 @@
      [:span.schema-field-name (pr-str k)]
      [:span.schema-field-type type-str]]))
 
+(def ^:private example-max-lines
+  "Lines of generated example worth showing. Past this it is filler, not a hint."
+  14)
+
+(defn truncate-example
+  "`s` capped at `n` lines, with a count of what was dropped."
+  [s n]
+  (let [lines (str/split-lines s)]
+    (if (<= (count lines) n)
+      s
+      (str (str/join "\n" (take n lines))
+           "\n  \u2026 " (- (count lines) n) " more line(s)"))))
+
 (defn- generate-example-str
   "Try to generate a malli example. Returns nil if malli.generator is unavailable."
   [schema]
   (try
     (let [gen-fn (requiring-resolve 'malli.generator/generate)]
       (when gen-fn
-        (let [example (gen-fn (m/schema schema) {:seed 42})]
-          (with-out-str (pprint/pprint example)))))
+        ;; :size bounds the collections. Without it a `[:set keyword?]` field
+        ;; generates dozens of arbitrary keywords, and the example for a
+        ;; workflow definition ran to about sixty lines of noise — filling the
+        ;; page and teaching nothing, on exactly the schemas worth reading
+        ;; (BOU-517). The line cap is the backstop for schemas that are simply
+        ;; large.
+        (let [example (gen-fn (m/schema schema) {:seed 42 :size 3})]
+          (truncate-example (with-out-str (pprint/pprint example))
+                            example-max-lines))))
     (catch Exception _ nil)))
 
 (defn render-schema-detail

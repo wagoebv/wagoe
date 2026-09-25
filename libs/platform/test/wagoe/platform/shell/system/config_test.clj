@@ -117,3 +117,16 @@
     (is (= 4100 (:port (:wagoe/http-server c))))
     (is (= 4100 (get-in c [:wagoe/http-server :config :port])))
     (is (= (ig/ref :wagoe/http-handler) (:handler (:wagoe/http-server c))))))
+
+(deftest ^:unit request-capture-is-supplied-and-dev-only
+  ;; The handler has always read :request-capture?; nothing supplied it, so the
+  ;; dashboard's Request Inspector could not capture in any app (BOU-506).
+  (testing "the dev profile switches request capture on"
+    (let [c (sut/system-config (assoc (config) :wagoe/profile :dev))]
+      (is (true? (:request-capture? (:wagoe/http-handler c))))))
+
+  (testing "every other profile leaves it off"
+    (doseq [profile [:test :acc :prod]]
+      (let [c (sut/system-config (assoc (config) :wagoe/profile profile))]
+        (is (false? (:request-capture? (:wagoe/http-handler c)))
+            (str profile " must not capture requests"))))))

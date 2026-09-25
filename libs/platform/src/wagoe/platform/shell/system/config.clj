@@ -58,7 +58,14 @@
              :tracer          (ig/ref :wagoe/tracing)
              :error-reporter  (ig/ref :wagoe/error-reporting)
              :db-context      (ig/ref :wagoe/db-context)
-             :i18n-middleware (ig/ref :wagoe/i18n-http-middleware)}
+             :i18n-middleware (ig/ref :wagoe/i18n-http-middleware)
+             ;; Installs devtools' request-capture middleware, which is the only
+             ;; thing that writes the log the dashboard's Request Inspector
+             ;; reads. The handler has always taken this parameter; nothing ever
+             ;; supplied it, so the page could not capture in any application
+             ;; (BOU-506). Dev only — it holds request/response pairs in memory,
+             ;; and the wiring skips it when devtools is off the classpath.
+             :request-capture? (= :dev (:wagoe/profile config))}
             http-extras)
 
      :wagoe/http-server (merge http-cfg
