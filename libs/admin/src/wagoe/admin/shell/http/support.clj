@@ -233,10 +233,14 @@
                          (= field-type :boolean)
                          (= normalized-value "true")
 
-                           ; Integer values - wrap in try/catch for invalid input
+                           ; Integer values. `parse-long` answers nil for unreadable
+                           ; input rather than throwing, so the catch below never
+                           ; fired and "forty" was written as NULL, silently clearing
+                           ; the field (BOU-521). nil is the failure signal.
                          (= field-type :int)
                          (try
-                           (parse-long normalized-value)
+                           (or (parse-long normalized-value)
+                               (throw (NumberFormatException. normalized-value)))
                            (catch NumberFormatException _
                              (throw (ex-info "Invalid integer value"
                                              {:type :validation-error
@@ -254,6 +258,20 @@
                                               :field field-keyword
                                               :value normalized-value
                                               :message (str "Field '" (name field-keyword) "' must be a valid decimal")}))))
+
+                           ; A calendar date is exactly YYYY-MM-DD: no time part and no
+                           ; zone (BOU-519 decision). The date widget only sends that
+                           ; shape; anything else is a hand-crafted request and was
+                           ; written straight to the table (BOU-521).
+                         (= field-type :date)
+                         (if (re-matches #"\d{4}-\d{2}-\d{2}" normalized-value)
+                           normalized-value
+                           (throw (ex-info "Invalid date value"
+                                           {:type :validation-error
+                                            :field field-keyword
+                                            :value normalized-value
+                                            :message (str "Field '" (name field-keyword)
+                                                          "' must be a date as YYYY-MM-DD")})))
 
                            ; UUID values - wrap in try/catch for invalid input
                          (= field-type :uuid)
@@ -283,6 +301,31 @@
 ;; =============================================================================
 ;; Handler Helpers
 ;; =============================================================================
+
+
+(defn parse-form-params-checked
+  "Like `parse-form-params`, but returns `[data field-errors]` instead of
+   throwing on a value that cannot be read as its field's type.
+
+   `parse-form-params` throws a :validation-error on the first bad field, and
+   the create and update handlers call it outside their error handling, so an
+   invalid integer, decimal, UUID or date answered 500 rather than re-rendering
+   the form (BOU-521). Parsing field by field reports every bad field at once,
+   in the {field [message]} shape the form already renders, and keeps what the
+   user typed in `data` so the re-rendered form shows it."
+  [params entity-config]
+  (reduce-kv
+   (fn [[data errors] field-name value]
+     (try
+       [(merge data (parse-form-params {field-name value} entity-config)) errors]
+       (catch clojure.lang.ExceptionInfo e
+         (let [{:keys [type field message]} (ex-data e)]
+           (if (= :validation-error type)
+             [(assoc data field (if (vector? value) (last value) value))
+              (assoc errors field [message])]
+             (throw e))))))
+   [{} {}]
+   params))
 
 (defn get-current-user
   "Extract authenticated user from request.

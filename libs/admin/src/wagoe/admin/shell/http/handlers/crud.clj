@@ -57,12 +57,12 @@
           ; Check permissions
           _ (shell-permissions/assert-can-create-entity! user entity-name entity-config)
 
-          form-data (support/parse-form-params (submitted-params request) entity-config)
+          [form-data parse-errors] (support/parse-form-params-checked (submitted-params request) entity-config)
 
           ; Validate data
           validation-result (ports/validate-entity-data admin-service entity-name form-data)]
 
-      (if (:valid? validation-result)
+      (if (and (:valid? validation-result) (empty? parse-errors))
         ; Create entity and return list page
         (try
           (let [_created-entity (ports/create-entity admin-service entity-name form-data)
@@ -118,7 +118,7 @@
         (let [entities (ports/list-available-entities schema-provider)
               entity-configs (into {} (map (fn [e] [e (ports/get-entity-config schema-provider e)])) entities)
               permissions (permissions/get-entity-permissions user entity-name entity-config)
-              errors (ui-validation/explain->field-errors (:errors validation-result))]
+              errors (merge (ui-validation/explain->field-errors (:errors validation-result)) parse-errors)]
 
           (-> (support/html-response request
                                      (admin-ui/admin-layout
@@ -156,7 +156,7 @@
           ; Check permissions
           _ (shell-permissions/assert-can-edit-entity! user entity-name entity-config)
 
-          form-data (support/parse-form-params (submitted-params request) entity-config)
+          [form-data parse-errors] (support/parse-form-params-checked (submitted-params request) entity-config)
 
           ;; An update is validated as the entity it would leave behind, not as
           ;; the fields the request happened to carry. Validating `form-data`
@@ -179,7 +179,7 @@
 
           validation-result (ports/validate-entity-data admin-service entity-name merged)]
 
-      (if (:valid? validation-result)
+      (if (and (:valid? validation-result) (empty? parse-errors))
         ; Update entity and re-render detail page with success flash
         (let [updated-record (ports/update-entity admin-service entity-name id form-data)
               permissions    (permissions/get-entity-permissions user entity-name entity-config)
@@ -199,7 +199,7 @@
 
         ; Validation errors - re-render form with flash inside page content
         (let [permissions (permissions/get-entity-permissions user entity-name entity-config)
-              errors      (ui-validation/explain->field-errors (:errors validation-result))
+              errors      (merge (ui-validation/explain->field-errors (:errors validation-result)) parse-errors)
               ctx         (support/build-entity-detail-opts admin-service schema-provider config entity-name entity-config merged request)]
 
           (-> (support/html-response request
