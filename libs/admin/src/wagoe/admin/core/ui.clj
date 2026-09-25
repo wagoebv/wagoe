@@ -37,6 +37,7 @@
 ;; Coerce a stored value to the shape a date/datetime input accepts (BOU-504).
 (def format-for-date-input base/format-for-date-input)
 (def format-for-datetime-input base/format-for-datetime-input)
+(def datetime-input-step base/datetime-input-step)
 (def get-field-errors base/get-field-errors)
 
 ;; --- layout: shell, sidebar, home, error pages, confirmation dialog, url util ---

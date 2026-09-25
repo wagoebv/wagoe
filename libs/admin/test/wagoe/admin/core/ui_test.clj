@@ -1369,11 +1369,21 @@
     (is (nil? (ui/format-for-date-input nil)))))
 
 (deftest ^:unit format-for-datetime-input-test
-  (testing "an ISO instant becomes the YYYY-MM-DDTHH:mm a datetime-local accepts"
-    (is (= "2026-09-01T06:12" (ui/format-for-datetime-input "2026-09-01T06:12:50Z"))))
+  ;; This test used to assert "06:12:50" -> "06:12". The form submits every
+  ;; editable field, so an edit to any other field wrote the truncated value
+  ;; back and the seconds were lost. datetime-local accepts seconds and
+  ;; milliseconds; they are kept when present.
+  (testing "an ISO instant keeps its seconds"
+    (is (= "2026-09-01T06:12:50" (ui/format-for-datetime-input "2026-09-01T06:12:50Z"))))
 
-  (testing "a zone-less timestamp is reformatted where it stands"
-    (is (= "2026-09-01T06:12" (ui/format-for-datetime-input "2026-09-01 06:12:50"))))
+  (testing "a zone-less timestamp is reformatted where it stands, seconds included"
+    (is (= "2026-09-01T06:12:50" (ui/format-for-datetime-input "2026-09-01 06:12:50"))))
+
+  (testing "milliseconds are kept"
+    (is (= "2026-09-01T06:12:50.123" (ui/format-for-datetime-input "2026-09-01T06:12:50.123Z"))))
+
+  (testing "a value on the minute renders as before"
+    (is (= "2026-09-01T06:12" (ui/format-for-datetime-input "2026-09-01T06:12:00Z"))))
 
   (testing "an unreadable value yields nil"
     (is (nil? (ui/format-for-datetime-input "not a timestamp")))
@@ -1388,3 +1398,27 @@
           rendered (str widget)]
       (is (str/includes? rendered "2026-09-01"))
       (is (not (str/includes? rendered "T00:00:00Z"))))))
+
+(deftest ^:unit datetime-input-step-matches-the-precision-test
+  ;; A datetime-local defaults to step=60. Given a value with seconds the
+  ;; browser flags a step mismatch and refuses to submit the form — so keeping
+  ;; the seconds without widening the step would trade silent truncation for a
+  ;; form that cannot be saved.
+  (is (nil? (ui/datetime-input-step "2026-09-01T06:12")) "minute precision keeps the default")
+  (is (= "1" (ui/datetime-input-step "2026-09-01T06:12:50")))
+  (is (= "0.001" (ui/datetime-input-step "2026-09-01T06:12:50.123")))
+  (is (nil? (ui/datetime-input-step nil))))
+
+(deftest ^:unit datetime-widget-renders-seconds-with-a-matching-step-test
+  ;; The helpers above are only half of it: the rendered <input> has to carry
+  ;; both the seconds and the step, or the browser blocks the submit.
+  (let [render (fn [v] (str (ui/render-field-widget :due-at v
+                                                    {:type :instant :widget :datetime-input} nil)))]
+    (testing "seconds are in the value and the step allows them"
+      (let [html (render "2026-09-01T06:12:50Z")]
+        (is (str/includes? html "2026-09-01T06:12:50"))
+        (is (str/includes? html ":step \"1\""))))
+    (testing "a value on the minute keeps the browser's default step"
+      (let [html (render "2026-09-01T06:12:00Z")]
+        (is (str/includes? html "2026-09-01T06:12"))
+        (is (not (str/includes? html ":step")))))))

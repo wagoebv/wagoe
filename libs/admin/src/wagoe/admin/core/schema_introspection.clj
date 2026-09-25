@@ -544,14 +544,21 @@
     auto-fields))
 
 (defn derive-editable-fields
-  "The visible fields of `config` that are not read-only.
+  "The fields of `merged` that can be edited, given the `auto-config` it was
+   built from.
 
-   Kept separate from parse-table-metadata because it has to run again after a
-   manual config is merged in — see build-entity-config (BOU-498)."
-  [{:keys [detail-fields fields readonly-fields hide-fields]}]
-  (let [readonly (set readonly-fields)
-        hidden   (set hide-fields)]
-    (->> (or (seq detail-fields) (keys fields))
+   Starts from the auto-detected :editable-fields and removes anything read-only
+   by detection OR by the manual config, and anything hidden. Both inputs matter
+   because `merge` replaces :readonly-fields rather than unioning it, and
+   :detail-fields is a view setting, not an editability one. Deriving from the
+   merged config alone made a manual `:readonly-fields #{:email}` un-hide :id
+   and every timestamp column, and a narrowed :detail-fields empty the edit
+   form. Kept separate from parse-table-metadata because it has to run again
+   after a manual config is merged in (BOU-498)."
+  [auto-config merged]
+  (let [readonly (into (set (:readonly-fields auto-config)) (:readonly-fields merged))
+        hidden   (set (:hide-fields merged))]
+    (->> (or (:editable-fields auto-config) (keys (:fields merged)))
          (remove readonly)
          (remove hidden)
          vec)))
@@ -589,7 +596,7 @@
       ;; :editable-fields still wins.
       (cond-> merged
         (not (contains? manual-config :editable-fields))
-        (assoc :editable-fields (derive-editable-fields merged))))
+        (assoc :editable-fields (derive-editable-fields auto-config merged))))
     auto-config))
 
 ;; =============================================================================

@@ -216,7 +216,9 @@
 ;; -----------------------------------------------------------------------------
 
 (def ^:private html-date-formatter (DateTimeFormatter/ofPattern "yyyy-MM-dd"))
-(def ^:private html-datetime-formatter (DateTimeFormatter/ofPattern "yyyy-MM-dd'T'HH:mm"))
+(def ^:private html-datetime-minute-formatter (DateTimeFormatter/ofPattern "yyyy-MM-dd'T'HH:mm"))
+(def ^:private html-datetime-second-formatter (DateTimeFormatter/ofPattern "yyyy-MM-dd'T'HH:mm:ss"))
+(def ^:private html-datetime-milli-formatter  (DateTimeFormatter/ofPattern "yyyy-MM-dd'T'HH:mm:ss.SSS"))
 
 (defn format-for-date-input
   "Coerce a stored value to the `YYYY-MM-DD` an `<input type=\"date\">` accepts.
@@ -227,15 +229,40 @@
   (some->> (->local-date value) (safe-format html-date-formatter)))
 
 (defn format-for-datetime-input
-  "Coerce a stored value to the `YYYY-MM-DDTHH:mm` an
-   `<input type=\"datetime-local\">` accepts.
+  "Coerce a stored value to a string an `<input type=\"datetime-local\">`
+   accepts, at the precision the value has: `YYYY-MM-DDTHH:mm` on the minute,
+   `…:ss` with seconds, `…:ss.SSS` with milliseconds.
+
+   Not always `HH:mm`. The form submits every editable field, so dropping the
+   seconds here meant an edit to any *other* field wrote the truncated value
+   back. The widget holds at most milliseconds; finer precision (Postgres keeps
+   microseconds) still cannot survive a round trip through it.
 
    The widget carries no zone, so a zone-less value is reformatted where it
-   stands and an instant is read at UTC — the same rule `->local-date` uses."
+   stands and an instant is read at UTC — the same rule `->local-date` uses.
+   Pair with `datetime-input-step`, or the browser rejects the seconds."
   [value]
-  (some->> (or (->naive value)
-               (some-> (->zoned value utc) (.toLocalDateTime)))
-           (safe-format html-datetime-formatter)))
+  (when-let [^LocalDateTime ldt (or (->naive value)
+                                    (some-> (->zoned value utc) (.toLocalDateTime)))]
+    (safe-format (cond
+                   (pos? (quot (.getNano ldt) 1000000)) html-datetime-milli-formatter
+                   (pos? (.getSecond ldt))              html-datetime-second-formatter
+                   :else                                html-datetime-minute-formatter)
+                 ldt)))
+
+(defn datetime-input-step
+  "The `step` a datetime-local needs for `formatted`, the output of
+   `format-for-datetime-input`: nil on the minute, \"1\" with seconds,
+   \"0.001\" with milliseconds.
+
+   The default step is 60 seconds. A value with seconds is then a step
+   mismatch and the browser refuses to submit the form — keeping the seconds
+   without this would turn silent truncation into a form that cannot be saved."
+  [formatted]
+  (case (count formatted)
+    19 "1"
+    23 "0.001"
+    nil))
 
 (defn render-field-value
   "Render field value for display in table or detail view.

@@ -137,11 +137,16 @@
                        :class "form-control"})
 
        (= widget-type :datetime-input)
-       (ui/text-input field-name (base/format-for-datetime-input value)
-                      {:type "datetime-local"
-                       :required required?
-                       :readonly readonly?
-                       :class "form-control"})
+       (let [formatted (base/format-for-datetime-input value)]
+         (ui/text-input field-name formatted
+                        (cond-> {:type "datetime-local"
+                                 :required required?
+                                 :readonly readonly?
+                                 :class "form-control"}
+                          ;; Without it a value with seconds fails the
+                          ;; default step=60 and the form will not submit.
+                          (base/datetime-input-step formatted)
+                          (assoc :step (base/datetime-input-step formatted)))))
 
        ;; Color picker
        (= widget-type :color-input)

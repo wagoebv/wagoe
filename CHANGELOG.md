@@ -62,7 +62,8 @@ for what is public API, what is internal, and how deprecations are announced.
 - **A field named in `:readonly-fields` still rendered as a writable input**
   (BOU-498). Drop any `:editable-fields` you added to work around it.
 - **Date and datetime fields rendered empty** (BOU-504). The stored value is
-  now coerced to the shape the widget accepts; a manual `:type` re-derives it.
+  now coerced to the shape the widget accepts, keeping seconds and
+  milliseconds; a manual `:type` re-derives it.
 
 ## [1.0.0-rc-3] — 2026-09-21
 

@@ -357,6 +357,32 @@
                        auto-config {:hide-fields #{:password-hash}})]
       (is (not (contains? (set (:editable-fields merged)) :password-hash))))))
 
+(deftest ^:unit deriving-editability-keeps-what-the-auto-config-excluded-test
+  ;; The first BOU-498 fix derived editability from the MERGED :readonly-fields
+  ;; and :detail-fields. `merge` replaces those, it does not union them, so a
+  ;; manual config that named one read-only field un-hid every auto-detected
+  ;; one — :id included — and one that narrowed the detail view emptied the
+  ;; edit form. Editability now starts from the auto-detected editable fields.
+  (let [auto-config (introspection/parse-table-metadata :users sample-users-table-metadata)]
+    (testing "a manual :readonly-fields does not make auto-detected read-only fields editable"
+      (let [editable (set (:editable-fields
+                           (introspection/build-entity-config
+                            auto-config {:readonly-fields #{:email}})))]
+        (is (not (contains? editable :email)))
+        (doseq [f [:id :created-at :updated-at :deleted-at]]
+          (is (not (contains? editable f))
+              (str f " is read-only by detection and must stay out of the form")))))
+
+    (testing ":detail-fields shapes the detail view, not which fields can be edited"
+      (is (= (:editable-fields auto-config)
+             (:editable-fields (introspection/build-entity-config
+                                auto-config {:detail-fields [:email]})))))
+
+    (testing "a manual config that says nothing about fields changes nothing"
+      (is (= (:editable-fields auto-config)
+             (:editable-fields (introspection/build-entity-config
+                                auto-config {:label "People"})))))))
+
 ;; =============================================================================
 ;; Relationship Detection Tests (Week 1 Stub)
 ;; =============================================================================
