@@ -9,7 +9,7 @@
             [wagoe.shared.ui.core.components :as ui]
             [wagoe.shared.ui.core.table :as table-ui]
             [clojure.string :as str])
-  (:import (java.time DateTimeException Instant LocalDate LocalDateTime ZoneId ZonedDateTime)
+  (:import (java.time DateTimeException Instant LocalDate LocalDateTime ZoneId ZoneOffset ZonedDateTime)
            (java.time.format DateTimeFormatter DateTimeParseException)
            (java.util Locale)))
 
@@ -266,6 +266,20 @@
   {:input-zone  (display-zone display)
    :server-zone (server-zone display)})
 
+(defn- ->offset
+  "A ZoneOffset from `s` (`-05:00`, `Z`), or nil. It arrives from a form field,
+   so anything unreadable is ignored rather than trusted."
+  ^ZoneOffset [s]
+  (when (and (string? s) (not (str/blank? s)))
+    (try (ZoneOffset/of (str/trim s)) (catch DateTimeException _ nil))))
+
+(defn datetime-input-offset
+  "The UTC offset `value` has when shown in `input-zone`, e.g. `-05:00`, or nil.
+   The form sends it back beside the wall time so `parse-datetime-input` can
+   tell the two occurrences of a repeated local time apart."
+  [value ^ZoneId input-zone ^ZoneId server-zone]
+  (some-> (->instant value server-zone) (.atZone input-zone) (.getOffset) (str)))
+
 (defn format-for-datetime-input
   "Coerce a stored timestamp to what an `<input type=\"datetime-local\">`
    accepts, as wall time in `input-zone`, at the precision the value has:
@@ -301,15 +315,24 @@
    server. With the server's offset the wall time is the server's own, which
    is right for a zone-less column; zone-aware columns and SQLite read the
    offset and get the exact instant either way (BOU-523)."
-  [s ^ZoneId input-zone ^ZoneId server-zone]
+  ([s input-zone server-zone] (parse-datetime-input s input-zone server-zone nil))
+  ([s ^ZoneId input-zone ^ZoneId server-zone preferred-offset]
   (when (string? s)
     ;; A value that already names its zone or offset — an API client sending
     ;; `…Z` — is taken as exactly that instant; only a zone-less value, which
     ;; is what the widget sends, is read in `input-zone`.
+    ;;
+    ;; When the clocks go back a local time happens twice, and `atZone` picks
+    ;; the earlier one: `2026-10-25T02:30` in Amsterdam, rendered from 01:30Z,
+    ;; was saved as 00:30Z by a form nobody changed. `preferred-offset` is the
+    ;; offset the value was rendered with, carried back by the form; ofLocal
+    ;; uses it only to choose within such an overlap.
     (when-let [^Instant inst (or (tc/string->instant s)
-                                 (some-> ^LocalDateTime (->naive s) (.atZone input-zone) (.toInstant)))]
+                                 (some-> ^LocalDateTime (->naive s)
+                                         (ZonedDateTime/ofLocal input-zone (->offset preferred-offset))
+                                         (.toInstant)))]
       (.format ^DateTimeFormatter storage-formatter
-               (.toOffsetDateTime (.atZone inst server-zone))))))
+               (.toOffsetDateTime (.atZone inst server-zone)))))))
 
 (defn datetime-input-step
   "The `step` a datetime-local needs for `formatted`, the output of

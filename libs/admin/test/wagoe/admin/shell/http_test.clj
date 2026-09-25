@@ -662,9 +662,26 @@
       (put! {"appointment-at" "2026-09-01T09:15:00" "__zone" "Asia/Tokyo"} nyc)
       (is (= (java.time.Instant/parse "2026-09-01T00:15:00Z") (instant))))
 
+    (testing "a repeated local time keeps its instant through an unchanged save"
+      ;; 01:30 happens twice in New York on 2026-11-01. The later one, 06:30Z,
+      ;; was saved as 05:30Z by a form nobody touched.
+      (db/execute-update! *db-ctx* {:update :test-users
+                                    :set    {:appointment-at (java.time.OffsetDateTime/parse "2026-11-01T06:30:00Z")}
+                                    :where  [:= :id id]})
+      (let [body (:body (*handler* (make-request :get url admin-user
+                                                 {:path {:entity "test-users" :id (str id)}
+                                                  :headers nyc})))]
+        (is (str/includes? body "value=\"2026-11-01T01:30\""))
+        (is (str/includes? body "name=\"__offset.appointment-at\""))
+        (is (str/includes? body "value=\"-05:00\"")))
+      (put! {"nickname" "dst" "appointment-at" "2026-11-01T01:30"
+             "__zone" "America/New_York" "__offset.appointment-at" "-05:00"} nyc)
+      (is (= (java.time.Instant/parse "2026-11-01T06:30:00Z") (instant))))
+
     (testing "the zone field never reaches the database as a column"
-      (let [resp (put! {"nickname" "zone-only" "__zone" "Asia/Tokyo"} nyc)]
-        (is (< (:status resp) 400))))))
+      (let [resp (put! {"nickname" "zone-only" "__zone" "Asia/Tokyo"
+                        "__offset.appointment-at" "+09:00"} nyc)]
+        (is (< (:status resp) 400) "neither __zone nor __offset.* is written as a column")))))
 
 (deftest ^:contract update-entity-reads-a-decoded-body
   ;; A JSON PUT carries its fields in :body-params, and Ring still puts an

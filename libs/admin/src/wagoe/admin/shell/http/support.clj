@@ -215,7 +215,7 @@
    ;; the database would have read it anyway.
    (let [server (java.time.ZoneId/systemDefault)]
      (parse-form-params params entity-config {:input-zone server :server-zone server})))
-  ([params entity-config {:keys [input-zone server-zone]}]
+  ([params entity-config {:keys [input-zone server-zone offsets]}]
   (reduce-kv
    (fn [acc field-name value]
      (let [field-keyword (keyword field-name)
@@ -269,7 +269,8 @@
                            ; stored with the server's offset, so every database reads
                            ; back the moment that was meant (BOU-523).
                          (= field-type :instant)
-                         (or (ui-base/parse-datetime-input normalized-value input-zone server-zone)
+                         (or (ui-base/parse-datetime-input normalized-value input-zone server-zone
+                                                           (get offsets field-keyword))
                              (throw (ex-info "Invalid date-time value"
                                              {:type :validation-error
                                               :field field-keyword
@@ -546,10 +547,19 @@
    visit, when the page was rendered before the cookie existed. A missing or
    unknown `__zone` falls back to the same resolution the page used."
   [config request params]
-  (let [display (display-options config request)]
+  (let [display      (display-options config request)
+        offset-param #(some-> % name (str/starts-with? "__offset."))
+        ;; `__offset.<field>`: the offset each datetime was rendered with, to
+        ;; tell the two occurrences of a repeated local time apart.
+        offsets      (into {}
+                           (keep (fn [[k v]]
+                                   (when (offset-param k)
+                                     [(keyword (subs (name k) (count "__offset."))) v])))
+                           params)]
     [{:input-zone  (or (->zone (get params "__zone")) (:zone-id display))
-      :server-zone (:server-zone-id display)}
-     (dissoc params "__zone" :__zone)]))
+      :server-zone (:server-zone-id display)
+      :offsets     offsets}
+     (into {} (remove (fn [[k _]] (or (offset-param k) (#{"__zone" :__zone} k)))) params)]))
 
 ;; =============================================================================
 ;; Entity Detail Options (shared by detail + crud handlers)

@@ -1500,14 +1500,51 @@
     (is (nil? (ui/parse-datetime-input "tomorrow" ams ams)))
     (is (nil? (ui/parse-datetime-input "" ams ams)))))
 
+(deftest ^:unit a-repeated-local-time-is-disambiguated-by-its-offset-test
+  (testing "the offset a value renders with"
+    (is (= "-05:00" (ui/datetime-input-offset "2026-11-01T06:30:00Z" nyc utc)))
+    (is (= "-04:00" (ui/datetime-input-offset "2026-11-01T05:30:00Z" nyc utc))))
+  (testing "01:30 in New York on 2026-11-01 happens twice; the offset picks one"
+    (is (= "2026-11-01T06:30:00.000Z" (ui/parse-datetime-input "2026-11-01T01:30" nyc utc "-05:00")))
+    (is (= "2026-11-01T05:30:00.000Z" (ui/parse-datetime-input "2026-11-01T01:30" nyc utc "-04:00"))))
+  (testing "outside an overlap the offset changes nothing, and a bad one is ignored"
+    (is (= "2026-09-01T10:00:50.000Z" (ui/parse-datetime-input "2026-09-01T12:00:50" ams utc "-05:00")))
+    (is (= "2026-09-01T10:00:50.000Z" (ui/parse-datetime-input "2026-09-01T12:00:50" ams utc "nonsense")))))
+
 (deftest ^:unit rendering-and-parsing-in-one-zone-round-trip-test
   ;; The invariant BOU-519 broke: render a stored value, submit it untouched,
   ;; and the stored instant must not move — for any client and server zone.
+  ;;
+  ;; The last four are the two occurrences of a repeated local time when the
+  ;; clocks go back — 01:30 twice in New York, 02:30 twice in Amsterdam. With
+  ;; only the wall time the later one was saved as the earlier; the form now
+  ;; carries the offset it rendered with.
   (doseq [input [ams nyc tokyo utc]
           server [ams utc nyc]
-          stored ["2026-09-01T10:00:50Z" "2026-03-29T01:30:00Z" "2026-12-31T23:59:59.250Z"]]
+          stored ["2026-09-01T10:00:50Z" "2026-03-29T01:30:00Z" "2026-12-31T23:59:59.250Z"
+                  "2026-11-01T05:30:00Z" "2026-11-01T06:30:00Z"
+                  "2026-10-25T00:30:00Z" "2026-10-25T01:30:00Z"]]
     (let [shown   (ui/format-for-datetime-input stored input server)
-          written (ui/parse-datetime-input shown input server)]
+          offset  (ui/datetime-input-offset stored input server)
+          written (ui/parse-datetime-input shown input server offset)]
       (is (= (java.time.Instant/parse stored)
              (.toInstant (java.time.OffsetDateTime/parse written)))
           (str stored " via " input " / server " server)))))
+
+(deftest ^:unit inline-datetime-formats-stored-strings-and-shows-rejected-ones-raw-test
+  ;; SQLite returns instants as strings. The inline form passed any string
+  ;; through unformatted, so `…Z` reached a datetime-local, which drops it and
+  ;; shows empty. Only a value the user just submitted is shown as typed.
+  (let [display {:zone-id nyc :server-zone-id utc}
+        cfg     {:type :instant :widget :datetime-input}]
+    (testing "a stored string is formatted into the browser's zone, with its offset"
+      (let [html (str (ui/render-inline-edit-form :things 1 :due-at "2026-11-01T06:30:00Z" cfg display))]
+        (is (str/includes? html "2026-11-01T01:30"))
+        (is (str/includes? html "datetime-local"))
+        (is (str/includes? html "__offset.due-at"))
+        (is (str/includes? html "-05:00"))))
+    (testing "a rejected value is shown exactly as it was typed"
+      (let [html (str (ui/render-inline-edit-form-with-error :things 1 :due-at "next tuesday" cfg
+                                                             ["must be a date and time"] display))]
+        (is (str/includes? html "next tuesday"))
+        (is (not (str/includes? html "datetime-local")))))))

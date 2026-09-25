@@ -167,7 +167,11 @@
                            (base/datetime-input-step formatted)
                            (assoc :step (base/datetime-input-step formatted))))
           ;; The widget carries no zone, so say which one it is in.
-          [:small.field-zone (str input-zone)]])
+          [:small.field-zone (str input-zone)]
+          ;; …and no offset. When the clocks go back a local time happens
+          ;; twice; this tells the parser which of the two was shown.
+          (when-let [offset (base/datetime-input-offset value input-zone server-zone)]
+            [:input {:type "hidden" :name (str "__offset." (name field-name)) :value offset}])])
 
        ;; Color picker
        (= widget-type :color-input)
