@@ -31,39 +31,32 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Admin forms shifted zone-less timestamps on non-UTC servers** (BOU-519).
+  The stored wall time is now shown and saved back unchanged.
 - **CI could not start an S3 endpoint** (BOU-518). MinIO withdrew its public
   images; the storage job now uses a pinned `adobe/s3mock`.
-
 - **`bb check:jdk` passed a `.tool-versions` that pinned another JDK** (BOU-488).
   It now reads the asdf spelling and requires the file to name one.
 - **`bb db:reset` prompted twice, so `echo y |` reported success over a reset
   that never ran** (BOU-500). One prompt now, and failures are propagated.
-- **`bb scaffold` help omitted Replicate; `bb create-admin` help said the
-  password could not come from stdin** (BOU-496, BOU-501). Both now match the
-  code.
+- **`bb scaffold` and `bb create-admin` help were wrong** (BOU-496, BOU-501).
+  Replicate is listed, and the password can come from stdin.
 - **The dashboard's Request Inspector captured nothing** (BOU-506). It now
   records under the `:dev` profile; no config change needed.
 - **The dashboard reported `0 applied` migrations** (BOU-507). Applied
   migrations are listed even when their files are not on the classpath.
 - **Security Status rendered a blank password tile and policy card**
   (BOU-510). Both now say when no policy is configured.
-- **The dashboard's Schema Browser showed no application schemas** (BOU-509).
-  Any namespace ending in `.schema` is discovered, not only `wagoe.*`. Schemas
-  are keyed by their full namespace (`:wagoe.user.schema/User`, previously
-  `:user/User`), so an application's `acme.user.schema/User` no longer hides
-  the framework's.
-- **Dashboard sub-pages reported `0 components` unless started from a REPL**
-  (BOU-508). They now read the running system however it was started. The
-  Config Editor is read-only outside the REPL: Apply restarts components of
-  the system `(go)` started, and against any other it had reported "Config
-  applied successfully" while restarting nothing.
+- **The Schema Browser showed no application schemas** (BOU-509). All
+  `*.schema` namespaces are listed, keyed as `:wagoe.user.schema/User`.
+- **Dashboard pages reported `0 components` outside the REPL** (BOU-508). The
+  Config Editor is read-only there; start with `(go)` to edit.
 - **The Schema Browser's example value ran to hundreds of lines** (BOU-517).
   Collections are bounded and the example is capped.
 - **A field named in `:readonly-fields` still rendered as a writable input**
   (BOU-498). Drop any `:editable-fields` you added to work around it.
-- **Date and datetime fields rendered empty** (BOU-504). The stored value is
-  now coerced to the shape the widget accepts, keeping seconds and
-  milliseconds; a manual `:type` re-derives it.
+- **Date and datetime fields rendered empty** (BOU-504). They now show the
+  stored value, seconds included.
 
 ## [1.0.0-rc-3] — 2026-09-21
 
