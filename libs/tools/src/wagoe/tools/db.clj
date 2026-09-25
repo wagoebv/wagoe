@@ -170,29 +170,41 @@
     (println)
     (println (yellow (str "  WARNING: This will DROP and recreate the " env " database.")))
     (println (yellow "  All data will be lost."))
-    (println))
-  (print "  Continue? [y/N] ")
-  (flush)
-  (let [answer (str/trim (or (read-line) ""))]
-    (if (contains? #{"y" "Y" "yes" "Yes"} answer)
-      (do
-        (println)
-        (println (dim "  Running: clojure -M:migrate reset"))
-        (try
-          (process/shell "clojure" "-M:migrate" "reset")
-          (println (green "  Reset complete."))
+    (println)
+    (print "  Continue? [y/N] ")
+    (flush)
+    (let [answer (str/trim (or (read-line) ""))]
+      (if (contains? #{"y" "Y" "yes" "Yes"} answer)
+        (do
           (println)
-          (println (dim "  Running: clojure -M:migrate up"))
-          (process/shell "clojure" "-M:migrate" "up")
-          (println (green "  Migrations applied successfully."))
+          (println (dim "  Running: clojure -M:migrate reset"))
+          (try
+            ;; The migrate CLI asks for the environment name on its own stdin.
+            ;; That is a second prompt for a question already answered above, so
+            ;; it is answered here: a single `echo y | bb db:reset` used to feed
+            ;; the first prompt, leave the second at EOF, and report success over
+            ;; a reset that never ran (BOU-500).
+            (let [reset-result (process/shell {:in (str env "\n") :continue true}
+                                              "clojure" "-M:migrate" "reset")]
+              (when-not (zero? (:exit reset-result))
+                (println (red "  Reset failed or was cancelled — database unchanged."))
+                (System/exit 1)))
+            (println (green "  Reset complete."))
+            (println)
+            (println (dim "  Running: clojure -M:migrate up"))
+            (let [up-result (process/shell {:continue true} "clojure" "-M:migrate" "up")]
+              (when-not (zero? (:exit up-result))
+                (println (red "  Migrations failed."))
+                (System/exit 1)))
+            (println (green "  Migrations applied successfully."))
+            (println)
+            (catch Exception e
+              (println (red (str "  Migration failed: " (.getMessage e))))
+              (System/exit 1))))
+        (do
           (println)
-          (catch Exception e
-            (println (red (str "  Migration failed: " (.getMessage e))))
-            (System/exit 1))))
-      (do
-        (println)
-        (println (dim "  Aborted."))
-        (println)))))
+          (println (dim "  Aborted."))
+          (println))))))
 
 (defn db-seed
   "Seed the database from the dev seed file.
