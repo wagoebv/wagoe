@@ -94,3 +94,38 @@
         "a module and its generated tests verify clean")
     (is (empty? (filter #(= :fcis (:step %)) (:issues report)))
         "no FC/IS issue is raised against the test namespace")))
+
+(deftest ^:unit test-path-is-judged-from-the-project-root
+  ;; test-path? matched "/test/" anywhere in the path. The MCP tools pass
+  ;; absolute, canonical paths, so a project that merely LIVES under a
+  ;; directory named test — ~/test/myapp, /tmp/test/... — had every core file
+  ;; classified as a test and skipped, and FC/IS reported a pass without
+  ;; checking anything.
+  (let [root "/work/test/acme"]
+    (testing "a source file of a project under a directory named test is source"
+      (is (not (verify/test-path? root "/work/test/acme/src/acme/order/core/order.clj"))))
+    (testing "the project's own test root is a test path"
+      (is (verify/test-path? root "/work/test/acme/test/acme/order/core/order_test.clj")))
+    (testing "a module that happens to be named test is still source"
+      (is (not (verify/test-path? root "/work/test/acme/src/acme/test/core/x.clj"))))
+    (testing "monorepo layout: libs/<lib>/test is a test root, libs/<lib>/src is not"
+      (is (verify/test-path? root "/work/test/acme/libs/foo/test/wagoe/foo/core/x_test.clj"))
+      (is (not (verify/test-path? root "/work/test/acme/libs/foo/src/wagoe/foo/core/x.clj"))))
+    (testing "relative paths"
+      (is (verify/test-path? root "test/acme/order/core/order_test.clj"))
+      (is (not (verify/test-path? root "src/acme/order/core/order.clj"))))))
+
+(deftest ^:unit a-violation-under-a-directory-named-test-is-still-caught
+  ;; End to end: the silent pass this guards against. A core namespace that
+  ;; requires clojure.test is a BND-806 violation wherever the project lives.
+  (let [f (apply io/file *tmp* ["test" "proj" "src" "wagoe" "tmp" "core" "bad.clj"])]
+    (.mkdirs (.getParentFile f))
+    (spit f (str "(ns wagoe.tmp.core.bad\n"
+                 "  (:require [clojure.test :refer [is]]))\n"
+                 "(defn f [] (is true))\n"))
+    (let [report (verify/verify-generated
+                  {:test-runner passing-runner}
+                  {:success true :module "tmp" :files [{:path (.getPath f) :action :create}]})]
+      (is (seq (filter #(= :fcis (:step %)) (:issues report)))
+          "FC/IS must check the file, not skip it because of where the project lives")
+      (is (not= :pass (:status report))))))
