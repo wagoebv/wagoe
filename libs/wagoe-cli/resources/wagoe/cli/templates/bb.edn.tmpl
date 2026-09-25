@@ -13,6 +13,7 @@
              [wagoe.tools.doctor      :as doctor]
              [wagoe.tools.doctor-env  :as doctor-env]
              [wagoe.tools.check       :as check]
+             [wagoe.tools.lint-imports :as lint-imports]
              [wagoe.tools.check-fcis  :as check-fcis]
              [wagoe.tools.check-tests :as check-tests]
              [wagoe.tools.check-ports :as check-ports]
@@ -43,6 +44,14 @@
   ;; Quality checks
   check             {:doc "Run all quality checks (FC/IS, ports, placeholder-tests, kondo, doctor)"
                      :task (apply check/-main *command-line-args*)}
+  ;; Wagoe libraries that define a registry macro — defworkflow, defsearch,
+  ;; defreport, defevent, defpush — ship clj-kondo config inside their jars.
+  ;; clj-kondo only applies those once they are copied into
+  ;; .clj-kondo/imports/, which `bb check`'s lint step does not do: it passes
+  ;; source paths, not the classpath. Without this the macros lint as
+  ;; unresolved symbols (BOU-503). Run it once, and after dependency changes.
+  lint:imports      {:doc "Import clj-kondo configs exported by dependencies into .clj-kondo/imports/ (run after dependency changes)"
+                     :task (apply lint-imports/-main *command-line-args*)}
   check:fcis        {:doc "FC/IS boundary enforcement"
                      :task (check-fcis/-main)}
   check:placeholder-tests {:doc "Detect placeholder (is true) assertions in test files"

@@ -1,0 +1,11 @@
+;; clj-kondo configuration exported to any project that depends on
+;; com.wagoe/wagoe-reports.
+;;
+;; `defreport` binds a var and registers the definition. clj-kondo cannot expand
+;; the macro from a published jar, so without this every consuming project
+;; reports the bound name as an unresolved symbol and has to add the same
+;; :lint-as entry to its own .clj-kondo/config.edn by hand (BOU-503).
+;;
+;; Since `bb check` fails the build on a lint error, that is no longer merely
+;; noisy.
+{:lint-as {wagoe.reports.shell.registry/defreport clojure.core/def}}

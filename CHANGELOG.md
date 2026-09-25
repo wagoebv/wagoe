@@ -37,6 +37,20 @@ for what is public API, what is internal, and how deprecations are announced.
   images; the storage job now uses a pinned `adobe/s3mock`.
 - **`bb check:jdk` passed a `.tool-versions` that pinned another JDK** (BOU-488).
   It now reads the asdf spelling and requires the file to name one.
+- **Registry macros forced every project to add its own `:lint-as`**
+  (BOU-503). `defworkflow`, `defsearch`, `defreport`, `defevent` and `defpush`
+  now ship clj-kondo exports. Run `bb lint:imports` once to copy them into
+  `.clj-kondo/imports/`, commit that directory, and the local entries can go.
+  clj-kondo does not read exports during an ordinary lint, so the import step
+  is required rather than optional.
+
+### Added
+
+- **`bb lint:imports`** (BOU-503). Copies the clj-kondo configs a project's
+  dependencies export into `.clj-kondo/imports/`. Generated projects now ship a
+  `.clj-kondo/config.edn`: without that directory clj-kondo's `--copy-configs`
+  reports "No configs copied" and exits 0, so the import would have silently
+  done nothing.
 - **MCP `describe-module` found no modules in a generated project** (BOU-516).
   The project module graph now lists the application's own modules.
 - **MCP `scaffold-module` reported `fail` on its own output** (BOU-515). The

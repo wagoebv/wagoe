@@ -216,6 +216,23 @@ with the `search_documents` table — no external dependencies required.
 
 ---
 
+**Linting:** the macro binds a var clj-kondo cannot see from a published jar,
+so the bound name reads as an unresolved symbol. From 1.0.0-rc-4,
+`wagoe-search` ships a clj-kondo export carrying the rule (BOU-503) — but an
+export applies only once copied into `.clj-kondo/imports/`. clj-kondo does not
+read exports during an ordinary lint, and `bb check` passes source paths rather
+than the classpath. Import them once, and again after changing dependencies:
+
+```bash
+bb lint:imports     # writes .clj-kondo/imports/ — commit it
+```
+
+Before rc-4, or if you would rather not commit the imports, keep the rule local:
+
+```clojure
+{:lint-as {wagoe.search.shell.registry/defsearch clojure.core/def}}
+```
+
 ## Common Pitfalls
 
 ### 1. Registry Leakage Between Tests
