@@ -8,10 +8,11 @@
             [hiccup2.core :as h]))
 
 (defn- config-section
-  "Render a single top-level config section as an editable card.
+  "Render a single top-level config section as a card — editable with Preview
+   and Apply when `editable?`, a read-only textarea otherwise.
    Strips ig/ref values to serializable placeholders so the textarea
    contains valid EDN that can round-trip through edn/read-string."
-  [section-key section-val]
+  [section-key section-val editable?]
   (let [key-str (pr-str section-key)
         val-str (pr-str (cfg-edit/strip-refs section-val))]
     (c/card {:title key-str}
@@ -20,9 +21,11 @@
               {:name        (str "config-" key-str)
                :rows        (min 15 (max 3 (count (str/split-lines val-str))))
                :style       "width:100%;font-family:var(--font-mono);font-size:12px;background:var(--bg-inset);color:var(--fg-base);border:1px solid var(--border);padding:8px;resize:vertical"
-               :data-original val-str}
+               :data-original val-str
+               :readonly    (not editable?)}
               val-str]
-             [:div {:style "display:flex;gap:8px;margin-top:8px;justify-content:flex-end"}
+             (when editable?
+              [:div {:style "display:flex;gap:8px;margin-top:8px;justify-content:flex-end"}
               [:button.filter-input
                {:hx-post    "/dashboard/fragments/config-preview"
                 :hx-target  (str "#preview-" (hash key-str))
@@ -37,21 +40,29 @@
                 :hx-include (str "[name='config-" key-str "']")
                 :hx-confirm "Apply this config change? Affected components will restart."
                 :style      "cursor:pointer;padding:4px 12px;width:auto;background:var(--accent-green);color:var(--bg-base)"}
-               "Apply"]]
+               "Apply"]])
              [:div {:id (str "preview-" (hash key-str))}]])))
 
 (defn- config-content
-  "Render the config tree with editable sections.
-   Uses real config values in the editable textareas (not redacted) so that
+  "Render the config tree, editable when `editable?`.
+   Uses real config values in the textareas (not redacted) so that
    Apply doesn't overwrite secrets with ********. This is a dev-only dashboard."
-  [config]
+  [config editable?]
   [:div
    [:div.stat-row
     (c/stat-card {:label "Components" :value (count config)})
-    (c/stat-card {:label "Mode" :value "editable" :value-class "green"})
-    (c/stat-card {:label "Status" :value "live" :sub "changes restart affected components"})]
+    (if editable?
+      (c/stat-card {:label "Mode" :value "editable" :value-class "green"})
+      (c/stat-card {:label "Mode" :value "read-only"}))
+    (if editable?
+      (c/stat-card {:label "Status" :value "live" :sub "changes restart affected components"})
+      (c/stat-card {:label "Status" :value "view only" :sub "start with (go) from the REPL to edit"}))]
+   (when-not editable?
+     [:p.empty-state
+      "This system was not started from the REPL. Apply works by restarting components "
+      "of the system (go) started, so here the config can be read but not changed."])
    (for [[k v] (sort-by str config)]
-     (config-section k v))])
+     (config-section k v editable?))])
 
 (defn render
   "Render the Config Editor full page."
@@ -61,7 +72,9 @@
      (merge opts {:active-path "/dashboard/config"
                   :title       "Config Editor"})
      (if config
-       (config-content config)
+       ;; Read-only unless the caller says otherwise: editing has to be
+       ;; switched on by a system Apply can actually restart.
+       (config-content config (true? (:config-editable? opts)))
        [:div.empty-state "No config available. Start the system with (go) first."]))))
 
 (defn parse-edited-value

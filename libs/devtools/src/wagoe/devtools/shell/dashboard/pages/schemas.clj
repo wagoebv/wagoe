@@ -49,28 +49,38 @@
        (not (var? v))
        (try (m/schema v) true (catch Exception _ false))))
 
+(defn schema-key
+  "The browser's key for schema var `var-name` in namespace `ns-sym`: the
+   var's fully-qualified name as a keyword, e.g. :wagoe.user.schema/User.
+
+   Not :<module>/<Var>. That shorter key kept only the segment before
+   `.schema`, so acme.user.schema/User and wagoe.user.schema/User were both
+   :user/User, and every `*.core.schema` namespace landed on :core. Once the
+   scan took in every loaded `.schema` namespace (BOU-509) the collision became
+   reachable, and discover-all-schemas merges — one schema silently vanished
+   from the browser. The full namespace is the only name unique by
+   construction."
+  [ns-sym var-name]
+  (keyword (str ns-sym) (name var-name)))
+
 (defn- discover-schemas-from-ns
   "Try to require a namespace and collect its public Malli schema defs.
-   Returns a map of {:<module>/<VarName> schema-value} or nil."
+   Returns a map of {schema-key schema-value} or nil."
   [ns-sym]
   (try
     (require ns-sym)
     (when-let [ns-obj (find-ns ns-sym)]
-      (let [;; The segment before `.schema`, whichever namespace it came from:
-            ;; wagoe.user.schema -> user, invoicing.invoice.schema -> invoice.
-            ;; Anchoring on `wagoe.` keyed every application schema as :core
-            ;; even once it was discovered (BOU-509).
-            module (second (re-find #"([^.]+)\.schema$" (str ns-sym)))]
-        (into {}
-              (for [[var-name var-ref] (ns-publics ns-obj)
-                    :let [v (try (var-get var-ref) (catch Exception _ nil))]
-                    :when (malli-schema? v)]
-                [(keyword (or module "core") (name var-name)) v]))))
+      (into {}
+            (for [[var-name var-ref] (ns-publics ns-obj)
+                  :let [v (try (var-get var-ref) (catch Exception _ nil))]
+                  :when (malli-schema? v)]
+              [(schema-key ns-sym var-name) v])))
     (catch Exception _ nil)))
 
 (defn- discover-all-schemas
-  "Scan all wagoe.*.schema namespaces and collect Malli schemas.
-   Returns a map of {qualified-key schema-value}."
+  "Scan every discovered `.schema` namespace and collect Malli schemas.
+   Returns a map of {schema-key schema-value}; keys cannot collide, see
+   `schema-key`."
   []
   (reduce (fn [acc ns-sym]
             (if-let [schemas (discover-schemas-from-ns ns-sym)]

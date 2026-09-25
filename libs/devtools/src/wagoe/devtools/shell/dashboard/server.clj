@@ -38,6 +38,16 @@
           (.getLocalPort connector))))
     (catch Exception _ nil)))
 
+(defn- repl-system
+  "The system `(go)` started — `integrant.repl.state/system` — or nil.
+
+   Distinct from the running system build-context displays, which may come from
+   `platform-system/running` instead. Config Apply restarts components by
+   rewriting integrant.repl's state, so it can act only on this one; see the
+   config-apply route."
+  []
+  (try @(resolve 'integrant.repl.state/system) (catch Exception _ nil)))
+
 (defn- build-context
   "Build a context map from the injected Integrant components.
 
@@ -48,7 +58,7 @@
    available\" on a perfectly running server — while Overview, which already
    had this fallback, looked healthy (BOU-508, after BOU-400)."
   [config]
-  (let [sys          (or (try @(resolve 'integrant.repl.state/system) (catch Exception _ nil))
+  (let [sys          (or (repl-system)
                          (try (platform-system/running) (catch Exception _ nil)))
         http-handler (:http-handler config)
         http-server  (:http-server config)
@@ -80,6 +90,10 @@
      :config          (when sys
                         (or (try @(resolve 'integrant.repl.state/config) (catch Exception _ nil))
                             (try (platform-system/configuration) (catch Exception _ nil))))
+     ;; Shown is not the same as editable. Started by wagoe.main the config
+     ;; above comes from platform-system, but Apply can only restart what
+     ;; (go) started — so outside the REPL the editor renders read-only.
+     :config-editable? (some? (repl-system))
      :active-sessions (when-let [session-repo (when sys (get sys :wagoe/session-repository))]
                         (try (let [now (java.time.Instant/now)]
                                (count (filter (fn [s]
@@ -216,6 +230,22 @@
                                                        "on :wagoe/dashboard. Wire it as a zero-argument function "
                                                        "returning your Integrant config, e.g. "
                                                        "#(my-app.system-config/ig-config (wagoe.config/load-config)).")}}
+
+                                ;; Before anything is mutated. With no (go) the
+                                ;; REPL system is nil, restart-component answers
+                                ;; "not found" and returns nil without throwing,
+                                ;; and the loop below counted that as a restart:
+                                ;; an app started by wagoe.main got "Config
+                                ;; applied successfully" while nothing restarted,
+                                ;; and integrant.repl's config and prep fn were
+                                ;; overwritten on the way.
+                                (nil? (repl-system))
+                                {:success? false
+                                 :error {:type    :system-not-running
+                                         :message (str "Apply restarts components of a system started from the "
+                                                       "REPL with (go). This one was started another way (e.g. "
+                                                       "wagoe.main), so there is nothing here it can restart — "
+                                                       "the config is shown read-only.")}}
 
                                 (and set-prep-fn sys-var cfg-var restart-fn)
                                 (let [;; Snapshot previous state so we can roll back on failure

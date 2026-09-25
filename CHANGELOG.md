@@ -43,9 +43,15 @@ for what is public API, what is internal, and how deprecations are announced.
 - **Security Status rendered a blank password tile and policy card**
   (BOU-510). Both now say when no policy is configured.
 - **The dashboard's Schema Browser showed no application schemas** (BOU-509).
-  Any namespace ending in `.schema` is discovered, not only `wagoe.*`.
+  Any namespace ending in `.schema` is discovered, not only `wagoe.*`. Schemas
+  are keyed by their full namespace (`:wagoe.user.schema/User`, previously
+  `:user/User`), so an application's `acme.user.schema/User` no longer hides
+  the framework's.
 - **Dashboard sub-pages reported `0 components` unless started from a REPL**
-  (BOU-508). They now read the running system however it was started.
+  (BOU-508). They now read the running system however it was started. The
+  Config Editor is read-only outside the REPL: Apply restarts components of
+  the system `(go)` started, and against any other it had reported "Config
+  applied successfully" while restarting nothing.
 
 ## [1.0.0-rc-3] — 2026-09-21
 

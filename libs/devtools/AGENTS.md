@@ -71,7 +71,7 @@ Local web UI at `localhost:9999` providing x-ray vision into the running system.
 - `/dashboard` — System Overview: components, routes, modules, environment
 - `/dashboard/routes` — Route Explorer: filterable route table with interceptor chain
 - `/dashboard/requests` — Request Inspector: live request stream (HTMX polling 2s)
-- `/dashboard/schemas` — Schema Browser: Malli schema tree with example generation
+- `/dashboard/schemas` — Schema Browser: Malli schema tree with example generation. Every loaded namespace ending in `.schema` is scanned; each schema is keyed by its full var name (`:wagoe.user.schema/User`) so same-named schemas from different namespaces stay distinct
 - `/dashboard/db` — Database Explorer: migrations, pool stats, query runner
 - `/dashboard/errors` — Error Dashboard: BND-coded errors with fix suggestions
 
@@ -157,6 +157,7 @@ Editable view of the running system config with secret redaction.
 - Each top-level key gets its own card with an editable `<textarea>`
 - **Preview Changes** button — HTMX POST to `/dashboard/fragments/config-preview` — shows a diff and lists affected components
 - **Apply** button — HTMX POST to `/dashboard/fragments/config-apply` — restarts affected components; always confirms with a browser dialog
+- **REPL only.** Apply restarts components by rewriting `integrant.repl.state`, which only `(go)` fills. Started any other way (e.g. `wagoe.main`) the page shows the config read-only, without Preview or Apply, and a direct POST to the apply route is refused with `:system-not-running` — it previously reported success while restarting nothing
 - Key files: `shell/dashboard/pages/config.clj`, `core/config_editor.clj`
 
 #### Security Status — `/dashboard/security`
