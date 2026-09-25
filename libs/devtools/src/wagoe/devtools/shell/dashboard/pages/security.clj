@@ -41,9 +41,12 @@
         csp        (:csp summary)]
     [:div
      [:div.stat-row
+      ;; "Not configured" rather than a blank tile: every other tile in this row
+      ;; carries a value, so an empty one reads as a rendering failure instead
+      ;; of as an absent policy (BOU-510).
       (c/stat-card {:label "Password Strength"
-                    :value (when pp (str/capitalize (name (:strength pp))))
-                    :value-class (when pp (strength-class (:strength pp)))})
+                    :value (if pp (str/capitalize (name (:strength pp))) "Not configured")
+                    :value-class (if pp (strength-class (:strength pp)) "stat-value-warning")})
       (c/stat-card {:label "Auth Methods"
                     :value (count (:methods auth))})
       (c/stat-card {:label "MFA"
@@ -59,14 +62,18 @@
                     :value-class (if (:rate-limiting? summary) "green" "stat-value-warning")})]
      [:div.two-col
       (c/card {:title "Password Policy"}
-              (when pp
+              (if pp
                 [:div
                  [:div {:style "font-family:var(--font-mono);font-size:12px;line-height:2"}
                   (check-item (>= (:min-length pp) 8) (str "Min length: " (:min-length pp)))
                   (check-item (:require-uppercase? pp) "Require uppercase")
                   (check-item (:require-lowercase? pp) "Require lowercase")
                   (check-item (:require-numbers? pp) "Require numbers")
-                  (check-item (:require-special? pp) "Require special characters")]]))
+                  (check-item (:require-special? pp) "Require special characters")]]
+                ;; An empty card next to a populated one reads as broken; say
+                ;; what is actually the case (BOU-510).
+                [:div.text-muted {:style "font-size:12px"}
+                 "No password policy configured — the user module's defaults apply."]))
       (c/card {:title "Authentication & Access"}
               [:div {:style "font-family:var(--font-mono);font-size:12px;line-height:2"}
                (for [method (:methods auth)]
