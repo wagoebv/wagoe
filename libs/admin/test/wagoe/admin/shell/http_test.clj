@@ -91,7 +91,9 @@
            -- Nullable, optional, and carrying no meaning to the admin module:
            -- `deleted_at` is the soft-delete marker, so it cannot stand in for
            -- an ordinary optional field (BOU-477).
-           nickname VARCHAR(255))"}))
+           nickname VARCHAR(255),
+           -- A calendar date: YYYY-MM-DD, never a time part (BOU-521).
+           birthday DATE)"}))
 
 (defn drop-test-table!
   "Drop test users table"
@@ -580,6 +582,38 @@
     (is (nil? (:nickname (db/execute-one! *db-ctx*
                                           {:select [:*] :from [:test-users]
                                            :where  [:= :id id]}))))))
+
+(deftest ^:contract a-date-with-a-time-part-is-refused
+  ;; A :date is a calendar date (BOU-519 decision). The date widget only sends
+  ;; YYYY-MM-DD, but the admin wrote whatever arrived straight to the table,
+  ;; so a hand-crafted request stored a timestamp in a DATE field (BOU-521).
+  (let [user (create-test-user! "date@example.com" "Date User" true)
+        id   (:id user)
+        put! (fn [v] (*handler* (make-request :put (str "/web/admin/test-users/" id) admin-user
+                                              {:path {:entity "test-users" :id (str id)}
+                                               :form {"birthday" v}})))
+        row  (fn [] (db/execute-one! *db-ctx* {:select [:*] :from [:test-users]
+                                               :where  [:= :id id]}))]
+    (testing "a valid date is stored"
+      (let [resp (put! "1990-05-17")]
+        (is (< (:status resp) 400))
+        (is (= "1990-05-17" (str (:birthday (row)))))))
+
+    (testing "an impossible calendar date is a field error, not a 500"
+      ;; `2024-02-31` has the right shape, so the regex let it through and the
+      ;; DATE column rejected it at the write.
+      (let [resp (put! "2024-02-31")]
+        (is (= 422 (:status resp)) (str "status was " (:status resp)))
+        (is (= "1990-05-17" (str (:birthday (row)))))))
+
+    (testing "a date with a time part is refused, not stored, and not a 500"
+      (let [resp (put! "1990-05-18T10:00")]
+        (is (= 422 (:status resp)) (str "status was " (:status resp)))
+        (is (str/includes? (:body resp) "must be a date as YYYY-MM-DD")
+            "the form says which field and why")
+        (is (str/includes? (:body resp) "value=\"1990-05-18T10:00\"")
+            "and shows what was rejected, not a date it made up from it")
+        (is (= "1990-05-17" (str (:birthday (row)))) "the row is unchanged")))))
 
 (deftest ^:contract update-entity-reads-a-decoded-body
   ;; A JSON PUT carries its fields in :body-params, and Ring still puts an

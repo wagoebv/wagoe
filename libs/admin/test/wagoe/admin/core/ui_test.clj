@@ -1448,3 +1448,22 @@
                         (ui/format-for-datetime-input (java.sql.Timestamp/valueOf "2026-09-01 12:00:50"))))
                  (is (= "2026-09-01"
                         (ui/format-for-date-input (java.sql.Timestamp/valueOf "2026-09-01 00:30:00")))))))))
+
+(deftest ^:unit a-rejected-value-is-shown-as-it-was-typed-test
+  ;; A 422 re-render keeps what the user submitted, but a date, datetime or
+  ;; number input cannot hold arbitrary text: the date widget showed the
+  ;; rejected `1990-05-17T10:00` as `1990-05-17`, and a number input showed a
+  ;; rejected `forty` as empty. Submitting again then saved a value the user
+  ;; never typed. With a field error, the raw value is shown as text.
+  (let [render (fn [field v cfg errors] (str (ui/render-field-widget field v cfg errors)))]
+    (testing "a rejected date keeps its time part on screen"
+      (let [html (render :birthday "1990-05-17T10:00" {:type :date :widget :date-input} ["must be a date"])]
+        (is (str/includes? html "1990-05-17T10:00"))
+        (is (not (str/includes? html "\"date\"")))))
+    (testing "a rejected number keeps its text on screen"
+      (let [html (render :age "forty" {:type :int :widget :number-input} ["must be an integer"])]
+        (is (str/includes? html "forty"))
+        (is (not (str/includes? html "\"number\"")))))
+    (testing "without an error the widgets are unchanged"
+      (is (str/includes? (render :birthday "1990-05-17" {:type :date :widget :date-input} nil) "\"date\""))
+      (is (str/includes? (render :age 41 {:type :int :widget :number-input} nil) "\"number\"")))))
