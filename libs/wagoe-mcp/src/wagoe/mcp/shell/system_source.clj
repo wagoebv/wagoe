@@ -146,31 +146,35 @@
                vec))))))
 
 (defn- project-modules
-  "The application's own modules: directories under `src/<base-ns>/` that carry
-   a `ports.clj`, which is what every Wagoe module has by convention.
+  "The application's own modules: every directory under `src/` that holds a
+   `ports.clj` — the invariant every Wagoe module satisfies (AGENTS.md).
 
    The monorepo answer walks `libs/`. A generated project keeps its modules
-   under one base namespace instead, so `describe-module` found nothing and
-   answered `:available []` in a project whose entire `src/` is one module
-   (BOU-516).
+   under its own base namespace instead, so `describe-module` found nothing and
+   answered `:available []` (BOU-516). A first fix scanned exactly
+   `src/<base>/<module>/`, which still missed a root module (`src/todo/`) and a
+   dotted base namespace (`src/com/acme/invoice/`); finding the ports files
+   themselves works at any depth.
 
    Directory names are file-system spellings — `invoice_line_item` — and the
-   name an agent asks for is the module's own, so the underscores are folded
-   back to hyphens."
+   name an agent asks for is the module's own, so underscores fold back to
+   hyphens. `:base-ns` is the dotted namespace above the module, nil for a root
+   module."
   [root]
-  (let [src (io/file root "src")]
+  (let [src (.getCanonicalFile (io/file root "src"))]
     (when (.isDirectory src)
-      (->> (.listFiles src)
-           (filter #(.isDirectory ^java.io.File %))
-           (mapcat (fn [base]
-                     (for [d     (.listFiles ^java.io.File base)
-                           :when (.isDirectory ^java.io.File d)
-                           :when (.exists (io/file d "ports.clj"))]
-                       {:name       (str/replace (.getName ^java.io.File d) "_" "-")
-                        :base-ns    (str/replace (.getName ^java.io.File base) "_" "-")
-                        :has-ports? true})))
-           (sort-by :name)
-           vec))))
+      (let [src-path (.toPath src)
+            ns-seg   #(str/replace (str %) "_" "-")]
+        (->> (file-seq src)
+             (filter #(and (.isFile ^java.io.File %) (= "ports.clj" (.getName ^java.io.File %))))
+             (map (fn [^java.io.File f]
+                    (let [segs (map ns-seg (.relativize src-path (.toPath (.getParentFile f))))]
+                      {:name       (last segs)
+                       :base-ns    (when (next segs) (str/join "." (butlast segs)))
+                       :has-ports? true})))
+             (remove #(str/blank? (:name %)))
+             (sort-by (juxt :name :base-ns))
+             vec)))))
 
 (defn- project-module-graph
   "What a project created by `wagoe new` has: the wagoe libraries it depends on
