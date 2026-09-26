@@ -8,8 +8,9 @@
    `PRAGMA table_info` instead.
 
    Both forms return the same column maps — `:name` (lower case), `:type`,
-   `:not-null`, `:default`, `:primary-key` — which is what the port promises
-   and what the four separate copies did not consistently deliver."
+   `:not-null`, `:default`, `:primary-key`, `:generated` — which is what the
+   port promises and what the four separate copies did not consistently
+   deliver."
   (:require [clojure.string :as str]
             [honey.sql :as sql]
             [next.jdbc :as jdbc]
@@ -52,12 +53,25 @@
         result (first (rows datasource query honey))]
     (> (get result :table_count 0) 0)))
 
+(defn- generated-column?
+  "Whether the database fills this column itself. Their column_default is
+   NULL, so without this an identity column reads as one an INSERT must supply.
+   PostgreSQL and H2 report is_identity and is_generated; MySQL has neither and
+   says it in `extra` (DEFAULT_GENERATED there is a plain default)."
+  [col]
+  (boolean
+   (or (= "YES" (:is_identity col))
+       (= "ALWAYS" (:is_generated col))
+       (some->> (:extra col) (re-find #"(?i)auto_increment|(?:virtual|stored) generated")))))
+
 (defn information-schema-table-info
   "Column information for `table-name`, per `information_schema`. See
-   `information-schema-table-exists?` for `spec`."
-  [{:keys [schema honey] :as spec} datasource table-name]
+   `information-schema-table-exists?` for `spec`; its `:generated-columns` are
+   the columns this engine reports identity and generated columns in."
+  [{:keys [schema honey generated-columns] :as spec} datasource table-name]
   (let [table-str     (table-key spec table-name)
-        columns-query {:select   [:column_name :data_type :is_nullable :column_default]
+        columns-query {:select   (into [:column_name :data_type :is_nullable :column_default]
+                                       generated-columns)
                        :from     [:information_schema.columns]
                        :where    [:and
                                   [:= :table_schema schema]
@@ -80,7 +94,8 @@
              :type        (:data_type col)
              :not-null    (= "NO" (:is_nullable col))
              :default     (:column_default col)
-             :primary-key (contains? pk-columns (:column_name col))})
+             :primary-key (contains? pk-columns (:column_name col))
+             :generated   (generated-column? col)})
           columns)))
 
 ;; =============================================================================
@@ -105,11 +120,18 @@
   ;; (name table-name) accepts only a keyword, string or symbol.
   (let [pragma-sql (str "PRAGMA table_info(" (name table-name) ")")
         results    (jdbc/execute! datasource [pragma-sql]
-                                  {:builder-fn rs/as-unqualified-lower-maps})]
+                                  {:builder-fn rs/as-unqualified-lower-maps})
+        ;; A lone INTEGER PRIMARY KEY is the rowid, which SQLite numbers.
+        ;; Generated columns PRAGMA table_info does not list at all.
+        rowid-alias (let [pks (filter #(pos? (:pk %)) results)]
+                      (when (and (= 1 (count pks))
+                                 (= "INTEGER" (str/upper-case (str (:type (first pks))))))
+                        (:name (first pks))))]
     (mapv (fn [row]
             {:name        (str/lower-case (:name row))
              :type        (:type row)
              :not-null    (= (:notnull row) 1)
              :default     (:dflt_value row)
-             :primary-key (= (:pk row) 1)})
+             :primary-key (= (:pk row) 1)
+             :generated   (= rowid-alias (:name row))})
           results)))

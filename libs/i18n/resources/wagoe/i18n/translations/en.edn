@@ -372,6 +372,8 @@
  :admin/page-not-found-title       "Not Found"
  :admin/page-not-found-message     "The entity '{name}' does not exist or is not accessible."
  :admin/button-back-to-admin       "Back to Admin"
+ :admin/page-config-error-title    "Configuration error"
+ :admin/config-error-not-on-form   "{entity} cannot be created here: column '{column}' is NOT NULL with no default, and {field} is not on the create form. Give the column a default, or make {field} editable in the admin config."
  :admin/entity-card-count          "{count} records"
  :admin/button-clear-all-filters   "Clear all"
  :admin/filter-add-option          "+ Add filter..."

@@ -84,33 +84,34 @@
                              "entity config in :wagoe/admin :entities.")
                         {:type :invalid-config
                          :entity-name entity-name})))
-
-      (if-let [redirect-url (:create-redirect-url entity-config)]
+      (or
+       (support/create-config-error-response request config schema-provider user entity-name entity-config)
+       (if-let [redirect-url (:create-redirect-url entity-config)]
         ;; Append return-to so the delegated create flow can bring the user
         ;; back to the admin list view (or whichever page they came from) on
         ;; success or cancel, instead of falling through to module-owned URLs
         ;; that may not exist as GET routes.
-        (let [return-to (str "/web/admin/" (name entity-name))
-              separator (if (str/includes? redirect-url "?") "&" "?")
-              target (str redirect-url separator "return-to=" return-to)]
-          (ring-response/redirect target 303))
-        (let [; Get all available entities for sidebar
-              entities (ports/list-available-entities schema-provider)
-              entity-configs (into {} (map (fn [e] [e (ports/get-entity-config schema-provider e)])) entities)
+         (let [return-to (str "/web/admin/" (name entity-name))
+               separator (if (str/includes? redirect-url "?") "&" "?")
+               target (str redirect-url separator "return-to=" return-to)]
+           (ring-response/redirect target 303))
+         (let [; Get all available entities for sidebar
+               entities (ports/list-available-entities schema-provider)
+               entity-configs (into {} (map (fn [e] [e (ports/get-entity-config schema-provider e)])) entities)
 
               ; Get permissions
-              permissions (permissions/get-entity-permissions user entity-name entity-config)]
-          (support/html-response request
-                                 (admin-ui/admin-layout
-                                  (admin-ui/entity-detail-page entity-name entity-config nil {} permissions
-                                                               {:display   (support/display-options config request)
+               permissions (permissions/get-entity-permissions user entity-name entity-config)]
+           (support/html-response request
+                                  (admin-ui/admin-layout
+                                   (admin-ui/entity-detail-page entity-name entity-config nil {} permissions
+                                                                {:display   (support/display-options config request)
                                                                 ;; A parent's "New" link (BOU-491).
-                                                                :return-to (support/safe-return-to request)
-                                                                :prefill   (support/foreign-key-prefill
-                                                                            entity-name entity-configs
-                                                                            (:query-params request))})
-                                  {:user user
-                                   :current-entity entity-name
-                                   :entities entities
-                                   :entity-configs entity-configs
-                                   :logo-url (:logo-url config)})))))))
+                                                                 :return-to (support/safe-return-to request)
+                                                                 :prefill   (support/foreign-key-prefill
+                                                                             entity-name entity-configs
+                                                                             (:query-params request))})
+                                   {:user user
+                                    :current-entity entity-name
+                                    :entities entities
+                                    :entity-configs entity-configs
+                                    :logo-url (:logo-url config)}))))))))

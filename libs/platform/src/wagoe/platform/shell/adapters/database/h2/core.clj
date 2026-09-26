@@ -9,7 +9,8 @@
             [wagoe.platform.shell.adapters.database.h2.connection :as connection]))
 
 (def ^:private introspection-spec
-  {:schema "public" :honey {:dialect :ansi} :fold-table-name? true})
+  {:schema "public" :honey {:dialect :ansi} :fold-table-name? true
+   :generated-columns [:is_identity :is_generated]})
 
 (def spec
   "What H2 does differently. See common.adapter for the keys."

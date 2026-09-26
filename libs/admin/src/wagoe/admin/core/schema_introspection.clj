@@ -621,6 +621,50 @@
     auto-config))
 
 ;; =============================================================================
+;; Create-path Config Checks
+;; =============================================================================
+
+(def create-filled-fields
+  "Fields the admin create path fills itself (see `create-entity` in
+   wagoe.admin.shell.service)."
+  #{:id :created-at :updated-at})
+
+(defn- off-form-reason
+  [field entity-config]
+  (if (contains? (set (:readonly-fields entity-config)) field)
+    "it is in :readonly-fields"
+    "it is not in :editable-fields"))
+
+(defn create-form-column-errors
+  "The columns the admin can never create a record without.
+
+   The admin insert writes the create form's fields and :hide-fields (hidden
+   from view, but a request may still supply them), minus :readonly-fields,
+   plus `create-filled-fields`. A NOT NULL column outside that, with no default
+   and not filled by the database (identity, computed), fails every create
+   (BOU-494). `columns-meta` is the raw column metadata of the entity's table.
+   Returns a vector of {:field :column :message}; entities with their own
+   create flow are skipped."
+  [entity-name entity-config columns-meta]
+  (if (or (:create-redirect-url entity-config) (:split-table-update entity-config))
+    []
+    (let [written (into create-filled-fields
+                        (remove (set (:readonly-fields entity-config)))
+                        (concat (:editable-fields entity-config) (:hide-fields entity-config)))]
+      (vec (for [{column :name :keys [not-null default generated]} columns-meta
+                 :let [field (keyword (case-conversion/snake-case->kebab-case-string column))]
+                 :when (and not-null
+                            (nil? default)
+                            (not generated)
+                            (not (contains? written field)))]
+             {:field   field
+              :column  column
+              :message (str "Entity '" (name entity-name) "' cannot be created in the admin: column '"
+                            column "' is NOT NULL with no default, and " field
+                            " is not on the create form (" (off-form-reason field entity-config) ")."
+                            " Add a column default, or make " field " editable.")})))))
+
+;; =============================================================================
 ;; Field Ordering
 ;; =============================================================================
 

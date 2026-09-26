@@ -372,6 +372,8 @@
  :admin/page-not-found-title       "Niet gevonden"
  :admin/page-not-found-message     "De entiteit '{name}' bestaat niet of is niet toegankelijk."
  :admin/button-back-to-admin       "Terug naar admin"
+ :admin/page-config-error-title    "Configuratiefout"
+ :admin/config-error-not-on-form   "{entity} kan hier niet worden aangemaakt: kolom '{column}' is NOT NULL zonder standaardwaarde, en {field} staat niet op het aanmaakformulier. Geef de kolom een standaardwaarde, of maak {field} bewerkbaar in de admin-config."
  :admin/entity-card-count          "{count} records"
  :admin/button-clear-all-filters   "Alles wissen"
  :admin/filter-add-option          "+ Filter toevoegen..."

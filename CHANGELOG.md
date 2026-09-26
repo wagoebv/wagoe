@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Admin create failed with a generic banner on a NOT NULL column the form leaves out** (BOU-494).
+  The create page now names the column; give it a default or make the field editable.
 - **`:wagoe/logging :level` did not reach Jetty or Hikari** (BOU-528). Existing projects:
   take `resources/logback.xml`, `:provider :slf4j` and the `:mcp` `:jvm-opts` from `wagoe new`.
 - **`bb scaffold integrate` and `wagoe add` skipped the prod config** (BOU-529).
