@@ -159,7 +159,7 @@
         (is (str/includes? (:content migration-file) "name VARCHAR(255) NOT NULL"))
         (is (str/includes? (:content migration-file) "email VARCHAR(255) NOT NULL UNIQUE"))
         (is (str/includes? (:content migration-file) "phone VARCHAR(255)"))
-        (is (str/includes? (:content migration-file) "active BOOLEAN NOT NULL"))))))
+        (is (str/includes? (:content migration-file) "active BOOLEAN DEFAULT true NOT NULL"))))))
 
 (deftest ^:unit generate-module-dry-run-test
   (testing "dry run does not write files"

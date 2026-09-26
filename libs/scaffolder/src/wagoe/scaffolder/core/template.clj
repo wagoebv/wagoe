@@ -177,6 +177,75 @@
     :decimal "DECIMAL(19,4)"
     :relation "UUID"))
 
+(def ^:private uuid-pattern
+  #"(?i)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+
+(defn- parses? [parse s]
+  (try (parse s) true
+       (catch java.time.format.DateTimeParseException _ false)))
+
+(defn date-only?
+  "Whether `s` is a bare date, 2026-01-01.
+
+   Pure: true"
+  [s]
+  (parses? #(java.time.LocalDate/parse %) (str s)))
+
+(defn default-literal
+  "The SQL literal for `value` as the DEFAULT of a column of the field's type,
+   or nil when the value does not suit that type. It goes into DDL, so numbers
+   and booleans must look like one and everything else is quoted. A relation
+   takes none: a default foreign key points at a row nobody chose.
+
+   Pure: true
+
+   Example:
+     (default-literal {:type :int} \"3\")        => \"3\"
+     (default-literal {:type :string} \"it's\")  => \"'it''s'\""
+  [{:keys [type enum-values]} value]
+  (when (some? value)
+    (let [s      (if (keyword? value) (name value) (str value))
+          quoted (str "'" (str/replace s "'" "''") "'")]
+      (case type
+        :int      (when (re-matches #"-?\d+" s) s)
+        :decimal  (when (re-matches #"-?\d+(\.\d+)?" s) s)
+        :boolean  (when (#{"true" "false"} s) s)
+        :relation nil
+        ;; No portable JSON literal across H2, SQLite and PostgreSQL.
+        :json     nil
+        :enum     (when (some #{(keyword s)} enum-values) quoted)
+        :uuid     (when (re-matches uuid-pattern s) quoted)
+        ;; Not a bare date: the column would resolve it in the database
+        ;; session's time zone, so 2026-01-01 became 2025-12-31T23:00Z on a
+        ;; PostgreSQL in Amsterdam.
+        :inst     (when (parses? #(java.time.OffsetDateTime/parse %) s) quoted)
+        :date     (when (parses? #(java.time.LocalDate/parse %) s) quoted)
+        quoted))))
+
+(defn valid-default?
+  "Whether the field's `:default`, if it has one, can be written as a DEFAULT.
+
+   Pure: true"
+  [field-def]
+  (or (nil? (:default field-def))
+      (some? (default-literal field-def (:default field-def)))))
+
+(defn column-default
+  "The DEFAULT literal for a field's column, or nil for none.
+
+   A required enum with no explicit default takes its first value, so a form
+   that leaves the column out — an admin `:readonly-fields` entry — can still
+   create the row (BOU-494).
+
+   Pure: true"
+  [{:keys [type enum-values] :as field-def}]
+  (cond
+    (some? (:default field-def))
+    (default-literal field-def (:default field-def))
+
+    (and (= :enum type) (get field-def :required true) (seq enum-values))
+    (default-literal field-def (first enum-values))))
+
 (def on-delete-clauses
   "The `ON DELETE` actions a relation field may ask for.
 
@@ -276,6 +345,9 @@
              :field-unique (get field-def :unique false)
              :malli-type (field-type->malli field-def)
              :sql-type (field-type->sql field-def)}
+      (column-default field-def)
+      (assoc :sql-default (column-default field-def))
+
       relation?
       (assoc :references     (:references field-def)
              :relation-table (relation-table (:references field-def)

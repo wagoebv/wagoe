@@ -180,6 +180,7 @@ Format: `name:type[:modifier...]`, e.g. `status:enum:values=draft,sent:required`
 | `required` | Non-nullable field |
 | `optional` | Nullable field (default) |
 | `unique` | Unique constraint |
+| `default=v` | Column `DEFAULT`; a required `enum` without one defaults to its first value. A datetime needs an offset (`default=2026-01-01T00:00:00Z`). Quote a value holding a colon and a modifier word: `default='a:unique'` |
 | `indexed` | Database index |
 
 ### Examples

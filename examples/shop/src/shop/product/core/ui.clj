@@ -6,7 +6,11 @@
   [products _opts]
   [:div.page
    [:h1 "Products"]
-   [:div.items
-    (for [item products]
-      [:div.item {:key (:id item)}
-       [:p (str (:id item))]])]])
+   [:table.items
+    [:thead [:tr [:th "Name"] [:th "Sku"] [:th "Price"]]]
+    [:tbody
+     (for [item products]
+       [:tr
+        [:td (str (:name item))]
+        [:td (str (:sku item))]
+        [:td (str (:price item))]])]]])

@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Scaffolded list page showed only ids** (BOU-486). It now has a column per
+  declared field; regenerate or edit `core/ui.clj` in existing modules.
 - **Admin create failed with a generic banner on a NOT NULL column the form leaves out** (BOU-494).
   The create page now names the column; give it a default or make the field editable.
 - **`:wagoe/logging :level` did not reach Jetty or Hikari** (BOU-528). Existing projects:
@@ -68,6 +70,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **Scaffolder `default=<value>` field modifier** (BOU-494). Required enums now
+  default to their first value in newly generated migrations.
 - **Admin: add a child from an editable has-many** (BOU-491). The panel links to
   the child's create form with the foreign key prefilled.
 - **Admin detects has-many from foreign keys** (BOU-481). Detected panels are

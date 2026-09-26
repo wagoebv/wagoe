@@ -34,7 +34,7 @@
    [nil "--entity NAME" "Entity name (PascalCase) (required)"
     :validate [#(re-matches #"^[A-Z][a-zA-Z0-9]*$" %)
                "Must be PascalCase"]]
-   [nil "--field SPEC" "Field specification: name:type[:values=a,b,c][:required][:unique] (can be repeated)"
+   [nil "--field SPEC" "Field specification: name:type[:values=a,b,c][:required][:unique][:default=v] (can be repeated)"
     :multi true
     :default []
     :update-fn conj]
@@ -89,6 +89,7 @@
     :default false]
    [nil "--unique" "Field must be unique"
     :default false]
+   [nil "--default VALUE" "Column DEFAULT; a required enum defaults to its first value"]
    ;; `generate` has always offered this, and `field` writes migrations and
    ;; edits schema.clj just as it does. Without it the service's output-dir
    ;; support was unreachable from the command users actually run, and
@@ -163,16 +164,40 @@
          (remove str/blank?)
          (mapv keyword))))
 
+(defn- modifier? [part]
+  (or (#{"required" "unique" "optional" "indexed"} part)
+      (some #(str/starts-with? part %)
+            ["values=" "references=" "references-table=" "on-delete=" "default="])))
+
+(defn- rejoin-default
+  "A default may hold colons — a URL, a timestamp — which the spec split cut
+   apart. Glue back every piece after `default=` that is not a modifier."
+  [flags]
+  (reduce (fn [acc part]
+            (if (and (some-> (peek acc) (str/starts-with? "default="))
+                     (not (modifier? part)))
+              (conj (pop acc) (str (peek acc) ":" part))
+              (conj acc part)))
+          []
+          flags))
+
+(def ^:private quoted-default
+  "`default='...'`: everything between the quotes is the value, so a colon or
+   a word like `unique` in it is not taken for a modifier."
+  #"(^|:)default='(.*?)'(?=:|$)")
+
 (defn parse-field-spec
   "Parse a field specification string into a field map.
 
-   Format: name:type[:values=a,b,c][:required][:unique]
+   Format: name:type[:values=a,b,c][:required][:unique][:default=v]
+   A default holding a modifier word after a colon is quoted: default='a:unique'.
 
    Examples:
      email:email:required:unique
      name:string:required
      age:integer
      status:enum:values=draft,sent,paid:required
+     status:enum:values=entered,paid:required:default=entered
 
    An `enum` needs its values: without them the generated schema was
    `[:enum]`, which matches nothing, so every write of that field failed
@@ -182,8 +207,11 @@
      Map with keys: :name, :type, :required, :unique, :enum-values,
      or error map"
   [field-spec]
-  (let [parts (str/split field-spec #":")
-        [name-str type-str & flags] parts
+  (let [[_ _ quoted] (re-find quoted-default field-spec)
+        field-spec (if quoted (str/replace-first field-spec quoted-default "") field-spec)
+        parts (str/split field-spec #":")
+        [name-str type-str & raw-flags] parts
+        flags (rejoin-default raw-flags)
         valid-types #{"string" "text" "integer" "int" "decimal" "boolean" "email" "uuid" "enum" "date" "datetime" "inst" "json" "relation"}
         ;; Map CLI type names to schema type names
         type-mapping {"integer" :int
@@ -208,7 +236,8 @@
                             (subs % (count "references=")))
                          flags)
         on-delete-flag (flag-value "on-delete=")
-        on-delete (if on-delete-flag (keyword on-delete-flag) :cascade)]
+        on-delete (if on-delete-flag (keyword on-delete-flag) :cascade)
+        default (or quoted (flag-value "default="))]
     (cond
       (< (count parts) 2)
       {:error (str "Invalid field spec: " field-spec " (expected format: name:type[:required][:unique])")}
@@ -281,12 +310,32 @@
                    references " is deleted. Drop `required`, or use "
                    "on-delete=restrict to refuse the delete instead.")}
 
+      (and (not quoted) (some-> default (str/starts-with? "'")))
+      {:error (str "Unclosed quote in default= on " name-str
+                   ": write default='value' with the closing quote before the next colon")}
+
+      (and (= :inst type-kw) default (template/date-only? default))
+      {:error (str "Invalid default= on " name-str ": " (pr-str default)
+                   " has no time or offset. A " type-str " column resolves it in the "
+                   "database session's time zone; write an offset timestamp, e.g. "
+                   default "T00:00:00Z")}
+
+      ;; The value goes into DDL, so it has to suit the column (BOU-494).
+      (and default
+           (not (template/valid-default? {:type type-kw :enum-values enum-values
+                                          :default default})))
+      {:error (str "Invalid default= on " name-str ": " (pr-str default)
+                   " does not suit a " type-str " field"
+                   (when (= :enum type-kw)
+                     (str " (must be one of: " (str/join ", " (map name enum-values)) ")")))}
+
       :else
       (cond-> {:name (keyword name-str)
                :type type-kw
                :required (boolean (some #(= % "required") flags))
                :unique (boolean (some #(= % "unique") flags))}
         enum-values           (assoc :enum-values enum-values)
+        default               (assoc :default default)
         (= :relation type-kw) (assoc :references references :on-delete on-delete)
         references-table      (assoc :references-table references-table)))))
 
@@ -427,6 +476,14 @@
                  (conj "At least one --field is required"))]
     [(empty? errors) errors]))
 
+(defn- field-command-type
+  "The field type `--type` names."
+  [type-str]
+  (get {"integer" :int "int" :int "date" :inst
+        "datetime" :inst "text" :text "json" :json}
+       type-str
+       (keyword type-str)))
+
 (defn validate-field-options
   "Validate required options for field command."
   [opts]
@@ -487,7 +544,15 @@
                       (:required opts))
                  (conj (str "--required and --on-delete set-null contradict: the column cannot be "
                             "NOT NULL and be set to null when the parent is deleted. "
-                            "Drop --required, or use --on-delete restrict.")))]
+                            "Drop --required, or use --on-delete restrict."))
+
+                 (and (:default opts)
+                      (not (template/valid-default?
+                            {:type        (field-command-type (:type opts))
+                             :enum-values (parse-enum-values (:enum-values opts))
+                             :default     (:default opts)})))
+                 (conj (str "Invalid --default " (pr-str (:default opts))
+                            ": it does not suit a " (:type opts) " field")))]
     [(empty? errors) errors]))
 
 (defn validate-endpoint-options
@@ -567,9 +632,7 @@
     (if-not valid?
       {:status 1
        :errors errors}
-      (let [type-mapping {"integer" :int "int" :int "date" :inst
-                          "datetime" :inst "text" :text "json" :json}
-            field-type (get type-mapping (:type opts) (keyword (:type opts)))
+      (let [field-type (field-command-type (:type opts))
             request {:module-name (:module-name opts)
                      :entity (:entity opts)
                      :field (cond-> {:name (keyword (:name opts))
@@ -578,6 +641,9 @@
                                      :unique (:unique opts false)}
                               (= :enum field-type)
                               (assoc :enum-values (parse-enum-values (:enum-values opts)))
+
+                              (:default opts)
+                              (assoc :default (:default opts))
 
                               (= :relation field-type)
                               (assoc :references (:references opts)
@@ -745,7 +811,7 @@ Required Options:
   --field SPEC         Field specification (can be repeated)
 
 Field Specification Format:
-  name:type[:values=a,b,c][:references=entity][:references-table=t][:on-delete=x][:required][:unique]
+  name:type[:values=a,b,c][:references=entity][:references-table=t][:on-delete=x][:required][:unique][:default=v]
 
 Field Types:
   string     - Text field
@@ -769,9 +835,17 @@ Field Flags:
                     set-null needs a nullable column, so not with `required`
   required          Field cannot be null
   unique            Field must be unique across all records
+  default=v         Column DEFAULT, e.g. default=entered. Quoted for text and
+                    enums, bare for numbers and booleans. A required enum
+                    without one defaults to its first value. A datetime needs
+                    an offset: default=2026-01-01T00:00:00Z. Quote a value
+                    holding a colon and a modifier word: default='a:unique'
 
   Example — an invoice line that dies with its invoice:
     --field invoice:relation:references=invoice:required
+
+  Example — a status an admin form may leave out:
+    --field status:enum:values=entered,paid:required:default=entered
 
 Interface Options (default: all enabled):
   --no-http            Skip the HTTP (REST API) routes
@@ -838,6 +912,8 @@ Optional Flags:
                        set-null needs a nullable column, so not with --required
   --required           Field cannot be null
   --unique             Field must be unique
+  --default VALUE      Column DEFAULT; a required enum without one defaults
+                       to its first value
   --dry-run            Show what would be generated
 
 Examples:
