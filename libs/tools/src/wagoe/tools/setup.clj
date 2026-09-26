@@ -232,7 +232,7 @@
 
 (defn- logging-template [env]
   (if (= env "test")
-    "  :wagoe/logging\n  {:provider :slf4j :level :warn}\n"
+    "  :wagoe/logging\n  {:provider :slf4j :level :info}\n"
     (str "  :wagoe/logging\n"
          "  {:provider     :slf4j\n"
          "   :level        " (if (prod? env) ":info" ":debug") "\n"

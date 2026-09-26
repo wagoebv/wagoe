@@ -19,8 +19,10 @@
     :migrate-on-start? true
     :pool              {:minimum-idle 1 :maximum-pool-size 5}}
 
+   ;; INFO, not quieter: the port the app bound is logged at INFO, and
+   ;; scripts/example-smoke.sh reads it from there.
    :wagoe/logging
-   {:provider :slf4j :level :warn}
+   {:provider :slf4j :level :info}
   ;; Product module (bb scaffold integrate)
   :wagoe/product
   {:enabled? true

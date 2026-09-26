@@ -288,8 +288,8 @@
       (is (= {"wagoe.platform.core" "DEBUG" "org.eclipse.jetty.server.Server" "INFO" "shop.core" "INFO"}
              (:init (levels-under "examples/shop/resources/logback.xml"
                                   "examples/shop/resources/conf/dev/config.edn" :dev names)))))
-    (testing "test, :level :warn"
-      (is (= {"wagoe.platform.core" "WARN" "org.eclipse.jetty.server.Server" "WARN" "shop.core" "WARN"}
+    (testing "test keeps INFO: the bound port is logged there, and the smoke reads it"
+      (is (= {"wagoe.platform.core" "INFO" "org.eclipse.jetty.server.Server" "INFO" "shop.core" "INFO"}
              (:init (levels-under "examples/shop/resources/logback.xml"
                                   "examples/shop/resources/conf/test/config.edn" :test names)))))))
 
