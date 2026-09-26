@@ -44,11 +44,11 @@
                                 :password "Strong-Pass-1234!"
                                 :name     "Duplicate"})
           body (str (:body resp))]
-      ;; Server returns 500 with user-exists error (not ideal, but that's the current behaviour)
-      (is (contains? #{409 500} (:status resp))
-          "Duplicate email should be rejected with 409 or 500")
-      (is (str/includes? (str/lower-case body) "already exists")
-          "Response should mention the user already exists"))))
+      ;; 409 with the form again; the wording does not confirm the account (BOU-552)
+      (is (= 409 (:status resp))
+          "Duplicate email should be rejected with 409")
+      (is (str/includes? (str/lower-case body) "cannot be used to register")
+          "Response should explain the email cannot be used"))))
 
 (deftest ^:integration ^:e2e register-weak-password-rejected
   (testing "Weak password returns 400 with password validation feedback"
