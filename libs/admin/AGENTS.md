@@ -613,7 +613,7 @@ The create insert writes only the form's fields (plus `:hide-fields`, which a re
 ## Testing
 
 ```bash
-clojure -M:test :admin
+clojure -M:test:test/pg :admin
 ```
 
 ### UI Testing Checklist

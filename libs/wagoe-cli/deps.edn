@@ -2,7 +2,9 @@
  :deps  {cheshire/cheshire {:mvn/version "6.2.0"}}
  :aliases
  {:test  {:extra-paths ["test"]
-          :extra-deps  {lambdaisland/kaocha {:mvn/version "1.91.1392"}}
+          :extra-deps  {lambdaisland/kaocha {:mvn/version "1.91.1392"}
+                        ;; To load a generated project's logback.xml in new-test.
+                        ch.qos.logback/logback-classic {:mvn/version "1.6.3"}}
           :main-opts   ["-m" "kaocha.runner"]}
   :build {:replace-deps {io.github.clojure/tools.build {:git/tag "v0.10.13" :git/sha "3a3c177d"}
                          slipset/deps-deploy {:mvn/version "0.2.5"}}

@@ -456,7 +456,8 @@
     (testing "embedded-postgres"
       ;; scaffolder imports EmbeddedPostgres directly: migration_postgres_test
       ;; round-trips the generated timestamp columns on PostgreSQL (BOU-522).
-      (doseq [s ["admin" "platform" "tenant" "scaffolder"]]
+      ;; workflow converts its legacy TEXT timestamps on PostgreSQL (BOU-502).
+      (doseq [s ["admin" "platform" "tenant" "scaffolder" "workflow"]]
         (is (str/includes? (get in-ci s "") ":test/pg")
             (str s " uses EmbeddedPostgres and must request :test/pg"))))
 
@@ -476,7 +477,7 @@
       ;; The whole point: a suite that does not need the heavy deps must not
       ;; resolve them.
       (doseq [[s alias] in-ci
-              :when (not (#{"admin" "platform" "tenant" "scaffolder" "observability"
+              :when (not (#{"admin" "platform" "tenant" "scaffolder" "workflow" "observability"
                             "devtools" "unit"} s))]
         (is (= "-M:test" alias)
             (str s " requests " alias " but needs nothing beyond :test"))))))

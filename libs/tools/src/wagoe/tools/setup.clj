@@ -232,12 +232,7 @@
 
 (defn- logging-template [env]
   (if (= env "test")
-    (str "  :wagoe/logging\n"
-         "  {:level     :debug\n"
-         "   :console   true\n"
-         "   :appenders [{:appender       :rolling-file\n"
-         "                :file           \"logs/wagoe-test.log\"\n"
-         "                :rolling-policy {:type :time-based :max-history 3}}]}\n")
+    "  :wagoe/logging\n  {:provider :slf4j :level :info}\n"
     (str "  :wagoe/logging\n"
          "  {:provider     :slf4j\n"
          "   :level        " (if (prod? env) ":info" ":debug") "\n"

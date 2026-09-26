@@ -48,7 +48,7 @@ bb scaffold integrate product   # --dry-run to see the config first
 clojure -M:migrate up
 ----
 
-`integrate` writes one key into `resources/conf/{dev,test}/config.edn`. Nothing
+`integrate` writes one key into every `resources/conf/<profile>/config.edn`. Nothing
 else needs changing: `src/` and `test/` are already on the project's paths, so
 the module's tests run under plain `clojure -M:test`.
 

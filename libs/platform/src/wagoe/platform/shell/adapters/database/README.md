@@ -256,14 +256,11 @@ Ensure your `deps.edn` includes the necessary JDBC drivers:
 The system includes comprehensive tests for all databases:
 
 ```bash
-# Run basic tests (SQLite and H2 only, no external dependencies)
-clojure -M:test wagoe.platform.shell.adapters.database.multi-db-test/run-basic-tests
+# The adapter tests run in the platform suite
+clojure -M:test :platform --focus-meta :unit
 
-# Run integration tests (requires PostgreSQL and MySQL servers)
-clojure -M:test wagoe.platform.shell.adapters.database.multi-db-test/run-integration-tests
-
-# Run performance tests
-clojure -M:test wagoe.platform.shell.adapters.database.multi-db-test/run-performance-tests
+# Integration tests (require PostgreSQL and MySQL servers)
+clojure -M:test :platform --focus-meta :integration
 ```
 
 ## Troubleshooting
@@ -316,11 +313,11 @@ docker run -d --name test-postgres -e POSTGRES_PASSWORD=test -p 5432:5432 postgr
 docker run -d --name test-mysql -e MYSQL_ROOT_PASSWORD=test -p 3306:3306 mysql:8
 
 # Run all tests
-clojure -M:test
+clojure -M:test:test/all
 
 # Run specific database tests
-clojure -M:test -i :integration  # PostgreSQL/MySQL tests
-clojure -M:test -e :integration  # SQLite/H2 tests only
+clojure -M:test :platform --focus-meta :integration  # PostgreSQL/MySQL tests
+clojure -M:test :platform --skip-meta :integration   # SQLite/H2 tests only
 ```
 
 ## License

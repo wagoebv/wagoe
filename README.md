@@ -13,7 +13,7 @@
 
 **For developers:** 31 independently-publishable libraries on Clojars — use just `wagoe-core` for validation utilities, or go full-stack with JWT + MFA auth, auto-generated CRUD UIs, background jobs, multi-tenancy, real-time WebSockets, and more. Every library follows the same FC/IS structure, making any Wagoe codebase instantly familiar.
 
-**Ship faster:** The scaffolder generates fully structured modules (entity + routes + tests) in seconds. The admin UI auto-generates CRUD interfaces from your schema — no manual forms. Built-in observability, RFC 5988 pagination, and declarative interceptors mean you write business logic, not plumbing. AI tooling (`bb scaffold ai`, `bb ai gen-tests`, `bb ai sql`) handles the repetitive parts.
+**Ship faster:** The scaffolder generates fully structured modules (entity + routes + tests) in seconds. The admin UI auto-generates CRUD interfaces from your schema — no manual forms. Built-in observability, RFC 5988 pagination, and declarative interceptors mean you write business logic, not plumbing. AI tooling (`bb scaffold ai`, and the experimental `bb ai gen-tests` and `bb ai sql`) handles the repetitive parts.
 
 **Ship with confidence:** Reference deployment configs (systemd, nginx, Fly.io, Render), an OWASP-aligned security checklist, scaling guides, health check endpoints, and zero-downtime migration patterns.
 
@@ -196,12 +196,12 @@ Use `wagoe.core.utils.case-conversion` for conversions. Never convert manually.
 
 ```bash
 # Testing (Kaocha, default test profile uses H2 in-memory DB)
-clojure -M:test                                          # All tests
+clojure -M:test:test/all                                          # All tests
 clojure -M:test :core                                    # Single library
-clojure -M:test --focus-meta :unit                       # Unit tests only
-clojure -M:test --focus-meta :integration                # Integration tests only
+clojure -M:test:test/all --focus-meta :unit                       # Unit tests only
+clojure -M:test:test/all --focus-meta :integration                # Integration tests only
 clojure -M:test --watch :core                            # Watch mode
-JWT_SECRET="dev-secret-at-least-32-characters-long" WAG_ENV=test clojure -M:test
+JWT_SECRET="dev-secret-at-least-32-characters-long" WAG_ENV=test clojure -M:test:test/all
 
 # Linting
 clojure -M:clj-kondo --lint src test libs/*/src libs/*/test
@@ -222,9 +222,9 @@ bb scaffold ai "product module with name, price, stock"  # NL scaffolding via AI
 bb scaffold ai "product module with name, price, stock" --yes  # Non-interactive generation
 
 # AI tooling
-bb ai explain --file stacktrace.txt  # Explain error
-bb ai gen-tests libs/user/src/wagoe/user/core/validation.clj  # Generate tests
-bb ai sql "find active users with orders in last 7 days"          # HoneySQL from NL
+bb ai explain --file stacktrace.txt  # Explain error (experimental)
+bb ai gen-tests libs/user/src/wagoe/user/core/validation.clj  # Generate tests (experimental)
+bb ai sql "find active users with orders in last 7 days"          # HoneySQL from NL (experimental)
 bb ai docs --module libs/user --type agents                       # Generate AGENTS.md
 
 # Operations
@@ -252,7 +252,7 @@ The default `test` profile runs against in-memory H2. To run against PostgreSQL:
 
 ```bash
 WAG_ENV=test JWT_SECRET="dev-secret-at-least-32-characters-long" clojure -M:migrate up
-WAG_ENV=test JWT_SECRET="dev-secret-at-least-32-characters-long" clojure -M:test
+WAG_ENV=test JWT_SECRET="dev-secret-at-least-32-characters-long" clojure -M:test:test/all
 ```
 
 4. Revert `resources/conf/test/config.edn` after the run.
@@ -267,7 +267,7 @@ Six automated safeguards run in CI to catch regressions early. The FC/IS check a
 bb check:fcis                    # Core namespaces must not import shell, I/O, logging, or DB
 bb check:placeholder-tests       # No (is true) placeholders masking missing coverage
 bb check:deps                    # Library dependency direction + cycle detection
-clojure -M:test --focus-meta :security  # Error mapping, CSRF, XSS, SQL parameterization
+clojure -M:test:test/all --focus-meta :security  # Error mapping, CSRF, XSS, SQL parameterization
 ```
 
 See [ADR-021](./dev-docs/adr/ADR-021-fcis-boundary-rules.adoc) (FC/IS rules) and [ADR-022](./dev-docs/adr/ADR-022-error-handling-conventions.adoc) (error handling conventions) for rationale.

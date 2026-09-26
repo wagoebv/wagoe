@@ -1,5 +1,6 @@
 (ns wagoe.tools.quickstart-test
   (:require [wagoe.tools.config-edn :as config-edn]
+            [clojure.java.io :as io]
             [clojure.test :refer [deftest is testing]]
             [wagoe.tools.quickstart :as quickstart]))
 
@@ -123,3 +124,16 @@
           (is (= before (slurp path)) "--dry-run must not write"))
         (finally
           (.delete tmp))))))
+
+(deftest ^:unit inject-sample-module-config-writes-every-profile
+  ;; Integrate writes prod too; when it failed, this fallback left prod without
+  ;; :wagoe/tasks (BOU-529).
+  (let [root (.toFile (java.nio.file.Files/createTempDirectory
+                       "quickstart-test" (make-array java.nio.file.attribute.FileAttribute 0)))
+        conf #(io/file root "resources" "conf" % "config.edn")]
+    (doseq [env ["dev" "test" "prod"]]
+      (io/make-parents (conf env))
+      (spit (conf env) "{:active\n {:wagoe/settings {}}\n :inactive {}}\n"))
+    (is (true? (quickstart/inject-sample-module-config (str root))))
+    (doseq [env ["dev" "test" "prod"]]
+      (is (= :already-present (config-edn/key-status (slurp (conf env)) ":wagoe/tasks")) env))))

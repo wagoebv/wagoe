@@ -264,7 +264,7 @@ clojure -M:test :calendar
 clojure -M:test --focus-meta :unit :calendar
 
 # DST edge cases specifically
-clojure -M:test --focus wagoe.calendar.core.recurrence-test
+clojure -M:test :calendar --focus wagoe.calendar.core.recurrence-test
 
 # iCal round-trip integration tests
 clojure -M:test --focus-meta :integration :calendar
