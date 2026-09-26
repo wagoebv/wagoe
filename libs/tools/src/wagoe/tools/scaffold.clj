@@ -256,13 +256,51 @@
       module-name (into (vec args) ["--base-ns" (project/module-base-ns module-name root)])
       :else       (into (vec args) ["--base-ns" (project/base-ns root)]))))
 
+(defn resolution-failure?
+  "True when the CLI's stderr says a dependency could not be fetched, as
+   opposed to the scaffolder itself failing."
+  [err]
+  (boolean (and err (re-find #"Error building classpath|Could not (?:find|transfer|resolve) artifact|Failed to read artifact descriptor|Failure to find"
+                             err))))
+
+(defn- tee-writer
+  "A Writer that forwards to `out` as it is written and keeps a copy in `sb`."
+  ^java.io.Writer [^java.io.Writer out ^StringBuilder sb]
+  (proxy [java.io.Writer] []
+    (write
+      ([x]
+       (if (string? x)
+         (do (.append sb ^String x) (.write out ^String x))
+         (do (.append sb (char x)) (.write out (int x))))
+       (.flush out))
+      ([cbuf off len]
+       (if (string? cbuf)
+         (do (.append sb ^String cbuf (int off) (int (+ off len)))
+             (.write out ^String cbuf (int off) (int len)))
+         (do (.append sb ^chars cbuf (int off) (int len))
+             (.write out ^chars cbuf (int off) (int len))))
+       (.flush out)))
+    (flush [] (.flush out))
+    (close [] (.flush out))))
+
+(defn- run-scaffolder-once
+  "Streams stderr as it arrives, so a cold dependency download is not silent,
+   and returns it for the retry decision."
+  [cmd]
+  (let [err (StringBuilder.)
+        {:keys [exit]} (apply shell {:continue true :err (tee-writer *err* err)} cmd)]
+    {:exit exit :err (str err)}))
+
 (defn run-clojure!
   "Shell out to the Clojure scaffolder CLI with given args. Streams output to terminal.
 
    In generated projects (no libs/scaffolder directory), injects wagoe-scaffolder
    via -Sdeps so the namespace is resolvable. In the monorepo, libs/scaffolder/src is
    already on the classpath, so -Sdeps is skipped to avoid forcing Maven resolution of
-   an artifact that may not yet be published."
+   an artifact that may not yet be published.
+
+   In a fresh environment this is the first JVM to fetch the scaffolder and
+   rewrite-clj, so a transient fetch failure is retried once (BOU-545)."
   [args]
   (println)
   (println (bold "Running scaffolder..."))
@@ -274,8 +312,20 @@
                          ["clojure"
                           "-Sdeps"
                           (scaffolder-deps)
-                          "-M" "-m" "wagoe.scaffolder.shell.cli-entry"])]
-      (apply shell (concat base-cmd (with-base-ns args))))
+                          "-M" "-m" "wagoe.scaffolder.shell.cli-entry"])
+          cmd          (concat base-cmd (with-base-ns args))
+          first-try    (run-scaffolder-once cmd)
+          result       (if (and (not (zero? (:exit first-try)))
+                                (resolution-failure? (:err first-try)))
+                         (do (println (yellow "Dependency fetch failed — retrying once..."))
+                             (run-scaffolder-once cmd))
+                         first-try)]
+      ;; Truthy on success: wizard-ai stops a multi-entity run on the first nil.
+      (if (zero? (:exit result))
+        result
+        (do (println (red (str "Scaffolder exited with code " (:exit result))))
+            (*exit!* 1)
+            nil)))
     (catch Exception e
       (println (red (str "Scaffolder exited with error: " (.getMessage e))))
       (*exit!* 1))))

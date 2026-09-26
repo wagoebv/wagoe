@@ -12,6 +12,7 @@
             [clojure.string :as str]
             [clojure.java.io :as io]
             [babashka.fs :as fs]
+            [babashka.process :as process]
             [wagoe.tools.scaffold :as scaffold]))
 
 (defn- run
@@ -281,3 +282,69 @@
                 ["endpoint" "--module-name" "product" "--output-dir"]]]
     (is (= args (scaffold/with-base-ns args))
         (str "malformed " (last args) " must reach the scaffolder untouched"))))
+
+;; BOU-545: in a fresh container the scaffolder JVM is the first to fetch
+;; rewrite-clj, and a transient miss there failed quickstart's sample module.
+
+(def ^:private fetch-error
+  (str "Error building classpath. The following artifacts could not be resolved: "
+       "rewrite-clj:rewrite-clj:jar:1.2.57 (absent): Could not find artifact "
+       "rewrite-clj:rewrite-clj:jar:1.2.57 in central (https://repo1.maven.org/maven2/)"))
+
+(defn- fails-with [msg] (str "echo '" msg "' >&2; exit 1"))
+
+(defn- run-scaffolder
+  "run-clojure! with each scaffolder run replaced by the next bash `scripts`,
+   run by the real `shell` with the options run-clojure! gave it."
+  [scripts]
+  (let [real      process/shell
+        calls     (atom 0)
+        exit      (atom nil)
+        err       (java.io.StringWriter.)
+        remaining (atom scripts)]
+    (with-out-str
+      (binding [*err* err
+                scaffold/*exit!* #(reset! exit %)]
+        (with-redefs [process/shell (fn [opts & _]
+                                      (swap! calls inc)
+                                      (let [script (first @remaining)]
+                                        (swap! remaining rest)
+                                        (real opts "bash" "-c" script)))]
+          (scaffold/run-clojure! ["generate" "--module-name" "tasks"]))))
+    {:calls @calls :exit @exit :err (str err)}))
+
+(deftest ^:unit a-dependency-fetch-failure-is-retried-once
+  (testing "a resolution error, then success: retried, and no failure"
+    (is (= [2 nil] ((juxt :calls :exit) (run-scaffolder [(fails-with fetch-error) "exit 0"])))))
+
+  (testing "a resolution error twice: one retry, then it fails"
+    (let [r (run-scaffolder [(fails-with fetch-error) (fails-with fetch-error)])]
+      (is (= [2 1] ((juxt :calls :exit) r)))
+      (is (str/includes? (:err r) "Could not find artifact rewrite-clj") "the error reaches the user")))
+
+  (testing "any other failure is not retried"
+    (is (= [1 1] ((juxt :calls :exit) (run-scaffolder [(fails-with "Module tasks already exists")]))))))
+
+(deftest ^:unit the-scaffolders-stderr-is-shown-while-it-runs
+  (testing "a cold dependency download shows progress, not minutes of silence"
+    (let [flag (fs/path (fs/create-temp-dir) "done")
+          err  (java.io.StringWriter.)
+          real process/shell
+          run  (future
+                 (binding [*err* err
+                           scaffold/*exit!* (fn [_])]
+                   (with-out-str
+                     (with-redefs [process/shell
+                                   (fn [opts & _]
+                                     (real opts "bash" "-c"
+                                           (str "echo 'Downloading: rewrite-clj' >&2; "
+                                                "while [ ! -e '" flag "' ]; do sleep 0.05; done")))]
+                       (scaffold/run-clojure! ["generate" "--module-name" "tasks"])))))
+          seen? (loop [n 0]
+                  (cond (str/includes? (str err) "Downloading: rewrite-clj") true
+                        (> n 100) false
+                        :else (do (Thread/sleep 50) (recur (inc n)))))]
+      (spit (str flag) "")
+      (deref run 10000 nil)
+      (fs/delete-tree (fs/parent flag))
+      (is seen? "stderr only arrived after the scaffolder exited"))))
