@@ -24,16 +24,43 @@
      Returns {:api [...] :web [...] :static []} for composition
      by the HTTP handler."
   (:require [integrant.core :as ig]
+            [wagoe.platform.database :as db]
             [wagoe.workflow.shell.registry :as registry]
             [wagoe.workflow.shell.persistence :as persistence]
             [wagoe.workflow.shell.service :as service]
             [wagoe.workflow.shell.http :as workflow-http]
+            [clojure.java.io :as io]
+            [clojure.string :as str]
             [clojure.tools.logging :as log]))
+
+(def ^:private migration-dir "wagoe/workflow/migrations/")
+
+(defn- migration-resource [file-name]
+  (or (io/resource (str migration-dir file-name))
+      (throw (ex-info "Workflow migration missing from the classpath"
+                      {:type :internal-error :file file-name}))))
+
+(defn- migration-statements
+  "The statements of the migration that creates workflow's tables."
+  []
+  (->> (str/split (slurp (migration-resource "20260926100000-workflow-tables.up.sql"))
+                  #"--;;")
+       (map str/trim)
+       (remove str/blank?)))
+
+(defn- initialize-workflow-schema!
+  "Create workflow's tables at boot, for installations that never ran
+   `migrate up`. Converting a pre-BOU-502 TEXT table is left to `migrate up`:
+   it locks the table and breaks replicas still running the old version."
+  [ctx]
+  (log/info "Initializing workflow schema")
+  (doseq [statement (migration-statements)]
+    (db/execute-ddl! ctx statement)))
 
 (defmethod ig/init-key :wagoe/workflow-db-schema
   [_ {:keys [ctx]}]
   (log/info "Initializing workflow database schema")
-  (persistence/initialize-workflow-schema! ctx)
+  (initialize-workflow-schema! ctx)
   {:status :initialized})
 
 (defmethod ig/halt-key! :wagoe/workflow-db-schema

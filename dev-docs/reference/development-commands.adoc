@@ -80,7 +80,7 @@ clojure -M:test :realtime       # Realtime library tests
 clojure -M:test:test/pg :tenant         # Tenant library tests
 clojure -M:test :external       # External adapters tests
 clojure -M:test :payments       # Payments library tests
-clojure -M:test :workflow       # Workflow library tests
+clojure -M:test:test/pg :workflow  # Workflow library tests
 clojure -M:test :search         # Search library tests
 clojure -M:test :reports        # Reports library tests
 clojure -M:test :calendar       # Calendar library tests
@@ -360,11 +360,11 @@ Framework-aware AI tools (requires Ollama, Anthropic, or OpenAI):
 [source,bash]
 ----
 bb ai                                       # Show help
-bb ai explain                               # Explain error from stdin
-bb ai explain --file stacktrace.txt         # Explain error from file
-bb ai gen-tests <file>                      # Generate test namespace
-bb ai gen-tests <file> -o <output>          # Write tests to file
-bb ai sql "find active users with orders"   # Generate HoneySQL from description
+bb ai explain                               # Explain error from stdin (experimental)
+bb ai explain --file stacktrace.txt         # Explain error from file (experimental)
+bb ai gen-tests <file>                      # Generate test namespace (experimental)
+bb ai gen-tests <file> -o <output>          # Write tests to file (experimental)
+bb ai sql "find active users with orders"   # Generate HoneySQL from description (experimental)
 bb ai docs --module libs/user --type agents # Generate documentation
 bb ai admin-entity "products with name, price, status"  # Generate admin entity EDN
 ----

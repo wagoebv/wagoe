@@ -41,7 +41,7 @@ JWT_SECRET="dev-secret-at-least-32-characters-long" WAG_ENV=test clojure -M:test
 # run. Bare `clojure -M:test` runs the lean set: fine for a suite that needs
 # nothing extra, and it fails on ClassNotFoundException for one that does.
 #
-#   :test/pg      admin, scaffolder, tenant (embedded PostgreSQL, Linux binary)
+#   :test/pg      admin, scaffolder, tenant, workflow (embedded PostgreSQL, Linux binary)
 #   :test/pg-mac  add to :test/pg on Apple Silicon — CI is ubuntu-only
 #   :test/otel    observability             (OpenTelemetry in-memory exporters)
 #   :test/http    devtools                  (clj-http-lite)
@@ -60,7 +60,7 @@ clojure -M:test :jobs                              # Jobs library tests
 clojure -M:test :email                             # Email library tests
 clojure -M:test:test/pg :tenant                    # Tenant library tests
 clojure -M:test :realtime                          # Realtime library tests
-clojure -M:test :workflow                          # Workflow library tests
+clojure -M:test:test/pg :workflow                  # Workflow library tests
 clojure -M:test :search                            # Search library tests
 clojure -M:test :external                          # External adapters tests
 clojure -M:test :payments                          # Payments library tests
@@ -115,9 +115,9 @@ docker build -t wagoe:latest .                  # Prod image (root Dockerfile; s
 clojure -M:migrate up                              # Run migrations
 
 # Scripting (Babashka)
-bb ai explain --file stacktrace.txt                # Explain error via AI
-bb ai gen-tests libs/user/src/wagoe/user/core/validation.clj  # Generate test namespace
-bb ai sql "find active users with orders in last 7 days"          # HoneySQL from NL
+bb ai explain --file stacktrace.txt                # Explain error via AI (experimental)
+bb ai gen-tests libs/user/src/wagoe/user/core/validation.clj  # Generate test namespace (experimental)
+bb ai sql "find active users with orders in last 7 days"          # HoneySQL from NL (experimental)
 bb ai docs --module libs/user --type agents                       # Generate AGENTS.md
 bb ai admin-entity "products with name, price, status"            # Generate admin entity EDN config
 wagoe doctor                                       # Diagnostics front door: environment + config
@@ -258,7 +258,7 @@ The quality gate `bb check:fcis` (run on every commit) enforces strict rules:
 | `bb scaffold ai "description"` | Generating module structure from natural language description |
 | `bb scaffold field --module-name {m} --entity {E} --name {field} --type {type}` | Adding a field to an existing module's schema |
 | `bb scaffold endpoint --module-name {m} --path {path} --method {method} --handler-name {name}` | Adding an HTTP endpoint to an existing module |
-| `bb scaffold integrate {module}` | Write a generated module's config key into resources/conf/{dev,test}/config.edn |
+| `bb scaffold integrate {module}` | Write a generated module's config key into every resources/conf/<profile>/config.edn |
 
 ### Scaffolder Best Practices for AI Agents
 

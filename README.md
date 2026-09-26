@@ -13,7 +13,7 @@
 
 **For developers:** 31 independently-publishable libraries on Clojars — use just `wagoe-core` for validation utilities, or go full-stack with JWT + MFA auth, auto-generated CRUD UIs, background jobs, multi-tenancy, real-time WebSockets, and more. Every library follows the same FC/IS structure, making any Wagoe codebase instantly familiar.
 
-**Ship faster:** The scaffolder generates fully structured modules (entity + routes + tests) in seconds. The admin UI auto-generates CRUD interfaces from your schema — no manual forms. Built-in observability, RFC 5988 pagination, and declarative interceptors mean you write business logic, not plumbing. AI tooling (`bb scaffold ai`, `bb ai gen-tests`, `bb ai sql`) handles the repetitive parts.
+**Ship faster:** The scaffolder generates fully structured modules (entity + routes + tests) in seconds. The admin UI auto-generates CRUD interfaces from your schema — no manual forms. Built-in observability, RFC 5988 pagination, and declarative interceptors mean you write business logic, not plumbing. AI tooling (`bb scaffold ai`, and the experimental `bb ai gen-tests` and `bb ai sql`) handles the repetitive parts.
 
 **Ship with confidence:** Reference deployment configs (systemd, nginx, Fly.io, Render), an OWASP-aligned security checklist, scaling guides, health check endpoints, and zero-downtime migration patterns.
 
@@ -222,9 +222,9 @@ bb scaffold ai "product module with name, price, stock"  # NL scaffolding via AI
 bb scaffold ai "product module with name, price, stock" --yes  # Non-interactive generation
 
 # AI tooling
-bb ai explain --file stacktrace.txt  # Explain error
-bb ai gen-tests libs/user/src/wagoe/user/core/validation.clj  # Generate tests
-bb ai sql "find active users with orders in last 7 days"          # HoneySQL from NL
+bb ai explain --file stacktrace.txt  # Explain error (experimental)
+bb ai gen-tests libs/user/src/wagoe/user/core/validation.clj  # Generate tests (experimental)
+bb ai sql "find active users with orders in last 7 days"          # HoneySQL from NL (experimental)
 bb ai docs --module libs/user --type agents                       # Generate AGENTS.md
 
 # Operations
