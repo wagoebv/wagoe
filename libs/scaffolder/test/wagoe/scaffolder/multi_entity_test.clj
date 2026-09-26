@@ -644,3 +644,25 @@
           (is (str/includes? (json (:body (call :put (str "/invoices/" id) {:due "2026-02-01"})))
                              "\"due\":\"2026-02-01\""))
           (is (= 400 (:status (call :post "/invoices" {:number "A-2" :due "2026-13-45"})))))))))
+
+(deftest ^:integration an-indexed-field-added-later-migrates-up-and-down-on-sqlite
+  ;; BOU-535. SQLite refuses to drop an indexed column, so the down migration
+  ;; drops the index first.
+  (let [dir (invoice-module! (temp-dir) "bou535")
+        r   (ports/add-field svc {:module-name "billing" :base-ns "bou535" :entity "Invoice"
+                                  :field {:name :sku :type :string :indexed true}
+                                  :output-dir (.getPath dir)})
+        f   (java.io.File/createTempFile "bou535" ".db")
+        ds  (jdbc/get-datasource {:jdbcUrl (str "jdbc:sqlite:" (.getPath f))})
+        run (fn [suffix] (doseq [[path sql] (files-under dir)
+                                 :when (str/ends-with? path suffix)
+                                 st (statements sql)]
+                           (jdbc/execute! ds [st])))
+        idx (fn [] (jdbc/execute! ds ["SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'idx_invoices_sku'"]))]
+    (is (:success r) (pr-str (:errors r)))
+    (try
+      (run ".up.sql")
+      (is (= 1 (count (idx))) "the up migration creates the index")
+      (run "-add-sku-to-invoices.down.sql")
+      (is (empty? (idx)))
+      (finally (.delete f)))))

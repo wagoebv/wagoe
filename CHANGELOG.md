@@ -33,6 +33,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **A generated module's first-entity API answered canned stubs** (BOU-539). It now
   calls the service; regenerate `shell/http.clj` or copy `api-routes` from a new module.
+- **Scaffolder field modifiers `indexed` and `optional` were ignored** (BOU-535). `indexed`
+  now writes an index; an unknown modifier is an error instead of being dropped.
 - **Scaffolded `date` fields were timestamps** (BOU-547). `due:date` is now a `DATE` column
   holding `YYYY-MM-DD`; existing specs regenerate differently — use `datetime` for a timestamp.
 - **Scaffolded repository updates kept `updated-at` and sent an empty `SET`** (BOU-547).

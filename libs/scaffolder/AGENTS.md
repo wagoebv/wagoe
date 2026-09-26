@@ -161,7 +161,7 @@ bb scaffold adapter \
 
 ## Field Specification Format
 
-Fields are specified as `name:type[:values=a,b,c][:references=entity][:on-delete=x][:required][:unique][:default=v]`:
+Fields are specified as `name:type[:values=a,b,c][:references=entity][:on-delete=x][:required|:optional][:unique][:indexed][:default=v]`:
 
 | Type | Maps to Malli | Notes |
 |------|--------------|-------|
@@ -177,6 +177,10 @@ Fields are specified as `name:type[:values=a,b,c][:references=entity][:on-delete
 | `datetime` / `inst` | `inst?` | `TIMESTAMP WITH TIME ZONE` |
 | `json` | `:map` | |
 | `relation` | `:uuid` | `references=` is required. The column is `<name>_id`, gets `REFERENCES <target>(id)` and an index; `on-delete=` is `cascade` (default), `restrict`, `set-null` or `no-action` |
+
+`optional` is the default and can be said; with `required` it is refused.
+`indexed` adds `CREATE INDEX IF NOT EXISTS idx_<table>_<column>`. Any other
+modifier is an error that names it.
 
 A relation names the entity it points at, not the table:
 `--field invoice:relation:references=invoice:required` on an `InvoiceLineItem`
@@ -389,7 +393,7 @@ Configure the provider via environment variables: `ANTHROPIC_API_KEY`, `OPENAI_A
 |------|---------|-------------|
 | `--module-name` | — | Module name in lowercase kebab-case (required) |
 | `--entity` | — | Entity name in PascalCase (required) |
-| `--field` | — | Repeatable: `name:type[:values=a,b,c][:references=entity][:on-delete=x][:required][:unique][:default=v]` |
+| `--field` | — | Repeatable: `name:type[:values=a,b,c][:references=entity][:on-delete=x][:required|:optional][:unique][:indexed][:default=v]` |
 | `--[no-]http` | true | Generate the HTTP (REST API) routes |
 | `--[no-]web` | true | Generate the Web UI: `core/ui.clj`, `shell/web_handlers.clj`, and the module's `:web` route contribution |
 | `--audit` | true | Include audit logging |

@@ -179,3 +179,47 @@
              (select-keys row [:status :qty :token])))
       (is (= #inst "2026-01-01T00:00:00Z"
              (java.util.Date/from (.toInstant ^java.time.OffsetDateTime (:due row))))))))
+
+;; =============================================================================
+;; indexed, optional, and modifiers nobody knows (BOU-535)
+;; =============================================================================
+
+(deftest ^:unit indexed-writes-an-index
+  (let [field (cli/parse-field-spec "sku:string:required:indexed")]
+    (is (true? (:indexed field)))
+    (testing "in the create migration"
+      (is (str/includes? (migration-for field)
+                         "CREATE INDEX IF NOT EXISTS idx_orders_sku ON orders(sku);")))
+    (testing "in the add-field migration"
+      (is (str/includes? (gen/generate-add-field-migration "orders" "Order" field "20260926000000")
+                         "CREATE INDEX IF NOT EXISTS idx_orders_sku ON orders(sku);")))
+    (testing "and only when asked for"
+      (is (not (str/includes? (migration-for (cli/parse-field-spec "sku:string")) "idx_orders_sku"))))
+    (testing "the field command takes --indexed"
+      (is (true? (:indexed (:options (clojure.tools.cli/parse-opts ["--indexed"] cli/field-options))))))))
+
+(deftest ^:integration an-indexed-field-migrates-on-h2-and-sqlite
+  (let [sql (migration-for (cli/parse-field-spec "sku:string:indexed"))
+        f   (java.io.File/createTempFile "bou535" ".db")]
+    (try
+      (doseq [ds [(jdbc/get-datasource {:jdbcUrl (str "jdbc:h2:mem:bou535" (System/nanoTime) ";DB_CLOSE_DELAY=-1")})
+                  (jdbc/get-datasource {:jdbcUrl (str "jdbc:sqlite:" (.getPath f))})]
+              s   (remove str/blank? (map str/trim (str/split sql #";")))
+              :let [s (->> (str/split-lines s) (remove #(str/starts-with? (str/trim %) "--")) (str/join "\n"))]
+              :when (not (str/blank? s))]
+        (is (some? (jdbc/execute! ds [s])) s))
+      (finally (.delete f)))))
+
+(deftest ^:unit optional-is-the-default-and-says-so
+  (is (false? (:required (cli/parse-field-spec "note:string:optional"))))
+  (is (str/includes? (str (:error (cli/parse-field-spec "note:string:required:optional"))) "optional")
+      "required and optional together contradict"))
+
+(deftest ^:unit an-unknown-modifier-is-refused-by-name
+  (doseq [spec ["note:string:requird" "note:string:required:bogus" "sku:string:index"]]
+    (let [{:keys [error]} (cli/parse-field-spec spec)]
+      (is (str/includes? (str error) (last (str/split spec #":"))) (str spec " -> " (pr-str error)))))
+  (testing "a default's colons are still the default's"
+    (is (= "a:b" (:default (cli/parse-field-spec "note:string:default=a:b"))))
+    (is (= "a:unique" (:default (cli/parse-field-spec "note:string:default='a:unique':indexed"))))
+    (is (true? (:indexed (cli/parse-field-spec "note:string:default='a:unique':indexed"))))))

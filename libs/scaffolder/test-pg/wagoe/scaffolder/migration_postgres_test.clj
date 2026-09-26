@@ -31,7 +31,7 @@
    {:module-name "billing"
     :base-ns     "app"
     :entities    [{:name   "Payment"
-                   :fields [{:name :reference :type :string}
+                   :fields [{:name :reference :type :string :indexed true}   ; BOU-535: the index runs here too
                             {:name :paid-at   :type :inst}]}]}))
 
 (defn- statements [sql]

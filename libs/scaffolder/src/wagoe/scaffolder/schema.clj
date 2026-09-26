@@ -30,6 +30,7 @@
    [:type FieldType]                                        ; Field type
    [:required {:optional true} :boolean]                    ; Is field required?
    [:unique {:optional true} :boolean]                      ; Is field unique?
+   [:indexed {:optional true} :boolean]                     ; CREATE INDEX on the column?
    [:default {:optional true} :any]                         ; Default value
    [:enum-values {:optional true} [:vector :keyword]]       ; For enum type
    [:min {:optional true} :int]                             ; Min length/value

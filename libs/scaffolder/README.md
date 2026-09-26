@@ -202,7 +202,7 @@ clojure -M:dev -m wagoe.scaffolder.shell.cli-entry generate \
   --field total:decimal:required \
   --field status:string:required \
   --field shipped:boolean \
-  --field shipped-at:instant
+  --field shipped-at:datetime
 
 # Dry run to preview
 clojure -M:dev -m wagoe.scaffolder.shell.cli-entry generate \

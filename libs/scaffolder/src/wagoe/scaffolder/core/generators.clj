@@ -377,9 +377,10 @@
          fields (:fields entity)
          field-sqls (str/join ",\n" (map generate-migration-field fields))
         ;; Every foreign key gets one: it is what a join reads, and what the
-        ;; database scans on each cascading delete of the parent.
+        ;; database scans on each cascading delete of the parent. An `indexed`
+        ;; field gets one too (BOU-535).
          relation-indexes (->> fields
-                               (filter :relation-table)
+                               (filter #(or (:relation-table %) (:field-indexed %)))
                                (map (fn [f]
                                       (format "CREATE INDEX IF NOT EXISTS idx_%s_%s ON %s(%s);"
                                               table-name (:field-name-snake f)
@@ -1343,7 +1344,7 @@ DROP TABLE IF EXISTS %s;
                                          (:on-delete field-ctx)
                                          "CASCADE"))
                             "")
-        index-sql (if relation-table
+        index-sql (if (or relation-table (:field-indexed field-ctx))
                     (format "\nCREATE INDEX IF NOT EXISTS idx_%s_%s ON %s(%s);\n"
                             table-name field-name table-name field-name)
                     "")]

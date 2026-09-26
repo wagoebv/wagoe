@@ -346,6 +346,7 @@
              :field-type (:type field-def)
              :field-required (get field-def :required true)
              :field-unique (get field-def :unique false)
+             :field-indexed (get field-def :indexed false)
              :malli-type (field-type->malli field-def)
              :sql-type (field-type->sql field-def)}
       (column-default field-def)
