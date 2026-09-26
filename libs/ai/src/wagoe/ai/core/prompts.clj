@@ -377,7 +377,13 @@ Output ONLY valid EDN with this structure:
   :field-order [:field1 :field2 :status :created-at :updated-at]
   :field-groups
   [{:id :identity :label \"Identity\" :fields [:field1 :field2]}
-   {:id :state    :label \"State\"    :fields [:status]}]}}
+   {:id :state    :label \"State\"    :fields [:status]}]
+  :has-many
+  [{:entity      :order-items
+    :table       :order_items
+    :foreign-key :order-id
+    :label       \"Order Items\"
+    :fields      [:product-name :quantity]}]}}
 
 Rules:
 - All keywords MUST be kebab-case
@@ -387,6 +393,9 @@ Rules:
 - For enum fields, provide :options as vectors of [keyword label] pairs
 - Field types: :string, :text, :int, :decimal, :boolean, :enum, :instant, :email, :uuid, :json
 - Group related fields logically into :field-groups
+- Child records go in a top-level :has-many vector of {:entity :table :foreign-key :label :fields};
+  :table is the snake_case table name, :foreign-key the kebab-case column on the child pointing
+  here. Omit :has-many when the description names no child records
 - Output ONLY the EDN map, no explanation, no markdown fences
 
 Column width — :width is an optional positive integer weight for list-view columns.

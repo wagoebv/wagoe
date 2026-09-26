@@ -41,7 +41,7 @@ JWT_SECRET="dev-secret-at-least-32-characters-long" WAG_ENV=test clojure -M:test
 # run. Bare `clojure -M:test` runs the lean set: fine for a suite that needs
 # nothing extra, and it fails on ClassNotFoundException for one that does.
 #
-#   :test/pg      admin, platform, tenant   (embedded PostgreSQL, Linux binary)
+#   :test/pg      admin, platform, scaffolder, tenant, workflow   (embedded PostgreSQL, Linux binary)
 #   :test/pg-mac  local runs on Apple Silicon — CI is ubuntu-only
 #   :test/otel    observability             (OpenTelemetry in-memory exporters)
 #   :test/http    devtools                  (clj-http-lite)
@@ -115,9 +115,9 @@ docker build -t wagoe:latest .                  # Prod image (root Dockerfile; s
 clojure -M:migrate up                              # Run migrations
 
 # Scripting (Babashka)
-bb ai explain --file stacktrace.txt                # Explain error via AI
-bb ai gen-tests libs/user/src/wagoe/user/core/validation.clj  # Generate test namespace
-bb ai sql "find active users with orders in last 7 days"          # HoneySQL from NL
+bb ai explain --file stacktrace.txt                # Explain error via AI (experimental)
+bb ai gen-tests libs/user/src/wagoe/user/core/validation.clj  # Generate test namespace (experimental)
+bb ai sql "find active users with orders in last 7 days"          # HoneySQL from NL (experimental)
 bb ai docs --module libs/user --type agents                       # Generate AGENTS.md
 bb ai admin-entity "products with name, price, status"            # Generate admin entity EDN config
 wagoe doctor                                       # Diagnostics front door: environment + config

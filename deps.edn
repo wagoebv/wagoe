@@ -17,6 +17,7 @@
            "libs/payments/src" "libs/payments/test"         ;; Payments: PSP abstraction
            "libs/external/src" "libs/external/test"         ;; Phase 13: External
            "libs/workflow/src" "libs/workflow/test"         ;; Phase 14: Workflow
+           "libs/workflow/resources"                        ;; workflow migrations
            "libs/search/src" "libs/search/test"             ;; Phase 15: Search
            "libs/reports/src" "libs/reports/test"           ;; Phase 16: Reports
            "libs/calendar/src" "libs/calendar/test"         ;; Phase 17: Calendar
@@ -349,7 +350,7 @@
                                      "libs/email/src" "libs/email/test"
                                      "libs/tenant/src" "libs/tenant/test"
                                      "libs/realtime/src" "libs/realtime/test"
-                                     "libs/workflow/src" "libs/workflow/test"
+                                     "libs/workflow/src" "libs/workflow/test" "libs/workflow/resources"
                                      "libs/search/src" "libs/search/test"
                                      "libs/payments/src" "libs/payments/test"
                                      "libs/external/src" "libs/external/test"
