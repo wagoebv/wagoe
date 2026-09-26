@@ -187,3 +187,16 @@
     (let [service (ok-service "# Module Docs\n\n## Purpose\nDoes stuff.")
           result  (svc/generate-docs service "libs/core" :agents)]
       (is (= "# Module Docs\n\n## Purpose\nDoes stuff." (:text result))))))
+
+;; =============================================================================
+;; generate-admin-entity tests
+;; =============================================================================
+
+(deftest ^:integration generate-admin-entity-test
+  (testing "BOU-493: an ```edn-fenced answer is accepted and written unfenced"
+    (let [result (svc/generate-admin-entity
+                  (ok-service "```edn\n{:products {:label \"Products\"}}\n```")
+                  "products with name" "/nonexistent")]
+      (is (nil? (:error result)))
+      (is (= "products" (:entity-name result)))
+      (is (= "{:products {:label \"Products\"}}" (:text result))))))
