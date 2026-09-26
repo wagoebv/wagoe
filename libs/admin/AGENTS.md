@@ -178,8 +178,8 @@ the write commits:
 - A failed publish is logged at warn; the request still succeeds.
 - `:hide-fields` are stripped from `:attrs` and `:prior`.
 - Nothing is published for a write that changed nothing (unknown id).
-- On `:redis`, a value transit cannot encode (`OffsetDateTime`, `LocalDate`,
-  a `PGobject`) fails the publish, which is then only logged.
+- On `:redis`, a `PGobject` (jsonb) column arrives as its JSON string; the
+  in-memory bus hands over the object itself.
 
 Example subscriber that starts a workflow: see "Lifecycle Events" in
 [README.md](README.md).

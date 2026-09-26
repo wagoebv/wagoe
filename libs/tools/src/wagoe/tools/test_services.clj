@@ -41,7 +41,8 @@
     :host      "localhost"
     :port      6379
     :needed-by ["wagoe.jobs.adapter-surface-test"
-                "wagoe.cache.adapter-surface-test"]}
+                "wagoe.cache.adapter-surface-test"
+                "wagoe.admin.shell.lifecycle-events-redis-test"]}
    {:id        :mysql
     :host      "127.0.0.1"
     ;; `:port-env` is not documentation — a test requires the compose file to
