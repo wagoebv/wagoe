@@ -121,6 +121,26 @@ java_major() {
   echo "$major"
 }
 
+# Install sdkman, retrying a transient failure (BOU-262). A failed attempt can
+# leave a half-written ~/.sdkman, and sdkman's installer refuses to run over an
+# existing one — so every retry failed the same way (BOU-525). Only a directory
+# this run created is removed; a user's own ~/.sdkman is left alone.
+install_sdkman() {
+  local init="$HOME/.sdkman/bin/sdkman-init.sh" preexisting=false attempt
+  [[ -e "$HOME/.sdkman" ]] && preexisting=true
+  for attempt in 1 2 3; do
+    if curl -fsSL "https://get.sdkman.io" | bash && [[ -s "$init" ]]; then
+      return 0
+    fi
+    [[ "$preexisting" == false ]] && rm -rf "$HOME/.sdkman"
+    if [[ $attempt -lt 3 ]]; then
+      info "sdkman install failed (attempt $attempt/3) — retrying in $((attempt * 3))s..."
+      sleep $((attempt * 3))
+    fi
+  done
+  return 1
+}
+
 JAVA_FOUND=""
 command -v java &>/dev/null && JAVA_FOUND=$(java_major || true)
 
@@ -139,27 +159,12 @@ else
   if [[ "$OS" == "macos" ]]; then
     brew install --cask temurin 2>/dev/null || fail "Failed to install JVM via brew"
   elif [[ "$OS" == "debian" || "$OS" == "wsl" || "$OS" == "fedora" ]]; then
-    if ! command -v sdk &>/dev/null; then
+    # Detected by its init script, not `command -v sdk`: `sdk` is a shell
+    # function that exists only once that script is sourced, so an installed
+    # sdkman looked absent and was installed again, which sdkman refuses.
+    if [[ ! -s "$HOME/.sdkman/bin/sdkman-init.sh" ]]; then
       info "Installing sdkman..."
-      # Guarded and retried, unlike every other install step here, this one was
-      # not: a transient 503 from sdkman.io aborted the whole installer showing
-      # raw curl output and nothing from Wagoe (BOU-262). That is the failure
-      # mode the prerequisite check above exists to prevent, one step later.
-      #
-      # -fsS, not -s: `-s` hides the server error too, so the one line that says
-      # what went wrong is suppressed on the path where it matters most.
-      sdkman_installed=false
-      for attempt in 1 2 3; do
-        if curl -fsSL "https://get.sdkman.io" | bash; then
-          sdkman_installed=true
-          break
-        fi
-        [[ $attempt -lt 3 ]] && {
-          info "sdkman install failed (attempt $attempt/3) — retrying in $((attempt * 3))s..."
-          sleep $((attempt * 3))
-        }
-      done
-      [[ "$sdkman_installed" == true ]] || fail "Could not install sdkman after 3 attempts.
+      install_sdkman || fail "Could not install sdkman after 3 attempts.
 
   sdkman.io provides the JVM for this platform, and it did not respond.
   This is usually temporary — check https://status.sdkman.io and re-run:

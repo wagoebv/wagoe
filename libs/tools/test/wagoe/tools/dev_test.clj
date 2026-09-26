@@ -5,7 +5,8 @@
    died with `ClassNotFoundException: org.h2.Driver`, for every profile,
    because the alias carried no JDBC driver. Nothing caught it: smoke-check
    verified the alias *existed*, which it did."
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [clojure.string :as str]
+            [clojure.test :refer [deftest is testing]]
             [wagoe.tools.dev :as dev]))
 
 (def ^:private monorepo-shape
@@ -81,3 +82,13 @@
 
   (testing "a directory with no src/*/main.clj has none"
     (is (nil? (dev/app-main-ns "libs/tools")))))
+
+(deftest ^:unit a-failed-smoke-check-names-the-command-and-its-error
+  ;; A failed check threw, so `bb quickstart` ended in a stack trace and the
+  ;; command's own error was out of view (BOU-525).
+  (let [report (dev/check-failure-report
+                ["clojure" "-M:test" "--help"]
+                {:exit 1 :err "Error building classpath. Could not transfer artifact x from central\n"})]
+    (is (= "[smoke] FAILED: clojure -M:test --help (exit 1)" (first report)))
+    (is (some #(str/includes? % "Could not transfer artifact") report)))
+  (is (nil? (dev/check-failure-report ["clojure" "-M:test" "--help"] {:exit 0 :err ""}))))
