@@ -30,7 +30,8 @@
    Evaluating the file is the point: `str/includes?` on the source cannot tell
    a route vector from a route map, which is how the old format survived."
   []
-  (doseq [generate [gen/generate-ports-file
+  (doseq [generate [gen/generate-schema-file
+                    gen/generate-ports-file
                     gen/generate-ui-file
                     gen/generate-web-handlers-file
                     gen/generate-http-file]]
@@ -64,7 +65,7 @@
         (is (= #{:get :post}
                (set (keys (:data (r/match-by-path router "/products"))))))
         (is (= #{:get :put :delete}
-               (set (keys (:data (r/match-by-path router "/products/42"))))))))
+               (set (keys (dissoc (:data (r/match-by-path router "/products/42")) :swagger)))))))
 
     (testing "the web routes carry no /web prefix — the platform adds it"
       (doseq [path (map first (r/routes (r/router (:web contribution))))]

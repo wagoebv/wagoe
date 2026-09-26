@@ -20,7 +20,7 @@
    {:module-name "billing"
     :base-ns     "app"
     :entities    [{:name   "Payment"
-                   :fields [{:name :reference :type :string}
+                   :fields [{:name :reference :type :string :indexed true}
                             {:name :paid-at   :type :inst}
                             {:name :due-on    :type :date}]}]}))
 

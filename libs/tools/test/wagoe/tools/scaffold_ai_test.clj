@@ -235,3 +235,17 @@
     (is (some #{"--no-http"} entity)))
   (is (not-any? #{"--no-http"} (second (scaffold/build-ai-commands
                                         (#'scaffold/parse-ai-module-spec multi-entity-json))))))
+
+(deftest ^:unit public-api-reaches-every-entity
+  (let [[generate entity] (scaffold/build-ai-commands
+                           (#'scaffold/parse-ai-module-spec
+                            (str/replace multi-entity-json "\"http\":true" "\"http\":true,\"public-api\":true")))]
+    (is (some #{"--public-api"} generate))
+    (is (some #{"--public-api"} entity)))
+  (is (not-any? #{"--public-api"} (apply concat (scaffold/build-ai-commands
+                                                 (#'scaffold/parse-ai-module-spec multi-entity-json))))))
+
+(deftest ^:unit the-wizard-offers-a-timestamp
+  ;; `date` is a calendar day since BOU-547; without `datetime` no timestamp.
+  (is (some #{"date"} scaffold/field-types))
+  (is (some #{"datetime"} scaffold/field-types)))

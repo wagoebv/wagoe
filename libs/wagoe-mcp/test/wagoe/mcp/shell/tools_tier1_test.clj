@@ -206,3 +206,17 @@
         (is (contains? props "references") props)
         (is (contains? props "references-table") props)
         (is (contains? props "on-delete") props)))))
+
+(deftest ^:unit scaffold-module-forwards-public-api
+  ;; Generated API routes require a signed-in user; public-api opens them.
+  (let [seen (atom nil)
+        svc  (reify scaffold/IScaffolderService
+               (generate-module [_ req] (reset! seen req) {:success true :files []})
+               (add-field [_ _] {:success true :files []})
+               (add-entity [_ _] {:success true :files []})
+               (add-endpoint [_ _] {:success true :files []})
+               (add-adapter [_ _] {:success true :files []}))]
+    (tools/run (deps svc) "scaffold-module"
+               {:module "tmp" :entities [{:name "Thing" :fields [{:name "title" :type "string"}]}]
+                :interfaces {:public-api true} :preview true})
+    (is (= {:public-api true} (:interfaces @seen)))))

@@ -502,3 +502,20 @@
 
   (testing "returns nil for nil input"
     (is (nil? (parsing/ensure-standard-requires nil)))))
+
+(deftest ^:unit datetime-is-its-own-type
+  ;; `date` is a calendar day since BOU-547, so a timestamp needs `datetime`,
+  ;; and it was coerced to string.
+  (let [json   "{\"module-name\": \"p\", \"entity\": \"P\", \"fields\": [{\"name\": \"at\", \"type\": \"datetime\"}, {\"name\": \"on\", \"type\": \"date\"}]}"
+        fields (:fields (parsing/parse-module-spec json))]
+    (is (= ["datetime" "date"] (mapv :type fields)))
+    (is (some #{"at:datetime:required"} (parsing/module-spec->cli-args (parsing/parse-module-spec json))))))
+
+(deftest ^:unit public-api-reaches-the-scaffolder
+  ;; Generated API routes require a signed-in user; the spec can open them.
+  (let [spec (fn [extra] (parsing/parse-module-spec
+                          (str "{\"module-name\": \"p\", \"entity\": \"P\", \"fields\": []" extra "}")))]
+    (is (false? (:public-api (spec ""))))
+    (is (not-any? #{"--public-api"} (parsing/module-spec->cli-args (spec ""))))
+    (is (true? (:public-api (spec ", \"public-api\": true"))))
+    (is (some #{"--public-api"} (parsing/module-spec->cli-args (spec ", \"public-api\": true"))))))

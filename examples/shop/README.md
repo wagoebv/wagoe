@@ -49,8 +49,8 @@ For a database that survives a restart, `WAG_ENV=dev` uses SQLite — copy
 | `src/shop/system_config.clj` | how the app assembles the framework and its own keys |
 | `resources/conf/test/config.edn` | the module key `bb scaffold integrate` wrote |
 
-The generated handlers return canned responses. Wiring them to the service is
-the intended first edit — see
+The generated handlers call the service: a `POST /api/v1/products` writes a row
+that `GET` reads back. The domain logic is yours to add — see
 [Your First Module](../../docs/modules/getting-started/pages/your-first-module.adoc).
 
 ## Two things worth knowing

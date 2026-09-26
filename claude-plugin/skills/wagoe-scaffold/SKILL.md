@@ -122,6 +122,6 @@ wagoe new my-app
 ## What this does not cover
 
 The generator writes structure, not behaviour. The core functions it produces
-are stubs with real signatures; the HTTP handlers return canned responses. It
-gets you a module that compiles, migrates, tests and passes the gates — the
+are stubs with real signatures; the HTTP handlers call the service, so the API
+reads and writes the table from the start. It gets you a module that compiles, migrates, tests and passes the gates — the
 domain logic is still yours to write.

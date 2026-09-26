@@ -35,6 +35,18 @@ for what is public API, what is internal, and how deprecations are announced.
   characters and encoded slashes are refused, in admin's `return_to` too. Upgrade user and admin.
 - **`/web/register` answered 500 on a rejected password or a taken email** (BOU-552). It re-renders
   the form; `POST /api/v1/users` answers 400 for a password containing the email. Upgrade user.
+- **A generated module's first-entity API answered canned stubs** (BOU-539). It now
+  calls the service; regenerate `shell/http.clj` or copy `api-routes` from a new module.
+- **Scaffolded APIs and list pages answered anyone** (BOU-539). They now require a signed-in user;
+  `--public-api` opens them. Regenerate `shell/*http.clj`, or add the guards by hand.
+- **A reference to a missing row answered 500** (BOU-540). Admin create and update show it on the field;
+  scaffolded repositories raise a `:validation-error` (400). Regenerate `shell/*persistence.clj`.
+- **Scaffolder field modifiers `indexed` and `optional` were ignored** (BOU-535). `indexed`
+  now writes an index; an unknown modifier is an error instead of being dropped.
+- **Scaffolded `date` fields were timestamps** (BOU-547). `due:date` is now a `DATE`; use `datetime`
+  for a timestamp. Before adding one to an older module, regenerate its `shell/*persistence.clj`.
+- **Scaffolded repository updates kept `updated-at` and sent an empty `SET`** (BOU-547).
+  Update sets it and refuses an empty change; regenerate `shell/*persistence.clj`.
 - **Admin offered a tenant create that could never succeed** (BOU-534). It is now
   off via `:permissions {:create false}`; create tenants with `POST /api/v1/tenants`.
 - **`clojure -T:build uber` failed on macOS and Windows in generated projects** (BOU-549).
