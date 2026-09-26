@@ -1,6 +1,7 @@
 {;; =============================================================================
  ;; Gemeenschappelijk — gedeeld over alle modules
  ;; =============================================================================
+ :common/error-generic      "Er ging iets mis. Probeer het later opnieuw."
  :common/column-id          "ID"
  :common/column-name        "Naam"
  :common/column-email       "E-mail"

@@ -1,6 +1,7 @@
 {;; =============================================================================
  ;; Common — shared across all modules
  ;; =============================================================================
+ :common/error-generic      "Something went wrong. Please try again later."
  :common/column-id          "ID"
  :common/column-name        "Name"
  :common/column-email       "Email"

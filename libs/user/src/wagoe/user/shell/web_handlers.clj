@@ -517,7 +517,7 @@
             (log/error e "Login error" {:email (:email prepared-data)})
             (html-response request
                            (layout/pilot-page-layout "Login error"
-                                                     (ui/error-message (.getMessage e)))
+                                                     (ui/error-message [:t :common/error-generic]))
                            500)))))))
 
 (defn logout-handler
@@ -1528,14 +1528,15 @@
                                                                        {:new-password ["Password does not meet requirements"]})
                                  400
                                  htmx-no-cache-headers)
-                  ;; Default error
-                  (html-response request (ui/error-message (.getMessage e)) 500))))
+                  ;; Default error: the detail goes to the log, not the page.
+                  (do (log/error e "Error changing password")
+                      (html-response request (ui/error-message [:t :common/error-generic]) 500)))))
             (catch Exception e
               (log/error e "Error changing password")
-              (html-response request (ui/error-message (.getMessage e)) 500)))))
+              (html-response request (ui/error-message [:t :common/error-generic]) 500)))))
       (catch Exception e
         (log/error e "Error in password-change-handler")
-        (html-response request (ui/error-message (.getMessage e)) 500)))))
+        (html-response request (ui/error-message [:t :common/error-generic]) 500)))))
 
 ;; =============================================================================
 ;; MFA Web Handlers

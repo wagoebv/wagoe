@@ -965,3 +965,27 @@
              ["/web/x?y=1"        "/web/x?y=1"]
              ["/web/x#frag"       "/web/x#frag"]]]
       (is (= expected (location return-to)) (pr-str return-to)))))
+
+(deftest ^:contract ^:security error-pages-hide-the-exception
+  ;; The exception message can carry driver or config detail (BOU-552).
+  (let [boom (RuntimeException. "jdbc:postgresql://db:5432 password=hunter2")]
+    (testing "login"
+      (let [svc (reify ports/IUserService
+                  (authenticate-user [_ _] (throw boom)))
+            response ((web-handlers/login-submit-handler svc {})
+                      {:form-params {"email" "user@example.com" "password" "password123"}})]
+        (is (= 500 (:status response)))
+        (is (not (html-contains? response "hunter2")))
+        (is (html-contains? response "error-generic"))))
+    (testing "change password, an untyped service error"
+      (let [svc (reify ports/IUserService
+                  (change-password [_ _ _ _]
+                    (throw (ex-info "jdbc password=hunter2" {:type :internal-error}))))
+            response ((web-handlers/password-change-handler svc {})
+                      {:user {:id (UUID/randomUUID)}
+                       :form-params {"current-password" "old-Password-1"
+                                     "new-password" "new-Password-1"
+                                     "confirm-password" "new-Password-1"}})]
+        (is (= 500 (:status response)))
+        (is (not (html-contains? response "hunter2")))
+        (is (html-contains? response "error-generic"))))))
