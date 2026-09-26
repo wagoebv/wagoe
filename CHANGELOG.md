@@ -33,6 +33,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **Password hashes, MFA secrets and session tokens were written to the log** (BOU-556). Nothing
   to rotate; purge application logs you retain.
+- **Open redirect after login via `?return-to=/\evil.com`** (BOU-553). Backslashes, control
+  characters and encoded slashes are refused, in admin's `return_to` too. Upgrade user and admin.
+- **`/web/register` answered 500 on a rejected password or a taken email** (BOU-552). It re-renders
+  the form; `POST /api/v1/users` answers 400 for a password containing the email. Upgrade user.
 - **A generated module's first-entity API answered canned stubs** (BOU-539). It now
   calls the service; regenerate `shell/http.clj` or copy `api-routes` from a new module.
 - **Scaffolded APIs and list pages answered anyone** (BOU-539). They now require a signed-in user;

@@ -139,10 +139,13 @@
                                                                                     (:password-policy validation-config)
                                                                                     {:email (:email user-data)})]
                           (when-not (:valid? password-validation)
-                            ;; Surface detailed violations from password policy so callers (HTTP/CLI)
-                            ;; can show user-friendly hints about what is wrong with the password.
+                            ;; A :validation-error, as step 1 throws for the same rules, so
+                            ;; the HTTP boundary answers 400 and forms render it. Its own
+                            ;; type mapped to nothing and answered 500 (BOU-552).
                             (throw (ex-info "Password does not meet requirements"
-                                            {:type :password-policy-violation
+                                            {:type :validation-error
+                                             :errors (mapv #(assoc % :field :password)
+                                                           (:violations password-validation))
                                              :violations (:violations password-validation)})))))
 
                       ;; 3. Check business rules using pure core function

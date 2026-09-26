@@ -10,6 +10,7 @@
 
    All handlers use the shared UI components and user shell services."
   (:require [wagoe.config :as wagoe-config]
+            [wagoe.core.utils.redirect :as redirect]
             [wagoe.core.validation :as cv]
             [wagoe.i18n.shell.middleware :as i18n-middleware]
             [wagoe.i18n.shell.render :as i18n]
@@ -74,12 +75,7 @@
    Returns:
      Safe local URL string"
   [url default]
-  (if (and url
-           (string? url)
-           (str/starts-with? url "/")
-           (not (str/starts-with? url "//")))
-    url
-    default))
+  (if (redirect/local-path? url) url default))
 
 (defn- display-password-policy
   "The password rules the create-user form should list.
@@ -521,7 +517,7 @@
             (log/error e "Login error" {:email (:email prepared-data)})
             (html-response request
                            (layout/pilot-page-layout "Login error"
-                                                     (ui/error-message (.getMessage e)))
+                                                     (ui/error-message [:t :common/error-generic]))
                            500)))))))
 
 (defn logout-handler
@@ -551,6 +547,30 @@
                      :return-to (get-in request [:query-params "return-to"])}]
       (html-response request (user-ui/register-page {} {} page-opts)))))
 
+(defn- error-field-key
+  "The form keys errors by field keyword, but a service :validation-error mixes
+   two shapes: business rules report `:field :password`, while schema failures
+   come from `humanized-errors->error-maps` as a path vector, `:field
+   [:password]`. Keyed as-is, the vector ones land under `[:password]` and the
+   form — which looks up `:password` — renders nothing at all."
+  [field]
+  (cond
+    (keyword? field)             field
+    (and (sequential? field)
+         (keyword? (last field))) (last field)
+    :else                        :form))
+
+(defn- service-errors->field-errors
+  "Group a service :validation-error's `:errors` — a vector of
+   {:field :code :message} — into the field -> messages map the form takes.
+   Anything without a usable field lands under :form, which the form renders as
+   an unattached block."
+  [errors]
+  (reduce (fn [acc {:keys [field message]}]
+            (update acc (error-field-key field) (fnil conj []) message))
+          {}
+          errors))
+
 (defn register-submit-handler
   "POST /web/register - validate data, create user account."
   [user-service config]
@@ -565,14 +585,24 @@
                          :role :user
                          :active true}
           [valid? validation-errors _]
-          (validate-request-data user-schema/CreateUserRequest prepared-data)]
+          (validate-request-data user-schema/CreateUserRequest prepared-data)
+          rerender (fn [errors status]
+                     (html-response request
+                                    (user-ui/register-page prepared-data errors
+                                                           {:user (get request :user)
+                                                            :flash (get request :flash)
+                                                            :return-to raw-return-to})
+                                    status))
+          ;; The exception message can carry driver or config detail; it goes
+          ;; to the log, not the page (BOU-552).
+          failed (fn [e]
+                   (log/error e "Registration failed")
+                   (html-response request
+                                  (layout/pilot-page-layout "Registration error"
+                                                            (ui/error-message [:t :user/register-error-generic]))
+                                  500))]
       (if-not valid?
-        (html-response request
-                       (user-ui/register-page prepared-data validation-errors
-                                              {:user (get request :user)
-                                               :flash (get request :flash)
-                                               :return-to raw-return-to})
-                       400)
+        (rerender validation-errors 400)
         (try
           (let [user-result (user-ports/register-user user-service prepared-data)
                 ;; Automatically authenticate the newly registered user
@@ -602,11 +632,22 @@
                                :same-site :strict})))
               ;; Shouldn't happen, but fallback to login page
               (response/redirect "/web/login")))
+          ;; The service applies the configured password policy, which the
+          ;; request schema does not know, so its refusal is a form error too
+          ;; (BOU-552).
+          (catch clojure.lang.ExceptionInfo e
+            (case (:type (ex-data e))
+              :validation-error
+              (rerender (service-errors->field-errors (:errors (ex-data e))) 400)
+
+              ;; 409 as the API answers. Worded not to confirm the account,
+              ;; as login does not either.
+              :user-exists
+              (rerender {:email [[:t :user/register-email-unavailable]]} 409)
+
+              (failed e)))
           (catch Exception e
-            (html-response request
-                           (layout/pilot-page-layout "Registration error"
-                                                     (ui/error-message (.getMessage e)))
-                           500)))))))
+            (failed e)))))))
 
 ;; =============================================================================
 ;; HTMX Fragment Handlers
@@ -743,30 +784,6 @@
                     "You can log in at any time.\n\n"
                     "— " app-name)})))
 
-(defn- error-field-key
-  "The form keys errors by field keyword, but a service :validation-error mixes
-   two shapes: business rules report `:field :password`, while schema failures
-   come from `humanized-errors->error-maps` as a path vector, `:field
-   [:password]`. Keyed as-is, the vector ones land under `[:password]` and the
-   form — which looks up `:password` — renders nothing at all."
-  [field]
-  (cond
-    (keyword? field)             field
-    (and (sequential? field)
-         (keyword? (last field))) (last field)
-    :else                        :form))
-
-(defn- service-errors->field-errors
-  "Group a service :validation-error's `:errors` — a vector of
-   {:field :code :message} — into the field -> messages map the form takes.
-   Anything without a usable field lands under :form, which the form renders as
-   an unattached block."
-  [errors]
-  (reduce (fn [acc {:keys [field message]}]
-            (update acc (error-field-key field) (fnil conj []) message))
-          {}
-          errors))
-
 (defn create-user-htmx-handler
   "HTMX handler for creating a new user (POST /web/users).
 
@@ -842,15 +859,12 @@
             ;; discards — pressing Create did nothing at all (BOU-381).
             (let [data (ex-data e)]
               (case (:type data)
-                :password-policy-violation
-                ;; nil, not the violations: the password box comes back empty,
-                ;; so the tick list has to describe an empty field. What was
-                ;; wrong with the one submitted is in the message.
-                (rerender {:password (mapv :message (:violations data))} nil)
-
                 :user-exists
                 (rerender {:email [(or (:message data) (.getMessage e))]} nil)
 
+                ;; Password policy refusals included. nil, not the violations:
+                ;; the password box comes back empty, so the tick list has to
+                ;; describe an empty field. What was wrong is in the message.
                 :validation-error
                 (rerender (service-errors->field-errors (:errors data)) nil)
 
@@ -1514,14 +1528,15 @@
                                                                        {:new-password ["Password does not meet requirements"]})
                                  400
                                  htmx-no-cache-headers)
-                  ;; Default error
-                  (html-response request (ui/error-message (.getMessage e)) 500))))
+                  ;; Default error: the detail goes to the log, not the page.
+                  (do (log/error e "Error changing password")
+                      (html-response request (ui/error-message [:t :common/error-generic]) 500)))))
             (catch Exception e
               (log/error e "Error changing password")
-              (html-response request (ui/error-message (.getMessage e)) 500)))))
+              (html-response request (ui/error-message [:t :common/error-generic]) 500)))))
       (catch Exception e
         (log/error e "Error in password-change-handler")
-        (html-response request (ui/error-message (.getMessage e)) 500)))))
+        (html-response request (ui/error-message [:t :common/error-generic]) 500)))))
 
 ;; =============================================================================
 ;; MFA Web Handlers

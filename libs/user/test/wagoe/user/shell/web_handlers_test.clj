@@ -9,6 +9,8 @@
    - HTML response structure"
   (:require [wagoe.user.shell.web-handlers :as web-handlers]
             [wagoe.user.ports :as ports]
+            [wagoe.user.shell.service :as service]
+            [wagoe.user.shell.in-memory-repository-test :as mem]
             [wagoe.email.ports :as email-ports]
             [clojure.test :refer [deftest testing is]]
             [clojure.string :as str])
@@ -562,9 +564,10 @@
   (testing "a password the policy rejects comes back as a form, not a 500"
     (let [service (create-service-rejecting-registration
                    (ex-info "Password does not meet requirements"
-                            {:type :password-policy-violation
-                             :violations [{:code :missing-number
-                                           :message "Must contain at least one number"}]}))
+                            {:type :validation-error
+                             :errors [{:field :password
+                                       :code :missing-number
+                                       :message "Must contain at least one number"}]}))
           config {:active {:wagoe/settings {:user-limits {:max-users 1000}}}}
           handler (web-handlers/create-user-htmx-handler service nil config)
           request {:form-params {"name" "Test User"
@@ -884,3 +887,105 @@
       (is (true? (:http-only cookie)) "HttpOnly blocks JS access to the session token")
       (is (= :strict (:same-site cookie)) "SameSite=Strict mitigates CSRF")
       (is (= "/" (:path cookie)) "cookie scoped to the whole app"))))
+
+(defn- policy-service
+  "The real UserService on in-memory repositories, with a 12-character minimum."
+  []
+  (service/create-user-service (mem/->MemoryUserRepository (atom {}))
+                               (mem/->MemorySessionRepository (atom {}))
+                               (mem/->MemoryAuditRepository (atom []))
+                               {:password-policy {:min-length 12}}
+                               nil))
+
+(deftest ^:contract register-submit-rejects-policy-passwords-with-the-form
+  ;; Both passwords pass the request schema, so only the service refuses them.
+  ;; Each used to leave as a 500 error page (BOU-552).
+  (let [submit (fn [email password]
+                 ((web-handlers/register-submit-handler (policy-service) {})
+                  {:form-params {"name" "Alice" "email" email "password" password}}))]
+    (testing "a password containing the email's local part"
+      (let [response (submit "alice@x.org" "alice-Secret-123")]
+        (is (= 400 (:status response)))
+        (is (html-contains? response "register-form"))
+        (is (html-contains? response "Password cannot contain your email address"))))
+
+    (testing "a password shorter than the configured minimum"
+      (let [response (submit "bob@x.org" "Shortpass1")]
+        (is (= 400 (:status response)))
+        (is (html-contains? response "register-form"))
+        (is (html-contains? response "at least 12 characters"))))))
+
+(deftest ^:contract register-submit-refuses-a-taken-email-with-the-form
+  (let [svc (policy-service)
+        _ (ports/register-user svc {:name "Alice" :email "alice@x.org"
+                                    :password "Correct-horse-9" :role :user})
+        response ((web-handlers/register-submit-handler svc {})
+                  {:form-params {"name" "Alice" "email" "alice@x.org"
+                                 "password" "Correct-horse-9"}})]
+    ;; 409, as the API answers :user-exists. The wording does not confirm the
+    ;; account the way "already exists" would; login is neutral too (BOU-552).
+    (is (= 409 (:status response)))
+    (is (html-contains? response "register-form"))
+    (is (html-contains? response "register-email-unavailable"))))
+
+(deftest ^:contract register-submit-error-page-hides-the-exception
+  (let [svc (create-service-rejecting-registration
+             (RuntimeException. "jdbc:postgresql://db:5432 password=hunter2"))
+        response ((web-handlers/register-submit-handler svc {})
+                  {:form-params {"name" "Alice" "email" "alice@x.org"
+                                 "password" "Correct-horse-9"}})]
+    (is (= 500 (:status response)))
+    (is (not (html-contains? response "hunter2")))
+    (is (html-contains? response "register-error-generic"))))
+
+(deftest ^:contract ^:security login-return-to-stays-on-this-site
+  ;; Browsers read `\\` as `/`, so `/\\evil.com` was followed as `//evil.com`
+  ;; after login (BOU-553).
+  (let [auth-svc (reify ports/IUserService
+                   (authenticate-user [_ _]
+                     {:authenticated true
+                      :user    {:role :user}
+                      :session {:session-token "t"}}))
+        location (fn [return-to]
+                   (-> ((web-handlers/login-submit-handler auth-svc {})
+                        {:form-params {"email" "user@example.com"
+                                       "password" "password123"
+                                       "return-to" return-to}})
+                       (get-in [:headers "Location"])))]
+    (doseq [[return-to expected]
+            [["/\\evil.com"        "/web/dashboard"]
+             ["/%5Cevil.com"      "/web/dashboard"]
+             ["/%5cevil.com"      "/web/dashboard"]
+             ["//evil.com"        "/web/dashboard"]
+             ["/%2F%2Fevil.com"   "/web/dashboard"]
+             ["https://evil.com"  "/web/dashboard"]
+             ["/web/x\ty"        "/web/dashboard"]
+             ["/web/x\ny"        "/web/dashboard"]
+             [""                  "/web/dashboard"]
+             ["/web/x?y=1"        "/web/x?y=1"]
+             ["/web/x#frag"       "/web/x#frag"]]]
+      (is (= expected (location return-to)) (pr-str return-to)))))
+
+(deftest ^:contract ^:security error-pages-hide-the-exception
+  ;; The exception message can carry driver or config detail (BOU-552).
+  (let [boom (RuntimeException. "jdbc:postgresql://db:5432 password=hunter2")]
+    (testing "login"
+      (let [svc (reify ports/IUserService
+                  (authenticate-user [_ _] (throw boom)))
+            response ((web-handlers/login-submit-handler svc {})
+                      {:form-params {"email" "user@example.com" "password" "password123"}})]
+        (is (= 500 (:status response)))
+        (is (not (html-contains? response "hunter2")))
+        (is (html-contains? response "error-generic"))))
+    (testing "change password, an untyped service error"
+      (let [svc (reify ports/IUserService
+                  (change-password [_ _ _ _]
+                    (throw (ex-info "jdbc password=hunter2" {:type :internal-error}))))
+            response ((web-handlers/password-change-handler svc {})
+                      {:user {:id (UUID/randomUUID)}
+                       :form-params {"current-password" "old-Password-1"
+                                     "new-password" "new-Password-1"
+                                     "confirm-password" "new-Password-1"}})]
+        (is (= 500 (:status response)))
+        (is (not (html-contains? response "hunter2")))
+        (is (html-contains? response "error-generic"))))))

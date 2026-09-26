@@ -62,3 +62,19 @@
   (testing "the server zone is always the JVM's, whatever is displayed"
     (is (= (java.time.ZoneId/systemDefault)
            (:server-zone-id (support/display-options {:time-zone "Asia/Tokyo"} {:headers {}}))))))
+
+(deftest ^:unit ^:security return-to-stays-inside-the-admin
+  ;; BOU-553: the prefix check alone let control characters and backslashes
+  ;; through to the redirect.
+  (doseq [[return-to expected]
+          [["/web/admin/\\evil.com"     nil]
+           ["/web/admin/%5Cevil.com"   nil]
+           ["/web/admin/x\ny"         nil]
+           ["/web/admin/x\ty"         nil]
+           ["//evil.com/web/admin/"    nil]
+           ["https://evil.com/web/admin/" nil]
+           [""                         nil]
+           ["/web/admin/users?page=2"  "/web/admin/users?page=2"]
+           ["/web/admin/users#top"     "/web/admin/users#top"]]]
+    (is (= expected (support/safe-return-to {:query-params {"return_to" return-to}}))
+        (pr-str return-to))))
