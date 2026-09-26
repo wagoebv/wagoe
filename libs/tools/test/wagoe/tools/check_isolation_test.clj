@@ -14,7 +14,8 @@
    without the libraries it does not declare\". This gate answers the second
    one, statically: a library may not reach for a namespace it neither owns nor
    declares, whichever loading trick it uses to get there."
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [clj-yaml.core :as yaml]
+            [clojure.test :refer [deftest is testing]]
             [clojure.string :as str]
             [wagoe.tools.check-isolation :as sut]))
 
@@ -259,24 +260,33 @@
   ;; Without this, a library added under libs/ gets no isolated build and
   ;; nothing says so — check:branch-protection reads job keys, not matrix
   ;; values, so the job list still looks complete.
-  (let [yaml     (slurp ".github/workflows/ci.yml")
-        block    (second (re-find #"(?s)check-isolation-matrix:.*?lib:\s*\[(.*?)\]" yaml))
-        in-ci    (set (remove str/blank? (map str/trim (str/split (str block) #"[,\s]+"))))
+  ;; Libraries are grouped several to a job (BOU-527), so the matrix is a list
+  ;; of groups and a library could be listed twice as easily as not at all.
+  (let [src      (slurp ".github/workflows/ci.yml")
+        groups   (get-in (yaml/parse-string src)
+                         [:jobs :check-isolation-matrix :strategy :matrix :include])
+        listed   (mapcat :libs groups)
+        in-ci    (set listed)
         excluded #{"tools" "e2e"}
         expected (remove excluded (sut/libs))]
 
     (testing "the matrix was found in the workflow at all"
-      ;; A regex that stops matching would otherwise make this test pass by
+      ;; A path that stops matching would otherwise make this test pass by
       ;; comparing two empty sets.
       (is (seq in-ci)))
 
-    (testing "every library has a cell, except the two documented exclusions"
+    (testing "no library is built twice"
+      (is (= (count listed) (count in-ci))
+          (str "listed in more than one group: "
+               (pr-str (for [[lib n] (frequencies listed) :when (> n 1)] lib)))))
+
+    (testing "every library is built, except the two documented exclusions"
       (is (empty? (remove in-ci expected))
           (str "libraries with no isolated build: " (pr-str (remove in-ci expected)))))
 
     (testing "and the matrix names no library that no longer exists"
       (is (empty? (remove (set (sut/libs)) in-ci))
-          (str "cells for libraries not in libs/: "
+          (str "builds for libraries not in libs/: "
                (pr-str (remove (set (sut/libs)) in-ci)))))
 
     (testing "the exclusions are deliberate, not a gap"
@@ -285,10 +295,10 @@
       (is (= #{"tools" "e2e"} (set (remove in-ci (sut/libs))))))
 
     (testing "and tools, which cannot be a cell, is loaded in isolation anyway"
-      ;; It is the one library with no matrix cell, so without this step its
+      ;; It is the one library the matrix does not build, so without this step its
       ;; isolation rests entirely on the static gate.
-      (is (str/includes? yaml "bb --classpath src -e")
-          "the check-isolation job must still load libs/tools against its own src"))))
+      (is (str/includes? src "bb --classpath src -e")
+          "the checks job must still load libs/tools against its own src"))))
 
 (deftest ^:unit the-known-offender-stays-fixed
   ;; realtime is the case this gate was built for. BOU-305 removed the smuggled

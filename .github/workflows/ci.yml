@@ -144,22 +144,141 @@ jobs:
           retention-days: 14
 
   # =============================================================================
-  # AGENTS link integrity check
+  # Babashka gates — one job, one step per gate
+  #
+  # These were 20 jobs of ~10s each, and the plan runs 20 jobs at a time: each
+  # took a slot that a JVM job was queued for (BOU-527). Every step runs even
+  # when an earlier one fails, so one push shows every failing gate by name.
   # =============================================================================
-  agents-links:
-    name: AGENTS Links
+  checks:
+    name: Babashka Gates
     runs-on: ubuntu-latest
 
     steps:
+      # Full history: check:changelog compares against the merge base with the
+      # target branch, and a shallow clone has neither the base nor a common
+      # ancestor.
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - name: Setup Babashka
         uses: DeLaGuardo/setup-clojure@13.6.1
         with:
           bb: latest
 
+      - name: Validate dev config
+        if: ${{ !cancelled() }}
+        run: bb doctor --env dev --ci
+
+      - name: Validate test config
+        if: ${{ !cancelled() }}
+        run: bb doctor --env test --ci
+
       - name: Check AGENTS links
+        if: ${{ !cancelled() }}
         run: bb check-links
+
+      - name: Check FC/IS boundaries
+        if: ${{ !cancelled() }}
+        run: bb check:fcis
+
+      - name: Check for placeholder tests
+        if: ${{ !cancelled() }}
+        run: bb check:placeholder-tests
+
+      - name: Check deftest metadata placement
+        if: ${{ !cancelled() }}
+        run: bb check:test-meta
+
+      - name: Check deftest pyramid tags
+        if: ${{ !cancelled() }}
+        run: bb check:test-tags
+
+      - name: Check dependency direction
+        if: ${{ !cancelled() }}
+        run: bb check:deps
+
+      - name: Check ports / hexagonal boundaries
+        if: ${{ !cancelled() }}
+        run: bb check:ports
+
+      - name: Check for tracked backup/cruft files
+        if: ${{ !cancelled() }}
+        run: bb check:hygiene
+
+      - name: Check the changelog covers this branch
+        if: ${{ !cancelled() }}
+        env:
+          CHANGELOG_BASE: origin/${{ github.base_ref || github.event.repository.default_branch }}
+        run: bb check:changelog
+
+      - name: Check documented library counts and publishing claims
+        if: ${{ !cancelled() }}
+        run: bb check:doc-counts
+
+      - name: Every Dockerfile, workflow and installer names the same JDK
+        if: ${{ !cancelled() }}
+        run: bb check:jdk
+
+      - name: One roadmap, and it plans nothing that already shipped
+        if: ${{ !cancelled() }}
+        run: bb check:roadmap
+
+      # ADR-022 required a :type on every thrown ex-info in April 2026 and
+      # nothing checked it: 59 shell throws had none by August. ADR-036 added
+      # the return shapes. The allowlist ships full and empties as BOU-323
+      # walks the migration; an entry that stops exempting anything fails here.
+      - name: Check errors carry the shape ADR-022 and ADR-036 decided
+        if: ${{ !cancelled() }}
+        run: bb check:error-shape
+
+      # "30 independently publishable libraries" — the static half. A library
+      # may not load a namespace it neither owns nor declares. The isolated
+      # build below cannot see this: realtime compiled clean against its own
+      # deps.edn because its require sat in a try/catch that swallowed the
+      # failure, and the adapter threw on first use, from Clojars (BOU-304).
+      - name: Check no library loads an undeclared namespace
+        if: ${{ !cancelled() }}
+        run: bb check:isolation
+
+      # libs/tools is the one library the isolated-build matrix cannot cover:
+      # its runtime is Babashka, so `clojure -M` cannot load it. Babashka can,
+      # and against its own src/ alone this is the same property every other
+      # library gets from the matrix. Without it, tools' isolation rested
+      # entirely on the static gate above.
+      - name: Load libs/tools against only its own source (Babashka runtime)
+        if: ${{ !cancelled() }}
+        run: |
+          set -euo pipefail
+          form="$(bb -e "(require '[wagoe.tools.check-isolation :as ci]) (print (ci/require-form \"tools\"))")"
+          cd libs/tools
+          bb --classpath src -e "$form"
+
+      - name: Check every hard-coded suite version agrees
+        if: ${{ !cancelled() }}
+        run: bb check:versions
+
+      - name: Check published POMs carry inter-Wagoe deps
+        if: ${{ !cancelled() }}
+        run: bb check:poms
+
+      # BOU-277: protection required 13 contexts that were the job *keys* from
+      # this file, while GitHub reports each job's `name:`. It now requires
+      # exactly one context — `All Tests Passed` — and this checks that the
+      # summary transitively depends on every job. It reads ci.yml, so it needs
+      # no token.
+      - name: The one required context must cover every job
+        if: ${{ !cancelled() }}
+        run: bb check:branch-protection
+
+      - name: Check AGENTS files are in sync with the generator
+        if: ${{ !cancelled() }}
+        run: bb check:agents
+
+      - name: Check for residual boundary namespaces, keys, coords, env and URLs
+        if: ${{ !cancelled() }}
+        run: bb check:no-boundary
 
   # =============================================================================
   # Fast command smoke checks (aliases + key docs/dev commands)
@@ -188,465 +307,103 @@ jobs:
         run: bb smoke-check
 
   # =============================================================================
-  # Config Doctor — validate config files for common mistakes
-  # =============================================================================
-  config-doctor:
-    name: Config Doctor
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Setup Babashka
-        uses: DeLaGuardo/setup-clojure@13.6.1
-        with:
-          bb: latest
-
-      - name: Validate dev config
-        run: bb doctor --env dev --ci
-
-      - name: Validate test config
-        run: bb doctor --env test --ci
-
-  # =============================================================================
-  # FC/IS boundary enforcement (Babashka — fast, no JVM)
-  # =============================================================================
-  check-fcis:
-    name: FC/IS Check
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Setup Babashka
-        uses: DeLaGuardo/setup-clojure@13.6.1
-        with:
-          bb: latest
-
-      - name: Check FC/IS boundaries
-        run: bb check:fcis
-
-  # =============================================================================
-  # Placeholder test detection (Babashka — fast, no JVM)
-  # =============================================================================
-  check-placeholder-tests:
-    name: Placeholder Test Check
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Setup Babashka
-        uses: DeLaGuardo/setup-clojure@13.6.1
-        with:
-          bb: latest
-
-      - name: Check for placeholder tests
-        run: bb check:placeholder-tests
-
-  # =============================================================================
-  # Deftest metadata placement (Babashka — fast, no JVM)
-  # =============================================================================
-  check-test-meta:
-    name: Deftest Metadata Check
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Setup Babashka
-        uses: DeLaGuardo/setup-clojure@13.6.1
-        with:
-          bb: latest
-
-      - name: Check deftest metadata placement
-        run: bb check:test-meta
-
-  # =============================================================================
-  # Deftest pyramid tags (Babashka — fast, no JVM)
-  # =============================================================================
-  check-test-tags:
-    name: Deftest Pyramid Tag Check
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Setup Babashka
-        uses: DeLaGuardo/setup-clojure@13.6.1
-        with:
-          bb: latest
-
-      - name: Check deftest pyramid tags
-        run: bb check:test-tags
-
-  # =============================================================================
-  # Dependency direction linting (Babashka — fast, no JVM)
-  # =============================================================================
-  check-deps:
-    name: Dependency Direction Check
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Setup Babashka
-        uses: DeLaGuardo/setup-clojure@13.6.1
-        with:
-          bb: latest
-
-      - name: Check dependency direction
-        run: bb check:deps
-
-  # =============================================================================
-  # Ports / hexagonal boundary enforcement (Babashka — fast, no JVM)
-  # =============================================================================
-  check-ports:
-    name: Ports Boundary Check
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Setup Babashka
-        uses: DeLaGuardo/setup-clojure@13.6.1
-        with:
-          bb: latest
-
-      - name: Check ports / hexagonal boundaries
-        run: bb check:ports
-
-  # =============================================================================
-  # Repo hygiene — no tracked backup/cruft files (Babashka — fast, no JVM)
-  # =============================================================================
-  check-hygiene:
-    name: Repo Hygiene Check
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Setup Babashka
-        uses: DeLaGuardo/setup-clojure@13.6.1
-        with:
-          bb: latest
-
-      - name: Check for tracked backup/cruft files
-        run: bb check:hygiene
-
-  # =============================================================================
-  # A branch changing shipped src/ must describe it in CHANGELOG.md
-  # =============================================================================
-  check-changelog:
-    name: Changelog Check
-    runs-on: ubuntu-latest
-
-    steps:
-      # Full history: the gate compares against the merge base with the target
-      # branch, and a shallow clone has neither the base nor a common ancestor.
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-
-      - name: Setup Babashka
-        uses: DeLaGuardo/setup-clojure@13.6.1
-        with:
-          bb: latest
-
-      - name: Check the changelog covers this branch
-        env:
-          CHANGELOG_BASE: origin/${{ github.base_ref || github.event.repository.default_branch }}
-        run: bb check:changelog
-
-  # =============================================================================
-  # Documented library counts vs deploy/all-libs (Babashka — fast, no JVM)
-  # =============================================================================
-  check-doc-counts:
-    name: Documented Library Count Check
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Setup Babashka
-        uses: DeLaGuardo/setup-clojure@13.6.1
-        with:
-          bb: latest
-
-      - name: Check documented library counts and publishing claims
-        run: bb check:doc-counts
-
-  check-jdk:
-    name: JDK Baseline Check
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Setup Babashka
-        uses: DeLaGuardo/setup-clojure@13.6.1
-        with:
-          bb: latest
-
-      - name: Every Dockerfile, workflow and installer names the same JDK
-        run: bb check:jdk
-
-  check-roadmap:
-    name: Roadmap Agreement Check
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Setup Babashka
-        uses: DeLaGuardo/setup-clojure@13.6.1
-        with:
-          bb: latest
-
-      - name: One roadmap, and it plans nothing that already shipped
-        run: bb check:roadmap
-
-  # =============================================================================
-  # "30 independently publishable libraries" — the static half
-  #
-  # A library may not load a namespace it neither owns nor declares. This is the
-  # half `check-isolation-matrix` below cannot see: 30 of 31 libraries compile
-  # clean against their own deps.edn, realtime included, because its require sits
-  # in a try/catch that swallows the failure. The namespace loads; the adapter
-  # throws on first use, from Clojars, in a user's application (BOU-304).
-  # =============================================================================
-  check-error-shape:
-    name: Errors Carry Their Shape
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Setup Babashka
-        uses: DeLaGuardo/setup-clojure@13.6.1
-        with:
-          bb: latest
-
-      # ADR-022 required a :type on every thrown ex-info in April 2026 and
-      # nothing checked it: 59 shell throws had none by August. ADR-036 added
-      # the return shapes. The allowlist ships full and empties as BOU-323
-      # walks the migration; an entry that stops exempting anything fails here.
-      - name: Check errors carry the shape ADR-022 and ADR-036 decided
-        run: bb check:error-shape
-
-  check-isolation:
-    name: Libraries Declare What They Load
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Setup Babashka
-        uses: DeLaGuardo/setup-clojure@13.6.1
-        with:
-          bb: latest
-
-      - name: Check no library loads an undeclared namespace
-        run: bb check:isolation
-
-      # libs/tools is the one library the isolated-build matrix cannot cover:
-      # its runtime is Babashka, so `clojure -M` cannot load it. Babashka can,
-      # and against its own src/ alone this is the same property every other
-      # library gets from a matrix cell. Without it, tools' isolation rested
-      # entirely on the static gate above.
-      - name: Load libs/tools against only its own source (Babashka runtime)
-        run: |
-          set -euo pipefail
-          form="$(bb -e "(require '[wagoe.tools.check-isolation :as ci]) (print (ci/require-form \"tools\"))")"
-          cd libs/tools
-          bb --classpath src -e "$form"
-
-  # =============================================================================
   # "30 independently publishable libraries" — the compile half
   #
   # Each library built against *only* its own deps.edn, not the monorepo
   # classpath. Catches an undeclared static require, which is the failure the
   # claim is usually assumed to be about. Compile-only rather than each library's
   # test suite: it is a fraction of the runtime, and the tests would not add
-  # coverage of the smuggling — check-isolation above is what catches that.
+  # coverage of the smuggling — check:isolation in `checks` is what catches that.
   #
-  # Two of the 31 libraries are not cells. `libs/tools` because its runtime is
+  # Two of the 31 libraries are not built here. `libs/tools` because its runtime is
   # Babashka, not the JVM: babashka.process and babashka.fs are built into bb and
   # are not Maven dependencies, so `clojure -M` cannot load it by design —
   # `bb test:tools` is what exercises it. `libs/e2e` because it has no src/ at
   # all, only tests.
   #
-  # The list below is checked against the tree by `matrix-covers-every-library`
-  # in check_isolation_test.clj: a library added under libs/ without a cell here
-  # fails that test rather than silently going unbuilt.
+  # One job per library took 30 of the plan's 20 concurrent slots for ~15s of
+  # work each, most of it setup, and the rest of CI queued behind them. Six
+  # libraries per job: each still loads in its own JVM from its own deps.edn,
+  # so the coverage is the same (BOU-527).
+  #
+  # The lists below are checked against the tree by `matrix-covers-every-library`
+  # in check_isolation_test.clj: a library added under libs/ without a place
+  # here fails that test rather than silently going unbuilt.
   # =============================================================================
   check-isolation-matrix:
-    name: Isolated Build (${{ matrix.lib }})
+    name: Isolated Build (${{ join(matrix.libs, ', ') }})
     runs-on: ubuntu-latest
     needs: warm-deps
 
     strategy:
       fail-fast: false
       matrix:
-        lib: [admin, ai, audience, cache, calendar, config, core, devtools, email, events,
-              external, geo, i18n, jobs, observability, payments, platform, push,
-              realtime, reports, scaffolder, search, shared-ui, storage, tenant,
-              ui-style, user, wagoe-cli, wagoe-mcp, workflow]
+        include:
+          - libs: [admin, ai, audience, cache, calendar, config]
+          - libs: [core, devtools, email, events, external, geo]
+          - libs: [i18n, jobs, observability, payments, platform, push]
+          - libs: [realtime, reports, scaffolder, search, shared-ui, storage]
+          - libs: [tenant, ui-style, user, wagoe-cli, wagoe-mcp, workflow]
 
     steps:
       - uses: actions/checkout@v6
 
       # The composite action rather than a hand-rolled setup-clojure + cache.
-      # It carries the v2 cache key — the un-versioned one it replaced was
+      # It carries the versioned cache key — the un-versioned one it replaced was
       # poisoned by whichever job with the smallest dependency tree won the save
-      # race, and 29 cells racing to write it would re-mint that stub — and it
-      # prefetches serially, which is what avoids the Maven concurrent-resolution
-      # crash and retries Maven Central's 429s. Without it, a rate-limited cell
-      # fails under an innocent library's name (#211, #329, BOU-250).
+      # race — and it prefetches serially, which is what avoids the Maven
+      # concurrent-resolution crash and retries Maven Central's 429s. Without
+      # it, a rate-limited job fails under an innocent library's name (#211,
+      # #329, BOU-250).
+      #
+      # `also-warm` resolves each library's own deps.edn, which the step below
+      # loads from. Prefetching only the root left that resolution unretried,
+      # and a Maven 403 there failed the build under the name of whichever
+      # library it was building (BOU-417).
       - name: Setup Clojure + restore deps
         uses: ./.github/actions/clojure-deps
         with:
           aliases: -M:test
-
-      # And again for the library's own deps.edn, which the step below resolves
-      # from its directory. Prefetching only the root left that second
-      # resolution unretried, and a Maven 403 there failed the cell under the
-      # name of whichever library it was building (BOU-417).
-      - name: Warm this library's own deps
-        uses: ./.github/actions/clojure-deps
-        with:
-          aliases: "-"
-          working-directory: libs/${{ matrix.lib }}
+          also-warm: libs/${{ join(matrix.libs, ' libs/') }}
 
       - name: Setup Babashka
         uses: DeLaGuardo/setup-clojure@13.6.1
         with:
           bb: latest
 
-      # Requires every namespace the library ships, from the library's own
-      # directory, so the classpath is its deps.edn and nothing else.
+      # Requires every namespace each library ships, from the library's own
+      # directory, so the classpath is its deps.edn and nothing else. One JVM
+      # per library, and every library is tried before the job fails, so one
+      # run names every library that does not build alone.
       #
       # The namespace list is built by wagoe.tools.check-isolation rather than by
       # find|sed here: the shell version used `s|\.cljc\?$||`, and `\?` is GNU
       # basic-regex, so BSD sed left the extension on and emitted
       # `(require 'wagoe.core.foo.clj)`. Green on this runner, broken for anyone
       # reproducing the job on a Mac. It is unit-tested there.
-      - name: Load every namespace against only this library's deps.edn
+      - name: Load every namespace against only its library's deps.edn
         run: |
-          set -euo pipefail
+          set -uo pipefail
+          failed=()
 
-          form="$(bb -e "(require '[wagoe.tools.check-isolation :as ci]) (print (ci/require-form \"${{ matrix.lib }}\"))")"
+          for lib in ${{ join(matrix.libs, ' ') }}; do
+            echo "::group::$lib"
+            form="$(bb -e "(require '[wagoe.tools.check-isolation :as ci]) (print (ci/require-form \"$lib\"))")"
 
-          if [ -z "$form" ]; then
-            echo "No namespaces under src/ — nothing to isolate."
-            exit 0
+            if [ -z "$form" ]; then
+              echo "No namespaces under src/ — nothing to isolate."
+            else
+              echo "Loading in isolation:"
+              bb -e "(require '[wagoe.tools.check-isolation :as ci]) (run! println (ci/namespaces-of \"$lib\"))" | sed 's/^/  /'
+              (cd "libs/$lib" && clojure -M -e "$form") || failed+=("$lib")
+            fi
+            echo "::endgroup::"
+          done
+
+          if [ ${#failed[@]} -gt 0 ]; then
+            echo "::error::does not build against its own deps.edn: ${failed[*]}"
+            exit 1
           fi
-
-          echo "Loading in isolation:"
-          bb -e "(require '[wagoe.tools.check-isolation :as ci]) (run! println (ci/namespaces-of \"${{ matrix.lib }}\"))" | sed 's/^/  /'
-
-          cd "libs/${{ matrix.lib }}"
-          clojure -M -e "$form"
-
-  # =============================================================================
-  # Suite version consistency (Babashka — fast, no JVM)
-  # =============================================================================
-  check-versions:
-    name: Suite Version Consistency
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Setup Babashka
-        uses: DeLaGuardo/setup-clojure@13.6.1
-        with:
-          bb: latest
-
-      - name: Check every hard-coded suite version agrees
-        run: bb check:versions
-
-  # =============================================================================
-  # POM dependency completeness (Babashka — fast, no JVM)
-  # =============================================================================
-  check-poms:
-    name: POM Dependency Completeness Check
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Setup Babashka
-        uses: DeLaGuardo/setup-clojure@13.6.1
-        with:
-          bb: latest
-
-      - name: Check published POMs carry inter-Wagoe deps
-        run: bb check:poms
-
-  # =============================================================================
-  # Branch protection coverage (Babashka — fast, no JVM)
-  # =============================================================================
-  # BOU-277: protection required 13 contexts that were the job *keys* from this
-  # file, while GitHub reports each job's `name:`. They could never be
-  # satisfied, and while an admin override absorbed them, could never fail.
-  #
-  # It now requires exactly one context — `All Tests Passed` — and this job
-  # checks that the summary transitively depends on everything that can run. No
-  # API and no token: the earlier version read branch protection directly, which
-  # meant an admin-scoped credential living in the repository.
-  branch-protection:
-    name: Branch Protection Check
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Setup Babashka
-        uses: DeLaGuardo/setup-clojure@13.6.1
-        with:
-          bb: latest
-
-      - name: The one required context must cover every job
-        run: bb check:branch-protection
-
-  # =============================================================================
-  # AGENTS.md generator drift (Babashka — fast, no JVM)
-  # =============================================================================
-  check-agents:
-    name: AGENTS.md Drift Check
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Setup Babashka
-        uses: DeLaGuardo/setup-clojure@13.6.1
-        with:
-          bb: latest
-
-      - name: Check AGENTS files are in sync with the generator
-        run: bb check:agents
-
-  # =============================================================================
-  # Rename gate — no residual boundary tokens (Babashka — fast, no JVM)
-  # =============================================================================
-  check-no-boundary:
-    name: Rename Gate (no residual boundary tokens)
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Setup Babashka
-        uses: DeLaGuardo/setup-clojure@13.6.1
-        with:
-          bb: latest
-
-      # git grep needs the full history-free worktree only, but the gate reads
-      # tracked files via `git ls-files`/`git grep`, so a plain checkout is enough.
-      - name: Check for residual boundary namespaces, keys, coords, env and URLs
-        run: bb check:no-boundary
 
   # =============================================================================
   # In-repo runnable examples must actually run (examples/todo, examples/shop)
@@ -1663,7 +1420,7 @@ jobs:
   test-summary:
     name: All Tests Passed
     runs-on: ubuntu-latest
-    needs: [lint, branch-protection, first-run-smoke, build-ui-assets, docs-lint, agents-links, command-smoke, config-doctor, i18n-scan, check-fcis, check-placeholder-tests, check-test-meta, check-test-tags, check-deps, check-ports, check-hygiene, check-changelog, check-doc-counts, check-jdk, check-roadmap, check-versions, check-isolation, check-error-shape, check-isolation-matrix, check-poms, check-agents, check-no-boundary, build-uberjar, test-tools, example-smoke, test-i18n, test-config, test-app, test-core, test-observability, test-platform, test-user, test-admin, test-ui-style, test-storage, test-cache, test-events, test-jobs, test-tenant, test-audience, test-devtools, test-email, test-realtime, test-workflow, test-search, test-scaffolder, test-external, test-payments, test-push, test-calendar, test-reports, test-geo, test-ai, test-mcp, test-wagoe-cli, test-shared-ui, e2e]
+    needs: [checks, lint, first-run-smoke, build-ui-assets, docs-lint, command-smoke, i18n-scan, check-isolation-matrix, build-uberjar, test-tools, example-smoke, test-i18n, test-config, test-app, test-core, test-observability, test-platform, test-user, test-admin, test-ui-style, test-storage, test-cache, test-events, test-jobs, test-tenant, test-audience, test-devtools, test-email, test-realtime, test-workflow, test-search, test-scaffolder, test-external, test-payments, test-push, test-calendar, test-reports, test-geo, test-ai, test-mcp, test-wagoe-cli, test-shared-ui, e2e]
 
     steps:
       - name: Summary
