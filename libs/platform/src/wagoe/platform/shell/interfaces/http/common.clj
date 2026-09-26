@@ -109,6 +109,13 @@
 ;; Component Health Checks
 ;; =============================================================================
 
+(defn- log-check-failure
+  "One line, no stack trace: readiness is polled, and the reason stays in the
+   log because the response body is readable by load balancers (BOU-558)."
+  [component ^Throwable e]
+  (log/warnf "%s readiness check failed: %s: %s"
+             component (.getName (class e)) (.getMessage e)))
+
 (defn- check-database
   "Check database connectivity by executing SELECT 1.
 
@@ -127,9 +134,9 @@
       {:status "ok"
        :response-time-ms (- (System/currentTimeMillis) start)})
     (catch Exception e
-      (log/warn e "Database health check failed")
+      (log-check-failure "Database" e)
       {:status "down"
-       :error (.getMessage e)})))
+       :error "database unreachable"})))
 
 (defn- check-cache
   "Check cache connectivity via ping.
@@ -151,9 +158,9 @@
         {:status "down"
          :error "ping returned false"}))
     (catch Exception e
-      (log/warn e "Cache health check failed")
+      (log-check-failure "Cache" e)
       {:status "down"
-       :error (.getMessage e)})))
+       :error "cache unreachable"})))
 
 (defn readiness-handler
   "Create a readiness check handler that verifies dependency health.

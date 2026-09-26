@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **`/health/ready` showed database and cache exception messages** (BOU-558). The body now says
+  `unreachable`; the reason is logged at WARN. Upgrade platform if readiness is public.
 - **Password hashes, MFA secrets and session tokens were written to the log** (BOU-556). Nothing
   to rotate; purge application logs you retain.
 - **User admin, profile, MFA and workflow pages showed exception messages** (BOU-555). They log
