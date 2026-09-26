@@ -1,6 +1,7 @@
 (ns wagoe.cli.new-test
   (:require [clojure.test :refer [deftest is testing]]
             [clojure.java.io :as io]
+            [clojure.java.shell :as sh]
             [clojure.edn :as edn]
             [clojure.string :as str]
             [wagoe.cli.new :as new])
@@ -447,8 +448,30 @@
         (testing "on stderr: the :mcp alias puts this file on its classpath, and stdout is its JSON-RPC channel"
           (is (= "System.err"
                  (.getTarget ^ConsoleAppender
-                                       (first (iterator-seq (.iteratorForAppenders (.getLogger ctx "ROOT"))))))))
+                  (first (iterator-seq (.iteratorForAppenders (.getLogger ctx "ROOT"))))))))
         (.stop ctx))
+      (finally
+        (when (.exists (io/file tmp))
+          (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f)))))))
+
+(deftest ^:integration mcp-stdout-carries-only-json-rpc
+  ;; The :mcp alias puts two logback.xml on the classpath — the project's and
+  ;; wagoe-mcp's — and Logback reports that on stdout, the JSON-RPC channel
+  ;; (BOU-528). A real `-M:mcp` needs the published wagoe-mcp, so this starts a
+  ;; JVM on the same two files and the alias's :jvm-opts.
+  (let [tmp (str (System/getProperty "java.io.tmpdir") "/wagoe-mcp-stdout-" (System/currentTimeMillis))]
+    (try
+      (new/generate! tmp "test-proj" {})
+      (let [jvm-opts (get-in (edn/read-string (slurp (io/file tmp "deps.edn"))) [:aliases :mcp :jvm-opts])
+            cp       (str/join java.io.File/pathSeparator
+                               [(str tmp "/resources") "../wagoe-mcp/resources"
+                                (System/getProperty "java.class.path")])
+            {:keys [out err]} (apply sh/sh (concat [(str (System/getProperty "java.home") "/bin/java")]
+                                                   jvm-opts
+                                                   ["-cp" cp "clojure.main" "-e"
+                                                    "(.info (org.slf4j.LoggerFactory/getLogger \"t\") \"logged\")"]))]
+        (is (str/includes? err "logged") "the log line itself goes to stderr")
+        (is (= "" out)))
       (finally
         (when (.exists (io/file tmp))
           (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f)))))))
