@@ -71,6 +71,10 @@
                   {:url (str dir-url)})
         [])))
 
+(defn- warn-no-manifests! []
+  (log/warn (str "No migration manifest found; library migrations will not run. "
+                 "A jar built without directory entries hides them.")))
+
 (defn manifest-urls
   []
   (let [cl (context-classloader)]
@@ -79,7 +83,9 @@
                        :when   (str/ends-with? file ".edn")]
                    (java.net.URL. ^java.net.URL dir-url ^String file))
                  (enumeration-seq (.getResources cl legacy-manifest-resource)))
-         (distinct))))
+         (distinct)
+         (seq)
+         (#(or % (do (warn-no-manifests!) []))))))
 
 (defn- parse-migration-manifest [manifest-url]
   (let [manifest-data (-> manifest-url slurp edn/read-string)

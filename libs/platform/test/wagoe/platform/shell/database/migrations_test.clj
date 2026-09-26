@@ -701,3 +701,12 @@
         (io/make-parents manifest)
         (spit manifest "{:paths [\"thirdparty/migrations/\"]}")
         (is (contains? (discover-with [(io/as-url dir)]) "thirdparty/migrations/"))))))
+
+(deftest ^:unit finding-no-manifest-at-all-is-logged
+  ;; A jar built without directory entries hides every manifest (BOU-543 review).
+  (with-temp-dir
+    (fn [dir]
+      (let [warned (atom 0)]
+        (with-redefs [migrations/warn-no-manifests! #(swap! warned inc)]
+          (is (= #{"migrations/"} (discover-with [(io/as-url dir)]))))
+        (is (= 1 @warned))))))
