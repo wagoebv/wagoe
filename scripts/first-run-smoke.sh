@@ -72,7 +72,21 @@ docker run --rm \
   -e "SMOKE_AI=${SMOKE_AI:-}" \
   -e "GITHUB_TOKEN=${GITHUB_TOKEN:-}" \
   "$IMAGE" bash -euo pipefail -c '
-fail() { echo; echo "SMOKE FAILURE: $*"; exit 1; }
+# On failure, show the tail of the log the failing step just wrote. Steps send
+# their output to /tmp/*.log, so the failure line alone said what broke but
+# never why: "Failed to create admin user." and "quickstart scaffolded no
+# migration at all" both arrived with no cause (BOU-525).
+fail() {
+  echo
+  last_log="$(ls -t /tmp/*.log 2>/dev/null | head -1)"
+  if [ -n "$last_log" ]; then
+    echo "── last 40 lines of $last_log"
+    tail -40 "$last_log"
+    echo "──"
+  fi
+  echo "SMOKE FAILURE: $*"
+  exit 1
+}
 ok()   { echo "  ok — $*"; }
 
 # ── 0. package manager ──────────────────────────────────────────────────────
