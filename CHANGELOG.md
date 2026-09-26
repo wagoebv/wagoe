@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **`/web/register` answered 500 on a password the policy rejects** (BOU-552). It re-renders
+  the form; `POST /api/v1/users` answers 400 for a password containing the email. Upgrade user.
 - **Admin offered a tenant create that could never succeed** (BOU-534). It is now
   off via `:permissions {:create false}`; create tenants with `POST /api/v1/tenants`.
 - **`clojure -T:build uber` failed on macOS and Windows in generated projects** (BOU-549).

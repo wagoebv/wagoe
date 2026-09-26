@@ -9,6 +9,8 @@
    - HTML response structure"
   (:require [wagoe.user.shell.web-handlers :as web-handlers]
             [wagoe.user.ports :as ports]
+            [wagoe.user.shell.service :as service]
+            [wagoe.user.shell.in-memory-repository-test :as mem]
             [wagoe.email.ports :as email-ports]
             [clojure.test :refer [deftest testing is]]
             [clojure.string :as str])
@@ -562,9 +564,10 @@
   (testing "a password the policy rejects comes back as a form, not a 500"
     (let [service (create-service-rejecting-registration
                    (ex-info "Password does not meet requirements"
-                            {:type :password-policy-violation
-                             :violations [{:code :missing-number
-                                           :message "Must contain at least one number"}]}))
+                            {:type :validation-error
+                             :errors [{:field :password
+                                       :code :missing-number
+                                       :message "Must contain at least one number"}]}))
           config {:active {:wagoe/settings {:user-limits {:max-users 1000}}}}
           handler (web-handlers/create-user-htmx-handler service nil config)
           request {:form-params {"name" "Test User"
@@ -884,3 +887,30 @@
       (is (true? (:http-only cookie)) "HttpOnly blocks JS access to the session token")
       (is (= :strict (:same-site cookie)) "SameSite=Strict mitigates CSRF")
       (is (= "/" (:path cookie)) "cookie scoped to the whole app"))))
+
+(defn- policy-service
+  "The real UserService on in-memory repositories, with a 12-character minimum."
+  []
+  (service/create-user-service (mem/->MemoryUserRepository (atom {}))
+                               (mem/->MemorySessionRepository (atom {}))
+                               (mem/->MemoryAuditRepository (atom []))
+                               {:password-policy {:min-length 12}}
+                               nil))
+
+(deftest ^:contract register-submit-rejects-policy-passwords-with-the-form
+  ;; Both passwords pass the request schema, so only the service refuses them.
+  ;; Each used to leave as a 500 error page (BOU-552).
+  (let [submit (fn [email password]
+                 ((web-handlers/register-submit-handler (policy-service) {})
+                  {:form-params {"name" "Alice" "email" email "password" password}}))]
+    (testing "a password containing the email's local part"
+      (let [response (submit "alice@x.org" "alice-Secret-123")]
+        (is (= 400 (:status response)))
+        (is (html-contains? response "register-form"))
+        (is (html-contains? response "Password cannot contain your email address"))))
+
+    (testing "a password shorter than the configured minimum"
+      (let [response (submit "bob@x.org" "Shortpass1")]
+        (is (= 400 (:status response)))
+        (is (html-contains? response "register-form"))
+        (is (html-contains? response "at least 12 characters"))))))
