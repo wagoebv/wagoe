@@ -175,7 +175,14 @@ the write commits:
 - Wiring: `ig-config` refs `:wagoe/events` only when it is in `:enabled`, and
   `create-admin-service` wraps the service in `PublishingAdminService` only
   when given a publisher. Without a bus the old code runs unchanged.
-- A failed publish is logged at warn; the request still succeeds.
+- A failed publish is logged at warn; the request still succeeds. Publishing
+  is synchronous, so a bulk delete stops at the first failure and logs how many
+  it skipped, rather than waiting out the broker timeout once per row.
+- `:prior`, and `:attrs` on delete, are best-effort: they are read before the
+  write, outside its transaction, so a concurrent write can make them stale.
+- Bulk delete reads the records in one query and publishes only when the
+  delete count equals the number read; otherwise it logs and publishes none,
+  since it cannot tell which rows another request deleted first.
 - `:hide-fields` are stripped from `:attrs` and `:prior`.
 - Nothing is published for a write that changed nothing (unknown id).
 - On `:redis`, a `PGobject` (jsonb) column arrives as its JSON string; the

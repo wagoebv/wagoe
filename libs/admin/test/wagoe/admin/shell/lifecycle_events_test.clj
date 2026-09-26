@@ -5,7 +5,9 @@
             [integrant.core :as ig]
             [reitit.ring :as ring]
             [wagoe.admin.shell.http :as admin-http]
+            [wagoe.admin.ports :as admin-ports]
             [wagoe.admin.shell.module-wiring :as wiring]
+            [wagoe.admin.shell.service :as service]
             [wagoe.admin.shell.schema-repository :as schema-repo]
             [wagoe.events.ports :as events]
             [wagoe.events.shell.module-wiring]
@@ -193,6 +195,77 @@
                                        {"number" "INV-5" "status" "sent"}))))
           (is (= 200 (:status (request :delete (str "/web/admin/invoices/" id)))))
           (is (nil? (invoice-row "INV-5"))))))))
+
+(deftest ^:integration a-bulk-delete-stops-publishing-after-the-first-failure
+  ;; Each failed publish can cost the broker's timeout on the request thread;
+  ;; a bulk delete during an outage paid it once per row.
+  (let [calls   (atom 0)
+        bus     (reify events/IEventPublisher
+                  (publish! [_ _ _]
+                    (swap! calls inc)
+                    {:error {:type :events/publish-failed :message "down"}}))
+        request (handler bus)]
+    (doseq [n ["INV-6" "INV-7" "INV-8"]]
+      (request :post "/web/admin/invoices" {"number" n "status" "draft"}))
+    (reset! calls 0)
+    (let [ids (mapv #(str (:id (invoice-row %))) ["INV-6" "INV-7" "INV-8"])]
+      (is (= 200 (:status (request :post "/web/admin/invoices/bulk-delete" {"ids[]" ids}))))
+      (is (= 1 @calls))
+      (is (nil? (invoice-row "INV-6")) "the delete itself went through"))))
+
+(defn- counting-inner
+  "The real service, counting get-entity calls; `bulk-delete` replaces its
+   bulk delete when given."
+  [provider get-calls & [bulk-delete]]
+  (let [real (service/create-admin-service *db* provider nil nil admin-config)]
+    #_{:clj-kondo/ignore [:missing-protocol-method]}
+    (reify admin-ports/IAdminService
+      (get-entity [_ e id] (swap! get-calls inc) (admin-ports/get-entity real e id))
+      (bulk-delete-entities [_ e ids]
+        (if bulk-delete (bulk-delete e ids) (admin-ports/bulk-delete-entities real e ids))))))
+
+(deftest ^:integration bulk-delete-reads-its-priors-in-one-query
+  (with-bus
+    (fn [bus]
+      (let [seen      (collect! bus)
+            request   (handler bus)
+            _         (doseq [n ["INV-9" "INV-10"]]
+                        (request :post "/web/admin/invoices" {"number" n "status" "draft"}))
+            ids       (mapv #(:id (invoice-row %)) ["INV-9" "INV-10"])
+            provider  (schema-repo/create-schema-repository *db* admin-config)
+            get-calls (atom 0)
+            svc       (service/->PublishingAdminService (counting-inner provider get-calls)
+                                                        *db* provider bus)]
+        (reset! seen [])
+        (is (= 2 (:success-count (admin-ports/bulk-delete-entities svc :invoices ids))))
+        (is (zero? @get-calls) "no read per id")
+        (loop [n 0]
+          (when (and (< n 100) (< (count @seen) 2)) (Thread/sleep 20) (recur (inc n))))
+        (is (= {(first ids) "INV-9" (second ids) "INV-10"}
+               (into {} (map (juxt (comp :id :payload) (comp :number :attrs :payload))) @seen)))))))
+
+(deftest ^:integration a-bulk-delete-that-lost-a-race-publishes-nothing
+  ;; Another request deleted one of the rows between the read of the priors
+  ;; and this delete. The adapter reports a count, not which rows, so the
+  ;; events are skipped rather than duplicated.
+  (with-bus
+    (fn [bus]
+      (let [seen     (collect! bus)
+            request  (handler bus)
+            _        (doseq [n ["INV-11" "INV-12"]]
+                       (request :post "/web/admin/invoices" {"number" n "status" "draft"}))
+            ids      (mapv #(:id (invoice-row %)) ["INV-11" "INV-12"])
+            provider (schema-repo/create-schema-repository *db* admin-config)
+            real     (service/create-admin-service *db* provider nil nil admin-config)
+            racing   (fn [e ids]
+                       (admin-ports/delete-entity real e (first ids))
+                       (admin-ports/bulk-delete-entities real e ids))
+            svc      (service/->PublishingAdminService (counting-inner provider (atom 0) racing)
+                                                       *db* provider bus)]
+        (reset! seen [])
+        (is (= 1 (:success-count (admin-ports/bulk-delete-entities svc :invoices ids))))
+        (Thread/sleep 200)
+        (is (empty? @seen))))))
 
 (deftest ^:unit the-bus-is-wired-only-when-it-is-configured
   (let [service-deps #(get-in (wiring/ig-config {} {:enabled %}) [:components :wagoe/admin-service])]

@@ -803,7 +803,7 @@
 
    A failure is logged, not raised: the row is already written, and a 500
    would tell the user it was not. Hidden fields stay out of the payload,
-   since an event can leave the process."
+   since an event can leave the process. Returns true when published."
   [publisher schema-provider type entity-name id attrs & [prior]]
   (let [hidden  (:hide-fields (ports/get-entity-config schema-provider entity-name))
         strip   #(apply dissoc % hidden)
@@ -818,11 +818,44 @@
                                                  :published-at (Instant/now)}))
                   (catch Exception e
                     {:error {:type :events/publish-failed :message (ex-message e)}}))]
-    (when (:error result)
+    (if (:error result)
       (log/warn "admin lifecycle event not published"
-                {:type type :entity entity-name :id id :error (:error result)}))))
+                {:type type :entity entity-name :id id :error (:error result)})
+      true)))
 
-(defrecord PublishingAdminService [inner schema-provider publisher]
+(defn- get-entities
+  "The live records among `ids`, in one query, read the way `get-entity`
+   reads one."
+  [db-ctx schema-provider entity-name ids]
+  (let [entity-config (ports/get-entity-config schema-provider entity-name)
+        {:keys [from-clause select-clause join-clause field-aliases]} (resolve-query-config entity-config)
+        id-field      (get field-aliases :id (:primary-key entity-config :id))
+        in-ids        [:in id-field (mapv type-conversion/uuid->string ids)]]
+    (if (empty? ids)
+      []
+      (db/execute-query! db-ctx
+                         (cond-> {:select select-clause
+                                  :from   from-clause
+                                  :where  (if (:soft-delete entity-config false)
+                                            [:and in-ids [:= (get field-aliases :deleted-at :deleted_at) nil]]
+                                            in-ids)}
+                           join-clause (assoc :join join-clause))))))
+
+(defn- publish-deleted!
+  "One deleted event per prior, stopping at the first failure: each can cost
+   the broker's timeout on the request thread, so an outage during a bulk
+   delete would otherwise hold it for a timeout per row."
+  [publisher schema-provider entity-name primary-key priors]
+  (loop [[prior & more] priors]
+    (when prior
+      (if (publish-lifecycle! publisher schema-provider :admin/entity-deleted
+                              entity-name (get prior primary-key) prior)
+        (recur more)
+        (when (seq more)
+          (log/warn "admin lifecycle events skipped after a failed publish"
+                    {:entity entity-name :skipped (count more)}))))))
+
+(defrecord PublishingAdminService [inner db-ctx schema-provider publisher]
   ;; Wraps the service only when a bus is configured, so an application
   ;; without one runs exactly the code it did before. Each write publishes
   ;; after it returns, which is after it committed. Reads for :prior happen
@@ -866,13 +899,22 @@
       deleted?))
 
   (bulk-delete-entities [_ entity-name ids]
-    ;; Eager: a lazy seq would first be read after the rows were gone.
-    (let [priors (into [] (keep #(some->> (ports/get-entity inner entity-name %) (vector %))) ids)
-          result (ports/bulk-delete-entities inner entity-name ids)]
-      (when (pos? (:success-count result 0))
-        (doseq [[id prior] priors]
-          (publish-lifecycle! publisher schema-provider :admin/entity-deleted
-                              entity-name id prior)))
+    ;; The adapter returns a count, not which rows it deleted. When that is
+    ;; not the number read, another request got to some of them first and
+    ;; publishes those itself, so nothing is published here rather than a
+    ;; duplicate.
+    (let [priors  (get-entities db-ctx schema-provider entity-name ids)
+          result  (ports/bulk-delete-entities inner entity-name ids)
+          deleted (:success-count result 0)]
+      (cond
+        (and (pos? deleted) (= deleted (count priors)))
+        (publish-deleted! publisher schema-provider entity-name
+                          (:primary-key (ports/get-entity-config schema-provider entity-name) :id)
+                          priors)
+
+        (pos? deleted)
+        (log/warn "admin lifecycle events skipped: bulk delete count differs from the records read"
+                  {:entity entity-name :deleted deleted :read (count priors)}))
       result)))
 
 ;; =============================================================================
@@ -896,4 +938,4 @@
    (create-admin-service db-ctx schema-provider logger error-reporter config nil))
   ([db-ctx schema-provider logger error-reporter config event-publisher]
    (cond-> (->AdminService db-ctx schema-provider logger error-reporter config)
-     event-publisher (->PublishingAdminService schema-provider event-publisher))))
+     event-publisher (->PublishingAdminService db-ctx schema-provider event-publisher))))
