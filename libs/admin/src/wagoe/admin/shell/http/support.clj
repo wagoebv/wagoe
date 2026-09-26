@@ -5,6 +5,7 @@
    error mappings, query/form parsing, and handler helpers used by the handler
    namespaces and the route definitions in `wagoe.admin.shell.http`."
   (:require
+   [wagoe.admin.core.ui :as admin-ui]
    [wagoe.admin.core.ui.base :as ui-base]
    [wagoe.admin.ports :as ports]
    [wagoe.admin.shell.permissions :as shell-permissions]
@@ -442,6 +443,24 @@
   (-> (html-response request html)
       (ring-response/header "HX-Trigger" "entityListUpdated")))
 
+(defn create-config-error-response
+  "The admin page saying why `entity-name` cannot be created, or nil when it
+   can. A create form that could never be saved is refused up front (BOU-494).
+   A 500: the config is at fault, not the request."
+  [request config schema-provider user entity-name entity-config]
+  (when (seq (:create-config-errors entity-config))
+    (let [entities       (ports/list-available-entities schema-provider)
+          entity-configs (into {} (map (fn [e] [e (ports/get-entity-config schema-provider e)])) entities)]
+      (-> (html-response request
+                         (admin-ui/admin-layout
+                          (admin-ui/create-config-error entity-name entity-config)
+                          {:user           user
+                           :current-entity entity-name
+                           :entities       entities
+                           :entity-configs entity-configs
+                           :logo-url       (:logo-url config)}))
+          (ring-response/status 500)))))
+
 ;; =============================================================================
 ;; Display Options
 ;; =============================================================================
@@ -562,6 +581,36 @@
      (into {} (remove (fn [[k _]] (or (offset-param k) (#{"__zone" :__zone} k)))) params)]))
 
 ;; =============================================================================
+;; Return-to and has-many prefill (BOU-491)
+;; =============================================================================
+
+(defn safe-return-to
+  "The request's `return_to`, or nil unless it is a path inside the admin, so
+   it cannot redirect off-site."
+  [request]
+  (let [return-to (get-in request [:query-params "return_to"])]
+    (when (and (string? return-to) (str/starts-with? return-to "/web/admin/"))
+      return-to)))
+
+(defn foreign-key-prefill
+  "Starting values for a create form of `entity-name`, from the query string
+   a parent's \"New\" link builds. Only a field some entity names as the
+   `:foreign-key` of a has-many on `entity-name` is taken, and only when its
+   value is a UUID."
+  [entity-name entity-configs query-params]
+  (let [fk-fields (into #{}
+                        (comp (mapcat :has-many)
+                              (filter #(= entity-name (:entity %)))
+                              (keep :foreign-key)
+                              (map #(keyword (str/replace (name %) "_" "-"))))
+                        (vals entity-configs))]
+    (into {}
+          (keep (fn [field]
+                  (when-let [id (some-> (get query-params (name field)) parse-uuid)]
+                    [field id])))
+          fk-fields)))
+
+;; =============================================================================
 ;; Entity Detail Options (shared by detail + crud handlers)
 ;; =============================================================================
 
@@ -586,11 +635,18 @@
         record-id       (str (get record primary-key))
         has-many-rels   (get entity-config :has-many [])
         parent-url      (str "/web/admin/" (name entity-name) "/" record-id)
+        ; One page of children; one row more tells whether there are others.
+        panel-size      (get-in config [:pagination :default-page-size] 20)
         related-records (when (seq has-many-rels)
                           (mapv (fn [rel]
-                                  [(cond-> (assoc rel :entity-config (get entity-configs (:entity rel)))
-                                     (:editable rel) (assoc :return-to parent-url))
-                                   (ports/list-related-entities admin-service entity-name record-id rel)])
+                                  (let [rows (ports/list-related-entities admin-service entity-name record-id
+                                                                          (assoc rel :limit (inc panel-size)))]
+                                    [(cond-> (assoc rel
+                                                    :entity-config (get entity-configs (:entity rel))
+                                                    :parent-id record-id
+                                                    :has-more? (> (count rows) panel-size))
+                                       (:editable rel) (assoc :return-to parent-url))
+                                     (vec (take panel-size rows))]))
                                 has-many-rels))
 
         ; Return URL when navigating back from a child entity (e.g. order-items → order)

@@ -119,5 +119,10 @@
                           com.wagoe/wagoe-scaffolder {:local/root "../../libs/scaffolder"}
                           com.wagoe/wagoe-tools      {:local/root "../../libs/tools"}
                           com.wagoe/wagoe-jobs       {:local/root "../../libs/jobs"}}
+             ;; The project's logback.xml and wagoe-mcp's are both on this
+             ;; classpath, and Logback reports that on stdout — the JSON-RPC
+             ;; channel. Silenced here, not in logback.xml, so an app boot
+             ;; still reports a broken logging config (BOU-528).
+             :jvm-opts   ["-Dlogback.statusListenerClass=ch.qos.logback.core.status.NopStatusListener"]
              :main-opts  ["-m" "wagoe.mcp.shell.server"]}}}
 

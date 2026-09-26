@@ -8,6 +8,7 @@
    - Relationship detection (Week 1 stub, Week 2+ full implementation)
    - Entity config merging (auto-detected + manual overrides)"
   (:require [wagoe.admin.core.schema-introspection :as introspection]
+            [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]))
 
 ^{:kaocha.testable/meta {:unit true :admin true}}
@@ -640,3 +641,126 @@
                     :primary-key false}
           result (introspection/parse-column-metadata col-meta)]
       (is (false? (:hidden result))))))
+
+;; =============================================================================
+;; Inverse (has-many) Relationships — BOU-481
+;; =============================================================================
+
+(defn- detected [entity-name columns]
+  (introspection/detect-relationships
+   (introspection/parse-table-metadata entity-name columns)))
+
+(def ^:private order-configs
+  {:orders      (detected :orders [{:name "id" :type "UUID" :primary-key true}
+                                   {:name "number" :type "VARCHAR(50)" :not-null true}])
+   :order-items (detected :order-items [{:name "id" :type "UUID" :primary-key true}
+                                        {:name "order_id" :type "UUID" :not-null true}
+                                        {:name "sku" :type "VARCHAR(50)" :not-null true}])})
+
+(deftest ^:unit inverse-has-many-test
+  (testing "a belongs-to registers the matching has-many on the parent, in config shape"
+    (is (= [{:entity      :order-items
+             :table       :order_items
+             :foreign-key :order-id
+             :label       "Order items"
+             :fields      [:sku]
+             :editable    false}]
+           (introspection/inverse-has-many :orders order-configs))))
+
+  (testing "an entity nothing points at has none"
+    (is (= [] (introspection/inverse-has-many :order-items order-configs))))
+
+  (testing "a belongs-to whose parent is not a known entity registers nothing"
+    (is (= [] (introspection/inverse-has-many :orders (dissoc order-configs :orders))))))
+
+(deftest ^:unit with-inverse-relationships-test
+  (let [explicit {:entity :order-items :table :order_items :foreign-key :order-id
+                  :label "Lines" :fields [:sku] :editable true}
+        result   (fn [configs] (introspection/with-inverse-relationships
+                                 :orders (:orders configs) configs))]
+    (testing "detected has-many lands on the :has-many key the admin renders"
+      (let [cfg (result order-configs)]
+        (is (= [:order-items] (mapv :entity (:has-many cfg))))
+        (is (= (:has-many cfg) (get-in cfg [:relationships :has-many])))))
+
+    (testing "an explicit entry for the same child wins over the detected one"
+      (let [cfg (result (assoc-in order-configs [:orders :has-many] [explicit]))]
+        (is (= [explicit] (:has-many cfg)))
+        (is (= [explicit] (get-in cfg [:relationships :has-many])))))
+
+    (testing "explicit entries for other children are kept alongside detected ones"
+      (let [other {:entity :notes :table :notes :foreign-key :order-id}
+            cfg   (result (assoc-in order-configs [:orders :has-many] [other]))]
+        (is (= [:notes :order-items] (mapv :entity (:has-many cfg))))))))
+
+;; =============================================================================
+;; Columns the create form cannot fill (BOU-494)
+;; =============================================================================
+
+(def ^:private invoices-columns
+  [{:name "id" :type "UUID" :not-null true :default nil :primary-key true}
+   {:name "number" :type "VARCHAR(50)" :not-null true :default nil :primary-key false}
+   {:name "status" :type "VARCHAR(50)" :not-null true :default nil :primary-key false}
+   {:name "created_at" :type "TIMESTAMP" :not-null true :default nil :primary-key false}
+   {:name "updated_at" :type "TIMESTAMP" :not-null true :default nil :primary-key false}])
+
+(defn- create-errors [config columns]
+  (introspection/create-form-column-errors :invoices config columns))
+
+(deftest ^:unit create-form-column-errors-test
+  ;; The admin insert writes only what the create form holds, so a NOT NULL
+  ;; column without a default that is not on the form fails every create.
+  (let [config {:editable-fields [:number]
+                :readonly-fields #{:id :status :created-at :updated-at}}]
+    (testing "a NOT NULL column without a default, not on the form, is reported"
+      (let [[error & more] (create-errors config invoices-columns)]
+        (is (nil? more))
+        (is (= :status (:field error)))
+        (is (= "status" (:column error)))
+        (is (str/includes? (:message error) "invoices") "names the entity")
+        (is (str/includes? (:message error) "'status'") "names the column")
+        (is (str/includes? (:message error) "create form"))
+        (is (str/includes? (:message error) "default") "suggests a column default")
+        (is (str/includes? (:message error) ":readonly-fields") "says why it is not on the form")))
+
+    (testing ":id, :created-at and :updated-at are filled by the admin"
+      (is (not-any? #{:id :created-at :updated-at}
+                    (map :field (create-errors config invoices-columns)))))
+
+    (testing "a column default makes it creatable"
+      (is (empty? (create-errors config (assoc-in invoices-columns [2 :default] "'draft'")))))
+
+    (testing "a nullable column is fine"
+      (is (empty? (create-errors config (assoc-in invoices-columns [2 :not-null] false)))))
+
+    (testing "a column the database fills is fine: identity, auto-increment, computed (PR #568 review)"
+      (is (empty? (create-errors config (assoc-in invoices-columns [2 :generated] true)))))
+
+    (testing "a column on the form is the database's to enforce, not a config error"
+      (is (empty? (create-errors (-> config
+                                         (update :editable-fields conj :status)
+                                         (update :readonly-fields disj :status))
+                                     invoices-columns))))
+
+    (testing "a hidden field is not a config error: a request may still supply it"
+      (is (empty? (create-errors (-> config
+                                     (assoc :hide-fields #{:status})
+                                     (update :readonly-fields disj :status))
+                                 invoices-columns))))
+
+    (testing "an entity with its own create flow is not the admin's to create"
+      (is (empty? (create-errors (assoc config :create-redirect-url "/web/invoices/new")
+                                 invoices-columns)))))
+
+  (testing "a column read-only by detection counts, though a manual :readonly-fields replaced that set (PR #568 review)"
+    ;; merge keeps the manual list only, so :version is not in it, but
+    ;; derive-editable-fields still keeps it off the form.
+    (let [columns (conj invoices-columns
+                        {:name "version" :type "INTEGER" :not-null true :default nil :primary-key false})
+          errors  (create-errors {:editable-fields [:number :status]
+                                  :readonly-fields #{:id :created-at :updated-at}}
+                                 columns)]
+      (is (= [:version] (mapv :field errors)))
+      (is (not (str/includes? (:message (first errors)) "lists"))
+          "does not claim the config lists it as read-only")
+      (is (str/includes? (:message (first errors)) ":editable-fields")))))

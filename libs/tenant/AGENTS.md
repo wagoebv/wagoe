@@ -372,14 +372,14 @@ clojure -M:migrate up
 ## Testing
 
 ```bash
-clojure -M:test :tenant                                             # All tenant tests
-clojure -M:test --focus wagoe.tenant.core.tenant-test            # Slug/schema pure functions
-clojure -M:test --focus wagoe.tenant.core.membership-test        # Membership pure functions
-clojure -M:test --focus wagoe.tenant.shell.service-test          # TenantService (mocked repo)
-clojure -M:test --focus wagoe.tenant.shell.membership-service-test  # MembershipService
-clojure -M:test --focus wagoe.tenant.shell.invite-service-test   # InviteService
-clojure -M:test --focus wagoe.tenant.shell.persistence-test      # Contract tests (H2)
-clojure -M:test --focus wagoe.tenant.integration-test            # End-to-end flows
+clojure -M:test:test/pg :tenant                                             # All tenant tests
+clojure -M:test:test/pg :tenant --focus wagoe.tenant.core.tenant-test            # Slug/schema pure functions
+clojure -M:test:test/pg :tenant --focus wagoe.tenant.core.membership-test        # Membership pure functions
+clojure -M:test:test/pg :tenant --focus wagoe.tenant.shell.service-test          # TenantService (mocked repo)
+clojure -M:test:test/pg :tenant --focus wagoe.tenant.shell.membership-service-test  # MembershipService
+clojure -M:test:test/pg :tenant --focus wagoe.tenant.shell.invite-service-test   # InviteService
+clojure -M:test:test/pg :tenant --focus wagoe.tenant.shell.persistence-test      # Contract tests (H2)
+clojure -M:test:test/pg :tenant --focus wagoe.tenant.integration-test            # End-to-end flows
 ```
 
 ---

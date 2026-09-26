@@ -621,6 +621,50 @@
     auto-config))
 
 ;; =============================================================================
+;; Create-path Config Checks
+;; =============================================================================
+
+(def create-filled-fields
+  "Fields the admin create path fills itself (see `create-entity` in
+   wagoe.admin.shell.service)."
+  #{:id :created-at :updated-at})
+
+(defn- off-form-reason
+  [field entity-config]
+  (if (contains? (set (:readonly-fields entity-config)) field)
+    "it is in :readonly-fields"
+    "it is not in :editable-fields"))
+
+(defn create-form-column-errors
+  "The columns the admin can never create a record without.
+
+   The admin insert writes the create form's fields and :hide-fields (hidden
+   from view, but a request may still supply them), minus :readonly-fields,
+   plus `create-filled-fields`. A NOT NULL column outside that, with no default
+   and not filled by the database (identity, computed), fails every create
+   (BOU-494). `columns-meta` is the raw column metadata of the entity's table.
+   Returns a vector of {:field :column :message}; entities with their own
+   create flow are skipped."
+  [entity-name entity-config columns-meta]
+  (if (or (:create-redirect-url entity-config) (:split-table-update entity-config))
+    []
+    (let [written (into create-filled-fields
+                        (remove (set (:readonly-fields entity-config)))
+                        (concat (:editable-fields entity-config) (:hide-fields entity-config)))]
+      (vec (for [{column :name :keys [not-null default generated]} columns-meta
+                 :let [field (keyword (case-conversion/snake-case->kebab-case-string column))]
+                 :when (and not-null
+                            (nil? default)
+                            (not generated)
+                            (not (contains? written field)))]
+             {:field   field
+              :column  column
+              :message (str "Entity '" (name entity-name) "' cannot be created in the admin: column '"
+                            column "' is NOT NULL with no default, and " field
+                            " is not on the create form (" (off-form-reason field entity-config) ")."
+                            " Add a column default, or make " field " editable.")})))))
+
+;; =============================================================================
 ;; Field Ordering
 ;; =============================================================================
 
@@ -811,8 +855,8 @@
 (defn detect-relationships
   "Detect all relationships for an entity configuration.
 
-   Week 2: Detects belongs-to relationships from foreign key fields.
-   Week 3+: Could add has-many and has-one detection.
+   Detects belongs-to relationships from foreign key fields. The inverse
+   has-many needs every entity's config; see `with-inverse-relationships`.
 
    Args:
      entity-config: Entity configuration map
@@ -835,6 +879,44 @@
                          foreign-keys)]
     (assoc entity-config
            :relationships {:belongs-to belongs-to
-                           :has-many []   ; Week 3+: Inverse relationships
+                           :has-many []   ; filled by with-inverse-relationships
                            :has-one []})))  ; Week 3+: One-to-one relationships
+
+(defn inverse-has-many
+  "The has-many entries on `entity-name` implied by other entities'
+   belongs-to, in the shape an explicit `:has-many` config takes. Read-only:
+   an explicit entry can set `:editable true`.
+
+   Args:
+     entity-name:    the parent entity
+     entity-configs: map of entity name -> config, each run through
+                     `detect-relationships`"
+  [entity-name entity-configs]
+  (if-not (contains? entity-configs entity-name)
+    []
+    (vec (for [[child cfg] entity-configs
+               bt          (get-in cfg [:relationships :belongs-to])
+               :when       (= entity-name (:entity bt))
+               :let        [fk (:foreign-key bt)]]
+           {:entity      child
+            :table       (keyword (str/replace (name (:table-name cfg child)) "-" "_"))
+            :foreign-key fk
+            :label       (:label cfg)
+            ;; The key and the parent are already on the page.
+            :fields      (vec (remove #{fk (:primary-key cfg :id)} (:list-fields cfg)))
+            :editable    false}))))
+
+(defn with-inverse-relationships
+  "`entity-config` with detected has-many merged into `:has-many` (the key
+   the admin renders) and `[:relationships :has-many]`. An explicit entry for
+   a child entity replaces the detected one for that child."
+  [entity-name entity-config entity-configs]
+  (let [explicit (vec (:has-many entity-config))
+        covered  (set (map :entity explicit))
+        merged   (into explicit
+                       (remove #(covered (:entity %)))
+                       (inverse-has-many entity-name entity-configs))]
+    (-> entity-config
+        (assoc :has-many merged)
+        (assoc-in [:relationships :has-many] merged))))
 

@@ -17,6 +17,7 @@
    [wagoe.platform.shell.persistence-interceptors :as persist-interceptors]
    [wagoe.core.utils.type-conversion :as type-conversion]
    [wagoe.core.utils.case-conversion :as case-conversion]
+   [wagoe.admin.core.db-errors :as db-errors]
    [clojure.string :as str])
   (:import [java.util UUID]
            [java.time Instant]))
@@ -286,6 +287,19 @@
     {:primary-data   (add-ts primary-data)
      :secondary-data (add-ts secondary-data)}))
 
+(defn- not-null-violation
+  "`e` as a :validation-error on the field whose NOT NULL constraint the
+   database enforced, or nil when it is not such a violation (BOU-494)."
+  [e]
+  (when-let [column (some (comp db-errors/not-null-violation-column ex-message)
+                          (take-while some? (iterate ex-cause e)))]
+    (let [field (keyword (case-conversion/snake-case->kebab-case-string column))]
+      (ex-info (str "Field is required: " (name field))
+               {:type   :validation-error
+                :field  field
+                :errors {field ["Field is required"]}}
+               e))))
+
 ;; =============================================================================
 ;; Admin Service Implementation
 ;; =============================================================================
@@ -435,7 +449,10 @@
               ; Insert without RETURNING (H2 compatibility)
              insert-query {:insert-into table-name
                            :values [db-data]}
-             _ (db/execute-one! db-ctx insert-query)
+             _ (try
+                 (db/execute-one! db-ctx insert-query)
+                 (catch Exception e
+                   (throw (or (not-null-violation e) e))))
 
               ; Fetch the created record
              select-query {:select [:*]
@@ -740,13 +757,38 @@
      :admin-list-related-entities
      {:parent-id parent-id :entity (name (:entity relationship))}
      (fn [{:keys [_params]}]
-       (let [table   (:table relationship)
-             fk-col  (case-conversion/kebab-case->snake-case-keyword (:foreign-key relationship))
-             query   {:select [:*]
-                      :from   [table]
-                      :where  [:= fk-col (str parent-id)]}
-             results (db/execute-query! db-ctx query)]
-         results))
+       ;; Read the child the way its own list page does: through its
+       ;; :query-overrides and soft delete, so joined columns are not blank.
+       ;; A child that is not an admin entity falls back to its bare table.
+       (let [child      (:entity relationship)
+             child-cfg  (when (ports/validate-entity-exists schema-provider child)
+                          (ports/get-entity-config schema-provider child))
+             {:keys [from-clause select-clause join-clause field-aliases]}
+             (if child-cfg
+               (resolve-query-config child-cfg)
+               {:from-clause [(:table relationship)] :select-clause [:*] :field-aliases {}})
+             ;; Without an alias, qualify from :select: in a join a bare
+             ;; column that both tables carry is ambiguous.
+             qualify    (fn [field]
+                          (let [col (case-conversion/kebab-case->snake-case-keyword field)]
+                            (or (get field-aliases field)
+                                (some #(when (and (keyword? %)
+                                                  (str/ends-with? (name %) (str "." (name col))))
+                                         %)
+                                      select-clause)
+                                col)))
+             fk-where   [:= (qualify (:foreign-key relationship)) (str parent-id)]
+             query      (cond-> {:select   select-clause
+                                 :from     from-clause
+                                 :where    (if (:soft-delete child-cfg false)
+                                             [:and fk-where [:= (qualify :deleted-at) nil]]
+                                             fk-where)
+                                 ;; The child list's own order, so a limited
+                                 ;; panel is that list's first page.
+                                 :order-by [[(qualify (:default-sort child-cfg :id)) :asc]]}
+                          join-clause           (assoc :join join-clause)
+                          (:limit relationship) (assoc :limit (:limit relationship)))]
+         (db/execute-query! db-ctx query)))
      db-ctx)))
 
 ;; =============================================================================

@@ -190,6 +190,8 @@
        - :not-null - boolean
        - :default - default value or nil
        - :primary-key - boolean
+       - :generated - boolean: the database fills it (identity,
+         auto-increment, rowid, or a computed column)
        
      Example:
        (get-table-info sqlite-adapter ds :users)

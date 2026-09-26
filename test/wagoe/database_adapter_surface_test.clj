@@ -249,6 +249,48 @@
                  (catch Exception _ nil))
             (close!)))))))
 
+(def ^:private generated-probe-ddl
+  "A column the database numbers and one it computes, per engine. SQLite's
+   INTEGER PRIMARY KEY is the rowid, which it numbers itself."
+  {"h2"         (str "CREATE TABLE generated_probe (id VARCHAR(64) PRIMARY KEY,"
+                     " seq BIGINT GENERATED ALWAYS AS IDENTITY,"
+                     " len INT GENERATED ALWAYS AS (CHAR_LENGTH(id)) NOT NULL,"
+                     " plain INT NOT NULL)")
+   "postgresql" (str "CREATE TABLE generated_probe (id VARCHAR(64) PRIMARY KEY,"
+                     " seq BIGINT GENERATED ALWAYS AS IDENTITY,"
+                     " len INT GENERATED ALWAYS AS (length(id)) STORED NOT NULL,"
+                     " plain INT NOT NULL)")
+   "mysql"      (str "CREATE TABLE generated_probe (id VARCHAR(64) PRIMARY KEY,"
+                     " seq BIGINT NOT NULL AUTO_INCREMENT UNIQUE,"
+                     " len INT AS (LENGTH(id)) STORED NOT NULL,"
+                     " plain INT NOT NULL)")
+   "sqlite"     (str "CREATE TABLE generated_probe (seq INTEGER PRIMARY KEY,"
+                     " id VARCHAR(64) NOT NULL,"
+                     " len INT GENERATED ALWAYS AS (length(id)) STORED NOT NULL,"
+                     " plain INT NOT NULL)")})
+
+(deftest ^:integration get-table-info-marks-columns-the-database-fills
+  ;; Their column_default is NULL, so without :generated a caller took an
+  ;; identity column for one an INSERT must supply (PR #568 review).
+  (doseq [[label open] (live-backends)]
+    (testing label
+      (let [[{:keys [adapter datasource]} close!] (open)]
+        (try
+          (jdbc/execute! datasource ["DROP TABLE IF EXISTS generated_probe"])
+          (jdbc/execute! datasource [(generated-probe-ddl label)])
+          (let [info    (protocols/get-table-info adapter datasource :generated_probe)
+                by-name (into {} (map (juxt :name identity) info))]
+            (is (every? (comp boolean? :generated) info))
+            (is (true? (:generated (by-name "seq"))) "identity / auto-increment / rowid")
+            (is (false? (:generated (by-name "plain"))))
+            ;; PRAGMA table_info leaves generated columns out on SQLite.
+            (when-let [len (by-name "len")]
+              (is (true? (:generated len)) "computed")))
+          (finally
+            (try (jdbc/execute! datasource ["DROP TABLE IF EXISTS generated_probe"])
+                 (catch Exception _ nil))
+            (close!)))))))
+
 (deftest ^:integration column-names-come-back-lower-case-on-every-engine
   (testing "the port promises one shape, so a caller can compare without guessing"
     (doseq [[label open] (live-backends)]

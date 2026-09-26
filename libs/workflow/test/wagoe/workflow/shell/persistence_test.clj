@@ -9,6 +9,9 @@
   (:require [clojure.test :refer [deftest testing is use-fixtures]]
             [wagoe.workflow.ports :as ports]
             [wagoe.workflow.shell.persistence :as persistence]
+            [wagoe.platform.shell.database.migrations :as mig]
+            [clojure.string :as str]
+            [migratus.core :as migratus]
             [next.jdbc :as jdbc]
             [next.jdbc.connection :as connection])
   (:import [java.util UUID]
@@ -30,41 +33,11 @@
                                 :password ""})]
     (reset! test-datasource ds)
 
-    (jdbc/execute! ds
-                   ["CREATE TABLE IF NOT EXISTS workflow_instances (
-                      id            TEXT NOT NULL PRIMARY KEY,
-                      workflow_id   TEXT NOT NULL,
-                      entity_type   TEXT NOT NULL,
-                      entity_id     TEXT NOT NULL,
-                      current_state TEXT NOT NULL,
-                      created_at    TEXT NOT NULL,
-                      updated_at    TEXT NOT NULL,
-                      metadata      TEXT
-                    )"])
-
-    (jdbc/execute! ds
-                   ["CREATE INDEX IF NOT EXISTS idx_workflow_instances_entity
-                      ON workflow_instances (entity_type, entity_id)"])
-
-    (jdbc/execute! ds
-                   ["CREATE TABLE IF NOT EXISTS workflow_audit (
-                      id          TEXT NOT NULL PRIMARY KEY,
-                      instance_id TEXT NOT NULL REFERENCES workflow_instances(id),
-                      workflow_id TEXT NOT NULL,
-                      entity_type TEXT NOT NULL,
-                      entity_id   TEXT NOT NULL,
-                      transition  TEXT NOT NULL,
-                      from_state  TEXT NOT NULL,
-                      to_state    TEXT NOT NULL,
-                      actor_id    TEXT,
-                      actor_roles TEXT,
-                      context     TEXT,
-                      occurred_at TEXT NOT NULL
-                    )"])
-
-    (jdbc/execute! ds
-                   ["CREATE INDEX IF NOT EXISTS idx_workflow_audit_instance_id
-                      ON workflow_audit (instance_id)"])
+    ;; The shipped migrations, not a copy of their DDL.
+    (migratus/migrate {:store         :database
+                       :migration-dir (filterv #(str/includes? % "workflow")
+                                               (mig/discover-migration-dirs))
+                       :db            {:datasource ds}})
 
     (reset! test-store (persistence/create-workflow-store ds))))
 

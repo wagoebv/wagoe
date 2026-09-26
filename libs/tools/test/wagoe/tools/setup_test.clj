@@ -512,6 +512,14 @@
 (defn- env-ref? [v]
   (and (seq? v) (= 'env (first v))))
 
+(deftest ^:unit every-env-logs-through-slf4j
+  ;; Without :provider, :wagoe/logging is the no-op adapter and :level governs
+  ;; nothing (BOU-528).
+  (doseq [env ["dev" "test" "prod"]]
+    (is (= :slf4j (get-in (read-config (setup/build-config full-spec env))
+                          [:active :wagoe/logging :provider]))
+        env)))
+
 (deftest ^:unit prod-config-is-production-shaped
   (doseq [db (:database setup/valid-choices)]
     (let [active (:active (read-config (setup/build-config (assoc full-spec :database db) "prod")))

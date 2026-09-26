@@ -90,5 +90,5 @@ resources/conf/dev/
 
 [source,bash]
 ----
-clojure -M:test :admin
+clojure -M:test:test/pg :admin
 ----
