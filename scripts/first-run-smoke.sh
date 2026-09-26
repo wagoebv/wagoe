@@ -515,7 +515,7 @@ ok "(status), (modules) and (commands) work in the generated project"
 #
 # POST /auth/login with an empty body: coercion rejects it before any handler
 # runs, which is the error path a beginner meets first. Not the scaffolded
-# module: its handlers answer their own 400, which is not this pipeline's.
+# module: its handlers answer their own 400, outside this pipeline.
 LOGIN_CODE=$(curl -s -o /tmp/badreq.json -w "%{http_code}" --max-time 10 \
                   -X POST -H "Content-Type: application/json" -d "{}" \
                   http://localhost:3000/api/v1/auth/login || true)
