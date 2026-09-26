@@ -56,6 +56,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **Admin: add a child from an editable has-many** (BOU-491). The panel links to
+  the child's create form with the foreign key prefilled.
+- **Admin detects has-many from foreign keys** (BOU-481). Detected panels are
+  read-only; an explicit `:has-many` entry for the same child replaces them.
 - **`bb lint:imports`** (BOU-503). Imports the clj-kondo configs your
   dependencies export; generated projects ship the `.clj-kondo/` it needs.
 - **MCP `describe-module` found no modules in a generated project** (BOU-516).
