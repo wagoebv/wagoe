@@ -169,8 +169,8 @@ Format: `name:type[:modifier...]`, e.g. `status:enum:values=draft,sent:required`
 | `decimal` | `[:fn decimal?]`   | `DECIMAL(19,4)` |
 | `boolean` | `:boolean`         | `BOOLEAN`       |
 | `uuid`    | `:uuid`            | `TEXT`          |
-| `instant` | `inst?`            | `TEXT`          |
-| `date`    | `inst?`            | `TEXT`          |
+| `datetime` / `inst` | `inst?`  | `TIMESTAMP WITH TIME ZONE` |
+| `date`    | `YYYY-MM-DD` string | `DATE`         |
 
 **Modifiers**:
 

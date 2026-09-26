@@ -76,6 +76,12 @@
     (is (= "'2026-01-01'" (template/default-literal {:type :date} "2026-01-01"))
         "a DATE column still takes a date"))
 
+  (testing "`date` is a DATE, and takes a bare date as its default (BOU-547)"
+    (is (= {:name :due :type :date :required false :unique false :default "2026-01-01"}
+           (cli/parse-field-spec "due:date:default=2026-01-01")))
+    (is (str/includes? (migration-for (cli/parse-field-spec "due:date")) "due DATE"))
+    (is (= :inst (:type (cli/parse-field-spec "at:datetime"))) "datetime stays an instant"))
+
   (testing "a well-formed uuid default is accepted"
     (is (= "00000000-0000-0000-0000-000000000000"
            (:default (cli/parse-field-spec "token:uuid:default=00000000-0000-0000-0000-000000000000"))))))
@@ -88,7 +94,13 @@
     (is (nil? errors))
     (let [[ok? errs] (cli/validate-field-options options)]
       (is (false? ok?))
-      (is (some #(str/includes? % "--default") errs) (pr-str errs)))))
+      (is (some #(str/includes? % "--default") errs) (pr-str errs))))
+  (testing "--type date takes a bare date (BOU-547)"
+    (let [{:keys [options]} (clojure.tools.cli/parse-opts
+                             ["--module-name" "orders" "--entity" "Order"
+                              "--name" "due" "--type" "date" "--default" "2026-01-01"]
+                             cli/field-options)]
+      (is (= [true []] (cli/validate-field-options options))))))
 
 (deftest ^:unit the-schema-refuses-a-default-that-does-not-suit-the-type
   ;; The MCP tool and direct callers skip the CLI parser; generate-module

@@ -708,7 +708,7 @@
   ;; added there cannot quietly go unexercised.
   (let [cli-types ["string" "text" "integer" "int" "decimal" "boolean"
                    "email" "uuid" "enum" "date" "datetime" "inst" "json"]
-        type-mapping {"integer" :int "int" :int "date" :inst
+        type-mapping {"integer" :int "int" :int "date" :date
                       "datetime" :inst "text" :text "json" :json}]
     (doseq [t cli-types
             :let [field {:name :probe

@@ -173,7 +173,8 @@ Fields are specified as `name:type[:values=a,b,c][:references=entity][:on-delete
 | `email` | `[:re email-regex]` | |
 | `uuid` | `:uuid` | |
 | `enum` | `[:enum ...]` | `values=` is required — `[:enum]` validates nothing |
-| `date` / `datetime` / `inst` | `inst?` | |
+| `date` | `[:re …]`, a `YYYY-MM-DD` string | `DATE` column; reads back as the same string |
+| `datetime` / `inst` | `inst?` | `TIMESTAMP WITH TIME ZONE` |
 | `json` | `:map` | |
 | `relation` | `:uuid` | `references=` is required. The column is `<name>_id`, gets `REFERENCES <target>(id)` and an index; `on-delete=` is `cascade` (default), `restrict`, `set-null` or `no-action` |
 

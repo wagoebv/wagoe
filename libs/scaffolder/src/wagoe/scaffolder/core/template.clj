@@ -132,8 +132,11 @@
             #"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9]+([.-][a-zA-Z0-9]+)*\.[a-zA-Z]{2,}$"]
     :enum (into [:enum] enum-values)
     :inst 'inst?
+    ;; A string, which is what the generated persistence reads a DATE column
+    ;; back as. Month and day ranges so 2026-13-01 is a 400, not a database
+    ;; error; a 31st in a 30-day month still reaches the database.
     :date [:re {:error/message "Must be an ISO date (YYYY-MM-DD)"}
-           #"^\d{4}-\d{2}-\d{2}$"]
+           #"^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$"]
     :json :map
     ;; BigDecimal, not :double. `--field price:decimal` is what anyone reaches
     ;; for when scaffolding money, and this used to generate binary floating

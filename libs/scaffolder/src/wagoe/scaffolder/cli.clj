@@ -241,7 +241,7 @@
         ;; Map CLI type names to schema type names
         type-mapping {"integer" :int
                       "int" :int
-                      "date" :inst
+                      "date" :date
                       "datetime" :inst
                       "text" :text
                       "json" :json}
@@ -505,7 +505,7 @@
 (defn- field-command-type
   "The field type `--type` names."
   [type-str]
-  (get {"integer" :int "int" :int "date" :inst
+  (get {"integer" :int "int" :int "date" :date
         "datetime" :inst "text" :text "json" :json}
        type-str
        (keyword type-str)))

@@ -33,6 +33,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **A generated module's first-entity API answered canned stubs** (BOU-539). It now
   calls the service; regenerate `shell/http.clj` or copy `api-routes` from a new module.
+- **Scaffolded `date` fields were timestamps** (BOU-547). `due:date` is now a `DATE` column
+  holding `YYYY-MM-DD`; existing specs regenerate differently — use `datetime` for a timestamp.
+- **Scaffolded repository updates kept `updated-at` and sent an empty `SET`** (BOU-547).
+  Update sets it and refuses an empty change; regenerate `shell/*persistence.clj`.
 - **Scaffolded repositories failed every create and update on H2** (BOU-497).
   Regenerate `shell/persistence.clj`, or drop `sql/format` and `:returning`.
 - **Scaffolded list page showed only ids** (BOU-486). It now has a column per

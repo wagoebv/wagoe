@@ -10,6 +10,7 @@
             [clojure.test :as t :refer [deftest is testing]]
             [clojure.walk :as walk]
             [integrant.core :as ig]
+            [muuntaja.core :as muuntaja]
             [next.jdbc :as jdbc]
             [reitit.core :as r]
             [wagoe.platform.shell.adapters.database.factory :as db-factory]
@@ -569,3 +570,77 @@
       (testing "an unknown id is a 404"
         (is (= 404 (:status (call :get (str "/invoices/" (java.util.UUID/randomUUID)) nil))))
         (is (= 404 (:status (call :put (str "/invoices/" (java.util.UUID/randomUUID)) {:number "x"}))))))))
+
+;; =============================================================================
+;; Repository update (BOU-547)
+;; =============================================================================
+
+(defn- ->instant [x]
+  (cond (instance? java.time.Instant x)        x
+        (instance? java.time.OffsetDateTime x) (.toInstant ^java.time.OffsetDateTime x)
+        (instance? java.util.Date x)           (.toInstant ^java.util.Date x)
+        (string? x)                            (java.time.Instant/parse x)))
+
+(deftest ^:integration a-repository-update-bumps-updated-at-and-refuses-an-empty-one
+  (let [dir (invoice-module! (temp-dir) "bou547u")]
+    (add-line-item! dir "bou547u")
+    (load-and-test! dir)
+    (let [db   (h2-migrated dir "bou547u")
+          at   (fn [n s] @(ns-resolve (symbol (str "bou547u.billing." n)) s))
+          t0   (java.time.Instant/parse "2020-01-01T00:00:00Z")
+          inv  (random-uuid)
+          line (random-uuid)
+          ;; [repository create update row-without-audit-columns]
+          repos {"the first entity"
+                 [((at "shell.persistence" 'create-repository) db)
+                  (at "ports" 'create) (at "ports" 'update-entity)
+                  {:id inv :number "A-1"} {:number "A-2"}]
+                 "a further entity"
+                 [((at "shell.invoice-line-item-persistence" 'create-repository) db)
+                  (at "ports" 'create-invoice-line-item-entity) (at "ports" 'update-invoice-line-item-entity)
+                  {:id line :invoice-id inv :description "x" :quantity 1} {:quantity 2}]}]
+      (doseq [[label [repo create! update! row change]] repos]
+        (testing label
+          (create! repo (assoc row :created-at t0 :updated-at t0))
+          (testing "an update moves updated-at"
+            (let [updated (update! repo (merge {:id (:id row)} change))]
+              (is (= (val (first change)) (get updated (key (first change)))))
+              (is (.isAfter ^java.time.Instant (->instant (:updated-at updated)) t0)
+                  (pr-str (:updated-at updated)))))
+          (testing "an update with nothing to set is a typed error, not UPDATE t SET WHERE"
+            (let [e (try (update! repo {:id (:id row)}) nil
+                         (catch clojure.lang.ExceptionInfo e e))]
+              (is (= :validation-error (:type (ex-data e))) (pr-str e)))))))))
+
+(deftest ^:integration a-date-field-round-trips-as-a-date
+  ;; `due:date` was an instant: a TIMESTAMP WITH TIME ZONE column, and a
+  ;; 2026-01-01 posted came back as 2026-01-01T00:00:00Z (BOU-547).
+  (let [dir (temp-dir)
+        due (cli/parse-field-spec "due:date:required")
+        r   (ports/generate-module svc {:module-name "billing" :base-ns "bou547d"
+                                        :entities    [{:name "Invoice"
+                                                       :fields [{:name :number :type :string :required true}
+                                                                due]}]
+                                        :output-dir  (.getPath dir)})]
+    (is (:success r) (pr-str (:errors r)))
+    (load-and-test! dir)
+    (doseq [[label db] [["H2" (h2-migrated dir "bou547d")]
+                        ["SQLite" (let [f (java.io.File/createTempFile "bou547d" ".db")
+                                        ctx (db-factory/db-context {:adapter :sqlite :database-path (.getPath f)})]
+                                    (doseq [[path sql] (files-under dir)
+                                            :when (str/ends-with? path ".up.sql")
+                                            st (statements sql)]
+                                      (jdbc/execute! (:datasource ctx) [st]))
+                                    ctx)]]]
+      (testing label
+        (let [at      (fn [n s] @(ns-resolve (symbol (str "bou547d.billing." n)) s))
+              svc     ((at "shell.service" 'create-service) ((at "shell.persistence" 'create-repository) db))
+              call    (api-caller (:api ((at "shell.http" 'billing-routes) svc {})))
+              json    (fn [body] (slurp (muuntaja/encode muuntaja/instance "application/json" body)))
+              created (call :post "/invoices" {:number "A-1" :due "2026-01-01"})
+              id      (get-in created [:body :id])]
+          (is (= 201 (:status created)) (pr-str created))
+          (is (str/includes? (json (:body (call :get (str "/invoices/" id) nil))) "\"due\":\"2026-01-01\""))
+          (is (str/includes? (json (:body (call :put (str "/invoices/" id) {:due "2026-02-01"})))
+                             "\"due\":\"2026-02-01\""))
+          (is (= 400 (:status (call :post "/invoices" {:number "A-2" :due "2026-13-45"})))))))))
