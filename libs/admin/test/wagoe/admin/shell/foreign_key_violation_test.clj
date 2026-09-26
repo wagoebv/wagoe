@@ -108,3 +108,24 @@
           (when-not (= :sqlite backend)
             (is (re-find #"has-errors\"><label for=\"customer-id\"" body)
                 "the customer-id field carries the error")))))))
+
+(deftest ^:integration an-update-to-a-missing-row-is-a-validation-error-test
+  ;; Create mapped the refusal; update and the inline field edit did not (BOU-540 review).
+  (doseq [[backend db-ctx] @backends
+          :let [{:keys [svc]} (system db-ctx)
+                customer (str (random-uuid))
+                _ (db/execute-update! db-ctx {:insert-into :customers :values [{:id customer :name "C"}]})
+                order (ports/create-entity svc :orders {:number (str "U-" backend) :customer-id customer})
+                id    (parse-uuid (str (:id order)))
+                thrown (fn [f] (with-silent-logging
+                                 (try (f) nil (catch clojure.lang.ExceptionInfo e e))))]]
+    (testing (str backend)
+      (doseq [[label f] [["update-entity"
+                          #(ports/update-entity svc :orders id {:customer-id no-such-customer})]
+                         ["update-entity-field"
+                          #(ports/update-entity-field svc :orders id :customer-id no-such-customer)]]]
+        (testing label
+          (let [ex (thrown f)]
+            (is (= :validation-error (:type (ex-data ex))) (pr-str (ex-data ex)))
+            (when-not (= :sqlite backend)
+              (is (= :customer-id (:field (ex-data ex)))))))))))

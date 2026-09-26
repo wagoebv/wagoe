@@ -510,30 +510,33 @@
 
              split-cfg (:split-table-update entity-config)
 
-             _ (if split-cfg
-                 (let [{:keys [secondary-table secondary-fields]} split-cfg
-                       {:keys [primary-data secondary-data]}
-                       (split-update-data sanitized-data secondary-fields entity-fields now-str)
-                       primary-db   (-> primary-data
-                                        prepare-values-for-db
-                                        case-conversion/kebab-case->snake-case-map)
-                       secondary-db (-> secondary-data
-                                        prepare-values-for-db
-                                        case-conversion/kebab-case->snake-case-map)]
-                   (db/with-transaction* db-ctx
-                     (fn [tx]
-                       (when (seq primary-db)
-                         (db/execute-update! tx {:update table-name
-                                                 :set    primary-db
-                                                 :where  [:= primary-key id-str]}))
-                       (when (seq secondary-db)
-                         (db/execute-update! tx {:update secondary-table
-                                                 :set    secondary-db
-                                                 :where  [:= primary-key id-str]})))))
-                 ;; non-split path
-                 (db/execute-update! db-ctx {:update table-name
-                                             :set    db-data
-                                             :where  [:= primary-key id-str]}))
+             _ (try
+                 (if split-cfg
+                   (let [{:keys [secondary-table secondary-fields]} split-cfg
+                         {:keys [primary-data secondary-data]}
+                         (split-update-data sanitized-data secondary-fields entity-fields now-str)
+                         primary-db   (-> primary-data
+                                          prepare-values-for-db
+                                          case-conversion/kebab-case->snake-case-map)
+                         secondary-db (-> secondary-data
+                                          prepare-values-for-db
+                                          case-conversion/kebab-case->snake-case-map)]
+                     (db/with-transaction* db-ctx
+                       (fn [tx]
+                         (when (seq primary-db)
+                           (db/execute-update! tx {:update table-name
+                                                   :set    primary-db
+                                                   :where  [:= primary-key id-str]}))
+                         (when (seq secondary-db)
+                           (db/execute-update! tx {:update secondary-table
+                                                   :set    secondary-db
+                                                   :where  [:= primary-key id-str]})))))
+                   ;; non-split path
+                   (db/execute-update! db-ctx {:update table-name
+                                               :set    db-data
+                                               :where  [:= primary-key id-str]}))
+                 (catch Exception e
+                   (throw (or (not-null-violation e) (foreign-key-violation e) e))))
 
               ; Fetch the updated record using join-aware query
              {:keys [from-clause select-clause join-clause field-aliases]} (resolve-query-config entity-config)
@@ -605,7 +608,10 @@
                update-query {:update effective-table
                              :set db-data
                              :where [:= primary-key id-str]}
-               _ (db/execute-update! db-ctx update-query)
+               _ (try
+                   (db/execute-update! db-ctx update-query)
+                   (catch Exception e
+                     (throw (or (not-null-violation e) (foreign-key-violation e) e))))
 
                ; Fetch updated record using join-aware query
                {:keys [from-clause select-clause join-clause field-aliases]} (resolve-query-config entity-config)
