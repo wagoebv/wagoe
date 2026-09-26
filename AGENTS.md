@@ -368,9 +368,15 @@ Every module MUST define `ports.clj`.
 
 ### 4. Write Short
 
-Comments, docstrings, commit messages and PR descriptions: say the thing, then
-stop. Someone has to read all of it.
+Everything written for someone else to read — comments, docstrings, commit
+messages, PR descriptions, PR and review comments, issue descriptions — is
+short, human and to the point. Say the thing, then stop. Someone has to read
+all of it.
 
+- **No slop.** No filler, no restating the diff, no recap of what you just
+  said, no stacked caveats, no "comprehensive" or "robust".
+- **No attributions.** No "Generated with …" footers, no `Co-Authored-By`
+  trailers, no tool signatures.
 - **Comments and docstrings** — explain what is not obvious from the code.
   Usually why, not what. One or two sentences. If a comment needs paragraphs,
   the code probably needs a rethink, or the reasoning belongs in an ADR.
@@ -379,6 +385,10 @@ stop. Someone has to read all of it.
 - **PR descriptions** — what changed and why, in a few lines. Reviewers read
   the diff; do not narrate it back to them. Include verification output only
   when a reviewer would otherwise have to re-run it.
+- **PR and review comments** — the answer or the finding, and the evidence in
+  a line. Point to the commit; do not retell it.
+- **Issue descriptions** — the problem, how to reproduce it, and what done
+  looks like.
 - **CHANGELOG entries** — **two lines, hard limit.** What changed, and what a
   user does about it. The reasoning, the measurements and the history belong in
   the ticket and the commit; a changelog nobody finishes reading is worse than a
