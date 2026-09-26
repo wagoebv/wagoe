@@ -27,6 +27,31 @@
   (testing "nil stays nil"
     (is (nil? (parsing/strip-code-fence nil)))))
 
+(deftest ^:unit fenced-answers-with-more-than-one-fence-test
+  (testing "a fence line inside a Clojure string does not end the block"
+    (let [src    "(ns foo-test)\n(def sample \"see:\n```edn\n{:a 1}\n```\nend\")\n(deftest a-test (is sample))"
+          result (parsing/parse-generated-tests (str "```clojure\n" src "\n```"))]
+      (is (= src result))
+      (is (false? (parsing/truncated? result)))))
+
+  (testing "every clojure block of a gen-tests answer is kept"
+    (let [result (parsing/parse-generated-tests
+                  (str "Namespace:\n```clojure\n(ns foo-test\n  (:require [clojure.test :refer [deftest is]]))\n```\n\n"
+                       "And the tests:\n\n```clojure\n(deftest a-test\n  (is (= 1 1)))\n```\n"))]
+      (is (str/starts-with? result "(ns foo-test"))
+      (is (str/includes? result "(deftest a-test"))
+      (is (not (str/includes? result "```")))))
+
+  (testing "the json block is parsed, not a shell example before it"
+    (is (= "{:select [:*]}"
+           (:honeysql (parsing/parse-sql-response
+                       (str "Run it with:\n```bash\nbb ai sql \"all users\"\n```\n\n"
+                            "Answer:\n```json\n{\"honeysql\": \"{:select [:*]}\"}\n```"))))))
+
+  (testing "JSON outside any fence is still found when the fenced text is not JSON"
+    (is (= "value" (:key (parsing/parse-json-response
+                          "```bash\necho hi\n```\nResult: {\"key\": \"value\"}"))))))
+
 (deftest ^:unit parse-admin-entity-test
   (testing "BOU-493: a ```edn fence and surrounding prose are not rejected"
     (let [result (parsing/parse-admin-entity
