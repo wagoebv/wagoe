@@ -67,6 +67,21 @@
     (is (= "down" (get-in body [:components :database :status])))
     (is (string? (get-in body [:components :database :error])))))
 
+;; BOU-558: readiness is reachable by load balancers; a driver message names
+;; hosts, users and databases.
+(def ^:private secret-message
+  "Connection to db.internal.example:5432 refused for user app_admin password=hunter2")
+
+(deftest ^:unit readiness-handler-keeps-db-exception-text-out-of-body
+  (let [db-ctx {:datasource (reify javax.sql.DataSource
+                              (getConnection [_]
+                                (throw (java.sql.SQLException. ^String secret-message))))}
+        response ((sut/readiness-handler db-ctx nil) {})
+        body (json/parse-string (:body response) true)]
+    (is (= 503 (:status response)))
+    (is (= "down" (get-in body [:components :database :status])))
+    (is (not (re-find #"db\.internal|5432|app_admin|hunter2" (:body response))))))
+
 ;; =============================================================================
 ;; readiness-handler — with cache
 ;; =============================================================================
@@ -115,3 +130,14 @@
     (is (= 200 (:status response)))
     (is (= "ok" (:status body)))
     (is (empty? (:components body)))))
+
+(deftest ^:unit readiness-handler-keeps-cache-exception-text-out-of-body
+  (let [cache (reify wagoe.cache.ports.ICacheManagement
+                (ping [_] (throw (ex-info ^String secret-message {})))
+                (close! [_] true)
+                (flush-all! [_] 0))
+        response ((sut/readiness-handler nil cache) {})
+        body (json/parse-string (:body response) true)]
+    (is (= 503 (:status response)))
+    (is (= "down" (get-in body [:components :cache :status])))
+    (is (not (re-find #"db\.internal|5432|app_admin|hunter2" (:body response))))))
