@@ -76,3 +76,11 @@
     (let [prompt (prompts/build-docs-system-prompt :agents)]
       (is (str/includes? prompt "Ports & Protocols"))
       (is (str/includes? prompt "ports.clj")))))
+
+(deftest ^:unit admin-entity-prompt-teaches-has-many-test
+  (testing "BOU-493: relations use the admin library's :has-many shape"
+    (let [prompt (prompts/build-admin-entity-system-prompt [])]
+      (is (str/includes? prompt ":has-many"))
+      (doseq [k [":entity" ":table" ":foreign-key" ":label" ":fields"]]
+        (is (str/includes? prompt k) k))
+      (is (not (str/includes? prompt ":relations"))))))

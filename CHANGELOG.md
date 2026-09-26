@@ -31,6 +31,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **`bb ai admin-entity` rejected an answer in an ```edn fence** (BOU-493). Any
+  fence is accepted now, and a parse failure names the real error.
+- **`bb ai explain`, `gen-tests` and `sql` are marked experimental** (BOU-511..513).
+  `explain` prints the error's own BND code and `Fix:` text first.
 - **install.sh could not recover from a failed sdkman download** (BOU-525). A
   retry now clears the partial install; an existing sdkman is detected.
 - **MCP verify never ran a generated project's tests** (BOU-520). It now focuses
