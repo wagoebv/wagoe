@@ -1,18 +1,9 @@
 (ns wagoe.tools.clojure-deps-action-test
-  "The dependency retry has to clear Maven's record of the failure first.
+  "The clojure-deps action's dependency prefetch: its retry, its cache key, and
+   what it warms.
 
-   Maven writes a `*.lastUpdated` marker beside an artifact it could not
-   download, and its update policy for releases is `never` — so a later
-   resolution reads the marker instead of the network. The four retries in
-   `.github/actions/clojure-deps` waited 140 seconds between them and achieved
-   nothing, and `~/.m2/repository` is what actions/cache saves, so one 403
-   during warm-deps was restored into all 30 isolation cells (BOU-440).
-
-   A transient 404 records an empty `.error=`, like a genuine absence, so the
-   retry also clears the markers of artifacts the error names (BOU-548).
-
-   Asserted by running scripts/ci-resolve-deps.sh against a fake ~/.m2, not by
-   grepping the YAML for a word: what matters is which markers it removes."
+   The retry is asserted by running scripts/ci-resolve-deps.sh with a fake
+   `clojure` and `sleep` on the PATH, not by grepping the YAML for a word."
   (:require [babashka.fs :as fs]
             [babashka.process :as process]
             [clj-yaml.core :as yaml]
@@ -98,87 +89,67 @@
               (str "the matrix builds these, and nothing warms their deps: "
                    (pr-str (sort missing)))))))))
 
-;; The fake `clojure` fails for as long as FAKE_BLOCKER exists, which is what
-;; Maven does while a marker is in place.
+;; The fake `clojure` fails its first FAKE_FAILS calls with the resolver's own
+;; message and FAKE_EXIT, then succeeds. The fake `sleep` records the wait
+;; instead of taking it.
 (def ^:private fake-clojure
   "#!/usr/bin/env bash
 n=$(( $(cat \"$HOME/.calls\" 2>/dev/null || echo 0) + 1 )); echo $n > \"$HOME/.calls\"
-if { [ -n \"${FAKE_BLOCKER:-}\" ] && [ -e \"$FAKE_BLOCKER\" ]; } || [ \"${FAKE_ALWAYS:-}\" = fail ]; then
-  echo 'Error building classpath. Could not find artifact io.opentelemetry:opentelemetry-sdk-testing:jar:1.66.0 (absent)' >&2
-  exit 1
+echo \"$*\" >> \"$HOME/.args\"
+if [ \"$n\" -le \"${FAKE_FAILS:-0}\" ]; then
+  echo 'Error building classpath. The following artifacts could not be resolved: io.opentelemetry:opentelemetry-sdk-testing:jar:1.66.0 (absent): Could not find artifact io.opentelemetry:opentelemetry-sdk-testing:jar:1.66.0 in central (https://repo1.maven.org/maven2/)' >&2
+  exit \"${FAKE_EXIT:-1}\"
 fi
 ")
 
-(def ^:private absent-marker
-  ".m2/repository/io/opentelemetry/opentelemetry-sdk-testing/1.66.0/opentelemetry-sdk-testing-1.66.0.jar.lastUpdated")
+(def ^:private fake-sleep
+  "#!/usr/bin/env bash
+echo \"$1\" >> \"$HOME/.slept\"
+")
 
-(def ^:private sources-marker
-  ".m2/repository/foo/bar/1.0/bar-1.0-sources.jar.lastUpdated")
-
-(def ^:private transfer-marker
-  ".m2/repository/org/slf4j/slf4j-api/1.7.36/slf4j-api-1.7.36.jar.lastUpdated")
-
-(def ^:private empty-error "#NOTE\nhttps\\://repo.maven.apache.org/maven2/.error=\n")
-
-(defn- with-m2 [f]
+(defn- with-fakes [f]
   (let [home (fs/create-temp-dir)
-        mk (fn [rel content]
-             (let [p (fs/path home rel)]
-               (fs/create-dirs (fs/parent p))
-               (spit (str p) content)
-               p))]
+        bin (fs/path home "bin")]
     (try
-      (fs/create-dirs (fs/path home "bin"))
-      (spit (str (fs/path home "bin" "clojure")) fake-clojure)
-      (fs/set-posix-file-permissions (fs/path home "bin" "clojure") "rwxr-xr-x")
-      (f home mk)
+      (fs/create-dirs bin)
+      (doseq [[cmd src] {"clojure" fake-clojure "sleep" fake-sleep}]
+        (spit (str (fs/path bin cmd)) src)
+        (fs/set-posix-file-permissions (fs/path bin cmd) "rwxr-xr-x"))
+      (f home)
       (finally (fs/delete-tree home)))))
 
 (defn- resolve! [home env]
   (process/shell {:out :string :err :string :continue true :dir (str home)
                   :extra-env (merge {"HOME" (str home)
-                                     "PATH" (str (fs/path home "bin") ":" (System/getenv "PATH"))
-                                     "RESOLVE_RETRY_DELAY" "0"}
+                                     "PATH" (str (fs/path home "bin") ":" (System/getenv "PATH"))}
                                     env)}
                  "bash" (str (io/file (repo-root) "scripts" "ci-resolve-deps.sh")) "." "-M:test"))
 
-(defn- calls [home]
-  (parse-long (str/trim (slurp (str (fs/path home ".calls"))))))
+(defn- lines-of [home file]
+  (let [f (fs/path home file)]
+    (if (fs/exists? f) (str/split-lines (slurp (str f))) [])))
 
-(deftest ^:unit it-clears-a-transfer-failure-and-keeps-a-genuine-absence
-  (with-m2
-    (fn [home mk]
-      ;; What Maven writes when the download failed…
-      (mk transfer-marker (str "#NOTE\nhttps\\://repo.maven.apache.org/maven2/.error="
-                               "Could not transfer artifact: status code: 403\n"))
-      ;; …and when an artifact was never published. Every -sources.jar that does
-      ;; not exist has one, and re-checking each on every attempt buys nothing.
-      (mk sources-marker empty-error)
-      (let [r (resolve! home {})]
+(deftest ^:unit a-transient-failure-is-retried-until-it-resolves
+  (with-fakes
+    (fn [home]
+      (let [r (resolve! home {"FAKE_FAILS" "3"})]
         (is (zero? (:exit r)) (str (:out r) (:err r)))
-        (is (not (fs/exists? (fs/path home transfer-marker))))
-        (is (fs/exists? (fs/path home sources-marker)))
-        (is (str/includes? (:out r) "cleared 1"))))))
+        (is (= 4 (count (lines-of home ".args"))) "succeeds on the fourth attempt")
+        (is (every? #{"-Sthreads 1 -P -M:test"} (lines-of home ".args")))))))
 
-(deftest ^:unit a-cached-transient-404-is-cleared-for-the-retry
-  (testing "a transient miss records an empty .error=, like a genuine one, so
-            the retry clears the marker of the artifact the error names"
-    (with-m2
-      (fn [home mk]
-        (let [marker (mk absent-marker empty-error)]
-          (mk sources-marker empty-error)
-          (let [r (resolve! home {"FAKE_BLOCKER" (str marker)})]
-            (is (zero? (:exit r)) (str (:out r) (:err r)))
-            (is (= 2 (calls home)) "succeeds on the second attempt")
-            (is (not (fs/exists? marker)))
-            (is (fs/exists? (fs/path home sources-marker))
-                "a marker the error does not name is kept")))))))
+(deftest ^:unit the-retries-outlast-a-few-minutes-of-central-failing
+  (testing "BOU-548's outage failed four attempts over two and a half minutes"
+    (with-fakes
+      (fn [home]
+        (resolve! home {"FAKE_FAILS" "99"})
+        (let [waited (reduce + (map parse-long (lines-of home ".slept")))]
+          (is (>= waited 300) (str "waits total " waited "s")))))))
 
-(deftest ^:unit a-genuine-404-still-fails-after-the-retries
-  (with-m2
-    (fn [home _mk]
-      (let [r (resolve! home {"FAKE_ALWAYS" "fail"})]
-        (is (= 1 (:exit r)))
-        (is (= 4 (calls home)))
-        (is (str/includes? (:out r) "after 4 attempts"))))))
-
+(deftest ^:unit a-persistent-failure-gives-up-with-the-resolvers-status
+  (with-fakes
+    (fn [home]
+      (let [r (resolve! home {"FAKE_FAILS" "99" "FAKE_EXIT" "3"})]
+        (is (= 3 (:exit r)))
+        (is (= 5 (count (lines-of home ".args"))))
+        (is (str/includes? (:out r) "Could not find artifact io.opentelemetry"))
+        (is (str/includes? (:out r) "after 5 attempts"))))))

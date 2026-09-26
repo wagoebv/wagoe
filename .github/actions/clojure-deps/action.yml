@@ -104,9 +104,7 @@ runs:
         set -o pipefail
 
         # One retry policy for both loops below, so a directory warm is as
-        # protected as an alias warm. It lives in a script so the clearing of
-        # Maven's cached failures can be run against a fake ~/.m2 (BOU-440,
-        # BOU-548).
+        # protected as an alias warm. It lives in a script so it can be tested.
         resolve_with_retry() {
           "${{ github.action_path }}/../../../scripts/ci-resolve-deps.sh" "$@"
         }
