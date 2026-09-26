@@ -150,10 +150,11 @@ Unversioned `/api/workflow/*` paths are backward-compatibility redirects to `/ap
 ## Database Schema
 
 The tables ship as migrations in `libs/workflow/resources/wagoe/workflow/migrations/`,
-so `bb migrate up` creates them with no boot. `:wagoe/workflow-db-schema` runs the
-same files at boot for installations that do not migrate. Timestamps are
+so `bb migrate up` creates them with no boot. `:wagoe/workflow-db-schema` creates
+them at boot for installations that do not migrate. Timestamps are
 `TIMESTAMP WITH TIME ZONE`; tables created before BOU-502 stored them as TEXT and
-are converted by the second migration.
+are converted by the second migration, which only `migrate up` runs. Workflow
+supports PostgreSQL, H2 and SQLite, not MySQL.
 
 ---
 

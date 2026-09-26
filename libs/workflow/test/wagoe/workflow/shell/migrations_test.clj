@@ -146,13 +146,15 @@
         (is (= written (:created-at (ports/find-instance (persistence/create-workflow-store ds) id))))
         (assert-store-round-trips ds)))))
 
-(deftest ^:integration boot-runs-the-same-migrations
+(defn- h2-ctx []
+  (factory/db-context
+   (factory/h2-config (str "mem:wf_boot_" (System/nanoTime) ";DB_CLOSE_DELAY=-1"))))
+
+(deftest ^:integration boot-creates-the-tables
   (testing ":wagoe/workflow-db-schema, for an installation that boots without migrating"
-    (let [ctx (factory/db-context
-               (factory/h2-config (str "mem:wf_boot_" (System/nanoTime) ";DB_CLOSE_DELAY=-1")))
+    (let [ctx (h2-ctx)
           ds  (:datasource ctx)]
       (try
-        (doseq [ddl legacy-boot-ddl] (jdbc/execute! ds [ddl]))
         (ig/init-key :wagoe/workflow-db-schema {:ctx ctx})
         (doseq [[table column] timestamp-columns]
           (is (timestamp-tz/zone-aware? (column-type ds table column))
@@ -162,3 +164,20 @@
           (migrate! ds)
           (assert-store-round-trips ds))
         (finally (factory/close-db-context! ctx))))))
+
+(deftest ^:integration boot-leaves-a-legacy-table-to-migrate-up
+  ;; Converting takes an exclusive lock and changes the column type under
+  ;; replicas still running the old version, so only `migrate up` does it.
+  (let [ctx (h2-ctx)
+        ds  (:datasource ctx)]
+    (try
+      (doseq [ddl legacy-boot-ddl] (jdbc/execute! ds [ddl]))
+      (ig/init-key :wagoe/workflow-db-schema {:ctx ctx})
+      (doseq [[table column] timestamp-columns]
+        (is (not (timestamp-tz/zone-aware? (column-type ds table column)))
+            (str table "." column " was converted at boot")))
+      (migrate! ds)
+      (doseq [[table column] timestamp-columns]
+        (is (timestamp-tz/zone-aware? (column-type ds table column))
+            (str table "." column)))
+      (finally (factory/close-db-context! ctx)))))
