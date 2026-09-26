@@ -8,6 +8,7 @@
    [wagoe.admin.core.ui :as admin-ui]
    [wagoe.admin.core.ui.base :as ui-base]
    [wagoe.admin.ports :as ports]
+   [wagoe.core.utils.redirect :as redirect]
    [wagoe.admin.shell.permissions :as shell-permissions]
    [wagoe.i18n.shell.middleware :as i18n-middleware]
    [wagoe.i18n.shell.render :as i18n]
@@ -607,7 +608,8 @@
    it cannot redirect off-site."
   [request]
   (let [return-to (get-in request [:query-params "return_to"])]
-    (when (and (string? return-to) (str/starts-with? return-to "/web/admin/"))
+    (when (and (redirect/local-path? return-to)
+               (str/starts-with? return-to "/web/admin/"))
       return-to)))
 
 (defn foreign-key-prefill

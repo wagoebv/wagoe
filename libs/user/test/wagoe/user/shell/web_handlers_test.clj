@@ -937,3 +937,31 @@
     (is (= 500 (:status response)))
     (is (not (html-contains? response "hunter2")))
     (is (html-contains? response "register-error-generic"))))
+
+(deftest ^:contract ^:security login-return-to-stays-on-this-site
+  ;; Browsers read `\\` as `/`, so `/\\evil.com` was followed as `//evil.com`
+  ;; after login (BOU-553).
+  (let [auth-svc (reify ports/IUserService
+                   (authenticate-user [_ _]
+                     {:authenticated true
+                      :user    {:role :user}
+                      :session {:session-token "t"}}))
+        location (fn [return-to]
+                   (-> ((web-handlers/login-submit-handler auth-svc {})
+                        {:form-params {"email" "user@example.com"
+                                       "password" "password123"
+                                       "return-to" return-to}})
+                       (get-in [:headers "Location"])))]
+    (doseq [[return-to expected]
+            [["/\\evil.com"        "/web/dashboard"]
+             ["/%5Cevil.com"      "/web/dashboard"]
+             ["/%5cevil.com"      "/web/dashboard"]
+             ["//evil.com"        "/web/dashboard"]
+             ["/%2F%2Fevil.com"   "/web/dashboard"]
+             ["https://evil.com"  "/web/dashboard"]
+             ["/web/x\ty"        "/web/dashboard"]
+             ["/web/x\ny"        "/web/dashboard"]
+             [""                  "/web/dashboard"]
+             ["/web/x?y=1"        "/web/x?y=1"]
+             ["/web/x#frag"       "/web/x#frag"]]]
+      (is (= expected (location return-to)) (pr-str return-to)))))

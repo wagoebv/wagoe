@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Open redirect after login via `?return-to=/\evil.com`** (BOU-553). Backslashes, control
+  characters and encoded slashes are refused, in admin's `return_to` too. Upgrade user and admin.
 - **`/web/register` answered 500 on a rejected password or a taken email** (BOU-552). It re-renders
   the form; `POST /api/v1/users` answers 400 for a password containing the email. Upgrade user.
 - **Admin offered a tenant create that could never succeed** (BOU-534). It is now

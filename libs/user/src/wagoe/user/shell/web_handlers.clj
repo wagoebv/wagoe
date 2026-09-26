@@ -10,6 +10,7 @@
 
    All handlers use the shared UI components and user shell services."
   (:require [wagoe.config :as wagoe-config]
+            [wagoe.core.utils.redirect :as redirect]
             [wagoe.core.validation :as cv]
             [wagoe.i18n.shell.middleware :as i18n-middleware]
             [wagoe.i18n.shell.render :as i18n]
@@ -74,12 +75,7 @@
    Returns:
      Safe local URL string"
   [url default]
-  (if (and url
-           (string? url)
-           (str/starts-with? url "/")
-           (not (str/starts-with? url "//")))
-    url
-    default))
+  (if (redirect/local-path? url) url default))
 
 (defn- display-password-policy
   "The password rules the create-user form should list.
