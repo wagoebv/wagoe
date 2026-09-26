@@ -78,7 +78,9 @@ docker run --rm \
 # migration at all" both arrived with no cause (BOU-525).
 fail() {
   echo
-  last_log="$(ls -t /tmp/*.log 2>/dev/null | head -1)"
+  # `|| true`: before the first step writes a log, ls finds nothing and,
+  # under -euo pipefail, would end the shell before the message below.
+  last_log="$(ls -t /tmp/*.log 2>/dev/null | head -1 || true)"
   if [ -n "$last_log" ]; then
     echo "── last 40 lines of $last_log"
     tail -40 "$last_log"
