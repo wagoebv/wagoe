@@ -332,6 +332,10 @@ Show child records inline on a parent's detail page:
               :editable    true}]}}
 ```
 
+With `:editable true` the panel links each row to its edit form and offers "New <child>", which opens the child's create form with the foreign key filled in and returns to the parent after saving.
+
+Without config, a has-many is detected from any allowlisted entity whose `<parent>_id` column names this one; it is read-only. An explicit entry for the same child entity replaces the detected one.
+
 On the child entity, use `:parent-context` to show parent info at the top of the child's detail page:
 
 ```clojure

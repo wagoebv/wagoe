@@ -562,6 +562,36 @@
      (into {} (remove (fn [[k _]] (or (offset-param k) (#{"__zone" :__zone} k)))) params)]))
 
 ;; =============================================================================
+;; Return-to and has-many prefill (BOU-491)
+;; =============================================================================
+
+(defn safe-return-to
+  "The request's `return_to`, or nil unless it is a path inside the admin, so
+   it cannot redirect off-site."
+  [request]
+  (let [return-to (get-in request [:query-params "return_to"])]
+    (when (and (string? return-to) (str/starts-with? return-to "/web/admin/"))
+      return-to)))
+
+(defn foreign-key-prefill
+  "Starting values for a create form of `entity-name`, from the query string
+   a parent's \"New\" link builds. Only a field some entity names as the
+   `:foreign-key` of a has-many on `entity-name` is taken, and only when its
+   value is a UUID."
+  [entity-name entity-configs query-params]
+  (let [fk-fields (into #{}
+                        (comp (mapcat :has-many)
+                              (filter #(= entity-name (:entity %)))
+                              (keep :foreign-key)
+                              (map #(keyword (str/replace (name %) "_" "-"))))
+                        (vals entity-configs))]
+    (into {}
+          (keep (fn [field]
+                  (when-let [id (some-> (get query-params (name field)) parse-uuid)]
+                    [field id])))
+          fk-fields)))
+
+;; =============================================================================
 ;; Entity Detail Options (shared by detail + crud handlers)
 ;; =============================================================================
 
@@ -589,7 +619,8 @@
         related-records (when (seq has-many-rels)
                           (mapv (fn [rel]
                                   [(cond-> (assoc rel :entity-config (get entity-configs (:entity rel)))
-                                     (:editable rel) (assoc :return-to parent-url))
+                                     (:editable rel) (assoc :return-to parent-url
+                                                            :parent-id record-id))
                                    (ports/list-related-entities admin-service entity-name record-id rel)])
                                 has-many-rels))
 

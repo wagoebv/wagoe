@@ -102,7 +102,13 @@
               permissions (permissions/get-entity-permissions user entity-name entity-config)]
           (support/html-response request
                                  (admin-ui/admin-layout
-                                  (admin-ui/entity-detail-page entity-name entity-config nil {} permissions {:display (support/display-options config request)})
+                                  (admin-ui/entity-detail-page entity-name entity-config nil {} permissions
+                                                               {:display   (support/display-options config request)
+                                                                ;; A parent's "New" link (BOU-491).
+                                                                :return-to (support/safe-return-to request)
+                                                                :prefill   (support/foreign-key-prefill
+                                                                            entity-name entity-configs
+                                                                            (:query-params request))})
                                   {:user user
                                    :current-entity entity-name
                                    :entities entities

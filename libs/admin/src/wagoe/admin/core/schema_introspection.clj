@@ -811,8 +811,8 @@
 (defn detect-relationships
   "Detect all relationships for an entity configuration.
 
-   Week 2: Detects belongs-to relationships from foreign key fields.
-   Week 3+: Could add has-many and has-one detection.
+   Detects belongs-to relationships from foreign key fields. The inverse
+   has-many needs every entity's config; see `with-inverse-relationships`.
 
    Args:
      entity-config: Entity configuration map
@@ -835,6 +835,44 @@
                          foreign-keys)]
     (assoc entity-config
            :relationships {:belongs-to belongs-to
-                           :has-many []   ; Week 3+: Inverse relationships
+                           :has-many []   ; filled by with-inverse-relationships
                            :has-one []})))  ; Week 3+: One-to-one relationships
+
+(defn inverse-has-many
+  "The has-many entries on `entity-name` implied by other entities'
+   belongs-to, in the shape an explicit `:has-many` config takes. Read-only:
+   an explicit entry can set `:editable true`.
+
+   Args:
+     entity-name:    the parent entity
+     entity-configs: map of entity name -> config, each run through
+                     `detect-relationships`"
+  [entity-name entity-configs]
+  (if-not (contains? entity-configs entity-name)
+    []
+    (vec (for [[child cfg] entity-configs
+               bt          (get-in cfg [:relationships :belongs-to])
+               :when       (= entity-name (:entity bt))
+               :let        [fk (:foreign-key bt)]]
+           {:entity      child
+            :table       (keyword (str/replace (name (:table-name cfg child)) "-" "_"))
+            :foreign-key fk
+            :label       (:label cfg)
+            ;; The key and the parent are already on the page.
+            :fields      (vec (remove #{fk (:primary-key cfg :id)} (:list-fields cfg)))
+            :editable    false}))))
+
+(defn with-inverse-relationships
+  "`entity-config` with detected has-many merged into `:has-many` (the key
+   the admin renders) and `[:relationships :has-many]`. An explicit entry for
+   a child entity replaces the detected one for that child."
+  [entity-name entity-config entity-configs]
+  (let [explicit (vec (:has-many entity-config))
+        covered  (set (map :entity explicit))
+        merged   (into explicit
+                       (remove #(covered (:entity %)))
+                       (inverse-has-many entity-name entity-configs))]
+    (-> entity-config
+        (assoc :has-many merged)
+        (assoc-in [:relationships :has-many] merged))))
 

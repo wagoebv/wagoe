@@ -971,6 +971,51 @@
                                               sample-related-records))]
       (is (str/includes? html "ABC-1")))))
 
+(def ^:private order-id "4b1c2d3e-0000-4000-8000-000000000001")
+
+(def ^:private editable-relationship
+  (assoc sample-relationship
+         :editable    true
+         :foreign-key :order-id
+         :parent-id   order-id
+         :return-to   (str "/web/admin/orders/" order-id)
+         :entity-config {:label "Order items"}))
+
+(deftest ^:unit related-records-table-new-child-link-test
+  ;; BOU-491: an editable has-many listed its children but offered no way to add one.
+  (let [new-url (str "/web/admin/order-items/new?order-id=" order-id
+                     "&return_to=%2Fweb%2Fadmin%2Forders%2F" order-id)]
+    (testing "an editable relationship links to the child's create form"
+      (let [table (ui/related-records-table editable-relationship sample-related-records)]
+        (is (str/includes? (str table) (str "\"" new-url "\"")))
+        (is (str/includes? (str table) (str [:t :admin/button-new {:entity "Order items"}])))))
+
+    (testing "the link is there when the parent has no children yet"
+      (is (str/includes? (str (ui/related-records-table editable-relationship [])) new-url)))
+
+    (testing "a read-only relationship has no link"
+      (let [html (str (ui/related-records-table (assoc editable-relationship :editable false)
+                                                sample-related-records))]
+        (is (not (str/includes? html "/new?")))
+        (is (not (str/includes? html ":admin/button-new")))))))
+
+(deftest ^:unit create-form-carries-prefill-and-return-to-test
+  ;; BOU-491: the child's create form opens with the FK filled in, and posts
+  ;; return_to so the create handler can send the admin back to the parent.
+  (let [config  (-> sample-entity-config
+                    (update :editable-fields conj :order-id)
+                    (assoc-in [:fields :order-id] {:type :uuid :label "Order"}))
+        parent  (str "/web/admin/orders/" order-id)
+        page    (ui/entity-detail-page :order-items config nil nil sample-permissions
+                                       {:return-to parent
+                                        :prefill   {:order-id (parse-uuid order-id)}})
+        html    (str page)]
+    (is (str/includes? html ":admin/page-create-title") "still a create page")
+    (is (str/includes? html "hx-post"))
+    (is (str/includes? html (str "\"" order-id "\"")) "the FK field is prefilled")
+    (is (str/includes? html (str "/web/admin/order-items?return_to="
+                                 (java.net.URLEncoder/encode parent "UTF-8"))))))
+
 (deftest ^:unit entity-detail-page-threads-display-to-related-tables-test
   (let [page (ui/entity-detail-page :users sample-entity-config sample-record
                                     nil sample-permissions
@@ -1448,7 +1493,7 @@
                (testing (str "JVM zone " zone)
                  (is (= "2026-09-01T12:00:50"
                         (ui/format-for-datetime-input (java.sql.Timestamp/valueOf "2026-09-01 12:00:50")
-                                                    (java.time.ZoneId/systemDefault) (java.time.ZoneId/systemDefault))))
+                                                      (java.time.ZoneId/systemDefault) (java.time.ZoneId/systemDefault))))
                  (is (= "2026-09-01"
                         (ui/format-for-date-input (java.sql.Timestamp/valueOf "2026-09-01 00:30:00")))))))))
 

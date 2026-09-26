@@ -640,3 +640,54 @@
                     :primary-key false}
           result (introspection/parse-column-metadata col-meta)]
       (is (false? (:hidden result))))))
+
+;; =============================================================================
+;; Inverse (has-many) Relationships — BOU-481
+;; =============================================================================
+
+(defn- detected [entity-name columns]
+  (introspection/detect-relationships
+   (introspection/parse-table-metadata entity-name columns)))
+
+(def ^:private order-configs
+  {:orders      (detected :orders [{:name "id" :type "UUID" :primary-key true}
+                                   {:name "number" :type "VARCHAR(50)" :not-null true}])
+   :order-items (detected :order-items [{:name "id" :type "UUID" :primary-key true}
+                                        {:name "order_id" :type "UUID" :not-null true}
+                                        {:name "sku" :type "VARCHAR(50)" :not-null true}])})
+
+(deftest ^:unit inverse-has-many-test
+  (testing "a belongs-to registers the matching has-many on the parent, in config shape"
+    (is (= [{:entity      :order-items
+             :table       :order_items
+             :foreign-key :order-id
+             :label       "Order items"
+             :fields      [:sku]
+             :editable    false}]
+           (introspection/inverse-has-many :orders order-configs))))
+
+  (testing "an entity nothing points at has none"
+    (is (= [] (introspection/inverse-has-many :order-items order-configs))))
+
+  (testing "a belongs-to whose parent is not a known entity registers nothing"
+    (is (= [] (introspection/inverse-has-many :orders (dissoc order-configs :orders))))))
+
+(deftest ^:unit with-inverse-relationships-test
+  (let [explicit {:entity :order-items :table :order_items :foreign-key :order-id
+                  :label "Lines" :fields [:sku] :editable true}
+        result   (fn [configs] (introspection/with-inverse-relationships
+                                 :orders (:orders configs) configs))]
+    (testing "detected has-many lands on the :has-many key the admin renders"
+      (let [cfg (result order-configs)]
+        (is (= [:order-items] (mapv :entity (:has-many cfg))))
+        (is (= (:has-many cfg) (get-in cfg [:relationships :has-many])))))
+
+    (testing "an explicit entry for the same child wins over the detected one"
+      (let [cfg (result (assoc-in order-configs [:orders :has-many] [explicit]))]
+        (is (= [explicit] (:has-many cfg)))
+        (is (= [explicit] (get-in cfg [:relationships :has-many])))))
+
+    (testing "explicit entries for other children are kept alongside detected ones"
+      (let [other {:entity :notes :table :notes :foreign-key :order-id}
+            cfg   (result (assoc-in order-configs [:orders :has-many] [other]))]
+        (is (= [:notes :order-items] (mapv :entity (:has-many cfg))))))))
