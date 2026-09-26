@@ -58,6 +58,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **`bb setup` writes a prod profile** (BOU-499). Set the `#env` variables it
+  names (`bb doctor --env prod --ci` lists the unset ones) before deploying.
 - **`bb lint:imports`** (BOU-503). Imports the clj-kondo configs your
   dependencies export; generated projects ship the `.clj-kondo/` it needs.
 - **MCP `describe-module` found no modules in a generated project** (BOU-516).

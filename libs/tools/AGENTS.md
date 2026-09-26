@@ -137,6 +137,7 @@ bb setup --database h2 --payment none --ai-provider none
 |------|---------|
 | `resources/conf/dev/config.edn` | Full dev config with `:active`/`:inactive` sections |
 | `resources/conf/test/config.edn` | Test config with H2 in-memory DB and mock/no-op providers |
+| `resources/conf/prod/config.edn` | Prod config: Secure cookies, `:info` logging, connection and secrets from `#env`, no dev-only keys or AI service, no migrate-on-start |
 | `.env.example` | All required env vars with comments and sensible defaults |
 
 **Available options:**
