@@ -164,6 +164,23 @@
          (remove str/blank?)
          (mapv keyword))))
 
+(defn- modifier? [part]
+  (or (#{"required" "unique" "optional" "indexed"} part)
+      (some #(str/starts-with? part %)
+            ["values=" "references=" "references-table=" "on-delete=" "default="])))
+
+(defn- rejoin-default
+  "A default may hold colons — a URL, a timestamp — which the spec split cut
+   apart. Glue back every piece after `default=` that is not a modifier."
+  [flags]
+  (reduce (fn [acc part]
+            (if (and (some-> (peek acc) (str/starts-with? "default="))
+                     (not (modifier? part)))
+              (conj (pop acc) (str (peek acc) ":" part))
+              (conj acc part)))
+          []
+          flags))
+
 (defn parse-field-spec
   "Parse a field specification string into a field map.
 
@@ -185,7 +202,8 @@
      or error map"
   [field-spec]
   (let [parts (str/split field-spec #":")
-        [name-str type-str & flags] parts
+        [name-str type-str & raw-flags] parts
+        flags (rejoin-default raw-flags)
         valid-types #{"string" "text" "integer" "int" "decimal" "boolean" "email" "uuid" "enum" "date" "datetime" "inst" "json" "relation"}
         ;; Map CLI type names to schema type names
         type-mapping {"integer" :int

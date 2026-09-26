@@ -38,8 +38,26 @@
                   "price:decimal:default=cheap"
                   "active:boolean:default=yes"
                   "status:enum:values=entered,paid:default=lost"
-                  "invoice:relation:references=invoice:default=x"]]
-      (is (:error (cli/parse-field-spec spec)) spec))))
+                  "invoice:relation:references=invoice:default=x"
+                  "token:uuid:default=not-a-uuid"
+                  "due:datetime:default=tomorrow"
+                  "due:datetime:default=2026-13-45T00:00:00Z"
+                  "meta:json:default={}"]]
+      (is (:error (cli/parse-field-spec spec)) spec)))
+
+  (testing "a default may contain colons"
+    (is (= "https://example.org"
+           (:default (cli/parse-field-spec "link:string:default=https://example.org"))))
+    (is (= "2026-01-01T00:00:00Z"
+           (:default (cli/parse-field-spec "due:datetime:default=2026-01-01T00:00:00Z"))))
+    (is (= {:default "https://example.org" :required true :unique true}
+           (select-keys (cli/parse-field-spec "link:string:default=https://example.org:required:unique")
+                        [:default :required :unique]))
+        "modifiers after the default are still modifiers"))
+
+  (testing "a well-formed uuid default is accepted"
+    (is (= "00000000-0000-0000-0000-000000000000"
+           (:default (cli/parse-field-spec "token:uuid:default=00000000-0000-0000-0000-000000000000"))))))
 
 (deftest ^:unit the-field-command-takes-a-default
   (let [{:keys [options errors]} (clojure.tools.cli/parse-opts
@@ -114,10 +132,17 @@
   (let [ds  (jdbc/get-datasource {:jdbcUrl (str "jdbc:h2:mem:dflt" (System/nanoTime) ";DB_CLOSE_DELAY=-1")})
         sql (migration-for {:name :reference :type :string :required true}
                            {:name :status :type :enum :enum-values [:entered :paid] :required true}
-                           {:name :qty :type :int :required true :default 1})]
+                           {:name :qty :type :int :required true :default 1}
+                           {:name :token :type :uuid :required true
+                            :default "00000000-0000-0000-0000-000000000001"}
+                           {:name :due :type :inst :required true
+                            :default "2026-01-01T00:00:00Z"})]
     (jdbc/execute! ds [(first (str/split sql #";"))])
     (jdbc/execute! ds ["INSERT INTO orders (id, reference, created_at) VALUES (?, ?, CURRENT_TIMESTAMP)"
                        (random-uuid) "R-1"])
-    (is (= {:status "entered" :qty 1}
-           (jdbc/execute-one! ds ["SELECT status, qty FROM orders"]
-                              {:builder-fn rs/as-unqualified-lower-maps})))))
+    (let [row (jdbc/execute-one! ds ["SELECT status, qty, token, due FROM orders"]
+                                 {:builder-fn rs/as-unqualified-lower-maps})]
+      (is (= {:status "entered" :qty 1 :token #uuid "00000000-0000-0000-0000-000000000001"}
+             (select-keys row [:status :qty :token])))
+      (is (= #inst "2026-01-01T00:00:00Z"
+             (java.util.Date/from (.toInstant ^java.time.OffsetDateTime (:due row))))))))

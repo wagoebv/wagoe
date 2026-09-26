@@ -177,6 +177,13 @@
     :decimal "DECIMAL(19,4)"
     :relation "UUID"))
 
+(def ^:private uuid-pattern
+  #"(?i)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+
+(defn- parses? [parse s]
+  (try (parse s) true
+       (catch java.time.format.DateTimeParseException _ false)))
+
 (defn default-literal
   "The SQL literal for `value` as the DEFAULT of a column of the field's type,
    or nil when the value does not suit that type. It goes into DDL, so numbers
@@ -197,7 +204,14 @@
         :decimal  (when (re-matches #"-?\d+(\.\d+)?" s) s)
         :boolean  (when (#{"true" "false"} s) s)
         :relation nil
+        ;; No portable JSON literal across H2, SQLite and PostgreSQL.
+        :json     nil
         :enum     (when (some #{(keyword s)} enum-values) quoted)
+        :uuid     (when (re-matches uuid-pattern s) quoted)
+        :inst     (when (or (parses? #(java.time.OffsetDateTime/parse %) s)
+                            (parses? #(java.time.LocalDate/parse %) s))
+                    quoted)
+        :date     (when (parses? #(java.time.LocalDate/parse %) s) quoted)
         quoted))))
 
 (defn valid-default?
