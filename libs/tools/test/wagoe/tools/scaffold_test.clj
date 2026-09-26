@@ -74,6 +74,11 @@
   (doseq [modifier ["values=" "required" "unique" "default="]]
     (is (str/includes? scaffold/help-text modifier) modifier)))
 
+(deftest ^:unit scaffold-help-names-the-entity-command
+  ;; BOU-497
+  (is (str/includes? scaffold/help-text "bb scaffold entity"))
+  (is (str/includes? scaffold/help-text "--belongs-to")))
+
 (deftest ^:unit scaffolder-deps-carries-the-source-rewriter
   ;; The scaffolder edits schema.clj with rewrite-clj. Injecting the scaffolder
   ;; alone would fail with `Could not locate rewrite_clj/zip` the moment the

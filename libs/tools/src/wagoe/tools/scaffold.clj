@@ -7,6 +7,7 @@
 ;;   bb scaffold                     -- show help
 ;;   bb scaffold generate            -- interactive wizard
 ;;   bb scaffold generate [args...]  -- non-interactive passthrough
+;;   bb scaffold entity [args...]    -- add an entity to an existing module
 ;;   bb scaffold field               -- interactive wizard
 ;;   bb scaffold endpoint            -- interactive wizard
 ;;   bb scaffold adapter             -- interactive wizard
@@ -142,6 +143,22 @@
         no-http    (when-not http ["--no-http"])
         no-web     (when-not web  ["--no-web"])]
     (vec (concat base field-args no-http no-web))))
+
+(defn build-entity-args
+  "`bb scaffold entity` arguments for an entity added to `module`."
+  [module {:keys [name belongs-to fields]}]
+  (vec (concat ["entity" "--module-name" module "--entity" name]
+               (when belongs-to ["--belongs-to" belongs-to])
+               (mapcat #(vector "--field" (field->spec %)) fields))))
+
+(defn build-ai-commands
+  "The scaffolder commands an AI module spec stands for: `generate` for its
+   first entity, then `entity` for each further one, in order (BOU-497)."
+  [{:keys [module entities http web]}]
+  (let [[{:keys [name fields]} & more] entities]
+    (into [(build-generate-args {:module module :entity name :fields fields
+                                 :http http :web web})]
+          (map #(build-entity-args module %) more))))
 
 ;; =============================================================================
 ;; Run Clojure scaffolder
@@ -532,13 +549,23 @@
    module."
   [out]
   (try
-    (let [data  (json/parse-string (ai/json-line out) true)
-          spec  {:module (:module-name data)
-                 :entity (:entity data)
-                 :fields (vec (:fields data))
-                 :http   (boolean (:http data))
-                 :web    (boolean (:web data))}]
-      (when (and (valid-kebab? (:module spec)) (valid-pascal? (:entity spec)))
+    (let [data     (json/parse-string (ai/json-line out) true)
+          ;; `:entities` is the multi-entity shape (BOU-497); a spec with only
+          ;; `:entity` and `:fields` is one entity.
+          entities (if (seq (:entities data))
+                     (mapv (fn [e] (cond-> {:name (:name e) :fields (vec (:fields e))}
+                                     (:belongs-to e) (assoc :belongs-to (:belongs-to e))))
+                           (:entities data))
+                     [{:name (:entity data) :fields (vec (:fields data))}])
+          spec     {:module   (:module-name data)
+                    :entity   (:name (first entities))
+                    :fields   (:fields (first entities))
+                    :entities entities
+                    :http     (boolean (:http data))
+                    :web      (boolean (:web data))}]
+      (when (and (valid-kebab? (:module spec))
+                 (every? (comp valid-pascal? :name) entities)
+                 (every? #(or (nil? (:belongs-to %)) (valid-pascal? (:belongs-to %))) entities))
         spec))
     (catch Exception _ nil)))
 
@@ -583,15 +610,21 @@
           (*exit!* 1))
 
       :else
-      (let [{:keys [module entity fields http web]} spec
-            args (build-generate-args spec)]
-        (display-generate-summary module entity fields http web)
+      (let [{:keys [module entities http web]} spec
+            commands (build-ai-commands spec)]
+        (doseq [{:keys [name fields belongs-to]} entities]
+          (display-generate-summary module name fields http web)
+          (when belongs-to
+            (println (str "  belongs to " (bold belongs-to)))))
         (println)
-        (println (dim (str "Command: clojure -M -m wagoe.scaffolder.shell.cli-entry "
-                           (str/join " " args))))
+        (doseq [args commands]
+          (println (dim (str "Command: clojure -M -m wagoe.scaffolder.shell.cli-entry "
+                             (str/join " " args)))))
         (println)
         (if (or yes? (confirm "Generate this module?" true))
-          (run-clojure! args)
+          ;; In order, and no further once one fails: an entity cannot be added
+          ;; to a module that was not generated.
+          (reduce (fn [_ args] (or (run-clojure! args) (reduced nil))) nil commands)
           (println (yellow "Cancelled. No files were generated.")))))))
 
 ;; =============================================================================
@@ -604,6 +637,7 @@
        "Usage:\n"
        "  bb scaffold                     Show this help\n"
        "  bb scaffold generate            Interactive wizard for module generation\n"
+       "  bb scaffold entity [args]       Add an entity to an existing module (see below)\n"
        "  bb scaffold field               Interactive wizard for adding a field\n"
        "  bb scaffold endpoint            Interactive wizard for adding an endpoint\n"
        "  bb scaffold adapter             Interactive wizard for adding an adapter\n"
@@ -616,6 +650,7 @@
        "\n"
        "Non-interactive passthrough (when args are provided directly):\n"
        "  bb scaffold generate --module-name foo --entity Foo --field bar:string\n"
+       "  bb scaffold entity --module-name foo --entity FooLine --belongs-to foo --field qty:int\n"
        "  bb scaffold field --module-name foo --entity Foo --name bar --type string\n"
        "\n"
        "Field spec: name:type[:values=a,b,c][:required][:unique][:default=v]\n"
@@ -657,6 +692,11 @@
       (= sub "new")
       (do (print-new-removed)
           (*exit!* 1))
+
+      (= sub "entity")
+      (if (seq rest-args)
+        (run-clojure! (into ["entity"] rest-args))
+        (run-clojure! ["entity" "--help"]))
 
       (= sub "field")
       (if (seq rest-args)

@@ -19,6 +19,7 @@ Essential commands, conventions, and patterns for working with the Wagoe Framewo
 bb scaffold                                        # Interactive module scaffolding wizard
 bb scaffold ai "product module with name, price"   # AI-powered NL scaffolding (interactive confirm)
 bb scaffold ai "product module with name, price" --yes  # AI-powered NL scaffolding (non-interactive)
+bb scaffold entity --module-name invoice --entity InvoiceLineItem --belongs-to invoice --field qty:int  # Add entity to existing module
 bb scaffold field --module-name invoice --entity Invoice --name amount --type decimal   # Add field to existing module
 bb scaffold endpoint --module-name invoice --path /invoices --method post --handler-name create-invoice  # Add HTTP endpoint
 bb scaffold integrate product                      # Write a scaffolded module's config key (--dry-run to preview)
@@ -256,6 +257,7 @@ The quality gate `bb check:fcis` (run on every commit) enforces strict rules:
 |---------|----------|
 | `bb scaffold` | Creating a new module from scratch (interactive wizard) |
 | `bb scaffold ai "description"` | Generating module structure from natural language description |
+| `bb scaffold entity --module-name {m} --entity {E} [--belongs-to {parent}] --field {spec}` | Adding an entity to an existing module (line items to invoices) |
 | `bb scaffold field --module-name {m} --entity {E} --name {field} --type {type}` | Adding a field to an existing module's schema |
 | `bb scaffold endpoint --module-name {m} --path {path} --method {method} --handler-name {name}` | Adding an HTTP endpoint to an existing module |
 | `bb scaffold integrate {module}` | Write a generated module's config key into resources/conf/{dev,test}/config.edn |

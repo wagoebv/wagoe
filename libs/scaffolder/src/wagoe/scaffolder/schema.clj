@@ -78,7 +78,19 @@
    [:name :string]                                          ; Entity name (PascalCase)
    [:plural {:optional true} :string]                       ; Plural form (e.g., "customers")
    [:fields [:vector FieldDefinition]]                      ; Entity fields
+   ;; The parent entity, in this module: a required `<parent>_id` relation
+   ;; column with a foreign key and an index (BOU-497).
+   [:belongs-to {:optional true} [:re template/entity-name-pattern]]
    [:description {:optional true} :string]])                ; Entity documentation
+
+(def AddEntityRequest
+  "Schema for adding an entity to an existing module (BOU-497)."
+  [:map {:title "Add Entity Request"}
+   [:module-name :string]
+   [:entity EntityDefinition]
+   [:base-ns {:optional true} [:maybe :string]]
+   [:dry-run {:optional true} [:maybe :boolean]]
+   [:output-dir {:optional true} [:maybe :string]]])
 
 ;; =============================================================================
 ;; Module Generation Request

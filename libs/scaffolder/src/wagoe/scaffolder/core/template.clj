@@ -354,38 +354,87 @@
                                              (:references-table field-def))
              :on-delete      (get field-def :on-delete :cascade)))))
 
+(defn belongs-to-field
+  "The relation field `:belongs-to parent` stands for: required, cascading.
+
+   Pure: true"
+  [parent]
+  (let [k (pascal->kebab parent)]
+    {:name (keyword k) :type :relation :references k :required true :on-delete :cascade}))
+
+(defn entity-fields
+  "An entity's fields, with its `:belongs-to` parent as the first one. A field
+   of the same name already declared wins.
+
+   Pure: true"
+  [{:keys [fields belongs-to]}]
+  (let [field (when (valid-entity-name? belongs-to) (belongs-to-field belongs-to))]
+    (if (and field (not-any? #(= (:name field) (keyword (name (:name %)))) fields))
+      (into [field] fields)
+      (vec fields))))
+
+(defn repository-fns
+  "Method names of an entity's repository port.
+
+   The module's first entity keeps the short names. A later entity shares
+   ports.clj with it, and defprotocol interns its methods as vars in that
+   namespace, so a second `find-by-id` would silently replace the first
+   (BOU-497).
+
+   Pure: true"
+  [entity-kebab entity-plural primary?]
+  (if primary?
+    {:find-by-id "find-by-id" :find-all "find-all" :create "create"
+     :update "update-entity" :delete "delete"}
+    {:find-by-id (str "find-" entity-kebab "-by-id")
+     :find-all   (str "find-all-" entity-plural)
+     :create     (str "create-" entity-kebab "-entity")
+     :update     (str "update-" entity-kebab "-entity")
+     :delete     (str "delete-" entity-kebab "-entity")}))
+
 (defn build-entity-context
   "Build template context for an entity.
-   
+
    Args:
      entity-def - Entity definition map
      module-name - Module name string
-   
+     opts - {:primary? bool}; true (the default) for the module's first
+            entity, which owns shell/service.clj and shell/persistence.clj.
+            Any other entity gets its own `shell/<entity>_service.clj` and
+            `shell/<entity>_persistence.clj`.
+
    Returns:
      Map with template placeholders for the entity
-   
+
    Pure: true"
-  [entity-def module-name]
-  (let [entity-name (:name entity-def)
-        ;; Through pascal->kebab, not str/lower-case. Everything below is
-        ;; derived from this one value, so lowercasing here is what turned
-        ;; InvoiceLineItem into the table `invoicelineitems` and the method
-        ;; `create-invoicelineitem` (BOU-480).
-        entity-kebab (pascal->kebab entity-name)
-        entity-plural (or (:plural entity-def) (pluralize entity-kebab))]
-    {:module-name module-name
-     :entity-name entity-name
-     ;; `:entity-lower` is the kebab form: it names Clojure vars
-     ;; (`create-<entity-lower>`), where a run-together word is wrong and a
-     ;; hyphen is right. It is not `str/lower-case` of anything any more.
-     :entity-lower entity-kebab
-     :entity-kebab entity-kebab
-     :entity-snake (kebab->snake entity-kebab)
-     :entity-plural entity-plural
-     :entity-plural-snake (kebab->snake entity-plural)
-     :entity-table (kebab->snake entity-plural)
-     :fields (mapv build-field-context (:fields entity-def))
-     :description (:description entity-def "")}))
+  ([entity-def module-name] (build-entity-context entity-def module-name {:primary? true}))
+  ([entity-def module-name {:keys [primary?] :or {primary? true}}]
+   (let [entity-name (:name entity-def)
+         ;; Through pascal->kebab, not str/lower-case. Everything below is
+         ;; derived from this one value, so lowercasing here is what turned
+         ;; InvoiceLineItem into the table `invoicelineitems` and the method
+         ;; `create-invoicelineitem` (BOU-480).
+         entity-kebab (pascal->kebab entity-name)
+         entity-plural (or (:plural entity-def) (pluralize entity-kebab))
+         shell-ns (fn [suffix] (if primary? (str "shell." suffix) (str "shell." entity-kebab "-" suffix)))]
+     {:module-name module-name
+      :entity-name entity-name
+      ;; `:entity-lower` is the kebab form: it names Clojure vars
+      ;; (`create-<entity-lower>`), where a run-together word is wrong and a
+      ;; hyphen is right. It is not `str/lower-case` of anything any more.
+      :entity-lower entity-kebab
+      :entity-kebab entity-kebab
+      :entity-snake (kebab->snake entity-kebab)
+      :entity-plural entity-plural
+      :entity-plural-snake (kebab->snake entity-plural)
+      :entity-table (kebab->snake entity-plural)
+      :fields (mapv build-field-context (entity-fields entity-def))
+      :description (:description entity-def "")
+      :primary? (boolean primary?)
+      :repo-fns (repository-fns entity-kebab entity-plural primary?)
+      :service-ns (shell-ns "service")
+      :persistence-ns (shell-ns "persistence")
+      :service-test-ns (shell-ns "service-test")})))
 
 (defn build-module-context
   "Build complete template context for module generation.
@@ -408,7 +457,8 @@
      :module-path (kebab->snake module-name)
      :base-ns base-ns
      :base-ns-path (ns->path base-ns)
-     :entities (mapv #(build-entity-context % module-name) entities)
+     :entities (vec (map-indexed #(build-entity-context %2 module-name {:primary? (zero? %1)})
+                                 entities))
      ;; Defaulted here rather than at each reader, so "absent means yes" is
      ;; decided once. Passed straight through before, and read by nobody
      ;; (BOU-479).

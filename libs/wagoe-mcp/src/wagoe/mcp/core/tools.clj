@@ -68,10 +68,11 @@
                   :properties {"module"   {:type        "string"
                                            :description "Module name, lowercase kebab-case (e.g. \"invoice\")."}
                                "entities" {:type  "array"
-                                           :description "Entities to generate."
+                                           :description "Entities to generate, all of them. The first is the module's main entity; each further one gets its own core, service, persistence, migration and tests, and a section in schema.clj and ports.clj."
                                            :items {:type       "object"
                                                    :properties {"name"   {:type "string" :description "Entity name, PascalCase (e.g. \"Invoice\")."}
                                                                 "plural" {:type "string" :description "Optional plural form."}
+                                                                "belongs-to" {:type "string" :description "An entity listed before this one that it belongs to: a required <entity>_id foreign key with an index."}
                                                                 "fields" {:type  "array"
                                                                           :items {:type       "object"
                                                                                   :properties {"name"     {:type "string" :description "Field name, kebab-case."}

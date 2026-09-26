@@ -212,6 +212,43 @@ clojure -M:dev -m wagoe.scaffolder.shell.cli-entry generate \
   --dry-run
 ```
 
+### `entity` Command
+
+Adds an entity to a module that exists — invoice line items to an invoicing
+module:
+
+```bash
+bb scaffold entity --module-name billing --entity InvoiceLineItem \
+  --belongs-to invoice \
+  --field description:string:required \
+  --field quantity:int:required:default=1
+```
+
+`--belongs-to` adds a required `invoice_id` column with a foreign key
+(`ON DELETE CASCADE`) and an index; the parent must be an entity of the module.
+
+The entity gets its own `core/<entity>.clj`, `shell/<entity>_service.clj`,
+`shell/<entity>_persistence.clj`, `shell/<entity>_http.clj`, create migration
+and tests. Its defs are appended to `schema.clj` and `ports.clj`, whose
+existing text is left as it is, and it is wired in `module_wiring.clj`: after a
+restart its CRUD API answers at `/api/v1/invoice-line-items`. There is no web
+page for it.
+
+Wiring the first extra entity adds an `ig-config` and an `entity-wiring`
+multimethod to `module_wiring.clj`, and replaces its routes init-key with one
+that also mounts the extra entities' routes. If you have edited that init-key,
+the command refuses rather than drop your change. Later entities only append.
+
+A file it would write that already exists, or a name the module already
+defines, refuses the run and writes nothing.
+
+A second entity's repository methods carry its name
+(`find-invoice-line-item-by-id`, …): both protocols live in one `ports.clj`,
+and a second `find-by-id` would replace the first.
+
+`generate` through the API or MCP takes several entities at once and writes
+the same files.
+
 ## Generated Code Examples
 
 ### Schema (schema.clj)

@@ -38,52 +38,66 @@
 ;; Feature 1: NL Scaffolding response parsing
 ;; =============================================================================
 
+(def ^:private valid-field-types
+  #{"string" "text" "int" "decimal" "boolean" "email" "uuid" "enum" "date" "json"})
+
+(defn- normalise-field [f]
+  (let [t (let [raw (get f :type (get f "type" "string"))]
+            (if (valid-field-types raw) raw "string"))]
+    (cond-> {:name     (get f :name (get f "name"))
+             :type     t
+             :required (boolean (get f :required (get f "required" true)))
+             :unique   (boolean (get f :unique (get f "unique" false)))}
+      (= t "enum")
+      (assoc :enum-values (get f :enum-values
+                               (get f "enum-values"
+                                    (get f :values
+                                         (get f "values"))))))))
+
 (defn parse-module-spec
   "Parse an AI-generated module specification JSON into a normalised map.
 
-   Expected AI output shape:
-   {\"module-name\": \"product\", \"entity\": \"Product\",
-    \"fields\": [{\"name\": \"price\", \"type\": \"decimal\", \"required\": true}],
+   Expected AI output shape, one entity or several (BOU-497):
+   {\"module-name\": \"billing\",
+    \"entities\": [{\"name\": \"Invoice\", \"fields\": [...]},
+                  {\"name\": \"InvoiceLineItem\", \"belongs-to\": \"Invoice\",
+                   \"fields\": [...]}],
     \"http\": true, \"web\": true}
 
+   The older singular shape — `entity` plus `fields` — is still read.
+
    Returns:
-     Normalised map with keyword keys and validated field specs,
-     or {:error str} on failure."
+     {:module-name :entities [{:name :fields :belongs-to?}] :http :web}, plus
+     :entity and :fields for the first entity, or {:error str} on failure."
   [response-text]
   (let [parsed (parse-json-response response-text)]
     (if (:error parsed)
       parsed
-      (let [{:keys [module-name entity fields]} parsed
-            valid-types #{"string" "text" "int" "decimal" "boolean" "email"
-                          "uuid" "enum" "date" "json"}]
+      (let [{:keys [module-name entity fields entities]} parsed
+            entities (if (sequential? entities)
+                       entities
+                       [{:name entity :fields fields}])]
         (cond
           (not (string? module-name))
           {:error "AI response missing module-name"}
 
-          (not (string? entity))
+          (or (empty? entities) (not (every? (comp string? :name) entities)))
           {:error "AI response missing entity"}
 
-          (not (sequential? fields))
+          (not (every? (comp sequential? :fields) entities))
           {:error "AI response fields must be an array"}
 
           :else
-          {:module-name module-name
-           :entity      entity
-           :fields      (mapv (fn [f]
-                                (let [t (let [raw (get f :type (get f "type" "string"))]
-                                          (if (valid-types raw) raw "string"))]
-                                  (cond-> {:name     (get f :name (get f "name"))
-                                           :type     t
-                                           :required (boolean (get f :required (get f "required" true)))
-                                           :unique   (boolean (get f :unique (get f "unique" false)))}
-                                    (= t "enum")
-                                    (assoc :enum-values (get f :enum-values
-                                                             (get f "enum-values"
-                                                                  (get f :values
-                                                                       (get f "values"))))))))
-                              fields)
-           :http        (boolean (get parsed :http true))
-           :web         (boolean (get parsed :web true))})))))
+          (let [entities (mapv (fn [{:keys [name fields belongs-to]}]
+                                 (cond-> {:name name :fields (mapv normalise-field fields)}
+                                   (string? belongs-to) (assoc :belongs-to belongs-to)))
+                               entities)]
+            {:module-name module-name
+             :entity      (:name (first entities))
+             :fields      (:fields (first entities))
+             :entities    entities
+             :http        (boolean (get parsed :http true))
+             :web         (boolean (get parsed :web true))}))))))
 
 (defn normalise-module-spec
   "Normalise a provider-parsed module spec map into canonical scaffolder shape.

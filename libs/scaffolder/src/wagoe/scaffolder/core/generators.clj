@@ -20,6 +20,20 @@
 ;; Schema File Generator
 ;; =============================================================================
 
+(defn- repo-fns
+  "The entity's repository method names; a hand-built context without them
+   gets the first entity's."
+  [entity]
+  (merge (template/repository-fns nil nil true) (:repo-fns entity)))
+
+(defn- shell-ns
+  "The entity's `shell.*` namespace suffix for `k`, the first entity's when
+   the context does not say."
+  [entity k]
+  (get entity k (get {:service-ns "shell.service"
+                      :persistence-ns "shell.persistence"
+                      :service-test-ns "shell.service-test"} k)))
+
 (defn generate-field-schema
   "Generate Malli schema for a single field.
    
@@ -39,25 +53,20 @@
        (format "   [%s %s]" field-name malli-type)
        (format "   [%s {:optional true} %s]" field-name malli-type)))))
 
-(defn generate-schema-file
-  "Generate schema.clj file content.
-   
-   Args:
-     ctx - Template context map
-   
-   Returns:
-     String content for schema.clj
-   
-   Pure: true"
-  [ctx]
-  (let [base-ns (:base-ns ctx "wagoe")
-        module-name (:module-name ctx)
-        entity (first (:entities ctx))
-        entity-name (:entity-name entity)
+(def ^:private banner-rule
+  ";; =============================================================================")
+
+(defn- banner [title]
+  (str banner-rule "\n;; " title "\n" banner-rule "\n\n"))
+
+(defn- schema-parts
+  "The entity, request and validation defs for one entity, as three strings."
+  [entity]
+  (let [entity-name (:entity-name entity)
         ;; Names the `validate-<x>` / `explain-<x>` vars the core file calls,
         ;; so it has to be the same derivation the core file uses — kebab, not
         ;; a lowercased run of words (BOU-480).
-        entity-lower (template/pascal->kebab entity-name)
+        e (template/pascal->kebab entity-name)
         fields (:fields entity)
         field-schemas (str/join "\n" (map generate-field-schema fields))
         ;; Every field optional, whatever it is on the entity. An update
@@ -67,182 +76,147 @@
         ;; schemas, so `--field name:string:required` made `name` mandatory on
         ;; update — against the convention in libs/scaffolder/AGENTS.md.
         update-field-schemas (str/join "\n" (map #(generate-field-schema % true) fields))]
-    (format "(ns %s.%s.schema
-  \"Schema definitions for %s module.\"
-  (:require [malli.core :as m]))
+    {:entity (str "(def " entity-name "\n"
+                  "  \"Schema for " entity-name " entity.\"\n"
+                  "  [:map {:title \"" entity-name "\"}\n"
+                  "   [:id :uuid]\n"
+                  field-schemas "\n"
+                  "   [:created-at inst?]\n"
+                  "   [:updated-at {:optional true} [:maybe inst?]]\n"
+                  "   [:deleted-at {:optional true} [:maybe inst?]]])\n")
+     :requests (str "(def Create" entity-name "Request\n"
+                    "  \"Schema for create " e " API requests.\"\n"
+                    "  [:map {:title \"Create " entity-name " Request\"}\n"
+                    field-schemas "])\n"
+                    "\n"
+                    "(def Update" entity-name "Request\n"
+                    "  \"Schema for update " e " API requests.\"\n"
+                    "  [:map {:title \"Update " entity-name " Request\"}\n"
+                    update-field-schemas "])\n")
+     :validation (str "(def ^:private " e "-validator (m/validator " entity-name "))\n"
+                      "(def ^:private " e "-explainer (m/explainer " entity-name "))\n"
+                      "\n"
+                      "(defn validate-" e "\n"
+                      "  \"Validates a " e " entity against the " entity-name " schema.\"\n"
+                      "  [" e "-data]\n"
+                      "  (" e "-validator " e "-data))\n"
+                      "\n"
+                      "(defn explain-" e "\n"
+                      "  \"Provides detailed validation errors for " e " data.\"\n"
+                      "  [" e "-data]\n"
+                      "  (" e "-explainer " e "-data))\n")}))
 
-;; =============================================================================
-;; Domain Entity Schemas
-;; =============================================================================
+(defn generate-schema-file
+  "Generate schema.clj file content for the module's first entity.
 
-(def %s
-  \"Schema for %s entity.\"
-  [:map {:title \"%s\"}
-   [:id :uuid]
-%s
-   [:created-at inst?]
-   [:updated-at {:optional true} [:maybe inst?]]
-   [:deleted-at {:optional true} [:maybe inst?]]])
+   Pure: true"
+  [ctx]
+  (let [base-ns (:base-ns ctx "wagoe")
+        module-name (:module-name ctx)
+        {:keys [entity requests validation]} (schema-parts (first (:entities ctx)))]
+    (str "(ns " base-ns "." module-name ".schema\n"
+         "  \"Schema definitions for " module-name " module.\"\n"
+         "  (:require [malli.core :as m]))\n"
+         "\n"
+         (banner "Domain Entity Schemas")
+         entity
+         "\n"
+         (banner "API Request Schemas")
+         requests
+         "\n"
+         (banner "Validation Functions")
+         validation)))
 
-;; =============================================================================
-;; API Request Schemas
-;; =============================================================================
+(defn entity-schema-section
+  "The schema.clj text a further entity appends: its entity, request and
+   validation defs under one banner. Every name in it carries the entity's
+   name, so it cannot collide with the defs already in the file.
 
-(def Create%sRequest
-  \"Schema for create %s API requests.\"
-  [:map {:title \"Create %s Request\"}
-%s])
-
-(def Update%sRequest
-  \"Schema for update %s API requests.\"
-  [:map {:title \"Update %s Request\"}
-%s])
-
-;; =============================================================================
-;; Validation Functions
-;; =============================================================================
-
-(def ^:private %s-validator (m/validator %s))
-(def ^:private %s-explainer (m/explainer %s))
-
-(defn validate-%s
-  \"Validates a %s entity against the %s schema.\"
-  [%s-data]
-  (%s-validator %s-data))
-
-(defn explain-%s
-  \"Provides detailed validation errors for %s data.\"
-  [%s-data]
-  (%s-explainer %s-data))
-"
-            base-ns
-            module-name
-            module-name
-            entity-name
-            entity-name
-            entity-name
-            field-schemas
-            entity-name
-            entity-lower
-            entity-name
-            field-schemas
-            entity-name
-            entity-lower
-            entity-name
-            update-field-schemas
-            entity-lower
-            entity-name
-            entity-lower
-            entity-name
-            entity-lower
-            entity-lower
-            entity-name
-            entity-lower
-            entity-lower
-            entity-lower
-            entity-lower
-            entity-lower
-            entity-lower
-            entity-lower
-            entity-lower)))
+   Pure: true"
+  [entity-ctx]
+  (let [{:keys [entity requests validation]} (schema-parts entity-ctx)]
+    (str (banner (:entity-name entity-ctx))
+         entity "\n" requests "\n" validation)))
 
 ;; =============================================================================
 ;; Ports File Generator
 ;; =============================================================================
 
+(defn- ports-parts
+  "The repository and service protocols for one entity, as two strings."
+  [entity]
+  (let [entity-name (:entity-name entity)
+        e (:entity-lower entity)
+        {:keys [find-by-id find-all create update delete]} (repo-fns entity)]
+    {:repository
+     (str "(defprotocol I" entity-name "Repository\n"
+          "  \"Repository interface for " e " persistence operations.\"\n"
+          "\n"
+          "  (" find-by-id " [this id]\n"
+          "    \"Find " e " by ID.\")\n"
+          "\n"
+          "  (" find-all " [this options]\n"
+          "    \"Find all " e "s with pagination and filtering.\")\n"
+          "\n"
+          "  (" create " [this entity]\n"
+          "    \"Create new " e ".\")\n"
+          "\n"
+          (when (get entity :primary? true)
+            (str "  ;; `update-entity`, not `update-<entity>`: the service protocol below declares\n"
+                 "  ;; `update-<entity>` too, and defprotocol interns its methods as vars in this\n"
+                 "  ;; namespace — so the second silently overwrote the first, leaving\n"
+                 "  ;; ports/update-<entity> with the service arity [this id data]. Nor `update`,\n"
+                 "  ;; which would shadow clojure.core/update. The repository's other methods are\n"
+                 "  ;; already generic (create, delete), so this matches its own family. (BOU-267)\n"))
+          "  (" update " [this entity]\n"
+          "    \"Update existing " e ".\")\n"
+          "\n"
+          "  (" delete " [this id]\n"
+          "    \"Delete " e " by ID.\"))\n")
+     :service
+     (str "(defprotocol I" entity-name "Service\n"
+          "  \"" entity-name " service interface for business operations.\"\n"
+          "\n"
+          "  (get-" e " [this id]\n"
+          "    \"Get " e " by ID.\")\n"
+          "\n"
+          "  (list-" e "s [this options]\n"
+          "    \"List " e "s with pagination.\")\n"
+          "\n"
+          "  (create-" e " [this data]\n"
+          "    \"Create new " e ".\")\n"
+          "\n"
+          "  (update-" e " [this id data]\n"
+          "    \"Update " e ".\")\n"
+          "\n"
+          "  (delete-" e " [this id]\n"
+          "    \"Delete " e ".\"))\n")}))
+
 (defn generate-ports-file
-  "Generate ports.clj file content.
-   
-   Args:
-     ctx - Template context map
-   
-   Returns:
-     String content for ports.clj
-   
+  "Generate ports.clj file content for the module's first entity.
+
    Pure: true"
   [ctx]
   (let [base-ns (:base-ns ctx "wagoe")
         module-name (:module-name ctx)
-        entity (first (:entities ctx))
-        entity-name (:entity-name entity)
-        entity-lower (:entity-lower entity)]
-    (format "(ns %s.%s.ports
-  \"%s module port definitions (abstract interfaces).\")
+        {:keys [repository service]} (ports-parts (first (:entities ctx)))]
+    (str "(ns " base-ns "." module-name ".ports\n"
+         "  \"" (str/capitalize module-name) " module port definitions (abstract interfaces).\")\n"
+         "\n"
+         (banner "Repository Ports")
+         repository
+         "\n"
+         (banner "Service Ports")
+         service)))
 
-;; =============================================================================
-;; Repository Ports
-;; =============================================================================
+(defn entity-ports-section
+  "The ports.clj text a further entity appends: its repository and service
+   protocols under one banner.
 
-(defprotocol I%sRepository
-  \"Repository interface for %s persistence operations.\"
-
-  (find-by-id [this id]
-    \"Find %s by ID.\")
-
-  (find-all [this options]
-    \"Find all %ss with pagination and filtering.\")
-
-  (create [this entity]
-    \"Create new %s.\")
-
-  ;; `update-entity`, not `update-<entity>`: the service protocol below declares
-  ;; `update-<entity>` too, and defprotocol interns its methods as vars in this
-  ;; namespace — so the second silently overwrote the first, leaving
-  ;; ports/update-<entity> with the service arity [this id data]. Nor `update`,
-  ;; which would shadow clojure.core/update. The repository's other methods are
-  ;; already generic (create, delete), so this matches its own family. (BOU-267)
-  (update-entity [this entity]
-    \"Update existing %s.\")
-
-  (delete [this id]
-    \"Delete %s by ID.\"))
-
-;; =============================================================================
-;; Service Ports
-;; =============================================================================
-
-(defprotocol I%sService
-  \"%s service interface for business operations.\"
-
-  (get-%s [this id]
-    \"Get %s by ID.\")
-
-  (list-%ss [this options]
-    \"List %ss with pagination.\")
-
-  (create-%s [this data]
-    \"Create new %s.\")
-
-  (update-%s [this id data]
-    \"Update %s.\")
-
-  (delete-%s [this id]
-    \"Delete %s.\"))
-"
-            base-ns
-            module-name
-            (str/capitalize module-name)
-            entity-name
-            entity-lower
-            entity-lower
-            entity-lower
-            entity-lower
-            ;; `update-entity` is now a literal, so the method-name arg that
-            ;; used to sit here is gone; only its docstring %s remains.
-            entity-lower
-            entity-lower
-            entity-name
-            entity-name
-            entity-lower
-            entity-lower
-            entity-lower
-            entity-lower
-            entity-lower
-            entity-lower
-            entity-lower
-            entity-lower
-            entity-lower
-            entity-lower)))
+   Pure: true"
+  [entity]
+  (let [{:keys [repository service]} (ports-parts entity)]
+    (str (banner (:entity-name entity)) repository "\n" service)))
 
 ;; =============================================================================
 ;; Core Logic File Generator
@@ -258,14 +232,14 @@
      String content for core/{entity}.clj
    
    Pure: true"
-  [ctx]
-  (let [base-ns (:base-ns ctx "wagoe")
-        module-name (:module-name ctx)
-        entity (first (:entities ctx))
-        _entity-name (:entity-name entity)
-        entity-lower (:entity-lower entity)
-        entity-kebab (:entity-kebab entity)]
-    (format "(ns %s.%s.core.%s
+  ([ctx] (generate-core-file ctx (first (:entities ctx))))
+  ([ctx entity]
+   (let [base-ns (:base-ns ctx "wagoe")
+         module-name (:module-name ctx)
+         _entity-name (:entity-name entity)
+         entity-lower (:entity-lower entity)
+         entity-kebab (:entity-kebab entity)]
+     (format "(ns %s.%s.core.%s
   \"Pure business logic for %s domain.
    
    All functions in this namespace are pure - they have no side effects,
@@ -334,24 +308,24 @@
     [true nil data]
     [false (schema/explain-%s data) nil]))
 "
-            base-ns
-            module-name
-            entity-kebab
-            entity-lower
-            base-ns
-            module-name
-            entity-kebab
-            entity-lower
-            entity-lower
-            entity-kebab
-            entity-lower
-            entity-lower
-            entity-lower
-            entity-kebab
-            entity-lower
-            entity-lower
-            entity-lower
-            entity-lower)))
+             base-ns
+             module-name
+             entity-kebab
+             entity-lower
+             base-ns
+             module-name
+             entity-kebab
+             entity-lower
+             entity-lower
+             entity-kebab
+             entity-lower
+             entity-lower
+             entity-lower
+             entity-kebab
+             entity-lower
+             entity-lower
+             entity-lower
+             entity-lower))))
 
 ;; =============================================================================
 ;; Migration File Generator
@@ -397,21 +371,21 @@
      String content for migration SQL
    
    Pure: true"
-  [ctx migration-number]
-  (let [entity (first (:entities ctx))
-        table-name (:entity-table entity)
-        fields (:fields entity)
-        field-sqls (str/join ",\n" (map generate-migration-field fields))
+  ([ctx migration-number] (generate-migration-file ctx (first (:entities ctx)) migration-number))
+  ([_ctx entity migration-number]
+   (let [table-name (:entity-table entity)
+         fields (:fields entity)
+         field-sqls (str/join ",\n" (map generate-migration-field fields))
         ;; Every foreign key gets one: it is what a join reads, and what the
         ;; database scans on each cascading delete of the parent.
-        relation-indexes (->> fields
-                              (filter :relation-table)
-                              (map (fn [f]
-                                     (format "CREATE INDEX IF NOT EXISTS idx_%s_%s ON %s(%s);"
-                                             table-name (:field-name-snake f)
-                                             table-name (:field-name-snake f))))
-                              (str/join "\n"))]
-    (format "-- Migration %s: Create %s table
+         relation-indexes (->> fields
+                               (filter :relation-table)
+                               (map (fn [f]
+                                      (format "CREATE INDEX IF NOT EXISTS idx_%s_%s ON %s(%s);"
+                                              table-name (:field-name-snake f)
+                                              table-name (:field-name-snake f))))
+                               (str/join "\n"))]
+     (format "-- Migration %s: Create %s table
 
 CREATE TABLE IF NOT EXISTS %s (
   id UUID PRIMARY KEY,
@@ -424,13 +398,13 @@ CREATE TABLE IF NOT EXISTS %s (
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_%s_created_at ON %s(created_at);
 %s"
-            migration-number
-            table-name
-            table-name
-            field-sqls
-            table-name
-            table-name
-            (if (str/blank? relation-indexes) "" (str relation-indexes "\n")))))
+             migration-number
+             table-name
+             table-name
+             field-sqls
+             table-name
+             table-name
+             (if (str/blank? relation-indexes) "" (str relation-indexes "\n"))))))
 
 (defn generate-migration-down-file
   "Generate the rollback SQL matching `generate-migration-file`.
@@ -440,15 +414,15 @@ CREATE INDEX IF NOT EXISTS idx_%s_created_at ON %s(created_at);
    its index, so the index needs no separate statement.
 
    Pure: true"
-  [ctx]
-  (let [entity     (first (:entities ctx))
-        table-name (:entity-table entity)]
-    (format "-- Rollback: drop the %s table
+  ([ctx] (generate-migration-down-file ctx (first (:entities ctx))))
+  ([_ctx entity]
+   (let [table-name (:entity-table entity)]
+     (format "-- Rollback: drop the %s table
 
 DROP TABLE IF EXISTS %s;
 "
-            table-name
-            table-name)))
+             table-name
+             table-name))))
 
 ;; =============================================================================
 ;; UI File Generator
@@ -509,28 +483,29 @@ DROP TABLE IF EXISTS %s;
      String content for service.clj file
      
    Pure: true"
-  [ctx]
-  (let [base-ns (:base-ns ctx "wagoe")
-        module-name (:module-name ctx)
-        entity (first (:entities ctx))
-        entity-name (:entity-name entity)
-        entity-lower (template/pascal->kebab entity-name)
-        entity-kebab (str/replace entity-lower #"\s+" "-")]
-    (str "(ns " base-ns "." module-name ".shell.service\n"
-         "  \"Service layer for " module-name " module.\"\n"
-         "  (:require [" base-ns "." module-name ".ports :as ports]\n"
-         "            [" base-ns "." module-name ".core." entity-kebab " :as core])\n"
-         "  (:import [java.time Instant]\n"
-         "           [java.util UUID]))\n"
-         "\n"
-         "(defn- current-time []\n"
-         "  (Instant/now))\n"
-         "\n"
-         "(defn- generate-" entity-lower "-id []\n"
-         "  (UUID/randomUUID))\n"
-         "\n"
-         "(defrecord " entity-name "Service [repository]\n"
-         "  ports/I" entity-name "Service\n"
+  ([ctx] (generate-service-file ctx (first (:entities ctx))))
+  ([ctx entity]
+   (let [base-ns (:base-ns ctx "wagoe")
+         module-name (:module-name ctx)
+         entity-name (:entity-name entity)
+         entity-lower (template/pascal->kebab entity-name)
+         entity-kebab (str/replace entity-lower #"\s+" "-")
+         {:keys [find-by-id find-all create update delete]} (repo-fns entity)]
+     (str "(ns " base-ns "." module-name "." (shell-ns entity :service-ns) "\n"
+          "  \"Service layer for " module-name " module.\"\n"
+          "  (:require [" base-ns "." module-name ".ports :as ports]\n"
+          "            [" base-ns "." module-name ".core." entity-kebab " :as core])\n"
+          "  (:import [java.time Instant]\n"
+          "           [java.util UUID]))\n"
+          "\n"
+          "(defn- current-time []\n"
+          "  (Instant/now))\n"
+          "\n"
+          "(defn- generate-" entity-lower "-id []\n"
+          "  (UUID/randomUUID))\n"
+          "\n"
+          "(defrecord " entity-name "Service [repository]\n"
+          "  ports/I" entity-name "Service\n"
          ;; _this everywhere: none of these bodies use it, and an unused binding
          ;; is a clj-kondo warning — which fails `bb check` in the generated
          ;; project, since kondo exits non-zero on warnings (BOU-267).
@@ -539,23 +514,23 @@ DROP TABLE IF EXISTS %s;
          ;; every call is reflective, and nothing ties the service to the port
          ;; it is written against. The protocol function is the way through a
          ;; port (BOU-478).
-         "  (create-" entity-lower " [_this data]\n"
-         "    (let [prepared (core/prepare-new-" entity-lower " data (generate-" entity-lower "-id) (current-time))]\n"
-         "      (ports/create repository prepared)))\n"
-         "  (get-" entity-lower " [_this id]\n"
-         "    (ports/find-by-id repository id))\n"
+          "  (create-" entity-lower " [_this data]\n"
+          "    (let [prepared (core/prepare-new-" entity-lower " data (generate-" entity-lower "-id) (current-time))]\n"
+          "      (ports/" create " repository prepared)))\n"
+          "  (get-" entity-lower " [_this id]\n"
+          "    (ports/" find-by-id " repository id))\n"
          ;; find-all, not list-<plural>: the repository port has no
          ;; list-<plural> method, so this called something that does not exist
          ;; and blew up at runtime the first time anyone listed anything.
-         "  (list-" (template/pluralize entity-lower) " [_this opts]\n"
-         "    (ports/find-all repository opts))\n"
-         "  (update-" entity-lower " [_this id data]\n"
-         "    (ports/update-entity repository (assoc data :id id)))\n"
-         "  (delete-" entity-lower " [_this id]\n"
-         "    (ports/delete repository id)))\n"
-         "\n"
-         "(defn create-service [repository]\n"
-         "  (->" entity-name "Service repository))\n")))
+          "  (list-" (template/pluralize entity-lower) " [_this opts]\n"
+          "    (ports/" find-all " repository opts))\n"
+          "  (update-" entity-lower " [_this id data]\n"
+          "    (ports/" update " repository (assoc data :id id)))\n"
+          "  (delete-" entity-lower " [_this id]\n"
+          "    (ports/" delete " repository id)))\n"
+          "\n"
+          "(defn create-service [repository]\n"
+          "  (->" entity-name "Service repository))\n"))))
 
 ;; =============================================================================
 ;; Persistence File Generator
@@ -571,11 +546,11 @@ DROP TABLE IF EXISTS %s;
      String content for persistence.clj file
      
    Pure: true"
-  [ctx]
-  (let [base-ns (:base-ns ctx "wagoe")
-        module-name (:module-name ctx)
-        entity (first (:entities ctx))
-        entity-name (:entity-name entity)
+  ([ctx] (generate-persistence-file ctx (first (:entities ctx))))
+  ([ctx entity]
+   (let [base-ns (:base-ns ctx "wagoe")
+         module-name (:module-name ctx)
+         entity-name (:entity-name entity)
         ;; entity-lower was only used to build the repository's
         ;; `update-<entity>` method name, which is now the literal
         ;; `update-entity` (BOU-267).
@@ -584,43 +559,41 @@ DROP TABLE IF EXISTS %s;
         ;; table from the PascalCase name, so it queried `Products` while the
         ;; migration created `products` — which worked only because neither H2
         ;; nor PostgreSQL distinguishes unquoted identifiers by case (BOU-486).
-        table-name (:entity-table entity)]
-    (str "(ns " base-ns "." module-name ".shell.persistence\n"
-         "  \"Persistence layer for " module-name " module.\"\n"
-         "  (:require [" base-ns "." module-name ".ports :as ports]\n"
-         "            [wagoe.platform.database :as db]\n"
-         "            [honey.sql :as sql]))\n"
-         "\n"
-         "(defrecord Database" entity-name "Repository [db-ctx]\n"
-         "  ports/I" entity-name "Repository\n"
-         "  (create [_this entity]\n"
-         "    (db/execute-one! db-ctx\n"
-         "      (sql/format {:insert-into :" table-name "\n"
-         "                   :values [entity]\n"
-         "                   :returning [:*]})))\n"
-         "  (find-by-id [_this id]\n"
-         "    (db/execute-one! db-ctx\n"
-         "      (sql/format {:select [:*]\n"
-         "                   :from [:" table-name "]\n"
-         "                   :where [:= :id id]})))\n"
-         "  (find-all [_this opts]\n"
-         "    (db/execute-query! db-ctx\n"
-         "      (sql/format {:select [:*]\n"
-         "                   :from [:" table-name "]\n"
-         "                   :limit (:limit opts 20)})))\n"
-         "  (update-entity [_this entity]\n"
-         "    (db/execute-one! db-ctx\n"
-         "      (sql/format {:update :" table-name "\n"
-         "                   :set (dissoc entity :id)\n"
-         "                   :where [:= :id (:id entity)]\n"
-         "                   :returning [:*]})))\n"
-         "  (delete [_this id]\n"
-         "    (db/execute-one! db-ctx\n"
-         "      (sql/format {:delete-from :" table-name "\n"
-         "                   :where [:= :id id]}))))\n"
-         "\n"
-         "(defn create-repository [db-ctx]\n"
-         "  (->Database" entity-name "Repository db-ctx))\n")))
+         table-name (:entity-table entity)
+         {:keys [find-by-id find-all create update delete]} (repo-fns entity)]
+     ;; HoneySQL maps, not `sql/format` output: the platform formats a map for
+     ;; the adapter's dialect and converts Instants, and a pre-formatted vector
+     ;; skips both. No RETURNING either — H2, the test profile's database,
+     ;; rejects it, so every create answered 500 (BOU-497).
+     (str "(ns " base-ns "." module-name "." (shell-ns entity :persistence-ns) "\n"
+          "  \"Persistence layer for " module-name " module.\"\n"
+          "  (:require [" base-ns "." module-name ".ports :as ports]\n"
+          "            [wagoe.platform.database :as db]))\n"
+          "\n"
+          "(defn- select-by-id [db-ctx id]\n"
+          "  (db/execute-one! db-ctx {:select [:*] :from [:" table-name "] :where [:= :id id]}))\n"
+          "\n"
+          "(defrecord Database" entity-name "Repository [db-ctx]\n"
+          "  ports/I" entity-name "Repository\n"
+          "  (" create " [_this entity]\n"
+          "    (db/execute-update! db-ctx {:insert-into :" table-name " :values [entity]})\n"
+          "    entity)\n"
+          "  (" find-by-id " [_this id]\n"
+          "    (select-by-id db-ctx id))\n"
+          "  (" find-all " [_this opts]\n"
+          "    (db/execute-query! db-ctx {:select [:*]\n"
+          "                               :from [:" table-name "]\n"
+          "                               :limit (or (:limit opts) 20)}))\n"
+          "  (" update " [_this entity]\n"
+          "    (db/execute-update! db-ctx {:update :" table-name "\n"
+          "                                :set (dissoc entity :id)\n"
+          "                                :where [:= :id (:id entity)]})\n"
+          "    (select-by-id db-ctx (:id entity)))\n"
+          "  (" delete " [_this id]\n"
+          "    (db/execute-update! db-ctx {:delete-from :" table-name " :where [:= :id id]})))\n"
+          "\n"
+          "(defn create-repository [db-ctx]\n"
+          "  (->Database" entity-name "Repository db-ctx))\n"))))
 
 ;; =============================================================================
 ;; HTTP File Generator
@@ -760,32 +733,32 @@ DROP TABLE IF EXISTS %s;
      String content for core test file
      
    Pure: true"
-  [ctx]
-  (let [base-ns (:base-ns ctx "wagoe")
-        module-name (:module-name ctx)
-        entity (first (:entities ctx))
-        entity-name (:entity-name entity)
-        entity-lower (template/pascal->kebab entity-name)]
-    (str "(ns " base-ns "." module-name ".core." entity-lower "-test\n"
-         "  (:require [clojure.test :refer [deftest testing is]]\n"
-         "            [" base-ns "." module-name ".core." entity-lower " :as core])\n"
-         "  (:import [java.time Instant]\n"
-         "           [java.util UUID]))\n"
-         "\n"
+  ([ctx] (generate-core-test-file ctx (first (:entities ctx))))
+  ([ctx entity]
+   (let [base-ns (:base-ns ctx "wagoe")
+         module-name (:module-name ctx)
+         entity-name (:entity-name entity)
+         entity-lower (template/pascal->kebab entity-name)]
+     (str "(ns " base-ns "." module-name ".core." entity-lower "-test\n"
+          "  (:require [clojure.test :refer [deftest testing is]]\n"
+          "            [" base-ns "." module-name ".core." entity-lower " :as core])\n"
+          "  (:import [java.time Instant]\n"
+          "           [java.util UUID]))\n"
+          "\n"
          ;; Pyramid tag is required, not decorative: `bb check:test-tags`
          ;; enforces exactly one per deftest, and it runs in generated projects.
          ;; Untagged output made `bb check` fail the moment a user scaffolded a
          ;; module, while AGENTS.md claimed the scaffolder emits correct test
          ;; metadata (BOU-264 review).
-         "(deftest ^:unit prepare-new-" entity-lower "-test\n"
-         "  (testing \"prepares " entity-lower " for creation\"\n"
-         "    (let [data {:name \"Test\"}\n"
-         "          " entity-lower "-id (UUID/fromString \"11111111-1111-1111-1111-111111111111\")\n"
-         "          current-time (Instant/parse \"2026-01-01T00:00:00Z\")\n"
-         "          result (core/prepare-new-" entity-lower " data " entity-lower "-id current-time)]\n"
-         "      (is (= " entity-lower "-id (:id result)))\n"
-         "      (is (= current-time (:created-at result)))\n"
-         "      (is (= current-time (:updated-at result))))))\n")))
+          "(deftest ^:unit prepare-new-" entity-lower "-test\n"
+          "  (testing \"prepares " entity-lower " for creation\"\n"
+          "    (let [data {:name \"Test\"}\n"
+          "          " entity-lower "-id (UUID/fromString \"11111111-1111-1111-1111-111111111111\")\n"
+          "          current-time (Instant/parse \"2026-01-01T00:00:00Z\")\n"
+          "          result (core/prepare-new-" entity-lower " data " entity-lower "-id current-time)]\n"
+          "      (is (= " entity-lower "-id (:id result)))\n"
+          "      (is (= current-time (:created-at result)))\n"
+          "      (is (= current-time (:updated-at result))))))\n"))))
 
 (defn generate-service-test-file
   "Generate test service file content.
@@ -797,33 +770,34 @@ DROP TABLE IF EXISTS %s;
      String content for service test file
      
    Pure: true"
-  [ctx]
-  (let [base-ns (:base-ns ctx "wagoe")
-        module-name (:module-name ctx)
-        entity (first (:entities ctx))
-        entity-name (:entity-name entity)
-        entity-lower (template/pascal->kebab entity-name)]
-    (str "(ns " base-ns "." module-name ".shell.service-test\n"
-         "  (:require [clojure.test :refer [deftest testing is]]\n"
-         "            [" base-ns "." module-name ".shell.service :as service]\n"
-         "            [" base-ns "." module-name ".ports :as ports]))\n"
-         "\n"
+  ([ctx] (generate-service-test-file ctx (first (:entities ctx))))
+  ([ctx entity]
+   (let [base-ns (:base-ns ctx "wagoe")
+         module-name (:module-name ctx)
+         entity-name (:entity-name entity)
+         entity-lower (template/pascal->kebab entity-name)
+         {:keys [find-by-id find-all create update delete]} (repo-fns entity)]
+     (str "(ns " base-ns "." module-name "." (shell-ns entity :service-test-ns) "\n"
+          "  (:require [clojure.test :refer [deftest testing is]]\n"
+          "            [" base-ns "." module-name "." (shell-ns entity :service-ns) " :as service]\n"
+          "            [" base-ns "." module-name ".ports :as ports]))\n"
+          "\n"
          ;; ^:unit — the repository is a reify'd stub, so no database is touched.
-         "(deftest ^:unit create-" entity-lower "-test\n"
-         "  (testing \"creates " entity-lower " via service\"\n"
+          "(deftest ^:unit create-" entity-lower "-test\n"
+          "  (testing \"creates " entity-lower " via service\"\n"
          ;; Every method, not just create: reify'ing a protocol partially is a
          ;; clj-kondo warning, and `bb check` fails on warnings in the generated
          ;; project. It also makes the stub usable as you add tests, instead of
          ;; blowing up the first time one calls find-all (BOU-267).
-         "    (let [mock-repo (reify ports/I" entity-name "Repository\n"
-         "                      (create [_ entity] entity)\n"
-         "                      (find-by-id [_ _id] nil)\n"
-         "                      (find-all [_ _opts] [])\n"
-         "                      (update-entity [_ entity] entity)\n"
-         "                      (delete [_ _id] nil))\n"
-         "          svc (service/create-service mock-repo)\n"
-         "          result (ports/create-" entity-lower " svc {:name \"Test\"})]\n"
-         "      (is (some? result)))))\n")))
+          "    (let [mock-repo (reify ports/I" entity-name "Repository\n"
+          "                      (" create " [_ entity] entity)\n"
+          "                      (" find-by-id " [_ _id] nil)\n"
+          "                      (" find-all " [_ _opts] [])\n"
+          "                      (" update " [_ entity] entity)\n"
+          "                      (" delete " [_ _id] nil))\n"
+          "          svc (service/create-service mock-repo)\n"
+          "          result (ports/create-" entity-lower " svc {:name \"Test\"})]\n"
+          "      (is (some? result)))))\n"))))
 
 (defn generate-persistence-test-file
   "Generate test persistence file content.
@@ -835,17 +809,17 @@ DROP TABLE IF EXISTS %s;
      String content for persistence test file
      
    Pure: true"
-  [ctx]
-  (let [base-ns (:base-ns ctx "wagoe")
-        module-name (:module-name ctx)
-        entity (first (:entities ctx))
-        entity-name (:entity-name entity)
-        entity-lower (template/pascal->kebab entity-name)]
-    (str "(ns " base-ns "." module-name ".shell." entity-lower "-repository-test\n"
-         "  (:require [clojure.test :refer [deftest testing is]]\n"
-         "            [" base-ns "." module-name ".shell.persistence :as persistence]\n"
-         "            [" base-ns "." module-name ".ports :as ports]))\n"
-         "\n"
+  ([ctx] (generate-persistence-test-file ctx (first (:entities ctx))))
+  ([ctx entity]
+   (let [base-ns (:base-ns ctx "wagoe")
+         module-name (:module-name ctx)
+         entity-name (:entity-name entity)
+         entity-lower (template/pascal->kebab entity-name)]
+     (str "(ns " base-ns "." module-name ".shell." entity-lower "-repository-test\n"
+          "  (:require [clojure.test :refer [deftest testing is]]\n"
+          "            [" base-ns "." module-name "." (shell-ns entity :persistence-ns) " :as persistence]\n"
+          "            [" base-ns "." module-name ".ports :as ports]))\n"
+          "\n"
          ;; Was `(is true)` with a \"requires database context\" comment, which
          ;; `bb check:placeholder-tests` rejects — and that check runs in
          ;; generated projects, so scaffolding a module broke `bb check`.
@@ -854,14 +828,154 @@ DROP TABLE IF EXISTS %s;
          ;; fails if the repository stops implementing its port, which is the
          ;; mistake this file can actually catch before a database exists.
          ;; ^:integration because the exercises you add next need one.
-         "(deftest ^:integration create-" entity-lower "-test\n"
-         "  (testing \"the repository implements its persistence port\"\n"
-         "    (is (satisfies? ports/I" entity-name "Repository\n"
-         "                    (persistence/create-repository nil))))\n"
-         "  (testing \"creating a " entity-lower " round-trips through the database\"\n"
-         "    ;; Add a database context and assert on a real create here.\n"
-         "    ;; See the module README for wiring a test db-ctx.\n"
-         "    ))\n")))
+          "(deftest ^:integration create-" entity-lower "-test\n"
+          "  (testing \"the repository implements its persistence port\"\n"
+          "    (is (satisfies? ports/I" entity-name "Repository\n"
+          "                    (persistence/create-repository nil))))\n"
+          "  (testing \"creating a " entity-lower " round-trips through the database\"\n"
+          "    ;; Add a database context and assert on a real create here.\n"
+          "    ;; See the module README for wiring a test db-ctx.\n"
+          "    ))\n"))))
+
+;; =============================================================================
+;; Further entities (BOU-497)
+;; =============================================================================
+;;
+;; A module's first entity owns schema.clj, ports.clj, shell/service.clj,
+;; shell/persistence.clj and the web files. A further entity gets files of its
+;; own and appends a section to schema.clj and ports.clj. Appending keeps what
+;; is already there byte for byte: the file is not re-parsed and re-printed, so
+;; hand edits survive, and every name the section defines carries the entity's
+;; name, so the file still compiles.
+
+(defn defined-symbols
+  "Every top-level name `source` defines, protocol methods included, or nil
+   when it does not parse.
+
+   Pure: true"
+  [source]
+  (try
+    (loop [loc (z/of-string source) acc #{}]
+      (if (nil? loc)
+        acc
+        (let [head (when (= :list (z/tag loc)) (some-> loc z/down))
+              op   (some-> head z/sexpr)
+              nm   (some-> head z/right z/sexpr)
+              methods (when (= 'defprotocol op)
+                        (->> (iterate z/right (z/right head))
+                             (take-while some?)
+                             (filter #(= :list (z/tag %)))
+                             (keep #(some-> % z/down z/sexpr))))]
+          (recur (z/right loc)
+                 (cond-> (into acc methods)
+                   (and (symbol? op) (str/starts-with? (name op) "def") (symbol? nm))
+                   (conj nm))))))
+    (catch Exception _ nil)))
+
+(defn append-section
+  "`source` with `section` after it, one blank line between.
+
+   Pure: true"
+  [source section]
+  (str (str/trimr source) "\n\n" section))
+
+(defn generate-entity-http-file
+  "shell/<entity>_http.clj for a further entity: its CRUD API routes.
+
+   Real handlers, not the first entity's stubs: nothing else reaches this
+   entity's service over HTTP. Bodies are decoded with the Create/Update
+   request schemas, which drop unknown keys — they would otherwise become
+   column names in the insert — and turn JSON strings into UUIDs.
+
+   Pure: true"
+  [ctx entity]
+  (let [base-ns (:base-ns ctx "wagoe")
+        module-name (:module-name ctx)
+        entity-name (:entity-name entity)
+        e (:entity-kebab entity)
+        plural (:entity-plural entity)]
+    (str "(ns " base-ns "." module-name ".shell." e "-http\n"
+         "  \"HTTP API for " entity-name ", mounted by the " module-name " module's routes.\"\n"
+         "  (:require [" base-ns "." module-name ".ports :as ports]\n"
+         "            [" base-ns "." module-name ".schema :as schema]\n"
+         "            [malli.core :as m]\n"
+         "            [malli.transform :as mt]))\n"
+         "\n"
+         "(def ^:private json->data\n"
+         "  (mt/transformer mt/strip-extra-keys-transformer mt/json-transformer))\n"
+         "\n"
+         "(def ^:private decode-create (m/decoder schema/Create" entity-name "Request json->data))\n"
+         "(def ^:private valid-create? (m/validator schema/Create" entity-name "Request))\n"
+         "(def ^:private decode-update (m/decoder schema/Update" entity-name "Request json->data))\n"
+         "(def ^:private valid-update? (m/validator schema/Update" entity-name "Request))\n"
+         "\n"
+         "(defn- invalid []\n"
+         "  {:status 400 :body {:error {:type :validation-error :message \"Invalid " e "\"}}})\n"
+         "\n"
+         "(defn- not-found []\n"
+         "  {:status 404 :body {:error {:type :not-found :message \"No such " e "\"}}})\n"
+         "\n"
+         "(defn- id-of [request]\n"
+         "  (some-> (get-in request [:path-params :id]) parse-uuid))\n"
+         "\n"
+         "(defn api-routes\n"
+         "  \"Reitit route data. Paths are relative — the platform mounts them under /api/v1.\"\n"
+         "  [service]\n"
+         "  [[\"/" plural "\"\n"
+         "    {:get  {:summary \"List " plural "\"\n"
+         "            :handler (fn [_request]\n"
+         "                       {:status 200 :body (ports/list-" e "s service {})})}\n"
+         "     :post {:summary \"Create a " e "\"\n"
+         "            :handler (fn [request]\n"
+         "                       (let [data (decode-create (:body-params request))]\n"
+         "                         (if (valid-create? data)\n"
+         "                           {:status 201 :body (ports/create-" e " service data)}\n"
+         "                           (invalid))))}}]\n"
+         "   [\"/" plural "/:id\"\n"
+         "    {:swagger {:parameters [{:name \"id\" :in \"path\" :required true :type \"string\"}]}\n"
+         "     :get    {:summary \"Get a " e "\"\n"
+         "              :handler (fn [request]\n"
+         "                         (if-let [found (some->> (id-of request) (ports/get-" e " service))]\n"
+         "                           {:status 200 :body found}\n"
+         "                           (not-found)))}\n"
+         "     :put    {:summary \"Update a " e "\"\n"
+         "              :handler (fn [request]\n"
+         "                         (let [id   (id-of request)\n"
+         "                               data (decode-update (:body-params request))]\n"
+         "                           (cond\n"
+         "                             (nil? id)                 (not-found)\n"
+         "                             (not (valid-update? data)) (invalid)\n"
+         "                             :else (if-let [updated (ports/update-" e " service id data)]\n"
+         "                                     {:status 200 :body updated}\n"
+         "                                     (not-found)))))}\n"
+         "     :delete {:summary \"Delete a " e "\"\n"
+         "              :handler (fn [request]\n"
+         "                         (if-let [id (id-of request)]\n"
+         "                           (do (ports/delete-" e " service id) {:status 204})\n"
+         "                           (not-found)))}}]])\n")))
+
+(defn entity-files
+  "The files a further entity adds, as [{:path :content}]: core, service,
+   persistence and http namespaces of its own, its migration pair and its tests.
+
+   Pure: true"
+  [ctx entity migration-number]
+  (let [base   (str (:base-ns-path ctx) "/" (:module-path ctx) "/")
+        src    #(str "src/" base (template/ns->path %) ".clj")
+        tst    #(str "test/" base (template/ns->path %) ".clj")
+        e      (:entity-kebab entity)
+        plural (:entity-plural entity)]
+    [{:path (src (str "core." e)) :content (generate-core-file ctx entity)}
+     {:path (src (:service-ns entity)) :content (generate-service-file ctx entity)}
+     {:path (src (:persistence-ns entity)) :content (generate-persistence-file ctx entity)}
+     {:path (src (str "shell." e "-http")) :content (generate-entity-http-file ctx entity)}
+     {:path    (format "migrations/%s-create-%s.up.sql" migration-number plural)
+      :content (generate-migration-file ctx entity migration-number)}
+     {:path    (format "migrations/%s-create-%s.down.sql" migration-number plural)
+      :content (generate-migration-down-file ctx entity)}
+     {:path (tst (str "core." e "-test")) :content (generate-core-test-file ctx entity)}
+     {:path (tst (str "shell." e "-repository-test")) :content (generate-persistence-test-file ctx entity)}
+     {:path (tst (:service-test-ns entity)) :content (generate-service-test-file ctx entity)}]))
 
 ;; =============================================================================
 ;; Incremental Generators - Add Field
@@ -979,6 +1093,199 @@ DROP TABLE IF EXISTS %s;
             module-name                                      ; 27    discovery note
             module-name module-name module-name              ; 28-30 module init
             module-name module-name)))
+
+;; =============================================================================
+;; Wiring a further entity (BOU-497)
+;; =============================================================================
+;;
+;; Platform discovery builds a scaffolded module from four keys, one service
+;; and one routes contribution, unless the wiring namespace defines `ig-config`.
+;; So the first further entity installs, once: an `ig-config` that adds
+;; :wagoe/<m>-entities, and a routes init-key that adds those entities' API
+;; routes to the module's. The routes init-key is the one form replaced rather
+;; than appended to — a second defmethod further down would silently win and
+;; leave the first as dead code. Every entity after that is an append.
+
+(defn- top-level-forms
+  "Zippers at each top-level form of `source`, in order."
+  [source]
+  (take-while some? (iterate z/right (z/of-string source {:track-position? true}))))
+
+(defn- form-head
+  "The first three elements of a list form, as data, or nil."
+  [loc]
+  (when (= :list (z/tag loc))
+    (try (vec (take 3 (map z/sexpr (take-while some? (iterate z/right (z/down loc))))))
+         (catch Exception _ nil))))
+
+(defn- routes-init-form?
+  [module-name loc]
+  (= ['defmethod 'ig/init-key (keyword "wagoe" (str module-name "-routes"))]
+     (form-head loc)))
+
+(defn- wiring-routes-form
+  "The routes init-key that adds the further entities' API routes."
+  [module-name]
+  (str "(defmethod ig/init-key :wagoe/" module-name "-routes\n"
+       "  [_ {:keys [service config entities]}]\n"
+       "  (log/info \"Initializing " module-name " routes\")\n"
+       "  ;; A contribution — {:api [...] :web [...] :static [...]} — not a route\n"
+       "  ;; table. :wagoe/http-handler prefixes and versions each part before\n"
+       "  ;; mounting it. The API routes of every entity `bb scaffold entity` added\n"
+       "  ;; (see entity-wiring below) join the first entity's.\n"
+       "  (reduce (fn [contribution {entity-service :service routes :routes}]\n"
+       "            (update contribution :api into (routes entity-service)))\n"
+       "          (http/" module-name "-routes service (or config {}))\n"
+       "          (vals entities)))"))
+
+(defn- wiring-seam-section
+  [module-name]
+  (let [k #(str ":wagoe/" module-name %)]
+    (str (banner "Further entities (bb scaffold entity)")
+         ";; One entity-wiring method per entity. ig-config builds each one's\n"
+         ";; repository and service under " (k "-entities") ", and the routes\n"
+         ";; init-key above mounts their API routes with the module's.\n"
+         "\n"
+         "(defmulti entity-wiring\n"
+         "  \"{:repository f :service f :routes f} for one further entity.\"\n"
+         "  identity)\n"
+         "\n"
+         "(defmethod ig/init-key " (k "-entities") "\n"
+         "  [_ {:keys [ctx]}]\n"
+         "  (into {}\n"
+         "        (for [entity (keys (methods entity-wiring))\n"
+         "              :let [{:keys [repository service routes]} (entity-wiring entity)]]\n"
+         "          [entity {:service (service (repository ctx)) :routes routes}])))\n"
+         "\n"
+         "(defn ig-config\n"
+         "  \"This module's Integrant graph: the four keys platform discovery would\n"
+         "   build, plus " (k "-entities") ".\"\n"
+         "  [settings _opts]\n"
+         "  {:components\n"
+         "   {" (k "-repository") "\n"
+         "    {:ctx (ig/ref :wagoe/db-context)}\n"
+         "    " (k "-service") "\n"
+         "    {:repository (ig/ref " (k "-repository") ")}\n"
+         "    " (k "-entities") "\n"
+         "    {:ctx (ig/ref :wagoe/db-context)}\n"
+         "    " (k "-routes") "\n"
+         "    {:service  (ig/ref " (k "-service") ")\n"
+         "     :entities (ig/ref " (k "-entities") ")\n"
+         "     :config   settings}\n"
+         "    " (k "") "\n"
+         "    {:enabled? true\n"
+         "     :service  (ig/ref " (k "-service") ")\n"
+         "     :routes   (ig/ref " (k "-routes") ")}}})\n")))
+
+(defn- entity-wiring-section
+  [entity]
+  (let [e (:entity-kebab entity)]
+    (str (banner (:entity-name entity))
+         "(defmethod entity-wiring :" e "\n"
+         "  [_]\n"
+         "  {:repository " e "-persistence/create-repository\n"
+         "   :service    " e "-service/create-service\n"
+         "   :routes     " e "-http/api-routes})\n")))
+
+(defn- entity-requires
+  "[alias namespace] pairs the entity's wiring section needs."
+  [ctx entity]
+  (let [prefix (str (:base-ns ctx "wagoe") "." (:module-name ctx) ".")
+        e      (:entity-kebab entity)]
+    (for [part ["persistence" "service" "http"]]
+      [(symbol (str e "-" part))
+       (symbol (str prefix (if (= "http" part)
+                             (str "shell." e "-http")
+                             (shell-ns entity (keyword (str part "-ns"))))))])))
+
+(defn- require-aliases
+  "alias -> namespace for the vector entries of the ns form's :require."
+  [ns-loc]
+  (let [req (some->> (iterate z/right (z/down ns-loc))
+                     (take-while some?)
+                     (filter #(and (= :list (z/tag %)) (= :require (some-> % z/down z/sexpr))))
+                     first)]
+    {:loc req
+     :aliases (into {}
+                    (for [v (some->> req z/down (iterate z/right) (take-while some?))
+                          :when (= :vector (z/tag v))
+                          :let [[n & opts] (z/sexpr v)
+                                a (get (apply hash-map (if (odd? (count opts)) (butlast opts) opts)) :as)]
+                          :when a]
+                      [a n]))}))
+
+(defn- add-requires
+  "`source` with `pairs` added to its ns :require, or an :error."
+  [source pairs]
+  (let [ns-loc (some #(when (= 'ns (first (form-head %))) %) (top-level-forms source))
+        {:keys [loc aliases]} (when ns-loc (require-aliases ns-loc))
+        clash (some (fn [[a n]] (when (and (contains? aliases a) (not= n (aliases a))) a)) pairs)
+        todo  (remove (fn [[a _]] (contains? aliases a)) pairs)]
+    (cond
+      (nil? loc) {:error "its ns form has no :require"}
+      clash      {:error (str "it already uses the alias " clash " for " (aliases clash))}
+      :else
+      (let [indent (or (some-> loc z/down z/right z/position second dec) 12)]
+        {:content (z/root-string
+                   (reduce (fn [l [a n]]
+                             (-> l
+                                 (z/append-child* (n/newlines 1))
+                                 (z/append-child* (n/spaces indent))
+                                 (z/append-child* (z/node (z/of-string (str "[" n " :as " a "]"))))))
+                           loc
+                           todo))}))))
+
+(defn- defmethod-dispatches
+  "Dispatch values of the top-level `(defmethod multi …)` forms in `source`."
+  [source multi]
+  (set (keep #(let [[op m d] (form-head %)] (when (and (= 'defmethod op) (= multi m)) d))
+             (top-level-forms source))))
+
+(defn add-entity-to-wiring
+  "`source` — a module_wiring.clj — with `entity` wired in.
+
+   Returns {:content s} or {:error reason}. The first further entity also
+   installs the seam described above, and refuses when the routes init-key is
+   not the one `generate` wrote: replacing it would drop the edit.
+
+   Pure: true"
+  [source ctx entity]
+  (try
+    (let [module-name (:module-name ctx)
+          defined     (defined-symbols source)
+          seam?       (contains? defined 'entity-wiring)
+          k           (keyword (:entity-kebab entity))
+          installed
+          (if seam?
+            {:content source}
+            (let [loc      (some #(when (routes-init-form? module-name %) %) (top-level-forms source))
+                  expected (some #(when (routes-init-form? module-name %) (z/sexpr %))
+                                 (top-level-forms (generate-module-wiring-file ctx)))]
+              (cond
+                (contains? defined 'ig-config)
+                {:error "it already defines ig-config, so the module builds its own graph"}
+
+                (or (nil? loc) (not= expected (z/sexpr loc)))
+                {:error (str "its :wagoe/" module-name "-routes init-key is not the one bb scaffold"
+                             " generate wrote, and wiring an entity replaces it")}
+
+                :else
+                {:content (append-section
+                           (z/root-string (z/replace loc (z/node (z/of-string (wiring-routes-form module-name)))))
+                           (wiring-seam-section module-name))})))]
+      (cond
+        (:error installed) installed
+
+        (contains? (defmethod-dispatches (:content installed) 'entity-wiring) k)
+        {:error (str "it already wires " k)}
+
+        :else
+        (let [with-requires (add-requires (:content installed) (entity-requires ctx entity))]
+          (if (:error with-requires)
+            with-requires
+            {:content (append-section (:content with-requires) (entity-wiring-section entity))}))))
+    (catch Exception e
+      {:error (str "it could not be read: " (.getMessage e))})))
 
 (defn generate-add-field-migration
   "Generate ALTER TABLE migration for adding a field.

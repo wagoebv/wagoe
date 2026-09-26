@@ -148,9 +148,10 @@
     (assoc :on-delete (if on-delete (keyword on-delete) :cascade))))
 
 (defn- entity->scaffolder
-  [{:keys [name plural fields]}]
+  [{:keys [name plural fields belongs-to]}]
   (cond-> {:name name :fields (mapv field->scaffolder fields)}
-    plural (assoc :plural plural)))
+    plural     (assoc :plural plural)
+    belongs-to (assoc :belongs-to belongs-to)))
 
 (defn- file-summary [files]
   (mapv #(select-keys % [:path :action]) files))
