@@ -102,6 +102,8 @@
 ;; Template fragments — each returns an EDN string for the given env
 ;; =============================================================================
 
+(defn- prod? [env] (= env "prod"))
+
 (defn- settings-template [project-name env]
   (str "  :wagoe/settings\n"
        "  {:name              \"" project-name "-" env "\"\n"
@@ -114,13 +116,30 @@
        ;; over plain HTTP — so omitting it sent the session cookie with Secure
        ;; and nobody could stay logged in locally (BOU-447). `wagoe new` writes
        ;; it for the same reason (dev-config.edn.tmpl).
-       "   ;; Auth cookies omit Secure for local HTTP; set true behind TLS.\n"
-       "   :secure-cookies?   false\n"
+       (if (prod? env)
+         (str "   ;; HTTPS-only auth cookies. Prod is served behind TLS.\n"
+              "   :secure-cookies?   true\n")
+         (str "   ;; Auth cookies omit Secure for local HTTP; set true behind TLS.\n"
+              "   :secure-cookies?   false\n"))
        "   :features          {:user-web-ui {:enabled? true}}}\n"))
 
 (defn- postgresql-template [env]
-  (if (= env "test")
-    ""  ; test uses H2
+  (cond
+    (= env "test") ""  ; test uses H2
+    ;; No defaults: a prod database named by a fallback is one nobody chose,
+    ;; and a bare #env makes `bb doctor --ci` name what is unset.
+    (prod? env)
+    (str "  :wagoe/postgresql\n"
+         "  {:host        #env POSTGRES_HOST\n"
+         "   :port        #or [#long #or [#env POSTGRES_PORT 5432] 5432]\n"
+         "   :dbname      #env POSTGRES_DB\n"
+         "   :user        #env POSTGRES_USER\n"
+         "   :password    #env POSTGRES_PASSWORD\n"
+         "   :auto-commit true\n"
+         "   :pool        {:minimum-idle          2\n"
+         "                 :maximum-pool-size     10\n"
+         "                 :connection-timeout-ms 30000}}\n")
+    :else
     (str "  :wagoe/postgresql\n"
          "  {:host        #or [#env POSTGRES_HOST \"localhost\"]\n"
          "   :port        #or [#long #or [#env POSTGRES_PORT 5432] 5432]\n"
@@ -136,14 +155,29 @@
   (if (= env "test")
     ""
     (str "  :wagoe/sqlite\n"
-         "  {:db   \"" env "-database.db\"\n"
+         ;; In prod the file must sit on a volume the operator picks, not in
+         ;; the working directory of an image.
+         (if (prod? env)
+           "  {:db   #env SQLITE_PATH\n"
+           (str "  {:db   \"" env "-database.db\"\n"))
          "   :pool {:minimum-idle          1\n"
          "          :maximum-pool-size     3\n"
          "          :connection-timeout-ms 10000}}\n")))
 
 (defn- mysql-template [env]
-  (if (= env "test")
-    ""
+  (cond
+    (= env "test") ""
+    (prod? env)
+    (str "  :wagoe/mysql\n"
+         "  {:host     #env MYSQL_HOST\n"
+         "   :port     #or [#long #or [#env MYSQL_PORT 3306] 3306]\n"
+         "   :dbname   #env MYSQL_DB\n"
+         "   :user     #env MYSQL_USER\n"
+         "   :password #env MYSQL_PASSWORD\n"
+         "   :pool     {:minimum-idle          2\n"
+         "              :maximum-pool-size     10\n"
+         "              :connection-timeout-ms 30000}}\n")
+    :else
     (str "  :wagoe/mysql\n"
          "  {:host     #or [#env MYSQL_HOST \"localhost\"]\n"
          "   :port     #or [#long #or [#env MYSQL_PORT 3306] 3306]\n"
@@ -178,7 +212,9 @@
          "            :maximum-pool-size 5\n"
          "            :connection-timeout-ms 5000}}\n")
     (str "  :wagoe/h2\n"
-         "  {:db   \"./" env "-h2-database\"\n"
+         (if (prod? env)
+           "  {:db   #env H2_PATH\n"
+           (str "  {:db   \"./" env "-h2-database\"\n"))
          "   :pool {:minimum-idle      1\n"
          "          :maximum-pool-size 10}}\n")))
 
@@ -204,7 +240,7 @@
          "                :rolling-policy {:type :time-based :max-history 3}}]}\n")
     (str "  :wagoe/logging\n"
          "  {:provider     :slf4j\n"
-         "   :level        :debug\n"
+         "   :level        " (if (prod? env) ":info" ":debug") "\n"
          "   :logger-name  \"wagoe\"\n"
          "   :default-tags {:service     \"wagoe-" env "\"\n"
          "                  :environment \"" (if (= env "prod") "production" "development") "\"}}\n")))
@@ -236,7 +272,9 @@
                "Export it:  export REPLICATE_API_TOKEN=<token>   (or add it to .env, then: set -a; source .env; set +a)"]})
 
 (defn- ai-template [provider env]
-  (case provider
+  ;; The AI service backs scaffolding and the error explainer — build-time
+  ;; tools, not something a production app calls.
+  (case (if (prod? env) :none provider)
     :none ""
     :ollama
     (if (= env "test")
@@ -326,8 +364,17 @@
   (case provider
     :none ""
     :smtp
-    (if (= env "test")
-      ""
+    (cond
+      (= env "test") ""
+      (prod? env)
+      (str "  :wagoe.external/smtp\n"
+           "  {:host     #env SMTP_HOST\n"
+           "   :port     #or [#long #or [#env SMTP_PORT 587] 587]\n"
+           "   :username #env SMTP_USERNAME\n"
+           "   :password #env SMTP_PASSWORD\n"
+           "   :tls?     true\n"
+           "   :from     #env SMTP_FROM}\n")
+      :else
       (str "  :wagoe.external/smtp\n"
            "  {:host #or [#env SMTP_HOST \"localhost\"]\n"
            "   :port #or [#long #or [#env SMTP_PORT 1025] 1025]\n"
@@ -384,7 +431,7 @@
                   ;; BND-code enrichment of BOU-321. Setup regenerates the whole
                   ;; config, so leaving it out here silently un-ships the
                   ;; feature on any project that runs setup (BOU-416).
-                  (when-not (= env "test")
+                  (when-not (#{"test" "prod"} env)
                     "  :wagoe/dev-error-enricher {}\n")
                   ;; Also written by wagoe new. An expired session is hidden
                   ;; from every read but its row stays, so without this key
@@ -419,7 +466,9 @@
    :ollama     ["OLLAMA_URL"]
    :replicate  ["REPLICATE_API_TOKEN"]
    :redis      ["REDIS_HOST" "REDIS_PORT" "REDIS_PASSWORD"]
-   :smtp       ["SMTP_HOST" "SMTP_PORT" "SMTP_FROM"]})
+   :sqlite     ["SQLITE_PATH"]
+   :h2         ["H2_PATH"]
+   :smtp       ["SMTP_HOST" "SMTP_PORT" "SMTP_FROM" "SMTP_USERNAME" "SMTP_PASSWORD"]})
 
 (defn build-env-example
   "Generate .env.example content from a setup spec."
@@ -433,6 +482,9 @@
          (when (= (:database spec) :mysql)
            (into ["# MySQL Database"]
                  (concat (map #(str % "=") (get component-env-vars :mysql)) [""])))
+         (when (#{:sqlite :h2} (:database spec))
+           (into ["# Database file (prod profile only)"]
+                 (concat (map #(str % "=") (get component-env-vars (:database spec))) [""])))
          ["# Security" "JWT_SECRET=change-me-to-a-32-char-secret" ""]
          (when (not= (:ai-provider spec) :none)
            (let [provider (:ai-provider spec)]
@@ -521,28 +573,21 @@
 (defn- write-config-files!
   "Write generated config files to disk."
   [spec]
-  (let [dev-config  (build-config spec "dev")
-        test-config (build-config spec "test")
-        env-example (build-env-example spec)]
-
-    ;; Ensure directories exist
-    (io/make-parents (io/file (root-dir) "resources" "conf" "dev" "config.edn"))
-    (io/make-parents (io/file (root-dir) "resources" "conf" "test" "config.edn"))
-
-    (spit (io/file (root-dir) "resources" "conf" "dev" "config.edn") dev-config)
-    (spit (io/file (root-dir) "resources" "conf" "test" "config.edn") test-config)
-    (spit (io/file (root-dir) ".env.example") env-example)
-
+  (let [envs ["dev" "test" "prod"]]
     (println)
-    (println (green "✓") " Generated " (cyan "resources/conf/dev/config.edn"))
-    (println (green "✓") " Generated " (cyan "resources/conf/test/config.edn"))
+    (doseq [env envs]
+      (let [f (io/file (root-dir) "resources" "conf" env "config.edn")]
+        (io/make-parents f)
+        (spit f (build-config spec env))
+        (println (green "✓") " Generated " (cyan (str "resources/conf/" env "/config.edn")))))
+    (spit (io/file (root-dir) ".env.example") (build-env-example spec))
     (println (green "✓") " Generated " (cyan ".env.example"))
 
-    ;; The file the admin key's `#include` names. Written for both envs, and
+    ;; The file the admin key's `#include` names. Written for every env, and
     ;; only when the config references it.
     (when (:admin-ui spec)
       (if-let [entity @admin-users-entity]
-        (doseq [env ["dev" "test"]]
+        (doseq [env envs]
           (let [f (io/file (root-dir) "resources" "conf" env "admin" "users.edn")]
             (io/make-parents f)
             (spit f entity)
@@ -715,6 +760,7 @@
   (println "Generated files:")
   (println "  resources/conf/dev/config.edn")
   (println "  resources/conf/test/config.edn")
+  (println "  resources/conf/prod/config.edn")
   (println "  .env.example"))
 
 ;; =============================================================================

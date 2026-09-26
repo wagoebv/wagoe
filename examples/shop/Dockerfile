@@ -31,8 +31,9 @@ RUN chown -R app:app /app
 USER app
 
 # WAG_ENV selects resources/conf/<env>/config.edn. `prod` expects a
-# resources/conf/prod/config.edn, which `wagoe new` does not generate — add one
-# before deploying, or the app will report the config as not found.
+# resources/conf/prod/config.edn, which `wagoe new` does not generate — run
+# `bb setup` to write one before deploying, or the app will report the config
+# as not found.
 ENV WAG_ENV=prod
 ENV HTTP_PORT=3000
 EXPOSE 3000
