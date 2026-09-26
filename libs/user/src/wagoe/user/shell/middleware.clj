@@ -233,7 +233,7 @@
             (log/info "Session invalid or expired" {:uri (:uri request)})
             (create-unauthorized-response "Invalid or expired session" :invalid-session request)))
         (catch Exception ex
-          (log/warn ex "Session validation failed" {:session-token (str (take 8 session-token) "...")})
+          (log/warn ex "Session validation failed" {:uri (:uri request)})
           (create-unauthorized-response "Session validation failed" :session-validation-error request)))
 
       ;; No session token provided
@@ -337,8 +337,7 @@
                     :method (:request-method request)
                     :has-session (boolean session-token)
                     :has-bearer (boolean bearer-token)
-                    :cookies (keys (:cookies request))
-                    :session-token-value (when session-token (subs session-token 0 (min 8 (count session-token))))})
+                    :cookies (keys (:cookies request))})
          (cond
            ;; Try JWT authentication first
            bearer-token
@@ -347,7 +346,7 @@
            ;; Fall back to session authentication
            session-token
            (do
-             (log/info "Attempting session authentication" {:token-preview (subs session-token 0 8)})
+             (log/info "Attempting session authentication")
              ((session-authentication-middleware user-service handler) request))
 
            ;; No authentication provided

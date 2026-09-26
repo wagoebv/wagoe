@@ -177,19 +177,24 @@
           (str k " must not reach a handler")))))
 
 (deftest ^:unit ^:security session-authentication-does-not-log-the-token
-  ;; A session token is a bearer credential (BOU-556).
-  (let [token "sess-7f3c9a1b2d4e6f8091a2b3c4d5e6f708"]
-    (doseq [session [{:user-id 7} nil]]
+  ;; A session token is a bearer credential (BOU-556); not even a prefix is logged.
+  (let [token   "sess-7f3c9a1b2d4e6f8091a2b3c4d5e6f708"
+        prefix  (subs token 0 8)
+        request {:uri "/x" :cookies {"session-token" {:value token}}}]
+    (doseq [[label validate] [["valid session" (constantly {:user-id 7})]
+                              ["invalid session" (constantly nil)]
+                              ["validation throws" (fn [_] (throw (ex-info "db down" {:type :internal-error})))]]
+            [mw-label wrap] [["session" #(sut/session-authentication-middleware % echo-handler)]
+                             ["flexible" #((sut/flexible-authentication-middleware %) echo-handler)]]]
       (let [service #_{:clj-kondo/ignore [:missing-protocol-method]}
                     (reify wagoe.user.ports/IUserService
-                      (validate-session [_ _] session)
+                      (validate-session [_ t] (validate t))
                       (get-user-by-id [_ _] {:id 7 :email "s@b.c" :role :user}))]
         (log-test/with-log
-          ((sut/session-authentication-middleware service echo-handler)
-           {:uri "/x" :cookies {"session-token" {:value token}}})
+          ((wrap service) request)
           (is (seq (log-test/the-log)) "the attempt is still logged")
-          (is (not-any? #(str/includes? (str (:message %)) token) (log-test/the-log))
-              (str "token logged when session is " (pr-str session))))))))
+          (is (not-any? #(str/includes? (str (:message %)) prefix) (log-test/the-log))
+              (str mw-label " middleware, " label ": token logged")))))))
 
 (deftest ^:unit flexible-authentication-does-not-revalidate-an-authenticated-request
   ;; user, admin and workflow routes carry flexible-authentication-middleware.

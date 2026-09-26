@@ -15,6 +15,7 @@
 (def ^:private password "Correct-Horse-Battery-1!")
 (def ^:private mfa-secret "MFASECRETVALUE7Q3Z")
 (def ^:private backup-code "BACKUPCODE-93XK")
+(def ^:private mfa-code "924613")
 
 (defn- h2-ctx []
   {:datasource (connection/->pool HikariDataSource
@@ -54,7 +55,8 @@
           (let [result (user-ports/authenticate-user service {:email      email
                                                               :password   password
                                                               :ip-address "203.0.113.7"
-                                                              :user-agent "test"})
+                                                              :user-agent "test"
+                                                              :mfa-code   mfa-code})
                 text   (logged-text)]
             (is (:authenticated result) "the login itself succeeds")
             (is (str/includes? text "update-user") "the login's update-user was logged")
@@ -62,6 +64,7 @@
               (is (not (str/includes? text hash)))
               (is (not (str/includes? text mfa-secret)))
               (is (not (str/includes? text backup-code)))
+              (is (not (str/includes? text mfa-code)))
               (is (not (str/includes? text password)))))))
       (finally
         (.close ^HikariDataSource (:datasource ctx))))))

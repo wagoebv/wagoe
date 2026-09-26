@@ -26,7 +26,9 @@
 (deftest ^:unit ^:security service-operation-does-not-log-secrets-test
   ;; BOU-556: params reach the logger, breadcrumbs and error reports.
   (let [params {:user-id 7
-                :user-entity {:id 7 :password-hash "bcrypt+sha512$SECRETHASH" :mfa-secret "MFASECRETVALUE"}}]
+                :user-entity {:id 7 :password-hash "bcrypt+sha512$SECRETHASH" :mfa-secret "MFASECRETVALUE"}
+                ;; the shape authenticate-user passes
+                :user-credentials {:email "a@b.c" :password "PLAINPASSWORD" :mfa-code "924613"}}]
     (doseq [[label f] [["success" (constantly {:ok true})]
                        ["failure" (fn [_] (throw (ex-info "boom" {:type :internal-error})))]]]
       (let [seen (atom [])]
@@ -36,4 +38,6 @@
         (let [text (str/join "\n" @seen)]
           (is (str/includes? text "update-user") (str label ": the operation is recorded"))
           (is (not (str/includes? text "SECRETHASH")) (str label ": password hash recorded"))
-          (is (not (str/includes? text "MFASECRETVALUE")) (str label ": mfa secret recorded")))))))
+          (is (not (str/includes? text "MFASECRETVALUE")) (str label ": mfa secret recorded"))
+          (is (not (str/includes? text "PLAINPASSWORD")) (str label ": password recorded"))
+          (is (not (str/includes? text "924613")) (str label ": mfa code recorded")))))))
