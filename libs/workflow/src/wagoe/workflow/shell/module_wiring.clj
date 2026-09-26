@@ -24,16 +24,51 @@
      Returns {:api [...] :web [...] :static []} for composition
      by the HTTP handler."
   (:require [integrant.core :as ig]
+            [wagoe.platform.database :as db]
+            [wagoe.platform.shell.database.timestamp-tz :as timestamp-tz]
             [wagoe.workflow.shell.registry :as registry]
             [wagoe.workflow.shell.persistence :as persistence]
             [wagoe.workflow.shell.service :as service]
             [wagoe.workflow.shell.http :as workflow-http]
+            [clojure.edn :as edn]
+            [clojure.java.io :as io]
+            [clojure.string :as str]
             [clojure.tools.logging :as log]))
+
+(def ^:private migration-dir "wagoe/workflow/migrations/")
+
+(defn- migration-resource [file-name]
+  (or (io/resource (str migration-dir file-name))
+      (throw (ex-info "Workflow migration missing from the classpath"
+                      {:type :internal-error :file file-name}))))
+
+(defn- migration-statements
+  "The statements of the migration that creates workflow's tables."
+  []
+  (->> (str/split (slurp (migration-resource "20260926100000-workflow-tables.up.sql"))
+                  #"--;;")
+       (map str/trim)
+       (remove str/blank?)))
+
+(defn- zoned-columns
+  "The [table column] pairs the follow-up migration converts."
+  []
+  (-> (migration-resource "20260926100100-workflow-timestamps-carry-a-zone.edn")
+      slurp edn/read-string :up-fn second))
+
+(defn- initialize-workflow-schema!
+  "Run workflow's migrations at boot, for installations that never ran
+   `migrate up`. Both steps are idempotent, so a later migration run is a no-op."
+  [ctx]
+  (log/info "Initializing workflow schema")
+  (doseq [statement (migration-statements)]
+    (db/execute-ddl! ctx statement))
+  (timestamp-tz/widen-columns! (:datasource ctx) (zoned-columns)))
 
 (defmethod ig/init-key :wagoe/workflow-db-schema
   [_ {:keys [ctx]}]
   (log/info "Initializing workflow database schema")
-  (persistence/initialize-workflow-schema! ctx)
+  (initialize-workflow-schema! ctx)
   {:status :initialized})
 
 (defmethod ig/halt-key! :wagoe/workflow-db-schema

@@ -149,33 +149,11 @@ Unversioned `/api/workflow/*` paths are backward-compatibility redirects to `/ap
 
 ## Database Schema
 
-```sql
-CREATE TABLE workflow_instances (
-  id            TEXT PRIMARY KEY,
-  workflow_id   TEXT NOT NULL,
-  entity_type   TEXT NOT NULL,
-  entity_id     TEXT NOT NULL,
-  current_state TEXT NOT NULL,
-  created_at    TEXT NOT NULL,
-  updated_at    TEXT NOT NULL,
-  metadata      TEXT
-);
-
-CREATE TABLE workflow_audit (
-  id          TEXT PRIMARY KEY,
-  instance_id TEXT NOT NULL REFERENCES workflow_instances(id),
-  workflow_id TEXT NOT NULL,
-  entity_type TEXT NOT NULL,
-  entity_id   TEXT NOT NULL,
-  transition  TEXT NOT NULL,
-  from_state  TEXT NOT NULL,
-  to_state    TEXT NOT NULL,
-  actor_id    TEXT,
-  actor_roles TEXT,
-  context     TEXT,
-  occurred_at TEXT NOT NULL
-);
-```
+The tables ship as migrations in `libs/workflow/resources/wagoe/workflow/migrations/`,
+so `bb migrate up` creates them with no boot. `:wagoe/workflow-db-schema` runs the
+same files at boot for installations that do not migrate. Timestamps are
+`TIMESTAMP WITH TIME ZONE`; tables created before BOU-502 stored them as TEXT and
+are converted by the second migration.
 
 ---
 

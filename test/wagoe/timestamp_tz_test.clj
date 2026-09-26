@@ -128,6 +128,37 @@
                  (catch Exception _ nil))
             (close!)))))))
 
+(deftest ^:integration an-iso-8601-text-column-becomes-a-zoned-timestamp
+  ;; Workflow kept its timestamps as ISO-8601 TEXT until BOU-502.
+  (doseq [[label open] (backends)
+          :let [converts? (not= "mysql" label)]]
+    (testing label
+      (let [[{:keys [datasource]} close!] (open)
+            written (Instant/parse "2026-03-11T10:00:00.123Z")]
+        (try
+          (jdbc/execute! datasource ["DROP TABLE IF EXISTS tzw_text"])
+          (jdbc/execute! datasource ["CREATE TABLE tzw_text (id INT, made_at TEXT)"])
+          (jdbc/execute! datasource ["INSERT INTO tzw_text (id, made_at) VALUES (1, ?)" (str written)])
+          (is (= (if converts? 1 0) (sut/widen-columns! datasource [["tzw_text" "made_at"]])))
+          (when (#{"h2" "postgresql"} label)
+            (is (sut/zone-aware? (column-type-name datasource "tzw_text" "made_at"))))
+          (when converts?
+            (let [v (val (first (first (jdbc/execute! datasource
+                                                      ["SELECT made_at FROM tzw_text WHERE id = 1"]))))]
+              (is (= written (condp instance? v
+                               Timestamp (.toInstant ^Timestamp v)
+                               java.time.OffsetDateTime (.toInstant ^java.time.OffsetDateTime v)
+                               ;; SQLite: epoch millis, in a TEXT-affinity column
+                               String (Instant/ofEpochMilli (parse-long v))
+                               v))
+                  (str label " read back " (pr-str v))))
+            (testing "running it again does nothing"
+              (is (zero? (sut/widen-columns! datasource [["tzw_text" "made_at"]])))))
+          (finally
+            (try (jdbc/execute! datasource ["DROP TABLE IF EXISTS tzw_text"])
+                 (catch Exception _ nil))
+            (close!)))))))
+
 (deftest ^:integration a-column-that-is-not-there-is-skipped-not-failed
   (testing "a database that never ran the migration creating the table"
     (let [[{:keys [datasource]} close!] ((second (first (backends))))]

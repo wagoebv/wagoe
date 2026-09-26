@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **`bb migrate up` did not create workflow's tables** (BOU-502). They ship as a
+  migration; their TEXT timestamps become zoned on `migrate up` or at boot.
 - **install.sh could not recover from a failed sdkman download** (BOU-525). A
   retry now clears the partial install; an existing sdkman is detected.
 - **MCP verify never ran a generated project's tests** (BOU-520). It now focuses
