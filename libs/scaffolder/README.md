@@ -226,13 +226,14 @@ bb scaffold entity --module-name billing --entity InvoiceLineItem \
 
 `--belongs-to` adds a required `invoice_id` column with a foreign key
 (`ON DELETE CASCADE`) and an index; the parent must be an entity of the module.
+Do not also declare an `invoice-id` or `invoice` field: that is refused.
 
 The entity gets its own `core/<entity>.clj`, `shell/<entity>_service.clj`,
 `shell/<entity>_persistence.clj`, `shell/<entity>_http.clj`, create migration
 and tests. Its defs are appended to `schema.clj` and `ports.clj`, whose
 existing text is left as it is, and it is wired in `module_wiring.clj`: after a
 restart its CRUD API answers at `/api/v1/invoice-line-items`. There is no web
-page for it.
+page for it. `--no-http` leaves out `shell/<entity>_http.clj` and its routes.
 
 Wiring the first extra entity adds an `ig-config` and an `entity-wiring`
 multimethod to `module_wiring.clj`, and replaces its routes init-key with one

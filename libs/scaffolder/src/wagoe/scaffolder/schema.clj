@@ -74,20 +74,27 @@
 
 (def EntityDefinition
   "Schema for an entity definition."
-  [:map {:title "Entity Definition"}
-   [:name :string]                                          ; Entity name (PascalCase)
-   [:plural {:optional true} :string]                       ; Plural form (e.g., "customers")
-   [:fields [:vector FieldDefinition]]                      ; Entity fields
-   ;; The parent entity, in this module: a required `<parent>_id` relation
-   ;; column with a foreign key and an index (BOU-497).
-   [:belongs-to {:optional true} [:re template/entity-name-pattern]]
-   [:description {:optional true} :string]])                ; Entity documentation
+  [:and
+   [:map {:title "Entity Definition"}
+    [:name :string]                                          ; Entity name (PascalCase)
+    [:plural {:optional true} :string]                       ; Plural form (e.g., "customers")
+    [:fields [:vector FieldDefinition]]                      ; Entity fields
+    ;; The parent entity, in this module: a required `<parent>_id` relation
+    ;; column with a foreign key and an index (BOU-497).
+    [:belongs-to {:optional true} [:re template/entity-name-pattern]]
+    [:description {:optional true} :string]]                ; Entity documentation
+   [:fn {:error/fn (fn [{e :value} _]
+                     (str (:name e) " belongs to " (:belongs-to e) ", which already gives it "
+                          (template/kebab->snake (template/pascal->kebab (:belongs-to e)))
+                          "_id: drop the field " (name (template/belongs-to-clash e))))}
+    (complement template/belongs-to-clash)]])
 
 (def AddEntityRequest
   "Schema for adding an entity to an existing module (BOU-497)."
   [:map {:title "Add Entity Request"}
    [:module-name :string]
    [:entity EntityDefinition]
+   [:interfaces {:optional true} [:map [:http {:optional true} :boolean]]]
    [:base-ns {:optional true} [:maybe :string]]
    [:dry-run {:optional true} [:maybe :boolean]]
    [:output-dir {:optional true} [:maybe :string]]])

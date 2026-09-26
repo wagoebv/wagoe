@@ -219,3 +219,19 @@
   (is (= [["generate" "--module-name" "product" "--entity" "Product"
            "--field" "name:string:required" "--field" "price:decimal:required"]]
          (scaffold/build-ai-commands (#'scaffold/parse-ai-module-spec spec-json)))))
+
+(deftest ^:unit a-lowercase-belongs-to-is-the-entity-it-names
+  ;; "belongs-to": "invoice" threw the whole spec away.
+  (let [spec (#'scaffold/parse-ai-module-spec
+              (str/replace multi-entity-json "\"belongs-to\":\"Invoice\"" "\"belongs-to\":\"invoice\""))]
+    (is (some? spec))
+    (is (= "Invoice" (:belongs-to (second (:entities spec)))))))
+
+(deftest ^:unit no-http-reaches-every-entity
+  (let [[generate entity] (scaffold/build-ai-commands
+                           (#'scaffold/parse-ai-module-spec
+                            (str/replace multi-entity-json "\"http\":true" "\"http\":false")))]
+    (is (some #{"--no-http"} generate))
+    (is (some #{"--no-http"} entity)))
+  (is (not-any? #{"--no-http"} (second (scaffold/build-ai-commands
+                                        (#'scaffold/parse-ai-module-spec multi-entity-json))))))

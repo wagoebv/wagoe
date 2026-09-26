@@ -10,7 +10,7 @@
   ports/IProductRepository
   (create [_this entity]
     (db/execute-update! db-ctx {:insert-into :products :values [entity]})
-    entity)
+    (select-by-id db-ctx (:id entity)))
   (find-by-id [_this id]
     (select-by-id db-ctx id))
   (find-all [_this opts]

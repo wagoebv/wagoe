@@ -382,3 +382,132 @@
                                                     {:name "Invoice" :fields [{:name :b :type :string}]}]
                                       :dry-run     true})]
     (is (false? (:success r)))))
+
+;; =============================================================================
+;; The entity API, decoded and refused (BOU-497 review)
+;; =============================================================================
+
+(defn- entity-api
+  "A caller for the generated line-item API under `dir`, on the stand-in service."
+  [base]
+  (let [svc    (reify-service (symbol (str base ".billing.ports") "IInvoiceLineItemService"))
+        routes ((ns-resolve (symbol (str base ".billing.shell.invoice-line-item-http")) 'api-routes) svc)
+        router (r/router routes)]
+    (fn [method path body]
+      (let [m (r/match-by-path router path)]
+        ((get-in m [:data method :handler])
+         {:request-method method :path-params (:path-params m) :body-params body})))))
+
+(deftest ^:integration a-decimal-field-takes-a-json-number-or-a-numeric-string
+  ;; Muuntaja parses 9.99 as a Double, and malli has no BigDecimal decoder, so
+  ;; `decimal?` refused both 9.99 and "9.99": every POST answered 400.
+  (let [dir (invoice-module! (temp-dir) "bou497dec")]
+    (add-line-item! dir "bou497dec" (update line-item :fields conj {:name :price :type :decimal}))
+    (load-and-test! dir)
+    (reset! seen [])
+    (let [call (entity-api "bou497dec")
+          inv  (str (java.util.UUID/randomUUID))]
+      (doseq [price [9.99 "9.99" 10]]
+        (reset! seen [])
+        (is (= 201 (:status (call :post "/invoice-line-items"
+                                  {:invoice-id inv :description "x" :quantity 1 :price price})))
+            (pr-str price))
+        (is (= (bigdec price) (:price (second (first @seen)))) (pr-str price)))
+      (is (= 400 (:status (call :post "/invoice-line-items"
+                                {:invoice-id inv :description "x" :quantity 1 :price "cheap"}))))
+      (is (not= 400 (:status (call :put (str "/invoice-line-items/" (java.util.UUID/randomUUID))
+                                   {:price 9.99})))
+          "PUT decodes it too"))))
+
+(deftest ^:integration an-update-with-nothing-to-set-is-a-400
+  ;; `UPDATE t SET  WHERE ...` — a 500 from the database.
+  (let [dir (invoice-module! (temp-dir) "bou497put")]
+    (add-line-item! dir "bou497put")
+    (load-and-test! dir)
+    (let [call (entity-api "bou497put")
+          path (str "/invoice-line-items/" (java.util.UUID/randomUUID))]
+      (is (= 400 (:status (call :put path {}))))
+      (is (= 400 (:status (call :put path {:sneaky "dropped"})))))))
+
+(deftest ^:unit belonging-to-a-parent-and-declaring-its-id-is-refused
+  ;; Both become the column invoice_id: a duplicate column in CREATE TABLE and
+  ;; :malli.core/duplicate-keys in schema.clj.
+  (doseq [clash [{:name :invoice-id :type :uuid :required true}
+                 {:name :invoice :type :string}]]
+    (let [dir    (invoice-module! (temp-dir) "bou497dup")
+          before (files-under dir)
+          entity (update line-item :fields conj clash)
+          r      (add-line-item! dir "bou497dup" entity)]
+      (is (false? (:success r)))
+      (is (some #(str/includes? % (name (:name clash))) (:errors r)) (pr-str (:errors r)))
+      (is (= before (files-under dir)) "nothing is written")
+      (testing "generate-module — the MCP tool's path — refuses it too"
+        (let [r (ports/generate-module svc {:module-name "billing"
+                                            :entities    [{:name "Invoice" :fields [{:name :number :type :string}]}
+                                                          entity]
+                                            :dry-run     true})]
+          (is (false? (:success r)))
+          (is (some #(str/includes? % (name (:name clash))) (:errors r)) (pr-str (:errors r))))))))
+
+(deftest ^:integration create-returns-the-row-with-its-column-defaults
+  ;; It returned its input, so a DEFAULT the database filled in was missing.
+  (let [dir (temp-dir)
+        r   (ports/generate-module svc {:module-name "billing" :base-ns "bou497cr"
+                                        :entities    [{:name "Invoice"
+                                                       :fields [{:name :number :type :string}
+                                                                {:name :state :type :string
+                                                                 :required false :default "draft"}]}
+                                                      (update line-item :fields conj
+                                                              {:name :note :type :string
+                                                               :required false :default "n/a"})]
+                                        :output-dir  (.getPath dir)})]
+    (is (:success r) (pr-str (:errors r)))
+    (load-and-test! dir)
+    (let [ctx  (db-factory/db-context {:adapter :h2
+                                       :database-path (str "mem:bou497cr" (System/nanoTime) ";DB_CLOSE_DELAY=-1")
+                                       :pool {:minimum-idle 1 :maximum-pool-size 2}})
+          _    (doseq [[path sql] (files-under dir)
+                       :when (str/ends-with? path ".up.sql")
+                       st (statements sql)]
+                 (jdbc/execute! (:datasource ctx) [st]))
+          at   (fn [n s] @(ns-resolve (symbol (str "bou497cr.billing." n)) s))
+          invs ((at "shell.service" 'create-service) ((at "shell.persistence" 'create-repository) ctx))
+          line ((at "shell.invoice-line-item-service" 'create-service)
+                ((at "shell.invoice-line-item-persistence" 'create-repository) ctx))
+          inv  ((at "ports" 'create-invoice) invs {:number "A-1"})
+          item ((at "ports" 'create-invoice-line-item) line {:invoice-id (:id inv) :description "x" :quantity 2})]
+      (is (= "draft" (:state inv)) "the first entity")
+      (is (= "n/a" (:note item)) "a further entity")
+      (is (= inv ((at "ports" 'get-invoice) invs (:id inv))) "what create returns is what get returns"))))
+
+(deftest ^:integration a-module-without-http-gets-no-entity-api
+  (let [dir (temp-dir)
+        r   (ports/generate-module svc {:module-name "billing" :base-ns "bou497nh"
+                                        :interfaces  {:http false}
+                                        :entities    [{:name "Invoice" :fields [{:name :number :type :string}]}
+                                                      line-item]
+                                        :output-dir  (.getPath dir)})]
+    (is (:success r) (pr-str (:errors r)))
+    (is (not-any? #(str/ends-with? % "_http.clj") (keys (files-under dir))))
+    (testing "and adding one later with :http false writes none either"
+      (let [dir2 (invoice-module! (temp-dir) "bou497nh2")
+            r2   (ports/add-entity svc {:module-name "billing" :base-ns "bou497nh2"
+                                        :entity line-item :interfaces {:http false}
+                                        :output-dir (.getPath dir2)})]
+        (is (:success r2) (pr-str (:errors r2)))
+        (is (not-any? #(str/ends-with? % "_http.clj") (keys (files-under dir2))))
+        (let [system (boot-module dir2 "bou497nh2")]
+          (is (contains? (:wagoe/billing-entities system) :invoice-line-item))
+          (is (not (contains? (api-paths system) "/invoice-line-items"))))))
+    (testing "the module boots, with the entity and no API for it"
+      (let [system (boot-module dir "bou497nh")]
+        (is (contains? (:wagoe/billing-entities system) :invoice-line-item))
+        (is (empty? (api-paths system)))))
+    (testing "the CLI's entity command takes --no-http"
+      (let [dir3 (invoice-module! (temp-dir) "bou497nh3")]
+        (with-out-str
+          (is (= 0 (cli/run-cli! svc ["entity" "--module-name" "billing" "--entity" "InvoiceLineItem"
+                                      "--belongs-to" "invoice" "--field" "quantity:int"
+                                      "--no-http" "--base-ns" "bou497nh3"
+                                      "--output-dir" (.getPath dir3)]))))
+        (is (not-any? #(str/ends-with? % "_http.clj") (keys (files-under dir3))))))))

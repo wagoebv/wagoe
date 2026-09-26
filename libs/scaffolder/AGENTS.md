@@ -90,7 +90,8 @@ bb scaffold entity \
   (`find-invoice-line-item-by-id`), because a second `find-by-id` in the same
   `ports.clj` would replace the first entity's.
 - `--belongs-to <entity>` is a required `<entity>_id` relation field with
-  `ON DELETE CASCADE` and an index. The parent must be defined in `schema.clj`.
+  `ON DELETE CASCADE` and an index. The parent must be defined in `schema.clj`,
+  and a field named `<entity>` or `<entity>-id` next to it is refused.
 - Refuses, writing nothing, when a file it would create exists or the module
   already defines one of its names.
 - Wires it in `module_wiring.clj` and serves its CRUD API at
@@ -98,7 +99,8 @@ bb scaffold entity \
   installs an `ig-config` and an `entity-wiring` multimethod, and replaces the
   one `:wagoe/<module>-routes` init-key so it mounts every entity's routes;
   that replacement is refused if the init-key was hand-edited. Later entities
-  append one `entity-wiring` method. No web page.
+  append one `entity-wiring` method. No web page. `--no-http` (or `:http false`
+  in `:interfaces`) leaves out the http namespace and its routes.
 
 `generate-module` (API, MCP `scaffold-module`) takes several `:entities`; the
 first is generated as above and each further one as `entity` would add it.

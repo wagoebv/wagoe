@@ -577,7 +577,7 @@ DROP TABLE IF EXISTS %s;
           "  ports/I" entity-name "Repository\n"
           "  (" create " [_this entity]\n"
           "    (db/execute-update! db-ctx {:insert-into :" table-name " :values [entity]})\n"
-          "    entity)\n"
+          "    (select-by-id db-ctx (:id entity)))\n"
           "  (" find-by-id " [_this id]\n"
           "    (select-by-id db-ctx id))\n"
           "  (" find-all " [_this opts]\n"
@@ -901,8 +901,17 @@ DROP TABLE IF EXISTS %s;
          "            [malli.core :as m]\n"
          "            [malli.transform :as mt]))\n"
          "\n"
+         ";; JSON has no decimal type: Muuntaja reads 9.99 as a Double, and malli\n"
+         ";; has no decoder for decimal?, so without this a decimal field refused both\n"
+         ";; 9.99 and \"9.99\".\n"
+         "(defn- ->decimal [x]\n"
+         "  (cond (number? x) (bigdec x)\n"
+         "        (string? x) (try (bigdec x) (catch NumberFormatException _ x))\n"
+         "        :else x))\n"
+         "\n"
          "(def ^:private json->data\n"
-         "  (mt/transformer mt/strip-extra-keys-transformer mt/json-transformer))\n"
+         "  (mt/transformer mt/strip-extra-keys-transformer mt/json-transformer\n"
+         "                  {:decoders {'decimal? ->decimal}}))\n"
          "\n"
          "(def ^:private decode-create (m/decoder schema/Create" entity-name "Request json->data))\n"
          "(def ^:private valid-create? (m/validator schema/Create" entity-name "Request))\n"
@@ -944,6 +953,7 @@ DROP TABLE IF EXISTS %s;
          "                               data (decode-update (:body-params request))]\n"
          "                           (cond\n"
          "                             (nil? id)                 (not-found)\n"
+         "                             (empty? data)             (invalid)\n"
          "                             (not (valid-update? data)) (invalid)\n"
          "                             :else (if-let [updated (ports/update-" e " service id data)]\n"
          "                                     {:status 200 :body updated}\n"
@@ -954,9 +964,14 @@ DROP TABLE IF EXISTS %s;
          "                           (do (ports/delete-" e " service id) {:status 204})\n"
          "                           (not-found)))}}]])\n")))
 
+(defn- http?
+  [ctx]
+  (get-in ctx [:interfaces :http] true))
+
 (defn entity-files
   "The files a further entity adds, as [{:path :content}]: core, service,
    persistence and http namespaces of its own, its migration pair and its tests.
+   No http namespace when the module has no HTTP interface.
 
    Pure: true"
   [ctx entity migration-number]
@@ -965,17 +980,19 @@ DROP TABLE IF EXISTS %s;
         tst    #(str "test/" base (template/ns->path %) ".clj")
         e      (:entity-kebab entity)
         plural (:entity-plural entity)]
-    [{:path (src (str "core." e)) :content (generate-core-file ctx entity)}
-     {:path (src (:service-ns entity)) :content (generate-service-file ctx entity)}
-     {:path (src (:persistence-ns entity)) :content (generate-persistence-file ctx entity)}
-     {:path (src (str "shell." e "-http")) :content (generate-entity-http-file ctx entity)}
-     {:path    (format "migrations/%s-create-%s.up.sql" migration-number plural)
-      :content (generate-migration-file ctx entity migration-number)}
-     {:path    (format "migrations/%s-create-%s.down.sql" migration-number plural)
-      :content (generate-migration-down-file ctx entity)}
-     {:path (tst (str "core." e "-test")) :content (generate-core-test-file ctx entity)}
-     {:path (tst (str "shell." e "-repository-test")) :content (generate-persistence-test-file ctx entity)}
-     {:path (tst (:service-test-ns entity)) :content (generate-service-test-file ctx entity)}]))
+    (cond->
+     [{:path (src (str "core." e)) :content (generate-core-file ctx entity)}
+      {:path (src (:service-ns entity)) :content (generate-service-file ctx entity)}
+      {:path (src (:persistence-ns entity)) :content (generate-persistence-file ctx entity)}
+      {:path    (format "migrations/%s-create-%s.up.sql" migration-number plural)
+       :content (generate-migration-file ctx entity migration-number)}
+      {:path    (format "migrations/%s-create-%s.down.sql" migration-number plural)
+       :content (generate-migration-down-file ctx entity)}
+      {:path (tst (str "core." e "-test")) :content (generate-core-test-file ctx entity)}
+      {:path (tst (str "shell." e "-repository-test")) :content (generate-persistence-test-file ctx entity)}
+      {:path (tst (:service-test-ns entity)) :content (generate-service-test-file ctx entity)}]
+      (http? ctx)
+      (conj {:path (src (str "shell." e "-http")) :content (generate-entity-http-file ctx entity)}))))
 
 ;; =============================================================================
 ;; Incremental Generators - Add Field
@@ -1134,7 +1151,8 @@ DROP TABLE IF EXISTS %s;
        "  ;; mounting it. The API routes of every entity `bb scaffold entity` added\n"
        "  ;; (see entity-wiring below) join the first entity's.\n"
        "  (reduce (fn [contribution {entity-service :service routes :routes}]\n"
-       "            (update contribution :api into (routes entity-service)))\n"
+       "            (cond-> contribution\n"
+       "              routes (update :api into (routes entity-service))))\n"
        "          (http/" module-name "-routes service (or config {}))\n"
        "          (vals entities)))"))
 
@@ -1178,21 +1196,23 @@ DROP TABLE IF EXISTS %s;
          "     :routes   (ig/ref " (k "-routes") ")}}})\n")))
 
 (defn- entity-wiring-section
-  [entity]
+  [ctx entity]
   (let [e (:entity-kebab entity)]
     (str (banner (:entity-name entity))
          "(defmethod entity-wiring :" e "\n"
          "  [_]\n"
          "  {:repository " e "-persistence/create-repository\n"
-         "   :service    " e "-service/create-service\n"
-         "   :routes     " e "-http/api-routes})\n")))
+         "   :service    " e "-service/create-service"
+         (if (http? ctx)
+           (str "\n   :routes     " e "-http/api-routes})\n")
+           "})\n"))))
 
 (defn- entity-requires
   "[alias namespace] pairs the entity's wiring section needs."
   [ctx entity]
   (let [prefix (str (:base-ns ctx "wagoe") "." (:module-name ctx) ".")
         e      (:entity-kebab entity)]
-    (for [part ["persistence" "service" "http"]]
+    (for [part (cond-> ["persistence" "service"] (http? ctx) (conj "http"))]
       [(symbol (str e "-" part))
        (symbol (str prefix (if (= "http" part)
                              (str "shell." e "-http")
@@ -1283,7 +1303,7 @@ DROP TABLE IF EXISTS %s;
         (let [with-requires (add-requires (:content installed) (entity-requires ctx entity))]
           (if (:error with-requires)
             with-requires
-            {:content (append-section (:content with-requires) (entity-wiring-section entity))}))))
+            {:content (append-section (:content with-requires) (entity-wiring-section ctx entity))}))))
     (catch Exception e
       {:error (str "it could not be read: " (.getMessage e))})))
 

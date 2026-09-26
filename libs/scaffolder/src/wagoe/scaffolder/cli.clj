@@ -76,6 +76,8 @@
     :update-fn conj]
    [nil "--belongs-to ENTITY" "The module's entity this one belongs to: a required <entity>_id foreign key"
     :validate [template/valid-entity-name? "Must be an entity name"]]
+   [nil "--[no-]http" "Generate the entity's HTTP (REST API) routes (default: true)"
+    :default true]
    [nil "--base-ns NS" "Base namespace + path for the module (default: the project's own)"]
    [nil "--output-dir DIR" "Output directory (default: current directory)"
     :default "."]
@@ -667,6 +669,7 @@
                         {:module-name (:module-name opts)
                          :entity      (cond-> {:name (:entity opts) :fields fields-or-errors}
                                         (:belongs-to opts) (assoc :belongs-to (:belongs-to opts)))
+                         :interfaces  {:http (:http opts true)}
                          :output-dir  (:output-dir opts)
                          :dry-run     (:dry-run opts)
                          :base-ns     (:base-ns opts)})]
@@ -962,6 +965,8 @@ Options:
   --belongs-to ENTITY  The module's entity this one belongs to. Adds a
                        required <entity>_id column with a foreign key
                        (ON DELETE CASCADE) and an index
+  --no-http            No API routes for the entity: for a module generated
+                       with --no-http
   --output-dir DIR     Write somewhere other than the current directory
   --dry-run            Show what would be generated without creating files
 

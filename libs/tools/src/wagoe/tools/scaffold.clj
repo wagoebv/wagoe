@@ -146,10 +146,11 @@
 
 (defn build-entity-args
   "`bb scaffold entity` arguments for an entity added to `module`."
-  [module {:keys [name belongs-to fields]}]
+  [module {:keys [name belongs-to fields http] :or {http true}}]
   (vec (concat ["entity" "--module-name" module "--entity" name]
                (when belongs-to ["--belongs-to" belongs-to])
-               (mapcat #(vector "--field" (field->spec %)) fields))))
+               (mapcat #(vector "--field" (field->spec %)) fields)
+               (when-not http ["--no-http"]))))
 
 (defn build-ai-commands
   "The scaffolder commands an AI module spec stands for: `generate` for its
@@ -158,7 +159,7 @@
   (let [[{:keys [name fields]} & more] entities]
     (into [(build-generate-args {:module module :entity name :fields fields
                                  :http http :web web})]
-          (map #(build-entity-args module %) more))))
+          (map #(build-entity-args module (assoc % :http http)) more))))
 
 ;; =============================================================================
 ;; Run Clojure scaffolder
@@ -554,7 +555,10 @@
           ;; `:entity` and `:fields` is one entity.
           entities (if (seq (:entities data))
                      (mapv (fn [e] (cond-> {:name (:name e) :fields (vec (:fields e))}
-                                     (:belongs-to e) (assoc :belongs-to (:belongs-to e))))
+                                     ;; A model writes "invoice" as often as "Invoice".
+                                     (:belongs-to e) (assoc :belongs-to
+                                                            (cond-> (:belongs-to e)
+                                                              (valid-kebab? (:belongs-to e)) kebab->pascal))))
                            (:entities data))
                      [{:name (:entity data) :fields (vec (:fields data))}])
           spec     {:module   (:module-name data)

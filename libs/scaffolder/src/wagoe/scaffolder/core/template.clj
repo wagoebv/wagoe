@@ -362,6 +362,17 @@
   (let [k (pascal->kebab parent)]
     {:name (keyword k) :type :relation :references k :required true :on-delete :cascade}))
 
+(defn belongs-to-clash
+  "The declared field that would also be the `:belongs-to` parent's column —
+   `invoice` or `invoice-id` next to `:belongs-to \"Invoice\"` — or nil. Both
+   become invoice_id: a duplicate column and duplicate schema keys.
+
+   Pure: true"
+  [{:keys [fields belongs-to]}]
+  (when (valid-entity-name? belongs-to)
+    (let [parent (pascal->kebab belongs-to)]
+      (some #(when (#{parent (str parent "-id")} (name (:name %))) (:name %)) fields))))
+
 (defn entity-fields
   "An entity's fields, with its `:belongs-to` parent as the first one. A field
    of the same name already declared wins.

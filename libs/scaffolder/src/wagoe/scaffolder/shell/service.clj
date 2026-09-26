@@ -636,6 +636,7 @@
             ctx         (template/build-module-context
                          {:module-name module-name
                           :base-ns     (or (:base-ns request) "wagoe")
+                          :interfaces  (:interfaces request {})
                           :entities    []})
             entity      (template/build-entity-context (:entity request) module-name {:primary? false})
             ctx         (assoc ctx :entities [entity])
@@ -710,15 +711,17 @@
                                         :action :update :note "appended the entity"}))
                                 edits))
             service-ns  (str (:base-ns ctx) "." module-name "." (:service-ns entity))
+            http?       (get-in ctx [:interfaces :http])
             uri         (str "/api/v1/" (:entity-plural entity))]
         {:success     true
          :module-name module-name
          :command     :entity
          :entity      (:entity-name entity)
          :files       files
-         :next-steps  ["Run the migration: clojure -M:migrate up"
-                       (str "Restart the system; the API is at " uri " and " uri "/:id")
-                       (str "Run the tests: clojure -M:test --focus " service-ns "-test")]
+         :next-steps  (filterv some?
+                               ["Run the migration: clojure -M:migrate up"
+                                (when http? (str "Restart the system; the API is at " uri " and " uri "/:id"))
+                                (str "Run the tests: clojure -M:test --focus " service-ns "-test")])
          :warnings    (when dry-run ["Dry run - no files were written"])})
       (catch clojure.lang.ExceptionInfo e
         (if (= ::refuse-overwrite (:type (ex-data e)))
