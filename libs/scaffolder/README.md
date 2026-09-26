@@ -370,6 +370,9 @@ resources/scaffolder/templates/
 cd libs/scaffolder
 clojure -M:test
 
+# ...including the PostgreSQL round trip (embedded PostgreSQL; add :test/pg-mac on Apple Silicon)
+clojure -M:test:test/pg
+
 # Lint
 clojure -M:clj-kondo --lint src test
 

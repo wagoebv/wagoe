@@ -169,7 +169,9 @@
     :boolean "BOOLEAN"
     :email "VARCHAR(255)"
     :enum "VARCHAR(50)"
-    :inst "TIMESTAMPTZ"
+    ;; The SQL-standard spelling, not TIMESTAMPTZ: one migration runs on
+    ;; SQLite, H2 and PostgreSQL, and H2 rejects TIMESTAMPTZ (BOU-522).
+    :inst "TIMESTAMP WITH TIME ZONE"
     :date "DATE"
     :json "JSONB"
     :decimal "DECIMAL(19,4)"

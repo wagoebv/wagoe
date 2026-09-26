@@ -37,6 +37,8 @@ for what is public API, what is internal, and how deprecations are announced.
   browser's zone, else `:time-zone` in `:wagoe/settings`, else Europe/Amsterdam.
 - **Admin forms answered 500 on an unreadable value and stored "forty" as NULL**
   (BOU-521). They now show a field error; a `:date` must be `YYYY-MM-DD`.
+- **Scaffolded timestamp columns broke on H2 and shifted on PostgreSQL** (BOU-522).
+  New modules use `TIMESTAMP WITH TIME ZONE`; existing tables are unchanged.
 - **MCP `describe-module` missed root and dotted-namespace modules** (BOU-516).
   Any directory under `src/` with a `ports.clj` is now found.
 - **Admin forms shifted zone-less timestamps on non-UTC servers** (BOU-519).

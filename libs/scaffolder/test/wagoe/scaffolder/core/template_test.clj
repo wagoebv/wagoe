@@ -42,7 +42,7 @@
     (is (= "BOOLEAN" (template/field-type->sql {:type :boolean})))
     (is (= "VARCHAR(255)" (template/field-type->sql {:type :email})))
     (is (= "VARCHAR(50)" (template/field-type->sql {:type :enum})))
-    (is (= "TIMESTAMPTZ" (template/field-type->sql {:type :inst})))
+    (is (= "TIMESTAMP WITH TIME ZONE" (template/field-type->sql {:type :inst})))
     (is (= "JSONB" (template/field-type->sql {:type :json})))
     ;; Not DOUBLE PRECISION: `--field price:decimal` is what anyone reaches
     ;; for when scaffolding money, and binary floating point is the wrong

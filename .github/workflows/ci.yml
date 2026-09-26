@@ -1187,12 +1187,15 @@ jobs:
       - name: Setup Clojure + warm deps
         uses: ./.github/actions/clojure-deps
         with:
-          aliases: -M:test
+          aliases: -M:test:test/pg
 
+      # :test/pg for migration_postgres_test: a generated migration's
+      # timestamps written and read back on PostgreSQL, which is where the
+      # zone-less audit columns went wrong (BOU-522).
       - name: Run tests
         env:
           JWT_SECRET: "ci-test-secret-minimum-32-characters"
-        run: clojure -M:test :scaffolder
+        run: clojure -M:test:test/pg :scaffolder
 
   test-reports:
     name: Test wagoe/reports

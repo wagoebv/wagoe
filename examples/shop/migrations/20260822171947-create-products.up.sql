@@ -5,9 +5,9 @@ CREATE TABLE IF NOT EXISTS products (
   name VARCHAR(255) NOT NULL,
   sku VARCHAR(255) NOT NULL,
   price DECIMAL(19,4),
-  created_at TIMESTAMP NOT NULL,
-  updated_at TIMESTAMP,
-  deleted_at TIMESTAMP
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+  updated_at TIMESTAMP WITH TIME ZONE,
+  deleted_at TIMESTAMP WITH TIME ZONE
 );
 
 -- Indexes
