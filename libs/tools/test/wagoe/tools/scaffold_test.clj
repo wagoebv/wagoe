@@ -287,50 +287,64 @@
 ;; rewrite-clj, and a transient miss there failed quickstart's sample module.
 
 (def ^:private fetch-error
-  (str "Error building classpath. Could not transfer artifact "
-       "rewrite-clj:rewrite-clj:jar:1.2.57 from/to central: status code: 429"))
+  (str "Error building classpath. The following artifacts could not be resolved: "
+       "rewrite-clj:rewrite-clj:jar:1.2.57 (absent): Could not find artifact "
+       "rewrite-clj:rewrite-clj:jar:1.2.57 in central (https://repo1.maven.org/maven2/)"))
+
+(defn- fails-with [msg] (str "echo '" msg "' >&2; exit 1"))
 
 (defn- run-scaffolder
-  "run-clojure! with `shell` answering `responses` in order."
-  [responses]
-  (let [calls (atom 0)
-        exit  (atom nil)
-        remaining (atom responses)]
+  "run-clojure! with each scaffolder run replaced by the next bash `scripts`,
+   run by the real `shell` with the options run-clojure! gave it."
+  [scripts]
+  (let [real      process/shell
+        calls     (atom 0)
+        exit      (atom nil)
+        err       (java.io.StringWriter.)
+        remaining (atom scripts)]
     (with-out-str
-      (binding [*err* (java.io.StringWriter.)
+      (binding [*err* err
                 scaffold/*exit!* #(reset! exit %)]
-        (with-redefs [process/shell (fn [& _]
+        (with-redefs [process/shell (fn [opts & _]
                                       (swap! calls inc)
-                                      (let [r (first @remaining)]
+                                      (let [script (first @remaining)]
                                         (swap! remaining rest)
-                                        r))]
+                                        (real opts "bash" "-c" script)))]
           (scaffold/run-clojure! ["generate" "--module-name" "tasks"]))))
-    {:calls @calls :exit @exit}))
+    {:calls @calls :exit @exit :err (str err)}))
 
 (deftest ^:unit a-dependency-fetch-failure-is-retried-once
   (testing "a resolution error, then success: retried, and no failure"
-    (is (= {:calls 2 :exit nil}
-           (run-scaffolder [{:exit 1 :err fetch-error} {:exit 0}]))))
+    (is (= [2 nil] ((juxt :calls :exit) (run-scaffolder [(fails-with fetch-error) "exit 0"])))))
 
   (testing "a resolution error twice: one retry, then it fails"
-    (is (= {:calls 2 :exit 1}
-           (run-scaffolder [{:exit 1 :err fetch-error} {:exit 1 :err fetch-error}]))))
+    (let [r (run-scaffolder [(fails-with fetch-error) (fails-with fetch-error)])]
+      (is (= [2 1] ((juxt :calls :exit) r)))
+      (is (str/includes? (:err r) "Could not find artifact rewrite-clj") "the error reaches the user")))
 
   (testing "any other failure is not retried"
-    (is (= {:calls 1 :exit 1}
-           (run-scaffolder [{:exit 1 :err "Module tasks already exists"}])))))
+    (is (= [1 1] ((juxt :calls :exit) (run-scaffolder [(fails-with "Module tasks already exists")]))))))
 
-(deftest ^:unit the-retry-clears-the-cached-miss-it-would-otherwise-re-read
-  (let [m2 (fs/create-temp-dir)
-        dir (fs/path m2 "rewrite-clj" "rewrite-clj" "1.2.57")
-        named (fs/path dir "rewrite-clj-1.2.57.jar.lastUpdated")
-        other (fs/path m2 "foo" "bar" "1.0" "bar-1.0-sources.jar.lastUpdated")]
-    (try
-      (fs/create-dirs dir)
-      (fs/create-dirs (fs/parent other))
-      (spit (str named) "x")
-      (spit (str other) "x")
-      (scaffold/clear-missing-markers! fetch-error (str m2))
-      (is (not (fs/exists? named)))
-      (is (fs/exists? other) "a marker the error does not name is kept")
-      (finally (fs/delete-tree m2)))))
+(deftest ^:unit the-scaffolders-stderr-is-shown-while-it-runs
+  (testing "a cold dependency download shows progress, not minutes of silence"
+    (let [flag (fs/path (fs/create-temp-dir) "done")
+          err  (java.io.StringWriter.)
+          real process/shell
+          run  (future
+                 (binding [*err* err
+                           scaffold/*exit!* (fn [_])]
+                   (with-out-str
+                     (with-redefs [process/shell
+                                   (fn [opts & _]
+                                     (real opts "bash" "-c"
+                                           (str "echo 'Downloading: rewrite-clj' >&2; "
+                                                "while [ ! -e '" flag "' ]; do sleep 0.05; done")))]
+                       (scaffold/run-clojure! ["generate" "--module-name" "tasks"])))))
+          seen? (loop [n 0]
+                  (cond (str/includes? (str err) "Downloading: rewrite-clj") true
+                        (> n 100) false
+                        :else (do (Thread/sleep 50) (recur (inc n)))))]
+      (spit (str flag) "")
+      (deref run 10000 nil)
+      (fs/delete-tree (fs/parent flag))
+      (is seen? "stderr only arrived after the scaffolder exited"))))

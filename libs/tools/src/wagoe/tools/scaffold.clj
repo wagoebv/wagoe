@@ -256,9 +256,6 @@
       module-name (into (vec args) ["--base-ns" (project/module-base-ns module-name root)])
       :else       (into (vec args) ["--base-ns" (project/base-ns root)]))))
 
-(def ^:private coordinate
-  #"[A-Za-z0-9_.-]+:[A-Za-z0-9_.-]+:[A-Za-z0-9_.-]+(?::[A-Za-z0-9_.-]+)?:[A-Za-z0-9_.+-]+")
-
 (defn resolution-failure?
   "True when the CLI's stderr says a dependency could not be fetched, as
    opposed to the scaffolder itself failing."
@@ -266,25 +263,33 @@
   (boolean (and err (re-find #"Error building classpath|Could not (?:find|transfer|resolve) artifact|Failed to read artifact descriptor|Failure to find"
                              err))))
 
-(defn clear-missing-markers!
-  "Delete the `*.lastUpdated` markers of the artifacts `err` names. Maven reads
-   a marker instead of the network, so a retry that keeps it fails the same way
-   (BOU-440, BOU-548)."
-  [err m2-repo]
-  (doseq [coord (distinct (re-seq coordinate (str err)))
-          :let [parts (str/split coord #":")
-                [g a] parts
-                v (last parts)
-                dir (io/file m2-repo (str/replace g "." "/") a v)]
-          f (.listFiles dir)
-          :when (and (str/starts-with? (.getName f) (str a "-" v))
-                     (str/ends-with? (.getName f) ".lastUpdated"))]
-    (io/delete-file f true)))
+(defn- tee-writer
+  "A Writer that forwards to `out` as it is written and keeps a copy in `sb`."
+  ^java.io.Writer [^java.io.Writer out ^StringBuilder sb]
+  (proxy [java.io.Writer] []
+    (write
+      ([x]
+       (if (string? x)
+         (do (.append sb ^String x) (.write out ^String x))
+         (do (.append sb (char x)) (.write out (int x))))
+       (.flush out))
+      ([cbuf off len]
+       (if (string? cbuf)
+         (do (.append sb ^String cbuf (int off) (int (+ off len)))
+             (.write out ^String cbuf (int off) (int len)))
+         (do (.append sb ^chars cbuf (int off) (int len))
+             (.write out ^chars cbuf (int off) (int len))))
+       (.flush out)))
+    (flush [] (.flush out))
+    (close [] (.flush out))))
 
-(defn- run-scaffolder-once [cmd]
-  (let [{:keys [exit err]} (apply shell {:continue true :err :string} cmd)]
-    (when (seq err) (binding [*out* *err*] (print err) (flush)))
-    {:exit exit :err err}))
+(defn- run-scaffolder-once
+  "Streams stderr as it arrives, so a cold dependency download is not silent,
+   and returns it for the retry decision."
+  [cmd]
+  (let [err (StringBuilder.)
+        {:keys [exit]} (apply shell {:continue true :err (tee-writer *err* err)} cmd)]
+    {:exit exit :err (str err)}))
 
 (defn run-clojure!
   "Shell out to the Clojure scaffolder CLI with given args. Streams output to terminal.
@@ -313,9 +318,6 @@
           result       (if (and (not (zero? (:exit first-try)))
                                 (resolution-failure? (:err first-try)))
                          (do (println (yellow "Dependency fetch failed — retrying once..."))
-                             (clear-missing-markers! (:err first-try)
-                                                     (io/file (System/getProperty "user.home")
-                                                              ".m2" "repository"))
                              (run-scaffolder-once cmd))
                          first-try)]
       ;; Truthy on success: wizard-ai stops a multi-entity run on the first nil.
