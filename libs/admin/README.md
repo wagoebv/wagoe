@@ -419,6 +419,48 @@ When entity data lives across multiple tables (e.g. `auth_users` + `users`), use
 
 ---
 
+## Lifecycle Events
+
+When the application configures `:wagoe/events`, every admin write publishes an
+event on the `:admin` topic after it commits (BOU-492). Without an event bus,
+nothing is published and nothing extra runs.
+
+| Event type | When | Payload |
+|---|---|---|
+| `:admin/entity-created` | create | `{:entity :invoices :id #uuid "…" :attrs {…}}` |
+| `:admin/entity-updated` | edit form, inline edit | the same, plus `:prior {…}`: the record before the write |
+| `:admin/entity-deleted` | delete, bulk delete (one event per record) | the same; `:attrs` is the record as it was |
+
+`:attrs` leaves out the entity's `:hide-fields`. If publishing fails, the error
+is logged and the request still succeeds, because the row is already written.
+
+Starting a workflow when an invoice is created in the admin:
+
+```clojure
+(ns myapp.shell.invoice-workflow
+  (:require [integrant.core :as ig]
+            [wagoe.events.ports :as events]
+            [wagoe.workflow.ports :as workflow]))
+
+(defn- on-admin-event [{:keys [engine store]} {:keys [type payload]}]
+  (when (and (= :admin/entity-created type) (= :invoices (:entity payload))
+             ;; Delivery is at-least-once: start the workflow only once.
+             (nil? (workflow/find-instance-by-entity store :invoice (:id payload))))
+    (workflow/start-workflow! engine {:workflow-id :invoice-workflow
+                                      :entity-type :invoice
+                                      :entity-id   (:id payload)})))
+
+;; config: :myapp/invoice-workflow {:bus      #ig/ref :wagoe/events
+;;                                  :workflow #ig/ref :wagoe/workflow}
+(defmethod ig/init-key :myapp/invoice-workflow [_ {:keys [bus workflow]}]
+  {:bus bus :sub (events/subscribe! bus :admin (partial on-admin-event workflow))})
+
+(defmethod ig/halt-key! :myapp/invoice-workflow [_ {:keys [bus sub]}]
+  (events/unsubscribe! bus sub))
+```
+
+---
+
 ## Web Routes
 
 | Path | Method | Description |

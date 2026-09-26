@@ -161,6 +161,31 @@ The service soft-deletes by running `UPDATE <table> SET deleted_at = ? WHERE id 
 
 ---
 
+## Lifecycle Events (BOU-492)
+
+With `:wagoe/events` configured, admin writes publish on topic `:admin`, after
+the write commits:
+
+| Type | Payload |
+|---|---|
+| `:admin/entity-created` | `{:entity :invoices :id <uuid> :attrs {...}}` |
+| `:admin/entity-updated` | same, plus `:prior {...}`; also for inline edits |
+| `:admin/entity-deleted` | same; `:attrs` is the record as it was; one per record on bulk delete |
+
+- Wiring: `ig-config` refs `:wagoe/events` only when it is in `:enabled`, and
+  `create-admin-service` wraps the service in `PublishingAdminService` only
+  when given a publisher. Without a bus the old code runs unchanged.
+- A failed publish is logged at warn; the request still succeeds.
+- `:hide-fields` are stripped from `:attrs` and `:prior`.
+- Nothing is published for a write that changed nothing (unknown id).
+- On `:redis`, a value transit cannot encode (`OffsetDateTime`, `LocalDate`,
+  a `PGobject`) fails the publish, which is then only logged.
+
+Example subscriber that starts a workflow: see "Lifecycle Events" in
+[README.md](README.md).
+
+---
+
 ## UI/Frontend Development
 
 ### Technology Stack

@@ -18,7 +18,10 @@
    [wagoe.core.utils.type-conversion :as type-conversion]
    [wagoe.core.utils.case-conversion :as case-conversion]
    [wagoe.admin.core.db-errors :as db-errors]
-   [clojure.string :as str])
+   [wagoe.events.core.event :as event]
+   [wagoe.events.ports :as events]
+   [clojure.string :as str]
+   [clojure.tools.logging :as log])
   (:import [java.util UUID]
            [java.time Instant]))
 
@@ -792,6 +795,87 @@
      db-ctx)))
 
 ;; =============================================================================
+;; Lifecycle events (BOU-492)
+;; =============================================================================
+
+(defn- publish-lifecycle!
+  "Publish `type` for a write that has committed.
+
+   A failure is logged, not raised: the row is already written, and a 500
+   would tell the user it was not. Hidden fields stay out of the payload,
+   since an event can leave the process."
+  [publisher schema-provider type entity-name id attrs & [prior]]
+  (let [hidden  (:hide-fields (ports/get-entity-config schema-provider entity-name))
+        strip   #(apply dissoc % hidden)
+        payload (cond-> {:entity entity-name :id id :attrs (strip attrs)}
+                  prior (assoc :prior (strip prior)))
+        result  (try
+                  (events/publish! publisher :admin
+                                   (event/event {:id           (random-uuid)
+                                                 :type         type
+                                                 :source       :admin
+                                                 :payload      payload
+                                                 :published-at (Instant/now)}))
+                  (catch Exception e
+                    {:error {:type :events/publish-failed :message (ex-message e)}}))]
+    (when (:error result)
+      (log/warn "admin lifecycle event not published"
+                {:type type :entity entity-name :id id :error (:error result)}))))
+
+(defrecord PublishingAdminService [inner schema-provider publisher]
+  ;; Wraps the service only when a bus is configured, so an application
+  ;; without one runs exactly the code it did before. Each write publishes
+  ;; after it returns, which is after it committed. Reads for :prior happen
+  ;; only here, for the same reason.
+  ports/IAdminService
+  (list-entities [_ entity-name options] (ports/list-entities inner entity-name options))
+  (get-entity [_ entity-name id] (ports/get-entity inner entity-name id))
+  (count-entities [_ entity-name filters] (ports/count-entities inner entity-name filters))
+  (validate-entity-data [_ entity-name data] (ports/validate-entity-data inner entity-name data))
+  (list-related-entities [_ parent-entity-name parent-id relationship]
+    (ports/list-related-entities inner parent-entity-name parent-id relationship))
+
+  (create-entity [_ entity-name data]
+    (let [record (ports/create-entity inner entity-name data)]
+      (publish-lifecycle! publisher schema-provider :admin/entity-created
+                          entity-name (:id record) record)
+      record))
+
+  (update-entity [_ entity-name id data]
+    (let [prior  (ports/get-entity inner entity-name id)
+          record (ports/update-entity inner entity-name id data)]
+      (when record
+        (publish-lifecycle! publisher schema-provider :admin/entity-updated
+                            entity-name id record prior))
+      record))
+
+  (update-entity-field [_ entity-name id field value]
+    (let [prior  (ports/get-entity inner entity-name id)
+          record (ports/update-entity-field inner entity-name id field value)]
+      (when record
+        (publish-lifecycle! publisher schema-provider :admin/entity-updated
+                            entity-name id record prior))
+      record))
+
+  (delete-entity [_ entity-name id]
+    (let [prior    (ports/get-entity inner entity-name id)
+          deleted? (ports/delete-entity inner entity-name id)]
+      (when (and deleted? prior)
+        (publish-lifecycle! publisher schema-provider :admin/entity-deleted
+                            entity-name id prior))
+      deleted?))
+
+  (bulk-delete-entities [_ entity-name ids]
+    ;; Eager: a lazy seq would first be read after the rows were gone.
+    (let [priors (into [] (keep #(some->> (ports/get-entity inner entity-name %) (vector %))) ids)
+          result (ports/bulk-delete-entities inner entity-name ids)]
+      (when (pos? (:success-count result 0))
+        (doseq [[id prior] priors]
+          (publish-lifecycle! publisher schema-provider :admin/entity-deleted
+                              entity-name id prior)))
+      result)))
+
+;; =============================================================================
 ;; Factory Function
 ;; =============================================================================
 
@@ -804,8 +888,12 @@
      logger: Logger instance for operation logging
      error-reporter: Error reporter for exception tracking
      config: Admin configuration map with pagination settings
+     event-publisher: optional wagoe.events IEventPublisher (BOU-492)
 
    Returns:
      AdminService instance implementing IAdminService"
-  [db-ctx schema-provider logger error-reporter config]
-  (->AdminService db-ctx schema-provider logger error-reporter config))
+  ([db-ctx schema-provider logger error-reporter config]
+   (create-admin-service db-ctx schema-provider logger error-reporter config nil))
+  ([db-ctx schema-provider logger error-reporter config event-publisher]
+   (cond-> (->AdminService db-ctx schema-provider logger error-reporter config)
+     event-publisher (->PublishingAdminService schema-provider event-publisher))))

@@ -72,6 +72,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **Admin writes publish lifecycle events** (BOU-492). With `:wagoe/events` on,
+  subscribe to `:admin` for `:admin/entity-created`, `-updated` and `-deleted`.
 - **Modules with several entities** (BOU-497, BOU-514). `bb scaffold entity
   --belongs-to invoice` adds one; `scaffold ai` and MCP now generate them all.
 - **Scaffolder `default=<value>` field modifier** (BOU-494). Required enums now
