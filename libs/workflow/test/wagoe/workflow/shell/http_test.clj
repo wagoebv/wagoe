@@ -166,3 +166,19 @@
   (let [response (post "/workflow/instances" {} (admin-token))]
     (is (= 400 (:status response)))
     (is (= "validation-error" (:error (body-data response))))))
+
+(deftest ^:unit the-admin-list-page-hides-the-exception
+  ;; The message can carry driver or config detail (BOU-555).
+  (let [store    (reify ports/IWorkflowStore
+                   (save-instance! [_ _] nil)
+                   (find-instance [_ _] nil)
+                   (find-instance-by-entity [_ _ _] nil)
+                   (update-instance-state! [_ _ _] nil)
+                   (save-audit-entry! [_ _] nil)
+                   (find-audit-log [_ _] nil)
+                   (list-instances [_ _]
+                     (throw (RuntimeException. "jdbc:postgresql://db password=hunter2"))))
+        response (sut/handle-list-instances-web store {})]
+    (is (= 500 (:status response)))
+    (is (not (re-find #"hunter2" (:body response))))
+    (is (re-find #"error-generic" (:body response)))))
