@@ -2,7 +2,7 @@
   "A library that ships migrations must publish the manifest that reveals them.
 
    `wagoe.platform.shell.database.migrations` discovers library migrations from
-   a `wagoe/migration-paths.edn` resource enumerated off the classpath. A
+   a `wagoe/migration-paths/<lib>.edn` resource enumerated off the classpath. A
    library with migration files and no manifest contributes nothing: the runner
    never looks in its directory, `bb migrate up` reports nothing pending, and
    the first query fails on a missing table.
@@ -51,7 +51,7 @@
 (defn- declared-paths
   "The migration directories `lib` publishes, or nil when it publishes none."
   [lib]
-  (let [manifest (fs/path (repo-root) "libs" lib "resources" "wagoe" "migration-paths.edn")]
+  (let [manifest (fs/path (repo-root) "libs" lib "resources" "wagoe" "migration-paths" (str lib ".edn"))]
     (when (fs/exists? manifest)
       (let [data (edn/read-string (slurp (fs/file manifest)))]
         (set (if (vector? data) data (:paths data)))))))
@@ -63,12 +63,12 @@
       (is (seq with-migrations)
           "found no library shipping migrations; the scan is looking in the wrong place"))
 
-    (testing "each one publishes wagoe/migration-paths.edn"
+    (testing "each one publishes wagoe/migration-paths/<lib>.edn"
       (doseq [[lib dirs] with-migrations]
         (let [declared (declared-paths lib)]
           (is (some? declared)
               (str lib " ships migrations in " (pr-str (sort dirs))
-                   " and publishes no wagoe/migration-paths.edn, so the runner"
+                   " and publishes no wagoe/migration-paths/" lib ".edn, so the runner"
                    " never reads them. Add {:paths " (pr-str (vec (sort dirs))) "}"))
 
           (testing (str lib " declares the directories it actually has")
@@ -76,3 +76,11 @@
               (is (empty? (remove declared dirs))
                   (str lib " has migrations in " (pr-str (sort (remove declared dirs)))
                        " which its manifest does not declare")))))))))
+
+(deftest ^:unit no-library-ships-the-shared-manifest-name
+  ;; An uberjar keeps one copy of a shared name, so every library but one lost
+  ;; its migrations in `java -jar app.jar migrate` (BOU-543).
+  (doseq [lib (fs/list-dir (fs/path (repo-root) "libs"))]
+    (is (not (fs/exists? (fs/path lib "resources" "wagoe" "migration-paths.edn")))
+        (str (fs/file-name lib) " ships wagoe/migration-paths.edn; move it to"
+             " wagoe/migration-paths/" (fs/file-name lib) ".edn"))))

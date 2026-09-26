@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **An uberjar's `migrate` ran only one library's migrations** (BOU-543). Rebuild the jar;
+  a library of your own moves its manifest to `wagoe/migration-paths/<lib>.edn`.
 - **Scaffolded repositories failed every create and update on H2** (BOU-497).
   Regenerate `shell/persistence.clj`, or drop `sql/format` and `:returning`.
 - **Scaffolded list page showed only ids** (BOU-486). It now has a column per

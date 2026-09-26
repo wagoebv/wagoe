@@ -29,16 +29,57 @@
 ;; Migration Configuration
 ;; =============================================================================
 
-(def ^:private migration-manifest-resource "wagoe/migration-paths.edn")
+(def ^:private migration-manifest-dir
+  "One manifest per library, `wagoe/migration-paths/<lib>.edn`.
+
+   A single shared name cannot survive an uberjar: it keeps one copy and drops
+   the rest, so `java -jar app.jar migrate` saw one library's migrations
+   (BOU-543). Distinct names flatten without colliding."
+  "wagoe/migration-paths/")
+
+(def ^:private legacy-manifest-resource
+  "The shared name used before BOU-543. Still read, so a third-party library that
+   ships it works on a normal classpath; in an uberjar it has the old problem."
+  "wagoe/migration-paths.edn")
 
 (defn- context-classloader
   []
   (or (.getContextClassLoader (Thread/currentThread))
       (clojure.lang.RT/baseLoader)))
 
+(defn- manifest-names
+  "File names of the `.edn` manifests directly inside the directory at `dir-url`.
+
+   A jar is listed through its directory entry, which tools.build, Leiningen and
+   Maven all write."
+  [^java.net.URL dir-url]
+  (case (.getProtocol dir-url)
+    "file" (->> (.listFiles (io/file (.toURI dir-url)))
+                (filter #(.isFile ^java.io.File %))
+                (map #(.getName ^java.io.File %)))
+    "jar"  (let [conn (doto ^java.net.JarURLConnection (.openConnection dir-url)
+                        (.setUseCaches false))
+                 prefix (.getEntryName conn)]
+             (with-open [jar (.getJarFile conn)]
+               (->> (enumeration-seq (.entries jar))
+                    (map #(.getName ^java.util.jar.JarEntry %))
+                    (filter #(str/starts-with? % prefix))
+                    (map #(subs % (count prefix)))
+                    (remove #(or (str/blank? %) (str/includes? % "/")))
+                    doall)))
+    (do (log/warn "Cannot list migration manifests; migrations there are not read"
+                  {:url (str dir-url)})
+        [])))
+
 (defn manifest-urls
   []
-  (enumeration-seq (.getResources (context-classloader) migration-manifest-resource)))
+  (let [cl (context-classloader)]
+    (->> (concat (for [dir-url (enumeration-seq (.getResources cl migration-manifest-dir))
+                       file    (sort (manifest-names dir-url))
+                       :when   (str/ends-with? file ".edn")]
+                   (java.net.URL. ^java.net.URL dir-url ^String file))
+                 (enumeration-seq (.getResources cl legacy-manifest-resource)))
+         (distinct))))
 
 (defn- parse-migration-manifest [manifest-url]
   (let [manifest-data (-> manifest-url slurp edn/read-string)
@@ -49,7 +90,6 @@
     (when-not (sequential? paths)
       (throw (ex-info "Invalid migration manifest"
                       {:type :configuration-error
-                       :resource migration-manifest-resource
                        :url (str manifest-url)
                        :expected "vector or map with :paths vector"})))
     (->> paths
@@ -259,7 +299,7 @@
 
    The root application keeps using `migrations/`. Libraries can contribute
    additional Migratus-compatible directories by publishing a
-   `wagoe/migration-paths.edn` resource on the classpath."
+   `wagoe/migration-paths/<lib>.edn` resource on the classpath."
   []
   (let [library-dirs (mapcat parse-migration-manifest (manifest-urls))
         migration-dirs (->> (concat [project-migration-dir] library-dirs)

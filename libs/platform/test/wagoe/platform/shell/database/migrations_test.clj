@@ -4,6 +4,7 @@
             [clojure.java.io :as io]
             [clojure.test :refer [deftest is testing]]
             [migratus.core :as migratus]
+            [migratus.migrations :as migratus-migrations]
             [migratus.utils :as migratus-utils]
             [migratus.protocols]))
 
@@ -618,3 +619,85 @@
             (.closeEntry out))
           (with-open [jf (java.util.jar.JarFile. jar)]
             (is (= "migrations/" (migrations/create-destination jf)))))))))
+
+;; -----------------------------------------------------------------------------
+;; Discovery from a classpath and from a flat jar (BOU-543)
+;; -----------------------------------------------------------------------------
+
+(defn- lib-resource-dirs
+  "Every libs/*/resources that ships a migration, with the directories they sit in."
+  []
+  (into {}
+        (for [lib   (.listFiles (io/file "libs"))
+              :let  [res (io/file lib "resources")]
+              :when (.isDirectory res)
+              :let  [root (.toPath res)
+                     dirs (into #{}
+                                (comp (filter #(and (.isFile %)
+                                                    (migratus-migrations/parse-name (.getName %))))
+                                      (map #(str (.relativize root (.toPath (.getParentFile %))) "/")))
+                                (file-seq res))]
+              :when (seq dirs)]
+          [res dirs])))
+
+(defn- flatten-like-an-uberjar!
+  "Copy every lib's resources onto one tree, last copy winning, as build.clj does."
+  [resource-dirs target]
+  (doseq [res  resource-dirs
+          file (file-seq res)
+          :when (.isFile file)]
+    (let [out (io/file target (str (.relativize (.toPath res) (.toPath file))))]
+      (io/make-parents out)
+      (io/copy file out))))
+
+(defn- jar-dir!
+  "Zip `dir` into `jar-file` with directory entries, as tools.build writes them."
+  [dir jar-file]
+  (let [root (.toPath dir)]
+    (with-open [zos (java.util.zip.ZipOutputStream. (io/output-stream jar-file))]
+      (doseq [f (rest (file-seq dir))]
+        (let [rel (str (.relativize root (.toPath f)))]
+          (.putNextEntry zos (java.util.zip.ZipEntry. (if (.isDirectory f) (str rel "/") rel)))
+          (when (.isFile f) (io/copy f zos))
+          (.closeEntry zos))))))
+
+(defn- discover-with [urls]
+  (let [cl     (java.net.URLClassLoader. (into-array java.net.URL urls)
+                                         (ClassLoader/getPlatformClassLoader))
+        thread (Thread/currentThread)
+        prev   (.getContextClassLoader thread)]
+    (try
+      (.setContextClassLoader thread cl)
+      (set (migrations/discover-migration-dirs))
+      (finally
+        (.setContextClassLoader thread prev)
+        (.close cl)))))
+
+(deftest ^:integration every-library-migration-dir-is-discovered
+  (let [libs     (lib-resource-dirs)
+        expected (set (mapcat val libs))]
+    (testing "the scan found the libraries — otherwise this passes vacuously"
+      (is (<= 4 (count libs)) (pr-str (keys libs))))
+
+    (testing "from a classpath of separate resource directories"
+      (let [found (discover-with (map #(io/as-url %) (keys libs)))]
+        (is (empty? (remove found expected)) (pr-str found))))
+
+    (testing "from one flat jar, as the uberjar ships them"
+      (with-temp-dir
+        (fn [dir]
+          (let [tree (io/file dir "tree")
+                jar  (io/file dir "app.jar")]
+            (flatten-like-an-uberjar! (keys libs) tree)
+            (jar-dir! tree jar)
+            (let [found (discover-with [(io/as-url jar)])]
+              (is (empty? (remove found expected))
+                  (str "missing " (pr-str (sort (remove found expected))))))))))))
+
+(deftest ^:unit legacy-manifest-location-is-still-read
+  (with-temp-dir
+    (fn [dir]
+      (let [manifest (io/file dir "wagoe" "migration-paths.edn")]
+        (io/make-parents manifest)
+        (spit manifest "{:paths [\"thirdparty/migrations/\"]}")
+        (is (contains? (discover-with [(io/as-url dir)]) "thirdparty/migrations/"))))))
