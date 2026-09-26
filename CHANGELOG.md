@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Scaffolded list page showed only ids** (BOU-486). It now has a column per
+  declared field; regenerate or edit `core/ui.clj` in existing modules.
 - **install.sh could not recover from a failed sdkman download** (BOU-525). A
   retry now clears the partial install; an existing sdkman is detected.
 - **MCP verify never ran a generated project's tests** (BOU-520). It now focuses
@@ -56,6 +58,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **Scaffolder `default=<value>` field modifier** (BOU-494). Required enums now
+  default to their first value in newly generated migrations.
 - **`bb lint:imports`** (BOU-503). Imports the clj-kondo configs your
   dependencies export; generated projects ship the `.clj-kondo/` it needs.
 - **MCP `describe-module` found no modules in a generated project** (BOU-516).
