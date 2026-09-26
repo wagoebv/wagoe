@@ -1,27 +1,64 @@
 (ns shop.product.shell.persistence
   "Persistence layer for product module."
   (:require [shop.product.ports :as ports]
-            [wagoe.platform.database :as db]))
+            [wagoe.platform.database :as db])
+  (:import [java.sql SQLException]
+           [java.time Instant LocalDate]))
+
+(defn- date->iso
+  "A DATE column as the schema's YYYY-MM-DD. Drivers return java.sql.Date,
+   whose JSON form depends on the JVM's time zone."
+  [v]
+  (cond (instance? java.sql.Date v) (str (.toLocalDate ^java.sql.Date v))
+        (instance? LocalDate v) (str v)
+        :else v))
+
+(defn- ->entity [row]
+  (some-> row (update-vals date->iso)))
+
+(defn- missing-reference?
+  "Whether the database refused a reference to a row that does not exist:
+   SQLState 23503 (PostgreSQL) or 23506 (H2), error 1452 (MySQL), and SQLite's
+   result code, which it reports only in the message."
+  [e]
+  (some #(and (instance? SQLException %)
+              (or (#{"23503" "23506"} (.getSQLState ^SQLException %))
+                  (= 1452 (.getErrorCode ^SQLException %))
+                  (re-find #"SQLITE_CONSTRAINT_FOREIGNKEY" (str (ex-message %)))))
+        (take-while some? (iterate ex-cause e))))
+
+(defn- write! [db-ctx query]
+  (try
+    (db/execute-update! db-ctx query)
+    (catch clojure.lang.ExceptionInfo e
+      (throw (if (missing-reference? e)
+               (ex-info "A referenced record does not exist" {:type :validation-error} e)
+               e)))))
 
 (defn- select-by-id [db-ctx id]
-  (db/execute-one! db-ctx {:select [:*] :from [:products] :where [:= :id id]}))
+  (->entity (db/execute-one! db-ctx {:select [:*] :from [:products] :where [:= :id id]})))
 
 (defrecord DatabaseProductRepository [db-ctx]
   ports/IProductRepository
   (create [_this entity]
-    (db/execute-update! db-ctx {:insert-into :products :values [entity]})
+    (write! db-ctx {:insert-into :products :values [entity]})
     (select-by-id db-ctx (:id entity)))
   (find-by-id [_this id]
     (select-by-id db-ctx id))
   (find-all [_this opts]
-    (db/execute-query! db-ctx {:select [:*]
-                               :from [:products]
-                               :limit (or (:limit opts) 20)}))
+    (mapv ->entity (db/execute-query! db-ctx {:select [:*]
+                                              :from [:products]
+                                              :order-by [[:created-at :asc] [:id :asc]]
+                                              :limit (or (:limit opts) 20)
+                                              :offset (or (:offset opts) 0)})))
   (update-entity [_this entity]
-    (db/execute-update! db-ctx {:update :products
-                                :set (dissoc entity :id)
-                                :where [:= :id (:id entity)]})
-    (select-by-id db-ctx (:id entity)))
+    (let [changes (dissoc entity :id :created-at :updated-at)]
+      (when (empty? changes)
+        (throw (ex-info "Nothing to update" {:type :validation-error :id (:id entity)})))
+      (write! db-ctx {:update :products
+                      :set (assoc changes :updated-at (Instant/now))
+                      :where [:= :id (:id entity)]})
+      (select-by-id db-ctx (:id entity))))
   (delete [_this id]
     (db/execute-update! db-ctx {:delete-from :products :where [:= :id id]})))
 

@@ -117,3 +117,16 @@
     (let [r (run-skill-quickstart "[4/8] Scaffolding sample module\n  Done\nQuickstart Complete\n")]
       (is (zero? (:exit r)) (str (:out r) (:err r)))
       (is (str/includes? (:out r) "quickstart ok")))))
+
+(deftest ^:unit the-smoke-container-body-has-no-single-quote
+  ;; The body is one single-quoted docker argument; an apostrophe in a comment
+  ;; ends it early and bash -n fails on the rest of the script.
+  (let [src (slurp "scripts/first-run-smoke.sh")
+        open "-c \"$(declare -f quickstart_failed_steps)\"'"
+        start (+ (or (str/index-of src open) (throw (ex-info "body start not found" {})))
+                 (count open))
+        end (or (str/last-index-of src "\n'\n") (throw (ex-info "body end not found" {})))
+        body (subs src start end)]
+    (is (not (str/includes? body "'"))
+        (str "apostrophe in the docker body: "
+             (some #(when (str/includes? % "'") %) (str/split-lines body))))))

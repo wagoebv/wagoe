@@ -169,8 +169,8 @@ Format: `name:type[:modifier...]`, e.g. `status:enum:values=draft,sent:required`
 | `decimal` | `[:fn decimal?]`   | `DECIMAL(19,4)` |
 | `boolean` | `:boolean`         | `BOOLEAN`       |
 | `uuid`    | `:uuid`            | `TEXT`          |
-| `instant` | `inst?`            | `TEXT`          |
-| `date`    | `inst?`            | `TEXT`          |
+| `datetime` / `inst` | `inst?`  | `TIMESTAMP WITH TIME ZONE` |
+| `date`    | `YYYY-MM-DD` string | `DATE`         |
 
 **Modifiers**:
 
@@ -202,7 +202,7 @@ clojure -M:dev -m wagoe.scaffolder.shell.cli-entry generate \
   --field total:decimal:required \
   --field status:string:required \
   --field shipped:boolean \
-  --field shipped-at:instant
+  --field shipped-at:datetime
 
 # Dry run to preview
 clojure -M:dev -m wagoe.scaffolder.shell.cli-entry generate \

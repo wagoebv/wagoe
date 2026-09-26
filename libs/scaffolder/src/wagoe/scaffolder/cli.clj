@@ -34,7 +34,7 @@
    [nil "--entity NAME" "Entity name (PascalCase) (required)"
     :validate [#(re-matches #"^[A-Z][a-zA-Z0-9]*$" %)
                "Must be PascalCase"]]
-   [nil "--field SPEC" "Field specification: name:type[:values=a,b,c][:required][:unique][:default=v] (can be repeated)"
+   [nil "--field SPEC" "Field specification: name:type[:values=a,b,c][:required|:optional][:unique][:indexed][:default=v] (can be repeated)"
     :multi true
     :default []
     :update-fn conj]
@@ -48,6 +48,8 @@
     :default true]
    [nil "--[no-]web" "Generate the Web UI interface (default: true)"
     :default true]
+   [nil "--public-api" "API routes and web page open to anyone (default: signed-in users only)"
+    :default false]
    [nil "--audit" "Enable audit logging (default: true)"
     :default true]
    [nil "--pagination" "Enable pagination support (default: true)"
@@ -78,6 +80,8 @@
     :validate [template/valid-entity-name? "Must be an entity name"]]
    [nil "--[no-]http" "Generate the entity's HTTP (REST API) routes (default: true)"
     :default true]
+   [nil "--public-api" "API routes open to anyone (default: they require a signed-in user)"
+    :default false]
    [nil "--base-ns NS" "Base namespace + path for the module (default: the project's own)"]
    [nil "--output-dir DIR" "Output directory (default: current directory)"
     :default "."]
@@ -113,6 +117,8 @@
    [nil "--required" "Field cannot be null"
     :default false]
    [nil "--unique" "Field must be unique"
+    :default false]
+   [nil "--indexed" "Add a database index on the column"
     :default false]
    [nil "--default VALUE" "Column DEFAULT; a required enum defaults to its first value"]
    ;; `generate` has always offered this, and `field` writes migrations and
@@ -241,7 +247,7 @@
         ;; Map CLI type names to schema type names
         type-mapping {"integer" :int
                       "int" :int
-                      "date" :inst
+                      "date" :date
                       "datetime" :inst
                       "text" :text
                       "json" :json}
@@ -262,7 +268,8 @@
                          flags)
         on-delete-flag (flag-value "on-delete=")
         on-delete (if on-delete-flag (keyword on-delete-flag) :cascade)
-        default (or quoted (flag-value "default="))]
+        default (or quoted (flag-value "default="))
+        unknown (remove modifier? flags)]
     (cond
       (< (count parts) 2)
       {:error (str "Invalid field spec: " field-spec " (expected format: name:type[:required][:unique])")}
@@ -272,6 +279,16 @@
 
       (not (contains? valid-types type-str))
       {:error (str "Invalid field type: " type-str " (must be one of: " (str/join ", " (sort valid-types)) ")")}
+
+      ;; A typo'd modifier used to be dropped without a word: `requird` gave a
+      ;; nullable column (BOU-535).
+      (seq unknown)
+      {:error (str "Unknown modifier " (str/join ", " (map pr-str unknown)) " on " name-str
+                   " (known: required, optional, unique, indexed, values=, references=, "
+                   "references-table=, on-delete=, default=)")}
+
+      (and (some #{"required"} flags) (some #{"optional"} flags))
+      {:error (str "Field " name-str " is both required and optional; pick one")}
 
       (and (= :enum type-kw) (empty? enum-values))
       {:error (str "Enum field " name-str " needs its values: "
@@ -360,6 +377,7 @@
                :required (boolean (some #(= % "required") flags))
                :unique (boolean (some #(= % "unique") flags))}
         enum-values           (assoc :enum-values enum-values)
+        (some #{"indexed"} flags) (assoc :indexed true)
         default               (assoc :default default)
         (= :relation type-kw) (assoc :references references :on-delete on-delete)
         references-table      (assoc :references-table references-table)))))
@@ -505,7 +523,7 @@
 (defn- field-command-type
   "The field type `--type` names."
   [type-str]
-  (get {"integer" :int "int" :int "date" :inst
+  (get {"integer" :int "int" :int "date" :date
         "datetime" :inst "text" :text "json" :json}
        type-str
        (keyword type-str)))
@@ -634,7 +652,8 @@
                                  :entities [{:name (:entity opts)
                                              :fields fields-or-errors}]
                                  :interfaces {:http (:http opts)
-                                              :web (:web opts)}
+                                              :web (:web opts)
+                                              :public-api (boolean (:public-api opts))}
                                  :features {:audit (:audit opts)
                                             :pagination (:pagination opts)}
                                  :output-dir (:output-dir opts)
@@ -669,7 +688,8 @@
                         {:module-name (:module-name opts)
                          :entity      (cond-> {:name (:entity opts) :fields fields-or-errors}
                                         (:belongs-to opts) (assoc :belongs-to (:belongs-to opts)))
-                         :interfaces  {:http (:http opts true)}
+                         :interfaces  {:http (:http opts true)
+                                       :public-api (boolean (:public-api opts))}
                          :output-dir  (:output-dir opts)
                          :dry-run     (:dry-run opts)
                          :base-ns     (:base-ns opts)})]
@@ -692,7 +712,8 @@
                      :field (cond-> {:name (keyword (:name opts))
                                      :type field-type
                                      :required (:required opts false)
-                                     :unique (:unique opts false)}
+                                     :unique (:unique opts false)
+                                     :indexed (:indexed opts false)}
                               (= :enum field-type)
                               (assoc :enum-values (parse-enum-values (:enum-values opts)))
 
@@ -910,6 +931,8 @@ Interface Options (default: all enabled):
   --no-http            Skip the HTTP (REST API) routes
   --no-web             Skip the Web UI: core/ui.clj, shell/web_handlers.clj
                        and the module's :web route contribution
+  --public-api         API routes and web page open to anyone; by default
+                       the API answers 401 and the page redirects to login
 
 Feature Options (default: all enabled):
   --audit              Enable audit logging
@@ -967,6 +990,8 @@ Options:
                        (ON DELETE CASCADE) and an index
   --no-http            No API routes for the entity: for a module generated
                        with --no-http
+  --public-api         API routes open to anyone; by default they answer
+                       401 without a signed-in user
   --output-dir DIR     Write somewhere other than the current directory
   --dry-run            Show what would be generated without creating files
 

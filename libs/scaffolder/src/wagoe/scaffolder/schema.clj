@@ -18,6 +18,7 @@
    :email                                                   ; Email (validated string)
    :enum                                                    ; Enumeration
    :inst                                                    ; Instant/timestamp
+   :date                                                    ; Calendar date, no time or zone
    :json                                                    ; JSON/map data
    :decimal                                                 ; Decimal number
    :relation])                                              ; Foreign key to another entity
@@ -29,6 +30,7 @@
    [:type FieldType]                                        ; Field type
    [:required {:optional true} :boolean]                    ; Is field required?
    [:unique {:optional true} :boolean]                      ; Is field unique?
+   [:indexed {:optional true} :boolean]                     ; CREATE INDEX on the column?
    [:default {:optional true} :any]                         ; Default value
    [:enum-values {:optional true} [:vector :keyword]]       ; For enum type
    [:min {:optional true} :int]                             ; Min length/value
@@ -69,7 +71,7 @@
     (fn [{:keys [type on-delete required]}]
       (not (and (= :relation type) (= :set-null on-delete) required)))]
    ;; :default goes into DDL (BOU-494).
-   [:fn {:error/message ":default must suit the field's type: a number for int/decimal, true/false for boolean, one of the values for enum, an offset timestamp for inst, none for relation"}
+   [:fn {:error/message ":default must suit the field's type: a number for int/decimal, true/false for boolean, one of the values for enum, an offset timestamp for inst, YYYY-MM-DD for date, none for relation"}
     template/valid-default?]])
 
 (def EntityDefinition
@@ -94,7 +96,9 @@
   [:map {:title "Add Entity Request"}
    [:module-name :string]
    [:entity EntityDefinition]
-   [:interfaces {:optional true} [:map [:http {:optional true} :boolean]]]
+   [:interfaces {:optional true} [:map
+                                  [:http {:optional true} :boolean]
+                                  [:public-api {:optional true} :boolean]]]
    [:base-ns {:optional true} [:maybe :string]]
    [:dry-run {:optional true} [:maybe :boolean]]
    [:output-dir {:optional true} [:maybe :string]]])
@@ -116,7 +120,9 @@
    [:interfaces {:optional true}
     [:map
      [:http {:optional true} :boolean]
-     [:web {:optional true} :boolean]]]
+     [:web {:optional true} :boolean]
+     ;; API routes open to anyone. Absent means they require a signed-in user.
+     [:public-api {:optional true} :boolean]]]
    [:features                                               ; Optional features
     {:optional true}
     [:map

@@ -73,7 +73,8 @@
                (some? interfaces) (assoc :interfaces interfaces)))]
     ;; ports/ui/web-handlers first: with :web on, http.clj requires the
     ;; module's web-handlers namespace (BOU-484).
-    (doseq [generate [gen/generate-ports-file
+    (doseq [generate [gen/generate-schema-file
+                      gen/generate-ports-file
                       gen/generate-ui-file
                       gen/generate-web-handlers-file
                       gen/generate-http-file]]

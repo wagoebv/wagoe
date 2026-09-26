@@ -189,20 +189,28 @@ xref:architecture:conventions.adoc[Conventions].
 
 == shell/http.clj
 
-Reitit route data — `[path data & children]` — and stub handlers returning
-canned responses:
+Reitit route data — `[path data & children]` — and handlers that call the
+service. Each decodes the JSON body through the request schema, and answers 400
+on a body that does not validate and 404 on an unknown id. The list takes
+`?limit=` (at most 100) and `?offset=`, oldest first:
 
 [source,clojure]
 ----
+(def ^:private signed-in ['wagoe.user.shell.http-interceptors/require-authenticated])
+
 (defn api-routes
-  [_service]
+  [service]
   [["/products"
-    {:get  {:handler (fn [_req] {:status 200 :body []})}
-     :post {:handler (fn [_req] {:status 201 :body {}})}}]
-   ["/products/:id"
-    {:get    {:handler (fn [_req] {:status 200 :body {}})}
-     :put    {:handler (fn [_req] {:status 200 :body {}})}
-     :delete {:handler (fn [_req] {:status 204})}}]])
+    {:get  {:interceptors signed-in
+            :handler (fn [request]
+                       {:status 200 :body (ports/list-products service (page-of request))})}
+     :post {:interceptors signed-in
+            :handler (fn [request]
+                       (let [data (decode-create (:body-params request))]
+                         (if (valid-create? data)
+                           {:status 201 :body (ports/create-product service data)}
+                           (invalid))))}}]
+   ["/products/:id" ...]])
 
 (defn product-routes
   [service config]
@@ -215,8 +223,16 @@ The paths are relative. `product-routes` returns a *contribution*, not a route
 table: the application mounts `:api` under `/api/v1` and `:web` under `/web`, so
 writing `/api/products` here would serve it at `/api/v1/api/products`.
 
-Wiring the handlers to the service is the second edit, after validation. The
-service is already available — it is the `service` argument.
+The handlers go through the service's port, so what you add to the service —
+the validation above — applies to the API without touching this file.
+
+Every route requires a signed-in user and answers 401 without one: send the
+`jwt-token` from `POST /api/v1/auth/login` as `Authorization: Bearer <token>`,
+or the session cookie a browser gets at `/web/login`. For an API open to
+anyone, generate with `--public-api`, or drop `:interceptors signed-in` from
+the routes you want public. The web page at `/web/products` is guarded the
+same way, but sends a signed-out visitor to `/web/login`; `--public-api`
+opens it too.
 
 == The split, in one line
 

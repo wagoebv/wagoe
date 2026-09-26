@@ -435,10 +435,27 @@
                     :action :create}
                    {:path (format "migrations/%s-add-%s-to-%s.down.sql"
                                   migration-number field-name-kebab entity-plural)
-                    :content (format "-- Rollback: drop %s from %s\n\nALTER TABLE %s DROP COLUMN %s;\n"
-                                     field-name-snake table-name table-name field-name-snake)
+                    ;; The index first: SQLite refuses to drop an indexed column.
+                    :content (str (format "-- Rollback: drop %s from %s\n\n" field-name-snake table-name)
+                                  (when (or (= :relation (:type field)) (:indexed field))
+                                    (format "DROP INDEX IF EXISTS idx_%s_%s;\n" table-name field-name-snake))
+                                  (format "ALTER TABLE %s DROP COLUMN %s;\n" table-name field-name-snake))
                     :action :create}]
             schema-path (format "src/%s/%s/schema.clj" base-ns-path module-path)
+            ;; A module generated before DATE columns reads them back as
+            ;; java.sql.Date, which JSON writes as the day before east of UTC.
+            persistence (let [own (resolve-path output-dir
+                                                (format "src/%s/%s/shell/%s_persistence.clj" base-ns-path module-path
+                                                        (template/kebab->snake (template/pascal->kebab entity))))]
+                          (if (.isFile own)
+                            own
+                            (resolve-path output-dir (format "src/%s/%s/shell/persistence.clj" base-ns-path module-path))))
+            date-warning (when (and (= :date (:type field))
+                                    (.isFile persistence)
+                                    (not (str/includes? (slurp persistence) "date->iso")))
+                           (str (.getPath persistence) " has no date->iso, so this field will read back a day"
+                                " early east of UTC. Regenerate that file, or copy date->iso and ->entity"
+                                " from a newly generated module."))
 
             ;; Before anything is written. The migration and the schema entry
             ;; are the two halves this command exists to keep in step, and the
@@ -617,7 +634,9 @@
                                    (in-project))]
                        (:manual? schema-entry)
                        (into [(:manual-note schema-entry)]))
-         :warnings (when dry-run ["Dry run - no files were written"])})
+         :warnings (not-empty (cond-> []
+                                date-warning (conj date-warning)
+                                dry-run      (conj "Dry run - no files were written")))})
 
       (catch Exception e
         {:success false

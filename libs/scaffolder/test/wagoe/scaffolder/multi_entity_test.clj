@@ -10,9 +10,11 @@
             [clojure.test :as t :refer [deftest is testing]]
             [clojure.walk :as walk]
             [integrant.core :as ig]
+            [muuntaja.core :as muuntaja]
             [next.jdbc :as jdbc]
             [reitit.core :as r]
             [wagoe.platform.shell.adapters.database.factory :as db-factory]
+            [wagoe.platform.shell.http.reitit-router :as reitit-router]
             [wagoe.scaffolder.cli :as cli]
             [wagoe.scaffolder.ports :as ports]
             [wagoe.scaffolder.shell.service :as service]))
@@ -167,6 +169,31 @@
   "What the stand-in service was asked to create."
   (atom []))
 
+(def ^:private signed-in
+  "What the platform's global authentication puts on a request with valid
+   credentials."
+  {:id (random-uuid) :email "a@example.com" :role :user})
+
+(defn- http-caller
+  "Call `routes` through the platform's own pipeline — its interceptors, error
+   mapping and JSON — as a signed-in user unless `:user` says otherwise.
+   Returns the response with its JSON body decoded."
+  [routes & {:keys [user] :or {user signed-in}}]
+  (let [handler (reitit-router/compile-routes routes {:swagger-enabled false})]
+    (fn [method path body & [query]]
+      (let [resp (handler (cond-> {:request-method method :uri path
+                                   :headers {"accept" "application/json"}}
+                            user  (assoc :user user)
+                            query (assoc :query-string query)
+                            body  (-> (assoc-in [:headers "content-type"] "application/json")
+                                      (assoc :body (muuntaja/encode muuntaja/instance
+                                                                    "application/json" body)))))]
+        (cond-> resp
+          (some? (:body resp)) (update :body #(let [s (if (string? %) % (slurp %))]
+                                                (when-not (str/blank? s)
+                                                  (muuntaja/decode muuntaja/instance
+                                                                   "application/json" s)))))))))
+
 (defn- reify-service
   "A stand-in for the generated entity service: records creates, lists nothing.
    Evaluated because the protocol only exists once the generated code is loaded."
@@ -174,7 +201,7 @@
   (eval `(reify ~protocol
            (~'create-invoice-line-item [~'_ ~'data] (swap! seen conj [:create ~'data]) ~'data)
            (~'get-invoice-line-item [~'_ ~'_id] nil)
-           (~'list-invoice-line-items [~'_ ~'_opts] [])
+           (~'list-invoice-line-items [~'_ ~'opts] (swap! seen conj [:list ~'opts]) [])
            (~'update-invoice-line-item [~'_ ~'_id ~'_data] nil)
            (~'delete-invoice-line-item [~'_ ~'_id] nil))))
 
@@ -218,11 +245,7 @@
     (reset! seen [])
     (let [svc     (reify-service 'bou497h.billing.ports/IInvoiceLineItemService)
           routes  ((ns-resolve 'bou497h.billing.shell.invoice-line-item-http 'api-routes) svc)
-          router  (r/router routes)
-          call    (fn [method path body]
-                    (let [m (r/match-by-path router path)]
-                      ((get-in m [:data method :handler])
-                       {:request-method method :path-params (:path-params m) :body-params body})))
+          call    (http-caller routes)
           inv     (str (java.util.UUID/randomUUID))]
       (testing "POST coerces the JSON body and creates"
         (let [resp (call :post "/invoice-line-items" {:invoice-id inv :description "x" :quantity 2
@@ -391,12 +414,8 @@
   "A caller for the generated line-item API under `dir`, on the stand-in service."
   [base]
   (let [svc    (reify-service (symbol (str base ".billing.ports") "IInvoiceLineItemService"))
-        routes ((ns-resolve (symbol (str base ".billing.shell.invoice-line-item-http")) 'api-routes) svc)
-        router (r/router routes)]
-    (fn [method path body]
-      (let [m (r/match-by-path router path)]
-        ((get-in m [:data method :handler])
-         {:request-method method :path-params (:path-params m) :body-params body})))))
+        routes ((ns-resolve (symbol (str base ".billing.shell.invoice-line-item-http")) 'api-routes) svc)]
+    (http-caller routes)))
 
 (deftest ^:integration a-decimal-field-takes-a-json-number-or-a-numeric-string
   ;; Muuntaja parses 9.99 as a Double, and malli has no BigDecimal decoder, so
@@ -511,3 +530,348 @@
                                       "--no-http" "--base-ns" "bou497nh3"
                                       "--output-dir" (.getPath dir3)]))))
         (is (not-any? #(str/ends-with? % "_http.clj") (keys (files-under dir3))))))))
+
+;; =============================================================================
+;; The first entity's API reaches its service (BOU-539)
+;; =============================================================================
+
+(defn- h2-migrated [dir tag]
+  (let [ctx (db-factory/db-context {:adapter :h2
+                                    :database-path (str "mem:" tag (System/nanoTime) ";DB_CLOSE_DELAY=-1")
+                                    :pool {:minimum-idle 1 :maximum-pool-size 2}})]
+    (doseq [[path sql] (files-under dir)
+            :when (str/ends-with? path ".up.sql")
+            st (statements sql)]
+      (jdbc/execute! (:datasource ctx) [st]))
+    ctx))
+
+(defn- api-caller [routes & opts]
+  (apply http-caller routes opts))
+
+(deftest ^:integration the-first-entity-api-reaches-its-service
+  ;; Its handlers answered canned bodies: POST gave 201 and {}, and nothing was
+  ;; ever written.
+  (let [dir (temp-dir)
+        r   (ports/generate-module svc {:module-name "billing" :base-ns "bou539"
+                                        :entities    [{:name "Invoice"
+                                                       :fields [{:name :number :type :string :required true}
+                                                                {:name :total :type :decimal :required true}]}]
+                                        :output-dir  (.getPath dir)})]
+    (is (:success r) (pr-str (:errors r)))
+    (load-and-test! dir)
+    (let [db      (h2-migrated dir "bou539")
+          at      (fn [n s] @(ns-resolve (symbol (str "bou539.billing." n)) s))
+          svc     ((at "shell.service" 'create-service) ((at "shell.persistence" 'create-repository) db))
+          contrib ((at "shell.http" 'billing-routes) svc {})
+          call    (api-caller (:api contrib))
+          created (call :post "/invoices" {:number "A-1" :total 9.99 :sneaky "dropped"})
+          id      (get-in created [:body :id])]
+      (is (= #{:api :web :static} (set (keys contrib))))
+      (testing "POST creates a row, and GET shows it"
+        (is (= 201 (:status created)))
+        (is (parse-uuid (str id)))
+        (let [got (call :get (str "/invoices/" id) nil)]
+          (is (= 200 (:status got)))
+          (is (= "A-1" (get-in got [:body :number])))
+          (is (== 9.99 (get-in got [:body :total]))))
+        (is (= [id] (map :id (:body (call :get "/invoices" nil))))))
+      (testing "PUT updates the row"
+        (is (= "A-2" (get-in (call :put (str "/invoices/" id) {:number "A-2"}) [:body :number]))))
+      (testing "bad bodies are a 400"
+        (is (= 400 (:status (call :post "/invoices" {:number "A-3" :total "cheap"}))))
+        (is (= 400 (:status (call :post "/invoices" {}))))
+        (is (= 400 (:status (call :put (str "/invoices/" id) {})))))
+      (testing "an unknown id is a 404"
+        (is (= 404 (:status (call :get (str "/invoices/" (java.util.UUID/randomUUID)) nil))))
+        (is (= 404 (:status (call :put (str "/invoices/" (java.util.UUID/randomUUID)) {:number "x"}))))))))
+
+;; =============================================================================
+;; Repository update (BOU-547)
+;; =============================================================================
+
+(defn- ->instant [x]
+  (cond (instance? java.time.Instant x)        x
+        (instance? java.time.OffsetDateTime x) (.toInstant ^java.time.OffsetDateTime x)
+        (instance? java.util.Date x)           (.toInstant ^java.util.Date x)
+        (string? x)                            (java.time.Instant/parse x)))
+
+(deftest ^:integration a-repository-update-bumps-updated-at-and-refuses-an-empty-one
+  (let [dir (invoice-module! (temp-dir) "bou547u")]
+    (add-line-item! dir "bou547u")
+    (load-and-test! dir)
+    (let [db   (h2-migrated dir "bou547u")
+          at   (fn [n s] @(ns-resolve (symbol (str "bou547u.billing." n)) s))
+          t0   (java.time.Instant/parse "2020-01-01T00:00:00Z")
+          inv  (random-uuid)
+          line (random-uuid)
+          ;; [repository create update row-without-audit-columns]
+          repos {"the first entity"
+                 [((at "shell.persistence" 'create-repository) db)
+                  (at "ports" 'create) (at "ports" 'update-entity)
+                  {:id inv :number "A-1"} {:number "A-2"}]
+                 "a further entity"
+                 [((at "shell.invoice-line-item-persistence" 'create-repository) db)
+                  (at "ports" 'create-invoice-line-item-entity) (at "ports" 'update-invoice-line-item-entity)
+                  {:id line :invoice-id inv :description "x" :quantity 1} {:quantity 2}]}]
+      (doseq [[label [repo create! update! row change]] repos]
+        (testing label
+          (create! repo (assoc row :created-at t0 :updated-at t0))
+          (testing "an update moves updated-at"
+            (let [updated (update! repo (merge {:id (:id row)} change))]
+              (is (= (val (first change)) (get updated (key (first change)))))
+              (is (.isAfter ^java.time.Instant (->instant (:updated-at updated)) t0)
+                  (pr-str (:updated-at updated)))))
+          (testing "an update with nothing to set is a typed error, not UPDATE t SET WHERE"
+            (let [e (try (update! repo {:id (:id row)}) nil
+                         (catch clojure.lang.ExceptionInfo e e))]
+              (is (= :validation-error (:type (ex-data e))) (pr-str e)))))))))
+
+(deftest ^:integration a-date-field-round-trips-as-a-date
+  ;; `due:date` was an instant: a TIMESTAMP WITH TIME ZONE column, and a
+  ;; 2026-01-01 posted came back as 2026-01-01T00:00:00Z (BOU-547).
+  (let [dir (temp-dir)
+        due (cli/parse-field-spec "due:date:required")
+        r   (ports/generate-module svc {:module-name "billing" :base-ns "bou547d"
+                                        :entities    [{:name "Invoice"
+                                                       :fields [{:name :number :type :string :required true}
+                                                                due]}]
+                                        :output-dir  (.getPath dir)})]
+    (is (:success r) (pr-str (:errors r)))
+    (load-and-test! dir)
+    (doseq [[label db] [["H2" (h2-migrated dir "bou547d")]
+                        ["SQLite" (let [f (java.io.File/createTempFile "bou547d" ".db")
+                                        ctx (db-factory/db-context {:adapter :sqlite :database-path (.getPath f)})]
+                                    (doseq [[path sql] (files-under dir)
+                                            :when (str/ends-with? path ".up.sql")
+                                            st (statements sql)]
+                                      (jdbc/execute! (:datasource ctx) [st]))
+                                    ctx)]]]
+      (testing label
+        (let [at      (fn [n s] @(ns-resolve (symbol (str "bou547d.billing." n)) s))
+              svc     ((at "shell.service" 'create-service) ((at "shell.persistence" 'create-repository) db))
+              call    (api-caller (:api ((at "shell.http" 'billing-routes) svc {})))
+              json    (fn [body] (slurp (muuntaja/encode muuntaja/instance "application/json" body)))
+              created (call :post "/invoices" {:number "A-1" :due "2026-01-01"})
+              id      (get-in created [:body :id])]
+          (is (= 201 (:status created)) (pr-str created))
+          (is (str/includes? (json (:body (call :get (str "/invoices/" id) nil))) "\"due\":\"2026-01-01\""))
+          (is (str/includes? (json (:body (call :put (str "/invoices/" id) {:due "2026-02-01"})))
+                             "\"due\":\"2026-02-01\""))
+          (is (= 400 (:status (call :post "/invoices" {:number "A-2" :due "2026-13-45"}))))
+          (is (= 400 (:status (call :post "/invoices" {:number "A-2" :due "2026-02-31"})))
+              "a day the month does not have"))))))
+
+(deftest ^:integration an-indexed-field-added-later-migrates-up-and-down-on-sqlite
+  ;; BOU-535. SQLite refuses to drop an indexed column, so the down migration
+  ;; drops the index first.
+  (let [dir (invoice-module! (temp-dir) "bou535")
+        r   (ports/add-field svc {:module-name "billing" :base-ns "bou535" :entity "Invoice"
+                                  :field {:name :sku :type :string :indexed true}
+                                  :output-dir (.getPath dir)})
+        f   (java.io.File/createTempFile "bou535" ".db")
+        ds  (jdbc/get-datasource {:jdbcUrl (str "jdbc:sqlite:" (.getPath f))})
+        run (fn [suffix] (doseq [[path sql] (files-under dir)
+                                 :when (str/ends-with? path suffix)
+                                 st (statements sql)]
+                           (jdbc/execute! ds [st])))
+        idx (fn [] (jdbc/execute! ds ["SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'idx_invoices_sku'"]))]
+    (is (:success r) (pr-str (:errors r)))
+    (try
+      (run ".up.sql")
+      (is (= 1 (count (idx))) "the up migration creates the index")
+      (run "-add-sku-to-invoices.down.sql")
+      (is (empty? (idx)))
+      (finally (.delete f)))))
+
+(deftest ^:integration a-reference-to-a-missing-row-is-a-validation-error
+  ;; BOU-540. A line item for an invoice that does not exist reached the
+  ;; database and came back as a :database-error, which the platform answers
+  ;; with a 500. The 400 seen in the #575 real flow was a body missing a
+  ;; required field, refused before any insert.
+  (let [dir (invoice-module! (temp-dir) "bou540")]
+    (add-line-item! dir "bou540")
+    (load-and-test! dir)
+    (doseq [[label db] [["H2" (h2-migrated dir "bou540")]
+                        ["SQLite" (let [f   (java.io.File/createTempFile "bou540" ".db")
+                                        ctx (db-factory/db-context {:adapter :sqlite :database-path (.getPath f)})]
+                                    (doseq [[path sql] (files-under dir)
+                                            :when (str/ends-with? path ".up.sql")
+                                            st (statements sql)]
+                                      (jdbc/execute! (:datasource ctx) [st]))
+                                    ctx)]]]
+      (testing label
+        (let [at   (fn [n s] @(ns-resolve (symbol (str "bou540.billing." n)) s))
+              line ((at "shell.invoice-line-item-service" 'create-service)
+                    ((at "shell.invoice-line-item-persistence" 'create-repository) db))
+              call (api-caller ((at "shell.invoice-line-item-http" 'api-routes) line))
+              fk   (call :post "/invoice-line-items"
+                         {:invoice-id (str (random-uuid)) :description "x" :quantity 1})
+              bad  (call :post "/invoice-line-items" {:invoice-id "nope" :quantity 1})]
+          (is (= 400 (:status fk)) (pr-str fk))
+          (testing "and it has the shape of the handler's own 400 (BOU-540 review)"
+            ;; The handler answered {:error {:type ..}}, the platform's mapper
+            ;; {:error "validation-error" :message ..}: two shapes on one endpoint.
+            (is (= 400 (:status bad)))
+            (is (= "validation-error" (:error (:body fk)) (:error (:body bad))) (pr-str (:body bad)))
+            (is (= (set (keys (:body fk))) (set (keys (:body bad)))))))))))
+
+;; =============================================================================
+;; A generated API requires a signed-in user (BOU-539 review)
+;; =============================================================================
+
+(deftest ^:integration the-generated-api-requires-a-signed-in-user
+  ;; Every generated module served create, update and delete to anyone.
+  (let [dir (invoice-module! (temp-dir) "bou539auth")]
+    (add-line-item! dir "bou539auth")
+    (load-and-test! dir)
+    (let [at   (fn [n s] @(ns-resolve (symbol (str "bou539auth.billing." n)) s))
+          id   (str "/" (random-uuid))
+          apis {"the first entity"  [(:api ((at "shell.http" 'billing-routes) nil {})) "/invoices"]
+                "a further entity"  [((at "shell.invoice-line-item-http" 'api-routes) nil) "/invoice-line-items"]}]
+      (doseq [[label [routes path]] apis
+              [method p] [[:get path] [:post path] [:get (str path id)] [:put (str path id)] [:delete (str path id)]]]
+        (testing (str label " " method " " p)
+          (let [resp ((http-caller routes :user nil) method p {:number "x"})]
+            (is (= 401 (:status resp)) (pr-str resp))
+            (is (= "unauthorized" (:error (:body resp))))))))))
+
+(deftest ^:integration public-api-generates-open-routes
+  (let [dir (temp-dir)
+        r   (ports/generate-module svc {:module-name "billing" :base-ns "bou539pub"
+                                        :interfaces  {:public-api true}
+                                        :entities    [{:name "Invoice" :fields [{:name :number :type :string}]}]
+                                        :output-dir  (.getPath dir)})]
+    (is (:success r) (pr-str (:errors r)))
+    (let [dir2 (invoice-module! (temp-dir) "bou539pub2")]
+      (with-out-str
+        (is (= 0 (cli/run-cli! svc ["entity" "--module-name" "billing" "--entity" "InvoiceLineItem"
+                                    "--belongs-to" "invoice" "--field" "quantity:int"
+                                    "--public-api" "--base-ns" "bou539pub2"
+                                    "--output-dir" (.getPath dir2)]))))
+      (load-and-test! dir)
+      (load-and-test! dir2)
+      (reset! seen [])
+      (let [invoices (:api (@(ns-resolve 'bou539pub.billing.shell.http 'billing-routes) nil {}))
+            lines    (@(ns-resolve 'bou539pub2.billing.shell.invoice-line-item-http 'api-routes)
+                      (reify-service 'bou539pub2.billing.ports/IInvoiceLineItemService))]
+        (testing "generate --public-api: no guard, and the file says the routes are public"
+          (is (not= 401 (:status ((http-caller invoices :user nil) :get (str "/invoices/" (random-uuid)) nil))))
+          (is (str/includes? (get (files-under dir) "src/bou539pub/billing/shell/http.clj") "public")))
+        (testing "entity --public-api"
+          (is (= 200 (:status ((http-caller lines :user nil) :get "/invoice-line-items" nil)))))
+        (testing "the module's other entity keeps its guard"
+          (let [first-entity (:api (@(ns-resolve 'bou539pub2.billing.shell.http 'billing-routes) nil {}))]
+            (is (= 401 (:status ((http-caller first-entity :user nil) :get "/invoices" nil))))))))
+    (testing "the generate command takes --public-api"
+      (let [dir3 (temp-dir)]
+        (with-out-str
+          (is (= 0 (cli/run-cli! svc ["generate" "--module-name" "billing" "--entity" "Invoice"
+                                      "--field" "number:string" "--public-api" "--base-ns" "bou539pub3"
+                                      "--output-dir" (.getPath dir3)]))))
+        (is (not (str/includes? (get (files-under dir3) "src/bou539pub3/billing/shell/http.clj")
+                                "require-authenticated")))))))
+
+;; =============================================================================
+;; The list endpoint pages, in a stable order (BOU-539 review)
+;; =============================================================================
+
+(deftest ^:integration the-list-endpoint-pages-in-a-stable-order
+  (let [dir (invoice-module! (temp-dir) "bou539page")]
+    (add-line-item! dir "bou539page")
+    (load-and-test! dir)
+    (let [db   (h2-migrated dir "bou539page")
+          at   (fn [n s] @(ns-resolve (symbol (str "bou539page.billing." n)) s))
+          repo ((at "shell.persistence" 'create-repository) db)
+          call (api-caller (:api ((at "shell.http" 'billing-routes)
+                                  ((at "shell.service" 'create-service) repo) {})))
+          t    #(java.time.Instant/parse (str "2026-01-0" % "T00:00:00Z"))
+          ;; Written out of order, so insertion order is not creation order.
+          rows (for [[n day] [["C" 3] ["A" 1] ["B" 2]]]
+                 ((at "ports" 'create) repo {:id (random-uuid) :number n :created-at (t day) :updated-at (t day)}))
+          _    (doall rows)
+          nums (fn [q] (mapv :number (:body (call :get "/invoices" nil q))))]
+      (testing "oldest first"
+        (is (= ["A" "B" "C"] (nums nil))))
+      (testing "limit and offset from the query string"
+        (is (= ["A" "B"] (nums "limit=2")))
+        (is (= ["C"] (nums "limit=2&offset=2")))))
+    (testing "limit is clamped, and a bad value is the default"
+      (let [call (entity-api "bou539page")]
+        (doseq [[q opts] [["limit=1000&offset=-5" {:limit 100 :offset 0}]
+                          ["limit=abc" {:limit 20 :offset 0}]
+                          [nil {:limit 20 :offset 0}]]]
+          (reset! seen [])
+          (is (= 200 (:status (call :get "/invoice-line-items" nil q))))
+          (is (= [[:list opts]] @seen) (pr-str q)))))
+    (testing "swagger shows the two parameters"
+      (let [routes @(ns-resolve 'bou539page.billing.shell.invoice-line-item-http 'api-routes)
+            params (get-in (into {} (routes nil)) ["/invoice-line-items" :get :swagger :parameters])]
+        (is (= #{"limit" "offset"} (set (map :name params))))))))
+
+;; =============================================================================
+;; A date field added to a module generated before DATE columns (BOU-547 review)
+;; =============================================================================
+
+(deftest ^:unit a-date-field-on-an-old-module-names-the-file-to-regenerate
+  ;; An old persistence.clj has no date->iso, so the DATE column reads back as
+  ;; java.sql.Date, which JSON writes as the day before east of UTC.
+  (let [dir     (invoice-module! (temp-dir) "bou547old")
+        _       (add-line-item! dir "bou547old")
+        first-p (io/file dir "src/bou547old/billing/shell/persistence.clj")
+        line-p  (io/file dir "src/bou547old/billing/shell/invoice_line_item_persistence.clj")
+        add     (fn [entity field]
+                  (ports/add-field svc {:module-name "billing" :base-ns "bou547old" :entity entity
+                                        :field field :output-dir (.getPath dir) :dry-run true}))
+        warned? (fn [r f] (some #(and (str/includes? % "date->iso") (str/includes? % (.getPath f)))
+                                (:warnings r)))]
+    (testing "a module generated with DATE support: no warning"
+      (is (not (warned? (add "Invoice" {:name :due :type :date}) first-p))))
+    (spit first-p (str/replace (slurp first-p) "date->iso" "old-fn"))
+    (spit line-p (str/replace (slurp line-p) "date->iso" "old-fn"))
+    (testing "an older one: the warning names that entity's persistence file"
+      (is (warned? (add "Invoice" {:name :due :type :date}) first-p))
+      (is (warned? (add "InvoiceLineItem" {:name :due :type :date}) line-p)))
+    (testing "a field that is not a date: no warning"
+      (is (not (warned? (add "Invoice" {:name :sku :type :string}) first-p))))))
+
+;; =============================================================================
+;; The generated web page requires a signed-in user too (BOU-539 review)
+;; =============================================================================
+
+(defn- web-caller
+  "GET a path under /web through the platform pipeline. The body is HTML, left as a string."
+  [web-routes & {:keys [user] :or {user signed-in}}]
+  (let [handler (reitit-router/compile-routes [(into ["/web"] web-routes)] {:swagger-enabled false})]
+    (fn [path]
+      (let [resp (handler (cond-> {:request-method :get :uri path :headers {"accept" "text/html"}}
+                            user (assoc :user user)))]
+        (update resp :body #(if (string? %) % (some-> % slurp)))))))
+
+(deftest ^:integration the-generated-web-page-requires-a-signed-in-user
+  (doseq [[tag public?] [["bou539web" false] ["bou539webpub" true]]]
+    (let [dir (temp-dir)
+          r   (ports/generate-module svc {:module-name "billing" :base-ns tag
+                                          :interfaces  {:public-api public?}
+                                          :entities    [{:name "Invoice" :fields [{:name :number :type :string}]}]
+                                          :output-dir  (.getPath dir)})]
+      (is (:success r) (pr-str (:errors r)))
+      (load-and-test! dir)
+      (let [db   (h2-migrated dir tag)
+            at   (fn [n s] @(ns-resolve (symbol (str tag ".billing." n)) s))
+            svc  ((at "shell.service" 'create-service) ((at "shell.persistence" 'create-repository) db))
+            _    ((at "ports" 'create-invoice) svc {:number "INV-77"})
+            web  (:web ((at "shell.http" 'billing-routes) svc {}))]
+        (if public?
+          (testing "--public-api opens the page too"
+            (let [resp ((web-caller web :user nil) "/web/invoices")]
+              (is (= 200 (:status resp)))
+              (is (str/includes? (:body resp) "INV-77"))))
+          (do
+            (testing "signed out: a redirect to the login page, not a JSON 401"
+              (let [resp ((web-caller web :user nil) "/web/invoices")]
+                (is (= 302 (:status resp)) (pr-str (dissoc resp :body)))
+                (is (= "/web/login?return-to=%2Fweb%2Finvoices" (get-in resp [:headers "Location"])))))
+            (testing "signed in: the page, with the rows"
+              (let [resp ((web-caller web) "/web/invoices")]
+                (is (= 200 (:status resp)))
+                (is (str/includes? (:body resp) "INV-77"))))))))))

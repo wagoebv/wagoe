@@ -132,8 +132,15 @@
             #"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9]+([.-][a-zA-Z0-9]+)*\.[a-zA-Z]{2,}$"]
     :enum (into [:enum] enum-values)
     :inst 'inst?
-    :date [:re {:error/message "Must be an ISO date (YYYY-MM-DD)"}
-           #"^\d{4}-\d{2}-\d{2}$"]
+    ;; A string, which is what the generated persistence reads a DATE column
+    ;; back as. Parsed, as admin does (BOU-521): the shape alone let 2026-02-31
+    ;; through to a DATE column that refused it, or to SQLite, which kept it.
+    :date [:and
+           [:re {:error/message "Must be an ISO date (YYYY-MM-DD)"} #"^\d{4}-\d{2}-\d{2}$"]
+           [:fn {:error/message "Must be a date that exists"}
+            '(fn [s]
+               (try (some? (java.time.LocalDate/parse s))
+                    (catch java.time.format.DateTimeParseException _ false)))]]
     :json :map
     ;; BigDecimal, not :double. `--field price:decimal` is what anyone reaches
     ;; for when scaffolding money, and this used to generate binary floating
@@ -343,6 +350,7 @@
              :field-type (:type field-def)
              :field-required (get field-def :required true)
              :field-unique (get field-def :unique false)
+             :field-indexed (get field-def :indexed false)
              :malli-type (field-type->malli field-def)
              :sql-type (field-type->sql field-def)}
       (column-default field-def)

@@ -377,9 +377,10 @@
          fields (:fields entity)
          field-sqls (str/join ",\n" (map generate-migration-field fields))
         ;; Every foreign key gets one: it is what a join reads, and what the
-        ;; database scans on each cascading delete of the parent.
+        ;; database scans on each cascading delete of the parent. An `indexed`
+        ;; field gets one too (BOU-535).
          relation-indexes (->> fields
-                               (filter :relation-table)
+                               (filter #(or (:relation-table %) (:field-indexed %)))
                                (map (fn [f]
                                       (format "CREATE INDEX IF NOT EXISTS idx_%s_%s ON %s(%s);"
                                               table-name (:field-name-snake f)
@@ -568,112 +569,72 @@ DROP TABLE IF EXISTS %s;
      (str "(ns " base-ns "." module-name "." (shell-ns entity :persistence-ns) "\n"
           "  \"Persistence layer for " module-name " module.\"\n"
           "  (:require [" base-ns "." module-name ".ports :as ports]\n"
-          "            [wagoe.platform.database :as db]))\n"
+          "            [wagoe.platform.database :as db])\n"
+          "  (:import [java.sql SQLException]\n"
+          "           [java.time Instant LocalDate]))\n"
+          "\n"
+          "(defn- date->iso\n"
+          "  \"A DATE column as the schema's YYYY-MM-DD. Drivers return java.sql.Date,\n"
+          "   whose JSON form depends on the JVM's time zone.\"\n"
+          "  [v]\n"
+          "  (cond (instance? java.sql.Date v) (str (.toLocalDate ^java.sql.Date v))\n"
+          "        (instance? LocalDate v) (str v)\n"
+          "        :else v))\n"
+          "\n"
+          "(defn- ->entity [row]\n"
+          "  (some-> row (update-vals date->iso)))\n"
+          "\n"
+          ;; A 400, not the 500 a :database-error is answered with (BOU-540).
+          "(defn- missing-reference?\n"
+          "  \"Whether the database refused a reference to a row that does not exist:\n"
+          "   SQLState 23503 (PostgreSQL) or 23506 (H2), error 1452 (MySQL), and SQLite's\n"
+          "   result code, which it reports only in the message.\"\n"
+          "  [e]\n"
+          "  (some #(and (instance? SQLException %)\n"
+          "              (or (#{\"23503\" \"23506\"} (.getSQLState ^SQLException %))\n"
+          "                  (= 1452 (.getErrorCode ^SQLException %))\n"
+          "                  (re-find #\"SQLITE_CONSTRAINT_FOREIGNKEY\" (str (ex-message %)))))\n"
+          "        (take-while some? (iterate ex-cause e))))\n"
+          "\n"
+          "(defn- write! [db-ctx query]\n"
+          "  (try\n"
+          "    (db/execute-update! db-ctx query)\n"
+          "    (catch clojure.lang.ExceptionInfo e\n"
+          "      (throw (if (missing-reference? e)\n"
+          "               (ex-info \"A referenced record does not exist\" {:type :validation-error} e)\n"
+          "               e)))))\n"
           "\n"
           "(defn- select-by-id [db-ctx id]\n"
-          "  (db/execute-one! db-ctx {:select [:*] :from [:" table-name "] :where [:= :id id]}))\n"
+          "  (->entity (db/execute-one! db-ctx {:select [:*] :from [:" table-name "] :where [:= :id id]})))\n"
           "\n"
           "(defrecord Database" entity-name "Repository [db-ctx]\n"
           "  ports/I" entity-name "Repository\n"
           "  (" create " [_this entity]\n"
-          "    (db/execute-update! db-ctx {:insert-into :" table-name " :values [entity]})\n"
+          "    (write! db-ctx {:insert-into :" table-name " :values [entity]})\n"
           "    (select-by-id db-ctx (:id entity)))\n"
           "  (" find-by-id " [_this id]\n"
           "    (select-by-id db-ctx id))\n"
           "  (" find-all " [_this opts]\n"
-          "    (db/execute-query! db-ctx {:select [:*]\n"
-          "                               :from [:" table-name "]\n"
-          "                               :limit (or (:limit opts) 20)}))\n"
+          "    (mapv ->entity (db/execute-query! db-ctx {:select [:*]\n"
+          "                                              :from [:" table-name "]\n"
+          "                                              :order-by [[:created-at :asc] [:id :asc]]\n"
+          "                                              :limit (or (:limit opts) 20)\n"
+          "                                              :offset (or (:offset opts) 0)})))\n"
           "  (" update " [_this entity]\n"
-          "    (db/execute-update! db-ctx {:update :" table-name "\n"
-          "                                :set (dissoc entity :id)\n"
-          "                                :where [:= :id (:id entity)]})\n"
-          "    (select-by-id db-ctx (:id entity)))\n"
+          ;; Refused here rather than sent: an empty :set is `UPDATE t SET  WHERE`,
+          ;; a database syntax error (BOU-547).
+          "    (let [changes (dissoc entity :id :created-at :updated-at)]\n"
+          "      (when (empty? changes)\n"
+          "        (throw (ex-info \"Nothing to update\" {:type :validation-error :id (:id entity)})))\n"
+          "      (write! db-ctx {:update :" table-name "\n"
+          "                      :set (assoc changes :updated-at (Instant/now))\n"
+          "                      :where [:= :id (:id entity)]})\n"
+          "      (select-by-id db-ctx (:id entity))))\n"
           "  (" delete " [_this id]\n"
           "    (db/execute-update! db-ctx {:delete-from :" table-name " :where [:= :id id]})))\n"
           "\n"
           "(defn create-repository [db-ctx]\n"
           "  (->Database" entity-name "Repository db-ctx))\n"))))
-
-;; =============================================================================
-;; HTTP File Generator
-;; =============================================================================
-
-(defn generate-http-file
-  "Generate shell/http.clj file content.
-   
-   Args:
-     ctx - Template context map
-     
-   Returns:
-     String content for http.clj file
-     
-   Pure: true"
-  [ctx]
-  (let [base-ns (:base-ns ctx "wagoe")
-        module-name (:module-name ctx)
-        entity (first (:entities ctx))
-        entity-name (:entity-name entity)
-        entity-lower (template/pascal->kebab entity-name)
-        entity-plural (template/pluralize entity-lower)
-        ;; `:interfaces` decides what this file defines and what the
-        ;; contribution carries. A module generated with --no-web has no web
-        ;; UI files on disk, so it must not mount web routes either (BOU-479).
-        {:keys [http web]} (:interfaces ctx {:http true :web true})]
-    ;; No :require at all. The handlers below are stubs that call nothing, so
-    ;; requiring ports here was an unused require — a clj-kondo warning, and
-    ;; `bb check` fails on warnings in the generated project (BOU-267). The
-    ;; comment says what to add back when the stubs get bodies.
-    (str "(ns " base-ns "." module-name ".shell.http\n"
-         "  \"HTTP routes for " module-name " module.\""
-         ;; Required only when there are web routes to mount. The API handlers
-         ;; below are stubs that call nothing, so requiring ports here would be
-         ;; an unused require — a clj-kondo warning, and `bb check` fails on
-         ;; warnings in the generated project (BOU-267).
-         (if web
-           (str "\n  (:require [" base-ns "." module-name ".shell.web-handlers :as web-handlers]))\n")
-           ")\n")
-         "\n"
-         ";; The API handlers below are stubs that return canned responses. When\n"
-         ";; you wire them to the service, add to the ns form above:\n"
-         ";;   [" base-ns "." module-name ".ports :as ports]\n"
-         "\n"
-         (when http
-           (str "(defn api-routes\n"
-                "  \"Reitit route data: [path data & children].\n"
-                "\n"
-                "   Paths are relative — the platform mounts these under /api/v1.\"\n"
-                "  [_service]\n"
-                "  [[\"/" entity-plural "\"\n"
-                "    {:get  {:handler (fn [_req] {:status 200 :body []})}\n"
-                "     :post {:handler (fn [_req] {:status 201 :body {}})}}]\n"
-                "   [\"/" entity-plural "/:id\"\n"
-                "    {:get    {:handler (fn [_req] {:status 200 :body {}})}\n"
-                "     :put    {:handler (fn [_req] {:status 200 :body {}})}\n"
-                "     :delete {:handler (fn [_req] {:status 204})}}]])\n"
-                "\n"))
-         (when web
-           (str "(defn web-routes\n"
-                "  \"Mounted under /web — do not repeat the prefix here.\"\n"
-                "  [service config]\n"
-                "  [[\"/" entity-plural "\"\n"
-                "    {:get {:handler (web-handlers/" entity-lower "-list-handler service config)}}]])\n"
-                "\n"))
-         "(defn " module-name "-routes\n"
-         "  \"This module's contribution to the application's route table.\n"
-         "\n"
-         "   :api    versioned, mounted under /api/v1\n"
-         "   :web    mounted under /web\n"
-         "   :static mounted as written\"\n"
-         ;; All three keys, always: the platform folds a contribution by
-         ;; looking each part up, and a missing one is not the same as an
-         ;; empty one to a reader trying to see what the module serves.
-         "  [" (if (or http web) "service" "_service") " "
-         (if web "config" "_config") "]\n"
-         "  {:api    " (if http "(api-routes service)" "[]") "\n"
-         "   :web    " (if web "(web-routes service config)" "[]") "\n"
-         "   :static []})\n"
-         "\n")))
 
 ;; =============================================================================
 ;; Web Handlers File Generator
@@ -879,29 +840,43 @@ DROP TABLE IF EXISTS %s;
   [source section]
   (str (str/trimr source) "\n\n" section))
 
-(defn generate-entity-http-file
-  "shell/<entity>_http.clj for a further entity: its CRUD API routes.
+(defn- api-requires
+  "The ns requires the API section below needs."
+  [base-ns module-name]
+  [(str "[" base-ns "." module-name ".ports :as ports]")
+   (str "[" base-ns "." module-name ".schema :as schema]")
+   "[malli.core :as m]"
+   "[malli.transform :as mt]"])
 
-   Real handlers, not the first entity's stubs: nothing else reaches this
-   entity's service over HTTP. Bodies are decoded with the Create/Update
-   request schemas, which drop unknown keys — they would otherwise become
-   column names in the insert — and turn JSON strings into UUIDs.
+(defn- ns-form
+  "An ns form with a docstring and `requires`, one per line."
+  [ns-name doc requires]
+  (str "(ns " ns-name "\n"
+       "  \"" doc "\""
+       (if (seq requires)
+         (str "\n  (:require " (str/join "\n            " requires) "))\n")
+         ")\n")))
 
-   Pure: true"
-  [ctx entity]
-  (let [base-ns (:base-ns ctx "wagoe")
-        module-name (:module-name ctx)
-        entity-name (:entity-name entity)
-        e (:entity-kebab entity)
-        plural (:entity-plural entity)]
-    (str "(ns " base-ns "." module-name ".shell." e "-http\n"
-         "  \"HTTP API for " entity-name ", mounted by the " module-name " module's routes.\"\n"
-         "  (:require [" base-ns "." module-name ".ports :as ports]\n"
-         "            [" base-ns "." module-name ".schema :as schema]\n"
-         "            [malli.core :as m]\n"
-         "            [malli.transform :as mt]))\n"
-         "\n"
-         ";; JSON has no decimal type: Muuntaja reads 9.99 as a Double, and malli\n"
+(defn- api-section
+  "An entity's CRUD API: request decoding and `api-routes`. Every entity's
+   http namespace gets this one, the first entity's included (BOU-539).
+
+   Bodies are decoded with the Create/Update request schemas, which drop
+   unknown keys — they would otherwise become column names in the insert — and
+   turn JSON strings into UUIDs. Errors are thrown with a :type, so the
+   platform answers them in the one shape it uses for every other error.
+
+   Unless `public?`, every route requires a signed-in user. The guard is named
+   by symbol, the way the user module's own routes name it: the platform
+   resolves it at boot, and the module requires nothing from another module's
+   shell."
+  [entity public?]
+  (let [entity-name (:entity-name entity)
+        e (or (:entity-kebab entity) (template/pascal->kebab entity-name))
+        plural (or (:entity-plural entity) (template/pluralize e))
+        guard (if public? "" "\n            :interceptors signed-in")
+        guard-id (if public? "" "\n              :interceptors signed-in")]
+    (str ";; JSON has no decimal type: Muuntaja reads 9.99 as a Double, and malli\n"
          ";; has no decoder for decimal?, so without this a decimal field refused both\n"
          ";; 9.99 and \"9.99\".\n"
          "(defn- ->decimal [x]\n"
@@ -918,23 +893,46 @@ DROP TABLE IF EXISTS %s;
          "(def ^:private decode-update (m/decoder schema/Update" entity-name "Request json->data))\n"
          "(def ^:private valid-update? (m/validator schema/Update" entity-name "Request))\n"
          "\n"
+         ";; Thrown, not returned: the platform maps :type to the status and answers\n"
+         ";; in the shape it uses for every error, a missing reference included.\n"
          "(defn- invalid []\n"
-         "  {:status 400 :body {:error {:type :validation-error :message \"Invalid " e "\"}}})\n"
+         "  (throw (ex-info \"Invalid " e "\" {:type :validation-error})))\n"
          "\n"
          "(defn- not-found []\n"
-         "  {:status 404 :body {:error {:type :not-found :message \"No such " e "\"}}})\n"
+         "  (throw (ex-info \"No such " e "\" {:type :not-found})))\n"
          "\n"
          "(defn- id-of [request]\n"
          "  (some-> (get-in request [:path-params :id]) parse-uuid))\n"
+         "\n"
+         "(def ^:private max-page 100)\n"
+         "\n"
+         "(defn- page-of\n"
+         "  \"limit and offset from the query string. A missing or malformed value is\n"
+         "   the default, and limit is capped so one request cannot read the table.\"\n"
+         "  [request]\n"
+         "  (let [n (fn [k default]\n"
+         "            (let [v (get-in request [:query-params k])]\n"
+         "              (or (when (string? v) (parse-long v)) default)))]\n"
+         "    {:limit  (-> (n \"limit\" 20) (max 1) (min max-page))\n"
+         "     :offset (max 0 (n \"offset\" 0))}))\n"
+         "\n"
+         (if public?
+           ";; Public: these routes answer anyone, signed in or not (--public-api).\n"
+           (str ";; Every route requires a signed-in user and answers 401 without one.\n"
+                ";; Generate with --public-api for routes open to anyone.\n"
+                "(def ^:private signed-in ['wagoe.user.shell.http-interceptors/require-authenticated])\n"))
          "\n"
          "(defn api-routes\n"
          "  \"Reitit route data. Paths are relative — the platform mounts them under /api/v1.\"\n"
          "  [service]\n"
          "  [[\"/" plural "\"\n"
-         "    {:get  {:summary \"List " plural "\"\n"
-         "            :handler (fn [_request]\n"
-         "                       {:status 200 :body (ports/list-" e "s service {})})}\n"
-         "     :post {:summary \"Create a " e "\"\n"
+         "    {:get  {:summary \"List " plural ", oldest first\"" guard "\n"
+         "            :swagger {:parameters [{:name \"limit\" :in \"query\" :required false :type \"integer\"\n"
+         "                                    :description \"Default 20, at most 100\"}\n"
+         "                                   {:name \"offset\" :in \"query\" :required false :type \"integer\"}]}\n"
+         "            :handler (fn [request]\n"
+         "                       {:status 200 :body (ports/list-" e "s service (page-of request))})}\n"
+         "     :post {:summary \"Create a " e "\"" guard "\n"
          "            :handler (fn [request]\n"
          "                       (let [data (decode-create (:body-params request))]\n"
          "                         (if (valid-create? data)\n"
@@ -942,12 +940,12 @@ DROP TABLE IF EXISTS %s;
          "                           (invalid))))}}]\n"
          "   [\"/" plural "/:id\"\n"
          "    {:swagger {:parameters [{:name \"id\" :in \"path\" :required true :type \"string\"}]}\n"
-         "     :get    {:summary \"Get a " e "\"\n"
+         "     :get    {:summary \"Get a " e "\"" guard-id "\n"
          "              :handler (fn [request]\n"
          "                         (if-let [found (some->> (id-of request) (ports/get-" e " service))]\n"
          "                           {:status 200 :body found}\n"
          "                           (not-found)))}\n"
-         "     :put    {:summary \"Update a " e "\"\n"
+         "     :put    {:summary \"Update a " e "\"" guard-id "\n"
          "              :handler (fn [request]\n"
          "                         (let [id   (id-of request)\n"
          "                               data (decode-update (:body-params request))]\n"
@@ -958,11 +956,79 @@ DROP TABLE IF EXISTS %s;
          "                             :else (if-let [updated (ports/update-" e " service id data)]\n"
          "                                     {:status 200 :body updated}\n"
          "                                     (not-found)))))}\n"
-         "     :delete {:summary \"Delete a " e "\"\n"
+         "     :delete {:summary \"Delete a " e "\"" guard-id "\n"
          "              :handler (fn [request]\n"
          "                         (if-let [id (id-of request)]\n"
          "                           (do (ports/delete-" e " service id) {:status 204})\n"
          "                           (not-found)))}}]])\n")))
+
+(defn generate-entity-http-file
+  "shell/<entity>_http.clj for a further entity: its CRUD API routes.
+
+   Pure: true"
+  [ctx entity]
+  (let [base-ns (:base-ns ctx "wagoe")
+        module-name (:module-name ctx)]
+    (str (ns-form (str base-ns "." module-name ".shell." (:entity-kebab entity) "-http")
+                  (str "HTTP API for " (:entity-name entity) ", mounted by the "
+                       module-name " module's routes.")
+                  (api-requires base-ns module-name))
+         "\n"
+         (api-section entity (get-in ctx [:interfaces :public-api] false)))))
+
+(defn generate-http-file
+  "Generate shell/http.clj: the first entity's API and web routes, and the
+   module's route contribution.
+
+   Pure: true"
+  [ctx]
+  (let [base-ns (:base-ns ctx "wagoe")
+        module-name (:module-name ctx)
+        entity (first (:entities ctx))
+        entity-lower (template/pascal->kebab (:entity-name entity))
+        entity-plural (template/pluralize entity-lower)
+        ;; `:interfaces` decides what this file defines and what the
+        ;; contribution carries. A module generated with --no-web has no web
+        ;; UI files on disk, so it must not mount web routes either (BOU-479).
+        {:keys [http web]} (:interfaces ctx {:http true :web true})
+        ;; One switch for the module's routes, API and page alike.
+        public? (get-in ctx [:interfaces :public-api] false)]
+    (str (ns-form (str base-ns "." module-name ".shell.http")
+                  (str "HTTP routes for " module-name " module.")
+                  ;; Only what is used: an unused require is a clj-kondo
+                  ;; warning, and `bb check` fails on those (BOU-267).
+                  (concat (when http (api-requires base-ns module-name))
+                          (when web [(str "[" base-ns "." module-name ".shell.web-handlers :as web-handlers]")])))
+         "\n"
+         (when http (str (api-section entity public?) "\n"))
+         (when web
+           (str (if public?
+                  ";; Public: this page answers anyone, signed in or not (--public-api).\n"
+                  (str ";; Signed-in users only; anyone else is sent to /web/login.\n"
+                       "(def ^:private signed-in-page ['wagoe.user.shell.http-interceptors/require-web-authenticated])\n"))
+                "\n"
+                "(defn web-routes\n"
+                "  \"Mounted under /web — do not repeat the prefix here.\"\n"
+                "  [service config]\n"
+                "  [[\"/" entity-plural "\"\n"
+                "    {:get {" (if public? "" ":interceptors signed-in-page\n           ")
+                ":handler (web-handlers/" entity-lower "-list-handler service config)}}]])\n"
+                "\n"))
+         "(defn " module-name "-routes\n"
+         "  \"This module's contribution to the application's route table.\n"
+         "\n"
+         "   :api    versioned, mounted under /api/v1\n"
+         "   :web    mounted under /web\n"
+         "   :static mounted as written\"\n"
+         ;; All three keys, always: the platform folds a contribution by
+         ;; looking each part up, and a missing one is not the same as an
+         ;; empty one to a reader trying to see what the module serves.
+         "  [" (if (or http web) "service" "_service") " "
+         (if web "config" "_config") "]\n"
+         "  {:api    " (if http "(api-routes service)" "[]") "\n"
+         "   :web    " (if web "(web-routes service config)" "[]") "\n"
+         "   :static []})\n"
+         "\n")))
 
 (defn- http?
   [ctx]
@@ -1340,7 +1406,7 @@ DROP TABLE IF EXISTS %s;
                                          (:on-delete field-ctx)
                                          "CASCADE"))
                             "")
-        index-sql (if relation-table
+        index-sql (if (or relation-table (:field-indexed field-ctx))
                     (format "\nCREATE INDEX IF NOT EXISTS idx_%s_%s ON %s(%s);\n"
                             table-name field-name table-name field-name)
                     "")]

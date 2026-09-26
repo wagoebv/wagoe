@@ -122,6 +122,20 @@
                                               "Authentication required"
                                               correlation-id)))))})
 
+(def require-web-authenticated
+  "require-authenticated for HTML pages: without a signed-in user it redirects
+   to /web/login, returning to this page afterwards, rather than answering 401."
+  {:name :require-web-authenticated
+   :enter (fn [{:keys [request] :as ctx}]
+            (if (authenticated? request)
+              ctx
+              (assoc ctx :response
+                     {:status  302
+                      :headers {"Location" (str "/web/login?return-to="
+                                                (java.net.URLEncoder/encode
+                                                 (str (:uri request)) "UTF-8"))}
+                      :body    ""})))})
+
 (def require-unauthenticated
   "Requires NO authenticated user in session.
    

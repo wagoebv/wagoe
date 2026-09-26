@@ -18,6 +18,13 @@
     (is (str/includes? prompt "\"belongs-to\""))
     (is (str/includes? prompt "InvoiceLineItem"))))
 
+(deftest ^:unit the-scaffolding-prompt-tells-a-day-from-a-moment
+  ;; `date` is a calendar day since BOU-547; a timestamp is `datetime`.
+  (let [prompt (prompts/build-scaffolding-system-prompt)]
+    (is (str/includes? prompt "date|datetime"))
+    (is (re-find #"datetime[^\n]*moment" prompt))
+    (is (str/includes? prompt "\"public-api\""))))
+
 (deftest ^:unit build-scaffolding-user-prompt-test
   (testing "user prompt includes description"
     (let [prompt (prompts/build-scaffolding-user-prompt "a product module" [])]

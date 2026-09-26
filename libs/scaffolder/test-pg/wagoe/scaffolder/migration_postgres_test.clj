@@ -14,9 +14,13 @@
    with :test/pg, and tools' check_test requires it to."
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
+            [muuntaja.core :as muuntaja]
             [next.jdbc :as jdbc]
             [next.jdbc.result-set :as rs]
+            [reitit.core :as r]
+            [wagoe.platform.shell.adapters.database.factory :as db-factory]
             [wagoe.platform.shell.adapters.database.postgresql.connection :as pg-conn]
+            [wagoe.scaffolder.cli :as cli]
             [wagoe.scaffolder.core.generators :as gen]
             [wagoe.scaffolder.core.template :as template])
   (:import [io.zonky.test.db.postgres.embedded EmbeddedPostgres]
@@ -27,7 +31,7 @@
    {:module-name "billing"
     :base-ns     "app"
     :entities    [{:name   "Payment"
-                   :fields [{:name :reference :type :string}
+                   :fields [{:name :reference :type :string :indexed true}   ; BOU-535: the index runs here too
                             {:name :paid-at   :type :inst}]}]}))
 
 (defn- statements [sql]
@@ -69,3 +73,52 @@
            (testing "every generated instant column reads back the instant that was written"
              (doseq [c [:created_at :updated_at :paid_at]]
                (is (= instant (.toInstant ^java.sql.Timestamp (get row c))) (name c))))))))))
+
+(defn- load-generated! [ctx]
+  (doseq [generate [gen/generate-schema-file gen/generate-ports-file gen/generate-core-file
+                    gen/generate-service-file gen/generate-persistence-file gen/generate-ui-file
+                    gen/generate-web-handlers-file gen/generate-http-file]]
+    (binding [*ns* *ns*] (load-string (generate ctx)))))
+
+(deftest ^:integration a-date-field-round-trips-on-postgresql
+  ;; `due:date` made a TIMESTAMP WITH TIME ZONE column (BOU-547). West of UTC,
+  ;; so a date read through a zoned type would land on the day before. The
+  ;; relation is for BOU-540: a missing parent is a :validation-error.
+  (in-jvm-zone
+   "America/Los_Angeles"
+   (fn []
+     (with-open [pg (.start (EmbeddedPostgres/builder))]
+       (let [ctx (template/build-module-context
+                  {:module-name "billing" :base-ns "bou547pg"
+                   :entities    [{:name "Invoice"
+                                  :fields [{:name :number :type :string :required true}
+                                           (cli/parse-field-spec "due:date:required")
+                                           (cli/parse-field-spec "customer:relation:references=customer")]}]})
+             db  (db-factory/db-context {:adapter :postgresql :host "localhost" :port (.getPort pg)
+                                         :name "postgres" :username "postgres" :password "postgres"
+                                         :pool {:minimum-idle 1 :maximum-pool-size 2}})]
+         (jdbc/execute! (:datasource db) ["CREATE TABLE customers (id UUID PRIMARY KEY)"])
+         (doseq [s (statements (gen/generate-migration-file ctx "20260926000000"))]
+           (jdbc/execute! (:datasource db) [s]))
+         (load-generated! ctx)
+         (let [at      (fn [n s] @(ns-resolve (symbol (str "bou547pg.billing." n)) s))
+               svc     ((at "shell.service" 'create-service) ((at "shell.persistence" 'create-repository) db))
+               router  (r/router (:api ((at "shell.http" 'billing-routes) svc {})))
+               call    (fn [method path body]
+                         (let [m (r/match-by-path router path)]
+                           ((get-in m [:data method :handler])
+                            {:request-method method :path-params (:path-params m) :body-params body})))
+               json    (fn [body] (slurp (muuntaja/encode muuntaja/instance "application/json" body)))
+               created (call :post "/invoices" {:number "A-1" :due "2026-01-01"})]
+           (is (= 201 (:status created)) (pr-str created))
+           (is (str/includes? (json (:body (call :get (str "/invoices/" (get-in created [:body :id])) nil)))
+                              "\"due\":\"2026-01-01\""))
+           (is (= "date" (:data_type (jdbc/execute-one!
+                                      (:datasource db)
+                                      ["SELECT data_type FROM information_schema.columns WHERE table_name = 'invoices' AND column_name = 'due'"]
+                                      {:builder-fn rs/as-unqualified-lower-maps}))))
+           (is (= :validation-error
+                  (:type (ex-data (try (call :post "/invoices" {:number "A-2" :due "2026-01-01"
+                                                                :customer-id (str (random-uuid))})
+                                       nil
+                                       (catch clojure.lang.ExceptionInfo e e))))))))))))

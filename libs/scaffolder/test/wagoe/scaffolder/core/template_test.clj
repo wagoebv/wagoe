@@ -76,3 +76,14 @@
       (is (= 1 (count (:entities ctx))))
       (is (true? (get-in ctx [:interfaces :http])))
       (is (true? (get-in ctx [:features :audit]))))))
+
+(deftest ^:unit a-date-schema-refuses-a-day-the-month-lacks
+  ;; The regex took 2026-02-31, which the DATE column then refused: a 500.
+  ;; Read back from the text the generator writes, as the generated schema is.
+  (let [schema (eval (read-string (str (template/field-type->malli {:type :date}))))]
+    (is (m/validate schema "2024-02-29"))
+    (is (not (m/validate schema "2026-02-31")))
+    (is (not (m/validate schema "2026-13-01")))
+    (is (not (m/validate schema "2026-1-01")))
+    (is (not (m/validate schema 20260101)) "not a string, and does not throw")
+    (is (some? (m/explain schema 20260101)))))

@@ -135,8 +135,8 @@ curl http://localhost:3000/api/v1/products
 # => []
 ----
 
-`[]` is the right answer: the generated handlers are stubs that return canned
-responses, and wiring them to the service is your first edit. The routes live in
+`[]` is the right answer: the table is empty. The generated handlers call the
+service, so a `POST` creates a row the next `GET` returns. The routes live in
 `src/<your-project>/product/shell/http.clj` — `bb scaffold integrate` prints the prefix
 they are mounted under.
 

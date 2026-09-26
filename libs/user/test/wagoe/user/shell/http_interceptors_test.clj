@@ -60,6 +60,19 @@
       (is (= "Authentication required" (get-in result [:response :body :message]))
           "Should have error message"))))
 
+(deftest ^:contract require-web-authenticated-test
+  ;; For HTML pages: a browser should land on the login page, not a JSON 401.
+  (testing "signed out: a redirect to login that returns here"
+    (let [result ((:enter http-int/require-web-authenticated)
+                  (create-test-context {:uri "/web/invoices"}))]
+      (is (= 302 (get-in result [:response :status])))
+      (is (= "/web/login?return-to=%2Fweb%2Finvoices"
+             (get-in result [:response :headers "Location"])))))
+  (testing "signed in: passes through"
+    (let [ctx    (create-test-context {:uri "/web/invoices" :user {:id "u1"}})
+          result ((:enter http-int/require-web-authenticated) ctx)]
+      (is (= ctx result)))))
+
 (deftest ^:contract error-response-lets-muuntaja-encode-body-test
   ;; ZZP-120: create-error-response used to hardcode a "Content-Type" header.
   ;; muuntaja's format-response middleware SKIPS encoding when the response

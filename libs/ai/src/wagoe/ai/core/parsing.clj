@@ -116,7 +116,7 @@
 ;; =============================================================================
 
 (def ^:private valid-field-types
-  #{"string" "text" "int" "decimal" "boolean" "email" "uuid" "enum" "date" "json"})
+  #{"string" "text" "int" "decimal" "boolean" "email" "uuid" "enum" "date" "datetime" "json"})
 
 (defn- normalise-field [f]
   (let [t (let [raw (get f :type (get f "type" "string"))]
@@ -139,12 +139,12 @@
     \"entities\": [{\"name\": \"Invoice\", \"fields\": [...]},
                   {\"name\": \"InvoiceLineItem\", \"belongs-to\": \"Invoice\",
                    \"fields\": [...]}],
-    \"http\": true, \"web\": true}
+    \"http\": true, \"web\": true, \"public-api\": false}
 
    The older singular shape — `entity` plus `fields` — is still read.
 
    Returns:
-     {:module-name :entities [{:name :fields :belongs-to?}] :http :web}, plus
+     {:module-name :entities [{:name :fields :belongs-to?}] :http :web :public-api}, plus
      :entity and :fields for the first entity, or {:error str} on failure."
   [response-text]
   (let [parsed (parse-json-response response-text)]
@@ -174,7 +174,8 @@
              :fields      (:fields (first entities))
              :entities    entities
              :http        (boolean (get parsed :http true))
-             :web         (boolean (get parsed :web true))}))))))
+             :web         (boolean (get parsed :web true))
+             :public-api  (boolean (get parsed :public-api false))}))))))
 
 (defn normalise-module-spec
   "Normalise a provider-parsed module spec map into canonical scaffolder shape.
@@ -202,7 +203,7 @@
 
    Returns:
      Vector of string args for wagoe.scaffolder.shell.cli-entry."
-  [{:keys [module-name entity fields http web]}]
+  [{:keys [module-name entity fields http web public-api]}]
   (let [base       ["generate" "--module-name" module-name "--entity" entity]
         ;; `values=` carries the enum's values through. Without it the spec said
         ;; only `status:enum` and the generated schema was `[:enum]`, which
@@ -218,7 +219,7 @@
                            fields)
         no-http    (when-not http ["--no-http"])
         no-web     (when-not web  ["--no-web"])]
-    (vec (concat base field-args no-http no-web))))
+    (vec (concat base field-args no-http no-web (when public-api ["--public-api"])))))
 
 (defn normalise-setup-spec
   "The seven setup choices, with a default for every one the provider omitted.
