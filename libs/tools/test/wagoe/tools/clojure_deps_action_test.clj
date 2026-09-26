@@ -8,11 +8,15 @@
    nothing, and `~/.m2/repository` is what actions/cache saves, so one 403
    during warm-deps was restored into all 30 isolation cells (BOU-440).
 
-   Asserted by running the shell function against a fixture, not by grepping the
-   YAML for a word: what matters is which markers it removes."
-  (:require [clj-yaml.core :as yaml]
+   A transient 404 records an empty `.error=`, like a genuine absence, so the
+   retry also clears the markers of artifacts the error names (BOU-548).
+
+   Asserted by running scripts/ci-resolve-deps.sh against a fake ~/.m2, not by
+   grepping the YAML for a word: what matters is which markers it removes."
+  (:require [babashka.fs :as fs]
+            [babashka.process :as process]
+            [clj-yaml.core :as yaml]
             [clojure.java.io :as io]
-            [clojure.java.shell :as shell]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]))
 
@@ -29,19 +33,9 @@
        first
        :run))
 
-(deftest ^:unit the-retry-clears-the-failure-before-trying-again
-  (let [script (prefetch-script)]
-
-    (testing "the prefetch step was found"
-      (is (some? script))
-      (is (str/includes? script "for attempt in")))
-
-    (testing "and it clears cached failures inside the retry loop, before resolving"
-      (let [loop-start (str/index-of script "for attempt in")
-            clear-call (str/index-of script "clear_failed_downloads\n" loop-start)
-            resolve-at (str/index-of script "clojure -Sthreads 1 -P" loop-start)]
-        (is (and clear-call resolve-at (< clear-call resolve-at))
-            "a retry that does not clear the marker re-reads it and fails the same way")))))
+(deftest ^:unit the-prefetch-step-retries-through-the-script
+  (testing "the retry is the tested script, not an untested copy in the YAML"
+    (is (str/includes? (str (prefetch-script)) "scripts/ci-resolve-deps.sh"))))
 
 (defn- ci-file []
   (let [cwd (System/getProperty "user.dir")]
@@ -104,41 +98,87 @@
               (str "the matrix builds these, and nothing warms their deps: "
                    (pr-str (sort missing)))))))))
 
-(deftest ^:unit it-clears-a-transfer-failure-and-keeps-a-genuine-absence
-  (let [script (prefetch-script)
-        fn-start (str/index-of script "clear_failed_downloads() {")
-        fn-end (str/index-of script "for alias in")
-        fn-src (subs script fn-start fn-end)
-        home (str (System/getProperty "java.io.tmpdir") "/wagoe-m2-" (System/nanoTime))
-        poisoned (io/file home ".m2/repository/org/slf4j/slf4j-api/1.7.36"
-                          "slf4j-api-1.7.36.jar.lastUpdated")
-        absent (io/file home ".m2/repository/foo/bar/1.0" "bar-1.0-sources.jar.lastUpdated")]
+;; The fake `clojure` fails for as long as FAKE_BLOCKER exists, which is what
+;; Maven does while a marker is in place.
+(def ^:private fake-clojure
+  "#!/usr/bin/env bash
+n=$(( $(cat \"$HOME/.calls\" 2>/dev/null || echo 0) + 1 )); echo $n > \"$HOME/.calls\"
+if { [ -n \"${FAKE_BLOCKER:-}\" ] && [ -e \"$FAKE_BLOCKER\" ]; } || [ \"${FAKE_ALWAYS:-}\" = fail ]; then
+  echo 'Error building classpath. Could not find artifact io.opentelemetry:opentelemetry-sdk-testing:jar:1.66.0 (absent)' >&2
+  exit 1
+fi
+")
+
+(def ^:private absent-marker
+  ".m2/repository/io/opentelemetry/opentelemetry-sdk-testing/1.66.0/opentelemetry-sdk-testing-1.66.0.jar.lastUpdated")
+
+(def ^:private sources-marker
+  ".m2/repository/foo/bar/1.0/bar-1.0-sources.jar.lastUpdated")
+
+(def ^:private transfer-marker
+  ".m2/repository/org/slf4j/slf4j-api/1.7.36/slf4j-api-1.7.36.jar.lastUpdated")
+
+(def ^:private empty-error "#NOTE\nhttps\\://repo.maven.apache.org/maven2/.error=\n")
+
+(defn- with-m2 [f]
+  (let [home (fs/create-temp-dir)
+        mk (fn [rel content]
+             (let [p (fs/path home rel)]
+               (fs/create-dirs (fs/parent p))
+               (spit (str p) content)
+               p))]
     (try
-      (io/make-parents poisoned)
-      (io/make-parents absent)
+      (fs/create-dirs (fs/path home "bin"))
+      (spit (str (fs/path home "bin" "clojure")) fake-clojure)
+      (fs/set-posix-file-permissions (fs/path home "bin" "clojure") "rwxr-xr-x")
+      (f home mk)
+      (finally (fs/delete-tree home)))))
+
+(defn- resolve! [home env]
+  (process/shell {:out :string :err :string :continue true :dir (str home)
+                  :extra-env (merge {"HOME" (str home)
+                                     "PATH" (str (fs/path home "bin") ":" (System/getenv "PATH"))
+                                     "RESOLVE_RETRY_DELAY" "0"}
+                                    env)}
+                 "bash" (str (io/file (repo-root) "scripts" "ci-resolve-deps.sh")) "." "-M:test"))
+
+(defn- calls [home]
+  (parse-long (str/trim (slurp (str (fs/path home ".calls"))))))
+
+(deftest ^:unit it-clears-a-transfer-failure-and-keeps-a-genuine-absence
+  (with-m2
+    (fn [home mk]
       ;; What Maven writes when the download failed…
-      (spit poisoned (str "#NOTE\n"
-                          "https\\://repo.maven.apache.org/maven2/.error="
-                          "Could not transfer artifact: status code: 403\n"))
-      ;; …and when the artifact simply was never published. Every -sources.jar
-      ;; that does not exist has one of these, so clearing them all would add a
-      ;; round-trip per artifact on every attempt.
-      (spit absent "#NOTE\nhttps\\://repo.maven.apache.org/maven2/.error=\n")
+      (mk transfer-marker (str "#NOTE\nhttps\\://repo.maven.apache.org/maven2/.error="
+                               "Could not transfer artifact: status code: 403\n"))
+      ;; …and when an artifact was never published. Every -sources.jar that does
+      ;; not exist has one, and re-checking each on every attempt buys nothing.
+      (mk sources-marker empty-error)
+      (let [r (resolve! home {})]
+        (is (zero? (:exit r)) (str (:out r) (:err r)))
+        (is (not (fs/exists? (fs/path home transfer-marker))))
+        (is (fs/exists? (fs/path home sources-marker)))
+        (is (str/includes? (:out r) "cleared 1"))))))
 
-      (let [{:keys [exit out]} (shell/sh "bash" "-c" (str fn-src "\nclear_failed_downloads")
-                                         :env {"HOME" home "PATH" (System/getenv "PATH")})]
-        (testing "it runs"
-          (is (zero? exit)))
+(deftest ^:unit a-cached-transient-404-is-cleared-for-the-retry
+  (testing "a transient miss records an empty .error=, like a genuine one, so
+            the retry clears the marker of the artifact the error names"
+    (with-m2
+      (fn [home mk]
+        (let [marker (mk absent-marker empty-error)]
+          (mk sources-marker empty-error)
+          (let [r (resolve! home {"FAKE_BLOCKER" (str marker)})]
+            (is (zero? (:exit r)) (str (:out r) (:err r)))
+            (is (= 2 (calls home)) "succeeds on the second attempt")
+            (is (not (fs/exists? marker)))
+            (is (fs/exists? (fs/path home sources-marker))
+                "a marker the error does not name is kept")))))))
 
-        (testing "the transfer failure is gone, so the next attempt reaches the network"
-          (is (not (.exists poisoned))))
+(deftest ^:unit a-genuine-404-still-fails-after-the-retries
+  (with-m2
+    (fn [home _mk]
+      (let [r (resolve! home {"FAKE_ALWAYS" "fail"})]
+        (is (= 1 (:exit r)))
+        (is (= 4 (calls home)))
+        (is (str/includes? (:out r) "after 4 attempts"))))))
 
-        (testing "the genuine absence is kept"
-          (is (.exists absent)))
-
-        (testing "and it says how many it cleared"
-          (is (str/includes? out "cleared 1"))))
-
-      (finally
-        (doseq [f (reverse (file-seq (io/file home)))]
-          (.delete ^java.io.File f))))))
