@@ -1,7 +1,7 @@
 (ns wagoe.push-migrations-test
   "Do push's migrations actually run, and do its stores then work?
 
-   The runner discovers library migrations from a `wagoe/migration-paths.edn`
+   The runner discovers library migrations from a `wagoe/migration-paths/<lib>.edn`
    resource on the classpath. Push shipped three migrations and no manifest, so
    its directory was never read: `bb migrate up` reported nothing pending and
    the first query failed on a missing table (BOU-423).
