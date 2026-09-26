@@ -28,6 +28,13 @@ inputs:
       (BOU-417).
     required: false
     default: "."
+  skip-on-hit:
+    description: >-
+      "true" skips the prefetch on an exact cache hit. Only `warm-deps` sets it:
+      it is the only job that can save a key, so an exact hit means a previous
+      warm-deps already resolved everything it would resolve now (BOU-527).
+    required: false
+    default: "false"
 
 runs:
   using: composite
@@ -68,6 +75,7 @@ runs:
     # until some dependency happened to change. "Known-bad" was too narrow a
     # reason to bump, which is how that was missed in review.
     - name: Cache dependencies
+      id: cache
       uses: actions/cache@v5
       with:
         path: |
@@ -89,6 +97,7 @@ runs:
     # tools.deps exits 1 for every error, so we retry on any failure and let the
     # last attempt surface the real message.
     - name: Prefetch deps (serial — avoids Maven concurrent-resolution crash)
+      if: inputs.skip-on-hit != 'true' || steps.cache.outputs.cache-hit != 'true'
       shell: bash
       working-directory: ${{ inputs.working-directory }}
       run: |
