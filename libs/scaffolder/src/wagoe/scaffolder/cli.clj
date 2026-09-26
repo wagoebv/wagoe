@@ -181,10 +181,16 @@
           []
           flags))
 
+(def ^:private quoted-default
+  "`default='...'`: everything between the quotes is the value, so a colon or
+   a word like `unique` in it is not taken for a modifier."
+  #"(^|:)default='(.*?)'(?=:|$)")
+
 (defn parse-field-spec
   "Parse a field specification string into a field map.
 
    Format: name:type[:values=a,b,c][:required][:unique][:default=v]
+   A default holding a modifier word after a colon is quoted: default='a:unique'.
 
    Examples:
      email:email:required:unique
@@ -201,7 +207,9 @@
      Map with keys: :name, :type, :required, :unique, :enum-values,
      or error map"
   [field-spec]
-  (let [parts (str/split field-spec #":")
+  (let [[_ _ quoted] (re-find quoted-default field-spec)
+        field-spec (if quoted (str/replace-first field-spec quoted-default "") field-spec)
+        parts (str/split field-spec #":")
         [name-str type-str & raw-flags] parts
         flags (rejoin-default raw-flags)
         valid-types #{"string" "text" "integer" "int" "decimal" "boolean" "email" "uuid" "enum" "date" "datetime" "inst" "json" "relation"}
@@ -229,7 +237,7 @@
                          flags)
         on-delete-flag (flag-value "on-delete=")
         on-delete (if on-delete-flag (keyword on-delete-flag) :cascade)
-        default (flag-value "default=")]
+        default (or quoted (flag-value "default="))]
     (cond
       (< (count parts) 2)
       {:error (str "Invalid field spec: " field-spec " (expected format: name:type[:required][:unique])")}
@@ -301,6 +309,16 @@
                    "the column cannot be NOT NULL and be set to null when "
                    references " is deleted. Drop `required`, or use "
                    "on-delete=restrict to refuse the delete instead.")}
+
+      (and (not quoted) (some-> default (str/starts-with? "'")))
+      {:error (str "Unclosed quote in default= on " name-str
+                   ": write default='value' with the closing quote before the next colon")}
+
+      (and (= :inst type-kw) default (template/date-only? default))
+      {:error (str "Invalid default= on " name-str ": " (pr-str default)
+                   " has no time or offset. A " type-str " column resolves it in the "
+                   "database session's time zone; write an offset timestamp, e.g. "
+                   default "T00:00:00Z")}
 
       ;; The value goes into DDL, so it has to suit the column (BOU-494).
       (and default
@@ -819,7 +837,9 @@ Field Flags:
   unique            Field must be unique across all records
   default=v         Column DEFAULT, e.g. default=entered. Quoted for text and
                     enums, bare for numbers and booleans. A required enum
-                    without one defaults to its first value
+                    without one defaults to its first value. A datetime needs
+                    an offset: default=2026-01-01T00:00:00Z. Quote a value
+                    holding a colon and a modifier word: default='a:unique'
 
   Example — an invoice line that dies with its invoice:
     --field invoice:relation:references=invoice:required

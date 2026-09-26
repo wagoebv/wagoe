@@ -55,6 +55,27 @@
                         [:default :required :unique]))
         "modifiers after the default are still modifiers"))
 
+  (testing "an unquoted default swallows only the pieces that are not modifiers"
+    (is (= {:default "a" :unique true}
+           (select-keys (cli/parse-field-spec "note:string:default=a:unique")
+                        [:default :unique]))))
+
+  (testing "a quoted default is literal, colons and modifier words included"
+    (is (= {:default "a:unique" :unique false :required true}
+           (select-keys (cli/parse-field-spec "note:string:default='a:unique':required")
+                        [:default :unique :required])))
+    (is (= "https://x.org:8080"
+           (:default (cli/parse-field-spec "link:string:default='https://x.org:8080'"))))
+    (is (:error (cli/parse-field-spec "note:string:default='a:unique"))
+        "an unclosed quote is refused, not kept as part of the value"))
+
+  (testing "a datetime default needs an offset: a bare date resolves in the session's zone"
+    (let [{:keys [error]} (cli/parse-field-spec "due:datetime:default=2026-01-01")]
+      (is (str/includes? (str error) "offset") (pr-str error)))
+    (is (not (m/validate schema/FieldDefinition {:name :due :type :inst :default "2026-01-01"})))
+    (is (= "'2026-01-01'" (template/default-literal {:type :date} "2026-01-01"))
+        "a DATE column still takes a date"))
+
   (testing "a well-formed uuid default is accepted"
     (is (= "00000000-0000-0000-0000-000000000000"
            (:default (cli/parse-field-spec "token:uuid:default=00000000-0000-0000-0000-000000000000"))))))

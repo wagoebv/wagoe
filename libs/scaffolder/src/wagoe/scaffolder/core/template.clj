@@ -184,6 +184,13 @@
   (try (parse s) true
        (catch java.time.format.DateTimeParseException _ false)))
 
+(defn date-only?
+  "Whether `s` is a bare date, 2026-01-01.
+
+   Pure: true"
+  [s]
+  (parses? #(java.time.LocalDate/parse %) (str s)))
+
 (defn default-literal
   "The SQL literal for `value` as the DEFAULT of a column of the field's type,
    or nil when the value does not suit that type. It goes into DDL, so numbers
@@ -208,9 +215,10 @@
         :json     nil
         :enum     (when (some #{(keyword s)} enum-values) quoted)
         :uuid     (when (re-matches uuid-pattern s) quoted)
-        :inst     (when (or (parses? #(java.time.OffsetDateTime/parse %) s)
-                            (parses? #(java.time.LocalDate/parse %) s))
-                    quoted)
+        ;; Not a bare date: the column would resolve it in the database
+        ;; session's time zone, so 2026-01-01 became 2025-12-31T23:00Z on a
+        ;; PostgreSQL in Amsterdam.
+        :inst     (when (parses? #(java.time.OffsetDateTime/parse %) s) quoted)
         :date     (when (parses? #(java.time.LocalDate/parse %) s) quoted)
         quoted))))
 

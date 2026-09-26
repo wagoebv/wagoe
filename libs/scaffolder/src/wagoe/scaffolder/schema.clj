@@ -69,7 +69,7 @@
     (fn [{:keys [type on-delete required]}]
       (not (and (= :relation type) (= :set-null on-delete) required)))]
    ;; :default goes into DDL (BOU-494).
-   [:fn {:error/message ":default must suit the field's type: a number for int/decimal, true/false for boolean, one of the values for enum, none for relation"}
+   [:fn {:error/message ":default must suit the field's type: a number for int/decimal, true/false for boolean, one of the values for enum, an offset timestamp for inst, none for relation"}
     template/valid-default?]])
 
 (def EntityDefinition

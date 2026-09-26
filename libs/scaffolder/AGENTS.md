@@ -167,6 +167,11 @@ a relation). A required enum without one defaults to its first value. This is
 what keeps a required column creatable when an admin form leaves it out as a
 `:readonly-fields` entry. `bb scaffold field` takes it as `--default VALUE`.
 
+A datetime default needs an offset, `default=2026-01-01T00:00:00Z`: a bare date
+would resolve in the database session's time zone. An unquoted default keeps
+its colons up to the next modifier, so `default=a:unique` is `a` plus `unique`.
+Quote it to keep it literal: `default='a:unique'`.
+
 Examples:
 
 ```bash
