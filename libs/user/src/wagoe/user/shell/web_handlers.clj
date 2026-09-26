@@ -590,15 +590,23 @@
                          :active true}
           [valid? validation-errors _]
           (validate-request-data user-schema/CreateUserRequest prepared-data)
-          rerender (fn [errors]
+          rerender (fn [errors status]
                      (html-response request
                                     (user-ui/register-page prepared-data errors
                                                            {:user (get request :user)
                                                             :flash (get request :flash)
                                                             :return-to raw-return-to})
-                                    400))]
+                                    status))
+          ;; The exception message can carry driver or config detail; it goes
+          ;; to the log, not the page (BOU-552).
+          failed (fn [e]
+                   (log/error e "Registration failed")
+                   (html-response request
+                                  (layout/pilot-page-layout "Registration error"
+                                                            (ui/error-message [:t :user/register-error-generic]))
+                                  500))]
       (if-not valid?
-        (rerender validation-errors)
+        (rerender validation-errors 400)
         (try
           (let [user-result (user-ports/register-user user-service prepared-data)
                 ;; Automatically authenticate the newly registered user
@@ -632,17 +640,18 @@
           ;; request schema does not know, so its refusal is a form error too
           ;; (BOU-552).
           (catch clojure.lang.ExceptionInfo e
-            (if (= :validation-error (:type (ex-data e)))
-              (rerender (service-errors->field-errors (:errors (ex-data e))))
-              (html-response request
-                             (layout/pilot-page-layout "Registration error"
-                                                       (ui/error-message (.getMessage e)))
-                             500)))
+            (case (:type (ex-data e))
+              :validation-error
+              (rerender (service-errors->field-errors (:errors (ex-data e))) 400)
+
+              ;; 409 as the API answers. Worded not to confirm the account,
+              ;; as login does not either.
+              :user-exists
+              (rerender {:email [[:t :user/register-email-unavailable]]} 409)
+
+              (failed e)))
           (catch Exception e
-            (html-response request
-                           (layout/pilot-page-layout "Registration error"
-                                                     (ui/error-message (.getMessage e)))
-                           500)))))))
+            (failed e)))))))
 
 ;; =============================================================================
 ;; HTMX Fragment Handlers

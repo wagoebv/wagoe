@@ -914,3 +914,26 @@
         (is (= 400 (:status response)))
         (is (html-contains? response "register-form"))
         (is (html-contains? response "at least 12 characters"))))))
+
+(deftest ^:contract register-submit-refuses-a-taken-email-with-the-form
+  (let [svc (policy-service)
+        _ (ports/register-user svc {:name "Alice" :email "alice@x.org"
+                                    :password "Correct-horse-9" :role :user})
+        response ((web-handlers/register-submit-handler svc {})
+                  {:form-params {"name" "Alice" "email" "alice@x.org"
+                                 "password" "Correct-horse-9"}})]
+    ;; 409, as the API answers :user-exists. The wording does not confirm the
+    ;; account the way "already exists" would; login is neutral too (BOU-552).
+    (is (= 409 (:status response)))
+    (is (html-contains? response "register-form"))
+    (is (html-contains? response "register-email-unavailable"))))
+
+(deftest ^:contract register-submit-error-page-hides-the-exception
+  (let [svc (create-service-rejecting-registration
+             (RuntimeException. "jdbc:postgresql://db:5432 password=hunter2"))
+        response ((web-handlers/register-submit-handler svc {})
+                  {:form-params {"name" "Alice" "email" "alice@x.org"
+                                 "password" "Correct-horse-9"}})]
+    (is (= 500 (:status response)))
+    (is (not (html-contains? response "hunter2")))
+    (is (html-contains? response "register-error-generic"))))

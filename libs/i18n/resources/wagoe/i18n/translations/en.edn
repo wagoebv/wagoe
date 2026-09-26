@@ -120,6 +120,8 @@
 
  :user/page-users-title         "Users"
  :user/page-create-account-title "Create Account"
+ :user/register-email-unavailable "This email cannot be used to register. If it is yours, sign in instead."
+ :user/register-error-generic "Registration failed. Please try again later."
 
  :user/bulk-action-deactivate   "Deactivate"
  :user/bulk-action-activate     "Activate"
