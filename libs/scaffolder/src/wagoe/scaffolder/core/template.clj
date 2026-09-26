@@ -133,10 +133,14 @@
     :enum (into [:enum] enum-values)
     :inst 'inst?
     ;; A string, which is what the generated persistence reads a DATE column
-    ;; back as. Month and day ranges so 2026-13-01 is a 400, not a database
-    ;; error; a 31st in a 30-day month still reaches the database.
-    :date [:re {:error/message "Must be an ISO date (YYYY-MM-DD)"}
-           #"^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$"]
+    ;; back as. Parsed, as admin does (BOU-521): the shape alone let 2026-02-31
+    ;; through to a DATE column that refused it, or to SQLite, which kept it.
+    :date [:and
+           [:re {:error/message "Must be an ISO date (YYYY-MM-DD)"} #"^\d{4}-\d{2}-\d{2}$"]
+           [:fn {:error/message "Must be a date that exists"}
+            '(fn [s]
+               (try (some? (java.time.LocalDate/parse s))
+                    (catch java.time.format.DateTimeParseException _ false)))]]
     :json :map
     ;; BigDecimal, not :double. `--field price:decimal` is what anyone reaches
     ;; for when scaffolding money, and this used to generate binary floating

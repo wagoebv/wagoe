@@ -657,7 +657,9 @@
           (is (str/includes? (json (:body (call :get (str "/invoices/" id) nil))) "\"due\":\"2026-01-01\""))
           (is (str/includes? (json (:body (call :put (str "/invoices/" id) {:due "2026-02-01"})))
                              "\"due\":\"2026-02-01\""))
-          (is (= 400 (:status (call :post "/invoices" {:number "A-2" :due "2026-13-45"})))))))))
+          (is (= 400 (:status (call :post "/invoices" {:number "A-2" :due "2026-13-45"}))))
+          (is (= 400 (:status (call :post "/invoices" {:number "A-2" :due "2026-02-31"})))
+              "a day the month does not have"))))))
 
 (deftest ^:integration an-indexed-field-added-later-migrates-up-and-down-on-sqlite
   ;; BOU-535. SQLite refuses to drop an indexed column, so the down migration
