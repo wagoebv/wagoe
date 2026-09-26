@@ -82,7 +82,8 @@
 
 (deftest ^:integration a-date-field-round-trips-on-postgresql
   ;; `due:date` made a TIMESTAMP WITH TIME ZONE column (BOU-547). West of UTC,
-  ;; so a date read through a zoned type would land on the day before.
+  ;; so a date read through a zoned type would land on the day before. The
+  ;; relation is for BOU-540: a missing parent is a :validation-error.
   (in-jvm-zone
    "America/Los_Angeles"
    (fn []
@@ -91,10 +92,12 @@
                   {:module-name "billing" :base-ns "bou547pg"
                    :entities    [{:name "Invoice"
                                   :fields [{:name :number :type :string :required true}
-                                           (cli/parse-field-spec "due:date:required")]}]})
+                                           (cli/parse-field-spec "due:date:required")
+                                           (cli/parse-field-spec "customer:relation:references=customer")]}]})
              db  (db-factory/db-context {:adapter :postgresql :host "localhost" :port (.getPort pg)
                                          :name "postgres" :username "postgres" :password "postgres"
                                          :pool {:minimum-idle 1 :maximum-pool-size 2}})]
+         (jdbc/execute! (:datasource db) ["CREATE TABLE customers (id UUID PRIMARY KEY)"])
          (doseq [s (statements (gen/generate-migration-file ctx "20260926000000"))]
            (jdbc/execute! (:datasource db) [s]))
          (load-generated! ctx)
@@ -113,4 +116,9 @@
            (is (= "date" (:data_type (jdbc/execute-one!
                                       (:datasource db)
                                       ["SELECT data_type FROM information_schema.columns WHERE table_name = 'invoices' AND column_name = 'due'"]
-                                      {:builder-fn rs/as-unqualified-lower-maps}))))))))))
+                                      {:builder-fn rs/as-unqualified-lower-maps}))))
+           (is (= :validation-error
+                  (:type (ex-data (try (call :post "/invoices" {:number "A-2" :due "2026-01-01"
+                                                                :customer-id (str (random-uuid))})
+                                       nil
+                                       (catch clojure.lang.ExceptionInfo e e))))))))))))

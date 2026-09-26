@@ -666,3 +666,30 @@
       (run "-add-sku-to-invoices.down.sql")
       (is (empty? (idx)))
       (finally (.delete f)))))
+
+(deftest ^:integration a-reference-to-a-missing-row-is-a-validation-error
+  ;; BOU-540. A line item for an invoice that does not exist reached the
+  ;; database and came back as a :database-error, which the platform answers
+  ;; with a 500. The 400 seen in the #575 real flow was a body missing a
+  ;; required field, refused before any insert.
+  (let [dir (invoice-module! (temp-dir) "bou540")]
+    (add-line-item! dir "bou540")
+    (load-and-test! dir)
+    (doseq [[label db] [["H2" (h2-migrated dir "bou540")]
+                        ["SQLite" (let [f   (java.io.File/createTempFile "bou540" ".db")
+                                        ctx (db-factory/db-context {:adapter :sqlite :database-path (.getPath f)})]
+                                    (doseq [[path sql] (files-under dir)
+                                            :when (str/ends-with? path ".up.sql")
+                                            st (statements sql)]
+                                      (jdbc/execute! (:datasource ctx) [st]))
+                                    ctx)]]]
+      (testing label
+        (let [at   (fn [n s] @(ns-resolve (symbol (str "bou540.billing." n)) s))
+              line ((at "shell.invoice-line-item-service" 'create-service)
+                    ((at "shell.invoice-line-item-persistence" 'create-repository) db))
+              call (api-caller ((at "shell.invoice-line-item-http" 'api-routes) line))
+              e    (try (call :post "/invoice-line-items"
+                              {:invoice-id (str (random-uuid)) :description "x" :quantity 1})
+                        nil
+                        (catch clojure.lang.ExceptionInfo e e))]
+          (is (= :validation-error (:type (ex-data e))) (pr-str (ex-data e))))))))
