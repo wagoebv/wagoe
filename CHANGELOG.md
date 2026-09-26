@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **`bb scaffold integrate` and `wagoe add` skipped the prod config** (BOU-529).
+  Both now write every profile; re-run integrate, or copy a `wagoe add` key into prod.
 - **`bb migrate up` did not create workflow's tables** (BOU-502). Stop all replicas
   and run `migrate up` before starting this version; seed timestamps as `#inst`.
 - **`bb ai admin-entity` rejected an answer in an ```edn fence** (BOU-493). Any
