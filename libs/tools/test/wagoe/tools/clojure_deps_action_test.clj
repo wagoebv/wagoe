@@ -1,18 +1,13 @@
 (ns wagoe.tools.clojure-deps-action-test
-  "The dependency retry has to clear Maven's record of the failure first.
+  "The clojure-deps action's dependency prefetch: its retry, its cache key, and
+   what it warms.
 
-   Maven writes a `*.lastUpdated` marker beside an artifact it could not
-   download, and its update policy for releases is `never` — so a later
-   resolution reads the marker instead of the network. The four retries in
-   `.github/actions/clojure-deps` waited 140 seconds between them and achieved
-   nothing, and `~/.m2/repository` is what actions/cache saves, so one 403
-   during warm-deps was restored into all 30 isolation cells (BOU-440).
-
-   Asserted by running the shell function against a fixture, not by grepping the
-   YAML for a word: what matters is which markers it removes."
-  (:require [clj-yaml.core :as yaml]
+   The retry is asserted by running scripts/ci-resolve-deps.sh with a fake
+   `clojure` and `sleep` on the PATH, not by grepping the YAML for a word."
+  (:require [babashka.fs :as fs]
+            [babashka.process :as process]
+            [clj-yaml.core :as yaml]
             [clojure.java.io :as io]
-            [clojure.java.shell :as shell]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]))
 
@@ -29,19 +24,9 @@
        first
        :run))
 
-(deftest ^:unit the-retry-clears-the-failure-before-trying-again
-  (let [script (prefetch-script)]
-
-    (testing "the prefetch step was found"
-      (is (some? script))
-      (is (str/includes? script "for attempt in")))
-
-    (testing "and it clears cached failures inside the retry loop, before resolving"
-      (let [loop-start (str/index-of script "for attempt in")
-            clear-call (str/index-of script "clear_failed_downloads\n" loop-start)
-            resolve-at (str/index-of script "clojure -Sthreads 1 -P" loop-start)]
-        (is (and clear-call resolve-at (< clear-call resolve-at))
-            "a retry that does not clear the marker re-reads it and fails the same way")))))
+(deftest ^:unit the-prefetch-step-retries-through-the-script
+  (testing "the retry is the tested script, not an untested copy in the YAML"
+    (is (str/includes? (str (prefetch-script)) "scripts/ci-resolve-deps.sh"))))
 
 (defn- ci-file []
   (let [cwd (System/getProperty "user.dir")]
@@ -104,41 +89,67 @@
               (str "the matrix builds these, and nothing warms their deps: "
                    (pr-str (sort missing)))))))))
 
-(deftest ^:unit it-clears-a-transfer-failure-and-keeps-a-genuine-absence
-  (let [script (prefetch-script)
-        fn-start (str/index-of script "clear_failed_downloads() {")
-        fn-end (str/index-of script "for alias in")
-        fn-src (subs script fn-start fn-end)
-        home (str (System/getProperty "java.io.tmpdir") "/wagoe-m2-" (System/nanoTime))
-        poisoned (io/file home ".m2/repository/org/slf4j/slf4j-api/1.7.36"
-                          "slf4j-api-1.7.36.jar.lastUpdated")
-        absent (io/file home ".m2/repository/foo/bar/1.0" "bar-1.0-sources.jar.lastUpdated")]
+;; The fake `clojure` fails its first FAKE_FAILS calls with the resolver's own
+;; message and FAKE_EXIT, then succeeds. The fake `sleep` records the wait
+;; instead of taking it.
+(def ^:private fake-clojure
+  "#!/usr/bin/env bash
+n=$(( $(cat \"$HOME/.calls\" 2>/dev/null || echo 0) + 1 )); echo $n > \"$HOME/.calls\"
+echo \"$*\" >> \"$HOME/.args\"
+if [ \"$n\" -le \"${FAKE_FAILS:-0}\" ]; then
+  echo 'Error building classpath. The following artifacts could not be resolved: io.opentelemetry:opentelemetry-sdk-testing:jar:1.66.0 (absent): Could not find artifact io.opentelemetry:opentelemetry-sdk-testing:jar:1.66.0 in central (https://repo1.maven.org/maven2/)' >&2
+  exit \"${FAKE_EXIT:-1}\"
+fi
+")
+
+(def ^:private fake-sleep
+  "#!/usr/bin/env bash
+echo \"$1\" >> \"$HOME/.slept\"
+")
+
+(defn- with-fakes [f]
+  (let [home (fs/create-temp-dir)
+        bin (fs/path home "bin")]
     (try
-      (io/make-parents poisoned)
-      (io/make-parents absent)
-      ;; What Maven writes when the download failed…
-      (spit poisoned (str "#NOTE\n"
-                          "https\\://repo.maven.apache.org/maven2/.error="
-                          "Could not transfer artifact: status code: 403\n"))
-      ;; …and when the artifact simply was never published. Every -sources.jar
-      ;; that does not exist has one of these, so clearing them all would add a
-      ;; round-trip per artifact on every attempt.
-      (spit absent "#NOTE\nhttps\\://repo.maven.apache.org/maven2/.error=\n")
+      (fs/create-dirs bin)
+      (doseq [[cmd src] {"clojure" fake-clojure "sleep" fake-sleep}]
+        (spit (str (fs/path bin cmd)) src)
+        (fs/set-posix-file-permissions (fs/path bin cmd) "rwxr-xr-x"))
+      (f home)
+      (finally (fs/delete-tree home)))))
 
-      (let [{:keys [exit out]} (shell/sh "bash" "-c" (str fn-src "\nclear_failed_downloads")
-                                         :env {"HOME" home "PATH" (System/getenv "PATH")})]
-        (testing "it runs"
-          (is (zero? exit)))
+(defn- resolve! [home env]
+  (process/shell {:out :string :err :string :continue true :dir (str home)
+                  :extra-env (merge {"HOME" (str home)
+                                     "PATH" (str (fs/path home "bin") ":" (System/getenv "PATH"))}
+                                    env)}
+                 "bash" (str (io/file (repo-root) "scripts" "ci-resolve-deps.sh")) "." "-M:test"))
 
-        (testing "the transfer failure is gone, so the next attempt reaches the network"
-          (is (not (.exists poisoned))))
+(defn- lines-of [home file]
+  (let [f (fs/path home file)]
+    (if (fs/exists? f) (str/split-lines (slurp (str f))) [])))
 
-        (testing "the genuine absence is kept"
-          (is (.exists absent)))
+(deftest ^:unit a-transient-failure-is-retried-until-it-resolves
+  (with-fakes
+    (fn [home]
+      (let [r (resolve! home {"FAKE_FAILS" "3"})]
+        (is (zero? (:exit r)) (str (:out r) (:err r)))
+        (is (= 4 (count (lines-of home ".args"))) "succeeds on the fourth attempt")
+        (is (every? #{"-Sthreads 1 -P -M:test"} (lines-of home ".args")))))))
 
-        (testing "and it says how many it cleared"
-          (is (str/includes? out "cleared 1"))))
+(deftest ^:unit the-retries-outlast-a-few-minutes-of-central-failing
+  (testing "BOU-548's outage failed four attempts over two and a half minutes"
+    (with-fakes
+      (fn [home]
+        (resolve! home {"FAKE_FAILS" "99"})
+        (let [waited (reduce + (map parse-long (lines-of home ".slept")))]
+          (is (>= waited 300) (str "waits total " waited "s")))))))
 
-      (finally
-        (doseq [f (reverse (file-seq (io/file home)))]
-          (.delete ^java.io.File f))))))
+(deftest ^:unit a-persistent-failure-gives-up-with-the-resolvers-status
+  (with-fakes
+    (fn [home]
+      (let [r (resolve! home {"FAKE_FAILS" "99" "FAKE_EXIT" "3"})]
+        (is (= 3 (:exit r)))
+        (is (= 5 (count (lines-of home ".args"))))
+        (is (str/includes? (:out r) "Could not find artifact io.opentelemetry"))
+        (is (str/includes? (:out r) "after 5 attempts"))))))

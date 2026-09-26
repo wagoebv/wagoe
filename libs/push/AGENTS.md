@@ -24,7 +24,7 @@ Multi-platform push notification delivery for FCM (Firebase) and APNs (Apple). D
 ## Migrations
 
 Three, under `resources/wagoe/push/migrations/`, revealed to the runner by
-`resources/wagoe/migration-paths.edn`. Without that manifest the directory is never read —
+`resources/wagoe/migration-paths/push.edn`. Without that manifest the directory is never read —
 `bb migrate up` reports nothing pending and the first query fails on a missing table, which
 is how push shipped until BOU-423. `libs/tools/test/.../migration_manifests_test.clj` fails
 when a library adds migrations and forgets the manifest.

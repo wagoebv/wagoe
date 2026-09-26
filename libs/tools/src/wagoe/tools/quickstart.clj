@@ -8,7 +8,7 @@
 ;;   bb quickstart --preset minimal # Non-interactive with minimal preset
 
 (ns wagoe.tools.quickstart
-  (:require [wagoe.tools.ansi :refer [bold green red dim]]
+  (:require [wagoe.tools.ansi :refer [bold green red yellow dim]]
             [wagoe.tools.integrate :as integrate]
             [babashka.process :as process]
             [clojure.java.io :as io]
@@ -95,11 +95,20 @@
   (println "  It does not start the app — the final step tells you how.")
   (println))
 
-(defn- print-success []
+(defn- print-finish
+  "The closing banner. A failed sample-module step leaves a working project, so
+   quickstart still exits 0, but it must not claim success (BOU-545)."
+  [failed]
   (println)
-  (println (green (bold "━━━ Quickstart Complete ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")))
-  (println)
-  (println (green "  Your Wagoe project is configured and ready to start!"))
+  (if (empty? failed)
+    (do (println (green (bold "━━━ Quickstart Complete ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")))
+        (println)
+        (println (green "  Your Wagoe project is configured and ready to start!")))
+    (do (println (yellow (bold (str "━━━ Quickstart Completed with " (count failed)
+                                    " failed step(s): " (str/join ", " failed)
+                                    " ━━━"))))
+        (println)
+        (println (yellow "  The project is configured, but the step(s) above failed — see their output."))))
   (println)
   (println "  Next steps:")
   (println "    1. Start the REPL:  " (bold "bb repl") "  (prompt + nREPL on port 7888)")
@@ -161,31 +170,34 @@
               ["bb" "doctor" "--ci"])
 
     ;; Step 4: Scaffold and integrate a sample module (non-critical — continue on failure)
-    (let [scaffolded? (run-step 4 8 "Scaffolding sample module"
-                                ["bb" "scaffold" "generate"
-                                 "--module-name" "tasks" "--entity" "Task"
-                                 "--field" "title:string" "--field" "done:boolean"]
-                                :continue? true)]
-      (when scaffolded?
-        (run-step 5 8 "Integrating sample module into project"
-                  ["bb" "scaffold" "integrate" "tasks"]
-                  :continue? true)
+    (let [failed (atom [])
+          fail!  #(swap! failed conj %)
+          step!  (fn [n description cmd]
+                   (or (run-step n 8 description cmd :continue? true)
+                       (do (fail! (str "[" n "/8] " description)) false)))]
+      (when (step! 4 "Scaffolding sample module"
+                   ["bb" "scaffold" "generate"
+                    "--module-name" "tasks" "--entity" "Task"
+                    "--field" "title:string" "--field" "done:boolean"])
+        (step! 5 "Integrating sample module into project"
+               ["bb" "scaffold" "integrate" "tasks"])
         ;; Step 6: Activate module in config — the config key, which integrate also writes
         (println)
         (println (bold "[6/8] Activating sample module in config"))
         (if (inject-sample-module-config)
           (println (green "  Done"))
-          (println (dim "  Skipped — could not inject config (add :wagoe/tasks manually)")))))
+          (do (println (red "  Failed — could not inject config (add :wagoe/tasks manually)"))
+              (fail! "[6/8] Activating sample module in config"))))
 
-    ;; Step 7: Run migrations (critical — abort on failure)
-    (run-step 7 8 "Running database migrations"
-              ["bb" "migrate" "up"])
+      ;; Step 7: Run migrations (critical — abort on failure)
+      (run-step 7 8 "Running database migrations"
+                ["bb" "migrate" "up"])
 
-    ;; Step 8: Verify project structure
-    (run-step 8 8 "Verifying project structure"
-              ["bb" "smoke-check"])
+      ;; Step 8: Verify project structure
+      (run-step 8 8 "Verifying project structure"
+                ["bb" "smoke-check"])
 
-    (print-success)))
+      (print-finish @failed))))
 
 ;; Run when executed directly
 (when (= *file* (System/getProperty "babashka.file"))
