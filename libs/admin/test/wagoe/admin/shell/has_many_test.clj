@@ -6,12 +6,14 @@
             [wagoe.admin.ports :as ports]
             [wagoe.admin.shell.http.handlers.crud :as crud]
             [wagoe.admin.shell.http.handlers.detail :as detail]
+            [wagoe.admin.shell.http.handlers.list :as list]
             [wagoe.admin.shell.schema-repository :as schema-repo]
             [wagoe.admin.shell.service :as service]
             [wagoe.observability.errors.shell.adapters.no-op :as error-reporting-no-op]
             [wagoe.observability.logging.shell.adapters.no-op :as logging-no-op]
             [wagoe.platform.database :as db]
-            [wagoe.platform.shell.adapters.database.factory :as db-factory]))
+            [wagoe.platform.shell.adapters.database.factory :as db-factory]
+            [ring.util.codec :as codec]))
 
 ^{:kaocha.testable/meta {:contract true :admin true}}
 
@@ -193,3 +195,37 @@
                               :query {"return_to" parent}
                               ;; Longer than VARCHAR(100): passes validation, fails the insert.
                               :form {"hm-order-id" order-id "sku" (apply str (repeat 150 "x"))}))))))
+
+(deftest ^:contract a-panel-shows-one-page-and-links-to-the-rest
+  ;; Detection turned a panel on for every FK child, and the panel had no
+  ;; LIMIT: a tenant page rendered every user (PR #567 review).
+  (let [small    (assoc-in config [:pagination :default-page-size] 2)
+        svc      (service/create-admin-service (:db @sys) (:sp @sys)
+                                               (logging-no-op/create-logging-component {})
+                                               (error-reporting-no-op/create-error-reporting-component {})
+                                               small)
+        order-id (create-order!)
+        other-id (create-order!)
+        add-item (fn [order sku]
+                   (db/execute-update! (:db @sys) {:raw (str "INSERT INTO hm_items (id, hm_order_id, sku) VALUES ('"
+                                                             (random-uuid) "', '" order "', '" sku "')")}))
+        detail   #(:body ((detail/entity-detail-handler svc (:sp @sys) small)
+                          (request :get "hm-orders" :id %)))]
+    (doseq [n (range 3)] (add-item order-id (str "LIM-" n)))
+    (add-item other-id "OTHER-ORDER")
+    (let [body     (detail order-id)
+          view-all (some->> body (re-find #"href=\"(/web/admin/hm-items\?[^\"]+)\"") second
+                            (#(str/replace % "&amp;" "&")))]
+      (testing "the panel shows one page of children"
+        (is (= 2 (count (re-seq #"LIM-\d" body)))))
+
+      (testing "and links to the child list filtered by the FK"
+        (is (some? view-all))
+        (let [list-body (:body ((list/entity-list-handler svc (:sp @sys) small)
+                                (request :get "hm-items"
+                                         :query (codec/form-decode (second (str/split view-all #"\?" 2))))))]
+          (is (str/includes? list-body "LIM-"))
+          (is (not (str/includes? list-body "OTHER-ORDER")))))
+
+      (testing "no link when every child fits"
+        (is (not (re-find #"href=\"/web/admin/hm-items\?filters" (detail other-id))))))))

@@ -332,7 +332,9 @@ Show child records inline on a parent's detail page:
               :editable    true}]}}
 ```
 
-With `:editable true` the panel links each row to its edit form and offers "New <child>", which opens the child's create form with the foreign key filled in and returns to the parent after saving.
+With `:editable true` the panel links each row to its edit form and offers "New <child>", which opens the child's create form with the foreign key filled in and returns to the parent after saving. The link is left out when the foreign key is not an editable field of the child, or when the child has a `:create-redirect-url`: a delegated create flow does not read the foreign key.
+
+A panel shows one page (`:pagination :default-page-size`) and links to the child's list, filtered to this parent, when there are more.
 
 Without config, a has-many is detected from any allowlisted entity whose `<parent>_id` column names this one; it is read-only. An explicit entry for the same child entity replaces the detected one.
 

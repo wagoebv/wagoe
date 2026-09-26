@@ -616,12 +616,18 @@
         record-id       (str (get record primary-key))
         has-many-rels   (get entity-config :has-many [])
         parent-url      (str "/web/admin/" (name entity-name) "/" record-id)
+        ; One page of children; one row more tells whether there are others.
+        panel-size      (get-in config [:pagination :default-page-size] 20)
         related-records (when (seq has-many-rels)
                           (mapv (fn [rel]
-                                  [(cond-> (assoc rel :entity-config (get entity-configs (:entity rel)))
-                                     (:editable rel) (assoc :return-to parent-url
-                                                            :parent-id record-id))
-                                   (ports/list-related-entities admin-service entity-name record-id rel)])
+                                  (let [rows (ports/list-related-entities admin-service entity-name record-id
+                                                                          (assoc rel :limit (inc panel-size)))]
+                                    [(cond-> (assoc rel
+                                                    :entity-config (get entity-configs (:entity rel))
+                                                    :parent-id record-id
+                                                    :has-more? (> (count rows) panel-size))
+                                       (:editable rel) (assoc :return-to parent-url))
+                                     (vec (take panel-size rows))]))
                                 has-many-rels))
 
         ; Return URL when navigating back from a child entity (e.g. order-items → order)

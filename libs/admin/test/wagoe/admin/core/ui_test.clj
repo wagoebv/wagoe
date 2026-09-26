@@ -979,7 +979,7 @@
          :foreign-key :order-id
          :parent-id   order-id
          :return-to   (str "/web/admin/orders/" order-id)
-         :entity-config {:label "Order items"}))
+         :entity-config {:label "Order items" :editable-fields [:sku :order-id]}))
 
 (deftest ^:unit related-records-table-new-child-link-test
   ;; BOU-491: an editable has-many listed its children but offered no way to add one.
@@ -998,6 +998,46 @@
                                                 sample-related-records))]
         (is (not (str/includes? html "/new?")))
         (is (not (str/includes? html ":admin/button-new")))))))
+
+(defn- new-child-link? [relationship]
+  (str/includes? (str (ui/related-records-table relationship sample-related-records))
+                 ":admin/button-new"))
+
+(deftest ^:unit related-records-table-new-child-link-guards-test
+  ;; PR #567 review: the link was built from :editable alone.
+  (testing "the link needs the FK on the child's create form"
+    (is (not (new-child-link? (assoc-in editable-relationship [:entity-config :editable-fields] [:sku])))))
+
+  (testing "the link needs a UUID parent id, which is all the create form prefills"
+    (is (not (new-child-link? (assoc editable-relationship :parent-id "42")))))
+
+  (testing "a snake_case FK still matches the kebab-case form field"
+    (is (new-child-link? (assoc editable-relationship :foreign-key :order_id))))
+
+  (testing "a child with a delegated create flow gets no link: that flow drops the FK and the parent"
+    (is (not (new-child-link? (assoc-in editable-relationship
+                                        [:entity-config :create-redirect-url] "/web/users/new"))))))
+
+(deftest ^:unit related-records-table-view-all-link-test
+  ;; PR #567 review: a panel shows one page of children and links to the rest.
+  (let [view-all (str "/web/admin/order-items?filters%5Border-id%5D%5Bop%5D=eq"
+                      "&filters%5Border-id%5D%5Bvalue%5D=" order-id)]
+    (testing "a truncated panel links to the child list filtered by the FK"
+      (let [html (str (ui/related-records-table (assoc editable-relationship :has-more? true)
+                                                sample-related-records))]
+        (is (str/includes? html (str "\"" view-all "\"")))
+        (is (str/includes? html ":admin/relationship-view-all"))))
+
+    (testing "a read-only panel links too"
+      (is (str/includes? (str (ui/related-records-table (assoc editable-relationship
+                                                               :has-more? true :editable false)
+                                                        sample-related-records))
+                         view-all)))
+
+    (testing "no link when every child is shown"
+      (is (not (str/includes? (str (ui/related-records-table editable-relationship
+                                                             sample-related-records))
+                              ":admin/relationship-view-all"))))))
 
 (deftest ^:unit create-form-carries-prefill-and-return-to-test
   ;; BOU-491: the child's create form opens with the FK filled in, and posts

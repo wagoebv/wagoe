@@ -416,14 +416,39 @@
             (-> (name f) (str/replace #"-" " ") str/capitalize)]
            [:span.parent-context-field-value (str v)]]))]]))
 
+(defn- new-child-url
+  "The \"New <child>\" link of an editable has-many, or nil when the child's
+   create form cannot take the parent: the FK is not on the form, the parent
+   id is not the UUID the form prefills, or the child delegates to its own
+   create flow, which reads neither the FK nor return_to."
+  [relationship entity fk-param return-qs]
+  (let [child-cfg (:entity-config relationship)
+        parent-id (str (:parent-id relationship))]
+    (when (and (:editable relationship)
+               fk-param
+               (some #{(keyword fk-param)} (:editable-fields child-cfg))
+               (parse-uuid parent-id)
+               (not (:create-redirect-url child-cfg)))
+      (str (base/entity-create-url entity child-cfg) "?" fk-param "=" parent-id
+           (when return-qs (str "&" return-qs))))))
+
+(defn- view-all-url
+  "The child list filtered to this parent, in the filter bar's own format."
+  [entity fk-param parent-id]
+  (let [param #(base/url-encode (str "filters[" fk-param "][" % "]"))]
+    (str "/web/admin/" entity "?" (param "op") "=eq&"
+         (param "value") "=" (base/url-encode (str parent-id)))))
+
 (defn related-records-table
   "Render a table of related records for a has-many relationship.
    When :editable true, adds an Edit link per row and a link to create a child
-   with its :foreign-key set to :parent-id.
+   with its :foreign-key set to :parent-id. When :has-more? is set, the
+   records are one page of more, and a link leads to the rest.
 
    Args:
      relationship: {:label \"Order Items\" :fields [...] :editable true
                     :foreign-key :order-id :parent-id \"...\" :return-to \"...\"
+                    :has-more? true
                     :entity-config {...}} — the related entity's config, which
                    gives each cell its field type
      records:      vector of record maps (kebab-case keys)
@@ -442,10 +467,7 @@
         ;; The create form names its fields in kebab-case; a snake_case
         ;; :foreign-key would not match one.
         fk-param  (some-> (:foreign-key relationship) name (str/replace "_" "-"))
-        new-url   (when (and editable? fk-param (:parent-id relationship))
-                    (str "/web/admin/" entity "/new?" fk-param "="
-                         (base/url-encode (str (:parent-id relationship)))
-                         (when return-qs (str "&" return-qs))))]
+        new-url   (new-child-url relationship entity fk-param return-qs)]
     [:div.related-records {:class "space-y-3 mt-6"}
      [:h2.section-title label]
      (when new-url
@@ -476,7 +498,10 @@
                 [:a.button.secondary
                  {:href (str "/web/admin/" entity "/" (:id record)
                              (when return-qs (str "?" return-qs)))}
-                 [:t :common/button-edit]]])])]]])]))
+                 [:t :common/button-edit]]])])]]])
+     (when (and (:has-more? relationship) fk-param (some? (:parent-id relationship)))
+       [:a.button.secondary {:href (view-all-url entity fk-param (:parent-id relationship))}
+        [:t :admin/relationship-view-all {:label label}]])]))
 
 (defn entity-detail-page
   "Entity detail/edit page.

@@ -340,6 +340,7 @@
        parent-id:          string  — ID of the parent record
        relationship:       map     — {:entity :order-items :table :order_items
                                       :foreign-key :order-id :label \"...\" :fields [...]}
+                           An optional :limit caps the rows.
      Returns:
        Vector of records (kebab-case keys) or []"))
 

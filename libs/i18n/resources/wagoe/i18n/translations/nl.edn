@@ -355,6 +355,7 @@
  :admin/button-update              "Bijwerken"
  :admin/button-create              "Aanmaken"
  :admin/relationship-empty-state   "Geen {label} gevonden."
+ :admin/relationship-view-all      "Alle {label} bekijken"
  :admin/page-edit-title            "{label} bewerken"
  :admin/page-create-title          "{label} aanmaken"
  :admin/button-back-to-list        "Terug naar lijst"

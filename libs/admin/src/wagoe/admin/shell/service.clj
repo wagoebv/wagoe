@@ -761,12 +761,16 @@
                                       select-clause)
                                 col)))
              fk-where   [:= (qualify (:foreign-key relationship)) (str parent-id)]
-             query      (cond-> {:select select-clause
-                                 :from   from-clause
-                                 :where  (if (:soft-delete child-cfg false)
-                                           [:and fk-where [:= (qualify :deleted-at) nil]]
-                                           fk-where)}
-                          join-clause (assoc :join join-clause))]
+             query      (cond-> {:select   select-clause
+                                 :from     from-clause
+                                 :where    (if (:soft-delete child-cfg false)
+                                             [:and fk-where [:= (qualify :deleted-at) nil]]
+                                             fk-where)
+                                 ;; The child list's own order, so a limited
+                                 ;; panel is that list's first page.
+                                 :order-by [[(qualify (:default-sort child-cfg :id)) :asc]]}
+                          join-clause           (assoc :join join-clause)
+                          (:limit relationship) (assoc :limit (:limit relationship)))]
          (db/execute-query! db-ctx query)))
      db-ctx)))
 
