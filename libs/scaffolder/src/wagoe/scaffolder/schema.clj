@@ -67,7 +67,10 @@
    ;; dropping whichever of the two the caller meant less (BOU-480 review).
    [:fn {:error/message ":on-delete :set-null needs a nullable column, so the field cannot be :required"}
     (fn [{:keys [type on-delete required]}]
-      (not (and (= :relation type) (= :set-null on-delete) required)))]])
+      (not (and (= :relation type) (= :set-null on-delete) required)))]
+   ;; :default goes into DDL (BOU-494).
+   [:fn {:error/message ":default must suit the field's type: a number for int/decimal, true/false for boolean, one of the values for enum, none for relation"}
+    template/valid-default?]])
 
 (def EntityDefinition
   "Schema for an entity definition."

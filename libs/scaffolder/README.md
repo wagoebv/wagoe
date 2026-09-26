@@ -180,6 +180,7 @@ Format: `name:type[:modifier...]`, e.g. `status:enum:values=draft,sent:required`
 | `required` | Non-nullable field |
 | `optional` | Nullable field (default) |
 | `unique` | Unique constraint |
+| `default=v` | Column `DEFAULT`; a required `enum` without one defaults to its first value |
 | `indexed` | Database index |
 
 ### Examples

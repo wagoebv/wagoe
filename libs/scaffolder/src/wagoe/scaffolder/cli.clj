@@ -34,7 +34,7 @@
    [nil "--entity NAME" "Entity name (PascalCase) (required)"
     :validate [#(re-matches #"^[A-Z][a-zA-Z0-9]*$" %)
                "Must be PascalCase"]]
-   [nil "--field SPEC" "Field specification: name:type[:values=a,b,c][:required][:unique] (can be repeated)"
+   [nil "--field SPEC" "Field specification: name:type[:values=a,b,c][:required][:unique][:default=v] (can be repeated)"
     :multi true
     :default []
     :update-fn conj]
@@ -89,6 +89,7 @@
     :default false]
    [nil "--unique" "Field must be unique"
     :default false]
+   [nil "--default VALUE" "Column DEFAULT; a required enum defaults to its first value"]
    ;; `generate` has always offered this, and `field` writes migrations and
    ;; edits schema.clj just as it does. Without it the service's output-dir
    ;; support was unreachable from the command users actually run, and
@@ -166,13 +167,14 @@
 (defn parse-field-spec
   "Parse a field specification string into a field map.
 
-   Format: name:type[:values=a,b,c][:required][:unique]
+   Format: name:type[:values=a,b,c][:required][:unique][:default=v]
 
    Examples:
      email:email:required:unique
      name:string:required
      age:integer
      status:enum:values=draft,sent,paid:required
+     status:enum:values=entered,paid:required:default=entered
 
    An `enum` needs its values: without them the generated schema was
    `[:enum]`, which matches nothing, so every write of that field failed
@@ -208,7 +210,8 @@
                             (subs % (count "references=")))
                          flags)
         on-delete-flag (flag-value "on-delete=")
-        on-delete (if on-delete-flag (keyword on-delete-flag) :cascade)]
+        on-delete (if on-delete-flag (keyword on-delete-flag) :cascade)
+        default (flag-value "default=")]
     (cond
       (< (count parts) 2)
       {:error (str "Invalid field spec: " field-spec " (expected format: name:type[:required][:unique])")}
@@ -281,12 +284,22 @@
                    references " is deleted. Drop `required`, or use "
                    "on-delete=restrict to refuse the delete instead.")}
 
+      ;; The value goes into DDL, so it has to suit the column (BOU-494).
+      (and default
+           (not (template/valid-default? {:type type-kw :enum-values enum-values
+                                          :default default})))
+      {:error (str "Invalid default= on " name-str ": " (pr-str default)
+                   " does not suit a " type-str " field"
+                   (when (= :enum type-kw)
+                     (str " (must be one of: " (str/join ", " (map name enum-values)) ")")))}
+
       :else
       (cond-> {:name (keyword name-str)
                :type type-kw
                :required (boolean (some #(= % "required") flags))
                :unique (boolean (some #(= % "unique") flags))}
         enum-values           (assoc :enum-values enum-values)
+        default               (assoc :default default)
         (= :relation type-kw) (assoc :references references :on-delete on-delete)
         references-table      (assoc :references-table references-table)))))
 
@@ -427,6 +440,14 @@
                  (conj "At least one --field is required"))]
     [(empty? errors) errors]))
 
+(defn- field-command-type
+  "The field type `--type` names."
+  [type-str]
+  (get {"integer" :int "int" :int "date" :inst
+        "datetime" :inst "text" :text "json" :json}
+       type-str
+       (keyword type-str)))
+
 (defn validate-field-options
   "Validate required options for field command."
   [opts]
@@ -487,7 +508,15 @@
                       (:required opts))
                  (conj (str "--required and --on-delete set-null contradict: the column cannot be "
                             "NOT NULL and be set to null when the parent is deleted. "
-                            "Drop --required, or use --on-delete restrict.")))]
+                            "Drop --required, or use --on-delete restrict."))
+
+                 (and (:default opts)
+                      (not (template/valid-default?
+                            {:type        (field-command-type (:type opts))
+                             :enum-values (parse-enum-values (:enum-values opts))
+                             :default     (:default opts)})))
+                 (conj (str "Invalid --default " (pr-str (:default opts))
+                            ": it does not suit a " (:type opts) " field")))]
     [(empty? errors) errors]))
 
 (defn validate-endpoint-options
@@ -567,9 +596,7 @@
     (if-not valid?
       {:status 1
        :errors errors}
-      (let [type-mapping {"integer" :int "int" :int "date" :inst
-                          "datetime" :inst "text" :text "json" :json}
-            field-type (get type-mapping (:type opts) (keyword (:type opts)))
+      (let [field-type (field-command-type (:type opts))
             request {:module-name (:module-name opts)
                      :entity (:entity opts)
                      :field (cond-> {:name (keyword (:name opts))
@@ -578,6 +605,9 @@
                                      :unique (:unique opts false)}
                               (= :enum field-type)
                               (assoc :enum-values (parse-enum-values (:enum-values opts)))
+
+                              (:default opts)
+                              (assoc :default (:default opts))
 
                               (= :relation field-type)
                               (assoc :references (:references opts)
@@ -745,7 +775,7 @@ Required Options:
   --field SPEC         Field specification (can be repeated)
 
 Field Specification Format:
-  name:type[:values=a,b,c][:references=entity][:references-table=t][:on-delete=x][:required][:unique]
+  name:type[:values=a,b,c][:references=entity][:references-table=t][:on-delete=x][:required][:unique][:default=v]
 
 Field Types:
   string     - Text field
@@ -769,9 +799,15 @@ Field Flags:
                     set-null needs a nullable column, so not with `required`
   required          Field cannot be null
   unique            Field must be unique across all records
+  default=v         Column DEFAULT, e.g. default=entered. Quoted for text and
+                    enums, bare for numbers and booleans. A required enum
+                    without one defaults to its first value
 
   Example — an invoice line that dies with its invoice:
     --field invoice:relation:references=invoice:required
+
+  Example — a status an admin form may leave out:
+    --field status:enum:values=entered,paid:required:default=entered
 
 Interface Options (default: all enabled):
   --no-http            Skip the HTTP (REST API) routes
@@ -838,6 +874,8 @@ Optional Flags:
                        set-null needs a nullable column, so not with --required
   --required           Field cannot be null
   --unique             Field must be unique
+  --default VALUE      Column DEFAULT; a required enum without one defaults
+                       to its first value
   --dry-run            Show what would be generated
 
 Examples:

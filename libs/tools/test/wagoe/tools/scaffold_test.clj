@@ -69,6 +69,11 @@
     (is (str/includes? scaffold/help-text "wagoe new")
         "help must name the real project generator")))
 
+(deftest ^:unit scaffold-help-names-the-field-modifiers
+  ;; default= is new (BOU-494); the passthrough example is where it is found.
+  (doseq [modifier ["values=" "required" "unique" "default="]]
+    (is (str/includes? scaffold/help-text modifier) modifier)))
+
 (deftest ^:unit scaffolder-deps-carries-the-source-rewriter
   ;; The scaffolder edits schema.clj with rewrite-clj. Injecting the scaffolder
   ;; alone would fail with `Could not locate rewrite_clj/zip` the moment the

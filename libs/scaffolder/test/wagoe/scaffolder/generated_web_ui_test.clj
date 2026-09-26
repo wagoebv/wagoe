@@ -12,6 +12,7 @@
    a Reitit router from the generated contribution and asks it for the page."
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
+            [hiccup2.core :as h]
             [reitit.ring :as ring]
             [wagoe.scaffolder.core.generators :as gen]
             [wagoe.scaffolder.core.template :as template]))
@@ -72,12 +73,9 @@
           (str "body is a " (type (:body response)) ", which Ring cannot write")))
 
     (testing "and it is the service's rows, rendered"
-      ;; The ids, because that is all the generated `core/ui.clj` puts on the
-      ;; page — it ignores the fields the module declared (BOU-486). What
-      ;; matters here is that rows from the service reach the HTML at all.
       (let [body (:body response)]
-        (is (str/includes? body "gizmo-one"))
-        (is (str/includes? body "gizmo-two"))
+        (is (str/includes? body "first"))
+        (is (str/includes? body "second"))
         (is (not (str/includes? body "Web UI"))
             "still the inline stub — web-routes does not call the generated handler")))))
 
@@ -112,3 +110,25 @@
         "http.clj does not require the module's web-handlers namespace")
     (is (not (str/includes? http "<html><body>Web UI</body></html>"))
         "the inline stub is still there")))
+
+(deftest ^:unit the-list-page-shows-the-declared-fields
+  ;; It rendered `[:p (str (:id item))]` per row, so a module scaffolded with
+  ;; name and price served a page of bare UUIDs (BOU-486).
+  (eval-source! (gen/generate-ui-file
+                 (template/build-module-context
+                  {:module-name "catalog"
+                   :base-ns     "wagoe"
+                   :entities    [{:name   "Product"
+                                  :fields [{:name :name :type :string}
+                                           {:name :unit-price :type :decimal}]}]})))
+  (let [page ((resolve 'wagoe.catalog.core.ui/product-list-page)
+              [{:id "p-1" :name "Kettle" :unit-price 12.50M}] {})
+        html (str (h/html page))]
+    (testing "one header per declared field"
+      (is (str/includes? html "<th>Name</th>") html)
+      (is (str/includes? html "<th>Unit price</th>") html))
+    (testing "and each row's values under them"
+      (is (str/includes? html "<td>Kettle</td>") html)
+      (is (str/includes? html "<td>12.50</td>") html))
+    (testing "not the id in place of the data"
+      (is (not (str/includes? html "p-1")) html))))

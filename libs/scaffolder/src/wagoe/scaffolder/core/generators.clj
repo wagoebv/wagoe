@@ -372,6 +372,7 @@
         sql-type (:sql-type field-ctx)
         required (:field-required field-ctx)
         unique (:field-unique field-ctx)
+        default-clause (if-let [d (:sql-default field-ctx)] (str " DEFAULT " d) "")
         null-clause (if required " NOT NULL" "")
         unique-clause (if unique " UNIQUE" "")
         ;; A relation carries its REFERENCES inline. Written by hand before,
@@ -383,7 +384,7 @@
                                          (:on-delete field-ctx)
                                          "CASCADE"))
                             "")]
-    (format "  %s %s%s%s%s" field-name sql-type null-clause unique-clause references-clause)))
+    (format "  %s %s%s%s%s%s" field-name sql-type default-clause null-clause unique-clause references-clause)))
 
 (defn generate-migration-file
   "Generate migration SQL file content.
@@ -469,7 +470,16 @@ DROP TABLE IF EXISTS %s;
         entity (first (:entities ctx))
         entity-name (:entity-name entity)
         entity-lower (template/pascal->kebab entity-name)
-        entity-plural (template/pluralize entity-lower)]
+        entity-plural (template/pluralize entity-lower)
+        field-names (map :field-name-kebab (:fields entity))
+        ;; Plain strings, not [:t ...] markers: the page renders through
+        ;; hiccup2, and wagoe-i18n is a library a project may drop (BOU-484).
+        headers (->> field-names
+                     (map #(str "[:th \"" (str/capitalize (str/replace % "-" " ")) "\"]"))
+                     (str/join " "))
+        cells (->> field-names
+                   (map #(str "[:td (str (:" % " item))]"))
+                   (str/join "\n        "))]
     (str "(ns " base-ns "." module-name ".core.ui\n"
          "  \"Pure UI generation for " module-name " module - Hiccup templates.\")\n"
          "\n"
@@ -478,10 +488,12 @@ DROP TABLE IF EXISTS %s;
          "  [" entity-plural " _opts]\n"
          "  [:div.page\n"
          "   [:h1 \"" (str/capitalize entity-plural) "\"]\n"
-         "   [:div.items\n"
-         "    (for [item " entity-plural "]\n"
-         "      [:div.item {:key (:id item)}\n"
-         "       [:p (str (:id item))]])]])\n")))
+         "   [:table.items\n"
+         "    [:thead [:tr " headers "]]\n"
+         "    [:tbody\n"
+         "     (for [item " entity-plural "]\n"
+         "       [:tr\n"
+         "        " cells "])]]])\n")))
 
 ;; =============================================================================
 ;; Service File Generator
@@ -986,6 +998,7 @@ DROP TABLE IF EXISTS %s;
         field-ctx (template/build-field-context field)
         field-name (:field-name-snake field-ctx)
         sql-type (:sql-type field-ctx)
+        default-clause (if-let [d (:sql-default field-ctx)] (str " DEFAULT " d) "")
         not-null (if (:field-required field-ctx) " NOT NULL" "")
         unique-clause (if (:field-unique field-ctx) " UNIQUE" "")
         ;; The same clause and index `generate-migration-file` gives a
@@ -1006,7 +1019,7 @@ DROP TABLE IF EXISTS %s;
                     "")]
     (format "-- Migration %s: Add %s to %s table
 
-ALTER TABLE %s ADD COLUMN %s %s%s%s%s;
+ALTER TABLE %s ADD COLUMN %s %s%s%s%s%s;
 %s"
             migration-number
             field-name
@@ -1014,6 +1027,7 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s%s;
             table-name
             field-name
             sql-type
+            default-clause
             not-null
             unique-clause
             references-clause
