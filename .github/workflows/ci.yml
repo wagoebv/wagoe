@@ -36,6 +36,11 @@ jobs:
   # in parallel, which reliably trips Central's rate limiter (429/403) and fails
   # a job before any test runs. Prefetching the union of aliases here means every
   # later job restores a fully populated ~/.m2. (BOU-250, mechanism 4.)
+  #
+  # Every other JVM job needs this one and nothing else. Jobs used to wait on
+  # lint and on each other in library order, but nothing passes between them:
+  # each builds its own classpath. The chain made the run as slow as six JVM
+  # jobs back to back (BOU-527). test-summary still needs every job.
   # =============================================================================
   warm-deps:
     name: Warm Dependency Cache
@@ -53,6 +58,7 @@ jobs:
           # every cell then fetched them from Central concurrently with nothing
           # cached behind it (BOU-441).
           also-warm: libs/*
+          skip-on-hit: "true"
 
   lint:
     name: Lint
@@ -88,7 +94,6 @@ jobs:
   build-ui-assets:
     name: Build UI Assets
     runs-on: ubuntu-latest
-    needs: lint
 
     steps:
       - uses: actions/checkout@v6
@@ -704,7 +709,7 @@ jobs:
   test-app:
     name: Test app (:unit suite)
     runs-on: ubuntu-latest
-    needs: lint
+    needs: warm-deps
 
     services:
       # `:unit` spans every library's tests, so it inherits their services. The
@@ -744,9 +749,9 @@ jobs:
     # them was failing (BOU-422).
     #
     # `:unit` also lists every library's test path, so this repeats what the
-    # per-library jobs cover. Deliberate: the suites run in parallel, and
-    # narrowing the suite is a change to what `bb test:all` means locally, which
-    # is not worth risking to save wall-clock this job does not cost.
+    # per-library jobs cover. Deliberate: narrowing the suite changes what
+    # `bb test:all` means locally. It is now the longest job, so it sets the
+    # run's wall-clock (BOU-527).
     steps:
       - uses: actions/checkout@v6
 
@@ -764,7 +769,7 @@ jobs:
   test-core:
     name: Test wagoe/core
     runs-on: ubuntu-latest
-    needs: lint
+    needs: warm-deps
 
     steps:
       - uses: actions/checkout@v6
@@ -782,7 +787,7 @@ jobs:
   test-observability:
     name: Test wagoe/observability
     runs-on: ubuntu-latest
-    needs: lint
+    needs: warm-deps
 
     steps:
       - uses: actions/checkout@v6
@@ -800,7 +805,7 @@ jobs:
   test-platform:
     name: Test wagoe/platform
     runs-on: ubuntu-latest
-    needs: [lint, test-observability]
+    needs: warm-deps
 
     steps:
       - uses: actions/checkout@v6
@@ -818,7 +823,7 @@ jobs:
   test-user:
     name: Test wagoe/user
     runs-on: ubuntu-latest
-    needs: [lint, test-platform]
+    needs: warm-deps
 
     steps:
       - uses: actions/checkout@v6
@@ -836,7 +841,7 @@ jobs:
   test-admin:
     name: Test wagoe/admin
     runs-on: ubuntu-latest
-    needs: [lint, test-user]
+    needs: warm-deps
 
     steps:
       - uses: actions/checkout@v6
@@ -854,7 +859,7 @@ jobs:
   test-ui-style:
     name: Test wagoe/ui-style
     runs-on: ubuntu-latest
-    needs: lint
+    needs: warm-deps
 
     steps:
       - uses: actions/checkout@v6
@@ -872,7 +877,7 @@ jobs:
   test-shared-ui:
     name: Test wagoe/shared-ui
     runs-on: ubuntu-latest
-    needs: lint
+    needs: warm-deps
 
     steps:
       - uses: actions/checkout@v6
@@ -890,7 +895,7 @@ jobs:
   test-storage:
     name: Test wagoe/storage
     runs-on: ubuntu-latest
-    needs: [lint, test-platform]
+    needs: warm-deps
 
     steps:
       - uses: actions/checkout@v6
@@ -944,7 +949,7 @@ jobs:
   test-cache:
     name: Test wagoe/cache
     runs-on: ubuntu-latest
-    needs: [lint, test-platform]
+    needs: warm-deps
 
     services:
       # The adapter surface sweep compares the in-memory adapter against Redis.
@@ -976,7 +981,7 @@ jobs:
   test-events:
     name: Test wagoe/events
     runs-on: ubuntu-latest
-    needs: [lint]
+    needs: warm-deps
 
     services:
       # The Redis Streams adapter's tests skip themselves without one, and a
@@ -1008,7 +1013,7 @@ jobs:
   test-jobs:
     name: Test wagoe/jobs
     runs-on: ubuntu-latest
-    needs: [lint, test-platform]
+    needs: warm-deps
 
     services:
       # The adapter surface sweep compares db, in-memory and Redis. Without one
@@ -1040,7 +1045,7 @@ jobs:
   test-tenant:
     name: Test wagoe/tenant
     runs-on: ubuntu-latest
-    needs: [lint, test-platform]
+    needs: warm-deps
 
     steps:
       - uses: actions/checkout@v6
@@ -1058,7 +1063,7 @@ jobs:
   test-audience:
     name: Test wagoe/audience
     runs-on: ubuntu-latest
-    needs: [lint, test-platform]
+    needs: warm-deps
 
     steps:
       - uses: actions/checkout@v6
@@ -1076,7 +1081,7 @@ jobs:
   test-devtools:
     name: Test wagoe/devtools
     runs-on: ubuntu-latest
-    needs: [lint, test-platform]
+    needs: warm-deps
 
     steps:
       - uses: actions/checkout@v6
@@ -1094,7 +1099,7 @@ jobs:
   test-email:
     name: Test wagoe/email
     runs-on: ubuntu-latest
-    needs: [lint, test-platform]
+    needs: warm-deps
 
     steps:
       - uses: actions/checkout@v6
@@ -1112,7 +1117,7 @@ jobs:
   test-realtime:
     name: Test wagoe/realtime
     runs-on: ubuntu-latest
-    needs: [lint, test-platform]
+    needs: warm-deps
 
     services:
       # Without one, every `when-redis` body skips and the pub/sub bus — the
@@ -1143,7 +1148,7 @@ jobs:
   test-workflow:
     name: Test wagoe/workflow
     runs-on: ubuntu-latest
-    needs: [lint, test-platform]
+    needs: warm-deps
 
     steps:
       - uses: actions/checkout@v6
@@ -1161,7 +1166,7 @@ jobs:
   test-search:
     name: Test wagoe/search
     runs-on: ubuntu-latest
-    needs: [lint, test-platform]
+    needs: warm-deps
 
     steps:
       - uses: actions/checkout@v6
@@ -1179,7 +1184,7 @@ jobs:
   test-scaffolder:
     name: Test wagoe/scaffolder
     runs-on: ubuntu-latest
-    needs: [lint, test-platform]
+    needs: warm-deps
 
     steps:
       - uses: actions/checkout@v6
@@ -1200,7 +1205,7 @@ jobs:
   test-reports:
     name: Test wagoe/reports
     runs-on: ubuntu-latest
-    needs: lint
+    needs: warm-deps
 
     steps:
       - uses: actions/checkout@v6
@@ -1218,7 +1223,7 @@ jobs:
   test-calendar:
     name: Test wagoe/calendar
     runs-on: ubuntu-latest
-    needs: lint
+    needs: warm-deps
 
     steps:
       - uses: actions/checkout@v6
@@ -1236,7 +1241,7 @@ jobs:
   test-geo:
     name: Test wagoe/geo
     runs-on: ubuntu-latest
-    needs: lint
+    needs: warm-deps
 
     steps:
       - uses: actions/checkout@v6
@@ -1254,7 +1259,7 @@ jobs:
   test-ai:
     name: Test wagoe/ai
     runs-on: ubuntu-latest
-    needs: lint
+    needs: warm-deps
 
     steps:
       - uses: actions/checkout@v6
@@ -1275,7 +1280,7 @@ jobs:
   test-mcp:
     name: Test wagoe/wagoe-mcp
     runs-on: ubuntu-latest
-    needs: lint
+    needs: warm-deps
 
     steps:
       - uses: actions/checkout@v6
@@ -1293,7 +1298,7 @@ jobs:
   test-wagoe-cli:
     name: Test wagoe/wagoe-cli
     runs-on: ubuntu-latest
-    needs: lint
+    needs: warm-deps
 
     steps:
       - uses: actions/checkout@v6
@@ -1314,7 +1319,7 @@ jobs:
   test-external:
     name: Test wagoe/external
     runs-on: ubuntu-latest
-    needs: [lint, test-platform]
+    needs: warm-deps
 
     steps:
       - uses: actions/checkout@v6
@@ -1335,7 +1340,7 @@ jobs:
   test-payments:
     name: Test wagoe/payments
     runs-on: ubuntu-latest
-    needs: lint
+    needs: warm-deps
 
     steps:
       - uses: actions/checkout@v6
@@ -1356,7 +1361,7 @@ jobs:
   test-push:
     name: Test wagoe/push
     runs-on: ubuntu-latest
-    needs: [lint, test-jobs]
+    needs: warm-deps
 
     steps:
       - uses: actions/checkout@v6
@@ -1377,7 +1382,7 @@ jobs:
   i18n-scan:
     name: i18n Scan
     runs-on: ubuntu-latest
-    needs: lint
+    needs: warm-deps
 
     steps:
       - uses: actions/checkout@v6
@@ -1405,7 +1410,7 @@ jobs:
   test-i18n:
     name: Test wagoe/i18n
     runs-on: ubuntu-latest
-    needs: lint
+    needs: warm-deps
 
     steps:
       - uses: actions/checkout@v6
@@ -1426,7 +1431,7 @@ jobs:
   e2e:
     name: E2E (spel)
     runs-on: ubuntu-latest
-    needs: [lint, build-ui-assets]
+    needs: [warm-deps, build-ui-assets]
 
     steps:
       - uses: actions/checkout@v6
@@ -1528,7 +1533,7 @@ jobs:
   build-uberjar:
     name: Build Uberjar
     runs-on: ubuntu-latest
-    needs: lint
+    needs: warm-deps
 
     steps:
       - uses: actions/checkout@v6
