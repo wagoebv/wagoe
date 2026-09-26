@@ -6,9 +6,10 @@
    booted failed on a missing `workflow_instances` (BOU-502)."
   (:require [clojure.string :as str]
             [integrant.core :as ig]
-            [clojure.test :refer [deftest is testing]]
+            [clojure.test :refer [deftest is testing use-fixtures]]
             [migratus.core :as migratus]
             [next.jdbc :as jdbc]
+            [support.embedded-pg :as epg]
             [wagoe.platform.shell.adapters.database.factory :as factory]
             [wagoe.platform.shell.database.migrations :as mig]
             [wagoe.platform.shell.database.timestamp-tz :as timestamp-tz]
@@ -19,7 +20,8 @@
            [java.sql Connection]
            [java.time Instant]
            [java.time.temporal ChronoUnit]
-           [java.util UUID]))
+           [java.util UUID]
+           [javax.sql DataSource]))
 
 (defn- workflow-dirs []
   (filterv #(str/includes? % "workflow") (mig/discover-migration-dirs)))
@@ -35,6 +37,43 @@
   (let [f (File/createTempFile "wf_mig" ".db")]
     (.deleteOnExit f)
     (jdbc/get-datasource {:dbtype "sqlite" :dbname (.getPath f)})))
+
+(def ^:private pg-server (atom nil))
+
+(use-fixtures :once
+  (fn [f]
+    (reset! pg-server (epg/start!))
+    (try (f) (finally (epg/stop! @pg-server)))))
+
+(def ^:private pg-session-zone
+  "Not UTC, so a conversion that read the session zone would move the value."
+  "America/New_York")
+
+(defn- in-session-zone
+  "`ds`, with every connection's session zone set to `pg-session-zone`. pgjdbc
+   sends the JVM's zone at startup, which overrides a `-c TimeZone` option."
+  ^DataSource [^DataSource ds]
+  (reify DataSource
+    (getConnection [_]
+      (let [c (.getConnection ds)]
+        (jdbc/execute! c [(str "SET TIME ZONE '" pg-session-zone "'")])
+        c))))
+
+(defn- postgres
+  "A fresh database on the embedded PostgreSQL."
+  []
+  (let [db (str "wf_mig_" (System/nanoTime))]
+    (jdbc/execute! (epg/datasource @pg-server) [(str "CREATE DATABASE " db)])
+    (in-session-zone
+     (jdbc/get-datasource {:dbtype   "postgresql"
+                           :host     "localhost"
+                           :port     (epg/port @pg-server)
+                           :dbname   db
+                           :user     "postgres"
+                           :password "postgres"}))))
+
+(defn- engines []
+  [[:h2 (h2)] [:sqlite (sqlite)] [:postgresql (postgres)]])
 
 (defn- migrate! [ds]
   (migratus/migrate {:store         :database
@@ -102,19 +141,16 @@
     (is (seq (workflow-dirs))
         "no workflow directory — the manifest is missing, so the runner never reads it"))
 
-  (doseq [[engine ds] [[:h2 (h2)] [:sqlite (sqlite)]]]
+  (doseq [[engine ds] (engines)]
     (testing (str (name engine) ", fresh database, migrations only")
       (migrate! ds)
       (doseq [table ["workflow_instances" "workflow_audit"]]
         (is (some? (column-type ds table "id")) (str table " was not created")))
-      (assert-store-round-trips ds)))
-
-  (testing "H2: timestamp columns carry a zone"
-    (let [ds (h2)]
-      (migrate! ds)
-      (doseq [[table column] timestamp-columns]
-        (is (timestamp-tz/zone-aware? (column-type ds table column))
-            (str table "." column))))))
+      (when-not (= :sqlite engine)
+        (doseq [[table column] timestamp-columns]
+          (is (timestamp-tz/zone-aware? (column-type ds table column))
+              (str table "." column))))
+      (assert-store-round-trips ds))))
 
 (def ^:private legacy-boot-ddl
   "What `:wagoe/workflow-db-schema` created before BOU-502: timestamps as TEXT."
@@ -129,22 +165,35 @@
       actor_id TEXT, actor_roles TEXT, context TEXT, occurred_at TEXT NOT NULL)"])
 
 (deftest ^:integration tables-an-older-boot-created-are-converted
-  (doseq [[engine ds] [[:h2 (h2)] [:sqlite (sqlite)]]]
+  (doseq [[engine ds] (engines)]
     (testing (str (name engine) ": a row written as TEXT survives the migration")
       (doseq [ddl legacy-boot-ddl] (jdbc/execute! ds [ddl]))
+      (when (= :postgresql engine)
+        (is (= pg-session-zone (:zone (jdbc/execute-one! ds ["SELECT current_setting('TimeZone') AS zone"])))))
       (let [id      (UUID/randomUUID)
-            written (Instant/parse "2026-03-11T10:00:00.123Z")]
+            entity  (str (UUID/randomUUID))
+            written (Instant/parse "2026-03-11T10:00:00.123Z")
+            store   (persistence/create-workflow-store ds)]
         (jdbc/execute! ds ["INSERT INTO workflow_instances
                               (id, workflow_id, entity_type, entity_id, current_state, created_at, updated_at)
                             VALUES (?, 'order-flow', 'order', ?, 'pending', ?, ?)"
-                           (str id) (str (UUID/randomUUID)) (str written) (str written)])
+                           (str id) entity (str written) (str written)])
+        (jdbc/execute! ds ["INSERT INTO workflow_audit
+                              (id, instance_id, workflow_id, entity_type, entity_id, transition, from_state, to_state, occurred_at)
+                            VALUES (?, ?, 'order-flow', 'order', ?, 'ship', 'pending', 'shipped', ?)"
+                           (str (UUID/randomUUID)) (str id) entity (str written)])
         (migrate! ds)
-        (when (= :h2 engine)
+        (when-not (= :sqlite engine)
           (doseq [[table column] timestamp-columns]
             (is (timestamp-tz/zone-aware? (column-type ds table column))
                 (str table "." column))))
-        (is (= written (:created-at (ports/find-instance (persistence/create-workflow-store ds) id))))
-        (assert-store-round-trips ds)))))
+        (is (= written (:created-at (ports/find-instance store id))))
+        (is (= [written] (map :occurred-at (ports/find-audit-log store id))))
+        (assert-store-round-trips ds)
+        (testing "and converting again changes nothing"
+          (is (zero? (timestamp-tz/widen-columns! ds timestamp-columns)))
+          (is (nil? (migrate! ds)))
+          (is (= written (:created-at (ports/find-instance store id)))))))))
 
 (defn- h2-ctx []
   (factory/db-context

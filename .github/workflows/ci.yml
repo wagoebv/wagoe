@@ -913,12 +913,14 @@ jobs:
       - name: Setup Clojure + warm deps
         uses: ./.github/actions/clojure-deps
         with:
-          aliases: -M:test
+          aliases: -M:test:test/pg
 
+      # :test/pg: the timestamp migration converts legacy TEXT columns on
+      # PostgreSQL (BOU-502).
       - name: Run tests
         env:
           JWT_SECRET: "ci-test-secret-minimum-32-characters"
-        run: clojure -M:test :workflow
+        run: clojure -M:test:test/pg :workflow
 
   test-search:
     name: Test wagoe/search
