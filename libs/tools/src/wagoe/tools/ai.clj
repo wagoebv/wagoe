@@ -119,25 +119,48 @@
 ;; explain
 ;; =============================================================================
 
+(defn- strip-control
+  "`s` without ANSI escape sequences or control characters, newlines kept."
+  [s]
+  (-> (str s)
+      (str/replace #"\u001B\][^\u0007\u001B]*(?:\u0007|\u001B\\)?" "")
+      (str/replace #"\u001B\[[0-?]*[ -/]*[@-~]" "")
+      (str/replace #"\u001B[@-_]?" "")
+      (str/replace #"[\p{Cc}&&[^\n]]" "")))
+
+(defn- bnd-fix-lines
+  "The `Fix:` lines inside a BND block, which devtools opens with a
+   `━━━ BND-301: Title ━━━` header and closes with a rule of `━`."
+  [lines]
+  (:fixes (reduce (fn [{:keys [in-block?] :as acc} line]
+                    (cond
+                      (re-find #"BND-\d{3}:" line)     (assoc acc :in-block? true)
+                      (re-matches #"\u2501+" line)     (assoc acc :in-block? false)
+                      (and in-block? (str/starts-with? line "Fix:"))
+                      (update acc :fixes conj line)
+                      :else                            acc))
+                  {:in-block? false :fixes []}
+                  lines)))
+
 (defn known-remedy
   "What the error already says about fixing itself, or nil.
 
-   The catalogue title and fix for each BND code in `input`, then every
-   `Fix:` line the error carries, verbatim. The model's summary is printed
-   after this, never instead of it: it has been confidently wrong (BOU-512)."
+   The catalogue title and fix for each BND code in `input`, then the `Fix:`
+   lines inside its BND blocks. Other `Fix:` lines are pasted text, not ours,
+   and are not printed under our header. The model's summary is printed after
+   this, never instead of it: it has been confidently wrong (BOU-512)."
   [input catalog]
-  (let [codes     (distinct (re-seq #"BND-\d{3}" (str input)))
+  (let [lines     (map str/trim (str/split-lines (strip-control input)))
+        codes     (distinct (mapcat #(re-seq #"BND-\d{3}" %) lines))
         from-code (mapcat (fn [code]
                             (when-let [{:keys [title fix]} (get catalog code)]
                               (cond-> [(str code ": " title)]
                                 fix (conj (str "Fix: " fix)))))
                           codes)
-        own-fixes (->> (str/split-lines (str input))
-                       (map str/trim)
-                       (filter #(str/starts-with? % "Fix:")))
-        lines     (distinct (concat from-code own-fixes))]
-    (when (seq lines)
-      (str/join "\n" lines))))
+        own-fixes (bnd-fix-lines lines)
+        out       (distinct (concat from-code own-fixes))]
+    (when (seq out)
+      (str/join "\n" out))))
 
 (defn- file-arg
   "The value of -f/--file in `args`, or nil."
