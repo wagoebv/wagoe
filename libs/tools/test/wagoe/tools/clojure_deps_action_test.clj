@@ -73,7 +73,8 @@
             nothing cached behind it (BOU-441)"
     (let [ci (yaml/parse-string (slurp (ci-file)))
           jobs (:jobs ci)
-          matrix (get-in jobs [:check-isolation-matrix :strategy :matrix :lib])
+          matrix (->> (get-in jobs [:check-isolation-matrix :strategy :matrix :include])
+                      (mapcat :libs))
           warm (->> (get-in jobs [:warm-deps :steps])
                     (keep #(get-in % [:with :also-warm]))
                     first)]
