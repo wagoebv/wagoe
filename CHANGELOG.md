@@ -60,6 +60,8 @@ for what is public API, what is internal, and how deprecations are announced.
   the child's create form with the foreign key prefilled.
 - **Admin detects has-many from foreign keys** (BOU-481). Detected panels are
   read-only; an explicit `:has-many` entry for the same child replaces them.
+- **`bb setup` writes a prod profile** (BOU-499). Set the `#env` variables it
+  names (`bb doctor --env prod --ci` lists the unset ones) before deploying.
 - **`bb lint:imports`** (BOU-503). Imports the clj-kondo configs your
   dependencies export; generated projects ship the `.clj-kondo/` it needs.
 - **MCP `describe-module` found no modules in a generated project** (BOU-516).
