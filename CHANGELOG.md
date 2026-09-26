@@ -33,8 +33,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **A generated module's first-entity API answered canned stubs** (BOU-539). It now
   calls the service; regenerate `shell/http.clj` or copy `api-routes` from a new module.
-- **Scaffolded APIs answered anyone** (BOU-539). They now require a signed-in user (401 without);
-  `--public-api` opens them. Regenerate `shell/*http.clj`, or add the guard by hand.
+- **Scaffolded APIs and list pages answered anyone** (BOU-539). They now require a signed-in user;
+  `--public-api` opens them. Regenerate `shell/*http.clj`, or add the guards by hand.
 - **A reference to a missing row answered 500** (BOU-540). Admin create and update show it on the field;
   scaffolded repositories raise a `:validation-error` (400). Regenerate `shell/*persistence.clj`.
 - **Scaffolder field modifiers `indexed` and `optional` were ignored** (BOU-535). `indexed`

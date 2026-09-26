@@ -124,13 +124,19 @@ ok "unversioned /api/products redirects to /api/v1"
 # be made until :migrate-on-start? existed: the test profile is in-memory H2
 # inside this process, so no separate `clojure -M:migrate up` can reach it, and
 # the request answered 500 with `Table "products" not found` (BOU-484, BOU-485).
-WEB=$(curl -fsS "http://localhost:$PORT/web/products") \
+# Signed out, the page sends the browser to the login page (BOU-539).
+LOC=$(curl -s -o /dev/null -w '%{http_code} %{redirect_url}' "http://localhost:$PORT/web/products")
+case "$LOC" in
+  "302 "*"/web/login?return-to=%2Fweb%2Fproducts") ;;
+  *) fail "/web/products signed out answered '$LOC', expected a 302 to /web/login" ;;
+esac
+WEB=$(curl -fsS "${AUTH[@]}" "http://localhost:$PORT/web/products") \
   || { tail -30 /tmp/shop-smoke.log; fail "/web/products did not answer"; }
 case "$WEB" in
-  *"<h1>Products</h1>"*) ;;
-  *) fail "/web/products returned '$WEB', not the generated page" ;;
+  *"<h1>Products</h1>"*"T-1"*) ;;
+  *) fail "/web/products returned '$WEB', not the generated page with the row created above" ;;
 esac
-ok "the scaffolded module's web page renders, so migrations ran at boot"
+ok "the web page redirects a signed-out visitor, and shows a signed-in one the rows"
 
 echo
 echo "✅ examples/todo and examples/shop both run against this checkout"

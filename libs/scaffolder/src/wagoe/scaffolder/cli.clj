@@ -48,7 +48,7 @@
     :default true]
    [nil "--[no-]web" "Generate the Web UI interface (default: true)"
     :default true]
-   [nil "--public-api" "API routes open to anyone (default: they require a signed-in user)"
+   [nil "--public-api" "API routes and web page open to anyone (default: signed-in users only)"
     :default false]
    [nil "--audit" "Enable audit logging (default: true)"
     :default true]
@@ -931,8 +931,8 @@ Interface Options (default: all enabled):
   --no-http            Skip the HTTP (REST API) routes
   --no-web             Skip the Web UI: core/ui.clj, shell/web_handlers.clj
                        and the module's :web route contribution
-  --public-api         API routes open to anyone; by default they answer
-                       401 without a signed-in user
+  --public-api         API routes and web page open to anyone; by default
+                       the API answers 401 and the page redirects to login
 
 Feature Options (default: all enabled):
   --audit              Enable audit logging

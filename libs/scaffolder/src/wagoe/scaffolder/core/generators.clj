@@ -990,7 +990,9 @@ DROP TABLE IF EXISTS %s;
         ;; `:interfaces` decides what this file defines and what the
         ;; contribution carries. A module generated with --no-web has no web
         ;; UI files on disk, so it must not mount web routes either (BOU-479).
-        {:keys [http web]} (:interfaces ctx {:http true :web true})]
+        {:keys [http web]} (:interfaces ctx {:http true :web true})
+        ;; One switch for the module's routes, API and page alike.
+        public? (get-in ctx [:interfaces :public-api] false)]
     (str (ns-form (str base-ns "." module-name ".shell.http")
                   (str "HTTP routes for " module-name " module.")
                   ;; Only what is used: an unused require is a clj-kondo
@@ -998,13 +1000,19 @@ DROP TABLE IF EXISTS %s;
                   (concat (when http (api-requires base-ns module-name))
                           (when web [(str "[" base-ns "." module-name ".shell.web-handlers :as web-handlers]")])))
          "\n"
-         (when http (str (api-section entity (get-in ctx [:interfaces :public-api] false)) "\n"))
+         (when http (str (api-section entity public?) "\n"))
          (when web
-           (str "(defn web-routes\n"
+           (str (if public?
+                  ";; Public: this page answers anyone, signed in or not (--public-api).\n"
+                  (str ";; Signed-in users only; anyone else is sent to /web/login.\n"
+                       "(def ^:private signed-in-page ['wagoe.user.shell.http-interceptors/require-web-authenticated])\n"))
+                "\n"
+                "(defn web-routes\n"
                 "  \"Mounted under /web — do not repeat the prefix here.\"\n"
                 "  [service config]\n"
                 "  [[\"/" entity-plural "\"\n"
-                "    {:get {:handler (web-handlers/" entity-lower "-list-handler service config)}}]])\n"
+                "    {:get {" (if public? "" ":interceptors signed-in-page\n           ")
+                ":handler (web-handlers/" entity-lower "-list-handler service config)}}]])\n"
                 "\n"))
          "(defn " module-name "-routes\n"
          "  \"This module's contribution to the application's route table.\n"

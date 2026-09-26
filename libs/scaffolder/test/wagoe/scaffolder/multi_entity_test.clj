@@ -833,3 +833,45 @@
       (is (warned? (add "InvoiceLineItem" {:name :due :type :date}) line-p)))
     (testing "a field that is not a date: no warning"
       (is (not (warned? (add "Invoice" {:name :sku :type :string}) first-p))))))
+
+;; =============================================================================
+;; The generated web page requires a signed-in user too (BOU-539 review)
+;; =============================================================================
+
+(defn- web-caller
+  "GET a path under /web through the platform pipeline. The body is HTML, left as a string."
+  [web-routes & {:keys [user] :or {user signed-in}}]
+  (let [handler (reitit-router/compile-routes [(into ["/web"] web-routes)] {:swagger-enabled false})]
+    (fn [path]
+      (let [resp (handler (cond-> {:request-method :get :uri path :headers {"accept" "text/html"}}
+                            user (assoc :user user)))]
+        (update resp :body #(if (string? %) % (some-> % slurp)))))))
+
+(deftest ^:integration the-generated-web-page-requires-a-signed-in-user
+  (doseq [[tag public?] [["bou539web" false] ["bou539webpub" true]]]
+    (let [dir (temp-dir)
+          r   (ports/generate-module svc {:module-name "billing" :base-ns tag
+                                          :interfaces  {:public-api public?}
+                                          :entities    [{:name "Invoice" :fields [{:name :number :type :string}]}]
+                                          :output-dir  (.getPath dir)})]
+      (is (:success r) (pr-str (:errors r)))
+      (load-and-test! dir)
+      (let [db   (h2-migrated dir tag)
+            at   (fn [n s] @(ns-resolve (symbol (str tag ".billing." n)) s))
+            svc  ((at "shell.service" 'create-service) ((at "shell.persistence" 'create-repository) db))
+            _    ((at "ports" 'create-invoice) svc {:number "INV-77"})
+            web  (:web ((at "shell.http" 'billing-routes) svc {}))]
+        (if public?
+          (testing "--public-api opens the page too"
+            (let [resp ((web-caller web :user nil) "/web/invoices")]
+              (is (= 200 (:status resp)))
+              (is (str/includes? (:body resp) "INV-77"))))
+          (do
+            (testing "signed out: a redirect to the login page, not a JSON 401"
+              (let [resp ((web-caller web :user nil) "/web/invoices")]
+                (is (= 302 (:status resp)) (pr-str (dissoc resp :body)))
+                (is (= "/web/login?return-to=%2Fweb%2Finvoices" (get-in resp [:headers "Location"])))))
+            (testing "signed in: the page, with the rows"
+              (let [resp ((web-caller web) "/web/invoices")]
+                (is (= 200 (:status resp)))
+                (is (str/includes? (:body resp) "INV-77"))))))))))

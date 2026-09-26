@@ -95,11 +95,15 @@
                            (do (ports/delete-product service id) {:status 204})
                            (not-found)))}}]])
 
+;; Signed-in users only; anyone else is sent to /web/login.
+(def ^:private signed-in-page ['wagoe.user.shell.http-interceptors/require-web-authenticated])
+
 (defn web-routes
   "Mounted under /web — do not repeat the prefix here."
   [service config]
   [["/products"
-    {:get {:handler (web-handlers/product-list-handler service config)}}]])
+    {:get {:interceptors signed-in-page
+           :handler (web-handlers/product-list-handler service config)}}]])
 
 (defn product-routes
   "This module's contribution to the application's route table.

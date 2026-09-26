@@ -68,8 +68,9 @@ Every API route requires a signed-in user and answers 401 without one. The
 routes name `'wagoe.user.shell.http-interceptors/require-authenticated` by
 symbol, as the user module's own routes do, so the module requires nothing
 from another module's shell; the platform's global authentication sets
-`:user`. `--public-api` generates the routes without it, marked public in a
-comment.
+`:user`. The web page does the same with `require-web-authenticated`, which
+redirects to `/web/login` instead. `--public-api` generates both without a
+guard, marked public in a comment.
 
 ### Creating a new project — not this library
 
@@ -406,7 +407,7 @@ Configure the provider via environment variables: `ANTHROPIC_API_KEY`, `OPENAI_A
 | `--field` | — | Repeatable: `name:type[:values=a,b,c][:references=entity][:on-delete=x][:required|:optional][:unique][:indexed][:default=v]` |
 | `--[no-]http` | true | Generate the HTTP (REST API) routes |
 | `--[no-]web` | true | Generate the Web UI: `core/ui.clj`, `shell/web_handlers.clj`, and the module's `:web` route contribution |
-| `--public-api` | false | API routes open to anyone; by default they require a signed-in user |
+| `--public-api` | false | API routes and web page open to anyone; by default they require a signed-in user |
 | `--audit` | true | Include audit logging |
 | `--pagination` | true | Include pagination support |
 | `--output-dir` | `.` | Output directory |
