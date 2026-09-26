@@ -574,8 +574,8 @@ When encountering 500 errors or unexpected behavior:
    tail -100 logs/wagoe.log | grep -A 10 "ERROR"
    ```
    `resources/logback.xml` writes `logs/wagoe.log`, plus `logs/audit.log` and
-   `logs/security.log`. Generated projects ship no logback config, so their
-   logs go to the console rather than to a file.
+   `logs/security.log`. A generated project's `resources/logback.xml` logs to
+   the console (stderr) rather than to a file.
 
 2. **Add temporary logging** - Use `println` for quick debugging:
    ```clojure

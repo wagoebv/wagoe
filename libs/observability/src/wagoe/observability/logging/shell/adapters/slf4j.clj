@@ -15,7 +15,8 @@
   (:require
    [wagoe.observability.logging.ports :as ports])
   (:import
-   [org.slf4j LoggerFactory MDC]))
+   [clojure.lang Reflector]
+   [org.slf4j Logger LoggerFactory MDC]))
 
 ;; =============================================================================
 ;; Level Management
@@ -348,6 +349,24 @@
 ;; =============================================================================
 ;; Factory Functions
 ;; =============================================================================
+
+(def ^:private logback-level-names
+  {:trace "TRACE" :debug "DEBUG" :info "INFO" :warn "WARN" :error "ERROR" :fatal "ERROR"})
+
+(defn set-root-level!
+  "Sets the root logger to `level`, so the configured level governs every
+   library's logging and not only Wagoe's. Logback only, reached by reflection
+   so another SLF4J backend is left alone. Returns true when applied."
+  [level]
+  (let [root (LoggerFactory/getLogger Logger/ROOT_LOGGER_NAME)]
+    (if-let [level-name (and (= "ch.qos.logback.classic.Logger" (.getName (class root)))
+                             (logback-level-names level))]
+      (do (Reflector/invokeInstanceMethod
+           root "setLevel"
+           (object-array [(Reflector/invokeStaticMethod "ch.qos.logback.classic.Level" "toLevel"
+                                                        (object-array [level-name]))]))
+          true)
+      false)))
 
 (defn create-slf4j-logger
   "Creates an SLF4J logger instance.

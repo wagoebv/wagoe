@@ -12,7 +12,11 @@
             [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
-            [integrant.core :as ig]))
+            [integrant.core :as ig])
+  (:import [ch.qos.logback.classic Level Logger LoggerContext]
+           [ch.qos.logback.classic.util ContextInitializer]
+           [ch.qos.logback.core.read ListAppender]
+           [org.slf4j LoggerFactory]))
 
 (deftest ^:unit the-router-component-is-settings-not-an-adapter
   ;; It used to dispatch on :adapter to one of three routers, two of which were
@@ -205,6 +209,45 @@
            (ig/init-key :wagoe/metrics {:provider :mystery})))
     (is (= [:errors-no-op {:provider :mystery}]
            (ig/init-key :wagoe/error-reporting {:provider :mystery})))))
+
+(defn- logged-after-init
+  "Initialises :wagoe/logging with `config` on Logback with its root at
+   `root-level` and nothing else configured, then logs `level` on `logger-name`.
+   Returns the messages that reached the root. Restores this classpath's
+   logback configuration afterwards."
+  [config root-level [level logger-name]]
+  (let [^LoggerContext ctx (LoggerFactory/getILoggerFactory)
+        root     (.getLogger ctx Logger/ROOT_LOGGER_NAME)
+        appender (ListAppender.)]
+    (try
+      (.reset ctx)
+      (.setLevel root root-level)
+      (ig/init-key :wagoe/logging config)
+      (doto appender (.setContext ctx) (.start))
+      (.addAppender root appender)
+      (let [l (LoggerFactory/getLogger ^String logger-name)]
+        (case level
+          :debug (.debug l "the line")
+          :info  (.info l "the line")))
+      (mapv #(.getFormattedMessage ^ch.qos.logback.classic.spi.ILoggingEvent %)
+            (.-list appender))
+      (finally
+        (.reset ctx)
+        (.autoConfig (ContextInitializer. ctx))))))
+
+(deftest ^:integration configured-level-governs-every-logger
+  ;; A generated project booted with `:level :info` logged 753 DEBUG lines,
+  ;; mostly Jetty's: the level reached only Wagoe's own adapter, never the root
+  ;; logger, which Logback leaves at DEBUG when no logback.xml is found (BOU-528).
+  (testing ":info silences a third-party DEBUG line"
+    (is (= [] (logged-after-init {:provider :slf4j :level :info} Level/DEBUG
+                                 [:debug "org.eclipse.jetty.server.Server"]))))
+  (testing "and keeps its INFO"
+    (is (= ["the line"] (logged-after-init {:provider :slf4j :level :info} Level/DEBUG
+                                           [:info "org.eclipse.jetty.server.Server"]))))
+  (testing ":debug is honoured over a quieter bootstrap level"
+    (is (= ["the line"] (logged-after-init {:provider :slf4j :level :debug} Level/INFO
+                                           [:debug "wagoe.anything"])))))
 
 ;; =============================================================================
 ;; Prometheus metrics provider + /metrics endpoint (BOU-174)

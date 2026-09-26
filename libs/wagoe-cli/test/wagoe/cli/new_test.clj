@@ -3,7 +3,10 @@
             [clojure.java.io :as io]
             [clojure.edn :as edn]
             [clojure.string :as str]
-            [wagoe.cli.new :as new]))
+            [wagoe.cli.new :as new])
+  (:import [ch.qos.logback.classic LoggerContext]
+           [ch.qos.logback.classic.joran JoranConfigurator]
+           [ch.qos.logback.core ConsoleAppender]))
 
 (deftest ^:unit validate-name-test
   (testing "valid kebab-case names are accepted"
@@ -423,6 +426,29 @@
                 "ig-config must call system-config")
             (is (some #{:extra-modules} nodes)
                 "and tell it which modules this app enables in code"))))
+      (finally
+        (when (.exists (io/file tmp))
+          (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f)))))))
+
+(deftest ^:integration generated-logging-starts-at-info
+  ;; `:level` in config.edn is applied when :wagoe/logging initialises. Before
+  ;; that — the database pool, `-M:migrate`, `-M:user-cli` — only logback.xml
+  ;; governs, and without one Logback logs everything at DEBUG (BOU-528).
+  (let [tmp (str (System/getProperty "java.io.tmpdir") "/wagoe-logback-" (System/currentTimeMillis))]
+    (try
+      (new/generate! tmp "test-proj" {})
+      (let [ctx  (LoggerContext.)
+            file (io/file tmp "resources/logback.xml")]
+        (is (.exists file) "resources/logback.xml")
+        (doto (JoranConfigurator.) (.setContext ctx) (.doConfigure file))
+        (let [jetty (.getLogger ctx "org.eclipse.jetty.server.Server")]
+          (is (not (.isDebugEnabled jetty)) "a third-party DEBUG line is not emitted")
+          (is (.isInfoEnabled jetty)))
+        (testing "on stderr: the :mcp alias puts this file on its classpath, and stdout is its JSON-RPC channel"
+          (is (= "System.err"
+                 (.getTarget ^ConsoleAppender
+                                       (first (iterator-seq (.iteratorForAppenders (.getLogger ctx "ROOT"))))))))
+        (.stop ctx))
       (finally
         (when (.exists (io/file tmp))
           (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f)))))))
