@@ -12,6 +12,7 @@
             [clojure.string :as str]
             [clojure.java.io :as io]
             [babashka.fs :as fs]
+            [babashka.process :as process]
             [wagoe.tools.scaffold :as scaffold]))
 
 (defn- run
@@ -281,3 +282,55 @@
                 ["endpoint" "--module-name" "product" "--output-dir"]]]
     (is (= args (scaffold/with-base-ns args))
         (str "malformed " (last args) " must reach the scaffolder untouched"))))
+
+;; BOU-545: in a fresh container the scaffolder JVM is the first to fetch
+;; rewrite-clj, and a transient miss there failed quickstart's sample module.
+
+(def ^:private fetch-error
+  (str "Error building classpath. Could not transfer artifact "
+       "rewrite-clj:rewrite-clj:jar:1.2.57 from/to central: status code: 429"))
+
+(defn- run-scaffolder
+  "run-clojure! with `shell` answering `responses` in order."
+  [responses]
+  (let [calls (atom 0)
+        exit  (atom nil)
+        remaining (atom responses)]
+    (with-out-str
+      (binding [*err* (java.io.StringWriter.)
+                scaffold/*exit!* #(reset! exit %)]
+        (with-redefs [process/shell (fn [& _]
+                                      (swap! calls inc)
+                                      (let [r (first @remaining)]
+                                        (swap! remaining rest)
+                                        r))]
+          (scaffold/run-clojure! ["generate" "--module-name" "tasks"]))))
+    {:calls @calls :exit @exit}))
+
+(deftest ^:unit a-dependency-fetch-failure-is-retried-once
+  (testing "a resolution error, then success: retried, and no failure"
+    (is (= {:calls 2 :exit nil}
+           (run-scaffolder [{:exit 1 :err fetch-error} {:exit 0}]))))
+
+  (testing "a resolution error twice: one retry, then it fails"
+    (is (= {:calls 2 :exit 1}
+           (run-scaffolder [{:exit 1 :err fetch-error} {:exit 1 :err fetch-error}]))))
+
+  (testing "any other failure is not retried"
+    (is (= {:calls 1 :exit 1}
+           (run-scaffolder [{:exit 1 :err "Module tasks already exists"}])))))
+
+(deftest ^:unit the-retry-clears-the-cached-miss-it-would-otherwise-re-read
+  (let [m2 (fs/create-temp-dir)
+        dir (fs/path m2 "rewrite-clj" "rewrite-clj" "1.2.57")
+        named (fs/path dir "rewrite-clj-1.2.57.jar.lastUpdated")
+        other (fs/path m2 "foo" "bar" "1.0" "bar-1.0-sources.jar.lastUpdated")]
+    (try
+      (fs/create-dirs dir)
+      (fs/create-dirs (fs/parent other))
+      (spit (str named) "x")
+      (spit (str other) "x")
+      (scaffold/clear-missing-markers! fetch-error (str m2))
+      (is (not (fs/exists? named)))
+      (is (fs/exists? other) "a marker the error does not name is kept")
+      (finally (fs/delete-tree m2)))))

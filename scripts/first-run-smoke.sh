@@ -91,6 +91,21 @@ fail() {
 }
 ok()   { echo "  ok — $*"; }
 
+# Print the section of each step quickstart reports as failed, or the whole log
+# when it is short. A failed step is early in the log, so the tail fail() prints
+# never reached its error (BOU-545). Returns 1 when no step failed.
+quickstart_failed_steps() {
+  local log="$1" n from to
+  grep -q "failed step(s)" "$log" || return 1
+  if [ "$(wc -l <"$log")" -le 150 ]; then cat "$log"; return 0; fi
+  for n in $(grep "failed step(s)" "$log" | grep -oE "\[[0-9]+/8\]" | tr -d "[]" | cut -d/ -f1); do
+    from=$(grep -m1 -nF "[$n/8]" "$log" | cut -d: -f1)
+    to=$(tail -n +"$((from + 1))" "$log" | grep -m1 -nE "\[[0-9]+/8\]" | cut -d: -f1 || true)
+    echo "── step [$n/8] of $log"
+    if [ -n "$to" ]; then sed -n "${from},$((from + to - 1))p" "$log"; else tail -n +"$from" "$log"; fi
+  done
+}
+
 # ── 0. package manager ──────────────────────────────────────────────────────
 # SMOKE_IMAGE has always been a parameter, but the body hardcoded apt-get, so
 # pointing it at Fedora failed on packaging rather than on a defect — the matrix
@@ -277,6 +292,11 @@ if [ "$TARGET" = worktree ]; then
 fi
 bash -ic "bb quickstart" </dev/null >/tmp/quickstart.log 2>&1 \
   || { tail -25 /tmp/quickstart.log; fail "bb quickstart exited non-zero"; }
+# A failed sample-module step exits 0, so ask the log.
+if quickstart_failed_steps /tmp/quickstart.log; then
+  echo "SMOKE FAILURE: bb quickstart completed with a failed step"
+  exit 1
+fi
 grep -vE "^\s*;;" resources/conf/dev/config.edn | grep -q ":wagoe/sqlite" \
   || fail "quickstart overwrote the working config (BOU-228)"
 ok "completed without clobbering the config"

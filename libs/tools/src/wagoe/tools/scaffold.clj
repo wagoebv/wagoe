@@ -256,13 +256,46 @@
       module-name (into (vec args) ["--base-ns" (project/module-base-ns module-name root)])
       :else       (into (vec args) ["--base-ns" (project/base-ns root)]))))
 
+(def ^:private coordinate
+  #"[A-Za-z0-9_.-]+:[A-Za-z0-9_.-]+:[A-Za-z0-9_.-]+(?::[A-Za-z0-9_.-]+)?:[A-Za-z0-9_.+-]+")
+
+(defn resolution-failure?
+  "True when the CLI's stderr says a dependency could not be fetched, as
+   opposed to the scaffolder itself failing."
+  [err]
+  (boolean (and err (re-find #"Error building classpath|Could not (?:find|transfer|resolve) artifact|Failed to read artifact descriptor|Failure to find"
+                             err))))
+
+(defn clear-missing-markers!
+  "Delete the `*.lastUpdated` markers of the artifacts `err` names. Maven reads
+   a marker instead of the network, so a retry that keeps it fails the same way
+   (BOU-440, BOU-548)."
+  [err m2-repo]
+  (doseq [coord (distinct (re-seq coordinate (str err)))
+          :let [parts (str/split coord #":")
+                [g a] parts
+                v (last parts)
+                dir (io/file m2-repo (str/replace g "." "/") a v)]
+          f (.listFiles dir)
+          :when (and (str/starts-with? (.getName f) (str a "-" v))
+                     (str/ends-with? (.getName f) ".lastUpdated"))]
+    (io/delete-file f true)))
+
+(defn- run-scaffolder-once [cmd]
+  (let [{:keys [exit err]} (apply shell {:continue true :err :string} cmd)]
+    (when (seq err) (binding [*out* *err*] (print err) (flush)))
+    {:exit exit :err err}))
+
 (defn run-clojure!
   "Shell out to the Clojure scaffolder CLI with given args. Streams output to terminal.
 
    In generated projects (no libs/scaffolder directory), injects wagoe-scaffolder
    via -Sdeps so the namespace is resolvable. In the monorepo, libs/scaffolder/src is
    already on the classpath, so -Sdeps is skipped to avoid forcing Maven resolution of
-   an artifact that may not yet be published."
+   an artifact that may not yet be published.
+
+   In a fresh environment this is the first JVM to fetch the scaffolder and
+   rewrite-clj, so a transient fetch failure is retried once (BOU-545)."
   [args]
   (println)
   (println (bold "Running scaffolder..."))
@@ -274,8 +307,23 @@
                          ["clojure"
                           "-Sdeps"
                           (scaffolder-deps)
-                          "-M" "-m" "wagoe.scaffolder.shell.cli-entry"])]
-      (apply shell (concat base-cmd (with-base-ns args))))
+                          "-M" "-m" "wagoe.scaffolder.shell.cli-entry"])
+          cmd          (concat base-cmd (with-base-ns args))
+          first-try    (run-scaffolder-once cmd)
+          result       (if (and (not (zero? (:exit first-try)))
+                                (resolution-failure? (:err first-try)))
+                         (do (println (yellow "Dependency fetch failed — retrying once..."))
+                             (clear-missing-markers! (:err first-try)
+                                                     (io/file (System/getProperty "user.home")
+                                                              ".m2" "repository"))
+                             (run-scaffolder-once cmd))
+                         first-try)]
+      ;; Truthy on success: wizard-ai stops a multi-entity run on the first nil.
+      (if (zero? (:exit result))
+        result
+        (do (println (red (str "Scaffolder exited with code " (:exit result))))
+            (*exit!* 1)
+            nil)))
     (catch Exception e
       (println (red (str "Scaffolder exited with error: " (.getMessage e))))
       (*exit!* 1))))
