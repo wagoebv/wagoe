@@ -70,14 +70,17 @@
                                :entity-name entity-name})))
 
           entity-config (ports/get-entity-config schema-provider entity-name)
+          disabled (support/create-disabled-response request user entity-name entity-config)
 
           ; Check permissions
-          _ (shell-permissions/assert-can-create-entity! user entity-name entity-config)]
+          _ (when-not disabled
+              (shell-permissions/assert-can-create-entity! user entity-name entity-config))]
 
       ;; Split-table entities MUST have :create-redirect-url because the generic
       ;; admin create flow only writes to one table, leaving orphaned rows.
       ;; Fail early with a clear error instead of letting the service layer throw.
-      (when (and (:split-table-update entity-config)
+      (when (and (not disabled)
+                 (:split-table-update entity-config)
                  (not (:create-redirect-url entity-config)))
         (throw (ex-info (str "Entity '" (name entity-name) "' uses split-table-update but has no "
                              ":create-redirect-url configured. Add :create-redirect-url to the "
@@ -85,6 +88,7 @@
                         {:type :invalid-config
                          :entity-name entity-name})))
       (or
+       disabled
        (support/create-config-error-response request config schema-provider user entity-name entity-config)
        (if-let [redirect-url (:create-redirect-url entity-config)]
         ;; Append return-to so the delegated create flow can bring the user

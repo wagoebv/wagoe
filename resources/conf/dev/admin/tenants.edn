@@ -9,7 +9,7 @@
   :readonly-fields #{:id :schema-name :created-at :updated-at}
   ;; The tenant service derives schema_name and provisions the schema, so
   ;; create tenants with POST /api/v1/tenants, not here (BOU-534).
-  :permissions {:create false}
+  :permissions {:create false :create-hint "POST /api/v1/tenants"}
   :fields
   {:slug       {:label [:t :admin.tenants/field-slug]}
    :name       {:label [:t :admin.tenants/field-name]}

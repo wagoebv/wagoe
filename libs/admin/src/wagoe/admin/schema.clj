@@ -234,8 +234,10 @@
                   :description "Whether entity supports soft delete (has deleted-at column)"}
     :boolean]
    [:permissions {:optional true
-                  :description "{:create false} hides and refuses create, for entities another module must create"}
-    [:map [:create {:optional true} :boolean]]]
+                  :description "{:create false} hides and refuses create, for entities another module must create; :create-hint names where they are created instead"}
+    [:map
+     [:create {:optional true} :boolean]
+     [:create-hint {:optional true} :string]]]
    [:ui {:optional true
          :description "UI-specific configuration overrides for this entity"}
     UIConfig]])

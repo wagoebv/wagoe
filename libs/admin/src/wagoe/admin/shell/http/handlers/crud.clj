@@ -63,9 +63,11 @@
                                :entity-name entity-name})))
 
           entity-config (ports/get-entity-config schema-provider entity-name)
+          disabled (support/create-disabled-response request user entity-name entity-config)
 
           ; Check permissions
-          _ (shell-permissions/assert-can-create-entity! user entity-name entity-config)
+          _ (when-not disabled
+              (shell-permissions/assert-can-create-entity! user entity-name entity-config))
           config-error (support/create-config-error-response request config schema-provider
                                                              user entity-name entity-config)
 
@@ -76,6 +78,9 @@
           validation-result (ports/validate-entity-data admin-service entity-name form-data)]
 
       (cond
+        disabled
+        disabled
+
         config-error
         config-error
 

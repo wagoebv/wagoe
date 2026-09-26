@@ -597,7 +597,8 @@ The create insert writes only the form's fields (plus `:hide-fields`, which a re
 When the column is derived by another module (tenants' `schema_name`, set at
 provisioning), neither fix applies: point `:create-redirect-url` at that
 module's create page, or, if it has none, set `:permissions {:create false}`.
-That hides "New" and refuses create with a 403 (BOU-534).
+That hides "New" and answers create with a 403 admin page; `:create-hint
+"POST /api/v1/tenants"` tells the user where to go instead (BOU-534).
 
 ### 6. Direct Navigation to HTMX Fragment Endpoints
 
