@@ -8,6 +8,7 @@
    - Relationship detection (Week 1 stub, Week 2+ full implementation)
    - Entity config merging (auto-detected + manual overrides)"
   (:require [wagoe.admin.core.schema-introspection :as introspection]
+            [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]))
 
 ^{:kaocha.testable/meta {:unit true :admin true}}
@@ -691,3 +692,45 @@
       (let [other {:entity :notes :table :notes :foreign-key :order-id}
             cfg   (result (assoc-in order-configs [:orders :has-many] [other]))]
         (is (= [:notes :order-items] (mapv :entity (:has-many cfg))))))))
+
+;; =============================================================================
+;; Read-only NOT NULL columns (BOU-494)
+;; =============================================================================
+
+(def ^:private invoices-columns
+  [{:name "id" :type "UUID" :not-null true :default nil :primary-key true}
+   {:name "number" :type "VARCHAR(50)" :not-null true :default nil :primary-key false}
+   {:name "status" :type "VARCHAR(50)" :not-null true :default nil :primary-key false}
+   {:name "created_at" :type "TIMESTAMP" :not-null true :default nil :primary-key false}
+   {:name "updated_at" :type "TIMESTAMP" :not-null true :default nil :primary-key false}])
+
+(deftest ^:unit readonly-not-null-errors-test
+  ;; The admin insert omits every :readonly-fields entry, so a read-only column
+  ;; that is NOT NULL with no default fails every create.
+  (let [config {:readonly-fields #{:id :status :created-at :updated-at}}]
+    (testing "a read-only NOT NULL column without a default is reported"
+      (let [[error & more] (introspection/readonly-not-null-errors :invoices config invoices-columns)]
+        (is (nil? more))
+        (is (= :status (:field error)))
+        (is (= "status" (:column error)))
+        (is (str/includes? (:message error) "invoices") "names the entity")
+        (is (str/includes? (:message error) "'status'") "names the column")
+        (is (str/includes? (:message error) "default") "suggests a column default")
+        (is (str/includes? (:message error) ":readonly-fields") "suggests dropping it from :readonly-fields")))
+
+    (testing ":id, :created-at and :updated-at are filled by the admin"
+      (is (not-any? #{:id :created-at :updated-at}
+                    (map :field (introspection/readonly-not-null-errors :invoices config invoices-columns)))))
+
+    (testing "a column default makes it creatable"
+      (is (empty? (introspection/readonly-not-null-errors
+                   :invoices config (assoc-in invoices-columns [2 :default] "'draft'")))))
+
+    (testing "a nullable column is fine"
+      (is (empty? (introspection/readonly-not-null-errors
+                   :invoices config (assoc-in invoices-columns [2 :not-null] false)))))
+
+    (testing "an entity with its own create flow is not the admin's to create"
+      (is (empty? (introspection/readonly-not-null-errors
+                   :invoices (assoc config :create-redirect-url "/web/invoices/new")
+                   invoices-columns))))))

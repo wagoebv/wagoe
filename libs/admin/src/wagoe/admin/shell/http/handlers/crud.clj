@@ -66,6 +66,7 @@
 
           ; Check permissions
           _ (shell-permissions/assert-can-create-entity! user entity-name entity-config)
+          _ (support/assert-creatable-config! entity-name entity-config)
 
           [zones params] (support/form-zone-options config request (submitted-params request))
           [form-data parse-errors] (support/parse-form-params-checked params entity-config zones)
@@ -109,26 +110,33 @@
                                        :flash {:type :success
                                                :message [:t :admin/flash-created {:label (:label entity-config)}]}}))))
           (catch Exception e
-            (log/error e "Failed to create entity" {:entity entity-name})
-            (let [entities (ports/list-available-entities schema-provider)
+            (let [;; A constraint the database enforced, reported on its field
+                  ;; by the service (BOU-494).
+                  field-errors (when (= :validation-error (:type (ex-data e)))
+                                 (:errors (ex-data e)))
+                  _ (when-not field-errors
+                      (log/error e "Failed to create entity" {:entity entity-name}))
+                  entities (ports/list-available-entities schema-provider)
                   entity-configs (into {} (map (fn [e] [e (ports/get-entity-config schema-provider e)])) entities)
                   permissions (permissions/get-entity-permissions user entity-name entity-config)]
-              (support/html-response request
-                                     (admin-ui/admin-layout
-                                      (admin-ui/entity-detail-page entity-name entity-config nil {} permissions (rejected-create-opts config request form-data))
-                                      {:user user
-                                       :current-entity entity-name
-                                       :entities entities
-                                       :entity-configs entity-configs
-                                       :logo-url (:logo-url config)
-                                       :flash {:type :error
+              (cond->
+               (support/html-response request
+                                      (admin-ui/admin-layout
+                                       (admin-ui/entity-detail-page entity-name entity-config nil (or field-errors {}) permissions (rejected-create-opts config request form-data))
+                                       {:user user
+                                        :current-entity entity-name
+                                        :entities entities
+                                        :entity-configs entity-configs
+                                        :logo-url (:logo-url config)
+                                        :flash {:type :error
                                                ;; Only 4xx-mapped domain errors carry
                                                ;; client-safe messages; anything else is
                                                ;; internal — logged above, generic flash
                                                ;; (BOU-182: never echo raw exception text).
-                                               :message (or (client-safe-error-message e)
-                                                            [:t :admin/flash-create-failed
-                                                             {:label (:label entity-config)}])}})))))
+                                                :message (or (client-safe-error-message e)
+                                                             [:t :admin/flash-create-failed
+                                                              {:label (:label entity-config)}])}}))
+                field-errors (assoc :status 422)))))
 
         ; Validation errors - re-render form
         (let [entities (ports/list-available-entities schema-provider)

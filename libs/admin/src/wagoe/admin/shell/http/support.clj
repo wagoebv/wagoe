@@ -386,6 +386,16 @@
     (shell-permissions/assert-can-access-admin! user)
     user))
 
+(defn assert-creatable-config!
+  "Throw the config errors introspection found on the create path, so a create
+   form that could never be saved is refused up front (BOU-494)."
+  [entity-name entity-config]
+  (when-let [errors (seq (:create-config-errors entity-config))]
+    (throw (ex-info (str/join " " (map :message errors))
+                    {:type :invalid-config
+                     :entity-name entity-name
+                     :fields (mapv :field errors)}))))
+
 (defn get-entity-name
   "Extract entity name from path parameters.
 

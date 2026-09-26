@@ -565,7 +565,11 @@ Both values are submitted when checkbox is checked, resulting in an array.
 
 **Prevention**: The admin `new-entity-handler` now validates this at startup and throws a clear config error if the combination is missing.
 
-### 5. Direct Navigation to HTMX Fragment Endpoints
+### 5. `:readonly-fields` on a NOT NULL Column
+
+The create insert omits every read-only field, so a read-only column that is `NOT NULL` with no default fails every create. `:id`, `:created-at` and `:updated-at` are filled by the admin and are exempt. Introspection logs this as a config error and the create form refuses with `:invalid-config`, naming the entity and column (BOU-494). Fix: give the column a default, or drop it from `:readonly-fields`.
+
+### 6. Direct Navigation to HTMX Fragment Endpoints
 
 **Problem**: Refreshing page on HTMX fragment URL shows unstyled HTML.
 

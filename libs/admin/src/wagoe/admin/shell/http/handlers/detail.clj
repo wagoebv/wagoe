@@ -84,6 +84,7 @@
                              "entity config in :wagoe/admin :entities.")
                         {:type :invalid-config
                          :entity-name entity-name})))
+      (support/assert-creatable-config! entity-name entity-config)
 
       (if-let [redirect-url (:create-redirect-url entity-config)]
         ;; Append return-to so the delegated create flow can bring the user

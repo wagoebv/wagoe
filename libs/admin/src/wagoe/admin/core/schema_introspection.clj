@@ -621,6 +621,39 @@
     auto-config))
 
 ;; =============================================================================
+;; Create-path Config Checks
+;; =============================================================================
+
+(def create-filled-fields
+  "Fields the admin create path fills itself (see `create-entity` in
+   wagoe.admin.shell.service)."
+  #{:id :created-at :updated-at})
+
+(defn readonly-not-null-errors
+  "The :readonly-fields entries the admin can never create a record with.
+
+   The admin insert omits every read-only field, so a NOT NULL column with no
+   default fails every create (BOU-494). `columns-meta` is the raw column
+   metadata of the entity's table. Returns a vector of {:field :column :message};
+   entities with their own create flow are skipped."
+  [entity-name entity-config columns-meta]
+  (if (or (:create-redirect-url entity-config) (:split-table-update entity-config))
+    []
+    (let [readonly (set (:readonly-fields entity-config))]
+      (vec (for [{column :name :keys [not-null default]} columns-meta
+                 :let [field (keyword (case-conversion/snake-case->kebab-case-string column))]
+                 :when (and not-null
+                            (nil? default)
+                            (contains? readonly field)
+                            (not (contains? create-filled-fields field)))]
+             {:field   field
+              :column  column
+              :message (str "Entity '" (name entity-name) "' lists " field
+                            " in :readonly-fields, but column '" column
+                            "' is NOT NULL with no default, so the admin cannot create a record."
+                            " Add a column default, or drop " field " from :readonly-fields.")})))))
+
+;; =============================================================================
 ;; Field Ordering
 ;; =============================================================================
 

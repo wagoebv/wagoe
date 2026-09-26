@@ -17,6 +17,7 @@
    [wagoe.platform.shell.persistence-interceptors :as persist-interceptors]
    [wagoe.core.utils.type-conversion :as type-conversion]
    [wagoe.core.utils.case-conversion :as case-conversion]
+   [wagoe.admin.core.db-errors :as db-errors]
    [clojure.string :as str])
   (:import [java.util UUID]
            [java.time Instant]))
@@ -286,6 +287,19 @@
     {:primary-data   (add-ts primary-data)
      :secondary-data (add-ts secondary-data)}))
 
+(defn- not-null-violation
+  "`e` as a :validation-error on the field whose NOT NULL constraint the
+   database enforced, or nil when it is not such a violation (BOU-494)."
+  [e]
+  (when-let [column (some (comp db-errors/not-null-violation-column ex-message)
+                          (take-while some? (iterate ex-cause e)))]
+    (let [field (keyword (case-conversion/snake-case->kebab-case-string column))]
+      (ex-info (str "Field is required: " (name field))
+               {:type   :validation-error
+                :field  field
+                :errors {field ["Field is required"]}}
+               e))))
+
 ;; =============================================================================
 ;; Admin Service Implementation
 ;; =============================================================================
@@ -435,7 +449,10 @@
               ; Insert without RETURNING (H2 compatibility)
              insert-query {:insert-into table-name
                            :values [db-data]}
-             _ (db/execute-one! db-ctx insert-query)
+             _ (try
+                 (db/execute-one! db-ctx insert-query)
+                 (catch Exception e
+                   (throw (or (not-null-violation e) e))))
 
               ; Fetch the created record
              select-query {:select [:*]
