@@ -41,6 +41,9 @@
                                          :pool          {:minimum-idle 1 :maximum-pool-size 2}})]
       (db/execute-update! db-ctx {:raw "CREATE TABLE hm_orders (id UUID PRIMARY KEY, name VARCHAR(100) NOT NULL)"})
       (db/execute-update! db-ctx {:raw "CREATE TABLE hm_items (id UUID PRIMARY KEY, hm_order_id UUID NOT NULL, sku VARCHAR(100) NOT NULL)"})
+      ;; A child whose list page joins a second table, like :users and auth_users.
+      (db/execute-update! db-ctx {:raw "CREATE TABLE hm_members (id UUID PRIMARY KEY, hm_order_id UUID NOT NULL)"})
+      (db/execute-update! db-ctx {:raw "CREATE TABLE hm_profiles (id UUID PRIMARY KEY, nickname VARCHAR(100) NOT NULL, hm_order_id UUID)"})
       (let [sp  (schema-repo/create-schema-repository db-ctx config)
             svc (service/create-admin-service db-ctx sp
                                               (logging-no-op/create-logging-component {})
@@ -50,6 +53,8 @@
         (try (f)
              (finally
                (db/execute-update! db-ctx {:raw "DROP TABLE hm_items"})
+               (db/execute-update! db-ctx {:raw "DROP TABLE hm_members"})
+               (db/execute-update! db-ctx {:raw "DROP TABLE hm_profiles"})
                (db/execute-update! db-ctx {:raw "DROP TABLE hm_orders"})
                (db-factory/close-db-context! db-ctx)))))))
 
@@ -131,3 +136,60 @@
   (testing "the explicit entry wins over the detected one"
     (is (= (get-in config [:entities :hm-orders :has-many])
            (:has-many (ports/get-entity-config (:sp @sys) :hm-orders))))))
+
+(def ^:private joined-config
+  (-> config
+      (update-in [:entity-discovery :allowlist] conj :hm-members)
+      (assoc-in [:entities :hm-members]
+                {:label           "Members"
+                 :query-overrides {:from          [[:hm_members :m]]
+                                   :join          [[:hm_profiles :p] [:= :m.id :p.id]]
+                                   :select        [:m.id :m.hm_order_id :p.nickname]
+                                   ;; No alias for the FK, and both tables carry the
+                                   ;; column: the shape of the shipped :users entity.
+                                   :field-aliases {:id       :m.id
+                                                   :nickname :p.nickname}}})
+      (update-in [:entities :hm-orders :has-many] conj
+                 {:entity :hm-members :table :hm_members :foreign-key :hm-order-id
+                  :label "Members" :fields [:nickname]})))
+
+(deftest ^:contract a-panel-reads-children-through-their-join
+  ;; A child with :query-overrides was read from its primary table alone, so
+  ;; the panel showed blanks for every joined column (PR #567 review).
+  (let [db        (:db @sys)
+        sp        (schema-repo/create-schema-repository db joined-config)
+        svc       (service/create-admin-service db sp
+                                                (logging-no-op/create-logging-component {})
+                                                (error-reporting-no-op/create-error-reporting-component {})
+                                                joined-config)
+        order-id  (create-order!)
+        member-id (random-uuid)]
+    (db/execute-update! db {:raw (str "INSERT INTO hm_members (id, hm_order_id) VALUES ('" member-id "', '" order-id "')")})
+    (db/execute-update! db {:raw (str "INSERT INTO hm_profiles (id, nickname) VALUES ('" member-id "', 'Ada-the-member')")})
+    (let [body (:body ((detail/entity-detail-handler svc sp joined-config)
+                       (request :get "hm-orders" :id order-id)))]
+      (is (str/includes? body "Ada-the-member")))))
+
+(deftest ^:contract a-failed-child-create-keeps-the-parent
+  ;; Both error branches re-rendered the form without return_to, so the next
+  ;; submit and Cancel lost the parent (PR #567 review).
+  (let [order-id (str (create-order!))
+        parent   (str "/web/admin/hm-orders/" order-id)
+        create   (handler crud/create-entity-handler)
+        check    (fn [resp]
+                   (let [body (:body resp)]
+                     (is (str/includes? body (str "hx-post=\"/web/admin/hm-items?return_to=%2Fweb%2Fadmin%2Fhm-orders%2F" order-id "\""))
+                         "the form posts return_to again")
+                     (is (str/includes? body (str "href=\"" parent "\"")) "Cancel goes to the parent")
+                     (is (str/includes? body (str "value=\"" order-id "\"")) "the FK the user sent is kept")
+                     (is (not (str/includes? body "hx-put")) "still a create form (BOU-533)")))]
+    (testing "validation failure"
+      (check (create (request :post "hm-items"
+                              :query {"return_to" parent}
+                              :form {"hm-order-id" order-id})))) ; sku missing
+
+    (testing "persistence failure"
+      (check (create (request :post "hm-items"
+                              :query {"return_to" parent}
+                              ;; Longer than VARCHAR(100): passes validation, fails the insert.
+                              :form {"hm-order-id" order-id "sku" (apply str (repeat 150 "x"))}))))))

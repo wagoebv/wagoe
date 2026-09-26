@@ -740,13 +740,34 @@
      :admin-list-related-entities
      {:parent-id parent-id :entity (name (:entity relationship))}
      (fn [{:keys [_params]}]
-       (let [table   (:table relationship)
-             fk-col  (case-conversion/kebab-case->snake-case-keyword (:foreign-key relationship))
-             query   {:select [:*]
-                      :from   [table]
-                      :where  [:= fk-col (str parent-id)]}
-             results (db/execute-query! db-ctx query)]
-         results))
+       ;; Read the child the way its own list page does: through its
+       ;; :query-overrides and soft delete, so joined columns are not blank.
+       ;; A child that is not an admin entity falls back to its bare table.
+       (let [child      (:entity relationship)
+             child-cfg  (when (ports/validate-entity-exists schema-provider child)
+                          (ports/get-entity-config schema-provider child))
+             {:keys [from-clause select-clause join-clause field-aliases]}
+             (if child-cfg
+               (resolve-query-config child-cfg)
+               {:from-clause [(:table relationship)] :select-clause [:*] :field-aliases {}})
+             ;; Without an alias, qualify from :select: in a join a bare
+             ;; column that both tables carry is ambiguous.
+             qualify    (fn [field]
+                          (let [col (case-conversion/kebab-case->snake-case-keyword field)]
+                            (or (get field-aliases field)
+                                (some #(when (and (keyword? %)
+                                                  (str/ends-with? (name %) (str "." (name col))))
+                                         %)
+                                      select-clause)
+                                col)))
+             fk-where   [:= (qualify (:foreign-key relationship)) (str parent-id)]
+             query      (cond-> {:select select-clause
+                                 :from   from-clause
+                                 :where  (if (:soft-delete child-cfg false)
+                                           [:and fk-where [:= (qualify :deleted-at) nil]]
+                                           fk-where)}
+                          join-clause (assoc :join join-clause))]
+         (db/execute-query! db-ctx query)))
      db-ctx)))
 
 ;; =============================================================================
