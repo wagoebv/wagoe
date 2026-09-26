@@ -335,7 +335,14 @@
       (is (re-find #"Invalid email format" form))
       (is (re-find #"field-errors" form))
       (is (not (re-find #"validation-errors" form))
-          "no form-level panel when every error belongs to a field"))))
+          "no form-level panel when every error belongs to a field")))
+
+  (testing "errors on no shown field are rendered, not dropped"
+    (let [form (str (ui/register-form {} {:form ["Registration is closed"]
+                                          :role ["Role not allowed"]}))]
+      (is (re-find #"validation-errors" form))
+      (is (re-find #"Registration is closed" form))
+      (is (re-find #"Role not allowed" form)))))
 
 ;; =============================================================================
 ;; Success Message Component Tests
