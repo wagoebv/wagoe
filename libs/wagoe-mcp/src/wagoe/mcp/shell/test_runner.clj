@@ -24,19 +24,43 @@
       (try (->> (edn/read-string {:default (fn [_ v] v)} (slurp f)) :tests (map :id) set)
            (catch Exception _ nil)))))
 
+(defn- rel-paths
+  "Paths of the files under `dir` whose name satisfies `pred`, relative to
+   `dir`, with `/` separators."
+  [^java.io.File dir pred]
+  (when (.isDirectory dir)
+    (->> (file-seq dir)
+         (filter #(and (.isFile ^java.io.File %) (pred (.getName ^java.io.File %))))
+         (map #(str/replace (str (.relativize (.toPath dir) (.toPath ^java.io.File %))) "\\" "/")))))
+
+(defn- module-dirs
+  "Every module's directory relative to `root`/src: a directory with a
+   ports.clj, which every module has."
+  [root]
+  (->> (rel-paths (io/file root "src") #(= "ports.clj" %))
+       (keep #(second (re-matches #"(.+)/ports\.clj" %)))
+       set))
+
 (defn- module-test-namespaces
-  "Test namespaces under a `<module>` directory in `root`/test, sorted."
+  "Test namespaces for `module`: the test files under the module's own
+   directory — its src path, under test/ — minus any module nested inside it.
+
+   Not any directory named like the module: module `shop` in base namespace
+   `shop` then picked up `shop.customer`'s tests (BOU-520 review)."
   [root module]
-  (let [test-dir (io/file root "test")
-        dir-name (str/replace (str module) "-" "_")]
-    (when (.isDirectory test-dir)
-      (->> (file-seq test-dir)
-           (filter #(and (.isFile ^java.io.File %) (str/ends-with? (.getName ^java.io.File %) "_test.clj")))
-           (map #(str (.relativize (.toPath test-dir) (.toPath ^java.io.File %))))
-           (filter #(some #{dir-name} (butlast (str/split % #"/"))))
-           (map #(-> % (str/replace #"\.clj$" "") (str/replace "/" ".") (str/replace "_" "-")))
-           sort
-           vec))))
+  (let [dirs     (module-dirs root)
+        dir-name (str/replace (str module) "-" "_")
+        own      (filter #(= dir-name (last (str/split % #"/"))) dirs)
+        nested   (fn [d] (filter #(str/starts-with? % (str d "/")) dirs))]
+    (->> own
+         (mapcat (fn [d]
+                   (let [others (nested d)]
+                     (->> (rel-paths (io/file root "test" d) #(str/ends-with? % "_test.clj"))
+                          (map #(str d "/" %))
+                          (remove (fn [f] (some #(str/starts-with? f (str % "/")) others)))))))
+         (map #(-> % (str/replace #"\.clj$" "") (str/replace "/" ".") (str/replace "_" "-")))
+         sort
+         vec)))
 
 (defn test-command
   "How to run `module`'s tests in the project at `root`: `{:argv [...]}`, or
