@@ -1,6 +1,7 @@
 (ns wagoe.push.shell.jobs
   (:require [wagoe.push.core.notification :as notif]
             [wagoe.push.core.delivery :as delivery]
+            [wagoe.push.core.device :as device]
             [wagoe.push.shell.registry :as registry]
             [wagoe.push.shell.service :as service]
             [wagoe.push.ports :as ports]
@@ -30,7 +31,7 @@
                                 (merge (delivery/result->analytics-event notification-id result (java.util.Date.))
                                        {:id (random-uuid) :user-id user-id}))
             (when (:token-invalid? result)
-              (log/infof "Push: marking invalid token %s" (:device-token result))
+              (log/infof "Push: marking invalid token %s" (device/token-preview (:device-token result)))
               (ports/mark-token-invalid! device-store (:device-token result)))))))))
 
 (defn handle-broadcast

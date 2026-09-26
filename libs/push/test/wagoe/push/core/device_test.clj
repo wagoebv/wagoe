@@ -31,3 +31,8 @@
     (is (= :fcm (:platform record)))
     (is (true? (:active? record)))
     (is (= now (:created-at record)))))
+
+(deftest ^:unit ^:security token-preview-test
+  (is (= "abcdef…" (device/token-preview "abcdef0123456789")))
+  (is (= "ab…" (device/token-preview "ab")))
+  (is (= "…" (device/token-preview nil))))

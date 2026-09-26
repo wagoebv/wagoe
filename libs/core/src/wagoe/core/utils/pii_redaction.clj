@@ -5,23 +5,45 @@
 (def default-redact-keys
   "Default set of keys whose values should be redacted before sending to external systems.
 
-  Keys are stored as lower-case strings for case-insensitive matching."
-  #{"password" "pass" "pwd"
-    "authorization" "auth" "auth-header"
-    "token" "access_token" "refresh_token"
-    "secret" "api-key" "api_key"
+  Names are in the form `normalize-key-name` produces: lower-case kebab, so
+  `:access_token`, `\"accessToken\"` and `:access-token` all match one entry."
+  #{"password" "pass" "pwd" "password-confirmation"
+    "authorization" "auth" "auth-header" "cookie" "set-cookie"
+    "token" "access-token" "refresh-token"
+    "secret" "api-key" "private-key"
+    "mfa-code" "verification-code" "confirmation-code"
+    "backup-code" "backup-codes" "mfa-backup-codes"
     "email" "e-mail"
-    "ssn" "social_security_number"
-    "credit-card" "credit_card"})
+    "ssn" "social-security-number"
+    "credit-card"})
+
+(def non-secret-key-names
+  "Names the suffix rules below would catch but that carry no secret."
+  #{"content-hash" "commit-hash" "etag"})
 
 (defn normalize-key-name
-  "Normalize a map key to a lower-case string for matching."
+  "Normalize a map key to a lower-case kebab string for matching:
+   `:Password`, `\"password_hash\"` and `\"passwordHash\"` become
+   \"password\", \"password-hash\" and \"password-hash\"."
   [k]
   (-> (cond
         (keyword? k) (name k)
         (string? k) k
         :else (str k))
-      (str/lower-case)))
+      (str/replace #"([a-z0-9])([A-Z])" "$1-$2")
+      (str/lower-case)
+      (str/replace "_" "-")))
+
+(defn sensitive-key-name?
+  "True when a normalized key name is in `keys`, or ends in -secret, -token,
+   -hash, -password or a credential-bearing -key (`stripe-secret-key`,
+   `x-api-key`). A bare -key suffix would also catch `idempotency-key` and
+   `cache-key`, so only the key kinds that are secrets are listed."
+  [keys kname]
+  (boolean (and (not (contains? non-secret-key-names kname))
+                (or (contains? keys kname)
+                    (re-find #"-(secret|token|hash|password)$" kname)
+                    (re-find #"(^|-)(secret|private|api|access|signing|encryption|master)-key$" kname)))))
 
 (defn email-string?
   "Best-effort detection of email-like strings.
@@ -75,7 +97,7 @@
         :else v)
 
       ;; All other keys use generic redaction
-      (contains? keys kname)
+      (sensitive-key-name? keys kname)
       "[REDACTED]"
 
       :else
@@ -93,6 +115,12 @@
             (let [v' (redact-pii v state)]
               [k (redact-pii-value k v' state)])))
 
+    (instance? java.util.Map data)
+    (redact-pii (into {} data) state)
+
+    (set? data)
+    (into #{} (map #(redact-pii % state)) data)
+
     (sequential? data)
     (mapv #(redact-pii % state) data)
 
@@ -108,3 +136,12 @@
     (-> context
         (update :extra #(when % (redact-pii % state)))
         (update :tags #(when % (redact-pii % state))))))
+
+(def ^:private log-redact-state
+  (build-redact-state {:redact {:mask-email? false}}))
+
+(defn redact-for-log
+  "Redact secrets in `data` before it is logged. Emails are left alone: logs
+   already carry them, and this is about credentials."
+  [data]
+  (redact-pii data log-redact-state))

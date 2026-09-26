@@ -141,11 +141,12 @@
     ;; Add breadcrumb for operation start
     (add-database-breadcrumb "query" :start operation-details)
 
-    ;; Side effect: log query
+    ;; Side effect: log query. Only the parameter count: the values are
+    ;; positional, so they cannot be redacted by name (BOU-556).
     (log/debug "Executing query"
                {:adapter adapter-dialect
                 :sql (first sql-query)
-                :params (rest sql-query)})
+                :param-count (count (rest sql-query))})
 
     (try
       ;; Side effect: database I/O
@@ -173,7 +174,7 @@
         (let [error-details (merge operation-details
                                    {:error (.getMessage e)
                                     :sql (first sql-query)
-                                    :params (rest sql-query)})]
+                                    :param-count (count (rest sql-query))})]
           (add-database-breadcrumb "query" :error error-details))
 
 ;; Skip error reporting since database layer doesn't have error context
@@ -188,7 +189,7 @@
                         {:type :database-error
                          :adapter adapter-dialect
                          :sql (first sql-query)
-                         :params (rest sql-query)
+                         :param-count (count (rest sql-query))
                          :original-error (.getMessage e)}
                         e))))))
 
@@ -249,7 +250,7 @@
     (log/debug "Executing update"
                {:adapter adapter-dialect
                 :sql (first sql-query)
-                :params (rest sql-query)})
+                :param-count (count (rest sql-query))})
 
     (try
       ;; Side effect: database I/O
@@ -275,7 +276,7 @@
         (let [error-details (merge operation-details
                                    {:error (.getMessage e)
                                     :sql (first sql-query)
-                                    :params (rest sql-query)})]
+                                    :param-count (count (rest sql-query))})]
           (add-database-breadcrumb operation-type :error error-details))
 
 ;; Skip error reporting since database layer doesn't have error context
@@ -290,7 +291,7 @@
                         {:type :database-error
                          :adapter adapter-dialect
                          :sql (first sql-query)
-                         :params (rest sql-query)
+                         :param-count (count (rest sql-query))
                          :original-error (.getMessage e)}
                         e))))))
 

@@ -1,5 +1,7 @@
 (ns wagoe.platform.shell.persistence-interceptors-test
-  (:require [clojure.test :refer [deftest testing is]]
+  (:require [clojure.string :as str]
+            [clojure.test :refer [deftest testing is]]
+            [clojure.tools.logging.test :as log-test]
             [wagoe.platform.shell.persistence-interceptors :as pi]))
 
 ;; ==============================================================================
@@ -75,3 +77,21 @@
                   {})]
       (is (nil? result)
           "nil is a valid not-found result and should be returned as-is"))))
+
+;; ==============================================================================
+;; Secrets never reach the log (BOU-556)
+;; ==============================================================================
+
+(deftest ^:unit ^:security persistence-operation-does-not-log-secrets-test
+  (let [entity {:id 7 :password-hash "bcrypt+sha512$SECRETHASH" :mfa-secret "MFASECRETVALUE"}]
+    (doseq [[label db-fn] [["success" (constantly entity)]
+                           ["nil result" (constantly nil)]
+                           ["failure" (fn [_] (throw (ex-info "boom" {:type :db-error})))]]]
+      (log-test/with-log
+        (try
+          (pi/execute-persistence-operation :update-user {:user-entity entity} db-fn {})
+          (catch clojure.lang.ExceptionInfo _))
+        (let [text (str/join "\n" (map :message (log-test/the-log)))]
+          (is (str/includes? text "update-user") (str label ": the operation is logged"))
+          (is (not (str/includes? text "SECRETHASH")) (str label ": password hash logged"))
+          (is (not (str/includes? text "MFASECRETVALUE")) (str label ": mfa secret logged")))))))

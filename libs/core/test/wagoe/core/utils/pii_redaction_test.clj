@@ -89,3 +89,51 @@
           twice (pii/redact-pii once state)]
       (is (= once twice))
       (is (= "ok" (:safe once))))))
+
+(deftest ^:unit ^:security redact-for-log-test
+  (let [out (pii/redact-for-log
+             {:user-entity {:id               7
+                            :email            "user@example.com"
+                            :password-hash    "bcrypt+sha512$abc"
+                            :mfa-secret       "JBSWY3DPEHPK3PXP"
+                            :mfa-backup-codes ["11111111"]
+                            :session_token    "tok"
+                            :webhook-secret   "whsec"
+                            :api-key          "key"}})]
+    (testing "secrets are redacted by name, including -secret/-token/-hash suffixes"
+      (doseq [k [:password-hash :mfa-secret :mfa-backup-codes :session_token :webhook-secret :api-key]]
+        (is (= "[REDACTED]" (get-in out [:user-entity k])) (str k))))
+    (testing "ids and emails stay readable"
+      (is (= 7 (get-in out [:user-entity :id])))
+      (is (= "user@example.com" (get-in out [:user-entity :email]))))))
+
+(deftest ^:unit ^:security redact-for-log-key-names-test
+  (testing "one-time codes, cookies and password confirmation, kebab and snake"
+    (doseq [k [:mfa-code :mfa_code :verification-code :verification_code
+               :backup-code :backup_code :confirmation-code :confirmation_code
+               :cookie "set-cookie" :password-confirmation]]
+      (is (= "[REDACTED]" (get (pii/redact-for-log {k "v"}) k)) (str k))))
+  (testing "camelCase names are normalized before matching"
+    (doseq [k ["passwordHash" "accessToken" "apiKey" :mfaSecret]]
+      (is (= "[REDACTED]" (get (pii/redact-for-log {k "v"}) k)) (str k))))
+  (testing "credential-bearing -key names are redacted"
+    (doseq [k [:stripe-secret-key "x-api-key" "X-API-Key" :secret-key :aws-access-key :signing-key]]
+      (is (= "[REDACTED]" (get (pii/redact-for-log {k "v"}) k)) (str k))))
+  (testing "other -key, -code and -id names are left alone"
+    (doseq [k [:idempotency-key :cache-key :api-key-id :public-key :status-code :country-code]]
+      (is (= "v" (get (pii/redact-for-log {k "v"}) k)) (str k))))
+  (testing "known non-secret hashes stay readable; csrf-token does not"
+    (let [out (pii/redact-for-log {:content-hash "h1" :commit-hash "h2" :etag "e" :csrf-token "c"})]
+      (is (= {:content-hash "h1" :commit-hash "h2" :etag "e" :csrf-token "[REDACTED]"} out)))))
+
+(deftest ^:unit ^:security redact-for-log-walks-sets-and-java-maps-test
+  (testing "maps inside a set are redacted"
+    (is (= #{{:mfa-secret "[REDACTED]" :id 1}}
+           (pii/redact-for-log #{{:mfa-secret "s" :id 1}}))))
+  (testing "a java.util.Map is redacted"
+    (is (= {"password" "[REDACTED]" "id" 1}
+           (pii/redact-for-log (java.util.HashMap. {"password" "p" "id" 1})))))
+  (testing "Sentry context gets the same non-secret allowance"
+    (let [out (pii/apply-redaction {:extra {:content-hash "h" :csrf-token "c"}} {})]
+      (is (= "h" (get-in out [:extra :content-hash])))
+      (is (= "[REDACTED]" (get-in out [:extra :csrf-token]))))))
