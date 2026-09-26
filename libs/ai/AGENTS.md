@@ -6,12 +6,14 @@
 
 **Features:**
 1. **NL Scaffolding** — parse a natural language description into a scaffolding spec (`bb scaffold ai "..."`)
-2. **Error Explainer** — explain a stack trace with Wagoe-specific context (`bb ai explain`)
-3. **Test Generator** — generate a complete test namespace for a source file (`bb ai gen-tests <file>`)
-4. **SQL Copilot** — translate a description into HoneySQL format (`bb ai sql "..."`)
+2. **Error Explainer** (experimental) — explain a stack trace with Wagoe-specific context (`bb ai explain`)
+3. **Test Generator** (experimental) — generate a complete test namespace for a source file (`bb ai gen-tests <file>`)
+4. **SQL Copilot** (experimental) — translate a description into HoneySQL format (`bb ai sql "..."`)
 5. **Documentation Wizard** — generate AGENTS.md, OpenAPI YAML, or README (`bb ai docs --module ...`)
 6. **Admin Entity Generator** — generate admin UI entity EDN config from a description (`bb ai admin-entity "..."`)
 7. **Setup Parser** — parse a NL project setup description into a config spec (`bb setup ai "..."`)
+
+**Experimental (1.0):** 2, 3 and 4 can give confidently wrong answers (BOU-511/512/513); review their output. `bb ai explain` prints the error's own BND code and `Fix:` text before the model's summary.
 
 **Provider strategy:** offline-first via Ollama (no data leaves the machine by default), with cloud opt-in via `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OPENAI_BASE_URL` (any OpenAI-compatible endpoint) or `REPLICATE_API_TOKEN` (hosted, no local GPU). Setting one takes precedence over `config.edn`, so opting in needs no config edit; the dev default stays local.
 
@@ -134,15 +136,15 @@ Require the wiring namespace in your system config loader:
 bb scaffold ai "product module with name string, price decimal required"
 bb scaffold ai "product module with name string, price decimal required" --yes
 
-# Error Explainer
+# Error Explainer (experimental)
 cat stacktrace.txt | bb ai explain
 bb ai explain --file stacktrace.txt
 
-# Test Generator
+# Test Generator (experimental)
 bb ai gen-tests libs/user/src/wagoe/user/core/validation.clj
 bb ai gen-tests libs/user/src/wagoe/user/core/validation.clj --output libs/user/test/wagoe/user/core/validation_test.clj
 
-# SQL Copilot
+# SQL Copilot (experimental)
 bb ai sql "find active users with orders in the last 7 days"
 
 # Documentation Wizard

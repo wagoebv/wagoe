@@ -10,7 +10,6 @@
             [wagoe.ai.core.parsing :as parsing]
             [wagoe.ai.core.prompts :as prompts]
             [wagoe.ai.ports :as ports]
-            [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.tools.logging :as log]))
@@ -307,17 +306,7 @@
          result   (resolve-provider service messages opts)]
      (if (:error result)
        result
-       (let [edn-text (:text result)
-             ;; Extract entity name from the EDN (first key)
-             entity-name (try
-                           (let [parsed (edn/read-string edn-text)]
-                             (when (map? parsed)
-                               (name (first (keys parsed)))))
-                           (catch Exception _ nil))]
-         (if entity-name
-           {:text edn-text :entity-name entity-name}
-           {:error "AI response is not valid EDN with an entity key"
-            :raw-text edn-text}))))))
+       (parsing/parse-admin-entity (:text result))))))
 
 ;; =============================================================================
 ;; Feature 7: Setup Parse (NL to setup spec)

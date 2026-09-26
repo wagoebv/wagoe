@@ -609,7 +609,7 @@ Both values are submitted when checkbox is checked, resulting in an array.
 ## Testing
 
 ```bash
-clojure -M:test :admin
+clojure -M:test:test/pg :admin
 ```
 
 ### UI Testing Checklist

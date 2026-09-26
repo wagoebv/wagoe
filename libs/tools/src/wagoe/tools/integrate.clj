@@ -7,7 +7,7 @@
 ;;   bb scaffold integrate product                 # Guide integration of "product"
 ;;   bb scaffold integrate product --base-ns myapp # Module under myapp.product.*
 ;;
-;; It writes the module's Integrant config into resources/conf/{dev,test}/config.edn
+;; It writes the module's Integrant config into every resources/conf/<profile>/config.edn
 ;; and reports what it did. `--dry-run` shows the same and writes nothing.
 ;;
 ;; It used to only print, while bb.edn.tmpl, the generated AGENTS.md and
@@ -112,6 +112,57 @@
          "}")))
 
 ;; =============================================================================
+;; Writing
+;; =============================================================================
+
+(def dev-only-keys
+  "`wagoe.platform.shell.modules/dev-only-modules`, which throws when one of
+   these is active outside :dev. A test keeps the two in step."
+  #{":wagoe/dashboard"})
+
+(defn profiles
+  "The profile directories under `<root>/resources/conf`, sorted."
+  [root]
+  (->> (.listFiles (io/file root "resources" "conf"))
+       (filter #(.isDirectory ^java.io.File %))
+       (map #(.getName ^java.io.File %))
+       sort))
+
+(def ^:private ok-results #{:written :already-present :dev-only :no-file})
+
+(defn blocking
+  "The [env result] pairs that stop a write."
+  [results]
+  (remove (comp ok-results second) results))
+
+(defn- inject-each [root key-str snippet dry-run?]
+  (vec (for [env (profiles root)]
+         [env (if (and (dev-only-keys key-str) (not= "dev" env))
+                :dev-only
+                (config-edn/inject-key! (str root "/resources/conf/" env "/config.edn")
+                                        key-str (str "\n" snippet "\n")
+                                        {:dry-run? dry-run?}))])))
+
+(defn write-config!
+  "Add the module's key to the config.edn of every profile under `root`, or to
+   none: a profile that cannot take it blocks them all, since a key in some
+   profiles and not others boots in one environment only (BOU-529). Returns
+   [env result] pairs — the plan when nothing was written."
+  [root key-str snippet {:keys [dry-run?]}]
+  (let [plan (inject-each root key-str snippet true)]
+    (if (or dry-run? (seq (blocking plan)))
+      plan
+      (inject-each root key-str snippet false))))
+
+(defn blocked-message [blocked]
+  (str "Nothing was written: "
+       (str/join ", " (for [[env result] blocked]
+                        (str env (case result
+                                   :no-active-section      " has no :active section"
+                                   :insert-would-unbalance " would be unbalanced by the insertion"))))
+       "."))
+
+;; =============================================================================
 ;; Orchestration
 ;; =============================================================================
 
@@ -170,34 +221,27 @@
       (println (dim snippet))
       (println)
 
-      (let [results
-            (doall
-             (for [env ["dev" "test"]]
-               (let [path   (str (root-dir) "/resources/conf/" env "/config.edn")
-                     result (config-edn/inject-key! path key-str (str "\n" snippet "\n")
-                                                    {:dry-run? dry-run?})]
-                 (println (str "  " (case result
-                                      :written           (str (green "✓") " " (if dry-run? "would add to" "added to"))
-                                      :already-present   (str (green "✓") " already in")
-                                      :no-active-section (str (red "✗") " no :active section in")
-                                      :insert-would-unbalance (str (red "✗") " insertion would unbalance")
-                                      :no-file           (str (dim "–") " not found:"))
-                               " " (cyan (str "resources/conf/" env "/config.edn"))))
-                 result)))]
+      (let [results (write-config! (root-dir) key-str snippet {:dry-run? dry-run?})
+            blocked (seq (blocking results))]
+        (doseq [[env result] results]
+          (println (str "  " (case result
+                               :written           (str (green "✓") " " (if (or dry-run? blocked) "would add to" "added to"))
+                               :already-present   (str (green "✓") " already in")
+                               :dev-only          (str (dim "–") " dev-only key, skipped")
+                               :no-active-section (str (red "✗") " no :active section in")
+                               :insert-would-unbalance (str (red "✗") " insertion would unbalance")
+                               :no-file           (str (dim "–") " not found:"))
+                        " " (cyan (str "resources/conf/" env "/config.edn")))))
 
         (println)
         (cond
           ;; A run that wrote nothing must not look like success — to a person
           ;; or to a CI wrapper reading $?.
-          (some #{:no-active-section} results)
-          (do (println (red "No :active section — nothing was written."))
+          blocked
+          (do (println (red (blocked-message blocked)))
               (System/exit 1))
 
-          (some #{:insert-would-unbalance} results)
-          (do (println (red "Insertion would unbalance the config — nothing was written."))
-              (System/exit 1))
-
-          (every? #{:no-file} results)
+          (every? #{:no-file :dev-only} (map second results))
           (do (println (red "No config files found — is this a Wagoe project?"))
               (System/exit 1))
 
@@ -238,7 +282,7 @@
   (println "What it does:")
   (println "  1. Locates the module under src/<base-ns>/<module>/")
   (println "  2. Confirms it is on the classpath + covered by the test suites")
-  (println "  3. Writes :wagoe/<module> into resources/conf/{dev,test}/config.edn")
+  (println "  3. Writes :wagoe/<module> into every resources/conf/<profile>/config.edn")
   (println)
   (println "Running it twice is a no-op — an existing key is left alone."))
 
