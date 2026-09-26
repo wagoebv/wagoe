@@ -109,7 +109,7 @@
                           :error (.getMessage e)}))
         {:success false
          :errors [{:code :storage-error
-                   :message (.getMessage e)}]})))
+                   :message "Storage operation failed"}]})))
 
   (upload-image [this image-bytes metadata options]
     (when logger
@@ -183,7 +183,7 @@
                           :error (.getMessage e)}))
         {:success false
          :errors [{:code :storage-error
-                   :message (.getMessage e)}]})))
+                   :message "Storage operation failed"}]})))
 
   (download-file [_ file-key]
     (when logger

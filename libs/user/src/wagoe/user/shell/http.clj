@@ -239,106 +239,89 @@
 ;; MFA Handlers
 ;; =============================================================================
 
+;; Untyped exceptions are not caught here: the platform's http-error-handler
+;; logs them and answers a generic 500 (BOU-557).
+
 (defn mfa-setup-handler
   "POST /api/auth/mfa/setup - Initiate MFA setup for authenticated user."
   [mfa-service]
   (fn [request]
-    (try
-      (let [user-id (get-in request [:user :id])
-            _ (when-not user-id
-                (throw (ex-info "User not authenticated" {:type :unauthorized})))
-            result (mfa/setup-mfa mfa-service user-id)]
-        (if (:success? result)
-          {:status 200
-           :headers {"Content-Type" "application/json"}
-           :body (json/generate-string
-                  {:secret (:secret result)
-                   :qrCodeUrl (:qr-code-url result)
-                   :backupCodes (:backup-codes result)
-                   :issuer (:issuer result)
-                   :accountName (:account-name result)})}
-          {:status 400
-           :headers {"Content-Type" "application/json"}
-           ;; The message, not the map. mfa moved to the ADR-036 §3 return
-           ;; ({:error {:type … :message …}}); flattening here keeps this
-           ;; endpoint answering exactly what it answered before (BOU-323).
-           :body (json/generate-string {:error (get-in result [:error :message])})}))
-      (catch Exception e
-        {:status 500
+    (let [user-id (get-in request [:user :id])
+          _ (when-not user-id
+              (throw (ex-info "User not authenticated" {:type :unauthorized})))
+          result (mfa/setup-mfa mfa-service user-id)]
+      (if (:success? result)
+        {:status 200
          :headers {"Content-Type" "application/json"}
-         :body (json/generate-string {:error (.getMessage e)})}))))
+         :body (json/generate-string
+                {:secret (:secret result)
+                 :qrCodeUrl (:qr-code-url result)
+                 :backupCodes (:backup-codes result)
+                 :issuer (:issuer result)
+                 :accountName (:account-name result)})}
+        {:status 400
+         :headers {"Content-Type" "application/json"}
+         ;; The message, not the map. mfa moved to the ADR-036 §3 return
+         ;; ({:error {:type … :message …}}); flattening here keeps this
+         ;; endpoint answering exactly what it answered before (BOU-323).
+         :body (json/generate-string {:error (get-in result [:error :message])})}))))
 
 (defn mfa-enable-handler
   "POST /api/auth/mfa/enable - Enable MFA after verification."
   [mfa-service]
   (fn [request]
-    (try
-      (let [user-id (get-in request [:user :id])
-            _ (when-not user-id
-                (throw (ex-info "User not authenticated" {:type :unauthorized})))
-            body (get request :body-params)
-            secret (get body :secret)
-            backup-codes (get body :backupCodes)
-            verification-code (get body :verificationCode)
-            result (mfa/enable-mfa mfa-service user-id secret backup-codes verification-code)]
-        (if (:success? result)
-          {:status 200
-           :headers {"Content-Type" "application/json"}
-           :body (json/generate-string {:message "MFA enabled successfully"})}
-          {:status 400
-           :headers {"Content-Type" "application/json"}
-           ;; The message, not the map. mfa moved to the ADR-036 §3 return
-           ;; ({:error {:type … :message …}}); flattening here keeps this
-           ;; endpoint answering exactly what it answered before (BOU-323).
-           :body (json/generate-string {:error (get-in result [:error :message])})}))
-      (catch Exception e
-        {:status 500
+    (let [user-id (get-in request [:user :id])
+          _ (when-not user-id
+              (throw (ex-info "User not authenticated" {:type :unauthorized})))
+          body (get request :body-params)
+          secret (get body :secret)
+          backup-codes (get body :backupCodes)
+          verification-code (get body :verificationCode)
+          result (mfa/enable-mfa mfa-service user-id secret backup-codes verification-code)]
+      (if (:success? result)
+        {:status 200
          :headers {"Content-Type" "application/json"}
-         :body (json/generate-string {:error (.getMessage e)})}))))
+         :body (json/generate-string {:message "MFA enabled successfully"})}
+        {:status 400
+         :headers {"Content-Type" "application/json"}
+         ;; The message, not the map. mfa moved to the ADR-036 §3 return
+         ;; ({:error {:type … :message …}}); flattening here keeps this
+         ;; endpoint answering exactly what it answered before (BOU-323).
+         :body (json/generate-string {:error (get-in result [:error :message])})}))))
 
 (defn mfa-disable-handler
   "POST /api/auth/mfa/disable - Disable MFA for authenticated user."
   [mfa-service]
   (fn [request]
-    (try
-      (let [user-id (get-in request [:user :id])
-            _ (when-not user-id
-                (throw (ex-info "User not authenticated" {:type :unauthorized})))
-            result (mfa/disable-mfa mfa-service user-id)]
-        (if (:success? result)
-          {:status 200
-           :headers {"Content-Type" "application/json"}
-           :body (json/generate-string {:message "MFA disabled successfully"})}
-          {:status 400
-           :headers {"Content-Type" "application/json"}
-           ;; The message, not the map. mfa moved to the ADR-036 §3 return
-           ;; ({:error {:type … :message …}}); flattening here keeps this
-           ;; endpoint answering exactly what it answered before (BOU-323).
-           :body (json/generate-string {:error (get-in result [:error :message])})}))
-      (catch Exception e
-        {:status 500
+    (let [user-id (get-in request [:user :id])
+          _ (when-not user-id
+              (throw (ex-info "User not authenticated" {:type :unauthorized})))
+          result (mfa/disable-mfa mfa-service user-id)]
+      (if (:success? result)
+        {:status 200
          :headers {"Content-Type" "application/json"}
-         :body (json/generate-string {:error (.getMessage e)})}))))
+         :body (json/generate-string {:message "MFA disabled successfully"})}
+        {:status 400
+         :headers {"Content-Type" "application/json"}
+         ;; The message, not the map. mfa moved to the ADR-036 §3 return
+         ;; ({:error {:type … :message …}}); flattening here keeps this
+         ;; endpoint answering exactly what it answered before (BOU-323).
+         :body (json/generate-string {:error (get-in result [:error :message])})}))))
 
 (defn mfa-status-handler
   "GET /api/auth/mfa/status - Get MFA status for authenticated user."
   [mfa-service]
   (fn [request]
-    (try
-      (let [user-id (get-in request [:user :id])
-            _ (when-not user-id
-                (throw (ex-info "User not authenticated" {:type :unauthorized})))
-            status (mfa/get-mfa-status mfa-service user-id)]
-        {:status 200
-         :headers {"Content-Type" "application/json"}
-         :body (json/generate-string
-                {:enabled (:enabled status)
-                 :enabledAt (:enabled-at status)
-                 :backupCodesRemaining (:backup-codes-remaining status)})})
-      (catch Exception e
-        {:status 500
-         :headers {"Content-Type" "application/json"}
-         :body (json/generate-string {:error (.getMessage e)})}))))
+    (let [user-id (get-in request [:user :id])
+          _ (when-not user-id
+              (throw (ex-info "User not authenticated" {:type :unauthorized})))
+          status (mfa/get-mfa-status mfa-service user-id)]
+      {:status 200
+       :headers {"Content-Type" "application/json"}
+       :body (json/generate-string
+              {:enabled (:enabled status)
+               :enabledAt (:enabled-at status)
+               :backupCodesRemaining (:backup-codes-remaining status)})})))
 
 ;; =============================================================================
 ;; User Module Routes
