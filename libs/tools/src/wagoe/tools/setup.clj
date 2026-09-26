@@ -570,16 +570,25 @@
 
 (defn- root-dir [] (System/getProperty "user.dir"))
 
+(defn- write-profile-file!
+  "Prod is hand-maintained once it exists — module wiring, security policy —
+  so an existing prod file is kept rather than regenerated."
+  [env rel content]
+  (let [f    (io/file (root-dir) "resources" "conf" env rel)
+        path (str "resources/conf/" env "/" rel)]
+    (if (and (= env "prod") (.exists f))
+      (println (yellow "!") " Kept existing " (cyan path) (dim " (delete it to regenerate)"))
+      (do (io/make-parents f)
+          (spit f content)
+          (println (green "✓") " Generated " (cyan path))))))
+
 (defn- write-config-files!
   "Write generated config files to disk."
   [spec]
   (let [envs ["dev" "test" "prod"]]
     (println)
     (doseq [env envs]
-      (let [f (io/file (root-dir) "resources" "conf" env "config.edn")]
-        (io/make-parents f)
-        (spit f (build-config spec env))
-        (println (green "✓") " Generated " (cyan (str "resources/conf/" env "/config.edn")))))
+      (write-profile-file! env "config.edn" (build-config spec env)))
     (spit (io/file (root-dir) ".env.example") (build-env-example spec))
     (println (green "✓") " Generated " (cyan ".env.example"))
 
@@ -588,10 +597,7 @@
     (when (:admin-ui spec)
       (if-let [entity @admin-users-entity]
         (doseq [env envs]
-          (let [f (io/file (root-dir) "resources" "conf" env "admin" "users.edn")]
-            (io/make-parents f)
-            (spit f entity)
-            (println (green "✓") " Generated " (cyan (str "resources/conf/" env "/admin/users.edn")))))
+          (write-profile-file! env "admin/users.edn" entity))
         (println (yellow "!") " Admin entity config missing from wagoe-tools;"
                  (cyan "#include \"admin/users.edn\"") "will not resolve.")))
     (println)

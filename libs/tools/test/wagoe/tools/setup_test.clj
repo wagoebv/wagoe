@@ -554,3 +554,20 @@
       (is (fs/exists? (fs/file dir "resources" "conf" "prod" "admin" "users.edn"))
           "the prod config's #include must resolve")
       (finally (fs/delete-tree dir)))))
+
+(deftest ^:unit setup-keeps-an-existing-prod-config
+  (let [dir   (fs/create-temp-dir)
+        conf  (fs/file dir "resources" "conf" "prod" "config.edn")
+        users (fs/file dir "resources" "conf" "prod" "admin" "users.edn")]
+    (try
+      (fs/create-dirs (fs/parent users))
+      (spit conf "{:active {:my/service {}}}")
+      (spit users "{:users {:label \"Mine\"}}")
+      (with-redefs [setup/root-dir (constantly (str dir))]
+        (with-out-str (setup/from-flags {:database "postgresql" :admin-ui "true"})))
+      (is (= "{:active {:my/service {}}}" (slurp conf))
+          "a hand-maintained prod config must survive bb setup")
+      (is (= "{:users {:label \"Mine\"}}" (slurp users)))
+      (is (fs/exists? (fs/file dir "resources" "conf" "dev" "config.edn"))
+          "dev is still generated")
+      (finally (fs/delete-tree dir)))))
