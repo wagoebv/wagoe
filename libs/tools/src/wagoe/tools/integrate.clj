@@ -7,7 +7,7 @@
 ;;   bb scaffold integrate product                 # Guide integration of "product"
 ;;   bb scaffold integrate product --base-ns myapp # Module under myapp.product.*
 ;;
-;; It writes the module's Integrant config into resources/conf/{dev,test}/config.edn
+;; It writes the module's Integrant config into every resources/conf/<profile>/config.edn
 ;; and reports what it did. `--dry-run` shows the same and writes nothing.
 ;;
 ;; It used to only print, while bb.edn.tmpl, the generated AGENTS.md and
@@ -112,6 +112,35 @@
          "}")))
 
 ;; =============================================================================
+;; Writing
+;; =============================================================================
+
+(def dev-only-keys
+  "`wagoe.platform.shell.modules/dev-only-modules`, which throws when one of
+   these is active outside :dev. A test keeps the two in step."
+  #{":wagoe/dashboard"})
+
+(defn profiles
+  "The profile directories under `<root>/resources/conf`, sorted."
+  [root]
+  (->> (.listFiles (io/file root "resources" "conf"))
+       (filter #(.isDirectory ^java.io.File %))
+       (map #(.getName ^java.io.File %))
+       sort))
+
+(defn write-config!
+  "Add the module's key to the config.edn of every profile under `root`.
+   Returns [env result] pairs. Only dev and test were written, so a module
+   was missing under WAG_ENV=prod (BOU-529)."
+  [root key-str snippet {:keys [dry-run?]}]
+  (vec (for [env (profiles root)]
+         [env (if (and (dev-only-keys key-str) (not= "dev" env))
+                :dev-only
+                (config-edn/inject-key! (str root "/resources/conf/" env "/config.edn")
+                                        key-str (str "\n" snippet "\n")
+                                        {:dry-run? dry-run?}))])))
+
+;; =============================================================================
 ;; Orchestration
 ;; =============================================================================
 
@@ -171,19 +200,18 @@
       (println)
 
       (let [results
-            (doall
-             (for [env ["dev" "test"]]
-               (let [path   (str (root-dir) "/resources/conf/" env "/config.edn")
-                     result (config-edn/inject-key! path key-str (str "\n" snippet "\n")
-                                                    {:dry-run? dry-run?})]
-                 (println (str "  " (case result
-                                      :written           (str (green "✓") " " (if dry-run? "would add to" "added to"))
-                                      :already-present   (str (green "✓") " already in")
-                                      :no-active-section (str (red "✗") " no :active section in")
-                                      :insert-would-unbalance (str (red "✗") " insertion would unbalance")
-                                      :no-file           (str (dim "–") " not found:"))
-                               " " (cyan (str "resources/conf/" env "/config.edn"))))
-                 result)))]
+            (mapv
+             (fn [[env result]]
+               (println (str "  " (case result
+                                    :written           (str (green "✓") " " (if dry-run? "would add to" "added to"))
+                                    :already-present   (str (green "✓") " already in")
+                                    :dev-only          (str (dim "–") " dev-only key, skipped")
+                                    :no-active-section (str (red "✗") " no :active section in")
+                                    :insert-would-unbalance (str (red "✗") " insertion would unbalance")
+                                    :no-file           (str (dim "–") " not found:"))
+                             " " (cyan (str "resources/conf/" env "/config.edn"))))
+               result)
+             (write-config! (root-dir) key-str snippet {:dry-run? dry-run?}))]
 
         (println)
         (cond
@@ -197,7 +225,7 @@
           (do (println (red "Insertion would unbalance the config — nothing was written."))
               (System/exit 1))
 
-          (every? #{:no-file} results)
+          (every? #{:no-file :dev-only} results)
           (do (println (red "No config files found — is this a Wagoe project?"))
               (System/exit 1))
 
@@ -238,7 +266,7 @@
   (println "What it does:")
   (println "  1. Locates the module under src/<base-ns>/<module>/")
   (println "  2. Confirms it is on the classpath + covered by the test suites")
-  (println "  3. Writes :wagoe/<module> into resources/conf/{dev,test}/config.edn")
+  (println "  3. Writes :wagoe/<module> into every resources/conf/<profile>/config.edn")
   (println)
   (println "Running it twice is a no-op — an existing key is left alone."))
 

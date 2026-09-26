@@ -1,11 +1,18 @@
 (ns wagoe.tools.integrate-test
   (:require [clojure.test :refer [deftest is testing]]
             [clojure.java.io :as io]
+            [clojure.string :as str]
             [wagoe.tools.integrate :as integrate])
   (:import [java.nio.file Files]
            [java.nio.file.attribute FileAttribute]))
 
 (defn- tmp-root [] (.toFile (Files/createTempDirectory "integrate-test" (make-array FileAttribute 0))))
+
+(defn- repo-root []
+  (let [cwd (System/getProperty "user.dir")]
+    (or (first (filter #(.isDirectory (io/file % "libs"))
+                       [cwd (str cwd "/../..")]))
+        (throw (ex-info "cannot locate repo root (no libs/ dir)" {:cwd cwd})))))
 
 (defn- touch! [root & path-segs]
   (let [f (apply io/file root path-segs)]
@@ -153,3 +160,56 @@
   ;; The config key is read as a keyword, not as a path, so it stays kebab.
   (is (re-find #":wagoe/invoice-line-item"
                (integrate/generate-config-snippet "invoice-line-item" false))))
+
+;; =============================================================================
+;; write-config! — every profile under resources/conf, prod included (BOU-529)
+;; =============================================================================
+
+(def ^:private minimal-config "{:active\n {:wagoe/settings {:name \"x\"}}\n\n :inactive\n {}}\n")
+
+(defn- conf-root [& envs]
+  (let [root (tmp-root)]
+    (doseq [env envs]
+      (let [f (io/file root "resources" "conf" env "config.edn")]
+        (io/make-parents f)
+        (spit f minimal-config)))
+    root))
+
+(defn- config-text [root env]
+  (slurp (io/file root "resources" "conf" env "config.edn")))
+
+(def ^:private snippet (integrate/generate-config-snippet "product" false))
+
+(deftest ^:unit write-config-writes-every-profile
+  (let [root    (conf-root "dev" "test" "prod")
+        results (integrate/write-config! root ":wagoe/product" snippet {})]
+    (is (= {"dev" :written "test" :written "prod" :written} (into {} results)))
+    (doseq [env ["dev" "test" "prod"]]
+      (is (str/includes? (config-text root env) ":wagoe/product") env))))
+
+(deftest ^:unit write-config-does-not-create-a-missing-prod
+  (let [root    (conf-root "dev" "test")
+        results (integrate/write-config! root ":wagoe/product" snippet {})]
+    (is (= {"dev" :written "test" :written} (into {} results)))
+    (is (not (.exists (io/file root "resources" "conf" "prod"))))))
+
+(deftest ^:unit write-config-dry-run-lists-every-profile-and-writes-nothing
+  (let [root    (conf-root "dev" "test" "prod")
+        results (integrate/write-config! root ":wagoe/product" snippet {:dry-run? true})]
+    (is (= {"dev" :written "test" :written "prod" :written} (into {} results)))
+    (doseq [env ["dev" "test" "prod"]]
+      (is (= minimal-config (config-text root env)) env))))
+
+(deftest ^:unit write-config-keeps-a-dev-only-key-out-of-other-profiles
+  ;; The platform refuses :wagoe/dashboard outside :dev, so writing it to prod
+  ;; would stop the app booting.
+  (let [root    (conf-root "dev" "test" "prod")
+        results (integrate/write-config! root ":wagoe/dashboard"
+                                         (integrate/generate-config-snippet "dashboard" false) {})]
+    (is (= {"dev" :written "test" :dev-only "prod" :dev-only} (into {} results)))
+    (is (not (str/includes? (config-text root "prod") ":wagoe/dashboard")))))
+
+(deftest ^:unit dev-only-keys-match-the-platform
+  (let [src  (slurp (io/file (repo-root) "libs/platform/src/wagoe/platform/shell/modules.clj"))
+        form (read-string (subs src (str/index-of src "(def dev-only-modules")))]
+    (is (= (set (map str (keys (last form)))) integrate/dev-only-keys))))

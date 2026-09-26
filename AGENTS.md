@@ -258,7 +258,7 @@ The quality gate `bb check:fcis` (run on every commit) enforces strict rules:
 | `bb scaffold ai "description"` | Generating module structure from natural language description |
 | `bb scaffold field --module-name {m} --entity {E} --name {field} --type {type}` | Adding a field to an existing module's schema |
 | `bb scaffold endpoint --module-name {m} --path {path} --method {method} --handler-name {name}` | Adding an HTTP endpoint to an existing module |
-| `bb scaffold integrate {module}` | Write a generated module's config key into resources/conf/{dev,test}/config.edn |
+| `bb scaffold integrate {module}` | Write a generated module's config key into every resources/conf/<profile>/config.edn |
 
 ### Scaffolder Best Practices for AI Agents
 
