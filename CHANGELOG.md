@@ -46,6 +46,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **`/health/ready` showed database and cache exception messages** (BOU-558). The body now says
+  `unreachable`; the reason is logged at WARN. Upgrade platform if readiness is public.
 - **MFA and storage upload APIs returned the raw exception message** (BOU-557). They now answer the
   platform's generic 500 and log the cause; MFA without a user answers 401. Upgrade user and storage.
 - **Password hashes, MFA secrets and session tokens were written to the log** (BOU-556). Nothing

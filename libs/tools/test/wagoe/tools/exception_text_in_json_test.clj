@@ -17,11 +17,7 @@
    ["libs/tenant/src/wagoe/tenant/shell/membership_http.clj" 'update-membership-handler]
    "typed :validation-error only"
    ["libs/tenant/src/wagoe/tenant/shell/membership_http.clj" 'accept-invitation-handler]
-   "typed :validation-error only"
-   ["libs/platform/src/wagoe/platform/shell/interfaces/http/common.clj" 'check-database]
-   "readiness body names the driver error; not fixed in BOU-557, platform is out of its scope"
-   ["libs/platform/src/wagoe/platform/shell/interfaces/http/common.clj" 'check-cache]
-   "readiness body names the cache error; not fixed in BOU-557, platform is out of its scope"})
+   "typed :validation-error only"})
 
 (defn- json-handler-file? [path]
   (let [p   (str/replace (str path) "\\" "/")
