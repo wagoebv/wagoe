@@ -461,6 +461,24 @@
                            :logo-url       (:logo-url config)}))
           (ring-response/status 500)))))
 
+(defn create-disabled-response
+  "The admin 403 page for an entity with `:permissions {:create false}`, or
+   nil when create is allowed. Names `:create-hint` when the config has one
+   (BOU-534)."
+  [request user entity-name entity-config]
+  (let [{:keys [create create-hint]} (:permissions entity-config)]
+    (when (false? create)
+      (let [label (:label entity-config)
+            label (if (string? label) label (name entity-name))]
+        (-> (html-response request
+                           (admin-ui/admin-forbidden-page
+                            [:span
+                             [:t :admin/create-disabled {:entity label}]
+                             (when create-hint
+                               [:span " " [:t :admin/create-disabled-hint {:hint create-hint}]])]
+                            user))
+            (ring-response/status 403))))))
+
 ;; =============================================================================
 ;; Display Options
 ;; =============================================================================

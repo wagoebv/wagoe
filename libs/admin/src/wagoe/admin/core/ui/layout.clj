@@ -211,7 +211,7 @@
   "403 Forbidden page for admin access denial.
 
    Args:
-     reason: Explanation of why access was denied
+     reason: Why access was denied, shown instead of the generic message
      user: Current user (optional)
 
    Returns:
@@ -221,9 +221,9 @@
    [:t :admin/page-access-denied-title]
    [:div.error-page.admin-forbidden
     [:h1 "403 - " [:t :admin/page-access-denied-title]]
-    [:p.error-message [:t :admin/page-access-denied-message]]
-    (when reason
-      [:p.error-reason reason])
+    (if reason
+      [:p.error-message reason]
+      [:p.error-message [:t :admin/page-access-denied-message]])
     [:div.error-actions
      (if user
        [:a.button {:href "/"} [:t :admin/button-go-dashboard]]

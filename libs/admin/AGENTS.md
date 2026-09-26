@@ -161,6 +161,38 @@ The service soft-deletes by running `UPDATE <table> SET deleted_at = ? WHERE id 
 
 ---
 
+## Lifecycle Events (BOU-492)
+
+With `:wagoe/events` configured, admin writes publish on topic `:admin`, after
+the write commits:
+
+| Type | Payload |
+|---|---|
+| `:admin/entity-created` | `{:entity :invoices :id <uuid> :attrs {...}}` |
+| `:admin/entity-updated` | same, plus `:prior {...}`; also for inline edits |
+| `:admin/entity-deleted` | same; `:attrs` is the record as it was; one per record on bulk delete |
+
+- Wiring: `ig-config` refs `:wagoe/events` only when it is in `:enabled`, and
+  `create-admin-service` wraps the service in `PublishingAdminService` only
+  when given a publisher. Without a bus the old code runs unchanged.
+- A failed publish is logged at warn; the request still succeeds. Publishing
+  is synchronous, so a bulk delete stops at the first failure and logs how many
+  it skipped, rather than waiting out the broker timeout once per row.
+- `:prior`, and `:attrs` on delete, are best-effort: they are read before the
+  write, outside its transaction, so a concurrent write can make them stale.
+- Bulk delete reads the records in one query and publishes only when the
+  delete count equals the number read; otherwise it logs and publishes none,
+  since it cannot tell which rows another request deleted first.
+- `:hide-fields` are stripped from `:attrs` and `:prior`.
+- Nothing is published for a write that changed nothing (unknown id).
+- On `:redis`, a `PGobject` (jsonb) column arrives as its JSON string; the
+  in-memory bus hands over the object itself.
+
+Example subscriber that starts a workflow: see "Lifecycle Events" in
+[README.md](README.md).
+
+---
+
 ## UI/Frontend Development
 
 ### Technology Stack
@@ -568,6 +600,12 @@ Both values are submitted when checkbox is checked, resulting in an array.
 ### 5. A NOT NULL Column Off the Create Form
 
 The create insert writes only the form's fields (plus `:hide-fields`, which a request may still supply), so a `NOT NULL` column with no default that is read-only or not in `:editable-fields` fails every create. Exempt: `:id`, `:created-at` and `:updated-at`, which the admin fills, and identity and computed columns, which the database fills. Introspection logs this as a config error and the create page shows it, naming the entity and column, with status 500 (BOU-494). Fix: give the column a default, or make the field editable.
+
+When the column is derived by another module (tenants' `schema_name`, set at
+provisioning), neither fix applies: point `:create-redirect-url` at that
+module's create page, or, if it has none, set `:permissions {:create false}`.
+That hides "New" and answers create with a 403 admin page; `:create-hint
+"POST /api/v1/tenants"` tells the user where to go instead (BOU-534).
 
 ### 6. Direct Navigation to HTMX Fragment Endpoints
 

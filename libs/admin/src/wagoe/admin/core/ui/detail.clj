@@ -558,7 +558,7 @@
               (icons/icon :chevron-right {:size 14})]
              [:span.button.secondary.disabled {:aria-disabled "true"}
               (icons/icon :chevron-right {:size 14})])])
-        (when is-edit?
+        (when (and is-edit? (:can-create permissions))
           [:a.button.primary
            {:class "gap-2"
             ;; `list-url` is the caller context (either return-to from the

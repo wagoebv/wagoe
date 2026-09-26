@@ -191,6 +191,10 @@ unaffected; `instance?` is not. The exception is listed in
 `adapter_surface_test.clj` with its reason, and anything not listed there is
 required to round-trip exactly.
 
+**A type transit has no handler for arrives as its `str`** (BOU-492). A driver's
+`PGobject` (jsonb) is the usual one; the event is sent rather than lost. The
+`java.time` date and date-time types round-trip as themselves.
+
 **Unbounded streams.** `:max-len` trims approximately (default 10 000 entries).
 A stream with no bound is a disk leak that appears in the longest-running
 deployment first.

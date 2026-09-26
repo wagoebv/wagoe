@@ -50,7 +50,19 @@
    ;; what was published, on every event rather than in some edge case. The
    ;; in-memory adapter does not serialise, so it kept the original and the two
    ;; disagreed. `.toString` and `Instant/parse` round-trip exactly.
-   (transit/write-handler "instant" #(.toString ^java.time.Instant %))})
+   (transit/write-handler "instant" #(.toString ^java.time.Instant %))
+
+   ;; What a database row carries (BOU-492). `.toString` and `parse`
+   ;; round-trip each of them exactly, zone id included.
+   java.time.OffsetDateTime (transit/write-handler "offset-date-time" str)
+   java.time.ZonedDateTime  (transit/write-handler "zoned-date-time" str)
+   java.time.LocalDate      (transit/write-handler "local-date" str)
+   java.time.LocalDateTime  (transit/write-handler "local-date-time" str)})
+
+(def ^:private default-write-handler
+  "Anything else goes as its `str`, so an unexpected type (a driver's PGobject
+   for jsonb) changes a value rather than losing the whole event."
+  (transit/write-handler "str" str))
 
 (def ^:private read-handlers
   "Read an Instant back as an Instant.
@@ -59,6 +71,11 @@
    java.util.Date instead, so a round trip would change the type of a value
    nobody asked to convert."
   {"instant" (transit/read-handler #(java.time.Instant/parse %))
+   "offset-date-time" (transit/read-handler #(java.time.OffsetDateTime/parse %))
+   "zoned-date-time"  (transit/read-handler #(java.time.ZonedDateTime/parse %))
+   "local-date"       (transit/read-handler #(java.time.LocalDate/parse %))
+   "local-date-time"  (transit/read-handler #(java.time.LocalDateTime/parse %))
+   "str"              (transit/read-handler identity)
 
    ;; transit tags a PersistentList as "list" and its default reader hands back
    ;; a LazySeq. The values are equal, so this is invisible to `=` — and not to
@@ -69,7 +86,8 @@
 (defn- encode
   [event]
   (let [out (ByteArrayOutputStream.)]
-    (transit/write (transit/writer out :json {:handlers write-handlers}) event)
+    (transit/write (transit/writer out :json {:handlers        write-handlers
+                                              :default-handler default-write-handler}) event)
     (.toString out "UTF-8")))
 
 (defn- decode

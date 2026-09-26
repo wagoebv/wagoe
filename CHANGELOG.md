@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Admin offered a tenant create that could never succeed** (BOU-534). It is now
+  off via `:permissions {:create false}`; create tenants with `POST /api/v1/tenants`.
 - **`clojure -T:build uber` failed on macOS and Windows in generated projects** (BOU-549).
   Copy the LICENSE/NOTICE `:exclude` patterns from `wagoe new`'s `build.clj` into yours.
 - **An uberjar's `migrate` ran only one library's migrations** (BOU-543). Upgrade platform with
@@ -80,6 +82,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **Admin writes publish lifecycle events** (BOU-492). With `:wagoe/events` on,
+  subscribe to `:admin` for `:admin/entity-created`, `-updated` and `-deleted`.
 - **Modules with several entities** (BOU-497, BOU-514). `bb scaffold entity
   --belongs-to invoice` adds one; `scaffold ai` and MCP now generate them all.
 - **Scaffolder `default=<value>` field modifier** (BOU-494). Required enums now
