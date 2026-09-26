@@ -381,15 +381,15 @@ Add rate limiting to upload endpoints to prevent abuse (use Wagoe's rate limitin
 Run the test suite:
 
 ```bash
-clojure -M:test -m kaocha.runner --focus wagoe.storage
+clojure -M:test :storage --focus wagoe.storage
 ```
 
 Run specific test namespaces:
 
 ```bash
-clojure -M:test -m kaocha.runner --focus wagoe.storage.core.validation-test
-clojure -M:test -m kaocha.runner --focus wagoe.storage.shell.adapters.local-test
-clojure -M:test -m kaocha.runner --focus wagoe.storage.shell.service-test
+clojure -M:test :storage --focus wagoe.storage.core.validation-test
+clojure -M:test :storage --focus wagoe.storage.shell.adapters.local-test
+clojure -M:test :storage --focus wagoe.storage.shell.service-test
 ```
 
 ## Architecture

@@ -76,10 +76,10 @@ For complex schemas, lock in the expected error messages:
 [source,bash]
 ----
 # Run snapshot tests
-clojure -M:test --focus user-validation-snapshot-test
+clojure -M:test:test/all --focus user-validation-snapshot-test
 
 # Update snapshots when messages change intentionally
-UPDATE_SNAPSHOTS=true clojure -M:test --focus user-validation-snapshot-test
+UPDATE_SNAPSHOTS=true clojure -M:test:test/all --focus user-validation-snapshot-test
 ----
 
 == Common schema types

@@ -348,7 +348,7 @@ JWT_SECRET="dev-secret-at-least-32-characters-long" clojure -M:test :user
 clojure -M:test :user --focus-meta :unit
 
 # Update validation snapshots
-UPDATE_SNAPSHOTS=true clojure -M:test \
+UPDATE_SNAPSHOTS=true clojure -M:test :user \
   --focus wagoe.user.core.user-validation-snapshot-test
 ```
 

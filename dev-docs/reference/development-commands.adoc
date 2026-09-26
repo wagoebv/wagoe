@@ -51,14 +51,14 @@ Wagoe uses https://github.com/lambdaisland/kaocha[Kaocha] for testing with H2 in
 
 [source,bash]
 ----
-clojure -M:test
+clojure -M:test:test/all
 ----
 
 With JWT secret (required for auth tests):
 
 [source,bash]
 ----
-JWT_SECRET="dev-secret-at-least-32-characters-long" clojure -M:test
+JWT_SECRET="dev-secret-at-least-32-characters-long" clojure -M:test:test/all
 ----
 
 [[test-library]]
@@ -67,17 +67,17 @@ JWT_SECRET="dev-secret-at-least-32-characters-long" clojure -M:test
 [source,bash]
 ----
 clojure -M:test :core           # Core library tests
-clojure -M:test :observability  # Observability library tests
+clojure -M:test:test/otel :observability  # Observability library tests
 clojure -M:test :platform       # Platform library tests
 clojure -M:test :user           # User library tests
-clojure -M:test :admin          # Admin library tests
+clojure -M:test:test/pg :admin          # Admin library tests
 clojure -M:test :storage        # Storage library tests
-clojure -M:test :scaffolder     # Scaffolder library tests
+clojure -M:test:test/pg :scaffolder     # Scaffolder library tests
 clojure -M:test :cache          # Cache library tests
 clojure -M:test :jobs           # Jobs library tests
 clojure -M:test :email          # Email library tests
 clojure -M:test :realtime       # Realtime library tests
-clojure -M:test :tenant         # Tenant library tests
+clojure -M:test:test/pg :tenant         # Tenant library tests
 clojure -M:test :external       # External adapters tests
 clojure -M:test :payments       # Payments library tests
 clojure -M:test :workflow       # Workflow library tests
@@ -93,9 +93,9 @@ clojure -M:test :ai             # AI library tests
 
 [source,bash]
 ----
-clojure -M:test --focus-meta :unit         # Unit tests only
-clojure -M:test --focus-meta :integration  # Integration tests
-clojure -M:test --focus-meta :contract     # Database contract tests
+clojure -M:test:test/all --focus-meta :unit         # Unit tests only
+clojure -M:test:test/all --focus-meta :integration  # Integration tests
+clojure -M:test:test/all --focus-meta :contract     # Database contract tests
 ----
 
 [[test-namespace]]
@@ -103,8 +103,8 @@ clojure -M:test --focus-meta :contract     # Database contract tests
 
 [source,bash]
 ----
-clojure -M:test --focus wagoe.user.core.user-test
-clojure -M:test --focus wagoe.admin.core.entity-test
+clojure -M:test :user --focus wagoe.user.core.user-test
+clojure -M:test:test/pg :admin --focus wagoe.admin.core.entity-test
 ----
 
 [[test-watch]]
@@ -112,10 +112,10 @@ clojure -M:test --focus wagoe.admin.core.entity-test
 
 [source,bash]
 ----
-clojure -M:test --watch                           # Watch all tests
+clojure -M:test:test/all --watch                           # Watch all tests
 clojure -M:test --watch :core                     # Watch core library
-clojure -M:test --watch --focus-meta :unit        # Watch unit tests
-clojure -M:test --watch --focus wagoe.user.core.user-test  # Watch specific namespace
+clojure -M:test:test/all --watch --focus-meta :unit        # Watch unit tests
+clojure -M:test :user --watch --focus wagoe.user.core.user-test  # Watch specific namespace
 ----
 
 [[test-snapshots]]
@@ -123,7 +123,7 @@ clojure -M:test --watch --focus wagoe.user.core.user-test  # Watch specific name
 
 [source,bash]
 ----
-UPDATE_SNAPSHOTS=true clojure -M:test \
+UPDATE_SNAPSHOTS=true clojure -M:test:test/all \
   --focus wagoe.user.core.user-validation-snapshot-test
 ----
 
@@ -437,7 +437,7 @@ Always use `clj-paren-repair` to fix parenthesis issues. Never manually repair -
 [source,bash]
 ----
 # Start watch mode for your focus area
-clojure -M:test --watch --focus wagoe.user.core.user-test
+clojure -M:test :user --watch --focus wagoe.user.core.user-test
 
 # Edit code, save, tests run automatically
 # Ctrl+C to exit
@@ -449,7 +449,7 @@ clojure -M:test --watch --focus wagoe.user.core.user-test
 [source,bash]
 ----
 # Run all tests
-clojure -M:test
+clojure -M:test:test/all
 
 # Lint all code
 clojure -M:clj-kondo --lint src test libs/*/src libs/*/test
