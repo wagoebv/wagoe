@@ -85,7 +85,7 @@
 ;; =============================================================================
 
 (def field-types
-  ["string" "text" "int" "decimal" "boolean" "email" "uuid" "enum" "date" "json"])
+  ["string" "text" "int" "decimal" "boolean" "email" "uuid" "enum" "date" "datetime" "json"])
 
 (def http-methods ["GET" "POST" "PUT" "DELETE" "PATCH"])
 
@@ -137,29 +137,30 @@
                                (when required "required")
                                (when unique "unique")])))
 
-(defn build-generate-args [{:keys [module entity fields http web]}]
+(defn build-generate-args [{:keys [module entity fields http web public-api]}]
   (let [base       ["generate" "--module-name" module "--entity" entity]
         field-args (mapcat #(vector "--field" (field->spec %)) fields)
         no-http    (when-not http ["--no-http"])
         no-web     (when-not web  ["--no-web"])]
-    (vec (concat base field-args no-http no-web))))
+    (vec (concat base field-args no-http no-web (when public-api ["--public-api"])))))
 
 (defn build-entity-args
   "`bb scaffold entity` arguments for an entity added to `module`."
-  [module {:keys [name belongs-to fields http] :or {http true}}]
+  [module {:keys [name belongs-to fields http public-api] :or {http true}}]
   (vec (concat ["entity" "--module-name" module "--entity" name]
                (when belongs-to ["--belongs-to" belongs-to])
                (mapcat #(vector "--field" (field->spec %)) fields)
-               (when-not http ["--no-http"]))))
+               (when-not http ["--no-http"])
+               (when public-api ["--public-api"]))))
 
 (defn build-ai-commands
   "The scaffolder commands an AI module spec stands for: `generate` for its
    first entity, then `entity` for each further one, in order (BOU-497)."
-  [{:keys [module entities http web]}]
+  [{:keys [module entities http web public-api]}]
   (let [[{:keys [name fields]} & more] entities]
     (into [(build-generate-args {:module module :entity name :fields fields
-                                 :http http :web web})]
-          (map #(build-entity-args module (assoc % :http http)) more))))
+                                 :http http :web web :public-api public-api})]
+          (map #(build-entity-args module (assoc % :http http :public-api public-api)) more))))
 
 ;; =============================================================================
 ;; Run Clojure scaffolder
@@ -616,7 +617,8 @@
                     :fields   (:fields (first entities))
                     :entities entities
                     :http     (boolean (:http data))
-                    :web      (boolean (:web data))}]
+                    :web      (boolean (:web data))
+                    :public-api (boolean (:public-api data))}]
       (when (and (valid-kebab? (:module spec))
                  (every? (comp valid-pascal? :name) entities)
                  (every? #(or (nil? (:belongs-to %)) (valid-pascal? (:belongs-to %))) entities))

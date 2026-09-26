@@ -53,12 +53,13 @@ Output ONLY valid JSON with this exact structure:
   \"entities\": [
     {\"name\": \"PascalCaseName\",
      \"fields\": [
-       {\"name\": \"field-name\", \"type\": \"string|text|int|decimal|boolean|email|uuid|enum|date|json\", \"required\": true|false, \"unique\": false, \"enum-values\": [\"draft\", \"sent\"]}
+       {\"name\": \"field-name\", \"type\": \"string|text|int|decimal|boolean|email|uuid|enum|date|datetime|json\", \"required\": true|false, \"unique\": false, \"enum-values\": [\"draft\", \"sent\"]}
      ]},
     {\"name\": \"ChildName\", \"belongs-to\": \"PascalCaseName\", \"fields\": [...]}
   ],
   \"http\": true,
-  \"web\": true
+  \"web\": true,
+  \"public-api\": false
 }
 
 Example — \"invoices with a number and status, and line items with a description and quantity\":
@@ -78,10 +79,12 @@ Rules:
 - one entry in entities per thing the description names; most modules have one
 - an entity that belongs to another (line items of an invoice, lines of an order) carries \"belongs-to\": the parent's name. The parent comes first. Do not add the parent's id as a field; belongs-to creates it
 - field names MUST be kebab-case
-- valid field types: string, text, int, decimal, boolean, email, uuid, enum, date, json
+- valid field types: string, text, int, decimal, boolean, email, uuid, enum, date, datetime, json
+- date is a calendar day (a due date, a birthday); datetime is a moment in time (when something happened or is scheduled)
 - an \"enum\" field MUST also carry \"enum-values\": a non-empty array of kebab-case strings
 - default required=true, unique=false unless stated otherwise
 - default http=true, web=true unless stated otherwise
+- default public-api=false: the API requires a signed-in user. Set it true only when the description says the API is public or open to anyone
 - respond with ONLY the JSON object, no explanation, no markdown fences"))
 
 (defn build-scaffolding-user-prompt
