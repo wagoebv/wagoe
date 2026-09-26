@@ -245,9 +245,24 @@
           (println "[smoke] Missing required alias in deps.edn: :repl or :repl-clj"))
         (System/exit 1)))))
 
-(defn- run-check [label & cmd]
+(defn check-failure-report
+  "The lines to print when a smoke check's command exits non-zero: the command,
+   its exit code and the tail of its stderr. Nil when it succeeded."
+  [cmd {:keys [exit err]}]
+  (when-not (zero? exit)
+    (into [(str "[smoke] FAILED: " (str/join " " cmd) " (exit " exit ")")]
+          (take-last 20 (str/split-lines (or err ""))))))
+
+(defn- run-check
+  "Run a smoke check. On failure, print the command and its stderr and exit 1.
+   It used to throw, so quickstart ended in a babashka stack trace and the
+   command's own error scrolled out of view (BOU-525)."
+  [label & cmd]
   (println (str "[smoke] " label))
-  (apply shell {:out :string} cmd))
+  (let [result (apply shell {:out :string :err :string :continue true} cmd)]
+    (when-let [lines (check-failure-report cmd result)]
+      (binding [*out* *err*] (run! println lines))
+      (System/exit 1))))
 
 (defn smoke-check
   "Verify deps.edn aliases and key tool entrypoints. Exits non-zero on failure."
