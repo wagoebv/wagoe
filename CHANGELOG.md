@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Admin offered a tenant create that could never succeed** (BOU-534). It is now
+  off via `:permissions {:create false}`; create tenants with `POST /api/v1/tenants`.
 - **Scaffolded repositories failed every create and update on H2** (BOU-497).
   Regenerate `shell/persistence.clj`, or drop `sql/format` and `:returning`.
 - **Scaffolded list page showed only ids** (BOU-486). It now has a column per

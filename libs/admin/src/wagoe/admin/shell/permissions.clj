@@ -46,6 +46,11 @@
   ([user entity-name]
    (assert-can-create-entity! user entity-name nil))
   ([user entity-name entity-config]
+   (when (false? (get-in entity-config [:permissions :create]))
+     (throw (ex-info (str "Entity cannot be created in the admin: " (name entity-name))
+                     {:type   :forbidden
+                      :entity entity-name
+                      :reason :create-disabled})))
    (when-not (core-permissions/can-create-entity? user entity-name entity-config)
      (throw (ex-info (str "User cannot create entity: " (name entity-name))
                      {:type :forbidden

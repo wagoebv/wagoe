@@ -594,6 +594,11 @@ Both values are submitted when checkbox is checked, resulting in an array.
 
 The create insert writes only the form's fields (plus `:hide-fields`, which a request may still supply), so a `NOT NULL` column with no default that is read-only or not in `:editable-fields` fails every create. Exempt: `:id`, `:created-at` and `:updated-at`, which the admin fills, and identity and computed columns, which the database fills. Introspection logs this as a config error and the create page shows it, naming the entity and column, with status 500 (BOU-494). Fix: give the column a default, or make the field editable.
 
+When the column is derived by another module (tenants' `schema_name`, set at
+provisioning), neither fix applies: point `:create-redirect-url` at that
+module's create page, or, if it has none, set `:permissions {:create false}`.
+That hides "New" and refuses create with a 403 (BOU-534).
+
 ### 6. Direct Navigation to HTMX Fragment Endpoints
 
 **Problem**: Refreshing page on HTMX fragment URL shows unstyled HTML.

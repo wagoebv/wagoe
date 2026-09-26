@@ -644,9 +644,10 @@
    and not filled by the database (identity, computed), fails every create
    (BOU-494). `columns-meta` is the raw column metadata of the entity's table.
    Returns a vector of {:field :column :message}; entities with their own
-   create flow are skipped."
+   create flow, or with create disabled, are skipped."
   [entity-name entity-config columns-meta]
-  (if (or (:create-redirect-url entity-config) (:split-table-update entity-config))
+  (if (or (:create-redirect-url entity-config) (:split-table-update entity-config)
+          (false? (get-in entity-config [:permissions :create])))
     []
     (let [written (into create-filled-fields
                         (remove (set (:readonly-fields entity-config)))

@@ -152,6 +152,8 @@ This is the full schema for a single entity config file. All keys are optional u
 
   :soft-delete     true               ; true = set deleted_at on delete, false = hard delete
   :primary-key     :id                ; Primary key field (default: :id)
+  :permissions     {:create false}    ; No "New" button, create refused: another
+                                      ; module creates these (e.g. tenants)
 
   ;; ─────────────────────────────────────────────────────────────────────
   ;; PER-FIELD CONFIGURATION
