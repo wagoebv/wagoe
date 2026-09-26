@@ -1,5 +1,6 @@
 (ns wagoe.push.shell.adapters.apns
-  (:require [wagoe.push.ports :as ports]
+  (:require [wagoe.push.core.device :as device]
+            [wagoe.push.ports :as ports]
             [cheshire.core :as json]
             [clojure.tools.logging :as log])
   (:import [java.net URI]
@@ -96,7 +97,7 @@
               (try
                 (parse-apns-response (.get ^CompletableFuture future) token)
                 (catch Exception e
-                  (log/warnf "APNs async send failed for %s: %s" token (.getMessage e))
+                  (log/warnf "APNs async send failed for %s: %s" (device/token-preview token) (.getMessage e))
                   {:success?     false
                    :device-token token
                    :platform     :apns

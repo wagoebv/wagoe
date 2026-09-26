@@ -1,5 +1,6 @@
 (ns wagoe.push.shell.adapters.mock
-  (:require [wagoe.push.ports :as ports]
+  (:require [wagoe.push.core.device :as device]
+            [wagoe.push.ports :as ports]
             [clojure.tools.logging :as log])
   (:import [java.util UUID]))
 
@@ -9,7 +10,7 @@
   (fcm-send! [_ payload]
     (let [token (get-in payload [:message :token])
           msg-id (str "mock-fcm-" (UUID/randomUUID))]
-      (log/infof "Mock FCM: sent to %s → %s" token msg-id)
+      (log/infof "Mock FCM: sent to %s → %s" (device/token-preview token) msg-id)
       {:success?   true
        :message-id msg-id
        :device-token token
@@ -25,7 +26,7 @@
           tokens))
 
   (fcm-validate-token [_ token]
-    (log/infof "Mock FCM: validate token %s → valid" token)
+    (log/infof "Mock FCM: validate token %s → valid" (device/token-preview token))
     {:valid? true :token token}))
 
 (defrecord MockAPNsProvider []
@@ -33,7 +34,7 @@
 
   (apns-send! [_ _payload device-token]
     (let [apns-id (str "mock-apns-" (UUID/randomUUID))]
-      (log/infof "Mock APNs: sent to %s → %s" device-token apns-id)
+      (log/infof "Mock APNs: sent to %s → %s" (device/token-preview device-token) apns-id)
       {:success?     true
        :apns-id      apns-id
        :message-id   apns-id
