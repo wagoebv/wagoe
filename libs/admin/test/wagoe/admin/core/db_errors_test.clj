@@ -25,6 +25,12 @@
     (is (= "status" (db-errors/not-null-violation-column
                      "[SQLITE_CONSTRAINT_NOTNULL] A NOT NULL constraint failed (NOT NULL constraint failed: invoices.status)"))))
 
+  (testing "MySQL"
+    ;; Captured from MySQL 8.4 with STRICT_TRANS_TABLES: an explicit NULL, and
+    ;; a column the INSERT leaves out.
+    (is (= "status" (db-errors/not-null-violation-column "Column 'status' cannot be null")))
+    (is (= "status" (db-errors/not-null-violation-column "Field 'status' doesn't have a default value"))))
+
   (testing "anything else"
     (is (nil? (db-errors/not-null-violation-column "UNIQUE constraint failed: invoices.number")))
     (is (nil? (db-errors/not-null-violation-column "Database query failed")))

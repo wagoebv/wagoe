@@ -4,12 +4,14 @@
 
 (def ^:private not-null-patterns
   [#"NOT NULL constraint failed: (?:[^.\s()]+\.)?([^\s()]+)" ; SQLite
-   #"null value in column \"([^\"]+)\""                     ; PostgreSQL
-   #"NULL not allowed for column \"([^\"]+)\""])            ; H2
+   #"null value in column \"([^\"]+)\""                      ; PostgreSQL
+   #"NULL not allowed for column \"([^\"]+)\""               ; H2
+   #"Column '([^']+)' cannot be null"                        ; MySQL, explicit NULL
+   #"Field '([^']+)' doesn't have a default value"])         ; MySQL, column left out
 
 (defn not-null-violation-column
   "The column a NOT NULL violation `message` names, in lower case, or nil when
-   the message is not one. Reads the H2, PostgreSQL and SQLite texts."
+   the message is not one. Reads the H2, PostgreSQL, SQLite and MySQL texts."
   [message]
   (when message
     (some (fn [pattern]
