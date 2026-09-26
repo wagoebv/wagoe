@@ -320,8 +320,14 @@ The four tenant-aware HTTP interceptors live in `wagoe.user.shell.http-intercept
 
 ## Database Tables
 
+`tenants` has no migration. `:wagoe/tenant-db-schema` creates it at boot from
+the Malli schema `wagoe.tenant.schema/Tenant`, which is its one source; change
+the table there. The admin cannot create tenants (`schema_name` is derived at
+provisioning), so the shipped admin config sets `:permissions {:create false}`;
+use `POST /api/v1/tenants` (BOU-534).
+
 ```sql
--- Core tenant table (original migration)
+-- Created at boot from wagoe.tenant.schema/Tenant
 tenants (id, slug, name, schema_name, status, settings JSONB,
          created_at, updated_at, deleted_at)
 

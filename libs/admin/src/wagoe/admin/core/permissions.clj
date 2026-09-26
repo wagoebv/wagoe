@@ -193,10 +193,11 @@
      (can-create-entity? {:role :user} :users nil)    ;=> false"
   ([user entity-name]
    (can-create-entity? user entity-name nil))
-  ([user _entity-name _entity-config]
-   ; Week 1: Admin can create in all entities
-   ; Week 2+: Check entity-config :permissions :create
-   (is-admin? user)))
+  ([user _entity-name entity-config]
+   ;; `:permissions {:create false}` is for entities another module must
+   ;; create, such as tenants (BOU-534).
+   (and (is-admin? user)
+        (not (false? (get-in entity-config [:permissions :create]))))))
 
 (defn can-edit-entity?
   "Determine if user can edit existing records for an entity.

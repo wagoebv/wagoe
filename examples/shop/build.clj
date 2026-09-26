@@ -36,5 +36,14 @@
            ;; Several transitive dependencies ship signed jars and overlapping
            ;; META-INF entries; without this the uber step fails on duplicate
            ;; or invalid signature files.
-           :exclude   ["META-INF/.*\\.SF" "META-INF/.*\\.DSA" "META-INF/.*\\.RSA"]})
+           ;;
+           ;; LICENSE/NOTICE: some jars ship META-INF/LICENSE as a file, others
+           ;; (grpc-netty-shaded) META-INF/license/ as a directory. On a
+           ;; case-insensitive filesystem (macOS, Windows) the two collide and
+           ;; the build fails, so they are left out.
+           :exclude   ["META-INF/.*\\.SF" "META-INF/.*\\.DSA" "META-INF/.*\\.RSA"
+                       "^LICENSE(/.*)?$"
+                       "^NOTICE(/.*)?$"
+                       "(?i)^META-INF/LICENSE(/.*|\\.[^/]*)?$"
+                       "(?i)^META-INF/NOTICE(/.*|\\.[^/]*)?$"]})
   (println "Built" uber-file))

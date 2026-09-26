@@ -57,8 +57,9 @@
 ;; =============================================================================
 
 (defmethod ig/init-key :wagoe/admin-service
-  [_ {:keys [db-ctx schema-provider logger error-reporter config]}]
-  (service/create-admin-service db-ctx schema-provider logger error-reporter config))
+  [_ {:keys [db-ctx schema-provider logger error-reporter config event-publisher]}]
+  (service/create-admin-service db-ctx schema-provider logger error-reporter config
+                                event-publisher))
 
 (defmethod ig/halt-key! :wagoe/admin-service
   [_ _admin-service]
@@ -131,11 +132,15 @@
     {:components
      {:wagoe/admin-schema-provider {:db-ctx (ig/ref :wagoe/db-context)
                                     :config settings}
-      :wagoe/admin-service         {:db-ctx          (ig/ref :wagoe/db-context)
-                                    :schema-provider (ig/ref :wagoe/admin-schema-provider)
-                                    :logger          (ig/ref :wagoe/logging)
-                                    :error-reporter  (ig/ref :wagoe/error-reporting)
-                                    :config          settings}
+      :wagoe/admin-service         (cond-> {:db-ctx          (ig/ref :wagoe/db-context)
+                                            :schema-provider (ig/ref :wagoe/admin-schema-provider)
+                                            :logger          (ig/ref :wagoe/logging)
+                                            :error-reporter  (ig/ref :wagoe/error-reporting)
+                                            :config          settings}
+                                     ;; Only when configured: a ref to an absent
+                                     ;; component fails the boot (BOU-492).
+                                     (contains? (:enabled ctx) :wagoe/events)
+                                     (assoc :event-publisher (ig/ref :wagoe/events)))
       :wagoe/admin-routes          {:admin-service   (ig/ref :wagoe/admin-service)
                                     :schema-provider (ig/ref :wagoe/admin-schema-provider)
                                     :user-service    (ig/ref :wagoe/user-service)

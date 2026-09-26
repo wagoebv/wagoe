@@ -600,6 +600,18 @@ jobs:
     runs-on: ubuntu-latest
     needs: warm-deps
 
+    services:
+      # Lifecycle events over the Redis bus (BOU-492); skipped without it.
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
     steps:
       - uses: actions/checkout@v6
 
