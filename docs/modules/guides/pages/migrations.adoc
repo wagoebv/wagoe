@@ -55,11 +55,11 @@ Rules:
 | Library-contributed migrations (auto-discovered)
 |===
 
-Libraries contribute migrations by publishing a `wagoe/migration-paths.edn` manifest on the classpath:
+Libraries contribute migrations by publishing a `wagoe/migration-paths/<library>.edn` manifest on the classpath. The file name must be unique to the library: an uberjar keeps only one copy of a shared name.
 
 [source,clojure]
 ----
-;; libs/geo/resources/wagoe/migration-paths.edn
+;; libs/geo/resources/wagoe/migration-paths/geo.edn
 {:paths ["wagoe/geo/migrations/"]}
 ----
 

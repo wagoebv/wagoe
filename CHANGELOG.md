@@ -33,6 +33,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **Admin offered a tenant create that could never succeed** (BOU-534). It is now
   off via `:permissions {:create false}`; create tenants with `POST /api/v1/tenants`.
+- **`clojure -T:build uber` failed on macOS and Windows in generated projects** (BOU-549).
+  Copy the LICENSE/NOTICE `:exclude` patterns from `wagoe new`'s `build.clj` into yours.
+- **An uberjar's `migrate` ran only one library's migrations** (BOU-543). Upgrade platform with
+  the other libs and rebuild; move your own lib's manifest to `wagoe/migration-paths/<lib>.edn`.
 - **`bb quickstart` said Complete after its sample module failed** (BOU-545). It now names
   the failed step; the scaffolder also retries a dependency-fetch failure once.
 - **CI's dependency retry gave up after 2.5 minutes** (BOU-548). Maintainers only: it waits 5

@@ -46,20 +46,24 @@ trap cleanup EXIT
 # searched — "searching ports 3000-3099" — and a looser pattern picks 3000 out
 # of that line even when the server ended up somewhere else. The last match
 # wins, because the manager logs the requested port before the bound one.
-PORT=""
-for _ in $(seq 1 90); do
-  PORT=$(grep -oE ':port +[0-9]{4,5}' /tmp/shop-smoke.log 2>/dev/null \
-           | grep -oE '[0-9]{4,5}' | tail -1 || true)
-  if [ -n "$PORT" ] && curl -fsS -o /dev/null "http://localhost:$PORT/health" 2>/dev/null; then
-    break
-  fi
-  kill -0 "$APP_PID" 2>/dev/null || { tail -30 /tmp/shop-smoke.log; fail "the app exited during startup"; }
-  sleep 2
-done
-[ -n "$PORT" ] || { tail -30 /tmp/shop-smoke.log; fail "the app never reported a port"; }
+wait_for_health() {
+  local log=$1
+  PORT=""
+  for _ in $(seq 1 90); do
+    PORT=$(grep -oE ':port +[0-9]{4,5}' "$log" 2>/dev/null \
+             | grep -oE '[0-9]{4,5}' | tail -1 || true)
+    if [ -n "$PORT" ] && curl -fsS -o /dev/null "http://localhost:$PORT/health" 2>/dev/null; then
+      break
+    fi
+    kill -0 "$APP_PID" 2>/dev/null || { tail -30 "$log"; fail "the app exited during startup"; }
+    sleep 2
+  done
+  [ -n "$PORT" ] || { tail -30 "$log"; fail "the app never reported a port"; }
 
-curl -fsS -o /dev/null "http://localhost:$PORT/health" \
-  || { tail -30 /tmp/shop-smoke.log; fail "/health never answered — the app did not start"; }
+  curl -fsS -o /dev/null "http://localhost:$PORT/health" \
+    || { tail -30 "$log"; fail "/health never answered — the app did not start"; }
+}
+wait_for_health /tmp/shop-smoke.log
 ok "boots on WAG_ENV=test with no external services"
 
 # The point of the example: the scaffolded module serves a request. Asserting
@@ -91,6 +95,17 @@ case "$WEB" in
   *) fail "/web/products returned '$WEB', not the generated page" ;;
 esac
 ok "the scaffolded module's web page renders, so migrations ran at boot"
+
+# The uberjar is how a generated project ships. On Linux this cannot catch the
+# macOS LICENSE collision (BOU-549) — new_test.clj guards that — but it proves
+# the template's build produces a jar that boots.
+cleanup
+clojure -T:build uber > /tmp/shop-uber.log 2>&1 \
+  || { tail -30 /tmp/shop-uber.log; fail "clojure -T:build uber failed"; }
+java -jar target/shop-0.1.0.jar > /tmp/shop-jar.log 2>&1 &
+APP_PID=$!
+wait_for_health /tmp/shop-jar.log
+ok "the uberjar builds and boots"
 
 echo
 echo "✅ examples/todo and examples/shop both run against this checkout"
