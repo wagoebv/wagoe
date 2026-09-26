@@ -1,5 +1,6 @@
-;; Tables created before BOU-502 hold these as ISO-8601 TEXT. A no-op on SQLite
-;; and on tables the previous migration created.
+;; Tables created before BOU-502 hold these as ISO-8601 TEXT. On SQLite, which
+;; has no column type to change, the ISO values are rewritten as epoch millis.
+;; A no-op on tables the previous migration created.
 {:ns      wagoe.platform.shell.database.timestamp-tz
  :up-fn   ["up" [["workflow_instances" "created_at"]
                  ["workflow_instances" "updated_at"]
