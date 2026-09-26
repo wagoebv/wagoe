@@ -84,3 +84,44 @@
     ;; by the same release step, so a mismatch means one was missed.
     (is (= @#'scaffold/scaffolder-version @#'ai/ai-version)
         "wagoe-ai and wagoe-scaffolder pins have drifted — both are bumped by the same release")))
+
+(def ^:private catalog
+  {"BND-301" {:code "BND-301" :title "Connection Failed" :fix "Start the database."}})
+
+(deftest ^:unit known-remedy-test
+  (testing "a BND code yields its catalogue title and fix"
+    (is (= "BND-301: Connection Failed\nFix: Start the database."
+           (ai/known-remedy "ERROR BND-301 at foo\n  at bar" catalog))))
+
+  (testing "the error's own Fix: line comes through verbatim"
+    (is (= "Fix: export JWT_SECRET=\"x\""
+           (ai/known-remedy "boom\n  Fix: export JWT_SECRET=\"x\"\n" {}))))
+
+  (testing "a Fix: line that repeats the catalogue fix is not printed twice"
+    (is (= "BND-301: Connection Failed\nFix: Start the database."
+           (ai/known-remedy "--- BND-301: Connection Failed ---\nFix: Start the database." catalog))))
+
+  (testing "nothing known, nothing printed"
+    (is (nil? (ai/known-remedy "java.lang.NullPointerException" catalog)))))
+
+(deftest ^:unit explain-leads-with-the-known-remedy
+  (testing "BOU-512: the fix the error carries is printed before the model runs"
+    (let [out (with-redefs [ai/run-clojure! (fn [& _] (println "MODEL SUMMARY"))]
+                (with-out-str
+                  (with-in-str "ERROR boom\nFix: Start the database.\n"
+                    (ai/-main "explain"))))]
+      (is (str/includes? out "Fix: Start the database."))
+      (is (< (or (str/index-of out "Fix: Start the database.") Long/MAX_VALUE)
+             (str/index-of out "MODEL SUMMARY"))))))
+
+(deftest ^:unit help-marks-the-experimental-commands
+  (testing "BOU-511/512/513: gen-tests, explain and sql are labelled experimental"
+    (let [lines (str/split-lines (with-out-str (ai/-main "--help")))]
+      (doseq [cmd ["explain" "gen-tests" "sql"]]
+        (is (some #(and (str/includes? % (str "bb ai " cmd))
+                        (str/includes? % "(experimental)"))
+                  lines)
+            cmd))
+      (is (not-any? #(and (str/includes? % "bb ai admin-entity")
+                          (str/includes? % "(experimental)"))
+                    lines)))))

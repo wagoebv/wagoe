@@ -12,7 +12,8 @@
 ;;   bb ai docs --module <path> [--type agents|openapi|readme]
 
 (ns wagoe.tools.ai
-  (:require [wagoe.tools.ansi :refer [bold red]]
+  (:require [wagoe.tools.ansi :refer [bold red yellow]]
+            [wagoe.tools.help :as help]
             [clojure.java.io :as io]
             [clojure.string :as str]
             [babashka.process :refer [shell]]))
@@ -105,13 +106,63 @@
        last))
 
 (defn- run-clojure!
-  "Shell out to the Clojure AI CLI with given args. Streams output to terminal."
-  [args]
+  "Shell out to the Clojure AI CLI with given args. Streams output to terminal.
+   `opts` goes to babashka.process, e.g. {:in text} to feed stdin."
+  [args & [opts]]
   (try
-    (apply shell (ai-command args))
+    (apply shell (or opts {}) (ai-command args))
     (catch Exception e
       (println (red (str "AI CLI exited with error: " (.getMessage e))))
       (System/exit 1))))
+
+;; =============================================================================
+;; explain
+;; =============================================================================
+
+(defn known-remedy
+  "What the error already says about fixing itself, or nil.
+
+   The catalogue title and fix for each BND code in `input`, then every
+   `Fix:` line the error carries, verbatim. The model's summary is printed
+   after this, never instead of it: it has been confidently wrong (BOU-512)."
+  [input catalog]
+  (let [codes     (distinct (re-seq #"BND-\d{3}" (str input)))
+        from-code (mapcat (fn [code]
+                            (when-let [{:keys [title fix]} (get catalog code)]
+                              (cond-> [(str code ": " title)]
+                                fix (conj (str "Fix: " fix)))))
+                          codes)
+        own-fixes (->> (str/split-lines (str input))
+                       (map str/trim)
+                       (filter #(str/starts-with? % "Fix:")))
+        lines     (distinct (concat from-code own-fixes))]
+    (when (seq lines)
+      (str/join "\n" lines))))
+
+(defn- file-arg
+  "The value of -f/--file in `args`, or nil."
+  [args]
+  (some (fn [[a b]]
+          (cond
+            (#{"-f" "--file"} a)            b
+            (str/starts-with? a "--file=") (subs a 7)))
+        (partition-all 2 1 args)))
+
+(defn- explain!
+  "Print the error's own remedy, then hand the same input to the model."
+  [args]
+  (let [file  (file-arg args)
+        input (if file
+                (when (.exists (io/file file)) (slurp file))
+                (slurp *in*))]
+    (when-let [remedy (known-remedy input @help/error-catalog)]
+      (println)
+      (println (bold "=== Known fix (from the error itself) ==="))
+      (println remedy)
+      (println)
+      (println (yellow "The explanation below is AI-generated and experimental.")))
+    (run-clojure! (into ["explain"] args)
+                  (when-not file {:in input}))))
 
 ;; =============================================================================
 ;; Help text
@@ -122,15 +173,17 @@
        "\n"
        "Usage:\n"
        "  bb ai                               Show this help\n"
-       "  bb ai explain                       Explain error from stdin\n"
-       "  bb ai explain --file <path>         Explain error from file\n"
-       "  bb ai gen-tests <file>              Generate test namespace (stdout)\n"
-       "  bb ai gen-tests <file> --write      Write to the conventional test path\n"
-       "  bb ai gen-tests <file> -o <output>  Write tests to a named file\n"
-       "  bb ai sql <description>             Generate HoneySQL from description\n"
+       "  bb ai explain                       Explain error from stdin (experimental)\n"
+       "  bb ai explain --file <path>         Explain error from file (experimental)\n"
+       "  bb ai gen-tests <file>              Generate test namespace, stdout (experimental)\n"
+       "  bb ai gen-tests <file> --write      Write to the conventional test path (experimental)\n"
+       "  bb ai gen-tests <file> -o <output>  Write tests to a named file (experimental)\n"
+       "  bb ai sql <description>             Generate HoneySQL from description (experimental)\n"
        "  bb ai docs --module <path>          Generate all docs (agents, openapi, readme)\n"
        "  bb ai docs --module <path> --type agents|openapi|readme\n"
        "  bb ai admin-entity <description>    Generate admin entity EDN config\n"
+       "\n"
+       "Experimental: the answer can be confidently wrong. Review it before you use it.\n"
        "\n"
        "Provider selection (environment variables):\n"
        "  ANTHROPIC_API_KEY   \u2192 Anthropic (Claude)\n"
@@ -165,7 +218,7 @@
       (println help-text)
 
       (= sub "explain")
-      (run-clojure! (into ["explain"] rest-args))
+      (explain! rest-args)
 
       (= sub "gen-tests")
       (run-clojure! (into ["gen-tests"] rest-args))

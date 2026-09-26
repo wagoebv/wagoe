@@ -3,6 +3,48 @@
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]))
 
+(deftest ^:unit strip-code-fence-test
+  (testing "any info string, or none"
+    (doseq [info ["edn" "clojure" "clj" "json" "JSON" ""]]
+      (is (= "{:a 1}" (parsing/strip-code-fence (str "```" info "\n{:a 1}\n```")))
+          (str "info string: " (pr-str info)))))
+
+  (testing "prose before and after a single fenced block"
+    (is (= "{:a 1}"
+           (parsing/strip-code-fence
+            "Here is the config:\n\n```edn\n{:a 1}\n```\n\nLet me know if you need more."))))
+
+  (testing "a fence cut off by the output limit still loses its opener"
+    (is (= "{:a 1" (parsing/strip-code-fence "```edn\n{:a 1"))))
+
+  (testing "unfenced text is only trimmed"
+    (is (= "{:a 1}" (parsing/strip-code-fence "  {:a 1}\n"))))
+
+  (testing "backticks inside unfenced code are not a fence"
+    (let [src "(ns x)\n(def doc \"wrap it in ```edn fences\")"]
+      (is (= src (parsing/strip-code-fence src)))))
+
+  (testing "nil stays nil"
+    (is (nil? (parsing/strip-code-fence nil)))))
+
+(deftest ^:unit parse-admin-entity-test
+  (testing "BOU-493: a ```edn fence and surrounding prose are not rejected"
+    (let [result (parsing/parse-admin-entity
+                  "Sure:\n```edn\n{:products {:label \"Products\"}}\n```\nDone.")]
+      (is (= "products" (:entity-name result)))
+      (is (= "{:products {:label \"Products\"}}" (:text result))
+          "the text written to disk is the EDN alone")))
+
+  (testing "unparseable EDN reports the reader's own error"
+    (let [result (parsing/parse-admin-entity "{:products {:label \"Products\"")]
+      (is (str/includes? (:error result) "EOF"))
+      (is (not (str/includes? (:error result) "entity key")))
+      (is (= "{:products {:label \"Products\"" (:raw-text result)))))
+
+  (testing "valid EDN that is not an entity map says so"
+    (is (str/includes? (:error (parsing/parse-admin-entity "[:products]"))
+                       "not a map"))))
+
 (deftest ^:unit parse-json-response-test
   (testing "parses plain JSON"
     (let [result (parsing/parse-json-response "{\"key\": \"value\"}")]
@@ -11,6 +53,9 @@
   (testing "parses JSON wrapped in code fences"
     (let [result (parsing/parse-json-response "```json\n{\"key\": \"value\"}\n```")]
       (is (= "value" (:key result)))))
+
+  (testing "parses JSON in a fence with no info string"
+    (is (= "value" (:key (parsing/parse-json-response "```\n{\"key\": \"value\"}\n```")))))
 
   (testing "returns error map for invalid JSON"
     (let [result (parsing/parse-json-response "not json at all")]
@@ -129,6 +174,10 @@
   (testing "strips markdown code fences"
     (let [result (parsing/parse-generated-tests "```clojure\n(ns foo-test)\n```")]
       (is (= "(ns foo-test)" result))))
+
+  (testing "strips a ```clj fence and the prose around it"
+    (is (= "(ns foo-test)"
+           (parsing/parse-generated-tests "Here you go:\n```clj\n(ns foo-test)\n```\nEnjoy."))))
 
   (testing "returns trimmed plain Clojure"
     (let [result (parsing/parse-generated-tests "  (ns foo-test)  ")]

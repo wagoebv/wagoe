@@ -6,10 +6,12 @@ Framework-aware AI tooling for Wagoe applications. Unlike a generic assistant, i
 == Features
 
 1. *NL Scaffolding* - parse a natural language description into a scaffolding spec
-2. *Error Explainer* - explain a stack trace with Wagoe-specific context
-3. *Test Generator* - generate a complete test namespace for a source file
-4. *SQL Copilot* - translate a description into HoneySQL format
+2. *Error Explainer* (experimental) - explain a stack trace with Wagoe-specific context
+3. *Test Generator* (experimental) - generate a complete test namespace for a source file
+4. *SQL Copilot* (experimental) - translate a description into HoneySQL format
 5. *Documentation Wizard* - generate AGENTS.md, OpenAPI YAML, or README
+
+WARNING: The error explainer, test generator and SQL copilot are experimental for 1.0: their answers can be confidently wrong, so review them before use. `bb ai explain` prints the error's own BND code and `Fix:` text before the model's summary.
 
 == CLI commands
 
@@ -21,13 +23,13 @@ bb scaffold ai "product module with name, price, stock"
 # NL scaffolding (non-interactive)
 bb scaffold ai "product module with name, price, stock" --yes
 
-# Explain a stack trace
+# Explain a stack trace (experimental)
 bb ai explain --file stacktrace.txt
 
-# Generate test namespace
+# Generate test namespace (experimental)
 bb ai gen-tests libs/user/src/wagoe/user/core/validation.clj
 
-# Generate HoneySQL from description
+# Generate HoneySQL from description (experimental)
 bb ai sql "find active users with orders in the last 7 days"
 
 # Generate documentation
