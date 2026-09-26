@@ -265,7 +265,7 @@
     (catch Exception e
       (log/error e "Error in handle-list-instances-web")
       (html-response request
-                     [:div [:h2 "Error"] [:p (.getMessage e)]]
+                     [:div [:h2 "Error"] [:p [:t :common/error-generic]]]
                      500))))
 
 (defn handle-get-instance-web
@@ -288,7 +288,7 @@
     (catch Exception e
       (log/error e "Error in handle-get-instance-web")
       (html-response request
-                     [:div [:h2 "Error"] [:p (.getMessage e)]]
+                     [:div [:h2 "Error"] [:p [:t :common/error-generic]]]
                      500))))
 
 ;; =============================================================================

@@ -189,6 +189,7 @@
            :error {:type    :cannot-enable
                    :message (:reason can-enable)}}))
       (catch Exception e
+        (log/error e "MFA setup failed")
         {:success? false
          :error {:type    :mfa-setup-failed
                  :message (str "Failed to set up MFA: " (.getMessage e))}}))))
@@ -241,6 +242,7 @@
            :error {:type    :cannot-enable
                    :message (:reason can-enable)}}))
       (catch Exception e
+        (log/error e "MFA enable failed")
         {:success? false
          :error {:type    :mfa-enable-failed
                  :message (str "Failed to enable MFA: " (.getMessage e))}}))))
@@ -272,6 +274,7 @@
            :error {:type    :cannot-disable
                    :message (:reason can-disable)}}))
       (catch Exception e
+        (log/error e "MFA disable failed")
         {:success? false
          :error {:type    :mfa-disable-failed
                  :message (str "Failed to disable MFA: " (.getMessage e))}}))))

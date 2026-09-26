@@ -290,7 +290,8 @@
           response (handler request)]
 
       (is (= 500 (:status response)))
-      (is (html-contains? response "Database connection failed")))))
+      (is (not (html-contains? response "Database connection failed")))
+      (is (html-contains? response "error-generic")))))
 
 (deftest ^:contract web-root-page-handler-test
   (testing "renders translated public landing page through html-response"
@@ -381,7 +382,8 @@
           response (handler request)]
 
       (is (= 500 (:status response)))
-      (is (html-contains? response "Database error")))))
+      (is (not (html-contains? response "Database error")))
+      (is (html-contains? response "error-generic")))))
 
 (deftest ^:contract create-user-page-handler-test
   (testing "renders create user page"
@@ -492,7 +494,8 @@
           response (handler request)]
 
       (is (= 500 (:status response)))
-      (is (html-contains? response "Connection timeout")))))
+      (is (not (html-contains? response "Connection timeout")))
+      (is (html-contains? response "error-generic")))))
 
 (deftest ^:contract create-user-htmx-handler-test
   (testing "creates user successfully and instructs HTMX to navigate to return-to"
@@ -614,7 +617,8 @@
           response (handler request)]
 
       (is (= 500 (:status response)))
-      (is (html-contains? response "Email already exists"))))
+      (is (not (html-contains? response "Email already exists")))
+      (is (html-contains? response "error-generic"))))
 
   (testing "sends welcome email when send-welcome is checked and email-sender provided"
     (let [sent-emails (atom [])
@@ -737,7 +741,8 @@
           response (handler request)]
 
       (is (= 500 (:status response)))
-      (is (html-contains? response "Database error")))))
+      (is (not (html-contains? response "Database error")))
+      (is (html-contains? response "error-generic")))))
 
 (deftest ^:contract delete-user-htmx-handler-test
   (testing "deactivates user successfully and returns success message"
@@ -791,7 +796,8 @@
           response (handler request)]
 
       (is (= 500 (:status response)))
-      (is (html-contains? response "Cannot delete user with active sessions")))))
+      (is (not (html-contains? response "Cannot delete user with active sessions")))
+      (is (html-contains? response "error-generic")))))
 
 ;; =============================================================================
 ;; Integration Tests
@@ -986,6 +992,51 @@
                        :form-params {"current-password" "old-Password-1"
                                      "new-password" "new-Password-1"
                                      "confirm-password" "new-Password-1"}})]
+        (is (= 500 (:status response)))
+        (is (not (html-contains? response "hunter2")))
+        (is (html-contains? response "error-generic"))))
+    ;; The admin user-management pages had the same leak (BOU-555).
+    (testing "admin users page"
+      (let [svc (reify ports/IUserService
+                  (list-users [_ _] (throw boom)))
+            response ((web-handlers/users-page-handler svc {}) {})]
+        (is (= 500 (:status response)))
+        (is (not (html-contains? response "hunter2")))
+        (is (html-contains? response "error-generic"))))
+    (testing "admin user edit"
+      (let [user (create-test-user {})
+            svc  (reify ports/IUserService
+                   (get-user-by-id [_ _] user)
+                   (update-user-profile [_ _] (throw boom)))
+            response ((web-handlers/update-user-htmx-handler svc {})
+                      {:path-params {:id (str (:id user))}
+                       :form-params {"name" "Test User" "email" "test@example.com"
+                                     "role" "user" "active" "on"}})]
+        (is (= 500 (:status response)))
+        (is (not (html-contains? response "hunter2")))
+        (is (html-contains? response "error-generic"))))
+    (testing "admin bulk action, an untyped ex-info"
+      (let [svc (reify ports/IUserService
+                  (deactivate-user [_ _]
+                    (throw (ex-info "jdbc password=hunter2" {:type :internal-error}))))
+            response ((web-handlers/bulk-update-users-htmx-handler svc {})
+                      {:form-params {"user-ids" (str (UUID/randomUUID))
+                                     "action" "deactivate"}})]
+        (is (= 500 (:status response)))
+        (is (not (html-contains? response "hunter2")))
+        (is (html-contains? response "error-generic"))))
+    (testing "a curated bad-request message is still shown"
+      (let [response ((web-handlers/bulk-update-users-htmx-handler (create-mock-service) {})
+                      {:form-params {"user-ids" (str (UUID/randomUUID))
+                                     "action" "explode"}})]
+        (is (= 400 (:status response)))
+        (is (html-contains? response "Unsupported bulk action"))))
+    (testing "MFA setup, where the service folds the exception into its result"
+      (let [mfa-svc  {:user-repository
+                      (reify ports/IUserRepository
+                        (find-user-by-id [_ _] (throw boom)))}
+            response ((web-handlers/mfa-setup-initiate-handler mfa-svc {})
+                      {:user {:id (UUID/randomUUID) :email "a@b.c"}})]
         (is (= 500 (:status response)))
         (is (not (html-contains? response "hunter2")))
         (is (html-contains? response "error-generic"))))))
