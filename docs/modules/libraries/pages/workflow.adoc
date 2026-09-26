@@ -91,5 +91,5 @@ GET  /api/workflows/:id/audit      # Get audit trail
 
 [source,bash]
 ----
-clojure -M:test :workflow
+clojure -M:test:test/pg :workflow
 ----

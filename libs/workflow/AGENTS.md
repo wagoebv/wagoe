@@ -268,7 +268,7 @@ supports PostgreSQL, H2 and SQLite, not MySQL.
 ## Testing
 
 ```bash
-clojure -M:test :workflow
+clojure -M:test:test/pg :workflow
 ```
 
 Test fixture pattern:

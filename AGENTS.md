@@ -41,26 +41,26 @@ JWT_SECRET="dev-secret-at-least-32-characters-long" WAG_ENV=test clojure -M:test
 # run. Bare `clojure -M:test` runs the lean set: fine for a suite that needs
 # nothing extra, and it fails on ClassNotFoundException for one that does.
 #
-#   :test/pg      admin, platform, scaffolder, tenant, workflow   (embedded PostgreSQL, Linux binary)
-#   :test/pg-mac  local runs on Apple Silicon — CI is ubuntu-only
+#   :test/pg      admin, scaffolder, tenant, workflow (embedded PostgreSQL, Linux binary)
+#   :test/pg-mac  add to :test/pg on Apple Silicon — CI is ubuntu-only
 #   :test/otel    observability             (OpenTelemetry in-memory exporters)
 #   :test/http    devtools                  (clj-http-lite)
-clojure -M:test:test/pg :admin                     # one suite, only what it needs
+clojure -M:test:test/pg:test/pg-mac :admin         # one suite, only what it needs (macOS)
 
 # Testing - Per-library test suites
 clojure -M:test :core                              # Core library tests
-clojure -M:test :observability                     # Observability library tests
+clojure -M:test:test/otel :observability           # Observability library tests
 clojure -M:test :platform                          # Platform library tests
 clojure -M:test :user                              # User library tests
-clojure -M:test :admin                             # Admin library tests
+clojure -M:test:test/pg :admin                     # Admin library tests
 clojure -M:test :storage                           # Storage library tests
-clojure -M:test :scaffolder                        # Scaffolder library tests
+clojure -M:test:test/pg :scaffolder                # Scaffolder library tests
 clojure -M:test :cache                             # Cache library tests
 clojure -M:test :jobs                              # Jobs library tests
 clojure -M:test :email                             # Email library tests
-clojure -M:test :tenant                            # Tenant library tests
+clojure -M:test:test/pg :tenant                    # Tenant library tests
 clojure -M:test :realtime                          # Realtime library tests
-clojure -M:test :workflow                          # Workflow library tests
+clojure -M:test:test/pg :workflow                  # Workflow library tests
 clojure -M:test :search                            # Search library tests
 clojure -M:test :external                          # External adapters tests
 clojure -M:test :payments                          # Payments library tests
@@ -72,16 +72,16 @@ clojure -M:test :ui-style                          # UI style library tests
 clojure -M:test :i18n                              # i18n library tests
 
 # Testing - By metadata category
-clojure -M:test --focus-meta :unit                 # Unit tests only
-clojure -M:test --focus-meta :integration          # Integration tests
-clojure -M:test --focus-meta :contract             # Database contract tests
+clojure -M:test:test/all --focus-meta :unit                 # Unit tests only
+clojure -M:test:test/all --focus-meta :integration          # Integration tests
+clojure -M:test:test/all --focus-meta :contract             # Database contract tests
 
 # Testing - Watch mode and specific namespaces
 clojure -M:test --watch :core                      # Watch core library tests
-clojure -M:test --focus validation-test            # Single namespace
+clojure -M:test:test/all --focus validation-test            # Single namespace
 
 # Update validation snapshots
-UPDATE_SNAPSHOTS=true clojure -M:test --focus user-validation-snapshot-test
+UPDATE_SNAPSHOTS=true clojure -M:test:test/all --focus user-validation-snapshot-test
 
 # Code Quality
 clojure -M:clj-kondo --lint src test libs/*/src libs/*/test  # Lint all code
@@ -145,7 +145,7 @@ bb check:ports                                     # Hexagonal: modules must def
 bb check:poms                                      # Published POMs must carry inter-Wagoe deps (build-shared rewrite + pom-basis)
 bb check:roadmap                                   # One roadmap, and it may not plan what scaling.adoc marks shipped
 bb check:error-shape                               # Errors carry the shape ADR-022/ADR-036 decided: :type on a thrown ex-info, {:error {:type <kw>}} on a {:success? false}
-clojure -M:test --focus-meta :security             # Security-focused tests (error mapping, CSRF, XSS, SQL)
+clojure -M:test:test/all --focus-meta :security             # Security-focused tests (error mapping, CSRF, XSS, SQL)
 ```
 
 ### AI Assistant Helpers
@@ -460,7 +460,7 @@ If you cannot use the scaffolder (rare edge cases), follow this checklist:
 
 ```bash
 # Watch mode while developing
-clojure -M:test --watch --focus-meta :unit
+clojure -M:test:test/all --watch --focus-meta :unit
 
 # Watch specific library
 clojure -M:test --watch :core
@@ -542,7 +542,7 @@ To do a complete run against PostgreSQL:
 
 ```bash
 WAG_ENV=test JWT_SECRET="dev-secret-at-least-32-characters-long" clojure -M:migrate up
-WAG_ENV=test JWT_SECRET="dev-secret-at-least-32-characters-long" clojure -M:test
+WAG_ENV=test JWT_SECRET="dev-secret-at-least-32-characters-long" clojure -M:test:test/all
 ```
 
 4. Revert `resources/conf/test/config.edn` afterwards so normal local and CI
@@ -1001,7 +1001,7 @@ Automated safeguards run in CI (and `check:fcis` + `check:ports` in pre-commit) 
 | **Branch protection** | `bb check:branch-protection` | Branch protection requires one context, `All Tests Passed`. Fails when a job can run without that summary depending on it (so it could fail without blocking a merge), or when the summary is renamed out from under the required context. Reads `ci.yml` only — no API, no token | Yes |
 | **Documented library counts** | `bb check:doc-counts` | Prose disagreeing with `wagoe.tools.deploy/all-libs`: a documented library/artifact count that is not the real number, or a document calling a published library unpublished | Yes |
 | **Roadmap agreement** | `bb check:roadmap` | The public roadmap planning something `scaling.adoc` marks `✅` shipped (titles are discovered there, not listed in the gate), or a second roadmap file that is more than a redirect | Yes |
-| **Security tests** | `clojure -M:test --focus-meta :security` | Error→HTTP mapping, CSRF routing, XSS escaping, SQL injection, sensitive field leaks | Yes (test failure) |
+| **Security tests** | `clojure -M:test:test/all --focus-meta :security` | Error→HTTP mapping, CSRF routing, XSS escaping, SQL injection, sensitive field leaks | Yes (test failure) |
 | **clj-kondo lint** | `clojure -M:clj-kondo --lint ...` | Static analysis (existing gate) | Yes |
 | **Config doctor** | `bb doctor --env dev --ci` | Configuration errors (existing gate) | Yes |
 

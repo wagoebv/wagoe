@@ -481,7 +481,7 @@ libs/admin/src/wagoe/
 
 ```bash
 # Run tests
-clojure -M:test :admin
+clojure -M:test:test/pg :admin
 
 # Lint
 clojure -M:clj-kondo --lint libs/admin/src libs/admin/test

@@ -27,19 +27,19 @@ Wagoe uses Kaocha as the test runner with H2 in-memory database for all test sui
 [source,bash]
 ----
 # All tests
-clojure -M:test
+clojure -M:test:test/all
 
 # Single library
 clojure -M:test :core
 clojure -M:test :user
 
 # By metadata
-clojure -M:test --focus-meta :unit
-clojure -M:test --focus-meta :integration
-clojure -M:test --focus-meta :contract
+clojure -M:test:test/all --focus-meta :unit
+clojure -M:test:test/all --focus-meta :integration
+clojure -M:test:test/all --focus-meta :contract
 
 # Single namespace
-clojure -M:test --focus user-property-test
+clojure -M:test:test/all --focus user-property-test
 
 # Watch mode
 clojure -M:test --watch :core
@@ -116,5 +116,5 @@ For complex validation schemas, snapshot tests capture expected error messages:
 [source,bash]
 ----
 # Update snapshots when validation messages change intentionally
-UPDATE_SNAPSHOTS=true clojure -M:test --focus user-validation-snapshot-test
+UPDATE_SNAPSHOTS=true clojure -M:test:test/all --focus user-validation-snapshot-test
 ----

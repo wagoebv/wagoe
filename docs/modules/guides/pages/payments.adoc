@@ -180,7 +180,7 @@ The CLI prints the webhook signing secret — use it as `STRIPE_WEBHOOK_SECRET` 
 clojure -M:test :payments
 
 # Only pure function tests
-clojure -M:test --focus-meta :unit
+clojure -M:test :payments --focus-meta :unit
 ----
 
 Always use the mock provider in tests:
