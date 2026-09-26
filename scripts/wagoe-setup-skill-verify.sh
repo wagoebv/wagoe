@@ -20,11 +20,12 @@ set -euo pipefail
 
 IMAGE="${VERIFY_IMAGE:-ubuntu:24.04}"
 . "$(dirname "${BASH_SOURCE[0]}")/lib/quickstart-failed-steps.sh"
+. "$(dirname "${BASH_SOURCE[0]}")/lib/log-excerpt.sh"
 PW='Str0ng-Dev-Pass-x9'
 
 echo "=== wagoe-setup skill verification (${IMAGE}) ==="
 
-docker run --rm "$IMAGE" bash -euo pipefail -c "$(declare -f quickstart_failed_steps)"'
+docker run --rm "$IMAGE" bash -euo pipefail -c "$(declare -f quickstart_failed_steps log_excerpt)"'
   # install.sh has its own prerequisite check (BOU-226) which correctly refuses
   # and names the missing tools. BOU-232 covers that message across distros;
   # this script is about the skill flow, so satisfy the prerequisites and move
@@ -34,7 +35,7 @@ docker run --rm "$IMAGE" bash -euo pipefail -c "$(declare -f quickstart_failed_s
 
   echo "--- installing toolchain ---"
   curl -fsSL https://raw.githubusercontent.com/wagoebv/wagoe/main/scripts/install.sh | bash > /tmp/install.log 2>&1 \
-    || { tail -30 /tmp/install.log; echo "FAIL: install.sh"; exit 1; }
+    || { log_excerpt /tmp/install.log 30; echo "FAIL: install.sh"; exit 1; }
   echo "install.sh ok"
 
   echo
@@ -70,7 +71,7 @@ docker run --rm "$IMAGE" bash -euo pipefail -c "$(declare -f quickstart_failed_s
   echo
   echo "=== Steps 7-8: wagoe new + bb quickstart ==="
   cd /root
-  wagoe new my-app > /tmp/new.log 2>&1 || { tail -20 /tmp/new.log; echo "FAIL: wagoe new"; exit 1; }
+  wagoe new my-app > /tmp/new.log 2>&1 || { log_excerpt /tmp/new.log 20; echo "FAIL: wagoe new"; exit 1; }
   cd my-app
   set -a; . ./.env; set +a
   bb quickstart </dev/null > /tmp/quickstart.log 2>&1 \
@@ -110,7 +111,7 @@ docker run --rm "$IMAGE" bash -euo pipefail -c "$(declare -f quickstart_failed_s
     [ -n "$P" ] && { PORT="$P"; break; }
     sleep 1
   done
-  [ -n "$PORT" ] || { tail -30 /tmp/server.log; echo "FAIL: no port in server log"; exit 1; }
+  [ -n "$PORT" ] || { log_excerpt /tmp/server.log 30; echo "FAIL: no port in server log"; exit 1; }
   echo "port from log: $PORT"
 
   # "Serving" means the server answered, not that / returns 200: a fresh app
@@ -123,7 +124,7 @@ docker run --rm "$IMAGE" bash -euo pipefail -c "$(declare -f quickstart_failed_s
     sleep 1
   done
   { [ -n "$CODE" ] && [ "$CODE" != "000" ]; } \
-    || { tail -30 /tmp/server.log; echo "FAIL: app never answered on port $PORT"; exit 1; }
+    || { log_excerpt /tmp/server.log 30; echo "FAIL: app never answered on port $PORT"; exit 1; }
   LOC=$(curl -s -o /dev/null -w "%{redirect_url}" --max-time 3 "http://localhost:$PORT/" || true)
   echo "RESULT: serving on port $PORT — / -> $CODE${LOC:+ (redirects to $LOC)}"
 
