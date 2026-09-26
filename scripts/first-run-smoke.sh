@@ -45,6 +45,7 @@ set -euo pipefail
 IMAGE="${SMOKE_IMAGE:-ubuntu:24.04}"
 TARGET="${SMOKE_TARGET:-worktree}"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+. "$REPO_ROOT/scripts/lib/quickstart-failed-steps.sh"
 
 case "$TARGET" in
   worktree|released) ;;
@@ -71,7 +72,7 @@ docker run --rm \
   -e "TARGET=$TARGET" \
   -e "SMOKE_AI=${SMOKE_AI:-}" \
   -e "GITHUB_TOKEN=${GITHUB_TOKEN:-}" \
-  "$IMAGE" bash -euo pipefail -c '
+  "$IMAGE" bash -euo pipefail -c "$(declare -f quickstart_failed_steps)"'
 # On failure, show the tail of the log the failing step just wrote. Steps send
 # their output to /tmp/*.log, so the failure line alone said what broke but
 # never why: "Failed to create admin user." and "quickstart scaffolded no
@@ -277,6 +278,11 @@ if [ "$TARGET" = worktree ]; then
 fi
 bash -ic "bb quickstart" </dev/null >/tmp/quickstart.log 2>&1 \
   || { tail -25 /tmp/quickstart.log; fail "bb quickstart exited non-zero"; }
+# A failed sample-module step exits 0, so ask the log.
+if quickstart_failed_steps /tmp/quickstart.log; then
+  echo "SMOKE FAILURE: bb quickstart completed with a failed step"
+  exit 1
+fi
 grep -vE "^\s*;;" resources/conf/dev/config.edn | grep -q ":wagoe/sqlite" \
   || fail "quickstart overwrote the working config (BOU-228)"
 ok "completed without clobbering the config"

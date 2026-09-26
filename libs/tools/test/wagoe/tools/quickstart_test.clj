@@ -1,6 +1,8 @@
 (ns wagoe.tools.quickstart-test
   (:require [wagoe.tools.config-edn :as config-edn]
+            [babashka.process :as process]
             [clojure.java.io :as io]
+            [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [wagoe.tools.quickstart :as quickstart]))
 
@@ -54,7 +56,7 @@
                         " :inactive\n"
                         " {:wagoe/cache {:provider :redis}}}\n"))
         (is (= :written (config-edn/inject-key! path ":wagoe/tasks"
-                                               "\n  :wagoe/tasks\n  {:enabled? true}\n" {})))
+                                                "\n  :wagoe/tasks\n  {:enabled? true}\n" {})))
         (let [result (slurp path)]
           (is (re-find #":wagoe/tasks" result)
               "config should contain :wagoe/tasks after injection")
@@ -77,7 +79,7 @@
                         " :inactive\n"
                         " {:wagoe/cache {:provider :redis}}}\n"))
         (is (= :written (config-edn/inject-key! path ":wagoe/tasks"
-                                               "\n  :wagoe/tasks\n  {:enabled? true}\n" {})))
+                                                "\n  :wagoe/tasks\n  {:enabled? true}\n" {})))
         (let [result (slurp path)]
           (is (re-find #":wagoe/tasks" result)
               "config should contain :wagoe/tasks")
@@ -137,3 +139,34 @@
     (is (true? (quickstart/inject-sample-module-config (str root))))
     (doseq [env ["dev" "test" "prod"]]
       (is (= :already-present (config-edn/key-status (slurp (conf env)) ":wagoe/tasks")) env))))
+
+;; =============================================================================
+;; The closing banner (BOU-545)
+;; =============================================================================
+
+(defn- run-quickstart
+  "-main with every step stubbed. `failing` is the set of commands that fail,
+   named by their second word (`scaffold`, `migrate`, ...)."
+  [failing]
+  (let [ran (atom [])
+        out (with-out-str
+              (with-redefs [process/shell (fn [_opts & cmd]
+                                            (swap! ran conj (vec cmd))
+                                            {:exit (if (failing (second cmd)) 1 0)})
+                            quickstart/inject-sample-module-config (constantly true)]
+                (quickstart/-main)))]
+    {:out out :ran @ran}))
+
+(deftest ^:unit a-failed-sample-module-is-reported-not-called-complete
+  (testing "all steps pass: Complete"
+    (let [{:keys [out]} (run-quickstart #{})]
+      (is (str/includes? out "Quickstart Complete"))
+      (is (not (str/includes? out "failed step")))))
+
+  (testing "the scaffold step fails: named at the end, and the rest still runs"
+    (let [{:keys [out ran]} (run-quickstart #{"scaffold"})]
+      (is (str/includes? out "Completed with 1 failed step(s): [4/8] Scaffolding sample module"))
+      (is (not (str/includes? out "ready to start!")))
+      (is (some #(= ["bb" "migrate" "up"] %) ran) "migrations still run")
+      (is (not (some #(= ["bb" "scaffold" "integrate" "tasks"] %) ran))
+          "nothing to integrate"))))

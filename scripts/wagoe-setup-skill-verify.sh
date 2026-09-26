@@ -19,11 +19,12 @@
 set -euo pipefail
 
 IMAGE="${VERIFY_IMAGE:-ubuntu:24.04}"
+. "$(dirname "${BASH_SOURCE[0]}")/lib/quickstart-failed-steps.sh"
 PW='Str0ng-Dev-Pass-x9'
 
 echo "=== wagoe-setup skill verification (${IMAGE}) ==="
 
-docker run --rm "$IMAGE" bash -euo pipefail -c '
+docker run --rm "$IMAGE" bash -euo pipefail -c "$(declare -f quickstart_failed_steps)"'
   # install.sh has its own prerequisite check (BOU-226) which correctly refuses
   # and names the missing tools. BOU-232 covers that message across distros;
   # this script is about the skill flow, so satisfy the prerequisites and move
@@ -74,6 +75,10 @@ docker run --rm "$IMAGE" bash -euo pipefail -c '
   set -a; . ./.env; set +a
   bb quickstart </dev/null > /tmp/quickstart.log 2>&1 \
     || { echo "--- first 30 lines ---"; head -30 /tmp/quickstart.log; echo "FAIL: bb quickstart"; exit 1; }
+  # A failed sample-module step exits 0 (BOU-545).
+  if quickstart_failed_steps /tmp/quickstart.log; then
+    echo "FAIL: bb quickstart completed with a failed step"; exit 1
+  fi
   echo "quickstart ok"
   bb migrate status 2>&1 | grep -E "Applied migrations" || true
 

@@ -41,6 +41,10 @@ for what is public API, what is internal, and how deprecations are announced.
   holding `YYYY-MM-DD`; existing specs regenerate differently — use `datetime` for a timestamp.
 - **Scaffolded repository updates kept `updated-at` and sent an empty `SET`** (BOU-547).
   Update sets it and refuses an empty change; regenerate `shell/*persistence.clj`.
+- **`bb quickstart` said Complete after its sample module failed** (BOU-545). It now names
+  the failed step; the scaffolder also retries a dependency-fetch failure once.
+- **CI's dependency retry gave up after 2.5 minutes** (BOU-548). Maintainers only: it waits 5
+  now, and stops clearing `*.lastUpdated` markers, which tools.deps never reads.
 - **Scaffolded repositories failed every create and update on H2** (BOU-497).
   Regenerate `shell/persistence.clj`, or drop `sql/format` and `:returning`.
 - **Scaffolded list page showed only ids** (BOU-486). It now has a column per
