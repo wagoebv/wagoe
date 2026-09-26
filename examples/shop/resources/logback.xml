@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  The level here holds only until the system starts: :wagoe/logging applies
-  :level from resources/conf/<env>/config.edn to the root logger. Change it
-  there. INFO covers what runs before, and tools that never start the system
-  (-M:migrate, -M:user-cli).
+  Once the system starts, :wagoe/logging :level in resources/conf/<env>/config.edn
+  sets the wagoe loggers, and the root too but no louder than INFO (:root-level
+  overrides that). The levels here cover what runs before, and tools that
+  never start the system (-M:migrate, -M:user-cli).
 
   stderr, not stdout: the :mcp alias loads this file too, and stdout is its
   JSON-RPC channel.

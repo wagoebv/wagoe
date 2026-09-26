@@ -20,7 +20,7 @@
     :pool              {:minimum-idle 1 :maximum-pool-size 5}}
 
    :wagoe/logging
-   {:level :warn :console true}
+   {:provider :slf4j :level :warn}
   ;; Product module (bb scaffold integrate)
   :wagoe/product
   {:enabled? true

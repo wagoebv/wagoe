@@ -641,10 +641,10 @@
   (let [logger (case (:provider config)
                  :no-op (logging-no-op/create-logging-component config)
                  :stdout (logging-stdout/create-logging-component config)
-                 ;; The root too, or `:level` reaches only Wagoe's own lines
-                 ;; and Jetty and Hikari log at Logback's default (BOU-528).
-                 :slf4j (do (logging-slf4j/set-root-level! (or (:level config) :info))
-                            (logging-slf4j/create-logging-component config))
+                 ;; Applied to Logback too, or `:level` reaches only this
+                 ;; adapter and nothing clojure.tools.logging writes (BOU-528).
+                 :slf4j (vary-meta (logging-slf4j/create-logging-component config)
+                                   assoc ::previous-levels (logging-slf4j/apply-level! config))
                  (do
                    (log/warn "Unknown logging provider, falling back to no-op"
                              {:provider (:provider config)})
@@ -653,7 +653,8 @@
     logger))
 
 (defmethod ig/halt-key! :wagoe/logging
-  [_ _logger]
+  [_ logger]
+  (logging-slf4j/restore-levels! (::previous-levels (meta logger)))
   (log/info "Logging component halted"))
 
 ;; =============================================================================

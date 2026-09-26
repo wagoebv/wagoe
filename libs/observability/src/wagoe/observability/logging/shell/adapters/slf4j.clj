@@ -353,20 +353,40 @@
 (def ^:private logback-level-names
   {:trace "TRACE" :debug "DEBUG" :info "INFO" :warn "WARN" :error "ERROR" :fatal "ERROR"})
 
-(defn set-root-level!
-  "Sets the root logger to `level`, so the configured level governs every
-   library's logging and not only Wagoe's. Logback only, reached by reflection
-   so another SLF4J backend is left alone. Returns true when applied."
-  [level]
-  (let [root (LoggerFactory/getLogger Logger/ROOT_LOGGER_NAME)]
-    (if-let [level-name (and (= "ch.qos.logback.classic.Logger" (.getName (class root)))
-                             (logback-level-names level))]
-      (do (Reflector/invokeInstanceMethod
-           root "setLevel"
-           (object-array [(Reflector/invokeStaticMethod "ch.qos.logback.classic.Level" "toLevel"
-                                                        (object-array [level-name]))]))
-          true)
-      false)))
+(defn- logback-logger
+  "The Logback logger called `logger-name`, or nil under another SLF4J backend.
+   Reached by reflection so that backend is left alone."
+  [^String logger-name]
+  (let [l (LoggerFactory/getLogger logger-name)]
+    (when (= "ch.qos.logback.classic.Logger" (.getName (class l))) l)))
+
+(defn- set-levels! [levels]
+  (doseq [[logger-name level] levels]
+    (Reflector/invokeInstanceMethod (logback-logger logger-name) "setLevel" (object-array [level]))))
+
+(defn apply-level!
+  "`:level` sets the `wagoe` logger; the root gets `:root-level`, else `:level`
+   no louder than INFO, so :debug shows Wagoe's detail without Jetty's.
+   Returns the levels it replaced, for restore-levels!, or nil if not Logback."
+  [{:keys [level root-level] :or {level :info}}]
+  (when (logback-logger Logger/ROOT_LOGGER_NAME)
+    (let [targets  (->> {Logger/ROOT_LOGGER_NAME (or root-level (if (#{:trace :debug} level) :info level))
+                         "wagoe"                 level}
+                        (keep (fn [[n k]] (when-let [level-name (logback-level-names k)]
+                                            [n (Reflector/invokeStaticMethod
+                                                "ch.qos.logback.classic.Level" "toLevel"
+                                                (object-array [level-name]))])))
+                        (into {}))
+          previous (into {} (for [n (keys targets)]
+                              [n (Reflector/invokeInstanceMethod (logback-logger n) "getLevel"
+                                                                 (object-array 0))]))]
+      (set-levels! targets)
+      previous)))
+
+(defn restore-levels!
+  "Puts back the levels apply-level! replaced."
+  [previous]
+  (when previous (set-levels! previous)))
 
 (defn create-slf4j-logger
   "Creates an SLF4J logger instance.

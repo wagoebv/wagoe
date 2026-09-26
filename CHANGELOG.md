@@ -31,8 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
-- **`:wagoe/logging :level` did not reach Jetty or Hikari** (BOU-528). Existing
-  projects: copy `resources/logback.xml` from a fresh `wagoe new`.
+- **`:wagoe/logging :level` did not reach Jetty or Hikari** (BOU-528). Existing projects:
+  take `resources/logback.xml`, `:provider :slf4j` and the `:mcp` `:jvm-opts` from `wagoe new`.
 - **install.sh could not recover from a failed sdkman download** (BOU-525). A
   retry now clears the partial install; an existing sdkman is detected.
 - **MCP verify never ran a generated project's tests** (BOU-520). It now focuses
