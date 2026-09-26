@@ -23,6 +23,7 @@
    - Context carries operation metadata and database context
    - Interceptors handle all database-related cross-cutting concerns automatically"
   (:require [wagoe.core.interceptor :as interceptor]
+            [wagoe.core.utils.pii-redaction :as pii]
             [clojure.tools.logging :as log]
             [clojure.string :as str])
   (:import [java.time Instant]
@@ -65,7 +66,7 @@
    :enter (fn [{:keys [_operation operation-name params context] :as ctx}]
             ;; Log debug info for database operation
             (log/debug (str "Starting persistence operation: " operation-name)
-                       (merge context params))
+                       (pii/redact-for-log (merge context params)))
 
             ;; Add persistence breadcrumb (safe no-op if no error reporter available)
             (try
@@ -84,7 +85,7 @@
   {:name :persistence-operation-logging
    :enter (fn [{:keys [operation-name params context] :as ctx}]
             (log/debug (str "Executing database operation: " operation-name)
-                       (merge context params))
+                       (pii/redact-for-log (merge context params)))
             ctx)
    :leave (fn [{:keys [operation-name result context timing] :as ctx}]
             (let [start-time (:start timing)
@@ -100,7 +101,7 @@
             ctx)
    :error (fn [{:keys [operation-name context exception] :as ctx}]
             (log/error exception (str "Database operation failed: " operation-name)
-                       context)
+                       (pii/redact-for-log context))
             ctx)})
 
 (def persistence-error-handling
@@ -130,15 +131,15 @@
               ;; Check for potentially problematic results
               (and (str/includes? operation-name "find")
                    (nil? result))
-              (log/debug (str "Database operation returned nil: " operation-name) params)
+              (log/debug (str "Database operation returned nil: " operation-name) (pii/redact-for-log params))
 
               (and (str/includes? operation-name "create")
                    (nil? result))
-              (log/warn (str "Create operation returned nil: " operation-name) params)
+              (log/warn (str "Create operation returned nil: " operation-name) (pii/redact-for-log params))
 
               (and (str/includes? operation-name "update")
                    (nil? result))
-              (log/warn (str "Update operation returned nil: " operation-name) params))
+              (log/warn (str "Update operation returned nil: " operation-name) (pii/redact-for-log params)))
 
             ctx)})
 
@@ -151,7 +152,7 @@
                                 (/ (- (System/nanoTime) start-time) 1e6))]
               ;; Log successful operation with timing
               (log/info (str "Database operation successful: " operation-name)
-                        (merge params {:duration-ms duration-ms})))
+                        (pii/redact-for-log (merge params {:duration-ms duration-ms}))))
             ctx)})
 
 ;; ==============================================================================

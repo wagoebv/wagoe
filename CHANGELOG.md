@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Password hashes, MFA secrets and session tokens were written to the log** (BOU-556). Nothing
+  to rotate; purge application logs you retain.
 - **User admin, profile, MFA and workflow pages showed exception messages** (BOU-555). They log
   the exception and show a generic error. Upgrade user and workflow.
 - **Open redirect after login via `?return-to=/\evil.com`** (BOU-553). Backslashes, control

@@ -1,6 +1,13 @@
 (ns wagoe.push.core.device
   (:import [java.time Instant Duration]))
 
+(defn token-preview
+  "The first six characters of a device token, for logs. A full token lets
+   anyone holding the provider credentials push to that device (BOU-556)."
+  [token]
+  (let [t (str token)]
+    (str (subs t 0 (min 6 (count t))) "…")))
+
 (defn detect-platform
   "Heuristic platform detection from token format. Returns :fcm, :apns, or nil."
   [token]

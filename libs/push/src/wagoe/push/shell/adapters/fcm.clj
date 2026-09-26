@@ -1,5 +1,6 @@
 (ns wagoe.push.shell.adapters.fcm
-  (:require [wagoe.push.ports :as ports]
+  (:require [wagoe.push.core.device :as device]
+            [wagoe.push.ports :as ports]
             [cheshire.core :as json]
             [clojure.tools.logging :as log])
   (:import [java.net URI]
@@ -75,7 +76,7 @@
               (try
                 (parse-response (.get ^CompletableFuture future) token)
                 (catch Exception e
-                  (log/warnf "FCM async send failed for %s: %s" token (.getMessage e))
+                  (log/warnf "FCM async send failed for %s: %s" (device/token-preview token) (.getMessage e))
                   {:success?     false
                    :device-token token
                    :platform     :fcm

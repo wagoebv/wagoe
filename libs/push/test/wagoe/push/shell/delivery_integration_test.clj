@@ -1,5 +1,7 @@
 (ns wagoe.push.shell.delivery-integration-test
-  (:require [clojure.test :refer [deftest use-fixtures is]]
+  (:require [clojure.string :as str]
+            [clojure.test :refer [deftest use-fixtures is]]
+            [clojure.tools.logging.test :as log-test]
             [wagoe.push.shell.service :as service]
             [wagoe.push.shell.adapters.mock :as mock]
             [wagoe.push.shell.persistence :as p]
@@ -100,3 +102,28 @@
                            {:notification-id :broadcast-test :data {} :platform :fcm :locale :en})
     (let [stats (ports/get-push-stats analytics-store :broadcast-test {})]
       (is (= 3 (:sent stats))))))
+
+(deftest ^:integration ^:security handle-send-push-does-not-log-device-tokens
+  ;; BOU-556: a device token plus the provider credentials is enough to push to it.
+  (registry/register-push! {:id :token-log-test :title "Hi" :body "There" :channels #{:fcm}})
+  (let [device-store (p/->DeviceTokenStore pt/*db*)
+        user-id      (random-uuid)
+        token        "fcm-secret:TOKENBODY-1234567890"
+        _            (ports/register-device! device-store user-id
+                                             {:token token :platform :fcm :app-id "com.test"})
+        invalid      (reify ports/IFCMProvider
+                       (fcm-send! [_ _] {:success? false :device-token token :platform :fcm
+                                         :token-invalid? true})
+                       (fcm-send-multicast! [_ _ tokens]
+                         (mapv (fn [t] {:success? false :device-token t :platform :fcm
+                                        :token-invalid? true}) tokens))
+                       (fcm-validate-token [_ t] {:valid? false :token t}))]
+    (log-test/with-log
+      (jobs/handle-send-push {:device-store    device-store
+                              :analytics-store (p/->PushAnalyticsStore pt/*db*)
+                              :fcm-provider    invalid
+                              :apns-provider   (mock/->MockAPNsProvider)
+                              :callback-secret "s"}
+                             {:notification-id :token-log-test :data {} :user-id user-id :locale :en})
+      (is (log-test/logged? 'wagoe.push.shell.jobs :info #"marking invalid token fcm-se…"))
+      (is (not-any? #(str/includes? (str (:message %)) "TOKENBODY") (log-test/the-log))))))
