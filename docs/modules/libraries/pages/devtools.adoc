@@ -241,5 +241,5 @@ Steps: AI spec generation → confirm → scaffold → integrate → test.
 
 [source,bash]
 ----
-clojure -M:test :devtools
+clojure -M:test:test/http :devtools
 ----

@@ -99,5 +99,5 @@ For a module with three fields:
 
 [source,bash]
 ----
-clojure -M:test :scaffolder
+clojure -M:test:test/pg :scaffolder
 ----

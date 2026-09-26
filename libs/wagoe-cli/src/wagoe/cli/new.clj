@@ -107,6 +107,9 @@
                      ".claude/skills/wagoe/SKILL.md"    "claude-skill.md.tmpl"
                      "resources/conf/dev/config.edn"       "dev-config.edn.tmpl"
                      "resources/conf/test/config.edn"      "test-config.edn.tmpl"
+                     ;; Without it Logback logs at DEBUG until :wagoe/logging
+                     ;; applies the configured level (BOU-528).
+                     "resources/logback.xml"               "logback.xml.tmpl"
                      ;; Under the project's own namespace, not wagoe's: this is
                      ;; the application's wiring, and a project called shop
                      ;; should not be defining namespaces in the framework's

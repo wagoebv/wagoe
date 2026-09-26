@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Once the system starts, :wagoe/logging :level in resources/conf/<env>/config.edn
+  sets the wagoe loggers, and the root too but no louder than INFO (:root-level
+  overrides that). The levels here cover what runs before, and tools that
+  never start the system (-M:migrate, -M:user-cli).
+
+  stderr, not stdout: the :mcp alias loads this file too, and stdout is its
+  JSON-RPC channel.
+-->
+<configuration>
+  <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+    <target>System.err</target>
+    <encoder>
+      <pattern>%d{HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n</pattern>
+    </encoder>
+  </appender>
+
+  <root level="INFO">
+    <appender-ref ref="CONSOLE" />
+  </root>
+</configuration>

@@ -21,7 +21,8 @@
    [wagoe.admin.schema :as admin-schema]
    [wagoe.admin.core.schema-introspection :as introspection]
    [wagoe.platform.ports.database :as db-protocols]
-   [wagoe.core.utils.case-conversion :as case-conv]))
+   [wagoe.core.utils.case-conversion :as case-conv]
+   [clojure.tools.logging :as log]))
 
 ;; =============================================================================
 ;; Entity Config Computation (helper — must be defined before the record)
@@ -97,9 +98,26 @@
                          (assoc :field-grouping effective-field-grouping))
         config-with-ui (assoc merged-config :ui effective-ui)
         ;; Apply field ordering if specified
-        ordered-config (introspection/apply-field-order-to-config config-with-ui)]
-    ;; Add relationship detection (Week 1 stub)
-    (introspection/detect-relationships ordered-config)))
+        ordered-config (introspection/apply-field-order-to-config config-with-ui)
+        ;; Logged by get-entity-config; the create form refuses on it (BOU-494).
+        create-errors (introspection/create-form-column-errors entity-name merged-config table-metadata)]
+    (cond-> (introspection/detect-relationships ordered-config)
+      (seq create-errors) (assoc :create-config-errors create-errors))))
+
+(defn- base-entity-config
+  "`compute-entity-config`, cached, or nil when it cannot be computed. Used to
+   find the children of another entity (BOU-481): one allowlisted entity whose
+   table is missing must not break every other entity's page. Visiting that
+   entity itself still reports the error."
+  [repo entity-name]
+  (let [cache (:config-cache repo)
+        k     [::base entity-name]]
+    (if (contains? @cache k)
+      (get @cache k)
+      (let [cfg (try (compute-entity-config repo entity-name)
+                     (catch clojure.lang.ExceptionInfo _ nil))]
+        (swap! cache assoc k cfg)
+        cfg))))
 
 ;; =============================================================================
 ;; Schema Repository Implementation
@@ -144,7 +162,19 @@
      computation may run more than once; last write wins, results are
      identical. See `reset-cache!` to invalidate (e.g. after a migration)."
     (or (get @config-cache entity-name)
-        (let [entity-config (compute-entity-config this entity-name)]
+        (let [own           (compute-entity-config this entity-name)
+              all           (into {entity-name own}
+                                  (keep (fn [e] (some->> (base-entity-config this e) (vector e))))
+                                  ;; Only :allowlist discovery lists entities; the other
+                                  ;; modes throw, and must not take this entity down.
+                                  (remove #{entity-name}
+                                          (try (ports/list-available-entities this)
+                                               (catch clojure.lang.ExceptionInfo _ []))))
+              entity-config (introspection/with-inverse-relationships entity-name own all)]
+          ;; Here and not in compute-entity-config, which also runs for each
+          ;; entity as another's possible child.
+          (doseq [{:keys [message]} (:create-config-errors own)]
+            (log/error "Admin config error:" message))
           (swap! config-cache assoc entity-name entity-config)
           entity-config)))
 

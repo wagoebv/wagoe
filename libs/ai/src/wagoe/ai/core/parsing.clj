@@ -4,7 +4,88 @@
    FC/IS rule: no I/O here — receives raw AI response strings,
    returns parsed data or error maps."
   (:require [cheshire.core :as json]
+            [clojure.edn :as edn]
             [clojure.string :as str]))
+
+;; =============================================================================
+;; Code fences
+;; =============================================================================
+
+(def ^:private fence-opener #"^```([\w.+-]*)[ \t]*")
+(def ^:private fence-closer #"^```[ \t]*")
+
+(def ^:private string-aware-langs
+  ;; Languages whose string literals may hold a line that looks like a fence.
+  #{"" "clojure" "clj" "cljc" "cljs" "edn" "json"})
+
+(def ^:private clojure-langs #{"clojure" "clj" "cljc" "cljs"})
+
+(defn- in-string-after?
+  "Whether a Clojure/EDN/JSON reader is inside a string at the end of `line`."
+  [in-string? ^String line]
+  (loop [i 0
+         s in-string?]
+    (if (>= i (count line))
+      s
+      (let [c (.charAt line i)]
+        (cond
+          (= c \\)                  (recur (+ i 2) s)
+          (= c \")                  (recur (inc i) (not s))
+          (and (not s) (= c \;))    s
+          :else                     (recur (inc i) s))))))
+
+(defn- close-block [{:keys [info lines]}]
+  {:info info :body (str/join "\n" lines)})
+
+(defn code-blocks
+  "The fenced blocks in `text`, in order, as {:info str :body str}.
+
+   Fences start a line, as in Markdown. A closer is a bare ``` outside a string
+   literal, so a fence quoted inside a generated test does not end the block.
+   A block the output limit cut off runs to the end of the text."
+  [text]
+  (let [{:keys [blocks open]}
+        (reduce (fn [{:keys [open] :as acc} line]
+                  (cond
+                    (nil? open)
+                    (if-let [[_ info] (re-matches fence-opener line)]
+                      (assoc acc :open {:info (str/lower-case info) :lines [] :in-string? false})
+                      acc)
+
+                    (and (not (:in-string? open)) (re-matches fence-closer line))
+                    (-> acc (update :blocks conj (close-block open)) (assoc :open nil))
+
+                    :else
+                    (assoc acc :open (-> open
+                                         (update :lines conj line)
+                                         (assoc :in-string?
+                                                (and (contains? string-aware-langs (:info open))
+                                                     (in-string-after? (:in-string? open) line)))))))
+                {:blocks [] :open nil}
+                (str/split-lines text))]
+    (cond-> blocks open (conj (close-block open)))))
+
+(defn strip-code-fence
+  "The code in `text` without fences or the prose around them. Text with no
+   fence is returned trimmed.
+
+   With `langs`, the blocks tagged with one of them are joined, so an answer
+   split over two ```clojure blocks stays whole and a ```bash example ahead of
+   the ```json one is skipped. Failing that, untagged blocks, then the first.
+
+   Every parser here reads through this. Each used to strip its own fence —
+   ```json in one, ```clojure in another — and an ```edn answer from the
+   admin-entity generator matched neither (BOU-493)."
+  ([text] (strip-code-fence text nil))
+  ([text langs]
+   (when text
+     (let [blocks (code-blocks text)
+           picked (or (seq (filter #(contains? langs (:info %)) blocks))
+                      (when langs (seq (filter #(= "" (:info %)) blocks)))
+                      (take 1 blocks))]
+       (str/trim (if (seq picked)
+                   (str/join "\n\n" (map :body picked))
+                   text))))))
 
 ;; =============================================================================
 ;; JSON parsing
@@ -22,17 +103,13 @@
      Parsed map on success, {:error str :raw text} on failure."
   [text]
   (when text
-    (let [cleaned (-> text
-                      (str/replace #"(?s)```json\s*" "")
-                      (str/replace #"```\s*$" "")
-                      (str/trim))
-          ;; Try to extract just the JSON object if there's surrounding text
-          json-str (or (re-find #"(?s)\{.*\}" cleaned) cleaned)]
-      ;; Coercive parse: external AI text → data; exception → error map
-      (try
-        (json/parse-string json-str true)
-        (catch Exception _
-          {:error "Failed to parse AI response as JSON" :raw text})))))
+    ;; Coercive parse: external AI text → data; exception → nil. The raw text
+    ;; is the fallback for JSON the fences led us away from.
+    (let [parse   (fn [s] (try (json/parse-string s true) (catch Exception _ nil)))
+          cleaned (strip-code-fence text #{"json"})]
+      (or (parse (or (re-find #"(?s)\{.*\}" cleaned) cleaned))
+          (some-> (re-find #"(?s)\{.*\}" text) parse)
+          {:error "Failed to parse AI response as JSON" :raw text}))))
 
 ;; =============================================================================
 ;; Feature 1: NL Scaffolding response parsing
@@ -201,11 +278,35 @@
    Returns:
      Clean Clojure source string."
   [response-text]
-  (when response-text
-    (-> response-text
-        (str/replace #"(?s)```clojure\s*" "")
-        (str/replace #"```\s*$" "")
-        (str/trim))))
+  (strip-code-fence response-text clojure-langs))
+
+;; =============================================================================
+;; Feature 6: Admin Entity Generator response parsing
+;; =============================================================================
+
+(defn parse-admin-entity
+  "Parse an admin entity EDN answer.
+
+   Returns:
+     {:text edn-string :entity-name str}, where :text is the EDN without fence
+     or prose, or {:error str :raw-text str} naming what was actually wrong."
+  [response-text]
+  (let [edn-text (strip-code-fence response-text (conj clojure-langs "edn"))
+        parsed   (try
+                   {:value (edn/read-string edn-text)}
+                   (catch Exception e
+                     {:error (str "AI response is not valid EDN: " (ex-message e))}))
+        value    (:value parsed)]
+    (cond
+      (:error parsed)
+      (assoc parsed :raw-text response-text)
+
+      (not (and (map? value) (keyword? (ffirst value))))
+      {:error    "AI response is EDN but not a map keyed by entity name"
+       :raw-text response-text}
+
+      :else
+      {:text edn-text :entity-name (name (ffirst value))})))
 
 (defn ensure-test-metadata
   "Tag every unmetadata'd `deftest` in `test-source` with `^:<test-type>`.

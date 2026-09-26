@@ -365,8 +365,8 @@ HTTP handler
 ## Testing
 
 ```bash
-clojure -M:test :observability
-clojure -M:test :observability --focus-meta :unit
+clojure -M:test:test/otel :observability
+clojure -M:test:test/otel :observability --focus-meta :unit
 ```
 
 ---

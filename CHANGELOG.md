@@ -35,6 +35,18 @@ for what is public API, what is internal, and how deprecations are announced.
   Regenerate `shell/persistence.clj`, or drop `sql/format` and `:returning`.
 - **Scaffolded list page showed only ids** (BOU-486). It now has a column per
   declared field; regenerate or edit `core/ui.clj` in existing modules.
+- **Admin create failed with a generic banner on a NOT NULL column the form leaves out** (BOU-494).
+  The create page now names the column; give it a default or make the field editable.
+- **`:wagoe/logging :level` did not reach Jetty or Hikari** (BOU-528). Existing projects:
+  take `resources/logback.xml`, `:provider :slf4j` and the `:mcp` `:jvm-opts` from `wagoe new`.
+- **`bb scaffold integrate` and `wagoe add` skipped the prod config** (BOU-529).
+  Both now write every profile; re-run integrate, or copy a `wagoe add` key into prod.
+- **`bb migrate up` did not create workflow's tables** (BOU-502). Stop all replicas
+  and run `migrate up` before starting this version; seed timestamps as `#inst`.
+- **`bb ai admin-entity` rejected an answer in an ```edn fence** (BOU-493). Any
+  fence is accepted now, and a parse failure names the real error.
+- **`bb ai explain`, `gen-tests` and `sql` are marked experimental** (BOU-511..513).
+  `explain` prints the error's own BND code and `Fix:` text first.
 - **install.sh could not recover from a failed sdkman download** (BOU-525). A
   retry now clears the partial install; an existing sdkman is detected.
 - **MCP verify never ran a generated project's tests** (BOU-520). It now focuses
@@ -64,6 +76,10 @@ for what is public API, what is internal, and how deprecations are announced.
   --belongs-to invoice` adds one; `scaffold ai` and MCP now generate them all.
 - **Scaffolder `default=<value>` field modifier** (BOU-494). Required enums now
   default to their first value in newly generated migrations.
+- **Admin: add a child from an editable has-many** (BOU-491). The panel links to
+  the child's create form with the foreign key prefilled.
+- **Admin detects has-many from foreign keys** (BOU-481). Detected panels are
+  read-only; an explicit `:has-many` entry for the same child replaces them.
 - **`bb setup` writes a prod profile** (BOU-499). Set the `#env` variables it
   names (`bb doctor --env prod --ci` lists the unset ones) before deploying.
 - **`bb lint:imports`** (BOU-503). Imports the clj-kondo configs your

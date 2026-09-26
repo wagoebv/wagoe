@@ -352,7 +352,7 @@ clojure -M:migrate up
 ### 6. Run the Tests
 
 ```bash
-clojure -M:test :product
+clojure -M:test :{module-name}
 ```
 
 ---
@@ -408,7 +408,7 @@ Configure the provider via environment variables: `ANTHROPIC_API_KEY`, `OPENAI_A
 ## Testing
 
 ```bash
-clojure -M:test :scaffolder
+clojure -M:test:test/pg :scaffolder
 ```
 
 ---

@@ -50,6 +50,7 @@
 (def confirm-delete-dialog layout/confirm-delete-dialog)
 (def admin-forbidden-page layout/admin-forbidden-page)
 (def admin-not-found-page layout/admin-not-found-page)
+(def create-config-error layout/create-config-error)
 (def build-table-url layout/build-table-url)
 
 ;; --- list: search form, table row, table, list page ---

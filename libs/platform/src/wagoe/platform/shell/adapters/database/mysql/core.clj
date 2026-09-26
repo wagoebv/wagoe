@@ -9,7 +9,8 @@
             [wagoe.platform.shell.adapters.database.mysql.connection :as connection]))
 
 (def ^:private introspection-spec
-  {:schema [:database] :honey {:dialect :mysql} :fold-table-name? false})
+  {:schema [:database] :honey {:dialect :mysql} :fold-table-name? false
+   :generated-columns [:extra]})
 
 (def spec
   "What MySQL does differently. See common.adapter for the keys."

@@ -50,9 +50,9 @@ bb scaffold integrate product  # write its config key (--dry-run to preview)
 bb guide next                  # state-aware: what should happen next?
 
 # AI tooling (needs Ollama or ANTHROPIC_API_KEY / OPENAI_API_KEY)
-bb ai explain --file stacktrace.txt   # explain a Clojure/Wagoe error
-bb ai gen-tests src/path/to/ns.clj    # generate a test namespace
-bb ai sql "find active users with orders in last 7 days"  # HoneySQL from NL
+bb ai explain --file stacktrace.txt   # explain a Clojure/Wagoe error (experimental)
+bb ai gen-tests src/path/to/ns.clj    # generate a test namespace (experimental)
+bb ai sql "find active users with orders in last 7 days"  # HoneySQL from NL (experimental)
 bb setup ai "PostgreSQL with Stripe payments"             # AI-powered config setup
 
 # Diagnostics — start here when something is wrong

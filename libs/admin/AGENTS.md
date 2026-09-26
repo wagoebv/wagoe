@@ -565,7 +565,11 @@ Both values are submitted when checkbox is checked, resulting in an array.
 
 **Prevention**: The admin `new-entity-handler` now validates this at startup and throws a clear config error if the combination is missing.
 
-### 5. Direct Navigation to HTMX Fragment Endpoints
+### 5. A NOT NULL Column Off the Create Form
+
+The create insert writes only the form's fields (plus `:hide-fields`, which a request may still supply), so a `NOT NULL` column with no default that is read-only or not in `:editable-fields` fails every create. Exempt: `:id`, `:created-at` and `:updated-at`, which the admin fills, and identity and computed columns, which the database fills. Introspection logs this as a config error and the create page shows it, naming the entity and column, with status 500 (BOU-494). Fix: give the column a default, or make the field editable.
+
+### 6. Direct Navigation to HTMX Fragment Endpoints
 
 **Problem**: Refreshing page on HTMX fragment URL shows unstyled HTML.
 
@@ -609,7 +613,7 @@ Both values are submitted when checkbox is checked, resulting in an array.
 ## Testing
 
 ```bash
-clojure -M:test :admin
+clojure -M:test:test/pg :admin
 ```
 
 ### UI Testing Checklist

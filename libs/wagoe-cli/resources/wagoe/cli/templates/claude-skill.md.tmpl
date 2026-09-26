@@ -22,9 +22,9 @@ consistent.
 | Add a field to an existing entity | `bb scaffold field --module-name product --entity Product --name weight --type decimal --required` |
 | Add an endpoint | `bb scaffold endpoint --module-name product --path "/products/:id/publish" --method POST --handler-name publish-product-handler` |
 | Adapter for a port | `bb scaffold adapter --module-name product --port IProductNotifier --adapter-name email-product-notifier --method "notify-created:product"` |
-| Explain an error or stacktrace | `bb ai explain --file stacktrace.txt` |
-| Generate tests for a namespace | `bb ai gen-tests <path/to/file.clj> --write` |
-| SQL (HoneySQL) from a description | `bb ai sql "find active users with orders in last 7 days"` |
+| Explain an error or stacktrace (experimental) | `bb ai explain --file stacktrace.txt` |
+| Generate tests for a namespace (experimental) | `bb ai gen-tests <path/to/file.clj> --write` |
+| SQL (HoneySQL) from a description (experimental) | `bb ai sql "find active users with orders in last 7 days"` |
 | Admin entity config | `bb ai admin-entity "products with name, price, status"` |
 | Generate module docs (AGENTS.md) | `bb ai docs --module <path> --type agents` |
 | Configure the project (DB, payments, …) | `bb setup ai "PostgreSQL with Stripe payments"` |
