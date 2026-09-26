@@ -14,6 +14,7 @@
             [next.jdbc :as jdbc]
             [reitit.core :as r]
             [wagoe.platform.shell.adapters.database.factory :as db-factory]
+            [wagoe.platform.shell.http.reitit-router :as reitit-router]
             [wagoe.scaffolder.cli :as cli]
             [wagoe.scaffolder.ports :as ports]
             [wagoe.scaffolder.shell.service :as service]))
@@ -168,6 +169,31 @@
   "What the stand-in service was asked to create."
   (atom []))
 
+(def ^:private signed-in
+  "What the platform's global authentication puts on a request with valid
+   credentials."
+  {:id (random-uuid) :email "a@example.com" :role :user})
+
+(defn- http-caller
+  "Call `routes` through the platform's own pipeline — its interceptors, error
+   mapping and JSON — as a signed-in user unless `:user` says otherwise.
+   Returns the response with its JSON body decoded."
+  [routes & {:keys [user] :or {user signed-in}}]
+  (let [handler (reitit-router/compile-routes routes {:swagger-enabled false})]
+    (fn [method path body & [query]]
+      (let [resp (handler (cond-> {:request-method method :uri path
+                                   :headers {"accept" "application/json"}}
+                            user  (assoc :user user)
+                            query (assoc :query-string query)
+                            body  (-> (assoc-in [:headers "content-type"] "application/json")
+                                      (assoc :body (muuntaja/encode muuntaja/instance
+                                                                    "application/json" body)))))]
+        (cond-> resp
+          (some? (:body resp)) (update :body #(let [s (if (string? %) % (slurp %))]
+                                                (when-not (str/blank? s)
+                                                  (muuntaja/decode muuntaja/instance
+                                                                   "application/json" s)))))))))
+
 (defn- reify-service
   "A stand-in for the generated entity service: records creates, lists nothing.
    Evaluated because the protocol only exists once the generated code is loaded."
@@ -175,7 +201,7 @@
   (eval `(reify ~protocol
            (~'create-invoice-line-item [~'_ ~'data] (swap! seen conj [:create ~'data]) ~'data)
            (~'get-invoice-line-item [~'_ ~'_id] nil)
-           (~'list-invoice-line-items [~'_ ~'_opts] [])
+           (~'list-invoice-line-items [~'_ ~'opts] (swap! seen conj [:list ~'opts]) [])
            (~'update-invoice-line-item [~'_ ~'_id ~'_data] nil)
            (~'delete-invoice-line-item [~'_ ~'_id] nil))))
 
@@ -219,11 +245,7 @@
     (reset! seen [])
     (let [svc     (reify-service 'bou497h.billing.ports/IInvoiceLineItemService)
           routes  ((ns-resolve 'bou497h.billing.shell.invoice-line-item-http 'api-routes) svc)
-          router  (r/router routes)
-          call    (fn [method path body]
-                    (let [m (r/match-by-path router path)]
-                      ((get-in m [:data method :handler])
-                       {:request-method method :path-params (:path-params m) :body-params body})))
+          call    (http-caller routes)
           inv     (str (java.util.UUID/randomUUID))]
       (testing "POST coerces the JSON body and creates"
         (let [resp (call :post "/invoice-line-items" {:invoice-id inv :description "x" :quantity 2
@@ -392,12 +414,8 @@
   "A caller for the generated line-item API under `dir`, on the stand-in service."
   [base]
   (let [svc    (reify-service (symbol (str base ".billing.ports") "IInvoiceLineItemService"))
-        routes ((ns-resolve (symbol (str base ".billing.shell.invoice-line-item-http")) 'api-routes) svc)
-        router (r/router routes)]
-    (fn [method path body]
-      (let [m (r/match-by-path router path)]
-        ((get-in m [:data method :handler])
-         {:request-method method :path-params (:path-params m) :body-params body})))))
+        routes ((ns-resolve (symbol (str base ".billing.shell.invoice-line-item-http")) 'api-routes) svc)]
+    (http-caller routes)))
 
 (deftest ^:integration a-decimal-field-takes-a-json-number-or-a-numeric-string
   ;; Muuntaja parses 9.99 as a Double, and malli has no BigDecimal decoder, so
@@ -527,12 +545,8 @@
       (jdbc/execute! (:datasource ctx) [st]))
     ctx))
 
-(defn- api-caller [routes]
-  (let [router (r/router routes)]
-    (fn [method path body]
-      (let [m (r/match-by-path router path)]
-        ((get-in m [:data method :handler])
-         {:request-method method :path-params (:path-params m) :body-params body})))))
+(defn- api-caller [routes & opts]
+  (apply http-caller routes opts))
 
 (deftest ^:integration the-first-entity-api-reaches-its-service
   ;; Its handlers answered canned bodies: POST gave 201 and {}, and nothing was
@@ -555,7 +569,7 @@
       (is (= #{:api :web :static} (set (keys contrib))))
       (testing "POST creates a row, and GET shows it"
         (is (= 201 (:status created)))
-        (is (uuid? id))
+        (is (parse-uuid (str id)))
         (let [got (call :get (str "/invoices/" id) nil)]
           (is (= 200 (:status got)))
           (is (= "A-1" (get-in got [:body :number])))
@@ -688,8 +702,106 @@
               line ((at "shell.invoice-line-item-service" 'create-service)
                     ((at "shell.invoice-line-item-persistence" 'create-repository) db))
               call (api-caller ((at "shell.invoice-line-item-http" 'api-routes) line))
-              e    (try (call :post "/invoice-line-items"
-                              {:invoice-id (str (random-uuid)) :description "x" :quantity 1})
-                        nil
-                        (catch clojure.lang.ExceptionInfo e e))]
-          (is (= :validation-error (:type (ex-data e))) (pr-str (ex-data e))))))))
+              fk   (call :post "/invoice-line-items"
+                         {:invoice-id (str (random-uuid)) :description "x" :quantity 1})
+              bad  (call :post "/invoice-line-items" {:invoice-id "nope" :quantity 1})]
+          (is (= 400 (:status fk)) (pr-str fk))
+          (testing "and it has the shape of the handler's own 400 (BOU-540 review)"
+            ;; The handler answered {:error {:type ..}}, the platform's mapper
+            ;; {:error "validation-error" :message ..}: two shapes on one endpoint.
+            (is (= 400 (:status bad)))
+            (is (= "validation-error" (:error (:body fk)) (:error (:body bad))) (pr-str (:body bad)))
+            (is (= (set (keys (:body fk))) (set (keys (:body bad)))))))))))
+
+;; =============================================================================
+;; A generated API requires a signed-in user (BOU-539 review)
+;; =============================================================================
+
+(deftest ^:integration the-generated-api-requires-a-signed-in-user
+  ;; Every generated module served create, update and delete to anyone.
+  (let [dir (invoice-module! (temp-dir) "bou539auth")]
+    (add-line-item! dir "bou539auth")
+    (load-and-test! dir)
+    (let [at   (fn [n s] @(ns-resolve (symbol (str "bou539auth.billing." n)) s))
+          id   (str "/" (random-uuid))
+          apis {"the first entity"  [(:api ((at "shell.http" 'billing-routes) nil {})) "/invoices"]
+                "a further entity"  [((at "shell.invoice-line-item-http" 'api-routes) nil) "/invoice-line-items"]}]
+      (doseq [[label [routes path]] apis
+              [method p] [[:get path] [:post path] [:get (str path id)] [:put (str path id)] [:delete (str path id)]]]
+        (testing (str label " " method " " p)
+          (let [resp ((http-caller routes :user nil) method p {:number "x"})]
+            (is (= 401 (:status resp)) (pr-str resp))
+            (is (= "unauthorized" (:error (:body resp))))))))))
+
+(deftest ^:integration public-api-generates-open-routes
+  (let [dir (temp-dir)
+        r   (ports/generate-module svc {:module-name "billing" :base-ns "bou539pub"
+                                        :interfaces  {:public-api true}
+                                        :entities    [{:name "Invoice" :fields [{:name :number :type :string}]}]
+                                        :output-dir  (.getPath dir)})]
+    (is (:success r) (pr-str (:errors r)))
+    (let [dir2 (invoice-module! (temp-dir) "bou539pub2")]
+      (with-out-str
+        (is (= 0 (cli/run-cli! svc ["entity" "--module-name" "billing" "--entity" "InvoiceLineItem"
+                                    "--belongs-to" "invoice" "--field" "quantity:int"
+                                    "--public-api" "--base-ns" "bou539pub2"
+                                    "--output-dir" (.getPath dir2)]))))
+      (load-and-test! dir)
+      (load-and-test! dir2)
+      (reset! seen [])
+      (let [invoices (:api (@(ns-resolve 'bou539pub.billing.shell.http 'billing-routes) nil {}))
+            lines    (@(ns-resolve 'bou539pub2.billing.shell.invoice-line-item-http 'api-routes)
+                      (reify-service 'bou539pub2.billing.ports/IInvoiceLineItemService))]
+        (testing "generate --public-api: no guard, and the file says the routes are public"
+          (is (not= 401 (:status ((http-caller invoices :user nil) :get (str "/invoices/" (random-uuid)) nil))))
+          (is (str/includes? (get (files-under dir) "src/bou539pub/billing/shell/http.clj") "public")))
+        (testing "entity --public-api"
+          (is (= 200 (:status ((http-caller lines :user nil) :get "/invoice-line-items" nil)))))
+        (testing "the module's other entity keeps its guard"
+          (let [first-entity (:api (@(ns-resolve 'bou539pub2.billing.shell.http 'billing-routes) nil {}))]
+            (is (= 401 (:status ((http-caller first-entity :user nil) :get "/invoices" nil))))))))
+    (testing "the generate command takes --public-api"
+      (let [dir3 (temp-dir)]
+        (with-out-str
+          (is (= 0 (cli/run-cli! svc ["generate" "--module-name" "billing" "--entity" "Invoice"
+                                      "--field" "number:string" "--public-api" "--base-ns" "bou539pub3"
+                                      "--output-dir" (.getPath dir3)]))))
+        (is (not (str/includes? (get (files-under dir3) "src/bou539pub3/billing/shell/http.clj")
+                                "require-authenticated")))))))
+
+;; =============================================================================
+;; The list endpoint pages, in a stable order (BOU-539 review)
+;; =============================================================================
+
+(deftest ^:integration the-list-endpoint-pages-in-a-stable-order
+  (let [dir (invoice-module! (temp-dir) "bou539page")]
+    (add-line-item! dir "bou539page")
+    (load-and-test! dir)
+    (let [db   (h2-migrated dir "bou539page")
+          at   (fn [n s] @(ns-resolve (symbol (str "bou539page.billing." n)) s))
+          repo ((at "shell.persistence" 'create-repository) db)
+          call (api-caller (:api ((at "shell.http" 'billing-routes)
+                                  ((at "shell.service" 'create-service) repo) {})))
+          t    #(java.time.Instant/parse (str "2026-01-0" % "T00:00:00Z"))
+          ;; Written out of order, so insertion order is not creation order.
+          rows (for [[n day] [["C" 3] ["A" 1] ["B" 2]]]
+                 ((at "ports" 'create) repo {:id (random-uuid) :number n :created-at (t day) :updated-at (t day)}))
+          _    (doall rows)
+          nums (fn [q] (mapv :number (:body (call :get "/invoices" nil q))))]
+      (testing "oldest first"
+        (is (= ["A" "B" "C"] (nums nil))))
+      (testing "limit and offset from the query string"
+        (is (= ["A" "B"] (nums "limit=2")))
+        (is (= ["C"] (nums "limit=2&offset=2")))))
+    (testing "limit is clamped, and a bad value is the default"
+      (let [call (entity-api "bou539page")]
+        (doseq [[q opts] [["limit=1000&offset=-5" {:limit 100 :offset 0}]
+                          ["limit=abc" {:limit 20 :offset 0}]
+                          [nil {:limit 20 :offset 0}]]]
+          (reset! seen [])
+          (is (= 200 (:status (call :get "/invoice-line-items" nil q))))
+          (is (= [[:list opts]] @seen) (pr-str q)))))
+    (testing "swagger shows the two parameters"
+      (let [routes @(ns-resolve 'bou539page.billing.shell.invoice-line-item-http 'api-routes)
+            params (get-in (into {} (routes nil)) ["/invoice-line-items" :get :swagger :parameters])]
+        (is (= #{"limit" "offset"} (set (map :name params))))))))

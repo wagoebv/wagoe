@@ -36,7 +36,7 @@
                     first
                     :inputSchema)
         advertised (set (keys (get-in schema [:properties "interfaces" :properties])))]
-    (is (= #{"http" "web"} advertised)
+    (is (= #{"http" "web" "public-api"} advertised)
         "the schema advertises an interface the scaffolder does not generate")
 
     (testing "and the description does not claim a default the generator contradicts"

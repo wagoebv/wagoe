@@ -426,13 +426,14 @@ done
 # printing a head: error and no SMOKE FAILURE line.
 body_() { head -c 400 /tmp/tasks.json 2>/dev/null || true; echo; }
 case "$MODULE_CODE" in
-  2*) ;;
+  # 401 is a mounted route: generated APIs require a signed-in user (BOU-539).
+  2*|401) ;;
   404) tail -25 /tmp/repl.log
        fail "/api/v1/tasks returned 404 — quickstart scaffolded and integrated the module, but nothing mounted its routes" ;;
   000) tail -25 /tmp/repl.log
        fail "/api/v1/tasks never answered within 10 attempts" ;;
   *)   body_; tail -25 /tmp/repl.log
-       fail "/api/v1/tasks returned $MODULE_CODE, expected 2xx" ;;
+       fail "/api/v1/tasks returned $MODULE_CODE, expected 2xx or 401" ;;
 esac
 # The status alone is not the assertion. Assert on the body too: a handler that
 # is mounted but returns nothing usable is not a module that serves.
@@ -515,7 +516,7 @@ ok "(status), (modules) and (commands) work in the generated project"
 #
 # POST /auth/login with an empty body: coercion rejects it before any handler
 # runs, which is the error path a beginner meets first. Not the scaffolded
-# module: its handlers answer their own 400, outside this pipeline.
+# module: it requires a signed-in user, so it answers 401 before any body.
 LOGIN_CODE=$(curl -s -o /tmp/badreq.json -w "%{http_code}" --max-time 10 \
                   -X POST -H "Content-Type: application/json" -d "{}" \
                   http://localhost:3000/api/v1/auth/login || true)

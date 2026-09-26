@@ -617,7 +617,9 @@ DROP TABLE IF EXISTS %s;
           "  (" find-all " [_this opts]\n"
           "    (mapv ->entity (db/execute-query! db-ctx {:select [:*]\n"
           "                                              :from [:" table-name "]\n"
-          "                                              :limit (or (:limit opts) 20)})))\n"
+          "                                              :order-by [[:created-at :asc] [:id :asc]]\n"
+          "                                              :limit (or (:limit opts) 20)\n"
+          "                                              :offset (or (:offset opts) 0)})))\n"
           "  (" update " [_this entity]\n"
           ;; Refused here rather than sent: an empty :set is `UPDATE t SET  WHERE`,
           ;; a database syntax error (BOU-547).
@@ -861,11 +863,19 @@ DROP TABLE IF EXISTS %s;
 
    Bodies are decoded with the Create/Update request schemas, which drop
    unknown keys — they would otherwise become column names in the insert — and
-   turn JSON strings into UUIDs."
-  [entity]
+   turn JSON strings into UUIDs. Errors are thrown with a :type, so the
+   platform answers them in the one shape it uses for every other error.
+
+   Unless `public?`, every route requires a signed-in user. The guard is named
+   by symbol, the way the user module's own routes name it: the platform
+   resolves it at boot, and the module requires nothing from another module's
+   shell."
+  [entity public?]
   (let [entity-name (:entity-name entity)
         e (or (:entity-kebab entity) (template/pascal->kebab entity-name))
-        plural (or (:entity-plural entity) (template/pluralize e))]
+        plural (or (:entity-plural entity) (template/pluralize e))
+        guard (if public? "" "\n            :interceptors signed-in")
+        guard-id (if public? "" "\n              :interceptors signed-in")]
     (str ";; JSON has no decimal type: Muuntaja reads 9.99 as a Double, and malli\n"
          ";; has no decoder for decimal?, so without this a decimal field refused both\n"
          ";; 9.99 and \"9.99\".\n"
@@ -883,23 +893,46 @@ DROP TABLE IF EXISTS %s;
          "(def ^:private decode-update (m/decoder schema/Update" entity-name "Request json->data))\n"
          "(def ^:private valid-update? (m/validator schema/Update" entity-name "Request))\n"
          "\n"
+         ";; Thrown, not returned: the platform maps :type to the status and answers\n"
+         ";; in the shape it uses for every error, a missing reference included.\n"
          "(defn- invalid []\n"
-         "  {:status 400 :body {:error {:type :validation-error :message \"Invalid " e "\"}}})\n"
+         "  (throw (ex-info \"Invalid " e "\" {:type :validation-error})))\n"
          "\n"
          "(defn- not-found []\n"
-         "  {:status 404 :body {:error {:type :not-found :message \"No such " e "\"}}})\n"
+         "  (throw (ex-info \"No such " e "\" {:type :not-found})))\n"
          "\n"
          "(defn- id-of [request]\n"
          "  (some-> (get-in request [:path-params :id]) parse-uuid))\n"
+         "\n"
+         "(def ^:private max-page 100)\n"
+         "\n"
+         "(defn- page-of\n"
+         "  \"limit and offset from the query string. A missing or malformed value is\n"
+         "   the default, and limit is capped so one request cannot read the table.\"\n"
+         "  [request]\n"
+         "  (let [n (fn [k default]\n"
+         "            (let [v (get-in request [:query-params k])]\n"
+         "              (or (when (string? v) (parse-long v)) default)))]\n"
+         "    {:limit  (-> (n \"limit\" 20) (max 1) (min max-page))\n"
+         "     :offset (max 0 (n \"offset\" 0))}))\n"
+         "\n"
+         (if public?
+           ";; Public: these routes answer anyone, signed in or not (--public-api).\n"
+           (str ";; Every route requires a signed-in user and answers 401 without one.\n"
+                ";; Generate with --public-api for routes open to anyone.\n"
+                "(def ^:private signed-in ['wagoe.user.shell.http-interceptors/require-authenticated])\n"))
          "\n"
          "(defn api-routes\n"
          "  \"Reitit route data. Paths are relative — the platform mounts them under /api/v1.\"\n"
          "  [service]\n"
          "  [[\"/" plural "\"\n"
-         "    {:get  {:summary \"List " plural "\"\n"
-         "            :handler (fn [_request]\n"
-         "                       {:status 200 :body (ports/list-" e "s service {})})}\n"
-         "     :post {:summary \"Create a " e "\"\n"
+         "    {:get  {:summary \"List " plural ", oldest first\"" guard "\n"
+         "            :swagger {:parameters [{:name \"limit\" :in \"query\" :required false :type \"integer\"\n"
+         "                                    :description \"Default 20, at most 100\"}\n"
+         "                                   {:name \"offset\" :in \"query\" :required false :type \"integer\"}]}\n"
+         "            :handler (fn [request]\n"
+         "                       {:status 200 :body (ports/list-" e "s service (page-of request))})}\n"
+         "     :post {:summary \"Create a " e "\"" guard "\n"
          "            :handler (fn [request]\n"
          "                       (let [data (decode-create (:body-params request))]\n"
          "                         (if (valid-create? data)\n"
@@ -907,12 +940,12 @@ DROP TABLE IF EXISTS %s;
          "                           (invalid))))}}]\n"
          "   [\"/" plural "/:id\"\n"
          "    {:swagger {:parameters [{:name \"id\" :in \"path\" :required true :type \"string\"}]}\n"
-         "     :get    {:summary \"Get a " e "\"\n"
+         "     :get    {:summary \"Get a " e "\"" guard-id "\n"
          "              :handler (fn [request]\n"
          "                         (if-let [found (some->> (id-of request) (ports/get-" e " service))]\n"
          "                           {:status 200 :body found}\n"
          "                           (not-found)))}\n"
-         "     :put    {:summary \"Update a " e "\"\n"
+         "     :put    {:summary \"Update a " e "\"" guard-id "\n"
          "              :handler (fn [request]\n"
          "                         (let [id   (id-of request)\n"
          "                               data (decode-update (:body-params request))]\n"
@@ -923,7 +956,7 @@ DROP TABLE IF EXISTS %s;
          "                             :else (if-let [updated (ports/update-" e " service id data)]\n"
          "                                     {:status 200 :body updated}\n"
          "                                     (not-found)))))}\n"
-         "     :delete {:summary \"Delete a " e "\"\n"
+         "     :delete {:summary \"Delete a " e "\"" guard-id "\n"
          "              :handler (fn [request]\n"
          "                         (if-let [id (id-of request)]\n"
          "                           (do (ports/delete-" e " service id) {:status 204})\n"
@@ -941,7 +974,7 @@ DROP TABLE IF EXISTS %s;
                        module-name " module's routes.")
                   (api-requires base-ns module-name))
          "\n"
-         (api-section entity))))
+         (api-section entity (get-in ctx [:interfaces :public-api] false)))))
 
 (defn generate-http-file
   "Generate shell/http.clj: the first entity's API and web routes, and the
@@ -965,7 +998,7 @@ DROP TABLE IF EXISTS %s;
                   (concat (when http (api-requires base-ns module-name))
                           (when web [(str "[" base-ns "." module-name ".shell.web-handlers :as web-handlers]")])))
          "\n"
-         (when http (str (api-section entity) "\n"))
+         (when http (str (api-section entity (get-in ctx [:interfaces :public-api] false)) "\n"))
          (when web
            (str "(defn web-routes\n"
                 "  \"Mounted under /web — do not repeat the prefix here.\"\n"

@@ -23,23 +23,46 @@
 (def ^:private decode-update (m/decoder schema/UpdateProductRequest json->data))
 (def ^:private valid-update? (m/validator schema/UpdateProductRequest))
 
+;; Thrown, not returned: the platform maps :type to the status and answers
+;; in the shape it uses for every error, a missing reference included.
 (defn- invalid []
-  {:status 400 :body {:error {:type :validation-error :message "Invalid product"}}})
+  (throw (ex-info "Invalid product" {:type :validation-error})))
 
 (defn- not-found []
-  {:status 404 :body {:error {:type :not-found :message "No such product"}}})
+  (throw (ex-info "No such product" {:type :not-found})))
 
 (defn- id-of [request]
   (some-> (get-in request [:path-params :id]) parse-uuid))
+
+(def ^:private max-page 100)
+
+(defn- page-of
+  "limit and offset from the query string. A missing or malformed value is
+   the default, and limit is capped so one request cannot read the table."
+  [request]
+  (let [n (fn [k default]
+            (let [v (get-in request [:query-params k])]
+              (or (when (string? v) (parse-long v)) default)))]
+    {:limit  (-> (n "limit" 20) (max 1) (min max-page))
+     :offset (max 0 (n "offset" 0))}))
+
+;; Every route requires a signed-in user and answers 401 without one.
+;; Generate with --public-api for routes open to anyone.
+(def ^:private signed-in ['wagoe.user.shell.http-interceptors/require-authenticated])
 
 (defn api-routes
   "Reitit route data. Paths are relative — the platform mounts them under /api/v1."
   [service]
   [["/products"
-    {:get  {:summary "List products"
-            :handler (fn [_request]
-                       {:status 200 :body (ports/list-products service {})})}
+    {:get  {:summary "List products, oldest first"
+            :interceptors signed-in
+            :swagger {:parameters [{:name "limit" :in "query" :required false :type "integer"
+                                    :description "Default 20, at most 100"}
+                                   {:name "offset" :in "query" :required false :type "integer"}]}
+            :handler (fn [request]
+                       {:status 200 :body (ports/list-products service (page-of request))})}
      :post {:summary "Create a product"
+            :interceptors signed-in
             :handler (fn [request]
                        (let [data (decode-create (:body-params request))]
                          (if (valid-create? data)
@@ -48,11 +71,13 @@
    ["/products/:id"
     {:swagger {:parameters [{:name "id" :in "path" :required true :type "string"}]}
      :get    {:summary "Get a product"
+              :interceptors signed-in
               :handler (fn [request]
                          (if-let [found (some->> (id-of request) (ports/get-product service))]
                            {:status 200 :body found}
                            (not-found)))}
      :put    {:summary "Update a product"
+              :interceptors signed-in
               :handler (fn [request]
                          (let [id   (id-of request)
                                data (decode-update (:body-params request))]
@@ -64,6 +89,7 @@
                                      {:status 200 :body updated}
                                      (not-found)))))}
      :delete {:summary "Delete a product"
+              :interceptors signed-in
               :handler (fn [request]
                          (if-let [id (id-of request)]
                            (do (ports/delete-product service id) {:status 204})

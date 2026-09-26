@@ -96,7 +96,9 @@
   [:map {:title "Add Entity Request"}
    [:module-name :string]
    [:entity EntityDefinition]
-   [:interfaces {:optional true} [:map [:http {:optional true} :boolean]]]
+   [:interfaces {:optional true} [:map
+                                  [:http {:optional true} :boolean]
+                                  [:public-api {:optional true} :boolean]]]
    [:base-ns {:optional true} [:maybe :string]]
    [:dry-run {:optional true} [:maybe :boolean]]
    [:output-dir {:optional true} [:maybe :string]]])
@@ -118,7 +120,9 @@
    [:interfaces {:optional true}
     [:map
      [:http {:optional true} :boolean]
-     [:web {:optional true} :boolean]]]
+     [:web {:optional true} :boolean]
+     ;; API routes open to anyone. Absent means they require a signed-in user.
+     [:public-api {:optional true} :boolean]]]
    [:features                                               ; Optional features
     {:optional true}
     [:map

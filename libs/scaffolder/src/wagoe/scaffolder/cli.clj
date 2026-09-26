@@ -48,6 +48,8 @@
     :default true]
    [nil "--[no-]web" "Generate the Web UI interface (default: true)"
     :default true]
+   [nil "--public-api" "API routes open to anyone (default: they require a signed-in user)"
+    :default false]
    [nil "--audit" "Enable audit logging (default: true)"
     :default true]
    [nil "--pagination" "Enable pagination support (default: true)"
@@ -78,6 +80,8 @@
     :validate [template/valid-entity-name? "Must be an entity name"]]
    [nil "--[no-]http" "Generate the entity's HTTP (REST API) routes (default: true)"
     :default true]
+   [nil "--public-api" "API routes open to anyone (default: they require a signed-in user)"
+    :default false]
    [nil "--base-ns NS" "Base namespace + path for the module (default: the project's own)"]
    [nil "--output-dir DIR" "Output directory (default: current directory)"
     :default "."]
@@ -648,7 +652,8 @@
                                  :entities [{:name (:entity opts)
                                              :fields fields-or-errors}]
                                  :interfaces {:http (:http opts)
-                                              :web (:web opts)}
+                                              :web (:web opts)
+                                              :public-api (boolean (:public-api opts))}
                                  :features {:audit (:audit opts)
                                             :pagination (:pagination opts)}
                                  :output-dir (:output-dir opts)
@@ -683,7 +688,8 @@
                         {:module-name (:module-name opts)
                          :entity      (cond-> {:name (:entity opts) :fields fields-or-errors}
                                         (:belongs-to opts) (assoc :belongs-to (:belongs-to opts)))
-                         :interfaces  {:http (:http opts true)}
+                         :interfaces  {:http (:http opts true)
+                                       :public-api (boolean (:public-api opts))}
                          :output-dir  (:output-dir opts)
                          :dry-run     (:dry-run opts)
                          :base-ns     (:base-ns opts)})]
@@ -925,6 +931,8 @@ Interface Options (default: all enabled):
   --no-http            Skip the HTTP (REST API) routes
   --no-web             Skip the Web UI: core/ui.clj, shell/web_handlers.clj
                        and the module's :web route contribution
+  --public-api         API routes open to anyone; by default they answer
+                       401 without a signed-in user
 
 Feature Options (default: all enabled):
   --audit              Enable audit logging
@@ -982,6 +990,8 @@ Options:
                        (ON DELETE CASCADE) and an index
   --no-http            No API routes for the entity: for a module generated
                        with --no-http
+  --public-api         API routes open to anyone; by default they answer
+                       401 without a signed-in user
   --output-dir DIR     Write somewhere other than the current directory
   --dry-run            Show what would be generated without creating files
 

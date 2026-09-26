@@ -48,7 +48,9 @@
   (find-all [_this opts]
     (mapv ->entity (db/execute-query! db-ctx {:select [:*]
                                               :from [:products]
-                                              :limit (or (:limit opts) 20)})))
+                                              :order-by [[:created-at :asc] [:id :asc]]
+                                              :limit (or (:limit opts) 20)
+                                              :offset (or (:offset opts) 0)})))
   (update-entity [_this entity]
     (let [changes (dissoc entity :id :created-at :updated-at)]
       (when (empty? changes)

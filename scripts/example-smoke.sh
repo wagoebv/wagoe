@@ -62,10 +62,30 @@ curl -fsS -o /dev/null "http://localhost:$PORT/health" \
   || { tail -30 /tmp/shop-smoke.log; fail "/health never answered — the app did not start"; }
 ok "boots on WAG_ENV=test with no external services"
 
+# Generated APIs require a signed-in user (BOU-539). Without one, a write is
+# refused before it reaches the handler.
+CODE=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H "Content-Type: application/json" \
+            -d '{"name":"Tee","sku":"T-0","price":9.99}' "http://localhost:$PORT/api/v1/products")
+[ "$CODE" = "401" ] || fail "POST /api/v1/products without signing in answered $CODE, expected 401"
+ok "the scaffolded API refuses a request without a signed-in user"
+
+# Sign up through the web form, then log in over the API for a token. The
+# session cookie the form sets is Secure, which curl keeps off plain HTTP.
+CODE=$(curl -s -o /dev/null -w '%{http_code}' -X POST \
+            --data-urlencode "name=Smoke" --data-urlencode "email=smoke@example.test" \
+            --data-urlencode "password=Example-pass-1" "http://localhost:$PORT/web/register")
+[ "$CODE" = "303" ] || { tail -30 /tmp/shop-smoke.log; fail "POST /web/register answered $CODE, expected 303"; }
+LOGIN=$(curl -sS -X POST -H "Content-Type: application/json" \
+             -d '{"email":"smoke@example.test","password":"Example-pass-1"}' \
+             "http://localhost:$PORT/api/v1/auth/login")
+TOKEN=$(echo "$LOGIN" | grep -oE '"jwt-token":"[^"]+"' | cut -d'"' -f4 || true)
+[ -n "$TOKEN" ] || fail "POST /api/v1/auth/login returned no jwt-token: '$LOGIN'"
+AUTH=(-H "Authorization: Bearer $TOKEN")
+
 # The point of the example: the scaffolded module serves a request. Asserting
 # on the status alone would pass on the framework's 404 handler, which also
 # returns a body — so assert on what the generated handler returns.
-BODY=$(curl -fsS "http://localhost:$PORT/api/v1/products") \
+BODY=$(curl -fsS "${AUTH[@]}" "http://localhost:$PORT/api/v1/products") \
   || { tail -30 /tmp/shop-smoke.log; fail "/api/v1/products did not answer"; }
 [ "$BODY" = "[]" ] \
   || fail "/api/v1/products returned '$BODY', not the generated handler's []"
@@ -73,20 +93,20 @@ ok "the scaffolded module answers at /api/v1/products"
 
 # The handlers reach the service: a POST writes a row the next GET reads. They
 # were stubs that answered 201 and {} and wrote nothing (BOU-539).
-CREATED=$(curl -sS -w '\n%{http_code}' -X POST -H "Content-Type: application/json" \
+CREATED=$(curl -sS -w '\n%{http_code}' -X POST "${AUTH[@]}" -H "Content-Type: application/json" \
                -d '{"name":"Tee","sku":"T-1","price":9.99}' \
                "http://localhost:$PORT/api/v1/products")
 [ "$(echo "$CREATED" | tail -1)" = "201" ] \
   || { tail -30 /tmp/shop-smoke.log; fail "POST /api/v1/products answered '$CREATED', expected 201"; }
 ID=$(echo "$CREATED" | grep -oE '"id" *: *"[0-9a-f-]{36}"' | grep -oE '[0-9a-f-]{36}' || true)
 [ -n "$ID" ] || fail "POST /api/v1/products returned no id: '$CREATED'"
-GOT=$(curl -fsS "http://localhost:$PORT/api/v1/products/$ID") \
+GOT=$(curl -fsS "${AUTH[@]}" "http://localhost:$PORT/api/v1/products/$ID") \
   || fail "GET /api/v1/products/$ID did not answer"
 case "$GOT" in
   *'"sku":"T-1"'*) ;;
   *) fail "GET /api/v1/products/$ID returned '$GOT', not the row just created" ;;
 esac
-CODE=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H "Content-Type: application/json" \
+CODE=$(curl -s -o /dev/null -w '%{http_code}' -X POST "${AUTH[@]}" -H "Content-Type: application/json" \
             -d '{"name":"Tee"}' "http://localhost:$PORT/api/v1/products")
 [ "$CODE" = "400" ] || fail "POST /api/v1/products without its required fields answered $CODE, expected 400"
 ok "POST /api/v1/products writes a row that GET reads back, and a bad body is a 400"

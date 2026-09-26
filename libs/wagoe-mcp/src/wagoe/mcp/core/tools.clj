@@ -85,8 +85,8 @@
                                                                                   :required   ["name" "type"]}}}
                                                    :required   ["name" "fields"]}}
                                "interfaces" {:type       "object"
-                                             :description "Which interfaces to generate. Both default to true — omit this to get the whole module. Pass web=false to skip core/ui.clj, shell/web_handlers.clj and the module's :web routes; http=false to skip the REST API routes."
-                                             :properties {"http" {:type "boolean"} "web" {:type "boolean"}}}
+                                             :description "Which interfaces to generate. Both default to true — omit this to get the whole module. Pass web=false to skip core/ui.clj, shell/web_handlers.clj and the module's :web routes; http=false to skip the REST API routes. API routes require a signed-in user; public-api=true opens them to anyone."
+                                             :properties {"http" {:type "boolean"} "web" {:type "boolean"} "public-api" {:type "boolean"}}}
                                "preview"  {:type "boolean" :description "Dry-run: return the file plan without writing or verifying."}
                                "force"    {:type "boolean" :description "Overwrite an existing module. Without it, scaffolding a module that already exists is refused and the files it would replace are listed — so re-invoking after a failed verify needs this."}
                                "allow"    {:type "boolean" :description "Audited override of soft (FC/IS, convention) guardrails."}}
