@@ -511,3 +511,61 @@
                                       "--no-http" "--base-ns" "bou497nh3"
                                       "--output-dir" (.getPath dir3)]))))
         (is (not-any? #(str/ends-with? % "_http.clj") (keys (files-under dir3))))))))
+
+;; =============================================================================
+;; The first entity's API reaches its service (BOU-539)
+;; =============================================================================
+
+(defn- h2-migrated [dir tag]
+  (let [ctx (db-factory/db-context {:adapter :h2
+                                    :database-path (str "mem:" tag (System/nanoTime) ";DB_CLOSE_DELAY=-1")
+                                    :pool {:minimum-idle 1 :maximum-pool-size 2}})]
+    (doseq [[path sql] (files-under dir)
+            :when (str/ends-with? path ".up.sql")
+            st (statements sql)]
+      (jdbc/execute! (:datasource ctx) [st]))
+    ctx))
+
+(defn- api-caller [routes]
+  (let [router (r/router routes)]
+    (fn [method path body]
+      (let [m (r/match-by-path router path)]
+        ((get-in m [:data method :handler])
+         {:request-method method :path-params (:path-params m) :body-params body})))))
+
+(deftest ^:integration the-first-entity-api-reaches-its-service
+  ;; Its handlers answered canned bodies: POST gave 201 and {}, and nothing was
+  ;; ever written.
+  (let [dir (temp-dir)
+        r   (ports/generate-module svc {:module-name "billing" :base-ns "bou539"
+                                        :entities    [{:name "Invoice"
+                                                       :fields [{:name :number :type :string :required true}
+                                                                {:name :total :type :decimal :required true}]}]
+                                        :output-dir  (.getPath dir)})]
+    (is (:success r) (pr-str (:errors r)))
+    (load-and-test! dir)
+    (let [db      (h2-migrated dir "bou539")
+          at      (fn [n s] @(ns-resolve (symbol (str "bou539.billing." n)) s))
+          svc     ((at "shell.service" 'create-service) ((at "shell.persistence" 'create-repository) db))
+          contrib ((at "shell.http" 'billing-routes) svc {})
+          call    (api-caller (:api contrib))
+          created (call :post "/invoices" {:number "A-1" :total 9.99 :sneaky "dropped"})
+          id      (get-in created [:body :id])]
+      (is (= #{:api :web :static} (set (keys contrib))))
+      (testing "POST creates a row, and GET shows it"
+        (is (= 201 (:status created)))
+        (is (uuid? id))
+        (let [got (call :get (str "/invoices/" id) nil)]
+          (is (= 200 (:status got)))
+          (is (= "A-1" (get-in got [:body :number])))
+          (is (== 9.99 (get-in got [:body :total]))))
+        (is (= [id] (map :id (:body (call :get "/invoices" nil))))))
+      (testing "PUT updates the row"
+        (is (= "A-2" (get-in (call :put (str "/invoices/" id) {:number "A-2"}) [:body :number]))))
+      (testing "bad bodies are a 400"
+        (is (= 400 (:status (call :post "/invoices" {:number "A-3" :total "cheap"}))))
+        (is (= 400 (:status (call :post "/invoices" {}))))
+        (is (= 400 (:status (call :put (str "/invoices/" id) {})))))
+      (testing "an unknown id is a 404"
+        (is (= 404 (:status (call :get (str "/invoices/" (java.util.UUID/randomUUID)) nil))))
+        (is (= 404 (:status (call :put (str "/invoices/" (java.util.UUID/randomUUID)) {:number "x"}))))))))

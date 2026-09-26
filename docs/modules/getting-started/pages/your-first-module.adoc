@@ -189,20 +189,23 @@ xref:architecture:conventions.adoc[Conventions].
 
 == shell/http.clj
 
-Reitit route data — `[path data & children]` — and stub handlers returning
-canned responses:
+Reitit route data — `[path data & children]` — and handlers that call the
+service. Each decodes the JSON body through the request schema, and answers 400
+on a body that does not validate and 404 on an unknown id:
 
 [source,clojure]
 ----
 (defn api-routes
-  [_service]
+  [service]
   [["/products"
-    {:get  {:handler (fn [_req] {:status 200 :body []})}
-     :post {:handler (fn [_req] {:status 201 :body {}})}}]
-   ["/products/:id"
-    {:get    {:handler (fn [_req] {:status 200 :body {}})}
-     :put    {:handler (fn [_req] {:status 200 :body {}})}
-     :delete {:handler (fn [_req] {:status 204})}}]])
+    {:get  {:handler (fn [_request]
+                       {:status 200 :body (ports/list-products service {})})}
+     :post {:handler (fn [request]
+                       (let [data (decode-create (:body-params request))]
+                         (if (valid-create? data)
+                           {:status 201 :body (ports/create-product service data)}
+                           (invalid))))}}]
+   ["/products/:id" ...]])
 
 (defn product-routes
   [service config]
@@ -215,8 +218,8 @@ The paths are relative. `product-routes` returns a *contribution*, not a route
 table: the application mounts `:api` under `/api/v1` and `:web` under `/web`, so
 writing `/api/products` here would serve it at `/api/v1/api/products`.
 
-Wiring the handlers to the service is the second edit, after validation. The
-service is already available — it is the `service` argument.
+The handlers go through the service's port, so what you add to the service —
+the validation above — applies to the API without touching this file.
 
 == The split, in one line
 

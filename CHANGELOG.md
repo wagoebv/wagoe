@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **A generated module's first-entity API answered canned stubs** (BOU-539). It now
+  calls the service; regenerate `shell/http.clj` or copy `api-routes` from a new module.
 - **Scaffolded repositories failed every create and update on H2** (BOU-497).
   Regenerate `shell/persistence.clj`, or drop `sql/format` and `:returning`.
 - **Scaffolded list page showed only ids** (BOU-486). It now has a column per

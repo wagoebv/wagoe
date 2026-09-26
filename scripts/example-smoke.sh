@@ -71,6 +71,26 @@ BODY=$(curl -fsS "http://localhost:$PORT/api/v1/products") \
   || fail "/api/v1/products returned '$BODY', not the generated handler's []"
 ok "the scaffolded module answers at /api/v1/products"
 
+# The handlers reach the service: a POST writes a row the next GET reads. They
+# were stubs that answered 201 and {} and wrote nothing (BOU-539).
+CREATED=$(curl -sS -w '\n%{http_code}' -X POST -H "Content-Type: application/json" \
+               -d '{"name":"Tee","sku":"T-1","price":9.99}' \
+               "http://localhost:$PORT/api/v1/products")
+[ "$(echo "$CREATED" | tail -1)" = "201" ] \
+  || { tail -30 /tmp/shop-smoke.log; fail "POST /api/v1/products answered '$CREATED', expected 201"; }
+ID=$(echo "$CREATED" | grep -oE '"id" *: *"[0-9a-f-]{36}"' | grep -oE '[0-9a-f-]{36}' || true)
+[ -n "$ID" ] || fail "POST /api/v1/products returned no id: '$CREATED'"
+GOT=$(curl -fsS "http://localhost:$PORT/api/v1/products/$ID") \
+  || fail "GET /api/v1/products/$ID did not answer"
+case "$GOT" in
+  *'"sku":"T-1"'*) ;;
+  *) fail "GET /api/v1/products/$ID returned '$GOT', not the row just created" ;;
+esac
+CODE=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H "Content-Type: application/json" \
+            -d '{"name":"Tee"}' "http://localhost:$PORT/api/v1/products")
+[ "$CODE" = "400" ] || fail "POST /api/v1/products without its required fields answered $CODE, expected 400"
+ok "POST /api/v1/products writes a row that GET reads back, and a bad body is a 400"
+
 # The module mounts under the version prefix, so the unversioned path must
 # redirect rather than 404. This is what catches a module that wrote /api into
 # its own paths (Common Pitfalls #9).
