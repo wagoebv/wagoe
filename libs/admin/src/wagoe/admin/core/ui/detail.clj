@@ -285,6 +285,7 @@
      record: Entity record (nil for create)
      errors: Validation errors map
      permissions: Permission flags
+     prefill: Optional starting values for a create form
 
     Returns:
       Hiccup form structure
@@ -292,8 +293,9 @@
    Notes:
      If :field-groups is configured, renders fields in grouped sections.
      Otherwise, renders flat list of editable fields."
-  [entity-name entity-config record errors _permissions & [cancel-url display]]
+  [entity-name entity-config record errors _permissions & [cancel-url display prefill]]
   (let [editable-fields (:editable-fields entity-config)
+        values (or record prefill)
         field-groups (compute-field-groups entity-config)
         primary-key (:primary-key entity-config :id)
         record-id (get record primary-key)
@@ -306,7 +308,7 @@
         ; URL-encode the value: contextual list URLs frequently carry their own query params
         ; (filters, pagination, etc.), and a raw `&` would be parsed as a new top-level
         ; parameter on the PUT request, truncating return_to server-side.
-        form-action (if (and is-edit? cancel-url (not= cancel-url default-list-url))
+        form-action (if (and cancel-url (not= cancel-url default-list-url))
                       (str form-action-base "?return_to=" (base/url-encode cancel-url))
                       form-action-base)
         _form-method (if is-edit? "PUT" "POST")
@@ -344,7 +346,7 @@
          field-groups
          [:div.form-sections {:class "form-sections"}
           (for [group field-groups]
-            (render-field-group group entity-config record errors display))]
+            (render-field-group group entity-config values errors display))]
 
          ;; Priority 2: Split into required/optional sections if both exist
          (and (seq required-fields) (seq optional-fields))
@@ -356,7 +358,7 @@
            [:div.form-fields {:class "form-fields"}
             (for [field-name required-fields]
               (let [field-config (get-in entity-config [:fields field-name])
-                    field-value (get record field-name)
+                    field-value (get values field-name)
                     field-errors (get errors field-name)]
                 (render-field-widget field-name field-value field-config field-errors display)))]]
           [:details.form-section.form-section-optional
@@ -374,7 +376,7 @@
            [:div.form-fields {:class "form-fields"}
             (for [field-name optional-fields]
               (let [field-config (get-in entity-config [:fields field-name])
-                    field-value (get record field-name)
+                    field-value (get values field-name)
                     field-errors (get errors field-name)]
                 (render-field-widget field-name field-value field-config field-errors display)))]]]
 
@@ -383,7 +385,7 @@
          [:div.form-fields {:class "form-fields"}
           (for [field-name editable-fields]
             (let [field-config (get-in entity-config [:fields field-name])
-                  field-value (get record field-name)
+                  field-value (get values field-name)
                   field-errors (get errors field-name)]
               (render-field-widget field-name field-value field-config field-errors display)))])]
       [:div.form-actions {:class "form-actions justify-end border-t border-base-300 pt-4 mt-4"}
@@ -414,12 +416,39 @@
             (-> (name f) (str/replace #"-" " ") str/capitalize)]
            [:span.parent-context-field-value (str v)]]))]]))
 
+(defn- new-child-url
+  "The \"New <child>\" link of an editable has-many, or nil when the child's
+   create form cannot take the parent: the FK is not on the form, the parent
+   id is not the UUID the form prefills, or the child delegates to its own
+   create flow, which reads neither the FK nor return_to."
+  [relationship entity fk-param return-qs]
+  (let [child-cfg (:entity-config relationship)
+        parent-id (str (:parent-id relationship))]
+    (when (and (:editable relationship)
+               fk-param
+               (some #{(keyword fk-param)} (:editable-fields child-cfg))
+               (parse-uuid parent-id)
+               (not (:create-redirect-url child-cfg)))
+      (str (base/entity-create-url entity child-cfg) "?" fk-param "=" parent-id
+           (when return-qs (str "&" return-qs))))))
+
+(defn- view-all-url
+  "The child list filtered to this parent, in the filter bar's own format."
+  [entity fk-param parent-id]
+  (let [param #(base/url-encode (str "filters[" fk-param "][" % "]"))]
+    (str "/web/admin/" entity "?" (param "op") "=eq&"
+         (param "value") "=" (base/url-encode (str parent-id)))))
+
 (defn related-records-table
   "Render a table of related records for a has-many relationship.
-   When :editable true, adds an Edit link per row.
+   When :editable true, adds an Edit link per row and a link to create a child
+   with its :foreign-key set to :parent-id. When :has-more? is set, the
+   records are one page of more, and a link leads to the rest.
 
    Args:
      relationship: {:label \"Order Items\" :fields [...] :editable true
+                    :foreign-key :order-id :parent-id \"...\" :return-to \"...\"
+                    :has-more? true
                     :entity-config {...}} — the related entity's config, which
                    gives each cell its field type
      records:      vector of record maps (kebab-case keys)
@@ -432,9 +461,19 @@
   (let [fields    (:fields relationship)
         label     (:label relationship)
         editable? (:editable relationship)
-        entity    (name (:entity relationship))]
+        entity    (name (:entity relationship))
+        return-qs (when-let [rt (:return-to relationship)]
+                    (str "return_to=" (base/url-encode rt)))
+        ;; The create form names its fields in kebab-case; a snake_case
+        ;; :foreign-key would not match one.
+        fk-param  (some-> (:foreign-key relationship) name (str/replace "_" "-"))
+        new-url   (new-child-url relationship entity fk-param return-qs)]
     [:div.related-records {:class "space-y-3 mt-6"}
      [:h2.section-title label]
+     (when new-url
+       [:a.button.secondary {:class "gap-2" :href new-url}
+        (icons/icon :plus {:size 16})
+        [:t :admin/button-new {:entity (or (get-in relationship [:entity-config :label]) label)}]])
      (if (empty? records)
        [:p.empty-state [:t :admin/relationship-empty-state {:label label}]]
        [:div.table-wrapper
@@ -458,9 +497,11 @@
                [:td
                 [:a.button.secondary
                  {:href (str "/web/admin/" entity "/" (:id record)
-                             (when-let [rt (:return-to relationship)]
-                               (str "?return_to=" (base/url-encode rt))))}
-                 [:t :common/button-edit]]])])]]])]))
+                             (when return-qs (str "?" return-qs)))}
+                 [:t :common/button-edit]]])])]]])
+     (when (and (:has-more? relationship) fk-param (some? (:parent-id relationship)))
+       [:a.button.secondary {:href (view-all-url entity fk-param (:parent-id relationship))}
+        [:t :admin/relationship-view-all {:label label}]])]))
 
 (defn entity-detail-page
   "Entity detail/edit page.
@@ -552,7 +593,7 @@
        (parent-context-banner ctx))
      (when (seq errors)
        (ui/validation-errors errors))
-     (entity-form entity-name entity-config record errors permissions list-url (:display opts))
+     (entity-form entity-name entity-config record errors permissions list-url (:display opts) (:prefill opts))
      (when-let [related-records (:related-records opts)]
        (for [[rel records] related-records]
          (related-records-table rel records (:display opts))))]))

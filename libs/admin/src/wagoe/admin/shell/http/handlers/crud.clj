@@ -7,7 +7,8 @@
    [wagoe.admin.shell.permissions :as shell-permissions]
    [wagoe.admin.shell.http.support :as support]
    [wagoe.shared.ui.core.validation :as ui-validation]
-   [clojure.tools.logging :as log]))
+   [clojure.tools.logging :as log]
+   [ring.util.response :as ring-response]))
 
 (defn- client-safe-error-message
   "Message safe to show in an admin flash: a typed domain error whose mapped
@@ -36,6 +37,15 @@
   (or (some #(when (seq %) %)
             [(:form-params request) (:body-params request) (:params request)])
       {}))
+
+(defn- rejected-create-opts
+  "Page opts for a create form shown again after it failed. The values go in
+   as :prefill, not as the record: a record makes it an edit form that PUTs to
+   an id-less URL (BOU-533). return_to keeps a child create tied to its parent."
+  [config request form-data]
+  {:display   (support/display-options config request)
+   :prefill   form-data
+   :return-to (support/safe-return-to request)})
 
 (defn create-entity-handler
   "Handler for creating new entity.
@@ -66,33 +76,38 @@
       (if (and (:valid? validation-result) (empty? parse-errors))
         ; Create entity and return list page
         (try
-          (let [_created-entity (ports/create-entity admin-service entity-name form-data)
+          (if-let [return-to (support/safe-return-to request)]
+            ;; Created from a parent's has-many panel: go back there (BOU-491).
+            (do (ports/create-entity admin-service entity-name form-data)
+                (-> (ring-response/response "")
+                    (ring-response/header "HX-Redirect" return-to)))
+            (let [_created-entity (ports/create-entity admin-service entity-name form-data)
 
-                ; Fetch list page data
-                entities (ports/list-available-entities schema-provider)
-                entity-configs (into {} (map (fn [e] [e (ports/get-entity-config schema-provider e)])) entities)
+                  ; Fetch list page data
+                  entities (ports/list-available-entities schema-provider)
+                  entity-configs (into {} (map (fn [e] [e (ports/get-entity-config schema-provider e)])) entities)
 
-                ; Get entity list with default options
-                result (ports/list-entities admin-service entity-name {})
-                records (:records result)
-                total-count (:total-count result)
-                table-query {:page-size (:page-size result)
-                             :page (:page-number result)}
+                  ; Get entity list with default options
+                  result (ports/list-entities admin-service entity-name {})
+                  records (:records result)
+                  total-count (:total-count result)
+                  table-query {:page-size (:page-size result)
+                               :page (:page-number result)}
 
-                permissions (permissions/get-entity-permissions user entity-name entity-config)]
+                  permissions (permissions/get-entity-permissions user entity-name entity-config)]
 
-            ; Return list page HTML with success message
-            (support/html-response request
-                                   (admin-ui/admin-layout
-                                    (admin-ui/entity-list-page entity-name records entity-config table-query total-count permissions
-                                                               {:display (support/display-options config request)})
-                                    {:user user
-                                     :current-entity entity-name
-                                     :entities entities
-                                     :entity-configs entity-configs
-                                     :logo-url (:logo-url config)
-                                     :flash {:type :success
-                                             :message [:t :admin/flash-created {:label (:label entity-config)}]}})))
+              ; Return list page HTML with success message
+              (support/html-response request
+                                     (admin-ui/admin-layout
+                                      (admin-ui/entity-list-page entity-name records entity-config table-query total-count permissions
+                                                                 {:display (support/display-options config request)})
+                                      {:user user
+                                       :current-entity entity-name
+                                       :entities entities
+                                       :entity-configs entity-configs
+                                       :logo-url (:logo-url config)
+                                       :flash {:type :success
+                                               :message [:t :admin/flash-created {:label (:label entity-config)}]}}))))
           (catch Exception e
             (log/error e "Failed to create entity" {:entity entity-name})
             (let [entities (ports/list-available-entities schema-provider)
@@ -100,7 +115,7 @@
                   permissions (permissions/get-entity-permissions user entity-name entity-config)]
               (support/html-response request
                                      (admin-ui/admin-layout
-                                      (admin-ui/entity-detail-page entity-name entity-config form-data {} permissions {:display (support/display-options config request)})
+                                      (admin-ui/entity-detail-page entity-name entity-config nil {} permissions (rejected-create-opts config request form-data))
                                       {:user user
                                        :current-entity entity-name
                                        :entities entities
@@ -123,7 +138,7 @@
 
           (-> (support/html-response request
                                      (admin-ui/admin-layout
-                                      (admin-ui/entity-detail-page entity-name entity-config form-data errors permissions {:display (support/display-options config request)})
+                                      (admin-ui/entity-detail-page entity-name entity-config nil errors permissions (rejected-create-opts config request form-data))
                                       {:user user
                                        :current-entity entity-name
                                        :entities entities

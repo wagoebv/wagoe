@@ -355,6 +355,7 @@
  :admin/button-update              "Update"
  :admin/button-create              "Create"
  :admin/relationship-empty-state   "No {label} found."
+ :admin/relationship-view-all      "View all {label}"
  :admin/page-edit-title            "Edit {label}"
  :admin/page-create-title          "Create {label}"
  :admin/button-back-to-list        "Back to list"
