@@ -12,9 +12,12 @@
           (throw (ex-info "fail() not found in scripts/first-run-smoke.sh" {})))
       (str/replace "/tmp/*.log" (str dir "/*.log"))))
 
-(defn- run-fail [dir]
-  (process/shell {:out :string :err :string :continue true}
-                 "bash" "-euo" "pipefail" "-c" (str (fail-fn dir) "\nfail \"it broke\"")))
+(defn- run-fail
+  ([dir] (run-fail dir ""))
+  ([dir before]
+   (process/shell {:out :string :err :string :continue true}
+                  "bash" "-euo" "pipefail" "-c"
+                  (str ". scripts/lib/log-excerpt.sh\n" (fail-fn dir) before "\nfail \"it broke\""))))
 
 (deftest ^:unit fail-reports-with-and-without-a-log
   (let [dir (fs/create-temp-dir)]
@@ -30,6 +33,32 @@
           (is (= 1 (:exit r)))
           (is (str/includes? (:out r) "Error: database is locked"))
           (is (str/includes? (:out r) "SMOKE FAILURE: it broke"))))
+      (finally (fs/delete-tree dir)))))
+
+(deftest ^:unit fail-shows-the-exception-headline-above-the-tail
+  ;; On #577 the last 40 lines of admin.log were all Maven stack frames; the
+  ;; message saying what failed was above them (BOU-550).
+  (let [dir (fs/create-temp-dir)
+        log (str (fs/path dir "admin.log"))
+        frames (str/join "\n" (map #(str "\tat org.apache.maven.Frame.m" % "(Frame.java:1)") (range 200)))]
+    (try
+      (testing "a long log: the headline, then the tail"
+        (spit log (str "Downloading deps\n"
+                       "Exception in thread main: ModelBuildingException: 1 problem in pom\n"
+                       frames "\nlast line\n"))
+        (let [out (:out (run-fail dir))]
+          (is (str/includes? out "ModelBuildingException: 1 problem in pom"))
+          (is (str/includes? out "last line"))
+          (is (not (str/includes? out "Downloading deps")))))
+      (testing "a short log: all of it"
+        (spit log (str "first line\n" (str/join "\n" (repeat 60 "noise")) "\nlast line\n"))
+        (let [out (:out (run-fail dir))]
+          (is (str/includes? out "first line"))
+          (is (str/includes? out "last line"))))
+      (testing "a log the step already showed is not printed again"
+        (spit log "Error: shown once\n")
+        (let [out (:out (run-fail dir (str "\nlog_excerpt " log " 5")))]
+          (is (= 1 (count (re-seq #"Error: shown once" out))))))
       (finally (fs/delete-tree dir)))))
 
 (defn- run-failed-steps [log]
@@ -81,7 +110,9 @@
       (finally (fs/delete-tree dir)))))
 
 (deftest ^:unit the-smoke-container-gets-the-failed-step-check
-  (is (str/includes? (docker-body "scripts/first-run-smoke.sh") "quickstart_failed_steps ()")))
+  (let [body (docker-body "scripts/first-run-smoke.sh")]
+    (is (str/includes? body "quickstart_failed_steps ()"))
+    (is (str/includes? body "log_excerpt ()"))))
 
 (defn- run-skill-quickstart
   "The skill check's quickstart block, from its container body, with a fake
@@ -122,7 +153,7 @@
   ;; The body is one single-quoted docker argument; an apostrophe in a comment
   ;; ends it early and bash -n fails on the rest of the script.
   (let [src (slurp "scripts/first-run-smoke.sh")
-        open "-c \"$(declare -f quickstart_failed_steps)\"'"
+        open "-c \"$(declare -f quickstart_failed_steps log_excerpt)\"'"
         start (+ (or (str/index-of src open) (throw (ex-info "body start not found" {})))
                  (count open))
         end (or (str/last-index-of src "\n'\n") (throw (ex-info "body end not found" {})))

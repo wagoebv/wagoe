@@ -11,6 +11,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+. "$REPO_ROOT/scripts/lib/log-excerpt.sh"
 
 fail() { echo; echo "EXAMPLE SMOKE FAILURE: $*"; exit 1; }
 ok()   { echo "  ok — $*"; }
@@ -55,13 +56,13 @@ wait_for_health() {
     if [ -n "$PORT" ] && curl -fsS -o /dev/null "http://localhost:$PORT/health" 2>/dev/null; then
       break
     fi
-    kill -0 "$APP_PID" 2>/dev/null || { tail -30 "$log"; fail "the app exited during startup"; }
+    kill -0 "$APP_PID" 2>/dev/null || { log_excerpt "$log" 30; fail "the app exited during startup"; }
     sleep 2
   done
-  [ -n "$PORT" ] || { tail -30 "$log"; fail "the app never reported a port"; }
+  [ -n "$PORT" ] || { log_excerpt "$log" 30; fail "the app never reported a port"; }
 
   curl -fsS -o /dev/null "http://localhost:$PORT/health" \
-    || { tail -30 "$log"; fail "/health never answered — the app did not start"; }
+    || { log_excerpt "$log" 30; fail "/health never answered — the app did not start"; }
 }
 wait_for_health /tmp/shop-smoke.log
 ok "boots on WAG_ENV=test with no external services"
@@ -78,7 +79,7 @@ ok "the scaffolded API refuses a request without a signed-in user"
 CODE=$(curl -s -o /dev/null -w '%{http_code}' -X POST \
             --data-urlencode "name=Smoke" --data-urlencode "email=smoke@example.test" \
             --data-urlencode "password=Example-pass-1" "http://localhost:$PORT/web/register")
-[ "$CODE" = "303" ] || { tail -30 /tmp/shop-smoke.log; fail "POST /web/register answered $CODE, expected 303"; }
+[ "$CODE" = "303" ] || { log_excerpt /tmp/shop-smoke.log 30; fail "POST /web/register answered $CODE, expected 303"; }
 LOGIN=$(curl -sS -X POST -H "Content-Type: application/json" \
              -d '{"email":"smoke@example.test","password":"Example-pass-1"}' \
              "http://localhost:$PORT/api/v1/auth/login")
@@ -90,7 +91,7 @@ AUTH=(-H "Authorization: Bearer $TOKEN")
 # on the status alone would pass on the framework's 404 handler, which also
 # returns a body — so assert on what the generated handler returns.
 BODY=$(curl -fsS "${AUTH[@]}" "http://localhost:$PORT/api/v1/products") \
-  || { tail -30 /tmp/shop-smoke.log; fail "/api/v1/products did not answer"; }
+  || { log_excerpt /tmp/shop-smoke.log 30; fail "/api/v1/products did not answer"; }
 [ "$BODY" = "[]" ] \
   || fail "/api/v1/products returned '$BODY', not the generated handler's []"
 ok "the scaffolded module answers at /api/v1/products"
@@ -101,7 +102,7 @@ CREATED=$(curl -sS -w '\n%{http_code}' -X POST "${AUTH[@]}" -H "Content-Type: ap
                -d '{"name":"Tee","sku":"T-1","price":9.99}' \
                "http://localhost:$PORT/api/v1/products")
 [ "$(echo "$CREATED" | tail -1)" = "201" ] \
-  || { tail -30 /tmp/shop-smoke.log; fail "POST /api/v1/products answered '$CREATED', expected 201"; }
+  || { log_excerpt /tmp/shop-smoke.log 30; fail "POST /api/v1/products answered '$CREATED', expected 201"; }
 ID=$(echo "$CREATED" | grep -oE '"id" *: *"[0-9a-f-]{36}"' | grep -oE '[0-9a-f-]{36}' || true)
 [ -n "$ID" ] || fail "POST /api/v1/products returned no id: '$CREATED'"
 GOT=$(curl -fsS "${AUTH[@]}" "http://localhost:$PORT/api/v1/products/$ID") \
@@ -135,7 +136,7 @@ case "$LOC" in
   *) fail "/web/products signed out answered '$LOC', expected a 302 to /web/login" ;;
 esac
 WEB=$(curl -fsS "${AUTH[@]}" "http://localhost:$PORT/web/products") \
-  || { tail -30 /tmp/shop-smoke.log; fail "/web/products did not answer"; }
+  || { log_excerpt /tmp/shop-smoke.log 30; fail "/web/products did not answer"; }
 case "$WEB" in
   *"<h1>Products</h1>"*"T-1"*) ;;
   *) fail "/web/products returned '$WEB', not the generated page with the row created above" ;;
@@ -147,7 +148,7 @@ ok "the web page redirects a signed-out visitor, and shows a signed-in one the r
 # the template's build produces a jar that boots.
 cleanup
 clojure -T:build uber > /tmp/shop-uber.log 2>&1 \
-  || { tail -30 /tmp/shop-uber.log; fail "clojure -T:build uber failed"; }
+  || { log_excerpt /tmp/shop-uber.log 30; fail "clojure -T:build uber failed"; }
 java -jar target/shop-0.1.0.jar > /tmp/shop-jar.log 2>&1 &
 APP_PID=$!
 wait_for_health /tmp/shop-jar.log

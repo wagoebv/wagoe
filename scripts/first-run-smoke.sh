@@ -46,6 +46,7 @@ IMAGE="${SMOKE_IMAGE:-ubuntu:24.04}"
 TARGET="${SMOKE_TARGET:-worktree}"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 . "$REPO_ROOT/scripts/lib/quickstart-failed-steps.sh"
+. "$REPO_ROOT/scripts/lib/log-excerpt.sh"
 
 case "$TARGET" in
   worktree|released) ;;
@@ -72,8 +73,8 @@ docker run --rm \
   -e "TARGET=$TARGET" \
   -e "SMOKE_AI=${SMOKE_AI:-}" \
   -e "GITHUB_TOKEN=${GITHUB_TOKEN:-}" \
-  "$IMAGE" bash -euo pipefail -c "$(declare -f quickstart_failed_steps)"'
-# On failure, show the tail of the log the failing step just wrote. Steps send
+  "$IMAGE" bash -euo pipefail -c "$(declare -f quickstart_failed_steps log_excerpt)"'
+# On failure, show the log the failing step just wrote. Steps send
 # their output to /tmp/*.log, so the failure line alone said what broke but
 # never why: "Failed to create admin user." and "quickstart scaffolded no
 # migration at all" both arrived with no cause (BOU-525).
@@ -82,10 +83,8 @@ fail() {
   # `|| true`: before the first step writes a log, ls finds nothing and,
   # under -euo pipefail, would end the shell before the message below.
   last_log="$(ls -t /tmp/*.log 2>/dev/null | head -1 || true)"
-  if [ -n "$last_log" ]; then
-    echo "── last 40 lines of $last_log"
-    tail -40 "$last_log"
-    echo "──"
+  if [ -n "$last_log" ] && [ "$last_log" != "${LOG_EXCERPT_SHOWN:-}" ]; then
+    log_excerpt "$last_log"
   fi
   echo "SMOKE FAILURE: $*"
   exit 1
@@ -101,11 +100,11 @@ ok()   { echo "  ok — $*"; }
 export DEBIAN_FRONTEND=noninteractive
 if command -v apt-get >/dev/null 2>&1; then
   PKG=apt; EXPECT_HINT="apt-get install"
-  apt-get update -qq >/tmp/pkg.log 2>&1 || { tail -5 /tmp/pkg.log; fail "apt-get update failed"; }
-  pkg_install() { apt-get install -y -qq "$@" >/tmp/pkg.log 2>&1 || { tail -5 /tmp/pkg.log; fail "apt-get install $* failed"; }; }
+  apt-get update -qq >/tmp/pkg.log 2>&1 || { log_excerpt /tmp/pkg.log 5; fail "apt-get update failed"; }
+  pkg_install() { apt-get install -y -qq "$@" >/tmp/pkg.log 2>&1 || { log_excerpt /tmp/pkg.log 5; fail "apt-get install $* failed"; }; }
 elif command -v dnf >/dev/null 2>&1; then
   PKG=dnf; EXPECT_HINT="dnf install"
-  pkg_install() { dnf install -y -q "$@" >/tmp/pkg.log 2>&1 || { tail -5 /tmp/pkg.log; fail "dnf install $* failed"; }; }
+  pkg_install() { dnf install -y -q "$@" >/tmp/pkg.log 2>&1 || { log_excerpt /tmp/pkg.log 5; fail "dnf install $* failed"; }; }
 elif command -v pacman >/dev/null 2>&1; then
   PKG=pacman; EXPECT_HINT="pacman -S"
   # --disable-sandbox: pacman cannot initialise its seccomp sandbox under qemu
@@ -113,8 +112,8 @@ elif command -v pacman >/dev/null 2>&1; then
   # is reached from an Apple Silicon host. Without it every pacman call fails.
   PAC_FLAGS="--noconfirm --disable-sandbox"
   pacman -Sy $PAC_FLAGS >/tmp/pkg.log 2>&1 \
-    || { tail -5 /tmp/pkg.log; fail "pacman -Sy failed"; }
-  pkg_install() { pacman -S $PAC_FLAGS --needed "$@" >/tmp/pkg.log 2>&1 || { tail -5 /tmp/pkg.log; fail "pacman -S $* failed"; }; }
+    || { log_excerpt /tmp/pkg.log 5; fail "pacman -Sy failed"; }
+  pkg_install() { pacman -S $PAC_FLAGS --needed "$@" >/tmp/pkg.log 2>&1 || { log_excerpt /tmp/pkg.log 5; fail "pacman -S $* failed"; }; }
 else
   fail "no supported package manager (apt-get/dnf/pacman) in this image"
 fi
@@ -155,7 +154,7 @@ if [ "$PKG" = pacman ]; then
 fi
 T0=$(date +%s)
 bash /repo/scripts/install.sh >/tmp/install.log 2>&1 || {
-  tail -20 /tmp/install.log; fail "install.sh exited non-zero"; }
+  log_excerpt /tmp/install.log 20; fail "install.sh exited non-zero"; }
 for t in java clojure bb wagoe; do
   bash -ic "command -v $t" >/dev/null 2>&1 || fail "$t not on PATH after install"
 done
@@ -192,10 +191,10 @@ cd /root
 if [ "$TARGET" = worktree ]; then
   cp -r /repo /work
   bash -ic "bb --config /work/bb.edn -e \"(require (quote wagoe.cli.main)) (wagoe.cli.main/-main \\\"new\\\" \\\"demo\\\")\"" \
-    >/tmp/new.log 2>&1 || { tail -20 /tmp/new.log; fail "wagoe new failed"; }
+    >/tmp/new.log 2>&1 || { log_excerpt /tmp/new.log 20; fail "wagoe new failed"; }
 else
   bash -ic "wagoe new demo" </dev/null >/tmp/new.log 2>&1 \
-    || { tail -20 /tmp/new.log; fail "wagoe new failed"; }
+    || { log_excerpt /tmp/new.log 20; fail "wagoe new failed"; }
 fi
 cd /root/demo
 grep -vE "^\s*;;" resources/conf/dev/config.edn | grep -q ":wagoe/sqlite" \
@@ -260,7 +259,7 @@ fi
 # No Ollama server runs here; wiring is what boots, the first call is not made.
 if [ -n "${SMOKE_AI:-}" ]; then
   bash -ic "bb setup --database sqlite --ai-provider ${SMOKE_AI}" >/tmp/setup-ai.log 2>&1 \
-    || { tail -20 /tmp/setup-ai.log; fail "bb setup --ai-provider ${SMOKE_AI} exited non-zero"; }
+    || { log_excerpt /tmp/setup-ai.log 20; fail "bb setup --ai-provider ${SMOKE_AI} exited non-zero"; }
   grep -vE "^\s*;;" resources/conf/dev/config.edn | grep -q ":wagoe/ai-service" \
     || fail "setup accepted --ai-provider ${SMOKE_AI} but wrote no :wagoe/ai-service key — this cell would be checking nothing"
   ok "AI provider ${SMOKE_AI} enabled in config"
@@ -277,7 +276,7 @@ if [ "$TARGET" = worktree ]; then
   export WAGOE_SCAFFOLDER_ROOT=/work/libs/scaffolder
 fi
 bash -ic "bb quickstart" </dev/null >/tmp/quickstart.log 2>&1 \
-  || { tail -25 /tmp/quickstart.log; fail "bb quickstart exited non-zero"; }
+  || { log_excerpt /tmp/quickstart.log 25; fail "bb quickstart exited non-zero"; }
 # A failed sample-module step exits 0, so ask the log.
 if quickstart_failed_steps /tmp/quickstart.log; then
   echo "SMOKE FAILURE: bb quickstart completed with a failed step"
@@ -360,7 +359,7 @@ set -e
   || { grep -iE "^Error:|^Details:|Failed to create" /tmp/admin.log | head -3
        fail "bb create-admin exited $ADMIN_RC (BOU-266: the :user-cli alias must pass the verb through)"; }
 grep -q "Admin user created successfully" /tmp/admin.log \
-  || { tail -5 /tmp/admin.log
+  || { log_excerpt /tmp/admin.log 5
        fail "bb create-admin exited 0 without reporting that it created the user"; }
 ok "admin user created"
 
@@ -368,8 +367,8 @@ ok "admin user created"
 echo "[8/9] app serves HTTP"
 bash -ic "cd /root/demo && set -a && . ./.env && set +a && clojure -M:repl" >/tmp/repl.log 2>&1 &
 for _ in $(seq 1 90); do (echo > /dev/tcp/127.0.0.1/7888) 2>/dev/null && break; sleep 2; done
-(echo > /dev/tcp/127.0.0.1/7888) 2>/dev/null || { tail -25 /tmp/repl.log; fail "nREPL never came up"; }
-bash -ic "clj-nrepl-eval -p 7888 \"(go)\"" >/tmp/go.log 2>&1 || { tail -15 /tmp/go.log; fail "(go) failed"; }
+(echo > /dev/tcp/127.0.0.1/7888) 2>/dev/null || { log_excerpt /tmp/repl.log 25; fail "nREPL never came up"; }
+bash -ic "clj-nrepl-eval -p 7888 \"(go)\"" >/tmp/go.log 2>&1 || { log_excerpt /tmp/go.log 15; fail "(go) failed"; }
 
 # With SMOKE_AI set, ask the system about the module *before* probing HTTP.
 # clj-nrepl-eval exits 0 even when (go) threw, so a wiring failure otherwise
@@ -378,9 +377,9 @@ bash -ic "clj-nrepl-eval -p 7888 \"(go)\"" >/tmp/go.log 2>&1 || { tail -15 /tmp/
 # for text the expression contains would always match.
 if [ -n "${SMOKE_AI:-}" ]; then
   bash -ic "clj-nrepl-eval -p 7888 \"(str (quote ai-wired=) (some? (get integrant.repl.state/system :wagoe/ai-service)))\"" >/tmp/ai-wired.log 2>&1 \
-    || { tail -10 /tmp/ai-wired.log; fail "could not ask the running system about :wagoe/ai-service"; }
+    || { log_excerpt /tmp/ai-wired.log 10; fail "could not ask the running system about :wagoe/ai-service"; }
   grep -q "ai-wired=true" /tmp/ai-wired.log \
-    || { echo "--- (go) output: ---"; tail -15 /tmp/go.log
+    || { echo "--- (go) output: ---"; log_excerpt /tmp/go.log 15
          fail "(go) did not put :wagoe/ai-service in the system — the enabled module did not wire (BOU-414)"; }
   ok "AI service wired into the running system"
 fi
@@ -394,7 +393,7 @@ for _ in $(seq 1 45); do
   [ "$CODE" != "000" ] && break
   sleep 2
 done
-[ "$CODE" = "200" ] || { tail -25 /tmp/repl.log; fail "/api-docs/ returned $CODE, expected 200"; }
+[ "$CODE" = "200" ] || { log_excerpt /tmp/repl.log 25; fail "/api-docs/ returned $CODE, expected 200"; }
 ok "/api-docs/ returned 200"
 
 
@@ -428,11 +427,11 @@ body_() { head -c 400 /tmp/tasks.json 2>/dev/null || true; echo; }
 case "$MODULE_CODE" in
   # 401 is a mounted route: generated APIs require a signed-in user (BOU-539).
   2*|401) ;;
-  404) tail -25 /tmp/repl.log
+  404) log_excerpt /tmp/repl.log 25
        fail "/api/v1/tasks returned 404 — quickstart scaffolded and integrated the module, but nothing mounted its routes" ;;
-  000) tail -25 /tmp/repl.log
+  000) log_excerpt /tmp/repl.log 25
        fail "/api/v1/tasks never answered within 10 attempts" ;;
-  *)   body_; tail -25 /tmp/repl.log
+  *)   body_; log_excerpt /tmp/repl.log 25
        fail "/api/v1/tasks returned $MODULE_CODE, expected 2xx or 401" ;;
 esac
 # The status alone is not the assertion. Assert on the body too: a handler that
@@ -459,10 +458,10 @@ ok "/api/v1/tasks returned $MODULE_CODE with a JSON body, and unknown paths stil
 # clj-nrepl-eval echoes back as part of the code it was given: the step passed
 # with devtools removed from the template entirely. A count cannot be echoed.
 bash -ic "clj-nrepl-eval -p 7888 \"(do (require (quote wagoe.devtools.core.error-classifier)) (str (quote devtools-classify=) (some? (resolve (quote wagoe.devtools.core.error-classifier/classify)))))\"" \
-  >/tmp/devtools.log 2>&1 || { tail -15 /tmp/devtools.log
+  >/tmp/devtools.log 2>&1 || { log_excerpt /tmp/devtools.log 15
                                fail "wagoe.devtools is not loadable in the generated project (deps.edn :repl alias)"; }
 grep -qE "devtools-classify=true" /tmp/devtools.log \
-  || { tail -15 /tmp/devtools.log
+  || { log_excerpt /tmp/devtools.log 15
        fail "wagoe.devtools did not load — classify does not resolve"; }
 T1=$(date +%s)
 ok "wagoe-devtools loads from the :repl alias"
@@ -487,9 +486,9 @@ ok "wagoe-devtools loads from the :repl alias"
 # user/status" — so the `|| fail` below catches a broken connection and nothing
 # else. What discriminates is whether the dashboard is in the output.
 bash -ic "clj-nrepl-eval -p 7888 \"(with-out-str (user/status))\"" >/tmp/status.log 2>&1 \
-  || { tail -15 /tmp/status.log; fail "could not reach the nREPL to evaluate (status)"; }
+  || { log_excerpt /tmp/status.log 15; fail "could not reach the nREPL to evaluate (status)"; }
 grep -q "Wagoe Dev" /tmp/status.log \
-  || { tail -15 /tmp/status.log
+  || { log_excerpt /tmp/status.log 15
        fail "(status) printed no dashboard — it does not exist, or resolved to something that is not the devtools helper"; }
 # Asked of the system rather than read off the dashboard. The dashboard draws a
 # fixed-width box and `pad-right` truncates any line that would push the border
@@ -498,14 +497,14 @@ grep -q "Wagoe Dev" /tmp/status.log \
 # email-queue, t..." and this assertion read the cut-off `tasks` as a module that
 # was not running, while the same output said "33 components, 0 errors".
 bash -ic "clj-nrepl-eval -p 7888 \"(user/modules)\"" >/tmp/modules.log 2>&1 \
-  || { tail -15 /tmp/modules.log; fail "could not reach the nREPL to evaluate (modules)"; }
+  || { log_excerpt /tmp/modules.log 15; fail "could not reach the nREPL to evaluate (modules)"; }
 grep -q "tasks" /tmp/modules.log \
-  || { tail -15 /tmp/modules.log
+  || { log_excerpt /tmp/modules.log 15
        fail "(modules) does not list the scaffolded module among the running ones"; }
 bash -ic "clj-nrepl-eval -p 7888 \"(with-out-str (user/commands))\"" >/tmp/commands.log 2>&1 \
-  || { tail -15 /tmp/commands.log; fail "(commands) threw"; }
+  || { log_excerpt /tmp/commands.log 15; fail "(commands) threw"; }
 grep -q "SYSTEM:" /tmp/commands.log \
-  || { tail -15 /tmp/commands.log; fail "(commands) printed no palette"; }
+  || { log_excerpt /tmp/commands.log 15; fail "(commands) printed no palette"; }
 ok "(status), (modules) and (commands) work in the generated project"
 
 # ── does a bad request explain itself? ──────────────────────────────────────
@@ -552,17 +551,17 @@ printf "(+ 1 2)\n:repl/quit\n" \
 # before it can demonstrate anything about prompts. Checking that first means
 # the first failure names the actual defect instead of a symptom of it.
 if grep -q "Address already in use" /tmp/replprompt.log; then
-  tail -20 /tmp/replprompt.log
+  log_excerpt /tmp/replprompt.log 20
   fail "bb repl ignored --port and collided with the running system — the task drops *command-line-args* (BOU-403)"
 fi
 grep -q "nREPL server started on port 7999" /tmp/replprompt.log \
-  || { tail -20 /tmp/replprompt.log
+  || { log_excerpt /tmp/replprompt.log 20
        fail "bb repl did not forward --port to nREPL"; }
 grep -q "user=>" /tmp/replprompt.log \
-  || { tail -20 /tmp/replprompt.log
+  || { log_excerpt /tmp/replprompt.log 20
        fail "bb repl printed no prompt — headless again, nowhere to eval (go) (BOU-403)"; }
 grep -q "user=> 3" /tmp/replprompt.log \
-  || { tail -20 /tmp/replprompt.log
+  || { log_excerpt /tmp/replprompt.log 20
        fail "bb repl showed a prompt but did not evaluate (+ 1 2)"; }
 ok "prompt evaluates, and --port reached nREPL"
 
