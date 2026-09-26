@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **MFA and storage upload APIs returned the raw exception message** (BOU-557). They now answer the
+  platform's generic 500 and log the cause; MFA without a user answers 401. Upgrade user and storage.
 - **Open redirect after login via `?return-to=/\evil.com`** (BOU-553). Backslashes, control
   characters and encoded slashes are refused, in admin's `return_to` too. Upgrade user and admin.
 - **`/web/register` answered 500 on a rejected password or a taken email** (BOU-552). It re-renders
