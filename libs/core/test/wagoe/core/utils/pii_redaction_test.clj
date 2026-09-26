@@ -89,3 +89,20 @@
           twice (pii/redact-pii once state)]
       (is (= once twice))
       (is (= "ok" (:safe once))))))
+
+(deftest ^:unit ^:security redact-for-log-test
+  (let [out (pii/redact-for-log
+             {:user-entity {:id               7
+                            :email            "user@example.com"
+                            :password-hash    "bcrypt+sha512$abc"
+                            :mfa-secret       "JBSWY3DPEHPK3PXP"
+                            :mfa-backup-codes ["11111111"]
+                            :session_token    "tok"
+                            :webhook-secret   "whsec"
+                            :api-key          "key"}})]
+    (testing "secrets are redacted by name, including -secret/-token/-hash suffixes"
+      (doseq [k [:password-hash :mfa-secret :mfa-backup-codes :session_token :webhook-secret :api-key]]
+        (is (= "[REDACTED]" (get-in out [:user-entity k])) (str k))))
+    (testing "ids and emails stay readable"
+      (is (= 7 (get-in out [:user-entity :id])))
+      (is (= "user@example.com" (get-in out [:user-entity :email]))))))

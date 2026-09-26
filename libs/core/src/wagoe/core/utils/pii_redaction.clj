@@ -10,6 +10,8 @@
     "authorization" "auth" "auth-header"
     "token" "access_token" "refresh_token"
     "secret" "api-key" "api_key"
+    "private-key" "private_key"
+    "mfa-backup-codes" "mfa_backup_codes" "backup-codes" "backup_codes"
     "email" "e-mail"
     "ssn" "social_security_number"
     "credit-card" "credit_card"})
@@ -22,6 +24,14 @@
         (string? k) k
         :else (str k))
       (str/lower-case)))
+
+(defn sensitive-key-name?
+  "True when a normalized key name is in `keys`, or ends in -secret, -token,
+   -hash or -password (snake_case too), so `:password-hash` and `:mfa-secret`
+   are caught without listing every variant."
+  [keys kname]
+  (boolean (or (contains? keys kname)
+               (re-find #"[-_](secret|token|hash|password)$" kname))))
 
 (defn email-string?
   "Best-effort detection of email-like strings.
@@ -75,7 +85,7 @@
         :else v)
 
       ;; All other keys use generic redaction
-      (contains? keys kname)
+      (sensitive-key-name? keys kname)
       "[REDACTED]"
 
       :else
@@ -108,3 +118,12 @@
     (-> context
         (update :extra #(when % (redact-pii % state)))
         (update :tags #(when % (redact-pii % state))))))
+
+(def ^:private log-redact-state
+  (build-redact-state {:redact {:mask-email? false}}))
+
+(defn redact-for-log
+  "Redact secrets in `data` before it is logged. Emails are left alone: logs
+   already carry them, and this is about credentials."
+  [data]
+  (redact-pii data log-redact-state))

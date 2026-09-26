@@ -23,6 +23,7 @@
    - Context carries operation metadata and observability services
    - Interceptors handle all cross-cutting concerns automatically"
   (:require [wagoe.core.interceptor :as interceptor]
+            [wagoe.core.utils.pii-redaction :as pii]
             [wagoe.observability.logging.core :as logging]
             [wagoe.observability.logging.ports :as log-ports]
             [wagoe.observability.metrics.core :as metrics]
@@ -76,7 +77,7 @@
                  (str "Starting " operation-name)
                  "service"
                  :info
-                 (merge context params)))
+                 (pii/redact-for-log (merge context params))))
 
               ;; Start timing
               (assoc-in ctx [:timing :start] (System/nanoTime))))})
@@ -87,7 +88,7 @@
    :enter (fn [{:keys [operation-name params system context] :as ctx}]
             (when-let [logger (:logger system)]
               (log-ports/info logger (str "Starting service operation: " operation-name)
-                              (merge context params)))
+                              (pii/redact-for-log (merge context params))))
             ctx)
    :leave (fn [{:keys [operation-name result system context] :as ctx}]
             (when-let [logger (:logger system)]
@@ -152,14 +153,14 @@
                  (str "Service operation failed: " operation-name)
                  "service.error"
                  :error
-                 (merge context params {:error-message (.getMessage ^Throwable error)}))
+                 (pii/redact-for-log (merge context params {:error-message (.getMessage ^Throwable error)})))
 
                 ;; Report application error
                 (error-reporting/report-application-error
                  error-reporter
                  error
                  (str "Service operation failed: " operation-name)
-                 {:extra (merge {:operation operation-name} params context)
+                 {:extra (pii/redact-for-log (merge {:operation operation-name} params context))
                   :tags {:component "service"
                          :operation operation-name}})))
             ctx)})
@@ -180,7 +181,7 @@
                  (str operation-name "-completed")
                  entity-type
                  context
-                 (merge params (when result {:result-summary "Operation completed"})))
+                 (pii/redact-for-log (merge params (when result {:result-summary "Operation completed"}))))
 
                 ;; Audit logging for user actions
                 (when user-id
@@ -203,7 +204,7 @@
                (str "Service operation successful: " operation-name)
                "service"
                :info
-               (merge context params)))
+               (pii/redact-for-log (merge context params))))
             ctx)})
 
 ;; ==============================================================================

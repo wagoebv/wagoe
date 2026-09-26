@@ -213,7 +213,7 @@
   (fn [request]
     (if-let [session-token (extract-session-token request)]
       (try
-        (log/info "Validating session token" {:session-token session-token :uri (:uri request)})
+        (log/info "Validating session token" {:uri (:uri request)})
         (if-let [session (ports/validate-session user-service session-token)]
           ;; Session valid - fetch full user and add to request
           (do
@@ -230,7 +230,7 @@
                 (create-unauthorized-response "User not found" :user-not-found request))))
           ;; Session invalid or expired
           (do
-            (log/info "Session invalid or expired" {:session-token session-token})
+            (log/info "Session invalid or expired" {:uri (:uri request)})
             (create-unauthorized-response "Invalid or expired session" :invalid-session request)))
         (catch Exception ex
           (log/warn ex "Session validation failed" {:session-token (str (take 8 session-token) "...")})

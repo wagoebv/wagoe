@@ -3,7 +3,9 @@
             [wagoe.user.shell.auth]
             [wagoe.user.ports]
             [buddy.sign.jwt]
-            [clojure.test :refer [deftest is testing]]))
+            [clojure.string :as str]
+            [clojure.test :refer [deftest is testing]]
+            [clojure.tools.logging.test :as log-test]))
 
 (deftest ^:unit extract-session-token-test
   (testing "decodes percent-encoded session token from cookie"
@@ -174,6 +176,21 @@
       (is (nil? (get-in request [:user k]))
           (str k " must not reach a handler")))))
 
+(deftest ^:unit ^:security session-authentication-does-not-log-the-token
+  ;; A session token is a bearer credential (BOU-556).
+  (let [token "sess-7f3c9a1b2d4e6f8091a2b3c4d5e6f708"]
+    (doseq [session [{:user-id 7} nil]]
+      (let [service #_{:clj-kondo/ignore [:missing-protocol-method]}
+                    (reify wagoe.user.ports/IUserService
+                      (validate-session [_ _] session)
+                      (get-user-by-id [_ _] {:id 7 :email "s@b.c" :role :user}))]
+        (log-test/with-log
+          ((sut/session-authentication-middleware service echo-handler)
+           {:uri "/x" :cookies {"session-token" {:value token}}})
+          (is (seq (log-test/the-log)) "the attempt is still logged")
+          (is (not-any? #(str/includes? (str (:message %)) token) (log-test/the-log))
+              (str "token logged when session is " (pr-str session))))))))
+
 (deftest ^:unit flexible-authentication-does-not-revalidate-an-authenticated-request
   ;; user, admin and workflow routes carry flexible-authentication-middleware.
   ;; With BOU-373 the global pass has already validated the same credentials by
@@ -182,9 +199,9 @@
   ;; twice per request doubles that for no gain.
   (let [calls   (atom 0)
         service #_{:clj-kondo/ignore [:missing-protocol-method]}
-                (reify wagoe.user.ports/IUserService
-                  (validate-session [_ _] (swap! calls inc) {:user-id 7})
-                  (get-user-by-id [_ _] {:id 7 :email "s@b.c" :role :user}))
+        (reify wagoe.user.ports/IUserService
+          (validate-session [_ _] (swap! calls inc) {:user-id 7})
+          (get-user-by-id [_ _] {:id 7 :email "s@b.c" :role :user}))
         route   ((sut/flexible-authentication-middleware service) echo-handler)]
 
     (testing "already authenticated — the route-level pass is a no-op"
