@@ -461,8 +461,7 @@
                       ;; 30 days if remember-me is checked, otherwise session cookie (no max-age)
                     cookie-max-age (when remember? (* 30 24 60 60))]
                 (log/info "Login successful, setting cookie and redirecting"
-                          {:session-token session-token
-                           :session-token-type (type session-token)
+                          {:user-id (:id user)
                            :remember? remember?
                            :cookie-max-age cookie-max-age
                            :return-to return-to
@@ -906,9 +905,7 @@
     (try
       (let [user-id (get-in request [:path-params :id])
             form-data (:form-params request)
-            _ (log/info "Update user form data" {:form-data form-data
-                                                 :role-value (get form-data "role")
-                                                 :active-value (get form-data "active")})
+            _ (log/info "Update user form data" {:fields (keys form-data)})
             ;; Prepare data with kebab-case keyword keys for validation
             ;; Note: Checkbox fields are "on" when checked, absent when unchecked
             prepared-data {:name (get form-data "name")
@@ -1034,9 +1031,7 @@
             uuid (UUID/fromString user-id)
             user (user-ports/get-user-by-id user-service uuid)
             sessions (user-ports/get-user-sessions user-service uuid)
-            _ (log/info "Sessions retrieved:" {:count (count sessions)
-                                               :first-session (first sessions)
-                                               :session-keys (when (seq sessions) (keys (first sessions)))})
+            _ (log/info "Sessions retrieved:" {:count (count sessions)})
             current-token (get-in request [:cookies "session-token" :value])
             opts {:user (:user request)
                   :current-time (current-time)

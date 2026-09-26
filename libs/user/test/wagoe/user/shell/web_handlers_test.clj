@@ -13,6 +13,7 @@
             [wagoe.user.shell.in-memory-repository-test :as mem]
             [wagoe.email.ports :as email-ports]
             [clojure.test :refer [deftest testing is]]
+            [clojure.tools.logging.test :as log-test]
             [clojure.string :as str])
   (:import [java.util UUID]
            [java.time Instant]))
@@ -1040,3 +1041,29 @@
         (is (= 500 (:status response)))
         (is (not (html-contains? response "hunter2")))
         (is (html-contains? response "error-generic"))))))
+
+(deftest ^:contract ^:security session-tokens-stay-out-of-the-log
+  ;; A session token in the log is a login for whoever reads it (BOU-556).
+  (let [token  "tok-3f9a1c-secret"
+        logged (fn [f] (log-test/with-log (f) (pr-str (log-test/the-log))))]
+    (testing "web login"
+      (let [svc (reify ports/IUserService
+                  (authenticate-user [_ _]
+                    {:authenticated true
+                     :user    {:id (UUID/randomUUID) :role :user}
+                     :session {:session-token token}}))
+            out (logged #((web-handlers/login-submit-handler svc {})
+                          {:form-params {"email" "user@example.com" "password" "password123"}}))]
+        (is (str/includes? out "Login successful") "the log was not captured")
+        (is (not (str/includes? out token)))))
+    (testing "admin sessions page"
+      (let [user (create-test-user {})
+            svc  (reify ports/IUserService
+                   (get-user-by-id [_ _] user)
+                   (get-user-sessions [_ _]
+                     [{:id (UUID/randomUUID) :user-id (:id user) :session-token token
+                       :created-at (Instant/now) :expires-at (Instant/now)}]))
+            out (logged #((web-handlers/user-sessions-page-handler svc {})
+                          {:path-params {:id (str (:id user))}}))]
+        (is (str/includes? out "Sessions retrieved") "the log was not captured")
+        (is (not (str/includes? out token)))))))
