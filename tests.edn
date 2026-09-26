@@ -87,7 +87,8 @@
            :ns-patterns ["wagoe.storage.*-test"]}
 
           {:id :scaffolder
-           :test-paths ["libs/scaffolder/test"]
+           ;; test-pg/: the PostgreSQL round trip, which CI runs with :test/pg.
+           :test-paths ["libs/scaffolder/test" "libs/scaffolder/test-pg"]
            :ns-patterns ["wagoe.scaffolder.*-test"]}
 
           {:id :cache

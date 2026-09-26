@@ -8,9 +8,10 @@
    written into one kept only its wall time, and with the JVM in
    Europe/Amsterdam it read back as 08:00:50Z (BOU-522).
 
-   Needs the `:test/pg` alias for embedded PostgreSQL, as the admin, platform
-   and tenant suites do. Without it this namespace fails to load — loudly,
-   rather than skipping and reporting a pass it never earned."
+   Lives under test-pg/, which only the `:test/pg` alias puts on the
+   classpath: it needs embedded PostgreSQL and the platform library, which a
+   plain `clojure -M:test` should not resolve. CI runs the scaffolder suite
+   with :test/pg, and tools' check_test requires it to."
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [next.jdbc :as jdbc]

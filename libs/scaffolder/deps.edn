@@ -21,11 +21,31 @@
               ;; by serving it: the module's web handler renders its Hiccup
               ;; with hiccup2, and nothing checked that the body it returns is
               ;; something Ring can write (BOU-484).
+              ;; next.jdbc and the H2 and SQLite drivers so a generated migration
+              ;; is executed, not only read as text: H2 rejected the TIMESTAMPTZ
+              ;; the scaffolder emitted and nothing noticed (BOU-522).
               :extra-deps  {lambdaisland/kaocha  {:mvn/version "1.91.1392"}
                             metosin/reitit-core  {:mvn/version "0.10.1"}
                             metosin/reitit-ring  {:mvn/version "0.10.1"}
-                            hiccup/hiccup        {:mvn/version "2.0.0"}}
+                            hiccup/hiccup        {:mvn/version "2.0.0"}
+                            com.github.seancorfield/next.jdbc {:mvn/version "1.3.1118"}
+                            com.h2database/h2    {:mvn/version "2.5.250"}
+                            org.xerial/sqlite-jdbc {:mvn/version "3.53.4.0"}}
               :main-opts   ["-m" "kaocha.runner"]}
+
+  ;; The PostgreSQL round trip for generated timestamp columns (BOU-522), kept
+  ;; out of :test the way the root keeps it out of its :test (BOU-260): it
+  ;; needs embedded PostgreSQL and the platform's connection settings, and a
+  ;; plain `clojure -M:test` should not resolve either. Its test lives under
+  ;; test-pg/ so :test never loads it. Add :test/pg-mac on Apple Silicon.
+  :test/pg   {:extra-paths ["test-pg"]
+              ;; Its own kaocha config: the default scans only test/, so the
+              ;; PostgreSQL test would sit on the classpath and never run.
+              :main-opts   ["-m" "kaocha.runner" "--config-file" "tests-pg.edn"]
+              :extra-deps  {wagoe/platform {:local/root "../platform"}
+                            io.zonky.test/embedded-postgres {:mvn/version "2.2.2"}
+                            io.zonky.test.postgres/embedded-postgres-binaries-linux-amd64 {:mvn/version "18.6.0"}}}
+  :test/pg-mac {:extra-deps {io.zonky.test.postgres/embedded-postgres-binaries-darwin-arm64v8 {:mvn/version "18.6.0"}}}
 
   :clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2026.08.04"}}
               :main-opts    ["-m" "clj-kondo.main"]}

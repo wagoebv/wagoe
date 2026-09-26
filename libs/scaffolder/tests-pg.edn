@@ -1,0 +1,6 @@
+;; Kaocha config for `clojure -M:test:test/pg`: the default suite plus test-pg/.
+;; Without it kaocha scans only test/, so test-pg/ sat on the classpath and the
+;; PostgreSQL round trip never ran — green without having tested anything.
+#kaocha/v1
+{:tests [{:id         :unit
+          :test-paths ["test" "test-pg"]}]}
