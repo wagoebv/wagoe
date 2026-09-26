@@ -13,4 +13,8 @@ below.
 All shared development guidance — commands, FC/IS architecture, conventions,
 pitfalls, the custom Kaocha test reporter, and the `clj-nrepl-eval` /
 `clj-paren-repair` assistant-tooling setup — lives in `AGENTS.md` (imported
-above). There are currently no Claude-Code-only notes beyond that import.
+above).
+
+**Writing.** Follow "Write Short" in AGENTS.md for every commit, PR, review
+comment and issue. Add no attribution: no "🤖 Generated with Claude Code"
+footer, no `Co-Authored-By: Claude` trailer.
