@@ -41,24 +41,24 @@ JWT_SECRET="dev-secret-at-least-32-characters-long" WAG_ENV=test clojure -M:test
 # run. Bare `clojure -M:test` runs the lean set: fine for a suite that needs
 # nothing extra, and it fails on ClassNotFoundException for one that does.
 #
-#   :test/pg      admin, platform, tenant   (embedded PostgreSQL, Linux binary)
-#   :test/pg-mac  local runs on Apple Silicon — CI is ubuntu-only
+#   :test/pg      admin, scaffolder, tenant (embedded PostgreSQL, Linux binary)
+#   :test/pg-mac  add to :test/pg on Apple Silicon — CI is ubuntu-only
 #   :test/otel    observability             (OpenTelemetry in-memory exporters)
 #   :test/http    devtools                  (clj-http-lite)
-clojure -M:test:test/pg :admin                     # one suite, only what it needs
+clojure -M:test:test/pg:test/pg-mac :admin         # one suite, only what it needs (macOS)
 
 # Testing - Per-library test suites
 clojure -M:test :core                              # Core library tests
-clojure -M:test :observability                     # Observability library tests
+clojure -M:test:test/otel :observability           # Observability library tests
 clojure -M:test :platform                          # Platform library tests
 clojure -M:test :user                              # User library tests
-clojure -M:test :admin                             # Admin library tests
+clojure -M:test:test/pg :admin                     # Admin library tests
 clojure -M:test :storage                           # Storage library tests
-clojure -M:test :scaffolder                        # Scaffolder library tests
+clojure -M:test:test/pg :scaffolder                # Scaffolder library tests
 clojure -M:test :cache                             # Cache library tests
 clojure -M:test :jobs                              # Jobs library tests
 clojure -M:test :email                             # Email library tests
-clojure -M:test :tenant                            # Tenant library tests
+clojure -M:test:test/pg :tenant                    # Tenant library tests
 clojure -M:test :realtime                          # Realtime library tests
 clojure -M:test :workflow                          # Workflow library tests
 clojure -M:test :search                            # Search library tests
