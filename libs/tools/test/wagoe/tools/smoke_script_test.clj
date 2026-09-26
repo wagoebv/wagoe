@@ -33,11 +33,9 @@
       (finally (fs/delete-tree dir)))))
 
 (defn- run-failed-steps [log]
-  (let [src (or (re-find #"(?ms)^quickstart_failed_steps\(\) \{\n.*?^\}\n"
-                         (slurp "scripts/first-run-smoke.sh"))
-                (throw (ex-info "quickstart_failed_steps not found" {})))]
-    (process/shell {:out :string :err :string :continue true}
-                   "bash" "-euo" "pipefail" "-c" (str src "\nquickstart_failed_steps " log))))
+  (process/shell {:out :string :err :string :continue true}
+                 "bash" "-euo" "pipefail" "-c"
+                 (str ". scripts/lib/quickstart-failed-steps.sh\nquickstart_failed_steps " log)))
 
 (deftest ^:unit a-failed-quickstart-step-is-shown-not-just-the-tail
   ;; The scaffold step is early in the log; the last 40 lines began after it,
@@ -66,3 +64,56 @@
           (is (= 1 (:exit r)))
           (is (str/blank? (:out r)))))
       (finally (fs/delete-tree dir)))))
+
+;; Both scripts run their checks inside `docker run ... bash -c '<body>'`. A fake
+;; `docker` hands back that body, so a test can run the part it cares about.
+
+(defn- docker-body [script]
+  (let [dir (fs/create-temp-dir)
+        body (fs/path dir "body")]
+    (try
+      (spit (str (fs/path dir "docker")) "#!/usr/bin/env bash\nprintf '%s' \"${@: -1}\" > \"$BODY\"\n")
+      (fs/set-posix-file-permissions (fs/path dir "docker") "rwxr-xr-x")
+      (process/shell {:out :string :err :string
+                      :extra-env {"PATH" (str dir ":" (System/getenv "PATH")) "BODY" (str body)}}
+                     "bash" script)
+      (slurp (str body))
+      (finally (fs/delete-tree dir)))))
+
+(deftest ^:unit the-smoke-container-gets-the-failed-step-check
+  (is (str/includes? (docker-body "scripts/first-run-smoke.sh") "quickstart_failed_steps ()")))
+
+(defn- run-skill-quickstart
+  "The skill check's quickstart block, from its container body, with a fake
+   `bb` that exits 0 and logs `log`."
+  [log]
+  (let [body (docker-body "scripts/wagoe-setup-skill-verify.sh")
+        block (or (re-find #"(?ms)^\s*bb quickstart </dev/null.*?quickstart ok\"\n" body)
+                  (throw (ex-info "quickstart block not found" {})))
+        dir (fs/create-temp-dir)
+        qlog (str (fs/path dir "quickstart.log"))]
+    (try
+      (spit (str (fs/path dir "bb")) (str "#!/usr/bin/env bash\nprintf '%s' '" log "'\n"))
+      (fs/set-posix-file-permissions (fs/path dir "bb") "rwxr-xr-x")
+      (process/shell {:out :string :err :string :continue true
+                      :extra-env {"PATH" (str dir ":" (System/getenv "PATH"))}}
+                     "bash" "-euo" "pipefail" "-c"
+                     ;; Whatever the script puts ahead of its own body, then the block.
+                     (str (subs body 0 (str/index-of body "apt-get update"))
+                          "\n" (str/replace block "/tmp/quickstart.log" qlog)))
+      (finally (fs/delete-tree dir)))))
+
+(deftest ^:unit the-skill-check-fails-on-a-failed-quickstart-step
+  ;; quickstart exits 0 when its sample module fails (BOU-545), so the exit code
+  ;; alone passed the skill check.
+  (testing "a failed step fails the check and shows the step"
+    (let [r (run-skill-quickstart
+             (str "[4/8] Scaffolding sample module\nCould not find artifact rewrite-clj\n"
+                  "Quickstart Completed with 1 failed step(s): [4/8] Scaffolding sample module\n"))]
+      (is (= 1 (:exit r)) (:out r))
+      (is (str/includes? (:out r) "Could not find artifact rewrite-clj"))
+      (is (not (str/includes? (:out r) "quickstart ok")))))
+  (testing "a clean run passes"
+    (let [r (run-skill-quickstart "[4/8] Scaffolding sample module\n  Done\nQuickstart Complete\n")]
+      (is (zero? (:exit r)) (str (:out r) (:err r)))
+      (is (str/includes? (:out r) "quickstart ok")))))

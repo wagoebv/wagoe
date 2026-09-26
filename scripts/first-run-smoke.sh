@@ -45,6 +45,7 @@ set -euo pipefail
 IMAGE="${SMOKE_IMAGE:-ubuntu:24.04}"
 TARGET="${SMOKE_TARGET:-worktree}"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+. "$REPO_ROOT/scripts/lib/quickstart-failed-steps.sh"
 
 case "$TARGET" in
   worktree|released) ;;
@@ -71,7 +72,7 @@ docker run --rm \
   -e "TARGET=$TARGET" \
   -e "SMOKE_AI=${SMOKE_AI:-}" \
   -e "GITHUB_TOKEN=${GITHUB_TOKEN:-}" \
-  "$IMAGE" bash -euo pipefail -c '
+  "$IMAGE" bash -euo pipefail -c "$(declare -f quickstart_failed_steps)"'
 # On failure, show the tail of the log the failing step just wrote. Steps send
 # their output to /tmp/*.log, so the failure line alone said what broke but
 # never why: "Failed to create admin user." and "quickstart scaffolded no
@@ -90,21 +91,6 @@ fail() {
   exit 1
 }
 ok()   { echo "  ok — $*"; }
-
-# Print the section of each step quickstart reports as failed, or the whole log
-# when it is short. A failed step is early in the log, so the tail fail() prints
-# never reached its error (BOU-545). Returns 1 when no step failed.
-quickstart_failed_steps() {
-  local log="$1" n from to
-  grep -q "failed step(s)" "$log" || return 1
-  if [ "$(wc -l <"$log")" -le 150 ]; then cat "$log"; return 0; fi
-  for n in $(grep "failed step(s)" "$log" | grep -oE "\[[0-9]+/8\]" | tr -d "[]" | cut -d/ -f1); do
-    from=$(grep -m1 -nF "[$n/8]" "$log" | cut -d: -f1)
-    to=$(tail -n +"$((from + 1))" "$log" | grep -m1 -nE "\[[0-9]+/8\]" | cut -d: -f1 || true)
-    echo "── step [$n/8] of $log"
-    if [ -n "$to" ]; then sed -n "${from},$((from + to - 1))p" "$log"; else tail -n +"$from" "$log"; fi
-  done
-}
 
 # ── 0. package manager ──────────────────────────────────────────────────────
 # SMOKE_IMAGE has always been a parameter, but the body hardcoded apt-get, so
