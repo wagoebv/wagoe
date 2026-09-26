@@ -670,7 +670,8 @@
                                 has-many-rels))
 
         ; Return URL when navigating back from a child entity (e.g. order-items → order)
-        return-to   (get-in request [:query-params "return_to"])
+        ; Checked: it becomes hrefs on this page (BOU-553).
+        return-to   (safe-return-to request)
 
         ; Parse parent entity + id from return_to (/web/admin/{entity}/{id})
         parent-ref  (when return-to
@@ -703,7 +704,7 @@
                                 ids        (mapv #(str (:id %)) siblings)
                                 idx        (.indexOf ^java.util.List ids current-id)
                                 nav-url    #(str "/web/admin/" (name entity-name) "/" %
-                                                 "?return_to=" return-to)]
+                                                 "?return_to=" (ui-base/url-encode return-to))]
                             (when (>= idx 0)
                               (cond-> {:position (inc idx) :total (count ids)}
                                 (> idx 0)                (assoc :prev-url (nav-url (nth ids (dec idx))))
