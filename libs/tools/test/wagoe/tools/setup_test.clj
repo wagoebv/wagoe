@@ -1,6 +1,8 @@
 (ns wagoe.tools.setup-test
   (:require [clojure.test :refer [deftest is testing]]
             [wagoe.tools.setup :as setup]
+            [babashka.fs :as fs]
+            [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.set :as set]
             [clojure.string :as str]))
@@ -485,7 +487,7 @@
   ;; `#include "admin/users.edn"` was emitted without the file, and Aero throws
   ;; on a missing include — so an admin-enabled project could not read its own
   ;; config.
-  (doseq [env ["dev" "test"]]
+  (doseq [env ["dev" "test" "prod"]]
     (let [config   (setup/build-config (assoc minimal-spec :admin-ui true) env)
           includes (map second (re-seq #"#include\s+\"([^\"]+)\"" config))]
       (is (seq includes) "admin config should reference the entity file")
@@ -496,3 +498,76 @@
   (testing "and the resource is readable EDN naming the entity"
     (let [entity (read-string (slurp (io/resource "wagoe/tools/admin/users.edn")))]
       (is (contains? entity :users)))))
+
+;; =============================================================================
+;; BOU-499: a prod profile that is production-shaped
+;; =============================================================================
+
+(defn- read-config
+  "Parse generated config text. Tags are kept as `(tag value)`, so `#env X`
+   reads as `(env X)` and a test can tell a variable from a literal."
+  [text]
+  (edn/read-string {:default (fn [tag value] (list tag value))} text))
+
+(defn- env-ref? [v]
+  (and (seq? v) (= 'env (first v))))
+
+(deftest ^:unit prod-config-is-production-shaped
+  (doseq [db (:database setup/valid-choices)]
+    (let [active (:active (read-config (setup/build-config (assoc full-spec :database db) "prod")))
+          db-key (keyword "wagoe" (name db))
+          db-cfg (get active db-key)]
+      (testing (str "--database " (name db))
+        (is (true? (get-in active [:wagoe/settings :secure-cookies?]))
+            "prod is served behind TLS; auth cookies must carry Secure")
+        (is (= :info (get-in active [:wagoe/logging :level])))
+        (is (not (contains? active :wagoe/dashboard))
+            "the platform refuses dev-only modules outside :dev")
+        (is (not (contains? active :wagoe/dev-error-enricher)))
+        (is (not (contains? active :wagoe/ai-service))
+            "the AI service is a build-time tool")
+        (is (map? db-cfg) (str db-key " must be the active database"))
+        (is (not (contains? db-cfg :migrate-on-start?))
+            "prod migrations are a reviewed deploy step, and replicas race (BOU-485)")
+        (is (not (:memory db-cfg)))
+        (doseq [k [:host :dbname :user :password :db]
+                :when (contains? db-cfg k)]
+          (is (env-ref? (get db-cfg k))
+              (str db-key " " k " must come from the environment, not a literal")))))))
+
+(deftest ^:unit prod-config-takes-secrets-from-the-environment
+  (let [active (:active (read-config (setup/build-config full-spec "prod")))]
+    (is (env-ref? (get-in active [:wagoe/payment-provider :api-key])))
+    (is (env-ref? (get-in active [:wagoe/cache :password])))
+    (is (env-ref? (get-in active [:wagoe.external/smtp :password])))
+    (is (true? (get-in active [:wagoe.external/smtp :tls?])))))
+
+(deftest ^:unit setup-writes-a-prod-config
+  (let [dir (fs/create-temp-dir)]
+    (try
+      (with-redefs [setup/root-dir (constantly (str dir))]
+        (with-out-str (setup/from-flags {:database "postgresql" :admin-ui "true"})))
+      (let [f (fs/file dir "resources" "conf" "prod" "config.edn")]
+        (is (fs/exists? f) "bb setup must write resources/conf/prod/config.edn")
+        (when (fs/exists? f)
+          (is (true? (get-in (read-config (slurp f)) [:active :wagoe/settings :secure-cookies?])))))
+      (is (fs/exists? (fs/file dir "resources" "conf" "prod" "admin" "users.edn"))
+          "the prod config's #include must resolve")
+      (finally (fs/delete-tree dir)))))
+
+(deftest ^:unit setup-keeps-an-existing-prod-config
+  (let [dir   (fs/create-temp-dir)
+        conf  (fs/file dir "resources" "conf" "prod" "config.edn")
+        users (fs/file dir "resources" "conf" "prod" "admin" "users.edn")]
+    (try
+      (fs/create-dirs (fs/parent users))
+      (spit conf "{:active {:my/service {}}}")
+      (spit users "{:users {:label \"Mine\"}}")
+      (with-redefs [setup/root-dir (constantly (str dir))]
+        (with-out-str (setup/from-flags {:database "postgresql" :admin-ui "true"})))
+      (is (= "{:active {:my/service {}}}" (slurp conf))
+          "a hand-maintained prod config must survive bb setup")
+      (is (= "{:users {:label \"Mine\"}}" (slurp users)))
+      (is (fs/exists? (fs/file dir "resources" "conf" "dev" "config.edn"))
+          "dev is still generated")
+      (finally (fs/delete-tree dir)))))
