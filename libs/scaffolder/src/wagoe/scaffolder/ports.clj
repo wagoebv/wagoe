@@ -52,6 +52,23 @@
      Example:
        (add-field service {:module-name \"billing\" :entity \"Invoice\" ...})")
 
+  (add-entity [this request]
+    "Add an entity to an existing module.
+
+     Args:
+       request: {:module-name \"billing\"
+                 :entity {:name \"InvoiceLineItem\" :belongs-to \"invoice\"
+                          :fields [...]}
+                 :dry-run false}
+
+     Writes the entity's own core, service, persistence, migration and test
+     files, and appends its defs to schema.clj and ports.clj. Refuses, and
+     writes nothing, when one of those files exists or the module already
+     defines a name the entity needs.
+
+     Returns:
+       Map with :success, :files, :errors")
+
   (add-endpoint [this request]
     "Add an endpoint to an existing module.
      

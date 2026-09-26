@@ -90,6 +90,7 @@
           ;; would surface as an unrelated failure rather than a clear one.
           svc  (reify wagoe.scaffolder.ports/IScaffolderService
                  (generate-module [_ _] (throw (ex-info "not under test" {})))
+                 (add-entity [_ _] (throw (ex-info "not under test" {})))
                  (add-endpoint [_ _] (throw (ex-info "not under test" {})))
                  (add-adapter [_ _] (throw (ex-info "not under test" {})))
                  (add-field [_ request]
@@ -140,6 +141,7 @@
     (let [seen (atom nil)
           svc  (reify wagoe.scaffolder.ports/IScaffolderService
                  (generate-module [_ _] (throw (ex-info "not under test" {})))
+                 (add-entity [_ _] (throw (ex-info "not under test" {})))
                  (add-endpoint [_ _] (throw (ex-info "not under test" {})))
                  (add-adapter [_ _] (throw (ex-info "not under test" {})))
                  (add-field [_ request]

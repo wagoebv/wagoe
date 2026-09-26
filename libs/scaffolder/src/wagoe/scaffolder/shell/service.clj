@@ -133,6 +133,35 @@
                                   (.getName f))))
             (sort-by #(.getName ^java.io.File %) (.listFiles dir))))))
 
+(defn- migration-ids
+  "One fresh migration id per table, in order and all distinct. With `force?` a
+   table's existing create migration keeps its id, as for a single entity."
+  [output-dir force? tables]
+  (let [now (.format (java.time.LocalDateTime/now java.time.ZoneOffset/UTC)
+                     (java.time.format.DateTimeFormatter/ofPattern "yyyyMMddHHmmss"))
+        used (existing-migration-ids output-dir)]
+    (reduce (fn [ids table]
+              (conj ids (or (when force? (existing-migration-for output-dir table))
+                            (next-migration-id (into used ids) now))))
+            []
+            tables)))
+
+(defn- entities-problem
+  "Why a module's entity list cannot be generated, or nil. A `:belongs-to`
+   names an entity before it in the list: the parent's table has to exist when
+   the child's foreign key is created."
+  [entities]
+  (let [kebab (fn [n] (when (string? n) (template/pascal->kebab n)))
+        names (map (comp kebab :name) entities)]
+    (or (when-let [dup (some (fn [[n c]] (when (> c 1) n)) (frequencies names))]
+          (str "Two entities are called " (template/kebab->pascal dup) "."))
+        (some (fn [[i e]]
+                (when-let [parent (kebab (:belongs-to e))]
+                  (when-not (some #{parent} (take i names))
+                    (str (:name e) " belongs to " (template/kebab->pascal parent)
+                         ", which is not an entity listed before it."))))
+              (map-indexed vector entities)))))
+
 (def ^:private module-generation-request-validator (m/validator schema/ModuleGenerationRequest))
 (def ^:private module-generation-request-explainer (m/explainer schema/ModuleGenerationRequest))
 
@@ -145,6 +174,9 @@
 ;; refuses every parent delete against) (BOU-480 review).
 (def ^:private field-definition-validator (m/validator schema/FieldDefinition))
 (def ^:private field-definition-explainer (m/explainer schema/FieldDefinition))
+
+(def ^:private add-entity-request-validator (m/validator schema/AddEntityRequest))
+(def ^:private add-entity-request-explainer (m/explainer schema/AddEntityRequest))
 
 (defrecord ScaffolderService []
   ports/IScaffolderService
@@ -160,6 +192,9 @@
           (throw (ex-info (str "Invalid module generation request: " (pr-str explanation))
                           {:type :validation-error
                            :errors explanation}))))
+      (when-let [problem (entities-problem (:entities request))]
+        (throw (ex-info (str "Invalid module generation request: " problem)
+                        {:type :validation-error})))
 
       ;; Build template context
       (let [ctx (template/build-module-context request)
@@ -181,11 +216,14 @@
             ;; run rather than replacing the first. `up` is CREATE TABLE IF NOT
             ;; EXISTS so `migrate up` stays quiet, but `migrate down` then drops
             ;; the table with an older create still recorded as applied.
-            existing-migration (when force?
-                                 (existing-migration-for output-dir
-                                                         (:entity-plural (first (:entities ctx)))))
-            migration-number (or existing-migration
-                                 (get-next-migration-number output-dir))
+            ;; One per entity, and distinct: two entities generated in the
+            ;; same second would otherwise share an id (BOU-514).
+            ids (migration-ids output-dir force? (map :entity-plural (:entities ctx)))
+            migration-number (first ids)
+            ;; Every entity after the first appends to schema.clj and ports.clj
+            ;; and gets files of its own, exactly as `bb scaffold entity` would
+            ;; add it later (BOU-514).
+            more (rest (:entities ctx))
 
             ;; `--no-web` means no web UI files. They were written either way,
             ;; and nothing mounted them: `http.clj`'s web route served an
@@ -194,14 +232,24 @@
             web? (get-in ctx [:interfaces :web] true)
 
             ;; Generate source file contents
-            schema-content (generators/generate-schema-file ctx)
-            ports-content (generators/generate-ports-file ctx)
+            schema-content (reduce #(generators/append-section %1 (generators/entity-schema-section %2))
+                                   (generators/generate-schema-file ctx)
+                                   more)
+            ports-content (reduce #(generators/append-section %1 (generators/entity-ports-section %2))
+                                  (generators/generate-ports-file ctx)
+                                  more)
             core-content (generators/generate-core-file ctx)
             migration-content (generators/generate-migration-file ctx migration-number)
             service-content (generators/generate-service-file ctx)
             persistence-content (generators/generate-persistence-file ctx)
             http-content (generators/generate-http-file ctx)
-            module-wiring-content (generators/generate-module-wiring-file ctx)
+            module-wiring-content (reduce (fn [src e]
+                                            (let [r (generators/add-entity-to-wiring src ctx e)]
+                                              (or (:content r)
+                                                  (throw (ex-info (str "Cannot wire " (:entity-name e) ": " (:error r))
+                                                                  {:type :validation-error})))))
+                                          (generators/generate-module-wiring-file ctx)
+                                          more)
 
             ;; Generate test file contents
             core-test-content (generators/generate-core-test-file ctx)
@@ -254,6 +302,8 @@
                    {:path (format "test/%s/%s/shell/service_test.clj" base-ns-path module-path)
                     :content service-test-content
                     :action :create}]
+
+            files (into files (mapcat #(generators/entity-files ctx %1 %2) more (rest ids)))
 
             files (cond-> files
                     web?
@@ -574,6 +624,118 @@
          :module-name (:module-name request)
          :files []
          :errors [(str "Add field failed: " (.getMessage e))]})))
+
+  (add-entity [_this request]
+    (try
+      (when-not (add-entity-request-validator request)
+        (let [explanation (me/humanize (add-entity-request-explainer request))]
+          (throw (ex-info (str "Invalid entity: " (pr-str explanation))
+                          {:type :validation-error :errors explanation}))))
+      (let [{:keys [module-name dry-run]} request
+            output-dir  (or (:output-dir request) ".")
+            ctx         (template/build-module-context
+                         {:module-name module-name
+                          :base-ns     (or (:base-ns request) "wagoe")
+                          :interfaces  (:interfaces request {})
+                          :entities    []})
+            entity      (template/build-entity-context (:entity request) module-name {:primary? false})
+            ctx         (assoc ctx :entities [entity])
+            module-root (format "src/%s/%s/" (:base-ns-path ctx) (:module-path ctx))
+            schema-file (require-existing-file!
+                         (resolve-path output-dir (str module-root "schema.clj"))
+                         (str "Cannot add an entity to " module-name ": its schema.clj is not there."))
+            ports-file  (require-existing-file!
+                         (resolve-path output-dir (str module-root "ports.clj"))
+                         (str "Cannot add an entity to " module-name ": its ports.clj is not there."))
+            wiring-file (require-existing-file!
+                         (resolve-path output-dir (str module-root "shell/module_wiring.clj"))
+                         (str "Cannot add an entity to " module-name ": its shell/module_wiring.clj is not there."))
+            schema-src  (slurp schema-file)
+            ports-src   (slurp ports-file)
+            wiring      (generators/add-entity-to-wiring (slurp wiring-file) ctx entity)
+            _ (when (:error wiring)
+                (throw (ex-info (str "Cannot wire " (:entity-name entity) " into "
+                                     (.getPath wiring-file) ": " (:error wiring) ".")
+                                {:type :validation-error})))
+            schema-add  (generators/entity-schema-section entity)
+            ports-add   (generators/entity-ports-section entity)
+            parent      (some-> (get-in request [:entity :belongs-to])
+                                template/pascal->kebab template/kebab->pascal)
+            ;; Names, not text: a section is refused when the file already
+            ;; defines one of its vars, which is what would stop it compiling
+            ;; or silently redefine a protocol method.
+            clashes     (sort (concat
+                               (some-> (generators/defined-symbols schema-src)
+                                       (filter (generators/defined-symbols schema-add)))
+                               (some-> (generators/defined-symbols ports-src)
+                                       (filter (generators/defined-symbols ports-add)))))
+            _ (when (and parent
+                         (not (contains? (generators/defined-symbols schema-src) (symbol parent))))
+                (throw (ex-info (str (:entity-name entity) " belongs to " parent
+                                     ", but " (.getPath schema-file) " defines no " parent ".")
+                                {:type :validation-error})))
+            _ (when (seq clashes)
+                (throw (ex-info (str module-name " already defines "
+                                     (str/join ", " (map str clashes))
+                                     " — is " (:entity-name entity) " already in it?")
+                                {:type :validation-error})))
+            new-files   (generators/entity-files ctx entity (get-next-migration-number output-dir))
+            existing    (->> new-files
+                             (map #(resolve-path output-dir (:path %)))
+                             (filter #(.exists ^java.io.File %))
+                             (mapv #(.getPath ^java.io.File %)))
+            _ (when (seq existing)
+                (throw (ex-info "refuse-overwrite"
+                                {:type ::refuse-overwrite :existing existing})))
+            edits       [{:file schema-file :content (generators/append-section schema-src schema-add)}
+                         {:file ports-file :content (generators/append-section ports-src ports-add)}
+                         {:file wiring-file :content (:content wiring)}]
+            files       (if dry-run
+                          (into (mapv #(assoc % :action :skip
+                                              :path (.getPath (resolve-path output-dir (:path %)))
+                                              :note "dry run — would be created")
+                                      new-files)
+                                (map (fn [{:keys [file content]}]
+                                       {:path (.getPath ^java.io.File file) :content content
+                                        :action :skip :note "dry run — would append the entity"}))
+                                edits)
+                          (into (mapv (fn [{:keys [path content] :as entry}]
+                                        (let [file (resolve-path output-dir path)]
+                                          (.mkdirs (.getParentFile file))
+                                          (spit file content)
+                                          (assoc entry :action :create :path (.getPath file))))
+                                      new-files)
+                                (map (fn [{:keys [file content]}]
+                                       (spit file content)
+                                       {:path (.getPath ^java.io.File file) :content content
+                                        :action :update :note "appended the entity"}))
+                                edits))
+            service-ns  (str (:base-ns ctx) "." module-name "." (:service-ns entity))
+            http?       (get-in ctx [:interfaces :http])
+            uri         (str "/api/v1/" (:entity-plural entity))]
+        {:success     true
+         :module-name module-name
+         :command     :entity
+         :entity      (:entity-name entity)
+         :files       files
+         :next-steps  (filterv some?
+                               ["Run the migration: clojure -M:migrate up"
+                                (when http? (str "Restart the system; the API is at " uri " and " uri "/:id"))
+                                (str "Run the tests: clojure -M:test --focus " service-ns "-test")])
+         :warnings    (when dry-run ["Dry run - no files were written"])})
+      (catch clojure.lang.ExceptionInfo e
+        (if (= ::refuse-overwrite (:type (ex-data e)))
+          (let [existing (:existing (ex-data e))]
+            {:success false :module-name (:module-name request) :files []
+             :existing-files existing
+             :errors (into [(str (count existing) " file(s) the entity needs already exist. "
+                                 "Move them aside first:")]
+                           (map #(str "  " %) existing))})
+          {:success false :module-name (:module-name request) :files []
+           :errors [(str "Add entity failed: " (.getMessage e))]}))
+      (catch Exception e
+        {:success false :module-name (:module-name request) :files []
+         :errors [(str "Add entity failed: " (.getMessage e))]})))
 
   (add-endpoint [_this request]
     (try

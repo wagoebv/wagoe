@@ -11,6 +11,13 @@
       (is (str/includes? prompt "kebab-case"))
       (is (str/includes? prompt "JSON")))))
 
+(deftest ^:unit the-scaffolding-prompt-asks-for-every-entity
+  ;; BOU-497: the plural shape, with a worked multi-entity example.
+  (let [prompt (prompts/build-scaffolding-system-prompt)]
+    (is (str/includes? prompt "\"entities\""))
+    (is (str/includes? prompt "\"belongs-to\""))
+    (is (str/includes? prompt "InvoiceLineItem"))))
+
 (deftest ^:unit build-scaffolding-user-prompt-test
   (testing "user prompt includes description"
     (let [prompt (prompts/build-scaffolding-user-prompt "a product module" [])]

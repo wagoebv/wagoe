@@ -18,6 +18,7 @@ consistent.
 | Same, without an AI provider | `bb scaffold generate --module-name product --entity Product --field name:string:required --field price:decimal:required` |
 | Preview before writing files | add `--dry-run` to any scaffold command |
 | Wire a scaffolded module into the app | `bb scaffold integrate <module>` (preview with `--dry-run`) |
+| Add an entity to an existing module (line items of an invoice) | `bb scaffold entity --module-name billing --entity InvoiceLineItem --belongs-to invoice --field quantity:int:required` |
 | Add a field to an existing entity | `bb scaffold field --module-name product --entity Product --name weight --type decimal --required` |
 | Add an endpoint | `bb scaffold endpoint --module-name product --path "/products/:id/publish" --method POST --handler-name publish-product-handler` |
 | Adapter for a port | `bb scaffold adapter --module-name product --port IProductNotifier --adapter-name email-product-notifier --method "notify-created:product"` |

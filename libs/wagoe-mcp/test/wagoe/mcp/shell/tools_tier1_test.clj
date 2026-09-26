@@ -49,6 +49,7 @@
       {:success true :module-name (:module-name req)
        :files [{:path "migrations/007_add_x.sql" :content "ALTER TABLE things ADD COLUMN x;" :action :create}]
        :warnings ["Manual schema update required"]})
+    (add-entity [_ _] {:success true :files []})
     (add-endpoint [_ _] {:success true :files []})
     (add-adapter [_ _] {:success true :files []})))
 
@@ -140,6 +141,7 @@
     (add-field [_ req]
       (reset! seen req)
       {:success true :module-name (:module-name req) :files []})
+    (add-entity [_ _] {:success true :files []})
     (add-endpoint [_ _] {:success true :files []})
     (add-adapter [_ _] {:success true :files []})))
 

@@ -50,17 +50,33 @@ Your task: parse a natural language description of a Wagoe module into a structu
 Output ONLY valid JSON with this exact structure:
 {
   \"module-name\": \"kebab-case-name\",
-  \"entity\": \"PascalCaseName\",
-  \"fields\": [
-    {\"name\": \"field-name\", \"type\": \"string|text|int|decimal|boolean|email|uuid|enum|date|json\", \"required\": true|false, \"unique\": false, \"enum-values\": [\"draft\", \"sent\"]}
+  \"entities\": [
+    {\"name\": \"PascalCaseName\",
+     \"fields\": [
+       {\"name\": \"field-name\", \"type\": \"string|text|int|decimal|boolean|email|uuid|enum|date|json\", \"required\": true|false, \"unique\": false, \"enum-values\": [\"draft\", \"sent\"]}
+     ]},
+    {\"name\": \"ChildName\", \"belongs-to\": \"PascalCaseName\", \"fields\": [...]}
   ],
   \"http\": true,
   \"web\": true
 }
 
+Example — \"invoices with a number and status, and line items with a description and quantity\":
+{\"module-name\": \"invoicing\",
+ \"entities\": [
+   {\"name\": \"Invoice\", \"fields\": [
+     {\"name\": \"number\", \"type\": \"string\", \"required\": true, \"unique\": true},
+     {\"name\": \"status\", \"type\": \"enum\", \"required\": true, \"unique\": false, \"enum-values\": [\"draft\", \"sent\", \"paid\"]}]},
+   {\"name\": \"InvoiceLineItem\", \"belongs-to\": \"Invoice\", \"fields\": [
+     {\"name\": \"description\", \"type\": \"string\", \"required\": true, \"unique\": false},
+     {\"name\": \"quantity\", \"type\": \"int\", \"required\": true, \"unique\": false}]}],
+ \"http\": true, \"web\": true}
+
 Rules:
 - module-name MUST be kebab-case (e.g. product, order-item, user-profile)
-- entity MUST be PascalCase (e.g. Product, OrderItem, UserProfile)
+- every entity name MUST be PascalCase (e.g. Product, OrderItem, UserProfile)
+- one entry in entities per thing the description names; most modules have one
+- an entity that belongs to another (line items of an invoice, lines of an order) carries \"belongs-to\": the parent's name. The parent comes first. Do not add the parent's id as a field; belongs-to creates it
 - field names MUST be kebab-case
 - valid field types: string, text, int, decimal, boolean, email, uuid, enum, date, json
 - an \"enum\" field MUST also carry \"enum-values\": a non-empty array of kebab-case strings

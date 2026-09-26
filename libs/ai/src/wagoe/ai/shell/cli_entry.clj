@@ -291,7 +291,7 @@
               (println (red (explain-provider-error result service))))
             (System/exit 1))
         (println (json/generate-string
-                  (select-keys result [:module-name :entity :fields :http :web])))))))
+                  (select-keys result [:module-name :entity :fields :entities :http :web])))))))
 
 ;; =============================================================================
 ;; Subcommand: explain

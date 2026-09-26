@@ -134,6 +134,26 @@
       (is (= "enum" (:type field)))
       (is (nil? (:enum-values field))))))
 
+(deftest ^:unit parse-module-spec-takes-several-entities
+  ;; BOU-497: an invoice with its line items is one module with two entities.
+  (let [json   (str "{\"module-name\": \"billing\", \"entities\": ["
+                    "{\"name\": \"Invoice\", \"fields\": [{\"name\": \"number\", \"type\": \"string\"}]},"
+                    "{\"name\": \"InvoiceLineItem\", \"belongs-to\": \"Invoice\","
+                    " \"fields\": [{\"name\": \"quantity\", \"type\": \"int\"}]}]}")
+        result (parsing/parse-module-spec json)]
+    (is (nil? (:error result)) (pr-str result))
+    (is (= ["Invoice" "InvoiceLineItem"] (mapv :name (:entities result))))
+    (is (= "Invoice" (:belongs-to (second (:entities result)))))
+    (is (= "int" (:type (first (:fields (second (:entities result)))))))
+    (testing "the first entity is also the singular shape, for older readers"
+      (is (= "Invoice" (:entity result)))
+      (is (= "number" (:name (first (:fields result))))))))
+
+(deftest ^:unit parse-module-spec-still-takes-one-entity
+  (let [result (parsing/parse-module-spec
+                "{\"module-name\": \"p\", \"entity\": \"P\", \"fields\": [{\"name\": \"x\", \"type\": \"string\"}]}")]
+    (is (= [{:name "P" :fields (:fields result)}] (:entities result)))))
+
 (deftest ^:unit module-spec->cli-args-test
   (testing "generates correct CLI args for generate command"
     (let [spec {:module-name "product"

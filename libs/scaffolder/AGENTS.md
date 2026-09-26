@@ -71,6 +71,40 @@ wagoe new my-app
 copy of the templates, which had drifted until the result carried no
 `com.wagoe` dependencies and no entry point. Supersedes ADR-002.
 
+### `entity` — Add an Entity to an Existing Module
+
+```bash
+bb scaffold entity \
+  --module-name billing \
+  --entity InvoiceLineItem \
+  --belongs-to invoice \
+  --field description:string:required \
+  --field quantity:int:required
+```
+
+- Writes `core/<entity>.clj`, `shell/<entity>_service.clj`,
+  `shell/<entity>_persistence.clj`, a create migration and three tests.
+- Appends the entity's defs to `schema.clj` and `ports.clj`. Appended, not
+  merged: the existing text is kept byte for byte, and every appended name
+  carries the entity's name. The repository methods do too
+  (`find-invoice-line-item-by-id`), because a second `find-by-id` in the same
+  `ports.clj` would replace the first entity's.
+- `--belongs-to <entity>` is a required `<entity>_id` relation field with
+  `ON DELETE CASCADE` and an index. The parent must be defined in `schema.clj`,
+  and a field named `<entity>` or `<entity>-id` next to it is refused.
+- Refuses, writing nothing, when a file it would create exists or the module
+  already defines one of its names.
+- Wires it in `module_wiring.clj` and serves its CRUD API at
+  `/api/v1/<entities>` from `shell/<entity>_http.clj`. The first entity added
+  installs an `ig-config` and an `entity-wiring` multimethod, and replaces the
+  one `:wagoe/<module>-routes` init-key so it mounts every entity's routes;
+  that replacement is refused if the init-key was hand-edited. Later entities
+  append one `entity-wiring` method. No web page. `--no-http` (or `:http false`
+  in `:interfaces`) leaves out the http namespace and its routes.
+
+`generate-module` (API, MCP `scaffold-module`) takes several `:entities`; the
+first is generated as above and each further one as `entity` would add it.
+
 ### `field` — Add a Field to an Existing Entity
 
 ```bash
@@ -334,9 +368,11 @@ bb scaffold ai "invoice module with customer name, line items, total, status and
 ```
 
 The AI mode calls the configured LLM (Anthropic/OpenAI/Ollama) to:
-1. Parse the description into module name, entity name, and fields
+1. Parse the description into a module name and its entities, each with fields
+   and an optional `belongs-to` parent
 2. Show a preview of the generation plan
-3. Run `bb scaffold generate` with the parsed arguments
+3. Run `bb scaffold generate` for the first entity, then `bb scaffold entity`
+   for each further one
 
 Configure the provider via environment variables: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `OLLAMA_URL`.
 

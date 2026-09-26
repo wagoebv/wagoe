@@ -60,6 +60,31 @@
     :default false]])
 
 ;; =============================================================================
+;; Entity Command Options (add an entity to an existing module, BOU-497)
+;; =============================================================================
+
+(def entity-options
+  [[nil "--module-name NAME" "Module name (lowercase, kebab-case) (required)"
+    :validate [#(re-matches #"^[a-z][a-z0-9-]*$" %)
+               "Must be lowercase with hyphens only"]]
+   [nil "--entity NAME" "Entity name (PascalCase) (required)"
+    :validate [#(re-matches #"^[A-Z][a-zA-Z0-9]*$" %)
+               "Must be PascalCase"]]
+   [nil "--field SPEC" "Field specification, as for generate (can be repeated)"
+    :multi true
+    :default []
+    :update-fn conj]
+   [nil "--belongs-to ENTITY" "The module's entity this one belongs to: a required <entity>_id foreign key"
+    :validate [template/valid-entity-name? "Must be an entity name"]]
+   [nil "--[no-]http" "Generate the entity's HTTP (REST API) routes (default: true)"
+    :default true]
+   [nil "--base-ns NS" "Base namespace + path for the module (default: the project's own)"]
+   [nil "--output-dir DIR" "Output directory (default: current directory)"
+    :default "."]
+   [nil "--dry-run" "Show what would be generated without creating files"
+    :default false]])
+
+;; =============================================================================
 ;; Field Command Options (add field to existing entity)
 ;; =============================================================================
 
@@ -390,8 +415,9 @@
    after adding a column (BOU-275)."
   [result]
   (let [field?   (= :field (:command result))
-        heading  (if field?
-                   (str "✓ Added field to " (:module-name result))
+        heading  (case (:command result)
+                   :field  (str "✓ Added field to " (:module-name result))
+                   :entity (str "✓ Added entity " (:entity result) " to " (:module-name result))
                    (str "✓ Successfully generated module: " (:module-name result)))
         steps    (or (seq (:next-steps result))
                      ;; Fallback only. Every command that knows its own
@@ -625,6 +651,34 @@
                 (seq (:existing-files result))
                 (assoc :existing-files (:existing-files result))))))))))
 
+(defn execute-entity
+  "Execute entity command - add an entity to an existing module."
+  [service opts]
+  (let [errors (cond-> []
+                 (not (:module-name opts)) (conj "Missing required option: --module-name")
+                 (not (:entity opts))      (conj "Missing required option: --entity")
+                 (and (empty? (:field opts)) (not (:belongs-to opts)))
+                 (conj "At least one --field (or --belongs-to) is required"))]
+    (if (seq errors)
+      {:status 1 :errors errors}
+      (let [[fields-valid? fields-or-errors] (parse-all-fields (:field opts))]
+        (if-not fields-valid?
+          {:status 1 :errors fields-or-errors}
+          (let [result (ports/add-entity
+                        service
+                        {:module-name (:module-name opts)
+                         :entity      (cond-> {:name (:entity opts) :fields fields-or-errors}
+                                        (:belongs-to opts) (assoc :belongs-to (:belongs-to opts)))
+                         :interfaces  {:http (:http opts true)}
+                         :output-dir  (:output-dir opts)
+                         :dry-run     (:dry-run opts)
+                         :base-ns     (:base-ns opts)})]
+            (if (:success result)
+              {:status 0 :result result}
+              (cond-> {:status 1 :errors (:errors result)}
+                (seq (:existing-files result))
+                (assoc :existing-files (:existing-files result))))))))))
+
 (defn execute-field
   "Execute field command - add a field to an existing entity."
   [service opts]
@@ -724,6 +778,7 @@
   [verb opts service]
   (case verb
     :generate (execute-generate service opts)
+    :entity (execute-entity service opts)
     :field (execute-field service opts)
     :endpoint (execute-endpoint service opts)
     :adapter (execute-adapter service opts)
@@ -742,6 +797,7 @@ Usage: wagoe scaffolder <command> [options]
 
 Commands:
   generate    Generate a new module with full FC/IS structure
+  entity      Add an entity to an existing module (invoice line items)
   field       Add a field to an existing entity (creates migration)
   endpoint    Add an endpoint to an existing module (shows instructions)
   adapter     Generate a new adapter implementation
@@ -760,6 +816,9 @@ Examples:
     --field name:string:required \\
     --field sku:string:required:unique \\
     --field price:decimal:required
+
+  wagoe scaffolder entity --module-name billing --entity InvoiceLineItem \\
+    --belongs-to invoice --field description:string:required
 
   wagoe scaffolder field --module-name product --entity Product \\
     --name description --type text
@@ -886,6 +945,41 @@ Examples:
     --entity Invoice \\
     --field amount:decimal:required \\
     --dry-run")
+
+(def entity-help
+  "Add Entity Command
+
+Usage: wagoe scaffolder entity [options]
+
+Adds an entity to an existing module: its own core, service and persistence
+namespaces, a create migration and tests, plus its defs appended to the
+module's schema.clj and ports.clj. Nothing else in the module is touched, and
+the command refuses — writing nothing — when a file it needs already exists.
+
+Required Options:
+  --module-name NAME   The existing module
+  --entity NAME        Entity name (PascalCase)
+  --field SPEC         Field specification, as for generate (can be repeated)
+
+Options:
+  --belongs-to ENTITY  The module's entity this one belongs to. Adds a
+                       required <entity>_id column with a foreign key
+                       (ON DELETE CASCADE) and an index
+  --no-http            No API routes for the entity: for a module generated
+                       with --no-http
+  --output-dir DIR     Write somewhere other than the current directory
+  --dry-run            Show what would be generated without creating files
+
+The entity is wired into shell/module_wiring.clj and served at
+/api/v1/<entities>. It gets no web page.
+
+Example:
+  wagoe scaffolder entity \\
+    --module-name billing \\
+    --entity InvoiceLineItem \\
+    --belongs-to invoice \\
+    --field description:string:required \\
+    --field quantity:int:required:default=1")
 
 (def field-help
   "Add Field Command
@@ -1071,6 +1165,11 @@ Examples:
           (println field-help)
           0)
 
+        (and (= verb :entity) has-help-flag?)
+        (do
+          (println entity-help)
+          0)
+
         (and (= verb :endpoint) has-help-flag?)
         (do
           (println endpoint-help)
@@ -1089,6 +1188,7 @@ Examples:
               ;; Get command-specific options
               cmd-options (case verb
                             :generate generate-options
+                            :entity entity-options
                             :field field-options
                             :endpoint endpoint-options
                             :adapter adapter-options

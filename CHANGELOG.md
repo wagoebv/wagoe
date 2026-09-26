@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Scaffolded repositories failed every create and update on H2** (BOU-497).
+  Regenerate `shell/persistence.clj`, or drop `sql/format` and `:returning`.
 - **Scaffolded list page showed only ids** (BOU-486). It now has a column per
   declared field; regenerate or edit `core/ui.clj` in existing modules.
 - **Admin create failed with a generic banner on a NOT NULL column the form leaves out** (BOU-494).
@@ -70,6 +72,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **Modules with several entities** (BOU-497, BOU-514). `bb scaffold entity
+  --belongs-to invoice` adds one; `scaffold ai` and MCP now generate them all.
 - **Scaffolder `default=<value>` field modifier** (BOU-494). Required enums now
   default to their first value in newly generated migrations.
 - **Admin: add a child from an editable has-many** (BOU-491). The panel links to

@@ -186,3 +186,52 @@
     (is (= 2 (count calls)) "the spec is on the last line, not the first")
     (is (nil? exit))
     (is (some #{"product"} (:cmd (second calls))))))
+
+(def ^:private multi-entity-json
+  (str "{\"module-name\":\"billing\","
+       "\"entities\":[{\"name\":\"Invoice\","
+       "\"fields\":[{\"name\":\"number\",\"type\":\"string\",\"required\":true}]},"
+       "{\"name\":\"InvoiceLineItem\",\"belongs-to\":\"Invoice\","
+       "\"fields\":[{\"name\":\"quantity\",\"type\":\"int\",\"required\":true}]}],"
+       "\"http\":true,\"web\":true}"))
+
+(deftest ^:unit several-entities-are-one-generate-then-one-entity-each
+  ;; BOU-497: an invoice and its line items is the common shape, and the spec
+  ;; carried one entity.
+  (let [{:keys [calls exit]} (run-wizard "invoices with line items" true
+                                         [{:exit 0 :out multi-entity-json} {:exit 0} {:exit 0}])
+        [_parse generate entity] calls
+        after (fn [cmd flag] (second (drop-while #(not= flag %) cmd)))]
+    (is (= 3 (count calls)))
+    (testing "the first entity is generated as the module"
+      (is (some #{"generate"} (:cmd generate)))
+      (is (= "Invoice" (after (:cmd generate) "--entity")))
+      (is (some #{"number:string:required"} (:cmd generate))))
+    (testing "the second is added to it, belonging to the first"
+      (is (some #{"entity"} (:cmd entity)))
+      (is (= "billing" (after (:cmd entity) "--module-name")))
+      (is (= "InvoiceLineItem" (after (:cmd entity) "--entity")))
+      (is (= "Invoice" (after (:cmd entity) "--belongs-to")))
+      (is (some #{"quantity:int:required"} (:cmd entity))))
+    (is (nil? exit))))
+
+(deftest ^:unit the-singular-spec-still-renders-one-generate
+  (is (= [["generate" "--module-name" "product" "--entity" "Product"
+           "--field" "name:string:required" "--field" "price:decimal:required"]]
+         (scaffold/build-ai-commands (#'scaffold/parse-ai-module-spec spec-json)))))
+
+(deftest ^:unit a-lowercase-belongs-to-is-the-entity-it-names
+  ;; "belongs-to": "invoice" threw the whole spec away.
+  (let [spec (#'scaffold/parse-ai-module-spec
+              (str/replace multi-entity-json "\"belongs-to\":\"Invoice\"" "\"belongs-to\":\"invoice\""))]
+    (is (some? spec))
+    (is (= "Invoice" (:belongs-to (second (:entities spec)))))))
+
+(deftest ^:unit no-http-reaches-every-entity
+  (let [[generate entity] (scaffold/build-ai-commands
+                           (#'scaffold/parse-ai-module-spec
+                            (str/replace multi-entity-json "\"http\":true" "\"http\":false")))]
+    (is (some #{"--no-http"} generate))
+    (is (some #{"--no-http"} entity)))
+  (is (not-any? #{"--no-http"} (second (scaffold/build-ai-commands
+                                        (#'scaffold/parse-ai-module-spec multi-entity-json))))))
