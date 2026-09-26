@@ -77,7 +77,7 @@
      :generate {:success bool :files [{:path :action}] [:errors]}
      :kondo    {:findings [clj-kondo finding ...]}
      :fcis     {:violations [check-fcis violation ...]}
-     :tests    {:status :passed|:failed|:error|:unavailable
+     :tests    {:status :passed|:failed|:error|:unavailable|:no-tests
                 [:passed n] [:failed n] [:failures [...]] [:note ...]}
    `opts`:
      :overridden? — caller passed an audited `{:allow true}`; soft issues then
