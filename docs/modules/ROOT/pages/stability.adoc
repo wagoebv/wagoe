@@ -18,7 +18,7 @@ will promise.
 | Stability
 | Release candidate. The `1.0.0` surface is frozen: a breaking change lands
   between `1.0.0-rc-1` and `1.0.0` only where the candidate turns one up, and
-  then in an RC, never in `1.0.0` itself. One has — see
+  then in an RC, never in `1.0.0` itself. Some have — see
   <<_now_release_candidate,What we promise, and when>>. Everything deprecated
   is deferred to `2.0` — see <<_deferred_to_2_0,Deferred to 2.0>>.
 
@@ -200,8 +200,14 @@ rather than a commit message.
   blocks in `:wagoe/config-keys`.
 * *One more, in `1.0.0-rc-3`:* `bb scaffold generate --cli` is gone. It named an
   interface the scaffolder has never had a generator for, so no value of the
-  flag ever produced one; only a script that passes it is affected. Two
-  additions to the three frozen at `rc-1`, so the list is five.
+  flag ever produced one; only a script that passes it is affected.
+* *Six in `1.0.0-rc-4`:* workflow's timestamp columns carry a zone and need
+  `migrate up` with replicas stopped; `:wagoe/logging :level` now sets
+  Logback's levels; `register-user` throws `:validation-error` for a weak
+  password; and the scaffolder guards generated APIs, makes `date` a `DATE`
+  and refuses unknown field modifiers. Each, with its migration, is under
+  `### Breaking` in `CHANGELOG.md`. Eight additions to the three frozen at
+  `rc-1`, so the list is eleven.
 * Breaking changes that already shipped are in `CHANGELOG.md` under a
   `### Breaking` heading, naming the affected library and the migration.
 * Deprecations are announced under `### Deprecated`.
@@ -330,7 +336,8 @@ never names fails the build.
 === Deferred to 2.0
 
 Everything currently deprecated, and what replaces it. None of these is removed
-in a `1.x` release.
+in a `1.x` release. What `2.0` and the `1.x` releases before it will build is on
+the xref:roadmap.adoc#_after_1_0_0[roadmap].
 
 [cols="2,3",options="header"]
 |===
@@ -373,7 +380,7 @@ an unannounced break gets a fix or a revert, not a workaround.
 
 == See also
 
-* xref:roadmap.adoc[Roadmap] — what is left before `1.0.0`
+* xref:roadmap.adoc[Roadmap] — what is left before `1.0.0`, and what comes after
 * xref:architecture:fc-is.adoc[Functional Core / Imperative Shell] — why the
   `core/` ↔ `shell/` split is the stability boundary
 * https://github.com/wagoebv/wagoe/blob/main/CHANGELOG.md[CHANGELOG]

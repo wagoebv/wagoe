@@ -29,6 +29,21 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ## [Unreleased]
 
+### Breaking
+
+- **Workflow's tables ship as a migration, timestamps as `TIMESTAMP WITH TIME ZONE`** (BOU-502).
+  Stop all replicas and run `migrate up` before starting this version; seed timestamps as `#inst`.
+- **`:wagoe/logging :level` now sets Logback's root and `wagoe` loggers** (BOU-528), over `logback.xml`.
+  Set `:level`/`:root-level` as wanted; copy `logback.xml`, `:provider :slf4j` and `:mcp` `:jvm-opts` from `wagoe new`.
+- **`register-user` throws `:validation-error` for a password-policy refusal** (BOU-552), not
+  `:password-policy-violation`. Match on the new type; `:violations` is unchanged.
+- **Scaffolded APIs and list pages require a signed-in user** (BOU-539). Pass `--public-api` to
+  open them; for older modules, regenerate `shell/*http.clj` or add the guards by hand.
+- **Scaffolder `date` fields are a `DATE`, not a timestamp** (BOU-547). Use `datetime` for a timestamp;
+  regenerate an older module's `shell/*persistence.clj` before adding a `date` field to it.
+- **Scaffolder field specs refuse an unknown modifier, and `required` with `optional`** (BOU-535).
+  Fix any script that passes one; `indexed` now writes an index and `optional` is honoured.
+
 ### Fixed
 
 - **MFA and storage upload APIs returned the raw exception message** (BOU-557). They now answer the
@@ -43,14 +58,8 @@ for what is public API, what is internal, and how deprecations are announced.
   the form; `POST /api/v1/users` answers 400 for a password containing the email. Upgrade user.
 - **A generated module's first-entity API answered canned stubs** (BOU-539). It now
   calls the service; regenerate `shell/http.clj` or copy `api-routes` from a new module.
-- **Scaffolded APIs and list pages answered anyone** (BOU-539). They now require a signed-in user;
-  `--public-api` opens them. Regenerate `shell/*http.clj`, or add the guards by hand.
 - **A reference to a missing row answered 500** (BOU-540). Admin create and update show it on the field;
   scaffolded repositories raise a `:validation-error` (400). Regenerate `shell/*persistence.clj`.
-- **Scaffolder field modifiers `indexed` and `optional` were ignored** (BOU-535). `indexed`
-  now writes an index; an unknown modifier is an error instead of being dropped.
-- **Scaffolded `date` fields were timestamps** (BOU-547). `due:date` is now a `DATE`; use `datetime`
-  for a timestamp. Before adding one to an older module, regenerate its `shell/*persistence.clj`.
 - **Scaffolded repository updates kept `updated-at` and sent an empty `SET`** (BOU-547).
   Update sets it and refuses an empty change; regenerate `shell/*persistence.clj`.
 - **Admin offered a tenant create that could never succeed** (BOU-534). It is now
@@ -69,12 +78,8 @@ for what is public API, what is internal, and how deprecations are announced.
   declared field; regenerate or edit `core/ui.clj` in existing modules.
 - **Admin create failed with a generic banner on a NOT NULL column the form leaves out** (BOU-494).
   The create page now names the column; give it a default or make the field editable.
-- **`:wagoe/logging :level` did not reach Jetty or Hikari** (BOU-528). Existing projects:
-  take `resources/logback.xml`, `:provider :slf4j` and the `:mcp` `:jvm-opts` from `wagoe new`.
 - **`bb scaffold integrate` and `wagoe add` skipped the prod config** (BOU-529).
   Both now write every profile; re-run integrate, or copy a `wagoe add` key into prod.
-- **`bb migrate up` did not create workflow's tables** (BOU-502). Stop all replicas
-  and run `migrate up` before starting this version; seed timestamps as `#inst`.
 - **`bb ai admin-entity` rejected an answer in an ```edn fence** (BOU-493). Any
   fence is accepted now, and a parse failure names the real error.
 - **`bb ai explain`, `gen-tests` and `sql` are marked experimental** (BOU-511..513).
