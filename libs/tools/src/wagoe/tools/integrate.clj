@@ -128,17 +128,39 @@
        (map #(.getName ^java.io.File %))
        sort))
 
-(defn write-config!
-  "Add the module's key to the config.edn of every profile under `root`.
-   Returns [env result] pairs. Only dev and test were written, so a module
-   was missing under WAG_ENV=prod (BOU-529)."
-  [root key-str snippet {:keys [dry-run?]}]
+(def ^:private ok-results #{:written :already-present :dev-only :no-file})
+
+(defn blocking
+  "The [env result] pairs that stop a write."
+  [results]
+  (remove (comp ok-results second) results))
+
+(defn- inject-each [root key-str snippet dry-run?]
   (vec (for [env (profiles root)]
          [env (if (and (dev-only-keys key-str) (not= "dev" env))
                 :dev-only
                 (config-edn/inject-key! (str root "/resources/conf/" env "/config.edn")
                                         key-str (str "\n" snippet "\n")
                                         {:dry-run? dry-run?}))])))
+
+(defn write-config!
+  "Add the module's key to the config.edn of every profile under `root`, or to
+   none: a profile that cannot take it blocks them all, since a key in some
+   profiles and not others boots in one environment only (BOU-529). Returns
+   [env result] pairs — the plan when nothing was written."
+  [root key-str snippet {:keys [dry-run?]}]
+  (let [plan (inject-each root key-str snippet true)]
+    (if (or dry-run? (seq (blocking plan)))
+      plan
+      (inject-each root key-str snippet false))))
+
+(defn blocked-message [blocked]
+  (str "Nothing was written: "
+       (str/join ", " (for [[env result] blocked]
+                        (str env (case result
+                                   :no-active-section      " has no :active section"
+                                   :insert-would-unbalance " would be unbalanced by the insertion"))))
+       "."))
 
 ;; =============================================================================
 ;; Orchestration
@@ -199,33 +221,27 @@
       (println (dim snippet))
       (println)
 
-      (let [results
-            (mapv
-             (fn [[env result]]
-               (println (str "  " (case result
-                                    :written           (str (green "✓") " " (if dry-run? "would add to" "added to"))
-                                    :already-present   (str (green "✓") " already in")
-                                    :dev-only          (str (dim "–") " dev-only key, skipped")
-                                    :no-active-section (str (red "✗") " no :active section in")
-                                    :insert-would-unbalance (str (red "✗") " insertion would unbalance")
-                                    :no-file           (str (dim "–") " not found:"))
-                             " " (cyan (str "resources/conf/" env "/config.edn"))))
-               result)
-             (write-config! (root-dir) key-str snippet {:dry-run? dry-run?}))]
+      (let [results (write-config! (root-dir) key-str snippet {:dry-run? dry-run?})
+            blocked (seq (blocking results))]
+        (doseq [[env result] results]
+          (println (str "  " (case result
+                               :written           (str (green "✓") " " (if (or dry-run? blocked) "would add to" "added to"))
+                               :already-present   (str (green "✓") " already in")
+                               :dev-only          (str (dim "–") " dev-only key, skipped")
+                               :no-active-section (str (red "✗") " no :active section in")
+                               :insert-would-unbalance (str (red "✗") " insertion would unbalance")
+                               :no-file           (str (dim "–") " not found:"))
+                        " " (cyan (str "resources/conf/" env "/config.edn")))))
 
         (println)
         (cond
           ;; A run that wrote nothing must not look like success — to a person
           ;; or to a CI wrapper reading $?.
-          (some #{:no-active-section} results)
-          (do (println (red "No :active section — nothing was written."))
+          blocked
+          (do (println (red (blocked-message blocked)))
               (System/exit 1))
 
-          (some #{:insert-would-unbalance} results)
-          (do (println (red "Insertion would unbalance the config — nothing was written."))
-              (System/exit 1))
-
-          (every? #{:no-file :dev-only} results)
+          (every? #{:no-file :dev-only} (map second results))
           (do (println (red "No config files found — is this a Wagoe project?"))
               (System/exit 1))
 

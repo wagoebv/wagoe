@@ -157,6 +157,18 @@
                              "\n" snippet
                              (subs content close-idx)))))))))))
 
+(defn patch-configs!
+  "Patch every existing resources/conf/<profile>/config.edn, never creating one:
+   test takes :test-config-snippet, the rest :config-snippet, and a dev-scoped
+   module stays in dev. Only dev and test were written, so a module was missing
+   under WAG_ENV=prod (BOU-529)."
+  [dir {:keys [scope config-snippet test-config-snippet]}]
+  (doseq [env (sort (.list (io/file dir "resources/conf")))
+          :when (and (.exists (io/file dir "resources/conf" env "config.edn"))
+                     (or (not= :dev scope) (= "dev" env)))]
+    (patch-config! dir (str "resources/conf/" env "/config.edn")
+                   (if (= "test" env) test-config-snippet config-snippet))))
+
 ;; ─── AGENTS.md patching ──────────────────────────────────────────────────────
 
 (defn patch-agents-md!
@@ -250,8 +262,7 @@
                   :unreadable         (do (println "  deps.edn: could not be read as EDN, so nothing was written.")
                                           (println by-hand))
                   (println (str "  deps.edn: unchanged — " (:clojars module) " is already there"))))
-              (patch-config! dir "resources/conf/dev/config.edn" (:config-snippet module))
-              (patch-config! dir "resources/conf/test/config.edn" (:test-config-snippet module))
+              (patch-configs! dir module)
               (patch-agents-md! dir module)
               (println (str "\n" module-name " added"))
               ;; Said at install time, not left on a page the user reads later:

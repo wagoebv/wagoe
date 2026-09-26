@@ -173,3 +173,29 @@
           (is (str/includes? content "payments"))))
       (finally
         (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))
+
+(deftest ^:integration patch-configs-writes-every-existing-profile
+  ;; Only dev and test were written, so under WAG_ENV=prod the module was not
+  ;; there (BOU-529).
+  (let [tmp  (str (System/getProperty "java.io.tmpdir") "/wagoe-add-profiles-" (System/currentTimeMillis))
+        conf #(slurp (io/file tmp "resources/conf" % "config.edn"))]
+    (try
+      (make-wagoe-project! tmp)
+      (io/make-parents (io/file tmp "resources/conf/prod/config.edn"))
+      (spit (io/file tmp "resources/conf/prod/config.edn") "{\n :active\n {\n }\n}")
+      (add/patch-configs! tmp {:config-snippet      "  :wagoe/jobs\n  {:workers {:count 1}}\n"
+                               :test-config-snippet "  :wagoe/jobs\n  {:workers {:count 0}}\n"})
+      (is (str/includes? (conf "dev") ":count 1"))
+      (is (str/includes? (conf "test") ":count 0"))
+      (is (str/includes? (conf "prod") ":count 1"))
+      (is (not (.exists (io/file tmp "resources/conf/acc"))) "never creates a profile")
+
+      (testing "a dev-scoped module stays in dev"
+        (add/patch-configs! tmp {:scope               :dev
+                                 :config-snippet      "  :wagoe/dashboard\n  {}\n"
+                                 :test-config-snippet "  :wagoe/dashboard\n  {}\n"})
+        (is (str/includes? (conf "dev") ":wagoe/dashboard"))
+        (is (not (str/includes? (conf "test") ":wagoe/dashboard")))
+        (is (not (str/includes? (conf "prod") ":wagoe/dashboard"))))
+      (finally
+        (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))

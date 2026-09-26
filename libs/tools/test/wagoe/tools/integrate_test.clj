@@ -213,3 +213,15 @@
   (let [src  (slurp (io/file (repo-root) "libs/platform/src/wagoe/platform/shell/modules.clj"))
         form (read-string (subs src (str/index-of src "(def dev-only-modules")))]
     (is (= (set (map str (keys (last form)))) integrate/dev-only-keys))))
+
+(deftest ^:unit write-config-writes-nothing-when-one-profile-cannot-take-it
+  ;; acc, dev and test were written and prod was not, while the command said
+  ;; nothing was written.
+  (let [root    (conf-root "acc" "dev" "test" "prod")
+        _       (spit (io/file root "resources" "conf" "prod" "config.edn") "{:inactive {}}\n")
+        results (integrate/write-config! root ":wagoe/product" snippet {})
+        blocked (integrate/blocking results)]
+    (doseq [env ["acc" "dev" "test"]]
+      (is (= minimal-config (config-text root env)) env))
+    (is (= [["prod" :no-active-section]] blocked))
+    (is (str/includes? (integrate/blocked-message blocked) "prod"))))
