@@ -694,7 +694,7 @@
         (is (= [:notes :order-items] (mapv :entity (:has-many cfg))))))))
 
 ;; =============================================================================
-;; Read-only NOT NULL columns (BOU-494)
+;; Columns the create form cannot fill (BOU-494)
 ;; =============================================================================
 
 (def ^:private invoices-columns
@@ -704,33 +704,63 @@
    {:name "created_at" :type "TIMESTAMP" :not-null true :default nil :primary-key false}
    {:name "updated_at" :type "TIMESTAMP" :not-null true :default nil :primary-key false}])
 
-(deftest ^:unit readonly-not-null-errors-test
-  ;; The admin insert omits every :readonly-fields entry, so a read-only column
-  ;; that is NOT NULL with no default fails every create.
-  (let [config {:readonly-fields #{:id :status :created-at :updated-at}}]
-    (testing "a read-only NOT NULL column without a default is reported"
-      (let [[error & more] (introspection/readonly-not-null-errors :invoices config invoices-columns)]
+(defn- create-errors [config columns]
+  (introspection/create-form-column-errors :invoices config columns))
+
+(deftest ^:unit create-form-column-errors-test
+  ;; The admin insert writes only what the create form holds, so a NOT NULL
+  ;; column without a default that is not on the form fails every create.
+  (let [config {:editable-fields [:number]
+                :readonly-fields #{:id :status :created-at :updated-at}}]
+    (testing "a NOT NULL column without a default, not on the form, is reported"
+      (let [[error & more] (create-errors config invoices-columns)]
         (is (nil? more))
         (is (= :status (:field error)))
         (is (= "status" (:column error)))
         (is (str/includes? (:message error) "invoices") "names the entity")
         (is (str/includes? (:message error) "'status'") "names the column")
+        (is (str/includes? (:message error) "create form"))
         (is (str/includes? (:message error) "default") "suggests a column default")
-        (is (str/includes? (:message error) ":readonly-fields") "suggests dropping it from :readonly-fields")))
+        (is (str/includes? (:message error) ":readonly-fields") "says why it is not on the form")))
 
     (testing ":id, :created-at and :updated-at are filled by the admin"
       (is (not-any? #{:id :created-at :updated-at}
-                    (map :field (introspection/readonly-not-null-errors :invoices config invoices-columns)))))
+                    (map :field (create-errors config invoices-columns)))))
 
     (testing "a column default makes it creatable"
-      (is (empty? (introspection/readonly-not-null-errors
-                   :invoices config (assoc-in invoices-columns [2 :default] "'draft'")))))
+      (is (empty? (create-errors config (assoc-in invoices-columns [2 :default] "'draft'")))))
 
     (testing "a nullable column is fine"
-      (is (empty? (introspection/readonly-not-null-errors
-                   :invoices config (assoc-in invoices-columns [2 :not-null] false)))))
+      (is (empty? (create-errors config (assoc-in invoices-columns [2 :not-null] false)))))
+
+    (testing "a column the database fills is fine: identity, auto-increment, computed (PR #568 review)"
+      (is (empty? (create-errors config (assoc-in invoices-columns [2 :generated] true)))))
+
+    (testing "a column on the form is the database's to enforce, not a config error"
+      (is (empty? (create-errors (-> config
+                                         (update :editable-fields conj :status)
+                                         (update :readonly-fields disj :status))
+                                     invoices-columns))))
+
+    (testing "a hidden field is not a config error: a request may still supply it"
+      (is (empty? (create-errors (-> config
+                                     (assoc :hide-fields #{:status})
+                                     (update :readonly-fields disj :status))
+                                 invoices-columns))))
 
     (testing "an entity with its own create flow is not the admin's to create"
-      (is (empty? (introspection/readonly-not-null-errors
-                   :invoices (assoc config :create-redirect-url "/web/invoices/new")
-                   invoices-columns))))))
+      (is (empty? (create-errors (assoc config :create-redirect-url "/web/invoices/new")
+                                 invoices-columns)))))
+
+  (testing "a column read-only by detection counts, though a manual :readonly-fields replaced that set (PR #568 review)"
+    ;; merge keeps the manual list only, so :version is not in it, but
+    ;; derive-editable-fields still keeps it off the form.
+    (let [columns (conj invoices-columns
+                        {:name "version" :type "INTEGER" :not-null true :default nil :primary-key false})
+          errors  (create-errors {:editable-fields [:number :status]
+                                  :readonly-fields #{:id :created-at :updated-at}}
+                                 columns)]
+      (is (= [:version] (mapv :field errors)))
+      (is (not (str/includes? (:message (first errors)) "lists"))
+          "does not claim the config lists it as read-only")
+      (is (str/includes? (:message (first errors)) ":editable-fields")))))

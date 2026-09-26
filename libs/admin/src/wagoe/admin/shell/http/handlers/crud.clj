@@ -66,7 +66,8 @@
 
           ; Check permissions
           _ (shell-permissions/assert-can-create-entity! user entity-name entity-config)
-          _ (support/assert-creatable-config! entity-name entity-config)
+          config-error (support/create-config-error-response request config schema-provider
+                                                             user entity-name entity-config)
 
           [zones params] (support/form-zone-options config request (submitted-params request))
           [form-data parse-errors] (support/parse-form-params-checked params entity-config zones)
@@ -74,7 +75,11 @@
           ; Validate data
           validation-result (ports/validate-entity-data admin-service entity-name form-data)]
 
-      (if (and (:valid? validation-result) (empty? parse-errors))
+      (cond
+        config-error
+        config-error
+
+        (and (:valid? validation-result) (empty? parse-errors))
         ; Create entity and return list page
         (try
           (if-let [return-to (support/safe-return-to request)]
@@ -139,6 +144,7 @@
                 field-errors (assoc :status 422)))))
 
         ; Validation errors - re-render form
+        :else
         (let [entities (ports/list-available-entities schema-provider)
               entity-configs (into {} (map (fn [e] [e (ports/get-entity-config schema-provider e)])) entities)
               permissions (permissions/get-entity-permissions user entity-name entity-config)

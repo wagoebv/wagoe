@@ -11,12 +11,14 @@
             [wagoe.admin.shell.http.handlers.crud :as crud]
             [wagoe.admin.shell.http.handlers.detail :as detail]
             [wagoe.admin.test.embedded-pg :as epg]
+            [wagoe.i18n.shell.catalogue :as catalogue]
             [wagoe.platform.shell.adapters.database.factory :as db-factory]
             [wagoe.platform.database :as db]
             [wagoe.observability.logging.shell.adapters.no-op :as logging-no-op]
             [wagoe.observability.errors.shell.adapters.no-op :as error-reporting-no-op]
             [wagoe.test.logging :refer [with-silent-logging]]
             [clojure.string :as str]
+            [clojure.tools.logging.test :as log-test]
             [clojure.test :refer [deftest is testing use-fixtures]])
   (:import [java.io File]))
 
@@ -29,7 +31,7 @@
    :base-path "/web/admin"
    :require-role :admin
    :entity-discovery {:mode :allowlist
-                      :allowlist #{:invoices :drafts :open-invoices}}
+                      :allowlist #{:invoices :drafts :open-invoices :tickets}}
    :entities {;; The ticket's repro: status is read-only, NOT NULL, no default.
               :invoices      {:readonly-fields readonly}
               ;; The same, but the column has a default, so it can be created.
@@ -38,7 +40,9 @@
               ;; still refuses a row without it.
               :open-invoices {:table-name :invoices
                               :readonly-fields #{:id :created-at :updated-at}
-                              :fields {:status {:required false}}}}})
+                              :fields {:status {:required false}}}
+              ;; Columns the database fills, kept off the form.
+              :tickets       {:readonly-fields #{:id :created-at :updated-at :seq :len}}}})
 
 (def ^:private malli-schemas
   ;; As a scaffolded module registers it: status is an enum, so a select.
@@ -61,6 +65,18 @@
                 "created_at VARCHAR(40) NOT NULL, "
                 "updated_at VARCHAR(40) NOT NULL)")})))
 
+(def ^:private tickets-ddl
+  "An identity and a computed column, both NOT NULL with no column default.
+   SQLite has no identity column that is not the primary key."
+  {:h2         (str "CREATE TABLE tickets (id VARCHAR(36) PRIMARY KEY, title VARCHAR(50),"
+                    " seq BIGINT GENERATED ALWAYS AS IDENTITY,"
+                    " len INT GENERATED ALWAYS AS (CHAR_LENGTH(id)) NOT NULL)")
+   :postgresql (str "CREATE TABLE tickets (id VARCHAR(36) PRIMARY KEY, title VARCHAR(50),"
+                    " seq BIGINT GENERATED ALWAYS AS IDENTITY,"
+                    " len INT GENERATED ALWAYS AS (length(id)) STORED NOT NULL)")
+   :sqlite     (str "CREATE TABLE tickets (id VARCHAR(36) PRIMARY KEY, title VARCHAR(50),"
+                    " len INT GENERATED ALWAYS AS (length(id)) STORED NOT NULL)")})
+
 (defonce ^:private backends (atom {}))
 
 (defn- with-backends
@@ -71,7 +87,10 @@
                      :sqlite     (db-factory/db-context {:adapter :sqlite :database-path (.getPath sqlite-file)})
                      :postgresql (epg/db-context pg)}]
     (try
-      (doseq [ctx (vals ctxs)] (create-tables! ctx))
+      (doseq [[backend ctx] ctxs]
+        (create-tables! ctx)
+        (db/execute-update! ctx {:raw "DROP TABLE IF EXISTS tickets"})
+        (db/execute-update! ctx {:raw (tickets-ddl backend)}))
       (reset! backends ctxs)
       (f)
       (finally
@@ -90,12 +109,17 @@
                                              admin-config)]
     {:schema schema :svc svc}))
 
+(def ^:private i18n-catalogue
+  (catalogue/create-map-catalogue (catalogue/load-catalogue "wagoe/i18n/translations")))
+
 (defn- request [method entity form]
   {:request-method method
    :uri (str "/web/admin/" (name entity))
    :user admin-user
    :path-params {:entity (name entity)}
-   :form-params form})
+   :form-params form
+   :i18n/catalogue i18n-catalogue
+   :i18n/default-locale :en})
 
 (deftest ^:integration readonly-not-null-column-is-a-config-error-test
   (doseq [[backend db-ctx] @backends
@@ -107,22 +131,31 @@
       (testing "a column default makes it creatable"
         (is (empty? (:create-config-errors (ports/get-entity-config schema :drafts)))))
 
-      (testing "the create form refuses with a config error naming the entity, the column and the fix"
-        (let [ex (try ((detail/new-entity-handler svc schema admin-config) (request :get :invoices nil))
-                      nil
-                      (catch clojure.lang.ExceptionInfo e e))]
-          (is (= :invalid-config (:type (ex-data ex))))
-          (is (str/includes? (str (ex-message ex)) "invoices"))
-          (is (str/includes? (str (ex-message ex)) "'status'"))
-          (is (str/includes? (str (ex-message ex)) "default"))
-          (is (str/includes? (str (ex-message ex)) ":readonly-fields"))))
+      ;; It was an ex-info no error mapping knew, so the admin answered with
+      ;; a bare JSON 500 (PR #568 review).
+      (testing "the create form is an admin page naming the entity, the column and the fix"
+        (let [response ((detail/new-entity-handler svc schema admin-config) (request :get :invoices nil))
+              body     (str (:body response))]
+          (is (= 500 (:status response)))
+          (is (str/includes? (get-in response [:headers "Content-Type"]) "text/html"))
+          (is (str/includes? body "admin-shell") "inside the admin layout")
+          (is (re-find #"Invoices cannot be created here: column \S*status\S* is NOT NULL" body))
+          (is (str/includes? body "default"))))
 
-      (testing "so does a create submitted anyway"
-        (let [ex (try ((crud/create-entity-handler svc schema admin-config)
-                       (request :post :invoices {"number" "INV-1"}))
-                      nil
-                      (catch clojure.lang.ExceptionInfo e e))]
-          (is (= :invalid-config (:type (ex-data ex)))))))))
+      (testing "so is a create submitted anyway, and nothing is written"
+        (let [response ((crud/create-entity-handler svc schema admin-config)
+                        (request :post :invoices {"number" "INV-1"}))]
+          (is (= 500 (:status response)))
+          (is (re-find #"column \S*status\S* is NOT NULL" (str (:body response))))
+          (is (zero? (:total-count (ports/list-entities svc :invoices {})))))))))
+
+(deftest ^:integration columns-the-database-fills-are-not-config-errors-test
+  ;; Identity and computed columns have no column default, so they were
+  ;; reported as uncreatable (PR #568 review).
+  (doseq [[backend db-ctx] @backends
+          :let [{:keys [schema]} (system db-ctx)]]
+    (testing (str backend)
+      (is (empty? (:create-config-errors (ports/get-entity-config schema :tickets)))))))
 
 (deftest ^:integration not-null-violation-is-a-field-error-test
   (doseq [[backend db-ctx] @backends
@@ -160,3 +193,16 @@
       (testing "and the create stores the column default"
         (let [created (ports/create-entity svc :drafts {:number "D-1" :status "sent"})]
           (is (= "draft" (:status created))))))))
+
+(deftest ^:integration a-config-error-is-logged-once-test
+  ;; Each entity's config is also computed as another entity's possible child
+  ;; (BOU-481), and both computations logged (PR #568 review).
+  (let [db-ctx (:h2 @backends)]
+    (log-test/with-log
+      (let [{:keys [schema]} (system db-ctx)]
+        (doseq [e (ports/list-available-entities schema)]
+          (ports/get-entity-config schema e))
+        (doseq [e (ports/list-available-entities schema)]
+          (ports/get-entity-config schema e)))
+      (is (= 1 (count (filter #(re-find #"Entity 'invoices' cannot be created" (str (:message %)))
+                              (log-test/the-log))))))))

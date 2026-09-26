@@ -629,29 +629,40 @@
    wagoe.admin.shell.service)."
   #{:id :created-at :updated-at})
 
-(defn readonly-not-null-errors
-  "The :readonly-fields entries the admin can never create a record with.
+(defn- off-form-reason
+  [field entity-config]
+  (if (contains? (set (:readonly-fields entity-config)) field)
+    "it is in :readonly-fields"
+    "it is not in :editable-fields"))
 
-   The admin insert omits every read-only field, so a NOT NULL column with no
-   default fails every create (BOU-494). `columns-meta` is the raw column
-   metadata of the entity's table. Returns a vector of {:field :column :message};
-   entities with their own create flow are skipped."
+(defn create-form-column-errors
+  "The columns the admin can never create a record without.
+
+   The admin insert writes the create form's fields and :hide-fields (hidden
+   from view, but a request may still supply them), minus :readonly-fields,
+   plus `create-filled-fields`. A NOT NULL column outside that, with no default
+   and not filled by the database (identity, computed), fails every create
+   (BOU-494). `columns-meta` is the raw column metadata of the entity's table.
+   Returns a vector of {:field :column :message}; entities with their own
+   create flow are skipped."
   [entity-name entity-config columns-meta]
   (if (or (:create-redirect-url entity-config) (:split-table-update entity-config))
     []
-    (let [readonly (set (:readonly-fields entity-config))]
-      (vec (for [{column :name :keys [not-null default]} columns-meta
+    (let [written (into create-filled-fields
+                        (remove (set (:readonly-fields entity-config)))
+                        (concat (:editable-fields entity-config) (:hide-fields entity-config)))]
+      (vec (for [{column :name :keys [not-null default generated]} columns-meta
                  :let [field (keyword (case-conversion/snake-case->kebab-case-string column))]
                  :when (and not-null
                             (nil? default)
-                            (contains? readonly field)
-                            (not (contains? create-filled-fields field)))]
+                            (not generated)
+                            (not (contains? written field)))]
              {:field   field
               :column  column
-              :message (str "Entity '" (name entity-name) "' lists " field
-                            " in :readonly-fields, but column '" column
-                            "' is NOT NULL with no default, so the admin cannot create a record."
-                            " Add a column default, or drop " field " from :readonly-fields.")})))))
+              :message (str "Entity '" (name entity-name) "' cannot be created in the admin: column '"
+                            column "' is NOT NULL with no default, and " field
+                            " is not on the create form (" (off-form-reason field entity-config) ")."
+                            " Add a column default, or make " field " editable.")})))))
 
 ;; =============================================================================
 ;; Field Ordering

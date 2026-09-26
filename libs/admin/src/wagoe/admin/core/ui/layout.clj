@@ -249,6 +249,24 @@
      [:a.button {:href "/web/admin"} [:t :admin/button-back-to-admin]]]]
    {:user user}))
 
+(defn create-config-error
+  "Page content for an entity whose config leaves a NOT NULL column off the
+   create form, so no record of it can be created (BOU-494).
+
+   Args:
+     entity-name:   Keyword entity name
+     entity-config: Its config, carrying :create-config-errors"
+  [entity-name entity-config]
+  (let [label (:label entity-config)
+        label (if (string? label) label (name entity-name))]
+    [:div.error-page.admin-config-error
+     [:h1 [:t :admin/page-config-error-title]]
+     (for [{:keys [column field]} (:create-config-errors entity-config)]
+       [:p.error-message [:t :admin/config-error-not-on-form
+                          {:entity label :column column :field (name field)}]])
+     [:div.error-actions
+      [:a.button {:href (str "/web/admin/" (name entity-name))} [:t :admin/button-back-to-list]]]]))
+
 ;; =============================================================================
 ;; Utility Functions
 ;; =============================================================================

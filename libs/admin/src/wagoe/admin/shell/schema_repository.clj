@@ -99,11 +99,8 @@
         config-with-ui (assoc merged-config :ui effective-ui)
         ;; Apply field ordering if specified
         ordered-config (introspection/apply-field-order-to-config config-with-ui)
-        create-errors (introspection/readonly-not-null-errors entity-name merged-config table-metadata)]
-    ;; Reported once here, where the config is computed; the create form
-    ;; refuses on it (BOU-494).
-    (doseq [{:keys [message]} create-errors]
-      (log/error "Admin config error:" message))
+        ;; Logged by get-entity-config; the create form refuses on it (BOU-494).
+        create-errors (introspection/create-form-column-errors entity-name merged-config table-metadata)]
     (cond-> (introspection/detect-relationships ordered-config)
       (seq create-errors) (assoc :create-config-errors create-errors))))
 
@@ -174,6 +171,10 @@
                                           (try (ports/list-available-entities this)
                                                (catch clojure.lang.ExceptionInfo _ []))))
               entity-config (introspection/with-inverse-relationships entity-name own all)]
+          ;; Here and not in compute-entity-config, which also runs for each
+          ;; entity as another's possible child.
+          (doseq [{:keys [message]} (:create-config-errors own)]
+            (log/error "Admin config error:" message))
           (swap! config-cache assoc entity-name entity-config)
           entity-config)))
 

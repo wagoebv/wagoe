@@ -5,6 +5,7 @@
    error mappings, query/form parsing, and handler helpers used by the handler
    namespaces and the route definitions in `wagoe.admin.shell.http`."
   (:require
+   [wagoe.admin.core.ui :as admin-ui]
    [wagoe.admin.core.ui.base :as ui-base]
    [wagoe.admin.ports :as ports]
    [wagoe.admin.shell.permissions :as shell-permissions]
@@ -386,16 +387,6 @@
     (shell-permissions/assert-can-access-admin! user)
     user))
 
-(defn assert-creatable-config!
-  "Throw the config errors introspection found on the create path, so a create
-   form that could never be saved is refused up front (BOU-494)."
-  [entity-name entity-config]
-  (when-let [errors (seq (:create-config-errors entity-config))]
-    (throw (ex-info (str/join " " (map :message errors))
-                    {:type :invalid-config
-                     :entity-name entity-name
-                     :fields (mapv :field errors)}))))
-
 (defn get-entity-name
   "Extract entity name from path parameters.
 
@@ -451,6 +442,24 @@
   [request html]
   (-> (html-response request html)
       (ring-response/header "HX-Trigger" "entityListUpdated")))
+
+(defn create-config-error-response
+  "The admin page saying why `entity-name` cannot be created, or nil when it
+   can. A create form that could never be saved is refused up front (BOU-494).
+   A 500: the config is at fault, not the request."
+  [request config schema-provider user entity-name entity-config]
+  (when (seq (:create-config-errors entity-config))
+    (let [entities       (ports/list-available-entities schema-provider)
+          entity-configs (into {} (map (fn [e] [e (ports/get-entity-config schema-provider e)])) entities)]
+      (-> (html-response request
+                         (admin-ui/admin-layout
+                          (admin-ui/create-config-error entity-name entity-config)
+                          {:user           user
+                           :current-entity entity-name
+                           :entities       entities
+                           :entity-configs entity-configs
+                           :logo-url       (:logo-url config)}))
+          (ring-response/status 500)))))
 
 ;; =============================================================================
 ;; Display Options

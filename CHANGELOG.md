@@ -31,8 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
-- **Admin create failed with a generic banner on a read-only NOT NULL column** (BOU-494).
-  It is now a config error naming the column; add a default or drop it from `:readonly-fields`.
+- **Admin create failed with a generic banner on a NOT NULL column the form leaves out** (BOU-494).
+  The create page now names the column; give it a default or make the field editable.
 - **install.sh could not recover from a failed sdkman download** (BOU-525). A
   retry now clears the partial install; an existing sdkman is detected.
 - **MCP verify never ran a generated project's tests** (BOU-520). It now focuses

@@ -565,9 +565,9 @@ Both values are submitted when checkbox is checked, resulting in an array.
 
 **Prevention**: The admin `new-entity-handler` now validates this at startup and throws a clear config error if the combination is missing.
 
-### 5. `:readonly-fields` on a NOT NULL Column
+### 5. A NOT NULL Column Off the Create Form
 
-The create insert omits every read-only field, so a read-only column that is `NOT NULL` with no default fails every create. `:id`, `:created-at` and `:updated-at` are filled by the admin and are exempt. Introspection logs this as a config error and the create form refuses with `:invalid-config`, naming the entity and column (BOU-494). Fix: give the column a default, or drop it from `:readonly-fields`.
+The create insert writes only the form's fields (plus `:hide-fields`, which a request may still supply), so a `NOT NULL` column with no default that is read-only or not in `:editable-fields` fails every create. Exempt: `:id`, `:created-at` and `:updated-at`, which the admin fills, and identity and computed columns, which the database fills. Introspection logs this as a config error and the create page shows it, naming the entity and column, with status 500 (BOU-494). Fix: give the column a default, or make the field editable.
 
 ### 6. Direct Navigation to HTMX Fragment Endpoints
 
