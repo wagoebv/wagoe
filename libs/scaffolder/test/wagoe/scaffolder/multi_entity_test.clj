@@ -805,3 +805,29 @@
       (let [routes @(ns-resolve 'bou539page.billing.shell.invoice-line-item-http 'api-routes)
             params (get-in (into {} (routes nil)) ["/invoice-line-items" :get :swagger :parameters])]
         (is (= #{"limit" "offset"} (set (map :name params))))))))
+
+;; =============================================================================
+;; A date field added to a module generated before DATE columns (BOU-547 review)
+;; =============================================================================
+
+(deftest ^:unit a-date-field-on-an-old-module-names-the-file-to-regenerate
+  ;; An old persistence.clj has no date->iso, so the DATE column reads back as
+  ;; java.sql.Date, which JSON writes as the day before east of UTC.
+  (let [dir     (invoice-module! (temp-dir) "bou547old")
+        _       (add-line-item! dir "bou547old")
+        first-p (io/file dir "src/bou547old/billing/shell/persistence.clj")
+        line-p  (io/file dir "src/bou547old/billing/shell/invoice_line_item_persistence.clj")
+        add     (fn [entity field]
+                  (ports/add-field svc {:module-name "billing" :base-ns "bou547old" :entity entity
+                                        :field field :output-dir (.getPath dir) :dry-run true}))
+        warned? (fn [r f] (some #(and (str/includes? % "date->iso") (str/includes? % (.getPath f)))
+                                (:warnings r)))]
+    (testing "a module generated with DATE support: no warning"
+      (is (not (warned? (add "Invoice" {:name :due :type :date}) first-p))))
+    (spit first-p (str/replace (slurp first-p) "date->iso" "old-fn"))
+    (spit line-p (str/replace (slurp line-p) "date->iso" "old-fn"))
+    (testing "an older one: the warning names that entity's persistence file"
+      (is (warned? (add "Invoice" {:name :due :type :date}) first-p))
+      (is (warned? (add "InvoiceLineItem" {:name :due :type :date}) line-p)))
+    (testing "a field that is not a date: no warning"
+      (is (not (warned? (add "Invoice" {:name :sku :type :string}) first-p))))))
