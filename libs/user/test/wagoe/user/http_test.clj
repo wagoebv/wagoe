@@ -11,6 +11,8 @@
   (:require [wagoe.user.shell.http :as user-http]
             [wagoe.user.shell.mfa :as mfa]
             [wagoe.user.ports :as ports]
+            [wagoe.user.shell.service :as service]
+            [wagoe.user.shell.in-memory-repository-test :as mem]
             [clojure.test :refer [deftest testing is]]
             [cheshire.core :as json])
   (:import [java.util UUID]
@@ -485,3 +487,23 @@
         (let [resp ((user-http/mfa-disable-handler nil) request)]
           (is (= 400 (:status resp)))
           (is (= "Invalid verification code" (:error (body-of resp)))))))))
+
+(deftest ^:contract create-user-rejects-a-policy-password-with-400
+  ;; The service threw :password-policy-violation, which no mapping knew, so a
+  ;; password containing the email's local part answered 500 (BOU-552).
+  (let [svc (service/create-user-service (mem/->MemoryUserRepository (atom {}))
+                                         (mem/->MemorySessionRepository (atom {}))
+                                         (mem/->MemoryAuditRepository (atom []))
+                                         {:password-policy {:min-length 12}}
+                                         nil)
+        response ((user-http/create-user-handler svc)
+                  {:parameters {:body {:email "alice@x.org"
+                                       :name "Alice"
+                                       :password "alice-Secret-123"
+                                       :role "user"}}})]
+    (is (= 400 (:status response)))
+    (is (= "validation-error" (get-in response [:body :type])))
+    (is (= [{:field :password
+             :code :contains-email
+             :message "Password cannot contain your email address"}]
+           (get-in response [:body :field-errors])))))

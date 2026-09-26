@@ -886,6 +886,12 @@
       (csrf/hidden-field)
       (when (:return-to data)
         [:input {:type "hidden" :name "return-to" :value (:return-to data)}])
+      ;; Errors on no field this form shows — :form, and :role or :active,
+      ;; which self-service sets itself. Unrendered, a 400 said nothing.
+      (when-let [other (seq (mapcat val (dissoc errors :name :email :password)))]
+        [:div.validation-errors
+         (for [err other]
+           [:p err])])
       (ui/form-field :name [:t :common/label-name]
                      (ui/text-input :name (:name data) {:required true})
                      (:name errors))

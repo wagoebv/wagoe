@@ -1,6 +1,7 @@
 {;; =============================================================================
  ;; Gemeenschappelijk — gedeeld over alle modules
  ;; =============================================================================
+ :common/error-generic      "Er ging iets mis. Probeer het later opnieuw."
  :common/column-id          "ID"
  :common/column-name        "Naam"
  :common/column-email       "E-mail"
@@ -120,6 +121,8 @@
 
  :user/page-users-title         "Gebruikers"
  :user/page-create-account-title "Account aanmaken"
+ :user/register-email-unavailable "Met dit e-mailadres kun je je niet registreren. Is het van jou, log dan in."
+ :user/register-error-generic "Registreren is mislukt. Probeer het later opnieuw."
 
  :user/bulk-action-deactivate   "Deactiveren"
  :user/bulk-action-activate     "Activeren"

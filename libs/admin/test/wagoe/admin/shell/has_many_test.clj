@@ -229,3 +229,20 @@
 
       (testing "no link when every child fits"
         (is (not (re-find #"href=\"/web/admin/hm-items\?filters" (detail other-id))))))))
+
+(deftest ^:contract ^:security detail-page-ignores-an-off-site-return-to
+  ;; return_to became the breadcrumb, "Back to list", create and delete links
+  ;; unchecked, so `javascript:` rendered as an href (BOU-553).
+  (let [order-id (create-order!)
+        body     (fn [return-to]
+                   (:body ((handler detail/entity-detail-handler)
+                           (request :get "hm-orders" :id order-id
+                                    :query {"return_to" return-to}))))]
+    (doseq [evil ["javascript:alert(document.domain)" "https://evil.com"]]
+      (let [page (body evil)]
+        (is (not (str/includes? page "javascript:alert")) evil)
+        (is (not (str/includes? page "evil.com")) evil)
+        (is (str/includes? page "href=\"/web/admin/hm-orders\"") evil)))
+    (testing "a path inside the admin is kept"
+      (is (str/includes? (body "/web/admin/hm-orders?page=2")
+                         "href=\"/web/admin/hm-orders?page=2\"")))))
