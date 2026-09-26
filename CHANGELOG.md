@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **`clojure -T:build uber` failed on macOS and Windows in generated projects** (BOU-549).
+  Copy the LICENSE/NOTICE `:exclude` patterns from `wagoe new`'s `build.clj` into yours.
 - **Scaffolded repositories failed every create and update on H2** (BOU-497).
   Regenerate `shell/persistence.clj`, or drop `sql/format` and `:returning`.
 - **Scaffolded list page showed only ids** (BOU-486). It now has a column per

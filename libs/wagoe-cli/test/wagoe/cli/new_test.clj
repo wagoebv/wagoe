@@ -475,3 +475,31 @@
       (finally
         (when (.exists (io/file tmp))
           (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f)))))))
+
+(deftest ^:integration generated-build-excludes-colliding-licenses
+  ;; grpc-netty-shaded ships META-INF/license/ as a directory, dozens of jars
+  ;; ship META-INF/LICENSE as a file. On a case-insensitive filesystem (macOS,
+  ;; Windows) b/uber cannot write both and the build fails (BOU-549). CI is
+  ;; Linux, so building the jar there does not catch this; this test does.
+  (let [tmp (str (System/getProperty "java.io.tmpdir") "/wagoe-build-" (System/nanoTime))]
+    (try
+      (new/generate! tmp "test-proj" {})
+      (let [forms    (read-string (str "[" (slurp (io/file tmp "build.clj")) "]"))
+            uber-map (->> (tree-seq coll? seq forms)
+                          (filter #(and (map? %) (contains? % :uber-file)))
+                          first)
+            ;; b/uber matches each pattern against the whole entry path.
+            excluded? (fn [path] (some #(re-matches (re-pattern %) path) (:exclude uber-map)))]
+        (is (some? uber-map) "build.clj must call b/uber")
+        (doseq [path ["META-INF/license/LICENSE.boringssl.txt"
+                      "META-INF/LICENSE"
+                      "META-INF/LICENSE.txt"
+                      "META-INF/NOTICE"
+                      "META-INF/notice/NOTICE.txt"
+                      "LICENSE"
+                      "NOTICE"]]
+          (is (excluded? path) (str path " must be excluded from the uberjar")))
+        (doseq [path ["test_proj/main.class" "META-INF/services/java.sql.Driver"]]
+          (is (not (excluded? path)) (str path " must stay in the uberjar"))))
+      (finally
+        (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))
