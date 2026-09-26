@@ -124,6 +124,7 @@
            :ns-patterns ["wagoe.external.*-test"]}
 
           {:id :workflow
+           ;; Needs :test/pg: migrations_test converts on embedded PostgreSQL.
            :test-paths ["libs/workflow/test"]
            :ns-patterns ["wagoe.workflow.*-test"]}
 

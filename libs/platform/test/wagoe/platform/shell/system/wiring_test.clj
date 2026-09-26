@@ -9,10 +9,16 @@
             [wagoe.observability.metrics.ports :as metrics-ports]
             [wagoe.observability.tracing.ports :as tracing-ports]
             [wagoe.observability.errors.shell.adapters.no-op]
+            [aero.core :as aero]
             [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
-            [integrant.core :as ig]))
+            [integrant.core :as ig])
+  (:import [ch.qos.logback.classic Level Logger LoggerContext]
+           [ch.qos.logback.classic.joran JoranConfigurator]
+           [ch.qos.logback.classic.util ContextInitializer]
+           [ch.qos.logback.core.read ListAppender]
+           [org.slf4j LoggerFactory]))
 
 (deftest ^:unit the-router-component-is-settings-not-an-adapter
   ;; It used to dispatch on :adapter to one of three routers, two of which were
@@ -205,6 +211,113 @@
            (ig/init-key :wagoe/metrics {:provider :mystery})))
     (is (= [:errors-no-op {:provider :mystery}]
            (ig/init-key :wagoe/error-reporting {:provider :mystery})))))
+
+(defn- logged-after-init
+  "Initialises :wagoe/logging with `config` on Logback with its root at
+   `root-level` and nothing else configured, then logs `level` on `logger-name`.
+   Returns the messages that reached the root. Restores this classpath's
+   logback configuration afterwards."
+  [config root-level [level logger-name]]
+  (let [^LoggerContext ctx (LoggerFactory/getILoggerFactory)
+        root     (.getLogger ctx Logger/ROOT_LOGGER_NAME)
+        appender (ListAppender.)]
+    (try
+      (.reset ctx)
+      (.setLevel root root-level)
+      (ig/init-key :wagoe/logging config)
+      (doto appender (.setContext ctx) (.start))
+      (.addAppender root appender)
+      (let [l (LoggerFactory/getLogger ^String logger-name)]
+        (case level
+          :debug (.debug l "the line")
+          :info  (.info l "the line")))
+      (mapv #(.getFormattedMessage ^ch.qos.logback.classic.spi.ILoggingEvent %)
+            (.-list appender))
+      (finally
+        (.reset ctx)
+        (.autoConfig (ContextInitializer. ctx))))))
+
+(deftest ^:integration configured-level-governs-every-logger
+  ;; A generated project booted with `:level :info` logged 753 DEBUG lines,
+  ;; mostly Jetty's: the level reached only Wagoe's own adapter, never the root
+  ;; logger, which Logback leaves at DEBUG when no logback.xml is found (BOU-528).
+  (testing ":info silences a third-party DEBUG line"
+    (is (= [] (logged-after-init {:provider :slf4j :level :info} Level/DEBUG
+                                 [:debug "org.eclipse.jetty.server.Server"]))))
+  (testing "and keeps its INFO"
+    (is (= ["the line"] (logged-after-init {:provider :slf4j :level :info} Level/DEBUG
+                                           [:info "org.eclipse.jetty.server.Server"]))))
+  (testing ":debug is honoured over a quieter bootstrap level"
+    (is (= ["the line"] (logged-after-init {:provider :slf4j :level :debug} Level/INFO
+                                           [:debug "wagoe.anything"]))))
+  (testing ":debug keeps a third-party DEBUG line out"
+    (is (= [] (logged-after-init {:provider :slf4j :level :debug} Level/DEBUG
+                                 [:debug "org.eclipse.jetty.server.Server"]))))
+  (testing "unless :root-level asks for it"
+    (is (= ["the line"] (logged-after-init {:provider :slf4j :level :debug :root-level :debug} Level/INFO
+                                           [:debug "org.eclipse.jetty.server.Server"])))))
+
+(defn- levels-under
+  "Configures Logback from `logback-xml` alone, initialises :wagoe/logging with
+   `:wagoe/logging` from `config-edn` read under `profile`, and returns the
+   effective level of each of `names` — after init, and after halt. Restores
+   this classpath's logback configuration afterwards."
+  [logback-xml config-edn profile names]
+  (let [^LoggerContext ctx (LoggerFactory/getILoggerFactory)
+        config (get-in (aero/read-config (io/file config-edn) {:profile profile})
+                       [:active :wagoe/logging])
+        levels #(into {} (for [n names]
+                           [n (str (.getEffectiveLevel (.getLogger ctx ^String n)))]))]
+    (try
+      (.reset ctx)
+      (doto (JoranConfigurator.) (.setContext ctx) (.doConfigure (io/file logback-xml)))
+      (let [logger (ig/init-key :wagoe/logging config)
+            after  (levels)]
+        (ig/halt-key! :wagoe/logging logger)
+        {:init after :halt (levels)})
+      (finally
+        (.reset ctx)
+        (.autoConfig (ContextInitializer. ctx))))))
+
+(deftest ^:integration a-generated-projects-config-governs-its-logging
+  ;; Its config.edn had no :provider, so :wagoe/logging fell back to the no-op
+  ;; adapter and `:level` changed nothing (BOU-528). examples/shop is wagoe new
+  ;; output, kept in sync by `bb example:regen --check`.
+  (let [names ["wagoe.platform.core" "org.eclipse.jetty.server.Server" "shop.core"]]
+    (testing "dev, :level :debug: Wagoe's own DEBUG, nobody else's"
+      (is (= {"wagoe.platform.core" "DEBUG" "org.eclipse.jetty.server.Server" "INFO" "shop.core" "INFO"}
+             (:init (levels-under "examples/shop/resources/logback.xml"
+                                  "examples/shop/resources/conf/dev/config.edn" :dev names)))))
+    (testing "test keeps INFO: the bound port is logged there, and the smoke reads it"
+      (is (= {"wagoe.platform.core" "INFO" "org.eclipse.jetty.server.Server" "INFO" "shop.core" "INFO"}
+             (:init (levels-under "examples/shop/resources/logback.xml"
+                                  "examples/shop/resources/conf/test/config.edn" :test names)))))))
+
+(deftest ^:integration debug-in-monorepo-dev-shows-wagoe-not-jetty
+  ;; Dev's :level :debug went to the root, flooding every unpinned library,
+  ;; while resources/logback.xml pins `wagoe` at INFO, so Wagoe's own DEBUG
+  ;; stayed hidden (BOU-528).
+  (let [names ["wagoe.user.core" "org.eclipse.jetty.server.Server" "com.zaxxer.hikari.pool"
+               "org.flywaydb.core" "ROOT"]
+        {:keys [init halt]} (levels-under "resources/logback.xml" "resources/conf/dev/config.edn"
+                                          :dev names)]
+    (is (= {"wagoe.user.core" "DEBUG" "org.eclipse.jetty.server.Server" "WARN"
+            "com.zaxxer.hikari.pool" "WARN" "org.flywaydb.core" "INFO" "ROOT" "INFO"}
+           init))
+    (testing "halt puts back what logback.xml set"
+      (is (= {"wagoe.user.core" "INFO" "org.eclipse.jetty.server.Server" "WARN"
+              "com.zaxxer.hikari.pool" "WARN" "org.flywaydb.core" "INFO" "ROOT" "INFO"}
+             halt)))))
+
+(deftest ^:integration halt-restores-the-root-level
+  (let [ctx (LoggerFactory/getILoggerFactory)
+        root (.getLogger ^LoggerContext ctx Logger/ROOT_LOGGER_NAME)
+        before (.getLevel root)]
+    (try
+      (.setLevel root Level/ERROR)
+      (ig/halt-key! :wagoe/logging (ig/init-key :wagoe/logging {:provider :slf4j :level :info}))
+      (is (= Level/ERROR (.getLevel root)))
+      (finally (.setLevel root before)))))
 
 ;; =============================================================================
 ;; Prometheus metrics provider + /metrics endpoint (BOU-174)

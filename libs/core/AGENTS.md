@@ -176,7 +176,7 @@ clojure -M:test :core
 clojure -M:test :core --focus-meta :unit
 
 # Update validation snapshots when intended output changes
-UPDATE_SNAPSHOTS=true clojure -M:test \
+UPDATE_SNAPSHOTS=true clojure -M:test :core \
   --focus wagoe.core.validation.snapshot-test
 ```
 

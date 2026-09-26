@@ -131,7 +131,7 @@ libs/{library}/
 ----
 clojure -M:test :core
 clojure -M:test :user
-clojure -M:test :admin
+clojure -M:test:test/pg :admin
 # etc.
 ----
 

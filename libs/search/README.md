@@ -165,7 +165,7 @@ Re-indexing an existing entity is safe — upsert uses `ON CONFLICT (index_id, e
 clojure -M:test :search
 
 # Unit tests only
-clojure -M:test --focus-meta :unit
+clojure -M:test :search --focus-meta :unit
 ```
 
 H2 integration tests create their own in-memory database — no external dependencies required.

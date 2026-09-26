@@ -54,7 +54,7 @@
    {:enable-pruning true :retention-days 30 :interval-hours 6}
 
    :wagoe/logging
-   {:level :debug :console true}
+   {:provider :slf4j :level :debug}
   ;; Product module (bb scaffold integrate)
   :wagoe/product
   {:enabled? true

@@ -327,7 +327,7 @@ clojure -M:test :audience
 clojure -M:test --focus-meta :unit :audience
 
 # Single namespace
-clojure -M:test --focus wagoe.audience.core.filter-test
+clojure -M:test :audience --focus wagoe.audience.core.filter-test
 
 # Security-tagged tests
 clojure -M:test --focus-meta :security :audience
