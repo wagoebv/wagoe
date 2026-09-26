@@ -132,13 +132,12 @@
                                  (str/split exts #","))]
 
         (if-not (multipart-file? file)
-        (problem-details/bad-request
-         (if file
-           "Field 'file' must be an uploaded file"
-           "Missing required field: file")
-         {:missing-field "file"})
+          (problem-details/bad-request
+           (if file
+             "Field 'file' must be an uploaded file"
+             "Missing required field: file")
+           {:missing-field "file"})
 
-        (try
           (let [file-data (extract-file-data file)
                 metadata {:filename (:filename file-data)
                           :path path
@@ -156,12 +155,7 @@
 
               (problem-details/bad-request
                "File validation failed"
-               {:errors (:errors result)})))
-
-          (catch Exception e
-            (problem-details/internal-server-error
-             "Failed to upload file"
-             {:error (.getMessage e)}))))))))
+               {:errors (:errors result)}))))))))
 
 (defn upload-image-handler
   "Handler for image upload endpoint with processing options.
@@ -186,13 +180,12 @@
                              (parse-int-safe size))]
 
         (if-not (multipart-file? file)
-        (problem-details/bad-request
-         (if file
-           "Field 'file' must be an uploaded file"
-           "Missing required field: file")
-         {:missing-field "file"})
+          (problem-details/bad-request
+           (if file
+             "Field 'file' must be an uploaded file"
+             "Missing required field: file")
+           {:missing-field "file"})
 
-        (try
           (let [file-data (extract-file-data file)
                 metadata {:filename (:filename file-data)
                           :path path
@@ -212,12 +205,7 @@
 
               (problem-details/bad-request
                "Image upload failed"
-               {:errors (:errors result)})))
-
-          (catch Exception e
-            (problem-details/internal-server-error
-             "Failed to upload image"
-             {:error (.getMessage e)}))))))))
+               {:errors (:errors result)}))))))))
 
 (defn download-file-handler
   "Handler for file download endpoint.

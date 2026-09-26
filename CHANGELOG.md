@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **MFA and storage upload APIs returned the raw exception message** (BOU-557). They now answer the
+  platform's generic 500 and log the cause; MFA without a user answers 401. Upgrade user and storage.
 - **Password hashes, MFA secrets and session tokens were written to the log** (BOU-556). Nothing
   to rotate; purge application logs you retain.
 - **User admin, profile, MFA and workflow pages showed exception messages** (BOU-555). They log
