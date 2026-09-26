@@ -56,9 +56,15 @@
       nil
 
       rejected?
-      [:input.inline-input.error
-       {:type "text" :name (name field) :value (str value)
-        :required required? :autofocus true :aria-invalid "true"}]
+      [:span.inline-temporal
+       [:input.inline-input.error
+        {:type "text" :name (name field) :value (str value)
+         :required required? :autofocus true :aria-invalid "true"}]
+       ;; The offset the user submitted, passed on. Without it, re-submitting a
+       ;; refused second occurrence of a repeated local time (the October hour
+       ;; that happens twice) picked the first, an hour early.
+       (when-let [offset (get-in display [:offsets field])]
+         [:input {:type "hidden" :name (str "__offset." (name field)) :value offset}])]
 
       (= widget-type :datetime-input)
       (let [formatted (base/format-for-datetime-input value input-zone server-zone)

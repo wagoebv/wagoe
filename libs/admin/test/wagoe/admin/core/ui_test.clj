@@ -1548,3 +1548,16 @@
                                                              ["must be a date and time"] display))]
         (is (str/includes? html "next tuesday"))
         (is (not (str/includes? html "datetime-local")))))))
+
+(deftest ^:unit inline-error-form-keeps-the-submitted-offset-test
+  ;; 01:30 happens twice in New York on 2026-11-01. When an inline edit of the
+  ;; second one (-05:00) was refused, the error form dropped __offset, so
+  ;; submitting it again unchanged picked the first occurrence, an hour early.
+  (let [display {:zone-id nyc :server-zone-id utc :offsets {:due-at "-05:00"}}
+        html    (str (ui/render-inline-edit-form-with-error
+                      :things 1 :due-at "2026-11-01T01:30" {:type :instant :widget :datetime-input}
+                      ["refused"] display))]
+    (is (str/includes? html "2026-11-01T01:30") "the value as submitted")
+    (is (str/includes? html "__offset.due-at"))
+    (is (str/includes? html "-05:00"))
+    (is (str/includes? html "__zone"))))
