@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **`bb migrate up` did not create workflow's tables** (BOU-502). Stop all replicas
+  and run `migrate up` before starting this version; seed timestamps as `#inst`.
 - **`bb ai admin-entity` rejected an answer in an ```edn fence** (BOU-493). Any
   fence is accepted now, and a parse failure names the real error.
 - **`bb ai explain`, `gen-tests` and `sql` are marked experimental** (BOU-511..513).
