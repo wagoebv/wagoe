@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **`:wagoe/logging :level` did not reach Jetty or Hikari** (BOU-528). Existing projects:
+  take `resources/logback.xml`, `:provider :slf4j` and the `:mcp` `:jvm-opts` from `wagoe new`.
 - **`bb scaffold integrate` and `wagoe add` skipped the prod config** (BOU-529).
   Both now write every profile; re-run integrate, or copy a `wagoe add` key into prod.
 - **`bb migrate up` did not create workflow's tables** (BOU-502). Stop all replicas
