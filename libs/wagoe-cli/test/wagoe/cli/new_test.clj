@@ -92,6 +92,10 @@
           (is (not (re-find #"(?m)^\.clj-kondo/imports/" content))
               ".clj-kondo/imports/ must stay tracked in a generated project")))
 
+      (testing "generated agent guidance asks for short writing without attribution"
+        (is (str/includes? (slurp (io/file tmp "AGENTS.md")) "No attributions."))
+        (is (str/includes? (slurp (io/file tmp "CLAUDE.md")) "Co-Authored-By: Claude")))
+
       (testing ".env has a generated JWT_SECRET (no unreplaced placeholder)"
         (let [content (slurp (io/file tmp ".env"))]
           (is (str/includes? content "JWT_SECRET="))
