@@ -41,6 +41,8 @@ for what is public API, what is internal, and how deprecations are announced.
   Set `:level`/`:root-level` as wanted; copy `logback.xml`, `:provider :slf4j` and `:mcp` `:jvm-opts` from `wagoe new`.
 - **`register-user` throws `:validation-error` for a password-policy refusal** (BOU-552), not
   `:password-policy-violation`. Match on the new type; `:violations` is unchanged.
+- **The workflow API speaks kebab-case JSON, and a refused transition answers `{"error": {…}}`** (BOU-579).
+  Send `workflow-id`, `entity-type`, `entity-id`; read `current-state`, and drop checks on `success`.
 - **The workflow API answers 401 without a session** (BOU-561); it was open. Send a session or
   bearer token. The auth middleware's own 401 now has a JSON body; it had none.
 - **Scaffolded APIs and list pages require a signed-in user** (BOU-539). Pass `--public-api` to

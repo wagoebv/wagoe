@@ -59,11 +59,11 @@
    or nil when not computed (start / transition responses)."
   [instance available-ts]
   {:id             (str (:id instance))
-   :workflowId     (name (:workflow-id instance))
-   :entityType     (name (:entity-type instance))
-   :entityId       (str (:entity-id instance))
-   :currentState   (name (:current-state instance))
-   :availableTransitions
+   :workflow-id    (name (:workflow-id instance))
+   :entity-type    (name (:entity-type instance))
+   :entity-id      (str (:entity-id instance))
+   :current-state  (name (:current-state instance))
+   :available-transitions
    (when available-ts
      (mapv (fn [t]
              (cond-> {:id      (name (:id t))
@@ -72,20 +72,20 @@
                (:label t)  (assoc :label (:label t))
                (:reason t) (assoc :reason (name (:reason t)))))
            available-ts))
-   :createdAt  (str (:created-at instance))
-   :updatedAt  (str (:updated-at instance))})
+   :created-at (str (:created-at instance))
+   :updated-at (str (:updated-at instance))})
 
 (defn- audit-entry->response
   "Render an AuditEntry as a JSON-friendly map."
   [entry]
   {:id          (str (:id entry))
-   :instanceId  (str (:instance-id entry))
+   :instance-id (str (:instance-id entry))
    :transition  (name (:transition entry))
-   :fromState   (name (:from-state entry))
-   :toState     (name (:to-state entry))
-   :actorId     (some-> (:actor-id entry) str)
-   :actorRoles  (mapv name (or (:actor-roles entry) []))
-   :occurredAt  (str (:occurred-at entry))})
+   :from-state  (name (:from-state entry))
+   :to-state    (name (:to-state entry))
+   :actor-id    (some-> (:actor-id entry) str)
+   :actor-roles (mapv name (or (:actor-roles entry) []))
+   :occurred-at (str (:occurred-at entry))})
 
 ;; =============================================================================
 ;; Handlers
@@ -97,13 +97,13 @@
   (let [id-str   (get-in request [:path-params :id])
         id       (parse-uuid-param id-str "id")
         instance (ports/find-instance (:store engine) id)]
-    (if (nil? instance)
-      {:status 404
-       :body   {:error "Workflow instance not found" :id id-str}}
-      (let [actor    (actor-from-request request)
-            avail-ts (ports/available-transitions engine id (:actor-roles actor) nil)]
-        {:status 200
-         :body   (instance->response instance avail-ts)}))))
+    (when (nil? instance)
+      (throw (ex-info "Workflow instance not found"
+                      {:type :not-found :message "Workflow instance not found" :id id-str})))
+    (let [actor    (actor-from-request request)
+          avail-ts (ports/available-transitions engine id (:actor-roles actor) nil)]
+      {:status 200
+       :body   (instance->response instance avail-ts)})))
 
 (defn handle-get-audit-log
   "GET /api/v1/workflow/instances/:id/audit"
@@ -112,16 +112,16 @@
         id     (parse-uuid-param id-str "id")
         log-entries (ports/audit-log engine id)]
     {:status 200
-     :body   {:instanceId id-str
-              :entries    (mapv audit-entry->response log-entries)}}))
+     :body   {:instance-id id-str
+              :entries     (mapv audit-entry->response log-entries)}}))
 
 (defn handle-start-workflow
   "POST /api/v1/workflow/instances"
   [engine request]
   (let [body        (get-in request [:parameters :body])
-        workflow-id (keyword (:workflowId body))
-        entity-type (keyword (:entityType body))
-        entity-id   (parse-uuid-param (:entityId body) "entityId")
+        workflow-id (keyword (:workflow-id body))
+        entity-type (keyword (:entity-type body))
+        entity-id   (parse-uuid-param (:entity-id body) "entity-id")
         metadata    (:metadata body {})]
     (log/info "Starting workflow via HTTP"
               {:workflow-id workflow-id :entity-type entity-type :entity-id entity-id})
@@ -150,14 +150,13 @@
                                      :actor-id    (:actor-id actor)
                                      :actor-roles (:actor-roles actor)
                                      :context     context})]
+      ;; The scaffolded APIs' shape: the result, or {:error {:type :message}}.
       (if (:success? result)
         {:status 200
-         :body   {:success    true
-                  :instance   (instance->response (:instance result) nil)
-                  :auditEntry (audit-entry->response (:audit-entry result))}}
+         :body   {:instance    (instance->response (:instance result) nil)
+                  :audit-entry (audit-entry->response (:audit-entry result))}}
         {:status 422
-         :body   {:success false
-                  :error   (:error result)}}))))
+         :body   {:error (:error result)}}))))
 
 ;; =============================================================================
 ;; Route definitions
@@ -189,9 +188,9 @@
             :summary "Start a new workflow instance"
             :interceptors signed-in
             :parameters {:body [:map {:closed true}
-                                [:workflowId :string]
-                                [:entityType :string]
-                                [:entityId :string]
+                                [:workflow-id :string]
+                                [:entity-type :string]
+                                [:entity-id :string]
                                 ;; map-of, not :map: the metadata is the
                                 ;; caller's own and has no schema here, and a
                                 ;; closed :map would reject all of it.

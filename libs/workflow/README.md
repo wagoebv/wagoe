@@ -147,6 +147,9 @@ The component map returned by Integrant:
 | `GET` | `/api/v1/workflow/instances/:id/audit` | Full audit log |
 | `POST` | `/api/v1/workflow/instances/:id/transition` | Execute a transition |
 
+Bodies are kebab-case JSON. A transition the workflow does not make answers 422
+`{"error": {"type" … "message" …}}`.
+
 Unversioned `/api/workflow/*` paths are backward-compatibility redirects to `/api/v1/workflow/*`.
 
 ---

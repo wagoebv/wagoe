@@ -11,6 +11,7 @@
    whatever the caller sent — the transition came out nil and the rejection
    path answered `(name nil)`, a 500 for a request that is a 4xx."
   (:require [cheshire.core :as json]
+            [clojure.java.io :as io]
             [clojure.test :refer [deftest is testing use-fixtures]]
             [wagoe.platform.shell.http.reitit-router :as reitit]
             [wagoe.user.ports :as user-ports]
@@ -116,12 +117,13 @@
     (is (= 200 (:status response))
         "an authenticated admin was refused — the actor never reached the engine")
     (let [body (body-data response)]
-      (is (true? (:success body)))
-      (is (= "delivered" (get-in body [:instance :currentState])))
+      (is (= #{:instance :audit-entry} (set (keys body)))
+          "the body is the result, not a success flag beside it")
+      (is (= "delivered" (get-in body [:instance :current-state])))
 
       (testing "and the audit entry names who did it"
-        (is (= ["admin"] (get-in body [:auditEntry :actorRoles])))
-        (is (some? (get-in body [:auditEntry :actorId])))))))
+        (is (= ["admin"] (get-in body [:audit-entry :actor-roles])))
+        (is (some? (get-in body [:audit-entry :actor-id])))))))
 
 (defn- get-uri
   ([uri] (get-uri uri nil))
@@ -130,7 +132,7 @@
                 token (assoc-in [:headers "authorization"] (str "Bearer " token))))))
 
 (def ^:private start-body
-  {:workflowId "invoice-workflow" :entityType "invoice"})
+  {:workflow-id "invoice-workflow" :entity-type "invoice"})
 
 (defn- call-route
   "Each API route, called with `token` (nil for none)."
@@ -138,7 +140,7 @@
   (let [id (:id (new-instance))]
     (case route
       :start      (post "/workflow/instances"
-                        (assoc start-body :entityId (str (UUID/randomUUID)))
+                        (assoc start-body :entity-id (str (UUID/randomUUID)))
                         token)
       :get        (get-uri (str "/workflow/instances/" id) token)
       :audit      (get-uri (str "/workflow/instances/" id "/audit") token)
@@ -192,7 +194,7 @@
                        (admin-token))
         body     (body-data response)]
     (is (= 422 (:status response)))
-    (is (false? (:success body)))
+    (is (= [:error] (keys body)) "the scaffolded APIs' 422: an error, no success flag")
     (is (= "transition-not-found" (get-in body [:error :type])))
     (is (string? (get-in body [:error :message])))))
 
@@ -212,17 +214,17 @@
 (deftest ^:unit starting-a-workflow-reads-the-body-it-was-sent
   (let [entity-id (UUID/randomUUID)
         response  (post "/workflow/instances"
-                        {:workflowId "invoice-workflow"
-                         :entityType "invoice"
-                         :entityId   (str entity-id)
+                        {:workflow-id "invoice-workflow"
+                         :entity-type "invoice"
+                         :entity-id   (str entity-id)
                          ;; The caller's own metadata: the schema has to let it
                          ;; through, whatever is in it.
                          :metadata   {:invoiceNumber "2026-0001" :lines 3}}
                         (admin-token))
         body      (body-data response)]
     (is (= 201 (:status response)))
-    (is (= "entered" (:currentState body)))
-    (is (= (str entity-id) (:entityId body)))
+    (is (= "entered" (:current-state body)))
+    (is (= (str entity-id) (:entity-id body)))
     (is (= {:invoiceNumber "2026-0001" :lines 3}
            (:metadata (ports/find-instance-by-entity
                        (:store *service*) :invoice entity-id))))))
@@ -231,6 +233,83 @@
   (let [response (post "/workflow/instances" {} (admin-token))]
     (is (= 400 (:status response)))
     (is (= "validation-error" (:error (body-data response))))))
+
+;; =============================================================================
+;; The JSON shape: kebab-case, as the scaffolded APIs answer (BOU-579)
+;; =============================================================================
+
+(defn- all-keys
+  "Every map key anywhere in `body`, as strings."
+  [body]
+  (->> (tree-seq coll? seq body)
+       (filter map?)
+       (mapcat keys)
+       (map name)
+       set))
+
+(deftest ^:unit the-api-answers-kebab-case
+  (let [instance (new-instance)
+        token    (admin-token)
+        _        (post (str "/workflow/instances/" (:id instance) "/transition")
+                       {:transition "delivered"} token)
+        state    (body-data (get-uri (str "/workflow/instances/" (:id instance)) token))
+        audit    (body-data (get-uri (str "/workflow/instances/" (:id instance) "/audit") token))]
+    (is (= "delivered" (:current-state state)))
+    (is (= [{:id "paid" :to "paid" :enabled true}]
+           (:available-transitions state)))
+    (is (= (str (:id instance)) (:instance-id audit)))
+    (is (= "entered" (get-in audit [:entries 0 :from-state])))
+    (doseq [[label body] [["state" state] ["audit" audit]]]
+      (is (empty? (filter #(re-find #"[A-Z]" %) (all-keys body)))
+          (str label " has a camelCase key")))))
+
+(deftest ^:unit a-camel-case-start-body-is-refused
+  (let [response (post "/workflow/instances"
+                       {:workflowId "invoice-workflow" :entityType "invoice"
+                        :entityId (str (UUID/randomUUID))}
+                       (admin-token))]
+    (is (= 400 (:status response)))
+    (is (= "validation-error" (:error (body-data response))))))
+
+(deftest ^:unit an-unknown-instance-is-the-platforms-404
+  (let [response (get-uri (str "/workflow/instances/" (UUID/randomUUID)) (admin-token))
+        body     (body-data response)]
+    (is (= 404 (:status response)))
+    (is (= "not-found" (:error body)))
+    (is (string? (:message body)))))
+
+;; =============================================================================
+;; The documented bodies are what the API takes and answers (BOU-579)
+;; =============================================================================
+
+(defn- documented-json
+  "The JSON blocks under `== HTTP API` in the workflow docs, parsed."
+  []
+  (let [doc  (slurp (io/file (-> (io/resource "wagoe/workflow/shell/http_test.clj")
+                                 io/file .getParentFile .getParentFile .getParentFile
+                                 .getParentFile .getParentFile)
+                             "../../docs/modules/libraries/pages/workflow.adoc"))
+        from (subs doc (.indexOf ^String doc "== HTTP API"))]
+    (mapv #(json/parse-string (second %) true)
+          (re-seq #"(?s)\[source,json\]\n----\n(.*?)\n----" from))))
+
+(deftest ^:unit the-documented-bodies-are-the-apis
+  (let [[start rejected] (documented-json)]
+    (is (some? rejected) "the docs show a start body and a 422")
+    (registry/register-workflow! (assoc invoice-def :id (keyword (:workflow-id start))))
+    (let [response (post "/workflow/instances" start (admin-token))
+          instance (body-data response)]
+      (is (= 201 (:status response)) "the documented start body was refused")
+      (testing "a transition from where it stands that the workflow does not make"
+        (is (= rejected
+               (body-data (post (str "/workflow/instances/" (:id instance) "/transition")
+                                {:transition "paid"}
+                                (admin-token))))))
+      (testing "a transition answers the instance and its audit entry"
+        (is (= #{:instance :audit-entry}
+               (set (keys (body-data (post (str "/workflow/instances/" (:id instance) "/transition")
+                                           {:transition "delivered"}
+                                           (admin-token)))))))))))
 
 (deftest ^:unit the-admin-list-page-hides-the-exception
   ;; The message can carry driver or config detail (BOU-555).

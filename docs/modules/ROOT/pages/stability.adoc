@@ -201,13 +201,14 @@ rather than a commit message.
 * *One more, in `1.0.0-rc-3`:* `bb scaffold generate --cli` is gone. It named an
   interface the scaffolder has never had a generator for, so no value of the
   flag ever produced one; only a script that passes it is affected.
-* *Six in `1.0.0-rc-4`:* workflow's timestamp columns carry a zone and need
+* *Seven in `1.0.0-rc-4`:* workflow's timestamp columns carry a zone and need
   `migrate up` with replicas stopped; `:wagoe/logging :level` now sets
   Logback's levels; `register-user` throws `:validation-error` for a weak
-  password; and the scaffolder guards generated APIs, makes `date` a `DATE`
-  and refuses unknown field modifiers. Each, with its migration, is under
-  `### Breaking` in `CHANGELOG.md`. Eight additions to the three frozen at
-  `rc-1`, so the list is eleven.
+  password; the scaffolder guards generated APIs, makes `date` a `DATE`
+  and refuses unknown field modifiers; and the workflow API speaks kebab-case
+  JSON with the scaffolded APIs' error shape. Each, with its migration, is under
+  `### Breaking` in `CHANGELOG.md`. Nine additions to the three frozen at
+  `rc-1`, so the list is twelve.
 * Breaking changes that already shipped are in `CHANGELOG.md` under a
   `### Breaking` heading, naming the affected library and the migration.
 * Deprecations are announced under `### Deprecated`.
