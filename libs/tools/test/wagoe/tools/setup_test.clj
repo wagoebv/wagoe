@@ -599,7 +599,7 @@
             (render (str env "-config.edn.tmpl"))))
     (spit (fs/file dir ".env.example") (render "env.example.tmpl"))
     (integrate/write-config! (str dir) ":wagoe/product"
-                             (integrate/generate-config-snippet "product" true) {})
+                             (integrate/generate-config-snippet "product") {})
     dir))
 
 (defn- snapshot [dir]

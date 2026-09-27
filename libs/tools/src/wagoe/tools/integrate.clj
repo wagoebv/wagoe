@@ -101,15 +101,15 @@
    by `wagoe.platform.shell.modules/discover-module-config` from this one key
    (BOU-311) — an earlier version printed those too, which was right when you
    pasted it into `ig-config` and wrong now that it is written into config.edn,
-   where `(ig/ref …)` is a list and `config` is a bare symbol."
-  [module-name has-routes?]
+   where `(ig/ref …)` is a list and `config` is a bare symbol.
+
+   No `:base-path`: the platform mounts a module's routes under /api/v1 and
+   /web, and nothing read it (BOU-562)."
+  [module-name]
   (let [ns-name (module-ns-name module-name)]
     (str "  ;; " (str/capitalize ns-name) " module (bb scaffold integrate)\n"
          "  :wagoe/" ns-name "\n"
-         "  {:enabled? true"
-         (when has-routes?
-           (str "\n   :base-path \"/api/" ns-name "\""))
-         "}")))
+         "  {:enabled? true}")))
 
 ;; =============================================================================
 ;; Writing
@@ -213,7 +213,7 @@
       (println (dim "  key resolves to nothing and the boot fails."))
       (System/exit 1))
 
-    (let [snippet (generate-config-snippet module-name (:has-routes? module))
+    (let [snippet (generate-config-snippet module-name)
           key-str (str ":wagoe/" (module-ns-name module-name))]
 
       (println (bold (if dry-run? "Would write:" "Writing:")))
