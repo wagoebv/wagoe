@@ -99,6 +99,9 @@
                                          :required true
                                          :default true}]}]
                    :interfaces {:http true :web true}
+                   ;; Not the working directory: its config switches the
+                   ;; admin on, which adds admin files.
+                   :output-dir (.getPath (temp-dir))
                    :dry-run true}  ;; Always dry-run in tests
 
           result (ports/generate-module svc request)]
@@ -167,6 +170,7 @@
                    :entities [{:name "TestEntity"
                                :fields [{:name :name :type :string}]}]
                    :interfaces {:http true}
+                   :output-dir (.getPath (temp-dir))
                    :dry-run true}
 
           result (ports/generate-module svc request)]

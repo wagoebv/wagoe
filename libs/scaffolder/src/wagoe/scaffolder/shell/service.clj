@@ -162,6 +162,73 @@
                          ", which is not an entity listed before it."))))
               (map-indexed vector entities)))))
 
+;; =============================================================================
+;; Admin config (BOU-562)
+;; =============================================================================
+
+(defn- profile-dirs
+  "The profile directories under `output-dir`'s resources/conf, sorted."
+  [output-dir]
+  (->> (.listFiles ^java.io.File (resolve-path output-dir "resources/conf"))
+       (filter #(.isDirectory ^java.io.File %))
+       (sort-by #(.getName ^java.io.File %))))
+
+(defn- profile-config ^java.io.File [dir] (io/file dir "config.edn"))
+
+(defn- admin-on?
+  "Whether any profile switches the admin UI on."
+  [output-dir]
+  (boolean (some #(let [f (profile-config %)]
+                    (and (.isFile f) (generators/admin-active? (slurp f))))
+                 (profile-dirs output-dir))))
+
+(defn- admin-file-path [dir plural]
+  (str "resources/conf/" (.getName ^java.io.File dir) "/admin/" plural ".edn"))
+
+(defn- admin-files
+  "One admin entity file per profile for each [entity relations] pair."
+  [output-dir entity+relations]
+  (vec (for [dir (profile-dirs output-dir)
+             [entity relations] entity+relations]
+         {:path    (admin-file-path dir (:entity-plural entity))
+          :content (generators/admin-entity-file entity relations)
+          :action  :create})))
+
+(defn- admin-config-edits
+  "{:edits [{:file :content :note}] :warnings [...]}: each profile's
+   config.edn with `plurals` listed in its admin."
+  [output-dir plurals]
+  (reduce (fn [acc dir]
+            (let [f (profile-config dir)]
+              (if-not (.isFile f)
+                acc
+                (let [before (slurp f)
+                      {:keys [content reasons]}
+                      (reduce (fn [st plural]
+                                (let [r (generators/add-admin-entity (:content st) plural)]
+                                  (case (:status r)
+                                    :updated      (assoc st :content (:content r))
+                                    :unrecognised (update st :reasons conj (:reason r))
+                                    st)))
+                              {:content before :reasons []}
+                              plurals)]
+                  (cond-> acc
+                    (not= before content) (update :edits conj {:file f :content content
+                                                               :note "listed the entities in the admin"})
+                    (seq reasons) (update :warnings into (map #(str (.getPath f) ": " %) (distinct reasons))))))))
+          {:edits [] :warnings []}
+          (profile-dirs output-dir)))
+
+(defn- write-edits!
+  "Report entries for `edits`, written unless `dry-run?`."
+  [edits dry-run?]
+  (mapv (fn [{:keys [^java.io.File file content note]}]
+          (when-not dry-run? (spit file content))
+          {:path (.getPath file) :content content
+           :action (if dry-run? :skip :update)
+           :note (if dry-run? (str "dry run — would have " note) note)})
+        edits))
+
 (def ^:private module-generation-request-validator (m/validator schema/ModuleGenerationRequest))
 (def ^:private module-generation-request-explainer (m/explainer schema/ModuleGenerationRequest))
 
@@ -314,6 +381,20 @@
                            :content (generators/generate-web-handlers-file ctx)
                            :action :create}))
 
+            admin?  (admin-on? output-dir)
+            by-name (into {} (map (juxt :entity-kebab identity)) (:entities ctx))
+            files   (cond-> files
+                      admin?
+                      (into (admin-files
+                             output-dir
+                             (for [e (:entities ctx)]
+                               [e {:children (filter #(= (:entity-kebab e) (:belongs-to %)) (:entities ctx))
+                                   :parent   (when-let [p (by-name (:belongs-to e))]
+                                               {:name   (:entity-name p)
+                                                :fields (generators/admin-display-fields
+                                                         (map (comp keyword :field-name-kebab) (:fields p)))})}]))))
+            admin-edits (when admin? (admin-config-edits output-dir (map :entity-plural (:entities ctx))))
+
             ;; Which of them are already on disk. Checked before anything is
             ;; written: a re-run of the framework's most-recommended command
             ;; replaced all fourteen files with no prompt, no backup and exit 0,
@@ -351,7 +432,8 @@
                               (assoc entry
                                      :action (if existed :overwrite :create)
                                      :path   (.getPath file))))
-                          files))]
+                          files))
+            files (into files (write-edits! (:edits admin-edits) dry-run?))]
         {:success true
          :module-name module-name
          :files files
@@ -367,9 +449,8 @@
                       ;; The first entity's, not <module>-test (BOU-562).
                       (format "Run tests: clojure -M:test --focus %s.%s.core.%s-test"
                               (:base-ns ctx) module-name (:entity-kebab entity))]
-         :warnings (if dry-run?
-                     ["Dry run - no files were written"]
-                     [])})
+         :warnings (cond-> (vec (:warnings admin-edits))
+                     dry-run? (conj "Dry run - no files were written"))})
 
       (catch clojure.lang.ExceptionInfo e
         (if (= ::refuse-overwrite (:type (ex-data e)))
@@ -707,7 +788,29 @@
                                      (str/join ", " (map str clashes))
                                      " — is " (:entity-name entity) " already in it?")
                                 {:type :validation-error})))
-            new-files   (generators/entity-files ctx entity (get-next-migration-number output-dir))
+            admin?      (admin-on? output-dir)
+            parent-plural (some-> parent template/pascal->kebab template/pluralize)
+            new-files   (cond-> (generators/entity-files ctx entity (get-next-migration-number output-dir))
+                          admin?
+                          (into (admin-files
+                                 output-dir
+                                 [[entity {:parent (when parent
+                                                     {:name   parent
+                                                      :fields (generators/admin-display-fields
+                                                               (generators/schema-field-names schema-src parent))})}]])))
+            admin-edits (when admin? (admin-config-edits output-dir [(:entity-plural entity)]))
+            ;; The parent's own admin file gets the editable panel; one
+            ;; generated before admin config existed is left to the admin's
+            ;; read-only detection.
+            parent-edits (when (and admin? parent)
+                           (for [dir   (profile-dirs output-dir)
+                                 :let  [f (resolve-path output-dir (admin-file-path dir parent-plural))]
+                                 :when (.isFile f)
+                                 :let  [r (generators/add-admin-has-many (slurp f) parent-plural entity)]]
+                             (if (= :updated (:status r))
+                               {:file f :content (:content r) :note (str "added the " (:entity-plural entity) " panel")}
+                               (when (= :unrecognised (:status r))
+                                 {:warning (str (.getPath f) ": " (:reason r))}))))
             existing    (->> new-files
                              (map #(resolve-path output-dir (:path %)))
                              (filter #(.exists ^java.io.File %))
@@ -738,6 +841,9 @@
                                        {:path (.getPath ^java.io.File file) :content content
                                         :action :update :note "appended the entity"}))
                                 edits))
+            files       (into files (write-edits! (concat (:edits admin-edits) (filter :file parent-edits))
+                                                  dry-run))
+            warnings    (concat (:warnings admin-edits) (keep :warning parent-edits))
             service-ns  (str (:base-ns ctx) "." module-name "." (:service-ns entity))
             http?       (get-in ctx [:interfaces :http])
             uri         (str "/api/v1/" (:entity-plural entity))]
@@ -750,7 +856,8 @@
                                ["Run the migration: clojure -M:migrate up"
                                 (when http? (str "Restart the system; the API is at " uri " and " uri "/:id"))
                                 (str "Run the tests: clojure -M:test --focus " service-ns "-test")])
-         :warnings    (when dry-run ["Dry run - no files were written"])})
+         :warnings    (not-empty (cond-> (vec warnings)
+                                   dry-run (conj "Dry run - no files were written")))})
       (catch clojure.lang.ExceptionInfo e
         (if (= ::refuse-overwrite (:type (ex-data e)))
           (let [existing (:existing (ex-data e))]

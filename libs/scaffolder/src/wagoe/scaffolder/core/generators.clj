@@ -1850,3 +1850,219 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s%s%s;
             record-name
             port-name
             record-name)))
+
+;; =============================================================================
+;; Admin entity config (BOU-562)
+;; =============================================================================
+;;
+;; With the admin UI on, an entity needs three things before the admin shows
+;; it: resources/conf/<profile>/admin/<plural>.edn, its name in the admin's
+;; :allowlist and an `#include` of that file in :entities. The config files are
+;; Aero, so they are edited with rewrite-clj, which reads `#include` and
+;; `#merge` as syntax and keeps every comment.
+
+(defn- humanize [s]
+  (str/capitalize (str/replace (name s) "-" " ")))
+
+(defn- edn-str
+  "`x` printed without the commas pr-str puts between map entries. Only
+   generated names go in, so no string holds one."
+  [x]
+  (str/replace (pr-str x) ", " " "))
+
+(defn admin-display-fields
+  "The fields that stand for an entity on another's page: its first two own
+   fields, not its keys.
+
+   Pure: true"
+  [field-names]
+  (vec (take 2 (remove #(or (#{:id :created-at :updated-at :deleted-at} %)
+                            (str/ends-with? (name %) "-id"))
+                       field-names))))
+
+(defn schema-field-names
+  "The keys of the Malli map in `(def schema-name …)` within `source`, or nil.
+
+   Pure: true"
+  [source schema-name]
+  (when-let [m (schema-map-zloc source schema-name)]
+    (vec (for [child (take-while some? (iterate z/right (z/down m)))
+               :when (= :vector (z/tag child))
+               :let  [k (first (z/sexpr child))]
+               :when (keyword? k)]
+           k))))
+
+(defn admin-has-many
+  "The editable `:has-many` entry a parent's admin config gets for `child`.
+
+   Pure: true"
+  [child]
+  (let [fk (keyword (str (:belongs-to child) "-id"))]
+    {:entity      (keyword (:entity-plural child))
+     :table       (keyword (:entity-table child))
+     :foreign-key fk
+     :label       (humanize (:entity-plural child))
+     :fields      (vec (take 4 (remove #{fk} (map (comp keyword :field-name-kebab) (:fields child)))))
+     :editable    true}))
+
+(defn admin-entity-file
+  "resources/conf/<profile>/admin/<plural>.edn for `entity`.
+
+   `children` are the entities that belong to it, each getting an editable
+   `:has-many`; `parent` is {:name \"Invoice\" :fields [...]} when it belongs
+   to one, for the banner on its pages. Deletes are hard, as the generated
+   API's are, so a child's ON DELETE CASCADE runs.
+
+   Pure: true"
+  [entity {:keys [children parent]}]
+  (let [fields  (:fields entity)
+        names   (mapv (comp keyword :field-name-kebab) fields)
+        search  (vec (for [f fields :when (#{:string :text :email} (:field-type f))]
+                       (keyword (:field-name-kebab f))))
+        enums   (into {} (for [f fields :when (= :enum (:field-type f))]
+                           [(keyword (:field-name-kebab f))
+                            {:type    :enum
+                             :widget  :select
+                             :options (mapv #(vector % (humanize %)) (rest (:malli-type f)))}]))
+        fk      (when (:belongs-to entity) (keyword (str (:belongs-to entity) "-id")))
+        entry   (fn [k v] (format "%-16s %s" k v))
+        entries (cond-> [(entry ":label" (pr-str (humanize (:entity-plural entity))))
+                         (entry ":table-name" (str ":" (:entity-plural entity)))
+                         (entry ":soft-delete" "false")
+                         (entry ":list-fields" (pr-str (conj (vec (remove #{fk} names)) :created-at)))]
+                  (seq search) (conj (entry ":search-fields" (pr-str search)))
+                  :always      (conj (entry ":hide-fields" "#{:deleted-at}")
+                                     (entry ":readonly-fields" "#{:id :created-at :updated-at}"))
+                  (seq enums)  (conj (entry ":fields" (edn-str enums)))
+                  (seq children)
+                  (conj (entry ":has-many" (str "[" (str/join (str "\n" (apply str (repeat 20 " ")))
+                                                              (map (comp edn-str admin-has-many) children))
+                                                "]")))
+                  parent
+                  (conj (entry ":parent-context" (edn-str {:label (:name parent) :fields (:fields parent)}))))]
+    (str "{:" (:entity-plural entity) "\n"
+         " {" (str/join "\n  " entries) "}}\n")))
+
+(defn- key-of [loc]
+  (try (z/sexpr loc) (catch Exception _ ::unreadable)))
+
+(defn- map-val
+  "Zipper at the value of `k` in the map at `loc`, or nil. Walks key/value
+   pairs: `z/get` also matches a value equal to `k`, and :allowlist is both."
+  [loc k]
+  (when (and loc (= :map (z/tag loc)))
+    (loop [kl (z/down loc)]
+      (when-let [vl (some-> kl z/right)]
+        (if (= k (key-of kl)) vl (recur (z/right vl)))))))
+
+(defn- column [loc] (dec (second (z/position loc))))
+
+(defn- append-item
+  "`loc`'s collection with `node` appended: on a new line at the column of
+   its first item when `newline?`, else after a space."
+  [loc node newline?]
+  (if-let [first-child (z/down loc)]
+    (-> loc
+        (z/append-child* (if newline? (n/newlines 1) (n/spaces 1)))
+        (cond-> newline? (z/append-child* (n/spaces (column first-child))))
+        (z/append-child* node))
+    (z/append-child* loc node)))
+
+(defn- append-entry
+  "The map at `loc` with `k v` added on a line of its own, the value in the
+   column the first entry's value is in."
+  [loc k v-src]
+  (let [first-key (z/down loc)
+        col       (or (some-> first-key column) 1)
+        val-col   (or (some-> first-key z/right column) 0)]
+    (-> loc
+        (z/append-child* (n/newlines 1))
+        (z/append-child* (n/spaces col))
+        (z/append-child* (n/keyword-node k))
+        (z/append-child* (n/spaces (max 1 (- val-col col (count (str k))))))
+        (z/append-child* (z/node (z/of-string v-src))))))
+
+(defn- admin-loc [source]
+  (let [admin (-> (z/of-string source {:track-position? true}) (map-val :active) (map-val :wagoe/admin))]
+    (when (and admin (not (false? (some-> (map-val admin :enabled?) key-of))))
+      admin)))
+
+(defn admin-active?
+  "Whether the config.edn `source` switches the admin UI on.
+
+   Pure: true"
+  [source]
+  (try (some? (admin-loc source)) (catch Exception _ false)))
+
+(defn add-admin-entity
+  "config.edn `source` with the entity `plural` in the admin's :allowlist and
+   its file in :entities.
+
+   {:status :updated :content s}, :present, :no-admin, or
+   {:status :unrecognised :reason s} for an :entities that is not a `#merge`.
+
+   Pure: true"
+  [source plural]
+  (try
+    (let [k       (keyword plural)
+          include (str "#include \"admin/" plural ".edn\"")]
+      (if-not (admin-loc source)
+        {:status :no-admin}
+        (let [allow   (some-> (admin-loc source) (map-val :entity-discovery) (map-val :allowlist))
+              step1   (if (and allow (= :set (z/tag allow))
+                               (not (some #{k} (map key-of (take-while some? (iterate z/right (z/down allow)))))))
+                        (z/root-string (append-item allow (n/keyword-node k) false))
+                        source)
+              admin   (admin-loc step1)
+              ents    (map-val admin :entities)
+              merged  (when (and ents (= :reader-macro (z/tag ents))
+                                 (= "merge" (some-> ents z/down z/string)))
+                        (z/right (z/down ents)))
+              result  (cond
+                        (nil? ents)
+                        {:content (z/root-string (append-entry admin :entities (str "#merge [" include "]")))}
+
+                        (not (and merged (= :vector (z/tag merged))))
+                        {:reason (str ":entities is not a #merge of #includes, so add " include " to it")}
+
+                        (some #(= include (z/string %)) (take-while some? (iterate z/right (z/down merged))))
+                        {:content step1}
+
+                        :else
+                        {:content (z/root-string (append-item merged (z/node (z/of-string include)) true))})]
+          (cond
+            (:reason result)            {:status :unrecognised :reason (:reason result)}
+            (= source (:content result)) {:status :present}
+            :else                        {:status :updated :content (:content result)}))))
+    (catch Exception e
+      {:status :unrecognised :reason (str "it could not be read: " (.getMessage e))})))
+
+(defn add-admin-has-many
+  "The admin entity file `source` of `parent-plural` with an editable
+   `:has-many` for `child`. {:status :updated :content s}, :present, or
+   {:status :unrecognised :reason s}.
+
+   Pure: true"
+  [source parent-plural child]
+  (try
+    (let [entity (map-val (z/of-string source {:track-position? true}) (keyword parent-plural))
+          entry  (admin-has-many child)
+          hm     (map-val entity :has-many)]
+      (cond
+        (nil? entity)
+        {:status :unrecognised :reason (str "it does not configure :" parent-plural)}
+
+        (nil? hm)
+        {:status :updated :content (z/root-string (append-entry entity :has-many (str "[" (edn-str entry) "]")))}
+
+        (not= :vector (z/tag hm))
+        {:status :unrecognised :reason "its :has-many is not a vector"}
+
+        (some #(= (:entity entry) (:entity (try (z/sexpr %) (catch Exception _ nil))))
+              (take-while some? (iterate z/right (z/down hm))))
+        {:status :present}
+
+        :else
+        {:status :updated :content (z/root-string (append-item hm (z/node (z/of-string (edn-str entry))) true))}))
+    (catch Exception e
+      {:status :unrecognised :reason (str "it could not be read: " (.getMessage e))})))
