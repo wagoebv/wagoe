@@ -2741,7 +2741,7 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s%s%s;%s"
                                   (line-before placed "        (let [repo    (persistence/create-repository ctx)"
                                                (str "        ;; The rows it refers to are not what this tests.\n"
                                                     "        (db/execute-ddl! ctx \"" integrity "\")\n")))
-                                (add-requires [['db 'wagoe.platform.database]])
+                                (add-requires [['db (symbol "wagoe.platform.database")]])
                                 :content))
             placed    (if (and placed (not workflow?) (= :json (:field-type f)))
                         (left-out-of-round-trip placed k)
