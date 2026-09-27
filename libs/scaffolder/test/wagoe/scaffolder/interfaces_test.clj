@@ -30,7 +30,9 @@
                          :dry-run     true}
                   (some? interfaces) (assoc :interfaces interfaces)))]
     (is (true? (:success result)) (pr-str (:errors result)))
-    (set (map :path (:files result)))))
+    ;; Migration names carry a per-second timestamp; two calls can straddle a second.
+    (set (map #(str/replace (:path %) #"migrations/\d{14}-" "migrations/<ts>-")
+              (:files result)))))
 
 (defn- has-file? [paths suffix]
   (boolean (some #(str/ends-with? % suffix) paths)))
