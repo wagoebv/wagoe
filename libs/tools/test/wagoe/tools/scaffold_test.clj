@@ -348,3 +348,30 @@
       (deref run 10000 nil)
       (fs/delete-tree (fs/parent flag))
       (is seen? "stderr only arrived after the scaffolder exited"))))
+
+;; =============================================================================
+;; BOU-578: help names only commands a generated project has
+;; =============================================================================
+
+(deftest ^:unit help-names-no-command-a-project-lacks
+  ;; A generated project has no wagoe.scaffolder.shell.cli-entry on its
+  ;; classpath: `bb scaffold` injects it for each run.
+  (is (not (str/includes? scaffold/help-text "cli-entry")))
+  (is (not (str/includes? scaffold/help-text "wagoe scaffolder")))
+  (testing "every command it names is one -main dispatches"
+    (let [named (set (map second (re-seq #"bb scaffold ([a-z]+)" scaffold/help-text)))]
+      (is (seq named))
+      (doseq [sub named]
+        (let [ran (atom nil)
+              out (with-redefs [scaffold/run-clojure! #(reset! ran %)]
+                    (:out (run sub "--help")))]
+          (is (not (str/includes? out "Unknown subcommand")) sub)
+          (when @ran
+            (is (= [sub "--help"] @ran) sub)))))))
+
+(deftest ^:unit a-wizard-prints-the-command-it-runs-as-bb-scaffold
+  (let [out (with-out-str
+              (with-in-str "shop\nShop\ny\ny\nname\n1\ny\nn\n\nn\n"
+                (scaffold/wizard-generate)))]
+    (is (str/includes? out "Command: bb scaffold generate --module-name shop"))
+    (is (not (str/includes? out "cli-entry")))))
