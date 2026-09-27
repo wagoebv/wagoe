@@ -18,14 +18,40 @@
 ;; Input helpers
 ;; =============================================================================
 
-(defn- prompt [label]
+(def ^:private max-attempts 3)
+
+(defn- fail!
+  "End the wizard with `msg`. -main prints it and exits 1."
+  [msg]
+  (throw (ex-info msg {:type :validation-error})))
+
+(defn- prompt
+  "Read one trimmed line, or nil at end of input."
+  [label]
   (print (str (cyan "? ") (bold label) ": "))
   (flush)
-  (str/trim (or (read-line) "")))
+  (some-> (read-line) str/trim))
+
+(defn- ask
+  "Return `given` if set, else prompt for `label` up to max-attempts times.
+   `problem` returns an error message for a bad value, or nil. A bad `given`
+   fails at once: re-checking a flag's value cannot change it (BOU-565)."
+  [given label problem]
+  (if given
+    (if-let [msg (problem given)] (fail! msg) given)
+    (loop [attempt 1]
+      (let [input (prompt label)]
+        (when (nil? input)
+          (fail! (str "stdin closed before " label " was entered.")))
+        (let [msg (problem input)]
+          (cond
+            (nil? msg)                input
+            (>= attempt max-attempts) (fail! msg)
+            :else (do (println (red (str "  " msg))) (recur (inc attempt)))))))))
 
 (defn- read-password-once
-  "Read one password. Echoes nothing when given a console; falls back to
-   read-line when `console` is nil.
+  "Read one password, or nil at end of input. Echoes nothing when given a
+   console; falls back to read-line when `console` is nil.
 
    That fallback is load-bearing, not incidental: `bb create-admin` is driven
    non-interactively by the wagoe-setup skill, which pipes the password on
@@ -37,22 +63,36 @@
    pass under CI and block on a real console locally."
   [label console]
   (if console
-    (String. (.readPassword console (str label ": ") (into-array Object [])))
-    (do (print (str label ": ")) (flush) (str/trim (or (read-line) "")))))
+    (some-> (.readPassword console (str label ": ") (into-array Object [])) String.)
+    (do (print (str label ": ")) (flush) (some-> (read-line) str/trim))))
 
-(defn- read-confirmed-password
-  "Prompt for a password twice and validate. Re-prompts until the two entries
-   match, are non-blank, and are at least 8 characters. Returns the password."
-  ([] (read-confirmed-password (System/console)))
-  ([console]
-   (loop []
-     (let [p       (read-password-once "Password" console)
-           confirm (read-password-once "Confirm password" console)]
-       (cond
-         (str/blank? p)   (do (println (red "  Password cannot be empty.")) (recur))
-         (not= p confirm) (do (println (red "  Passwords do not match.")) (recur))
-         (< (count p) 8)  (do (println (red "  Password must be at least 8 characters.")) (recur))
-         :else p)))))
+(defn- password-problem [p confirm]
+  (cond
+    (str/blank? p)   "Password cannot be empty."
+    (not= p confirm) "Passwords do not match."
+    (< (count p) 8)  "Password must be at least 8 characters."))
+
+(def ^:private eof-message
+  "No password on stdin. Pipe one line: printf '%s\\n' \"$PW\" | bb create-admin ...")
+
+(defn- read-admin-password
+  "Piped stdin (`read-secret` nil): read one line and accept or reject it.
+   Interactive: `read-secret` is label -> string, or nil at EOF; ask twice and
+   re-prompt at most max-attempts times."
+  [read-secret]
+  (if-not read-secret
+    (let [p (read-password-once "Password" nil)]
+      (when (nil? p) (fail! eof-message))
+      (if-let [msg (password-problem p p)] (fail! msg) p))
+    (loop [attempt 1]
+      (let [p       (read-secret "Password")
+            confirm (when p (read-secret "Confirm password"))]
+        (when (nil? confirm) (fail! "Password entry ended before it was confirmed."))
+        (let [msg (password-problem p confirm)]
+          (cond
+            (nil? msg)                p
+            (>= attempt max-attempts) (fail! (str msg " Giving up after " max-attempts " attempts."))
+            :else (do (println (red (str "  " msg))) (recur (inc attempt)))))))))
 
 (defn- valid-email? [s]
   (boolean (re-matches #"^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$" s)))
@@ -93,13 +133,91 @@
   (println "  -h, --help       Show this help")
   (println)
   (println (bold "Notes:"))
-  (println "  The password is read from a secure prompt (not echoed), or from stdin")
-  (println "  when one is piped in — which is how a script creates the first admin.")
+  (println "  The password is read from a secure prompt (not echoed) and confirmed.")
+  (println "  With stdin piped, it is read once, from the first line:")
+  (println "    printf '%s\\n' \"$PW\" | bb create-admin --email EMAIL --name NAME")
   (println "  Run database migrations first: clojure -M:migrate up"))
+
+;; =============================================================================
+;; User CLI
+;; =============================================================================
+
+(def ^:private quiet-logback
+  "Logging config for the user CLI subprocess. Its schema setup logs every DDL
+   statement, and a project whose logback.xml writes to stdout printed them all
+   over the wizard (BOU-565). Warnings and errors still reach stderr."
+  "<configuration>
+  <appender name=\"STDERR\" class=\"ch.qos.logback.core.ConsoleAppender\">
+    <target>System.err</target>
+    <encoder><pattern>%-5level %logger{36} - %msg%n</pattern></encoder>
+  </appender>
+  <root level=\"WARN\"><appender-ref ref=\"STDERR\"/></root>
+</configuration>
+")
+
+(defn- user-cli-command [email name logback-path]
+  ["clojure"
+   (str "-J-Dlogback.configurationFile=" logback-path)
+   "-M:user-cli"
+   "create"
+   "--email" email
+   "--name"  name
+   "--role"  "admin"
+   "--password-prompt"])
+
+(defn- create-user! [{:keys [email name password env dir]}]
+  (let [logback (java.io.File/createTempFile "create-admin-logback" ".xml")]
+    (try
+      (spit logback quiet-logback)
+      (apply p/shell
+             (cond-> {:continue true
+                      :in (str password "\n")
+                      :env (assoc (into {} (System/getenv)) "WAG_ENV" env)}
+               dir (assoc :dir dir))
+             (user-cli-command email name (.getAbsolutePath logback)))
+      (finally (.delete logback)))))
 
 ;; =============================================================================
 ;; Main entry point
 ;; =============================================================================
+
+(defn- create-admin!
+  "Run the wizard; returns the exit code."
+  [opts]
+  (let [email (ask (:email opts) "Admin email address"
+                   #(cond (str/blank? %)         "Email is required."
+                          (not (valid-email? %)) "Not a valid email address."))
+        name  (ask (:name opts) "Full name"
+                   #(when (str/blank? %) "Name is required."))
+        env   (or (:env opts) "dev")
+        dir   (:dir opts)]
+
+    (println)
+    (println (bold "Summary"))
+    (println (str "  Email  : " (cyan email)))
+    (println (str "  Name   : " (cyan name)))
+    (println (str "  Role   : " (cyan "admin")))
+    (println (str "  Config : " (cyan env)))
+    (when dir
+      (println (str "  Dir    : " (cyan dir))))
+    (println)
+
+    (let [password (read-admin-password
+                    (when-let [console (System/console)]
+                      #(read-password-once % console)))
+          result   (create-user! {:email email :name name :password password
+                                  :env env :dir dir})]
+      (if (zero? (:exit result))
+        (do
+          (println)
+          (println (green (bold "Admin user created successfully.")))
+          (println (dim (str "  You can now log in at your application with: " email)))
+          0)
+        (do
+          (println)
+          (println (red (bold "Failed to create admin user.")))
+          (println (dim "  See the output above for details."))
+          1)))))
 
 (defn -main [& args]
   (let [opts (parse-args args)]
@@ -113,58 +231,16 @@
     (println (dim "Sets up the first administrator account for your project."))
     (println)
 
-    (let [email (loop []
-                  (let [input (or (:email opts) (prompt "Admin email address"))]
-                    (cond
-                      (str/blank? input)    (do (println (red "  Email is required.")) (recur))
-                      (not (valid-email? input)) (do (println (red "  Not a valid email address.")) (recur))
-                      :else input)))
-
-          name  (loop []
-                  (let [input (or (:name opts) (prompt "Full name"))]
-                    (if (str/blank? input)
-                      (do (println (red "  Name is required.")) (recur))
-                      input)))
-
-          env   (or (:env opts) "dev")
-          dir   (:dir opts)]
-
-      (println)
-      (println (bold "Summary"))
-      (println (str "  Email  : " (cyan email)))
-      (println (str "  Name   : " (cyan name)))
-      (println (str "  Role   : " (cyan "admin")))
-      (println (str "  Config : " (cyan env)))
-      (when dir
-        (println (str "  Dir    : " (cyan dir))))
-      (println)
-
-      (let [password (read-confirmed-password)
-
-            shell-opts (cond-> {:continue true
-                                :in (str password "\n")
-                                :env (assoc (into {} (System/getenv)) "WAG_ENV" env)}
-                         dir (assoc :dir dir))
-
-            result (p/shell
-                    shell-opts
-                    "clojure"
-                    "-M:user-cli"
-                    "create"
-                    "--email" email
-                    "--name"  name
-                    "--role"  "admin"
-                    "--password-prompt")]
-        (if (zero? (:exit result))
-          (do
-            (println)
-            (println (green (bold "Admin user created successfully.")))
-            (println (dim (str "  You can now log in at your application with: " email))))
-          (do
-            (println)
-            (println (red (bold "Failed to create admin user.")))
-            (println (dim "  See the output above for details."))
-            (System/exit 1)))))))
+    (let [exit (try
+                 (create-admin! opts)
+                 (catch clojure.lang.ExceptionInfo e
+                   (if (= :validation-error (:type (ex-data e)))
+                     (binding [*out* *err*]
+                       (println (red (str "Error: " (ex-message e))))
+                       1)
+                     (throw e))))]
+      (when-not (zero? exit)
+        (System/exit exit)))))
 
 ;; Run when executed directly (not via bb.edn task)
 (when (= *file* (System/getProperty "babashka.file"))

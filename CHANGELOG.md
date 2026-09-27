@@ -52,6 +52,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **`bb create-admin` looped forever on one piped password** (BOU-565). Pipe the password once;
+  closed stdin and repeated bad input now exit 1, and schema logging no longer reaches stdout.
 - **`bb setup` overwrote dev and test config and `.env.example`** (BOU-404, BOU-532). It now changes
   only what you answer, lists each change first, and refuses rather than write a lossy merge.
 - **`bb scaffold generate --audit` and `--pagination` are removed** (BOU-483). No generator read

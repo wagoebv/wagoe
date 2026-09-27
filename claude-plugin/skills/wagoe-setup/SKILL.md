@@ -140,11 +140,10 @@ fallback.
 
 ## Step 9 — create the admin user
 
-Generate a strong random password. Pipe it twice — the prompt asks for
-confirmation:
+Generate a strong random password and pipe it once:
 
 ```bash
-printf '%s\n%s\n' "$PW" "$PW" | bb create-admin --email "admin@<name>.test" --name "Admin"
+printf '%s\n' "$PW" | bb create-admin --email "admin@<name>.test" --name "Admin"
 ```
 
 Keep the password for Step 13.
