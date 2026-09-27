@@ -62,6 +62,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **`:wagoe/payment-provider` has no default provider, and `:mock` boots only in dev and test** (BOU-564).
   Set `:provider` explicitly; use `:stripe` or `:mollie` in every other profile.
+- **`:wagoe/tenant` refuses to boot on SQLite, and on H2 without `:allow-h2? true`** (BOU-576).
+  Use `:wagoe/postgresql`; a test profile on H2 adds `:allow-h2? true` under `:wagoe/tenant`.
+- **Tenant slugs, schema names, memberships and invite tokens are unique in the database** (BOU-576).
+  Boot stops, naming the table, if rows already duplicate one; remove the duplicates first.
 
 ### Added
 
@@ -74,6 +78,13 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **`migrate up` failed on a database that had never booted** (BOU-576). Nothing to do; an
+  applied database runs nothing new.
+- **The tenant API answered `400 {"error":null}` on success and 500 on not-found** (BOU-576).
+  Each route answers with the tenant or a typed 400/404/409; a taken slug is now 409, not 400.
+- **Membership reads and updates answered 500** (BOU-576); their timestamps could not be encoded.
+- **A new tenant could take a deleted tenant's slug, and with it that tenant's schema and data** (BOU-576).
+  A slug is now never reused; upgrade if you delete tenants.
 - **`bb setup` and `bb agents:update` ran the `wagoe` on PATH, which could be an older release** (BOU-577).
   Both now use the wagoe-cli wagoe-tools pins; copy `agents:update` from a new project's bb.edn, then run it.
 - **`wagoe add devtools` reads the dashboard port from `DASHBOARD_PORT`** (BOU-577), default 9999.

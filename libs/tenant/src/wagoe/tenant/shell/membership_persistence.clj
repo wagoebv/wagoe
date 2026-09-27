@@ -27,8 +27,9 @@
                                 :updated-at  :updated_at})))
 
 (defn- db->membership-entity
-  "Convert a DB record (snake_case, Instants from next.jdbc) to a membership entity (kebab-case, typed).
-   Timestamp columns come back as java.time.Instant from next.jdbc TIMESTAMPTZ columns."
+  "Convert a DB record (snake_case) to a membership entity (kebab-case, typed).
+   Drivers return a zoned timestamp as Timestamp or OffsetDateTime (H2), which
+   cheshire cannot encode, so each becomes an Instant (BOU-576)."
   [db-record]
   (when db-record
     (-> db-record
@@ -42,7 +43,11 @@
         (update :tenant-id type-conversion/string->uuid)
         (update :user-id type-conversion/string->uuid)
         (update :role type-conversion/string->keyword)
-        (update :status type-conversion/string->keyword))))
+        (update :status type-conversion/string->keyword)
+        (update :invited-at type-conversion/string->instant)
+        (update :accepted-at type-conversion/string->instant)
+        (update :created-at type-conversion/string->instant)
+        (update :updated-at type-conversion/string->instant))))
 
 ;; =============================================================================
 ;; Repository Implementation

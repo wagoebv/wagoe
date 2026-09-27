@@ -38,6 +38,10 @@ will promise.
   build and run on 21, and every CI job that starts a JVM uses it.
   `bb check:jdk` holds those to one number, so a JDK written in one place and
   not another cannot ship.
+
+| Databases
+| PostgreSQL and SQLite, and H2 for tests. MySQL is not supported yet; it is
+  planned after 1.0. Multi-tenancy needs PostgreSQL.
 |===
 
 Lockstep versioning means you never have to work out which `wagoe-user` goes
@@ -201,13 +205,15 @@ rather than a commit message.
 * *One more, in `1.0.0-rc-3`:* `bb scaffold generate --cli` is gone. It named an
   interface the scaffolder has never had a generator for, so no value of the
   flag ever produced one; only a script that passes it is affected.
-* *Six in `1.0.0-rc-4`:* workflow's timestamp columns carry a zone and need
+* *Eight in `1.0.0-rc-4`:* workflow's timestamp columns carry a zone and need
   `migrate up` with replicas stopped; `:wagoe/logging :level` now sets
   Logback's levels; `register-user` throws `:validation-error` for a weak
-  password; and the scaffolder guards generated APIs, makes `date` a `DATE`
-  and refuses unknown field modifiers. Each, with its migration, is under
-  `### Breaking` in `CHANGELOG.md`. Eight additions to the three frozen at
-  `rc-1`, so the list is eleven.
+  password; the scaffolder guards generated APIs, makes `date` a `DATE`
+  and refuses unknown field modifiers; `:wagoe/tenant` refuses to boot on
+  SQLite, and on H2 outside a test profile; and the tenant tables' uniqueness
+  stops a boot on existing duplicates. Each, with its migration, is under
+  `### Breaking` in `CHANGELOG.md`. Ten additions to the three frozen at
+  `rc-1`, so the list is thirteen.
 * Breaking changes that already shipped are in `CHANGELOG.md` under a
   `### Breaking` heading, naming the affected library and the migration.
 * Deprecations are announced under `### Deprecated`.

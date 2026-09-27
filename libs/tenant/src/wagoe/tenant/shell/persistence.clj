@@ -7,11 +7,23 @@
             [wagoe.tenant.schema :as tenant-schema]
             [cheshire.core]
             [clojure.set]
+            [clojure.string :as str]
             [clojure.tools.logging :as log]))
 
 ;; =============================================================================
 ;; Schema Initialization
 ;; =============================================================================
+
+(def ^:private indexes
+  "[name table columns unique?] the generated DDL does not make. Created
+   separately, IF NOT EXISTS, so a table that already exists gets them too.
+   A deleted tenant keeps its slug: its schema is not dropped, and the schema
+   name derives from the slug (BOU-576)."
+  [["uk_tenants_slug" "tenants" ["slug"] true]
+   ["uk_tenants_schema_name" "tenants" ["schema_name"] true]
+   ["uk_tenant_memberships_tenant_user" "tenant_memberships" ["tenant_id" "user_id"] true]
+   ["uk_tenant_member_invites_token_hash" "tenant_member_invites" ["token_hash"] true]
+   ["idx_tenant_member_invites_email" "tenant_member_invites" ["email"] false]])
 
 (defn initialize-tenant-schema!
   "Initialize database schema for tenant entities using Malli schema definitions.
@@ -26,9 +38,18 @@
   [ctx]
   (log/info "Initializing tenant schema from Malli definitions")
   (db/initialize-tables-from-schemas! ctx
-                                             {"tenants" tenant-schema/Tenant
-                                              "tenant_memberships" tenant-schema/TenantMembership
-                                              "tenant_member_invites" tenant-schema/TenantInvite}))
+                                      {"tenants" tenant-schema/Tenant
+                                       "tenant_memberships" tenant-schema/TenantMembership
+                                       "tenant_member_invites" tenant-schema/TenantInvite})
+  (doseq [[index table columns unique?] indexes]
+    (try
+      (db/execute-ddl! ctx (str "CREATE " (when unique? "UNIQUE ") "INDEX IF NOT EXISTS "
+                                index " ON " table " (" (str/join ", " columns) ")"))
+      (catch Exception e
+        (throw (ex-info (str "Cannot make " (str/join ", " columns) " unique on " table
+                             ": rows already share a value. Remove the duplicates, then restart.")
+                        {:type :conflict :table table :columns columns}
+                        e))))))
 
 ;; =============================================================================
 ;; Entity Transformations
@@ -103,18 +124,25 @@
          (db->tenant-entity ctx result)))
      ctx))
 
-  (find-all-tenants [_this {:keys [limit offset include-deleted?] :or {limit 50 offset 0 include-deleted? false}}]
+  (find-all-tenants [_this {:keys [limit offset include-deleted? status search]}]
     (persistence-interceptors/execute-persistence-operation
      :find-all-tenants
-     {:limit limit :offset offset :include-deleted? include-deleted?}
+     {:limit (or limit 50) :offset (or offset 0) :include-deleted? include-deleted?
+      :status status :search search}
      (fn [{:keys [params]}]
-       (let [{:keys [limit offset include-deleted?]} params
+       (let [{:keys [limit offset include-deleted? status search]} params
+             pattern (some->> search str/lower-case (format "%%%s%%"))
+             where   (cond-> [:and]
+                       (not include-deleted?) (conj [:is :deleted_at nil])
+                       status  (conj [:= :status (name status)])
+                       pattern (conj [:or [:like [:lower :name] pattern]
+                                      [:like [:lower :slug] pattern]]))
              query (cond-> {:select [:*]
                             :from [:tenants]
                             :order-by [[:created_at :desc]]
                             :limit limit
                             :offset offset}
-                     (not include-deleted?) (assoc :where [:is :deleted_at nil]))
+                     (next where) (assoc :where where))
              records (db/execute-query! ctx query)]
          (mapv #(db->tenant-entity ctx %) records)))
      ctx))
