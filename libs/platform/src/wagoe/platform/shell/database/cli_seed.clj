@@ -66,24 +66,46 @@
   (println "     clojure -M:seed <path-to-seed-file> --force")
   (println))
 
+(defn parse-args
+  "`[path] [--system ns] [--force]`, in any order."
+  [args]
+  (loop [[a & more] args acc {:force? false :path nil :system nil}]
+    (cond
+      (nil? a)            (update acc :path #(or % seed/default-seed-path))
+      (= "--force" a)     (recur more (assoc acc :force? true))
+      (= "--system" a)    (recur (rest more) (assoc acc :system (first more)))
+      :else               (recur more (update acc :path #(or % a))))))
+
 (defn- seed-and-report
-  [path]
+  [path system-ns]
   (let [result (seed/run-seed! path)]
     (if-let [err (:error result)]
       (do (print-error err)
           (System/exit 1))
-      (let [{:keys [tables rows detail]} (:ok result)]
+      (let [{:keys [tables rows detail inserted]} (:ok result)]
         (println)
         (println "✅ Seeded" rows "row(s) across" tables "table(s)")
         (doseq [{:keys [table rows]} detail]
           (println (str "   " table ": " rows)))
+        ;; After the commit, through the application: a seeded row with a
+        ;; workflow gets its instance, in the state the row holds.
+        (when system-ns
+          (try
+            (let [n (seed/run-seed-hooks! system-ns inserted)]
+              (when (pos? n)
+                (println (str "   and " n " seed hook(s) of " system-ns ", workflows among them"))))
+            (catch Exception e
+              (println)
+              (println "❌ The rows are in, but a seed hook failed:")
+              (println (str "   " (ex-message e)))
+              (println)
+              (System/exit 1))))
         (println)
         (System/exit 0)))))
 
 (defn -main
   [& args]
-  (let [force?  (some #{"--force"} args)
-        path    (or (first (remove #{"--force"} args)) seed/default-seed-path)
+  (let [{:keys [force? path system]} (parse-args args)
         ;; The SAME detection the database config uses, not a second reading of
         ;; WAG_ENV. detect-environment resolves, in order:
         ;;   -Denv  >  WAG_ENV  >  ENV  >  ENVIRONMENT  >  "dev"
@@ -101,4 +123,4 @@
     (when (and force? (not (contains? seedable-envs env)))
       (println)
       (println "⚠  --force given: seeding the" env "environment on purpose."))
-    (seed-and-report path)))
+    (seed-and-report path system)))

@@ -69,7 +69,9 @@
                       :where [:= :id (:id entity)]})
       (select-by-id db-ctx (:id entity))))
   (delete [_this id]
-    (db/execute-update! db-ctx {:delete-from :products :where [:= :id id]})))
+    (db/execute-update! db-ctx {:delete-from :products :where [:= :id id]}))
+  (transact [_this f]
+    (db/with-transaction* db-ctx (fn [_] (f)))))
 
 (defn create-repository [db-ctx]
   (->DatabaseProductRepository db-ctx))

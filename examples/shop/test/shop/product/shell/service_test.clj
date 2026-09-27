@@ -10,7 +10,8 @@
                       (find-by-id [_ _id] nil)
                       (find-all [_ _opts] [])
                       (update-entity [_ entity] entity)
-                      (delete [_ _id] nil))
+                      (delete [_ _id] nil)
+                      (transact [_ f] (f)))
           svc (service/create-service mock-repo)
           result (ports/create-product svc {:name "Test"})]
       (is (some? result)))))

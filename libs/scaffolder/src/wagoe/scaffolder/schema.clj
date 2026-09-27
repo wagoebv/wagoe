@@ -99,6 +99,9 @@
     ;; The parent entity, in this module: a required `<parent>_id` relation
     ;; column with a foreign key and an index (BOU-497).
     [:belongs-to {:optional true} [:re template/entity-name-pattern]]
+    ;; The fewest of this entity its parent may have. The parent's create
+    ;; then takes them in the same request (BOU-578).
+    [:min {:optional true} [:int {:min 1}]]
     [:workflow {:optional true} WorkflowSpec]
     [:description {:optional true} :string]]                ; Entity documentation
    [:fn {:error/fn (fn [{e :value} _]
@@ -107,10 +110,25 @@
                           "_id: drop the field " (name (template/belongs-to-clash e))))}
     (complement template/belongs-to-clash)]
    [:fn {:error/fn (fn [{e :value} _]
+                     (str (:name e) " has a minimum but no parent: --min goes with --belongs-to"))}
+    (fn [{:keys [min belongs-to]}] (or (nil? min) (some? belongs-to)))]
+   [:fn {:error/fn (fn [{e :value} _]
                      (str (:name e) "'s workflow makes the field " (name (get-in e [:workflow :field]))
                           ": drop the --field of that name"))}
     (fn [{:keys [fields workflow]}]
       (not-any? #(= (:field workflow) (keyword (name (:name %)))) fields))]])
+
+(def AddSubscriberRequest
+  "Schema for adding an event subscriber to a module (BOU-578). The names go
+   into code, so they are kebab-case."
+  [:map {:title "Add Subscriber Request"}
+   [:module-name :string]
+   [:event [:and :qualified-keyword [:fn #(re-matches #"^[a-z][a-z0-9.-]*/[a-z][a-z0-9-]*$" (subs (str %) 1))]]]
+   [:entity {:optional true} [:maybe [:re #"^[a-z][a-z0-9-]*$"]]]
+   [:name {:optional true} [:maybe [:re #"^[a-z][a-z0-9-]*$"]]]
+   [:base-ns {:optional true} [:maybe :string]]
+   [:dry-run {:optional true} [:maybe :boolean]]
+   [:output-dir {:optional true} [:maybe :string]]])
 
 (def AddEntityRequest
   "Schema for adding an entity to an existing module (BOU-497)."

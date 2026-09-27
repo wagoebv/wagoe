@@ -11,6 +11,7 @@
 ;;   bb scaffold field               -- interactive wizard
 ;;   bb scaffold endpoint            -- interactive wizard
 ;;   bb scaffold adapter             -- interactive wizard
+;;   bb scaffold subscriber [args...] -- add an event subscriber to a module
 ;;   bb scaffold ai "<description>" [--yes] -- AI-assisted module generation
 
 (ns wagoe.tools.scaffold
@@ -161,9 +162,10 @@
 
 (defn build-entity-args
   "`bb scaffold entity` arguments for an entity added to `module`."
-  [module {:keys [name belongs-to fields http public-api workflow] :or {http true}}]
+  [module {:keys [name belongs-to min fields http public-api workflow] :or {http true}}]
   (vec (concat ["entity" "--module-name" module "--entity" name]
                (when belongs-to ["--belongs-to" belongs-to])
+               (when (and belongs-to min) ["--min" (str min)])
                (mapcat #(vector "--field" (field->spec %)) fields)
                (when workflow ["--workflow" (workflow->spec workflow)])
                (when-not http ["--no-http"])
@@ -401,7 +403,8 @@
 ;; Summary display
 ;; =============================================================================
 
-(defn display-generate-summary [module entity fields http web & [public-api]]
+(defn display-generate-summary
+  [module entity fields http web & [public-api {:keys [workflow belongs-to min]}]]
   (println)
   (println (cyan "┌─ Summary ─────────────────────────────────────────────┐"))
   (println (str (cyan "│") " Module:  " (bold module)))
@@ -418,6 +421,10 @@
           ;; The space is not padding: a 14-character name ran into its type.
           (println (str (cyan "│") "   " (format "%-14s" name) " "
                         (format "%-10s" type) mods-str))))))
+  (when workflow
+    (println (str (cyan "│") " Workflow:  " (:field workflow) ": " (str/join " > " (:states workflow)))))
+  (when belongs-to
+    (println (str (cyan "│") " belongs to " belongs-to (when min (str ", at least " min)))))
   (println (str (cyan "│") " Interfaces:  "
                 "HTTP " (if http (green "\u2713") (red "\u2717"))
                 "  Web UI " (if web (green "\u2713") (red "\u2717"))))
@@ -428,6 +435,11 @@
 ;; =============================================================================
 ;; Interactive wizards
 ;; =============================================================================
+
+(defn- print-command
+  "The command a wizard is about to run, as the user would type it."
+  [args]
+  (println (dim (str "Command: bb scaffold " (str/join " " args)))))
 
 (defn wizard-generate []
   (println)
@@ -478,8 +490,7 @@
                                    :fields fields :http http :web web})]
 
     (println)
-    (println (dim (str "Command: clojure -M -m wagoe.scaffolder.shell.cli-entry "
-                       (str/join " " args))))
+    (print-command args)
     (println)
     (if (confirm "Proceed?" true)
       (run-clojure! args)
@@ -549,8 +560,7 @@
                dry-run  (conj "--dry-run"))]
 
     (println)
-    (println (dim (str "Command: clojure -M -m wagoe.scaffolder.shell.cli-entry "
-                       (str/join " " args))))
+    (print-command args)
     (println)
     (if (confirm "Proceed?" true)
       (run-clojure! args)
@@ -591,8 +601,7 @@
                dry-run (conj "--dry-run"))]
 
     (println)
-    (println (dim (str "Command: clojure -M -m wagoe.scaffolder.shell.cli-entry "
-                       (str/join " " args))))
+    (print-command args)
     (println)
     (if (confirm "Proceed?" true)
       (run-clojure! args)
@@ -651,8 +660,7 @@
                                  (when dry-run ["--dry-run"])))]
 
     (println)
-    (println (dim (str "Command: clojure -M -m wagoe.scaffolder.shell.cli-entry "
-                       (str/join " " args))))
+    (print-command args)
     (println)
     (if (confirm "Proceed?" true)
       (run-clojure! args)
@@ -684,6 +692,7 @@
           entities (if (seq (:entities data))
                      (mapv (fn [e] (cond-> {:name (:name e) :fields (vec (:fields e))}
                                      (valid-workflow? (:workflow e)) (assoc :workflow (:workflow e))
+                                     (and (:belongs-to e) (pos-int? (:min e))) (assoc :min (:min e))
                                      ;; A model writes "invoice" as often as "Invoice".
                                      (:belongs-to e) (assoc :belongs-to
                                                             (cond-> (:belongs-to e)
@@ -797,16 +806,14 @@
              ;; An `entity` dry run needs the module on disk, and a dry
              ;; `generate` does not put it there — so only `generate` runs.
              to-run   (if (:dry-run flags) (take 1 commands) commands)]
-         (doseq [{:keys [name fields belongs-to]} entities]
-           (display-generate-summary module name fields http web (boolean public-api))
-           (when belongs-to
-             (println (str "  belongs to " (bold belongs-to)))))
+         (doseq [{:keys [name fields] :as e} entities]
+           (display-generate-summary module name fields http web (boolean public-api) e))
          (println)
          (doseq [args commands]
-           (println (dim (str "Command: clojure -M -m wagoe.scaffolder.shell.cli-entry "
-                              (str/join " " args)))))
+           (print-command args))
          (println)
-         (if (or yes? (confirm "Generate this module?" true))
+         ;; A dry run writes nothing, so there is nothing to confirm.
+         (if (or yes? (:dry-run flags) (confirm "Generate this module?" true))
            ;; In order, and no further once one fails: an entity cannot be added
            ;; to a module that was not generated.
            (let [result (reduce (fn [_ args] (or (run-clojure! args) (reduced nil))) nil to-run)]
@@ -830,6 +837,7 @@
        "  bb scaffold field               Interactive wizard for adding a field\n"
        "  bb scaffold endpoint            Interactive wizard for adding an endpoint\n"
        "  bb scaffold adapter             Interactive wizard for adding an adapter\n"
+       "  bb scaffold subscriber [args]   Add an event subscriber to a module (see below)\n"
        "  bb scaffold ai <description> [--yes]    AI-powered module generation from NL description\n"
        "      [--dry-run] [--fresh] [--output-dir DIR] [--base-ns NS] [--force] [--no-http] [--no-web] [--[no-]public-api]\n"
        "  bb scaffold integrate <module> [--base-ns NS]  Guide integration of a scaffolded module\n"
@@ -840,8 +848,9 @@
        "\n"
        "Non-interactive passthrough (when args are provided directly):\n"
        "  bb scaffold generate --module-name foo --entity Foo --field bar:string\n"
-       "  bb scaffold entity --module-name foo --entity FooLine --belongs-to foo --field qty:int\n"
+       "  bb scaffold entity --module-name foo --entity FooLine --belongs-to foo --min 1 --field qty:int\n"
        "  bb scaffold field --module-name foo --entity Foo --name bar --type string\n"
+       "  bb scaffold subscriber --module-name foo --event :admin/entity-created --entity foos\n"
        "\n"
        "Field spec: name:type[:values=a,b,c][:required][:unique][:default=v]\n"
        "  --field status:enum:values=entered,paid:required:default=entered\n"
@@ -850,16 +859,12 @@
        "A status that only moves forward, as a workflow (generate and entity):\n"
        "  --workflow status:entered>delivered>paid\n"
        "\n"
-       "The wizard delegates to:\n"
-       "  clojure -M -m wagoe.scaffolder.shell.cli-entry <command> [opts]\n"
-       "\n"
        "For AI scaffolding, set one of:\n"
        "  ANTHROPIC_API_KEY, OPENAI_API_KEY, REPLICATE_API_TOKEN,\n"
        "  or start Ollama locally\n"
        "\n"
-       "For full CLI documentation:\n"
-       "  clojure -M -m wagoe.scaffolder.shell.cli-entry --help\n"
-       "  clojure -M -m wagoe.scaffolder.shell.cli-entry generate --help"))
+       "Every option of a command:\n"
+       "  bb scaffold generate --help     (and entity, field, endpoint, adapter, subscriber, ai)"))
 
 ;; =============================================================================
 ;; Main entry point
@@ -890,6 +895,9 @@
       (if (seq rest-args)
         (run-clojure! (into ["entity"] rest-args))
         (run-clojure! ["entity" "--help"]))
+
+      (= sub "subscriber")
+      (run-clojure! (into ["subscriber"] (or (seq rest-args) ["--help"])))
 
       (= sub "field")
       (if (seq rest-args)

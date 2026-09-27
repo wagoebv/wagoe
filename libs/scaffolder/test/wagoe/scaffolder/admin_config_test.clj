@@ -9,9 +9,11 @@
             [clojure.test :refer [deftest is testing]]
             [next.jdbc :as jdbc]
             [wagoe.admin.ports :as admin-ports]
+            [wagoe.admin.core.forms :as admin-forms]
             [wagoe.admin.schema :as admin-schema]
             [wagoe.admin.shell.schema-repository :as schema-repo]
             [wagoe.platform.shell.adapters.database.factory :as db-factory]
+            [wagoe.scaffolder.core.generators :as generators]
             [wagoe.scaffolder.ports :as ports]
             [wagoe.scaffolder.shell.service :as service]))
 
@@ -231,3 +233,37 @@
     (is (:success (ports/generate-module svc {:module-name "billing" :base-ns "bou562c"
                                               :entities entities :output-dir (.getPath dir)})))
     (is (not (.exists (io/file dir "resources/conf/dev/admin/invoices.edn"))))))
+
+(deftest ^:integration a-minimum-reaches-the-parent-s-has-many
+  ;; BOU-578: `--min 1` on the child; the admin enforces it (BOU-570).
+  (let [dir (project!)]
+    (is (:success (ports/generate-module svc {:module-name "billing" :base-ns "bou578a"
+                                              :entities [(first entities)] :output-dir (.getPath dir)})))
+    (is (:success (ports/add-entity svc {:module-name "billing" :base-ns "bou578a"
+                                         :entity (assoc (second entities) :min 1)
+                                         :output-dir (.getPath dir)})))
+    (is (= 1 (get-in (read-admin dir "dev") [:entities :invoices :has-many 0 :min])))
+    (is (empty? (admin-schema/entity-config-errors (read-admin dir "dev"))))))
+
+(deftest ^:integration a-field-added-to-a-child-joins-its-panel
+  ;; BOU-578: the has-many lists the child's first four fields, and the admin
+  ;; creates the children from them.
+  (let [dir (project!)
+        add (fn [f] (ports/add-field svc {:module-name "billing" :base-ns "bou578b" :entity "InvoiceLineItem"
+                                          :field f :output-dir (.getPath dir)}))]
+    (ports/generate-module svc {:module-name "billing" :base-ns "bou578b"
+                                :entities [(first entities)] :output-dir (.getPath dir)})
+    (ports/add-entity svc {:module-name "billing" :base-ns "bou578b" :entity (assoc (second entities) :min 1)
+                           :output-dir (.getPath dir)})
+    (is (:success (add {:name :unit-price :type :int :required true})))
+    (is (:success (add {:name :vat-rate :type :int :required false})))
+    (is (:success (add {:name :note :type :string :required false})))
+    (is (:success (add {:name :sku :type :string :required true})))
+    (doseq [env ["dev" "test"]]
+      (is (= [:description :quantity :unit-price :vat-rate :sku]
+             (get-in (read-admin dir env) [:entities :invoices :has-many 0 :fields]))
+          "the first four, as the scaffolder lists them, and any required one: the admin creates from them"))))
+
+(deftest ^:unit the-api-takes-as-many-children-as-the-admin
+  ;; BOU-578: one cap for a create with children, whichever door it comes in by.
+  (is (= admin-forms/max-child-rows generators/max-children)))

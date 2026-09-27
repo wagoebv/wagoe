@@ -71,6 +71,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **`bb scaffold generate|entity --workflow status:entered>delivered>paid`** (BOU-569). The status
   becomes a workflow that API and admin rows both start, moved by `POST /<entities>/:id/transition`.
+- **`bb scaffold entity --belongs-to invoice --min 1`** (BOU-578). The invoice API creates its line items
+  in the same request and transaction, refuses fewer, and the admin gets `:min`.
+- **`bb scaffold subscriber --module-name m --event :admin/entity-created`** (BOU-578). Writes an event
+  subscriber component, its handler and test, started when the event bus is on.
 
 ### Fixed
 
@@ -88,6 +92,11 @@ for what is public API, what is internal, and how deprecations are announced.
 - **Scaffolded migrations lost their indexes on SQLite and failed on PostgreSQL and MySQL** (BOU-569).
   Add `--;;` to older ones; an existing SQLite database needs a new migration creating the missing indexes.
 - **`bb scaffold ai --help` answered "Unknown option"** (BOU-569). It prints the usage.
+- **`bb db:seed` put a seeded delivered or paid row's workflow in its first state** (BOU-578). State it in
+  the seed row (`:status :delivered`); the instance starts there.
+- **`bb scaffold` help pointed at commands a project lacks, and `entity --help` printed the global help**
+  (BOU-578). Every `--help` now runs in a generated project; `scaffold ai --dry-run` no longer asks.
+- **`bb ai admin-entity` refused an unknown key without naming the valid ones** (BOU-578). It lists them.
 - **An admin create required hidden and defaulted fields, and a 422 marked no field** (BOU-570).
   Drop `:required false` workarounds; required textareas and selects now carry `required`.
 - **`bb ai gen-tests` wrote tests that did not compile, and `bb ai admin-entity` invented keys** (BOU-572).

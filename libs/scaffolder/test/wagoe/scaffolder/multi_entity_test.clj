@@ -137,10 +137,13 @@
         (is (= content (get after path)) path)))
 
     (testing "schema.clj and ports.clj keep what they had and gain a section"
-      (doseq [[path content] before
-              :when (re-find #"/(schema|ports)\.clj$" path)]
-        (is (str/starts-with? (get after path) (str/trimr content)) path)
-        (is (str/includes? (get after path) "InvoiceLineItem") path)))
+      ;; And the invoice's create request takes its line items (BOU-578).
+      (let [entry "\n   [:invoice-line-items {:optional true} [:vector {:max 500} [:map [:description :string] [:quantity :int]]]]"]
+        (doseq [[path content] before
+                :when (re-find #"/(schema|ports)\.clj$" path)]
+          (is (str/starts-with? (str/replace-first (get after path) entry "") (str/trimr content)) path)
+          (is (str/includes? (get after path) "InvoiceLineItem") path))
+        (is (str/includes? (get after "src/bou497a/billing/schema.clj") entry))))
 
     (testing "the entity's own files are new"
       (let [added (set (remove (set (keys before)) (keys after)))]

@@ -255,6 +255,24 @@
         (conj (str "For the admin's " (str/join ", " (map :entity-plural wf))
                    " to get a workflow too, switch on the event bus: wagoe add events"))))))
 
+(defn- children-of-first
+  "`ctx` with every entity that belongs to the first one marked :child-of:
+   the first entity's create takes them (BOU-578)."
+  [ctx]
+  (let [first-kebab (:entity-kebab (first (:entities ctx)))]
+    (update ctx :entities
+            (fn [es] (mapv #(cond-> % (= first-kebab (:belongs-to %)) (assoc :child-of true)) es)))))
+
+(defn- minimum-problem
+  "Why a minimum cannot be kept, or nil: only the first entity's create takes
+   children, so a child of any other has no create that could."
+  [entities]
+  (let [first-name (template/pascal->kebab (:name (first entities)))]
+    (some #(when (and (:min %) (not= first-name (some-> (:belongs-to %) template/pascal->kebab)))
+             (str (:name %) " has --min, but " (:belongs-to %) " is not the module's first entity ("
+                  (:name (first entities)) "): only the first entity's create takes children."))
+          entities)))
+
 (def ^:private module-generation-request-validator (m/validator schema/ModuleGenerationRequest))
 (def ^:private module-generation-request-explainer (m/explainer schema/ModuleGenerationRequest))
 
@@ -267,6 +285,9 @@
 ;; refuses every parent delete against) (BOU-480 review).
 (def ^:private field-definition-validator (m/validator schema/FieldDefinition))
 (def ^:private field-definition-explainer (m/explainer schema/FieldDefinition))
+
+(def ^:private add-subscriber-request-validator (m/validator schema/AddSubscriberRequest))
+(def ^:private add-subscriber-request-explainer (m/explainer schema/AddSubscriberRequest))
 
 (def ^:private add-entity-request-validator (m/validator schema/AddEntityRequest))
 (def ^:private add-entity-request-explainer (m/explainer schema/AddEntityRequest))
@@ -285,12 +306,13 @@
           (throw (ex-info (str "Invalid module generation request: " (pr-str explanation))
                           {:type :validation-error
                            :errors explanation}))))
-      (when-let [problem (entities-problem (:entities request))]
+      (when-let [problem (or (entities-problem (:entities request))
+                             (minimum-problem (:entities request)))]
         (throw (ex-info (str "Invalid module generation request: " problem)
                         {:type :validation-error})))
 
       ;; Build template context
-      (let [ctx (template/build-module-context request)
+      (let [ctx (children-of-first (template/build-module-context request))
             module-name (:module-name ctx)
             ;; Directory name, not namespace segment — see template/ns->path.
             module-path (:module-path ctx)
@@ -325,9 +347,14 @@
             web? (get-in ctx [:interfaces :web] true)
 
             ;; Generate source file contents
-            schema-content (reduce #(generators/append-section %1 (generators/entity-schema-section %2))
-                                   (generators/generate-schema-file ctx)
-                                   more)
+            schema-content (reduce (fn [src child]
+                                     (let [r (generators/add-children-to-schema src (:entity-name entity) child)]
+                                       (or (:content r)
+                                           (throw (ex-info (:error r) {:type :validation-error})))))
+                                   (reduce #(generators/append-section %1 (generators/entity-schema-section %2))
+                                           (generators/generate-schema-file ctx)
+                                           more)
+                                   (filter :child-of more))
             ports-content (reduce #(generators/append-section %1 (generators/entity-ports-section %2))
                                   (generators/generate-ports-file ctx)
                                   more)
@@ -632,8 +659,26 @@
                                    ""
                                    (str " (from " output-dir ")")))
             existing      (when (.isFile schema-file) (slurp schema-file))
+            ;; A child created with its parent: the parent's create request
+            ;; takes the field too, and so does the admin's panel (BOU-578).
+            nested        (when existing
+                            (generators/add-field-to-children-entry existing entity-plural field))
+            existing      (if (= :inserted (:status nested)) (:content nested) existing)
             edit          (when existing
                             (generators/add-field-to-schema existing entity field))
+            edit          (if (and (= :inserted (:status nested)) (not= :updated (:status edit)))
+                            (assoc edit :status :updated :content existing :schemas [])
+                            edit)
+            panel-edits   (when-let [parent (:parent nested)]
+                            (let [parent-plural (template/pluralize (template/pascal->kebab parent))]
+                              (for [dir   (when (.isDirectory (resolve-path output-dir "resources/conf"))
+                                            (profile-dirs output-dir))
+                                    :let  [f (resolve-path output-dir (admin-file-path dir parent-plural))]
+                                    :when (.isFile f)
+                                    :let  [r (generators/add-admin-has-many-field (slurp f) parent-plural entity-plural field)]
+                                    :when (= :updated (:status r))]
+                                {:file f :content (:content r)
+                                 :note (str "added " (name (:name field)) " to the " entity-plural " panel")})))
             ;; Every arm consults `edit`, which is pure and is computed for a
             ;; dry run too. A dedicated dry-run arm short-circuited ahead of it
             ;; and promised "would add the field to the entity and request
@@ -708,7 +753,11 @@
                            :action (if dry-run :skip :update)
                            :note (str (when dry-run "dry run — ")
                                       (if dry-run "would add " "added ")
-                                      (by-form (:schemas edit))
+                                      (str/join "; " (cond-> []
+                                                       (seq (:schemas edit)) (conj (by-form (:schemas edit)))
+                                                       (:parent nested)
+                                                       (conj (str (name (:name field)) " to Create" (:parent nested)
+                                                                  "Request's " entity-plural))))
                                       (when remaining (str " — " (problem-desc edit))))}
                     remaining (assoc :manual? true :manual-note remaining))))
 
@@ -728,7 +777,7 @@
               {:path (.getPath schema-file) :action :skip :manual? true
                :note (str (when dry-run "dry run — ") (problem-desc edit))
                :manual-note (remaining-note edit)})
-            all-files (conj (vec written) schema-entry)]
+            all-files (into (conj (vec written) schema-entry) (write-edits! panel-edits dry-run))]
 
         {:success true
          :module-name module-name
@@ -778,6 +827,18 @@
             entity      (template/build-entity-context (:entity request) module-name {:primary? false})
             ctx         (assoc ctx :entities [entity])
             module-root (format "src/%s/%s/" (:base-ns-path ctx) (:module-path ctx))
+            ;; The first entity is the one whose service is shell/service.clj;
+            ;; a further one has a service of its own. Only the first entity's
+            ;; create takes children (BOU-578).
+            parent-first? (and (:belongs-to entity)
+                               (not (.exists (resolve-path output-dir (str module-root "shell/"
+                                                                           (template/kebab->snake (:belongs-to entity))
+                                                                           "_service.clj")))))
+            _ (when (and (:min entity) (not parent-first?))
+                (throw (ex-info (str (:entity-name entity) " has --min, but "
+                                     (template/kebab->pascal (:belongs-to entity))
+                                     " is not the module's first entity: only the first entity's create takes children.")
+                                {:type :validation-error})))
             schema-file (require-existing-file!
                          (resolve-path output-dir (str module-root "schema.clj"))
                          (str "Cannot add an entity to " module-name ": its schema.clj is not there."))
@@ -789,7 +850,23 @@
                          (str "Cannot add an entity to " module-name ": its shell/module_wiring.clj is not there."))
             schema-src  (slurp schema-file)
             ports-src   (slurp ports-file)
-            wiring      (generators/add-entity-to-wiring (slurp wiring-file) ctx entity)
+            wiring-src  (slurp wiring-file)
+            ;; A service from before BOU-578 takes no children, and its
+            ;; wiring must go on building it as it did.
+            service-file (resolve-path output-dir (str module-root "shell/service.clj"))
+            children?   (and (.isFile service-file)
+                             (generators/service-takes-children? (slurp service-file)))
+            ctx         (assoc ctx :service-children? children?)
+            nested?     (and parent-first? children?)
+            _ (when (and (:min entity) (not nested?))
+                (throw (ex-info (str "Cannot keep a minimum: " (.getPath service-file) " creates the "
+                                     module-name " without the entities that belong to it. Replace it, and the :wagoe/"
+                                     module-name "-service and :wagoe/" module-name "-entities init-keys and ig-config"
+                                     " in its module_wiring.clj, with what a new `bb scaffold generate` writes,"
+                                     " then run this again.")
+                                {:type :validation-error})))
+            entity      (cond-> entity nested? (assoc :child-of true))
+            wiring      (generators/add-entity-to-wiring wiring-src ctx entity)
             _ (when (:error wiring)
                 (throw (ex-info (str "Cannot wire " (:entity-name entity) " into "
                                      (.getPath wiring-file) ": " (:error wiring) ".")
@@ -847,6 +924,13 @@
             _ (when (seq existing)
                 (throw (ex-info "refuse-overwrite"
                                 {:type ::refuse-overwrite :existing existing})))
+            schema-src  (if nested?
+                          (let [r (generators/add-children-to-schema schema-src parent entity)]
+                            (or (:content r)
+                                (throw (ex-info (str "Cannot let " parent " be created with its "
+                                                     (:entity-plural entity) ": " (:error r) ".")
+                                                {:type :validation-error}))))
+                          schema-src)
             edits       [{:file schema-file :content (generators/append-section schema-src schema-add)}
                          {:file ports-file :content (generators/append-section ports-src ports-add)}
                          {:file wiring-file :content (:content wiring)}]
@@ -873,7 +957,11 @@
             files       (into (into files (:kept admin-out))
                               (write-edits! (concat (:edits admin-edits) (filter :file parent-edits))
                                             dry-run))
-            warnings    (concat (:warnings admin-edits) (keep :warning parent-edits))
+            warnings    (cond-> (vec (concat (:warnings admin-edits) (keep :warning parent-edits)))
+                          (and parent-first? (not nested?))
+                          (conj (str parent "'s create does not take " (:entity-plural entity)
+                                     ": its service.clj predates that. Create them through /api/v1/"
+                                     (:entity-plural entity) ".")))
             service-ns  (str (:base-ns ctx) "." module-name "." (:service-ns entity))
             http?       (get-in ctx [:interfaces :http])
             uri         (str "/api/v1/" (:entity-plural entity))]
@@ -902,6 +990,74 @@
       (catch Exception e
         {:success false :module-name (:module-name request) :files []
          :errors [(str "Add entity failed: " (.getMessage e))]})))
+
+  (add-subscriber [_this request]
+    (try
+      (when-not (add-subscriber-request-validator request)
+        (throw (ex-info (str "Invalid subscriber: "
+                             (pr-str (me/humanize (add-subscriber-request-explainer request))))
+                        {:type :validation-error})))
+      (let [{:keys [module-name dry-run event entity]} request
+            output-dir  (or (:output-dir request) ".")
+            ctx         (template/build-module-context
+                         {:module-name module-name
+                          :base-ns     (or (:base-ns request) "wagoe")
+                          :entities    []})
+            sub         (generators/subscriber-context ctx event entity (:name request))
+            module-root (format "src/%s/%s/" (:base-ns-path ctx) (:module-path ctx))
+            wiring-file (require-existing-file!
+                         (resolve-path output-dir (str module-root "shell/module_wiring.clj"))
+                         (str "Cannot add a subscriber to " module-name ": its shell/module_wiring.clj is not there."))
+            service-file (resolve-path output-dir (str module-root "shell/service.clj"))
+            ctx         (assoc ctx :service-children? (and (.isFile service-file)
+                                                           (generators/service-takes-children? (slurp service-file))))
+            wiring      (generators/add-subscriber-to-wiring (slurp wiring-file) ctx sub)
+            _ (when (:error wiring)
+                (throw (ex-info (str "Cannot wire the subscriber into " (.getPath wiring-file) ": "
+                                     (:error wiring) ".")
+                                {:type :validation-error})))
+            new-files   [{:path (str "src/" (:path sub) ".clj") :content (generators/generate-subscriber-file sub)}
+                         {:path (str "test/" (:path sub) "_test.clj") :content (generators/generate-subscriber-test-file sub)}]
+            existing    (->> new-files
+                             (map #(resolve-path output-dir (:path %)))
+                             (filter #(.exists ^java.io.File %))
+                             (mapv #(.getPath ^java.io.File %)))
+            _ (when (seq existing)
+                (throw (ex-info "refuse-overwrite" {:type ::refuse-overwrite :existing existing})))
+            files       (conj (mapv (fn [{:keys [path content]}]
+                                      (let [file (resolve-path output-dir path)]
+                                        (when-not dry-run
+                                          (.mkdirs (.getParentFile file))
+                                          (spit file content))
+                                        {:path (.getPath file) :content content
+                                         :action (if dry-run :skip :create)}))
+                                    new-files)
+                              (do (when-not dry-run (spit wiring-file (:content wiring)))
+                                  {:path (.getPath ^java.io.File wiring-file) :content (:content wiring)
+                                   :action (if dry-run :skip :update) :note "requires the subscriber"}))
+            configs     (keep #(let [f (profile-config %)] (when (.isFile f) (slurp f)))
+                              (when (.isDirectory (resolve-path output-dir "resources/conf"))
+                                (profile-dirs output-dir)))]
+        {:success     true
+         :module-name module-name
+         :command     :subscriber
+         :files       files
+         :next-steps  (cond-> []
+                        (not-any? #(generators/module-active? % :wagoe/events) configs)
+                        (conj "Switch the event bus on: wagoe add events. The subscriber starts only with it")
+                        :always
+                        (conj (str "Fill in handle in " (:ns sub))
+                              (str "Run its test: clojure -M:test --focus " (:ns sub) "-test")))
+         :warnings    (when dry-run ["Dry run - no files were written"])})
+      (catch clojure.lang.ExceptionInfo e
+        (if (= ::refuse-overwrite (:type (ex-data e)))
+          {:success false :module-name (:module-name request) :files []
+           :errors (into ["The subscriber already exists:"] (map #(str "  " %) (:existing (ex-data e))))}
+          {:success false :module-name (:module-name request) :files []
+           :errors [(str "Add subscriber failed: " (.getMessage e))]}))
+      (catch Exception e
+        {:success false :module-name (:module-name request) :files []
+         :errors [(str "Add subscriber failed: " (.getMessage e))]})))
 
   (add-endpoint [_this request]
     (try
