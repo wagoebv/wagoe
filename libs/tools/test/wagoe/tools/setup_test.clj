@@ -958,6 +958,7 @@
                   "\n   :wagoe/dashboard {:port 9999}")))
       (let [dev-before  (slurp (conf-file dir "dev"))
             test-before (slurp (conf-file dir "test"))
+            env-before  (slurp (fs/file dir ".env.example"))
             [exit out]  (run-setup dir "" "--prod" "true")
             prod        (:active (conf dir "prod"))]
         (is (nil? exit) out)
@@ -974,7 +975,12 @@
         (is (not (contains? prod :wagoe/dashboard)) "the platform refuses it outside :dev")
         (is (not (contains? prod :wagoe/dev-error-enricher)))
         (is (= dev-before (slurp (conf-file dir "dev"))))
-        (is (= test-before (slurp (conf-file dir "test"))))))))
+        (is (= test-before (slurp (conf-file dir "test"))))
+        (testing ".env.example names the Redis variables prod's event bus reads"
+          (let [env-ex (slurp (fs/file dir ".env.example"))]
+            (is (str/starts-with? env-ex env-before) "only added to")
+            (doseq [v ["REDIS_HOST=" "REDIS_PORT=" "REDIS_PASSWORD="]]
+              (is (str/includes? env-ex v)))))))))
 
 (deftest ^:unit prod-gets-devs-admin-and-its-entity-files
   (with-project

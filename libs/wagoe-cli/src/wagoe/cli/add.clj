@@ -173,6 +173,19 @@
     "dev"  (or dev-config-snippet config-snippet)
     config-snippet))
 
+(defn project-name
+  "The project's name: dev's :wagoe/settings :name less its profile suffix,
+   as `bb setup` reads it, else the directory's name."
+  [dir]
+  (or (try
+        (some-> (get-in (edn/read-string {:default (fn [_ v] v)}
+                                         (slurp (io/file dir "resources/conf/dev/config.edn")))
+                        [:active :wagoe/settings :name])
+                (str/replace #"-(dev|development|test)$" "")
+                not-empty)
+        (catch Exception _ nil))
+      (.getName (.getAbsoluteFile (io/file dir)))))
+
 (defn- target-profiles
   "The existing profiles `module` belongs in, sorted, each with its snippet. A
    dev-scoped module goes in dev only; no profile is ever created."
@@ -180,7 +193,8 @@
   (for [env   (sort (.list (io/file dir "resources/conf")))
         :when (and (.exists (io/file dir "resources/conf" env "config.edn"))
                    (or (not= :dev scope) (= "dev" env)))
-        :let  [snippet (snippet-for module env)]
+        :let  [snippet (some-> (snippet-for module env)
+                               (str/replace "{{project-name}}" (project-name dir)))]
         :when (seq snippet)]
     [env snippet]))
 
@@ -202,6 +216,25 @@
                  (str/includes? (slurp (io/file dir "resources/conf" env "config.edn"))
                                 (str ":" (config-key-of snippet))))
                (target-profiles dir module))))
+
+(defn patch-env-example!
+  "Append to .env.example each of the module's :prod-env-vars it lacks, once
+   `results` show a profile other than dev and test runs the module. Lines
+   already there are never changed. Returns the variables added."
+  [dir {:keys [prod-env-vars]} results]
+  (let [f (io/file dir ".env.example")]
+    (when (and (seq prod-env-vars) (.exists f)
+               (some (fn [[env r]] (and (not (#{"dev" "test"} env)) (#{:added :present} r)))
+                     results))
+      (let [text    (slurp f)
+            have    (set (map second (re-seq #"(?m)^\s*([A-Z][A-Z0-9_]*)=" text)))
+            missing (remove have prod-env-vars)]
+        (when (seq missing)
+          (spit f (str text
+                       (when-not (or (str/blank? text) (str/ends-with? text "\n")) "\n")
+                       (when-not (str/blank? text) "\n")
+                       (str/join "\n" (map #(str % "=") missing)) "\n"))
+          (vec missing))))))
 
 ;; ─── AGENTS.md patching ──────────────────────────────────────────────────────
 
@@ -297,11 +330,14 @@
                   :unreadable         (do (println "  deps.edn: could not be read as EDN, so nothing was written.")
                                           (println by-hand))
                   (println (str "  deps.edn: unchanged — " (:clojars module) " is already there"))))
-              (doseq [[env result] (patch-configs! dir module)]
-                (println (str "  " env ": " (case result
-                                              :added     "added to config.edn"
-                                              :present   "already in config.edn"
-                                              :no-active "no :active map in config.edn, nothing written"))))
+              (let [results (patch-configs! dir module)]
+                (doseq [[env result] results]
+                  (println (str "  " env ": " (case result
+                                                 :added     "added to config.edn"
+                                                 :present   "already in config.edn"
+                                                 :no-active "no :active map in config.edn, nothing written"))))
+                (when-let [vs (patch-env-example! dir module results)]
+                  (println (str "  .env.example: added " (str/join ", " vs)))))
               (patch-agents-md! dir module)
               (println (str "\n" module-name " added"))
               ;; Said at install time, not left on a page the user reads later:

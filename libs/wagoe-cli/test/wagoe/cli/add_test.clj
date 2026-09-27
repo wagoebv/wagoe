@@ -252,3 +252,30 @@
           "the platform refuses the dashboard outside :dev")
       (finally
         (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))
+
+(deftest ^:integration events-in-prod-is-named-for-the-project-and-its-env-vars-listed
+  ;; The group was "my-app" in every project, and .env.example never named the
+  ;; Redis variables prod now needs.
+  (let [tmp    (with-profiles! "events-name")
+        module (cat/find-module "events")
+        env-ex (io/file tmp ".env.example")]
+    (try
+      (spit (io/file tmp "resources/conf/dev/config.edn")
+            "{\n :active\n {:wagoe/settings {:name \"shop-dev\"}\n }\n}")
+      (spit env-ex "# mine\nJWT_SECRET=keep-me\nREDIS_PORT=6380\n")
+      (add/patch-env-example! tmp module (add/patch-configs! tmp module))
+      (is (= "shop" (get-in (active-of tmp "prod") [:wagoe/events :group])))
+      (let [text (slurp env-ex)]
+        (is (str/starts-with? text "# mine\nJWT_SECRET=keep-me\nREDIS_PORT=6380\n") "only added to")
+        (is (str/includes? text "REDIS_HOST="))
+        (is (str/includes? text "REDIS_PASSWORD="))
+        (is (= 1 (count (re-seq #"(?m)^REDIS_PORT=" text)))))
+      (testing "and nothing when no profile runs it on Redis"
+        (let [before (slurp env-ex)]
+          (doseq [f (reverse (file-seq (io/file tmp "resources/conf/prod")))] (.delete f))
+          (spit env-ex "X=1\n")
+          (add/patch-env-example! tmp module [["dev" :present] ["test" :present]])
+          (is (= "X=1\n" (slurp env-ex)))
+          (is (some? before))))
+      (finally
+        (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))

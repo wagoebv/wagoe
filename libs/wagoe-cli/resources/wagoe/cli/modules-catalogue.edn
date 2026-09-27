@@ -249,7 +249,9 @@
    :tier                :stable
    ;; Dev runs in one process, so it needs no Redis; prod does (BOU-564).
    :dev-config-snippet  "  :wagoe/events\n  {:provider :memory}\n"
-   :config-snippet      "  :wagoe/events\n  {:provider :redis\n   :host     #env REDIS_HOST\n   :port     #long #or [#env REDIS_PORT 6379]\n   :password #env REDIS_PASSWORD\n   :group    \"my-app\"}\n"
+   :config-snippet      "  :wagoe/events\n  {:provider :redis\n   :host     #env REDIS_HOST\n   :port     #long #or [#env REDIS_PORT 6379]\n   :password #env REDIS_PASSWORD\n   :group    \"{{project-name}}\"}\n"
+   ;; What prod's Redis bus reads; `wagoe add` lists them in .env.example.
+   :prod-env-vars       ["REDIS_HOST" "REDIS_PORT" "REDIS_PASSWORD"]
    :test-config-snippet "  :wagoe/events\n  {:provider :memory}\n"
    :add-command         "wagoe add events"
    :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/events/AGENTS.md"}

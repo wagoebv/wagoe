@@ -505,6 +505,10 @@
            (when (= (:cache spec) :redis)
              (into ["# Redis Cache"]
                    (concat (map #(str % "=") (get component-env-vars :redis)) [""])))
+           ;; Set by plan when a prod it writes runs the event bus on Redis.
+           (when (:events-redis? spec)
+             (into ["# Redis event bus (prod profile)"]
+                   (concat (map #(str % "=") (get component-env-vars :redis)) [""])))
            (when (= (:email spec) :smtp)
              (into ["# SMTP Email"]
                    (concat (map #(str % "=") (get component-env-vars :smtp)) [""])))]))
@@ -961,11 +965,17 @@
                                                 {:switch-db? (not= "test" env) :env env
                                                  :spec spec :nl %2}))
                                true))
+        redis-bus? (some (fn [{:keys [path status content]}]
+                           (and (= (conf-rel "prod") path) (= :new status)
+                                (= :redis (some-> content read-edn first :active
+                                                  :wagoe/events :provider))))
+                         configs)
+        env-spec  (cond-> spec redis-bus? (assoc :events-redis? true))
         env-ex    (if (or existing? (read-target ".env.example"))
-                    (let [p (plan-file ".env.example" nil #(merge-env-example %1 spec %2) false)]
+                    (let [p (plan-file ".env.example" nil #(merge-env-example %1 env-spec %2) false)]
                       (if (= :skipped (:status p))
                         ;; Missing in an existing project: only what the answers add.
-                        (let [{:keys [text changes]} (merge-env-example "" spec "\n")]
+                        (let [{:keys [text changes]} (merge-env-example "" env-spec "\n")]
                           (if (seq changes)
                             {:path ".env.example" :status :new :content text :old nil :changes changes}
                             p))
