@@ -113,7 +113,8 @@
           (doseq [e [:invoices :invoice-line-items]]
             (is (:valid? (admin-schema/validate-entity-config (config e))) (str e)))
           (is (= [{:entity :invoice-line-items :table :invoice_line_items :foreign-key :invoice-id
-                   :label "Invoice line items" :fields [:description :quantity] :editable true}]
+                   :label "Invoice line items" :fields [:description :quantity] :editable true
+                   :on-delete :cascade}]
                  (:has-many (config :invoices))))
           (is (= {:label "Invoice" :fields [:number :status]}
                  (:parent-context (config :invoice-line-items))))
@@ -132,6 +133,7 @@
           (is (contains? (get-in admin [:entity-discovery :allowlist]) :invoice-line-items))
           (is (= [:invoice-line-items] (map :entity (get-in admin [:entities :invoices :has-many]))))
           (is (true? (get-in admin [:entities :invoices :has-many 0 :editable])))
+          (is (= :cascade (get-in admin [:entities :invoices :has-many 0 :on-delete])))
           (is (= {:label "Invoice" :fields [:number :status]}
                  (get-in admin [:entities :invoice-line-items :parent-context])))))
       (is (.isFile (io/file dir "resources/conf/prod/admin/invoice-line-items.edn"))))))

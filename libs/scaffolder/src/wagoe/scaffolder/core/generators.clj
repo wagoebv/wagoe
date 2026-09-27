@@ -1903,7 +1903,10 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s%s%s;
      :foreign-key fk
      :label       (humanize (:entity-plural child))
      :fields      (vec (take 4 (remove #{fk} (map (comp keyword :field-name-kebab) (:fields child)))))
-     :editable    true}))
+     :editable    true
+     ;; As the migration's foreign key does: a child has no life without its
+     ;; parent. The admin restricts a delete unless told otherwise.
+     :on-delete   :cascade}))
 
 (defn admin-entity-file
   "resources/conf/<profile>/admin/<plural>.edn for `entity`.
