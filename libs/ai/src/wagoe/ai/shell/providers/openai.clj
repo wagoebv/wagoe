@@ -14,6 +14,19 @@
 ;; HTTP helper
 ;; =============================================================================
 
+(def ^:private output-caps
+  "Chat models that reject an output limit above 4096."
+  #"^(gpt-3\.5|gpt-4-|gpt-4$)")
+
+(defn- token-limit
+  "[field limit] for `model`. o-series and gpt-5 models reject max_tokens and
+   read max_completion_tokens; OpenAI-compatible servers only know max_tokens."
+  [model limit]
+  (let [m (str model)]
+    (if (re-find #"^(o\d|gpt-5)" m)
+      [:max_completion_tokens limit]
+      [:max_tokens (cond-> limit (re-find output-caps m) (min 4096))])))
+
 (defn- chat-completion-request!
   "POST to /v1/chat/completions and return parsed JSON response.
 
@@ -46,7 +59,7 @@
                                             messages)}
                      (:temperature opts) (assoc :temperature (:temperature opts))
                      (:response-format opts) (assoc :response_format (:response-format opts))
-                     (:max-tokens opts)  (assoc :max_tokens (:max-tokens opts)))
+                     (:max-tokens opts)  (conj (token-limit model (:max-tokens opts))))
         response   (http/post url
                               {:body               (json/generate-string body)
                                :content-type       :json
@@ -69,18 +82,19 @@
       (try
         (log/debug "openai complete" {:model effective-model :messages (count messages)})
         (let [resp   (chat-completion-request! base-url api-key effective-model messages
-                                                (update opts :timeout #(or % timeout)))
+                                               (update opts :timeout #(or % timeout)))
               text   (get-in resp [:choices 0 :message :content])
               tokens (get-in resp [:usage :total_tokens] 0)]
-          {:text     text
-           :tokens   tokens
-           :base-url base-url
-           :provider :openai
-           :model    effective-model})
+          {:text       text
+           :tokens     tokens
+           :truncated? (= "length" (get-in resp [:choices 0 :finish_reason]))
+           :base-url   base-url
+           :provider   :openai
+           :model      effective-model})
         (catch Exception e
           (log/warn (str "openai complete failed: " (.getMessage e))
                     {:model effective-model})
-          {:error    (.getMessage e)
+          {:error    (or (not-empty (ex-message e)) (.getName (class e)))
            ;; Status and body come from ex-data, not the message: a 429 for
            ;; rate-limiting and a 429 for an exhausted balance need opposite
            ;; advice, and (.getMessage e) is "clj-http: status 429" for both.
