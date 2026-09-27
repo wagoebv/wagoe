@@ -82,6 +82,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **CLI polish** (BOU-580): every `wagoe` command answers `--help`; config keys `bb setup`, `bb scaffold
+  integrate` and `wagoe add` append follow the file's indentation; `bb ai` help lists Replicate's variables.
+- **The `(go)` box shows the dev dashboard URL** at the port it bound, and `bb ai admin-entity` names only
+  the config steps still missing (BOU-580).
 - **An admin event's `:id` was a string on SQLite and a UUID on PostgreSQL** (BOU-579). It is a UUID
   for a UUID id column on both; drop any string handling in subscribers.
 - **`migrate up` created tables for modules that were not switched on** (BOU-579). It now migrates
