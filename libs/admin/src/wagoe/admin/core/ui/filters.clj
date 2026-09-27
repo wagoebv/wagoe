@@ -176,6 +176,7 @@
       {:name (str "filters[" (name field-name) "][op]")
        :hx-get (str "/web/admin/" (name entity-name) "/table")
        :hx-target "#filter-table-container"
+       :hx-swap "outerHTML"
        :hx-trigger "change"
        :hx-include "closest form"}
       (for [[op label] operators]
@@ -192,6 +193,7 @@
        :aria-label [:t :admin/button-remove-filter]
        :hx-get (str "/web/admin/" (name entity-name) "/table")
        :hx-target "#filter-table-container"
+       :hx-swap "outerHTML"
        :hx-trigger "click"
        :hx-vals (str "{\"remove_filter\": \"" (name field-name) "\"}")
        :hx-include "closest form"}
@@ -226,6 +228,7 @@
            {:type "button"
             :hx-get (str "/web/admin/" (name entity-name) "/table")
             :hx-target "#filter-table-container"
+            :hx-swap "outerHTML"
             :hx-trigger "click"}
            (icons/icon :x {:size 14})
            " " [:t :admin/button-clear-all-filters]])]
@@ -234,6 +237,7 @@
        [:form.filter-form
         {:hx-get (str "/web/admin/" (name entity-name) "/table")
          :hx-target "#filter-table-container"
+         :hx-swap "outerHTML"
          :hx-trigger "submit, change delay:500ms from:find input, change from:find select"
          :hx-push-url "true"}
 
@@ -251,6 +255,7 @@
             {:name "add_filter_field"
              :hx-get (str "/web/admin/" (name entity-name) "/table")
              :hx-target "#filter-table-container"
+             :hx-swap "outerHTML"
              :hx-trigger "change"
              :hx-include "closest form"}
             [:option {:value ""} [:t :admin/filter-add-option]]

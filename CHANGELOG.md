@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Breaking
 
+- **`sortable-th` and `pagination` swap `outerHTML` by default** (BOU-386), so table refreshes stop nesting a
+  duplicate container. If your handler returns only the target's contents, pass `:hx-swap "innerHTML"`.
 - **Workflow's tables ship as a migration, timestamps as `TIMESTAMP WITH TIME ZONE`** (BOU-502).
   Stop all replicas and run `migrate up` before starting this version; seed timestamps as `#inst`.
 - **`:wagoe/logging :level` now sets Logback's root and `wagoe` loggers** (BOU-528), over `logback.xml`.
@@ -50,6 +52,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **`bb setup` overwrote dev and test config and `.env.example`** (BOU-404, BOU-532). It now changes
   only what you answer, lists each change first, and refuses rather than write a lossy merge.
+- **Field errors were not tied to their input for screen readers** (BOU-398). Inputs with errors now
+  carry `aria-invalid` and `aria-describedby`; hand-built fields can use `ui/describe-input` and `ui/field-errors`.
+- **`bb db:status`, `bb guide next` and devtools looked for migrations in `resources/migrations/`** (BOU-489).
+  They now use `migrations/`, the directory the migrator reads, and report a split between the two.
 - **`/health/ready` showed database and cache exception messages** (BOU-558). The body now says
   `unreachable`; the reason is logged at WARN. Upgrade platform if readiness is public.
 - **MFA and storage upload APIs returned the raw exception message** (BOU-557). They now answer the
@@ -92,6 +98,8 @@ for what is public API, what is internal, and how deprecations are announced.
   `explain` prints the error's own BND code and `Fix:` text first.
 - **install.sh could not recover from a failed sdkman download** (BOU-525). A
   retry now clears the partial install; an existing sdkman is detected.
+- **install.sh failed when GitHub's API rate limit was used up** (BOU-559). It
+  now finds the latest release without the API; no action needed.
 - **MCP verify never ran a generated project's tests** (BOU-520). It now focuses
   the module's test namespaces; a module with none reports `no-tests`.
 - **A refused inline edit lost the offset of a repeated local time** (BOU-523).

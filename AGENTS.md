@@ -1086,10 +1086,7 @@ bb example:regen --check       # CI: fail if it has drifted from generator outpu
 `examples/shop` is regenerated rather than maintained, so it cannot describe a
 project shape nobody gets. See `examples/shop/README.md`.
 
-The external `wagoe-examples` repository (ecommerce-api, blog-app) is
-**community examples**: not versioned against a release, not built by this
-repo's CI, and not a place to send someone who wants to know what the current
-framework does. Prefer `examples/shop`.
+The former `wagoe-examples` repository is archived; these two are the examples.
 
 ### SQLite `nil` LIMIT/OFFSET pitfall
 

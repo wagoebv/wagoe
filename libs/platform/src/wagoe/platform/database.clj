@@ -20,7 +20,8 @@
             [wagoe.platform.shell.adapters.database.common.schema :as schema]
             [wagoe.platform.shell.adapters.database.common.utils :as utils]
             [wagoe.platform.shell.adapters.database.config :as config]
-            [wagoe.platform.shell.adapters.database.utils.schema :as schema-utils]))
+            [wagoe.platform.shell.adapters.database.utils.schema :as schema-utils]
+            [wagoe.platform.shell.database.migrations :as migrations]))
 
 ;; =============================================================================
 ;; Query execution
@@ -131,3 +132,24 @@
 (def initialize-tables-from-schemas!
   "Create the tables described by a collection of Malli schemas, if absent."
   schema-utils/initialize-tables-from-schemas!)
+
+;; =============================================================================
+;; Migrations
+;; =============================================================================
+
+(def project-migration-dir
+  "The name a project's own migrations are read from."
+  migrations/project-migration-dir)
+
+(def discover-migration-dirs
+  "Every migration directory: the project's first, then each library's."
+  migrations/discover-migration-dirs)
+
+(def create-destination
+  "The directory migratus actually reads `project-migration-dir` from, as a path."
+  migrations/create-destination)
+
+(def shadowed-migration-dirs
+  "Project migrations no command will read because another source captures the
+   name — or nil. `migrate up` refuses while this is non-nil."
+  migrations/shadowed-migration-dirs)

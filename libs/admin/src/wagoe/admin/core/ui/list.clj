@@ -29,6 +29,7 @@
       [:div.entity-search-form
        [:form {:hx-get (str "/web/admin/" (name entity-name) "/table")
                :hx-target "#entity-table-container"
+               :hx-swap "outerHTML"
                :hx-push-url "true"
                :hx-trigger "submit"}
         [:div.search-controls
@@ -132,7 +133,8 @@
     [:div#entity-table-container
      {:hx-get hx-url
       :hx-trigger "entityCreated from:body, entityUpdated from:body, entityDeleted from:body"
-      :hx-target hx-target}
+      :hx-target hx-target
+      :hx-swap "outerHTML"}
      (if (empty? records)
        [:div.empty-state {:class "p-10 text-center"}
         [:div.empty-state-icon
@@ -205,6 +207,14 @@
                 (entity-table-row entity-name record entity-config permissions display))]]]]
           pagination]))]))
 
+(defn filter-table-container
+  "Filter builder and table: the target of filter requests, rendered the same
+   on the page and in the fragment that replaces it."
+  [entity-name records entity-config table-query total-count permissions filters display]
+  [:div#filter-table-container {:class "space-y-3"}
+   (filters/render-filter-builder entity-name entity-config filters)
+   (entity-table entity-name records entity-config table-query total-count permissions filters display)])
+
 (defn entity-list-page
   "Complete entity list page with search, table, and actions.
 
@@ -253,6 +263,7 @@
                                 :value (or search-value "")
                                 :hx-get (str "/web/admin/" (name entity-name) "/table")
                                 :hx-target "#entity-table-container"
+                                :hx-swap "outerHTML"
                                 :hx-push-url "true"
                                 :hx-trigger "keyup changed delay:300ms, search"
                                 :hx-include "this"}]
@@ -260,6 +271,7 @@
                                 :aria-label [:t :common/button-search]
                                 :hx-get (str "/web/admin/" (name entity-name) "/table")
                                 :hx-target "#entity-table-container"
+                                :hx-swap "outerHTML"
                                 :hx-push-url "true"
                                 :hx-include "previous .search-input"}
            (icons/icon :search {:size 18})]
@@ -293,6 +305,7 @@
                                     :aria-label [:t :admin/button-refresh]
                                     :hx-get (str "/web/admin/" (name entity-name) "/table")
                                     :hx-target "#entity-table-container"
+                                    :hx-swap "outerHTML"
                                     :hx-push-url "true"}
          (icons/icon :refresh {:size 18})]
         (when (:can-create permissions)
@@ -306,8 +319,5 @@
            [:t :admin/button-new {:entity (str/capitalize (name entity-name))}]])]]]
 
        ;; Filter builder + Table wrapper (THIS is the HTMX target for filter updates)
-     [:div#filter-table-container {:class "space-y-3"}
-      ;; Filter builder (will be updated by HTMX)
-      (filters/render-filter-builder entity-name entity-config filters)
-      ;; Table (will also be updated by HTMX)
-      (entity-table entity-name records entity-config table-query total-count permissions filters display)]]))
+     (filter-table-container entity-name records entity-config table-query total-count
+                             permissions filters display)]))

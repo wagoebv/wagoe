@@ -2,6 +2,7 @@
   "Orchestrates module generation: scaffold -> migrate -> reset -> summary."
   (:require [wagoe.devtools.core.prototype :as core]
             [wagoe.scaffolder.core.generators :as gen]
+            [wagoe.platform.database :as db]
             [clojure.java.io :as io]
             [clojure.java.shell :as shell]))
 
@@ -101,10 +102,11 @@
         now               (java.time.LocalDateTime/now)
         migration-ts      (.format now (java.time.format.DateTimeFormatter/ofPattern "yyyyMMddHHmmss"))
         migration-content (gen/generate-migration-file ctx migration-ts)
-        up-path           (format "resources/migrations/%s-add-%s-table.up.sql"
-                                  migration-ts module-name)
-        down-path         (format "resources/migrations/%s-add-%s-table.down.sql"
-                                  migration-ts module-name)
+        ;; Where migratus reads, so this never splits a project's migrations
+        ;; across two directories (BOU-489).
+        mig-dir           (db/create-destination)
+        up-path           (format "%s%s-add-%s-table.up.sql" mig-dir migration-ts module-name)
+        down-path         (format "%s%s-add-%s-table.down.sql" mig-dir migration-ts module-name)
         entity-table      (get-in ctx [:entities 0 :entity-table] module-name)]
     (write-file! up-path migration-content)
     (write-file! down-path (format "DROP TABLE IF EXISTS %s;\n" entity-table))

@@ -1,7 +1,9 @@
 (ns wagoe.devtools.shell.prototype-test
   (:require [clojure.test :refer [deftest testing is use-fixtures]]
             [clojure.java.io :as io]
-            [wagoe.devtools.shell.prototype :as prototype]))
+            [clojure.java.shell :as shell]
+            [wagoe.devtools.shell.prototype :as prototype]
+            [wagoe.platform.shell.database.migrations :as migrations]))
 
 (def ^:private test-module "test-scaffold-module")
 (def ^:private test-module-dir (str "libs/" test-module))
@@ -87,3 +89,28 @@
     (prototype/scaffold! test-module {:fields [[:value :int]] :endpoints [:crud]})
     (is (.exists (io/file test-module-dir))
         "module directory exists during test")))
+
+(defn- prototype-migration-paths
+  "The migration paths prototype! writes, with every side effect stubbed."
+  []
+  (let [written (atom [])]
+    (with-redefs [prototype/write-file!            (fn [path _] (swap! written conj path) path)
+                  prototype/generate-module-files! (fn [& _] [])
+                  shell/sh                         (fn [& _] {:exit 0})]
+      (with-out-str
+        (prototype/prototype! "widget" {:fields [[:name :string]]}))
+      @written)))
+
+(deftest ^:unit prototype!-writes-migrations-where-the-migrator-reads-them
+  ;; It wrote to resources/migrations unconditionally, which in a project using
+  ;; migrations/ creates the split the migrator refuses (BOU-489).
+  (testing "a project with neither directory gets migrations/"
+    (with-redefs [migrations/resolved-migration-dir (fn [& _] nil)]
+      (let [paths (prototype-migration-paths)]
+        (is (= 2 (count paths)))
+        (is (every? #(re-matches #"migrations/\d{14}-add-widget-table\.(up|down)\.sql" %) paths)
+            (pr-str paths)))))
+
+  (testing "a project already using resources/migrations keeps using it"
+    (with-redefs [migrations/resolved-migration-dir (fn [& _] (io/file "resources/migrations"))]
+      (is (every? #(re-find #"^resources/migrations/" %) (prototype-migration-paths))))))

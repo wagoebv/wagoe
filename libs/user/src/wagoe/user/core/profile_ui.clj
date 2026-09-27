@@ -178,28 +178,22 @@
     [:form {:hx-post "/web/profile/preferences"
             :hx-target "#preferences-card"
             :hx-swap "outerHTML"}
-     [:div.form-field
-      [:label {:for "date-format"} [:t :user/preferences-label-date-format]]
-      [:select#date-format {:name "date-format"}
-       [:option {:value "iso" :selected (= :iso (:date-format user))} [:t :user/preferences-date-iso]]
-       [:option {:value "us" :selected (= :us (:date-format user))} [:t :user/preferences-date-us]]
-       [:option {:value "eu" :selected (= :eu (:date-format user))} [:t :user/preferences-date-eu]]]
-      (when (:date-format errors)
-        [:span.error (first (:date-format errors))])]
-     [:div.form-field
-      [:label {:for "time-format"} [:t :user/preferences-label-time-format]]
-      [:select#time-format {:name "time-format"}
-       [:option {:value "12h" :selected (= :12h (:time-format user))} [:t :user/preferences-time-12h]]
-       [:option {:value "24h" :selected (= :24h (:time-format user))} [:t :user/preferences-time-24h]]]
-      (when (:time-format errors)
-        [:span.error (first (:time-format errors))])]
-     [:div.form-field
-      [:label {:for "language"} [:t :user/preferences-label-language]]
-      [:select#language {:name "language"}
-       [:option {:value "en" :selected (= "en" (:language user))} [:t :user/preferences-language-en]]
-       [:option {:value "nl" :selected (= "nl" (:language user))} [:t :user/preferences-language-nl]]]
-      (when (:language errors)
-        [:span.error (first (:language errors))])]
+     (ui/form-field :date-format [:t :user/preferences-label-date-format]
+                    [:select#date-format {:name "date-format"}
+                     [:option {:value "iso" :selected (= :iso (:date-format user))} [:t :user/preferences-date-iso]]
+                     [:option {:value "us" :selected (= :us (:date-format user))} [:t :user/preferences-date-us]]
+                     [:option {:value "eu" :selected (= :eu (:date-format user))} [:t :user/preferences-date-eu]]]
+                    (:date-format errors))
+     (ui/form-field :time-format [:t :user/preferences-label-time-format]
+                    [:select#time-format {:name "time-format"}
+                     [:option {:value "12h" :selected (= :12h (:time-format user))} [:t :user/preferences-time-12h]]
+                     [:option {:value "24h" :selected (= :24h (:time-format user))} [:t :user/preferences-time-24h]]]
+                    (:time-format errors))
+     (ui/form-field :language [:t :user/preferences-label-language]
+                    [:select#language {:name "language"}
+                     [:option {:value "en" :selected (= "en" (:language user))} [:t :user/preferences-language-en]]
+                     [:option {:value "nl" :selected (= "nl" (:language user))} [:t :user/preferences-language-nl]]]
+                    (:language errors))
      [:div.form-actions
       [:button.button.primary {:type "submit"}
        (icons/icon :save {:size 16})
