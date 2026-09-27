@@ -24,11 +24,35 @@
                                (ports/create repository prepared)
                                children))))
 
+(defn- start-workflows!
+  "Start the workflows of the children created with `created`, then its own
+   (`start`, when it has one), after the commit: the workflow store writes on
+   a connection of its own. No row without its workflow: on a failure the ones
+   started are removed, the row deleted with its children, and the error
+   rethrown."
+  [repository children created start]
+  (let [steps   (concat (for [[k {start-child :start undo :remove}] children
+                              :when start-child
+                              {:keys [id]} (get created k)]
+                          [#(start-child id) #(undo id)])
+                        (when start [[#(start (:id created)) (constantly nil)]]))
+        started (volatile! [])]
+    (try
+      (doseq [[run undo] steps]
+        (run)
+        (vswap! started conj undo))
+      (catch Exception e
+        (run! #(%) @started)
+        (ports/delete repository (:id created))
+        (throw e)))))
+
 (defrecord ProductService [repository children]
   ports/IProductService
   (create-product [_this data]
-    (let [prepared (core/prepare-new-product (apply dissoc data (keys children)) (generate-product-id) (current-time))]
-      (create-with-children repository children prepared data)))
+    (let [prepared (core/prepare-new-product (apply dissoc data (keys children)) (generate-product-id) (current-time))
+          created  (create-with-children repository children prepared data)]
+      (start-workflows! repository children created nil)
+      created))
   (get-product [_this id]
     (ports/find-by-id repository id))
   (list-products [_this opts]
