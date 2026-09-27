@@ -64,6 +64,22 @@
       (System/exit 1))
     parsed))
 
+(def provider-env
+  "The variables `make-service-from-env` tries, in order. The help and the
+   no-provider message list these, and `bb ai`'s help is pinned to them by a
+   test in wagoe-tools. AI_MODEL overrides the model of each."
+  [{:var "ANTHROPIC_API_KEY"   :provider :anthropic :label "Anthropic (Claude)"}
+   {:var "OPENAI_BASE_URL"     :provider :openai    :label "an OpenAI-compatible endpoint (oMLX, LM Studio)"}
+   {:var "OPENAI_API_KEY"      :provider :openai    :label "OpenAI (GPT)"}
+   {:var "REPLICATE_API_TOKEN" :provider :replicate :label "Replicate-hosted models"}
+   {:var "OLLAMA_URL"          :provider :ollama    :label "Ollama (default http://localhost:11434)"}])
+
+(defn- env-lines
+  "A line per variable in `rows`: indent, name, `sep`, label."
+  [rows indent sep]
+  (apply str (for [{:keys [var label]} rows]
+               (str indent (format "%-20s" var) sep label "\n"))))
+
 (defn explain-provider-error
   "Turn a provider's error result into something actionable.
 
@@ -114,11 +130,7 @@
        (str "No AI provider is configured, and the default (Ollama on "
             "localhost:11434) is not running.\n"
             "  Set one of:\n"
-            "    ANTHROPIC_API_KEY   Anthropic (Claude)\n"
-            "    OPENAI_API_KEY      OpenAI\n"
-            "    OPENAI_BASE_URL     an OpenAI-compatible endpoint\n"
-            "    REPLICATE_API_TOKEN Replicate-hosted models\n"
-            "    OLLAMA_URL          a running Ollama, if it is not on localhost\n"
+            (env-lines provider-env "    " "")
             "  or :wagoe/ai-service in resources/conf/<env>/config.edn")
 
        (and refused? (= :ollama provider))
@@ -178,51 +190,53 @@
          (apply str (map #(str "\n  " %) words)))))
 
 (defn- make-service-from-env
-  "Fall-back when no :wagoe/ai-service is present in active config.
-   Checks ANTHROPIC_API_KEY, OPENAI_BASE_URL, OPENAI_API_KEY, OLLAMA_URL in that order.
-   OPENAI_BASE_URL covers OpenAI-compatible endpoints (oMLX, LM Studio, etc.) that may
-   not require a real API key."
-  []
-  (cond
-    (System/getenv "ANTHROPIC_API_KEY")
-    {:provider    (anthropic/create-anthropic-provider
-                   {:api-key (System/getenv "ANTHROPIC_API_KEY")
-                    :model   (or (System/getenv "AI_MODEL") "claude-haiku-4-5-20251001")})
-     :configured? true}
+  "Fall-back when no :wagoe/ai-service is present in active config: the first
+   variable of `provider-env` that `env` sets picks the provider.
+   OPENAI_BASE_URL covers OpenAI-compatible endpoints (oMLX, LM Studio, etc.)
+   that may not require a real API key."
+  ([] (make-service-from-env (System/getenv)))
+  ([env]
+   (let [model  #(or (get env "AI_MODEL") %)
+         chosen (some #(when (get env (:var %)) (:var %)) provider-env)]
+     (case chosen
+       "ANTHROPIC_API_KEY"
+       {:provider    (anthropic/create-anthropic-provider
+                      {:api-key (get env "ANTHROPIC_API_KEY")
+                       :model   (model "claude-haiku-4-5-20251001")})
+        :configured? true}
 
-    (System/getenv "OPENAI_BASE_URL")
-    {:provider    (openai/create-openai-provider
-                   {:base-url (System/getenv "OPENAI_BASE_URL")
-                    :api-key  (or (System/getenv "OPENAI_API_KEY") "no-key")
-                    :model    (or (System/getenv "AI_MODEL") "gpt-4o-mini")})
-     :configured? true}
+       "OPENAI_BASE_URL"
+       {:provider    (openai/create-openai-provider
+                      {:base-url (get env "OPENAI_BASE_URL")
+                       :api-key  (or (get env "OPENAI_API_KEY") "no-key")
+                       :model    (model "gpt-4o-mini")})
+        :configured? true}
 
-    (System/getenv "OPENAI_API_KEY")
-    {:provider    (openai/create-openai-provider
-                   {:api-key (System/getenv "OPENAI_API_KEY")
-                    :model   (or (System/getenv "AI_MODEL") "gpt-4o-mini")})
-     :configured? true}
+       "OPENAI_API_KEY"
+       {:provider    (openai/create-openai-provider
+                      {:api-key (get env "OPENAI_API_KEY")
+                       :model   (model "gpt-4o-mini")})
+        :configured? true}
 
-    ;; Hosted models without a local GPU or an OpenAI account. REPLICATE_API_TOKEN
-    ;; is the name Replicate's own tooling uses, so it is likely already set.
-    (System/getenv "REPLICATE_API_TOKEN")
-    {:provider    (replicate-provider/create-replicate-provider
-                   {:api-key (System/getenv "REPLICATE_API_TOKEN")
-                    :model   (or (System/getenv "AI_MODEL")
-                                 replicate-provider/default-model)})
-     :configured? true}
+       ;; Hosted models without a local GPU or an OpenAI account. REPLICATE_API_TOKEN
+       ;; is the name Replicate's own tooling uses, so it is likely already set.
+       "REPLICATE_API_TOKEN"
+       {:provider    (replicate-provider/create-replicate-provider
+                      {:api-key (get env "REPLICATE_API_TOKEN")
+                       :model   (model replicate-provider/default-model)})
+        :configured? true}
 
-    :else
-    ;; `:configured?` records whether the user chose anything, at the only point
-    ;; that knows. Re-deriving it downstream got this wrong twice: first from
-    ;; env vars, which misreported a configured OPENAI_BASE_URL, then from the
-    ;; provider keyword, which misreported Ollama configured in config.edn
-    ;; (BOU-280). OLLAMA_URL alone means deliberate; no variable at all means
-    ;; this is the fallback nobody asked for.
-    {:provider    (ollama/create-ollama-provider
-                   {:base-url (or (System/getenv "OLLAMA_URL") "http://localhost:11434")
-                    :model    (or (System/getenv "AI_MODEL") "qwen2.5-coder:7b")})
-     :configured? (boolean (System/getenv "OLLAMA_URL"))}))
+       ;; OLLAMA_URL, or nothing. `:configured?` records whether the user chose
+       ;; anything, at the only point that knows. Re-deriving it downstream got
+       ;; this wrong twice: first from env vars, which misreported a configured
+       ;; OPENAI_BASE_URL, then from the provider keyword, which misreported
+       ;; Ollama configured in config.edn (BOU-280). OLLAMA_URL alone means
+       ;; deliberate; no variable at all means this is the fallback nobody
+       ;; asked for.
+       {:provider    (ollama/create-ollama-provider
+                      {:base-url (or (get env "OLLAMA_URL") "http://localhost:11434")
+                       :model    (model "qwen2.5-coder:7b")})
+        :configured? (boolean chosen)}))))
 
 (defn- config-provider
   "The :wagoe/ai-service entry from resources/conf/{env}/config.edn, when it
@@ -680,11 +694,9 @@
        "\n"
        "Experimental: the answer can be confidently wrong. Review it before you use it.\n"
        "\n"
-       "Provider selection (via environment variables):\n"
-       "  ANTHROPIC_API_KEY   \u2192 Anthropic (Claude)\n"
-       "  OPENAI_API_KEY      \u2192 OpenAI (GPT)\n"
-       "  OLLAMA_URL          \u2192 Ollama (local, default http://localhost:11434)\n"
-       "  AI_MODEL            \u2192 Override default model\n"
+       "Provider, when config.edn names none (the first variable set wins):\n"
+       (env-lines (conj provider-env {:var "AI_MODEL" :label "Override the default model"})
+                  "  " "\u2192 ")
        "\n"
        "For NL scaffolding:\n"
        "  bb scaffold ai <description> [--yes]"))

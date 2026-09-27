@@ -183,7 +183,8 @@
       (is (str/includes? src "(assoc (ig/init-key :wagoe/ai-service ai-cfg) :configured? true)")))
 
     (testing "and the bare fallback is only chosen when OLLAMA_URL says so"
-      (is (str/includes? src ":configured? (boolean (System/getenv \"OLLAMA_URL\"))")))))
+      (is (false? (:configured? (#'sut/make-service-from-env {}))))
+      (is (true? (:configured? (#'sut/make-service-from-env {"OLLAMA_URL" "http://x:1"})))))))
 
 (deftest ^:unit a-provider-named-in-config-outranks-an-exported-key
   ;; The env chain used to be consulted first, so any exported provider key beat
@@ -375,3 +376,15 @@
            (sut/admin-entity-next-steps (.getPath root) ["invoices"])))
     (is (= [] (sut/admin-entity-next-steps (.getPath root) ["users"]))
         "every profile has users")))
+
+(deftest ^:unit the-help-lists-every-variable-the-env-chain-reads
+  ;; The help listed no Replicate variables (BOU-580). The chain and the help
+  ;; now read one table.
+  (doseq [{:keys [var provider]} sut/provider-env]
+    (let [service (#'sut/make-service-from-env {var "x"})]
+      (is (= provider (-> service :provider type .getSimpleName
+                          (str/replace "Provider" "") str/lower-case keyword))
+          var)
+      (is (str/includes? sut/help-text var) var)))
+  (is (str/includes? sut/help-text "REPLICATE_API_TOKEN"))
+  (is (str/includes? sut/help-text "AI_MODEL")))
