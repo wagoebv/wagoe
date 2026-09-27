@@ -456,6 +456,12 @@
                            (str (.getPath persistence) " has no date->iso, so this field will read back a day"
                                 " early east of UTC. Regenerate that file, or copy date->iso and ->entity"
                                 " from a newly generated module."))
+            ;; Written as a keyword, an enum value is a column name to HoneySQL.
+            enum-warning (when (and (= :enum (:type field)) (.isFile persistence))
+                           (str "Add :" (name (:name field)) " to enum-fields in " (.getPath persistence)
+                                (when-not (str/includes? (slurp persistence) "enum-fields")
+                                  (str ", copied with ->row and ->entity from a newly generated module"))
+                                ", or storing it fails."))
 
             ;; Before anything is written. The migration and the schema entry
             ;; are the two halves this command exists to keep in step, and the
@@ -636,6 +642,7 @@
                        (into [(:manual-note schema-entry)]))
          :warnings (not-empty (cond-> []
                                 date-warning (conj date-warning)
+                                enum-warning (conj enum-warning)
                                 dry-run      (conj "Dry run - no files were written")))})
 
       (catch Exception e

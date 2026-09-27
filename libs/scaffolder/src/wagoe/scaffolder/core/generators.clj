@@ -537,6 +537,13 @@ DROP TABLE IF EXISTS %s;
 ;; Persistence File Generator
 ;; =============================================================================
 
+(defn- enum-field-set
+  "The entity's enum fields as a set literal, e.g. `#{:status}`."
+  [entity]
+  (str "#{" (str/join " " (for [f (:fields entity) :when (= :enum (:field-type f))]
+                            (str ":" (:field-name-kebab f))))
+       "}"))
+
 (defn generate-persistence-file
   "Generate shell/persistence.clj file content.
    
@@ -581,8 +588,19 @@ DROP TABLE IF EXISTS %s;
           "        (instance? LocalDate v) (str v)\n"
           "        :else v))\n"
           "\n"
+          ;; A keyword value is a column name to HoneySQL, so an enum insert
+          ;; failed with `no such column: entered` (BOU-562).
+          "(def ^:private enum-fields\n"
+          "  \"Keywords in Clojure, strings in the database.\"\n"
+          "  " (enum-field-set entity) ")\n"
+          "\n"
+          "(defn- ->row [entity]\n"
+          "  (reduce (fn [m k] (cond-> m (keyword? (get m k)) (update k name))) entity enum-fields))\n"
+          "\n"
           "(defn- ->entity [row]\n"
-          "  (some-> row (update-vals date->iso)))\n"
+          "  (some-> row\n"
+          "          (update-vals date->iso)\n"
+          "          (as-> r (reduce (fn [m k] (cond-> m (string? (get m k)) (update k keyword))) r enum-fields))))\n"
           "\n"
           ;; A 400, not the 500 a :database-error is answered with (BOU-540).
           "(defn- missing-reference?\n"
@@ -610,7 +628,7 @@ DROP TABLE IF EXISTS %s;
           "(defrecord Database" entity-name "Repository [db-ctx]\n"
           "  ports/I" entity-name "Repository\n"
           "  (" create " [_this entity]\n"
-          "    (write! db-ctx {:insert-into :" table-name " :values [entity]})\n"
+          "    (write! db-ctx {:insert-into :" table-name " :values [(->row entity)]})\n"
           "    (select-by-id db-ctx (:id entity)))\n"
           "  (" find-by-id " [_this id]\n"
           "    (select-by-id db-ctx id))\n"
@@ -627,7 +645,7 @@ DROP TABLE IF EXISTS %s;
           "      (when (empty? changes)\n"
           "        (throw (ex-info \"Nothing to update\" {:type :validation-error :id (:id entity)})))\n"
           "      (write! db-ctx {:update :" table-name "\n"
-          "                      :set (assoc changes :updated-at (Instant/now))\n"
+          "                      :set (->row (assoc changes :updated-at (Instant/now)))\n"
           "                      :where [:= :id (:id entity)]})\n"
           "      (select-by-id db-ctx (:id entity))))\n"
           "  (" delete " [_this id]\n"
@@ -760,6 +778,21 @@ DROP TABLE IF EXISTS %s;
           "          result (ports/create-" entity-lower " svc {:name \"Test\"})]\n"
           "      (is (some? result)))))\n"))))
 
+(defn- sample-value
+  "A literal the field's column accepts and reads back unchanged, as source
+   text, or nil for a type that does not read back as it was written."
+  [field]
+  (case (:field-type field)
+    (:string :text) "\"Test\""
+    :email          "\"test@example.com\""
+    :int            "1"
+    :decimal        "9.99M"
+    :boolean        "true"
+    (:uuid :relation) "(UUID/randomUUID)"
+    :enum           (str (second (:malli-type field)))
+    :date           "\"2026-01-01\""
+    nil))
+
 (defn generate-persistence-test-file
   "Generate test persistence file content.
    
@@ -775,28 +808,53 @@ DROP TABLE IF EXISTS %s;
    (let [base-ns (:base-ns ctx "wagoe")
          module-name (:module-name ctx)
          entity-name (:entity-name entity)
-         entity-lower (template/pascal->kebab entity-name)]
+         entity-lower (template/pascal->kebab entity-name)
+         {:keys [create find-by-id]} (repo-fns entity)
+         fields    (:fields entity)
+         relation? (some :relation-table fields)
+         ;; Compared after the round trip. A timestamp comes back in the
+         ;; driver's type and JSON has no portable column value, so those two
+         ;; are left out of the comparison.
+         compared  (keep #(when-let [v (sample-value %)] (str ":" (:field-name-kebab %) " " v)) fields)
+         instants  (for [f fields :when (= :inst (:field-type f))]
+                     (str " :" (:field-name-kebab f) " (Instant/now)"))]
      (str "(ns " base-ns "." module-name ".shell." entity-lower "-repository-test\n"
           "  (:require [clojure.test :refer [deftest testing is]]\n"
           "            [" base-ns "." module-name "." (shell-ns entity :persistence-ns) " :as persistence]\n"
-          "            [" base-ns "." module-name ".ports :as ports]))\n"
+          "            [" base-ns "." module-name ".ports :as ports]\n"
+          (when relation? "            [wagoe.platform.database :as db]\n")
+          "            [wagoe.platform.shell.adapters.database.factory :as db-factory]\n"
+          "            [wagoe.platform.shell.database.migrations :as migrations])\n"
+          "  (:import [java.time Instant]\n"
+          "           [java.util UUID]))\n"
           "\n"
-         ;; Was `(is true)` with a \"requires database context\" comment, which
-         ;; `bb check:placeholder-tests` rejects — and that check runs in
-         ;; generated projects, so scaffolding a module broke `bb check`.
-         ;;
-         ;; Asserting the wiring instead is both real and database-free: it
-         ;; fails if the repository stops implementing its port, which is the
-         ;; mistake this file can actually catch before a database exists.
-         ;; ^:integration because the exercises you add next need one.
+          "(defn- with-database\n"
+          "  \"Call `f` with a context on a fresh in-memory H2 database, migrated.\"\n"
+          "  [f]\n"
+          "  (let [ctx (db-factory/db-context {:adapter :h2\n"
+          "                                    :database-path (str \"mem:\" (UUID/randomUUID))\n"
+          "                                    :pool {:minimum-idle 1 :maximum-pool-size 2}})]\n"
+          "    (try\n"
+          "      (migrations/migrate-datasource! (:datasource ctx))\n"
+          "      (f ctx)\n"
+          "      (finally (db-factory/close-db-context! ctx)))))\n"
+          "\n"
           "(deftest ^:integration create-" entity-lower "-test\n"
           "  (testing \"the repository implements its persistence port\"\n"
           "    (is (satisfies? ports/I" entity-name "Repository\n"
           "                    (persistence/create-repository nil))))\n"
-          "  (testing \"creating a " entity-lower " round-trips through the database\"\n"
-          "    ;; Add a database context and assert on a real create here.\n"
-          "    ;; See the module README for wiring a test db-ctx.\n"
-          "    ))\n"))))
+          "  (testing \"a " entity-lower " round-trips through the database\"\n"
+          "    (with-database\n"
+          "      (fn [ctx]\n"
+          (when relation?
+            (str "        ;; The rows it refers to are not what this tests.\n"
+                 "        (db/execute-ddl! ctx \"SET REFERENTIAL_INTEGRITY FALSE\")\n"))
+          "        (let [repo    (persistence/create-repository ctx)\n"
+          "              fields  {" (str/join "\n                       " compared) "}\n"
+          "              created (ports/" create " repo (assoc fields :id (UUID/randomUUID) :created-at (Instant/now)"
+          (apply str instants) "))]\n"
+          "          (is (= fields (select-keys created (keys fields))))\n"
+          "          (is (= created (ports/" find-by-id " repo (:id created)))))))))\n"))))
 
 ;; =============================================================================
 ;; Further entities (BOU-497)

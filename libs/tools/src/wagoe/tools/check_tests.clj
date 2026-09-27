@@ -220,6 +220,45 @@
       (walk form))
     @out))
 
+(defn- testing-forms
+  "Every evaluated clojure.test `testing` form under `form`, nested ones too."
+  [form env]
+  (let [out (volatile! [])]
+    (letfn [(walk [x]
+              (when (coll? x)
+                (let [head (when (seq? x) (first x))]
+                  (when-not (unevaluated-head? env head)
+                    (when (resolve-op env #{"testing"} head)
+                      (vswap! out conj x))
+                    (run! walk (seq x))))))]
+      (walk form))
+    @out))
+
+(defn- asserting-fns
+  "Names of the functions `parsed` defines — with defn, or bound in a let —
+   whose bodies assert, so a `testing` that calls one counts as asserting."
+  [parsed env]
+  (let [out (volatile! #{})]
+    (letfn [(asserts? [x] (seq (assertion-sites x env)))
+            (walk [x]
+              (when (coll? x)
+                (let [head (when (seq? x) (first x))]
+                  (when (and (or (core-op? env head "defn") (core-op? env head "defn-"))
+                             (symbol? (second x)) (asserts? x))
+                    (vswap! out conj (name (second x))))
+                  (when (and (or (core-op? env head "let") (core-op? env head "letfn"))
+                             (vector? (second x)))
+                    (if (core-op? env head "letfn")
+                      (doseq [f (second x)
+                              :when (and (seq? f) (symbol? (first f)) (asserts? f))]
+                        (vswap! out conj (name (first f))))
+                      (doseq [[k v] (partition 2 (second x))
+                              :when (and (symbol? k) (asserts? v))]
+                        (vswap! out conj (name k)))))
+                  (run! walk (seq x)))))]
+      (run! walk parsed))
+    @out))
+
 (defn- asserted-expr
   "The expression a single `is`/`are` actually asserts: the second element of
    an `is`, the template of an `are`. Only this counts — a nested shape in a
@@ -323,6 +362,16 @@
                                                 assertion-helper-names)))]
        {:file (str file) :line (or (:row (meta form)) 0)
         :content "deftest without any assertion (is/are/known helper)"})
+     ;; A `testing` next to one that asserts passes the rule above, so an
+     ;; empty one needs its own (BOU-562).
+     (let [helpers (into assertion-helper-names (asserting-fns parsed env))]
+       (for [form dtests
+             :when (not (exempt? form))
+             block (testing-forms form env)
+             :when (and (empty? (assertion-sites block env))
+                        (empty? (set/intersection (evaluated-heads block env) helpers)))]
+         {:file (str file) :line (or (:row (meta block)) 0)
+          :content "testing block without any assertion (is/are/known helper)"}))
      (for [top parsed
            {:keys [site op]} (assertion-sites top env)
            :when (not (exempt-site? site))
