@@ -43,9 +43,13 @@ for what is public API, what is internal, and how deprecations are announced.
   regenerate an older module's `shell/*persistence.clj` before adding a `date` field to it.
 - **Scaffolder field specs refuse an unknown modifier, and `required` with `optional`** (BOU-535).
   Fix any script that passes one; `indexed` now writes an index and `optional` is honoured.
+- **`bb setup` exits 1 on a closed stdin instead of accepting every default** (BOU-404).
+  A script driving the wizard must pass flags: `bb setup --database sqlite`.
 
 ### Fixed
 
+- **`bb setup` overwrote dev and test config and `.env.example`** (BOU-404, BOU-532). It now merges,
+  keeping module keys and `:migrate-on-start?`, and lists each file it will change first.
 - **`/health/ready` showed database and cache exception messages** (BOU-558). The body now says
   `unreachable`; the reason is logged at WARN. Upgrade platform if readiness is public.
 - **MFA and storage upload APIs returned the raw exception message** (BOU-557). They now answer the

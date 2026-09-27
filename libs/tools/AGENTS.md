@@ -117,6 +117,8 @@ Summary: 4 passed, 1 warning, 1 error
 
 Generates `config.edn` for dev and test environments plus a `.env.example` file. Three modes: interactive wizard, CLI flags, or AI-powered natural language.
 
+An existing dev/test config or `.env.example` is merged into, not replaced: keys setup does not write stay, a database it replaces moves to `:inactive`, and the summary lists every change before anything is written. An existing prod config is kept. The wizard exits 1 on a closed stdin; scripts pass flags.
+
 ```bash
 # Interactive wizard — guided prompts for database, AI, payments, cache, etc.
 bb setup

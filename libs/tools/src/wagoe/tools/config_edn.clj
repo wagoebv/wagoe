@@ -60,32 +60,127 @@
                           :else         \space))
                   (lex text))))
 
-(defn active-section
-  "[start end] indices of the `:active` map's braces, or nil.
+(defn section
+  "[start end] indices of the braces of the map under `kw` (\":active\",
+   \":inactive\"), or nil.
 
    `end` is the closing brace. Strings and comments are blanked first, so a
    brace inside either cannot shift the depth count, and a `:active` mentioned
    in prose is not the section."
-  [text]
+  [text kw]
   (let [code (code-only text)
+        n    (count kw)
         idx  (loop [pos 0]
-               (let [i (str/index-of code ":active" pos)]
+               (let [i (str/index-of code kw pos)]
                  (cond
                    (nil? i) nil
                    ;; `:inactive` does not contain `:active` — the colon is in
                    ;; the wrong place — so no guard is needed for it. An earlier
                    ;; version had one anyway, and a test that never exercised it.
                    ;; What does need excluding is `::active`.
-                   (and (pos? i) (= \: (nth code (dec i)))) (recur (+ i 7))
+                   (and (pos? i) (= \: (nth code (dec i)))) (recur (+ i n))
                    :else i)))]
     (when idx
-      (when-let [open (str/index-of code "{" (+ idx 7))]
+      (when-let [open (str/index-of code "{" (+ idx n))]
         (loop [i (inc open), depth 1]
           (cond
             (>= i (count code)) nil
             (zero? depth)       [open (dec i)]
             :else (recur (inc i)
                          (case (nth code i) \{ (inc depth) \} (dec depth) depth))))))))
+
+(defn active-section
+  "[start end] indices of the `:active` map's braces, or nil."
+  [text]
+  (section text ":active"))
+
+(defn- form-end
+  "Index just past the form starting at `k` in lexed `lx`, or nil.
+
+   Enough reader for a config value: collections, strings, tagged literals
+   (`#env X`, `#or [..]`), sets, regexes and bare tokens."
+  [lx k]
+  (let [n      (count lx)
+        ch     #(nth (nth lx %) 1)
+        st     #(nth (nth lx %) 2)
+        ws?    #(or (= :comment (st %))
+                    (Character/isWhitespace ^char (ch %))
+                    (= \, (ch %)))
+        skip   #(loop [i %] (if (and (< i n) (ws? i)) (recur (inc i)) i))
+        token  #(loop [i %] (if (and (< i n) (= :code (st i)) (not (ws? i))
+                                     (not (#{\( \) \[ \] \{ \} \"} (ch i))))
+                              (recur (inc i))
+                              i))]
+    (when (< k n)
+      (let [c (ch k)]
+        (cond
+          (= :string (st k))
+          (some #(when (and (= :string (st %)) (= \" (ch %))) (inc %)) (range (inc k) n))
+
+          (#{\( \[ \{} c)
+          (loop [i (inc k), depth 1]
+            (cond (>= i n)          nil
+                  (not= :code (st i)) (recur (inc i) depth)
+                  :else (let [d (case (ch i) (\( \[ \{) (inc depth) (\) \] \}) (dec depth) depth)]
+                          (if (zero? d) (inc i) (recur (inc i) d)))))
+
+          (= \# c)
+          (if (and (< (inc k) n) (#{\{ \"} (ch (inc k))))
+            (form-end lx (inc k))
+            (form-end lx (skip (token (inc k)))))
+
+          (#{\' \@ \`} c) (form-end lx (inc k))
+
+          :else (let [e (token k)] (when (> e k) e)))))))
+
+(defn- line-start [text i]
+  (inc (or (str/last-index-of text "\n" (dec i)) -1)))
+
+(defn- lead-start
+  "Where the entry whose key is at `k` begins, taking along the comment lines
+   directly above it. Only when the key starts its own line."
+  [text k]
+  (let [ls (line-start text k)]
+    (if-not (str/blank? (subs text ls k))
+      k
+      (loop [from ls]
+        (if (zero? from)
+          from
+          (let [prev (line-start text (dec from))]
+            (if (str/starts-with? (str/trim (subs text prev (dec from))) ";")
+              (recur prev)
+              from)))))))
+
+(defn entries
+  "The key/value pairs of the map under `kw`, in order, as maps of `:key` (the
+   key's text), `:start` (the key), `:end` (past the value) and `:from` (where
+   the comments above it begin). nil when there is no such map or it cannot be
+   read."
+  [text kw]
+  (when-let [[open close] (section text kw)]
+    (let [lx   (lex text)
+          ws?  #(let [[_ c st] (nth lx %)]
+                  (or (= :comment st) (Character/isWhitespace ^char c) (= \, c)))
+          skip #(loop [i %] (if (and (< i close) (ws? i)) (recur (inc i)) i))]
+      (loop [k (skip (inc open)), out []]
+        (if (>= k close)
+          out
+          (let [kend (form-end lx k)
+                vend (some->> kend skip (form-end lx))]
+            (when (and vend (<= vend close))
+              (recur (skip vend)
+                     (conj out {:key   (subs text k kend)
+                                :start k
+                                :end   vend
+                                :from  (lead-start text k)})))))))))
+
+(defn insert-into
+  "`text` with `snippet` inserted just inside the closing brace of the map
+   under `kw`, or unchanged when there is none."
+  [text kw snippet]
+  (if-let [[_ close] (section text kw)]
+    (str (subs text 0 close) snippet (subs text close))
+    text))
 
 (defn active-closing-brace
   "Index of the brace closing the `:active` map, or nil."

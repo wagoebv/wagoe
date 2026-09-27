@@ -143,3 +143,15 @@
           "the file is untouched when the insertion is refused")
       (is (not (str/includes? (slurp path) ":wagoe/broken")))
       (finally (doseq [f (reverse (file-seq dir))] (.delete f))))))
+
+(deftest ^:unit entries-read-each-value-to-its-end
+  (let [text (str "{:active\n {:a/str \"x } y\"\n  ;; about b\n  :b/tag #or [#env B \"{\"]\n"
+                  "  :c/set #{:x} :d/char \\} :e/num 3\n  :f/map {:re #\"{L}\"}}}")
+        es   (sut/entries text ":active")]
+    (is (= [":a/str" ":b/tag" ":c/set" ":d/char" ":e/num" ":f/map"] (map :key es)))
+    (is (= [":b/tag #or [#env B \"{\"]" ":e/num 3"]
+           (for [e es :when (#{":b/tag" ":e/num"} (:key e))]
+             (subs text (:start e) (:end e)))))
+    (is (str/starts-with? (subs text (:from (second es))) "  ;; about b")
+        "the comment above a key belongs to it")
+    (is (nil? (sut/entries "{:active {:a/key}}" ":active")) "a key without a value")))

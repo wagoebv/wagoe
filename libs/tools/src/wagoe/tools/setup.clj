@@ -13,6 +13,7 @@
             [wagoe.tools.ansi :refer [bold green red cyan yellow dim]]
             [cheshire.core :as json]
             [clojure.java.io :as io]
+            [wagoe.tools.config-edn :as config-edn]
             [clojure.string :as str]
             [babashka.process :refer [shell]]))
 
@@ -59,6 +60,13 @@
 ;; Input helpers (follows scaffold.clj pattern)
 ;; =============================================================================
 
+(defn- read-answer
+  "A line from stdin. EOF throws: a closed stdin used to take every default,
+   the final \"write these files?\" included (BOU-404)."
+  []
+  (or (read-line)
+      (throw (ex-info "stdin closed" {:type :setup/stdin-closed}))))
+
 (defn- prompt
   ([label] (prompt label nil))
   ([label default]
@@ -66,7 +74,7 @@
      (print (str (cyan "? ") (bold label) " [" default "]: "))
      (print (str (cyan "? ") (bold label) ": ")))
    (flush)
-   (let [input (str/trim (or (read-line) ""))]
+   (let [input (str/trim (read-answer))]
      (if (and (empty? input) default)
        default
        input))))
@@ -77,7 +85,7 @@
    (let [hint (if default-yes? "Y/n" "y/N")]
      (print (str (cyan "? ") (bold label) " [" hint "]: "))
      (flush)
-     (let [input (str/trim (str/lower-case (or (read-line) "")))]
+     (let [input (str/trim (str/lower-case (read-answer)))]
        (if (empty? input)
          default-yes?
          (= input "y"))))))
@@ -90,7 +98,7 @@
     (println (str "    " (inc i) ") " (name k) "  " (dim description))))
   (print "  Choice [1]: ")
   (flush)
-  (let [input  (str/trim (or (read-line) ""))
+  (let [input  (str/trim (read-answer))
         choice (when (seq input) (try (Integer/parseInt input) (catch Exception _ nil)))]
     (cond
       (empty? input)                                     (first (first options))
@@ -465,39 +473,40 @@
    :h2         ["H2_PATH"]
    :smtp       ["SMTP_HOST" "SMTP_PORT" "SMTP_FROM" "SMTP_USERNAME" "SMTP_PASSWORD"]})
 
+(defn- env-example-sections
+  "The .env.example for `spec`, as sections of lines."
+  [spec]
+  (remove nil?
+          [["# Wagoe Environment Configuration" ""]
+           ["# HTTP Server" "HTTP_PORT=3000" "HTTP_HOST=0.0.0.0" ""]
+           (when (= (:database spec) :postgresql)
+             (into ["# PostgreSQL Database"]
+                   (concat (map #(str % "=") (get component-env-vars :postgresql)) [""])))
+           (when (= (:database spec) :mysql)
+             (into ["# MySQL Database"]
+                   (concat (map #(str % "=") (get component-env-vars :mysql)) [""])))
+           (when (#{:sqlite :h2} (:database spec))
+             (into ["# Database file (prod profile only)"]
+                   (concat (map #(str % "=") (get component-env-vars (:database spec))) [""])))
+           ["# Security" "JWT_SECRET=change-me-to-a-32-char-secret" ""]
+           (when (not= (:ai-provider spec) :none)
+             (let [provider (:ai-provider spec)]
+               (into [(str "# AI Provider (" (name provider) ")")]
+                     (concat (map #(str % "=") (get component-env-vars provider)) ["AI_MODEL=" ""]))))
+           (when (contains? #{:stripe :mollie} (:payment spec))
+             (into [(str "# Payments (" (name (:payment spec)) ")")]
+                   (concat (map #(str % "=") (get component-env-vars (:payment spec))) [""])))
+           (when (= (:cache spec) :redis)
+             (into ["# Redis Cache"]
+                   (concat (map #(str % "=") (get component-env-vars :redis)) [""])))
+           (when (= (:email spec) :smtp)
+             (into ["# SMTP Email"]
+                   (concat (map #(str % "=") (get component-env-vars :smtp)) [""])))]))
+
 (defn build-env-example
   "Generate .env.example content from a setup spec."
   [spec]
-  (let [sections
-        [["# Wagoe Environment Configuration" ""]
-         ["# HTTP Server" "HTTP_PORT=3000" "HTTP_HOST=0.0.0.0" ""]
-         (when (= (:database spec) :postgresql)
-           (into ["# PostgreSQL Database"]
-                 (concat (map #(str % "=") (get component-env-vars :postgresql)) [""])))
-         (when (= (:database spec) :mysql)
-           (into ["# MySQL Database"]
-                 (concat (map #(str % "=") (get component-env-vars :mysql)) [""])))
-         (when (#{:sqlite :h2} (:database spec))
-           (into ["# Database file (prod profile only)"]
-                 (concat (map #(str % "=") (get component-env-vars (:database spec))) [""])))
-         ["# Security" "JWT_SECRET=change-me-to-a-32-char-secret" ""]
-         (when (not= (:ai-provider spec) :none)
-           (let [provider (:ai-provider spec)]
-             (into [(str "# AI Provider (" (name provider) ")")]
-                   (concat (map #(str % "=") (get component-env-vars provider)) ["AI_MODEL=" ""]))))
-         (when (contains? #{:stripe :mollie} (:payment spec))
-           (into [(str "# Payments (" (name (:payment spec)) ")")]
-                 (concat (map #(str % "=") (get component-env-vars (:payment spec))) [""])))
-         (when (= (:cache spec) :redis)
-           (into ["# Redis Cache"]
-                 (concat (map #(str % "=") (get component-env-vars :redis)) [""])))
-         (when (= (:email spec) :smtp)
-           (into ["# SMTP Email"]
-                 (concat (map #(str % "=") (get component-env-vars :smtp)) [""])))]]
-    (->> sections
-         (remove nil?)
-         flatten
-         (str/join "\n"))))
+  (str/join "\n" (flatten (env-example-sections spec))))
 
 ;; =============================================================================
 ;; Interactive wizard
@@ -565,52 +574,164 @@
 
 (defn- root-dir [] (System/getProperty "user.dir"))
 
-(defn- write-profile-file!
-  "Prod is hand-maintained once it exists — module wiring, security policy —
-  so an existing prod file is kept rather than regenerated."
-  [env rel content]
-  (let [f    (io/file (root-dir) "resources" "conf" env rel)
-        path (str "resources/conf/" env "/" rel)]
-    (if (and (= env "prod") (.exists f))
-      (println (yellow "!") " Kept existing " (cyan path) (dim " (delete it to regenerate)"))
-      (do (io/make-parents f)
-          (spit f content)
-          (println (green "✓") " Generated " (cyan path))))))
+(def ^:private envs ["dev" "test" "prod"])
 
-(defn- write-config-files!
-  "Write generated config files to disk."
+;; Merging into an existing config (BOU-404). Regenerating the whole file
+;; dropped every key setup does not write: a module `bb scaffold integrate`
+;; added, the :migrate-on-start? `wagoe new` sets (BOU-532).
+
+(def ^:private database-keys
+  #{":wagoe/postgresql" ":wagoe/sqlite" ":wagoe/h2" ":wagoe/mysql"})
+
+(def ^:private chosen-keys
+  "Keys whose value is the answer to a question, so an existing one is
+   replaced. Any other key setup writes is only added when absent."
+  #{":wagoe/ai-service" ":wagoe/payment-provider" ":wagoe/cache" ":wagoe.external/smtp"})
+
+(defn- entry [text kw k]
+  (some #(when (= k (:key %)) %) (config-edn/entries text kw)))
+
+(defn- entry-text [text e]
+  (subs text (:start e) (:end e)))
+
+(defn- cut
+  "`text` without entry `e` and the comments above it."
+  [text e]
+  (let [end (cond-> (:end e) (= \newline (get text (:end e))) inc)]
+    (str (subs text 0 (:from e)) (subs text end))))
+
+(defn- deactivate
+  "`text` with entry `e` moved from :active to :inactive, comments and all."
+  [text e]
+  (let [piece (subs text (:from e) (:end e))
+        text  (cut text e)
+        text  (if-let [old (entry text ":inactive" (:key e))] (cut text old) text)]
+    (if (config-edn/section text ":inactive")
+      (config-edn/insert-into text ":inactive" (str "\n" piece "\n"))
+      (let [close (str/last-index-of text "}")]
+        (str (subs text 0 close) "\n :inactive\n {\n" piece "}\n" (subs text close))))))
+
+(defn- squash [s] (str/replace s #"\s+" " "))
+
+(defn merge-config
+  "`existing` config text with what `generated` sets, as {:text :changes}.
+   nil when `existing` has no :active map to merge into.
+
+   A database is added only when none of that kind is active; the one it
+   replaces moves to :inactive, since two active databases do not boot."
+  [existing generated]
+  (when (config-edn/entries existing ":active")
+    (let [add    (fn [acc k snippet]
+                   (-> acc
+                       (update :text config-edn/insert-into ":active" (str "\n  " snippet "\n"))
+                       (update :changes conj (str "add " k))))
+          result (reduce
+                  (fn [{:keys [text] :as acc} g]
+                    (let [k   (:key g)
+                          new (entry-text generated g)
+                          cur (entry text ":active" k)]
+                      (cond
+                        (and cur (chosen-keys k))
+                        (if (= (squash (entry-text text cur)) (squash new))
+                          acc
+                          (-> acc
+                              (assoc :text (str (subs text 0 (:start cur)) new (subs text (:end cur))))
+                              (update :changes conj (str "replace " k))))
+
+                        cur acc
+
+                        (database-keys k)
+                        (let [old (->> (config-edn/entries text ":active")
+                                       (map :key)
+                                       (filter database-keys))]
+                          (-> acc
+                              (assoc :text (reduce #(deactivate %1 (entry %1 ":active" %2)) text old))
+                              (update :changes into (map #(str "move " % " to :inactive") old))
+                              (add k new)))
+
+                        :else (add acc k new))))
+                  {:text existing :changes []}
+                  (config-edn/entries generated ":active"))]
+      (when (config-edn/entries (:text result) ":active")
+        result))))
+
+(defn- merge-env-example
+  "`existing` .env.example with the variables `spec` needs that it lacks."
+  [existing spec]
+  (let [have    (set (map second (re-seq #"(?m)^\s*([A-Z][A-Z0-9_]*)=" existing)))
+        missing (fn [line]
+                  (let [v (second (re-matches #"([A-Z][A-Z0-9_]*)=.*" line))]
+                    (and v (not (have v)))))
+        added   (for [[header & lines] (env-example-sections spec)
+                      :let  [vs (filter missing lines)]
+                      :when (seq vs)]
+                  (concat [header] vs [""]))]
+    (if (empty? added)
+      {:text existing :changes []}
+      {:text    (str existing (when-not (str/ends-with? existing "\n") "\n") "\n"
+                     (str/join "\n" (apply concat added)))
+       :changes [(str "add " (str/join ", " (mapcat #(remove str/blank? (rest %)) added)))]})))
+
+(defn- plan-file
+  "What setup would do to `rel`. `merge-fn` turns the existing text into
+   {:text :changes}, or nil when it cannot; without one an existing file is
+   kept."
+  [rel content merge-fn]
+  (let [f (io/file (root-dir) rel)]
+    (cond
+      (not (.exists f)) {:path rel :status :new :content content}
+      (nil? merge-fn)   {:path rel :status :kept}
+      :else (let [old (slurp f)]
+              (if-let [{:keys [text changes]} (merge-fn old)]
+                (if (= text old)
+                  {:path rel :status :unchanged}
+                  {:path rel :status :changed :content text :changes changes})
+                {:path rel :status :refused})))))
+
+(defn- plan
+  "Every file setup would touch for `spec`. Prod is hand-maintained once it
+   exists, and so is an admin entity file, so both are kept (BOU-499)."
   [spec]
-  (let [envs ["dev" "test" "prod"]]
-    (println)
-    (doseq [env envs]
-      (write-profile-file! env "config.edn" (build-config spec env)))
-    (spit (io/file (root-dir) ".env.example") (build-env-example spec))
-    (println (green "✓") " Generated " (cyan ".env.example"))
+  (concat
+   (for [env envs
+         :let [generated (build-config spec env)]]
+     (plan-file (str "resources/conf/" env "/config.edn") generated
+                (when-not (prod? env) #(merge-config % generated))))
+   [(plan-file ".env.example" (build-env-example spec) #(merge-env-example % spec))]
+   ;; The file the admin key's `#include` names, only when the config names it.
+   (when-let [entity (and (:admin-ui spec) @admin-users-entity)]
+     (for [env envs]
+       (plan-file (str "resources/conf/" env "/admin/users.edn") entity nil)))))
 
-    ;; The file the admin key's `#include` names. Written for every env, and
-    ;; only when the config references it.
-    (when (:admin-ui spec)
-      (if-let [entity @admin-users-entity]
-        (doseq [env envs]
-          (write-profile-file! env "admin/users.edn" entity))
-        (println (yellow "!") " Admin entity config missing from wagoe-tools;"
-                 (cyan "#include \"admin/users.edn\"") "will not resolve.")))
+(defn- write-plan! [spec plan]
+  (println)
+  (doseq [{:keys [path status content]} plan]
+    (case status
+      (:new :changed) (let [f (io/file (root-dir) path)]
+                        (io/make-parents f)
+                        (spit f content)
+                        (println (green "✓") (if (= :new status) " Generated" " Updated") (cyan path)))
+      :kept           (println (yellow "!") " Kept existing" (cyan path) (dim "(delete it to regenerate)"))
+      :unchanged      (println (dim (str "  Unchanged " path)))))
+  (when (and (:admin-ui spec) (nil? @admin-users-entity))
+    (println (yellow "!") " Admin entity config missing from wagoe-tools;"
+             (cyan "#include \"admin/users.edn\"") "will not resolve."))
+  (println)
+  (println (dim "Next steps:"))
+  (println (dim "  1. Copy .env.example to .env and fill in your values"))
+  (println (dim "  2. Run: bb migrate up"))
+  (println (dim "  3. Run: bb doctor  (to verify your config)"))
+  (when-let [steps (ai-provider-prerequisites (:ai-provider spec))]
     (println)
-    (println (dim "Next steps:"))
-    (println (dim "  1. Copy .env.example to .env and fill in your values"))
-    (println (dim "  2. Run: bb migrate up"))
-    (println (dim "  3. Run: bb doctor  (to verify your config)"))
-    (when-let [steps (ai-provider-prerequisites (:ai-provider spec))]
-      (println)
-      (println (yellow (str "Before " (name (:ai-provider spec)) " answers:")))
-      (doseq [s steps]
-        (println (dim (str "  - " s)))))))
+    (println (yellow (str "Before " (name (:ai-provider spec)) " answers:")))
+    (doseq [s steps]
+      (println (dim (str "  - " s))))))
 
 ;; =============================================================================
 ;; Display summary
 ;; =============================================================================
 
-(defn- display-summary [spec]
+(defn- display-summary [spec plan]
   (println)
   (println (cyan "┌─ Config Summary ─────────────────────────────────────┐"))
   (println (str (cyan "│") " Project:   " (bold (:project-name spec))))
@@ -620,13 +741,43 @@
   (println (str (cyan "│") " Cache:     " (bold (name (:cache spec)))))
   (println (str (cyan "│") " Email:     " (bold (name (:email spec)))))
   (println (str (cyan "│") " Admin UI:  " (if (:admin-ui spec) (green "✓") (red "✗"))))
-  (println (cyan "└───────────────────────────────────────────────────────┘")))
+  (println (cyan "└───────────────────────────────────────────────────────┘"))
+  (doseq [{:keys [path status changes]} plan]
+    (println (str "  " (case status
+                         :new       (green "create       ")
+                         :changed   (yellow "change       ")
+                         :unchanged (dim "unchanged    ")
+                         :kept      (dim "keep         ")
+                         :refused   (red "cannot merge "))
+                  path))
+    (doseq [c changes]
+      (println (dim (str "                 " c))))))
+
+(defn- run-setup!
+  "Show what `spec` would change, ask first when `ask?`, then write it."
+  [spec ask?]
+  (let [plan    (plan spec)
+        refused (filter #(= :refused (:status %)) plan)]
+    (display-summary spec plan)
+    (println)
+    (cond
+      (seq refused)
+      (do (doseq [{:keys [path]} refused]
+            (println (red (str path " has no :active map setup can merge into."))))
+          (println "Nothing was written. Move the file aside to have setup regenerate it.")
+          (*exit!* 1))
+
+      (and ask? (not (confirm "Generate these config files?" true)))
+      (println (yellow "Cancelled."))
+
+      :else (write-plan! spec plan))))
 
 ;; =============================================================================
 ;; AI mode
 ;; =============================================================================
 
 (defn- parse-ai-result
+
   "Parse AI setup-parse JSON result into a setup spec."
   [json-str]
   (try
@@ -664,38 +815,25 @@
   (println (bold "✦ Wagoe AI Config Setup"))
   (println (dim (str "Parsing: " description)))
   (println)
-  (try
-    (let [result (apply shell {:out :string :err :string :continue true}
-                        (ai/ai-command ["setup-parse" description]))
-          spec   (when (zero? (:exit result)) (parse-ai-result (:out result)))]
-      (if spec
-        (do
-          (display-summary spec)
+  (let [result (try (apply shell {:out :string :err :string :continue true}
+                           (ai/ai-command ["setup-parse" description]))
+                    (catch Exception _ nil))
+        spec   (when (some-> result :exit zero?) (parse-ai-result (:out result)))]
+    (cond
+      spec (run-setup! spec true)
+
+      (nil? result)
+      (do (println (yellow "AI parsing unavailable. Falling back to interactive mode."))
           (println)
-          (if (confirm "Generate these config files?" true)
-            (write-config-files! spec)
-            (println (yellow "Cancelled."))))
-        (do
-          (println (red "Could not parse AI response. Falling back to interactive mode."))
+          (run-setup! (wizard-interactive) true))
+
+      :else
+      (do (println (red "Could not parse AI response. Falling back to interactive mode."))
           ;; The CLI explains itself on stderr, which is captured here — a
           ;; rejected API key must not read as "the AI is unavailable".
           (when-not (str/blank? (str (:err result)))
             (println (dim (str/trim (str (:err result))))))
-          (let [spec (wizard-interactive)]
-            (display-summary spec)
-            (println)
-            (if (confirm "Generate these config files?" true)
-              (write-config-files! spec)
-              (println (yellow "Cancelled.")))))))
-    (catch Exception _
-      (println (yellow "AI parsing unavailable. Falling back to interactive mode."))
-      (println)
-      (let [spec (wizard-interactive)]
-        (display-summary spec)
-        (println)
-        (if (confirm "Generate these config files?" true)
-          (write-config-files! spec)
-          (println (yellow "Cancelled.")))))))
+          (run-setup! (wizard-interactive) true)))))
 
 ;; =============================================================================
 ;; Non-interactive flag mode
@@ -712,20 +850,25 @@
              (assoc opts (keyword (subs flag 2)) (first more)))
       :else (recur more opts))))
 
+(defn from-flags-spec
+  "The setup spec the flags in `opts` describe."
+  [opts]
+  {:project-name (or (:project-name opts) "my-app")
+   ;; sqlite, matching the interactive menu and the AI path — all
+   ;; three entry points must agree. Any `bb setup --<flag>` lands
+   ;; here, so `bb setup --payment mock` (no --database) took this
+   ;; default; with postgresql it wrote a config whose driver is not
+   ;; even on a generated project's classpath, which now ships only
+   ;; sqlite and h2. Same clean-start failure as BOU-228.
+   :database     (keyword (or (:database opts) "sqlite"))
+   :ai-provider  (keyword (or (:ai-provider opts) "none"))
+   :payment      (keyword (or (:payment opts) "none"))
+   :cache        (keyword (or (:cache opts) "none"))
+   :email        (keyword (or (:email opts) "none"))
+   :admin-ui     (not= "false" (or (:admin-ui opts) "true"))})
+
 (defn from-flags [opts]
-  (let [spec {:project-name (or (:project-name opts) "my-app")
-              ;; sqlite, matching the interactive menu and the AI path — all
-              ;; three entry points must agree. Any `bb setup --<flag>` lands
-              ;; here, so `bb setup --payment mock` (no --database) took this
-              ;; default; with postgresql it wrote a config whose driver is not
-              ;; even on a generated project's classpath, which now ships only
-              ;; sqlite and h2. Same clean-start failure as BOU-228.
-              :database     (keyword (or (:database opts) "sqlite"))
-              :ai-provider  (keyword (or (:ai-provider opts) "none"))
-              :payment      (keyword (or (:payment opts) "none"))
-              :cache        (keyword (or (:cache opts) "none"))
-              :email        (keyword (or (:email opts) "none"))
-              :admin-ui     (not= "false" (or (:admin-ui opts) "true"))}
+  (let [spec   (from-flags-spec opts)
         errors (spec-errors spec)]
     (if (seq errors)
       ;; Before the templates, not inside them: a `case` fall-through reported
@@ -733,9 +876,7 @@
       ;; choices (BOU-411).
       (do (doseq [e errors] (println (red e)))
           (*exit!* 1))
-      (do (display-summary spec)
-          (println)
-          (write-config-files! spec)))))
+      (run-setup! spec false))))
 
 ;; =============================================================================
 ;; Help
@@ -768,19 +909,14 @@
 ;; Main entry point
 ;; =============================================================================
 
-(defn -main [& raw-args]
+(defn- dispatch [raw-args]
   (let [args (vec raw-args)
         [sub & rest-args] args]
     (cond
       (or (nil? sub) (contains? #{"-h" "--help" "help"} sub))
       (if (nil? sub)
         ;; No args at all — run interactive wizard
-        (let [spec (wizard-interactive)]
-          (display-summary spec)
-          (println)
-          (if (confirm "Generate these config files?" true)
-            (write-config-files! spec)
-            (println (yellow "Cancelled."))))
+        (run-setup! (wizard-interactive) true)
         (print-help))
 
       (= sub "ai")
@@ -801,6 +937,17 @@
       (do (println (red (str "Unknown subcommand: " sub)))
           (println)
           (print-help)))))
+
+(defn -main [& raw-args]
+  (try
+    (dispatch raw-args)
+    (catch clojure.lang.ExceptionInfo e
+      (if (= :setup/stdin-closed (:type (ex-data e)))
+        (do (println)
+            (println (red "stdin closed before the wizard finished. Nothing was written."))
+            (println "  Without a terminal, pass flags:  bb setup --database sqlite")
+            (*exit!* 1))
+        (throw e)))))
 
 ;; Run when executed directly (not via bb.edn task)
 (when (= *file* (System/getProperty "babashka.file"))

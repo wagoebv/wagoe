@@ -1,5 +1,6 @@
 (ns wagoe.tools.setup-test
   (:require [clojure.test :refer [deftest is testing]]
+            [wagoe.tools.integrate :as integrate]
             [wagoe.tools.setup :as setup]
             [babashka.fs :as fs]
             [clojure.edn :as edn]
@@ -578,4 +579,128 @@
       (is (= "{:users {:label \"Mine\"}}" (slurp users)))
       (is (fs/exists? (fs/file dir "resources" "conf" "dev" "config.edn"))
           "dev is still generated")
+      (finally (fs/delete-tree dir)))))
+
+;; =============================================================================
+;; Existing config is merged into, never clobbered (BOU-404, BOU-532)
+;; =============================================================================
+
+(defn- wagoe-new-project!
+  "A dir holding what `wagoe new` writes, plus a module `bb scaffold integrate`
+   added. Returns the dir."
+  []
+  (let [dir    (fs/create-temp-dir)
+        render #(str/replace (lib-source (str "wagoe-cli/resources/wagoe/cli/templates/" %))
+                             "{{project-name}}" "shop")]
+    (doseq [env ["dev" "test"]]
+      (fs/create-dirs (fs/file dir "resources" "conf" env))
+      (spit (fs/file dir "resources" "conf" env "config.edn")
+            (render (str env "-config.edn.tmpl"))))
+    (spit (fs/file dir ".env.example") (render "env.example.tmpl"))
+    (integrate/write-config! (str dir) ":wagoe/product"
+                             (integrate/generate-config-snippet "product" true) {})
+    dir))
+
+(defn- snapshot [dir]
+  (into {} (for [f (fs/glob dir "**" {:hidden true}) :when (fs/regular-file? f)]
+             [(str (fs/relativize dir f)) (slurp (fs/file f))])))
+
+(defn- conf [dir env]
+  (read-config (slurp (fs/file dir "resources" "conf" env "config.edn"))))
+
+(defn- run-setup
+  "Run `bb setup` with `args` and `stdin` in `dir`. Returns [exit-code output]."
+  [dir stdin & args]
+  (let [exit (atom nil)
+        out  (with-redefs [setup/root-dir (constantly (str dir))]
+               (binding [setup/*exit!* #(reset! exit %)]
+                 (with-out-str (with-in-str stdin (apply setup/-main args)))))]
+    [@exit out]))
+
+(deftest ^:unit wizard-on-closed-stdin-writes-nothing
+  (let [dir (wagoe-new-project!)]
+    (try
+      (let [before     (snapshot dir)
+            [exit out] (run-setup dir "")]
+        (is (= 1 exit) "EOF is not consent")
+        (is (str/includes? out "stdin closed"))
+        (is (= before (snapshot dir))))
+      (finally (fs/delete-tree dir)))))
+
+(deftest ^:unit wizard-names-the-files-it-would-change-before-asking
+  (let [dir (wagoe-new-project!)]
+    (try
+      (let [before     (snapshot dir)
+            ;; Enter through every question, then decline.
+            [exit out] (run-setup dir "\n\n\n\n\n\n\nn\n")
+            summary    (-> out (str/split #"Config Summary") second
+                           (str/split #"Generate these") first)]
+        (is (nil? exit))
+        (is (str/includes? summary "resources/conf/dev/config.edn"))
+        (is (str/includes? summary "resources/conf/test/config.edn"))
+        (is (str/includes? summary ".env.example"))
+        (is (= before (snapshot dir)) "declined, so nothing written"))
+      (finally (fs/delete-tree dir)))))
+
+(deftest ^:unit flag-mode-merges-into-a-wagoe-new-project
+  (let [dir (wagoe-new-project!)]
+    (try
+      (let [[exit _] (run-setup dir "" "--database" "sqlite" "--ai-provider" "ollama")
+            dev      (:active (conf dir "dev"))
+            test     (:active (conf dir "test"))
+            env-ex   (slurp (fs/file dir ".env.example"))]
+        (is (nil? exit))
+        (is (true? (get-in dev [:wagoe/sqlite :migrate-on-start?])))
+        (is (= "shop-dev.db" (get-in dev [:wagoe/sqlite :db])))
+        (is (true? (get-in test [:wagoe/h2 :migrate-on-start?])))
+        (is (contains? dev :wagoe/product) "integrate-written key survives")
+        (is (contains? test :wagoe/product))
+        (is (= :ollama (get-in dev [:wagoe/ai-service :provider])) "what was asked is written")
+        (is (str/includes? env-ex "JWT_SECRET=change-me-to-a-32-char-minimum-secret"))
+        (is (str/includes? env-ex "OLLAMA_URL=")))
+      (finally (fs/delete-tree dir)))))
+
+(deftest ^:unit flag-mode-switching-database-keeps-the-old-one-inactive
+  (let [dir (wagoe-new-project!)]
+    (try
+      (run-setup dir "" "--database" "postgresql")
+      (let [{:keys [active inactive]} (conf dir "dev")]
+        (is (contains? active :wagoe/postgresql))
+        (is (not (contains? active :wagoe/sqlite)) "two active databases do not boot")
+        (is (true? (get-in inactive [:wagoe/sqlite :migrate-on-start?])))
+        (is (contains? active :wagoe/product)))
+      (finally (fs/delete-tree dir)))))
+
+(deftest ^:unit setup-twice-changes-nothing-the-second-time
+  (let [dir (wagoe-new-project!)]
+    (try
+      (run-setup dir "" "--database" "sqlite" "--cache" "redis")
+      (let [before (snapshot dir)]
+        (run-setup dir "" "--database" "sqlite" "--cache" "redis")
+        (is (= before (snapshot dir))))
+      (finally (fs/delete-tree dir)))))
+
+(deftest ^:unit unmergeable-config-refuses-and-writes-nothing
+  (let [dir (fs/create-temp-dir)]
+    (try
+      (fs/create-dirs (fs/file dir "resources" "conf" "dev"))
+      (spit (fs/file dir "resources" "conf" "dev" "config.edn") "{:my/key 1}")
+      (let [[exit out] (run-setup dir "" "--database" "sqlite")]
+        (is (= 1 exit))
+        (is (str/includes? out "resources/conf/dev/config.edn"))
+        (is (= {"resources/conf/dev/config.edn" "{:my/key 1}"} (snapshot dir))))
+      (finally (fs/delete-tree dir)))))
+
+(deftest ^:unit fresh-dir-gets-every-file
+  (let [dir (fs/create-temp-dir)]
+    (try
+      (let [[exit _] (run-setup dir "" "--database" "sqlite")]
+        (is (nil? exit))
+        (is (= #{"resources/conf/dev/config.edn" "resources/conf/test/config.edn"
+                 "resources/conf/prod/config.edn" ".env.example"
+                 "resources/conf/dev/admin/users.edn" "resources/conf/test/admin/users.edn"
+                 "resources/conf/prod/admin/users.edn"}
+               (set (keys (snapshot dir)))))
+        (is (= (setup/build-config (setup/from-flags-spec {:database "sqlite"}) "dev")
+               (slurp (fs/file dir "resources" "conf" "dev" "config.edn")))))
       (finally (fs/delete-tree dir)))))
