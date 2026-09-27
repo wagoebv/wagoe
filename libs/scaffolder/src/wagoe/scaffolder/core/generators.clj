@@ -537,6 +537,13 @@ DROP TABLE IF EXISTS %s;
 ;; Persistence File Generator
 ;; =============================================================================
 
+(defn- enum-field-set
+  "The entity's enum fields as a set literal, e.g. `#{:status}`."
+  [entity]
+  (str "#{" (str/join " " (for [f (:fields entity) :when (= :enum (:field-type f))]
+                            (str ":" (:field-name-kebab f))))
+       "}"))
+
 (defn generate-persistence-file
   "Generate shell/persistence.clj file content.
    
@@ -581,8 +588,19 @@ DROP TABLE IF EXISTS %s;
           "        (instance? LocalDate v) (str v)\n"
           "        :else v))\n"
           "\n"
+          ;; A keyword value is a column name to HoneySQL, so an enum insert
+          ;; failed with `no such column: entered` (BOU-562).
+          "(def ^:private enum-fields\n"
+          "  \"Keywords in Clojure, strings in the database.\"\n"
+          "  " (enum-field-set entity) ")\n"
+          "\n"
+          "(defn- ->row [entity]\n"
+          "  (reduce (fn [m k] (cond-> m (keyword? (get m k)) (update k name))) entity enum-fields))\n"
+          "\n"
           "(defn- ->entity [row]\n"
-          "  (some-> row (update-vals date->iso)))\n"
+          "  (some-> row\n"
+          "          (update-vals date->iso)\n"
+          "          (as-> r (reduce (fn [m k] (cond-> m (string? (get m k)) (update k keyword))) r enum-fields))))\n"
           "\n"
           ;; A 400, not the 500 a :database-error is answered with (BOU-540).
           "(defn- missing-reference?\n"
@@ -610,7 +628,7 @@ DROP TABLE IF EXISTS %s;
           "(defrecord Database" entity-name "Repository [db-ctx]\n"
           "  ports/I" entity-name "Repository\n"
           "  (" create " [_this entity]\n"
-          "    (write! db-ctx {:insert-into :" table-name " :values [entity]})\n"
+          "    (write! db-ctx {:insert-into :" table-name " :values [(->row entity)]})\n"
           "    (select-by-id db-ctx (:id entity)))\n"
           "  (" find-by-id " [_this id]\n"
           "    (select-by-id db-ctx id))\n"
@@ -627,7 +645,7 @@ DROP TABLE IF EXISTS %s;
           "      (when (empty? changes)\n"
           "        (throw (ex-info \"Nothing to update\" {:type :validation-error :id (:id entity)})))\n"
           "      (write! db-ctx {:update :" table-name "\n"
-          "                      :set (assoc changes :updated-at (Instant/now))\n"
+          "                      :set (->row (assoc changes :updated-at (Instant/now)))\n"
           "                      :where [:= :id (:id entity)]})\n"
           "      (select-by-id db-ctx (:id entity))))\n"
           "  (" delete " [_this id]\n"
@@ -760,6 +778,21 @@ DROP TABLE IF EXISTS %s;
           "          result (ports/create-" entity-lower " svc {:name \"Test\"})]\n"
           "      (is (some? result)))))\n"))))
 
+(defn- sample-value
+  "A literal the field's column accepts and reads back unchanged, as source
+   text, or nil for a type that does not read back as it was written."
+  [field]
+  (case (:field-type field)
+    (:string :text) "\"Test\""
+    :email          "\"test@example.com\""
+    :int            "1"
+    :decimal        "9.99M"
+    :boolean        "true"
+    (:uuid :relation) "(UUID/randomUUID)"
+    :enum           (str (second (:malli-type field)))
+    :date           "\"2026-01-01\""
+    nil))
+
 (defn generate-persistence-test-file
   "Generate test persistence file content.
    
@@ -775,28 +808,65 @@ DROP TABLE IF EXISTS %s;
    (let [base-ns (:base-ns ctx "wagoe")
          module-name (:module-name ctx)
          entity-name (:entity-name entity)
-         entity-lower (template/pascal->kebab entity-name)]
+         entity-lower (template/pascal->kebab entity-name)
+         {:keys [create find-by-id]} (repo-fns entity)
+         fields    (:fields entity)
+         relation? (some :relation-table fields)
+         ;; Compared after the round trip. A timestamp comes back in the
+         ;; driver's type and JSON has no portable column value, so those two
+         ;; are left out of the comparison.
+         compared  (keep #(when-let [v (sample-value %)] (str ":" (:field-name-kebab %) " " v)) fields)
+         opaque    (str/join " " (for [f fields :when (= :json (:field-type f))]
+                                   (str ":" (:field-name-kebab f))))
+         ;; Written but not compared: a NOT NULL column still needs a value.
+         instants  (concat
+                    (for [f fields :when (= :inst (:field-type f))]
+                      (str " :" (:field-name-kebab f) " (Instant/now)"))
+                    (for [f fields :when (and (nil? (sample-value f)) (not= :inst (:field-type f))
+                                              (:field-required f))]
+                      (str " :" (:field-name-kebab f) " \"{}\"")))]
      (str "(ns " base-ns "." module-name ".shell." entity-lower "-repository-test\n"
           "  (:require [clojure.test :refer [deftest testing is]]\n"
           "            [" base-ns "." module-name "." (shell-ns entity :persistence-ns) " :as persistence]\n"
-          "            [" base-ns "." module-name ".ports :as ports]))\n"
+          "            [" base-ns "." module-name ".ports :as ports]\n"
+          (when relation? "            [wagoe.platform.database :as db]\n")
+          "            [wagoe.platform.shell.adapters.database.factory :as db-factory]\n"
+          "            [wagoe.platform.shell.database.migrations :as migrations])\n"
+          "  (:import [java.time Instant]\n"
+          "           [java.util UUID]))\n"
           "\n"
-         ;; Was `(is true)` with a \"requires database context\" comment, which
-         ;; `bb check:placeholder-tests` rejects — and that check runs in
-         ;; generated projects, so scaffolding a module broke `bb check`.
-         ;;
-         ;; Asserting the wiring instead is both real and database-free: it
-         ;; fails if the repository stops implementing its port, which is the
-         ;; mistake this file can actually catch before a database exists.
-         ;; ^:integration because the exercises you add next need one.
+          "(defn- with-database\n"
+          "  \"Call `f` with a context on a fresh in-memory H2 database, migrated.\"\n"
+          "  [f]\n"
+          "  (let [ctx (db-factory/db-context {:adapter :h2\n"
+          "                                    :database-path (str \"mem:\" (UUID/randomUUID))\n"
+          "                                    :pool {:minimum-idle 1 :maximum-pool-size 2}})]\n"
+          "    (try\n"
+          "      (migrations/migrate-datasource! (:datasource ctx))\n"
+          "      (f ctx)\n"
+          "      (finally (db-factory/close-db-context! ctx)))))\n"
+          "\n"
           "(deftest ^:integration create-" entity-lower "-test\n"
           "  (testing \"the repository implements its persistence port\"\n"
           "    (is (satisfies? ports/I" entity-name "Repository\n"
           "                    (persistence/create-repository nil))))\n"
-          "  (testing \"creating a " entity-lower " round-trips through the database\"\n"
-          "    ;; Add a database context and assert on a real create here.\n"
-          "    ;; See the module README for wiring a test db-ctx.\n"
-          "    ))\n"))))
+          "  (testing \"a " entity-lower " round-trips through the database\"\n"
+          "    (with-database\n"
+          "      (fn [ctx]\n"
+          (when relation?
+            (str "        ;; The rows it refers to are not what this tests.\n"
+                 "        (db/execute-ddl! ctx \"SET REFERENTIAL_INTEGRITY FALSE\")\n"))
+          "        (let [repo    (persistence/create-repository ctx)\n"
+          "              fields  {" (str/join "\n                       " compared) "}\n"
+          "              created (ports/" create " repo (assoc fields :id (UUID/randomUUID) :created-at (Instant/now)"
+          (apply str instants) "))]\n"
+          "          (is (= fields (select-keys created (keys fields))))\n"
+          (if (seq opaque)
+            ;; A JSON column reads back as the driver's own type, which `=`
+            ;; compares by identity.
+            (str "          (is (= (dissoc created " opaque ")\n"
+                 "                 (dissoc (ports/" find-by-id " repo (:id created)) " opaque "))))))))\n")
+            (str "          (is (= created (ports/" find-by-id " repo (:id created)))))))))\n"))))))
 
 ;; =============================================================================
 ;; Further entities (BOU-497)
@@ -1798,3 +1868,270 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s%s%s;
             record-name
             port-name
             record-name)))
+
+;; =============================================================================
+;; Admin entity config (BOU-562)
+;; =============================================================================
+;;
+;; With the admin UI on, an entity needs three things before the admin shows
+;; it: resources/conf/<profile>/admin/<plural>.edn, its name in the admin's
+;; :allowlist and an `#include` of that file in :entities. The config files are
+;; Aero, so they are edited with rewrite-clj, which reads `#include` and
+;; `#merge` as syntax and keeps every comment.
+
+(defn- humanize [s]
+  (str/capitalize (str/replace (name s) "-" " ")))
+
+(defn- edn-str
+  "`x` printed without the commas pr-str puts between map entries. Only
+   generated names go in, so no string holds one."
+  [x]
+  (str/replace (pr-str x) ", " " "))
+
+(defn sensitive-field?
+  "Whether a column holds a secret the admin must not show: the admin's own
+   hidden names (`common-hidden-fields` in wagoe.admin.core.schema-introspection)
+   and any name with a word that says so.
+
+   Pure: true"
+  [k]
+  (boolean (or (#{:password-hash :password-encrypted :secret :token :api-key :private-key
+                  :salt :hash :search-vector :tsv :fts-vector} k)
+               (some #{"password" "hash" "secret" "token" "key" "salt"}
+                     (str/split (name k) #"-")))))
+
+(defn admin-display-fields
+  "The fields that stand for an entity on another's page: its first two own
+   fields, not its keys or secrets.
+
+   Pure: true"
+  [field-names]
+  (vec (take 2 (remove #(or (#{:id :created-at :updated-at :deleted-at} %)
+                            (str/ends-with? (name %) "-id")
+                            (sensitive-field? %))
+                       field-names))))
+
+(defn schema-field-names
+  "The keys of the Malli map in `(def schema-name …)` within `source`, or nil.
+
+   Pure: true"
+  [source schema-name]
+  (when-let [m (schema-map-zloc source schema-name)]
+    (vec (for [child (take-while some? (iterate z/right (z/down m)))
+               :when (= :vector (z/tag child))
+               :let  [k (first (z/sexpr child))]
+               :when (keyword? k)]
+           k))))
+
+(defn admin-has-many
+  "The editable `:has-many` entry a parent's admin config gets for `child`.
+
+   Pure: true"
+  [child]
+  (let [fk (keyword (str (:belongs-to child) "-id"))]
+    {:entity      (keyword (:entity-plural child))
+     :table       (keyword (:entity-table child))
+     :foreign-key fk
+     :label       (humanize (:entity-plural child))
+     :fields      (vec (take 4 (remove #(or (= fk %) (sensitive-field? %))
+                                       (map (comp keyword :field-name-kebab) (:fields child)))))
+     :editable    true
+     ;; As the migration's foreign key does: a child has no life without its
+     ;; parent. The admin restricts a delete unless told otherwise.
+     :on-delete   :cascade}))
+
+(defn admin-entity-file
+  "resources/conf/<profile>/admin/<plural>.edn for `entity`.
+
+   `children` are the entities that belong to it, each getting an editable
+   `:has-many`; `parent` is {:name \"Invoice\" :fields [...]} when it belongs
+   to one, for the banner on its pages. Deletes are hard, as the generated
+   API's are, so a child's ON DELETE CASCADE runs.
+
+   Pure: true"
+  [entity {:keys [children parent]}]
+  (let [fields  (:fields entity)
+        secrets (filterv sensitive-field? (map (comp keyword :field-name-kebab) fields))
+        names   (into [] (comp (map (comp keyword :field-name-kebab)) (remove sensitive-field?)) fields)
+        search  (vec (for [f fields
+                           :let [k (keyword (:field-name-kebab f))]
+                           :when (and (#{:string :text :email} (:field-type f)) (not (sensitive-field? k)))]
+                       k))
+        enums   (into {} (for [f fields :when (= :enum (:field-type f))]
+                           [(keyword (:field-name-kebab f))
+                            {:type    :enum
+                             :widget  :select
+                             :options (mapv #(vector % (humanize %)) (rest (:malli-type f)))}]))
+        fk      (when (:belongs-to entity) (keyword (str (:belongs-to entity) "-id")))
+        entry   (fn [k v] (format "%-16s %s" k v))
+        entries (cond-> [(entry ":label" (pr-str (humanize (:entity-plural entity))))
+                         (entry ":table-name" (str ":" (:entity-plural entity)))
+                         (entry ":soft-delete" "false")
+                         (entry ":list-fields" (pr-str (conj (vec (remove #{fk} names)) :created-at)))]
+                  (seq search) (conj (entry ":search-fields" (pr-str search)))
+                  ;; Secrets listed, not left to the admin's detection: a
+                  ;; manual :hide-fields replaced the set it detects.
+                  :always      (conj (entry ":hide-fields" (str "#{" (str/join " " (map str (cons :deleted-at secrets))) "}"))
+                                     (entry ":readonly-fields" "#{:id :created-at :updated-at}"))
+                  (seq enums)  (conj (entry ":fields" (edn-str enums)))
+                  (seq children)
+                  (conj (entry ":has-many" (str "[" (str/join (str "\n" (apply str (repeat 20 " ")))
+                                                              (map (comp edn-str admin-has-many) children))
+                                                "]")))
+                  parent
+                  (conj (entry ":parent-context" (edn-str {:label (:name parent) :fields (:fields parent)}))))]
+    (str "{:" (:entity-plural entity) "\n"
+         " {" (str/join "\n  " entries) "}}\n")))
+
+(defn- key-of [loc]
+  (try (z/sexpr loc) (catch Exception _ ::unreadable)))
+
+(defn- children
+  "Zippers at the forms inside `loc`, `#_` discards left out: a `#_#_ k v`
+   counted as a pair shifts every key after it onto a value."
+  [loc]
+  (->> (some-> loc z/down) (iterate z/right) (take-while some?)
+       (remove #(= :uneval (z/tag %)))))
+
+(defn- map-val
+  "Zipper at the value of `k` in the map at `loc`, or nil. Walks key/value
+   pairs: `z/get` also matches a value equal to `k`, and :allowlist is both."
+  [loc k]
+  (when (and loc (= :map (z/tag loc)))
+    (some (fn [[kl vl]] (when (= k (key-of kl)) vl))
+          (partition 2 (children loc)))))
+
+(defn- column [loc] (dec (second (z/position loc))))
+
+(defn- append-item
+  "`loc`'s collection with `node` appended: on a new line at the column of
+   its first item when `newline?`, else after a space."
+  [loc node newline?]
+  (if-let [first-child (first (children loc))]
+    (-> loc
+        (z/append-child* (if newline? (n/newlines 1) (n/spaces 1)))
+        (cond-> newline? (z/append-child* (n/spaces (column first-child))))
+        (z/append-child* node))
+    (z/append-child* loc node)))
+
+(defn- append-entry
+  "The map at `loc` with `k v` added on a line of its own, the value in the
+   column the first entry's value is in."
+  [loc k v-src]
+  (let [first-key (first (children loc))
+        col       (or (some-> first-key column) 1)
+        val-col   (or (some-> first-key z/right column) 0)]
+    (-> loc
+        (z/append-child* (n/newlines 1))
+        (z/append-child* (n/spaces col))
+        (z/append-child* (n/keyword-node k))
+        (z/append-child* (n/spaces (max 1 (- val-col col (count (str k))))))
+        (z/append-child* (z/node (z/of-string v-src))))))
+
+(defn- admin-node
+  "Zipper at the value of :wagoe/admin under :active, whatever its shape."
+  [source]
+  (-> (z/of-string source {:track-position? true}) (map-val :active) (map-val :wagoe/admin)))
+
+(defn- admin-loc
+  "The :wagoe/admin map, when it is a literal map with the admin on. A
+   `#profile` or `#include` in its place is not something to edit."
+  [source]
+  (let [admin (admin-node source)]
+    (when (and admin (= :map (z/tag admin))
+               (not (false? (some-> (map-val admin :enabled?) key-of))))
+      admin)))
+
+(defn admin-active?
+  "Whether the config.edn `source` switches the admin UI on. A :wagoe/admin
+   that is not a literal map counts: it cannot be read without Aero.
+
+   Pure: true"
+  [source]
+  (try (let [admin (admin-node source)]
+         (boolean (and admin (or (not= :map (z/tag admin)) (admin-loc source)))))
+       (catch Exception _ false)))
+
+(defn add-admin-entity
+  "config.edn `source` with the entity `plural` in the admin's :allowlist and
+   its file in :entities.
+
+   {:status :updated :content s}, :present, :no-admin, or
+   {:status :unrecognised :reason s} for an :entities that is not a `#merge`.
+
+   Pure: true"
+  [source plural]
+  (try
+    (let [k       (keyword plural)
+          include (str "#include \"admin/" plural ".edn\"")]
+      (cond
+        (nil? (admin-node source))
+        {:status :no-admin}
+
+        (not= :map (z/tag (admin-node source)))
+        {:status :unrecognised
+         :reason (str ":wagoe/admin is not a literal map, so add :" plural " to its :allowlist and "
+                      include " to its :entities yourself")}
+
+        (nil? (admin-loc source))
+        {:status :no-admin}
+
+        :else
+        (let [allow   (some-> (admin-loc source) (map-val :entity-discovery) (map-val :allowlist))
+              step1   (if (and allow (= :set (z/tag allow))
+                               (not (some #{k} (map key-of (children allow)))))
+                        (z/root-string (append-item allow (n/keyword-node k) false))
+                        source)
+              admin   (admin-loc step1)
+              ents    (map-val admin :entities)
+              merged  (when (and ents (= :reader-macro (z/tag ents))
+                                 (= "merge" (some-> ents z/down z/string)))
+                        (z/right (z/down ents)))
+              result  (cond
+                        (nil? ents)
+                        {:content (z/root-string (append-entry admin :entities (str "#merge [" include "]")))}
+
+                        (not (and merged (= :vector (z/tag merged))))
+                        {:reason (str ":entities is not a #merge of #includes, so add " include " to it")}
+
+                        (some #(= include (z/string %)) (children merged))
+                        {:content step1}
+
+                        :else
+                        {:content (z/root-string (append-item merged (z/node (z/of-string include)) true))})]
+          (cond
+            (:reason result)            {:status :unrecognised :reason (:reason result)}
+            (= source (:content result)) {:status :present}
+            :else                        {:status :updated :content (:content result)}))))
+    (catch Exception e
+      {:status :unrecognised :reason (str "it could not be read: " (.getMessage e))})))
+
+(defn add-admin-has-many
+  "The admin entity file `source` of `parent-plural` with an editable
+   `:has-many` for `child`. {:status :updated :content s}, :present, or
+   {:status :unrecognised :reason s}.
+
+   Pure: true"
+  [source parent-plural child]
+  (try
+    (let [entity (map-val (z/of-string source {:track-position? true}) (keyword parent-plural))
+          entry  (admin-has-many child)
+          hm     (map-val entity :has-many)]
+      (cond
+        (nil? entity)
+        {:status :unrecognised :reason (str "it does not configure :" parent-plural)}
+
+        (nil? hm)
+        {:status :updated :content (z/root-string (append-entry entity :has-many (str "[" (edn-str entry) "]")))}
+
+        (not= :vector (z/tag hm))
+        {:status :unrecognised :reason "its :has-many is not a vector"}
+
+        (some #(= (:entity entry) (:entity (try (z/sexpr %) (catch Exception _ nil))))
+              (children hm))
+        {:status :present}
+
+        :else
+        {:status :updated :content (z/root-string (append-item hm (z/node (z/of-string (edn-str entry))) true))}))
+    (catch Exception e
+      {:status :unrecognised :reason (str "it could not be read: " (.getMessage e))})))

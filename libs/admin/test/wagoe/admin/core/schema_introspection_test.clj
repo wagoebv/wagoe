@@ -265,6 +265,21 @@
 ;; Entity Config Merging Tests
 ;; =============================================================================
 
+(deftest ^:unit ^:security a-manual-config-cannot-un-hide-a-secret
+  ;; A manual :hide-fields replaced the detected set, so a scaffolded
+  ;; #{:deleted-at} showed and edited password hashes and API keys (BOU-562).
+  (let [col  (fn [n] {:name n :type "VARCHAR" :not-null false :default nil :primary-key false})
+        auto (introspection/parse-table-metadata
+              :accounts [{:name "id" :type "UUID" :not-null true :default nil :primary-key true}
+                         (col "name") (col "api_key") (col "password_hash") (col "deleted_at")])
+        cfg  (introspection/build-entity-config
+              auto {:hide-fields #{:deleted-at}
+                    :list-fields [:name :api-key]
+                    :search-fields [:name :password-hash]})]
+    (is (= #{:deleted-at :api-key :password-hash} (set (:hide-fields cfg))))
+    (doseq [k [:list-fields :search-fields :detail-fields :editable-fields]]
+      (is (not-any? #{:api-key :password-hash} (get cfg k)) (str k)))))
+
 (deftest ^:unit build-entity-config-test
   (testing "Merge auto-detected config with manual overrides"
     (let [auto-config (introspection/parse-table-metadata :users sample-users-table-metadata)
@@ -738,9 +753,9 @@
 
     (testing "a column on the form is the database's to enforce, not a config error"
       (is (empty? (create-errors (-> config
-                                         (update :editable-fields conj :status)
-                                         (update :readonly-fields disj :status))
-                                     invoices-columns))))
+                                     (update :editable-fields conj :status)
+                                     (update :readonly-fields disj :status))
+                                 invoices-columns))))
 
     (testing "a hidden field is not a config error: a request may still supply it"
       (is (empty? (create-errors (-> config

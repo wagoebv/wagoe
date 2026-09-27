@@ -436,24 +436,27 @@
          entity-kebab (pascal->kebab entity-name)
          entity-plural (or (:plural entity-def) (pluralize entity-kebab))
          shell-ns (fn [suffix] (if primary? (str "shell." suffix) (str "shell." entity-kebab "-" suffix)))]
-     {:module-name module-name
-      :entity-name entity-name
-      ;; `:entity-lower` is the kebab form: it names Clojure vars
-      ;; (`create-<entity-lower>`), where a run-together word is wrong and a
-      ;; hyphen is right. It is not `str/lower-case` of anything any more.
-      :entity-lower entity-kebab
-      :entity-kebab entity-kebab
-      :entity-snake (kebab->snake entity-kebab)
-      :entity-plural entity-plural
-      :entity-plural-snake (kebab->snake entity-plural)
-      :entity-table (kebab->snake entity-plural)
-      :fields (mapv build-field-context (entity-fields entity-def))
-      :description (:description entity-def "")
-      :primary? (boolean primary?)
-      :repo-fns (repository-fns entity-kebab entity-plural primary?)
-      :service-ns (shell-ns "service")
-      :persistence-ns (shell-ns "persistence")
-      :service-test-ns (shell-ns "service-test")})))
+     (cond-> {:module-name module-name
+              :entity-name entity-name
+              ;; `:entity-lower` is the kebab form: it names Clojure vars
+              ;; (`create-<entity-lower>`), where a run-together word is wrong and a
+              ;; hyphen is right. It is not `str/lower-case` of anything any more.
+              :entity-lower entity-kebab
+              :entity-kebab entity-kebab
+              :entity-snake (kebab->snake entity-kebab)
+              :entity-plural entity-plural
+              :entity-plural-snake (kebab->snake entity-plural)
+              :entity-table (kebab->snake entity-plural)
+              :fields (mapv build-field-context (entity-fields entity-def))
+              :description (:description entity-def "")
+              :primary? (boolean primary?)
+              :repo-fns (repository-fns entity-kebab entity-plural primary?)
+              :service-ns (shell-ns "service")
+              :persistence-ns (shell-ns "persistence")
+              :service-test-ns (shell-ns "service-test")}
+       ;; The parent, kebab: its admin config lists this entity (BOU-562).
+       (valid-entity-name? (:belongs-to entity-def))
+       (assoc :belongs-to (pascal->kebab (:belongs-to entity-def)))))))
 
 (defn build-module-context
   "Build complete template context for module generation.

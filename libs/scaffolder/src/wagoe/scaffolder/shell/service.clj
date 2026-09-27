@@ -162,6 +162,82 @@
                          ", which is not an entity listed before it."))))
               (map-indexed vector entities)))))
 
+;; =============================================================================
+;; Admin config (BOU-562)
+;; =============================================================================
+
+(defn- profile-dirs
+  "The profile directories under `output-dir`'s resources/conf, sorted."
+  [output-dir]
+  (->> (.listFiles ^java.io.File (resolve-path output-dir "resources/conf"))
+       (filter #(.isDirectory ^java.io.File %))
+       (sort-by #(.getName ^java.io.File %))))
+
+(defn- profile-config ^java.io.File [dir] (io/file dir "config.edn"))
+
+(defn- admin-on?
+  "Whether any profile switches the admin UI on."
+  [output-dir]
+  (boolean (some #(let [f (profile-config %)]
+                    (and (.isFile f) (generators/admin-active? (slurp f))))
+                 (profile-dirs output-dir))))
+
+(defn- admin-file-path [dir plural]
+  (str "resources/conf/" (.getName ^java.io.File dir) "/admin/" plural ".edn"))
+
+(defn- admin-files
+  "One admin entity file per profile for each [entity relations] pair, split
+   into {:new [...] :kept [...]}. One already there is kept, --force or not:
+   it is where the user's admin edits live, and it may be the framework's own
+   (users.edn, tenants.edn)."
+  [output-dir entity+relations]
+  (let [all (for [dir (profile-dirs output-dir)
+                  [entity relations] entity+relations]
+              {:path    (admin-file-path dir (:entity-plural entity))
+               :content (generators/admin-entity-file entity relations)
+               :action  :create})
+        exists? #(.exists ^java.io.File (resolve-path output-dir (:path %)))]
+    {:new  (vec (remove exists? all))
+     :kept (mapv #(assoc % :action :skip
+                         :path (.getPath (resolve-path output-dir (:path %)))
+                         :note "already exists — left as it is")
+                 (filter exists? all))}))
+
+(defn- admin-config-edits
+  "{:edits [{:file :content :note}] :warnings [...]}: each profile's
+   config.edn with `plurals` listed in its admin."
+  [output-dir plurals]
+  (reduce (fn [acc dir]
+            (let [f (profile-config dir)]
+              (if-not (.isFile f)
+                acc
+                (let [before (slurp f)
+                      {:keys [content reasons]}
+                      (reduce (fn [st plural]
+                                (let [r (generators/add-admin-entity (:content st) plural)]
+                                  (case (:status r)
+                                    :updated      (assoc st :content (:content r))
+                                    :unrecognised (update st :reasons conj (:reason r))
+                                    st)))
+                              {:content before :reasons []}
+                              plurals)]
+                  (cond-> acc
+                    (not= before content) (update :edits conj {:file f :content content
+                                                               :note "listed the entities in the admin"})
+                    (seq reasons) (update :warnings into (map #(str (.getPath f) ": " %) (distinct reasons))))))))
+          {:edits [] :warnings []}
+          (profile-dirs output-dir)))
+
+(defn- write-edits!
+  "Report entries for `edits`, written unless `dry-run?`."
+  [edits dry-run?]
+  (mapv (fn [{:keys [^java.io.File file content note]}]
+          (when-not dry-run? (spit file content))
+          {:path (.getPath file) :content content
+           :action (if dry-run? :skip :update)
+           :note (if dry-run? (str "dry run — would have " note) note)})
+        edits))
+
 (def ^:private module-generation-request-validator (m/validator schema/ModuleGenerationRequest))
 (def ^:private module-generation-request-explainer (m/explainer schema/ModuleGenerationRequest))
 
@@ -314,6 +390,20 @@
                            :content (generators/generate-web-handlers-file ctx)
                            :action :create}))
 
+            admin?  (admin-on? output-dir)
+            by-name (into {} (map (juxt :entity-kebab identity)) (:entities ctx))
+            admin-out (when admin?
+                        (admin-files
+                         output-dir
+                         (for [e (:entities ctx)]
+                           [e {:children (filter #(= (:entity-kebab e) (:belongs-to %)) (:entities ctx))
+                               :parent   (when-let [p (by-name (:belongs-to e))]
+                                           {:name   (:entity-name p)
+                                            :fields (generators/admin-display-fields
+                                                     (map (comp keyword :field-name-kebab) (:fields p)))})}])))
+            files   (into files (:new admin-out))
+            admin-edits (when admin? (admin-config-edits output-dir (map :entity-plural (:entities ctx))))
+
             ;; Which of them are already on disk. Checked before anything is
             ;; written: a re-run of the framework's most-recommended command
             ;; replaced all fourteen files with no prompt, no backup and exit 0,
@@ -351,7 +441,10 @@
                               (assoc entry
                                      :action (if existed :overwrite :create)
                                      :path   (.getPath file))))
-                          files))]
+                          files))
+            files (-> files
+                      (into (:kept admin-out))
+                      (into (write-edits! (:edits admin-edits) dry-run?)))]
         {:success true
          :module-name module-name
          :files files
@@ -363,12 +456,12 @@
          ;; writes the :wagoe/<module> key the generated module_wiring.clj
          ;; defines (BOU-309).
          :next-steps ["Review the generated files"
-                      (format "Print the config it needs: bb scaffold integrate %s" module-name)
+                      (format "Write its config key: bb scaffold integrate %s" module-name)
+                      ;; The first entity's, not <module>-test (BOU-562).
                       (format "Run tests: clojure -M:test --focus %s.%s.core.%s-test"
-                              (str/replace base-ns-path "/" ".") module-name module-name)]
-         :warnings (if dry-run?
-                     ["Dry run - no files were written"]
-                     [])})
+                              (:base-ns ctx) module-name (:entity-kebab entity))]
+         :warnings (cond-> (vec (:warnings admin-edits))
+                     dry-run? (conj "Dry run - no files were written"))})
 
       (catch clojure.lang.ExceptionInfo e
         (if (= ::refuse-overwrite (:type (ex-data e)))
@@ -456,6 +549,13 @@
                            (str (.getPath persistence) " has no date->iso, so this field will read back a day"
                                 " early east of UTC. Regenerate that file, or copy date->iso and ->entity"
                                 " from a newly generated module."))
+            ;; Written as a keyword, an enum value is a column name to HoneySQL.
+            enum-step (when (= :enum (:type field))
+                        (str "Add :" (name (:name field)) " to enum-fields in " (.getPath persistence)
+                             (when-not (and (.isFile persistence)
+                                            (str/includes? (slurp persistence) "enum-fields"))
+                               (str ", copied with ->row and ->entity from a newly generated module"))
+                             ", or storing it fails"))
 
             ;; Before anything is written. The migration and the schema entry
             ;; are the two halves this command exists to keep in step, and the
@@ -606,32 +706,22 @@
          :module-name module-name
          :command :field
          :files all-files
-           ;; Named, not implied. Adding a field needs three changes in step —
-           ;; schema, column, persistence transforms — and the third cannot be
-           ;; generated, because those transforms are hand-written per module.
-           ;; Leaving it unsaid is how a field reads back nil with no error
-           ;; anywhere (AGENTS.md pitfall 6).
-         ;; Resolved like every other path in this report. The persistence
-         ;; file was named relative to the working directory while the
-         ;; migrations and the schema edit were written under --output-dir, so
-         ;; the one step the user cannot skip pointed at a different project.
-         :next-steps (cond-> [(format "Add the field to both transforms in %s (entity->db and db->entity)"
-                                      (.getPath (resolve-path
-                                                 output-dir
-                                                 (format "src/%s/%s/shell/persistence.clj"
-                                                         base-ns-path module-path))))
-                              ;; And the commands run against whatever project
-                              ;; the shell is in, which is not the generated one
-                              ;; when --output-dir points elsewhere.
-                              (str "Run the migration: clojure -M:migrate up" (in-project))
-                                ;; --focus, not --focus-meta: generated tests carry ^:unit, never a
-                                ;; per-module tag, so `--focus-meta :order` printed
-                                ;; "No tests found with metadata key :order" and ran
-                                ;; everything. Advice that does not work is the same
-                                ;; defect as a file report that is not true.
-                              (str (format "Run the tests: clojure -M:test --focus %s.%s.core.%s-test"
-                                           (str/replace base-ns-path "/" ".") module-name module-name)
-                                   (in-project))]
+         ;; The generated persistence reads and writes every column as it is,
+         ;; so a field needs nothing there — except an enum, which has to be in
+         ;; `enum-fields` to be stored as a string (BOU-562). The path is
+         ;; resolved under --output-dir like every other in this report.
+         :next-steps (cond-> (filterv some?
+                                      [enum-step
+                                       ;; The commands run against whatever project
+                                       ;; the shell is in, which is not the generated
+                                       ;; one when --output-dir points elsewhere.
+                                       (str "Run the migration: clojure -M:migrate up" (in-project))
+                                       ;; --focus, not --focus-meta: generated tests carry
+                                       ;; ^:unit, never a per-module tag.
+                                       (str (format "Run the tests: clojure -M:test --focus %s.%s.core.%s-test"
+                                                    (or (:base-ns request) "wagoe") module-name
+                                                    (template/pascal->kebab entity))
+                                            (in-project))])
                        (:manual? schema-entry)
                        (into [(:manual-note schema-entry)]))
          :warnings (not-empty (cond-> []
@@ -698,7 +788,30 @@
                                      (str/join ", " (map str clashes))
                                      " — is " (:entity-name entity) " already in it?")
                                 {:type :validation-error})))
-            new-files   (generators/entity-files ctx entity (get-next-migration-number output-dir))
+            admin?      (admin-on? output-dir)
+            parent-plural (some-> parent template/pascal->kebab template/pluralize)
+            admin-out   (when admin?
+                          (admin-files
+                           output-dir
+                           [[entity {:parent (when parent
+                                               {:name   parent
+                                                :fields (generators/admin-display-fields
+                                                         (generators/schema-field-names schema-src parent))})}]]))
+            new-files   (into (generators/entity-files ctx entity (get-next-migration-number output-dir))
+                              (:new admin-out))
+            admin-edits (when admin? (admin-config-edits output-dir [(:entity-plural entity)]))
+            ;; The parent's own admin file gets the editable panel; one
+            ;; generated before admin config existed is left to the admin's
+            ;; read-only detection.
+            parent-edits (when (and admin? parent)
+                           (for [dir   (profile-dirs output-dir)
+                                 :let  [f (resolve-path output-dir (admin-file-path dir parent-plural))]
+                                 :when (.isFile f)
+                                 :let  [r (generators/add-admin-has-many (slurp f) parent-plural entity)]]
+                             (if (= :updated (:status r))
+                               {:file f :content (:content r) :note (str "added the " (:entity-plural entity) " panel")}
+                               (when (= :unrecognised (:status r))
+                                 {:warning (str (.getPath f) ": " (:reason r))}))))
             existing    (->> new-files
                              (map #(resolve-path output-dir (:path %)))
                              (filter #(.exists ^java.io.File %))
@@ -729,6 +842,10 @@
                                        {:path (.getPath ^java.io.File file) :content content
                                         :action :update :note "appended the entity"}))
                                 edits))
+            files       (into (into files (:kept admin-out))
+                              (write-edits! (concat (:edits admin-edits) (filter :file parent-edits))
+                                            dry-run))
+            warnings    (concat (:warnings admin-edits) (keep :warning parent-edits))
             service-ns  (str (:base-ns ctx) "." module-name "." (:service-ns entity))
             http?       (get-in ctx [:interfaces :http])
             uri         (str "/api/v1/" (:entity-plural entity))]
@@ -741,7 +858,8 @@
                                ["Run the migration: clojure -M:migrate up"
                                 (when http? (str "Restart the system; the API is at " uri " and " uri "/:id"))
                                 (str "Run the tests: clojure -M:test --focus " service-ns "-test")])
-         :warnings    (when dry-run ["Dry run - no files were written"])})
+         :warnings    (not-empty (cond-> (vec warnings)
+                                   dry-run (conj "Dry run - no files were written")))})
       (catch clojure.lang.ExceptionInfo e
         (if (= ::refuse-overwrite (:type (ex-data e)))
           (let [existing (:existing (ex-data e))]

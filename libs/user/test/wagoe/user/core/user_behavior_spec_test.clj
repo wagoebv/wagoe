@@ -96,6 +96,7 @@
     (doseq [sc scenarios]
       (let [[_test-name f] (first (behavior/compile-scenarios [sc] {}))
             exec (f)]
+        (is (:all-passed? exec) (:name sc))
         (when (:all-passed? exec)
           (when-let [rid (:rule-id sc)]
             (swap! executed-rule-ids conj rid))))))

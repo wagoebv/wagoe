@@ -605,11 +605,22 @@
        {:label \"System Users\" :list-fields [:email :name :role]})"
   [auto-config manual-config]
   (if manual-config
-    (let [merged (-> auto-config
+    (let [;; Detected secrets stay hidden whatever the manual config says: a
+          ;; manual :hide-fields replaced this set, and a scaffolded
+          ;; #{:deleted-at} showed password hashes (BOU-562).
+          secrets (set (filter should-be-hidden? (:hide-fields auto-config)))
+          visible #(some->> % (remove secrets) vec)
+          merged (-> auto-config
                      (merge (dissoc manual-config :fields))  ; Merge all except :fields
                      (assoc :fields (merge-fields-config
                                      (:fields auto-config)
-                                     (:fields manual-config))))]
+                                     (:fields manual-config)))
+                     (update :hide-fields #(into secrets %))
+                     (cond->
+                      (:list-fields manual-config)   (update :list-fields visible)
+                      (:search-fields manual-config) (update :search-fields visible)
+                      (:detail-fields manual-config) (update :detail-fields visible)
+                      (:editable-fields manual-config) (update :editable-fields visible)))]
       ;; :editable-fields is derived from :readonly-fields, so it has to be
       ;; recomputed once the manual config has had its say. The merge above
       ;; left it at what parse-table-metadata computed from the auto-detected

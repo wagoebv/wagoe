@@ -220,6 +220,93 @@
       (walk form))
     @out))
 
+(defn- testing-forms
+  "Every evaluated clojure.test `testing` form under `form`, nested ones too."
+  [form env]
+  (let [out (volatile! [])]
+    (letfn [(walk [x]
+              (when (coll? x)
+                (let [head (when (seq? x) (first x))]
+                  (when-not (unevaluated-head? env head)
+                    (when (resolve-op env #{"testing"} head)
+                      (vswap! out conj x))
+                    (run! walk (seq x))))))]
+      (walk form))
+    @out))
+
+(defn- head-syms
+  "Every symbol in operator position reachable at runtime under `form`."
+  [form env]
+  (let [out (volatile! #{})]
+    (letfn [(walk [x]
+              (when (coll? x)
+                (let [head (when (seq? x) (first x))]
+                  (if (unevaluated-head? env head)
+                    nil
+                    (do (when (symbol? head) (vswap! out conj head))
+                        (run! walk (seq x)))))))]
+      (walk form))
+    @out))
+
+(defn- external-assert-call?
+  "Whether `form` calls an `assert-*` or `expect-*` helper from another
+   namespace — test support libraries' convention for a helper that asserts."
+  [form env]
+  (boolean (some #(and (namespace %) (re-find #"^(assert|expect)-" (name %)))
+                 (head-syms form env))))
+
+(defn- helper-definitions
+  "name -> {:body form :macro? bool} for every helper `parsed` defines: defn,
+   defn-, defmacro, def of a fn, and let/letfn bindings."
+  [parsed env]
+  (let [out (volatile! {})]
+    (letfn [(walk [x]
+              (when (coll? x)
+                (let [head (when (seq? x) (first x))
+                      nm   (when (symbol? (second x)) (name (second x)))]
+                  (cond
+                    (and nm (or (core-op? env head "defn") (core-op? env head "defn-")))
+                    (vswap! out assoc nm {:body x})
+
+                    (and nm (core-op? env head "defmacro"))
+                    (vswap! out assoc nm {:body x :macro? true})
+
+                    (and nm (core-op? env head "def") (seq? (last x))
+                         (core-op? env (first (last x)) "fn"))
+                    (vswap! out assoc nm {:body (last x)})
+
+                    (and (core-op? env head "letfn") (vector? (second x)))
+                    (doseq [f (second x) :when (and (seq? f) (symbol? (first f)))]
+                      (vswap! out assoc (name (first f)) {:body f}))
+
+                    (and (core-op? env head "let") (vector? (second x)))
+                    (doseq [[k v] (partition 2 (second x)) :when (symbol? k)]
+                      (vswap! out assoc (name k) {:body v})))
+                  (run! walk (seq x)))))]
+      (run! walk parsed))
+    @out))
+
+(defn- asserts-directly?
+  [{:keys [body macro?]} env]
+  (or (seq (assertion-sites body env))
+      (external-assert-call? body env)
+      ;; A macro's assertion is inside a syntax quote, which reads as data.
+      (and macro? (some #(and (symbol? %) (#{"is" "are"} (name %))) (tree-seq coll? seq body)))))
+
+(defn- asserting-fns
+  "Names of the helpers `parsed` defines that assert, directly or through
+   another helper, so a `testing` that calls one counts as asserting."
+  [parsed env]
+  (let [defs  (helper-definitions parsed env)
+        start (into assertion-helper-names
+                    (keep (fn [[nm d]] (when (asserts-directly? d env) nm)) defs))]
+    (loop [known start]
+      (let [more (into known
+                       (keep (fn [[nm {:keys [body]}]]
+                               (when (seq (set/intersection (evaluated-heads body env) known)) nm)))
+                       defs)]
+        (if (= more known) known (recur more))))))
+
 (defn- asserted-expr
   "The expression a single `is`/`are` actually asserts: the second element of
    an `is`, the template of an `are`. Only this counts — a nested shape in a
@@ -323,6 +410,18 @@
                                                 assertion-helper-names)))]
        {:file (str file) :line (or (:row (meta form)) 0)
         :content "deftest without any assertion (is/are/known helper)"})
+     ;; A `testing` next to one that asserts passes the rule above, so an
+     ;; empty one needs its own (BOU-562).
+     (let [helpers (asserting-fns parsed env)]
+       (for [form dtests
+             :when (not (exempt? form))
+             block (testing-forms form env)
+             :when (not (:wagoe/allow-placeholder (meta block)))
+             :when (and (empty? (assertion-sites block env))
+                        (not (external-assert-call? block env))
+                        (empty? (set/intersection (evaluated-heads block env) helpers)))]
+         {:file (str file) :line (or (:row (meta block)) 0)
+          :content "testing block without any assertion (is/are/known helper)"}))
      (for [top parsed
            {:keys [site op]} (assertion-sites top env)
            :when (not (exempt-site? site))

@@ -280,7 +280,12 @@
           (= :already-present (key-status text key-str)) :already-present
           (nil? (active-closing-brace text))            :no-active-section
           dry-run?                                      :written
-          :else (let [out (insert-before-active-close text snippet)]
+          ;; Right after the last entry, and without the snippet's trailing
+          ;; newline: before the closing brace, that newline left the brace on
+          ;; a line of its own (BOU-562).
+          :else (let [at  (or (:end (last (entries text ":active")))
+                              (active-closing-brace text))
+                      out (str (subs text 0 at) (str/trimr snippet) (subs text at))]
                   (if (and (balanced? out) (some? (active-closing-brace out)))
                     (do (spit path out) :written)
                     ;; Refuse rather than write a config the app cannot read.

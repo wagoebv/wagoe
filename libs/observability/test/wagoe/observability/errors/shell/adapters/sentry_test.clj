@@ -216,7 +216,10 @@
       (testing "breadcrumb management works"
         (ports/add-breadcrumb! context {:message "Step 1" :category "test"})
         (ports/add-breadcrumb! context {:message "Step 2" :category "test"})
-        (ports/clear-breadcrumbs! context)))))
+        (is (= ["Step 1" "Step 2"]
+               (take-last 2 (map :message (:breadcrumbs (ports/current-context context))))))
+        (ports/clear-breadcrumbs! context)
+        (is (empty? (:breadcrumbs (ports/current-context context))))))))
 
 ;; =============================================================================
 ;; PII Redaction Tests

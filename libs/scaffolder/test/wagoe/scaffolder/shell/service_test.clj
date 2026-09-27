@@ -99,6 +99,9 @@
                                          :required true
                                          :default true}]}]
                    :interfaces {:http true :web true}
+                   ;; Not the working directory: its config switches the
+                   ;; admin on, which adds admin files.
+                   :output-dir (.getPath (temp-dir))
                    :dry-run true}  ;; Always dry-run in tests
 
           result (ports/generate-module svc request)]
@@ -167,6 +170,7 @@
                    :entities [{:name "TestEntity"
                                :fields [{:name :name :type :string}]}]
                    :interfaces {:http true}
+                   :output-dir (.getPath (temp-dir))
                    :dry-run true}
 
           result (ports/generate-module svc request)]
@@ -752,7 +756,8 @@
                         :output-dir (.getPath dir) :dry-run false})
               result (ports/add-field
                       svc {:module-name "item" :entity "Item"
-                           :field {:name :sku :type :string :required false :unique false}
+                           :field {:name :state :type :enum :enum-values [:new :old]
+                                   :required false :unique false}
                            :output-dir (.getPath dir) :dry-run false})
               steps  (:next-steps result)
               persistence (first (filter #(str/includes? % "persistence.clj") steps))]
@@ -760,8 +765,11 @@
               "the file the user has to edit by hand must be the generated one")
           ;; The step is a sentence; pull the path out of it and check something
           ;; is actually there. A path nothing is at is no better than a wrong one.
-          (let [path (second (re-find #"transforms in (\S+)" persistence))]
+          (let [path (second (re-find #"enum-fields in (\S+?\.clj)" persistence))]
             (is (.isFile (io/file path)) (str "no file at " path)))
+          (is (str/includes? persistence ":state"))
+          (is (not-any? #(str/includes? % "entity->db") steps)
+              "the generated persistence has no per-field transforms (BOU-562)")
           (doseq [cmd (filter #(str/includes? % "clojure -M:") steps)]
             (is (str/includes? cmd (.getPath dir))
                 (str "command runs against the wrong project: " cmd))))
@@ -777,7 +785,8 @@
         (let [svc    (service/create-scaffolder-service)
               result (ports/add-field
                       svc {:module-name "widget" :entity "Widget"
-                           :field {:name :sku :type :string :required false :unique false}
+                           :field {:name :state :type :enum :enum-values [:new :old]
+                                   :required false :unique false}
                            :output-dir (.getPath dir) :dry-run true})
               steps  (:next-steps result)]
           (is (some #(str/includes? % "src/wagoe/widget/shell/persistence.clj") steps))
@@ -785,6 +794,31 @@
                       (filter #(str/includes? % "clojure -M:") steps))
               "every command names the project it acts on"))
         (finally (delete-tree! dir))))))
+
+(deftest ^:unit the-test-namespace-in-next-steps-exists
+  ;; It was <module>.core.<module>-test, which exists only when the module and
+  ;; its first entity share a name (BOU-562).
+  (let [dir (temp-dir)]
+    (try
+      (let [svc     (service/create-scaffolder-service)
+            gen     (ports/generate-module
+                     svc {:module-name "invoicing" :base-ns "acme"
+                          :entities [{:name "Invoice" :fields [{:name :number :type :string}]}]
+                          :output-dir (.getPath dir)})
+            field   (ports/add-field
+                     svc {:module-name "invoicing" :base-ns "acme" :entity "Invoice"
+                          :field {:name :sku :type :string :required false :unique false}
+                          :output-dir (.getPath dir) :dry-run true})
+            test-ns (fn [steps] (some #(second (re-find #"--focus (\S+)" %)) steps))
+            file-of (fn [ns-name] (io/file dir "test" (str (-> ns-name
+                                                               (str/replace "." "/")
+                                                               (str/replace "-" "_"))
+                                                           ".clj")))]
+        (doseq [[what r] [["generate" gen] ["field" field]]]
+          (let [n (test-ns (:next-steps r))]
+            (is (some? n) (str what ": " (pr-str (:next-steps r))))
+            (is (.isFile (file-of n)) (str what " names " n)))))
+      (finally (delete-tree! dir)))))
 
 ;; =============================================================================
 ;; Overwrite protection (BOU-308)

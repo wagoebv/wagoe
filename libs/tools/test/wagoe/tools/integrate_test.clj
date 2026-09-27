@@ -113,13 +113,10 @@
 
 (deftest ^:unit generate-config-snippet-test
   (testing "basic config snippet"
-    (let [snippet (integrate/generate-config-snippet "product" false)]
+    (let [snippet (integrate/generate-config-snippet "product")]
       (is (re-find #":wagoe/product" snippet))
       (is (re-find #":enabled\? true" snippet))
-      (is (not (re-find #":base-path" snippet)))))
-
-  (testing "includes base-path for modules with routes"
-    (is (re-find #":base-path \"/api/product\"" (integrate/generate-config-snippet "product" true)))))
+      (is (not (re-find #":base-path" snippet)) "nothing reads it (BOU-562)"))))
 
 ;; =============================================================================
 ;; arg parsing
@@ -159,7 +156,7 @@
 (deftest ^:unit config-key-keeps-the-namespace-spelling
   ;; The config key is read as a keyword, not as a path, so it stays kebab.
   (is (re-find #":wagoe/invoice-line-item"
-               (integrate/generate-config-snippet "invoice-line-item" false))))
+               (integrate/generate-config-snippet "invoice-line-item"))))
 
 ;; =============================================================================
 ;; write-config! — every profile under resources/conf, prod included (BOU-529)
@@ -178,7 +175,7 @@
 (defn- config-text [root env]
   (slurp (io/file root "resources" "conf" env "config.edn")))
 
-(def ^:private snippet (integrate/generate-config-snippet "product" false))
+(def ^:private snippet (integrate/generate-config-snippet "product"))
 
 (deftest ^:unit write-config-writes-every-profile
   (let [root    (conf-root "dev" "test" "prod")
@@ -186,6 +183,22 @@
     (is (= {"dev" :written "test" :written "prod" :written} (into {} results)))
     (doseq [env ["dev" "test" "prod"]]
       (is (str/includes? (config-text root env) ":wagoe/product") env))))
+
+(deftest ^:unit write-config-leaves-no-brace-on-a-line-of-its-own
+  ;; The snippet's trailing newline pushed the :active map's closing brace onto
+  ;; a line of its own (BOU-562).
+  (doseq [config [minimal-config
+                  "{:active\n {:wagoe/settings {:name \"x\"}\n }\n\n :inactive\n {}}\n"]]
+    (let [root (tmp-root)
+          f    (io/file root "resources" "conf" "dev" "config.edn")]
+      (io/make-parents f)
+      (spit f config)
+      (integrate/write-config! root ":wagoe/product" snippet {})
+      (let [text (config-text root "dev")]
+        (is (str/includes? text "{:enabled? true}") text)
+        (is (= (count (re-seq #"(?m)^\s*\}\s*$" config))
+               (count (re-seq #"(?m)^\s*\}\s*$" text)))
+            text)))))
 
 (deftest ^:unit write-config-does-not-create-a-missing-prod
   (let [root    (conf-root "dev" "test")
@@ -205,7 +218,7 @@
   ;; would stop the app booting.
   (let [root    (conf-root "dev" "test" "prod")
         results (integrate/write-config! root ":wagoe/dashboard"
-                                         (integrate/generate-config-snippet "dashboard" false) {})]
+                                         (integrate/generate-config-snippet "dashboard") {})]
     (is (= {"dev" :written "test" :dev-only "prod" :dev-only} (into {} results)))
     (is (not (str/includes? (config-text root "prod") ":wagoe/dashboard")))))
 
