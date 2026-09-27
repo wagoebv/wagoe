@@ -134,7 +134,7 @@
   "The generated module's graph from its own `ig-config`, with the workflow,
    events and admin modules switched on, next to a real workflow component and
    an in-memory bus, on H2."
-  [dir base ctx]
+  [base ctx]
   (let [build (ns-resolve (symbol (str base ".billing.shell.module-wiring")) 'ig-config)
         graph (:components (build {:enabled? true}
                                   {:config {:active {:wagoe/workflow {} :wagoe/events {}
@@ -208,7 +208,7 @@
         _      (generate! dir "bou569b")
         _      (load-generated! dir)
         ctx    (migrated-ctx dir)
-        system (boot! dir "bou569b" ctx)
+        system (boot! "bou569b" ctx)
         call   (http-caller (:api (:wagoe/billing-routes system)))
         store  (get-in system [:wagoe/workflow :store])]
     (try
@@ -284,7 +284,7 @@
     (let [test-nss (load-generated! dir)
           {:keys [fail error]} (run-generated-tests! dir test-nss)
           ctx      (migrated-ctx dir)
-          system   (boot! dir "bou569e" ctx)
+          system   (boot! "bou569e" ctx)
           call     (http-caller (:api (:wagoe/billing-routes system)))]
       (is (= 0 fail))
       (is (= 0 error))
