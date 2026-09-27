@@ -10,6 +10,7 @@
             [integrant.core :as ig]
             [malli.core :as m]
             [next.jdbc :as jdbc]
+            [next.jdbc.result-set :as rs]
             [wagoe.platform.shell.adapters.database.factory :as db-factory]
             [wagoe.scaffolder.cli :as cli]
             [wagoe.scaffolder.multi-entity-test :as multi]
@@ -85,7 +86,7 @@
         (testing "and its workflow: the instance and the state"
           (let [row (jdbc/execute-one! (:datasource ctx)
                                        ["SELECT id, current_state FROM workflow_instances WHERE entity_id = ?" id]
-                                       {:builder-fn next.jdbc.result-set/as-unqualified-lower-maps})]
+                                       {:builder-fn rs/as-unqualified-lower-maps})]
             (is (some? row))
             (is (= {:instance-id (str (:id row)) :state "draft"} (:workflow body))))))
 
