@@ -185,3 +185,43 @@
 (deftest ^:unit an-active-that-is-not-a-literal-map-has-no-section
   (doseq [v ["#include \"active.edn\"" "#profile {:dev {:a 1}}" "#merge [{:a 1} {:b 2}]"]]
     (is (nil? (sut/entries (str "{:active " v "}") ":active")) v)))
+
+(defn- new-project-config
+  "The dev config `wagoe new` writes. Its :active entries sit at column 3."
+  []
+  (let [cwd  (System/getProperty "user.dir")
+        root (first (filter #(.isDirectory (java.io.File. (str % "/libs"))) [cwd (str cwd "/../..")]))]
+    (str/replace (slurp (str root "/libs/wagoe-cli/resources/wagoe/cli/templates/dev-config.edn.tmpl"))
+                 "{{project-name}}" "shop")))
+
+(deftest ^:unit an-appended-entry-follows-the-files-indentation
+  ;; Snippets are written at column 2; a `wagoe new` config has its entries at
+  ;; column 3, so appended keys sat one column left of the rest (BOU-580).
+  (let [dir  (.toFile (java.nio.file.Files/createTempDirectory
+                       "wagoe-config-edn" (make-array java.nio.file.attribute.FileAttribute 0)))
+        path (str dir "/config.edn")
+        text (new-project-config)]
+    (try
+      (spit path text)
+      (is (= :written (sut/inject-key! path ":wagoe/product"
+                                       "\n  ;; Product module\n  :wagoe/product\n  {:enabled? true\n   :limit 3}\n" {})))
+      (let [once (slurp path)]
+        (is (str/includes? once (str "   {:provider :slf4j :level :debug}\n"
+                                     "\n"
+                                     "   ;; Product module\n"
+                                     "   :wagoe/product\n"
+                                     "   {:enabled? true\n"
+                                     "    :limit 3}}\n"
+                                     "\n"
+                                     " :inactive"))
+            once)
+        (is (= :already-present (sut/inject-key! path ":wagoe/product" "\n  :wagoe/product\n  {}\n" {})))
+        (is (= once (slurp path)) "a second run changes no byte"))
+      (finally (doseq [f (reverse (file-seq dir))] (.delete f))))))
+
+(deftest ^:unit append-entry-keeps-blank-lines-in-a-snippet-blank
+  (let [out (sut/append-entry (new-project-config) ":active"
+                              "  :wagoe/metrics\n  {:provider :no-op}\n\n  :wagoe/error-reporting\n  {:provider :no-op}\n")]
+    (is (str/includes? out (str "   :wagoe/metrics\n   {:provider :no-op}\n\n"
+                                "   :wagoe/error-reporting\n   {:provider :no-op}}\n"))
+        out)))

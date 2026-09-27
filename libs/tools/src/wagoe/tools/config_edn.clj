@@ -213,6 +213,47 @@
     (str (subs text 0 close) snippet (subs text close))
     text))
 
+(defn line-ending
+  "The file's own line ending, so inserted lines match it."
+  [text]
+  (let [i (str/index-of text "\n")]
+    (if (and i (pos? i) (= \return (get text (dec i)))) "\r\n" "\n")))
+
+(defn column
+  "The column of index `i` in `text`."
+  [text i]
+  (- i (line-start text i)))
+
+(defn reindent
+  "`snippet`, written at column 2, moved to column `col`, lines ending in `nl`.
+   The first line is left as it is: the caller places it."
+  [snippet col nl]
+  (let [[first-line & more] (str/split-lines snippet)
+        shift #(cond
+                 (str/blank? %) ""
+                 (> col 2)      (str (apply str (repeat (- col 2) \space)) %)
+                 (< col 2)      (str/replace-first % (re-pattern (str "^ {0," (- 2 col) "}")) "")
+                 :else          %)]
+    (str/join nl (cons first-line (map shift more)))))
+
+(defn append-entry
+  "`text` with `snippet` — entries written at column 2 — after the last entry
+   of the map under `kw`: at that entry's column, a blank line before it, and
+   the map's closing brace right after it. Unchanged when there is no map."
+  [text kw snippet]
+  (if-let [[open close] (section text kw)]
+    (let [nl   (line-ending text)
+          es   (entries text kw)
+          prev (last es)
+          col  (if prev (column text (:start prev)) (inc (column text open)))
+          body (str (apply str (repeat col \space)) (reindent (str/trim snippet) col nl))]
+      (cond
+        prev       (str (subs text 0 (:end prev)) nl nl body (subs text (:end prev)))
+        (some? es) (str (subs text 0 (inc open)) nl body (subs text (inc open)))
+        ;; A map that cannot be read: just inside its closing brace.
+        :else      (str (subs text 0 close) nl body (subs text close))))
+    text))
+
 (defn active-closing-brace
   "Index of the brace closing the `:active` map, or nil."
   [text]
@@ -280,12 +321,9 @@
           (= :already-present (key-status text key-str)) :already-present
           (nil? (active-closing-brace text))            :no-active-section
           dry-run?                                      :written
-          ;; Right after the last entry, and without the snippet's trailing
-          ;; newline: before the closing brace, that newline left the brace on
-          ;; a line of its own (BOU-562).
-          :else (let [at  (or (:end (last (entries text ":active")))
-                              (active-closing-brace text))
-                      out (str (subs text 0 at) (str/trimr snippet) (subs text at))]
+          ;; Right after the last entry, so the closing brace stays on its
+          ;; line (BOU-562), and at its column (BOU-580).
+          :else (let [out (append-entry text ":active" snippet)]
                   (if (and (balanced? out) (some? (active-closing-brace out)))
                     (do (spit path out) :written)
                     ;; Refuse rather than write a config the app cannot read.

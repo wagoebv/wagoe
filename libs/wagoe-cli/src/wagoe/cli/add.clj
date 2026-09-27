@@ -155,32 +155,70 @@
     (contains? ks (keyword config-key))
     (str/includes? text (str ":" config-key))))
 
+(defn- active-map
+  "[open close col] for the :active map in `text`: its braces, and the column
+   of the last key that starts a line in it (nil when none does). Strings and
+   comments are skipped."
+  [text]
+  (when-let [open (some->> (str/index-of text ":active") (+ 7) (str/index-of text "{"))]
+    (let [n (count text)]
+      (loop [i (inc open), depth 1, st :code, bol nil, col nil]
+        (when (< i n)
+          (let [c (nth text i)]
+            (case st
+              :comment (if (= c \newline)
+                         (recur (inc i) depth :code (inc i) col)
+                         (recur (inc i) depth st bol col))
+              :string  (case c
+                         \\ (recur (+ i 2) depth st bol col)
+                         \" (recur (inc i) depth :code nil col)
+                         (recur (inc i) depth st bol col))
+              (let [col (if (and bol (= 1 depth) (= \: c)) (- i bol) col)]
+                (case c
+                  (\space \tab \,) (recur (inc i) depth st bol col)
+                  \newline (recur (inc i) depth st (inc i) col)
+                  \;       (recur (inc i) depth :comment nil col)
+                  \"       (recur (inc i) depth :string nil col)
+                  \\       (recur (+ i 2) depth st nil col)
+                  (\{ \[ \() (recur (inc i) (inc depth) st nil col)
+                  (\} \] \)) (if (= 1 depth)
+                               [open i col]
+                               (recur (inc i) (dec depth) st nil col))
+                  (recur (inc i) depth st nil col))))))))))
+
+(defn- place
+  "`snippet`, written at column 2, at column `col`."
+  [snippet col]
+  (let [[first-line & more] (str/split-lines (str/trim snippet))
+        pad (apply str (repeat (max 0 (- col 2)) \space))
+        cut (max 0 (- 2 col))]
+    (str/join "\n" (cons (str (apply str (repeat col \space)) first-line)
+                         (for [l more]
+                           (cond (str/blank? l) ""
+                                 (pos? cut)     (str/replace-first l (re-pattern (str "^ {0," cut "}")) "")
+                                 :else          (str pad l)))))))
+
 (defn patch-config!
   "Inject snippet into the :active map of a config file unless its key is there.
-   Returns :added, :present, or :no-active when there is no :active map to
-   write into."
+   It goes after the last entry, at that entry's column, with the closing brace
+   right after it. Returns :added, :present, or :no-active when there is no
+   :active map to write into."
   [dir relative-path snippet]
   (let [f          (io/file dir relative-path)
         content    (slurp f)
         config-key (config-key-of snippet)]
     (if (in-active? content config-key)
       :present
-      (let [active-idx (str/index-of content ":active")
-            open-idx   (when active-idx (str/index-of content "{" (+ active-idx 7)))
-            close-idx  (when open-idx
-                         (loop [i (inc open-idx) depth 1]
-                           (cond
-                             (>= i (count content)) nil
-                             (zero? depth)          (dec i)
-                             :else
-                             (let [c (nth content i)]
-                               (recur (inc i) (case c \{ (inc depth) \} (dec depth) depth))))))]
-        (if close-idx
-          (do (spit f (str (subs content 0 close-idx)
-                           "\n" snippet
-                           (subs content close-idx)))
-              :added)
-          :no-active)))))
+      (if-let [[open close col] (active-map content)]
+        (let [line-start (inc (or (str/last-index-of content "\n" open) -1))
+              col        (or col (- (inc open) line-start))
+              at         (count (str/trimr (subs content 0 close)))]
+          (spit f (str (subs content 0 at)
+                       (if (= at (inc open)) "\n" "\n\n")
+                       (place snippet col)
+                       (subs content close)))
+          :added)
+        :no-active))))
 
 (defn- snippet-for
   "What `module` writes into profile `env`. Dev may differ from prod: events

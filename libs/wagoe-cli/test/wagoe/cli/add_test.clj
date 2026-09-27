@@ -5,7 +5,8 @@
             [clojure.string :as str]
             [wagoe.cli.add :as add]
             [wagoe.cli.catalogue :as cat]
-            [wagoe.cli.new :as new]))
+            [wagoe.cli.new :as new]
+            [wagoe.cli.templates :as templates]))
 
 (defn- make-wagoe-project! [dir]
   (io/make-parents (io/file dir "resources/conf/dev/config.edn"))
@@ -140,6 +141,34 @@
                    (count (re-seq #":wagoe/payment-provider" after)))))))
       (finally
         (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))
+
+(deftest ^:integration added-keys-line-up-with-a-wagoe-new-config
+  ;; Snippets are written at column 2, a `wagoe new` config's entries sit at
+  ;; column 3, and the closing brace of :active ended up alone on a line
+  ;; (BOU-580).
+  (let [tmp  (str (System/getProperty "java.io.tmpdir") "/wagoe-add-indent-" (System/currentTimeMillis))
+        path "resources/conf/dev/config.edn"
+        f    (io/file tmp path)]
+    (try
+      (io/make-parents f)
+      (spit f (templates/render (templates/read-template "dev-config.edn.tmpl") {:project-name "shop"}))
+      (is (= :added (add/patch-config! tmp path (str "  :wagoe/metrics\n  {:provider :no-op}\n\n"
+                                                     "  :wagoe/error-reporting\n  {:provider :no-op}\n"))))
+      (let [once (slurp f)]
+        (is (str/includes? once (str "   {:provider :slf4j :level :debug}\n"
+                                     "\n"
+                                     "   :wagoe/metrics\n"
+                                     "   {:provider :no-op}\n"
+                                     "\n"
+                                     "   :wagoe/error-reporting\n"
+                                     "   {:provider :no-op}}\n"
+                                     "\n"
+                                     " :inactive"))
+            once)
+        (is (= :present (add/patch-config! tmp path "  :wagoe/metrics\n  {:provider :no-op}\n")))
+        (is (= once (slurp f)) "a second run changes no byte"))
+      (finally
+        (doseq [x (reverse (file-seq (io/file tmp)))] (.delete x))))))
 
 (deftest ^:integration email-writes-smtp-to-test-config-test
   (let [tmp (str (System/getProperty "java.io.tmpdir") "/wagoe-add-email-" (System/currentTimeMillis))]
