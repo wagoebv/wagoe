@@ -27,7 +27,10 @@
     "Update existing product.")
 
   (delete [this id]
-    "Delete product by ID."))
+    "Delete product by ID.")
+
+  (transact [this f]
+    "Call `f` in one database transaction, and return what it returns."))
 
 ;; =============================================================================
 ;; Service Ports
