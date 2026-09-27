@@ -153,14 +153,46 @@
                (when-not http ["--no-http"])
                (when public-api ["--public-api"]))))
 
+(defn apply-ai-flags
+  "`spec` with the interface flags given on the command line. An absent flag
+   defers to the spec."
+  [spec flags]
+  (merge spec (into {} (remove (comp nil? val)) (select-keys flags [:http :web :public-api]))))
+
 (defn build-ai-commands
   "The scaffolder commands an AI module spec stands for: `generate` for its
-   first entity, then `entity` for each further one, in order (BOU-497)."
-  [{:keys [module entities http web public-api]}]
-  (let [[{:keys [name fields]} & more] entities]
-    (into [(build-generate-args {:module module :entity name :fields fields
-                                 :http http :web web :public-api public-api})]
-          (map #(build-entity-args module (assoc % :http http :public-api public-api)) more))))
+   first entity, then `entity` for each further one, in order (BOU-497).
+
+   `flags` are the options parsed off `bb scaffold ai`. `--[no-]http`,
+   `--[no-]web` and `--[no-]public-api` override the spec; the rest are
+   appended to every command that accepts them (BOU-490)."
+  ([spec] (build-ai-commands spec {}))
+  ([spec {:keys [dry-run force output-dir base-ns] :as flags}]
+   (let [{:keys [module entities http web public-api]} (apply-ai-flags spec flags)
+         [{:keys [name fields]} & more] entities
+         shared (cond-> []
+                  output-dir (into ["--output-dir" output-dir])
+                  base-ns    (into ["--base-ns" base-ns])
+                  dry-run    (conj "--dry-run"))]
+     (into [(cond-> (into (build-generate-args {:module module :entity name :fields fields
+                                                :http http :web web :public-api public-api})
+                          shared)
+              force (conj "--force"))]
+           (map #(into (build-entity-args module (assoc % :http http :public-api public-api))
+                       shared)
+                more)))))
+
+(def ai-option-specs
+  "The flags `bb scaffold ai` takes. Anything else is refused: an unknown flag
+   used to be joined into the description and sent to the model (BOU-490)."
+  [["-y" "--yes" "Generate without asking"]
+   [nil "--dry-run" "Show what would be generated without creating files"]
+   [nil "--force" "Overwrite existing files"]
+   [nil "--output-dir DIR" "Output directory"]
+   [nil "--base-ns NS" "Base namespace for the module"]
+   [nil "--[no-]http" "Generate the REST API (overrides the description)"]
+   [nil "--[no-]web" "Generate the web UI (overrides the description)"]
+   [nil "--[no-]public-api" "API routes open to anyone (overrides the description)"]])
 
 ;; =============================================================================
 ;; Run Clojure scaffolder
@@ -335,7 +367,7 @@
 ;; Summary display
 ;; =============================================================================
 
-(defn display-generate-summary [module entity fields http web]
+(defn display-generate-summary [module entity fields http web & [public-api]]
   (println)
   (println (cyan "┌─ Summary ─────────────────────────────────────────────┐"))
   (println (str (cyan "│") " Module:  " (bold module)))
@@ -354,6 +386,8 @@
   (println (str (cyan "│") " Interfaces:  "
                 "HTTP " (if http (green "\u2713") (red "\u2717"))
                 "  Web UI " (if web (green "\u2713") (red "\u2717"))))
+  (when (some? public-api)
+    (println (str (cyan "│") " Public API:  " (if public-api (green "\u2713") (red "\u2717")))))
   (println (cyan "└───────────────────────────────────────────────────────┘")))
 
 ;; =============================================================================
@@ -633,55 +667,72 @@
    dependency (BOU-401) \u2014 and once reachable it shelled the scaffolder without
    rewrite-clj or `--base-ns`. It now parses and nothing else: generation goes
    through `run-clojure!`, the same call `bb scaffold generate` makes."
-  [description yes?]
-  (println)
-  (println (bold "\u2746 Wagoe AI Scaffolder \u2014 Natural Language Module Generation"))
-  (println)
-  (println (dim (str "Parsing: " description)))
-  (println)
-  (let [result (try
-                 (apply shell {:out :string :continue true}
-                        (ai/ai-command ["scaffold-parse" description]))
-                 (catch Exception e
-                   (println (red (str "AI scaffolder exited with error: " (.getMessage e))))
-                   (*exit!* 1)
-                   nil))
-        spec   (when (and result (zero? (:exit result)))
-                 (parse-ai-module-spec (:out result)))]
-    (cond
-      (nil? result)
-      nil
+  ([description yes?] (wizard-ai description yes? {}))
+  ([description yes? flags]
+   (println)
+   (println (bold "\u2746 Wagoe AI Scaffolder \u2014 Natural Language Module Generation"))
+   (println)
+   (println (dim (str "Parsing: " description)))
+   (println)
+   (let [result (try
+                  (apply shell {:out :string :continue true}
+                         (ai/ai-command ["scaffold-parse" description]))
+                  (catch Exception e
+                    (println (red (str "AI scaffolder exited with error: " (.getMessage e))))
+                    (*exit!* 1)
+                    nil))
+         spec   (when (and result (zero? (:exit result)))
+                  (parse-ai-module-spec (:out result)))]
+     (cond
+       (nil? result)
+       nil
 
-      (not (zero? (:exit result)))
-      (do (println (red "AI scaffolder could not parse the description."))
-          ;; The CLI's own message may be on stdout, which is captured for the
-          ;; spec — reprinted, or a failure explains itself to nobody.
-          (when-not (str/blank? (str (:out result)))
-            (println (dim (str/trim (str (:out result))))))
-          (*exit!* 1))
+       (not (zero? (:exit result)))
+       (do (println (red "AI scaffolder could not parse the description."))
+           ;; The CLI's own message may be on stdout, which is captured for the
+           ;; spec — reprinted, or a failure explains itself to nobody.
+           (when-not (str/blank? (str (:out result)))
+             (println (dim (str/trim (str (:out result))))))
+           (*exit!* 1))
 
-      (nil? spec)
-      (do (println (red "AI scaffolder returned no usable module spec."))
-          (println (dim (str/trim (str (:out result)))))
-          (*exit!* 1))
+       (nil? spec)
+       (do (println (red "AI scaffolder returned no usable module spec."))
+           (println (dim (str/trim (str (:out result)))))
+           (*exit!* 1))
 
-      :else
-      (let [{:keys [module entities http web]} spec
-            commands (build-ai-commands spec)]
-        (doseq [{:keys [name fields belongs-to]} entities]
-          (display-generate-summary module name fields http web)
-          (when belongs-to
-            (println (str "  belongs to " (bold belongs-to)))))
-        (println)
-        (doseq [args commands]
-          (println (dim (str "Command: clojure -M -m wagoe.scaffolder.shell.cli-entry "
-                             (str/join " " args)))))
-        (println)
-        (if (or yes? (confirm "Generate this module?" true))
-          ;; In order, and no further once one fails: an entity cannot be added
-          ;; to a module that was not generated.
-          (reduce (fn [_ args] (or (run-clojure! args) (reduced nil))) nil commands)
-          (println (yellow "Cancelled. No files were generated.")))))))
+       ;; `generate --force` rewrites the module's wiring, schema and ports
+       ;; without the other entities, and `entity` has no --force to put them
+       ;; back: the run fails halfway and leaves orphaned files.
+       (and (:force flags) (> (count (:entities spec)) 1))
+       (do (println (red (str "--force cannot regenerate a module with several entities ("
+                              (str/join ", " (map :name (:entities spec))) ").")))
+           (println "  Remove the module's files and run again without --force.")
+           (*exit!* 1))
+
+       :else
+       (let [{:keys [module entities http web public-api]} (apply-ai-flags spec flags)
+             commands (build-ai-commands spec flags)
+             ;; An `entity` dry run needs the module on disk, and a dry
+             ;; `generate` does not put it there — so only `generate` runs.
+             to-run   (if (:dry-run flags) (take 1 commands) commands)]
+         (doseq [{:keys [name fields belongs-to]} entities]
+           (display-generate-summary module name fields http web (boolean public-api))
+           (when belongs-to
+             (println (str "  belongs to " (bold belongs-to)))))
+         (println)
+         (doseq [args commands]
+           (println (dim (str "Command: clojure -M -m wagoe.scaffolder.shell.cli-entry "
+                              (str/join " " args)))))
+         (println)
+         (if (or yes? (confirm "Generate this module?" true))
+           ;; In order, and no further once one fails: an entity cannot be added
+           ;; to a module that was not generated.
+           (let [result (reduce (fn [_ args] (or (run-clojure! args) (reduced nil))) nil to-run)]
+             (when (and result (< (count to-run) (count commands)))
+               (println (yellow (str "Dry run: the " (dec (count commands))
+                                     " entity command(s) above add to a module that does not exist yet, so they were not run."))))
+             result)
+           (println (yellow "Cancelled. No files were generated."))))))))
 
 ;; =============================================================================
 ;; Help text
@@ -698,6 +749,7 @@
        "  bb scaffold endpoint            Interactive wizard for adding an endpoint\n"
        "  bb scaffold adapter             Interactive wizard for adding an adapter\n"
        "  bb scaffold ai <description> [--yes]    AI-powered module generation from NL description\n"
+       "      [--dry-run] [--output-dir DIR] [--base-ns NS] [--force] [--no-http] [--no-web] [--[no-]public-api]\n"
        "  bb scaffold integrate <module> [--base-ns NS]  Guide integration of a scaffolded module\n"
        "\n"
        "`bb scaffold` works inside an existing project. To create a new one:\n"
@@ -770,14 +822,22 @@
         (wizard-adapter))
 
       (= sub "ai")
-      (let [yes?        (boolean (some #{"--yes" "-y"} rest-args))
-            description (->> rest-args
-                             (remove #{"--yes" "-y"})
-                             (str/join " "))]
-        (if (seq description)
-          (wizard-ai description yes?)
+      (let [{:keys [options arguments errors]} (cli/parse-opts rest-args ai-option-specs)
+            description (str/join " " arguments)]
+        (cond
+          (seq errors)
+          (do (run! #(println (red %)) (distinct errors))
+              (println "  Quote the description, or put -- before one that starts with -:")
+              (println "  bb scaffold ai --yes -- \"-5% discount module\"")
+              (*exit!* 1))
+
+          (seq description)
+          (wizard-ai description (boolean (:yes options)) (dissoc options :yes))
+
+          :else
           (do (println (red "Please provide a module description."))
-              (println "  Example: bb scaffold ai \"product module with name, price, stock\""))))
+              (println "  Example: bb scaffold ai \"product module with name, price, stock\"")
+              (*exit!* 1))))
 
       (= sub "integrate")
       (do (require '[wagoe.tools.integrate :as integrate])

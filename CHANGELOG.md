@@ -54,6 +54,15 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **`bb setup` overwrote dev and test config and `.env.example`** (BOU-404, BOU-532). It now changes
   only what you answer, lists each change first, and refuses rather than write a lossy merge.
+- **`bb scaffold generate --audit` and `--pagination` are removed** (BOU-483). No generator read
+  them. Drop them from any script that passes them.
+- **`bb scaffold ai` refuses unknown flags** (BOU-490). Quote the description, or put `--` before
+  one that starts with `-`.
+
+### Fixed
+
+- **`bb scaffold ai --dry-run` wrote every file** (BOU-490). It is dry now, and an unknown flag
+  is refused instead of being sent to the model. Upgrade wagoe-tools.
 - **Field errors were not tied to their input for screen readers** (BOU-398). Inputs with errors now
   carry `aria-invalid` and `aria-describedby`; hand-built fields can use `ui/describe-input` and `ui/field-errors`.
 - **`bb db:status`, `bb guide next` and devtools looked for migrations in `resources/migrations/`** (BOU-489).
