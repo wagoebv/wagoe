@@ -255,10 +255,11 @@
                             :message "Password is too common or predictable"})
 
                      ;; User-specific checks
-                     (and user-context
-                          (:email user-context)
-                          (str/includes? (str/lower-case password)
-                                         (str/lower-case (first (str/split (:email user-context) #"@")))))
+                     ;; A local part under 3 characters matches too many passwords to
+                     ;; mean anything: `c@b.cd` refused `Invoice2026!` (BOU-565).
+                     (when-let [local (some-> (:email user-context) (str/split #"@") first str/lower-case)]
+                       (and (>= (count local) 3)
+                            (str/includes? (str/lower-case password) local)))
                      (conj {:code :contains-email
                             :message "Password cannot contain your email address"}))]
 
