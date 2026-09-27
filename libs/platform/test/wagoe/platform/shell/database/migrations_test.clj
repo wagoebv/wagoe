@@ -82,6 +82,56 @@
                     "wagoe/search/migrations/"]
                    (migrations/discover-migration-dirs)))))))))
 
+;; =============================================================================
+;; A module that is off is not migrated (BOU-579)
+;; =============================================================================
+
+(defn- with-library-manifests
+  "Call `f` with manifests for two framework modules and a third-party library
+   standing in for the classpath's."
+  [f]
+  (with-temp-dir
+    (fn [dir]
+      (let [mdir (doto (io/file dir "wagoe" "migration-paths") .mkdirs)
+            url  (fn [lib path]
+                   (io/as-url (doto (io/file mdir (str lib ".edn"))
+                                (spit (pr-str {:paths [path]})))))]
+        (with-redefs [migrations/manifest-urls
+                      (fn [] [(url "geo" "wagoe/geo/migrations/")
+                              (url "workflow" "wagoe/workflow/migrations/")
+                              (url "acme-billing" "acme/billing/migrations/")])]
+          (f))))))
+
+(deftest ^:unit a-module-that-is-off-is-not-migrated
+  (with-library-manifests
+    (fn []
+      (is (= ["migrations/" "wagoe/workflow/migrations/" "acme/billing/migrations/"]
+             (migrations/migration-dirs #{"workflow"}))
+          "geo is off; a library that is not a framework module is always migrated")
+      (is (= ["migrations/" "wagoe/geo/migrations/" "wagoe/workflow/migrations/"
+              "acme/billing/migrations/"]
+             (migrations/migration-dirs nil))
+          "nothing known about the modules: everything, as before"))))
+
+(deftest ^:unit the-shipped-manifests-name-their-modules
+  ;; The manifest's file name is what ties a directory to a module; one that
+  ;; drifted from the library name would be migrated whatever the config says.
+  (let [shipped (set (migrations/discover-migration-dirs))
+        off     #{"wagoe/geo/migrations/" "wagoe/push/migrations/" "wagoe/audience/migrations/"}]
+    (is (every? shipped off) "the libraries' manifests are not on this classpath")
+    (is (= (disj shipped "wagoe/geo/migrations/" "wagoe/push/migrations/" "wagoe/audience/migrations/")
+           (set (migrations/migration-dirs #{"workflow"}))))))
+
+(deftest ^:unit migrate-up-reads-the-modules-from-the-profiles-config
+  (with-library-manifests
+    (fn []
+      (with-redefs [migrations/shadowed-migration-dirs (fn ([] nil) ([_ _] nil))
+                    migrations/mysql?                  (constantly false)
+                    db-config/get-active-db-config     (fn [] {:datasource ::ds})
+                    db-config/load-config              (fn [_] {:active {:wagoe/geo-service {:provider :osm}}})]
+        (is (= ["migrations/" "wagoe/geo/migrations/" "acme/billing/migrations/"]
+               (:migration-dir (migrations/get-migration-config))))))))
+
 (deftest ^:unit discover-migration-dirs-rejects-invalid-manifests
   (testing "invalid manifest shapes fail fast with a clear error"
     (with-temp-dir

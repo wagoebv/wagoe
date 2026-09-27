@@ -58,7 +58,7 @@
     (is (thrown-with-msg?
          clojure.lang.ExceptionInfo #"Migration failed"
          (with-redefs [migrations/mysql? (constantly false)
-                            db-factory/db-context (fn [_] {:datasource ::pool})
+                       db-factory/db-context (fn [_] {:datasource ::pool})
                        db-factory/close-db-context! (fn [ctx] (swap! closed conj ctx))
                        migrations/refuse-shadowed-migration-dirs! (fn [] nil)
                        migrations/discover-migration-dirs (fn [] ["migrations"])
@@ -78,7 +78,7 @@
   (is (thrown-with-msg?
        clojure.lang.ExceptionInfo #"Migration failed"
        (with-redefs [migrations/mysql? (constantly false)
-                            db-factory/db-context (fn [_] {:datasource ::pool})
+                     db-factory/db-context (fn [_] {:datasource ::pool})
                      db-factory/close-db-context! (fn [_] (throw (Exception. "pool stuck")))
                      migrations/refuse-shadowed-migration-dirs! (fn [] nil)
                      migrations/discover-migration-dirs (fn [] ["migrations"])
@@ -90,7 +90,7 @@
   ;; pool on every path.
   (let [closed (atom [])]
     (with-redefs [migrations/mysql? (constantly false)
-                            db-factory/db-context (fn [_] {:datasource ::pool})
+                  db-factory/db-context (fn [_] {:datasource ::pool})
                   db-factory/close-db-context! (fn [ctx] (swap! closed conj ctx))
                   migrations/refuse-shadowed-migration-dirs! (fn [] nil)
                   migrations/discover-migration-dirs (fn [] ["migrations"])
@@ -122,3 +122,16 @@
                   (fn [] (throw (ex-info "never read" {:type :migration-dir-conflict})))]
       (is (thrown-with-msg? clojure.lang.ExceptionInfo #"never read"
                             (migrations/migrate-datasource! ::ds))))))
+
+(deftest ^:unit a-boot-migration-migrates-the-modules-that-are-on
+  ;; The system config names them; migrating every library on the classpath
+  ;; created tables for modules nobody switched on (BOU-579).
+  (let [asked (atom [])]
+    (with-redefs [migrations/mysql? (constantly false)
+                  db-factory/db-context (fn [_] {:adapter ::adapter :datasource ::the-pool})
+                  migrations/refuse-shadowed-migration-dirs! (fn [] nil)
+                  migrations/migration-dirs (fn [libs] (swap! asked conj libs) ["migrations"])
+                  migratus/migrate (fn [_] nil)]
+      (ig/init-key :wagoe/db-context {:adapter :h2 :migrate-on-start? true
+                                      :migrate-libraries #{"workflow"}}))
+    (is (= [#{"workflow"}] @asked))))

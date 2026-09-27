@@ -65,6 +65,10 @@ Libraries contribute migrations by publishing a `wagoe/migration-paths/<library>
 
 The migration system (`wagoe.platform.shell.database.migrations`) discovers the manifests and merges their directories at startup.
 
+`migrate up` and `:migrate-on-start?` apply a framework module's migrations only when the profile's `:active` switches the module on, and log each one they leave out.
+Switching a module on later applies its migrations on the next run; switching it off re-runs and rolls back nothing.
+A library that is not a framework module is always migrated.
+
 == Statement Separator
 
 Migratus uses `--;;` to separate SQL statements within a single migration file. Always use this between statements:

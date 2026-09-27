@@ -476,6 +476,13 @@
                                     (not (false? (:enabled? (get active k))))))))
        (sort-by key)))
 
+(defn enabled-libraries
+  "The libraries whose framework modules `active` switches on, or `extra`
+   enables in code, as names (\"geo\", \"workflow\"). Always-on ones included."
+  ([active] (enabled-libraries active #{}))
+  ([active extra]
+   (into #{} (map val) (module-entries active (into always-on-modules extra)))))
+
 (defn- module-graph
   "Ask one module for its graph, or fall back to passing its settings through.
 

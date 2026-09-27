@@ -118,4 +118,10 @@
        ;; config that has no registry, and a module that contributes handlers
        ;; without jobs enabled would fail the boot on a dangling ref.
        (contains? components :wagoe/job-registry)
-       (assoc-in [:wagoe/job-registry :handler-maps] (vec job-handlers))))))
+       (assoc-in [:wagoe/job-registry :handler-maps] (vec job-handlers))
+
+       ;; A boot migration applies only the migrations of modules that are on
+       ;; (BOU-579), as `migrate up` does.
+       (:migrate-on-start? (config/db-spec config))
+       (assoc-in [:wagoe/db-context :migrate-libraries]
+                 (modules/enabled-libraries active extra-modules))))))

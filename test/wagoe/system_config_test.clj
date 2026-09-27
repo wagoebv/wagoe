@@ -277,6 +277,15 @@
         (let [with-host (assoc-in settings (modules/redis-host-paths k) "redis")]
           (is (map? (sys-config/ig-config (with-module :prod k with-host)))))))))
 
+(deftest ^:unit a-boot-migration-is-told-which-modules-are-on
+  ;; Otherwise it migrates every library on the classpath (BOU-579).
+  (let [config (-> (base-config)
+                   (assoc-in [:active :wagoe/sqlite :migrate-on-start?] true)
+                   (assoc-in [:active :wagoe/workflow] {}))
+        libs   (get-in (sys-config/ig-config config) [:wagoe/db-context :migrate-libraries])]
+    (is (contains? libs "workflow"))
+    (is (not-any? libs ["geo" "push" "audience"]))))
+
 (deftest ^:integration every-emitted-key-has-an-init-key
   ;; The generated config used to enumerate 41 Integrant keys and separately
   ;; require the wiring that registered each one. Forgetting one half produced

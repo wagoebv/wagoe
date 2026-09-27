@@ -21,7 +21,9 @@
             [migratus.migrations :as migratus-migrations]
             [wagoe.platform.core.database.migration-sql :as migration-sql]
             [wagoe.platform.shell.adapters.database.config :as db-config]
+            [wagoe.platform.shell.modules :as modules]
             [clojure.edn :as edn]
+            [clojure.set :as set]
             [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.tools.logging :as log]))
@@ -323,6 +325,46 @@
                      " to a separate classpath resource.")))
     migration-dirs))
 
+(defn- manifest-library
+  "The library a manifest belongs to, from its name: `geo` for `geo.edn`. nil
+   for the legacy shared name, which says nothing about its library."
+  [^java.net.URL url]
+  (let [path (.getPath url)]
+    (when (str/includes? path migration-manifest-dir)
+      (-> (subs path (inc (str/last-index-of path "/")))
+          (str/replace #"\.edn$" "")))))
+
+(defn migration-dirs
+  "`discover-migration-dirs`, less the directories of framework modules that
+   `enabled-libs` does not name. nil keeps every directory.
+
+   `migrate up` created geo, push and audience tables in applications that never
+   switched those modules on (BOU-579). Leaving a directory out re-runs nothing:
+   migratus applies the ids it has not recorded and ignores recorded ones it no
+   longer reads, so a module's migrations apply the day it is switched on."
+  [enabled-libs]
+  (let [dirs (discover-migration-dirs)]
+    (if (nil? enabled-libs)
+      dirs
+      (let [framework (set (vals modules/framework-modules))
+            by-lib    (for [url  (manifest-urls)
+                            :let [lib (manifest-library url)]
+                            :when lib]
+                        [lib (parse-migration-manifest url)])
+            off?      (fn [[lib _]] (and (framework lib) (not (enabled-libs lib))))
+            skip      (set/difference (set (mapcat second (filter off? by-lib)))
+                                      (set (mapcat second (remove off? by-lib))))]
+        (doseq [[lib _] (filter off? by-lib)]
+          (log/info (str "Not migrating " lib ": its module is not switched on in :active")))
+        (vec (remove skip dirs))))))
+
+(defn- configured-libraries
+  "The libraries the active profile's config switches on, for the CLI, which
+   has no running system to ask."
+  []
+  (modules/enabled-libraries
+   (:active (db-config/load-config (db-config/detect-environment)))))
+
 (defn mysql?
   "Whether `datasource` is MySQL or MariaDB, from the driver's own answer."
   [datasource]
@@ -350,8 +392,9 @@
 
   Returns:
      Migratus configuration map"
-  [db-config]
-  (migratus-config (:datasource db-config) (discover-migration-dirs)))
+  ([db-config] (create-migratus-config db-config nil))
+  ([db-config enabled-libs]
+   (migratus-config (:datasource db-config) (migration-dirs enabled-libs))))
 
 (defn create-config
   "Narrow a read config to one suitable for *creating* a migration.
@@ -418,7 +461,7 @@
   (try
     (let [db-config (db-config/get-active-db-config)]
       (log/info "Loading migration configuration" {:database (:database-type db-config)})
-      (create-migratus-config db-config))
+      (create-migratus-config db-config (configured-libraries)))
     (catch Exception e
       (log/error e "Failed to load database configuration for migrations")
       (throw (ex-info "Migration configuration failed"
@@ -474,26 +517,29 @@
    whichever came first rather than the one its context was built for.
 
    Args:
-     datasource - the javax.sql.DataSource to migrate
+     datasource   - the javax.sql.DataSource to migrate
+     enabled-libs - the libraries whose modules are on (`modules/enabled-libraries`);
+                    nil migrates every library on the classpath
 
    Returns:
      nil
 
    Throws:
      Exception if migration fails"
-  [datasource]
-  (refuse-shadowed-migration-dirs!)
-  (log/info "Running database migrations on the application's own datasource")
-  (try
-    (migratus/migrate (migratus-config datasource (discover-migration-dirs)))
-    (log/info "Database migrations completed successfully")
-    (catch Exception e
-      (rethrow-config-conflict! e)
-      (log/error e "Database migration failed")
-      (throw (ex-info "Migration failed"
-                      {:type  :migration-failed
-                       :error (.getMessage e)}
-                      e)))))
+  ([datasource] (migrate-datasource! datasource nil))
+  ([datasource enabled-libs]
+   (refuse-shadowed-migration-dirs!)
+   (log/info "Running database migrations on the application's own datasource")
+   (try
+     (migratus/migrate (migratus-config datasource (migration-dirs enabled-libs)))
+     (log/info "Database migrations completed successfully")
+     (catch Exception e
+       (rethrow-config-conflict! e)
+       (log/error e "Database migration failed")
+       (throw (ex-info "Migration failed"
+                       {:type  :migration-failed
+                        :error (.getMessage e)}
+                       e))))))
 
 (defn rollback
   "Rolls back the last applied migration.
