@@ -11,6 +11,7 @@
 
 (ns wagoe.tools.help
   (:require [wagoe.tools.check :as check]
+            [wagoe.tools.db :as db]
             [wagoe.tools.report :as report]
             [wagoe.tools.ansi :refer [bold green red yellow dim cyan]]
             [clojure.edn :as edn]
@@ -311,29 +312,33 @@
 (defn- check-migrations
   "Report the project's migration files.
 
-   Absence is not a problem to fix. `wagoe new` writes no resources/migrations/,
+   Absence is not a problem to fix. `wagoe new` writes no migrations/,
    and the user module creates its four tables through
    `:wagoe/user-db-schema` rather than a migration — so a fresh project has
    nothing here and is working correctly. Warning about it gave every new
    project an item it could only clear by creating a directory it did not need,
    and the suggested fix (`clojure -M:migrate up`) does nothing without one
    (BOU-324)."
-  []
-  (let [migration-dir (io/file (root-dir) "resources" "migrations")
-        files         (when (.exists migration-dir)
-                        (filter #(.isFile %) (.listFiles migration-dir)))]
-    (cond
-      (seq files)
-      [{:level :pass
-        :msg   (str (count files) " migration file(s) found in resources/migrations/")}]
+  ([] (check-migrations (root-dir)))
+  ([root]
+   (let [{:keys [dir files shadowed]} (db/migration-layout root)]
+     (cond
+       shadowed
+       [{:level :error
+         :msg   (str (count shadowed) " file(s) in migrations/ are never read — " dir " captures the name")
+         :fix   "Keep every migration in one directory; `clojure -M:migrate up` refuses this split."}]
 
-      (.exists migration-dir)
-      [{:level :pass
-        :msg   "resources/migrations/ is empty (add .sql files, then `clojure -M:migrate up`)"}]
+       (seq files)
+       [{:level :pass
+         :msg   (str (count files) " migration file(s) found in " dir)}]
 
-      :else
-      [{:level :pass
-        :msg   "No migrations yet (optional — put .sql files in resources/migrations/)"}])))
+       files
+       [{:level :pass
+         :msg   (str dir " is empty (add .sql files, then `clojure -M:migrate up`)")}]
+
+       :else
+       [{:level :pass
+         :msg   (str "No migrations yet (optional — put .sql files in " dir ")")}]))))
 
 (defn- check-seeds
   "Check if dev seed data file exists."

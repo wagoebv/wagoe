@@ -30,33 +30,37 @@
 (defn- discover-migration-files
   "Discover .up.sql migration files from all migration directories.
    Uses platform's discover-migration-dirs when available, falls back to
-   resources/migrations/. Scans both filesystem and classpath resources."
-  []
-  (let [dirs (try
-               (let [discover-fn (requiring-resolve
-                                  'wagoe.platform.shell.database.migrations/discover-migration-dirs)]
-                 (discover-fn))
-               (catch Exception _
-                 ["migrations/"]))
-        ;; Collect files from each directory (filesystem + classpath)
-        files (mapcat (fn [dir]
-                        (let [;; Try filesystem first
-                              fs-dir (File. (str "resources/" dir))
-                              fs-files (when (.exists fs-dir)
-                                         (->> (.listFiles fs-dir)
-                                              (filter #(str/ends-with? (.getName %) ".up.sql"))
-                                              (map #(.getName %))))
-                              ;; Also scan classpath resources
-                              cp-url (io/resource dir)
-                              cp-files (when (and cp-url (= "file" (.getProtocol cp-url)))
-                                         (let [cp-dir (File. (.toURI cp-url))]
-                                           (when (.isDirectory cp-dir)
-                                             (->> (.listFiles cp-dir)
-                                                  (filter #(str/ends-with? (.getName %) ".up.sql"))
-                                                  (map #(.getName %))))))]
-                          (distinct (concat fs-files cp-files))))
-                      dirs)]
-    (->> files distinct sort)))
+   migrations/. Scans both filesystem and classpath resources."
+  ([] (discover-migration-files "."))
+  ([root]
+   (let [dirs (try
+                (let [discover-fn (requiring-resolve
+                                   'wagoe.platform.shell.database.migrations/discover-migration-dirs)]
+                  (discover-fn))
+                (catch Exception _
+                  ["migrations/"]))
+         ;; Collect files from each directory (filesystem + classpath)
+         files (mapcat (fn [dir]
+                         (let [;; Try filesystem first
+                               ;; migrations/ itself is off the classpath in a
+                               ;; generated project (BOU-489).
+                               fs-files (for [d     [(File. (str root) dir)
+                                                     (File. (str root) (str "resources/" dir))]
+                                              :when (.isDirectory d)
+                                              f     (.listFiles d)
+                                              :when (str/ends-with? (.getName f) ".up.sql")]
+                                          (.getName f))
+                               ;; Also scan classpath resources
+                               cp-url (io/resource dir)
+                               cp-files (when (and cp-url (= "file" (.getProtocol cp-url)))
+                                          (let [cp-dir (File. (.toURI cp-url))]
+                                            (when (.isDirectory cp-dir)
+                                              (->> (.listFiles cp-dir)
+                                                   (filter #(str/ends-with? (.getName %) ".up.sql"))
+                                                   (map #(.getName %))))))]
+                           (distinct (concat fs-files cp-files))))
+                       dirs)]
+     (->> files distinct sort))))
 
 (defn merge-migration-status
   "Combine the migration files on disk with the ids the database says are applied.

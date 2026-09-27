@@ -46,6 +46,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **`bb db:status`, `bb guide next` and devtools looked for migrations in `resources/migrations/`** (BOU-489).
+  They now use `migrations/`, the directory the migrator reads, and report a split between the two.
 - **`/health/ready` showed database and cache exception messages** (BOU-558). The body now says
   `unreachable`; the reason is logged at WARN. Upgrade platform if readiness is public.
 - **MFA and storage upload APIs returned the raw exception message** (BOU-557). They now answer the

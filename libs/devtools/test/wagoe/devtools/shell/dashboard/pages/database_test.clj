@@ -47,3 +47,14 @@
 
   (testing "no files and nothing applied yields no rows"
     (is (= [] (database/merge-migration-status #{} [])))))
+
+(deftest ^:unit discover-migration-files-reads-the-project-directory
+  ;; migrations/ is where the migrator and the scaffolder keep them; the panel
+  ;; looked only under resources/ and the classpath (BOU-489).
+  (let [root (.toFile (java.nio.file.Files/createTempDirectory
+                       "dashboard-migrations" (make-array java.nio.file.attribute.FileAttribute 0)))
+        f    (java.io.File. root "migrations/20260101000000-create-widgets.up.sql")]
+    (.mkdirs (.getParentFile f))
+    (spit f "CREATE TABLE widgets (id INT);")
+    (is (some #{"20260101000000-create-widgets.up.sql"}
+              (#'database/discover-migration-files (str root))))))

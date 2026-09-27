@@ -21,11 +21,14 @@
 
 (defn- root-dir [] (System/getProperty "user.dir"))
 
-(defn- config-path []
-  (str (root-dir) "/resources/conf/dev/config.edn"))
+(def project-migration-dir
+  "Where a project's migrations live. Copies
+   wagoe.platform.shell.database.migrations/project-migration-dir, which
+   Babashka cannot load; db-test pins the two together."
+  "migrations/")
 
-(defn- migrations-dir []
-  (str (root-dir) "/resources/migrations"))
+(defn- config-path [root]
+  (str root "/resources/conf/dev/config.edn"))
 
 (defn- seed-path []
   (str (root-dir) "/resources/seeds/dev.edn"))
@@ -76,56 +79,84 @@
            (sort-by #(.getName %))
            vec))))
 
+(defn migration-layout
+  "Where `root`'s migrations are read from.
+
+   migratus resolves the name `migrations/` to `resources/migrations` when that
+   exists, so files in the project directory are then never read, and the
+   platform refuses to migrate (BOU-274). Those are returned as `:shadowed`."
+  [root]
+  (let [resource (io/file root "resources" "migrations")
+        project  (io/file root project-migration-dir)]
+    (if (.isDirectory resource)
+      {:dir      "resources/migrations/"
+       :path     (str resource)
+       :files    (list-migration-files resource)
+       :shadowed (seq (list-migration-files project))}
+      {:dir   project-migration-dir
+       :path  (str project)
+       :files (list-migration-files project)})))
+
 ;; =============================================================================
 ;; Subcommands
 ;; =============================================================================
 
 (defn db-status
   "Show database config and migration info."
-  []
-  (println)
-  (println (bold "Wagoe Database Status"))
-  (println)
+  ([] (db-status (root-dir)))
+  ([root]
+   (println)
+   (println (bold "Wagoe Database Status"))
+   (println)
 
-  ;; Read and parse config
-  (let [config-file (io/file (config-path))]
-    (if-not (.exists config-file)
-      (println (red (str "  Config not found: " (config-path))))
-      (let [config-text  (slurp config-file)
-            parsed       (parse-config-minimal config-text)
-            active       (or (:active parsed) {})
-            {:keys [type config]} (detect-db-type active)]
+   ;; Read and parse config
+   (let [config-file (io/file (config-path root))]
+     (if-not (.exists config-file)
+       (println (red (str "  Config not found: " (config-path root))))
+       (let [config-text  (slurp config-file)
+             parsed       (parse-config-minimal config-text)
+             active       (or (:active parsed) {})
+             {:keys [type config]} (detect-db-type active)]
 
-        ;; Database type
-        (println (str "  " (bold "Database type: ") (green type)))
+         ;; Database type
+         (println (str "  " (bold "Database type: ") (green type)))
 
-        ;; Connection info (show what we can extract without connecting)
-        (when config
-          (let [jdbc-url  (:jdbc-url config)
-                db-name   (:db-name config)
-                host      (:host config)]
-            (when jdbc-url
-              (println (str "  " (bold "JDBC URL:      ") (dim (str jdbc-url)))))
-            (when host
-              (println (str "  " (bold "Host:          ") (dim (str host)))))
-            (when db-name
-              (println (str "  " (bold "Database:      ") (dim (str db-name)))))))
+         ;; Connection info (show what we can extract without connecting)
+         (when config
+           (let [jdbc-url  (:jdbc-url config)
+                 db-name   (:db-name config)
+                 host      (:host config)]
+             (when jdbc-url
+               (println (str "  " (bold "JDBC URL:      ") (dim (str jdbc-url)))))
+             (when host
+               (println (str "  " (bold "Host:          ") (dim (str host)))))
+             (when db-name
+               (println (str "  " (bold "Database:      ") (dim (str db-name)))))))
 
-        (println)
+         (println)
 
-        ;; Migration files
-        (let [mig-dir    (migrations-dir)
-              mig-files  (list-migration-files mig-dir)]
-          (if-not mig-files
-            (println (yellow (str "  No migrations directory found at " mig-dir)))
-            (let [count-files (count mig-files)]
-              (println (str "  " (bold "Migrations:    ") (green (str count-files))
-                            (dim (str " file" (when (not= count-files 1) "s")
-                                      " in resources/migrations/"))))
-              (when (pos? count-files)
-                (println (dim (str "  Latest:        " (.getName (last mig-files)))))))))
+         ;; Migration files
+         (let [{:keys [dir path files shadowed]} (migration-layout root)]
+           (cond
+             shadowed
+             (do
+               (println (red (str "  Never read — " dir " captures the name " project-migration-dir ":")))
+               (doseq [f shadowed]
+                 (println (red (str "    " project-migration-dir (.getName f)))))
+               (println (dim "  Keep every migration in one directory; `bb migrate up` refuses this split.")))
 
-        (println)))))
+             (nil? files)
+             (println (yellow (str "  No migrations directory found at " path)))
+
+             :else
+             (let [count-files (count files)]
+               (println (str "  " (bold "Migrations:    ") (green (str count-files))
+                             (dim (str " file" (when (not= count-files 1) "s")
+                                       " in " dir))))
+               (when (pos? count-files)
+                 (println (dim (str "  Latest:        " (.getName (last files)))))))))
+
+         (println))))))
 
 (def ^:private disposable-envs
   "Environments whose database may be destroyed or seeded. Allowlist, not denylist:
