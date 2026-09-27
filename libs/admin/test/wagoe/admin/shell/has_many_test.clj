@@ -132,7 +132,7 @@
     (let [sp (schema-repo/create-schema-repository
               (:db @sys) (update-in config [:entities :hm-orders] dissoc :has-many))]
       (is (= [{:entity :hm-items :table :hm_items :foreign-key :hm-order-id
-               :label "Items" :fields [:sku] :editable false :detected true}]
+               :label "Items" :fields [:sku] :editable false}]
              (:has-many (ports/get-entity-config sp :hm-orders))))))
 
   (testing "the explicit entry wins over the detected one"
@@ -246,6 +246,23 @@
         (is (re-find (re-pattern (str "<option[^>]*(selected[^>]*value=\"" order-id "\"|value=\""
                                       order-id "\"[^>]*selected)"))
                      body))))))
+
+(deftest ^:contract the-picker-is-a-select-only-while-every-parent-fits
+  ;; A select capped at the page size silently dropped every parent past it
+  ;; (BOU-563 review): past the limit the field stays a text input.
+  (create-order!)
+  (create-order!)
+  (let [total  (:n (db/execute-one! (:db @sys) {:select [[:%count.* :n]] :from [:hm_orders]}))
+        page   (fn [max-size]
+                 (:body ((detail/new-entity-handler (:svc @sys) (:sp @sys)
+                                                    (assoc-in config [:pagination :max-page-size] max-size))
+                         (request :get "hm-items"))))]
+    (testing "every parent fits: a select"
+      (is (re-find #"<select[^>]*name=\"hm-order-id\"" (page total))))
+    (testing "one parent more than fits: a text input"
+      (let [body (page (dec total))]
+        (is (not (re-find #"<select[^>]*name=\"hm-order-id\"" body)))
+        (is (re-find #"<input[^>]*name=\"hm-order-id\"" body))))))
 
 (deftest ^:contract ^:security detail-page-ignores-an-off-site-return-to
   ;; return_to became the breadcrumb, "Back to list", create and delete links

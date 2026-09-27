@@ -645,9 +645,10 @@
 
 (defn foreign-key-options
   "The choices for each editable foreign key of `entity-name`: the parent's
-   rows, up to the maximum page size, as [id label], where the label is the
-   parent's first search or list field. The current value stays a choice even
-   when it is not among them. An optional key can be left empty."
+   rows as [id label], where the label is the parent's first search or list
+   field. Only when every parent fits in the maximum page size: a select
+   capped there would silently offer a subset, so past it the key stays a
+   text input. An optional key can be left empty."
   [admin-service config entity-configs entity-name values]
   (let [entity-config (get entity-configs entity-name)
         page-size     (get-in config [:pagination :max-page-size] 200)]
@@ -659,17 +660,23 @@
                        label      (or (first (:search-fields parent-cfg))
                                       (first (:list-fields parent-cfg))
                                       pk)
-                       rows       (try (:records (ports/list-entities admin-service parent
-                                                                      {:limit page-size :sort label :sort-dir :asc}))
+                       page       (try (ports/list-entities admin-service parent
+                                                                {:limit page-size :sort label :sort-dir :asc})
                                        (catch Exception e
                                          (log/warn e "foreign key left as a text input: parent rows unreadable"
                                                    {:entity entity-name :field field :parent parent})
                                          ::unreadable))
+                       rows       (:records page)
                        current    (some-> (get values field) str)]
-                :when (not= ::unreadable rows)]
-            [field (cond-> (mapv (fn [r] [(str (get r pk)) (str (or (get r label) (get r pk)))]) rows)
-                     (and current (not-any? #(= current (str (get % pk))) rows)) (conj [current current])
-                     (not (get-in entity-config [:fields field :required])) (->> (into [["" "—"]])))]))))
+                :when (and (not= ::unreadable page)
+                           (<= (:total-count page 0) (count rows)))]
+            (let [options (mapv (fn [r] [(str (get r pk)) (str (or (get r label) (get r pk)))]) rows)]
+              [field (cond->> (cond-> options
+                                ;; A parent the list does not show (soft-deleted): kept,
+                                ;; so saving the form does not change it.
+                                (and current (not-any? #(= current (first %)) options))
+                                (conj [current current]))
+                       (not (get-in entity-config [:fields field :required])) (into [["" "—"]]))])))))
 
 (defn with-workflow-states
   "`records`, each with `:admin/workflow` {:instance-id :state} when it has a

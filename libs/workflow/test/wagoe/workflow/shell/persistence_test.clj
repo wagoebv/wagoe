@@ -287,5 +287,5 @@
       (is (= {entity-id {:instance-id (:id inst) :workflow-id :order-workflow :state :delivered}}
              (admin-ports/entity-workflows port :invoice [entity-id (UUID/randomUUID)]))))
     (testing "every instance of the entity is removed"
-      (is (= 2 (admin-ports/remove-entity-workflows! port :invoice entity-id)))
+      (is (= 2 (admin-ports/remove-entity-workflows! port nil :invoice entity-id)))
       (is (nil? (ports/find-instance-by-entity @test-store :invoice entity-id))))))

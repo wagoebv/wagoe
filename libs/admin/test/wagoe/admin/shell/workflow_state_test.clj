@@ -48,7 +48,7 @@
     (entity-workflows [_ entity-type ids]
       (swap! calls conj [:read entity-type])
       (into {} (keep (fn [id] (some->> (get @instances [entity-type id]) (vector id)))) ids))
-    (remove-entity-workflows! [_ entity-type id]
+    (remove-entity-workflows! [_ _tx entity-type id]
       (swap! calls conj [:remove entity-type id])
       (let [had? (contains? @instances [entity-type id])]
         (swap! instances dissoc [entity-type id])
@@ -111,6 +111,19 @@
           {:keys [svc]} (system instances (atom []))]
       (ports/bulk-delete-entities svc :ws-invoices [a b])
       (is (empty? @instances)))))
+
+(deftest ^:integration a-soft-delete-keeps-the-workflow-instance
+  ;; A soft delete can be undone; the instance and its audit must survive it.
+  (let [cfg       (assoc-in config [:entities :ws-invoices :soft-delete] true)
+        invoice   (random-uuid)
+        _         (db/execute-update! *db* {:raw "ALTER TABLE ws_invoices ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP"})
+        _         (db/execute-update! *db* {:raw (str "INSERT INTO ws_invoices (id, number) VALUES ('" invoice "', 'INV-S')")})
+        instances (atom {[:invoice invoice] {:instance-id (random-uuid) :state :entered}})
+        workflows (fake-workflows instances (atom []))
+        sp        (schema-repo/create-schema-repository *db* cfg)
+        svc       (service/create-admin-service *db* sp nil nil cfg nil workflows)]
+    (is (true? (ports/delete-entity svc :ws-invoices invoice)))
+    (is (= 1 (count @instances)))))
 
 (deftest ^:unit the-workflow-port-is-wired-only-when-workflow-is-on
   (let [graph #(:components (wiring/ig-config {} {:enabled %}))]

@@ -49,8 +49,8 @@ for what is public API, what is internal, and how deprecations are announced.
   A script driving the wizard must pass flags: `bb setup --database sqlite`.
 - **`bb setup` in an existing project creates no missing config file** (BOU-404). Pass `--prod true`
   to have it write `resources/conf/prod/config.edn`.
-- **Admin hard-deletes unless `:soft-delete true`; configured children follow, detected ones refuse** (BOU-563).
-  Set `:soft-delete true` where you relied on `deleted_at`, and `:on-delete` on a has-many to choose.
+- **Admin hard-deletes by default, and a parent with has-many rows is refused unless `:on-delete :cascade`** (BOU-563).
+  Set `:soft-delete true` where you relied on `deleted_at`, and `:on-delete :cascade` where children should go.
 - **An unknown or misplaced admin entity-config key stops startup** (BOU-563). The error names
   the path; move or remove the key.
 
@@ -143,7 +143,7 @@ for what is public API, what is internal, and how deprecations are announced.
   subscribe to `:admin` for `:admin/entity-created`, `-updated` and `-deleted`.
 - **Admin shows workflow state and keeps a has-many `:min`** (BOU-563). Add `:workflow
   {:entity-type :invoice}` to an entity, or `:min 1` to a has-many entry.
-- **Admin foreign keys are a select over the parent's rows** (BOU-563), not a UUID text input.
+- **Admin foreign keys are a select over the parent's rows** (BOU-563), while they fit one page.
 - **Modules with several entities** (BOU-497, BOU-514). `bb scaffold entity
   --belongs-to invoice` adds one; `scaffold ai` and MCP now generate them all.
 - **Scaffolder `default=<value>` field modifier** (BOU-494). Required enums now

@@ -664,8 +664,7 @@
              :foreign-key :order-id
              :label       "Order items"
              :fields      [:sku]
-             :editable    false
-             :detected    true}]
+             :editable    false}]
            (introspection/inverse-has-many :orders order-configs))))
 
   (testing "an entity nothing points at has none"

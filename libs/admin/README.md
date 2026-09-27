@@ -199,7 +199,7 @@ This is the full schema for a single entity config file. All keys are optional u
     :fields      [:product-name :quantity :total-cents]  ; Columns to show
     :editable    true                  ; false = read-only inline table
     :min         1                     ; refuse to delete the last child
-    :on-delete   :cascade}]            ; default for a configured has-many; or :restrict
+    :on-delete   :cascade}]            ; delete children with the parent; default :restrict
 
   ;; For has-many child entities: show parent info at top of child detail page.
   ;; (Set this on the CHILD entity, not the parent.)
@@ -319,9 +319,9 @@ When `:soft-delete true` is set on an entity:
 
 When `:soft-delete false` (the default), delete is permanent (`DELETE FROM …`). A `deleted_at` column does not change that; the config does.
 
-Children of a configured has-many follow their parent, in one transaction. A hard delete removes them first, so the foreign key needs no `ON DELETE CASCADE`. A soft delete sets `deleted_at` on the children that have the column and leaves the others.
+A has-many restricts by default, configured or detected: while it has rows, deleting the parent is refused with a 409 that names the child and how many there are. A has-many written only to show children must not start deleting them, and detected children may not belong to the parent alone (a user of several tenants).
 
-A has-many that is only detected restricts instead: while it has rows, deleting the parent is refused with a 409 that names the child and how many there are. Nobody said those rows belong to the parent, and they may not (a user of several tenants). Set `:on-delete :cascade` or `:on-delete :restrict` on a has-many entry to choose.
+With `:on-delete :cascade` on the entry, children follow their parent instead, in one transaction: a restrict anywhere below rolls back the whole delete. A hard delete removes them first, so the foreign key needs no `ON DELETE CASCADE`. A soft delete sets `deleted_at` on the children that have the column and leaves the others. Each removed row, children included, publishes its own `:admin/entity-deleted`.
 
 For entities using `:query-overrides`, set `:soft-delete-table` to tell the service which table to `UPDATE` on delete (defaults to the primary table in `:from`).
 
@@ -348,7 +348,7 @@ A panel shows one page (`:pagination :default-page-size`) and links to the child
 
 Without config, a has-many is detected from any allowlisted entity whose `<parent>_id` column names this one; it is read-only. An explicit entry for the same child entity replaces the detected one.
 
-The foreign key on the child's form is a select over the parent's rows, labelled by the parent's first `:search-fields` (else `:list-fields`) entry, up to `:pagination :max-page-size` rows. A field whose config sets another `:widget` keeps it.
+The foreign key on the child's form is a select over the parent's rows, labelled by the parent's first `:search-fields` (else `:list-fields`) entry, while all of them fit in `:pagination :max-page-size`; past that it stays a text input. A field whose config sets another `:widget` keeps it.
 
 `:min` refuses a delete, or a bulk delete, that would leave a parent with fewer children: the admin answers 409 and shows why. It does not stop you creating a parent without children, because the admin creates the parent first and adds children from its page; enforce that in your module's service if it matters.
 
@@ -435,7 +435,7 @@ When entity data lives across multiple tables (e.g. `auth_users` + `users`), use
 
 ## Workflow State
 
-With the workflow module on and `:workflow {:entity-type :invoice}` on an entity, its list gets a Workflow column and its detail page a Workflow line: the state of the entity's latest instance, linking to `/web/admin/workflows/<instance-id>`. `:entity-type` is what you pass to `start-workflow!`. Deleting the record, or its parent, deletes its instances and their audit log. Without the workflow module the key does nothing.
+With the workflow module on and `:workflow {:entity-type :invoice}` on an entity, its list gets a Workflow column and its detail page a Workflow line: the state of the entity's latest instance, linking to `/web/admin/workflows/<instance-id>`. `:entity-type` is what you pass to `start-workflow!`. A hard delete of the record, or of a parent it cascades from, deletes its instances and their audit log in the same transaction. A soft delete keeps them. A workflow store on a different database than the admin's is cleaned up outside the transaction, so not atomically. Without the workflow module the key does nothing.
 
 ---
 

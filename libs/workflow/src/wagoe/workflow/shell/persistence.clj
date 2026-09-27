@@ -111,6 +111,18 @@
 ;; IWorkflowStore implementation
 ;; =============================================================================
 
+(defn delete-entity-instances!
+  "Delete every instance of the entity, with its audit log, on `connectable`
+   and without a transaction of its own: the caller's, when there is one,
+   decides (BOU-563). Returns the number of instances deleted."
+  [connectable entity-type entity-id]
+  (let [by-entity [:and
+                   [:= :entity_type (kw->str entity-type)]
+                   [:= :entity_id (uuid->str entity-id)]]]
+    (jdbc/execute! connectable (sql/format {:delete-from :workflow_audit :where by-entity}))
+    (:next.jdbc/update-count
+     (jdbc/execute-one! connectable (sql/format {:delete-from :workflow_instances :where by-entity})))))
+
 (defrecord WorkflowStore [datasource]
   ports/IWorkflowStore
 

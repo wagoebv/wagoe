@@ -1,14 +1,17 @@
 (ns wagoe.admin.shell.delete-children-test
   "Deleting a record with has-many children (BOU-563): hard delete is the
-   default whatever the columns, configured children follow their parent,
-   detected children refuse the delete, `:on-delete` overrides either, and a
-   has-many `:min` refuses to delete the last child."
+   default whatever the columns, every has-many refuses the delete while it
+   has rows unless it says `:on-delete :cascade`, cascaded rows publish their
+   own deleted events, and a has-many `:min` refuses to delete the last child."
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest is testing use-fixtures]]
             [wagoe.admin.ports :as ports]
             [wagoe.admin.shell.http.handlers.delete :as delete]
             [wagoe.admin.shell.schema-repository :as schema-repo]
             [wagoe.admin.shell.service :as service]
+            [wagoe.events.ports :as events]
+            [wagoe.events.shell.module-wiring]
+            [integrant.core :as ig]
             [wagoe.platform.database :as db]
             [wagoe.platform.shell.adapters.database.factory :as db-factory]))
 
@@ -16,14 +19,15 @@
 
 (def ^:private lines-rel
   {:entity :dc-lines :table :dc_lines :foreign-key :dc-invoice-id
-   :label "Lines" :fields [:description] :editable true})
+   :label "Lines" :fields [:description] :editable true :on-delete :cascade})
 
 (defn- config [invoice-cfg & [lines-cfg]]
-  {:entity-discovery {:mode :allowlist :allowlist #{:dc-invoices :dc-lines :dc-notes}}
+  {:entity-discovery {:mode :allowlist :allowlist #{:dc-invoices :dc-lines :dc-notes :dc-subs}}
    :entities         {:dc-invoices (merge {:label "Invoices" :has-many [lines-rel]} invoice-cfg)
                       :dc-lines    (merge {:label "Lines"} lines-cfg)
                       ;; No has-many names it: a child only by detection.
-                      :dc-notes    {:label "Notes"}}
+                      :dc-notes    {:label "Notes"}
+                      :dc-subs     {:label "Subs"}}
    :pagination       {:default-page-size 20 :max-page-size 200}})
 
 (def ^:private ^:dynamic *db* nil)
@@ -43,8 +47,12 @@
       (db/execute-update! ctx {:raw "CREATE TABLE dc_notes (id UUID PRIMARY KEY,
                                                            dc_invoice_id UUID NOT NULL REFERENCES dc_invoices(id),
                                                            body VARCHAR(50) NOT NULL)"})
+      ;; A grandchild, under the lines.
+      (db/execute-update! ctx {:raw "CREATE TABLE dc_subs (id UUID PRIMARY KEY,
+                                                          dc_line_id UUID NOT NULL REFERENCES dc_lines(id))"})
       (try (binding [*db* ctx] (f))
            (finally
+             (db/execute-update! ctx {:raw "DROP TABLE dc_subs"})
              (db/execute-update! ctx {:raw "DROP TABLE dc_notes"})
              (db/execute-update! ctx {:raw "DROP TABLE dc_lines"})
              (db/execute-update! ctx {:raw "DROP TABLE dc_invoices"})
@@ -52,6 +60,7 @@
 
 (use-fixtures :each
   (fn [f]
+    (db/execute-update! *db* {:raw "DELETE FROM dc_subs"})
     (db/execute-update! *db* {:raw "DELETE FROM dc_notes"})
     (db/execute-update! *db* {:raw "DELETE FROM dc_lines"})
     (db/execute-update! *db* {:raw "DELETE FROM dc_invoices"})
@@ -164,6 +173,57 @@
         (testing "bulk delete too"
           (is (= :conflict (:type (ex-data (refusal #(ports/bulk-delete-entities svc :dc-invoices [id])))))))))))
 
+(deftest ^:integration a-configured-has-many-restricts-unless-it-says-cascade
+  ;; A display-only :has-many written before BOU-563 must not start deleting
+  ;; children on upgrade.
+  (let [{:keys [svc]} (svc (config {:has-many [(dissoc lines-rel :on-delete)]}))
+        {:keys [id lines]} (invoice!)
+        e (refusal #(ports/delete-entity svc :dc-invoices id))]
+    (is (= :conflict (:type (ex-data e))))
+    (is (str/includes? (ex-message e) "2 Lines"))
+    (is (some? (row :dc_invoices id)))
+    (is (every? some? (map #(row :dc_lines %) lines)))))
+
+(deftest ^:integration a-restrict-deep-in-a-cascade-rolls-back-what-it-already-deleted
+  ;; Notes cascade first, then the lines, whose subs restrict: the refusal
+  ;; comes after the notes are gone, inside the transaction.
+  (let [notes-rel {:entity :dc-notes :table :dc_notes :foreign-key :dc-invoice-id
+                   :label "Notes" :fields [:body] :on-delete :cascade}
+        {:keys [svc]} (svc (config {:has-many [notes-rel lines-rel]}
+                                   {:has-many [{:entity :dc-subs :table :dc_subs :foreign-key :dc-line-id
+                                                :label "Subs" :fields [:id]}]}))
+        {:keys [id lines]} (invoice! 1)
+        note (note! id)]
+    (db/execute-update! *db* {:raw (str "INSERT INTO dc_subs (id, dc_line_id) VALUES ('"
+                                        (random-uuid) "', '" (first lines) "')")})
+    (let [e (refusal #(ports/delete-entity svc :dc-invoices id))]
+      (is (= :conflict (:type (ex-data e))))
+      (is (str/includes? (ex-message e) "1 Subs")))
+    (is (some? (row :dc_notes note)) "the note deleted before the refusal is back")
+    (is (some? (row :dc_lines (first lines))))
+    (is (some? (row :dc_invoices id)))))
+
+(deftest ^:integration cascaded-rows-publish-their-own-deleted-events
+  (let [bus  (ig/init-key :wagoe/events {:provider :memory})
+        seen (atom [])]
+    (try
+      (events/subscribe! bus :admin #(swap! seen conj %))
+      (let [cfg (config {})
+            sp  (schema-repo/create-schema-repository *db* cfg)
+            svc (service/create-admin-service *db* sp nil nil cfg bus)
+            {:keys [id lines]} (invoice!)]
+        (is (true? (ports/delete-entity svc :dc-invoices id)))
+        (loop [n 0]
+          (when (and (< n 100) (< (count @seen) 3)) (Thread/sleep 20) (recur (inc n))))
+        (is (= #{[:dc-invoices id] [:dc-lines (first lines)] [:dc-lines (second lines)]}
+               (set (map (comp (juxt :entity :id) :payload)
+                         (filter #(= :admin/entity-deleted (:type %)) @seen)))))
+        (let [line-events (filter #(= :dc-lines (get-in % [:payload :entity])) @seen)]
+          (is (= 2 (count line-events)))
+          (is (every? #(str/starts-with? (str (get-in % [:payload :attrs :description])) "line") line-events)
+              "each carries the row as it was")))
+      (finally (ig/halt-key! :wagoe/events bus)))))
+
 (deftest ^:integration a-parent-without-detected-children-still-deletes
   (let [{:keys [svc]} (svc (config {}))
         {:keys [id]} (invoice!)]
@@ -178,7 +238,7 @@
           note (note! id)]
       (is (true? (ports/delete-entity svc :dc-invoices id)))
       (is (nil? (row :dc_notes note)))))
-  (testing ":on-delete :restrict on the configured lines refuses"
+  (testing ":on-delete :restrict refuses"
     (let [{:keys [svc]} (svc (config {:has-many [(assoc lines-rel :on-delete :restrict)]}))
           {:keys [id lines]} (invoice!)
           e (refusal #(ports/delete-entity svc :dc-invoices id))]
