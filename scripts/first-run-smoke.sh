@@ -166,7 +166,7 @@ bash -ic "command -v clj-nrepl-eval" >/dev/null 2>&1 \
   || fail "clj-nrepl-eval not on PATH after install (install.sh installs it with || true, so this is a failed bbin install, not a Wagoe defect — usually GitHub throttling)"
 # Name the tag. In released mode it IS the thing under test, and a red cell that
 # does not say which release it tested sends the reader to the Actions log to
-# find out. install.sh resolves it from the GitHub releases API, so it is not
+# find out. install.sh resolves it from GitHub at install time, so it is not
 # derivable from this checkout.
 # install.sh colours that line and ends it with an ellipsis, so the raw match is
 # "1.0.0-beta-5...<ESC>[0m". Strip both, or the tag reported is not a tag.

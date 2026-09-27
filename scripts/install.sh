@@ -404,6 +404,23 @@ done
 # ── wagoe CLI ──────────────────────────────────────────────
 info "Fetching latest Wagoe release tag..."
 
+# The releases page redirects to the latest release's tag. It is not the REST
+# API, so it does not draw on the 60-per-hour budget a shared runner IP used up
+# on 24 and 26 Sep (BOU-559). The API below is the fallback.
+RELEASES_PAGE="https://github.com/wagoebv/wagoe/releases/latest"
+WAGOE_TAG=""
+for attempt in 1 2 3; do
+  LOCATION="$(curl -sS -o /dev/null -w '%{redirect_url}' "$RELEASES_PAGE" 2>/dev/null || true)"
+  if [[ "$LOCATION" == */releases/tag/* ]]; then
+    WAGOE_TAG="${LOCATION##*/releases/tag/}"
+    break
+  fi
+  if [[ $attempt -lt 3 ]]; then sleep $((attempt * 3)); fi
+done
+
+# The REST API: slower to get right, and rate-limited, but it names the tag
+# even when the releases page does not redirect as expected.
+if [[ -z "$WAGOE_TAG" ]]; then
 # `curl -f` collapses every outcome into exit 22, so this used to blame the
 # user's connection for a working one: GitHub allows 60 unauthenticated API
 # requests per hour per IP, and a shared address — CI runner, office NAT, VPN
@@ -422,17 +439,39 @@ if [[ -n "$GH_API_TOKEN" ]]; then
   GH_AUTH_ARGS=(-H "Authorization: Bearer $GH_API_TOKEN")
 fi
 
-# Retried, but only for what a retry can fix: a network blip or a 5xx. A 403
-# with the rate limit exhausted resets in up to an hour, so sleeping 30 seconds
-# and asking again just delays the message below by 30 seconds (BOU-417).
+# `|| true`: an absent header is normal, and this runs under `set -e` where a
+# grep miss inside an assignment would end the script instead of the branch.
+header_value() { grep -i "^$1:" "$TAG_HEADERS" | tail -1 | tr -d '\r' | awk '{print $2}' || true; }
+
+# Seconds until the rate limit resets, or empty when the answer is not one.
+rate_limit_wait() {
+  [[ "$HTTP_CODE" == "403" || "$HTTP_CODE" == "429" ]] || return 0
+  [[ "$(header_value x-ratelimit-remaining)" == "0" ]] || return 0
+  local reset_at wait
+  reset_at="$(header_value x-ratelimit-reset)"
+  [[ "$reset_at" =~ ^[0-9]+$ ]] || { echo 3600; return 0; }
+  wait=$(( reset_at - $(date +%s) ))
+  if (( wait < 1 )); then wait=1; fi
+  echo "$wait"
+}
+
+# Retried, but only for what a retry can fix: a network blip, a 5xx, or a rate
+# limit that resets within a minute. One that resets in up to an hour is not
+# waited out; the message below says so instead (BOU-417).
 for attempt in 1 2 3; do
   set +e
   HTTP_CODE="$(curl -sSL -D "$TAG_HEADERS" -o "$TAG_BODY" -w '%{http_code}' \
     ${GH_AUTH_ARGS[@]+"${GH_AUTH_ARGS[@]}"} "$RELEASES_API" 2>/dev/null)"
   CURL_RC=$?
   set -e
-  if [[ $CURL_RC -eq 0 && ! "$HTTP_CODE" =~ ^5 ]]; then
-    break
+  if [[ $CURL_RC -eq 0 ]]; then
+    RATE_WAIT="$(rate_limit_wait)"
+    if [[ -n "$RATE_WAIT" && $RATE_WAIT -le 60 && $attempt -lt 3 ]]; then
+      info "GitHub's API rate limit resets in ${RATE_WAIT}s — waiting..."
+      sleep "$RATE_WAIT"
+      continue
+    fi
+    [[ ! "$HTTP_CODE" =~ ^5 ]] && break
   fi
   if [[ $attempt -lt 3 ]]; then
     info "Release lookup failed (attempt $attempt/3) — retrying in $((attempt * 3))s..."
@@ -446,20 +485,12 @@ if [[ $CURL_RC -ne 0 ]]; then
   fail "Could not reach $RELEASES_API (curl exit $CURL_RC). Check your internet connection."
 fi
 
-# `|| true`: an absent header is normal, and this runs under `set -e` where a
-# grep miss inside an assignment would end the script instead of the branch.
-header_value() { grep -i "^$1:" "$TAG_HEADERS" | tail -1 | tr -d '\r' | awk '{print $2}' || true; }
-
 if [[ "$HTTP_CODE" == "403" || "$HTTP_CODE" == "429" ]]; then
-  if [[ "$(header_value x-ratelimit-remaining)" == "0" ]]; then
-    RESET_AT="$(header_value x-ratelimit-reset)"
-    WAIT_MIN="?"
-    if [[ "$RESET_AT" =~ ^[0-9]+$ ]]; then
-      # Minutes from now, not a formatted timestamp: `date -d @epoch` is GNU and
-      # `date -r epoch` is BSD, and this script runs on both.
-      WAIT_MIN=$(( (RESET_AT - $(date +%s) + 59) / 60 ))
-      [[ $WAIT_MIN -lt 1 ]] && WAIT_MIN=1
-    fi
+  RATE_WAIT="$(rate_limit_wait)"
+  if [[ -n "$RATE_WAIT" ]]; then
+    # Minutes from now, not a formatted timestamp: `date -d @epoch` is GNU and
+    # `date -r epoch` is BSD, and this script runs on both.
+    WAIT_MIN=$(( (RATE_WAIT + 59) / 60 ))
     fail "GitHub's API rate limit is used up for this IP address, so the release
   lookup was refused. Your connection is fine.
     Retry in ${WAIT_MIN} min, or raise the limit now by exporting a token:
@@ -483,6 +514,7 @@ if [[ -z "$WAGOE_TAG" ]]; then
   fail "Could not determine latest Wagoe release tag: the API answered 200 but
     named no tag_name. Re-run, or install a specific tag by hand."
 fi
+fi  # REST API fallback
 
 info "Installing wagoe CLI @ $WAGOE_TAG..."
 # bbin's git dep resolution (--deps-root + --config) does not reliably set up
