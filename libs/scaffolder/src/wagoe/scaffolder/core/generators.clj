@@ -817,7 +817,7 @@ DROP TABLE IF EXISTS %s;
           "    (db/execute-update! db-ctx {:delete-from :" table-name " :where [:= :id id]}))"
           (when (:primary? entity true)
             (str "\n  (transact [_this f]\n"
-                 "    (db/with-transaction [_ db-ctx] (f)))"))
+                 "    (db/with-transaction* db-ctx (fn [_] (f))))"))
           (when-let [c (count-fn entity)]
             (str "\n  (" c " [_this " (:belongs-to entity) "-id]\n"
                  "    (:n (db/execute-one! db-ctx {:select [[:%count.* :n]] :from [:" table-name "]\n"
