@@ -659,8 +659,26 @@
                                    ""
                                    (str " (from " output-dir ")")))
             existing      (when (.isFile schema-file) (slurp schema-file))
+            ;; A child created with its parent: the parent's create request
+            ;; takes the field too, and so does the admin's panel (BOU-578).
+            nested        (when existing
+                            (generators/add-field-to-children-entry existing entity-plural field))
+            existing      (if (= :inserted (:status nested)) (:content nested) existing)
             edit          (when existing
                             (generators/add-field-to-schema existing entity field))
+            edit          (if (and (= :inserted (:status nested)) (not= :updated (:status edit)))
+                            (assoc edit :status :updated :content existing :schemas [])
+                            edit)
+            panel-edits   (when-let [parent (:parent nested)]
+                            (let [parent-plural (template/pluralize (template/pascal->kebab parent))]
+                              (for [dir   (when (.isDirectory (resolve-path output-dir "resources/conf"))
+                                            (profile-dirs output-dir))
+                                    :let  [f (resolve-path output-dir (admin-file-path dir parent-plural))]
+                                    :when (.isFile f)
+                                    :let  [r (generators/add-admin-has-many-field (slurp f) parent-plural entity-plural field)]
+                                    :when (= :updated (:status r))]
+                                {:file f :content (:content r)
+                                 :note (str "added " (name (:name field)) " to the " entity-plural " panel")})))
             ;; Every arm consults `edit`, which is pure and is computed for a
             ;; dry run too. A dedicated dry-run arm short-circuited ahead of it
             ;; and promised "would add the field to the entity and request
@@ -735,7 +753,11 @@
                            :action (if dry-run :skip :update)
                            :note (str (when dry-run "dry run — ")
                                       (if dry-run "would add " "added ")
-                                      (by-form (:schemas edit))
+                                      (str/join "; " (cond-> []
+                                                       (seq (:schemas edit)) (conj (by-form (:schemas edit)))
+                                                       (:parent nested)
+                                                       (conj (str (name (:name field)) " to Create" (:parent nested)
+                                                                  "Request's " entity-plural))))
                                       (when remaining (str " — " (problem-desc edit))))}
                     remaining (assoc :manual? true :manual-note remaining))))
 
@@ -755,7 +777,7 @@
               {:path (.getPath schema-file) :action :skip :manual? true
                :note (str (when dry-run "dry run — ") (problem-desc edit))
                :manual-note (remaining-note edit)})
-            all-files (conj (vec written) schema-entry)]
+            all-files (into (conj (vec written) schema-entry) (write-edits! panel-edits dry-run))]
 
         {:success true
          :module-name module-name

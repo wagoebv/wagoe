@@ -164,3 +164,29 @@
         (finally
           (ig/halt! system)
           (db-factory/close-db-context! db))))))
+
+(deftest ^:integration a-field-added-to-a-child-reaches-its-parent-s-create
+  ;; `bb scaffold field` on the line items: the invoice's create request has
+  ;; to take it too, or its nested line items drop it and fail NOT NULL.
+  (let [base "bou578f"
+        dir  (billing! base ["--min" "1"])
+        out  (with-out-str (cli/run-cli! svc ["field" "--module-name" "billing" "--entity" "InvoiceLineItem"
+                                              "--name" "unit-price" "--type" "int" "--required"
+                                              "--base-ns" base "--output-dir" (.getPath dir)]))]
+    (is (str/includes? (get (files-under dir) "src/bou578f/billing/schema.clj")
+                       "[:invoice-line-items [:vector {:min 1} [:map [:description :string] [:quantity :int] [:unit-price :int]]]]")
+        out)
+    (load-and-test! dir)
+    (let [db     (h2-migrated dir "bou578f")
+          system (boot base db)
+          call   (http-caller (:api (:wagoe/billing-routes system)))
+          line   {:description "x" :quantity 1}]
+      (try
+        (let [resp (call :post "/invoices" {:number "A-1" :invoice-line-items [(assoc line :unit-price 250)]})]
+          (is (= 201 (:status resp)) (pr-str resp))
+          (is (= 250 (get-in resp [:body :invoice-line-items 0 :unit-price]))))
+        (let [resp (call :post "/invoices" {:number "A-2" :invoice-line-items [line]})]
+          (is (= 400 (:status resp)) (pr-str resp)))
+        (finally
+          (ig/halt! system)
+          (db-factory/close-db-context! db))))))

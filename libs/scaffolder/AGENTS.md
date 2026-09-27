@@ -125,8 +125,11 @@ An entity that belongs to the module's first entity is created with it:
 writes the invoice and its line items in one transaction. `--min 1` (`:min`,
 `"min"` in the AI spec) makes them required: fewer is a 400 naming
 `invoice-line-items`, the API refuses the delete or move that would leave
-fewer, and the admin's `:has-many` gets `:min`. Only the first entity's create
-takes children, so `--min` on a child of another is refused.
+fewer (counted and written in one transaction holding the parent's row, so
+two at once cannot both pass), and the admin's `:has-many` gets `:min`. Only
+the first entity's create takes children, so `--min` on a child of another is
+refused. `bb scaffold field` on such a child adds the field to the parent's
+create entry too, and to the admin panel's `:fields`.
 
 ### `--workflow` — a status that moves through fixed steps
 

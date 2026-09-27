@@ -242,3 +242,22 @@
                                          :output-dir (.getPath dir)})))
     (is (= 1 (get-in (read-admin dir "dev") [:entities :invoices :has-many 0 :min])))
     (is (empty? (admin-schema/entity-config-errors (read-admin dir "dev"))))))
+
+(deftest ^:integration a-field-added-to-a-child-joins-its-panel
+  ;; BOU-578: the has-many lists the child's first four fields, and the admin
+  ;; creates the children from them.
+  (let [dir (project!)
+        add (fn [f] (ports/add-field svc {:module-name "billing" :base-ns "bou578b" :entity "InvoiceLineItem"
+                                          :field f :output-dir (.getPath dir)}))]
+    (ports/generate-module svc {:module-name "billing" :base-ns "bou578b"
+                                :entities [(first entities)] :output-dir (.getPath dir)})
+    (ports/add-entity svc {:module-name "billing" :base-ns "bou578b" :entity (assoc (second entities) :min 1)
+                           :output-dir (.getPath dir)})
+    (is (:success (add {:name :unit-price :type :int :required true})))
+    (is (:success (add {:name :vat-rate :type :int :required false})))
+    (is (:success (add {:name :note :type :string :required false})))
+    (is (:success (add {:name :sku :type :string :required true})))
+    (doseq [env ["dev" "test"]]
+      (is (= [:description :quantity :unit-price :vat-rate :sku]
+             (get-in (read-admin dir env) [:entities :invoices :has-many 0 :fields]))
+          "the first four, as the scaffolder lists them, and any required one: the admin creates from them"))))

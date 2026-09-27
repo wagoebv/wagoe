@@ -33,6 +33,12 @@
   (when (and (:min entity) (:belongs-to entity))
     (str "count-" (:entity-plural entity) "-by-" (:belongs-to entity))))
 
+(defn- transact-fn
+  "The repository method that runs a child's guarded delete or move in one
+   transaction, for a child with a minimum (BOU-578), else nil."
+  [entity]
+  (when (count-fn entity) (str "transact-" (:entity-plural entity))))
+
 (defn- shell-ns
   "The entity's `shell.*` namespace suffix for `k`, the first entity's when
    the context does not say."
@@ -187,8 +193,12 @@
             (str "\n\n  (transact [this f]\n"
                  "    \"Call `f` in one database transaction, and return what it returns.\")"))
           (when-let [c (count-fn entity)]
-            (str "\n\n  (" c " [this " (:belongs-to entity) "-id]\n"
-                 "    \"How many " (:entity-plural entity) " the " (:belongs-to entity) " has.\")"))
+            (str "\n\n  (" (transact-fn entity) " [this f]\n"
+                 "    \"Call `f` in one database transaction, and return what it returns.\")\n\n"
+                 "  (" c " [this " (:belongs-to entity) "-id]\n"
+                 "    \"How many " (:entity-plural entity) " the " (:belongs-to entity) " has. In a transaction, it\n"
+                 "     holds the " (:belongs-to entity) "'s row until the end, so two deletes cannot both count\n"
+                 "     the same children.\")"))
           ")\n")
      :service
      (str "(defprotocol I" entity-name "Service\n"
@@ -520,13 +530,18 @@ DROP TABLE IF EXISTS %s;
   (let [parent (:belongs-to entity)
         plural (:entity-plural entity)
         n      (:min entity)]
-    (str "(defn- keep-minimum!\n"
-         "  \"Refuse to leave the " parent " with fewer than " n " " plural ".\"\n"
-         "  [repository " parent "-id]\n"
-         "  (when (<= (ports/" (count-fn entity) " repository " parent "-id) " n ")\n"
-         "    (throw (ex-info \"Every " parent " keeps at least " n " of its " plural "\"\n"
-         "                    {:type :validation-error\n"
-         "                     :errors {:" plural " [\"every " parent " keeps at least " n "\"]}}))))\n"
+    (str "(defn- keeping-minimum\n"
+         "  \"Call `f` in one transaction, refusing first when it would leave the " parent "\n"
+         "   with fewer than " n " " plural ". The count holds the " parent "'s row, so two\n"
+         "   deletes at once cannot both pass. No " parent "-id, no check.\"\n"
+         "  [repository " parent "-id f]\n"
+         "  (ports/" (transact-fn entity) " repository\n"
+         "   (fn []\n"
+         "     (when (and " parent "-id (<= (ports/" (count-fn entity) " repository " parent "-id) " n "))\n"
+         "       (throw (ex-info \"Every " parent " keeps at least " n " of its " plural "\"\n"
+         "                       {:type :validation-error\n"
+         "                        :errors {:" plural " [\"every " parent " keeps at least " n "\"]}})))\n"
+         "     (f))))\n"
          "\n")))
 
 (defn- create-with-children-fn
@@ -579,15 +594,21 @@ DROP TABLE IF EXISTS %s;
          insert  (if primary?
                    "(create-with-children repository children prepared data)"
                    (str "(ports/" create " repository prepared)"))
-         ;; The guard a child with a minimum puts before an update that moves
-         ;; it to another parent, and before a delete.
-         guard-update (when minimum?
-                        (str "    (when-let [row (and (contains? data " parent-id ") (ports/" find-by-id " repository id))]\n"
-                             "      (when (not= (" parent-id " row) (" parent-id " data))\n"
-                             "        (keep-minimum! repository (" parent-id " row))))\n"))
-         guard-delete (when minimum?
-                        (str "    (when-let [row (ports/" find-by-id " repository id)]\n"
-                             "      (keep-minimum! repository (" parent-id " row)))\n"))]
+         ;; A child with a minimum deletes, or moves to another parent, only
+         ;; through keeping-minimum. The row is read first, so the lock is the
+         ;; transaction's first write, which SQLite needs.
+         update-expr (if wf
+                       (str "(ports/" update " repository (assoc (dissoc data :" (:field wf) ") :id id))")
+                       (str "(ports/" update " repository (assoc data :id id))"))
+         update-body (if minimum?
+                       (str "    (let [row (when (contains? data " parent-id ") (ports/" find-by-id " repository id))]\n"
+                            "      (keeping-minimum repository (when (and row (not= (" parent-id " row) (" parent-id " data))) (" parent-id " row))\n"
+                            "                       #(" (subs update-expr 1) ")))")
+                       (str "    " update-expr ")"))
+         delete-expr (if minimum?
+                       (str "(keeping-minimum repository (" parent-id " (ports/" find-by-id " repository id))\n"
+                            "                               #(ports/" delete " repository id))")
+                       (str "(ports/" delete " repository id)"))]
      (str "(ns " base-ns "." module-name "." (shell-ns entity :service-ns) "\n"
           "  \"Service layer for " module-name " module.\"\n"
           "  (:require [" base-ns "." module-name ".ports :as ports]\n"
@@ -648,16 +669,12 @@ DROP TABLE IF EXISTS %s;
           "  (list-" (template/pluralize entity-lower) " [_this opts]\n"
           "    (ports/" find-all " repository opts))\n"
           "  (update-" entity-lower " [_this id data]\n"
-          guard-update
-          (if wf
-            (str "    ;; Only a transition moves " (:field wf) ".\n"
-                 "    (ports/" update " repository (assoc (dissoc data :" (:field wf) ") :id id)))\n")
-            (str "    (ports/" update " repository (assoc data :id id)))\n"))
+          (when wf (str "    ;; Only a transition moves " (:field wf) ".\n"))
+          update-body "\n"
           "  (delete-" entity-lower " [_this id]\n"
-          guard-delete
           (if wf
             (str "    ;; The row first: a delete the database refuses keeps its workflow.\n"
-                 "    (let [deleted (ports/" delete " repository id)]\n"
+                 "    (let [deleted " delete-expr "]\n"
                  "      (ports/remove-" entity-lower "-workflow! workflow id)\n"
                  "      deleted))\n"
                  "  (transition-" entity-lower " [_this id transition actor]\n"
@@ -671,7 +688,7 @@ DROP TABLE IF EXISTS %s;
                  "        (if (:success? result)\n"
                  "          (assoc result :" entity-lower " (mirror-" (:field wf) "! repository id (get-in result [:instance :current-state])))\n"
                  "          result)))))\n")
-            (str "    (ports/" delete " repository id)))\n"))
+            (str "    " delete-expr "))\n"))
           "\n"
           (cond
             (and primary? wf)
@@ -819,9 +836,18 @@ DROP TABLE IF EXISTS %s;
             (str "\n  (transact [_this f]\n"
                  "    (db/with-transaction* db-ctx (fn [_] (f))))"))
           (when-let [c (count-fn entity)]
-            (str "\n  (" c " [_this " (:belongs-to entity) "-id]\n"
-                 "    (:n (db/execute-one! db-ctx {:select [[:%count.* :n]] :from [:" table-name "]\n"
-                 "                                 :where [:= :" (:belongs-to entity) "-id " (:belongs-to entity) "-id]})))"))
+            (let [p      (:belongs-to entity)
+                  parent (some #(when (= (str p "-id") (:field-name-kebab %)) (:relation-table %)) (:fields entity))]
+              (str "\n  (" (transact-fn entity) " [_this f]\n"
+                   "    (db/with-transaction* db-ctx (fn [_] (f))))\n"
+                   "  (" c " [_this " p "-id]\n"
+                   ;; A write, not SELECT … FOR UPDATE: it locks the row on
+                   ;; PostgreSQL, MySQL and H2 alike, and takes SQLite's write
+                   ;; lock, which has no FOR UPDATE.
+                   "    ;; Changes nothing; it holds the " p "'s row until the transaction ends.\n"
+                   "    (db/execute-update! db-ctx {:update :" parent " :set {:id :id} :where [:= :id " p "-id]})\n"
+                   "    (:n (db/execute-one! db-ctx {:select [[:%count.* :n]] :from [:" table-name "]\n"
+                   "                                 :where [:= :" p "-id " p "-id]})))")))
           ")\n"
           "\n"
           "(defn create-repository [db-ctx]\n"
@@ -948,7 +974,9 @@ DROP TABLE IF EXISTS %s;
           "                      (" update " [_ entity] entity)\n"
           "                      (" delete " [_ _id] nil)"
           (when (:primary? entity true) "\n                      (transact [_ f] (f))")
-          (when-let [c (count-fn entity)] (str "\n                      (" c " [_ _id] 0)"))
+          (when-let [c (count-fn entity)]
+            (str "\n                      (" (transact-fn entity) " [_ f] (f))"
+                 "\n                      (" c " [_ _id] 0)"))
           ")\n"
           (if (:workflow entity)
             (str "          started (atom [])\n"
@@ -2346,6 +2374,45 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s%s%s;%s"
       :present  {:error (str "Create" parent "Request already has " (:entity-plural child))}
       {:error (str "Create" parent "Request is not the [:map ...] bb scaffold generate wrote")})))
 
+(defn- children-map-zloc
+  "Zipper at the item `[:map …]` of the `:<plural>` entry in a
+   Create<Parent>Request of `source`, and the parent's name, or nil."
+  [source plural]
+  (let [k (keyword plural)]
+    (some (fn [loc]
+            (let [[op nm] (form-head loc)]
+              (when-let [[_ parent] (and (= 'def op) (re-matches #"Create(\w+)Request" (str nm)))]
+                (when-let [entry (some-> (schema-map-zloc source (str nm)) (existing-entry k))]
+                  (let [vector-form (some #(when (and (= :vector (z/tag %)) (= :vector (first (z/sexpr %)))) %)
+                                          (take-while some? (iterate z/right (z/down entry))))
+                        item        (some #(when (and (= :vector (z/tag %)) (= :map (first (z/sexpr %)))) %)
+                                          (some->> vector-form z/down (iterate z/right) (take-while some?)))]
+                    (when item [item parent]))))))
+          (top-level-forms source))))
+
+(defn add-field-to-children-entry
+  "`source` — a schema.clj — with `field` in the create entry the parent's
+   request has for the child `plural`, so a child created with its parent
+   takes it too (BOU-578).
+
+   {:status :inserted :content s :parent \"Invoice\"}, {:status :present}, or
+   {:status :none} when no parent's create takes the child.
+
+   Pure: true"
+  [source plural field]
+  (if-let [[item parent] (children-map-zloc source plural)]
+    (let [entry (schema-field-entry field)
+          k     (entry-key-of entry)]
+      (if (existing-entry item k)
+        {:status :present :parent parent}
+        {:status  :inserted
+         :parent  parent
+         :content (-> item
+                      (z/append-child* (n/spaces 1))
+                      (z/append-child* (entry-node entry))
+                      z/root-string)}))
+    {:status :none}))
+
 (defn add-field-to-schema
   "Add `field` to the entity and request schemas in `source`.
 
@@ -2829,6 +2896,38 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s%s%s;%s"
             (:reason result)            {:status :unrecognised :reason (:reason result)}
             (= source (:content result)) {:status :present}
             :else                        {:status :updated :content (:content result)}))))
+    (catch Exception e
+      {:status :unrecognised :reason (str "it could not be read: " (.getMessage e))})))
+
+(defn add-admin-has-many-field
+  "The admin entity file `source` of `parent-plural` with `field` in the
+   `:fields` of its `:has-many` for `child-plural`: when it lists fewer than
+   the four the scaffolder writes, or the field is required, since the admin
+   creates the children from these (BOU-578). {:status :updated :content s},
+   :unchanged, or {:status :unrecognised :reason s}.
+
+   Pure: true"
+  [source parent-plural child-plural field]
+  (try
+    (let [k      (keyword (name (:name field)))
+          entity (map-val (z/of-string source {:track-position? true}) (keyword parent-plural))
+          panel  (some #(when (= (keyword child-plural) (key-of (map-val % :entity))) %)
+                       (children (map-val entity :has-many)))
+          fields (map-val panel :fields)
+          listed (map key-of (children fields))]
+      (cond
+        (nil? fields)
+        {:status :unchanged}
+
+        (not= :vector (z/tag fields))
+        {:status :unrecognised :reason "its :has-many :fields is not a vector"}
+
+        (or (some #{k} listed) (sensitive-field? k)
+            (and (>= (count listed) 4) (not (get field :required true))))
+        {:status :unchanged}
+
+        :else
+        {:status :updated :content (z/root-string (append-item fields (n/keyword-node k) false))}))
     (catch Exception e
       {:status :unrecognised :reason (str "it could not be read: " (.getMessage e))})))
 
