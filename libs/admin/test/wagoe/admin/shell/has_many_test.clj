@@ -230,6 +230,23 @@
       (testing "no link when every child fits"
         (is (not (re-find #"href=\"/web/admin/hm-items\?filters" (detail other-id))))))))
 
+(deftest ^:contract a-foreign-key-is-a-picker-over-the-parent
+  ;; It was a free-text UUID input (BOU-563).
+  (let [order-id (create-order!)
+        body     (:body ((handler detail/new-entity-handler) (request :get "hm-items")))
+        select   (re-find #"(?s)<select[^>]*name=\"hm-order-id\".*?</select>" body)]
+    (is (some? select) "the FK renders as a select")
+    (is (str/includes? (str select) (str "value=\"" order-id "\"")) "listing the parent's rows")
+    (is (not (re-find #"<input[^>]*name=\"hm-order-id\"" body)))
+    (testing "the edit form selects the current parent"
+      (let [item-id (random-uuid)
+            _       (db/execute-update! (:db @sys) {:raw (str "INSERT INTO hm_items (id, hm_order_id, sku) VALUES ('"
+                                                              item-id "', '" order-id "', 'PICK')")})
+            body    (:body ((handler detail/entity-detail-handler) (request :get "hm-items" :id item-id)))]
+        (is (re-find (re-pattern (str "<option[^>]*(selected[^>]*value=\"" order-id "\"|value=\""
+                                      order-id "\"[^>]*selected)"))
+                     body))))))
+
 (deftest ^:contract ^:security detail-page-ignores-an-off-site-return-to
   ;; return_to became the breadcrumb, "Back to list", create and delete links
   ;; unchecked, so `javascript:` rendered as an href (BOU-553).

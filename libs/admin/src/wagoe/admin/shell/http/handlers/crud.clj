@@ -42,10 +42,11 @@
   "Page opts for a create form shown again after it failed. The values go in
    as :prefill, not as the record: a record makes it an edit form that PUTs to
    an id-less URL (BOU-533). return_to keeps a child create tied to its parent."
-  [config request form-data]
-  {:display   (support/display-options config request)
-   :prefill   form-data
-   :return-to (support/safe-return-to request)})
+  [admin-service config entity-configs entity-name request form-data]
+  {:display       (support/display-options config request)
+   :prefill       form-data
+   :return-to     (support/safe-return-to request)
+   :field-options (support/foreign-key-options admin-service config entity-configs entity-name form-data)})
 
 (defn create-entity-handler
   "Handler for creating new entity.
@@ -100,7 +101,7 @@
 
                   ; Get entity list with default options
                   result (ports/list-entities admin-service entity-name {})
-                  records (:records result)
+                  records (support/with-workflow-states config entity-config (:records result))
                   total-count (:total-count result)
                   table-query {:page-size (:page-size result)
                                :page (:page-number result)}
@@ -132,7 +133,7 @@
               (cond->
                (support/html-response request
                                       (admin-ui/admin-layout
-                                       (admin-ui/entity-detail-page entity-name entity-config nil (or field-errors {}) permissions (rejected-create-opts config request form-data))
+                                       (admin-ui/entity-detail-page entity-name entity-config nil (or field-errors {}) permissions (rejected-create-opts admin-service config entity-configs entity-name request form-data))
                                        {:user user
                                         :current-entity entity-name
                                         :entities entities
@@ -157,7 +158,7 @@
 
           (-> (support/html-response request
                                      (admin-ui/admin-layout
-                                      (admin-ui/entity-detail-page entity-name entity-config nil errors permissions (rejected-create-opts config request form-data))
+                                      (admin-ui/entity-detail-page entity-name entity-config nil errors permissions (rejected-create-opts admin-service config entity-configs entity-name request form-data))
                                       {:user user
                                        :current-entity entity-name
                                        :entities entities

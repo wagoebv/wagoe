@@ -52,7 +52,13 @@
                      entity-type   (filter #(= entity-type (:entity-type %)))
                      current-state (filter #(= current-state (:current-state %))))
           sorted (sort-by (comp str :updated-at) #(compare %2 %1) filtered)]
-      (vec (take limit (drop offset sorted))))))
+      (vec (take limit (drop offset sorted)))))
+
+  (delete-instance! [_ instance-id]
+    (let [existed? (contains? @instances instance-id)]
+      (swap! instances dissoc instance-id)
+      (swap! audit-log (fn [log] (filterv #(not= instance-id (:instance-id %)) log)))
+      existed?)))
 
 (defn create-memory-store []
   (->MemoryStore (atom {}) (atom [])))

@@ -193,6 +193,38 @@ Example subscriber that starts a workflow: see "Lifecycle Events" in
 
 ---
 
+## Deletes, children, workflows (BOU-563)
+
+- **Hard delete is the default.** A `deleted_at` column no longer switches soft
+  delete on; set `:soft-delete true`. `parse-table-metadata` always answers
+  `:soft-delete false`.
+- **Children follow the parent** (`delete-tree!` in `shell/service.clj`), over
+  every `:has-many`, detected or configured, recursively, in one transaction.
+  Hard: children are deleted first, so no `ON DELETE CASCADE` is needed. Soft:
+  children with a `deleted_at` column get one; children without are left.
+- **`:min` on a has-many** refuses a delete or bulk delete that would leave a
+  parent with fewer children: `:type :conflict`, and the delete handlers answer
+  409 with an error toast. It is checked before the delete, outside its
+  transaction. Creating a parent without children is not refused: the admin
+  creates the parent first and the children from its page.
+- **Unknown entity-config keys fail at startup.** `schema/EntityOverrides` is a
+  closed schema, checked by `create-schema-repository`; the error names the
+  path. Add a key there when the admin starts reading one.
+- **Workflow state.** `:workflow {:entity-type :invoice}` on an entity shows a
+  Workflow column on the list and a state line on the detail page, linking to
+  `/web/admin/workflows/:id`, and deletes remove the entity's instances. The
+  admin reaches workflow only through `ports/IEntityWorkflows`: wagoe.workflow
+  depends on the admin, so it implements the port (`:wagoe/workflow-admin`,
+  built when both modules are on) and `ig-config` refs it only when
+  `:wagoe/workflow` is enabled, as with events.
+- **Foreign keys are pickers.** A field some has-many names as its
+  `:foreign-key` renders as a select over the parent's rows (up to
+  `:max-page-size`, labelled by the parent's first search or list field) unless
+  its config picks a widget other than a text input.
+- **Epoch millis** in a timestamp column render like ISO text.
+
+---
+
 ## UI/Frontend Development
 
 ### Technology Stack

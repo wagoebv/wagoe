@@ -205,7 +205,18 @@
           rows (jdbc/execute! datasource
                               (sql/format query)
                               {:builder-fn rs/as-unqualified-lower-maps})]
-      (mapv db->instance rows))))
+      (mapv db->instance rows)))
+
+  (delete-instance! [_ instance-id]
+    (log/debug "Deleting workflow instance" {:id instance-id})
+    (jdbc/with-transaction [tx datasource]
+      ;; The audit rows reference the instance.
+      (jdbc/execute! tx (sql/format {:delete-from :workflow_audit
+                                     :where       [:= :instance_id (uuid->str instance-id)]}))
+      (-> (jdbc/execute-one! tx (sql/format {:delete-from :workflow_instances
+                                             :where       [:= :id (uuid->str instance-id)]}))
+          :next.jdbc/update-count
+          pos?))))
 
 (defn create-workflow-store
   "Create a WorkflowStore backed by a JDBC datasource.

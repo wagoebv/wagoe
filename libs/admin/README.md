@@ -108,7 +108,7 @@ Use Aero's `#merge` + `#include` to load them:
 
 ## Entity Configuration Reference
 
-This is the full schema for a single entity config file. All keys are optional unless noted.
+This is the full schema for a single entity config file. All keys are optional unless noted. A key not listed here, or one in the wrong map, stops the application at startup with its path, e.g. `unknown key at [:entities :invoices :fields :has-many]`.
 
 ```clojure
 {:my-entity
@@ -150,10 +150,12 @@ This is the full schema for a single entity config file. All keys are optional u
   ;; DATABASE / PERSISTENCE
   ;; ─────────────────────────────────────────────────────────────────────
 
-  :soft-delete     true               ; true = set deleted_at on delete, false = hard delete
+  :soft-delete     true               ; true = set deleted_at on delete; default false = hard delete
   :primary-key     :id                ; Primary key field (default: :id)
   :permissions     {:create false}    ; No "New" button, create refused: another
                                       ; module creates these (e.g. tenants)
+  :workflow        {:entity-type :invoice}  ; show the wagoe.workflow state of each
+                                            ; record; see "Workflow State"
 
   ;; ─────────────────────────────────────────────────────────────────────
   ;; PER-FIELD CONFIGURATION
@@ -195,7 +197,8 @@ This is the full schema for a single entity config file. All keys are optional u
     :foreign-key :order-id             ; FK column in the related table (kebab-case keyword)
     :label       "Order Items"         ; Section heading
     :fields      [:product-name :quantity :total-cents]  ; Columns to show
-    :editable    true}]                ; false = read-only inline table
+    :editable    true                  ; false = read-only inline table
+    :min         1}]                   ; refuse to delete the last child
 
   ;; For has-many child entities: show parent info at top of child detail page.
   ;; (Set this on the CHILD entity, not the parent.)
@@ -248,7 +251,7 @@ The admin UI auto-detects field types from the database schema. You can override
 | `:int` | `INTEGER`, `BIGINT`, `SMALLINT` | Number input |
 | `:decimal` | `DECIMAL`, `NUMERIC`, `FLOAT` | Number input (decimal) |
 | `:boolean` | `BOOLEAN`, `BOOL` | Checkbox |
-| `:instant` | `TIMESTAMP`, `DATETIME`, `TEXT` fields ending in `-at` | Formatted date display |
+| `:instant` | `TIMESTAMP`, `DATETIME`, `TEXT` fields ending in `-at` | Formatted date display; a stored value in epoch millis (SQLite, from a seed) renders the same as ISO text |
 | `:date` | `DATE` | Date input |
 | `:time` | `TIME` | Time input |
 | `:json` | `JSON`, `JSONB` | Textarea |
@@ -313,7 +316,9 @@ When `:soft-delete true` is set on an entity:
 - The list view automatically excludes soft-deleted records (`WHERE deleted_at IS NULL`)
 - Bulk delete also soft-deletes
 
-When `:soft-delete false` (the default), delete is permanent (`DELETE FROM …`).
+When `:soft-delete false` (the default), delete is permanent (`DELETE FROM …`). A `deleted_at` column does not change that; the config does.
+
+Children follow their parent, over every has-many, configured or detected, in one transaction. A hard delete removes them first, so the foreign key needs no `ON DELETE CASCADE`. A soft delete sets `deleted_at` on the children that have the column and leaves the others.
 
 For entities using `:query-overrides`, set `:soft-delete-table` to tell the service which table to `UPDATE` on delete (defaults to the primary table in `:from`).
 
@@ -339,6 +344,10 @@ With `:editable true` the panel links each row to its edit form and offers "New 
 A panel shows one page (`:pagination :default-page-size`) and links to the child's list, filtered to this parent, when there are more.
 
 Without config, a has-many is detected from any allowlisted entity whose `<parent>_id` column names this one; it is read-only. An explicit entry for the same child entity replaces the detected one.
+
+The foreign key on the child's form is a select over the parent's rows, labelled by the parent's first `:search-fields` (else `:list-fields`) entry, up to `:pagination :max-page-size` rows. A field whose config sets another `:widget` keeps it.
+
+`:min` refuses a delete, or a bulk delete, that would leave a parent with fewer children: the admin answers 409 and shows why. It does not stop you creating a parent without children, because the admin creates the parent first and adds children from its page; enforce that in your module's service if it matters.
 
 On the child entity, use `:parent-context` to show parent info at the top of the child's detail page:
 
@@ -418,6 +427,12 @@ When entity data lives across multiple tables (e.g. `auth_users` + `users`), use
     :fields      [:product-name :quantity :product-price-cents :total-cents]
     :editable    true}]}}
 ```
+
+---
+
+## Workflow State
+
+With the workflow module on and `:workflow {:entity-type :invoice}` on an entity, its list gets a Workflow column and its detail page a Workflow line: the state of the entity's latest instance, linking to `/web/admin/workflows/<instance-id>`. `:entity-type` is what you pass to `start-workflow!`. Deleting the record, or its parent, deletes its instances and their audit log. Without the workflow module the key does nothing.
 
 ---
 

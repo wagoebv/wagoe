@@ -9,6 +9,8 @@
   (:require [clojure.test :refer [deftest testing is use-fixtures]]
             [wagoe.workflow.ports :as ports]
             [wagoe.workflow.shell.persistence :as persistence]
+            [wagoe.workflow.shell.admin-adapter :as admin-adapter]
+            [wagoe.admin.ports :as admin-ports]
             [wagoe.platform.shell.database.migrations :as mig]
             [clojure.string :as str]
             [migratus.core :as migratus]
@@ -27,10 +29,10 @@
 
 (defn- setup-test-db []
   (let [^HikariDataSource ds (connection/->pool
-                               com.zaxxer.hikari.HikariDataSource
-                               {:jdbcUrl  "jdbc:h2:mem:workflow-test;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_DELAY=-1"
-                                :username "sa"
-                                :password ""})]
+                              com.zaxxer.hikari.HikariDataSource
+                              {:jdbcUrl  "jdbc:h2:mem:workflow-test;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_DELAY=-1"
+                               :username "sa"
+                               :password ""})]
     (reset! test-datasource ds)
 
     ;; The shipped migrations, not a copy of their DDL.
@@ -255,3 +257,35 @@
       (is (>= (count all) 2))
       (is (= 2 (count page1)))
       (is (not= (:id (first page1)) (:id (first page2)))))))
+
+;; =============================================================================
+;; delete-instance! and the admin's port (BOU-563)
+;; =============================================================================
+
+(deftest ^:integration delete-instance-removes-it-and-its-audit-log
+  (let [inst  (make-instance)
+        other (make-instance)]
+    (ports/save-instance! @test-store inst)
+    (ports/save-instance! @test-store other)
+    (ports/save-audit-entry! @test-store (make-audit-entry inst))
+    (is (true? (ports/delete-instance! @test-store (:id inst))))
+    (is (nil? (ports/find-instance @test-store (:id inst))))
+    (is (empty? (ports/find-audit-log @test-store (:id inst))))
+    (is (some? (ports/find-instance @test-store (:id other))) "another instance is untouched")
+    (is (false? (ports/delete-instance! @test-store (:id inst))) "a second delete finds nothing")))
+
+(deftest ^:integration the-admin-reads-and-removes-an-entitys-workflows
+  (let [entity-id (UUID/randomUUID)
+        inst      (make-instance {:entity-type :invoice :entity-id entity-id :current-state :delivered})
+        older     (make-instance {:entity-type :invoice :entity-id entity-id
+                                  :created-at (.minusSeconds (Instant/now) 60)})
+        port      (admin-adapter/create-entity-workflows @test-store)]
+    (ports/save-instance! @test-store older)
+    (ports/save-instance! @test-store inst)
+    (ports/save-audit-entry! @test-store (make-audit-entry inst))
+    (testing "the latest instance, keyed by entity id"
+      (is (= {entity-id {:instance-id (:id inst) :workflow-id :order-workflow :state :delivered}}
+             (admin-ports/entity-workflows port :invoice [entity-id (UUID/randomUUID)]))))
+    (testing "every instance of the entity is removed"
+      (is (= 2 (admin-ports/remove-entity-workflows! port :invoice entity-id)))
+      (is (nil? (ports/find-instance-by-entity @test-store :invoice entity-id))))))

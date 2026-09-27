@@ -57,7 +57,7 @@
 
           ; Get entity data
           result (ports/list-entities admin-service entity-name options)
-          records (:records result)
+          records (support/with-workflow-states config entity-config (:records result))
           total-count (:total-count result)
 
           ; Merge pagination info from result into options for UI
@@ -124,7 +124,7 @@
 
           ; Get entity data
           result (ports/list-entities admin-service entity-name options)
-          records (:records result)
+          records (support/with-workflow-states config entity-config (:records result))
           total-count (:total-count result)
 
           ; Merge pagination info from result into options for UI
