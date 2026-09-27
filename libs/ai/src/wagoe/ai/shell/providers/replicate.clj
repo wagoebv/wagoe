@@ -13,9 +13,9 @@
      Wagoe needs and avoids a polling loop entirely.
    - `output` comes back as a list of string chunks rather than a string.
 
-   Input constraints are per-model rather than per-API. `anthropic/claude-4.5-haiku`
-   rejects `max_tokens` below 1024 with a 422 naming the field, so the failure
-   is reported with that detail instead of a bare status."
+   Input constraints are per-model rather than per-API — see `model-input`. A
+   422 names the field it rejected, so the failure is reported with that detail
+   instead of a bare status."
   (:require [wagoe.ai.core.parsing :as parsing]
             [wagoe.ai.ports :as ports]
             [cheshire.core :as json]
@@ -26,9 +26,13 @@
 (def ^:private default-base-url "https://api.replicate.com")
 
 (def default-model
-  "Small, fast, and good at instruction-following — the qualities that matter
-   for scaffolding and SQL generation."
-  "anthropic/claude-4.5-haiku")
+  "The model used when config names none."
+  "anthropic/claude-opus-4.6")
+
+(def default-max-tokens
+  "Output budget when the caller sets none. Each model has its own default,
+   and a small one cuts an answer off mid-form."
+  8192)
 
 ;; =============================================================================
 ;; Request/response shaping
@@ -83,6 +87,42 @@
                  :else       (try (json/parse-string (str body) true)
                                   (catch Exception _ nil)))]
     (some-> (or (:detail parsed) (:title parsed)) str str/trim not-empty)))
+
+;; Each model's input schema, from GET /v1/models/<owner>/<name> (BOU-567).
+;; A family entry covers every model of that owner; a model entry refines it.
+;; :max-key is the field the output limit goes in.
+(def ^:private model-families
+  {"anthropic/" {:max-key :max_tokens :min 1024}
+   "openai/"    {:max-key :max_completion_tokens :messages? true}})
+
+(def ^:private model-limits
+  {"anthropic/claude-4.5-haiku" {:max 8192}
+   "anthropic/claude-opus-4.6"  {:max 128000}})
+
+(defn- model-spec [model]
+  (merge {:max-key :max_tokens}
+         (some (fn [[prefix spec]] (when (str/starts-with? (str model) prefix) spec))
+               model-families)
+         (get model-limits model)))
+
+(defn model-input
+  "The prediction input for `model`: the conversation in the shape that model
+   takes, and the output limit — `:max-tokens` in `opts`, else
+   `default-max-tokens` — clamped to what it accepts, in the field it reads.
+
+   Pure, so the shaping is testable without a token."
+  [model messages opts]
+  (let [{:keys [max-key messages?] lo :min hi :max} (model-spec model)
+        limit (cond-> (or (:max-tokens opts) default-max-tokens)
+                lo (max lo)
+                hi (min hi))]
+    (cond-> (if messages?
+              {:messages (mapv (fn [{:keys [role content]}]
+                                 {:role (name role) :content content})
+                               messages)}
+              (messages->input messages))
+      true                (assoc max-key limit)
+      (:temperature opts) (assoc :temperature (:temperature opts)))))
 
 ;; =============================================================================
 ;; HTTP
@@ -176,21 +216,23 @@
           ;; carried it in the schema and nothing read it, so a long prompt
           ;; timed out at 60s however the knob was set.
           effective-timeout (or (:timeout opts) timeout default-timeout-ms)
-          input (cond-> (messages->input messages)
-                  (:max-tokens opts)  (assoc :max_tokens (:max-tokens opts))
-                  (:temperature opts) (assoc :temperature (:temperature opts)))]
+          input (model-input effective-model messages opts)
+          limit (some input [:max_tokens :max_completion_tokens])]
       (try
         (log/debug "replicate complete" {:model effective-model :messages (count messages)})
         (let [resp   (prediction-request! base-url api-key effective-model input
                                           effective-timeout)
               status (:status resp)]
           (if (= "succeeded" status)
-            {:text     (output->text (:output resp))
-             ;; Replicate reports no token usage on this endpoint.
-             :tokens   0
-             :base-url base-url
-             :provider :replicate
-             :model    effective-model}
+            (let [used (get-in resp [:metrics :token_output_count])]
+              {:text       (output->text (:output resp))
+               :tokens     (or used 0)
+               ;; Replicate reports no stop reason. Output that used the whole
+               ;; budget is output the limit stopped.
+               :truncated? (boolean (and used (>= used limit)))
+               :base-url   base-url
+               :provider   :replicate
+               :model      effective-model})
             ;; A prediction can fail after a 2xx — the HTTP call succeeded, the
             ;; run did not. Without this the caller would read :text as nil and
             ;; report a parse failure for what is a provider error.
@@ -215,7 +257,9 @@
           (log/warn (str "replicate complete failed: " (.getMessage e))
                     {:model effective-model})
           (let [data (ex-data e)]
-            {:error    (or (failure-detail (:body data)) (.getMessage e))
+            {:error    (or (failure-detail (:body data))
+                           (not-empty (ex-message e))
+                           (.getName (class e)))
              ;; Status and body come from ex-data, not the message, so the
              ;; caller can tell a rejected token from an exhausted balance.
              :status   (:status data)
@@ -248,7 +292,7 @@
 
    Config:
      :api-key  - Replicate API token (required)
-     :model    - owner/name, e.g. anthropic/claude-4.5-haiku
+     :model    - owner/name, e.g. anthropic/claude-opus-4.6
      :base-url - override, for a proxy or a test double"
   [{:keys [base-url api-key model timeout]}]
   (->ReplicateProvider (or base-url default-base-url)

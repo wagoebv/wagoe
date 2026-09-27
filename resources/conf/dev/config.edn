@@ -199,7 +199,7 @@
   ;;
   ;;   {:provider :replicate
   ;;    :api-key  #or [#env REPLICATE_API_TOKEN ""]   ; a default, or bb doctor --ci fails
-  ;;    :model    #or [#env AI_MODEL "anthropic/claude-4.5-haiku"]}
+  ;;    :model    #or [#env AI_MODEL "anthropic/claude-opus-4.6"]}
   ;;
   ;; Keep that edit local — the committed default stays Ollama.
   :wagoe/ai-service
