@@ -85,20 +85,24 @@ Optionally enqueue side-effect jobs via `wagoe-jobs` after successful transition
 | `:to` | keyword | yes | Target state |
 | `:name` | keyword | no | Transition name (defaults to `:to`) |
 | `:required-permissions` | `[keyword]` | no | Actor must have at least one |
-| `:guard` | keyword | no | Key in the guard-registry map |
+| `:guard` | keyword | no | Key in the workflow's `:guards` or the service's guard registry |
 | `:side-effects` | `[keyword]` | no | Job types enqueued after success |
 
 ### Guards
 
-Guards are pure functions registered at service creation time. They receive the `:context`
-map from the transition request and return `true` (allow) or `false` (reject):
+A guard takes one map and returns truthy (allow) or falsy (reject). The map is the
+request's `:context` plus `:workflow/instance` and, when the workflow has an
+`:entity-loader`, `:workflow/entity` (a delay). Declare guards on the workflow:
 
 ```clojure
-(def guard-registry
-  {:payment-confirmed (fn [ctx] (= :confirmed (:payment-status ctx)))})
-
-(service/create-workflow-service store registry nil guard-registry)
+{:transitions   [{:from :draft :to :delivered :name :deliver :guard :has-lines?}]
+ :entity-loader (fn [_entity-type invoice-id]
+                  {:line-count (count-invoice-lines invoice-id)})
+ :guards        {:has-lines? (fn [{:workflow/keys [entity]}]
+                               (pos? (:line-count @entity)))}}
 ```
+
+See [AGENTS.md](AGENTS.md#guards) for the full contract.
 
 ### Side Effects
 
@@ -117,11 +121,11 @@ silently skipped:
 
 ## Configuration
 
+`wagoe add workflow` writes this under `:active`; the module wires its own
+database and, when `:wagoe/jobs` is enabled, the job queue:
+
 ```edn
-;; resources/conf/dev/config.edn
-{:wagoe/workflow
- {:db-ctx    #ig/ref :wagoe/database-context
-  :job-queue #ig/ref :wagoe/job-queue}}  ; optional
+{:wagoe/workflow {}}
 ```
 
 The component map returned by Integrant:
