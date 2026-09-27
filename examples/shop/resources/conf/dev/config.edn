@@ -57,9 +57,7 @@
    {:provider :slf4j :level :debug}
   ;; Product module (bb scaffold integrate)
   :wagoe/product
-  {:enabled? true
-   :base-path "/api/product"}
-}
+  {:enabled? true}}
 
  :inactive
  {}}

@@ -445,7 +445,7 @@
          ;; writes the :wagoe/<module> key the generated module_wiring.clj
          ;; defines (BOU-309).
          :next-steps ["Review the generated files"
-                      (format "Print the config it needs: bb scaffold integrate %s" module-name)
+                      (format "Write its config key: bb scaffold integrate %s" module-name)
                       ;; The first entity's, not <module>-test (BOU-562).
                       (format "Run tests: clojure -M:test --focus %s.%s.core.%s-test"
                               (:base-ns ctx) module-name (:entity-kebab entity))]
