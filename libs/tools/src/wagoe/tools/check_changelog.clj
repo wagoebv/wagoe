@@ -189,6 +189,78 @@
                       {:exit exit :err (str/trim (or err ""))})))
     out))
 
+;; =============================================================================
+;; Rule 3 — the stability page counts the breaks the changelog lists
+;; =============================================================================
+
+(def stability-path "docs/modules/ROOT/pages/stability.adoc")
+
+(def ^:private number-words
+  (let [ones ["zero" "one" "two" "three" "four" "five" "six" "seven" "eight" "nine" "ten"
+              "eleven" "twelve" "thirteen" "fourteen" "fifteen" "sixteen" "seventeen"
+              "eighteen" "nineteen"]]
+    (merge (zipmap ones (range))
+           (into {} (for [[t tens] [["twenty" 20] ["thirty" 30] ["forty" 40]]
+                          [o n] (map vector ones (range 10))]
+                      [(if (zero? n) t (str t "-" o)) (+ tens n)])))))
+
+(defn- number [word] (get number-words (some-> word str/lower-case)))
+
+(defn- unreleased-breaks
+  "The entries under `### Breaking` in `[Unreleased]`."
+  [changelog]
+  (let [unreleased (second (re-find #"(?s)## \[Unreleased\](.*?)(?=\n## \[|\z)" changelog))
+        breaking   (second (re-find #"(?s)### Breaking\s*\n(.*?)(?=\n### |\z)" (str unreleased)))]
+    (count (re-seq #"(?m)^- " (str breaking)))))
+
+(defn stability-findings
+  "What the stability page's release-candidate list gets wrong about the
+   changelog: the next candidate's count and its listed items against the
+   `[Unreleased]` `### Breaking` entries, and the running totals against the
+   per-candidate counts. The page names no tickets, so counts are what can be
+   held; which item is which is a reviewer's job (BOU-579)."
+  [changelog stability]
+  (let [current (some-> (re-find #"Current version\s*\n\|\s*`1\.0\.0-rc-(\d+)`" stability)
+                        second parse-long)
+        rcs     (into {} (for [[_ word rc] (re-seq #"(?m)^\* \*(\S+)[^*\n]*? in `1\.0\.0-rc-(\d+)`:\*" stability)]
+                           [(parse-long rc) (number word)]))
+        breaks  (unreleased-breaks changelog)
+        nxt     (some-> current inc)
+        items   (when nxt
+                  (some->> (re-find (re-pattern (str "(?s)in `1\\.0\\.0-rc-" nxt "`:\\*.*?\n(.*?)(?=\n\\* |\n\\+\n|\\z)"))
+                                    stability)
+                           second (re-seq #"(?m)^\*\* ") count))
+        [_ additions total] (re-find #"(\S+)\s+additions\s+to\s+the\s+three\s+frozen\s+at\s+`rc-1`,\s+so\s+the\s+list\s+is\s+(\S+?)\." stability)
+        sum     (reduce + (keep val rcs))]
+    (cond-> []
+      (nil? current)
+      (conj "no `1.0.0-rc-N` current version")
+
+      (and current (not= breaks (get rcs nxt 0)))
+      (conj (str "`[Unreleased]` has " breaks " breaking entries; the rc-" nxt " paragraph counts "
+                 (get rcs nxt 0)))
+
+      (and current (pos? breaks) (not= breaks items))
+      (conj (str "the rc-" nxt " paragraph lists " (or items 0) " items for " breaks " breaking entries"))
+
+      (and (seq rcs) (not= sum (number additions)))
+      (conj (str "the additions say " additions "; the candidates add up to " sum))
+
+      (and (seq rcs) (not= (+ 3 sum) (number total)))
+      (conj (str "the list is said to be " total "; three frozen plus " sum " is " (+ 3 sum))))))
+
+(defn- report-stability
+  "Prints what the stability page gets wrong and returns whether it did."
+  []
+  (let [findings (when (.exists (java.io.File. ^String stability-path))
+                   (stability-findings (slurp changelog-path) (slurp stability-path)))]
+    (when (seq findings)
+      (println (ansi/red (str stability-path " disagrees with " changelog-path ":")))
+      (println)
+      (doseq [f findings] (println (str "  " f)))
+      (println))
+    (boolean (seq findings))))
+
 (defn- base-ref
   "What to compare against. `CHANGELOG_BASE` wins, so CI can name the PR base."
   []
@@ -247,7 +319,8 @@
   (if-let [base (base-ref)]
     (let [changed     (changed-since base)
           missing     (verdict changed (opted-out? base))
-          undocumented (report-deprecations)]
+          undocumented (report-deprecations)
+          unstable    (report-stability)]
       (when missing
         (let [{:keys [files]} missing]
           (when undocumented (println))
@@ -261,11 +334,11 @@
           (println (str "framework will notice. If they will notice nothing, say so with "
                         opt-out-marker))
           (println "in a commit message on this branch.")))
-      (if (or missing undocumented)
+      (if (or missing undocumented unstable)
         (System/exit 1)
         (do
           (println (ansi/green (str changelog-path " is up to date with this branch, "
-                                    "and announces every deprecation.")))
+                                    "announces every deprecation, and agrees with the stability page.")))
           (System/exit 0))))
     (do
       ;; No base means no comparison, and a gate that passes because it could

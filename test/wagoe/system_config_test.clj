@@ -6,6 +6,8 @@
             [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
+            [clojure.tools.logging.test :as log-test]
+            [wagoe.platform.shell.system.config :as platform-config]
             [integrant.core :as ig]))
 
 ;; ---------------------------------------------------------------------------
@@ -240,6 +242,66 @@
                                                              k {:enabled? true}))))
         (str k " assembled under " profile " — it is not dev-only, so it does "
              "not belong in dev-only-modules"))))
+
+(def ^:private redis-without-host
+  "Each Redis-capable module as `#env REDIS_HOST` leaves it when unset."
+  {:wagoe/events   {:provider :redis :group "app"}
+   :wagoe/cache    {:provider :redis :host nil}
+   :wagoe/realtime {:provider :redis :host ""}
+   :wagoe/jobs     {:provider :redis :redis {:host nil :port 6379}}})
+
+(defn- with-module [profile k settings]
+  (-> (base-config)
+      (assoc :wagoe/profile profile)
+      (assoc-in [:active k] settings)))
+
+(deftest ^:unit ^:security redis-without-a-host-fails-the-boot-outside-dev-and-test
+  ;; Each adapter connects to localhost when the host is nil, so a prod node
+  ;; with REDIS_HOST unset talked to a Redis nobody deployed (BOU-579).
+  (is (= (set (keys modules/redis-host-paths)) (set (keys redis-without-host)))
+      "a module that can run on Redis and is not swept here")
+  (doseq [[k settings] redis-without-host]
+    (testing (str k)
+      (doseq [profile [:prod :acc]]
+        (let [e (try (sys-config/ig-config (with-module profile k settings))
+                     nil
+                     (catch clojure.lang.ExceptionInfo e e))]
+          (is (some? e) (str k " assembled under " profile " with no Redis host"))
+          (is (= {:type :configuration-error :key k :env-var "REDIS_HOST"}
+                 (select-keys (ex-data e) [:type :key :env-var])))
+          (is (str/includes? (str (ex-message e)) "REDIS_HOST"))))
+
+      (testing "dev and test keep their localhost default"
+        (doseq [profile [:dev :test]]
+          (is (map? (sys-config/ig-config (with-module profile k settings))))))
+
+      (testing "a host set is enough"
+        (let [with-host (assoc-in settings (modules/redis-host-paths k) "redis")]
+          (is (map? (sys-config/ig-config (with-module :prod k with-host)))))))))
+
+(deftest ^:unit a-boot-migration-is-told-which-modules-are-on
+  ;; Otherwise it migrates every library on the classpath (BOU-579).
+  (let [config (-> (base-config)
+                   (assoc-in [:active :wagoe/sqlite :migrate-on-start?] true)
+                   (assoc-in [:active :wagoe/workflow] {}))
+        libs   (get-in (sys-config/ig-config config) [:wagoe/db-context :migrate-libraries])]
+    (is (contains? libs "workflow"))
+    (is (not-any? libs ["geo" "push" "audience"]))))
+
+(deftest ^:unit a-boot-migration-sees-what-migrate-up-sees
+  ;; `migrate up` reads config.edn and cannot see :extra-modules, which live in
+  ;; code. The boot used to add them, so the two migrated different sets.
+  (let [config (-> (base-config)
+                   (assoc-in [:active :wagoe/sqlite :migrate-on-start?] true)
+                   (assoc-in [:active :wagoe/workflow] {}))]
+    (log-test/with-log
+      (let [libs (get-in (platform-config/system-config config {:extra-modules #{:wagoe/geo-service}})
+                         [:wagoe/db-context :migrate-libraries])]
+        (is (= (modules/enabled-libraries (:active config)) libs)
+            "the set migrate up computes from the same config")
+        (is (not (contains? libs "geo")))
+        (is (log-test/logged? 'wagoe.platform.shell.system.config :warn #"geo module is enabled in code")
+            "a module enabled only in code is named, since its tables will not exist")))))
 
 (deftest ^:integration every-emitted-key-has-an-init-key
   ;; The generated config used to enumerate 41 Integrant keys and separately

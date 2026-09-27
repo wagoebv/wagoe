@@ -19,9 +19,12 @@
             ;; ".sql" missed EDN migrations, which migratus reads just as
             ;; happily — `get-all-supported-extensions` returns ["sql" "edn"].
             [migratus.migrations :as migratus-migrations]
+            [migratus.protocols :as migratus-protocols]
             [wagoe.platform.core.database.migration-sql :as migration-sql]
             [wagoe.platform.shell.adapters.database.config :as db-config]
+            [wagoe.platform.shell.modules :as modules]
             [clojure.edn :as edn]
+            [clojure.set :as set]
             [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.tools.logging :as log]))
@@ -323,6 +326,56 @@
                      " to a separate classpath resource.")))
     migration-dirs))
 
+(defn- manifest-library
+  "The library a manifest belongs to, from its name: `geo` for `geo.edn`. nil
+   for the legacy shared name, which says nothing about its library."
+  [^java.net.URL url]
+  (let [path (.getPath url)]
+    (when (str/includes? path migration-manifest-dir)
+      (-> (subs path (inc (str/last-index-of path "/")))
+          (str/replace #"\.edn$" "")))))
+
+(defn- library-manifests
+  "[library paths] for each manifest that names its library."
+  []
+  (for [url  (manifest-urls)
+        :let [lib (manifest-library url)]
+        :when lib]
+    [lib (parse-migration-manifest url)]))
+
+(defn ships-migrations?
+  "Whether library `lib` publishes a migration manifest on the classpath."
+  [lib]
+  (some? (io/resource (str migration-manifest-dir lib ".edn"))))
+
+(defn migration-dirs
+  "`discover-migration-dirs`, less the directories of framework modules that
+   `enabled-libs` does not name. nil keeps every directory.
+
+   `migrate up` created geo, push and audience tables in applications that never
+   switched those modules on (BOU-579). Leaving a directory out re-runs nothing:
+   migratus applies the ids it has not recorded and ignores recorded ones it no
+   longer reads, so a module's migrations apply the day it is switched on."
+  [enabled-libs]
+  (let [dirs (discover-migration-dirs)]
+    (if (nil? enabled-libs)
+      dirs
+      (let [framework (set (vals modules/framework-modules))
+            by-lib    (library-manifests)
+            off?      (fn [[lib _]] (and (framework lib) (not (enabled-libs lib))))
+            skip      (set/difference (set (mapcat second (filter off? by-lib)))
+                                      (set (mapcat second (remove off? by-lib))))]
+        (doseq [[lib _] (filter off? by-lib)]
+          (log/info (str "Not migrating " lib ": its module is not switched on in :active")))
+        (vec (remove skip dirs))))))
+
+(defn- configured-libraries
+  "The libraries the active profile's config switches on, for the CLI, which
+   has no running system to ask."
+  []
+  (modules/enabled-libraries
+   (:active (db-config/load-config (db-config/detect-environment)))))
+
 (defn mysql?
   "Whether `datasource` is MySQL or MariaDB, from the driver's own answer."
   [datasource]
@@ -350,8 +403,9 @@
 
   Returns:
      Migratus configuration map"
-  [db-config]
-  (migratus-config (:datasource db-config) (discover-migration-dirs)))
+  ([db-config] (create-migratus-config db-config nil))
+  ([db-config enabled-libs]
+   (migratus-config (:datasource db-config) (migration-dirs enabled-libs))))
 
 (defn create-config
   "Narrow a read config to one suitable for *creating* a migration.
@@ -413,18 +467,44 @@
 
    Throws:
      Exception if database configuration cannot be loaded"
+  ([] (get-migration-config {}))
+  ([{:keys [every-module?]}]
+   (refuse-shadowed-migration-dirs!)
+   (try
+     (let [db-config (db-config/get-active-db-config)]
+       (log/info "Loading migration configuration" {:database (:database-type db-config)})
+       (create-migratus-config db-config (when-not every-module? (configured-libraries))))
+     (catch Exception e
+       (log/error e "Failed to load database configuration for migrations")
+       (throw (ex-info "Migration configuration failed"
+                       {:type :configuration-error
+                        :error (.getMessage e)}
+                       e))))))
+
+(defn- rollback-config
+  "The config for going down: every module's migrations, not only those that
+   are on. migratus rolls back the last applied id among the migrations it can
+   see, so a filtered view turned a rollback past a switched-off module into a
+   no-op that reported success (BOU-579)."
   []
-  (refuse-shadowed-migration-dirs!)
-  (try
-    (let [db-config (db-config/get-active-db-config)]
-      (log/info "Loading migration configuration" {:database (:database-type db-config)})
-      (create-migratus-config db-config))
-    (catch Exception e
-      (log/error e "Failed to load database configuration for migrations")
-      (throw (ex-info "Migration configuration failed"
-                      {:type :configuration-error
-                       :error (.getMessage e)}
-                      e)))))
+  (get-migration-config {:every-module? true}))
+
+(defn- refuse-unreadable-last-migration!
+  "Throw when the last applied migration is in no directory `config` reads:
+   migratus would roll back nothing and say nothing."
+  [config]
+  (let [store (migratus-protocols/make-store config)
+        last  (try (migratus-protocols/connect store)
+                   (first (migratus-protocols/completed-ids store))
+                   (finally (migratus-protocols/disconnect store)))]
+    (when (and last
+               (not-any? #(= last (migratus-protocols/id %))
+                         (migratus-migrations/list-migrations config)))
+      (throw (ex-info (str "The last applied migration, " last ", is in no migration directory"
+                           " on the classpath, so it cannot be rolled back. Put back the library"
+                           " that shipped it, or undo it by hand and delete its row from "
+                           (:migration-table-name config) ".")
+                      {:type :migration-not-found :migration-id last})))))
 
 ;; =============================================================================
 ;; Migration Operations
@@ -474,26 +554,29 @@
    whichever came first rather than the one its context was built for.
 
    Args:
-     datasource - the javax.sql.DataSource to migrate
+     datasource   - the javax.sql.DataSource to migrate
+     enabled-libs - the libraries whose modules are on (`modules/enabled-libraries`);
+                    nil migrates every library on the classpath
 
    Returns:
      nil
 
    Throws:
      Exception if migration fails"
-  [datasource]
-  (refuse-shadowed-migration-dirs!)
-  (log/info "Running database migrations on the application's own datasource")
-  (try
-    (migratus/migrate (migratus-config datasource (discover-migration-dirs)))
-    (log/info "Database migrations completed successfully")
-    (catch Exception e
-      (rethrow-config-conflict! e)
-      (log/error e "Database migration failed")
-      (throw (ex-info "Migration failed"
-                      {:type  :migration-failed
-                       :error (.getMessage e)}
-                      e)))))
+  ([datasource] (migrate-datasource! datasource nil))
+  ([datasource enabled-libs]
+   (refuse-shadowed-migration-dirs!)
+   (log/info "Running database migrations on the application's own datasource")
+   (try
+     (migratus/migrate (migratus-config datasource (migration-dirs enabled-libs)))
+     (log/info "Database migrations completed successfully")
+     (catch Exception e
+       (rethrow-config-conflict! e)
+       (log/error e "Database migration failed")
+       (throw (ex-info "Migration failed"
+                       {:type  :migration-failed
+                        :error (.getMessage e)}
+                       e))))))
 
 (defn rollback
   "Rolls back the last applied migration.
@@ -506,7 +589,8 @@
   []
   (log/info "Rolling back last database migration...")
   (try
-    (let [config (get-migration-config)]
+    (let [config (rollback-config)]
+      (refuse-unreadable-last-migration! config)
       (migratus/rollback config)
       (log/info "Database rollback completed successfully"))
     (catch Exception e
@@ -528,7 +612,7 @@
   [migration-id]
   (log/info "Rolling back to migration" {:migration-id migration-id})
   (try
-    (let [config (get-migration-config)]
+    (let [config (rollback-config)]
       (migratus/rollback-until-just-after config migration-id)
       (log/info "Database rollback to migration completed" {:migration-id migration-id}))
     (catch Exception e
@@ -642,8 +726,11 @@
   []
   (log/warn "Resetting database - rolling back all migrations and re-applying")
   (try
-    (let [config (get-migration-config)]
-      (migratus/reset config)
+    ;; Down with every module's migrations, up with the enabled ones: a plain
+    ;; migratus/reset goes both ways with one set.
+    (let [config (rollback-config)]
+      (migratus/rollback-until-just-after config 0)
+      (migratus/migrate (get-migration-config))
       (log/info "Database reset completed"))
     (catch Exception e
       (rethrow-config-conflict! e)

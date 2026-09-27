@@ -4,7 +4,8 @@
    The file lists in these cases are real: they are the shapes of the thirty
    pull requests that merged between 2026-08-05 and 2026-08-16 without one
    CHANGELOG entry between them."
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [clojure.string :as str]
+            [clojure.test :refer [deftest is testing]]
             [wagoe.tools.check-changelog :as sut]))
 
 ;; =============================================================================
@@ -76,3 +77,43 @@
   ;; refactor with no behavioural edge. Explicit, and visible in git log.
   (is (nil? (sut/verdict ["libs/jobs/src/wagoe/jobs/shell/adapters/redis.clj"] true))
       "the marker did not waive the requirement"))
+
+;; =============================================================================
+;; Rule 3 — the stability page counts the breaks the changelog lists (BOU-579)
+;; =============================================================================
+
+(def ^:private changelog
+  "## [Unreleased]\n\n### Breaking\n\n- **A** (X-1). Do a.\n  More.\n- **B** (X-2). Do b.\n\n### Fixed\n\n- **C** (X-3).\n\n## [1.0.0-rc-3]\n\n### Breaking\n\n- **Old** (X-0).\n")
+
+(defn- stability [word items additions total]
+  (str "| Current version\n| `1.0.0-rc-3`\n\n"
+       "* *One has, in `1.0.0-rc-2`:* a thing.\n"
+       "* *One more, in `1.0.0-rc-3`:* another.\n"
+       "* *" word " in `1.0.0-rc-4`:* each is under `### Breaking`.\n"
+       (apply str (map #(str "** " % "\n") items))
+       "+\n" additions " additions to the three frozen at `rc-1`, so the list is " total ".\n"
+       "* Breaking changes that already shipped are in `CHANGELOG.md`.\n"))
+
+(deftest ^:unit the-stability-page-agrees-with-the-changelog
+  (is (empty? (sut/stability-findings changelog (stability "Two" ["a" "b"] "Four" "seven"))))
+  (testing "with the totals wrapped across lines, as prose is"
+    (is (empty? (sut/stability-findings
+                 changelog
+                 (str/replace (stability "Two" ["a" "b"] "Four" "seven")
+                              "frozen at `rc-1`" "frozen at\n  `rc-1`"))))))
+
+(deftest ^:unit a-break-the-stability-page-does-not-count-is-caught
+  (testing "the rc count"
+    (is (seq (sut/stability-findings changelog (stability "One" ["a" "b"] "Three" "six")))))
+  (testing "the listed items"
+    (is (seq (sut/stability-findings changelog (stability "Two" ["a"] "Four" "seven")))))
+  (testing "the additions"
+    (is (seq (sut/stability-findings changelog (stability "Two" ["a" "b"] "Three" "six")))))
+  (testing "the total"
+    (is (seq (sut/stability-findings changelog (stability "Two" ["a" "b"] "Four" "eight")))))
+  (testing "no paragraph at all for breaks that are unreleased"
+    (is (seq (sut/stability-findings changelog "| Current version\n| `1.0.0-rc-3`\n")))))
+
+(deftest ^:unit the-shipped-stability-page-agrees-with-the-changelog
+  (is (empty? (sut/stability-findings (slurp "CHANGELOG.md")
+                                      (slurp "docs/modules/ROOT/pages/stability.adoc")))))

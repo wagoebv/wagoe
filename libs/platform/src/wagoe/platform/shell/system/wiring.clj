@@ -113,7 +113,7 @@
     ;; any SQLite file lock would outlive the failed boot (BOU-485).
     (when (:migrate-on-start? config)
       (try
-        (migrations/migrate-datasource! (:datasource ctx))
+        (migrations/migrate-datasource! (:datasource ctx) (:migrate-libraries config))
         (catch Throwable t
           (log/error t "Boot migration failed; closing the database context")
           ;; Its own try: a pool that fails to close must not replace the

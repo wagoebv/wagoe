@@ -41,6 +41,10 @@ for what is public API, what is internal, and how deprecations are announced.
   Set `:level`/`:root-level` as wanted; copy `logback.xml`, `:provider :slf4j` and `:mcp` `:jvm-opts` from `wagoe new`.
 - **`register-user` throws `:validation-error` for a password-policy refusal** (BOU-552), not
   `:password-policy-violation`. Match on the new type; `:violations` is unchanged.
+- **Redis with no host fails the boot outside dev and test** (BOU-579), where it connected to localhost.
+  Set `REDIS_HOST` for events, cache, jobs and realtime, even if Redis runs on the same machine.
+- **The workflow API speaks kebab-case JSON, and a refused transition answers `{"error": {…}}`** (BOU-579).
+  Send `workflow-id`, `entity-type`, `entity-id`; read `current-state`, and drop checks on `success`.
 - **The workflow API answers 401 without a session** (BOU-561); it was open. Send a session or
   bearer token. The auth middleware's own 401 now has a JSON body; it had none.
 - **Scaffolded APIs and list pages require a signed-in user** (BOU-539). Pass `--public-api` to
@@ -78,6 +82,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **An admin event's `:id` was a string on SQLite and a UUID on PostgreSQL** (BOU-579). It is a UUID
+  for a UUID id column on both; drop any string handling in subscribers.
+- **`migrate up` created tables for modules that were not switched on** (BOU-579). It now migrates
+  only the modules in `:active`; tables it already created stay, and nothing re-runs.
 - **`migrate up` failed on a database that had never booted** (BOU-576). Nothing to do; an
   applied database runs nothing new.
 - **The tenant API answered `400 {"error":null}` on success and 500 on not-found** (BOU-576).

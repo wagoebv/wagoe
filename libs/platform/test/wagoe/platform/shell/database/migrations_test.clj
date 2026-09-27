@@ -1,6 +1,8 @@
 (ns wagoe.platform.shell.database.migrations-test
   (:require [wagoe.platform.shell.database.migrations :as migrations]
             [wagoe.platform.shell.adapters.database.config :as db-config]
+            [wagoe.platform.shell.adapters.database.factory :as db-factory]
+            [wagoe.platform.database :as db]
             [clojure.java.io :as io]
             [clojure.test :refer [deftest is testing]]
             [migratus.core :as migratus]
@@ -82,6 +84,114 @@
                     "wagoe/search/migrations/"]
                    (migrations/discover-migration-dirs)))))))))
 
+;; =============================================================================
+;; A module that is off is not migrated (BOU-579)
+;; =============================================================================
+
+(defn- with-library-manifests
+  "Call `f` with manifests for two framework modules and a third-party library
+   standing in for the classpath's."
+  [f]
+  (with-temp-dir
+    (fn [dir]
+      (let [mdir (doto (io/file dir "wagoe" "migration-paths") .mkdirs)
+            url  (fn [lib path]
+                   (io/as-url (doto (io/file mdir (str lib ".edn"))
+                                (spit (pr-str {:paths [path]})))))]
+        (with-redefs [migrations/manifest-urls
+                      (fn [] [(url "geo" "wagoe/geo/migrations/")
+                              (url "workflow" "wagoe/workflow/migrations/")
+                              (url "acme-billing" "acme/billing/migrations/")])]
+          (f))))))
+
+(deftest ^:unit a-module-that-is-off-is-not-migrated
+  (with-library-manifests
+    (fn []
+      (is (= ["migrations/" "wagoe/workflow/migrations/" "acme/billing/migrations/"]
+             (migrations/migration-dirs #{"workflow"}))
+          "geo is off; a library that is not a framework module is always migrated")
+      (is (= ["migrations/" "wagoe/geo/migrations/" "wagoe/workflow/migrations/"
+              "acme/billing/migrations/"]
+             (migrations/migration-dirs nil))
+          "nothing known about the modules: everything, as before"))))
+
+(deftest ^:unit the-shipped-manifests-name-their-modules
+  ;; The manifest's file name is what ties a directory to a module; one that
+  ;; drifted from the library name would be migrated whatever the config says.
+  (let [shipped (set (migrations/discover-migration-dirs))
+        off     #{"wagoe/geo/migrations/" "wagoe/push/migrations/" "wagoe/audience/migrations/"}]
+    (is (every? shipped off) "the libraries' manifests are not on this classpath")
+    (is (= (disj shipped "wagoe/geo/migrations/" "wagoe/push/migrations/" "wagoe/audience/migrations/")
+           (set (migrations/migration-dirs #{"workflow"}))))))
+
+(deftest ^:unit migrate-up-reads-the-modules-from-the-profiles-config
+  (with-library-manifests
+    (fn []
+      (with-redefs [migrations/shadowed-migration-dirs (fn ([] nil) ([_ _] nil))
+                    migrations/mysql?                  (constantly false)
+                    db-config/get-active-db-config     (fn [] {:datasource ::ds})
+                    db-config/load-config              (fn [_] {:active {:wagoe/geo-service {:provider :osm}}})]
+        (is (= ["migrations/" "wagoe/geo/migrations/" "acme/billing/migrations/"]
+               (:migration-dir (migrations/get-migration-config))))))))
+
+(defn- migration-dir!
+  "A directory holding one migration that creates `table`."
+  [root id table]
+  (let [dir (doto (io/file root table) .mkdirs)]
+    (spit (io/file dir (str id "-" table ".up.sql")) (str "CREATE TABLE " table " (id INT)"))
+    (spit (io/file dir (str id "-" table ".down.sql")) (str "DROP TABLE " table))
+    ;; Relative: migratus refuses an absolute migration directory.
+    (str (.getPath dir) "/")))
+
+(defn- with-applied-geo-migration
+  "Apply an app migration and a geo one to a fresh H2, then call `f` with the
+   database, both directories and the manifest dir, as `migrate up` sees them
+   with geo switched off."
+  [f]
+  (let [root (io/file "target" (str "bou579-" (System/nanoTime)))]
+    (try
+      (let [app  (migration-dir! root 20260101000000 "app_table")
+            geo  (migration-dir! root 20260102000000 "geo_table")
+            mdir (doto (io/file root "wagoe" "migration-paths") .mkdirs)
+            _    (spit (io/file mdir "geo.edn") (pr-str {:paths [geo]}))
+            ctx  (db-factory/db-context {:adapter :h2
+                                         :database-path (str "mem:rollback_" (System/nanoTime)
+                                                             ";DB_CLOSE_DELAY=-1")})]
+        (try
+          ;; Two runs, so geo is unambiguously the last applied.
+          (migratus/migrate (migrations/migratus-config (:datasource ctx) [app]))
+          (Thread/sleep 20)
+          (migratus/migrate (migrations/migratus-config (:datasource ctx) [app geo]))
+          (with-redefs [migrations/shadowed-migration-dirs (fn ([] nil) ([_ _] nil))
+                        migrations/manifest-urls           (fn [] [(io/as-url (io/file mdir "geo.edn"))])
+                        db-config/get-active-db-config     (fn [] {:datasource (:datasource ctx)})
+                        db-config/load-config              (fn [_] {:active {}})]
+            (f ctx app geo))
+          (finally (db-factory/close-db-context! ctx))))
+      (finally
+        (doseq [file (reverse (file-seq root))] (.delete ^java.io.File file))))))
+
+(deftest ^:integration rollback-reaches-a-migration-of-a-module-that-is-off
+  ;; migratus rolls back the last applied id, among the migrations it can see.
+  ;; With geo filtered out that was none, so rollback did nothing, said it had
+  ;; succeeded, and every later rollback stuck on the same id (BOU-579).
+  (with-applied-geo-migration
+    (fn [ctx app geo]
+      (with-redefs [migrations/discover-migration-dirs (fn [] [app geo])]
+        (migrations/rollback))
+      (is (not (db/table-exists? ctx :geo_table)) "the last applied migration was not rolled back")
+      (is (db/table-exists? ctx :app_table)))))
+
+(deftest ^:integration rollback-refuses-a-migration-it-cannot-find
+  ;; A library removed from the classpath takes its down migration with it.
+  (with-applied-geo-migration
+    (fn [ctx app _geo]
+      (with-redefs [migrations/discover-migration-dirs (fn [] [app])
+                    migrations/manifest-urls (fn [] [])]
+        (let [e (is (thrown? clojure.lang.ExceptionInfo (migrations/rollback)))]
+          (is (re-find #"20260102000000" (str (ex-message e) (:error (ex-data e)))))))
+      (is (db/table-exists? ctx :geo_table)))))
+
 (deftest ^:unit discover-migration-dirs-rejects-invalid-manifests
   (testing "invalid manifest shapes fail fast with a clear error"
     (with-temp-dir
@@ -128,7 +238,8 @@
   (testing "successful operations use the resolved migratus config"
     (let [config {:migration-dir ["migrations/"]}
           calls (atom [])]
-      (with-redefs [migrations/get-migration-config (fn [] config)
+      (with-redefs [migrations/get-migration-config (fn [& _] config)
+                    migrations/refuse-unreadable-last-migration! (fn [_] nil)
                     migratus/migrate (fn [arg] (swap! calls conj [:migrate arg]))
                     migratus/rollback (fn [arg] (swap! calls conj [:rollback arg]))
                     migratus/rollback-until-just-after (fn [arg migration-id]
@@ -178,7 +289,9 @@
                 [:completed-list config]
                 [:pending-list config]
                 [:create (migrations/create-config config) "add-users"]
-                [:reset config]
+                ;; Down with every module, up with the enabled ones (BOU-579).
+                [:rollback-until config 0]
+                [:migrate config]
                 [:init config]]
                @calls))
         (is (string? (:migration-dir (second (first (filter #(= :create (first %)) @calls)))))
@@ -187,7 +300,8 @@
 (deftest ^:unit migration-operations-wrap-failures-consistently
   (testing "migration operations keep useful ex-data on failure"
     (let [config {:migration-dir ["migrations/"]}]
-      (with-redefs [migrations/get-migration-config (fn [] config)
+      (with-redefs [migrations/get-migration-config (fn [& _] config)
+                    migrations/refuse-unreadable-last-migration! (fn [_] nil)
                     migratus/migrate (fn [_] (throw (ex-info "migrate boom" {})))
                     migratus/rollback (fn [_] (throw (ex-info "rollback last boom" {})))
                     migratus/rollback-until-just-after (fn [_ _] (throw (ex-info "rollback boom" {})))
@@ -498,7 +612,7 @@
     ;; to this error that reproduces the original complaint: the user is told
     ;; something failed but not that their migrations are in two places.
     (with-redefs [migrations/get-migration-config
-                  (fn [] (throw (ex-info "Migrations exist in two directories, and only one is read."
+                  (fn [& _] (throw (ex-info "Migrations exist in two directories, and only one is read."
                                          {:type :migration-dir-conflict})))]
       (doseq [[label op] [["migrate"  migrations/migrate]
                           ["rollback" migrations/rollback]]]

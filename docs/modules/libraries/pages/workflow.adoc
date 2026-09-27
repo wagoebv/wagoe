@@ -124,6 +124,26 @@ GET  /api/v1/workflow/instances/:id/audit      # Get audit trail
 
 Every route requires authentication (session or bearer token) and answers 401 without it.
 
+Bodies are kebab-case JSON, as in a scaffolded module's API. Start an instance with:
+
+[source,json]
+----
+{"workflow-id": "order-workflow",
+ "entity-type": "order",
+ "entity-id":   "5b1c9a52-6f0e-4d7a-9a57-2d9e3c1b8f40"}
+----
+
+A transition answers `{"instance": {…}, "audit-entry": {…}}`.
+One the workflow does not make from the current state answers 422:
+
+[source,json]
+----
+{"error": {"type":    "transition-not-found",
+           "message": "Transition 'paid' is not allowed from state 'entered'"}}
+----
+
+An unknown instance is a 404 and a malformed body a 400, in the platform's error shape.
+
 == Available transitions
 
 `available-transitions` takes the instance id, the actor's roles and the guard context.

@@ -284,9 +284,13 @@ Routes are defined in `shell/http.clj` as Reitit route data (no `/api` prefix) a
 | Method | Mounted path | Description |
 |--------|-------------|-------------|
 | `POST` | `/api/v1/workflow/instances` | Start a new workflow instance |
-| `GET` | `/api/v1/workflow/instances/:id` | Current state + `availableTransitions` (id, label, enabled?) |
+| `GET` | `/api/v1/workflow/instances/:id` | Current state + `available-transitions` (id, to, label, enabled) |
 | `GET` | `/api/v1/workflow/instances/:id/audit` | Full audit log |
 | `POST` | `/api/v1/workflow/instances/:id/transition` | Execute a transition |
+
+Bodies are kebab-case JSON, as in a scaffolded API: start takes `workflow-id`, `entity-type`
+and `entity-id`; a transition answers `{"instance" … "audit-entry" …}`, or 422
+`{"error": {"type" … "message" …}}` when the workflow does not make it.
 
 ## Database Migrations
 

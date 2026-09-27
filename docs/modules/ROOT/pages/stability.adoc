@@ -205,15 +205,34 @@ rather than a commit message.
 * *One more, in `1.0.0-rc-3`:* `bb scaffold generate --cli` is gone. It named an
   interface the scaffolder has never had a generator for, so no value of the
   flag ever produced one; only a script that passes it is affected.
-* *Eight in `1.0.0-rc-4`:* workflow's timestamp columns carry a zone and need
-  `migrate up` with replicas stopped; `:wagoe/logging :level` now sets
-  Logback's levels; `register-user` throws `:validation-error` for a weak
-  password; the scaffolder guards generated APIs, makes `date` a `DATE`
-  and refuses unknown field modifiers; `:wagoe/tenant` refuses to boot on
-  SQLite, and on H2 outside a test profile; and the tenant tables' uniqueness
-  stops a boot on existing duplicates. Each, with its migration, is under
-  `### Breaking` in `CHANGELOG.md`. Ten additions to the three frozen at
-  `rc-1`, so the list is thirteen.
+* *Nineteen in `1.0.0-rc-4`:* each is under `### Breaking` in `CHANGELOG.md`
+  with what to do about it.
+** Every route requires a signed-in user unless it says `:public true`.
+** `sortable-th` and `pagination` swap `outerHTML` by default.
+** Workflow's tables ship as a migration, with zoned timestamps; run
+   `migrate up` with replicas stopped.
+** `:wagoe/logging :level` sets Logback's levels.
+** `register-user` throws `:validation-error` for a weak password.
+** A Redis provider with no host fails the boot outside dev and test.
+** The workflow API speaks kebab-case JSON with the scaffolded APIs' error shape.
+** The workflow API requires a session or bearer token.
+** Scaffolded APIs and list pages require a signed-in user.
+** A scaffolder `date` field is a `DATE`.
+** The scaffolder refuses unknown field modifiers.
+** `bb setup` exits 1 on a closed stdin.
+** `bb setup` in an existing project creates no missing config file.
+** `bb setup --prod true` changes prod only, and refuses mock payments and AI.
+** The admin hard-deletes by default and refuses a parent with has-many rows
+   unless `:on-delete :cascade`.
+** An unknown admin entity-config key stops startup.
+** `:wagoe/payment-provider` has no default, and `:mock` runs only in dev and test.
+** `:wagoe/tenant` refuses to boot on SQLite, and on H2 outside a test profile.
+** Tenant slugs, schema names, memberships and invite tokens are unique in the
+   database, so a boot stops on existing duplicates.
++
+Twenty-one additions to the three frozen at `rc-1`, so the list is twenty-four.
+`bb check:changelog` holds the rc-4 count to the `[Unreleased]` `### Breaking`
+entries, and the totals to the counts above.
 * Breaking changes that already shipped are in `CHANGELOG.md` under a
   `### Breaking` heading, naming the affected library and the migration.
 * Deprecations are announced under `### Deprecated`.
