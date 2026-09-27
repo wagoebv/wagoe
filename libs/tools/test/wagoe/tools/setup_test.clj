@@ -1,5 +1,7 @@
 (ns wagoe.tools.setup-test
   (:require [clojure.test :refer [deftest is testing]]
+            [wagoe.tools.config-edn :as config-edn]
+            [wagoe.tools.integrate :as integrate]
             [wagoe.tools.setup :as setup]
             [babashka.fs :as fs]
             [clojure.edn :as edn]
@@ -579,3 +581,358 @@
       (is (fs/exists? (fs/file dir "resources" "conf" "dev" "config.edn"))
           "dev is still generated")
       (finally (fs/delete-tree dir)))))
+
+;; =============================================================================
+;; Existing config is merged into, never clobbered (BOU-404, BOU-532)
+;; =============================================================================
+
+(defn- wagoe-new-project!
+  "A dir holding what `wagoe new` writes, plus a module `bb scaffold integrate`
+   added. Returns the dir."
+  []
+  (let [dir    (fs/create-temp-dir)
+        render #(str/replace (lib-source (str "wagoe-cli/resources/wagoe/cli/templates/" %))
+                             "{{project-name}}" "shop")]
+    (doseq [env ["dev" "test"]]
+      (fs/create-dirs (fs/file dir "resources" "conf" env))
+      (spit (fs/file dir "resources" "conf" env "config.edn")
+            (render (str env "-config.edn.tmpl"))))
+    (spit (fs/file dir ".env.example") (render "env.example.tmpl"))
+    (integrate/write-config! (str dir) ":wagoe/product"
+                             (integrate/generate-config-snippet "product" true) {})
+    dir))
+
+(defn- snapshot [dir]
+  (into {} (for [f (fs/glob dir "**" {:hidden true}) :when (fs/regular-file? f)]
+             [(str (fs/relativize dir f)) (slurp (fs/file f))])))
+
+(defn- tree
+  "Every file (with its text) and every directory under `dir`."
+  [dir]
+  (into {} (for [f (fs/glob dir "**" {:hidden true})]
+             [(str (fs/relativize dir f)) (if (fs/directory? f) :dir (slurp (fs/file f)))])))
+
+(def ^:private enter-through
+  "Enter for every question the wizard can ask."
+  (apply str (repeat 12 "\n")))
+
+(defn- conf [dir env]
+  (read-config (slurp (fs/file dir "resources" "conf" env "config.edn"))))
+
+(defn- run-setup
+  "Run `bb setup` with `args` and `stdin` in `dir`. Returns [exit-code output]."
+  [dir stdin & args]
+  (let [exit (atom nil)
+        out  (with-redefs [setup/root-dir (constantly (str dir))]
+               (binding [setup/*exit!* #(reset! exit %)]
+                 (with-out-str (with-in-str stdin (apply setup/-main args)))))]
+    [@exit out]))
+
+(deftest ^:unit wizard-on-closed-stdin-writes-nothing
+  (let [dir (wagoe-new-project!)]
+    (try
+      (let [before     (snapshot dir)
+            [exit out] (run-setup dir "")]
+        (is (= 1 exit) "EOF is not consent")
+        (is (str/includes? out "stdin closed"))
+        (is (= before (snapshot dir))))
+      (finally (fs/delete-tree dir)))))
+
+(deftest ^:unit wizard-names-the-files-it-would-change-before-asking
+  (let [dir (wagoe-new-project!)]
+    (try
+      (let [before     (snapshot dir)
+            ;; Enter through every question, then decline.
+            [exit out] (run-setup dir "\n\n\n\n\n\n\nn\n")
+            summary    (-> out (str/split #"Config Summary") second
+                           (str/split #"Generate these") first)]
+        (is (nil? exit))
+        (is (str/includes? summary "resources/conf/dev/config.edn"))
+        (is (str/includes? summary "resources/conf/test/config.edn"))
+        (is (str/includes? summary ".env.example"))
+        (is (= before (snapshot dir)) "declined, so nothing written"))
+      (finally (fs/delete-tree dir)))))
+
+(deftest ^:unit flag-mode-merges-into-a-wagoe-new-project
+  (let [dir (wagoe-new-project!)]
+    (try
+      (let [[exit _] (run-setup dir "" "--database" "sqlite" "--ai-provider" "ollama")
+            dev      (:active (conf dir "dev"))
+            test     (:active (conf dir "test"))
+            env-ex   (slurp (fs/file dir ".env.example"))]
+        (is (nil? exit))
+        (is (true? (get-in dev [:wagoe/sqlite :migrate-on-start?])))
+        (is (= "shop-dev.db" (get-in dev [:wagoe/sqlite :db])))
+        (is (true? (get-in test [:wagoe/h2 :migrate-on-start?])))
+        (is (contains? dev :wagoe/product) "integrate-written key survives")
+        (is (contains? test :wagoe/product))
+        (is (= :ollama (get-in dev [:wagoe/ai-service :provider])) "what was asked is written")
+        (is (str/includes? env-ex "JWT_SECRET=change-me-to-a-32-char-minimum-secret"))
+        (is (str/includes? env-ex "OLLAMA_URL=")))
+      (finally (fs/delete-tree dir)))))
+
+(deftest ^:unit flag-mode-switching-database-keeps-the-old-one-inactive
+  (let [dir (wagoe-new-project!)]
+    (try
+      (run-setup dir "" "--database" "postgresql")
+      (let [{:keys [active inactive]} (conf dir "dev")]
+        (is (contains? active :wagoe/postgresql))
+        (is (not (contains? active :wagoe/sqlite)) "two active databases do not boot")
+        (is (true? (get-in inactive [:wagoe/sqlite :migrate-on-start?])))
+        (is (contains? active :wagoe/product)))
+      (finally (fs/delete-tree dir)))))
+
+(deftest ^:unit setup-twice-changes-nothing-the-second-time
+  (let [dir (wagoe-new-project!)]
+    (try
+      (run-setup dir "" "--database" "sqlite" "--cache" "redis")
+      (let [before (snapshot dir)]
+        (run-setup dir "" "--database" "sqlite" "--cache" "redis")
+        (is (= before (snapshot dir))))
+      (finally (fs/delete-tree dir)))))
+
+(deftest ^:unit unmergeable-config-refuses-and-writes-nothing
+  (let [dir (fs/create-temp-dir)]
+    (try
+      (fs/create-dirs (fs/file dir "resources" "conf" "dev"))
+      (spit (fs/file dir "resources" "conf" "dev" "config.edn") "{:my/key 1}")
+      (let [[exit out] (run-setup dir "" "--database" "sqlite")]
+        (is (= 1 exit))
+        (is (str/includes? out "resources/conf/dev/config.edn"))
+        (is (= {"resources/conf/dev/config.edn" "{:my/key 1}"} (snapshot dir))))
+      (finally (fs/delete-tree dir)))))
+
+(deftest ^:unit fresh-dir-gets-every-file
+  (let [dir (fs/create-temp-dir)]
+    (try
+      (let [[exit _] (run-setup dir "" "--database" "sqlite")]
+        (is (nil? exit))
+        (is (= #{"resources/conf/dev/config.edn" "resources/conf/test/config.edn"
+                 "resources/conf/prod/config.edn" ".env.example"
+                 "resources/conf/dev/admin/users.edn" "resources/conf/test/admin/users.edn"
+                 "resources/conf/prod/admin/users.edn"}
+               (set (keys (snapshot dir)))))
+        (is (= (setup/build-config (setup/with-defaults (setup/from-flags-spec {:database "sqlite"})) "dev")
+               (slurp (fs/file dir "resources" "conf" "dev" "config.edn")))))
+      (finally (fs/delete-tree dir)))))
+
+;; -----------------------------------------------------------------------------
+;; Only what was asked changes (review of #592)
+;; -----------------------------------------------------------------------------
+
+(defn- conf-file [dir env] (fs/file dir "resources" "conf" env "config.edn"))
+
+(defn- with-project
+  "Run `f` on a wagoe-new project dir, deleting it afterwards."
+  [f]
+  (let [dir (wagoe-new-project!)]
+    (try (f dir) (finally (fs/delete-tree dir)))))
+
+(deftest ^:unit an-unasked-database-is-left-alone
+  (with-project
+    (fn [dir]
+      (run-setup dir "" "--database" "postgresql")
+      (let [[exit _] (run-setup dir "" "--payment" "mock")
+            {:keys [active]} (conf dir "dev")]
+        (is (nil? exit))
+        (is (contains? active :wagoe/postgresql) "--payment is not --database sqlite")
+        (is (not (contains? active :wagoe/sqlite)))
+        (is (= :mock (get-in active [:wagoe/payment-provider :provider])))))))
+
+(deftest ^:unit a-test-profile-on-postgresql-survives
+  (with-project
+    (fn [dir]
+      (spit (conf-file dir "test") "{:active {:wagoe/postgresql {:host \"db\"}\n          :wagoe/product {:enabled? true}}}\n")
+      (run-setup dir "" "--database" "sqlite")
+      (let [{:keys [active]} (conf dir "test")]
+        (is (= {:host "db"} (:wagoe/postgresql active)))
+        (is (not (contains? active :wagoe/h2)))))))
+
+(deftest ^:unit enter-through-the-wizard-changes-nothing
+  (with-project
+    (fn [dir]
+      (spit (conf-file dir "dev")
+            (config-edn/insert-into (slurp (conf-file dir "dev")) ":active"
+                                    "\n   :wagoe/ai-service {:provider :anthropic}"))
+      (let [before     (tree dir)
+            [exit out] (run-setup dir enter-through)]
+        (is (nil? exit) out)
+        (is (= before (tree dir)) "a menu default is not an answer")))))
+
+(deftest ^:unit enter-through-the-wizard-changes-nothing-without-dev-or-prod
+  (with-project
+    (fn [dir]
+      (fs/delete (conf-file dir "dev"))
+      (let [before     (tree dir)
+            [exit out] (run-setup dir enter-through)]
+        (is (nil? exit) out)
+        (is (= before (tree dir)) "no dev config is not a licence to pick ollama or create prod")))))
+
+(deftest ^:unit a-switched-database-migrates-on-start-outside-prod
+  (with-project
+    (fn [dir]
+      (run-setup dir "" "--database" "postgresql" "--prod" "true")
+      (is (true? (get-in (conf dir "dev") [:active :wagoe/postgresql :migrate-on-start?])))
+      (is (nil? (get-in (conf dir "prod") [:active :wagoe/postgresql :migrate-on-start?]))))))
+
+(deftest ^:unit a-moved-database-lands-in-inactive-not-a-trailing-comment
+  (with-project
+    (fn [dir]
+      (spit (conf-file dir "dev") "{:active {:wagoe/sqlite {:db \"x.db\"}}}\n;; end }\n")
+      (let [[exit out] (run-setup dir "" "--database" "postgresql")
+            text (slurp (conf-file dir "dev"))]
+        (is (nil? exit) out)
+        (is (= {:db "x.db"} (get-in (read-config text) [:inactive :wagoe/sqlite])))
+        (is (str/ends-with? text ";; end }\n"))))))
+
+(deftest ^:unit crlf-stays-crlf
+  (with-project
+    (fn [dir]
+      (spit (conf-file dir "dev") (str/replace (slurp (conf-file dir "dev")) "\n" "\r\n"))
+      (run-setup dir "" "--cache" "redis")
+      (let [text (slurp (conf-file dir "dev"))]
+        (is (str/includes? text ":wagoe/cache"))
+        (is (not (re-find #"[^\r]\n" text)))))))
+
+(def ^:private refused {:exit 1 :names-dev? true :unchanged? true})
+
+(defn- refusal
+  "How setup with `args` ended in `dir`, in the shape of `refused`."
+  [dir args]
+  (let [before     (snapshot dir)
+        [exit out] (apply run-setup dir "" args)]
+    {:exit       exit
+     :names-dev? (str/includes? out "resources/conf/dev/config.edn")
+     :unchanged? (= before (snapshot dir))}))
+
+(deftest ^:unit the-safety-net-refuses-a-lossy-or-unreadable-merge
+  (testing "a merge that drops a key"
+    (with-project
+      (fn [dir]
+        (with-redefs [setup/merge-config (fn [old _ _] {:text (str/replace old ":wagoe/product" ":wagoe/prodUCT")
+                                                        :changes [] :moved #{}})]
+          (is (= refused (refusal dir ["--cache" "redis"])))))))
+  (testing "a merge that does not read"
+    (with-project
+      (fn [dir]
+        (with-redefs [setup/merge-config (fn [old _ _] {:text (str old "}") :changes [] :moved #{}})]
+          (is (= refused (refusal dir ["--cache" "redis"])))))))
+  (testing "a config that does not read as EDN"
+    (with-project
+      (fn [dir]
+        (spit (conf-file dir "dev") "{:active {:a/k #\"re\"}}")
+        (is (= refused (refusal dir ["--cache" "redis"]))))))
+  (testing "an :active that is not a literal map"
+    (doseq [v ["#include \"active.edn\"" "#profile {:dev {}}" "#merge [{} {}]"]]
+      (with-project
+        (fn [dir]
+          (spit (conf-file dir "dev") (str "{:active " v "}"))
+          (is (= refused (refusal dir ["--cache" "redis"]))))))))
+
+(deftest ^:unit a-read-only-target-writes-nothing
+  (testing "read-only file"
+    (with-project
+      (fn [dir]
+        (.setWritable (conf-file dir "dev") false)
+        (is (= refused (refusal dir ["--cache" "redis"]))))))
+  (testing "read-only directory: the temp files go first, so nothing is renamed"
+    (with-project
+      (fn [dir]
+        ;; The root is read-only, so .env.example fails after prod's
+        ;; directory was already created for its temp file.
+        (let [root   (fs/file dir)
+              before (tree dir)]
+          (.setWritable root false)
+          (try
+            (let [[exit out] (run-setup dir "" "--cache" "redis" "--prod" "true")
+                  report     (second (str/split out #"Nothing was written" 2))]
+              (is (= 1 exit))
+              (is (some? report) out)
+              (doseq [p ["resources/conf/dev/config.edn" "resources/conf/test/config.edn"
+                         "resources/conf/prod/config.edn" ".env.example"
+                         "resources/conf/prod/admin/users.edn"]]
+                (is (str/includes? (str report) p) (str p " is named as not written")))
+              (is (= before (tree dir)) "and no directory is left behind"))
+            (finally (.setWritable root true))))))))
+
+;; -----------------------------------------------------------------------------
+;; Second adversarial review of #592
+;; -----------------------------------------------------------------------------
+
+(deftest ^:unit an-answer-that-matches-keeps-the-existing-map
+  (with-project
+    (fn [dir]
+      (let [tst "{:active\n {:wagoe/h2 {:memory true}\n  :wagoe/cache {:provider :redis :host \"localhost\" :port 6379}\n  :wagoe/payment-provider {:provider :stripe :api-key \"sk_test_x\"}\n  :wagoe/ai-service {:provider :anthropic :api-key #env K}}\n :inactive {}}\n"
+            dev (config-edn/insert-into (slurp (conf-file dir "dev")) ":active"
+                                        "\n  :wagoe/cache {:provider :redis :host \"cache.internal\"}")]
+        (spit (conf-file dir "test") tst)
+        (spit (conf-file dir "dev") dev)
+        (run-setup dir "" "--cache" "redis" "--payment" "stripe" "--ai-provider" "anthropic")
+        (is (= tst (slurp (conf-file dir "test"))) "test is never downgraded to memory, mock or no-op")
+        (is (= "cache.internal" (get-in (conf dir "dev") [:active :wagoe/cache :host]))
+            "same provider, so the customised map stays")))))
+
+(deftest ^:unit a-file-changed-after-planning-is-not-overwritten
+  (with-project
+    (fn [dir]
+      (let [summary @#'setup/display-summary
+            racer   "{:active {:wagoe/sqlite {:db \"theirs\"}}}\n"]
+        (with-redefs [setup/display-summary (fn [& args]
+                                              (apply summary args)
+                                              (spit (conf-file dir "dev") racer))]
+          (let [test-before (slurp (conf-file dir "test"))
+                [exit out]  (run-setup dir "" "--cache" "redis")]
+            (is (= 1 exit))
+            (is (str/includes? out "changed on disk since planning"))
+            (is (= racer (slurp (conf-file dir "dev"))))
+            (is (= test-before (slurp (conf-file dir "test"))) "nothing written")))))))
+
+(deftest ^:unit a-string-that-looks-like-a-comment-is-not-moved
+  (with-project
+    (fn [dir]
+      (let [dev "{:active\n {:wagoe/settings {:note \"x\n; y\"}\n  :wagoe/postgresql {:host \"db\"}\n  ;; \"} ;\n  :wagoe/http {:port 3000}}\n :inactive {}}\n"]
+        (spit (conf-file dir "dev") dev)
+        (let [[exit out] (run-setup dir "" "--database" "sqlite")
+              {:keys [active inactive]} (conf dir "dev")]
+          (is (nil? exit) out)
+          (is (= {:note "x\n; y"} (:wagoe/settings active)))
+          (is (= {:port 3000} (:wagoe/http active)))
+          (is (= {:host "db"} (:wagoe/postgresql inactive))))))))
+
+(deftest ^:unit the-safety-net-compares-values
+  (with-project
+    (fn [dir]
+      (with-redefs [setup/merge-config (fn [old _ _] {:text (str/replace old "shop-dev.db" "other.db")
+                                                      :changes [] :moved #{}})]
+        (is (= refused (refusal dir ["--cache" "redis"])))))))
+
+(deftest ^:unit mixed-line-endings-do-not-drift
+  (with-project
+    (fn [dir]
+      (let [mixed "{:active\r\n {:wagoe/sqlite {:db \"x\"}\n  :wagoe/settings {:banner \"a\nb\"}}\r\n :inactive {}}\r\n"]
+        (spit (conf-file dir "dev") mixed)
+        (run-setup dir "" "--database" "sqlite")
+        (is (= mixed (slurp (conf-file dir "dev"))) "a no-op run writes nothing")
+        (run-setup dir "" "--cache" "memory")
+        (is (= {:banner "a\nb"} (get-in (conf dir "dev") [:active :wagoe/settings]))
+            "a newline inside a string stays a bare newline")))))
+
+(deftest ^:unit a-rewrite-keeps-mode-and-symlink
+  (with-project
+    (fn [dir]
+      (let [path  (.toPath (conf-file dir "dev"))
+            perms (java.nio.file.attribute.PosixFilePermissions/fromString "rw-------")]
+        (java.nio.file.Files/setPosixFilePermissions path perms)
+        (run-setup dir "" "--cache" "memory")
+        (is (= perms (java.nio.file.Files/getPosixFilePermissions
+                      path (make-array java.nio.file.LinkOption 0)))))))
+  (with-project
+    (fn [dir]
+      (let [shared (fs/file dir "shared-dev.edn")
+            link   (.toPath (conf-file dir "dev"))]
+        (fs/move (conf-file dir "dev") shared)
+        (java.nio.file.Files/createSymbolicLink link (.toPath shared)
+                                                (make-array java.nio.file.attribute.FileAttribute 0))
+        (run-setup dir "" "--cache" "memory")
+        (is (java.nio.file.Files/isSymbolicLink link))
+        (is (str/includes? (slurp shared) ":wagoe/cache") "the link's target is what changes")))))
