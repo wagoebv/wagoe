@@ -60,6 +60,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **`:wagoe/payment-provider` has no default provider, and `:mock` boots only in dev and test** (BOU-564).
   Set `:provider` explicitly; use `:stripe` or `:mollie` in every other profile.
+- **`:wagoe/tenant` refuses to boot on SQLite** (BOU-576); tenancy needs PostgreSQL. Switch to
+  `:wagoe/postgresql`, or remove `:wagoe/tenant`.
 
 ### Added
 
@@ -68,6 +70,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **`migrate up` failed on a database that had never booted** (BOU-576). Nothing to do; an
+  applied database runs nothing new.
+- **`POST /api/v1/tenants` answered `400 {"error":null}` after creating the tenant** (BOU-576).
+  It answers 201 with the tenant, and a refusal names its reason.
 - **Scaffolded migrations lost their indexes on SQLite and failed on PostgreSQL and MySQL** (BOU-569).
   Add `--;;` to older ones; an existing SQLite database needs a new migration creating the missing indexes.
 - **`bb scaffold ai --help` answered "Unknown option"** (BOU-569). It prints the usage.

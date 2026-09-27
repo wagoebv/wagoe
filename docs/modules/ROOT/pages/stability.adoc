@@ -38,6 +38,10 @@ will promise.
   build and run on 21, and every CI job that starts a JVM uses it.
   `bb check:jdk` holds those to one number, so a JDK written in one place and
   not another cannot ship.
+
+| Databases
+| PostgreSQL and SQLite, and H2 for tests. MySQL is not supported yet; it is
+  planned after 1.0 (BOU-574). Multi-tenancy needs PostgreSQL.
 |===
 
 Lockstep versioning means you never have to work out which `wagoe-user` goes

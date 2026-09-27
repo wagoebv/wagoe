@@ -4,8 +4,9 @@
 The `tenant` library provides full multi-tenancy: PostgreSQL schema-per-tenant isolation,
 membership management with roles, and a secure email invite flow.
 
-NOTE: Schema-per-tenant provisioning requires PostgreSQL.
-H2 and SQLite skip provisioning with a warning and are fine for unit/integration tests.
+NOTE: Schema-per-tenant provisioning requires PostgreSQL. On SQLite the
+application refuses to boot with `:wagoe/tenant` configured. H2 skips
+provisioning with a warning and is fine for unit/integration tests.
 
 == Prerequisites
 
