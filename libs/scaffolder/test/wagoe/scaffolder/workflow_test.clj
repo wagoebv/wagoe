@@ -13,6 +13,7 @@
             [integrant.core :as ig]
             [muuntaja.core :as muuntaja]
             [next.jdbc :as jdbc]
+            [next.jdbc.result-set :as rs]
             [wagoe.admin.schema :as admin-schema]
             [wagoe.events.core.event :as event]
             [wagoe.events.ports :as events]
@@ -255,6 +256,76 @@
       (finally
         (ig/halt! system)
         (db-factory/close-db-context! ctx)))))
+
+(defn- with-booted
+  "Call `f` with {:call :ctx :store :system} for module bou569<suffix>."
+  [suffix f]
+  (let [base   (str "bou569" suffix)
+        dir    (project!)
+        _      (generate! dir base)
+        _      (load-generated! dir)
+        ctx    (migrated-ctx dir)
+        system (boot! base ctx)]
+    (try
+      (f {:call   (http-caller (:api (:wagoe/billing-routes system)))
+          :ctx    ctx
+          :store  (get-in system [:wagoe/workflow :store])
+          :system system})
+      (finally
+        (ig/halt! system)
+        (db-factory/close-db-context! ctx)))))
+
+(defn- sql! [ctx s & params]
+  (jdbc/execute! (:datasource ctx) (into [s] params)))
+
+(defn- column [ctx id]
+  (:status (jdbc/execute-one! (:datasource ctx) ["SELECT status FROM invoices WHERE id = ?" id]
+                              {:builder-fn rs/as-unqualified-lower-maps})))
+
+(deftest ^:integration a-failed-status-write-fails-the-request-and-is-repaired
+  (with-booted "m"
+    (fn [{:keys [call ctx store]}]
+      (let [id   (get-in (call :post "/invoices" {:number "A-1"}) [:body :id])
+            uuid (parse-uuid id)
+            move #(call :post (str "/invoices/" id "/transition") {:transition %})]
+        (sql! ctx "ALTER TABLE invoices ADD CONSTRAINT no_delivered CHECK (status <> 'delivered')")
+        (testing "the column write fails, so the request does"
+          (is (<= 500 (:status (move "delivered")))))
+        (testing "the workflow moved and the column did not: that is not hidden"
+          (is (= :delivered (:current-state (workflow/find-instance-by-entity store :invoice uuid))))
+          (is (= "entered" (column ctx uuid))))
+        (sql! ctx "ALTER TABLE invoices DROP CONSTRAINT no_delivered")
+        (testing "the next transition repairs the column first"
+          (let [resp (move "paid")]
+            (is (= 200 (:status resp)) (pr-str resp))
+            (is (= "paid" (get-in resp [:body :status])))
+            (is (= "paid" (column ctx uuid)))))))))
+
+(deftest ^:integration a-create-whose-workflow-cannot-start-leaves-no-row
+  (with-booted "c"
+    (fn [{:keys [call ctx store]}]
+      ;; The instance's insert fails: its table is gone.
+      (sql! ctx "ALTER TABLE workflow_instances RENAME TO workflow_instances_away")
+      (is (<= 500 (:status (call :post "/invoices" {:number "A-1"}))))
+      (is (empty? (sql! ctx "SELECT id FROM invoices")) "the row is removed again")
+      (sql! ctx "ALTER TABLE workflow_instances_away RENAME TO workflow_instances")
+      (testing "a row that got no workflow gets one on its first transition"
+        (let [id (random-uuid)]
+          (sql! ctx "INSERT INTO invoices (id, number, created_at) VALUES (?, 'A-2', CURRENT_TIMESTAMP)" id)
+          (is (nil? (workflow/find-instance-by-entity store :invoice id)))
+          (let [resp (call :post (str "/invoices/" id "/transition") {:transition "delivered"})]
+            (is (= 200 (:status resp)) (pr-str resp))
+            (is (= "delivered" (get-in resp [:body :status])))))))))
+
+(deftest ^:integration a-refused-delete-keeps-the-workflow
+  (with-booted "d"
+    (fn [{:keys [call ctx store]}]
+      (let [id (get-in (call :post "/invoices" {:number "A-1"}) [:body :id])]
+        (sql! ctx "CREATE TABLE holds (id UUID PRIMARY KEY, invoice_id UUID REFERENCES invoices(id) ON DELETE RESTRICT)")
+        (sql! ctx "INSERT INTO holds (id, invoice_id) VALUES (?, ?)" (random-uuid) (parse-uuid id))
+        (is (<= 400 (:status (call :delete (str "/invoices/" id) nil))))
+        (is (some? (workflow/find-instance-by-entity store :invoice (parse-uuid id)))
+            "the row is still there, and so is its workflow")))))
 
 (deftest ^:unit the-next-steps-name-only-the-modules-that-are-off
   (let [dir (project!)

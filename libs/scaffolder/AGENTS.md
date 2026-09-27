@@ -134,9 +134,14 @@ request, `"workflow"` in the `bb scaffold ai` spec):
   out of both request schemas, so no API call or admin form sets it.
 - `shell/<entity>_workflow.clj` holds the definition, each state moving only
   to the next, and `install!`, which registers it through the workflow
-  registry port with an `:on-any-transition` hook that writes the new state to
-  the column.
-- The service starts an instance on create and removes it on delete.
+  registry port with an `:on-any-transition` hook for transitions made outside
+  the service (the workflow API, the admin).
+- The service starts an instance on create, and deletes the row it created
+  when that fails; it deletes the row before the instance. A transition starts
+  a missing instance, writes the new state to the column and fails the request
+  unless it reads back. The two writes are not one transaction (the workflow
+  store has its own connections), so a column left behind is brought level at
+  the next transition.
   `POST /api/v1/<entities>/:id/transition {"transition": "delivered"}` answers
   200 with the entity or 422 for a move the workflow does not make.
 - The admin writes rows without the service, so `install!` also subscribes to
