@@ -644,7 +644,7 @@
     (try
       (let [before     (snapshot dir)
             ;; Enter through every question, then decline.
-            [exit out] (run-setup dir "\n\n\n\n\n\n\nn\n")
+            [exit out] (run-setup dir "\n\n\n\n\n\n\n\nn\n")
             summary    (-> out (str/split #"Config Summary") second
                            (str/split #"Generate these") first)]
         (is (nil? exit))
@@ -772,9 +772,32 @@
 (deftest ^:unit a-switched-database-migrates-on-start-outside-prod
   (with-project
     (fn [dir]
+      (run-setup dir "" "--database" "postgresql")
       (run-setup dir "" "--database" "postgresql" "--prod" "true")
       (is (true? (get-in (conf dir "dev") [:active :wagoe/postgresql :migrate-on-start?])))
       (is (nil? (get-in (conf dir "prod") [:active :wagoe/postgresql :migrate-on-start?]))))))
+
+(deftest ^:unit prod-answers-go-to-prod-only
+  (with-project
+    (fn [dir]
+      (let [[exit out] (run-setup dir "" "--prod" "true")]
+        (is (nil? exit) out))
+      (spit (conf-file dir "prod")
+            (config-edn/insert-into (slurp (conf-file dir "prod")) ":active"
+                                    "\n  :my/hand-edit {:kept? true}"))
+      (let [dev-before  (slurp (conf-file dir "dev"))
+            test-before (slurp (conf-file dir "test"))
+            [exit out]  (run-setup dir "" "--database" "postgresql" "--prod" "true")
+            prod        (conf dir "prod")]
+        (is (nil? exit) out)
+        (is (= dev-before (slurp (conf-file dir "dev"))) "dev is not the profile asked for")
+        (is (= test-before (slurp (conf-file dir "test"))))
+        (is (contains? (:active prod) :wagoe/postgresql) out)
+        (is (env-ref? (get-in prod [:active :wagoe/postgresql :host])))
+        (is (contains? (:inactive prod) :wagoe/sqlite) "two active databases do not boot")
+        (is (= {:kept? true} (get-in prod [:active :my/hand-edit])) "merged, not regenerated")
+        (is (= {:enabled? true} (get-in prod [:active :wagoe/product])))
+        (is (not (str/includes? out "Kept existing")) out)))))
 
 (deftest ^:unit a-moved-database-lands-in-inactive-not-a-trailing-comment
   (with-project
@@ -850,8 +873,7 @@
               (is (= 1 exit))
               (is (some? report) out)
               ;; No admin users.edn: prod takes dev's modules, and dev has no admin.
-              (doseq [p ["resources/conf/dev/config.edn" "resources/conf/test/config.edn"
-                         "resources/conf/prod/config.edn" ".env.example"]]
+              (doseq [p ["resources/conf/prod/config.edn" ".env.example"]]
                 (is (str/includes? (str report) p) (str p " is named as not written")))
               (is (= before (tree dir)) "and no directory is left behind"))
             (finally (.setWritable root true))))))))
@@ -1004,15 +1026,43 @@
       (spit (conf-file dir "dev")
             (config-edn/insert-into (slurp (conf-file dir "dev")) ":active"
                                     "\n   :wagoe/events {:provider :memory}"))
-      (let [[exit out] (run-setup dir "" "--prod" "true" "--payment" "mock" "--cache" "redis")
+      (let [[exit out] (run-setup dir "" "--prod" "true" "--cache" "redis")
             text       (slurp (conf-file dir "prod"))
             env-ex     (slurp (fs/file dir ".env.example"))]
         (is (nil? exit) out)
         (is (not (str/includes? text ":mock")))
-        (is (= :mock (get-in (conf dir "dev") [:active :wagoe/payment-provider :provider]))
-            "dev still gets what was asked")
         (is (= 1 (count (re-seq #"(?m)^REDIS_HOST=" env-ex)))
             "cache and event bus share the Redis variables")))))
+
+(deftest ^:unit prod-refuses-what-prod-never-gets
+  ;; Setup said "Payments: mock", exited 0 and wrote it nowhere (BOU-577).
+  (doseq [args [["--payment" "mock"] ["--ai-provider" "anthropic"]]]
+    (testing (str/join " " args)
+      (with-project
+        (fn [dir]
+          (let [before     (tree dir)
+                [exit out] (apply run-setup dir "" "--prod" "true" args)]
+            (is (= 1 exit) out)
+            (is (str/includes? out (str "--" (subs (first args) 2) " " (second args))) out)
+            (is (str/includes? out "never written to prod") out)
+            (is (str/includes? out "without --prod") out)
+            (is (= before (tree dir)))))))))
+
+(deftest ^:unit the-wizard-asks-about-prod-first
+  (with-project
+    (fn [dir]
+      (let [dev-before (slurp (conf-file dir "dev"))
+            ;; prod? yes, then Enter through the rest, then write.
+            [exit out] (run-setup dir (str "y\n" (apply str (repeat 12 "\n"))))
+            prod-q     (str/index-of out "resources/conf/prod/config.edn")
+            db-q       (str/index-of out "Database")]
+        (is (nil? exit) out)
+        (is (and prod-q db-q (< prod-q db-q)) "asked before the questions it decides")
+        (is (str/includes? out "for prod") "and the questions say whose they are")
+        (is (not (str/includes? out "AI provider")) "prod never gets AI, so it is not asked")
+        (is (not (str/includes? out "Mock adapter")) "nor the mock payment provider")
+        (is (fs/exists? (conf-file dir "prod")) out)
+        (is (= dev-before (slurp (conf-file dir "dev"))))))))
 
 (deftest ^:unit a-fresh-prod-has-no-mock-payments
   (is (not (str/includes? (setup/build-config (assoc full-spec :payment :mock) "prod") ":mock"))))
@@ -1100,19 +1150,50 @@
   (with-new-project
     (fn [dir]
       (is (not (str/includes? (installed-block dir) "- payments (")))
-      (let [[exit out] (binding [setup/*wagoe-cli* (cli-command)]
-                         (run-setup dir "" "--payment" "mock"))]
+      (let [[exit out] (run-setup dir "" "--payment" "mock")]
         (is (nil? exit) out)
         (is (str/includes? (installed-block dir) "- payments (") out)
         (is (str/includes? (slurp (fs/file dir "AGENTS.md")) "<!-- gen:pitfalls -->")
             "the rest of AGENTS.md is left as it was")))))
 
-(deftest ^:integration setup-without-the-cli-says-to-refresh-agents-md
+(def ^:private module-block-re
+  #"(?s)(<!-- (wagoe:(?:available|installed)-modules) -->).*?(<!-- /\2 -->)")
+
+(defn- outside-module-blocks [text]
+  (str/replace text module-block-re "$1$3"))
+
+(defn- module-blocks [text]
+  (mapv first (re-seq module-block-re text)))
+
+(defn- cli-rendered-blocks
+  "The module blocks the CLI renders for `dir` as it is now."
+  [dir]
+  (require 'wagoe.cli.add)
+  (let [render (resolve 'wagoe.cli.add/render-module-blocks)
+        states (resolve 'wagoe.cli.add/module-states)]
+    (module-blocks (render (slurp (fs/file dir "AGENTS.md")) (states (str dir))))))
+
+(deftest ^:integration setup-and-add-agree-on-agents-md
+  ;; Setup ran whichever `wagoe` was on PATH. An older one ignored --modules and
+  ;; re-rendered AGENTS.md from its own template: camelCase API naming, no
+  ;; :public pitfall, a module table add then flipped back (BOU-577).
   (with-new-project
     (fn [dir]
-      (let [before     (slurp (fs/file dir "AGENTS.md"))
-            [exit out] (binding [setup/*wagoe-cli* nil]
-                         (run-setup dir "" "--payment" "mock"))]
-        (is (nil? exit) out)
-        (is (= before (slurp (fs/file dir "AGENTS.md"))))
-        (is (str/includes? (next-steps out) "wagoe agents update"))))))
+      (let [agents   #(slurp (fs/file dir "AGENTS.md"))
+            outside  (outside-module-blocks (agents))
+            step     (fn [label]
+                       (testing label
+                         (is (= outside (outside-module-blocks (agents)))
+                             "nothing outside the module blocks changes")
+                         (is (= (cli-rendered-blocks dir) (module-blocks (agents)))
+                             "the blocks are what the CLI renders")))]
+        (let [[exit out] (run-setup dir "" "--payment" "mock")]
+          (is (nil? exit) out)
+          (is (str/includes? (installed-block dir) "- payments (") out))
+        (step "setup")
+        (apply process/shell {:dir (str dir) :out :string :err :string}
+               (concat (cli-command) ["add" "jobs"]))
+        (step "add")
+        (let [[exit out] (run-setup dir "" "--cache" "memory")]
+          (is (nil? exit) out)
+          (step "setup again"))))))

@@ -5,7 +5,10 @@
                          ;; published artifact resolves through the POM (BOU-378).
          org.clojure/tools.cli {:mvn/version "1.4.256"}
          ;; Also bundled in Babashka; declared for the published POM (BOU-365).
-         borkdude/edamame {:mvn/version "1.6.43"}}
+         borkdude/edamame {:mvn/version "1.6.43"}
+         ;; setup renders AGENTS.md's module blocks with the CLI's own code, at
+         ;; this release, not with whichever `wagoe` is on PATH (BOU-577).
+         wagoe/cli {:local/root "../wagoe-cli"}}
  :aliases
  {:build {:replace-deps {io.github.clojure/tools.build {:git/tag "v0.10.13" :git/sha "3a3c177d"}
                          slipset/deps-deploy           {:mvn/version "0.2.5"}}

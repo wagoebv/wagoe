@@ -128,6 +128,25 @@
            sort
            vec))))
 
+(defn source-classpath
+  "`lib`'s :paths and those of every library it declares by `:local/root`,
+   transitively, as absolute paths joined for `--classpath`. Maven deps are left
+   out: for Babashka, the one runtime this is for, tools' are built in."
+  [lib]
+  (letfn [(lib-dir [l] (fs/file root-dir "libs" l))
+          (paths [l] (:paths (edn/read-string (slurp (fs/file (lib-dir l) "deps.edn")))
+                             ["src"]))
+          (closure [seen l]
+            (if (seen l)
+              seen
+              (reduce closure (conj seen l) (sort (declared-deps l)))))]
+    (->> (closure #{} lib)
+         sort
+         (cons lib)
+         distinct
+         (mapcat (fn [l] (map #(str (fs/canonicalize (fs/file (lib-dir l) %))) (paths l))))
+         (str/join fs/path-separator))))
+
 (defn require-form
   "A form that loads every namespace `lib` ships, for `clojure -M -e`.
 

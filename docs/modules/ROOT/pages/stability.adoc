@@ -201,7 +201,7 @@ rather than a commit message.
 * *One more, in `1.0.0-rc-3`:* `bb scaffold generate --cli` is gone. It named an
   interface the scaffolder has never had a generator for, so no value of the
   flag ever produced one; only a script that passes it is affected.
-* *Sixteen in `1.0.0-rc-4`:* each is under `### Breaking` in `CHANGELOG.md`
+* *Seventeen in `1.0.0-rc-4`:* each is under `### Breaking` in `CHANGELOG.md`
   with what to do about it.
 ** Every route requires a signed-in user unless it says `:public true`.
 ** `sortable-th` and `pagination` swap `outerHTML` by default.
@@ -217,12 +217,13 @@ rather than a commit message.
 ** The scaffolder refuses unknown field modifiers.
 ** `bb setup` exits 1 on a closed stdin.
 ** `bb setup` in an existing project creates no missing config file.
+** `bb setup --prod true` changes prod only, and refuses mock payments and AI.
 ** The admin hard-deletes by default and refuses a parent with has-many rows
    unless `:on-delete :cascade`.
 ** An unknown admin entity-config key stops startup.
 ** `:wagoe/payment-provider` has no default, and `:mock` runs only in dev and test.
 +
-Eighteen additions to the three frozen at `rc-1`, so the list is twenty-one.
+Nineteen additions to the three frozen at `rc-1`, so the list is twenty-two.
 `bb check:changelog` holds the rc-4 count to the `[Unreleased]` `### Breaking`
 entries, and the totals to the counts above.
 * Breaking changes that already shipped are in `CHANGELOG.md` under a
