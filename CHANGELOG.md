@@ -41,6 +41,8 @@ for what is public API, what is internal, and how deprecations are announced.
   Set `:level`/`:root-level` as wanted; copy `logback.xml`, `:provider :slf4j` and `:mcp` `:jvm-opts` from `wagoe new`.
 - **`register-user` throws `:validation-error` for a password-policy refusal** (BOU-552), not
   `:password-policy-violation`. Match on the new type; `:violations` is unchanged.
+- **Redis with no host fails the boot outside dev and test** (BOU-579), where it connected to localhost.
+  Set `REDIS_HOST` for events, cache, jobs and realtime, even if Redis runs on the same machine.
 - **The workflow API speaks kebab-case JSON, and a refused transition answers `{"error": {…}}`** (BOU-579).
   Send `workflow-id`, `entity-type`, `entity-id`; read `current-state`, and drop checks on `success`.
 - **The workflow API answers 401 without a session** (BOU-561); it was open. Send a session or
@@ -70,8 +72,6 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
-- **Redis with no host connected to localhost outside dev and test** (BOU-579). Events, cache, jobs and
-  realtime now fail the boot; set `REDIS_HOST`, even if Redis runs on the same machine.
 - **An admin event's `:id` was a string on SQLite and a UUID on PostgreSQL** (BOU-579). It is a UUID
   for a UUID id column on both; drop any string handling in subscribers.
 - **`migrate up` created tables for modules that were not switched on** (BOU-579). It now migrates
