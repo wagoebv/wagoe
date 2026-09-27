@@ -43,10 +43,11 @@
      :database    - database description string (e.g. \"PostgreSQL @ localhost:5432/mydb\")
      :web-url     - web URL (e.g. \"http://localhost:3000\")
      :admin-url   - admin URL or nil
+     :dashboard-url - dev dashboard URL or nil
      :nrepl-port  - nREPL port number
      :modules     - seq of active module name strings
      :guidance-level - current guidance level keyword"
-  [{:keys [components errors database web-url admin-url
+  [{:keys [components errors database web-url admin-url dashboard-url
            nrepl-port modules guidance-level]
     :or   {components 0 errors 0 guidance-level :full}}]
   (let [width     53
@@ -71,6 +72,7 @@
                            (when database (line (str "Database:  " database)))
                            (when web-url (line (str "Web:       " web-url)))
                            (when admin-url (line (str "Admin:     " admin-url)))
+                           (when dashboard-url (line (str "Dashboard: " dashboard-url)))
                            (when nrepl-port (line (str "nREPL:     port " nrepl-port)))
                            (line "")
                            (line (str "Modules:   " mod-str))

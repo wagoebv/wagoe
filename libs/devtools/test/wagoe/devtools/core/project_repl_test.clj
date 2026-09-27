@@ -106,6 +106,19 @@
     (is (str/includes? (status 7899) "port 7899"))
     (is (not (str/includes? (status nil) "nREPL")) "no port known, none claimed")))
 
+(deftest ^:unit the-box-shows-the-dev-dashboard-when-it-runs
+  ;; It showed Web, Admin and nREPL, but not the dashboard (BOU-580).
+  (let [status #(sut/status-text {:system   (assoc (system-of fresh-project) :wagoe/dashboard %)
+                                  :base-url "http://localhost:3001"})]
+    (is (str/includes? (status {:port 10003 :host "127.0.0.1"})
+                       "Dashboard: http://127.0.0.1:10003/dashboard"))
+    (is (str/includes? (status {:port 10003 :host "0.0.0.0"}) "http://localhost:10003/dashboard"))
+    (is (not (str/includes? (status nil) "Dashboard")) "it could not bind a port")
+    (is (not (str/includes? (sut/status-text {:system   (system-of fresh-project)
+                                              :base-url "http://localhost:3001"})
+                            "Dashboard"))
+        "not configured")))
+
 (deftest ^:unit nothing-running-has-no-dashboard
   ;; nil rather than an empty box: the caller prints "start it with (go)".
   (is (nil? (sut/status-text {:system nil :base-url "http://localhost:3000"}))))

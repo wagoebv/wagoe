@@ -1,6 +1,7 @@
 (ns wagoe.devtools.shell.dashboard.server-test
   (:require [clojure.test :refer [deftest testing is use-fixtures]]
             [clojure.string :as str]
+            [wagoe.devtools.core.project-repl :as project-repl]
             [wagoe.devtools.shell.dashboard.server]
             [integrant.core :as ig]
             ;; Loaded as a dev start loads them (dev/user.clj requires
@@ -91,6 +92,10 @@
           (is (= 200 (:status (http/get (str "http://localhost:" (:port started) "/dashboard")
                                         {:throw-exceptions false})))
               "the port it reports is the one serving")
+          (is (str/includes? (project-repl/status-text {:system   {:wagoe/dashboard started}
+                                                        :base-url "http://localhost:3000"})
+                             (str "Dashboard: http://127.0.0.1:" (:port started) "/dashboard"))
+              "and the (go) box shows that port, not the one asked for (BOU-580)")
           (finally (ig/halt-key! :wagoe/dashboard started))))
       (finally (ig/halt-key! :wagoe/dashboard squatter)))))
 
