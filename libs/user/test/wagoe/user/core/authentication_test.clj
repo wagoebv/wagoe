@@ -245,7 +245,16 @@
   (testing "password containing email username fails"
     (let [user-ctx {:email "alice@example.com"}
           result (auth/meets-password-policy? "Alice!123" strict-policy user-ctx)]
-      (is (some #(= :contains-email (:code %)) (:violations result))))))
+      (is (some #(= :contains-email (:code %)) (:violations result)))))
+
+  (testing "the email check ignores case"
+    (let [result (auth/meets-password-policy? "MyThijsPass1!" strict-policy {:email "thijs@x.nl"})]
+      (is (some #(= :contains-email (:code %)) (:violations result)))))
+
+  (testing "a local part under 3 characters is not matched (BOU-565)"
+    (doseq [email ["c@b.cd" "ab@b.cd"]]
+      (let [result (auth/meets-password-policy? "Invoice2026!" strict-policy {:email email})]
+        (is (not-any? #(= :contains-email (:code %)) (:violations result)) email)))))
 
 ;; =============================================================================
 ;; should-require-password-reset?
