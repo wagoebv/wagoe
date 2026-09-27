@@ -19,6 +19,7 @@
    fine throughout."
   (:require [clojure.test :refer [deftest is testing]]
             [clojure.string :as str]
+            [clojure.tools.cli]
             [babashka.fs :as fs]
             [babashka.process :as process]
             [wagoe.tools.ai :as ai]
@@ -307,10 +308,73 @@
 
 (deftest ^:integration a-dry-run-writes-nothing
   ;; The promise, against the real scaffolder.
-  (let [dir (str (fs/create-temp-dir))
-        {:keys [calls exit out]} (binding [*err* (java.io.StringWriter.)]
-                                   (run-main ["product module" "-y" "--dry-run" "--output-dir" dir]
-                                             spec-json process/shell))]
-    (is (= 2 (count calls)))
-    (is (nil? exit) out)
-    (is (empty? (fs/list-dir dir)) "a dry run must not write files")))
+  ;; The shell cannot run in the temp dir: the scaffolder resolves from this
+  ;; repo's deps.edn. So a command that is not dry and pointed at `dir` is never
+  ;; run, or a regression would write into the repo.
+  (let [dir  (str (fs/create-temp-dir))
+        real process/shell
+        safe (fn [opts & cmd]
+               (if (and (some #{"--dry-run"} cmd)
+                        (= dir (second (drop-while #(not= "--output-dir" %) cmd))))
+                 (apply real opts cmd)
+                 {:exit 1}))]
+    (try
+      (let [{:keys [calls exit out]} (binding [*err* (java.io.StringWriter.)]
+                                       (run-main ["product module" "-y" "--dry-run" "--output-dir" dir]
+                                                 spec-json safe))
+            scaffolder (second calls)]
+        (is (= 2 (count calls)))
+        (is (some #{"--dry-run"} scaffolder))
+        (is (= dir (second (drop-while #(not= "--output-dir" %) scaffolder))))
+        (is (nil? exit) out)
+        (is (empty? (fs/list-dir dir)) "a dry run must not write files"))
+      (finally (fs/delete-tree dir)))))
+
+(defn- plain [s] (str/replace s #"\u001b\[[0-9;]*m" ""))
+
+(deftest ^:unit force-refuses-a-module-with-several-entities
+  ;; `generate --force` drops the second entity from the wiring, then `entity`
+  ;; refuses because its files exist: exit 1 with orphaned files.
+  (let [{:keys [calls exit out]} (run-main ["invoices with line items" "-y" "--force"]
+                                           multi-entity-json (constantly {:exit 0}))]
+    (is (= 1 (count calls)) "only the parse runs")
+    (is (= 1 exit))
+    (is (str/includes? out "--force cannot regenerate a module with several entities")))
+  (testing "one entity still forces"
+    (let [{:keys [calls exit]} (run-main ["product module" "-y" "--force"]
+                                         spec-json (constantly {:exit 0}))]
+      (is (nil? exit))
+      (is (some #{"--force"} (second calls))))))
+
+(deftest ^:unit the-summary-shows-what-will-be-generated
+  (let [{:keys [out]} (run-main ["product module" "-y" "--no-http" "--public-api"]
+                                spec-json (constantly {:exit 0}))
+        out (plain out)]
+    (is (str/includes? out "HTTP ✗") "the flag, not the spec's http: true")
+    (is (str/includes? out "Public API:  ✓"))))
+
+(deftest ^:unit no-public-api-overrides-the-spec
+  (let [spec (assoc (#'scaffold/parse-ai-module-spec spec-json) :public-api true)
+        opts #(:options (clojure.tools.cli/parse-opts % scaffold/ai-option-specs))]
+    (is (false? (:public-api (opts ["--no-public-api"]))))
+    (is (nil? (:public-api (opts []))) "absent defers to the spec")
+    (is (not-any? #{"--public-api"} (first (scaffold/build-ai-commands spec (opts ["--no-public-api"])))))
+    (is (some #{"--public-api"} (first (scaffold/build-ai-commands spec (opts [])))))))
+
+(deftest ^:unit a-leading-dash-gets-one-error-and-a-hint
+  (let [{:keys [calls exit out]} (run-main ["-5%" "discount" "module"]
+                                           spec-json (constantly {:exit 0}))]
+    (is (empty? calls))
+    (is (= 1 exit))
+    (is (= 1 (count (re-seq #"Unknown option: \"-5\"" out))) out)
+    (is (str/includes? out "put -- before")))
+  (testing "and -- lets such a description through"
+    (let [{:keys [calls exit]} (run-main ["-y" "--" "-5% discount module"]
+                                         spec-json (constantly {:exit 0}))]
+      (is (nil? exit))
+      (is (= "-5% discount module" (last (first calls)))))))
+
+(deftest ^:unit an-empty-description-fails
+  (let [{:keys [calls exit]} (run-main ["--yes"] spec-json (constantly {:exit 0}))]
+    (is (empty? calls))
+    (is (= 1 exit))))

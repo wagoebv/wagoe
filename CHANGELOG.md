@@ -45,6 +45,8 @@ for what is public API, what is internal, and how deprecations are announced.
   Fix any script that passes one; `indexed` now writes an index and `optional` is honoured.
 - **`bb scaffold generate --audit` and `--pagination` are removed** (BOU-483). No generator read
   them. Drop them from any script that passes them.
+- **`bb scaffold ai` refuses unknown flags** (BOU-490). Quote the description, or put `--` before
+  one that starts with `-`.
 
 ### Fixed
 

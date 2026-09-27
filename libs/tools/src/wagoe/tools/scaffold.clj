@@ -153,17 +153,22 @@
                (when-not http ["--no-http"])
                (when public-api ["--public-api"]))))
 
+(defn apply-ai-flags
+  "`spec` with the interface flags given on the command line. An absent flag
+   defers to the spec."
+  [spec flags]
+  (merge spec (into {} (remove (comp nil? val)) (select-keys flags [:http :web :public-api]))))
+
 (defn build-ai-commands
   "The scaffolder commands an AI module spec stands for: `generate` for its
    first entity, then `entity` for each further one, in order (BOU-497).
 
-   `flags` are the options parsed off `bb scaffold ai`. `--http`, `--web` and
-   `--public-api` override the spec; the rest are appended to every command
-   that accepts them (BOU-490)."
+   `flags` are the options parsed off `bb scaffold ai`. `--[no-]http`,
+   `--[no-]web` and `--[no-]public-api` override the spec; the rest are
+   appended to every command that accepts them (BOU-490)."
   ([spec] (build-ai-commands spec {}))
   ([spec {:keys [dry-run force output-dir base-ns] :as flags}]
-   (let [{:keys [module entities http web public-api]}
-         (merge spec (into {} (remove (comp nil? val)) (select-keys flags [:http :web :public-api])))
+   (let [{:keys [module entities http web public-api]} (apply-ai-flags spec flags)
          [{:keys [name fields]} & more] entities
          shared (cond-> []
                   output-dir (into ["--output-dir" output-dir])
@@ -187,7 +192,7 @@
    [nil "--base-ns NS" "Base namespace for the module"]
    [nil "--[no-]http" "Generate the REST API (overrides the description)"]
    [nil "--[no-]web" "Generate the web UI (overrides the description)"]
-   [nil "--public-api" "API routes open to anyone"]])
+   [nil "--[no-]public-api" "API routes open to anyone (overrides the description)"]])
 
 ;; =============================================================================
 ;; Run Clojure scaffolder
@@ -362,7 +367,7 @@
 ;; Summary display
 ;; =============================================================================
 
-(defn display-generate-summary [module entity fields http web]
+(defn display-generate-summary [module entity fields http web & [public-api]]
   (println)
   (println (cyan "┌─ Summary ─────────────────────────────────────────────┐"))
   (println (str (cyan "│") " Module:  " (bold module)))
@@ -381,6 +386,8 @@
   (println (str (cyan "│") " Interfaces:  "
                 "HTTP " (if http (green "\u2713") (red "\u2717"))
                 "  Web UI " (if web (green "\u2713") (red "\u2717"))))
+  (when (some? public-api)
+    (println (str (cyan "│") " Public API:  " (if public-api (green "\u2713") (red "\u2717")))))
   (println (cyan "└───────────────────────────────────────────────────────┘")))
 
 ;; =============================================================================
@@ -693,14 +700,23 @@
            (println (dim (str/trim (str (:out result)))))
            (*exit!* 1))
 
+       ;; `generate --force` rewrites the module's wiring, schema and ports
+       ;; without the other entities, and `entity` has no --force to put them
+       ;; back: the run fails halfway and leaves orphaned files.
+       (and (:force flags) (> (count (:entities spec)) 1))
+       (do (println (red (str "--force cannot regenerate a module with several entities ("
+                              (str/join ", " (map :name (:entities spec))) ").")))
+           (println "  Remove the module's files and run again without --force.")
+           (*exit!* 1))
+
        :else
-       (let [{:keys [module entities http web]} spec
+       (let [{:keys [module entities http web public-api]} (apply-ai-flags spec flags)
              commands (build-ai-commands spec flags)
              ;; An `entity` dry run needs the module on disk, and a dry
              ;; `generate` does not put it there — so only `generate` runs.
              to-run   (if (:dry-run flags) (take 1 commands) commands)]
          (doseq [{:keys [name fields belongs-to]} entities]
-           (display-generate-summary module name fields http web)
+           (display-generate-summary module name fields http web (boolean public-api))
            (when belongs-to
              (println (str "  belongs to " (bold belongs-to)))))
          (println)
@@ -733,7 +749,7 @@
        "  bb scaffold endpoint            Interactive wizard for adding an endpoint\n"
        "  bb scaffold adapter             Interactive wizard for adding an adapter\n"
        "  bb scaffold ai <description> [--yes]    AI-powered module generation from NL description\n"
-       "      [--dry-run] [--output-dir DIR] [--base-ns NS] [--force] [--no-http] [--no-web] [--public-api]\n"
+       "      [--dry-run] [--output-dir DIR] [--base-ns NS] [--force] [--no-http] [--no-web] [--[no-]public-api]\n"
        "  bb scaffold integrate <module> [--base-ns NS]  Guide integration of a scaffolded module\n"
        "\n"
        "`bb scaffold` works inside an existing project. To create a new one:\n"
@@ -810,7 +826,9 @@
             description (str/join " " arguments)]
         (cond
           (seq errors)
-          (do (run! #(println (red %)) errors)
+          (do (run! #(println (red %)) (distinct errors))
+              (println "  Quote the description, or put -- before one that starts with -:")
+              (println "  bb scaffold ai --yes -- \"-5% discount module\"")
               (*exit!* 1))
 
           (seq description)
@@ -818,7 +836,8 @@
 
           :else
           (do (println (red "Please provide a module description."))
-              (println "  Example: bb scaffold ai \"product module with name, price, stock\""))))
+              (println "  Example: bb scaffold ai \"product module with name, price, stock\"")
+              (*exit!* 1))))
 
       (= sub "integrate")
       (do (require '[wagoe.tools.integrate :as integrate])
