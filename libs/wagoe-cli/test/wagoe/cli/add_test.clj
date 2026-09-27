@@ -155,6 +155,8 @@
       (is (= :added (add/patch-config! tmp path (str "  :wagoe/metrics\n  {:provider :no-op}\n\n"
                                                      "  :wagoe/error-reporting\n  {:provider :no-op}\n"))))
       (let [once (slurp f)]
+        (is (= #{3} (set (map (comp count second) (re-seq #"(?m)^([ {]*):wagoe/" once))))
+            "every key, the template's own included, at column 3")
         (is (str/includes? once (str "   {:provider :slf4j :level :debug}\n"
                                      "\n"
                                      "   :wagoe/metrics\n"

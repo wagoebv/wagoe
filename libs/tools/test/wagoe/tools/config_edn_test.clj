@@ -206,6 +206,8 @@
       (is (= :written (sut/inject-key! path ":wagoe/product"
                                        "\n  ;; Product module\n  :wagoe/product\n  {:enabled? true\n   :limit 3}\n" {})))
       (let [once (slurp path)]
+        (is (= #{3} (set (map #(sut/column once (:start %)) (sut/entries once ":active"))))
+            "every key, the template's own included, at column 3")
         (is (str/includes? once (str "   {:provider :slf4j :level :debug}\n"
                                      "\n"
                                      "   ;; Product module\n"

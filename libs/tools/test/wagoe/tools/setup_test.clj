@@ -700,7 +700,7 @@
       (run-setup dir "" "--database" "sqlite" "--ai-provider" "ollama" "--cache" "redis")
       (doseq [env ["dev" "test"]]
         (let [text (slurp (fs/file dir "resources" "conf" env "config.edn"))
-              cols (->> (config-edn/entries text ":active") rest
+              cols (->> (config-edn/entries text ":active")
                         (map #(- (:start %) 1 (or (str/last-index-of text "\n" (:start %)) -1))))]
           (is (contains? (set (map :key (config-edn/entries text ":active"))) ":wagoe/product") env)
           (is (= #{3} (set cols)) text)
