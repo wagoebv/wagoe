@@ -100,12 +100,14 @@
        [:div#users-table-container
         {:hx-get     hx-url
          :hx-trigger "userCreated from:body, userUpdated from:body, userDeleted from:body"
-         :hx-target  hx-target}
+         :hx-target  hx-target
+         :hx-swap    "outerHTML"}
         [:div.empty-state [:t :user/empty-state-no-users]]]
        [:div#users-table-container
         {:hx-get     hx-url
          :hx-trigger "userCreated from:body, userUpdated from:body, userDeleted from:body"
-         :hx-target  hx-target}
+         :hx-target  hx-target
+         :hx-swap    "outerHTML"}
         [:form#bulk-action-form {:hx-post   "/web/users/bulk"
                                  :hx-target "#users-table-container"
                                  :hx-swap   "outerHTML"
@@ -414,7 +416,7 @@
        ;; they were collected and then never rendered, so the form swapped back
        ;; in carrying nothing.
        (when (seq (:form errors))
-         [:div.validation-errors
+         [:div.validation-errors {:role "alert"}
           (for [err (:form errors)]
             [:p err])])
        (ui/form-field :name [:t :common/label-name]
@@ -426,7 +428,9 @@
        ;; Password field with validation feedback
        [:div {:class "form-field"}
         [:label {:for "password"} [:t :user/field-password]]
-        (ui/password-input :password rendered-password {:required true})
+        (cond-> (ui/password-input :password rendered-password {:required true})
+          (seq (:password errors))
+          (ui/describe-input :password (ui/field-error-id :password)))
         ;; Passed straight through: with a blank field and no violations to go
         ;; on, the rules render as neither met nor unmet. What was wrong with
         ;; the submitted password is said by the error below, not by ticks
@@ -438,10 +442,7 @@
         ;; errors that belong to no field, and rendering a password error in it
         ;; put a full-width panel under the field while the email error beside
         ;; it was a line of small red text (BOU-393).
-        (when (seq (:password errors))
-          [:div.field-errors
-           (for [err (:password errors)]
-             [:span.error err])])]
+        (ui/field-errors (ui/field-error-id :password) (:password errors))]
        (ui/form-field :role [:t :common/label-role]
                       (ui/select-field :role
                                        [[:user [:t :common/role-user]]
@@ -889,7 +890,7 @@
       ;; Errors on no field this form shows — :form, and :role or :active,
       ;; which self-service sets itself. Unrendered, a 400 said nothing.
       (when-let [other (seq (mapcat val (dissoc errors :name :email :password)))]
-        [:div.validation-errors
+        [:div.validation-errors {:role "alert"}
          (for [err other]
            [:p err])])
       (ui/form-field :name [:t :common/label-name]
@@ -901,7 +902,9 @@
        ;; Password field with validation feedback
       [:div {:class "form-field"}
        [:label {:for "password"} [:t :user/field-password]]
-       (ui/password-input :password "" {:required true})
+       (cond-> (ui/password-input :password "" {:required true})
+         (seq (:password errors))
+         (ui/describe-input :password (ui/field-error-id :password)))
         ;; nil violations render as neither met nor unmet — the field is never
         ;; pre-filled, so there is nothing to report against (BOU-381).
        (when policy
@@ -910,10 +913,7 @@
         ;; the name and email errors above come from `ui/form-field` in that
         ;; shape, so a password error in the form-level panel made one
         ;; submission answer in two different voices (BOU-393).
-       (when (seq (:password errors))
-         [:div.field-errors
-          (for [err (:password errors)]
-            [:span.error err])])]
+       (ui/field-errors (ui/field-error-id :password) (:password errors))]
       (ui/submit-button [:t :user/button-create-account] {:loading-text [:t :user/button-create-loading]})]]])
   ([data errors]
    (register-form data errors nil default-password-policy)))
@@ -1302,12 +1302,14 @@
        [:div#audit-table-container
         {:hx-get hx-url
          :hx-trigger "auditRefresh from:body"
-         :hx-target hx-target}
+         :hx-target hx-target
+         :hx-swap "outerHTML"}
         [:div.empty-state [:t :user/audit-empty-state]]]
        [:div#audit-table-container
         {:hx-get hx-url
          :hx-trigger "auditRefresh from:body"
-         :hx-target hx-target}
+         :hx-target hx-target
+         :hx-swap "outerHTML"}
         (ui/table-wrapper
          [:table {:class "data-table" :id "audit-table"}
           [:thead
@@ -1355,6 +1357,7 @@
    [:h3 [:t :user/audit-filters-title]]
    [:form.audit-filters-form {:hx-get "/web/audit/table"
                               :hx-target "#audit-table-container"
+                              :hx-swap "outerHTML"
                               :hx-push-url "true"}
     [:div.filter-group
      [:label {:for "action"} [:t :common/audit-action]]

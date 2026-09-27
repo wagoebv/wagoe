@@ -469,6 +469,15 @@
       (is (html-contains? response "Bob"))
       (is (html-contains? response "users-table-container"))))
 
+  (testing "the fragment is rooted at the container its callers target"
+    ;; They swap outerHTML on that assumption (BOU-386).
+    (let [service (create-mock-service)
+          config  {:active {:wagoe/settings {:user-limits {:max-users 1000}}}}]
+      (is (re-find #"^\s*<div [^>]*\bid=\"users-table-container\""
+                   (:body ((web-handlers/users-table-fragment-handler service config) {}))))
+      (is (re-find #"^\s*<div [^>]*\bid=\"audit-table-container\""
+                   (:body ((web-handlers/audit-table-fragment-handler service config) {}))))))
+
   (testing "handles errors"
     (let [service (reify ports/IUserService
                     (register-or-authenticate-user [_ _ _] {:user nil :created? false :authenticated? false :auth-result nil})

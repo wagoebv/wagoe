@@ -146,10 +146,8 @@
       (if (= htmx-target "filter-table-container")
          ; Filter action: return filter builder + table so the filter UI stays visible
         (support/htmx-fragment-response request
-                                        [:div#filter-table-container
-                                         (admin-ui/render-filter-builder entity-name entity-config filters)
-                                         (admin-ui/entity-table entity-name records entity-config table-query total-count permissions filters
-                                                               (support/display-options config request))])
+                                        (admin-ui/filter-table-container entity-name records entity-config table-query total-count permissions filters
+                                                                         (support/display-options config request)))
          ; Search / sort / pagination: return just the table
         (support/htmx-fragment-response request
                                         (admin-ui/entity-table entity-name records entity-config table-query total-count permissions filters
