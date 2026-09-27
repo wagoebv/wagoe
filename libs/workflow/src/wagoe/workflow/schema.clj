@@ -68,7 +68,11 @@
    ;; Lifecycle hooks: keys are :on-enter-<state>, :on-exit-<state>,
    ;; or :on-any-transition.  Values are vectors of 3-arity fns
    ;; (fn [updated-instance audit-entry context] ...).
-   [:hooks         {:optional true} [:map-of keyword? [:vector any?]]]])
+   [:hooks         {:optional true} [:map-of keyword? [:vector any?]]]
+   ;; Guards for this workflow, over the service's guard registry (BOU-571).
+   [:guards        {:optional true} [:map-of keyword? fn?]]
+   ;; (fn [entity-type entity-id] entity) — what a guard derefs :workflow/entity to.
+   [:entity-loader {:optional true} fn?]])
 
 ;; =============================================================================
 ;; Workflow Instance
