@@ -14,7 +14,8 @@
    without the libraries it does not declare\". This gate answers the second
    one, statically: a library may not reach for a namespace it neither owns nor
    declares, whichever loading trick it uses to get there."
-  (:require [clj-yaml.core :as yaml]
+  (:require [babashka.process :as process]
+            [clj-yaml.core :as yaml]
             [clojure.test :refer [deftest is testing]]
             [clojure.string :as str]
             [wagoe.tools.check-isolation :as sut]))
@@ -76,6 +77,23 @@
     ;; libs/e2e carries a deps.edn and no namespaces. A job that failed on it
     ;; would be reporting the wrong thing.
     (is (= "" (sut/require-form "e2e")))))
+
+(deftest ^:unit the-classpath-is-the-library-and-what-it-declares
+  ;; tools declares wagoe-cli (BOU-577). Its bare src/ failed the Babashka load
+  ;; step on a dependency it had declared.
+  (let [cp (set (str/split (sut/source-classpath "tools") #":"))
+        has? (fn [p] (some #(str/ends-with? % p) cp))]
+    (is (has? "libs/tools/src"))
+    (is (has? "libs/wagoe-cli/src") "a declared :local/root library")
+    (is (not (has? "libs/platform/src")) "an undeclared one stays out")))
+
+(deftest ^:integration tools-loads-against-its-declared-source
+  ;; The CI step, run here: Babashka, libs/tools as the directory, and nothing on
+  ;; the classpath the library does not declare.
+  (let [{:keys [exit out err]} (process/shell {:dir "libs/tools" :out :string :err :string :continue true}
+                                              "bb" "--classpath" (sut/source-classpath "tools")
+                                              "-e" (sut/require-form "tools"))]
+    (is (zero? exit) (str out err))))
 
 ;; =============================================================================
 ;; What counts as reaching outside the library
@@ -297,8 +315,9 @@
     (testing "and tools, which cannot be a cell, is loaded in isolation anyway"
       ;; It is the one library the matrix does not build, so without this step its
       ;; isolation rests entirely on the static gate.
-      (is (str/includes? src "bb --classpath src -e")
-          "the checks job must still load libs/tools against its own src"))))
+      (is (str/includes? src "(ci/source-classpath \\\"tools\\\")")
+          "the checks job must still load libs/tools against its declared source")
+      (is (str/includes? src "bb --classpath \"$cp\" -e")))))
 
 (deftest ^:unit the-known-offender-stays-fixed
   ;; realtime is the case this gate was built for. BOU-305 removed the smuggled

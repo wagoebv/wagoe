@@ -14,8 +14,10 @@ it. Add to the `:active` section of `resources/conf/dev/config.edn`:
 
 [source,clojure]
 ----
-:wagoe/dashboard {:port 9999}
+:wagoe/dashboard {:port #long #or [#env DASHBOARD_PORT 9999]}
 ----
+
+`wagoe add devtools` writes this for you.
 
 [source,clojure]
 ----
