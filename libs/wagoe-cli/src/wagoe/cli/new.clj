@@ -2,6 +2,7 @@
   (:require [clojure.java.io :as io]
             [clojure.java.shell :as shell]
             [clojure.string :as str]
+            [wagoe.cli.add :as add]
             [wagoe.cli.catalogue :as cat]
             [wagoe.cli.templates :as templates]))
 
@@ -129,7 +130,9 @@
                      ".githooks/pre-commit"                "githook-pre-commit.tmpl"}]
     (doseq [[target tmpl] files]
       (write-file! dir target (templates/render (templates/read-template tmpl) subs)))
-    (.setExecutable (io/file dir ".githooks/pre-commit") true false)))
+    (.setExecutable (io/file dir ".githooks/pre-commit") true false)
+    ;; What the files just written hold, not a list kept by hand (BOU-573).
+    (add/sync-agents-md! dir)))
 
 (defn- run-git
   "Default git runner: shells out via clojure.java.shell. Returns the sh result map."
