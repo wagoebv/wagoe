@@ -112,18 +112,12 @@
                        "../ai/src/wagoe/ai/shell/cli_entry.clj"])
                 (throw (ex-info "cli_entry.clj not found — cannot compare"
                                 {:cwd (System/getProperty "user.dir")})))
-        ;; The cond arms of make-service-from-env, which is the real chain.
-        ;; Only AI_MODEL is excluded, and only because it picks the model
-        ;; rather than the provider. OLLAMA_URL used to be excluded here too,
-        ;; on the assumption that it merely redirects the fallback — but
-        ;; make-service-from-env treats it as a deliberate choice
-        ;; (`:configured? (boolean (System/getenv "OLLAMA_URL"))`), so a remote
-        ;; Ollama was a supported setup this check called missing. Pruning the
-        ;; list the guard compares against is how the guard stops guarding.
-        chain (->> (re-seq #"\(System/getenv \"([A-Z_]+)\"\)" src)
-                   (map second)
-                   distinct
-                   (remove #{"AI_MODEL"})
+        ;; provider-env, the table make-service-from-env picks from (BOU-580).
+        ;; OLLAMA_URL is in it: the chain treats it as a deliberate choice, so
+        ;; a remote Ollama is a supported setup.
+        chain (->> (read-string (subs src (str/index-of src "(def provider-env")))
+                   last
+                   (map :var)
                    set)
         known (set (map first doctor-env/ai-provider-env-vars))]
 
