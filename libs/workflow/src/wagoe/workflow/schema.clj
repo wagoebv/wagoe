@@ -10,7 +10,8 @@
    - Which entity (type + id) is being managed
    - The current state of that entity
    - Metadata for guard / context evaluation"
-  (:require [malli.core :as m]))
+  (:require [malli.core :as m]
+            [malli.error :as me]))
 
 ;; =============================================================================
 ;; Workflow Definition
@@ -163,6 +164,7 @@
   (audit-entry-validator entry))
 
 (defn explain-workflow-definition
-  "Returns human-readable validation errors for a WorkflowDefinition."
+  "Returns human-readable validation errors for a WorkflowDefinition, keyed
+   like the definition, e.g. `{:hooks {:on-enter-paid [\"invalid type\"]}}`."
   [def]
-  (workflow-definition-explainer def))
+  (me/humanize (workflow-definition-explainer def)))
