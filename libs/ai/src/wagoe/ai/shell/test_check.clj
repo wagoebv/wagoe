@@ -78,40 +78,34 @@
 ;; Checks
 ;; =============================================================================
 
-(defn- messages [^Throwable t]
-  (->> (iterate ex-cause t)
-       (take-while some?)
-       (keep ex-message)
-       distinct
-       (str/join " — ")))
+(defn- on-classpath? [ns-sym]
+  (let [base (-> (str ns-sym) (str/replace "-" "_") (str/replace "." "/"))]
+    (boolean (some #(io/resource (str base %)) [".clj" ".cljc"]))))
 
-(defn- ns-name-of [text]
-  (some-> (re-find #"\(ns\s+(?:\^\S+\s+)*([^\s()\[\]{}]+)" (str text)) second symbol))
-
-(defn compile-errors
-  "Load `text` as it will be loaded by the test runner. Returns [message] when
-   it fails, else nil. A namespace the load created is removed again."
+(defn missing-namespaces
+  "One error per namespace `text` requires that is not on the classpath.
+   clj-kondo cannot tell an invented namespace from one it has not seen."
   [text]
-  (let [ns-sym  (ns-name-of text)
-        existed (some-> ns-sym find-ns)]
-    (try
-      (load-string text)
-      nil
-      (catch Throwable t [(str "Compile: " (messages t))])
-      (finally
-        (when (and ns-sym (not existed))
-          (remove-ns ns-sym))))))
+  (not-empty
+   (vec (for [ns-sym (required-namespaces text)
+              :when (not (on-classpath? ns-sym))]
+          (str "Requires " ns-sym ", which is not on the classpath")))))
+
+(def ^:private strict
+  "Names the model invented are errors, not the warnings they are by default.
+   Merged over the project's own config."
+  "{:linters {:unresolved-var {:level :error} :unresolved-namespace {:level :error}}}")
 
 (defn lint-errors
   "clj-kondo's warnings and errors for `text` as the file `filename`, run from
    `root` the way `bb check` runs it: the :clj-kondo alias and the project's
-   .clj-kondo config. `context-files` are linted alongside so protocol and
+   .clj-kondo config, with unresolved vars and namespaces raised to errors. `context-files` are linted alongside so protocol and
    arity checks can see the definitions; their own findings are dropped. The
    cache is off so the result depends on those files, not on what an earlier
    lint happened to leave behind. Returns [line], or nil when clean."
   [text {:keys [root filename context-files]}]
   (let [{:keys [exit out err]}
-        (apply sh/sh (concat ["clojure" "-M:clj-kondo" "--cache" "false" "--lint" "-"]
+        (apply sh/sh (concat ["clojure" "-M:clj-kondo" "--cache" "false" "--config" strict "--lint" "-"]
                              (distinct context-files)
                              ["--filename" filename :in text :dir (or root ".")]))
         ours (->> (str/split-lines (str out))
@@ -124,6 +118,7 @@
                                   (str/trim (str err out)))])))
 
 (defn check-errors
-  "Compile and lint errors for generated `text`, or nil when it passes both."
+  "Errors in generated `text`, or nil. Read and linted only: nothing the model
+   wrote runs before the user has the file (BOU-572 review)."
   [text lint-opts]
-  (not-empty (into (vec (compile-errors text)) (lint-errors text lint-opts))))
+  (not-empty (into (vec (missing-namespaces text)) (lint-errors text lint-opts))))

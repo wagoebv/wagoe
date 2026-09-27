@@ -568,8 +568,9 @@
    "org.httpkit" "ring.adapter"])
 
 (def ^:private io-symbols
-  "I/O reached without a namespace alias."
-  #"(?<![\w.\-/])(?:slurp|spit|with-open|Thread/sleep|System/getenv|java\.io\.|java\.nio\.|java\.net\.|File/|Files/|File\.)")
+  "I/O reached without a namespace alias. In-memory readers and writers are
+   not I/O."
+  #"(?<![\w.\-/*+!?<>=])(?:(?:slurp|spit|with-open)(?![\w.\-/*+!?<>=])|Thread/sleep|System/getenv|java\.io\.(?!(?:StringReader|StringWriter|PushbackReader|ByteArray\w*|CharArray\w*)\b)|java\.nio\.|java\.net\.|File/|Files/|File\.)")
 
 (defn- io-ns? [ns-name]
   (some #(or (= % ns-name) (str/starts-with? ns-name (str % "."))) io-namespaces))
@@ -604,6 +605,68 @@
         (let [end (form-end code j)]
           (recur end (conj out {:start j :end end :code (subs code j end)})))))))
 
+(def ^:private meta-re
+  "Metadata before a name: ^:kw, ^Type or ^{...}."
+  "(?:\\^(?:\\{[^}]*\\}|\\S+)\\s+)*")
+
+(def ^:private named-form
+  (re-pattern (str "^(\\((?:deftest|defn-?|def|defmacro)\\s+" meta-re ")([^\\s()\\[\\]{}]+)")))
+
+(defn- blank [s] (str/replace s #"[^\n]" " "))
+
+(defn- without-name
+  "`form-code` with the name it defines blanked: `slurp-lines-test` is a name,
+   not a call."
+  [form-code]
+  (if-let [[_ head n] (re-find named-form form-code)]
+    (str head (blank n) (subs form-code (+ (count head) (count n))))
+    form-code))
+
+(defn- element-end
+  "Index just past the vector element that starts at `i`."
+  [^String code i]
+  (let [c (.charAt code i)]
+    (cond
+      (#{\( \[ \{} c) (form-end code i)
+      (and (#{\# \' \@ \` \~} c) (< (inc i) (count code))
+           (#{\( \[ \{} (.charAt code (inc i))))
+      (form-end code (inc i))
+      :else
+      (loop [j i]
+        (if (or (>= j (count code))
+                (Character/isWhitespace (.charAt code j))
+                (#{\( \) \[ \] \{ \} \,} (.charAt code j)))
+          j
+          (recur (inc j)))))))
+
+(defn- blank-redef-targets
+  "`code` with the vars a `with-redefs` binding vector replaces blanked.
+   Stubbing `slurp` is what a unit test does instead of I/O."
+  [^String code]
+  (loop [code code from 0]
+    (let [k (str/index-of code "(with-redefs" from)
+          v (when k (str/index-of code "[" k))]
+      (if-not v
+        code
+        (let [code (loop [i (inc v) n 0 code code]
+                     (cond
+                       (>= i (count code))                              code
+                       (or (Character/isWhitespace (.charAt code i))
+                           (= \, (.charAt code i)))                      (recur (inc i) n code)
+                       (= \] (.charAt code i))                          code
+                       :else
+                       (let [e (element-end code i)]
+                         (recur e (inc n)
+                                (if (even? n)
+                                  (str (subs code 0 i) (blank (subs code i e)) (subs code e))
+                                  code)))))]
+          (recur code (inc v)))))))
+
+(defn- scanned
+  "The part of a form that says what it touches."
+  [form-code]
+  (-> form-code without-name blank-redef-targets))
+
 (defn- touches-io? [form-code prefixes io-names]
   (boolean
    (or (re-find io-symbols form-code)
@@ -616,6 +679,16 @@
              io-names))))
 
 (def ^:private pyramid-tag #"\^:(?:unit|integration|contract)\s+")
+
+(defn- drop-pyramid-meta
+  "`meta-str` without pyramid tags, as ^:kw or inside a ^{...} map."
+  [meta-str]
+  (-> meta-str
+      (str/replace pyramid-tag "")
+      (str/replace #"\^\{([^}]*)\}\s*"
+                   (fn [[_ body]]
+                     (let [b (str/trim (str/replace body #":(?:unit|integration|contract)\s+true\s*" ""))]
+                       (if (str/blank? b) "" (str "^{" b "} ")))))))
 
 (defn tag-tests
   "Give every deftest in `test-source` exactly one pyramid tag, from what it
@@ -631,28 +704,29 @@
     (let [code     (strip-noncode test-source)
           prefixes (io-prefixes test-source)
           forms    (top-level-forms code)
-          def-name #"^\((?:defn-?|def|defmacro)\s+(?:\^\S+\s+)*([^\s()\[\]{}]+)"
           io-names (loop [names #{}]
                      (let [more (into names
                                       (keep (fn [{fc :code}]
-                                              (when-let [[_ n] (re-find def-name fc)]
-                                                (when (touches-io? fc prefixes names) n))))
+                                              (when-let [[_ _ n] (re-find named-form fc)]
+                                                (when (and (not (str/starts-with? fc "(deftest"))
+                                                           (touches-io? (scanned fc) prefixes names))
+                                                  n))))
                                       forms)]
                        (if (= more names) names (recur more))))
           fixture-io? (some (fn [{fc :code}]
                               (and (str/starts-with? fc "(use-fixtures")
-                                   (touches-io? fc prefixes io-names)))
+                                   (touches-io? (scanned fc) prefixes io-names)))
                             forms)
           io-tag   (if (= :contract test-type) :contract :integration)]
       (reduce
        (fn [src {:keys [start end]}]
          (let [form (subs src start end)]
-           (if-let [[head deftest meta-str] (re-find #"^(\(deftest\s+)((?:\^\S+\s+)*)" form)]
-             (let [tag (if (or fixture-io? (touches-io? (subs code start end) prefixes io-names))
+           (if-let [[head deftest meta-str] (re-find (re-pattern (str "^(\\(deftest\\s+)(" meta-re ")")) form)]
+             (let [tag (if (or fixture-io? (touches-io? (scanned (subs code start end)) prefixes io-names))
                          io-tag
                          :unit)]
                (str (subs src 0 start)
-                    deftest "^" tag " " (str/replace meta-str pyramid-tag "")
+                    deftest "^" tag " " (drop-pyramid-meta meta-str)
                     (subs form (count head))
                     (subs src end)))
              src)))

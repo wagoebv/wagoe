@@ -286,6 +286,34 @@
     (let [src "(def doc \"call deftest here\")\n;; deftest goes at the top\n"]
       (is (= src (parsing/tag-tests src :unit)))))
 
+  ;; BOU-572 review: five shapes that were tagged ^:integration, or kept two tags.
+  (testing "a test named after an I/O function is not I/O"
+    (is (str/includes? (parsing/tag-tests "(deftest slurp-lines-test\n  (is (= 1 1)))" :unit)
+                       "(deftest ^:unit slurp-lines-test"))
+    ;; Named exactly like one, the right-hand boundary does not help.
+    (is (str/includes? (parsing/tag-tests "(deftest slurp\n  (is (= \"x\" (sut/read-it))))" :unit)
+                       "(deftest ^:unit slurp")))
+
+  (testing "a function whose name starts with one is not I/O"
+    (is (str/includes? (parsing/tag-tests "(deftest spitball-test\n  (is (= 2 (spitball 1))))" :unit)
+                       "(deftest ^:unit spitball-test")))
+
+  (testing "stubbing I/O with with-redefs is not I/O"
+    (let [src (str mocked-ns "(deftest stub-test\n"
+                   "  (with-redefs [slurp (constantly \"x\") jdbc/execute! (fn [& _] [])]\n"
+                   "    (is (= \"x\" (read-it)))))\n")]
+      (is (str/includes? (parsing/tag-tests src :unit) "(deftest ^:unit stub-test"))))
+
+  (testing "an in-memory reader is not I/O"
+    (let [src "(deftest reader-test\n  (is (= \\a (char (.read (java.io.StringReader. \"a\"))))))"]
+      (is (str/includes? (parsing/tag-tests src :unit) "(deftest ^:unit reader-test"))))
+
+  (testing "a map tag is replaced, not kept beside the new one"
+    (is (= "(deftest ^:unit a-test\n  (is (= 1 1)))"
+           (parsing/tag-tests "(deftest ^{:integration true} a-test\n  (is (= 1 1)))" :unit)))
+    (is (= "(deftest ^:unit ^{:security true} a-test\n  (is (= 1 1)))"
+           (parsing/tag-tests "(deftest ^{:integration true :security true} a-test\n  (is (= 1 1)))" :unit))))
+
   (testing "an indented deftest keeps its indentation"
     (is (= "  (deftest ^:unit foo-test)" (parsing/tag-tests "  (deftest foo-test)" :unit))))
 

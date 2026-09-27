@@ -350,7 +350,7 @@
 (def gen-tests-opts
   [["-o" "--output FILE" "Write to this file instead of stdout"]
    ["-w" "--write" "Write to the conventional test path for the source file"]
-   ["-f" "--force" "Overwrite an existing test file; write one that fails to compile or lint"]
+   ["-f" "--force" "Overwrite an existing test file; write one that fails its checks"]
    ["-h" "--help"]])
 
 (defn gen-tests-outcome
@@ -414,7 +414,7 @@
           (System/exit 1))
         (case (gen-tests-outcome result dest (:force options))
           :refuse
-          (do (println (red "The generated namespace fails to compile or lint, after one retry:"))
+          (do (println (red "The generated namespace fails its checks, after one retry:"))
               (print-check-errors (:check-errors result))
               (println (dim "Nothing written. Re-run with --force to write it anyway."))
               (System/exit 1))

@@ -125,6 +125,6 @@ bb ai gen-tests src/<your-project>/product/core/product.clj
 
 Generates a complete test namespace from the source file using Wagoe conventions.
 The model sees the real protocols and vars of every namespace the source requires.
-The answer is compiled and linted as `bb check` lints it, and retried once with the
+The answer is linted as `bb check` lints it, never run, and retried once with the
 errors; if it still fails nothing is written unless you pass `--force`. Each
 `deftest` is tagged `^:unit` unless it does real I/O.
