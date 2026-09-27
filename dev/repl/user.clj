@@ -214,6 +214,7 @@
                    :errors         0
                    :web-url        base-url
                    :admin-url      (when admin-path (str base-url admin-path))
+                   :dashboard-url  (project-repl/dashboard-url sys)
                    :nrepl-port     7888
                    :modules        modules
                    :guidance-level level}))))))

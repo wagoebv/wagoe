@@ -221,7 +221,7 @@
     (and (.exists f)
          (str/includes? (slurp f) "wagoe-tools"))))
 
-(defn- print-help []
+(defn print-help []
   (println (bold "wagoe doctor") " — check a project and say what to do next")
   (println)
   (println "Usage:")

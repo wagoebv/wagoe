@@ -88,5 +88,5 @@
   ;; The bind decides, not a guess about privileges.
   (with-redefs [server/check-host-bindable! (fn [_] nil)
                 ring.adapter.jetty/run-jetty (fn [_ _] ::server)]
-    (is (= {:server ::server :port 80}
+    (is (= {:server ::server :port 80 :host "127.0.0.1"}
            (ig/init-key :wagoe/dashboard {:port 80})))))

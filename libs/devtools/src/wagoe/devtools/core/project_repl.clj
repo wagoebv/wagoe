@@ -126,6 +126,15 @@
 ;; The dashboard
 ;; =============================================================================
 
+(defn dashboard-url
+  "The dev dashboard's URL at the port it bound, which is not the configured
+   one when that was busy. nil when it is not configured or found no port."
+  [system]
+  (when-let [{:keys [port host]} (:wagoe/dashboard system)]
+    (when port
+      (str "http://" (if (contains? #{nil "0.0.0.0" "::"} host) "localhost" host)
+           ":" port "/dashboard"))))
+
 (defn status-text
   "The startup dashboard, or nil when nothing is running.
 
@@ -139,10 +148,11 @@
   [{:keys [system base-url nrepl-port]}]
   (when system
     (guidance/format-startup-dashboard
-     {:components (count system)
-      :errors     0
-      :web-url    base-url
-      :admin-url  (when-let [prefix (get-in system [:wagoe/admin-routes :web-prefix])]
-                    (str base-url prefix))
-      :nrepl-port nrepl-port
-      :modules    (module-names system)})))
+     {:components    (count system)
+      :errors        0
+      :web-url       base-url
+      :admin-url     (when-let [prefix (get-in system [:wagoe/admin-routes :web-prefix])]
+                       (str base-url prefix))
+      :dashboard-url (dashboard-url system)
+      :nrepl-port    nrepl-port
+      :modules       (module-names system)})))

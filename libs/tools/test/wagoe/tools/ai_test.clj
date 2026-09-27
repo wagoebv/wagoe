@@ -148,6 +148,18 @@
       (is (< (or (str/index-of out "Fix: Start the database.") Long/MAX_VALUE)
              (str/index-of out "MODEL SUMMARY"))))))
 
+(deftest ^:unit help-lists-every-variable-the-ai-env-chain-reads
+  ;; It listed no Replicate variables (BOU-580). The chain is
+  ;; wagoe.ai.shell.cli-entry/provider-env; bb cannot load it, so it is read
+  ;; from source.
+  (let [src   (slurp "libs/ai/src/wagoe/ai/shell/cli_entry.clj")
+        form  (read-string (subs src (str/index-of src "(def provider-env")))
+        vars  (map :var (last form))
+        help  (with-out-str (ai/-main "--help"))]
+    (is (some #{"REPLICATE_API_TOKEN"} vars))
+    (doseq [v (conj vars "AI_MODEL")]
+      (is (str/includes? help v) v))))
+
 (deftest ^:unit help-marks-the-experimental-commands
   (testing "BOU-511/512/513: gen-tests, explain and sql are labelled experimental"
     (let [lines (str/split-lines (with-out-str (ai/-main "--help")))]
