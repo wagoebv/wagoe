@@ -192,3 +192,14 @@
                                   #"(?s):wagoe/(metrics|error-reporting)\s*\{[^}]*\}" "")]]
     (doseq [bad [":mock" ":memory" ":in-memory" ":no-op" ":wagoe/ai-service"]]
       (is (not (str/includes? prod bad)) (str name "'s prod snippet has " bad)))))
+
+(deftest ^:unit always-on-matches-the-platform
+  ;; AGENTS.md lists these as installed without a config key; the platform's
+  ;; always-on-modules is what makes that true (BOU-573).
+  (let [src      (some #(let [f (io/file % "platform/src/wagoe/platform/shell/modules.clj")]
+                          (when (.exists f) (slurp f)))
+                       [".." "libs"])
+        platform (clojure.edn/read-string
+                  (second (re-find #"(?s)\(def always-on-modules\s+\"(?:[^\"\\]|\\.)*\"\s+(#\{[^}]*\})" src)))]
+    (is (seq platform) "always-on-modules moved or changed shape")
+    (is (= platform (set (keep :always-on (:modules (cat/load-catalogue))))))))

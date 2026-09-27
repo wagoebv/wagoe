@@ -71,6 +71,10 @@ for what is public API, what is internal, and how deprecations are announced.
 - **Scaffolded migrations lost their indexes on SQLite and failed on PostgreSQL and MySQL** (BOU-569).
   Add `--;;` between the statements of older generated migrations; MySQL gets its own types.
 - **`bb scaffold ai --help` answered "Unknown option"** (BOU-569). It prints the usage.
+- **`bb setup` told you to copy `.env.example` over an existing `.env`** (BOU-573), replacing `JWT_SECRET`.
+  It now names only the variables `.env` lacks.
+- **A generated AGENTS.md listed modules already in deps.edn as ones to add** (BOU-573). `wagoe add` and
+  `bb setup` now keep its module section in line; run `wagoe agents update` in an existing project.
 - **`wagoe add` and `bb setup --prod true` left prod behind** (BOU-564). Both now bring every
   profile the project's modules; re-run `wagoe add <module>` for one prod lacks.
 - **`wagoe add payments` wrote the mock provider, which accepts any webhook as paid, into prod** (BOU-564).
@@ -186,6 +190,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **Workflow guards see the instance, and can load its entity** (BOU-571). Declare `:guards` and an
+  `:entity-loader` on the workflow; old guards still get the context. Workflow config is just `{}`.
 - **The scaffolder writes admin config** (BOU-562). With the admin on, `generate` and `entity` add each
   entity's file (never over an existing one), allowlist entry and `#include`, with secret columns hidden.
 - **Admin writes publish lifecycle events** (BOU-492). With `:wagoe/events` on,

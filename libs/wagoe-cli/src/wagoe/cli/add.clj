@@ -137,6 +137,24 @@
 (defn- config-key-of [snippet]
   (second (re-find #":(\S+)" snippet)))
 
+(defn- active-keys
+  "The keys of the :active map in config `text`, or nil when it does not read.
+   Aero's tags are read as their values."
+  [text]
+  (try
+    (let [active (:active (edn/read-string {:default (fn [_ v] v)} text))]
+      (when (map? active) (set (keys active))))
+    (catch Exception _ nil)))
+
+(defn- in-active?
+  "Whether `config-key` (\"wagoe/jobs\") is a key of :active in `text`. A key
+   parked under :inactive does not count. Text that does not read falls back
+   to a search, so a key is never written twice into a file we cannot parse."
+  [text config-key]
+  (if-let [ks (active-keys text)]
+    (contains? ks (keyword config-key))
+    (str/includes? text (str ":" config-key))))
+
 (defn patch-config!
   "Inject snippet into the :active map of a config file unless its key is there.
    Returns :added, :present, or :no-active when there is no :active map to
@@ -145,7 +163,7 @@
   (let [f          (io/file dir relative-path)
         content    (slurp f)
         config-key (config-key-of snippet)]
-    (if (str/includes? content (str ":" config-key))
+    (if (in-active? content config-key)
       :present
       (let [active-idx (str/index-of content ":active")
             open-idx   (when active-idx (str/index-of content "{" (+ active-idx 7)))
@@ -213,8 +231,8 @@
   [dir module dep-present?]
   (and dep-present?
        (every? (fn [[env snippet]]
-                 (str/includes? (slurp (io/file dir "resources/conf" env "config.edn"))
-                                (str ":" (config-key-of snippet))))
+                 (in-active? (slurp (io/file dir "resources/conf" env "config.edn"))
+                             (config-key-of snippet)))
                (target-profiles dir module))))
 
 (defn patch-env-example!
@@ -236,28 +254,84 @@
                        (str/join "\n" (map #(str % "=") missing)) "\n"))
           (vec missing))))))
 
-;; ─── AGENTS.md patching ──────────────────────────────────────────────────────
+;; ─── AGENTS.md module blocks ──────────────────────────────────────────────
 
-(defn patch-agents-md!
-  "Remove module row from available block; append to installed block."
-  [dir {:keys [name docs-url]}]
+(defn- extra-modules
+  "The keys in :extra-modules of the project's system_config.clj files."
+  [dir]
+  (let [src (io/file dir "src")]
+    (set (for [f     (when (.isDirectory src) (file-seq src))
+               :when (= "system_config.clj" (.getName ^java.io.File f))
+               [_ ks] (re-seq #":extra-modules\s+#\{([^}]*)\}" (slurp f))
+               k     (re-seq #":[\w.-]+/[\w.-]+" ks)]
+           k))))
+
+(defn- switched-on?
+  "Whether `module-key` is in dev's :active or in the code's :extra-modules."
+  [dir module-key]
+  (let [dev (io/file dir "resources/conf/dev/config.edn")
+        k   (str module-key)]
+    (or (contains? (extra-modules dir) k)
+        (and (.exists dev) (in-active? (slurp dev) (subs k 1))))))
+
+(defn module-states
+  "Each catalogue module with where the project has it: :enabled, :configurable
+   (in deps.edn, not switched on) or :absent. A module with a :module-key is on
+   when that key is in config or :extra-modules; the other core modules and the
+   :always-on ones are wired whatever config says; the rest need their config
+   key in every profile."
+  [dir]
+  (let [deps (slurp (io/file dir "deps.edn"))]
+    (for [m (:modules (cat/load-catalogue))
+          :let [dep (dep-coords deps (:clojars m) (:scope m))]]
+      [m (cond
+           (or (nil? dep) (= :unreadable dep)) :absent
+           (:module-key m)                     (if (switched-on? dir (:module-key m)) :enabled :configurable)
+           (or (= :core (:category m))
+               (:always-on m)
+               (installed? dir m true))        :enabled
+           :else                               :configurable)])))
+
+(defn- module-table [modules]
+  (str "| Module | Description | Command |\n"
+       "|--------|-------------|---------|\n"
+       (apply str (for [{:keys [name description module-key]} modules]
+                    (str "| " name " | " description " | "
+                         (if module-key
+                           (str "add `" module-key "` to `:extra-modules` in system_config.clj")
+                           (str "`wagoe add " name "`"))
+                         " |\n")))))
+
+(defn render-module-blocks
+  "`content` with the available- and installed-modules blocks rendered from
+   `states`, as `module-states` returns them."
+  [content states]
+  (let [of        (fn [s] (map first (filter #(= s (second %)) states)))
+        available (str "\n"
+                       (when-let [ms (seq (of :configurable))]
+                         (str "In deps.edn but not switched on. `wagoe add <module>` writes its config key.\n\n"
+                              (module-table ms) "\n"))
+                       (when-let [ms (seq (of :absent))]
+                         (str "Not in deps.edn. `wagoe add <module>` adds the dependency and its config.\n\n"
+                              (module-table ms))))
+        installed (str "\n## Installed Modules\n\n"
+                       (apply str (for [{:keys [name clojars docs-url]} (of :enabled)]
+                                    (str "- " name " (`" clojars "`) — [docs](" docs-url ")\n"))))]
+    (-> content
+        (templates/replace-block "wagoe:available-modules" available)
+        (templates/replace-block "wagoe:installed-modules" installed))))
+
+(defn sync-agents-md!
+  "Rewrite AGENTS.md's module blocks to match deps.edn and config.edn."
+  [dir]
   (let [f (io/file dir "AGENTS.md")]
     (when (.exists f)
       (let [content (slurp f)]
-        (if-not (str/includes? content "<!-- wagoe:available-modules -->")
+        (if-not (templates/block-content content "wagoe:available-modules")
           (println "  Warning: AGENTS.md sentinel comments not found — skipping AGENTS.md update")
-          (let [without-row  (templates/update-block
-                              content "wagoe:available-modules"
-                              #(str/replace % (templates/module-row-pattern name) ""))
-                install-line (str "- " name " — [docs](" docs-url ")\n")
-                ;; Re-running add to reach a profile it missed must not list
-                ;; the module twice.
-                with-install (if (str/includes? without-row install-line)
-                               without-row
-                               (str/replace without-row
-                                            "<!-- /wagoe:installed-modules -->"
-                                            (str install-line "<!-- /wagoe:installed-modules -->")))]
-            (spit f with-install)))))))
+          (let [synced (render-module-blocks content (module-states dir))]
+            (when (not= synced content)
+              (spit f synced))))))))
 
 ;; ─── Main ────────────────────────────────────────────────────────────────────
 
@@ -291,24 +365,16 @@
               ;; in every profile it belongs in. Requiring dep-present? prevents false
               ;; positives when two modules share a config key (e.g. email and external
               ;; both use :wagoe.external/smtp).
-              wired?       (if (seq (target-profiles dir module))
-                             (installed? dir module dep-present?)
-                             ;; No config snippet — check AGENTS.md installed section to avoid
-                             ;; false positives from pre-installed deps (e.g. wagoe-external).
-                             (let [agents-f (io/file dir "AGENTS.md")]
-                               (if (.exists agents-f)
-                                 (let [content          (slurp agents-f)
-                                       installed-start  (str/index-of content "<!-- wagoe:installed-modules -->")
-                                       installed-end    (str/index-of content "<!-- /wagoe:installed-modules -->")]
-                                   (if (and installed-start installed-end)
-                                     (str/includes? (subs content installed-start installed-end) module-name)
-                                     dep-present?))
-                                 dep-present?)))]
+              wired?       (installed? dir module dep-present?)]
           (cond
             (and dep-present? existing-ver (not= existing-ver (:version module)))
             (do (println (str "Warning: " module-name " is already in deps.edn at version " existing-ver
                               " (catalogue version: " (:version module) ")."))
                 (println "Resolve the version conflict manually — no changes made."))
+
+            (and dep-present? (:module-key module) (not (switched-on? dir (:module-key module))))
+            (println (str "Module '" module-name "' is in deps.edn but switched off. Add "
+                          (:module-key module) " to :extra-modules in src/<project>/system_config.clj."))
 
             wired?
             (println (str "Module '" module-name "' is already installed."))
@@ -338,7 +404,7 @@
                                                  :no-active "no :active map in config.edn, nothing written"))))
                 (when-let [vs (patch-env-example! dir module results)]
                   (println (str "  .env.example: added " (str/join ", " vs)))))
-              (patch-agents-md! dir module)
+              (sync-agents-md! dir)
               (println (str "\n" module-name " added"))
               ;; Said at install time, not left on a page the user reads later:
               ;; an incubating library is published and usable but outside the

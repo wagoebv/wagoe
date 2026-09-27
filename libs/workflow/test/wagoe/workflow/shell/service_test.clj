@@ -4,6 +4,7 @@
    Uses in-memory doubles for IWorkflowStore and IWorkflowRegistry
    to exercise the full transition orchestration without a real DB."
   (:require [clojure.java.io :as io]
+            [clojure.string :as str]
             [clojure.test :refer [deftest testing is use-fixtures]]
             [wagoe.workflow.ports :as ports]
             [wagoe.workflow.shell.registry :as registry]
@@ -454,3 +455,261 @@
       (let [result (ports/process-auto-transitions! auto-svc :ghost-workflow)]
         (is (= 0 (:processed result)))
         (is (= 0 (:attempted result)))))))
+
+;; =============================================================================
+;; What a guard sees (BOU-571)
+;; =============================================================================
+
+(def ^:private deliver-def
+  {:id            :deliver-workflow
+   :initial-state :draft
+   :states        #{:draft :delivered}
+   :transitions   [{:from :draft :to :delivered :name :deliver :guard :ok?}]})
+
+(defn- start-deliver!
+  "A service over `definition` with `guards` as its registry, and an instance of it."
+  [definition guards]
+  (registry/register-workflow! definition)
+  (let [svc (service/create-workflow-service (create-memory-store) *registry* nil guards)]
+    [svc (ports/start-workflow! svc {:workflow-id (:id definition)
+                                     :entity-type :invoice
+                                     :entity-id   (UUID/randomUUID)})]))
+
+(deftest ^:unit a-guard-sees-the-instance-and-the-context
+  (let [seen           (atom nil)
+        [svc instance] (start-deliver! deliver-def {:ok? (fn [in] (reset! seen in) true)})
+        forged         {:id (UUID/randomUUID)}]
+    (is (:success? (ports/transition! svc {:instance-id (:id instance)
+                                           :transition  :deliver
+                                           :context     {:by "test" :workflow/instance forged}})))
+    (testing "the caller's keys stay where one-argument guards read them"
+      (is (= "test" (:by @seen))))
+    (testing "the instance is the stored one, not what the caller sent"
+      (is (= (:id instance) (:id (:workflow/instance @seen))))
+      (is (= :draft (:current-state (:workflow/instance @seen)))))
+    (testing "no loader, no entity"
+      (is (not (contains? @seen :workflow/entity))))
+    (testing "the audit entry keeps the caller's context"
+      (is (= {:by "test" :workflow/instance forged}
+             (:context (first (ports/audit-log svc (:id instance)))))))))
+
+(deftest ^:unit a-guard-loads-the-entity-through-the-workflows-loader
+  (let [calls          (atom [])
+        lines          (atom 0)
+        definition     (assoc deliver-def
+                              :entity-loader (fn [entity-type entity-id]
+                                               (swap! calls conj [entity-type entity-id])
+                                               {:line-count @lines})
+                              :guards {:ok? (fn [{:workflow/keys [entity]}]
+                                              (pos? (:line-count @entity)))})
+        ;; The service's registry is what `wagoe add workflow` passes: empty.
+        [svc instance] (start-deliver! definition {})]
+    (testing "a guard on the definition is found, and refuses with no lines"
+      (is (= :guard-rejected
+             (get-in (ports/transition! svc {:instance-id (:id instance) :transition :deliver})
+                     [:error :type]))))
+    (testing "the loader got the instance's entity"
+      (is (= [[:invoice (:entity-id instance)]] @calls)))
+    (testing "available-transitions runs the same guard"
+      (is (false? (:enabled? (first (ports/available-transitions svc (:id instance) [] nil))))))
+    (reset! lines 2)
+    (is (:success? (ports/transition! svc {:instance-id (:id instance) :transition :deliver})))))
+
+(deftest ^:unit a-caller-cannot-hand-a-guard-an-entity
+  ;; Context arrives as JSON on the transition route, and instance metadata is
+  ;; merged into it for auto-transitions; neither may supply :workflow/* keys.
+  (let [seen           (atom nil)
+        [svc instance] (start-deliver! deliver-def {:ok? (fn [in] (reset! seen in) true)})]
+    (is (:success? (ports/transition! svc {:instance-id (:id instance)
+                                           :transition  :deliver
+                                           :context     {:by              "test"
+                                                         :workflow/entity {:line-count 5}
+                                                         :workflow/other  1}})))
+    (is (= "test" (:by @seen)))
+    (is (= #{:workflow/instance}
+           (set (filter #(= "workflow" (namespace %)) (keys @seen)))))))
+
+(def ^:private failing-loader-def
+  (assoc deliver-def
+         :transitions   [{:from :draft :to :delivered :name :deliver :guard :ok?}
+                         {:from :draft :to :cancelled}]
+         :states        #{:draft :delivered :cancelled}
+         :entity-loader (fn [_ _] (throw (RuntimeException. "db down")))
+         :guards        {:ok? (fn [{:workflow/keys [entity]}] (some? @entity))}))
+
+(deftest ^:unit a-failing-loader-is-a-typed-error-on-transition
+  (let [[svc instance] (start-deliver! failing-loader-def {})
+        e              (try (ports/transition! svc {:instance-id (:id instance) :transition :deliver})
+                            nil
+                            (catch clojure.lang.ExceptionInfo e e))]
+    (is (= {:type        :internal-error
+            :workflow-id :deliver-workflow
+            :entity-type :invoice
+            :entity-id   (:entity-id instance)}
+           (select-keys (ex-data e) [:type :workflow-id :entity-type :entity-id])))
+    (is (= "db down" (ex-message (ex-cause e))))))
+
+(deftest ^:unit a-failing-loader-disables-only-the-guarded-transitions
+  ;; The instance page reads available-transitions; one bad loader must not 500 it.
+  (let [[svc instance] (start-deliver! failing-loader-def {})
+        by-id          (into {} (map (juxt :id identity))
+                             (ports/available-transitions svc (:id instance) [] nil))]
+    (is (false? (:enabled? (by-id :deliver))))
+    (is (true? (:enabled? (by-id :cancelled))))))
+
+(deftest ^:unit the-entity-is-loaded-only-when-a-guard-asks
+  (let [calls          (atom 0)
+        definition     (assoc deliver-def :entity-loader (fn [_ _] (swap! calls inc) {}))
+        [svc instance] (start-deliver! definition {:ok? (constantly true)})]
+    (is (:success? (ports/transition! svc {:instance-id (:id instance) :transition :deliver})))
+    (is (zero? @calls))))
+
+(defn- bind-symbols
+  "Evaluate `form` with each symbol in `bindings` bound to its value."
+  [form bindings]
+  ((eval `(fn [{:syms [~@(keys bindings)]}] ~form)) bindings))
+
+(defn- documented-guard-workflow
+  "The workflow the guard example under `heading` defines, with
+   `count-invoice-lines` bound to `count-fn`."
+  [path heading re count-fn]
+  (let [block (first-block-under path heading re)
+        forms (when block (read-string (str "[" block "]")))
+        d     (first (filter #(and (seq? %) (= 'def (first %))) forms))]
+    (is (some? d) (str "the guard example in " path " defines nothing"))
+    (some-> d (nth 2) (bind-symbols {'count-invoice-lines count-fn}))))
+
+(deftest ^:unit the-documented-guard-example-runs
+  (doseq [[path heading re] [["AGENTS.md" "## Guards" md-block]
+                             ["../../docs/modules/libraries/pages/workflow.adoc"
+                              "== Guards" adoc-block]]]
+    (testing path
+      (registry/clear-registry!)
+      (let [lines      (atom {})
+            definition (documented-guard-workflow path heading re
+                                                  (fn [id] (count (get @lines id))))
+            _          (registry/register-workflow! definition)
+            svc        (service/create-workflow-service (create-memory-store) *registry* nil {})
+            invoice-id (UUID/randomUUID)
+            instance   (ports/start-workflow! svc {:workflow-id (:id definition)
+                                                   :entity-type :invoice
+                                                   :entity-id   invoice-id})
+            deliver!   #(ports/transition! svc {:instance-id (:id instance)
+                                                :transition  :deliver
+                                                :actor-roles [:admin]})]
+        (testing "an invoice with no lines is not delivered"
+          (is (= :guard-rejected (get-in (deliver!) [:error :type]))))
+        (swap! lines assoc invoice-id [{:qty 1}])
+        (testing "one line is enough"
+          (is (:success? (deliver!))))))))
+
+;; =============================================================================
+;; The documented calls run, and return what their `;; =>` says (BOU-571)
+;; =============================================================================
+
+(defn- shown-result
+  "What the `;; =>` comment after a form shows: the rest of the line the form
+   ends on, plus the comment lines directly under it. ::none without an `=>`,
+   and ::partial for a result elided with `...`."
+  [lines end-line end-col]
+  (let [tail  (subs (nth lines (dec end-line)) (min (dec end-col) (count (nth lines (dec end-line)))))
+        below (take-while #(str/starts-with? (str/triml %) ";") (drop end-line lines))
+        text  (str/join "\n" (cons tail below))
+        i     (str/index-of text "=>")]
+    (if-not i
+      ::none
+      (let [shown (->> (str/split-lines (subs text (+ 2 i)))
+                       (map #(str/replace-first (str/triml %) #"^;+" ""))
+                       (str/join "\n"))]
+        (if (str/includes? shown "...")
+          ::partial
+          (read-string shown))))))
+
+(defn- block-results
+  "Evaluate `block` form by form, returning {:form :shown :actual :error} for
+   each. Stops after a form that throws: the rest of the block depends on it."
+  [block]
+  (let [lines (str/split-lines block)
+        rdr   (clojure.lang.LineNumberingPushbackReader. (java.io.StringReader. block))]
+    (loop [out []]
+      (let [form (read {:eof ::eof} rdr)]
+        (if (= ::eof form)
+          out
+          (let [[actual error] (try [(eval form) nil]
+                                    (catch Exception e [nil e]))
+                result         {:form   form
+                                :shown  (shown-result lines (.getLineNumber rdr) (.getColumnNumber rdr))
+                                :actual actual
+                                :error  error}]
+            (if error (conj out result) (recur (conj out result)))))))))
+
+(defn- documented-results
+  "Evaluate the first code block under each heading, in order, in one fresh
+   namespace with `engine` and `order-uuid` bound. Returns every form's result,
+   tagged with its heading."
+  [path headings re]
+  (let [scratch (create-ns (gensym "wagoe.workflow.doc-example-"))
+        engine  (service/create-workflow-service (create-memory-store) *registry* nil {})]
+    (try
+      (binding [*ns* scratch]
+        (refer-clojure)
+        (doseq [[sym v] {'engine               engine
+                         'order-uuid           (UUID/randomUUID)
+                         'notify-finance!      (fn [& _])
+                         'release-reservation! (fn [& _])
+                         'sync-external!       (fn [& _])}]
+          (intern scratch sym v))
+        (vec (for [heading headings
+                   :let    [block (first-block-under path heading re)]
+                   :when   block
+                   result  (block-results block)]
+               (assoc result :heading heading))))
+      (finally
+        (remove-ns (ns-name scratch))))))
+
+(deftest ^:unit the-documented-calls-run
+  ;; A call whose arguments drifted from the port's throws here; one whose
+  ;; result drifted fails the comparison with its `;; =>` comment.
+  (doseq [[path headings re]
+          [["AGENTS.md" ["## Defining a Workflow" "## Usage Patterns" "## Auto-Transitions"] md-block]
+           ["README.md" ["### 1. Define a Workflow" "### 2. Start an Instance"
+                         "### 3. Execute a Transition" "### 4. Query State and History"] md-block]
+           ["../../docs/modules/libraries/pages/workflow.adoc"
+            ["== Defining a workflow" "== Available transitions"] adoc-block]]]
+    (testing path
+      (registry/clear-registry!)
+      (let [results (documented-results path headings re)
+            checked (remove #(#{::none ::partial} (:shown %)) results)]
+        (is (seq checked) "no documented result was compared")
+        (doseq [{:keys [heading form shown actual error]} results
+                :let [where (str heading ": " (pr-str form))]]
+          (is (nil? error) (str where " threw " (some-> error (#(or (ex-cause %) %)) ex-message)))
+          (when (and (nil? error) (not (#{::none ::partial} shown)))
+            (is (= shown actual) where)))))))
+
+;; =============================================================================
+;; The documented config is what `wagoe add workflow` writes (BOU-571)
+;; =============================================================================
+
+(defn- catalogue-config
+  "The `:wagoe/workflow` value `wagoe add workflow` writes, read from its catalogue."
+  []
+  (let [f     (io/file lib-dir "../wagoe-cli/resources/wagoe/cli/modules-catalogue.edn")
+        entry (->> (:modules (read-string (slurp f)))
+                   (filter #(= "workflow" (:name %)))
+                   first)]
+    (:wagoe/workflow (read-string (str "{" (:config-snippet entry) "}")))))
+
+(deftest ^:unit the-documented-config-is-what-wagoe-add-writes
+  (let [written (catalogue-config)
+        edn     #"(?s)```edn\n(.*?)```"]
+    (is (= {} written))
+    (doseq [[path heading re] [["AGENTS.md" "## Integrant Wiring" edn]
+                               ["README.md" "## Configuration" edn]
+                               ["../../docs/modules/libraries/pages/workflow.adoc"
+                                "== Configuration" #"(?s)\[source,edn\]\n----\n(.*?)\n----"]]]
+      (testing path
+        (is (= written
+               (some-> (first-block-under path heading re)
+                       read-string
+                       :wagoe/workflow)))))))
