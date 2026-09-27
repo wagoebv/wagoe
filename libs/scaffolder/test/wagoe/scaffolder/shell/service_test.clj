@@ -73,7 +73,6 @@
             :entities [{:name entity
                         :fields [{:name :name :type :string :required true}]}]
             :interfaces {:http true :web true}
-            :features {:audit true :pagination true}
             :output-dir (.getPath dir)
             :dry-run false}
            opts))
@@ -100,7 +99,6 @@
                                          :required true
                                          :default true}]}]
                    :interfaces {:http true :web true}
-                   :features {:audit true :pagination true}
                    :dry-run true}  ;; Always dry-run in tests
 
           result (ports/generate-module svc request)]
@@ -410,7 +408,6 @@
                        :entities [{:name "Widget"
                                    :fields [{:name :label :type :string :required true}]}]
                        :interfaces {:http true :web true}
-                       :features {:audit true :pagination true}
                        :output-dir (.getPath dir)
                        :dry-run false})]
           (is (true? (:success result)))
@@ -428,7 +425,6 @@
                         :entities [{:name "Widget"
                                     :fields [{:name :label :type :string :required true}]}]
                         :interfaces {:http true :web true}
-                        :features {:audit true :pagination true}
                         :output-dir (.getPath dir) :dry-run false})
               before (files-on-disk dir)
               result (ports/add-field
@@ -456,7 +452,6 @@
                         :entities [{:name "Widget"
                                     :fields [{:name :label :type :string :required true}]}]
                         :interfaces {:http true :web true}
-                        :features {:audit true :pagination true}
                         :output-dir (.getPath dir) :dry-run false})
               before (files-on-disk dir)
               result (ports/add-field
@@ -485,7 +480,6 @@
                            :entities [{:name "Widget"
                                        :fields [{:name :label :type :string :required true}]}]
                            :interfaces {:http true :web true}
-                           :features {:audit true :pagination true}
                            :output-dir (.getPath dir) :dry-run false})]
           (is (seq (files-on-disk dir)) "the target directory received the module")
           (is (every? #(str/starts-with? (:path %) (.getPath dir)) (:files result))
@@ -510,7 +504,6 @@
                           :entities [{:name (str/capitalize n)
                                       :fields [{:name :x :type :string :required true}]}]
                           :interfaces {:http true :web true}
-                          :features {:audit true :pagination true}
                           :output-dir (.getPath dir) :dry-run false}))
               _   (dorun (map gen ["alpha" "beta" "gamma"]))
               ids (->> (files-on-disk dir)
@@ -536,7 +529,6 @@
                            :entities [{:name "Widget"
                                        :fields [{:name :label :type :string :required true}]}]
                            :interfaces {:http true :web true}
-                           :features {:audit true :pagination true}
                            :output-dir (.getPath dir) :dry-run true})]
           (is (every? #(str/starts-with? (:path %) (.getPath dir)) (:files result))
               "a preview that names the wrong directory is worse than none")
@@ -559,7 +551,6 @@
                         :entities [{:name "Box"
                                     :fields [{:name :w :type :string :required true}]}]
                         :interfaces {:http true :web true}
-                        :features {:audit true :pagination true}
                         :output-dir (.getPath dir) :dry-run false})
               schema (io/file dir "src/wagoe/box/schema.clj")
               ;; Restructure the request schemas beyond what the inserter reads.
@@ -597,7 +588,6 @@
                         :entities [{:name "Box"
                                     :fields [{:name :w :type :string :required true}]}]
                         :interfaces {:http true :web true}
-                        :features {:audit true :pagination true}
                         :output-dir (.getPath dir) :dry-run false})
               before (slurp (io/file dir "src/wagoe/box/schema.clj"))
               result (ports/add-field
@@ -628,7 +618,6 @@
                         :entities [{:name "Item"
                                     :fields [{:name :name :type :string :required true}]}]
                         :interfaces {:http true :web true}
-                        :features {:audit true :pagination true}
                         :output-dir (.getPath dir) :dry-run false})
               schema (io/file dir "src/wagoe/item/schema.clj")
               _   (spit schema (str/replace (slurp schema)
@@ -660,7 +649,6 @@
                         :entities [{:name "Tag"
                                     :fields [{:name :label :type :string :required true}]}]
                         :interfaces {:http true :web true}
-                        :features {:audit true :pagination true}
                         :output-dir (.getPath dir) :dry-run false})
               result (ports/add-field
                       svc {:module-name "tag" :entity "Tag"
@@ -690,7 +678,6 @@
                         :entities [{:name "Item"
                                     :fields [{:name :name :type :string :required true}]}]
                         :interfaces {:http true :web true}
-                        :features {:audit true :pagination true}
                         :output-dir (.getPath dir) :dry-run false})
               schema (io/file dir "src/wagoe/item/schema.clj")
               _   (spit schema
@@ -762,7 +749,6 @@
                         :entities [{:name "Item"
                                     :fields [{:name :name :type :string :required true}]}]
                         :interfaces {:http true :web true}
-                        :features {:audit true :pagination true}
                         :output-dir (.getPath dir) :dry-run false})
               result (ports/add-field
                       svc {:module-name "item" :entity "Item"
@@ -952,7 +938,6 @@
                       :entities [{:name "Widget"
                                   :fields [{:name :label :type :string :required true}]}]
                       :interfaces {:http true :web true}
-                      :features {:audit true :pagination true}
                       :output-dir (.getPath dir) :dry-run false})
             result (ports/add-field
                     svc {:module-name "widget" :entity "Widget"
@@ -978,7 +963,6 @@
                      :entities [{:name "InvoiceLineItem"
                                  :fields [{:name :amount :type :decimal :required true}]}]
                      :interfaces {:http true :web true}
-                     :features {:audit true :pagination true}
                      :output-dir (.getPath dir)
                      :dry-run false})
             on-disk (files-on-disk dir)]
@@ -1011,7 +995,6 @@
                       :entities [{:name "InvoiceLineItem"
                                   :fields [{:name :amount :type :decimal :required true}]}]
                       :interfaces {:http true :web true}
-                      :features {:audit true :pagination true}
                       :output-dir (.getPath dir) :dry-run false})
             field (ports/add-field
                    svc {:module-name "invoice-line-item" :entity "InvoiceLineItem"
@@ -1037,7 +1020,6 @@
                      :entities [{:name "Invoice"
                                  :fields [{:name :status :type :enum :required true}]}]
                      :interfaces {:http true :web true}
-                     :features {:audit true :pagination true}
                      :output-dir (.getPath dir)
                      :dry-run false})]
         (is (false? (:success result)))
@@ -1054,7 +1036,6 @@
                                  :fields [{:name :status :type :enum :required true
                                            :enum-values [:draft :sent :paid]}]}]
                      :interfaces {:http true :web true}
-                     :features {:audit true :pagination true}
                      :output-dir (.getPath dir)
                      :dry-run false})]
         (is (true? (:success result)) (pr-str (:errors result)))

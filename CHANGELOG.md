@@ -45,9 +45,15 @@ for what is public API, what is internal, and how deprecations are announced.
   regenerate an older module's `shell/*persistence.clj` before adding a `date` field to it.
 - **Scaffolder field specs refuse an unknown modifier, and `required` with `optional`** (BOU-535).
   Fix any script that passes one; `indexed` now writes an index and `optional` is honoured.
+- **`bb scaffold generate --audit` and `--pagination` are removed** (BOU-483). No generator read
+  them. Drop them from any script that passes them.
+- **`bb scaffold ai` refuses unknown flags** (BOU-490). Quote the description, or put `--` before
+  one that starts with `-`.
 
 ### Fixed
 
+- **`bb scaffold ai --dry-run` wrote every file** (BOU-490). It is dry now, and an unknown flag
+  is refused instead of being sent to the model. Upgrade wagoe-tools.
 - **Field errors were not tied to their input for screen readers** (BOU-398). Inputs with errors now
   carry `aria-invalid` and `aria-describedby`; hand-built fields can use `ui/describe-input` and `ui/field-errors`.
 - **`bb db:status`, `bb guide next` and devtools looked for migrations in `resources/migrations/`** (BOU-489).

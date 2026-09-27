@@ -1285,6 +1285,13 @@ jobs:
         with:
           bb: latest
 
+      # scaffold_ai_test runs the real scaffolder (`clojure -M -m ...`) to prove
+      # a dry run writes nothing (BOU-490).
+      - name: Setup Clojure + warm deps
+        uses: ./.github/actions/clojure-deps
+        with:
+          aliases: "-"
+
       - name: Run wagoe-tools unit tests
         run: bb test:tools
 

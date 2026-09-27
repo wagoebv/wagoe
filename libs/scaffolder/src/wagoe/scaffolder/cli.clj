@@ -50,10 +50,6 @@
     :default true]
    [nil "--public-api" "API routes and web page open to anyone (default: signed-in users only)"
     :default false]
-   [nil "--audit" "Enable audit logging (default: true)"
-    :default true]
-   [nil "--pagination" "Enable pagination support (default: true)"
-    :default true]
    [nil "--output-dir DIR" "Output directory (default: current directory)"
     :default "."]
    [nil "--force" "Overwrite existing files"
@@ -654,8 +650,6 @@
                                  :interfaces {:http (:http opts)
                                               :web (:web opts)
                                               :public-api (boolean (:public-api opts))}
-                                 :features {:audit (:audit opts)
-                                            :pagination (:pagination opts)}
                                  :output-dir (:output-dir opts)
                                  :force (:force opts)
                                  :dry-run (:dry-run opts)}
@@ -933,10 +927,6 @@ Interface Options (default: all enabled):
                        and the module's :web route contribution
   --public-api         API routes and web page open to anyone; by default
                        the API answers 401 and the page redirects to login
-
-Feature Options (default: all enabled):
-  --audit              Enable audit logging
-  --pagination         Enable pagination support
 
 Other Options:
   --force              Overwrite an existing module (refused without it)

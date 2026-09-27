@@ -482,6 +482,4 @@
      ;; decided once. Passed straight through before, and read by nobody
      ;; (BOU-479).
      :interfaces (merge {:http true :web true}
-                        (:interfaces request {}))
-     :features (merge {:audit false :soft-delete false :pagination true}
-                      (:features request {}))}))
+                        (:interfaces request {}))}))

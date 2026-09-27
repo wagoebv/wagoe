@@ -51,3 +51,21 @@
                     first
                     slurp)]
         (is (str/includes? up "invoice_id UUID NOT NULL REFERENCES invoices(id)"))))))
+
+(deftest ^:integration a-preview-writes-nothing
+  ;; BOU-490: `bb scaffold ai --dry-run` wrote every file. This path is one
+  ;; generate-module call, so one :dry-run covers every entity.
+  (let [dir (temp-dir)
+        r   (tools/run {:scaffolder  (into-dir dir)
+                        :test-runner (fn [_] {:status :passed :passed 1 :failed 0})
+                        :audit       (audit/in-memory-audit-log)}
+                       "scaffold-module"
+                       {:module   "billing"
+                        :preview  true
+                        :entities [{:name "Invoice" :fields [{:name "number" :type "string"}]}
+                                   {:name "InvoiceLineItem" :belongs-to "invoice"
+                                    :fields [{:name "quantity" :type "int"}]}]})]
+    (is (= :preview (:status r)))
+    (is (some #(str/ends-with? (:path %) "core/invoice_line_item.clj") (:plan r))
+        "the plan covers the second entity")
+    (is (empty? (.listFiles dir)) "a preview must not write files")))

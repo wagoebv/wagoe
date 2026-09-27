@@ -30,7 +30,9 @@
                          :dry-run     true}
                   (some? interfaces) (assoc :interfaces interfaces)))]
     (is (true? (:success result)) (pr-str (:errors result)))
-    (set (map :path (:files result)))))
+    ;; Migration names carry a per-second timestamp; two calls can straddle a second.
+    (set (map #(str/replace (:path %) #"migrations/\d{14}-" "migrations/<ts>-")
+              (:files result)))))
 
 (defn- has-file? [paths suffix]
   (boolean (some #(str/ends-with? % suffix) paths)))
@@ -125,3 +127,19 @@
       "--cli is still a declared option")
   (is (not (str/includes? cli/generate-help "--cli"))
       "--cli is still in the help text"))
+
+(deftest ^:unit the-audit-and-pagination-flags-are-gone
+  ;; Declared, defaulted into :features, and read by no generator (BOU-483).
+  (doseq [flag ["--audit" "--pagination"]]
+    (is (not (str/includes? cli/generate-help flag)) (str flag " is still in the help text"))
+    (let [err    (java.io.StringWriter.)
+          status (atom nil)
+          out    (binding [*err* err]
+                   (with-out-str
+                     (reset! status
+                             (cli/run-cli! (service/create-scaffolder-service)
+                                           ["generate" "--module-name" "widget" "--entity" "Widget"
+                                            "--field" "label:string" "--dry-run" flag]))))]
+      (is (str/includes? (str out err) (str "Unknown option: \"" flag "\""))
+          (str flag " is still accepted"))
+      (is (= 1 @status)))))

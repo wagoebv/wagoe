@@ -123,12 +123,6 @@
      [:web {:optional true} :boolean]
      ;; API routes open to anyone. Absent means they require a signed-in user.
      [:public-api {:optional true} :boolean]]]
-   [:features                                               ; Optional features
-    {:optional true}
-    [:map
-     [:audit {:optional true} :boolean]
-     [:soft-delete {:optional true} :boolean]
-     [:pagination {:optional true} :boolean]]]
    [:dry-run {:optional true} :boolean]                     ; Preview without writing
    ;; Overwrite files that already exist. Without it, generation refuses rather
    ;; than replacing a module someone has edited — the CLI declared this flag
