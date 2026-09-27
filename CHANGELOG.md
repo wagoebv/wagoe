@@ -67,6 +67,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **An admin entity's `:hide-fields` could un-hide password hashes and API keys** (BOU-562). Detected
+  secrets now stay hidden and out of list, search and edit fields. Upgrade admin.
 - **Creating a scaffolded entity with an enum field answered 500** (BOU-562). Regenerate
   `shell/*persistence.clj`, or copy `enum-fields`, `->row` and `->entity` from a new module.
 - **Scaffolded repository tests asserted nothing about the database** (BOU-562). New ones
