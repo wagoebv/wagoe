@@ -132,16 +132,22 @@
 
 (defn- lead-start
   "Where the entry whose key is at `k` begins, taking along the comment lines
-   directly above it. Only when the key starts its own line."
-  [text k]
-  (let [ls (line-start text k)]
-    (if-not (str/blank? (subs text ls k))
+   directly above it. Only when the key starts its own line. A line counts as
+   a comment by the lexer's state, not its text: a string spanning lines can
+   hold a line that starts with `;`."
+  [text lx k]
+  (let [blank?   #(and (= :code (st-at lx %)) (Character/isWhitespace ^char (ch-at lx %)))
+        comment? (fn [from to]
+                   (let [i (first (remove blank? (range from to)))]
+                     (and i (= :comment (st-at lx i)))))
+        ls       (line-start text k)]
+    (if-not (every? blank? (range ls k))
       k
       (loop [from ls]
         (if (zero? from)
           from
           (let [prev (line-start text (dec from))]
-            (if (str/starts-with? (str/trim (subs text prev (dec from))) ";")
+            (if (comment? prev (dec from))
               (recur prev)
               from)))))))
 
@@ -159,7 +165,7 @@
                                   :start k
                                   :value v
                                   :end   vend
-                                  :from  (lead-start text k)})))))))
+                                  :from  (lead-start text lx k)})))))))
 
 (defn root-map
   "[open close] indices of the braces of the file's top-level map, or nil."

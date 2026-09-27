@@ -522,13 +522,15 @@
   #{":wagoe/postgresql" ":wagoe/sqlite" ":wagoe/h2" ":wagoe/mysql"})
 
 (def ^:private chosen-keys
-  "Keys whose value is the answer to a question, so answering replaces an
-   existing one, map and all."
-  #{":wagoe/ai-service" ":wagoe/payment-provider" ":wagoe/cache" ":wagoe.external/smtp"})
+  "Each key whose value answers a question, and the answer's spec key."
+  {":wagoe/ai-service"       :ai-provider
+   ":wagoe/payment-provider" :payment
+   ":wagoe/cache"            :cache
+   ":wagoe.external/smtp"    :email})
 
 (def defaults
-  "What an unanswered question means in a file setup creates. In a file that
-   exists, no answer means leave it alone."
+  "What an unanswered question means in a project setup creates. In a project
+   that exists, no answer means leave it alone."
   {:project-name "my-app" :database :sqlite :ai-provider :none :payment :none
    :cache :none :email :none :admin-ui true})
 
@@ -547,26 +549,37 @@
             (if (= ::eof form) out (recur (conj out form)))))))
     (catch Exception _ nil)))
 
-(defn- dev-active
-  "The :active map of the existing dev config, or nil."
+(defn- conf-rel [env] (str "resources/conf/" env "/config.edn"))
+
+(defn- existing-project?
+  "Whether a dev or test config exists. Setup then changes only what is
+   answered, and creates no config file nobody asked for."
   []
-  (let [f (io/file (root-dir) "resources" "conf" "dev" "config.edn")]
-    (when (.exists f)
-      (let [[m] (read-edn (slurp f))]
-        (when (map? m) (:active m))))))
+  (some #(.exists (io/file (root-dir) (conf-rel %))) ["dev" "test"]))
+
+(defn- current-active
+  "The :active map of the existing dev config, else test's, or nil."
+  []
+  (some (fn [env]
+          (let [f (io/file (root-dir) (conf-rel env))]
+            (when (.exists f)
+              (let [[m] (read-edn (slurp f))]
+                (when (map? m) (:active m))))))
+        ["dev" "test"]))
 
 (defn- current-choices
-  "What the existing dev config already answers, for the wizard's defaults."
+  "What the existing config already answers, to label the wizard's keep."
   [active]
   (let [provider #(let [p (get-in active [% :provider])]
                     (if (or (nil? p) (= :no-op p)) :none p))]
-    {:database    (some #(when (contains? active (keyword (subs % 1))) (keyword (name (keyword (subs % 1)))))
+    {:database    (some #(let [k (keyword (subs % 1))]
+                           (when (contains? active k) (keyword (name k))))
                         (sort database-keys))
      :ai-provider (provider :wagoe/ai-service)
      :payment     (provider :wagoe/payment-provider)
      :cache       (provider :wagoe/cache)
      :email       (if (contains? active :wagoe.external/smtp) :smtp :none)
-     :admin-ui    (contains? active :wagoe/admin)}))
+     :admin-ui    (if (contains? active :wagoe/admin) :yes :no)}))
 
 ;; =============================================================================
 ;; Interactive wizard
@@ -578,16 +591,17 @@
   (println (dim "Generate config.edn, test config, and .env.example for your project."))
   (println)
 
-  (let [current (some-> (dev-active) current-choices)
-        ;; With a config present, Enter keeps what it has: a menu default is
+  (let [existing? (existing-project?)
+        current   (current-choices (current-active))
+        ;; In an existing project Enter keeps what it has: a menu default is
         ;; not an answer, and must not replace a working provider (BOU-404).
-        pick    (fn [label k options]
-                  (let [answer (select-option
-                                label
-                                (cond->> options
-                                  current (cons [:keep (str "Keep what the config has ("
-                                                            (some-> (get current k) name) ")")])))]
-                    (when-not (= :keep answer) answer)))
+        pick      (fn [label k options]
+                    (let [answer (select-option
+                                  label
+                                  (cond->> options
+                                    existing? (cons [:keep (str "Keep what the config has ("
+                                                                (some-> (get current k) name) ")")])))]
+                      (when-not (= :keep answer) answer)))
         project-name (loop []
                        (let [s (prompt "Project name (kebab-case)" "my-app")]
                          (if (re-matches #"[a-z][a-z0-9-]*" s)
@@ -628,7 +642,13 @@
                     [[:none "No email"]
                      [:smtp "SMTP (requires SMTP server)"]])
 
-        admin-ui (confirm "Enable admin UI?" (if current (:admin-ui current) true))]
+        ;; No never removes an existing admin, it only does not add one.
+        admin-ui (if existing?
+                   (= :yes (pick "Admin UI" :admin-ui [[:yes "Add the admin UI"] [:no "No admin UI"]]))
+                   (confirm "Enable admin UI?" true))
+
+        prod? (when (and existing? (not (.exists (io/file (root-dir) (conf-rel "prod")))))
+                (confirm "Create resources/conf/prod/config.edn?" false))]
 
     {:project-name project-name
      :database     database
@@ -636,8 +656,8 @@
      :payment      payment
      :cache        cache
      :email        email
-     ;; No never removes an existing admin, it only does not add one.
-     :admin-ui     (if current (when admin-ui true) admin-ui)}))
+     :admin-ui     (if existing? (when admin-ui true) admin-ui)
+     :prod?        prod?}))
 
 ;; =============================================================================
 ;; Merging into an existing config (BOU-404)
@@ -645,6 +665,12 @@
 ;; Regenerating the whole file dropped every key setup does not write: a module
 ;; `bb scaffold integrate` added, the :migrate-on-start? `wagoe new` sets
 ;; (BOU-532). An existing file now gets only what was answered.
+
+(defn- line-ending
+  "The file's own line ending, so inserted lines match it."
+  [text]
+  (let [i (str/index-of text "\n")]
+    (if (and i (pos? i) (= \return (get text (dec i)))) "\r\n" "\n")))
 
 (defn- entry [text kw k]
   (some #(when (= k (:key %)) %) (config-edn/entries text kw)))
@@ -656,52 +682,63 @@
   (- i (inc (or (str/last-index-of text "\n" (dec i)) -1))))
 
 (defn- reindent
-  "`snippet`, written at column 2, moved to column `col`."
-  [snippet col]
+  "`snippet`, written at column 2, moved to column `col`, lines ending in `nl`."
+  [snippet col nl]
   (let [[first-line & more] (str/split-lines snippet)
         shift #(cond
                  (> col 2) (str (apply str (repeat (- col 2) \space)) %)
                  (< col 2) (str/replace-first % (re-pattern (str "^ {0," (- 2 col) "}")) "")
                  :else     %)]
-    (str/join "\n" (cons first-line (map shift more)))))
+    (str/join nl (cons first-line (map shift more)))))
 
 (defn- cut
-  "`text` without entry `e` and the comments above it."
+  "`text` without entry `e`, the comments above it, and its line end."
   [text e]
-  (let [end (cond-> (:end e) (= \newline (get text (:end e))) inc)]
-    (str (subs text 0 (:from e)) (subs text end))))
+  (let [rest (subs text (:end e))
+        skip (cond (str/starts-with? rest "\r\n") 2 (str/starts-with? rest "\n") 1 :else 0)]
+    (str (subs text 0 (:from e)) (subs rest skip))))
 
-(defn- add-entry [text snippet]
+(defn- add-entry [text snippet nl]
   (let [last-key (some-> (config-edn/entries text ":active") last :start)
         col      (if last-key (column text last-key) 2)
         close    (second (config-edn/section text ":active"))]
     (config-edn/insert-into text ":active"
-                            (str (if (= \newline (get text (dec close))) "\n" "\n\n")
-                                 (apply str (repeat col \space)) (reindent snippet col)))))
+                            (str (if (= \newline (get text (dec close))) nl (str nl nl))
+                                 (apply str (repeat col \space)) (reindent snippet col nl)))))
 
 (defn- deactivate
   "`text` with entry `e` moved from :active to :inactive, comments and all. An
    :inactive entry of the same key is replaced."
-  [text e]
+  [text e nl]
   (let [piece (subs text (:from e) (:end e))
         text  (cut text e)
         text  (if-let [old (entry text ":inactive" (:key e))] (cut text old) text)]
     (if (config-edn/section text ":inactive")
-      (config-edn/insert-into text ":inactive" (str "\n" piece))
+      (config-edn/insert-into text ":inactive" (str nl piece))
       (let [[_ close] (config-edn/root-map text)]
-        (str (subs text 0 close) "\n :inactive\n {\n" piece "}" (subs text close))))))
+        (str (subs text 0 close) nl " :inactive" nl " {" nl piece "}" (subs text close))))))
 
-(defn- squash [s] (str/replace s #"\s+" " "))
+(defn- provider-of
+  "The provider an existing entry configures: its :provider, or `present` for
+   a key that has none (smtp)."
+  [text e present]
+  (let [[v] (read-edn (subs text (:value e) (:end e)))
+        p   (if (map? v) (:provider v) present)]
+    (get {:in-memory :memory} p p)))
 
 (defn merge-config
   "`existing` config text with the answers in `generated`, as
-   {:text :changes :moved}. nil when `existing` has no literal :active map.
+   {:text :changes :moved :touched}. nil when `existing` has no literal
+   :active map.
 
-   Only answered keys are touched. A database is added when none of that kind
-   is active; with `switch-db?` the one it replaces moves to :inactive, since
-   two active databases do not boot. Without it (the test profile) an active
-   database is left alone."
-  [existing generated {:keys [switch-db?]}]
+   Only answered keys are touched. A provider already configured with the
+   answer keeps its map, and in the test profile any configured provider is
+   kept: its template is a stand-in (memory, mock, no-op), and replacing a real
+   one with it is a downgrade. A database is added when none is active; with
+   `switch-db?` the one it replaces moves to :inactive, since two active
+   databases do not boot. Without it (the test profile) an active database is
+   left alone."
+  [existing generated {:keys [switch-db? env spec nl] :or {nl "\n"}}]
   (when (config-edn/entries existing ":active")
     (reduce
      (fn [{:keys [text] :as acc} g]
@@ -709,18 +746,21 @@
              new    (entry-text generated g)
              cur    (entry text ":active" k)
              active (->> (config-edn/entries text ":active") (map :key) (filter database-keys))
+             answer (some->> (chosen-keys k) (get spec))
              add    #(-> %1
-                         (update :text add-entry new)
+                         (update :text add-entry new nl)
                          (update :changes conj (str "add " k)))]
          (cond
            (and cur (chosen-keys k))
-           (if (= (squash (entry-text text cur)) (squash new))
+           (if (or (= "test" env)
+                   (= (get {:in-memory :memory} answer answer) (provider-of text cur answer)))
              acc
              (-> acc
                  (assoc :text (str (subs text 0 (:start cur))
-                                   (reindent new (column text (:start cur)))
+                                   (reindent new (column text (:start cur)) nl)
                                    (subs text (:end cur))))
-                 (update :changes conj (str "replace " k " (edits inside it are lost)"))))
+                 (update :changes conj (str "replace " k " (edits inside it are lost)"))
+                 (update :touched conj k)))
 
            (chosen-keys k) (add acc)
 
@@ -728,7 +768,7 @@
 
            (and (database-keys k) (not cur) (or (empty? active) switch-db?))
            (-> acc
-               (assoc :text (reduce #(deactivate %1 (entry %1 ":active" %2)) text active))
+               (assoc :text (reduce #(deactivate %1 (entry %1 ":active" %2) nl) text active))
                (update :changes into (for [o active]
                                        (str "move " o " to :inactive"
                                             (when (entry text ":inactive" o) ", replacing the one there"))))
@@ -736,151 +776,239 @@
                (add))
 
            :else acc)))
-     {:text existing :changes [] :moved #{}}
+     {:text existing :changes [] :moved #{} :touched #{}}
      (config-edn/entries generated ":active"))))
 
-(defn- lost-keys
-  "Why `merged` must not replace `old`, or nil. Both must read as EDN, and every
-   root, :active and :inactive key of `old` must still be there — in :inactive
-   for a key in `moved`. Every parser mistake lands here as a refusal."
-  [old merged moved]
+(defn- merge-loss
+  "Why `merged` must not replace `old`, or nil. Both must read as one EDN map,
+   and every root, :active and :inactive entry of `old` must read back `=` —
+   except the keys setup replaced (`touched`), which only have to be there, and
+   the databases it moved (`moved`), which must be `=` in :inactive. Every
+   parser mistake lands here as a refusal."
+  [old merged moved touched]
   (let [[o & o-more] (read-edn old)
         [m & m-more] (read-edn merged)
-        ks           #(set (keys (when (map? %) %)))
-        moved        (set (map #(keyword (subs % 1)) moved))]
+        kw           #(set (map (fn [s] (keyword (subs s 1))) %))
+        moved        (kw moved)
+        touched      (kw touched)
+        oa (:active o) ma (:active m) oi (:inactive o) mi (:inactive m)]
     (cond
       (or (not (map? o)) (seq o-more)) "it does not read as one EDN map"
       (or (not (map? m)) (seq m-more)) "the merged result would not read as EDN"
       :else
-      (let [missing (concat (remove (ks m) (ks o))
-                            (remove #(if (moved %)
-                                       ((ks (:inactive m)) %)
-                                       ((ks (:active m)) %))
-                                    (ks (:active o)))
-                            (remove (ks (:inactive m)) (ks (:inactive o))))]
-        (when (seq missing)
-          (str "the merge would lose " (str/join ", " missing)))))))
+      (let [lost (concat
+                  (for [[k v] (dissoc o :active :inactive) :when (not= v (get m k ::absent))] k)
+                  (for [[k v] oa
+                        :when (cond (touched k) (not (contains? ma k))
+                                    (moved k)   (not= v (get mi k ::absent))
+                                    :else       (not= v (get ma k ::absent)))]
+                    k)
+                  (for [[k v] oi
+                        :when (if (moved k)
+                                (not (contains? mi k))
+                                (not= v (get mi k ::absent)))]
+                    k))]
+        (when (seq lost)
+          (str "the merge would change or lose " (str/join ", " lost)))))))
+
+(def ^:private baseline-env-headers
+  "Sections of .env.example no question answers, so a merge never adds them."
+  #{"# Wagoe Environment Configuration" "# HTTP Server" "# Security"})
 
 (defn- merge-env-example
-  "`existing` .env.example with the variables `spec` needs that it lacks."
-  [existing spec]
+  "`existing` .env.example with the variables the answers in `spec` need and it
+   lacks."
+  [existing spec nl]
   (let [have    (set (map second (re-seq #"(?m)^\s*([A-Z][A-Z0-9_]*)=" existing)))
         missing (fn [line]
                   (let [v (second (re-matches #"([A-Z][A-Z0-9_]*)=.*" line))]
                     (and v (not (have v)))))
         added   (for [[header & lines] (env-example-sections spec)
+                      :when (not (baseline-env-headers header))
                       :let  [vs (filter missing lines)]
                       :when (seq vs)]
                   (concat [header] vs [""]))]
     (if (empty? added)
       {:text existing :changes []}
-      {:text    (str existing (when-not (str/ends-with? existing "\n") "\n") "\n"
-                     (str/join "\n" (apply concat added)))
+      {:text    (str existing
+                     (when-not (or (str/blank? existing) (str/ends-with? existing "\n")) nl)
+                     (when-not (str/blank? existing) nl)
+                     (str/join nl (apply concat added)))
        :changes [(str "add " (str/join ", " (mapcat #(remove str/blank? (rest %)) added)))]})))
 
-(defn- plan-file
-  "What setup would do to `rel`. `merge-fn` turns the existing text into
-   {:text :changes :moved}, or nil when it cannot; without one an existing
-   file is kept. `edn?` runs the loss check on the result."
-  [rel content merge-fn edn?]
+(defn- read-target
+  "The text at `rel`, or nil when there is no file."
+  [rel]
   (let [f (io/file (root-dir) rel)]
+    (when (.exists f) (slurp f))))
+
+(defn- plan-file
+  "What setup would do to `rel`, with the text it was planned from as :old.
+
+   `create` is the content for a missing file, or nil to leave it missing.
+   `merge-fn` takes the existing text and its line ending and returns
+   {:text :changes :moved :touched}, or nil when it cannot; without one an
+   existing file is kept. `edn?` runs the loss check on the result."
+  [rel create merge-fn edn?]
+  (let [f   (io/file (root-dir) rel)
+        old (read-target rel)]
     (cond
-      (not (.exists f))   {:path rel :status :new :content content}
+      (nil? old)          (if create
+                            {:path rel :status :new :content create :old nil}
+                            {:path rel :status :skipped})
       (nil? merge-fn)     {:path rel :status :kept}
       (not (.canWrite f)) {:path rel :status :refused :reason "it is read-only"}
       :else
-      (let [old  (slurp f)
-            crlf (str/includes? old "\r\n")
-            res  (merge-fn (cond-> old crlf (str/replace "\r\n" "\n")))
-            text (some-> (:text res) (cond-> crlf (str/replace "\n" "\r\n")))
+      (let [res  (try (merge-fn old (line-ending old))
+                      (catch Exception e {::error (str "setup could not read it (" (.getMessage e) ")")}))
+            text (:text res)
             why  (cond
-                   (nil? res)   "it has no literal :active map to merge into"
-                   (= text old) nil
-                   edn?         (lost-keys old text (:moved res)))]
+                   (::error res) (::error res)
+                   (nil? res)    "it has no literal :active map to merge into"
+                   (= text old)  nil
+                   edn?          (merge-loss old text (:moved res) (:touched res)))]
         (cond
           why          {:path rel :status :refused :reason why}
           (= text old) {:path rel :status :unchanged}
-          :else        {:path rel :status :changed :content text :changes (:changes res)})))))
+          :else        {:path rel :status :changed :content text :old old
+                        :changes (:changes res)})))))
 
 (defn- plan
-  "Every file setup would touch for `spec`. A file setup creates gets the
-   defaults for what was not answered. Prod is hand-maintained once it
-   exists, and so is an admin entity file, so both are kept (BOU-499)."
+  "Every file setup would touch for `spec`.
+
+   In a new project every file is created, with the defaults for what was not
+   answered. In an existing one only answers are written: no missing config is
+   created, except prod when asked for (`:prod?`). Prod is hand-maintained once
+   it exists, and so is an admin entity file, so both are kept (BOU-499)."
   [spec]
-  (let [full    (with-defaults spec)
-        configs (for [env envs]
-                  (plan-file (str "resources/conf/" env "/config.edn")
-                             (build-config full env)
-                             (when-not (prod? env)
-                               #(merge-config % (build-config spec env) {:switch-db? (not= "test" env)}))
-                             true))
-        entity  @admin-users-entity]
+  (let [existing? (existing-project?)
+        full      (with-defaults spec)
+        configs   (for [env envs]
+                    (plan-file (conf-rel env)
+                               (when (or (not existing?) (and (prod? env) (:prod? spec)))
+                                 (build-config full env))
+                               (when-not (prod? env)
+                                 #(merge-config %1 (build-config spec env)
+                                                {:switch-db? (not= "test" env) :env env
+                                                 :spec spec :nl %2}))
+                               true))
+        env-ex    (if (or existing? (read-target ".env.example"))
+                    (let [p (plan-file ".env.example" nil #(merge-env-example %1 spec %2) false)]
+                      (if (= :skipped (:status p))
+                        ;; Missing in an existing project: only what the answers add.
+                        (let [{:keys [text changes]} (merge-env-example "" spec "\n")]
+                          (if (seq changes)
+                            {:path ".env.example" :status :new :content text :old nil :changes changes}
+                            p))
+                        p))
+                    (plan-file ".env.example" (build-env-example full) nil false))
+        entity    @admin-users-entity]
     (concat
      configs
-     [(plan-file ".env.example" (build-env-example full) #(merge-env-example % spec) false)]
+     [env-ex]
      ;; The file the admin key's `#include` names, wherever a config written
-     ;; here names it.
+     ;; now names it.
      (when entity
        (for [[env {:keys [content]}] (map vector envs configs)
              :when (some-> content (str/includes? "admin/users.edn"))]
          (plan-file (str "resources/conf/" env "/admin/users.edn") entity nil false))))))
 
+(defn- stale
+  "The paths of `items` whose file no longer holds the text it was planned
+   from."
+  [items]
+  (for [{:keys [path old]} items
+        :when (not= old (read-target path))]
+    path))
+
+(defn- missing-dirs
+  "The directories that would have to be created for `f`, outermost first."
+  [^java.io.File f]
+  (reverse (take-while #(not (.exists ^java.io.File %))
+                       (iterate #(.getParentFile ^java.io.File %) (.getParentFile f)))))
+
 (defn- write-all!
   "Write `items` ({:path :content}) all or nothing, as far as the filesystem
-   allows: every file goes to a temp file first, then each is renamed over its
-   target. Returns nil, or a message naming what failed and what was written."
+   allows: every file goes to a temp file beside its target first, then each
+   is renamed over it. A symlink's target is what gets replaced, and an
+   existing file's permissions carry over. Returns nil, or a message naming
+   what failed, what was written and what was not."
   [items]
-  (let [tmp-of #(let [f (io/file (root-dir) (:path %))]
-                  (io/file (.getParentFile f) (str "." (.getName f) ".setup-tmp")))
-        temps  (atom [])]
+  (let [target (fn [{:keys [path]}]
+                 (let [p (.toPath (io/file (root-dir) path))]
+                   (if (java.nio.file.Files/exists p (make-array java.nio.file.LinkOption 0))
+                     (.toRealPath p (make-array java.nio.file.LinkOption 0))
+                     p)))
+        tmp-of (fn [it]
+                 (let [t (target it)]
+                   (.resolveSibling t (str "." (.getFileName t) ".setup-tmp"))))
+        temps  (atom [])
+        dirs   (atom [])
+        paths  (map :path items)]
     (try
       (doseq [it items]
-        (let [tmp (tmp-of it)]
-          (io/make-parents tmp)
-          (spit tmp (:content it))
-          (swap! temps conj tmp)))
+        (let [tmp (tmp-of it)
+              t   (target it)]
+          (swap! dirs into (missing-dirs (.toFile tmp)))
+          (io/make-parents (.toFile tmp))
+          (spit (.toFile tmp) (:content it))
+          (swap! temps conj tmp)
+          (when (java.nio.file.Files/exists t (make-array java.nio.file.LinkOption 0))
+            (try
+              (java.nio.file.Files/setPosixFilePermissions
+               tmp (java.nio.file.Files/getPosixFilePermissions t (make-array java.nio.file.LinkOption 0)))
+              (catch UnsupportedOperationException _ nil)))))
       (let [done (atom [])]
         (try
           (doseq [it items]
-            (java.nio.file.Files/move (.toPath ^java.io.File (tmp-of it))
-                                      (.toPath (io/file (root-dir) (:path it)))
+            (java.nio.file.Files/move (tmp-of it) (target it)
                                       (into-array java.nio.file.CopyOption
                                                   [java.nio.file.StandardCopyOption/REPLACE_EXISTING]))
             (swap! done conj (:path it)))
           nil
           (catch Exception e
-            (str "Could not replace a file (" (.getMessage e) "). Written: "
-                 (if (seq @done) (str/join ", " @done) "nothing")))))
+            (str "Could not replace a file (" (.getMessage e) ")."
+                 " Written: " (str/join ", " @done) "."
+                 " Not written: " (str/join ", " (remove (set @done) paths)) "."))))
       (catch Exception e
-        (str "Nothing was written: " (.getMessage e)))
+        (str "Could not write a file (" (.getMessage e) ")."
+             " Nothing was written: " (str/join ", " paths) "."))
       (finally
-        (doseq [t @temps] (io/delete-file t true))))))
+        (doseq [t @temps] (java.nio.file.Files/deleteIfExists t))
+        (doseq [^java.io.File d (reverse (distinct @dirs))]
+          (when (and (.isDirectory d) (empty? (.list d)))
+            (.delete d)))))))
 
 (defn- write-plan! [spec plan]
   (println)
-  (if-let [err (write-all! (filter (comp #{:new :changed} :status) plan))]
-    (do (println (red err))
-        (*exit!* 1))
-    (do
-      (doseq [{:keys [path status]} plan]
-        (case status
-          :new       (println (green "✓") " Generated" (cyan path))
-          :changed   (println (green "✓") " Updated" (cyan path))
-          :kept      (println (yellow "!") " Kept existing" (cyan path) (dim "(delete it to regenerate)"))
-          :unchanged (println (dim (str "  Unchanged " path)))))
-      (when (and (:admin-ui spec) (nil? @admin-users-entity))
-        (println (yellow "!") " Admin entity config missing from wagoe-tools;"
-                 (cyan "#include \"admin/users.edn\"") "will not resolve."))
-      (println)
-      (println (dim "Next steps:"))
-      (println (dim "  1. Copy .env.example to .env and fill in your values"))
-      (println (dim "  2. Run: bb migrate up"))
-      (println (dim "  3. Run: bb doctor  (to verify your config)"))
-      (when-let [steps (ai-provider-prerequisites (:ai-provider spec))]
-        (println)
-        (println (yellow (str "Before " (name (:ai-provider spec)) " answers:")))
-        (doseq [s steps]
-          (println (dim (str "  - " s))))))))
+  (let [items (filter (comp #{:new :changed} :status) plan)]
+    (if-let [changed (seq (stale items))]
+      (do (println (red (str (str/join ", " changed)
+                             " changed on disk since planning, nothing written. Run setup again.")))
+          (*exit!* 1))
+      (if-let [err (write-all! items)]
+        (do (println (red err))
+            (*exit!* 1))
+        (do
+          (doseq [{:keys [path status]} plan]
+            (case status
+              :new       (println (green "✓") " Generated" (cyan path))
+              :changed   (println (green "✓") " Updated" (cyan path))
+              :kept      (println (yellow "!") " Kept existing" (cyan path) (dim "(delete it to regenerate)"))
+              (:unchanged :skipped) nil))
+          (when (and (:admin-ui spec) (nil? @admin-users-entity))
+            (println (yellow "!") " Admin entity config missing from wagoe-tools;"
+                     (cyan "#include \"admin/users.edn\"") "will not resolve."))
+          (println)
+          (println (dim "Next steps:"))
+          (println (dim "  1. Copy .env.example to .env and fill in your values"))
+          (println (dim "  2. Run: bb migrate up"))
+          (println (dim "  3. Run: bb doctor  (to verify your config)"))
+          (when-let [steps (ai-provider-prerequisites (:ai-provider spec))]
+            (println)
+            (println (yellow (str "Before " (name (:ai-provider spec)) " answers:")))
+            (doseq [s steps]
+              (println (dim (str "  - " s))))))))))
 
 ;; =============================================================================
 ;; Display summary
@@ -903,6 +1031,7 @@
                            :new       (green "create       ")
                            :changed   (yellow "change       ")
                            :unchanged (dim "unchanged    ")
+                           :skipped   (dim "not created  ")
                            :kept      (dim "keep         ")
                            :refused   (red "cannot merge "))
                     path
@@ -923,6 +1052,9 @@
             (println (red (str "Cannot merge into " path ": " reason "."))))
           (println "Nothing was written. Fix the file, or move it aside to have setup regenerate it.")
           (*exit!* 1))
+
+      (not-any? (comp #{:new :changed} :status) plan)
+      (println (dim "Nothing to change."))
 
       (and ask? (not (confirm "Generate these config files?" true)))
       (println (yellow "Cancelled."))
@@ -1020,7 +1152,8 @@
    :payment      (some-> (:payment opts) keyword)
    :cache        (some-> (:cache opts) keyword)
    :email        (some-> (:email opts) keyword)
-   :admin-ui     (some-> (:admin-ui opts) (not= "false"))})
+   :admin-ui     (some-> (:admin-ui opts) (not= "false"))
+   :prod?        (= "true" (:prod opts))})
 
 (defn from-flags [opts]
   (let [spec   (from-flags-spec opts)
@@ -1053,6 +1186,7 @@
   (println "  --cache CACHE          none, redis, memory")
   (println "  --email EMAIL          none, smtp")
   (println "  --admin-ui BOOL        true, false")
+  (println "  --prod true            Create resources/conf/prod/config.edn in an existing project")
   (println)
   (println "Generated files:")
   (println "  resources/conf/dev/config.edn")

@@ -47,6 +47,8 @@ for what is public API, what is internal, and how deprecations are announced.
   Fix any script that passes one; `indexed` now writes an index and `optional` is honoured.
 - **`bb setup` exits 1 on a closed stdin instead of accepting every default** (BOU-404).
   A script driving the wizard must pass flags: `bb setup --database sqlite`.
+- **`bb setup` in an existing project creates no missing config file** (BOU-404). Pass `--prod true`
+  to have it write `resources/conf/prod/config.edn`.
 
 ### Fixed
 
