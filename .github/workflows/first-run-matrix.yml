@@ -12,10 +12,9 @@ name: First-Run Matrix (nightly)
 # pre-release gate. Run it by hand before cutting a release rather than trusting
 # that last night's run still describes today's tree.
 #
-# NOTE on failure visibility: a scheduled workflow that fails only shows up in
-# the Actions tab and in GitHub's notification to the repo owner. A nightly gate
-# nobody reads is a gate that has stopped checking (BOU-250). If these start
-# being ignored, wire the failure to somewhere it will be seen.
+# A failing scheduled run opens (or comments on) one issue labelled
+# nightly-failure, and the next passing one closes it. The Actions tab alone went
+# unread for three red nights (BOU-250, BOU-290).
 
 on:
   schedule:
@@ -180,3 +179,39 @@ jobs:
           echo "Not covered here, and not claimed to be: macOS, WSL2, a"
           echo "corporate proxy, and real-user observation. Those need machines"
           echo "and people this matrix does not have."
+
+  # Scheduled runs only: a workflow_dispatch run has someone watching it.
+  report-failure:
+    name: Report nightly failure
+    runs-on: ubuntu-latest
+    needs: [smoke, smoke-released, smoke-ai, smoke-released-ai, adversarial, preconditions]
+    if: failure() && github.event_name == 'schedule'
+    permissions:
+      contents: read
+      actions: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v6
+      - name: Open or update the nightly-failure issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: ./scripts/nightly-failure-issue.sh fail
+
+  report-recovery:
+    name: Close nightly-failure issue
+    runs-on: ubuntu-latest
+    needs: [smoke, smoke-released, smoke-ai, smoke-released-ai, adversarial, preconditions]
+    if: success() && github.event_name == 'schedule'
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v6
+      - name: Close the nightly-failure issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: ./scripts/nightly-failure-issue.sh pass
