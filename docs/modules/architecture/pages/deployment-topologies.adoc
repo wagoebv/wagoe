@@ -254,7 +254,7 @@ curl http://localhost:3001/rpc                                      # connection
 ----
 
 A slice that serves HTTP routes, not just RPC, must include `user`: without it
-every route that is not `:public true` answers 401 (BOU-568).
+every route that is not `:public true` answers 401.
 
 Which modules can run this way is declared in the service catalogue — see
 xref:architecture:scaling.adoc#service-launch-mode[Running a module as a

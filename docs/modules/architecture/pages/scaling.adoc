@@ -239,8 +239,8 @@ module is not there to serve it.
 
 A service that serves HTTP needs the user module in the same process: it is what
 signs a request in. Without it every route that is not `:public true` answers
-401 — the platform fails closed rather than open (BOU-568). Run `service
-payments user`, or keep the slice behind RPC only.
+401 — the platform fails closed rather than open. Include `user` in the slice, or keep the slice
+behind RPC only.
 
 Which keys belong to which module is declared, not guessed:
 
