@@ -5,6 +5,7 @@
             [wagoe.storage.shell.service :as service]
             [wagoe.storage.shell.adapters.local :as local]
             [wagoe.storage.ports]
+            [wagoe.platform.shell.http.reitit-router :as reitit-router]
             [clojure.string]))
 
 (def test-dir "target/test-http-handlers-storage")
@@ -260,3 +261,33 @@
             key             ["" "   "]]
       (is (= 400 (:status (handler {:path-params {:file-key key} :query-params {}})))
           (str label " with " (pr-str key))))))
+
+;; ============================================================================
+;; Who may download (BOU-568)
+;; ============================================================================
+
+(deftest ^:unit ^:security a-signed-url-is-its-own-credential
+  ;; The platform refuses a route that is not :public true. With a signing
+  ;; secret the signature authenticates the download, so a signed link works
+  ;; for someone who is not signed in; without one, it does not.
+  (.mkdirs (io/file test-dir))
+  (spit (io/file test-dir "photo.jpg") "content")
+  (doseq [[label secret expected] [["with a signing secret" "s3cr3t" 200]
+                                   ["without one" nil 401]]]
+    (testing label
+      (let [storage (local/create-local-storage
+                     (cond-> {:base-path test-dir :url-base "/api/v1/storage/download"}
+                       secret (assoc :signing-secret secret)))
+            svc     (service/create-storage-service {:storage storage})
+            handler (reitit-router/compile-routes
+                     [(into ["/api/v1"] (sut/storage-routes svc {:signing-secret secret}))]
+                     {:swagger-enabled false :authentication {:middleware []}})
+            url     (wagoe.storage.ports/generate-signed-url storage "photo.jpg" 3600)
+            [path query] (clojure.string/split url #"\?" 2)]
+        (is (= expected (:status (handler {:request-method :get :uri path :query-string query}))))
+        (testing "and every other storage route still refuses"
+          (doseq [[method p] [[:post "/api/v1/storage/upload"]
+                              [:post "/api/v1/storage/upload/image"]
+                              [:delete "/api/v1/storage/delete/photo.jpg"]
+                              [:get "/api/v1/storage/url/photo.jpg"]]]
+            (is (= 401 (:status (handler {:request-method method :uri p}))) p)))))))

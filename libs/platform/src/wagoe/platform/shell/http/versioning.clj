@@ -156,7 +156,10 @@
     ;; the target format rather than migrated later (ADR-037).
     [(str "/api" path)
      (into {} (map (fn [method]
+                     ;; Public: it only points at the versioned route,
+                     ;; which enforces its own access (BOU-568).
                      [method {:handler redirect-handler
+                              :public  true
                               :summary (str "Redirect to " target-path)}]))
            [:get :post :put :delete :patch])]))
 

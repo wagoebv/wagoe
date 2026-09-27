@@ -427,9 +427,9 @@ with your application.
 
 ### 6. module routes — the prefix is added for you
 
-- **Symptom:** A route answers at /api/v1/api/my-resource instead of /api/v1/my-resource, or the module serves nothing at all and says nothing about it.
-- **Cause:** A module's :wagoe/<name>-routes component returns a contribution — {:api [..] :web [..] :static [..]} — and the platform prefixes each part before mounting it: :api is versioned under /api/v1, :web mounted under /web. Paths written with the prefix already on them get it twice. A flat vector returned instead of the three-key map contributes zero routes, and nothing errors.
-- **Fix:** Write Reitit route data at paths relative to the mount point, and return the three-key map. `bb scaffold generate` writes both; this is what to preserve when editing by hand.
+- **Symptom:** A route answers at /api/v1/api/my-resource instead of /api/v1/my-resource, or the module serves nothing at all and says nothing about it, or every route answers 401 to a caller who is not signed in.
+- **Cause:** A module's :wagoe/<name>-routes component returns a contribution — {:api [..] :web [..] :static [..]} — and the platform prefixes each part before mounting it: :api is versioned under /api/v1, :web mounted under /web. Paths written with the prefix already on them get it twice. A flat vector returned instead of the three-key map contributes zero routes, and nothing errors. Every route requires a signed-in user unless its route data says :public true (BOU-568).
+- **Fix:** Write Reitit route data at paths relative to the mount point, and return the three-key map. `bb scaffold generate` writes both; this is what to preserve when editing by hand. Add :public true, on the method or the path, only to a route something else authenticates: a login form, a signed webhook.
 
 ```clojure
 ;; WRONG — prefix written twice, and a flat vector instead of a contribution
@@ -441,7 +441,10 @@ with your application.
 (defn api-routes [svc]
   [["/my-resource"          ; no /api — versioning adds /api/v1
     {:get {:handler (fn [req] ...)
-           :summary "..."}}]])
+           :summary "..."}}]
+   ["/my-webhook"            ; signed by the sender, so no session
+    {:post {:handler (fn [req] ...)
+            :public  true}}]])
 
 (defn my-routes [svc config]
   {:api    (api-routes svc)

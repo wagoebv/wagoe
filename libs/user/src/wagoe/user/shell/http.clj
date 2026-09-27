@@ -409,8 +409,10 @@
                 :summary    "Soft delete user"
                 :tags       ["users"]
                 :parameters {:path [:map [:id :string]]}}}]
+     ;; Public: signing in is how a caller becomes authenticated (BOU-568).
      ["/auth/login"
-      {:post {:handler    (login-handler user-service)
+      {:public true
+       :post {:handler    (login-handler user-service)
               :summary    "Authenticate user with email/password"
               :tags       ["authentication"]
               :parameters {:body [:map {:closed true}
@@ -420,7 +422,8 @@
                                                                  [:userAgent {:optional true} :string]
                                                                  [:ipAddress {:optional true} :string]]]]}}}]
      ["/sessions"
-      {:post {:handler    (create-session-handler user-service)
+      {:public true
+       :post {:handler    (create-session-handler user-service)
               :summary    "Create session (login by user ID)"
               :tags       ["sessions"]
               :parameters {:body [:or
@@ -435,8 +438,10 @@
                                    [:deviceInfo {:optional true} [:map
                                                                   [:userAgent {:optional true} :string]
                                                                   [:ipAddress {:optional true} :string]]]]]}}}]
+     ;; The token in the path is the credential.
      ["/sessions/:token"
-      {:get    {:handler    (validate-session-handler user-service)
+      {:public true
+       :get    {:handler    (validate-session-handler user-service)
                 :summary    "Validate session"
                 :tags       ["sessions"]
                 :parameters {:path [:map [:token :string]]}}
@@ -478,18 +483,23 @@
   [user-service mfa-service config]
   (let [auth-middleware (user-middleware/flexible-authentication-middleware user-service)
         email-sender    (:email-sender config)]
-    [[""
+    [;; Public: the landing page, registration and sign-in come before a
+     ;; session exists (BOU-568).
+     [""
       {:no-doc true
+       :public true
        :get {:handler (web-handlers/web-root-page-handler user-service config)
              :summary "Web root landing page"}}]
      ["/register"
       {:no-doc true
+       :public true
        :get  {:handler (web-handlers/register-page-handler config)
               :summary "Self-service registration page"}
        :post {:handler (web-handlers/register-submit-handler user-service config)
               :summary "Submit registration form"}}]
      ["/login"
       {:no-doc true
+       :public true
        :get  {:handler (web-handlers/login-page-handler config)
               :summary "Login page"}
        :post {:handler (web-handlers/login-submit-handler user-service config)

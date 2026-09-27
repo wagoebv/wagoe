@@ -56,7 +56,7 @@
         body    (:body resp)]
     (is (= 401 (:status resp)))
     (is (= "Authentication required"
-           (:detail (json/parse-string (if (string? body) body (slurp body)) true))))))
+           (:message (json/parse-string (if (string? body) body (slurp body)) true))))))
 
 (deftest ^:unit the-role-middleware-403-is-json
   (let [handler (reitit/compile-routes
@@ -67,5 +67,5 @@
                           :user {:id (random-uuid) :role :user}})
         body    (:body resp)]
     (is (= 403 (:status resp)))
-    (is (= "access-forbidden"
-           (:type (json/parse-string (if (string? body) body (slurp body)) true))))))
+    (is (= "forbidden"
+           (:error (json/parse-string (if (string? body) body (slurp body)) true))))))

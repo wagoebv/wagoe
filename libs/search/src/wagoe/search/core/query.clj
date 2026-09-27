@@ -179,19 +179,26 @@
      query       - string (partial user input)
      limit       - integer
      threshold   - number (similarity threshold, e.g. 0.15)
+     filters     - map of keyword->any (optional)
 
    Returns:
      JDBC SQL vector [sql & params]"
-  [index-id entity-type query limit threshold]
-  (let [sql (str "SELECT entity_type, entity_id, metadata, "
-                 "  similarity(content_all, ?) AS rank, "
-                 "  NULL AS snippet "
-                 "FROM search_documents "
-                 "WHERE index_id = ? AND entity_type = ? "
-                 "  AND similarity(content_all, ?) > ? "
-                 "ORDER BY rank DESC "
-                 "LIMIT ?")]
-    [sql query index-id entity-type query threshold limit]))
+  ([index-id entity-type query limit threshold]
+   (build-postgres-suggest-sql index-id entity-type query limit threshold nil))
+  ([index-id entity-type query limit threshold filters]
+   (let [[filter-sql & filter-params] (build-filter-sql-postgres (or filters {}))
+         sql (str "SELECT entity_type, entity_id, metadata, "
+                  "  similarity(content_all, ?) AS rank, "
+                  "  NULL AS snippet "
+                  "FROM search_documents d "
+                  "WHERE index_id = ? AND entity_type = ? "
+                  "  AND similarity(content_all, ?) > ? "
+                  filter-sql " "
+                  "ORDER BY rank DESC "
+                  "LIMIT ?")]
+     (-> [sql query index-id entity-type query threshold]
+         (into filter-params)
+         (conj limit)))))
 
 ;; =============================================================================
 ;; Fallback SQL builders (H2 / SQLite)
@@ -255,17 +262,24 @@
      entity-type - string
      query       - string
      limit       - integer
+     filters     - map of keyword->any (optional)
 
    Returns:
      JDBC SQL vector [sql & params]"
-  [index-id entity-type query limit]
-  (let [pattern (str "%" (str/lower-case (or (sanitize-query query) "")) "%")
-        sql (str "SELECT entity_type, entity_id, metadata, "
-                 "  0.5 AS rank, "
-                 "  NULL AS snippet "
-                 "FROM search_documents "
-                 "WHERE index_id = ? AND entity_type = ? "
-                 "  AND LOWER(content_all) LIKE ? "
-                 "ORDER BY updated_at DESC "
-                 "LIMIT ?")]
-    [sql index-id entity-type pattern limit]))
+  ([index-id entity-type query limit]
+   (build-fallback-suggest-sql index-id entity-type query limit nil))
+  ([index-id entity-type query limit filters]
+   (let [pattern (str "%" (str/lower-case (or (sanitize-query query) "")) "%")
+         [filter-sql & filter-params] (build-filter-sql-fallback (or filters {}))
+         sql (str "SELECT entity_type, entity_id, metadata, "
+                  "  0.5 AS rank, "
+                  "  NULL AS snippet "
+                  "FROM search_documents "
+                  "WHERE index_id = ? AND entity_type = ? "
+                  "  AND LOWER(content_all) LIKE ? "
+                  filter-sql " "
+                  "ORDER BY updated_at DESC "
+                  "LIMIT ?")]
+     (-> [sql index-id entity-type pattern]
+         (into filter-params)
+         (conj limit)))))

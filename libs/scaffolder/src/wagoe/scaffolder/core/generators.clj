@@ -937,16 +937,16 @@ DROP TABLE IF EXISTS %s;
    turn JSON strings into UUIDs. Errors are thrown with a :type, so the
    platform answers them in the one shape it uses for every other error.
 
-   Unless `public?`, every route requires a signed-in user. The guard is named
-   by symbol, the way the user module's own routes name it: the platform
-   resolves it at boot, and the module requires nothing from another module's
-   shell."
+   Unless `public?`, every route requires a signed-in user. The platform
+   enforces that for any route not marked `:public true` (BOU-568); the guard
+   named here says so in the module, by symbol, so it requires nothing from
+   another module's shell."
   [entity public?]
   (let [entity-name (:entity-name entity)
         e (or (:entity-kebab entity) (template/pascal->kebab entity-name))
         plural (or (:entity-plural entity) (template/pluralize e))
-        guard (if public? "" "\n            :interceptors signed-in")
-        guard-id (if public? "" "\n              :interceptors signed-in")]
+        guard (if public? "\n            :public true" "\n            :interceptors signed-in")
+        guard-id (if public? "\n              :public true" "\n              :interceptors signed-in")]
     (str ";; JSON has no decimal type: Muuntaja reads 9.99 as a Double, and malli\n"
          ";; has no decoder for decimal?, so without this a decimal field refused both\n"
          ";; 9.99 and \"9.99\".\n"
@@ -1087,7 +1087,7 @@ DROP TABLE IF EXISTS %s;
                 "  \"Mounted under /web — do not repeat the prefix here.\"\n"
                 "  [service config]\n"
                 "  [[\"/" entity-plural "\"\n"
-                "    {:get {" (if public? "" ":interceptors signed-in-page\n           ")
+                "    {:get {" (if public? ":public true\n           " ":interceptors signed-in-page\n           ")
                 ":handler (web-handlers/" entity-lower "-list-handler service config)}}]])\n"
                 "\n"))
          "(defn " module-name "-routes\n"

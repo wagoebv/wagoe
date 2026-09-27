@@ -18,7 +18,7 @@
 (deftest ^:integration register-device-handler-test
   (let [deps    {:device-store (p/->DeviceTokenStore pt/*db*)}
         user-id (random-uuid)
-        request {:identity    {:user-id user-id}
+        request {:user        {:id user-id}
                  :body-params {:token "fcm-token-1" :platform :fcm :app-id "com.test"}}
         response (handlers/register-device-handler deps request)]
     (is (= 201 (:status response)))
@@ -26,7 +26,7 @@
 
 (deftest ^:integration register-device-invalid-body-test
   (let [deps    {:device-store (p/->DeviceTokenStore pt/*db*)}
-        request {:identity    {:user-id (random-uuid)}
+        request {:user        {:id (random-uuid)}
                  :body-params {:platform :fcm}}  ;; missing :token and :app-id
         response (handlers/register-device-handler deps request)]
     (is (= 400 (:status response)))))
@@ -36,7 +36,7 @@
         deps    {:device-store store}
         user-id (random-uuid)]
     (ports/register-device! store user-id {:token "t1" :platform :fcm :app-id "com.test"})
-    (let [response (handlers/list-devices-handler deps {:identity {:user-id user-id}})]
+    (let [response (handlers/list-devices-handler deps {:user {:id user-id}})]
       (is (= 200 (:status response)))
       (is (= 1 (count (get-in response [:body :devices])))))))
 
@@ -46,7 +46,7 @@
         user-id (random-uuid)]
     (ports/register-device! store user-id {:token "to-delete" :platform :fcm :app-id "com.test"})
     (let [response (handlers/unregister-device-handler deps
-                                                       {:identity    {:user-id user-id}
+                                                       {:user        {:id user-id}
                                                         :path-params {:token "to-delete"}})]
       (is (= 204 (:status response)))
       (is (empty? (ports/get-user-devices store user-id))))))
@@ -103,3 +103,15 @@
                                                 {:path-params {:notification-id "test-stats"}})]
       (is (= 200 (:status response)))
       (is (= 2 (get-in response [:body :sent]))))))
+
+;; --- Route data ---
+
+(deftest ^:unit only-the-callback-is-public
+  ;; The platform refuses every route that is not :public true. The callback is
+  ;; posted by a device, and its HMAC is the credential (BOU-568).
+  (let [[_ & children] (handlers/push-routes {})
+        public (for [[path data] children
+                     [method endpoint] data
+                     :when (:public endpoint)]
+                 [path method])]
+    (is (= [["/callback" :post]] public))))

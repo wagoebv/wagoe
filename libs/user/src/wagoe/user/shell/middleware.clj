@@ -9,8 +9,10 @@
   (:require [wagoe.user.ports :as ports]
             [wagoe.user.shell.auth :as auth-shell]
             [wagoe.core.utils.type-conversion :as type-conv]
+            [wagoe.platform.core.http.access :as access]
             [clojure.string :as str]
-            [clojure.tools.logging :as log]))
+            [clojure.tools.logging :as log]
+            [ring.websocket :as ring-ws]))
 
 ;; =============================================================================
 ;; Helper Functions
@@ -84,67 +86,20 @@
    (some-> (get-in request [:cookies "session-token" :value]) decode-token)))
 
 (defn create-unauthorized-response
-  "Creates standardized 401 Unauthorized response.
-   
-   For web UI requests (path starts with /web), redirects to login page.
-   For API requests, returns JSON error response.
-   
-   Args:
-     message: Error message string
-     reason: Keyword reason code
-     request: Optional request map to determine response type
-     
-   Returns:
-     Ring response map"
-  ([message reason]
-   (create-unauthorized-response message reason nil))
-  ([message reason request]
-   (if (and request (str/starts-with? (get request :uri "") "/web"))
-     ;; Web UI request - redirect to login with return-to parameter
-     (let [return-to (:uri request)
-           login-url (str "/web/login?return-to=" (java.net.URLEncoder/encode return-to "UTF-8"))]
-       {:status  302
-        :headers {"Location" login-url}
-        :body    ""})
-     ;; API request - return JSON error. No Content-Type: muuntaja encodes a
-     ;; map body only when none is set (BOU-561).
-     {:status  401
-      :body    {:type   "authentication-required"
-                :title  "Authentication Required"
-                :status 401
-                :detail message
-                :reason reason}})))
+  "401 for an API request; a /web request is redirected to the login page.
+   The shape is platform's, shared with its default-deny guard (BOU-568).
+   `_reason` is no longer sent: one 401 shape framework-wide."
+  ([message reason] (create-unauthorized-response message reason nil))
+  ([message _reason request]
+   (access/unauthorized-response message request
+                                 (access/correlation-id request (str (random-uuid))))))
 
 (defn create-forbidden-response
-  "Creates standardized 403 Forbidden response.
-   
-   For web UI requests (path starts with /web), redirects to login page.
-   For API requests, returns JSON error response.
-   
-   Args:
-     message: Error message string
-     reason: Keyword reason code
-     request: Optional request map to determine response type
-     
-   Returns:
-     Ring response map"
-  ([message reason]
-   (create-forbidden-response message reason nil))
-  ([message reason request]
-   (if (and request (str/starts-with? (get request :uri "") "/web"))
-     ;; Web UI request - redirect to login with return-to parameter (forbidden = not logged in or insufficient perms)
-     (let [return-to (:uri request)
-           login-url (str "/web/login?return-to=" (java.net.URLEncoder/encode return-to "UTF-8"))]
-       {:status  302
-        :headers {"Location" login-url}
-        :body    ""})
-     ;; API request - return JSON error. No Content-Type, as in the 401 above.
-     {:status  403
-      :body    {:type   "access-forbidden"
-                :title  "Access Forbidden"
-                :status 403
-                :detail message
-                :reason reason}})))
+  "403 for an API request; a /web request is redirected to the login page."
+  ([message reason] (create-forbidden-response message reason nil))
+  ([message _reason request]
+   (access/forbidden-response message request
+                              (access/correlation-id request (str (random-uuid))))))
 
 ;; =============================================================================
 ;; JWT Authentication Middleware
@@ -260,6 +215,10 @@
    route should not 401 over one, and a protected route still sees no `:user`
    and is refused by its own guard.
 
+   A WebSocket upgrade may carry its JWT as `?token=`, because a browser cannot
+   set a header on one. Only an upgrade: anywhere else a token in the URL ends
+   up in logs and history, and is ignored (BOU-568).
+
    Args:
      user-service - used for session validation; JWT needs no service
 
@@ -274,7 +233,13 @@
             ;; authentication worked and hands back the enriched request; on
             ;; failure it is never called and `captured` stays nil.
             captured (volatile! nil)
-            capture  (fn [enriched] (vreset! captured enriched) nil)]
+            capture  (fn [enriched] (vreset! captured enriched) nil)
+            ws-token (when (and (ring-ws/upgrade-request? request)
+                                (not (extract-bearer-token request)))
+                       (let [t (get-in request [:query-params "token"])]
+                         (when (string? t) t)))
+            request  (cond-> request
+                       ws-token (assoc-in [:headers "authorization"] (str "Bearer " ws-token)))]
         (cond
           (extract-bearer-token request)
           ((jwt-authentication-middleware capture) request)

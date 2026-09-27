@@ -22,6 +22,11 @@
    The token is verified via the realtime-service's JWT verifier
    during the connect handshake.
 
+   Mounted in a Wagoe application, the route is behind the platform's
+   default-deny: the user module reads `?token=` on an upgrade request, so a
+   missing or bad token is refused with 401 before this handler runs (BOU-568).
+   Leave the route un-`:public`; a custom `:token-param` is not read there.
+
    Lifecycle:
      on-open    → creates adapter, calls realtime-ports/connect (JWT auth)
      on-message → no-op (override with :on-message opt for bidirectional)

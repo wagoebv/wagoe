@@ -162,6 +162,9 @@
     :params         {}
     :body-params    body}))
 
+(defn- as-invitee [request]
+  (assoc request :user {:id user-id-1}))
+
 ;; =============================================================================
 ;; invite-user-handler
 ;; =============================================================================
@@ -318,7 +321,7 @@
 (deftest ^:contract accept-invitation-handler-test
   (testing "200 on accepting an invitation"
     (let [handler  (sut/accept-invitation-handler *mock-service*)
-          request  (make-request :post {:id (str member-id-1)})
+          request  (as-invitee (make-request :post {:id (str member-id-1)}))
           response (handler request)
           body     (parse-body response)]
       (is (= 200 (:status response)))
@@ -326,7 +329,7 @@
 
   (testing "400 when membership is not in :invited status"
     (let [handler  (sut/accept-invitation-handler *mock-service*)
-          request  (make-request :post {:id (str member-id-2)})
+          request  (as-invitee (make-request :post {:id (str member-id-2)}))
           response (handler request)]
       (is (= 400 (:status response)))))
 
@@ -360,3 +363,81 @@
       (is (string? (first route)))
       (doseq [[_method config] (second route)]
         (is (fn? (:handler config)))))))
+
+;; =============================================================================
+;; Authorization (BOU-568)
+;; =============================================================================
+
+(def other-tenant #uuid "10000000-0000-0000-0000-000000000009")
+(def stranger     #uuid "20000000-0000-0000-0000-000000000009")
+(def tenant-admin #uuid "20000000-0000-0000-0000-000000000002")
+
+(defn- through-route
+  "`request` answered by the route at `path`/`method`, its middleware included."
+  [path method request]
+  (let [data     (some (fn [[p d]] (when (= p path) d))
+                       (:api (sut/membership-routes *mock-service*)))
+        endpoint (get data method)
+        handler  (reduce (fn [h mw] (mw h))
+                         (:handler endpoint)
+                         (reverse (concat (:middleware data) (:middleware endpoint))))]
+    (handler (assoc request :request-method method :uri (str "/api/v1" path)))))
+
+(defn- add-admin! []
+  (swap! (:memberships *mock-service*) assoc (UUID/randomUUID)
+         {:id (UUID/randomUUID) :tenant-id tenant-id-1 :user-id tenant-admin
+          :role :admin :status :active}))
+
+(deftest ^:contract ^:security only-the-invitee-accepts
+  (let [handler  (sut/accept-invitation-handler *mock-service*)
+        response (handler (assoc (make-request :post {:id (str member-id-1)})
+                                 :user {:id stranger}))]
+    (is (= 403 (:status response)))
+    (is (= :invited (:status (ports/get-membership *mock-service* member-id-1)))
+        "and the invitation is still open")))
+
+(deftest ^:contract ^:security changing-memberships-takes-a-tenant-admin
+  (add-admin!)
+  (let [invite (fn [user]
+                 (through-route "/tenants/:tenant-id/memberships" :post
+                                (assoc (make-request :post {:tenant-id (str tenant-id-1)}
+                                                     {:userId (str (UUID/randomUUID)) :role "admin"})
+                                       :user user)))]
+    (testing "a signed-in stranger cannot invite"
+      (is (= 403 (:status (invite {:id stranger :role :user})))))
+    (testing "a plain member cannot invite"
+      (is (= 403 (:status (invite {:id user-id-1 :role :user})))))
+    (testing "the tenant's admin can"
+      (is (= 201 (:status (invite {:id tenant-admin :role :user})))))
+    (testing "and so can a global admin"
+      (is (= 201 (:status (invite {:id stranger :role :admin}))))))
+
+  (doseq [method [:put :delete]]
+    (testing (str (name method) " by a plain member is refused")
+      (let [response (through-route "/tenants/:tenant-id/memberships/:id" method
+                                    (assoc (make-request method {:tenant-id (str tenant-id-1)
+                                                                 :id        (str member-id-1)}
+                                                         {:role "admin"})
+                                           :user {:id user-id-1 :role :user}))]
+        (is (= 403 (:status response)))
+        (is (= :member (:role (ports/get-membership *mock-service* member-id-1))))))))
+
+(deftest ^:contract ^:security reading-memberships-takes-a-member
+  (let [list-as (fn [user]
+                  (through-route "/tenants/:tenant-id/memberships" :get
+                                 (assoc (make-request :get {:tenant-id (str tenant-id-1)})
+                                        :user user)))]
+    (is (= 403 (:status (list-as {:id stranger :role :user}))))
+    (is (= 200 (:status (list-as {:id user-id-1 :role :user}))))))
+
+(deftest ^:contract ^:security a-tenant-admin-cannot-reach-another-tenants-memberships
+  ;; Naming your own tenant in the path must not open another tenant's rows.
+  (swap! (:memberships *mock-service*) assoc (UUID/randomUUID)
+         {:id (UUID/randomUUID) :tenant-id other-tenant :user-id tenant-admin
+          :role :admin :status :active})
+  (let [response (through-route "/tenants/:tenant-id/memberships/:id" :delete
+                                (assoc (make-request :delete {:tenant-id (str other-tenant)
+                                                              :id        (str member-id-1)})
+                                       :user {:id tenant-admin :role :user}))]
+    (is (= 404 (:status response)))
+    (is (= :invited (:status (ports/get-membership *mock-service* member-id-1))))))

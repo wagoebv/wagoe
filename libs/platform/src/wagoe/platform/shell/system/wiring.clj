@@ -304,6 +304,7 @@
         {:post {:handler handler
                 :summary "Playwright e2e reset + seed endpoint"
                 :no-doc  true
+                :public  true
                 :skip-interceptors? true}}]])))
 
 (defn- interceptor-services
@@ -344,13 +345,11 @@
    pipeline; feature libraries inject their middleware, which is why platform
    does not require the tenant library (BOU-200).
 
-   `auth-middleware` is its own injection point rather than part of
-   `extra-middleware`, for the reason i18n is: its position is platform's
-   decision. It must be outermost, because tenant membership enrichment reads
-   `[:user :id]` and arrives via `extra-middleware`. Module contributions merge
-   by key and iterate in sorted order — `:wagoe/tenant` sorts before
-   `:wagoe/user` — so ordering could not come from there (BOU-373)."
-  [{:keys [auth-middleware extra-middleware i18n i18n-middleware]}]
+   Authentication is not here: it runs earlier, ahead of body decoding, with
+   the default-deny guard — see `:authentication` in the router config. It
+   still precedes the tenant middleware, which reads `[:user :id]` (BOU-373,
+   BOU-568)."
+  [{:keys [extra-middleware i18n i18n-middleware]}]
   (let [;; `:i18n` is still accepted. An app that upgrades platform without
         ;; regenerating its config still passes the component under that key —
         ;; the documented input until now — and dropping it would take the
@@ -369,7 +368,6 @@
                       (let [wrap (requiring-resolve 'wagoe.i18n.shell.middleware/wrap-i18n)]
                         (fn [handler] (wrap handler i18n)))))]
     (concat
-     (or auth-middleware [])
      (or extra-middleware [])
      (when i18n-mw [i18n-mw])
      ;; HTML forms can only GET and POST, so a POST carrying _method=delete is
@@ -455,8 +453,8 @@
   "The endpoints every Wagoe application serves, whoever it is.
 
    Health, readiness, liveness, the Prometheus scrape and the `/` redirect.
-   `:skip-interceptors?` on all of them: a liveness probe that needs a session
-   is not a liveness probe.
+   `:skip-interceptors?` and `:public` on all of them: a liveness probe that
+   needs a session is not a liveness probe.
 
    Reitit route data, used as-is — handlers are vars and functions rather than
    quoted symbols resolved at boot, so a typo is a lint error (ADR-037)."
@@ -469,7 +467,7 @@
                         (get-in config [:active :wagoe/settings :version] "unknown")
                         nil)
         ready-handler  (readiness-fn db-context cache)
-        internal       {:no-doc true :skip-interceptors? true}]
+        internal       {:no-doc true :skip-interceptors? true :public true}]
     [["/" {:get (merge internal
                        {:handler (fn [request]
                                    ;; Signed in or not decides where "/" goes.
@@ -501,6 +499,9 @@
 (defmethod ig/init-key :wagoe/http-handler
   [_ {:keys [module-routes logger metrics-emitter tracer error-reporter error-enricher config tenant-service db-context cache i18n i18n-middleware user-service request-capture? auth-middleware extra-middleware router]}]
   (log/info "Initializing top-level HTTP handler")
+  (when (empty? auth-middleware)
+    (log/warn (str "No authentication middleware is wired (no user module?). "
+                   "Every route that is not :public true answers 401.")))
   (require 'wagoe.platform.shell.interfaces.http.common)
   (let [platform-routes (platform-routes {:config          config
                                           :db-context      db-context
@@ -577,12 +578,15 @@
                                ;; after the framework's pipeline, so it sees a
                                ;; request the framework has already prepared.
                                :middleware (into (vec (request-middleware
-                                                       {:auth-middleware  auth-middleware
-                                                        :extra-middleware extra-middleware
+                                                       {:extra-middleware extra-middleware
                                                         :i18n             i18n
                                                         :i18n-middleware  i18n-middleware}))
                                                  (:middleware settings))
-                               :system system}
+                               :system system
+                               ;; Every route requires a signed-in user unless
+                               ;; it is `:public true` (BOU-568). Installed
+                               ;; here, not per module, so none can forget it.
+                               :authentication {:middleware (vec auth-middleware)}}
                         (contains? settings :coercion)
                         (assoc :coercion (:coercion settings))
 

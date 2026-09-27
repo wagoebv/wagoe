@@ -291,19 +291,19 @@
                          3600)]
 
         (if-not file-key
-        (problem-details/bad-request
-         "Missing required parameter: file-key"
-         {:missing-parameter "file-key"})
+          (problem-details/bad-request
+           "Missing required parameter: file-key"
+           {:missing-parameter "file-key"})
 
-        (if-let [url (service/get-file-url storage-service file-key expiration)]
-          {:status 200
-           :headers {"Content-Type" "application/json"}
-           :body {:url url
-                  :expiration-seconds expiration}}
+          (if-let [url (service/get-file-url storage-service file-key expiration)]
+            {:status 200
+             :headers {"Content-Type" "application/json"}
+             :body {:url url
+                    :expiration-seconds expiration}}
 
-          (problem-details/not-found
-           "File not found or URL generation failed"
-           {:file-key file-key})))))))
+            (problem-details/not-found
+             "File not found or URL generation failed"
+             {:file-key file-key})))))))
 
 ;; ============================================================================
 ;; Route Definitions
@@ -327,31 +327,34 @@
    ;; `{*file-key}` catches the whole key, slashes included: the local adapter
    ;; sharded every key it hands back (`2a/photo.jpg`), so a single-segment
    ;; `:file-key` could never match the key it had just returned (BOU-421).
-   [[(str base-path "/upload")
-     {:post {:handler     (upload-file-handler storage-service)
-             :summary     "Upload a file"
-             :description "Upload a file with validation (max-size, allowed-types, allowed-extensions)."}}]
+     [[(str base-path "/upload")
+       {:post {:handler     (upload-file-handler storage-service)
+               :summary     "Upload a file"
+               :description "Upload a file with validation (max-size, allowed-types, allowed-extensions)."}}]
 
-    [(str base-path "/upload/image")
-     {:post {:handler     (upload-image-handler storage-service)
-             :summary     "Upload an image with optional processing"
-             :description "Upload an image and optionally create a thumbnail."}}]
+      [(str base-path "/upload/image")
+       {:post {:handler     (upload-image-handler storage-service)
+               :summary     "Upload an image with optional processing"
+               :description "Upload an image and optionally create a thumbnail."}}]
 
-    [(str base-path "/download/{*file-key}")
-     {:get {:handler (download-file-handler storage-service signing-secret)
-            :summary "Download a file"
-            :swagger file-key-swagger}}]
+      [(str base-path "/download/{*file-key}")
+     ;; With a signing secret the signature is the credential, so a signed link
+     ;; works without a session. Without one this stays behind login (BOU-568).
+       {:get (cond-> {:handler (download-file-handler storage-service signing-secret)
+                      :summary "Download a file"
+                      :swagger file-key-swagger}
+               signing-secret (assoc :public true))}]
 
-    [(str base-path "/delete/{*file-key}")
-     {:delete {:handler (delete-file-handler storage-service)
-               :summary "Delete a file"
-               :swagger file-key-swagger}}]
+      [(str base-path "/delete/{*file-key}")
+       {:delete {:handler (delete-file-handler storage-service)
+                 :summary "Delete a file"
+                 :swagger file-key-swagger}}]
 
-    [(str base-path "/url/{*file-key}")
-     {:get {:handler (get-file-url-handler storage-service)
-            :summary "Get a direct or signed URL for a file"
-            :swagger {:parameters
-                      [{:name "file-key" :in "path" :required true :type "string"
-                        :description "Storage key of the file"}
-                       {:name "expiration" :in "query" :required false :type "integer"
-                        :description "Signed-URL lifetime in seconds (default 3600)"}]}}}]])))
+      [(str base-path "/url/{*file-key}")
+       {:get {:handler (get-file-url-handler storage-service)
+              :summary "Get a direct or signed URL for a file"
+              :swagger {:parameters
+                        [{:name "file-key" :in "path" :required true :type "string"
+                          :description "Storage key of the file"}
+                         {:name "expiration" :in "query" :required false :type "integer"
+                          :description "Signed-URL lifetime in seconds (default 3600)"}]}}}]])))

@@ -34,11 +34,15 @@ WebSocket-based real-time communication with JWT authentication, message routing
 ## Connection Lifecycle
 
 1. Client connects with JWT: `ws://host/ws?token=<jwt>`
-2. Server verifies JWT via `IJWTVerifier` adapter
-3. Connection record created, registered in connection registry
-4. `:on-open` callback invoked (if provided) with the `connection-id`
-5. Client can send/receive messages
-6. On disconnect: cleanup registry + unsubscribe from all pub/sub topics
+2. Behind the Wagoe platform the `/ws` route is not `:public`: the user module
+   reads `?token=` on a WebSocket upgrade (only there), and a missing or bad
+   token is a 401 before the upgrade (BOU-568). A browser's session cookie works
+   too. A custom `:token-param` is not read by the platform.
+3. Server verifies JWT via `IJWTVerifier` adapter
+4. Connection record created, registered in connection registry
+5. `:on-open` callback invoked (if provided) with the `connection-id`
+6. Client can send/receive messages
+7. On disconnect: cleanup registry + unsubscribe from all pub/sub topics
 
 ## WebSocket Handler Options
 
