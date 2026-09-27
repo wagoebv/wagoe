@@ -153,15 +153,15 @@
   (suggest-documents [_ index-id entity-type query opts]
     (log/debug "Suggesting documents"
                {:index-id index-id :entity-type entity-type :query query})
-    (let [{:keys [limit threshold]
+    (let [{:keys [limit threshold filters]
            :or   {limit 5 threshold 0.15}} opts
           sql-vec (if (= db-type :postgresql)
                     (qry/build-postgres-suggest-sql
                      (kw->str index-id) (kw->str entity-type)
-                     query limit threshold)
+                     query limit threshold filters)
                     (qry/build-fallback-suggest-sql
                      (kw->str index-id) (kw->str entity-type)
-                     query limit))
+                     query limit filters))
           rows (jdbc/execute! datasource sql-vec
                               {:builder-fn rs/as-unqualified-lower-maps})]
       (mapv db->result rows)))

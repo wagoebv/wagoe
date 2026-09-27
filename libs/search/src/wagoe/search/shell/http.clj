@@ -13,11 +13,19 @@
      POST   /search/:index-id/search       — HTMX search results fragment
 
    Searching takes a signed-in user; indexing, removing and the admin pages
-   take the admin role (BOU-568)."
+   take the admin role (BOU-568).
+
+   An index whose definition lists `:tenant-id` among its `:filters` is
+   tenant-scoped. A search of one reads the request's resolved tenant, and only
+   when the caller is an active member of it; a `tenant_id` the caller sends is
+   dropped. With no tenant resolved, only a global admin may search it, with
+   whatever filters they send. Anyone else gets 403."
   (:require [wagoe.i18n.shell.middleware :as i18n-middleware]
             [wagoe.platform.core.http.access :as access]
             [wagoe.i18n.shell.render :as i18n]
+            [wagoe.search.core.index :as index]
             [wagoe.search.ports :as ports]
+            [wagoe.search.shell.registry :as registry]
             [wagoe.search.core.ui :as search-ui]
             [clojure.tools.logging :as log])
   (:import [java.util UUID]))
@@ -34,6 +42,28 @@
       (handler request)
       (access/forbidden-response "Admin role required" request
                                  (access/correlation-id request (str (random-uuid)))))))
+
+(defn- tenant-filter? [k]
+  (= "tenant_id" (index/filter-key->json-key k)))
+
+(defn- scoped-filters
+  "The filters a search of `index-id` runs with, or ::refused.
+
+   See the namespace docstring for the rule."
+  [request index-id caller-filters]
+  (let [own       (into {} (remove (comp tenant-filter? key)) caller-filters)
+        tenant-id (get-in request [:tenant :id])
+        scoped?   (some tenant-filter? (:filters (registry/get-search index-id)))]
+    (cond
+      (not scoped?)                                own
+      (and tenant-id (or (:tenant-membership request)
+                         (access/admin? request))) (assoc own :tenant-id tenant-id)
+      (and (nil? tenant-id) (access/admin? request)) (or caller-filters {})
+      :else                                        ::refused)))
+
+(defn- refused [request]
+  (access/forbidden-response "Tenant membership required" request
+                             (access/correlation-id request (str (random-uuid)))))
 
 (defn- parse-uuid-param
   [s param-name]
@@ -83,24 +113,26 @@
         limit      (get body :limit 20)
         offset     (get body :offset 0)
         highlight? (get body :highlight? false)
-        filters    (when-let [f (get body :filters)] (not-empty f))]
+        filters    (scoped-filters request index-id (get body :filters))]
     (log/info "Search request" {:index-id index-id :query query})
-    (let [response (ports/search engine index-id query
-                                 (cond-> {:limit      limit
-                                          :offset     offset
-                                          :highlight? highlight?}
-                                   filters (assoc :filters filters)))]
-      {:status 200
-       :body   {:results  (mapv (fn [r]
-                                  (cond-> {:entityType (name (:entity-type r))
-                                           :entityId   (str (:entity-id r))
-                                           :rank       (:rank r)}
-                                    (:snippet r)   (assoc :snippet (:snippet r))
-                                    (:metadata r)  (assoc :metadata (:metadata r))))
-                                (:results response))
-                :total    (:total response)
-                :query    (:query response)
-                :tookMs   (:took-ms response)}})))
+    (if (= ::refused filters)
+      (refused request)
+      (let [response (ports/search engine index-id query
+                                   (cond-> {:limit      limit
+                                            :offset     offset
+                                            :highlight? highlight?}
+                                     (seq filters) (assoc :filters filters)))]
+        {:status 200
+         :body   {:results  (mapv (fn [r]
+                                    (cond-> {:entityType (name (:entity-type r))
+                                             :entityId   (str (:entity-id r))
+                                             :rank       (:rank r)}
+                                      (:snippet r)   (assoc :snippet (:snippet r))
+                                      (:metadata r)  (assoc :metadata (:metadata r))))
+                                  (:results response))
+                  :total    (:total response)
+                  :query    (:query response)
+                  :tookMs   (:took-ms response)}}))))
 
 (defn handle-suggest
   "POST /api/v1/search/:index-id/suggest"
@@ -109,14 +141,19 @@
         body         (get-in request [:parameters :body] {})
         query        (get body :query "")
         limit        (get body :limit 5)
-        suggestions  (ports/suggest engine index-id query {:limit limit})]
-    {:status 200
-     :body   {:suggestions (mapv (fn [r]
-                                   {:entityType (name (:entity-type r))
-                                    :entityId   (str (:entity-id r))
-                                    :rank       (:rank r)})
-                                 suggestions)
-              :query       query}}))
+        filters      (scoped-filters request index-id nil)]
+    (if (= ::refused filters)
+      (refused request)
+      (let [suggestions (ports/suggest engine index-id query
+                                       (cond-> {:limit limit}
+                                         (seq filters) (assoc :filters filters)))]
+        {:status 200
+         :body   {:suggestions (mapv (fn [r]
+                                       {:entityType (name (:entity-type r))
+                                        :entityId   (str (:entity-id r))
+                                        :rank       (:rank r)})
+                                     suggestions)
+                  :query       query}}))))
 
 (defn handle-index-document
   "POST /api/v1/search/documents"

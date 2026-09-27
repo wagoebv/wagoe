@@ -150,6 +150,12 @@ Call `ports/index-document!` from your module's service layer or event handler:
 Searching takes a signed-in user; indexing, removing and the web UI take the
 admin role (BOU-568).
 
+An index with `:tenant-id` in its `:filters` is tenant-scoped. Search and
+suggest then filter on the request's resolved tenant, and only for an active
+member of it; a `tenant_id` the caller sends is ignored. With no tenant
+resolved, only a global admin may search it (across tenants, with their own
+filters); anyone else gets 403.
+
 ### API Endpoints (mounted at `/api/v1/search/...`)
 
 | Method | Path                                        | Action            |

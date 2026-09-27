@@ -140,3 +140,13 @@
                           "product-search" "product" "test" {:status "active"})]
       (is (.contains sql "INSTR"))
       (is (some #(= "\"status\":\"active\"" %) params)))))
+
+(deftest ^:unit suggest-sql-carries-the-tenant-filter
+  ;; Suggestions of a tenant-scoped index are filtered like searches (BOU-568).
+  (let [[sql & params] (query/build-postgres-suggest-sql "i" "t" "wid" 5 0.15 {:tenant-id "a"})]
+    (is (re-find #"FROM search_documents d " sql))
+    (is (re-find #"d\.filters::jsonb->>'tenant_id' = \?" sql))
+    (is (= ["wid" "i" "t" "wid" 0.15 "a" 5] params)))
+  (let [[sql & params] (query/build-fallback-suggest-sql "i" "t" "wid" 5 {:tenant-id "a"})]
+    (is (re-find #"INSTR\(filters, \?\)" sql))
+    (is (= ["i" "t" "%wid%" "\"tenant_id\":\"a\"" 5] params))))

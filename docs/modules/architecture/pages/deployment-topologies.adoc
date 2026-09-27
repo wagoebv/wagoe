@@ -253,6 +253,9 @@ curl -X POST http://identity:3001/rpc -H "x-rpc-service-key: $RPC_SERVICE_KEY" -
 curl http://localhost:3001/rpc                                      # connection refused
 ----
 
+A slice that serves HTTP routes, not just RPC, must include `user`: without it
+every route that is not `:public true` answers 401 (BOU-568).
+
 Which modules can run this way is declared in the service catalogue — see
 xref:architecture:scaling.adoc#service-launch-mode[Running a module as a
 service]. A module that is `:inactive` in your config cannot: `service payments`

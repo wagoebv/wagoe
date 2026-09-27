@@ -174,3 +174,29 @@
       (let [response (anonymous m path)]
         (is (not (or (= 401 (:status response)) (sent-to-login? response)))
             (str (str/upper-case (name m)) " " path " is :public but refused an anonymous caller"))))))
+
+(def ^:private expected-public
+  "Every route an anonymous caller may reach, written out. `:public` inherited
+   from a parent route, or added without a reason, changes this set and fails
+   the test below. The unversioned `/api/...` redirects are checked by rule."
+  #{[:get "/"] [:get "/health"] [:get "/health/live"] [:get "/health/ready"]
+    [:get "/metrics"] [:get "/swagger.json"] [:get "/api-docs/*"]
+    [:post "/test/reset"]
+    [:post "/api/v1/auth/login"] [:post "/api/v1/sessions"]
+    [:get "/api/v1/sessions/:token"] [:delete "/api/v1/sessions/:token"]
+    [:get "/web"] [:get "/web/login"] [:post "/web/login"]
+    [:get "/web/register"] [:post "/web/register"]
+    [:post "/api/push/callback"]})
+
+(deftest ^:integration ^:security the-public-set-is-exactly-what-was-decided
+  (let [table     (route-table)
+        public    (set (for [[p m pub?] table :when pub?] [m p]))
+        versioned (set (for [[p] table :when (str/starts-with? p "/api/v1/")]
+                         (subs p (count "/api/v1"))))
+        redirects (set (for [suffix versioned
+                             m      [:get :post :put :patch :delete]]
+                         [m (str "/api" suffix)]))]
+    (is (= expected-public (set (remove (set redirects) public)))
+        "the public routes changed; update expected-public only on purpose")
+    (is (every? public redirects)
+        "an unversioned /api redirect is not public, so it cannot redirect")))

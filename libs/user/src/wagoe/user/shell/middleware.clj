@@ -11,7 +11,8 @@
             [wagoe.core.utils.type-conversion :as type-conv]
             [wagoe.platform.core.http.access :as access]
             [clojure.string :as str]
-            [clojure.tools.logging :as log]))
+            [clojure.tools.logging :as log]
+            [ring.websocket :as ring-ws]))
 
 ;; =============================================================================
 ;; Helper Functions
@@ -214,6 +215,10 @@
    route should not 401 over one, and a protected route still sees no `:user`
    and is refused by its own guard.
 
+   A WebSocket upgrade may carry its JWT as `?token=`, because a browser cannot
+   set a header on one. Only an upgrade: anywhere else a token in the URL ends
+   up in logs and history, and is ignored (BOU-568).
+
    Args:
      user-service - used for session validation; JWT needs no service
 
@@ -228,7 +233,13 @@
             ;; authentication worked and hands back the enriched request; on
             ;; failure it is never called and `captured` stays nil.
             captured (volatile! nil)
-            capture  (fn [enriched] (vreset! captured enriched) nil)]
+            capture  (fn [enriched] (vreset! captured enriched) nil)
+            ws-token (when (and (ring-ws/upgrade-request? request)
+                                (not (extract-bearer-token request)))
+                       (let [t (get-in request [:query-params "token"])]
+                         (when (string? t) t)))
+            request  (cond-> request
+                       ws-token (assoc-in [:headers "authorization"] (str "Bearer " ws-token)))]
         (cond
           (extract-bearer-token request)
           ((jwt-authentication-middleware capture) request)

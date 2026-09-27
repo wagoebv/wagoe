@@ -89,6 +89,12 @@ Under Integrant, pass it as `:jwt-verifier` on the `:wagoe/realtime` key.
 
 ### 4. Add WebSocket Endpoint
 
+In a Wagoe application the route needs no `:public true`: the platform refuses
+it without a signed-in user, and the user module accepts the `?token=` JWT on a
+WebSocket upgrade. A missing or bad token is a 401 before the upgrade (BOU-568).
+Use `wagoe.realtime.shell.handlers.ring-websocket/websocket-handler`; the
+hand-written handler below shows what it does.
+
 ```clojure
 (require '[wagoe.realtime.shell.adapters.websocket-adapter :as ws])
 

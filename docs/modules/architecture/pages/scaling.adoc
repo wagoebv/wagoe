@@ -237,6 +237,11 @@ In the test profile `service user` runs 20 of the application's 34 components.
 `/health` answers, `/web/login` answers, `/api/v1/tenants` is a 404 — the tenant
 module is not there to serve it.
 
+A service that serves HTTP needs the user module in the same process: it is what
+signs a request in. Without it every route that is not `:public true` answers
+401 — the platform fails closed rather than open (BOU-568). Run `service
+payments user`, or keep the slice behind RPC only.
+
 Which keys belong to which module is declared, not guessed:
 
 [source,clojure]
