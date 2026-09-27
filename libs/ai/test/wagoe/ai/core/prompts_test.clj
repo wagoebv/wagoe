@@ -66,10 +66,21 @@
       (is (str/includes? (:content (second msgs)) trace)))))
 
 (deftest ^:unit test-generator-messages-test
-  (testing "includes source file path and type in user message"
+  (testing "includes source file path in user message"
     (let [msgs (prompts/test-generator-messages "libs/user/src/core/v.clj" "(ns foo)" :unit)]
-      (is (str/includes? (:content (second msgs)) "libs/user/src/core/v.clj"))
-      (is (str/includes? (:content (second msgs)) "unit")))))
+      (is (str/includes? (:content (second msgs)) "libs/user/src/core/v.clj"))))
+
+  (testing "BOU-572: the required namespaces' real API goes with the source"
+    (let [msgs (prompts/test-generator-messages "src/a.clj" "(ns a)" :unit
+                                                "protocol wf/IWorkflowStore")]
+      (is (str/includes? (:content (second msgs)) "protocol wf/IWorkflowStore"))))
+
+  (testing "BOU-572: tags follow what a test touches, not where the source lives"
+    (let [prompt (prompts/build-test-generator-system-prompt)]
+      (is (str/includes? prompt "^:unit"))
+      (is (str/includes? prompt "real I/O"))
+      (is (not (str/includes? prompt "For shell/ files: use ^:integration")))
+      (is (str/includes? prompt "every method")))))
 
 (deftest ^:unit sql-copilot-messages-test
   (testing "description is included in user message"
@@ -106,3 +117,10 @@
       (doseq [k [":entity" ":table" ":foreign-key" ":label" ":fields"]]
         (is (str/includes? prompt k) k))
       (is (not (str/includes? prompt ":relations"))))))
+
+(deftest ^:unit admin-entity-prompt-teaches-the-entity-workflow-test
+  (testing "BOU-572: a workflow is an entity-level key, not a widget"
+    (let [prompt (prompts/build-admin-entity-system-prompt [])]
+      (is (str/includes? prompt ":workflow {:entity-type"))
+      (is (str/includes? prompt ":textarea") "the widgets are listed")
+      (is (not (str/includes? prompt ":widget :workflow"))))))

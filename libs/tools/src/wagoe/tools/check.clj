@@ -59,6 +59,13 @@
               (filter #(.exists (io/file %)) top-level-lint-paths))
         (lib-lint-paths)))
 
+(defn lint
+  "Run `linting-cmd` and exit with its status. The pre-commit hook calls this
+   rather than its own clj-kondo line, so it cannot pass what `bb check`
+   fails (BOU-572)."
+  []
+  (System/exit (:exit (process/shell {:continue true} (str/join " " (linting-cmd))))))
+
 (def all-checks
   [{:id    :fcis
     :scope :any

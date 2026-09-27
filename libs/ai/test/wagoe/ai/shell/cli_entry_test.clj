@@ -342,3 +342,14 @@
       (testing "--force overwrites it"
         (sut/write-admin-entities! targets true)
         (is (= "{:invoices {}}" (slurp prod)))))))
+
+(deftest ^:unit a-test-namespace-that-fails-its-checks-is-not-written
+  ;; BOU-572: rc-4 wrote one that stopped the whole suite from loading.
+  (let [failed {:text "(ns t-test)" :check-errors ["[t-test] Unable to resolve symbol"]}
+        passed {:text "(ns t-test)"}]
+    (is (= :refuse (sut/gen-tests-outcome failed "test/t_test.clj" false)))
+    (is (= :refuse (sut/gen-tests-outcome failed nil false)) "not printed as if it worked either")
+    (is (= :write (sut/gen-tests-outcome failed "test/t_test.clj" true)) "--force writes it anyway")
+    (is (= :print (sut/gen-tests-outcome failed nil true)))
+    (is (= :write (sut/gen-tests-outcome passed "test/t_test.clj" false)))
+    (is (= :print (sut/gen-tests-outcome passed nil false)))))

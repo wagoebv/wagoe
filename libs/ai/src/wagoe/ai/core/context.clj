@@ -190,3 +190,69 @@
        source
        (str (str/join "\n" (take max-lines lines))
             "\n;; ... (truncated)")))))
+
+;; =============================================================================
+;; Required namespaces — the API a generated test may call (BOU-572)
+;; =============================================================================
+
+(defn- libspecs
+  "[ns-sym opts] for each libspec in the ns form's :require clauses, with
+   prefix lists expanded."
+  [ns-form]
+  (->> ns-form
+       (filter #(and (seq? %) (= :require (first %))))
+       (mapcat rest)
+       (mapcat (fn [spec]
+                 (cond
+                   (symbol? spec) [[spec nil]]
+                   (and (sequential? spec) (symbol? (first spec)))
+                   (let [[head & more] spec]
+                     (if (and (seq more) (not-any? keyword? more))
+                       (for [s more
+                             :let [[sub & opts] (if (sequential? s) s [s])]]
+                         [(symbol (str head "." sub)) opts])
+                       [[head more]]))
+                   :else [])))))
+
+(defn ns-form-requires
+  "The namespaces an ns form requires, in order."
+  [ns-form]
+  (vec (distinct (map first (libspecs ns-form)))))
+
+(defn ns-form-aliases
+  "{ns-sym alias-sym} for the requires that name an alias."
+  [ns-form]
+  (into {}
+        (keep (fn [[ns-sym opts]]
+                (when-let [a (:as (apply hash-map (take (* 2 (quot (count opts) 2)) opts)))]
+                  [ns-sym a])))
+        (libspecs ns-form)))
+
+(defn- arglists-str [arglists]
+  (str/join " " (map pr-str arglists)))
+
+(defn render-namespace-apis
+  "The public API of each required namespace, named the way the source refers
+   to it, for the test generator's prompt. The model invented protocol names
+   when it only saw the source (BOU-572).
+
+   `apis` is [{:ns :protocols [{:name :methods [{:name :arglists}]}]
+               :vars [{:name :arglists}] :error}]."
+  [aliases apis]
+  (str/join
+   "\n\n"
+   (for [{:keys [ns protocols vars error]} apis
+         :let [a      (get aliases ns)
+               prefix (str (or a ns) "/")]]
+     (if error
+       (str ns " — could not be loaded (" error "); do not use it")
+       (str/join
+        "\n"
+        (concat
+         [(str ns (when a (str " — required as " a)))]
+         (for [{:keys [name methods]} protocols]
+           (str "  protocol " prefix name "\n"
+                (str/join "\n" (for [m methods]
+                                 (str "    (" (:name m) " " (arglists-str (:arglists m)) ")")))))
+         (for [{:keys [name arglists]} vars]
+           (str "  (" prefix name (when (seq arglists) (str " " (arglists-str arglists))) ")"))))))))
