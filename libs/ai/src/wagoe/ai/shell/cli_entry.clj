@@ -156,6 +156,25 @@
 
        :else msg))))
 
+(defn describe-failure
+  "`explain-provider-error`, then which provider failed, with what HTTP status,
+   and in the provider's own words. The advice alone left a 429 unreadable, and
+   an empty message printed nothing at all (BOU-567)."
+  [result service]
+  (let [advice (str/trim (str (explain-provider-error result service)))
+        raw    (str/trim (str (:error result)))
+        body   (str/trim (str (:body result)))
+        where  (str/join ", " (remove str/blank? [(some-> (:provider result) name)
+                                                  (:model result)
+                                                  (some->> (:status result) (str "HTTP "))]))
+        words  (remove str/blank? [(when (not= raw advice) raw)
+                                   ;; clj-http's own message carries no detail.
+                                   (when (or (str/blank? raw) (re-matches #"clj-http: status \d+" raw))
+                                     body)])]
+    (str (if (str/blank? advice) "The AI request failed with no message." advice)
+         (when (seq where) (str "\n  [" where "]"))
+         (apply str (map #(str "\n  " %) words)))))
+
 (defn- make-service-from-env
   "Fall-back when no :wagoe/ai-service is present in active config.
    Checks ANTHROPIC_API_KEY, OPENAI_BASE_URL, OPENAI_API_KEY, OLLAMA_URL in that order.
@@ -288,7 +307,7 @@
           result  (svc/scaffold-from-description service description (:root options))]
       (if (:error result)
         (do (binding [*out* *err*]
-              (println (red (explain-provider-error result service))))
+              (println (red (describe-failure result service))))
             (System/exit 1))
         (println (json/generate-string
                   (select-keys result [:module-name :entity :fields :entities :http :web :public-api])))))))
@@ -313,7 +332,7 @@
     (let [service (make-service-from-config)
           result  (svc/explain-error service stacktrace (:root options))]
       (if (:error result)
-        (do (println (red (explain-provider-error result service))) (System/exit 1))
+        (do (println (red (describe-failure result service))) (System/exit 1))
         (do
           (println)
           (println (bold "=== AI Error Explanation ==="))
@@ -366,7 +385,7 @@
       (let [service (make-service-from-config)
             result  (svc/generate-tests service source-path)]
         (if (:error result)
-          (do (println (red (explain-provider-error result service))) (System/exit 1))
+          (do (println (red (describe-failure result service))) (System/exit 1))
           (if dest
             (do (io/make-parents dest)
                 (spit dest (:text result))
@@ -393,7 +412,7 @@
     (let [service (make-service-from-config)
           result  (svc/sql-from-description service description (:root options))]
       (if (:error result)
-        (do (println (red (explain-provider-error result service))) (System/exit 1))
+        (do (println (red (describe-failure result service))) (System/exit 1))
         (do
           (println)
           (println (bold "=== HoneySQL ==="))
@@ -430,7 +449,7 @@
         (println)
         (let [result (svc/generate-docs service module-path doc-type)]
           (if (:error result)
-            (println (red (explain-provider-error result service)))
+            (println (red (describe-failure result service)))
             (if (:output options)
               (let [fname (str (:output options)
                                (when (> (count doc-types) 1)
@@ -448,6 +467,28 @@
    ["-y" "--yes" "Skip confirmation and write immediately"]
    ["-h" "--help"]])
 
+(defn profiles
+  "The profiles under resources/conf with a config.edn, or dev and test when
+   there are none yet. Hardcoding dev and test left prod without the file."
+  [root]
+  (->> (.listFiles (io/file root "resources" "conf"))
+       (filter #(.isFile (io/file % "config.edn")))
+       (map #(.getName %))
+       sort
+       seq
+       (#(vec (or % ["dev" "test"])))))
+
+(defn- type-source-line [{:keys [entity-name type-source corrections]}]
+  (str "Types for " entity-name ": "
+       (if (= :migrations (:source type-source))
+         (str "from the " (:table type-source) " table in the migrations")
+         "no table in the migrations, so inferred from field names")
+       (when (seq corrections)
+         (str " (corrected " (str/join ", " (map (fn [{:keys [field from to]}]
+                                                   (str field " " from "→" to))
+                                                 corrections))
+              ")"))))
+
 (defn cmd-admin-entity [args]
   (let [{:keys [options arguments]} (parse-or-exit! args admin-entity-opts "Usage: bb ai admin-entity <description>")
         description (str/join " " arguments)]
@@ -462,7 +503,7 @@
     (let [service (make-service-from-config)
           result  (svc/generate-admin-entity service description (:root options))]
       (if (:error result)
-        (do (println (red (explain-provider-error result service)))
+        (do (println (red (describe-failure result service)))
             (when (:raw-text result)
               (println)
               (println (dim "Raw AI output:"))
@@ -474,22 +515,26 @@
             (println (str (cyan "\u2502") " " line)))
           (println (cyan "\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518"))
           (println)
-          (let [entity-name (:entity-name result)]
+          (doseq [e (:entities result)]
+            (println (dim (type-source-line e))))
+          (println)
+          (let [root     (:root options)
+                entities (:entities result)]
             (if (or (:yes options) (confirm? "Write this entity config?"))
-              (let [dev-path  (str (:root options) "/resources/conf/dev/admin/" entity-name ".edn")
-                    test-path (str (:root options) "/resources/conf/test/admin/" entity-name ".edn")]
-                (io/make-parents dev-path)
-                (io/make-parents test-path)
-                (spit dev-path (:text result))
-                (spit test-path (:text result))
+              (do
                 (println)
-                (println (green (str "\u2713 Written to " dev-path)))
-                (println (green (str "\u2713 Written to " test-path)))
+                (doseq [profile (profiles root)
+                        {:keys [entity-name text]} entities]
+                  (let [path (str root "/resources/conf/" profile "/admin/" entity-name ".edn")]
+                    (io/make-parents path)
+                    (spit path text)
+                    (println (green (str "\u2713 Written to " path)))))
                 (println)
-                (println (dim "Next steps:"))
-                (println (dim (str "  1. Add :" entity-name " to :entity-discovery :allowlist in config.edn")))
-                (println (dim (str "  2. Add #include \"admin/" entity-name ".edn\" to :entities in config.edn")))
-                (println (dim "  3. Review and customize the generated config")))
+                (println (dim "Next steps, in each profile's config.edn:"))
+                (doseq [{:keys [entity-name]} entities]
+                  (println (dim (str "  - Add :" entity-name " to :entity-discovery :allowlist, and #include \"admin/"
+                                     entity-name ".edn\" to :entities"))))
+                (println (dim "  - Review and customize the generated config")))
               (println (yellow "Cancelled. No files were written.")))))))))
 
 ;; =============================================================================
@@ -509,7 +554,7 @@
           result  (svc/parse-setup-description service description)]
       (if (:error result)
         (do (binding [*out* *err*]
-              (println (red (explain-provider-error result service))))
+              (println (red (describe-failure result service))))
             (System/exit 1))
         ;; Output the JSON data to stdout for the Babashka setup wizard to consume
         (println (json/generate-string (parsing/normalise-setup-spec (:data result))))))))

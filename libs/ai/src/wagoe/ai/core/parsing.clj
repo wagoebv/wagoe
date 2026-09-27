@@ -285,29 +285,41 @@
 ;; Feature 6: Admin Entity Generator response parsing
 ;; =============================================================================
 
+(declare delimiter-balance)
+
 (defn parse-admin-entity
   "Parse an admin entity EDN answer.
 
    Returns:
-     {:text edn-string :entity-name str}, where :text is the EDN without fence
-     or prose, or {:error str :raw-text str} naming what was actually wrong."
+     {:text edn-string :entity-name str :value map}, where :text is the EDN
+     without fence or prose, or {:error str :raw-text str} naming what was
+     actually wrong."
   [response-text]
   (let [edn-text (strip-code-fence response-text (conj clojure-langs "edn"))
         parsed   (try
                    {:value (edn/read-string edn-text)}
                    (catch Exception e
-                     {:error (str "AI response is not valid EDN: " (ex-message e))}))
-        value    (:value parsed)]
+                     {:reader-error (ex-message e)}))
+        value    (:value parsed)
+        open     (when (:reader-error parsed) (delimiter-balance edn-text))]
     (cond
-      (:error parsed)
-      (assoc parsed :raw-text response-text)
+      ;; Unclosed delimiters mean the output limit stopped the model; that
+      ;; needs a different fix from EDN the model got wrong (BOU-567).
+      (pos? (or open 0))
+      {:error    (str "The model's answer was cut off: the EDN ends with " open
+                      " delimiter(s) still open (" (:reader-error parsed) ").")
+       :raw-text response-text}
+
+      (:reader-error parsed)
+      {:error    (str "AI response is not valid EDN: " (:reader-error parsed))
+       :raw-text response-text}
 
       (not (and (map? value) (keyword? (ffirst value))))
       {:error    "AI response is EDN but not a map keyed by entity name"
        :raw-text response-text}
 
       :else
-      {:text edn-text :entity-name (name (ffirst value))})))
+      {:text edn-text :entity-name (name (ffirst value)) :value value})))
 
 (defn ensure-test-metadata
   "Tag every unmetadata'd `deftest` in `test-source` with `^:<test-type>`.

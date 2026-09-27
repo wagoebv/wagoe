@@ -69,18 +69,19 @@
       (try
         (log/debug "openai complete" {:model effective-model :messages (count messages)})
         (let [resp   (chat-completion-request! base-url api-key effective-model messages
-                                                (update opts :timeout #(or % timeout)))
+                                               (update opts :timeout #(or % timeout)))
               text   (get-in resp [:choices 0 :message :content])
               tokens (get-in resp [:usage :total_tokens] 0)]
-          {:text     text
-           :tokens   tokens
-           :base-url base-url
-           :provider :openai
-           :model    effective-model})
+          {:text       text
+           :tokens     tokens
+           :truncated? (= "length" (get-in resp [:choices 0 :finish_reason]))
+           :base-url   base-url
+           :provider   :openai
+           :model      effective-model})
         (catch Exception e
           (log/warn (str "openai complete failed: " (.getMessage e))
                     {:model effective-model})
-          {:error    (.getMessage e)
+          {:error    (or (not-empty (ex-message e)) (.getName (class e)))
            ;; Status and body come from ex-data, not the message: a 429 for
            ;; rate-limiting and a 429 for an exhausted balance need opposite
            ;; advice, and (.getMessage e) is "clj-http: status 429" for both.

@@ -52,6 +52,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **`bb ai admin-entity` cut EDN off, printed empty errors, guessed types and dropped relations** (BOU-567).
+  It now types from your migrations and writes every profile; Replicate defaults to `anthropic/claude-opus-4.6`.
 - **`bb setup` overwrote dev and test config and `.env.example`** (BOU-404, BOU-532). It now changes
   only what you answer, lists each change first, and refuses rather than write a lossy merge.
 - **`bb scaffold generate --audit` and `--pagination` are removed** (BOU-483). No generator read

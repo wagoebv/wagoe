@@ -70,6 +70,72 @@
    [:fallback  {:optional true} ProviderConfig]])
 
 ;; =============================================================================
+;; AdminEntityFile — what `bb ai admin-entity` writes
+;; =============================================================================
+
+;; The admin's own EntityConfig (wagoe.admin.schema) describes a merged config:
+;; its FieldConfig requires :name and :widget, which introspection supplies and
+;; a file of overrides never carries. This is the file's shape. The ai library
+;; cannot depend on admin, so a root test pins the two together.
+
+(def AdminFieldType
+  "Field types the admin renders — wagoe.admin.schema/FieldType."
+  [:enum :uuid :string :int :decimal :boolean :instant :date :enum :json :text :binary])
+
+(def AdminFieldOverride
+  [:map
+   [:type       {:optional true} AdminFieldType]
+   [:label      {:optional true} :string]
+   [:width      {:optional true} [:int {:min 1}]]
+   [:filterable {:optional true} :boolean]
+   [:options    {:optional true} [:vector [:tuple :keyword :string]]]])
+
+(def AdminHasMany
+  [:map
+   [:entity      :keyword]
+   [:table       :keyword]
+   [:foreign-key :keyword]
+   [:label       {:optional true} :string]
+   [:fields      {:optional true} [:vector :keyword]]
+   [:editable    {:optional true} :boolean]])
+
+(def AdminEntityConfig
+  [:map
+   [:label           :string]
+   [:table-name      :keyword]
+   [:primary-key     {:optional true} :keyword]
+   [:list-fields     {:optional true} [:vector :keyword]]
+   [:detail-fields   {:optional true} [:vector :keyword]]
+   [:search-fields   {:optional true} [:vector :keyword]]
+   [:editable-fields {:optional true} [:vector :keyword]]
+   [:hide-fields     {:optional true} [:set :keyword]]
+   [:readonly-fields {:optional true} [:set :keyword]]
+   [:fields          {:optional true} [:map-of :keyword AdminFieldOverride]]
+   [:field-order     {:optional true} [:vector :keyword]]
+   [:field-groups    {:optional true} [:vector [:map
+                                                [:id :keyword]
+                                                [:label :string]
+                                                [:fields [:vector :keyword]]]]]
+   [:default-sort     {:optional true} :keyword]
+   [:default-sort-dir {:optional true} [:enum :asc :desc]]
+   [:icon            {:optional true} :string]
+   [:description     {:optional true} :string]
+   [:soft-delete     {:optional true} :boolean]
+   [:permissions     {:optional true} [:map
+                                       [:create {:optional true} :boolean]
+                                       [:create-hint {:optional true} :string]]]
+   [:ui              {:optional true} :map]
+   [:has-many        {:optional true} [:vector AdminHasMany]]
+   [:sidebar-hidden  {:optional true} :boolean]
+   [:parent-context  {:optional true} [:map
+                                       [:label :string]
+                                       [:fields [:vector :keyword]]]]])
+
+(def AdminEntityFile
+  "One or more entity configs keyed by entity name."
+  [:and [:map-of :keyword AdminEntityConfig] [:fn seq]])
+
+;; =============================================================================
 ;; Validation helpers
 ;; =============================================================================
 
