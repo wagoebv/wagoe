@@ -47,6 +47,10 @@
    Returns:
      IAIProvider implementation."
   [{:keys [provider] :as config}]
+  (when (nil? provider)
+    (throw (ex-info (str ":wagoe/ai-service has no :provider. Set one of :ollama, :anthropic,"
+                         " :openai, :replicate or :no-op.")
+                    {:type :configuration-error :key :wagoe/ai-service})))
   (case provider
     :ollama    (ollama/create-ollama-provider config)
     :anthropic (anthropic/create-anthropic-provider config)

@@ -13,7 +13,9 @@
    Shell: reads the running system, asks Jetty for its port, prints. The
    formatting and the module detection are in the core namespace of the same
    name."
-  (:require [integrant.repl.state :as state]
+  (:require [clojure.java.io :as io]
+            [clojure.string :as str]
+            [integrant.repl.state :as state]
             [wagoe.devtools.core.auto-fix :as auto-fix]
             [wagoe.devtools.core.error-classifier :as classifier]
             [wagoe.devtools.core.introspection :as introspection]
@@ -45,11 +47,20 @@
         host   (or (get-in config [:wagoe/http-server :host]) "localhost")]
     (str "http://" (if (contains? #{"0.0.0.0" "::"} host) "localhost" host) ":" port)))
 
+(defn nrepl-port
+  "The port in `dir`/.nrepl-port, which nREPL writes on start, or nil. The
+   alias pins 7888, but a REPL started another way picks its own."
+  [dir]
+  (let [f (io/file dir ".nrepl-port")]
+    (when (.exists f)
+      (parse-long (str/trim (slurp f))))))
+
 (defn status
   "Print system health: components, URL, active modules."
   []
-  (if-let [report (core/status-text {:system   state/system
-                                     :base-url (base-url state/system state/config)})]
+  (if-let [report (core/status-text {:system     state/system
+                                     :base-url   (base-url state/system state/config)
+                                     :nrepl-port (nrepl-port (System/getProperty "user.dir"))})]
     (println report)
     (println "System not running. Start it with (go)")))
 

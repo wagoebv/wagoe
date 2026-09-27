@@ -32,7 +32,7 @@
                                   yes? (conj "--yes")
                                   :always (conj description))))
     (catch Exception e
-      (println (red (str "Admin entity generator exited with error: " (.getMessage e))))
+      (println (red (ai/failure-message e)))
       (System/exit 1))))
 
 ;; Run when executed directly (not via bb.edn task)

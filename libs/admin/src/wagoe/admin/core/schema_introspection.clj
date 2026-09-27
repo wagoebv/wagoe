@@ -482,7 +482,9 @@
      :readonly-fields readonly-field-names
      :default-sort primary-key
      :default-sort-dir :desc
-     :soft-delete (contains? fields-by-name :deleted-at)}))
+     ;; Hard delete unless the config says `:soft-delete true`, as the README
+     ;; promises. A deleted_at column alone used to switch it on (BOU-563).
+     :soft-delete false}))
 
 ;; =============================================================================
 ;; Configuration Merging - Auto-detected + Manual Overrides

@@ -3,6 +3,7 @@
   (:require [shop.product.ports :as ports]
             [shop.product.schema :as schema]
             [malli.core :as m]
+            [malli.error :as me]
             [malli.transform :as mt]
             [shop.product.shell.web-handlers :as web-handlers]))
 
@@ -25,8 +26,13 @@
 
 ;; Thrown, not returned: the platform maps :type to the status and answers
 ;; in the shape it uses for every error, a missing reference included.
-(defn- invalid []
-  (throw (ex-info "Invalid product" {:type :validation-error})))
+;; `errors` lands in the body's details. Keys are kebab-case: an unknown
+;; one, camelCase included, is dropped, and its field reported missing.
+(defn- invalid [errors]
+  (throw (ex-info "Invalid product" {:type :validation-error :errors errors})))
+
+(defn- explain [schema data]
+  (me/humanize (m/explain schema data)))
 
 (defn- not-found []
   (throw (ex-info "No such product" {:type :not-found})))
@@ -67,7 +73,7 @@
                        (let [data (decode-create (:body-params request))]
                          (if (valid-create? data)
                            {:status 201 :body (ports/create-product service data)}
-                           (invalid))))}}]
+                           (invalid (explain schema/CreateProductRequest data)))))}}]
    ["/products/:id"
     {:swagger {:parameters [{:name "id" :in "path" :required true :type "string"}]}
      :get    {:summary "Get a product"
@@ -83,8 +89,8 @@
                                data (decode-update (:body-params request))]
                            (cond
                              (nil? id)                 (not-found)
-                             (empty? data)             (invalid)
-                             (not (valid-update? data)) (invalid)
+                             (empty? data)             (invalid {:body ["no field it knows"]})
+                             (not (valid-update? data)) (invalid (explain schema/UpdateProductRequest data))
                              :else (if-let [updated (ports/update-product service id data)]
                                      {:status 200 :body updated}
                                      (not-found)))))}

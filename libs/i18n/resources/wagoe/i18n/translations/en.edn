@@ -342,6 +342,7 @@
  :admin/empty-state-no-records     "No records found."
  :admin/button-create-first-record "Create First Record"
  :admin/column-actions             "Actions"
+ :admin/column-workflow            "Workflow"
  :admin/list-kicker                "Admin collection"
  :admin/list-description           "Manage {label}. {count} total"
  :admin/button-create-new          "Create new {entity}"

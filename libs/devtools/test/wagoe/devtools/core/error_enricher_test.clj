@@ -17,8 +17,12 @@
     (testing "enriched error has fix info when available"
       (is (nil? (:fix enriched))))
 
-    (testing "enriched error has dashboard-url"
-      (is (string? (:dashboard-url enriched))))
+    (testing "no dashboard-url without a dashboard port"
+      (is (nil? (:dashboard-url enriched))))
+
+    (testing "dashboard-url on the port given"
+      (is (= "http://localhost:9990/dashboard/errors"
+             (:dashboard-url (enricher/enrich classified {:dashboard-port 9990})))))
 
     (testing "enriched error has docs-url"
       (is (string? (:docs-url enriched))))))

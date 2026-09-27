@@ -226,9 +226,45 @@
     (is (thrown? clojure.lang.ExceptionInfo
                  (ig/init-key :wagoe/ai-service {:provider :nope})))))
 
+(deftest ^:unit input-is-shaped-per-model
+  ;; BOU-567. Measured against GET /v1/models/<owner>/<name>: the Anthropic
+  ;; models take prompt + system_prompt and max_tokens (at least 1024; haiku at
+  ;; most 8192), gpt-5.2 takes messages and max_completion_tokens.
+  (let [msgs [{:role :system :content "S"} {:role :user :content "U"}]]
+    (testing "claude-opus-4.6: flat prompt, max_tokens as asked"
+      (is (= {:prompt "U" :system_prompt "S" :max_tokens 16384}
+             (sut/model-input "anthropic/claude-opus-4.6" msgs {:max-tokens 16384}))))
+
+    (testing "claude-4.5-haiku: max_tokens clamped into what the model accepts"
+      (is (= 8192 (:max_tokens (sut/model-input "anthropic/claude-4.5-haiku" msgs {:max-tokens 16384}))))
+      (is (= 1024 (:max_tokens (sut/model-input "anthropic/claude-4.5-haiku" msgs {:max-tokens 100})))))
+
+    (testing "gpt-5.2: a conversation and max_completion_tokens"
+      (is (= {:messages [{:role "system" :content "S"} {:role "user" :content "U"}]
+              :max_completion_tokens 16384}
+             (sut/model-input "openai/gpt-5.2" msgs {:max-tokens 16384}))))
+
+    (testing "without a limit the provider sets one, so output is never cut at a model's small default"
+      (is (= sut/default-max-tokens
+             (:max_tokens (sut/model-input "anthropic/claude-opus-4.6" msgs {}))))
+      (is (= sut/default-max-tokens
+             (:max_completion_tokens (sut/model-input "openai/gpt-5.2" msgs {})))))))
+
+(deftest ^:unit output-that-used-the-whole-budget-is-truncated
+  ;; Replicate reports no stop reason. metrics.token_output_count equal to the
+  ;; limit sent is the same fact.
+  (let [p (sut/create-replicate-provider {:api-key "t" :model "openai/gpt-5.2"})
+        run (fn [n] (with-redefs [http/post (stub-post {:status "succeeded" :output ["{:a"]
+                                                        :metrics {:token_output_count n}})]
+                      (ports/complete p [{:role :user :content "x"}] {:max-tokens 2048})))]
+    (is (true? (:truncated? (run 2048))))
+    (is (= 2048 (:tokens (run 2048))))
+    (is (not (:truncated? (run 300))))))
+
 (deftest ^:unit a-default-model-is-chosen
   ;; Without one, a config that omits :model would send a nil model in the URL
   ;; path and 404.
+  (is (= "anthropic/claude-opus-4.6" sut/default-model))
   (is (str/includes? sut/default-model "/")
       "a Replicate model is owner/name")
   (is (= sut/default-model (:model (sut/create-replicate-provider {:api-key "t"})))))

@@ -249,7 +249,9 @@
   ;; this way.
   ;; Minus the dev-only ones. A dev dashboard is not part of any service, and
   ;; it refuses to assemble under this profile (BOU-477).
-  (reduce (fn [cfg k] (assoc-in cfg [:active k] {:enabled? true}))
+  ;; Merged, not replaced: payments has no default provider (BOU-564), and
+  ;; the test profile's mock is the one it may run.
+  (reduce (fn [cfg k] (update-in cfg [:active k] merge {:enabled? true}))
           (test-config)
           (remove modules/dev-only-modules (keys modules/framework-modules))))
 

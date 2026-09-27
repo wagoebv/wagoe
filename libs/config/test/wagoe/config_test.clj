@@ -35,3 +35,40 @@
 
   (testing "user validation"
     (is (map? (sut/user-validation-config {:active {}})))))
+
+;; =============================================================================
+;; #include inside a jar (BOU-563)
+;; =============================================================================
+
+(defn- temp-jar
+  "A jar holding `entries` {path content}."
+  ^java.io.File [entries]
+  (let [f (java.io.File/createTempFile "wagoe-config" ".jar")]
+    (.deleteOnExit f)
+    (with-open [out (java.util.jar.JarOutputStream. (java.io.FileOutputStream. f))]
+      (doseq [[path ^String content] entries]
+        (.putNextEntry out (java.util.jar.JarEntry. ^String path))
+        (.write out (.getBytes content "UTF-8"))
+        (.closeEntry out)))
+    f))
+
+(defn- jar-url [^java.io.File jar path]
+  (java.net.URL. (str "jar:" (.toURI jar) "!/" path)))
+
+(deftest ^:unit an-include-resolves-next-to-its-config-inside-a-jar
+  ;; Aero resolved a relative #include against a file only, so from the
+  ;; uberjar every include came back as {:aero/missing-include ...} and the
+  ;; admin started without its entities (BOU-563).
+  (let [jar (temp-jar {"conf/test/config.edn"      "{:entities #merge [#include \"admin/users.edn\"]}"
+                       "conf/test/admin/users.edn" "{:users {:label \"Users\" :nested #include \"more.edn\"}}"
+                       "conf/test/admin/more.edn"  "{:ok true}"})]
+    (is (= {:entities {:users {:label "Users" :nested {:ok true}}}}
+           (sut/read-config-resource (jar-url jar "conf/test/config.edn") :test)))))
+
+(deftest ^:unit a-missing-include-fails-and-names-the-file
+  (let [jar (temp-jar {"conf/test/config.edn" "{:entities #merge [#include \"admin/gone.edn\"]}"})
+        e   (try (sut/read-config-resource (jar-url jar "conf/test/config.edn") :test) nil
+                 (catch clojure.lang.ExceptionInfo e e))]
+    (is (= :configuration-error (:type (ex-data e))))
+    (is (re-find #"admin/gone\.edn" (str (ex-message e))))
+    (is (re-find #"conf/test/config\.edn" (str (ex-message e))))))

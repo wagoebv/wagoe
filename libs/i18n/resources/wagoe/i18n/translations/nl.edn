@@ -342,6 +342,7 @@
  :admin/empty-state-no-records     "Geen records gevonden."
  :admin/button-create-first-record "Eerste record aanmaken"
  :admin/column-actions             "Acties"
+ :admin/column-workflow            "Workflow"
  :admin/list-kicker                "Admin collectie"
  :admin/list-description           "{label} — {count} in totaal"
  :admin/button-create-new          "Nieuwe {entity} aanmaken"

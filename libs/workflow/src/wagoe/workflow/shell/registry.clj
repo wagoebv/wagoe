@@ -68,10 +68,12 @@
      ex-info with :type :validation-error when definition is invalid"
   [definition]
   (when-not (schema/valid-workflow-definition? definition)
-    (throw (ex-info "Invalid workflow definition"
-                    {:type    :validation-error
-                     :errors  (schema/explain-workflow-definition definition)
-                     :message "Workflow definition does not satisfy schema"})))
+    (let [errors (schema/explain-workflow-definition definition)]
+      (throw (ex-info (str "Invalid workflow definition " (:id definition) ": "
+                           (pr-str errors))
+                      {:type    :validation-error
+                       :errors  errors
+                       :message "Workflow definition does not satisfy schema"}))))
   (swap! registry-atom assoc (:id definition) definition)
   (:id definition))
 

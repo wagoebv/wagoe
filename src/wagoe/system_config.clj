@@ -119,7 +119,7 @@
    ;; platform and ran them in every service. `main-test` now asserts every key
    ;; the config emits is claimed or listed as platform.
    :workflow {:keys [:wagoe/workflow :wagoe/workflow-db-schema
-                     :wagoe/workflow-routes]}
+                     :wagoe/workflow-routes :wagoe/workflow-admin]}
 
    :search   {:keys [:wagoe/search :wagoe/search-routes]}
 

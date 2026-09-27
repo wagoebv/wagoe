@@ -13,10 +13,28 @@
    The AI library was fine. The invocation could not find it, so these tests
    drive the command construction rather than the AI code — testing the library
    would have passed throughout."
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [babashka.process :refer [shell]]
+            [clojure.test :refer [deftest is testing]]
             [clojure.string :as str]
             [wagoe.tools.ai :as ai]
             [wagoe.tools.scaffold :as scaffold]))
+
+(deftest ^:unit a-failed-cli-run-is-never-an-empty-line
+  ;; BOU-567: every failure ended in "AI CLI exited with error: " and nothing
+  ;; else. The CLI's stderr is the terminal, so the exception has no message.
+  (testing "the exception a real non-zero exit throws"
+    (let [e   (try (shell {:err :inherit} "sh" "-c" "exit 3") nil
+                   (catch Exception e e))
+          msg (ai/failure-message e)]
+      (is (some? e) "shell throws on a non-zero exit")
+      (is (str/includes? msg "status 3"))
+      (is (str/includes? msg "printed above"))))
+
+  (testing "a process that never started says why"
+    (is (= "AI CLI could not run: java.io.IOException"
+           (ai/failure-message (java.io.IOException.))))
+    (is (str/includes? (ai/failure-message (Exception. "Cannot run program \"clojure\""))
+                       "Cannot run program"))))
 
 (deftest ^:unit ai-deps-pins-the-published-artifact
   (testing "without an override, the injected dep names wagoe-ai at a version"

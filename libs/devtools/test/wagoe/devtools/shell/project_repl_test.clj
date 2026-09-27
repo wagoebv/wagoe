@@ -28,6 +28,18 @@
          (sut/base-url {:wagoe/http-server ::not-a-server}
                        {:wagoe/http-server {:port 3001}}))))
 
+(deftest ^:unit the-nrepl-port-is-the-one-nrepl-wrote
+  ;; The banner said 7888 whatever port the REPL ran on (BOU-564).
+  (let [dir (.toFile (java.nio.file.Files/createTempDirectory
+                      "nrepl-port" (make-array java.nio.file.attribute.FileAttribute 0)))]
+    (try
+      (is (nil? (sut/nrepl-port dir)) "no port file, no port to claim")
+      (spit (io/file dir ".nrepl-port") "7899\n")
+      (is (= 7899 (sut/nrepl-port dir)))
+      (finally
+        (io/delete-file (io/file dir ".nrepl-port") true)
+        (io/delete-file dir true)))))
+
 (deftest ^:unit fix-without-an-error-says-so-rather-than-throwing
   (is (str/includes? (with-out-str (sut/fix! nil)) "No recent error")))
 

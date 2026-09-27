@@ -14,8 +14,7 @@
      GET  /workflows        — list all workflow instances
      GET  /workflows/:id    — instance detail with state viz + audit trail
 
-   All routes require authentication (actor extracted from ring request).
-   Caller is responsible for mounting under an authenticated router."
+   Every route requires authentication and answers 401 without it."
   (:require [wagoe.i18n.shell.middleware :as i18n-middleware]
             [wagoe.i18n.shell.render :as i18n]
             [wagoe.workflow.ports :as ports]
@@ -168,6 +167,8 @@
   "The `:id` every instance route carries."
   [:map [:id :string]])
 
+(def ^:private signed-in ['wagoe.user.shell.http-interceptors/require-authenticated])
+
 (defn workflow-routes
   "Reitit route data for the workflow API. Mounted under /api/v1.
 
@@ -176,12 +177,17 @@
    caller sent, and a POST was answered from an empty body rather than
    refused (BOU-478).
 
+   Every route requires a signed-in user. The global `authenticate-if-present`
+   sets `:user` from a bearer token or a session; the interceptor refuses the
+   request without one, with the same 401 the scaffolded APIs give.
+
    Args:
      engine - WorkflowService (IWorkflowEngine)"
   [engine]
   [["/workflow/instances"
     {:post {:handler (fn [req] (handle-start-workflow engine req))
             :summary "Start a new workflow instance"
+            :interceptors signed-in
             :parameters {:body [:map {:closed true}
                                 [:workflowId :string]
                                 [:entityType :string]
@@ -193,14 +199,17 @@
    ["/workflow/instances/:id"
     {:get {:handler (fn [req] (handle-get-instance engine req))
            :summary "Get current workflow state"
+           :interceptors signed-in
            :parameters {:path instance-id-path}}}]
    ["/workflow/instances/:id/audit"
     {:get {:handler (fn [req] (handle-get-audit-log engine req))
            :summary "Get workflow audit log"
+           :interceptors signed-in
            :parameters {:path instance-id-path}}}]
    ["/workflow/instances/:id/transition"
     {:post {:handler (fn [req] (handle-transition engine req))
             :summary "Execute a workflow transition"
+            :interceptors signed-in
             :parameters {:path instance-id-path
                          :body [:map {:closed true}
                                 [:transition :string]

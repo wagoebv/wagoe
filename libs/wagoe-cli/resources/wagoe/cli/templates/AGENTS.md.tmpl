@@ -151,7 +151,7 @@ src/{{project-ns}}/
 |----------|-----------|---------|
 | All Clojure code | kebab | `:password-hash, :created-at` |
 | Database boundary only | snake | `password_hash, created_at` |
-| API/JSON boundary only | camel | `passwordHash, createdAt` |
+| API/JSON boundary only | kebab | `password-hash, created-at` |
 <!-- /gen:naming -->
 
 Convert **only at boundaries** — never in business logic:
