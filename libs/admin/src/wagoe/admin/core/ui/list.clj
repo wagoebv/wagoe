@@ -29,6 +29,7 @@
       [:div.entity-search-form
        [:form {:hx-get (str "/web/admin/" (name entity-name) "/table")
                :hx-target "#entity-table-container"
+               :hx-swap "outerHTML"
                :hx-push-url "true"
                :hx-trigger "submit"}
         [:div.search-controls
@@ -132,7 +133,8 @@
     [:div#entity-table-container
      {:hx-get hx-url
       :hx-trigger "entityCreated from:body, entityUpdated from:body, entityDeleted from:body"
-      :hx-target hx-target}
+      :hx-target hx-target
+      :hx-swap "outerHTML"}
      (if (empty? records)
        [:div.empty-state {:class "p-10 text-center"}
         [:div.empty-state-icon
@@ -253,6 +255,7 @@
                                 :value (or search-value "")
                                 :hx-get (str "/web/admin/" (name entity-name) "/table")
                                 :hx-target "#entity-table-container"
+                                :hx-swap "outerHTML"
                                 :hx-push-url "true"
                                 :hx-trigger "keyup changed delay:300ms, search"
                                 :hx-include "this"}]
@@ -260,6 +263,7 @@
                                 :aria-label [:t :common/button-search]
                                 :hx-get (str "/web/admin/" (name entity-name) "/table")
                                 :hx-target "#entity-table-container"
+                                :hx-swap "outerHTML"
                                 :hx-push-url "true"
                                 :hx-include "previous .search-input"}
            (icons/icon :search {:size 18})]
@@ -293,6 +297,7 @@
                                     :aria-label [:t :admin/button-refresh]
                                     :hx-get (str "/web/admin/" (name entity-name) "/table")
                                     :hx-target "#entity-table-container"
+                                    :hx-swap "outerHTML"
                                     :hx-push-url "true"}
          (icons/icon :refresh {:size 18})]
         (when (:can-create permissions)

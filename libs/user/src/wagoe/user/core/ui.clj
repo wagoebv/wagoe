@@ -100,12 +100,14 @@
        [:div#users-table-container
         {:hx-get     hx-url
          :hx-trigger "userCreated from:body, userUpdated from:body, userDeleted from:body"
-         :hx-target  hx-target}
+         :hx-target  hx-target
+         :hx-swap    "outerHTML"}
         [:div.empty-state [:t :user/empty-state-no-users]]]
        [:div#users-table-container
         {:hx-get     hx-url
          :hx-trigger "userCreated from:body, userUpdated from:body, userDeleted from:body"
-         :hx-target  hx-target}
+         :hx-target  hx-target
+         :hx-swap    "outerHTML"}
         [:form#bulk-action-form {:hx-post   "/web/users/bulk"
                                  :hx-target "#users-table-container"
                                  :hx-swap   "outerHTML"
@@ -1300,12 +1302,14 @@
        [:div#audit-table-container
         {:hx-get hx-url
          :hx-trigger "auditRefresh from:body"
-         :hx-target hx-target}
+         :hx-target hx-target
+         :hx-swap "outerHTML"}
         [:div.empty-state [:t :user/audit-empty-state]]]
        [:div#audit-table-container
         {:hx-get hx-url
          :hx-trigger "auditRefresh from:body"
-         :hx-target hx-target}
+         :hx-target hx-target
+         :hx-swap "outerHTML"}
         (ui/table-wrapper
          [:table {:class "data-table" :id "audit-table"}
           [:thead
@@ -1353,6 +1357,7 @@
    [:h3 [:t :user/audit-filters-title]]
    [:form.audit-filters-form {:hx-get "/web/audit/table"
                               :hx-target "#audit-table-container"
+                              :hx-swap "outerHTML"
                               :hx-push-url "true"}
     [:div.filter-group
      [:label {:for "action"} [:t :common/audit-action]]

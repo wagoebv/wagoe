@@ -5,6 +5,7 @@
    success messages, and complete page compositions based on User schema."
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest testing is]]
+            [support.htmx-swap :as htmx-swap]
             [wagoe.user.core.profile-ui :as profile-ui]
             [wagoe.user.core.ui :as ui]))
 
@@ -369,7 +370,7 @@
   ;; A screen reader announced "Password, edit text" and never the error
   ;; beneath it (BOU-398).
   (doseq [[label render] [["create-user" #(ui/create-user-form {} %)]
-                           ["register"    #(ui/register-form {} %)]]]
+                          ["register"    #(ui/register-form {} %)]]]
     (testing (str label " password field")
       (is (= {:aria-invalid "true" :described-by "password-error" :target-found? true}
              (described-field (render {:password ["Password must be at least 8 characters"]})
@@ -390,6 +391,27 @@
                 (ui/register-form {} {:form ["Registration is closed"]})]]
     (is (some #(and (= :div.validation-errors (first %)) (= "alert" (:role (second %))))
               (elements form)))))
+
+(deftest ^:unit table-refresh-keeps-one-container-test
+  ;; The container, its sort headers and its pager fetched a fragment rooted at
+  ;; the container's own id, swapped innerHTML, and nested a copy on each
+  ;; refresh (BOU-386).
+  (let [tq {:sort :created-at :dir :desc :page 2 :page-size 20 :offset 20 :limit 20}]
+    (testing "users table"
+      (let [page     (ui/users-page sample-users 100 {:table-query tq})
+            fragment (ui/users-table-fragment sample-users tq 100 {})
+            results  (htmx-swap/ids-after-swaps page "users-table-container" fragment)]
+        (is (<= 5 (count results)) "container, sort headers and pager all counted")
+        (is (every? #(= 1 (:ids %)) results) (pr-str (remove #(= 1 (:ids %)) results)))))
+
+    (testing "audit table"
+      (let [logs     [{:action :login :result :success :created-at "2026-03-19T08:00:00Z"
+                       :actor-email "a@example.com" :ip-address "127.0.0.1"}]
+            page     (ui/audit-page logs tq 100 {} {})
+            fragment (ui/audit-logs-table logs tq 100 {})
+            results  (htmx-swap/ids-after-swaps page "audit-table-container" fragment)]
+        (is (<= 4 (count results)) "container, filter form, sort header and pager all counted")
+        (is (every? #(= 1 (:ids %)) results) (pr-str (remove #(= 1 (:ids %)) results)))))))
 
 ;; =============================================================================
 ;; Success Message Component Tests

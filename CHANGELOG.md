@@ -46,6 +46,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Refreshing a users, audit or admin table nested a duplicate container** (BOU-386). Table controls now
+  swap `outerHTML`; a custom `sortable-th`/`pagination` handler must return the element carrying the target id.
 - **Field errors were not tied to their input for screen readers** (BOU-398). Inputs with errors now
   carry `aria-invalid` and `aria-describedby`; hand-built fields can use `ui/describe-input` and `ui/field-errors`.
 - **`/health/ready` showed database and cache exception messages** (BOU-558). The body now says
