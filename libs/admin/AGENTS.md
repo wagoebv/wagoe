@@ -216,8 +216,15 @@ Example subscriber that starts a workflow: see "Lifecycle Events" in
 - **`:min` on a has-many** refuses a delete or bulk delete that would leave a
   parent with fewer children: `:type :conflict`, and the delete handlers answer
   409 with an error toast. It is checked before the delete, outside its
-  transaction. Creating a parent without children is not refused: the admin
-  creates the parent first and the children from its page.
+  transaction.
+- **Create with children (BOU-570).** An `:editable` has-many with `:min` puts
+  `:min` child rows in the parent's create form (`forms/nested-relationships`
+  picks them; a child with its own create flow is left out). Rows are named
+  `__child.<entity>.<index>.<field>`; `GET /:entity/new/rows/:child` returns
+  one more, and "Remove" drops one in the browser. The handler parses and
+  validates each filled row, and `create-entity-with-children` inserts parent
+  and rows in one transaction, refusing fewer than `:min` (`:too-few`) and
+  naming a refused row (`:child {:entity :index}`). Blank rows are skipped.
 - **Unknown entity-config keys fail at startup.** `schema/EntityOverrides` is a
   closed schema, checked by `create-schema-repository`; the error names the
   path. Add a key there when the admin starts reading one.
@@ -238,6 +245,21 @@ Example subscriber that starts a workflow: see "Lifecycle Events" in
   than a text input. Only while every parent fits in `:max-page-size`; past it
   the field stays a text input rather than offer a subset.
 - **Epoch millis** in a timestamp column render like ISO text.
+
+## Required fields and form errors (BOU-570)
+
+- `introspection/for-create` drops `:required` from a field with a column
+  default (`:default-value`, from `get-table-info` `:default` on every
+  engine) or in `:hide-fields`. The create form renders with it, and
+  `validate-entity-data` applies it to data without a primary key: the port
+  has no create flag, and an update validates the merged row, which has one.
+  An empty field with a default is left out of the insert, so it gets it.
+- `validate-entity-data` returns `{field [message]}`; the handlers use it
+  as is. They used to pass it through `explain->field-errors`, which reads
+  Malli explain data and returned nothing: 422 with no field marked.
+- `forms/off-form-errors` are errors on fields the form does not show. The
+  error summary names them "(not on this form)", and `log-rejected!` logs them
+  at warn. Other rejections log at info.
 
 ---
 

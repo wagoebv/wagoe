@@ -292,7 +292,9 @@
     (let [make-handler (requiring-resolve 'wagoe.test-support.shell.handler/make-reset-handler)
           truncate!    (requiring-resolve 'wagoe.test-support.shell.reset/truncate-all!)
           seed!        (requiring-resolve 'wagoe.test-support.shell.reset/seed-baseline!)
+          fixtures!    (requiring-resolve 'wagoe.test-support.shell.reset/create-fixture-tables!)
           datasource   (:datasource db-context)
+          _            (fixtures! datasource)
           deps         {:user-service   user-service
                         :tenant-service tenant-service
                         :datasource     datasource

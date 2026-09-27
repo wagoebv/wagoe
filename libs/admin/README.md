@@ -132,7 +132,8 @@ This is the full schema for a single entity config file. All keys are optional u
   ;; FORM / DETAIL VIEW
   ;; ─────────────────────────────────────────────────────────────────────
 
-  :hide-fields     #{:internal-token :deleted-at}  ; Never show these fields anywhere in UI
+  :hide-fields     #{:internal-token :deleted-at}  ; Never show these fields anywhere in UI;
+                                                   ; not required on create
   :readonly-fields #{:id :created-at :updated-at}  ; Show but never allow editing
 
   ;; Order of fields in the create/edit form.
@@ -198,7 +199,7 @@ This is the full schema for a single entity config file. All keys are optional u
     :label       "Order Items"         ; Section heading
     :fields      [:product-name :quantity :total-cents]  ; Columns to show
     :editable    true                  ; false = read-only inline table
-    :min         1                     ; refuse to delete the last child
+    :min         1                     ; create with, and never delete below, 1 child
     :on-delete   :cascade}]            ; delete children with the parent; default :restrict
 
   ;; For has-many child entities: show parent info at top of child detail page.
@@ -237,6 +238,12 @@ This is the full schema for a single entity config file. All keys are optional u
 
   :ui {:field-grouping {:other-label "Advanced"}}}}
 ```
+
+---
+
+## Required Fields
+
+A `NOT NULL` column is required, except on create when the database fills it (a column default) or the form does not show it (`:hide-fields`). Left empty, a column with a default gets it. A rejected form marks each field it names; an error on a field the form does not show is listed at the top, saying so, and logged at warn.
 
 ---
 
@@ -350,7 +357,9 @@ Without config, a has-many is detected from any allowlisted entity whose `<paren
 
 The foreign key on the child's form is a select over the parent's rows, labelled by the parent's first `:search-fields` (else `:list-fields`) entry, while all of them fit in `:pagination :max-page-size`; past that it stays a text input. A field whose config sets another `:widget` keeps it.
 
-`:min` refuses a delete, or a bulk delete, that would leave a parent with fewer children: the admin answers 409 and shows why. It does not stop you creating a parent without children, because the admin creates the parent first and adds children from its page; enforce that in your module's service if it matters.
+`:min` refuses a delete, or a bulk delete, that would leave a parent with fewer children: the admin answers 409 and shows why.
+
+With `:min` on an `:editable true` has-many, the parent's create form also holds its first children: `:min` rows of the child's editable fields (without the foreign key), which "Add" and "Remove" change in place. Parent and children are written in one transaction; fewer than `:min` filled rows, or a row the child refuses, rejects the whole form with the error on the page. A child with a `:create-redirect-url`, a split table or `:permissions {:create false}` is left out, and its parent is created alone. `ports/create-entity-with-children` does the same outside the UI.
 
 On the child entity, use `:parent-context` to show parent info at the top of the child's detail page:
 
@@ -489,6 +498,7 @@ Starting a workflow when an invoice is created in the admin:
 | `/web/admin/:entity` | GET | List entities |
 | `/web/admin/:entity/new` | GET | Create form |
 | `/web/admin/:entity/new` | POST | Create entity |
+| `/web/admin/:entity/new/rows/:child` | GET | One child row for the create form (HTMX) |
 | `/web/admin/:entity/:id` | GET | View entity detail |
 | `/web/admin/:entity/:id/edit` | GET | Edit form |
 | `/web/admin/:entity/:id` | PUT | Update entity |

@@ -5,6 +5,7 @@
    error mappings, query/form parsing, and handler helpers used by the handler
    namespaces and the route definitions in `wagoe.admin.shell.http`."
   (:require
+   [wagoe.admin.core.forms :as forms]
    [wagoe.admin.core.ui :as admin-ui]
    [wagoe.admin.core.ui.base :as ui-base]
    [wagoe.admin.ports :as ports]
@@ -661,7 +662,7 @@
                                       (first (:list-fields parent-cfg))
                                       pk)
                        page       (try (ports/list-entities admin-service parent
-                                                                {:limit page-size :sort label :sort-dir :asc})
+                                                            {:limit page-size :sort label :sort-dir :asc})
                                        (catch Exception e
                                          (log/warn e "foreign key left as a text input: parent rows unreadable"
                                                    {:entity entity-name :field field :parent parent})
@@ -677,6 +678,17 @@
                                 (and current (not-any? #(= current (first %)) options))
                                 (conj [current current]))
                        (not (get-in entity-config [:fields field :required])) (into [["" "—"]]))])))))
+
+(defn nested-relationships
+  "The has-many entries `entity-config` is created with, as
+   `forms/nested-relationships` finds them (BOU-570)."
+  [schema-provider entity-config]
+  (forms/nested-relationships
+   entity-config
+   (into {} (for [rel   (:has-many entity-config)
+                  :when (and (:editable rel) (:min rel)
+                             (ports/validate-entity-exists schema-provider (:entity rel)))]
+              [(:entity rel) (ports/get-entity-config schema-provider (:entity rel))]))))
 
 (defn with-workflow-states
   "`records`, each with `:admin/workflow` {:instance-id :state} when it has a

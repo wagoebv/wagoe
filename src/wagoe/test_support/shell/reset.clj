@@ -19,13 +19,36 @@
    "tenant_member_invites"
    "users"
    "auth_users"
-   "tenants"])
+   "tenants"
+   "e2e_order_lines"
+   "e2e_orders"])
+
+(def ^:private fixture-tables
+  "Tables no module owns, for admin e2e tests: an order whose lines have a
+   has-many :min (:e2e-orders in resources/conf/test/config.edn, BOU-570)."
+  ["CREATE TABLE IF NOT EXISTS e2e_orders (
+      id UUID PRIMARY KEY,
+      number VARCHAR(50) NOT NULL,
+      status VARCHAR(20) DEFAULT 'open' NOT NULL)"
+   "CREATE TABLE IF NOT EXISTS e2e_order_lines (
+      id UUID PRIMARY KEY,
+      e2e_order_id UUID NOT NULL REFERENCES e2e_orders(id),
+      description VARCHAR(255) NOT NULL,
+      qty INT DEFAULT 1 NOT NULL)"])
+
+(defn create-fixture-tables!
+  "Create the e2e fixture tables if they are missing. Called when the reset
+   route is mounted, before the admin first reads their config."
+  [ds]
+  (doseq [ddl fixture-tables]
+    (jdbc/execute! ds [ddl])))
 
 (defn truncate-all!
   "Truncates every table the e2e suite might touch. Uses H2's
    SET REFERENTIAL_INTEGRITY FALSE because H2 does not support
    TRUNCATE ... CASCADE."
   [ds]
+  (create-fixture-tables! ds)
   (jdbc/with-transaction [tx ds]
     (jdbc/execute! tx ["SET REFERENTIAL_INTEGRITY FALSE"])
     (try

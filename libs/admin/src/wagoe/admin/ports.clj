@@ -217,6 +217,18 @@
                                       :name \"New User\"
                                       :role :user})")
 
+  (create-entity-with-children [this entity-name data children]
+    "Create a record and its first children in one transaction (BOU-570).
+
+     `children` is {child-entity [row-data ...]} for the has-many entries of
+     `entity-name`; each row gets the new record's id as its foreign key.
+
+     Returns {:record parent :children [{:entity child-entity :record row} ...]}.
+
+     Throws :validation-error with :too-few {child-entity {:min :count :label}}
+     when a has-many with a :min gets fewer rows, and with :child {:entity
+     :index} when the database refuses a row. Nothing is written then.")
+
   (update-entity [this entity-name id data]
     "Update existing entity record with validation.
 

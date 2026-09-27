@@ -63,6 +63,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **An admin create required hidden and defaulted fields, and a 422 marked no field** (BOU-570).
+  Drop `:required false` workarounds; required textareas and selects now carry `required`.
 - **`wagoe add` and `bb setup --prod true` left prod behind** (BOU-564). Both now bring every
   profile the project's modules; re-run `wagoe add <module>` for one prod lacks.
 - **`wagoe add payments` wrote the mock provider, which accepts any webhook as paid, into prod** (BOU-564).
@@ -178,6 +180,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **An admin parent with a has-many `:min` is created with its first children** (BOU-570). One form,
+  one transaction; fewer than `:min` is refused. Add `:editable true` to the has-many entry.
 - **The scaffolder writes admin config** (BOU-562). With the admin on, `generate` and `entity` add each
   entity's file (never over an existing one), allowlist entry and `#include`, with secret columns hidden.
 - **Admin writes publish lifecycle events** (BOU-492). With `:wagoe/events` on,

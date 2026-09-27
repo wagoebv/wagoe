@@ -93,6 +93,12 @@
       (is (vector? result))
       (is (= :select (first result))))))
 
+(deftest ^:unit required-reaches-textarea-and-select
+  ;; Both dropped :required, so the browser let a required one through (BOU-570).
+  (is (true? (:required (second (components/textarea :d "" {:required true})))))
+  (is (true? (:required (second (components/select-field :s [[:a "A"]] nil {:required true})))))
+  (is (not (contains? (second (components/textarea :d "" {:required false})) :required))))
+
 (deftest ^:unit checkbox-test
   (testing "Checked checkbox generation"
     (let [result (components/checkbox :active true)]
