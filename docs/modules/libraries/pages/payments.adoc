@@ -26,7 +26,7 @@ Configure `:wagoe/payment-provider` in `config.edn`:
 
 [source,clojure]
 ----
-;; Mock (development — default)
+;; Mock (dev and test profiles only — no default provider)
 :wagoe/payment-provider
 {:provider :mock}
 

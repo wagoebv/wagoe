@@ -50,6 +50,9 @@ for what is public API, what is internal, and how deprecations are announced.
 - **`bb setup` in an existing project creates no missing config file** (BOU-404). Pass `--prod true`
   to have it write `resources/conf/prod/config.edn`.
 
+- **`:wagoe/payment-provider` has no default provider, and `:mock` boots only in dev and test** (BOU-564).
+  Set `:provider` explicitly; use `:stripe` or `:mollie` in every other profile.
+
 ### Fixed
 
 - **`wagoe add` and `bb setup --prod true` left prod behind** (BOU-564). Both now bring every
