@@ -786,6 +786,31 @@
               "every command names the project it acts on"))
         (finally (delete-tree! dir))))))
 
+(deftest ^:unit the-test-namespace-in-next-steps-exists
+  ;; It was <module>.core.<module>-test, which exists only when the module and
+  ;; its first entity share a name (BOU-562).
+  (let [dir (temp-dir)]
+    (try
+      (let [svc     (service/create-scaffolder-service)
+            gen     (ports/generate-module
+                     svc {:module-name "invoicing" :base-ns "acme"
+                          :entities [{:name "Invoice" :fields [{:name :number :type :string}]}]
+                          :output-dir (.getPath dir)})
+            field   (ports/add-field
+                     svc {:module-name "invoicing" :base-ns "acme" :entity "Invoice"
+                          :field {:name :sku :type :string :required false :unique false}
+                          :output-dir (.getPath dir) :dry-run true})
+            test-ns (fn [steps] (some #(second (re-find #"--focus (\S+)" %)) steps))
+            file-of (fn [ns-name] (io/file dir "test" (str (-> ns-name
+                                                               (str/replace "." "/")
+                                                               (str/replace "-" "_"))
+                                                           ".clj")))]
+        (doseq [[what r] [["generate" gen] ["field" field]]]
+          (let [n (test-ns (:next-steps r))]
+            (is (some? n) (str what ": " (pr-str (:next-steps r))))
+            (is (.isFile (file-of n)) (str what " names " n)))))
+      (finally (delete-tree! dir)))))
+
 ;; =============================================================================
 ;; Overwrite protection (BOU-308)
 ;; =============================================================================

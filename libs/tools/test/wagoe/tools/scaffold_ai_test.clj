@@ -32,6 +32,12 @@
        "{\"name\":\"price\",\"type\":\"decimal\",\"required\":true,\"unique\":false}],"
        "\"http\":true,\"web\":true}"))
 
+(defn- test-cache-dir
+  "No parse cache unless a test names a directory for one: the default is the
+   project's target/, which every test here would share."
+  []
+  (when (string? scaffold/*parse-cache-dir*) scaffold/*parse-cache-dir*))
+
 (defn- run-wizard
   "Runs `wizard-ai` with every shell-out stubbed. `responses` is a seq of return
    values, one per shell call, in order. Returns {:calls [...] :out s :exit n}."
@@ -40,7 +46,8 @@
         remaining (atom (vec responses))
         exit      (atom nil)
         out       (with-out-str
-                    (binding [scaffold/*exit!* #(reset! exit %)]
+                    (binding [scaffold/*exit!* #(reset! exit %)
+                              scaffold/*parse-cache-dir* (test-cache-dir)]
                       (with-redefs [process/shell
                                     (fn [& args]
                                       (let [[opts cmd] (if (map? (first args))
@@ -140,8 +147,8 @@
     ;; scaffolder needs. Passing that through produced a scaffolder invocation
     ;; with `--module-name null`.
     (doseq [out ["I could not determine a module from that description."
-                 "{\"entity\":\"Product\"}"
-                 "{\"module-name\":\"Product Module\",\"entity\":\"Product\"}"]]
+                 "{\"module-name\":\"product\"}"
+                 "{\"module-name\":\"product\",\"entity\":\"Product Module\"}"]]
       (let [{:keys [calls exit]} (run-wizard "product module" true [{:exit 0 :out out}])]
         (is (= 1 (count calls)) (str "must not scaffold from: " out))
         (is (= 1 exit)))))
@@ -210,7 +217,7 @@
       (is (some #{"number:string:required"} (:cmd generate))))
     (testing "the second is added to it, belonging to the first"
       (is (some #{"entity"} (:cmd entity)))
-      (is (= "billing" (after (:cmd entity) "--module-name")))
+      (is (= "invoice" (after (:cmd entity) "--module-name")))
       (is (= "InvoiceLineItem" (after (:cmd entity) "--entity")))
       (is (= "Invoice" (after (:cmd entity) "--belongs-to")))
       (is (some #{"quantity:int:required"} (:cmd entity))))
@@ -258,7 +265,8 @@
   (let [calls (atom [])
         exit  (atom nil)
         out   (with-out-str
-                (binding [scaffold/*exit!* #(reset! exit %)]
+                (binding [scaffold/*exit!* #(reset! exit %)
+                          scaffold/*parse-cache-dir* (test-cache-dir)]
                   (with-redefs [process/shell
                                 (fn [opts & cmd]
                                   (swap! calls conj (vec cmd))
@@ -378,3 +386,44 @@
   (let [{:keys [calls exit]} (run-main ["--yes"] spec-json (constantly {:exit 0}))]
     (is (empty? calls))
     (is (= 1 exit))))
+
+(deftest ^:unit the-module-is-named-after-its-first-entity
+  ;; The model named the same description `invoice` on one run and `invoicing`
+  ;; on the next (BOU-562).
+  (doseq [named ["billing" "invoicing" "invoice"]]
+    (is (= "invoice" (:module (#'scaffold/parse-ai-module-spec
+                               (str/replace multi-entity-json "\"billing\"" (str "\"" named "\"")))))
+        named))
+  (is (= "invoice-line-item"
+         (:module (#'scaffold/parse-ai-module-spec
+                   "{\"module-name\":\"x\",\"entity\":\"InvoiceLineItem\",\"fields\":[]}")))))
+
+(deftest ^:unit the-real-run-reuses-the-dry-run-s-parse
+  (let [dir     (str (fs/create-temp-dir))
+        answers (atom [multi-entity-json
+                       (str/replace multi-entity-json "\"Invoice\"" "\"Bill\"")])
+        run     (fn [& args]
+                  (binding [scaffold/*parse-cache-dir* dir]
+                    (run-main (into ["invoices with line items" "-y"] args)
+                              nil (constantly {:exit 0}))))]
+    (try
+      (with-redefs [scaffold/parse-description (fn [_]
+                                                 (let [[a & more] @answers]
+                                                   (reset! answers (vec more))
+                                                   {:exit 0 :out a}))]
+        (let [module-of (fn [{:keys [calls]}]
+                          (some (fn [cmd] (second (drop-while #(not= "--module-name" %) cmd))) calls))
+              dry       (run "--dry-run")
+              real      (run)]
+          (is (= "invoice" (module-of dry)))
+          (is (= "invoice" (module-of real)) "not the second answer's `bill`")
+          (is (= 1 (count @answers)) "the real run did not ask again")
+          (is (str/includes? (plain (:out real)) "parse from") (:out real))))
+      (finally (fs/delete-tree dir)))))
+
+(deftest ^:unit the-summary-separates-name-and-type
+  (let [out (plain (with-out-str
+                     (scaffold/display-generate-summary "invoice" "Invoice"
+                                                        [{:name "total-in-cents" :type "int" :required true}]
+                                                        true true)))]
+    (is (re-find #"total-in-cents\s+int" out) out)))

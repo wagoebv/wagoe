@@ -47,6 +47,14 @@
        (map str/capitalize)
        (str/join)))
 
+(defn pascal->kebab
+  "InvoiceLineItem -> invoice-line-item, as the scaffolder derives it."
+  [s]
+  (-> s
+      (str/replace #"([A-Z]+)([A-Z][a-z])" "$1-$2")
+      (str/replace #"([a-z0-9])([A-Z])" "$1-$2")
+      str/lower-case))
+
 ;; =============================================================================
 ;; Prompts
 ;; =============================================================================
@@ -381,7 +389,8 @@
                         (filter some?)
                         (str/join ", "))
               mods-str (if (seq mods) (str " (" mods ")") "")]
-          (println (str (cyan "│") "   " (format "%-14s" name)
+          ;; The space is not padding: a 14-character name ran into its type.
+          (println (str (cyan "│") "   " (format "%-14s" name) " "
                         (format "%-10s" type) mods-str))))))
   (println (str (cyan "│") " Interfaces:  "
                 "HTTP " (if http (green "\u2713") (red "\u2717"))
@@ -646,7 +655,9 @@
                                                               (valid-kebab? (:belongs-to e)) kebab->pascal))))
                            (:entities data))
                      [{:name (:entity data) :fields (vec (:fields data))}])
-          spec     {:module   (:module-name data)
+          ;; From the first entity, not the model's `module-name`: the same
+          ;; description came back as `invoice` and then `invoicing` (BOU-562).
+          spec     {:module   (some-> (:name (first entities)) pascal->kebab)
                     :entity   (:name (first entities))
                     :fields   (:fields (first entities))
                     :entities entities
@@ -658,6 +669,43 @@
                  (every? #(or (nil? (:belongs-to %)) (valid-pascal? (:belongs-to %))) entities))
         spec))
     (catch Exception _ nil)))
+
+(def ^:dynamic *parse-cache-dir*
+  "Where a description's parse is kept, so a dry run and the real run that
+   follows it scaffold the same thing (BOU-562). `:project` is target/ of the
+   project being written to; nil keeps nothing."
+  :project)
+
+(defn parse-description
+  "The AI CLI's parse of `description`: the shell result, its spec on stdout."
+  [description]
+  (apply shell {:out :string :continue true}
+         (ai/ai-command ["scaffold-parse" description])))
+
+(defn- parse-cache-file [flags description]
+  (when-let [dir (case *parse-cache-dir*
+                   :project (str (or (:output-dir flags) (System/getProperty "user.dir"))
+                                 "/target/scaffold-ai")
+                   *parse-cache-dir*)]
+    (let [digest (.digest (java.security.MessageDigest/getInstance "SHA-256")
+                          (.getBytes (str/trim description) "UTF-8"))]
+      (io/file dir (str (subs (apply str (map #(format "%02x" %) digest)) 0 16) ".json")))))
+
+(defn- cached-parse
+  "The parse of `description`: the cached one when there is one, else a new
+   one, which is cached when it holds a spec."
+  [flags description]
+  (let [f (parse-cache-file flags description)]
+    (if (and f (.isFile ^java.io.File f))
+      (do (println (dim (str "Using the parse from " (.getPath ^java.io.File f)
+                             " — delete it to parse the description again.")))
+          (println)
+          {:exit 0 :out (slurp f)})
+      (let [result (parse-description description)]
+        (when (and f result (zero? (:exit result)) (parse-ai-module-spec (:out result)))
+          (io/make-parents f)
+          (spit f (ai/json-line (:out result))))
+        result))))
 
 (defn wizard-ai
   "Parse a description with the AI CLI, then scaffold through the normal path.
@@ -675,8 +723,7 @@
    (println (dim (str "Parsing: " description)))
    (println)
    (let [result (try
-                  (apply shell {:out :string :continue true}
-                         (ai/ai-command ["scaffold-parse" description]))
+                  (cached-parse flags description)
                   (catch Exception e
                     (println (red (str "AI scaffolder exited with error: " (.getMessage e))))
                     (*exit!* 1)

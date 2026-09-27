@@ -364,8 +364,9 @@
          ;; defines (BOU-309).
          :next-steps ["Review the generated files"
                       (format "Print the config it needs: bb scaffold integrate %s" module-name)
+                      ;; The first entity's, not <module>-test (BOU-562).
                       (format "Run tests: clojure -M:test --focus %s.%s.core.%s-test"
-                              (str/replace base-ns-path "/" ".") module-name module-name)]
+                              (:base-ns ctx) module-name (:entity-kebab entity))]
          :warnings (if dry-run?
                      ["Dry run - no files were written"]
                      [])})
@@ -636,7 +637,8 @@
                                 ;; everything. Advice that does not work is the same
                                 ;; defect as a file report that is not true.
                               (str (format "Run the tests: clojure -M:test --focus %s.%s.core.%s-test"
-                                           (str/replace base-ns-path "/" ".") module-name module-name)
+                                           (or (:base-ns request) "wagoe") module-name
+                                           (template/pascal->kebab entity))
                                    (in-project))]
                        (:manual? schema-entry)
                        (into [(:manual-note schema-entry)]))
