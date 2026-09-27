@@ -772,9 +772,32 @@
 (deftest ^:unit a-switched-database-migrates-on-start-outside-prod
   (with-project
     (fn [dir]
+      (run-setup dir "" "--database" "postgresql")
       (run-setup dir "" "--database" "postgresql" "--prod" "true")
       (is (true? (get-in (conf dir "dev") [:active :wagoe/postgresql :migrate-on-start?])))
       (is (nil? (get-in (conf dir "prod") [:active :wagoe/postgresql :migrate-on-start?]))))))
+
+(deftest ^:unit prod-answers-go-to-prod-only
+  (with-project
+    (fn [dir]
+      (let [[exit out] (run-setup dir "" "--prod" "true")]
+        (is (nil? exit) out))
+      (spit (conf-file dir "prod")
+            (config-edn/insert-into (slurp (conf-file dir "prod")) ":active"
+                                    "\n  :my/hand-edit {:kept? true}"))
+      (let [dev-before  (slurp (conf-file dir "dev"))
+            test-before (slurp (conf-file dir "test"))
+            [exit out]  (run-setup dir "" "--database" "postgresql" "--prod" "true")
+            prod        (conf dir "prod")]
+        (is (nil? exit) out)
+        (is (= dev-before (slurp (conf-file dir "dev"))) "dev is not the profile asked for")
+        (is (= test-before (slurp (conf-file dir "test"))))
+        (is (contains? (:active prod) :wagoe/postgresql) out)
+        (is (env-ref? (get-in prod [:active :wagoe/postgresql :host])))
+        (is (contains? (:inactive prod) :wagoe/sqlite) "two active databases do not boot")
+        (is (= {:kept? true} (get-in prod [:active :my/hand-edit])) "merged, not regenerated")
+        (is (= {:enabled? true} (get-in prod [:active :wagoe/product])))
+        (is (not (str/includes? out "Kept existing")) out)))))
 
 (deftest ^:unit a-moved-database-lands-in-inactive-not-a-trailing-comment
   (with-project
@@ -850,8 +873,7 @@
               (is (= 1 exit))
               (is (some? report) out)
               ;; No admin users.edn: prod takes dev's modules, and dev has no admin.
-              (doseq [p ["resources/conf/dev/config.edn" "resources/conf/test/config.edn"
-                         "resources/conf/prod/config.edn" ".env.example"]]
+              (doseq [p ["resources/conf/prod/config.edn" ".env.example"]]
                 (is (str/includes? (str report) p) (str p " is named as not written")))
               (is (= before (tree dir)) "and no directory is left behind"))
             (finally (.setWritable root true))))))))
@@ -1009,8 +1031,8 @@
             env-ex     (slurp (fs/file dir ".env.example"))]
         (is (nil? exit) out)
         (is (not (str/includes? text ":mock")))
-        (is (= :mock (get-in (conf dir "dev") [:active :wagoe/payment-provider :provider]))
-            "dev still gets what was asked")
+        (is (not (contains? (:active (conf dir "dev")) :wagoe/payment-provider))
+            "--prod answers are prod's, not dev's")
         (is (= 1 (count (re-seq #"(?m)^REDIS_HOST=" env-ex)))
             "cache and event bus share the Redis variables")))))
 

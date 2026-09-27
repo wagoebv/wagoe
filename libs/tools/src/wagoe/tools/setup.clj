@@ -672,7 +672,7 @@
                    (confirm "Enable admin UI?" true))
 
         prod? (when (and existing? (not (.exists (io/file (root-dir) (conf-rel "prod")))))
-                (confirm "Create resources/conf/prod/config.edn?" false))]
+                (confirm "Write these answers to a new resources/conf/prod/config.edn instead of dev and test?" false))]
 
     {:project-name project-name
      :database     database
@@ -969,10 +969,13 @@
 
    In a new project every file is created, with the defaults for what was not
    answered. In an existing one only answers are written: no missing config is
-   created, except prod when asked for (`:prod?`). Prod is hand-maintained once
-   it exists, and so is an admin entity file, so both are kept (BOU-499)."
+   created. With `:prod?` the answers are prod's alone: prod is created, or
+   merged into as dev is, and dev and test are left as they are (BOU-577). An
+   admin entity file is hand-maintained, so it is kept (BOU-499)."
   [spec]
   (let [existing? (existing-project?)
+        prod-only? (and existing? (:prod? spec))
+        targets   (if prod-only? ["prod"] envs)
         full      (with-defaults spec)
         dev-text  (read-target (conf-rel "dev"))
         dev       (let [a (some-> dev-text read-edn first :active)] (when (map? a) a))
@@ -990,10 +993,10 @@
                       (not existing?) (build-config full env)
                       (and (prod? env) (:prod? spec))
                       (or (:text carried) (build-config prod-spec env))))
-        configs   (for [env envs]
+        configs   (for [env targets]
                     (cond-> (plan-file (conf-rel env)
                                        (create env)
-                                       (when-not (prod? env)
+                                       (when (or (not (prod? env)) prod-only?)
                                          #(merge-config %1 (build-config spec env)
                                                         {:switch-db? (not= "test" env) :env env
                                                          :spec spec :nl %2}))
@@ -1002,7 +1005,7 @@
                       (assoc :changes (for [k (:left-out carried)]
                                         (str "leave out " k ": dev's provider is a stand-in; configure a real one")))))
         redis?    (some (fn [{:keys [path status content]}]
-                          (and (= (conf-rel "prod") path) (= :new status)
+                          (and (= (conf-rel "prod") path) (#{:new :changed} status)
                                (str/includes? content "#env REDIS_HOST")))
                         configs)
         env-spec  (cond-> spec redis? (assoc :prod-redis? true))
@@ -1023,7 +1026,7 @@
      ;; The files a config written now `#include`s: dev's copy for a prod made
      ;; from dev, else the users entity setup ships.
      (distinct
-      (for [[env {:keys [content]}] (map vector envs configs)
+      (for [[env {:keys [content]}] (map vector targets configs)
             :when content
             inc   (distinct (map second (re-seq #"#include\s+\"([^\"]+)\"" content)))
             :let  [source (or (when (prod? env) (read-target (str "resources/conf/dev/" inc)))
@@ -1341,7 +1344,7 @@
   (println "  --cache CACHE          none, redis, memory")
   (println "  --email EMAIL          none, smtp")
   (println "  --admin-ui BOOL        true, false")
-  (println "  --prod true            Create resources/conf/prod/config.edn in an existing project")
+  (println "  --prod true            Apply the answers to prod only (created, or merged into); dev and test are left alone")
   (println)
   (println "Generated files:")
   (println "  resources/conf/dev/config.edn")
