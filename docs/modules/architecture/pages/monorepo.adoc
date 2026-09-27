@@ -34,8 +34,7 @@ Example applications live under `examples/`, and CI runs both on every commit:
   `bb example:regen --check`
 * `examples/todo` — functional core / imperative shell with no framework at all
 
-https://github.com/wagoebv/wagoe-examples[wagoe-examples] holds community
-examples. They are not versioned against a release and not built here.
+The former `wagoe-examples` repository is archived; these two are the examples.
 
 == Library structure
 
