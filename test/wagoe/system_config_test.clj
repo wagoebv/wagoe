@@ -30,6 +30,13 @@
                           (sut/load-config {:profile :nonexistent})))]
       (is (= "Configuration file not found" (ex-message ex))))))
 
+(def ^:private enabled
+  "A module's settings when this file switches every module on. Payments has
+   no default provider, and this config has no profile to allow the mock
+   (BOU-564); it is only assembled, never started."
+  (fn [k] (get {:wagoe/payment-provider {:provider :stripe :api-key "sk" :webhook-secret "wh"}}
+               k {:enabled? true})))
+
 (defn- base-config
   []
   {:active
@@ -242,7 +249,7 @@
   ;; template. Both halves now live in the module's own library, and this is the
   ;; check that replaces it: run the real assembler over a config with every
   ;; framework module enabled, and ask Integrant whether it could build each key.
-  (let [everything (reduce (fn [c k] (assoc-in c [:active k] {:enabled? true}))
+  (let [everything (reduce (fn [c k] (assoc-in c [:active k] (enabled k)))
                            (base-config)
                            ;; Minus the dev-only ones: they refuse to assemble
                            ;; outside :dev, and this config has no profile.
@@ -292,7 +299,7 @@
                                        (slurp f))]
                          [(keyword (subs (second k) 1)) lib]))
 
-        everything (reduce (fn [c k] (assoc-in c [:active k] {:enabled? true}))
+        everything (reduce (fn [c k] (assoc-in c [:active k] (enabled k)))
                            (base-config)
                            ;; See above: a dev-only module will not assemble
                            ;; under a config with no profile.

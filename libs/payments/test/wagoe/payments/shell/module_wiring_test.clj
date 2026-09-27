@@ -5,7 +5,7 @@
             [integrant.core :as ig]
             ;; loads the init-key defmethod + transitively the adapter records
             ;; referenced below via fully-qualified class names.
-            [wagoe.payments.shell.module-wiring]))
+            [wagoe.payments.shell.module-wiring :as payments]))
 
 (defn- init [config]
   (ig/init-key :wagoe/payment-provider config))
@@ -78,9 +78,29 @@
     (is (instance? wagoe.payments.shell.adapters.mock.MockPaymentProvider
                    (init {:provider :mock}))))
 
-  (testing "defaults to mock when :provider is omitted"
-    (is (instance? wagoe.payments.shell.adapters.mock.MockPaymentProvider
-                   (init {})))))
+  (testing "no :provider is no default: it fails boot naming the key (BOU-564)"
+    ;; It defaulted to the mock, which accepts any webhook as paid.
+    (let [ex (config-error {})]
+      (is (= :configuration-error (:type (ex-data ex))))
+      (is (str/includes? (ex-message ex) ":wagoe/payment-provider")))))
+
+(deftest ^:unit the-mock-runs-only-in-dev-and-test
+  (let [assemble (fn [settings profile]
+                   (try (payments/ig-config settings {:config {:wagoe/profile profile}})
+                        (catch clojure.lang.ExceptionInfo e e)))]
+    (doseq [profile [:dev :test]]
+      (is (= {:wagoe/payment-provider {:provider :mock}}
+             (:components (assemble {:provider :mock} profile)))
+          (str profile)))
+    (doseq [profile [:prod :acc nil]]
+      (let [ex (assemble {:provider :mock} profile)]
+        (is (= :configuration-error (:type (ex-data ex))) (str profile))
+        (is (str/includes? (str (ex-message ex)) ":wagoe/payment-provider"))))
+    (testing "a missing provider fails at assembly too, in any profile"
+      (is (= :configuration-error (:type (ex-data (assemble {} :dev))))))
+    (testing "a real provider passes through untouched"
+      (is (= {:wagoe/payment-provider {:provider :stripe :api-key "k"}}
+             (:components (assemble {:provider :stripe :api-key "k"} :prod)))))))
 
 ;; =============================================================================
 ;; Unknown provider

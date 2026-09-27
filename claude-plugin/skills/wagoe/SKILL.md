@@ -59,8 +59,8 @@ An `enum` must name its values: `status:enum:values=draft,sent,paid`.
 
 - `core/` = pure functions only; `shell/` = all I/O. Shell → Core allowed;
   Core → Shell never.
-- kebab-case everywhere in Clojure; snake_case only at the DB boundary;
-  camelCase only at the API boundary.
+- kebab-case everywhere in Clojure and in the generated API's JSON;
+  snake_case only at the DB boundary.
 - A new field means synchronizing three places: Malli schema, DB migration,
   persistence-layer transformations.
 - Unbalanced parens: run `clj-paren-repair <file>` — never repair by hand.

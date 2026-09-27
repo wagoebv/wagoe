@@ -3,6 +3,7 @@
             [clojure.set :as set]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
+            [babashka.fs :as fs]
             [wagoe.tools.doctor-env :as doctor-env]
             [wagoe.tools.doctor :as doctor]))
 
@@ -157,3 +158,26 @@
   (testing "doctor defaults to no --all"
     (let [opts (#'wagoe.tools.doctor/parse-args [])]
       (is (false? (:all opts))))))
+
+;; =============================================================================
+;; Project-aware checks (BOU-564)
+;; =============================================================================
+
+(deftest ^:unit a-generated-project-is-not-told-to-install-node
+  ;; A generated project has no package.json and no test containers, and
+  ;; `wagoe doctor` named Node.js as its next step.
+  (let [dir (fs/create-temp-dir)]
+    (try
+      (let [ids (set (map :id (doctor-env/run-checks (str dir))))]
+        (is (not (contains? ids :node)))
+        (is (not (contains? ids :test-services))))
+      (spit (fs/file dir "package.json") "{}")
+      (spit (fs/file dir "docker-compose.test.yml") "services: {}")
+      (let [ids (set (map :id (doctor-env/run-checks (str dir))))]
+        (is (contains? ids :node) "a project with a package.json needs Node")
+        (is (contains? ids :test-services)))
+      (finally (fs/delete-tree dir)))))
+
+(deftest ^:unit port-9999-is-the-dev-dashboard
+  (is (= "dev dashboard" (get doctor-env/dev-ports 9999)))
+  (is (not-any? #(str/includes? % "shadow") (vals doctor-env/dev-ports))))

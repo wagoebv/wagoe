@@ -11,6 +11,7 @@
   (:require [wagoe.tools.ansi :refer [bold]]
             [wagoe.tools.report :as report]
             [wagoe.tools.test-services :as test-services]
+            [clojure.java.io :as io]
             [clojure.string :as str]
             [babashka.process :as process]))
 
@@ -135,13 +136,16 @@
        :msg "Node.js not found (needed for UI asset compilation)"
        :fix "Install: https://nodejs.org/ or `brew install node`"})))
 
+(def dev-ports
+  "The ports a dev run of a generated project listens on."
+  {3000 "HTTP server"
+   7888 "nREPL"
+   9999 "dev dashboard"})
+
 (defn check-ports
-  "Check that development ports 3000 (HTTP), 7888 (nREPL), 9999 (shadow-cljs) are available."
+  "Check that the dev ports in `dev-ports` are available."
   []
-  (let [ports      {3000 "HTTP server"
-                    7888 "nREPL"
-                    9999 "shadow-cljs"}
-        in-use     (filter (fn [[port _]] (port-in-use? port)) ports)]
+  (let [in-use (filter (fn [[port _]] (port-in-use? port)) (sort dev-ports))]
     (if (seq in-use)
       {:id :ports :level :warn
        :msg (str "Ports in use: "
@@ -241,16 +245,20 @@
 ;; =============================================================================
 
 (defn run-checks
-  "Run all environment checks. Returns a seq of check result maps."
-  []
-  [(check-java)
-   (check-clojure-cli)
-   (check-babashka)
-   (check-node)
-   (check-ports)
-   (check-clj-kondo)
-   (check-ai-providers)
-   (check-test-services)])
+  "Run the environment checks that apply to the project in `dir`. Node.js only
+   where there is a package.json, and the test services only where they are
+   declared: a generated project has neither, and was told to install Node
+   (BOU-564)."
+  ([] (run-checks (System/getProperty "user.dir")))
+  ([dir]
+   (cond-> [(check-java)
+            (check-clojure-cli)
+            (check-babashka)]
+     (.exists (io/file dir "package.json"))                (conj (check-node))
+     true                                                  (into [(check-ports)
+                                                                  (check-clj-kondo)
+                                                                  (check-ai-providers)])
+     (.exists (io/file dir test-services/compose-file))   (conj (check-test-services)))))
 
 ;; =============================================================================
 ;; Output formatting
@@ -282,11 +290,11 @@
   (println (str "  java              Java >= " java-min " installed"))
   (println "  clojure-cli       Clojure CLI installed")
   (println "  babashka          Babashka installed")
-  (println "  node              Node.js installed (warn only)")
-  (println "  ports             Dev ports 3000, 7888, 9999 available")
+  (println "  node              Node.js installed, when there is a package.json (warn only)")
+  (println "  ports             Dev ports 3000 (HTTP), 7888 (nREPL), 9999 (dashboard) available")
   (println "  clj-kondo         clj-kondo linter installed (warn only)")
   (println "  ai-providers      A provider env var is set, or Ollama / MLX is running (warn only)")
-  (println "  test-services     Redis / MySQL the adapter sweeps need (warn only)"))
+  (println "  test-services     Redis / MySQL the adapter sweeps need, when docker-compose.test.yml exists (warn only)"))
 
 ;; =============================================================================
 ;; Main entry point

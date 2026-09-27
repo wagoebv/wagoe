@@ -88,7 +88,7 @@ Other protocol methods: `create-off-session-payment`, `get-payment-status`,
 
 | Provider | Key | Required credentials | Env vars | Notes |
 |----------|-----|----------------------|----------|-------|
-| **Mock** | `:mock` | none | — | Auto-approves; no network calls. Use in dev and all tests |
+| **Mock** | `:mock` | none | — | Auto-approves; no network calls. Refused outside the dev and test profiles |
 | **Mollie** | `:mollie` | `:api-key`, `:webhook-base-url` | `MOLLIE_API_KEY`, `APP_BASE_URL` | Form-POST webhook, no HMAC; off-session/expiry throw `:not-implemented` |
 | **Stripe** | `:stripe` | `:api-key`, `:webhook-secret` | `STRIPE_API_KEY`, `STRIPE_WEBHOOK_SECRET` | HMAC-SHA256 webhooks; full off-session + expiry support |
 

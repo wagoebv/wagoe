@@ -15,7 +15,10 @@
  :naming
  [{:context :clojure :case :kebab :example ":password-hash, :created-at"}
   {:context :db      :case :snake :example "password_hash, created_at"}
-  {:context :api     :case :camel :example "passwordHash, createdAt"}]
+  ;; A generated project's API speaks kebab-case JSON; the framework's own
+  ;; user API is camelCase. :surfaces as on :pitfalls (BOU-564).
+  {:context :api     :case :camel :example "passwordHash, createdAt" :surfaces #{:framework}}
+  {:context :api     :case :kebab :example "password-hash, created-at" :surfaces #{:downstream}}]
 
  :dev-modules
  [{:name "scaffolder" :description "Module generation with FC/IS structure, tests, migrations"

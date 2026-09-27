@@ -916,6 +916,7 @@ DROP TABLE IF EXISTS %s;
   [(str "[" base-ns "." module-name ".ports :as ports]")
    (str "[" base-ns "." module-name ".schema :as schema]")
    "[malli.core :as m]"
+   "[malli.error :as me]"
    "[malli.transform :as mt]"])
 
 (defn- ns-form
@@ -965,8 +966,13 @@ DROP TABLE IF EXISTS %s;
          "\n"
          ";; Thrown, not returned: the platform maps :type to the status and answers\n"
          ";; in the shape it uses for every error, a missing reference included.\n"
-         "(defn- invalid []\n"
-         "  (throw (ex-info \"Invalid " e "\" {:type :validation-error})))\n"
+         ";; `errors` lands in the body's details. Keys are kebab-case: an unknown\n"
+         ";; one, camelCase included, is dropped, and its field reported missing.\n"
+         "(defn- invalid [errors]\n"
+         "  (throw (ex-info \"Invalid " e "\" {:type :validation-error :errors errors})))\n"
+         "\n"
+         "(defn- explain [schema data]\n"
+         "  (me/humanize (m/explain schema data)))\n"
          "\n"
          "(defn- not-found []\n"
          "  (throw (ex-info \"No such " e "\" {:type :not-found})))\n"
@@ -1007,7 +1013,7 @@ DROP TABLE IF EXISTS %s;
          "                       (let [data (decode-create (:body-params request))]\n"
          "                         (if (valid-create? data)\n"
          "                           {:status 201 :body (ports/create-" e " service data)}\n"
-         "                           (invalid))))}}]\n"
+         "                           (invalid (explain schema/Create" entity-name "Request data)))))}}]\n"
          "   [\"/" plural "/:id\"\n"
          "    {:swagger {:parameters [{:name \"id\" :in \"path\" :required true :type \"string\"}]}\n"
          "     :get    {:summary \"Get a " e "\"" guard-id "\n"
@@ -1021,8 +1027,8 @@ DROP TABLE IF EXISTS %s;
          "                               data (decode-update (:body-params request))]\n"
          "                           (cond\n"
          "                             (nil? id)                 (not-found)\n"
-         "                             (empty? data)             (invalid)\n"
-         "                             (not (valid-update? data)) (invalid)\n"
+         "                             (empty? data)             (invalid {:body [\"no field it knows\"]})\n"
+         "                             (not (valid-update? data)) (invalid (explain schema/Update" entity-name "Request data))\n"
          "                             :else (if-let [updated (ports/update-" e " service id data)]\n"
          "                                     {:status 200 :body updated}\n"
          "                                     (not-found)))))}\n"

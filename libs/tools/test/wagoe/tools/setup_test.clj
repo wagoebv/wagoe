@@ -848,9 +848,9 @@
                   report     (second (str/split out #"Nothing was written" 2))]
               (is (= 1 exit))
               (is (some? report) out)
+              ;; No admin users.edn: prod takes dev's modules, and dev has no admin.
               (doseq [p ["resources/conf/dev/config.edn" "resources/conf/test/config.edn"
-                         "resources/conf/prod/config.edn" ".env.example"
-                         "resources/conf/prod/admin/users.edn"]]
+                         "resources/conf/prod/config.edn" ".env.example"]]
                 (is (str/includes? (str report) p) (str p " is named as not written")))
               (is (= before (tree dir)) "and no directory is left behind"))
             (finally (.setWritable root true))))))))
@@ -936,3 +936,97 @@
         (run-setup dir "" "--cache" "memory")
         (is (java.nio.file.Files/isSymbolicLink link))
         (is (str/includes? (slurp shared) ":wagoe/cache") "the link's target is what changes")))))
+
+;; -----------------------------------------------------------------------------
+;; A prod profile made later is the project's, not a new one's (BOU-564)
+;; -----------------------------------------------------------------------------
+
+(deftest ^:unit the-wizard-offers-the-projects-own-name
+  (with-project
+    (fn [dir]
+      (let [[_ out] (run-setup dir enter-through)]
+        (is (re-find #"Project name \(kebab-case\)\S*\s+\[shop\]" out) out)))))
+
+(deftest ^:unit prod-carries-over-what-dev-has
+  (with-project
+    (fn [dir]
+      (spit (conf-file dir "dev")
+            (config-edn/insert-into
+             (slurp (conf-file dir "dev")) ":active"
+             (str "\n   :wagoe/ai-service {:provider :replicate :api-key #env REPLICATE_API_TOKEN}"
+                  "\n   :wagoe/events\n   {:provider :memory}"
+                  "\n   :wagoe/payment-provider {:provider :mock}"
+                  "\n   :wagoe/cache {:provider :memory :default-ttl 300}"
+                  "\n   :wagoe/jobs {:provider :memory :workers {:count 1}}"
+                  "\n   :wagoe/realtime {:provider :memory}"
+                  "\n   :my/gateway {:provider :mock}"
+                  "\n   :wagoe/dashboard {:port 9999}")))
+      (let [dev-before  (slurp (conf-file dir "dev"))
+            test-before (slurp (conf-file dir "test"))
+            env-before  (slurp (fs/file dir ".env.example"))
+            [exit out]  (run-setup dir "" "--prod" "true")
+            prod        (:active (conf dir "prod"))]
+        (is (nil? exit) out)
+        (is (= "shop-prod" (get-in prod [:wagoe/settings :name])) "the project's name, not my-app")
+        (is (contains? prod :wagoe/sqlite) "dev's database")
+        (is (env-ref? (get-in prod [:wagoe/sqlite :db])))
+        (is (= {:enabled? true :base-path "/api/product"} (:wagoe/product prod))
+            "a module integrated before prod existed")
+        (is (not (contains? prod :wagoe/ai-service)) "no AI in prod, as ai-template has it")
+        (testing "no stand-in reaches prod (BOU-564 review)"
+          (let [text (slurp (conf-file dir "prod"))]
+            (doseq [bad [":mock" ":memory" ":in-memory"]]
+              (is (not (str/includes? text bad)) bad)))
+          (is (not (contains? prod :wagoe/payment-provider)) "the mock accepts any webhook as paid")
+          (is (= :redis (get-in prod [:wagoe/cache :provider])))
+          (is (= :db (get-in prod [:wagoe/jobs :provider])))
+          (is (= :redis (get-in prod [:wagoe/realtime :provider])))
+          (is (not (contains? prod :my/gateway)))
+          (is (str/includes? out ":my/gateway") "and says what it left out"))
+        (is (= :redis (get-in prod [:wagoe/events :provider])) "one process in dev, several in prod")
+        (is (env-ref? (get-in prod [:wagoe/events :host])))
+        (is (str/includes? (slurp (conf-file dir "prod")) "\n  :wagoe/events\n  {:provider :redis")
+            "at the column of the keys around it")
+        (is (not (contains? prod :wagoe/dashboard)) "the platform refuses it outside :dev")
+        (is (not (contains? prod :wagoe/dev-error-enricher)))
+        (is (= dev-before (slurp (conf-file dir "dev"))))
+        (is (= test-before (slurp (conf-file dir "test"))))
+        (testing ".env.example names the Redis variables prod's event bus reads"
+          (let [env-ex (slurp (fs/file dir ".env.example"))]
+            (is (str/starts-with? env-ex env-before) "only added to")
+            (doseq [v ["REDIS_HOST" "REDIS_PORT" "REDIS_PASSWORD"]]
+              (is (= 1 (count (re-seq (re-pattern (str "(?m)^" v "=")) env-ex))) v))))))))
+
+(deftest ^:unit an-explicit-answer-still-keeps-the-mock-out-of-prod
+  (with-project
+    (fn [dir]
+      (spit (conf-file dir "dev")
+            (config-edn/insert-into (slurp (conf-file dir "dev")) ":active"
+                                    "\n   :wagoe/events {:provider :memory}"))
+      (let [[exit out] (run-setup dir "" "--prod" "true" "--payment" "mock" "--cache" "redis")
+            text       (slurp (conf-file dir "prod"))
+            env-ex     (slurp (fs/file dir ".env.example"))]
+        (is (nil? exit) out)
+        (is (not (str/includes? text ":mock")))
+        (is (= :mock (get-in (conf dir "dev") [:active :wagoe/payment-provider :provider]))
+            "dev still gets what was asked")
+        (is (= 1 (count (re-seq #"(?m)^REDIS_HOST=" env-ex)))
+            "cache and event bus share the Redis variables")))))
+
+(deftest ^:unit a-fresh-prod-has-no-mock-payments
+  (is (not (str/includes? (setup/build-config (assoc full-spec :payment :mock) "prod") ":mock"))))
+
+(deftest ^:unit prod-gets-devs-admin-and-its-entity-files
+  (with-project
+    (fn [dir]
+      (let [entity "{:invoices {:label \"Invoices\"}}\n"]
+        (fs/create-dirs (fs/file dir "resources" "conf" "dev" "admin"))
+        (spit (fs/file dir "resources" "conf" "dev" "admin" "invoices.edn") entity)
+        (spit (conf-file dir "dev")
+              (config-edn/insert-into
+               (slurp (conf-file dir "dev")) ":active"
+               "\n   :wagoe/admin {:enabled? true :entities #merge [#include \"admin/invoices.edn\"]}"))
+        (let [[exit out] (run-setup dir "" "--prod" "true")]
+          (is (nil? exit) out)
+          (is (str/includes? (slurp (conf-file dir "prod")) "admin/invoices.edn"))
+          (is (= entity (slurp (fs/file dir "resources" "conf" "prod" "admin" "invoices.edn")))))))))

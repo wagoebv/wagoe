@@ -8,7 +8,7 @@
             [integrant.core :as ig]))
 
 ;; :wagoe/payment-provider
-;; config: {:provider :mock|:mollie|:stripe
+;; config: {:provider :mock|:mollie|:stripe   ; required; :mock in dev/test only
 ;;           :api-key "..."            ; mollie or stripe secret key
 ;;           :webhook-secret "..."     ; stripe only
 ;;           :webhook-base-url "..."}  ; mollie: base URL for webhook registration
@@ -36,10 +36,35 @@
                      :missing-keys (mapv first missing)
                      :env-vars     (mapv second missing)}))))
 
+(defn- no-provider! []
+  (throw (ex-info (str ":wagoe/payment-provider has no :provider. Set :stripe or :mollie;"
+                       " :mock only in the dev and test profiles.")
+                  {:type :configuration-error :key :wagoe/payment-provider})))
+
+(defn ig-config
+  "The module's graph: its settings as they are, once they pass. There is no
+   default provider, and the mock, which accepts any webhook as paid, runs only
+   under the dev and test profiles (BOU-564)."
+  [settings ctx]
+  (let [provider (:provider settings)
+        profile  (get-in ctx [:config :wagoe/profile])]
+    (cond
+      (nil? provider) (no-provider!)
+
+      (and (= :mock provider) (not (#{:dev :test} profile)))
+      (throw (ex-info (str ":wagoe/payment-provider is :mock under the " (pr-str profile)
+                           " profile. The mock accepts any webhook as paid, so it runs"
+                           " only in dev and test; set :stripe or :mollie.")
+                      {:type :configuration-error :key :wagoe/payment-provider
+                       :provider :mock :profile profile}))
+
+      :else {:components {:wagoe/payment-provider settings}})))
+
 (defmethod ig/init-key :wagoe/payment-provider
   [_ {:keys [provider api-key webhook-secret webhook-base-url] :as config}]
   (log/infof "Initializing payment provider: %s" provider)
-  (case (or provider :mock)
+  (when (nil? provider) (no-provider!))
+  (case provider
     :mock   (do (log/info "Using Mock payment provider (development mode)")
                 (mock/make-mock-provider))
     :mollie (do (validate-credentials! :mollie [[:api-key "MOLLIE_API_KEY"]] config)

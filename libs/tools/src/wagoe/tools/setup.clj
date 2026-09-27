@@ -318,9 +318,12 @@
 (defn- payment-template [provider env]
   (case provider
     :none ""
+    ;; Never in prod, answered or not: the mock accepts any webhook as paid.
     :mock
-    (str "  :wagoe/payment-provider\n"
-         "  {:provider :mock}\n")
+    (if (prod? env)
+      ""
+      (str "  :wagoe/payment-provider\n"
+           "  {:provider :mock}\n"))
     :stripe
     (if (= env "test")
       (str "  :wagoe/payment-provider\n"
@@ -505,6 +508,10 @@
            (when (= (:cache spec) :redis)
              (into ["# Redis Cache"]
                    (concat (map #(str % "=") (get component-env-vars :redis)) [""])))
+           ;; Set by plan when a prod it writes reads Redis.
+           (when (:prod-redis? spec)
+             (into ["# Redis (prod profile)"]
+                   (concat (map #(str % "=") (get component-env-vars :redis)) [""])))
            (when (= (:email spec) :smtp)
              (into ["# SMTP Email"]
                    (concat (map #(str % "=") (get component-env-vars :smtp)) [""])))]))
@@ -581,6 +588,21 @@
      :email       (if (contains? active :wagoe.external/smtp) :smtp :none)
      :admin-ui    (if (contains? active :wagoe/admin) :yes :no)}))
 
+(defn- project-name
+  "The name the existing config was written for: :wagoe/settings :name less
+   its profile suffix, or nil. Re-running setup offered my-app (BOU-564)."
+  [active]
+  (some-> (get-in active [:wagoe/settings :name])
+          (str/replace #"-(dev|development|test)$" "")
+          not-empty))
+
+(defn- project-spec
+  "What the existing config answers, as a spec, for a profile made from it."
+  [active]
+  (-> (current-choices active)
+      (update :admin-ui #(= :yes %))
+      (assoc :project-name (project-name active))))
+
 ;; =============================================================================
 ;; Interactive wizard
 ;; =============================================================================
@@ -603,7 +625,8 @@
                                                                 (some-> (get current k) name) ")")])))]
                       (when-not (= :keep answer) answer)))
         project-name (loop []
-                       (let [s (prompt "Project name (kebab-case)" "my-app")]
+                       (let [s (prompt "Project name (kebab-case)"
+                                       (or (when existing? (project-name (current-active))) "my-app"))]
                          (if (re-matches #"[a-z][a-z0-9-]*" s)
                            s
                            (do (println (red "  Must be kebab-case")) (recur)))))
@@ -779,6 +802,67 @@
      {:text existing :changes [] :moved #{} :touched #{}}
      (config-edn/entries generated ":active"))))
 
+;; =============================================================================
+;; A prod profile made in an existing project (BOU-564)
+;; =============================================================================
+;; Built from the answers alone, it lacked every module added before it and the
+;; AI config, and was named my-app.
+
+(def ^:private dev-only-keys
+  "Keys that stay in dev: the platform refuses the first two outside :dev, and
+   the AI service is a build-time tool (see `ai-template`)."
+  #{":wagoe/dashboard" ":wagoe/dev-error-enricher" ":wagoe/ai-service"})
+
+(def ^:private stand-ins
+  "Providers that only pretend. The mock payment provider accepts any webhook
+   as paid; an in-memory bus, queue or cache splits across replicas."
+  #{:mock :no-op :memory :in-memory})
+
+(def ^:private redis-conn
+  (str "   :host     #env REDIS_HOST\n"
+       "   :port     #long #or [#env REDIS_PORT 6379]\n"
+       "   :password #env REDIS_PASSWORD"))
+
+(defn- prod-value
+  "What prod gets for dev's in-memory `k`, or nil when there is no real
+   provider to put in its place."
+  [k spec]
+  (case k
+    ":wagoe/events"   (str ":wagoe/events\n  {:provider :redis\n" redis-conn "\n"
+                           "   :group    \"" (:project-name spec) "\"}\n")
+    ":wagoe/realtime" (str ":wagoe/realtime\n  {:provider :redis\n" redis-conn "}\n")
+    ;; The database prod already has; no extra service to run.
+    ":wagoe/jobs"     ":wagoe/jobs\n  {:provider :db :workers {:count 1}}\n"
+    nil))
+
+(defn carry-over
+  "`prod-text` with every entry of `dev-text`'s :active it lacks, as
+   {:text :left-out}. Dev-only keys and databases stay behind. A stand-in
+   provider is replaced by a real one where there is one, else left out and
+   named in :left-out."
+  [prod-text dev-text spec]
+  (reduce (fn [{:keys [text] :as acc} e]
+            (let [k (:key e)]
+              (cond
+                (or (entry text ":active" k) (dev-only-keys k) (database-keys k))
+                acc
+
+                (stand-ins (provider-of dev-text e nil))
+                (if-let [v (prod-value k spec)]
+                  (assoc acc :text (add-entry text v "\n"))
+                  (update acc :left-out conj k))
+
+                :else
+                (assoc acc :text
+                       (add-entry text
+                                  ;; reindent moves a snippet from column 2 to
+                                  ;; `col`; 4 - c brings one at column c to 2.
+                                  (reindent (subs dev-text (:start e) (:end e))
+                                            (- 4 (column dev-text (:start e))) "\n")
+                                  "\n")))))
+          {:text prod-text :left-out []}
+          (or (config-edn/entries dev-text ":active") [])))
+
 (defn- merge-loss
   "Why `merged` must not replace `old`, or nil. Both must read as one EDN map,
    and every root, :active and :inactive entry of `old` must read back `=` —
@@ -823,11 +907,17 @@
         missing (fn [line]
                   (let [v (second (re-matches #"([A-Z][A-Z0-9_]*)=.*" line))]
                     (and v (not (have v)))))
-        added   (for [[header & lines] (env-example-sections spec)
-                      :when (not (baseline-env-headers header))
-                      :let  [vs (filter missing lines)]
-                      :when (seq vs)]
-                  (concat [header] vs [""]))]
+        ;; Two sections can name one variable (a Redis cache and a Redis
+        ;; event bus), so what one adds counts as present for the next.
+        added   (:out (reduce (fn [{:keys [seen] :as acc} [header & lines]]
+                                (let [vs (distinct (remove #(seen (second (re-matches #"([A-Z][A-Z0-9_]*)=.*" %)))
+                                                           (filter missing lines)))]
+                                  (if (or (baseline-env-headers header) (empty? vs))
+                                    acc
+                                    {:seen (into seen (map #(second (re-matches #"([A-Z][A-Z0-9_]*)=.*" %)) vs))
+                                     :out  (conj (:out acc) (concat [header] vs [""]))})))
+                              {:seen #{} :out []}
+                              (env-example-sections spec)))]
     (if (empty? added)
       {:text existing :changes []}
       {:text    (str existing
@@ -883,20 +973,43 @@
   [spec]
   (let [existing? (existing-project?)
         full      (with-defaults spec)
+        dev-text  (read-target (conf-rel "dev"))
+        dev       (let [a (some-> dev-text read-edn first :active)] (when (map? a) a))
+        ;; Unanswered means what dev has. Dev's admin is carried whole, with
+        ;; the entity files it includes, rather than regenerated.
+        ;; What dev runs in memory, prod runs on Redis, unless asked for.
+        from-dev  (cond-> (project-spec dev)
+                    (#{:memory :in-memory} (:cache (project-spec dev))) (assoc :cache :redis))
+        prod-spec (cond-> (with-defaults (merge-with #(if (nil? %2) %1 %2) from-dev spec))
+                    (contains? dev :wagoe/admin) (assoc :admin-ui false))
+        carried   (when (and existing? (:prod? spec) dev-text)
+                    (carry-over (build-config prod-spec "prod") dev-text prod-spec))
+        create    (fn [env]
+                    (cond
+                      (not existing?) (build-config full env)
+                      (and (prod? env) (:prod? spec))
+                      (or (:text carried) (build-config prod-spec env))))
         configs   (for [env envs]
-                    (plan-file (conf-rel env)
-                               (when (or (not existing?) (and (prod? env) (:prod? spec)))
-                                 (build-config full env))
-                               (when-not (prod? env)
-                                 #(merge-config %1 (build-config spec env)
-                                                {:switch-db? (not= "test" env) :env env
-                                                 :spec spec :nl %2}))
-                               true))
+                    (cond-> (plan-file (conf-rel env)
+                                       (create env)
+                                       (when-not (prod? env)
+                                         #(merge-config %1 (build-config spec env)
+                                                        {:switch-db? (not= "test" env) :env env
+                                                         :spec spec :nl %2}))
+                                       true)
+                      (and (prod? env) (seq (:left-out carried)))
+                      (assoc :changes (for [k (:left-out carried)]
+                                        (str "leave out " k ": dev's provider is a stand-in; configure a real one")))))
+        redis?    (some (fn [{:keys [path status content]}]
+                          (and (= (conf-rel "prod") path) (= :new status)
+                               (str/includes? content "#env REDIS_HOST")))
+                        configs)
+        env-spec  (cond-> spec redis? (assoc :prod-redis? true))
         env-ex    (if (or existing? (read-target ".env.example"))
-                    (let [p (plan-file ".env.example" nil #(merge-env-example %1 spec %2) false)]
+                    (let [p (plan-file ".env.example" nil #(merge-env-example %1 env-spec %2) false)]
                       (if (= :skipped (:status p))
                         ;; Missing in an existing project: only what the answers add.
-                        (let [{:keys [text changes]} (merge-env-example "" spec "\n")]
+                        (let [{:keys [text changes]} (merge-env-example "" env-spec "\n")]
                           (if (seq changes)
                             {:path ".env.example" :status :new :content text :old nil :changes changes}
                             p))
@@ -906,12 +1019,16 @@
     (concat
      configs
      [env-ex]
-     ;; The file the admin key's `#include` names, wherever a config written
-     ;; now names it.
-     (when entity
-       (for [[env {:keys [content]}] (map vector envs configs)
-             :when (some-> content (str/includes? "admin/users.edn"))]
-         (plan-file (str "resources/conf/" env "/admin/users.edn") entity nil false))))))
+     ;; The files a config written now `#include`s: dev's copy for a prod made
+     ;; from dev, else the users entity setup ships.
+     (distinct
+      (for [[env {:keys [content]}] (map vector envs configs)
+            :when content
+            inc   (distinct (map second (re-seq #"#include\s+\"([^\"]+)\"" content)))
+            :let  [source (or (when (prod? env) (read-target (str "resources/conf/dev/" inc)))
+                              (when (= "admin/users.edn" inc) entity))]
+            :when source]
+        (plan-file (str "resources/conf/" env "/" inc) source nil false))))))
 
 (defn- stale
   "The paths of `items` whose file no longer holds the text it was planned
