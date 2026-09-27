@@ -1,6 +1,10 @@
 (ns wagoe.devtools.shell.dashboard.pages.database-test
-  (:require [clojure.test :refer [deftest is testing]]
-            [wagoe.devtools.shell.dashboard.pages.database :as database]))
+  (:require [clojure.java.io :as io]
+            [clojure.string :as str]
+            [clojure.test :refer [deftest is testing]]
+            [wagoe.devtools.shell.dashboard.pages.database :as database]
+            [wagoe.platform.database :as db]
+            [wagoe.platform.shell.database.migrations :as migrations]))
 
 (deftest ^:unit merge-migration-status-test
   (testing "a file whose id the database has applied is applied"
@@ -47,3 +51,39 @@
 
   (testing "no files and nothing applied yields no rows"
     (is (= [] (database/merge-migration-status #{} [])))))
+
+(defn- temp-project
+  "A directory holding `files` (relative paths), as a File."
+  [files]
+  (let [root (.toFile (java.nio.file.Files/createTempDirectory
+                       "dashboard-migrations" (make-array java.nio.file.attribute.FileAttribute 0)))]
+    (doseq [path files
+            :let [f (io/file root path)]]
+      (io/make-parents f)
+      (spit f "SELECT 1;"))
+    root))
+
+(deftest ^:unit discover-migration-files-lists-what-the-migrator-reads
+  ;; BOU-489: the panel merged migrations/ and resources/migrations, so in a
+  ;; split project the shadowed files showed as pending forever.
+  (testing "a project using migrations/ has them listed"
+    (let [root (temp-project ["migrations/20260101000000-create-widgets.up.sql"])]
+      (with-redefs [migrations/resolved-migration-dir (fn [& _] (io/file root "migrations"))]
+        (is (some #{"20260101000000-create-widgets.up.sql"}
+                  (#'database/discover-migration-files))))))
+
+  (testing "in a split project only the directory migratus reads is listed"
+    (let [root (temp-project ["migrations/20260101000000-shadowed.up.sql"
+                              "resources/migrations/20260202000000-read.up.sql"])]
+      (with-redefs [migrations/resolved-migration-dir (fn [& _] (io/file root "resources/migrations"))]
+        (let [files (set (#'database/discover-migration-files))]
+          (is (contains? files "20260202000000-read.up.sql"))
+          (is (not (contains? files "20260101000000-shadowed.up.sql"))))))))
+
+(deftest ^:unit render-warns-about-shadowed-migrations
+  (with-redefs [db/shadowed-migration-dirs
+                (fn [] {:root      ["20260101000000-shadowed.up.sql"]
+                        :read-from "'resources/migrations'"})]
+    (let [html (database/render {})]
+      (is (str/includes? html "20260101000000-shadowed.up.sql"))
+      (is (str/includes? html "resources/migrations")))))

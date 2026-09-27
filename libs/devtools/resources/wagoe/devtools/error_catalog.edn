@@ -77,7 +77,7 @@
             :category    :persistence
             :title       "Migration Version Conflict"
             :description "Two migration files share the same version number, or there is a gap in the sequence."
-            :fix         "Check resources/migrations/ for duplicate version numbers and rename as needed."}
+            :fix         "Check migrations/ for duplicate version numbers and rename as needed."}
 
  ;; BND-4xx — Authentication / Authorization
  "BND-401" {:code        "BND-401"

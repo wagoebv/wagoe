@@ -116,7 +116,7 @@ libs/product/test/wagoe/product/
     ├── service_test.clj      # Integration tests
     └── persistence_test.clj  # Contract tests
 
-resources/migrations/
+migrations/
 └── 20240115120000-create-products-table.up.sql
 ```
 
