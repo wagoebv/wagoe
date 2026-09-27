@@ -185,7 +185,17 @@
                   {:workflow-id workflow-id
                    :entity-type (:entity-type input)
                    :entity-id   (:entity-id input)})
-        (ports/save-instance! store instance))))
+        (try
+          (ports/save-instance! store instance)
+          (catch clojure.lang.ExceptionInfo e
+            ;; Another start won the race: the entity has its one instance of
+            ;; this workflow (BOU-581).
+            (or (when (= :conflict (:type (ex-data e)))
+                  (first (ports/list-instances store {:workflow-id workflow-id
+                                                      :entity-type (:entity-type input)
+                                                      :entity-id   (:entity-id input)
+                                                      :limit       1})))
+                (throw e)))))))
 
   (transition! [_ request]
     (let [instance-id (:instance-id request)

@@ -1,0 +1,5 @@
+;; One instance per workflow and entity, so two lazy starts cannot both insert
+;; (BOU-581). Refuses, naming them, a table that already holds duplicates.
+{:ns      wagoe.workflow.shell.unique-instances
+ :up-fn   "up"
+ :down-fn "down"}

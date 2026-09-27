@@ -28,6 +28,7 @@
             [wagoe.workflow.shell.registry :as registry]
             [wagoe.workflow.shell.persistence :as persistence]
             [wagoe.workflow.shell.service :as service]
+            [wagoe.workflow.shell.unique-instances :as unique-instances]
             [wagoe.workflow.shell.http :as workflow-http]
             [wagoe.workflow.shell.admin-adapter :as admin-adapter]
             [clojure.java.io :as io]
@@ -56,7 +57,9 @@
   [ctx]
   (log/info "Initializing workflow schema")
   (doseq [statement (migration-statements)]
-    (db/execute-ddl! ctx statement)))
+    (db/execute-ddl! ctx statement))
+  ;; Without it two lazy starts can both insert (BOU-581).
+  (unique-instances/ensure-unique! (:datasource ctx)))
 
 (defmethod ig/init-key :wagoe/workflow-db-schema
   [_ {:keys [ctx]}]

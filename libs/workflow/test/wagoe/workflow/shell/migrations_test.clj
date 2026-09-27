@@ -4,7 +4,8 @@
    They used to be created only by the `:wagoe/workflow-db-schema` component,
    so `bb migrate up` followed by `bb db:seed` on a project that had never
    booted failed on a missing `workflow_instances` (BOU-502)."
-  (:require [clojure.string :as str]
+  (:require [clojure.java.io :as io]
+            [clojure.string :as str]
             [integrant.core :as ig]
             [clojure.test :refer [deftest is testing use-fixtures]]
             [migratus.core :as migratus]
@@ -15,8 +16,12 @@
             [wagoe.platform.shell.database.timestamp-tz :as timestamp-tz]
             [wagoe.workflow.ports :as ports]
             [wagoe.workflow.shell.module-wiring]
-            [wagoe.workflow.shell.persistence :as persistence])
+            [wagoe.workflow.shell.persistence :as persistence]
+            [wagoe.workflow.shell.registry :as registry]
+            [wagoe.workflow.shell.service :as service]
+            [wagoe.workflow.shell.unique-instances :as unique])
   (:import [java.io File]
+           [java.util.concurrent CountDownLatch]
            [java.sql Connection]
            [java.time Instant]
            [java.time.temporal ChronoUnit]
@@ -229,4 +234,87 @@
       (doseq [[table column] timestamp-columns]
         (is (timestamp-tz/zone-aware? (column-type ds table column))
             (str table "." column)))
+      (finally (factory/close-db-context! ctx)))))
+
+;; =============================================================================
+;; One instance per workflow and entity (BOU-581)
+;; =============================================================================
+
+(def ^:private flow
+  {:id :order-flow :initial-state :pending :states #{:pending :shipped}
+   :transitions [{:from :pending :to :shipped}]})
+
+(defn- start-at-once!
+  "Start `workflow-id` for `entity` from `n` threads released together; the
+   instances they got back."
+  [svc workflow-id entity n]
+  (let [latch   (CountDownLatch. 1)
+        started (doall (for [_ (range n)]
+                         (future (.await latch)
+                                 (ports/start-workflow! svc {:workflow-id workflow-id
+                                                             :entity-type :order
+                                                             :entity-id   entity}))))]
+    (.countDown latch)
+    (mapv deref started)))
+
+(deftest ^:integration concurrent-starts-make-one-instance
+  (doseq [[engine ds] (engines)
+          :when (#{:h2 :postgresql} engine)]
+    (testing (name engine)
+      (migrate! ds)
+      (registry/clear-registry!)
+      (registry/register-workflow! flow)
+      (registry/register-workflow! (assoc flow :id :billing-flow))
+      (try
+        (let [store  (persistence/create-workflow-store ds)
+              svc    (service/create-workflow-service store (registry/create-workflow-registry))
+              entity (UUID/randomUUID)
+              got    (start-at-once! svc :order-flow entity 8)]
+          (is (= 1 (count (set (map :id got)))) "every start got the one instance")
+          (is (= 1 (count (ports/list-instances store {:workflow-id :order-flow :entity-type :order
+                                                       :entity-id entity}))))
+          (testing "another workflow on the same entity is an instance of its own"
+            (ports/start-workflow! svc {:workflow-id :billing-flow :entity-type :order :entity-id entity})
+            (is (= 2 (count (ports/list-instances store {:entity-type :order :entity-id entity}))))))
+        (finally (registry/clear-registry!))))))
+
+(defn- tables-only!
+  "workflow's tables, as the first migration creates them, without the rest."
+  [ds]
+  (doseq [s (str/split (slurp (io/resource "wagoe/workflow/migrations/20260926100000-workflow-tables.up.sql"))
+                       #"--;;")
+          :when (not (str/blank? s))]
+    (jdbc/execute! ds [s])))
+
+(defn- insert-instance! [ds entity]
+  (jdbc/execute! ds ["INSERT INTO workflow_instances
+                        (id, workflow_id, entity_type, entity_id, current_state, created_at, updated_at)
+                      VALUES (?, 'order-flow', 'order', ?, 'pending', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+                     (str (UUID/randomUUID)) (str entity)]))
+
+(deftest ^:integration existing-duplicates-refuse-the-index-by-name
+  (doseq [[engine ds] (engines)]
+    (testing (name engine)
+      (tables-only! ds)
+      (let [entity (UUID/randomUUID)]
+        (insert-instance! ds entity)
+        (insert-instance! ds entity)
+        (let [e (try (unique/ensure-unique! ds) nil (catch clojure.lang.ExceptionInfo e e))]
+          (is (some? e) "the index went on over a duplicate")
+          (is (str/includes? (str (ex-message e)) "more than one instance") (ex-message e))
+          (is (= [(str entity)] (map :entity_id (:duplicates (ex-data e))))))
+        (jdbc/execute! ds ["DELETE FROM workflow_instances WHERE id IN (SELECT MIN(id) FROM workflow_instances)"])
+        (migrate! ds)
+        (testing "then it goes on, twice over, and a second instance is refused"
+          (unique/ensure-unique! ds)
+          (is (thrown? Exception (insert-instance! ds entity))))))))
+
+(deftest ^:integration boot-adds-the-index-too
+  (let [ctx (h2-ctx)
+        ds  (:datasource ctx)]
+    (try
+      (ig/init-key :wagoe/workflow-db-schema {:ctx ctx})
+      (let [entity (UUID/randomUUID)]
+        (insert-instance! ds entity)
+        (is (thrown? Exception (insert-instance! ds entity))))
       (finally (factory/close-db-context! ctx)))))

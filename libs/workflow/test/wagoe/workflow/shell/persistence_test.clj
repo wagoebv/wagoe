@@ -284,7 +284,8 @@
 (deftest ^:integration the-admin-reads-and-removes-an-entitys-workflows
   (let [entity-id (UUID/randomUUID)
         inst      (make-instance {:entity-type :invoice :entity-id entity-id :current-state :delivered})
-        older     (make-instance {:entity-type :invoice :entity-id entity-id
+        ;; Another workflow: one entity has one instance of each (BOU-581).
+        older     (make-instance {:entity-type :invoice :entity-id entity-id :workflow-id :refund-workflow
                                   :created-at (.minusSeconds (Instant/now) 60)})
         port      (admin-adapter/create-entity-workflows @test-store)]
     (ports/save-instance! @test-store older)
