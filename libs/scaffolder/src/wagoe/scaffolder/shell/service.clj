@@ -851,24 +851,26 @@
             schema-src  (slurp schema-file)
             ports-src   (slurp ports-file)
             wiring-src  (slurp wiring-file)
-            wiring      (generators/add-entity-to-wiring wiring-src ctx (cond-> entity parent-first? (assoc :child-of true)))
+            ;; A service from before BOU-578 takes no children, and its
+            ;; wiring must go on building it as it did.
+            service-file (resolve-path output-dir (str module-root "shell/service.clj"))
+            children?   (and (.isFile service-file)
+                             (generators/service-takes-children? (slurp service-file)))
+            ctx         (assoc ctx :service-children? children?)
+            nested?     (and parent-first? children?)
+            _ (when (and (:min entity) (not nested?))
+                (throw (ex-info (str "Cannot keep a minimum: " (.getPath service-file) " creates the "
+                                     module-name " without the entities that belong to it. Replace it, and the :wagoe/"
+                                     module-name "-service and :wagoe/" module-name "-entities init-keys and ig-config"
+                                     " in its module_wiring.clj, with what a new `bb scaffold generate` writes,"
+                                     " then run this again.")
+                                {:type :validation-error})))
+            entity      (cond-> entity nested? (assoc :child-of true))
+            wiring      (generators/add-entity-to-wiring wiring-src ctx entity)
             _ (when (:error wiring)
                 (throw (ex-info (str "Cannot wire " (:entity-name entity) " into "
                                      (.getPath wiring-file) ": " (:error wiring) ".")
                                 {:type :validation-error})))
-            ;; A wiring from before BOU-578 hands the first entity's service no
-            ;; children, so its create cannot take them.
-            nested?     (and parent-first? (str/includes? (:content wiring) "(keep :child)"))
-            _ (when (and (:min entity) (not nested?))
-                (throw (ex-info (str "Cannot keep a minimum: " (.getPath wiring-file) " builds the "
-                                     module-name " service without the entities that belong to it. Replace its :wagoe/"
-                                     module-name "-service and :wagoe/" module-name "-entities init-keys and ig-config"
-                                     " with what a new `bb scaffold generate` writes, then run this again.")
-                                {:type :validation-error})))
-            wiring      (if (and parent-first? (not nested?))
-                          (generators/add-entity-to-wiring wiring-src ctx entity)
-                          wiring)
-            entity      (cond-> entity nested? (assoc :child-of true))
             schema-add  (generators/entity-schema-section entity)
             ports-add   (generators/entity-ports-section entity)
             parent      (some-> (get-in request [:entity :belongs-to])
@@ -958,7 +960,7 @@
             warnings    (cond-> (vec (concat (:warnings admin-edits) (keep :warning parent-edits)))
                           (and parent-first? (not nested?))
                           (conj (str parent "'s create does not take " (:entity-plural entity)
-                                     ": its module wiring predates that. Create them through /api/v1/"
+                                     ": its service.clj predates that. Create them through /api/v1/"
                                      (:entity-plural entity) ".")))
             service-ns  (str (:base-ns ctx) "." module-name "." (:service-ns entity))
             http?       (get-in ctx [:interfaces :http])
@@ -1006,6 +1008,9 @@
             wiring-file (require-existing-file!
                          (resolve-path output-dir (str module-root "shell/module_wiring.clj"))
                          (str "Cannot add a subscriber to " module-name ": its shell/module_wiring.clj is not there."))
+            service-file (resolve-path output-dir (str module-root "shell/service.clj"))
+            ctx         (assoc ctx :service-children? (and (.isFile service-file)
+                                                           (generators/service-takes-children? (slurp service-file))))
             wiring      (generators/add-subscriber-to-wiring (slurp wiring-file) ctx sub)
             _ (when (:error wiring)
                 (throw (ex-info (str "Cannot wire the subscriber into " (.getPath wiring-file) ": "

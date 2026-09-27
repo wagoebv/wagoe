@@ -75,6 +75,13 @@
             (is (every? #(= id (str (:invoice-id %))) lines))
             (is (= 2 (count-rows db "invoice_line_items")))))
 
+        (testing "more than the admin takes is a 400 too, and writes nothing"
+          (let [before (count-rows db "invoices")]
+            (is (= 400 (:status (call :post "/invoices" {:number "A-9" :invoice-line-items (repeat 501 line)}))))
+            (is (= 400 (:status (call :post "/invoices" {:number "A-9" :invoice-line-items [line]
+                                                         :payments (repeat 501 {:amount 1})}))))
+            (is (= before (count-rows db "invoices")))))
+
         (testing "a child with no minimum may come along, or not"
           (is (= 201 (:status (call :post "/invoices" {:number "A-2" :invoice-line-items [line]
                                                        :payments [{:amount 5}]}))))
@@ -174,7 +181,7 @@
                                               "--name" "unit-price" "--type" "int" "--required"
                                               "--base-ns" base "--output-dir" (.getPath dir)]))]
     (is (str/includes? (get (files-under dir) "src/bou578f/billing/schema.clj")
-                       "[:invoice-line-items [:vector {:min 1} [:map [:description :string] [:quantity :int] [:unit-price :int]]]]")
+                       "[:invoice-line-items [:vector {:min 1 :max 500} [:map [:description :string] [:quantity :int] [:unit-price :int]]]]")
         out)
     (load-and-test! dir)
     (let [db     (h2-migrated dir "bou578f")

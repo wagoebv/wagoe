@@ -9,9 +9,11 @@
             [clojure.test :refer [deftest is testing]]
             [next.jdbc :as jdbc]
             [wagoe.admin.ports :as admin-ports]
+            [wagoe.admin.core.forms :as admin-forms]
             [wagoe.admin.schema :as admin-schema]
             [wagoe.admin.shell.schema-repository :as schema-repo]
             [wagoe.platform.shell.adapters.database.factory :as db-factory]
+            [wagoe.scaffolder.core.generators :as generators]
             [wagoe.scaffolder.ports :as ports]
             [wagoe.scaffolder.shell.service :as service]))
 
@@ -261,3 +263,7 @@
       (is (= [:description :quantity :unit-price :vat-rate :sku]
              (get-in (read-admin dir env) [:entities :invoices :has-many 0 :fields]))
           "the first four, as the scaffolder lists them, and any required one: the admin creates from them"))))
+
+(deftest ^:unit the-api-takes-as-many-children-as-the-admin
+  ;; BOU-578: one cap for a create with children, whichever door it comes in by.
+  (is (= admin-forms/max-child-rows generators/max-children)))

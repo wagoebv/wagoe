@@ -138,7 +138,7 @@
 
     (testing "schema.clj and ports.clj keep what they had and gain a section"
       ;; And the invoice's create request takes its line items (BOU-578).
-      (let [entry "\n   [:invoice-line-items {:optional true} [:vector [:map [:description :string] [:quantity :int]]]]"]
+      (let [entry "\n   [:invoice-line-items {:optional true} [:vector {:max 500} [:map [:description :string] [:quantity :int]]]]"]
         (doseq [[path content] before
                 :when (re-find #"/(schema|ports)\.clj$" path)]
           (is (str/starts-with? (str/replace-first (get after path) entry "") (str/trimr content)) path)

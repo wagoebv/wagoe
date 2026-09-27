@@ -544,6 +544,33 @@ DROP TABLE IF EXISTS %s;
          "     (f))))\n"
          "\n")))
 
+(defn- start-workflows-fn
+  "The first entity's service: the workflows of a new row and its children,
+   started after the transaction (BOU-578)."
+  [delete]
+  (str "(defn- start-workflows!\n"
+       "  \"Start the workflows of the children created with `created`, then its own\n"
+       "   (`start`, when it has one), after the commit: the workflow store writes on\n"
+       "   a connection of its own. No row without its workflow: on a failure the ones\n"
+       "   started are removed, the row deleted with its children, and the error\n"
+       "   rethrown.\"\n"
+       "  [repository children created start]\n"
+       "  (let [steps   (concat (for [[k {start-child :start undo :remove}] children\n"
+       "                              :when start-child\n"
+       "                              {:keys [id]} (get created k)]\n"
+       "                          [#(start-child id) #(undo id)])\n"
+       "                        (when start [[#(start (:id created)) (constantly nil)]]))\n"
+       "        started (volatile! [])]\n"
+       "    (try\n"
+       "      (doseq [[run undo] steps]\n"
+       "        (run)\n"
+       "        (vswap! started conj undo))\n"
+       "      (catch Exception e\n"
+       "        (run! #(%) @started)\n"
+       "        (ports/" delete " repository (:id created))\n"
+       "        (throw e)))))\n"
+       "\n"))
+
 (defn- create-with-children-fn
   "The first entity's create, with the children its request may carry."
   [entity-lower]
@@ -622,7 +649,7 @@ DROP TABLE IF EXISTS %s;
           "(defn- generate-" entity-lower "-id []\n"
           "  (UUID/randomUUID))\n"
           "\n"
-          (when primary? (create-with-children-fn entity-lower))
+          (when primary? (str (create-with-children-fn entity-lower) (start-workflows-fn delete)))
           (when minimum? (keep-minimum-fn entity))
           (when wf
             (str "(defn- mirror-" (:field wf) "!\n"
@@ -647,7 +674,15 @@ DROP TABLE IF EXISTS %s;
          ;; it is written against. The protocol function is the way through a
          ;; port (BOU-478).
           "  (create-" entity-lower " [_this data]\n"
-          (if wf
+          (cond
+            primary?
+            (str "    (let [prepared " prepare "\n"
+                 "          created  " insert "]\n"
+                 "      (start-workflows! repository children created"
+                 (if wf (str " #(ports/start-" entity-lower "-workflow! workflow %)") " nil") ")\n"
+                 "      created))\n")
+
+            wf
             (str "    (let [prepared " prepare "\n"
                  "          created  " insert "]\n"
                  ;; After the transaction: the workflow store writes on a
@@ -659,6 +694,8 @@ DROP TABLE IF EXISTS %s;
                  "          (ports/" delete " repository (:id created))\n"
                  "          (throw e)))\n"
                  "      created))\n")
+
+            :else
             (str "    (let [prepared " prepare "]\n"
                  "      " insert "))\n"))
           "  (get-" entity-lower " [_this id]\n"
@@ -713,7 +750,14 @@ DROP TABLE IF EXISTS %s;
 
             :else
             (str "(defn create-service [repository]\n"
-                 "  (->" entity-name "Service repository))\n"))))))
+                 "  (->" entity-name "Service repository))\n"))
+          (when (:child-of entity)
+            (str "\n"
+                 "(defn create-row\n"
+                 "  \"The row alone, as the " (:belongs-to entity) "'s create makes it inside its transaction."
+                 (when wf "\n   Its workflow is started after the commit.") "\"\n"
+                 "  [{:keys [repository]} data]\n"
+                 "  (ports/" create " repository " (str/replace prepare "(apply dissoc data (keys children))" "data") "))\n"))))))
 
 ;; =============================================================================
 ;; Persistence File Generator
@@ -1773,6 +1817,14 @@ DROP TABLE IF EXISTS %s;
        "          (http/" module-name "-routes service (or config {}))\n"
        "          (vals entities)))"))
 
+(defn service-takes-children?
+  "Whether the service.clj `source` creates its entity with the entities that
+   belong to it (BOU-578). One generated before takes the repository alone.
+
+   Pure: true"
+  [source]
+  (str/includes? (str source) "create-with-children"))
+
 (defn- service-init-form?
   [module-name loc]
   (= ['defmethod 'ig/init-key (keyword "wagoe" (str module-name "-service"))]
@@ -1811,8 +1863,11 @@ DROP TABLE IF EXISTS %s;
          "          ;; :child is what the first entity's create needs to make this one.\n"
          "          [entity (cond-> {:service svc :routes routes}\n"
          "                    child-of (assoc :child [(:key child-of)\n"
-         "                                            {:foreign-key (:foreign-key child-of)\n"
-         "                                             :create      #((:create child-of) svc %)}]))])))\n"
+         "                                            (cond-> {:foreign-key (:foreign-key child-of)\n"
+         "                                                     :create      #((:create child-of) svc %)}\n"
+         "                                              (:start child-of)\n"
+         "                                              (assoc :start  #((:start child-of) (:workflow svc) %)\n"
+         "                                                     :remove #((:remove child-of) (:workflow svc) %)))]))])))\n"
          "\n"
          "(defmethod ig/halt-key! " (k "-entities") "\n"
          "  [_ entities]\n"
@@ -1889,7 +1944,11 @@ DROP TABLE IF EXISTS %s;
            (str "\n   ;; Created with its " (:belongs-to entity) " too: its create takes :" (:entity-plural entity) ".\n"
                 "   :child-of   {:key         :" (:entity-plural entity) "\n"
                 "                :foreign-key :" (:belongs-to entity) "-id\n"
-                "                :create      ports/create-" e "}"))
+                "                :create      " e "-service/create-row"
+                (when (:workflow entity)
+                  (str "\n                :start       ports/start-" e "-workflow!\n"
+                       "                :remove      ports/remove-" e "-workflow!"))
+                "}"))
          "})\n")))
 
 (defn- entity-requires
@@ -1904,7 +1963,7 @@ DROP TABLE IF EXISTS %s;
                     (symbol (str prefix (if (#{"http" "workflow"} part)
                                           (str "shell." e "-" part)
                                           (shell-ns entity (keyword (str part "-ns"))))))]))
-      (:child-of entity) (conj ['ports (symbol (str prefix "ports"))]))))
+      (and (:child-of entity) (:workflow entity)) (conj ['ports (symbol (str prefix "ports"))]))))
 
 (defn- require-aliases
   "alias -> namespace for the vector entries of the ns form's :require."
@@ -1975,8 +2034,10 @@ DROP TABLE IF EXISTS %s;
 
       :else
       (let [routes-done (z/root-string (z/replace loc (z/node (z/of-string (wiring-routes-form module-name)))))
-            ;; A workflow's service init already takes the entities.
-            svc-done    (if (str/includes? (z/string svc) "(keep :child)")
+            ;; A workflow's service init already takes the entities; a
+            ;; service from before BOU-578 takes none, so its init stays.
+            svc-done    (if (or (str/includes? (z/string svc) "(keep :child)")
+                                (false? (:service-children? ctx)))
                           routes-done
                           (z/root-string (z/replace (form-of service-init-form? (top-level-forms routes-done))
                                                     (z/node (z/of-string (wiring-service-form module-name))))))]
@@ -2347,6 +2408,11 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s%s%s;%s"
                         z/root-string)})))
     {:status :unrecognised}))
 
+(def max-children
+  "The most children one create takes. The admin's `max-child-rows`, which a
+   test holds this to: the scaffolder does not depend on the admin."
+  500)
+
 (defn children-entry
   "The entry the first entity's Create request gets for `child`, an entity
    that belongs to it: its children, each with the child's create fields but
@@ -2359,8 +2425,8 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s%s%s;%s"
         fields (remove #(or (:workflow-state? %) (= fk (:field-name-kebab %))) (:fields child))
         item   (str "[:map " (str/join " " (map #(str/trim (generate-field-schema %)) fields)) "]")]
     (if-let [n (:min child)]
-      (str "[:" (:entity-plural child) " [:vector {:min " n "} " item "]]")
-      (str "[:" (:entity-plural child) " {:optional true} [:vector " item "]]"))))
+      (str "[:" (:entity-plural child) " [:vector {:min " n " :max " max-children "} " item "]]")
+      (str "[:" (:entity-plural child) " {:optional true} [:vector {:max " max-children "} " item "]]"))))
 
 (defn add-children-to-schema
   "`source` — a schema.clj — with `child`'s entry in `parent`'s Create
