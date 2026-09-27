@@ -15,7 +15,10 @@
    Usage:
      (system-config (config/load-config) {:extra-modules #{:wagoe/user}})"
   (:require [wagoe.config :as config]
+            [wagoe.platform.shell.database.migrations :as migrations]
             [wagoe.platform.shell.modules :as modules]
+            [clojure.set :as set]
+            [clojure.tools.logging :as log]
             [integrant.core :as ig]))
 
 (def ^:private core-keys
@@ -74,6 +77,16 @@
                                {:handler (ig/ref :wagoe/http-handler)
                                 :config  http-cfg})}))
 
+(defn- warn-code-enabled-migrations!
+  "Neither `migrate up` nor a boot migration sees `:extra-modules`, which live
+   in code, so a module enabled only there gets no tables. Say so."
+  [active extra-modules]
+  (let [code-only (set/difference (modules/enabled-libraries active extra-modules)
+                                  (modules/enabled-libraries active))]
+    (doseq [lib (sort (filter migrations/ships-migrations? code-only))]
+      (log/warn (str "The " lib " module is enabled in code, not in :active, so its migrations"
+                     " do not run. Add its key to :active in config.edn.")))))
+
 (defn system-config
   "The Integrant configuration for `config`.
 
@@ -106,6 +119,7 @@
          ;; a discovered module with a graph of its own need not have routes.
          discovered (modules/discover-module-config
                      active known base-ns modules/require-wiring! requiring-resolve)]
+     (warn-code-enabled-migrations! active extra-modules)
      ;; Framework modules first, then the scaffolded ones — the order routes are
      ;; concatenated in and mounted.
      (cond-> (merge (core-components config http
@@ -120,8 +134,8 @@
        (contains? components :wagoe/job-registry)
        (assoc-in [:wagoe/job-registry :handler-maps] (vec job-handlers))
 
-       ;; A boot migration applies only the migrations of modules that are on
-       ;; (BOU-579), as `migrate up` does.
+       ;; A boot migration applies the migrations of the modules :active
+       ;; switches on, the set `migrate up` reads, so the two agree (BOU-579).
        (:migrate-on-start? (config/db-spec config))
        (assoc-in [:wagoe/db-context :migrate-libraries]
-                 (modules/enabled-libraries active extra-modules))))))
+                 (modules/enabled-libraries active))))))

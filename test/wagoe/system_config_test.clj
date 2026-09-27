@@ -6,6 +6,8 @@
             [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
+            [clojure.tools.logging.test :as log-test]
+            [wagoe.platform.shell.system.config :as platform-config]
             [integrant.core :as ig]))
 
 ;; ---------------------------------------------------------------------------
@@ -285,6 +287,21 @@
         libs   (get-in (sys-config/ig-config config) [:wagoe/db-context :migrate-libraries])]
     (is (contains? libs "workflow"))
     (is (not-any? libs ["geo" "push" "audience"]))))
+
+(deftest ^:unit a-boot-migration-sees-what-migrate-up-sees
+  ;; `migrate up` reads config.edn and cannot see :extra-modules, which live in
+  ;; code. The boot used to add them, so the two migrated different sets.
+  (let [config (-> (base-config)
+                   (assoc-in [:active :wagoe/sqlite :migrate-on-start?] true)
+                   (assoc-in [:active :wagoe/workflow] {}))]
+    (log-test/with-log
+      (let [libs (get-in (platform-config/system-config config {:extra-modules #{:wagoe/geo-service}})
+                         [:wagoe/db-context :migrate-libraries])]
+        (is (= (modules/enabled-libraries (:active config)) libs)
+            "the set migrate up computes from the same config")
+        (is (not (contains? libs "geo")))
+        (is (log-test/logged? 'wagoe.platform.shell.system.config :warn #"geo module is enabled in code")
+            "a module enabled only in code is named, since its tables will not exist")))))
 
 (deftest ^:integration every-emitted-key-has-an-init-key
   ;; The generated config used to enumerate 41 Integrant keys and separately
