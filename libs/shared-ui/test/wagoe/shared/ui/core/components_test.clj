@@ -185,6 +185,36 @@
       (is (empty? (with-attr result :aria-invalid)))
       (is (not-any? #(= "email-error" (:id (second %))) (elements result))))))
 
+(deftest ^:unit form-field-error-wiring-edge-cases-test
+  (testing "an existing aria-describedby is kept, the error id appended"
+    (let [result  (components/form-field :email "Email"
+                                         (components/email-input :email "x" {:aria-describedby "email-hint"})
+                                         ["Invalid"])
+          [input] (with-attr result :aria-describedby)]
+      (is (= "email-hint email-error" (:aria-describedby input)))
+      (is (= "true" (:aria-invalid input)))))
+
+  (testing "the error id follows the control's own id"
+    (let [result  (components/form-field :email "Email"
+                                         [:input {:type "email" :name "email" :id "signup-email"}]
+                                         ["Invalid"])
+          [input] (with-attr result :aria-describedby)]
+      (is (= "signup-email-error" (:aria-describedby input)))
+      (is (some #(= "signup-email-error" (:id (second %))) (elements result)))))
+
+  (testing "a control submitted as name[] is matched"
+    (let [result (components/form-field :tags "Tags"
+                                        [:select {:name "tags[]" :id "tags" :multiple true}]
+                                        ["Pick one"])]
+      (is (= ["tags-error"] (map :aria-describedby (with-attr result :aria-describedby))))))
+
+  (testing "a :hidden keyword type counts as hidden"
+    (let [result (components/form-field :flag "Flag"
+                                        (list [:input {:type :hidden :name "flag" :value "false"}]
+                                              [:input {:type "checkbox" :name "flag" :id "flag"}])
+                                        ["Required"])]
+      (is (= ["checkbox"] (map :type (with-attr result :aria-invalid)))))))
+
 (deftest ^:unit validation-errors-announced-test
   (is (= "alert" (:role (second (components/validation-errors ["Name is required"]))))))
 

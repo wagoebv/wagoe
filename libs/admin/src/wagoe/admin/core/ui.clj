@@ -58,6 +58,7 @@
 (def entity-table-row list/entity-table-row)
 (def entity-table list/entity-table)
 (def entity-list-page list/entity-list-page)
+(def filter-table-container list/filter-table-container)
 
 ;; --- filters: advanced filter builder ---
 (def get-operators-for-field-type filters/get-operators-for-field-type)

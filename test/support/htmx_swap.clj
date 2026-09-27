@@ -52,17 +52,24 @@
               :else           node))]
     (walk page)))
 
+(defrecord Html [html])
+
 (defn count-id
-  "How many elements in `page` carry `target-id`."
+  "How many elements in `page` carry `target-id`. Rendered HTML inside it (a
+   handler's response body) is counted by its id attributes."
   [page target-id]
-  (count (filter #(and (element? %) (= target-id (id %)))
-                 (tree-seq #(or (vector? %) (seq? %)) seq page))))
+  (let [nodes (tree-seq #(or (vector? %) (seq? %)) seq page)
+        attr  (re-pattern (str "(?<![\\w-])id=\"" (java.util.regex.Pattern/quote target-id) "\""))]
+    (+ (count (filter #(and (element? %) (= target-id (id %))) nodes))
+       (reduce + (map #(count (re-seq attr (:html %))) (filter #(instance? Html %) nodes))))))
 
 (defn ids-after-swaps
   "For each request in `page` aimed at `#target-id`: its swap style, and how
-   many elements carry `target-id` once `fragment` is swapped in that way."
+   many elements carry `target-id` once `fragment` is swapped in that way.
+   `fragment` is hiccup, or a response body as an HTML string."
   [page target-id fragment]
-  (->> (requests page)
-       (filter #(= (str "#" target-id) (:target %)))
-       (map (fn [r]
-              (assoc r :ids (count-id (swap page target-id fragment (:swap r)) target-id))))))
+  (let [fragment (if (string? fragment) (->Html fragment) fragment)]
+    (->> (requests page)
+         (filter #(= (str "#" target-id) (:target %)))
+         (map (fn [r]
+                (assoc r :ids (count-id (swap page target-id fragment (:swap r)) target-id)))))))

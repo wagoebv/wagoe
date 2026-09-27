@@ -164,7 +164,8 @@
 (defn- inline-error-id
   "Unique per cell: a table renders the same field once per row."
   [entity-name record-id field]
-  (str "inline-" (name entity-name) "-" record-id "-" (name field) "-error"))
+  (-> (str "inline-" (name entity-name) "-" record-id "-" (name field) "-error")
+      (str/replace #"[^A-Za-z0-9_-]" "-")))
 
 (defn- inline-edit-form-with-error
   [entity-name record-id field value field-config errors display]

@@ -3,7 +3,8 @@
    
    These are reusable, generic components that can be used across all domain modules.
    No domain-specific logic should be placed here - only pure presentation functions."
-  (:require [hiccup2.core :as h]
+  (:require [clojure.string :as str]
+            [hiccup2.core :as h]
             [hiccup.util :as hutil]))
 
 (defn- merge-class
@@ -142,36 +143,53 @@
      [:input (-> (merge base-attrs checked-attrs opts)
                  (merge-class "form-checkbox"))])))
 
-(defn field-error-id
-  "Id of a field's error container. Derived from the input id, so it is as
-   unique on the page as the input the label already points at."
-  [field-key]
-  (str (name field-key) "-error"))
-
 (defn- control? [node]
   (and (vector? node)
        (keyword? (first node))
        (re-find #"^(input|select|textarea)(?:[.#]|$)" (name (first node)))))
 
+(defn- named-control?
+  "A visible control submitted as `field-name`, or as `field-name[]`."
+  [field-name node]
+  (when (control? node)
+    (let [attrs (second node)]
+      (and (map? attrs)
+           (contains? #{field-name (str field-name "[]")} (some-> (:name attrs) name))
+           (not= "hidden" (some-> (:type attrs) name))))))
+
+(defn- control-id [node]
+  (or (some-> (:id (second node)) name)
+      (second (re-find #"#([^.#]+)" (name (first node))))))
+
+(defn field-error-id
+  "Id of a field's error container: the id of the control named `field-key`
+   in `input-html` plus `-error`, so it is as unique on the page as that
+   control. Falls back to `field-key` when there is no such control or id."
+  ([field-key]
+   (str (name field-key) "-error"))
+  ([field-key input-html]
+   (let [control (->> (tree-seq #(or (vector? %) (seq? %)) seq input-html)
+                      (filter #(named-control? (name field-key) %))
+                      first)]
+     (str (or (some-> control control-id) (name field-key)) "-error"))))
+
 (defn describe-input
   "Mark the visible control(s) named `field-key` in `input-html` invalid and
-   point them at `error-id`, so a screen reader reads the error with the field.
-   A control that carries no attribute map is left alone."
+   add `error-id` to their aria-describedby, so a screen reader reads the error
+   with the field. A control that carries no attribute map is left alone."
   [input-html field-key error-id]
   (let [field-name (name field-key)
-        target?    (fn [node]
-                     (let [attrs (second node)]
-                       (and (map? attrs)
-                            (= field-name (some-> (:name attrs) name))
-                            (not= "hidden" (:type attrs)))))]
+        describe   (fn [attrs]
+                     (-> attrs
+                         (assoc :aria-invalid "true")
+                         (assoc :aria-describedby
+                                (str/trim (str (:aria-describedby attrs) " " error-id)))))]
     (letfn [(walk [node]
               (cond
-                (and (control? node) (target? node))
-                (update node 1 assoc :aria-invalid "true" :aria-describedby error-id)
-
-                (vector? node)    (mapv walk node)
-                (seq? node)       (doall (map walk node))
-                :else             node))]
+                (named-control? field-name node) (update node 1 describe)
+                (vector? node)                   (mapv walk node)
+                (seq? node)                      (doall (map walk node))
+                :else                            node))]
       (walk input-html))))
 
 (defn field-errors
@@ -194,7 +212,7 @@
    Returns:
      Hiccup form field structure"
   [field-key label input-html errors]
-  (let [error-id (field-error-id field-key)]
+  (let [error-id (field-error-id field-key input-html)]
     [:div {:class "form-field"}
      [:label {:for (name field-key)} label]
      (if (seq errors) (describe-input input-html field-key error-id) input-html)

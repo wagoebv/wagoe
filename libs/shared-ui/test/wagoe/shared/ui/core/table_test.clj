@@ -45,3 +45,14 @@
                            (tree-seq #(or (vector? %) (seq? %)) seq [th pager]))]
     (is (< 3 (count requesting)))
     (is (every? #(= "outerHTML" (:hx-swap (second %))) requesting))))
+
+(deftest ^:unit table-controls-hx-swap-option-test
+  ;; For a handler that returns only the target's contents.
+  (let [th    (table-ui/sortable-th {:label "Email" :field :email :base-url "/t" :page-size 20
+                                     :hx-target "#t" :hx-swap "innerHTML"})
+        pager (table-ui/pagination {:table-query {:page 2 :page-size 10} :total-count 50
+                                    :base-url "/t" :hx-target "#t" :hx-swap "innerHTML"})
+        requesting (filter #(and (vector? %) (map? (second %)) (:hx-get (second %)))
+                           (tree-seq #(or (vector? %) (seq? %)) seq [th pager]))]
+    (is (< 3 (count requesting)))
+    (is (every? #(= "innerHTML" (:hx-swap (second %))) requesting))))

@@ -15,8 +15,7 @@
    No browser or HTTP simulation required."
   (:require [wagoe.admin.core.ui :as ui]
             [clojure.test :refer [deftest is testing]]
-            [clojure.string :as str]
-            [support.htmx-swap :as htmx-swap])
+            [clojure.string :as str])
   (:import [java.time Instant]
            [java.util UUID]))
 
@@ -1690,34 +1689,17 @@
              (select-keys field [:aria-invalid :target-found?])))
       (is (str/includes? (str described-by) "7"))))
 
+  (testing "inline edit error ids: distinct per record, and safe as an id"
+    (let [error-id (fn [record-id]
+                     (:described-by (described-field
+                                     (ui/render-inline-edit-form-with-error
+                                      :things record-id :title "" {:widget :text-input} ["is required"])
+                                     "title")))]
+      (is (not= (error-id 7) (error-id 8)))
+      (is (re-matches #"[A-Za-z0-9_-]+" (error-id "a b\"c/d")))))
+
   (testing "inline edit of a rejected date"
     (let [cell (ui/render-inline-edit-form-with-error :things 7 :due-at "next tuesday"
                                                       {:type :instant :widget :datetime-input}
                                                       ["must be a date and time"])]
       (is (:target-found? (described-field cell "due-at"))))))
-
-(deftest ^:unit table-refresh-keeps-one-container-test
-  ;; Search, refresh, sort, paging and filter controls fetched a fragment
-  ;; rooted at their target's own id and swapped it innerHTML, nesting a copy
-  ;; on every request (BOU-386). The fragments are what
-  ;; `entity-table-fragment-handler` returns for each target.
-  (let [filters  {:email {:op :eq :value "user@example.com"}}
-        tq       {:sort :email :dir :asc :page 2 :page-size 20}
-        table    (ui/entity-table :users [sample-record] sample-entity-config tq 100
-                                  sample-permissions filters)
-        page     [:div
-                  (ui/entity-search-form :users sample-entity-config "" filters)
-                  (ui/entity-list-page :users [sample-record] sample-entity-config tq 100
-                                       sample-permissions {:filters filters})]]
-    (testing "#entity-table-container"
-      (let [results (htmx-swap/ids-after-swaps page "entity-table-container" table)]
-        (is (<= 8 (count results)) "container, search, refresh, sort headers and pager counted")
-        (is (every? #(= 1 (:ids %)) results) (pr-str (remove #(= 1 (:ids %)) results)))))
-
-    (testing "#filter-table-container"
-      (let [fragment [:div#filter-table-container
-                      (ui/render-filter-builder :users sample-entity-config filters)
-                      table]
-            results  (htmx-swap/ids-after-swaps page "filter-table-container" fragment)]
-        (is (<= 4 (count results)) "filter form, rows and clear-all counted")
-        (is (every? #(= 1 (:ids %)) results) (pr-str (remove #(= 1 (:ids %)) results)))))))

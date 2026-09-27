@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Breaking
 
+- **`sortable-th` and `pagination` swap `outerHTML` by default** (BOU-386), so table refreshes stop nesting a
+  duplicate container. If your handler returns only the target's contents, pass `:hx-swap "innerHTML"`.
 - **Workflow's tables ship as a migration, timestamps as `TIMESTAMP WITH TIME ZONE`** (BOU-502).
   Stop all replicas and run `migrate up` before starting this version; seed timestamps as `#inst`.
 - **`:wagoe/logging :level` now sets Logback's root and `wagoe` loggers** (BOU-528), over `logback.xml`.
@@ -46,8 +48,6 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
-- **Refreshing a users, audit or admin table nested a duplicate container** (BOU-386). Table controls now
-  swap `outerHTML`; a custom `sortable-th`/`pagination` handler must return the element carrying the target id.
 - **Field errors were not tied to their input for screen readers** (BOU-398). Inputs with errors now
   carry `aria-invalid` and `aria-describedby`; hand-built fields can use `ui/describe-input` and `ui/field-errors`.
 - **`/health/ready` showed database and cache exception messages** (BOU-558). The body now says

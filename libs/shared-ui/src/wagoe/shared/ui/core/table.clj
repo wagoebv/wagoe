@@ -40,8 +40,9 @@
    - :base-url      base path (e.g. \"/web/users\")
    - :page          current page (integer)
    - :page-size     current page-size (integer)
-   - :hx-target     HTMX target selector (string); the response replaces it
-                    (outerHTML), so the handler returns the element itself
+   - :hx-target     HTMX target selector (string)
+   - :hx-swap       default \"outerHTML\": the handler returns the target element
+                    itself. Pass \"innerHTML\" if it returns only the contents.
    - :hx-push-url?  bool, default true
    - :push-url-base optional path used for browser URL updates (defaults to :base-url)
    - :extra-params  map of additional query params (keyword/string keys)
@@ -51,7 +52,8 @@
    - When changing sort field or direction, page is reset to 1.
    "
   [{:keys [label field current-sort current-dir base-url push-url-base _page page-size
-           hx-target hx-push-url? extra-params]}]
+           hx-target hx-swap hx-push-url? extra-params]
+    :or {hx-swap "outerHTML"}}]
   (let [active?  (= current-sort field)
         next-dir (if (and active? (= current-dir :asc)) :desc :asc)
         icon-symbol (cond
@@ -72,7 +74,7 @@
     [:th
      {:hx-get     url
       :hx-target  hx-target
-      :hx-swap    "outerHTML"
+      :hx-swap    hx-swap
       :hx-push-url push-url
       :hx-params  "none"
       :class      (str "sortable-header"
@@ -120,12 +122,14 @@
    - :table-query   normalized TableQuery map
    - :total-count   total number of items
    - :base-url      base URL for hx-get links (e.g. \"/web/users/table\")
-   - :hx-target     HTMX target selector; replaced by the response (outerHTML)
+   - :hx-target     HTMX target selector
+   - :hx-swap       default \"outerHTML\"; see `sortable-th`
    - :push-url-base optional path used for browser URL updates (defaults to :base-url)
    - :extra-params  map of additional query params (filters, etc.)
 
    Returns nil when a single page is sufficient."
-  [{:keys [table-query total-count base-url push-url-base hx-target extra-params]}]
+  [{:keys [table-query total-count base-url push-url-base hx-target hx-swap extra-params]
+    :or {hx-swap "outerHTML"}}]
   (let [{:keys [page page-size]} table-query
         total-count  (long (or total-count 0))
         page-size    (long (max 1 (or page-size 20)))
@@ -162,7 +166,7 @@
                                    :class      (str "page-btn" (when active? " active"))
                                    :hx-get     (when-not active? (mk-url p))
                                    :hx-target  (when-not active? hx-target)
-                                   :hx-swap    (when-not active? "outerHTML")
+                                   :hx-swap    (when-not active? hx-swap)
                                    :hx-push-url (when-not active? (mk-push-url p))
                                    :hx-params  "none"
                                    :disabled   active?
@@ -180,7 +184,7 @@
         [:button.page-nav-btn {:type       "button"
                                :hx-get     (mk-url 1)
                                :hx-target  hx-target
-                               :hx-swap    "outerHTML"
+                               :hx-swap    hx-swap
                                :hx-push-url (mk-push-url 1)
                                :hx-params  "none"
                                :disabled   (<= page 1)
@@ -191,7 +195,7 @@
         [:button.page-nav-btn {:type       "button"
                                :hx-get     (mk-url prev-page)
                                :hx-target  hx-target
-                               :hx-swap    "outerHTML"
+                               :hx-swap    hx-swap
                                :hx-push-url (mk-push-url prev-page)
                                :hx-params  "none"
                                :disabled   (<= page 1)
@@ -208,7 +212,7 @@
         [:button.page-nav-btn {:type       "button"
                                :hx-get     (mk-url next-page)
                                :hx-target  hx-target
-                               :hx-swap    "outerHTML"
+                               :hx-swap    hx-swap
                                :hx-push-url (mk-push-url next-page)
                                :hx-params  "none"
                                :disabled   (>= page total-pages)
@@ -219,7 +223,7 @@
         [:button.page-nav-btn {:type       "button"
                                :hx-get     (mk-url total-pages)
                                :hx-target  hx-target
-                               :hx-swap    "outerHTML"
+                               :hx-swap    hx-swap
                                :hx-push-url (mk-push-url total-pages)
                                :hx-params  "none"
                                :disabled   (>= page total-pages)
