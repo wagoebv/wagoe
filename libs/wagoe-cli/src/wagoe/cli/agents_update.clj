@@ -74,8 +74,8 @@
 
 (defn -main [args]
   (let [check?        (some #{"--check"} args)
-        ;; `bb setup` writes module keys and asks for this alone: the module
-        ;; blocks follow the project, the rest stays as the user has it.
+        ;; The module blocks alone: they follow the project, the rest stays
+        ;; as the user has it.
         modules-only? (some #{"--modules"} args)
         f             (io/file "AGENTS.md")]
     (if-not (.exists f)

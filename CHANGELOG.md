@@ -53,6 +53,8 @@ for what is public API, what is internal, and how deprecations are announced.
   A script driving the wizard must pass flags: `bb setup --database sqlite`.
 - **`bb setup` in an existing project creates no missing config file** (BOU-404). Pass `--prod true`
   to have it write `resources/conf/prod/config.edn`.
+- **`bb setup --prod true` changes prod only** (BOU-577), merging into an existing prod config; dev
+  and test are left alone; it refuses `--payment mock` and `--ai-provider`. Run without `--prod` for dev.
 - **Admin hard-deletes by default, and a parent with has-many rows is refused unless `:on-delete :cascade`** (BOU-563).
   Set `:soft-delete true` where you relied on `deleted_at`, and `:on-delete :cascade` where children should go.
 - **An unknown or misplaced admin entity-config key stops startup** (BOU-563). The error names
@@ -79,6 +81,10 @@ for what is public API, what is internal, and how deprecations are announced.
 - **Membership reads and updates answered 500** (BOU-576); their timestamps could not be encoded.
 - **A new tenant could take a deleted tenant's slug, and with it that tenant's schema and data** (BOU-576).
   A slug is now never reused; upgrade if you delete tenants.
+- **`bb setup` and `bb agents:update` ran the `wagoe` on PATH, which could be an older release** (BOU-577).
+  Both now use the wagoe-cli wagoe-tools pins; copy `agents:update` from a new project's bb.edn, then run it.
+- **`wagoe add devtools` reads the dashboard port from `DASHBOARD_PORT`** (BOU-577), default 9999.
+  Existing projects can replace the literal port with `#long #or [#env DASHBOARD_PORT 9999]`.
 - **Scaffolded migrations lost their indexes on SQLite and failed on PostgreSQL and MySQL** (BOU-569).
   Add `--;;` to older ones; an existing SQLite database needs a new migration creating the missing indexes.
 - **`bb scaffold ai --help` answered "Unknown option"** (BOU-569). It prints the usage.

@@ -16,8 +16,8 @@
             [clojure.java.io :as io]
             [wagoe.tools.config-edn :as config-edn]
             [clojure.string :as str]
-            [babashka.fs :as fs]
-            [babashka.process :refer [shell]]))
+            [babashka.process :refer [shell]]
+            [wagoe.cli.add :as cli-add]))
 
 ;; =============================================================================
 ;; Process exit
@@ -615,6 +615,11 @@
   (println)
 
   (let [existing? (existing-project?)
+        ;; First, because it decides whose the answers are (BOU-577).
+        prod?     (when (and existing? (not (.exists (io/file (root-dir) (conf-rel "prod")))))
+                    (confirm "Create resources/conf/prod/config.edn from these answers, leaving dev and test alone?" false))
+        _         (when prod?
+                    (println (dim "The answers below are for prod. Keep means what dev has.")))
         current   (current-choices (current-active))
         ;; In an existing project Enter keeps what it has: a menu default is
         ;; not an answer, and must not replace a working provider (BOU-404).
@@ -644,18 +649,22 @@
                         [:h2         "H2 file-based (in-memory for the test profile)"]
                         [:mysql      "MySQL/MariaDB"]])
 
-        ai-provider (pick "AI provider" :ai-provider
-                          [[:ollama    "Local AI via Ollama (no API key, but needs Ollama installed + a pulled model)"]
-                           [:anthropic "Anthropic Claude (requires ANTHROPIC_API_KEY)"]
-                           [:openai    "OpenAI GPT (requires OPENAI_API_KEY)"]
-                           [:replicate "Hosted models via Replicate (requires REPLICATE_API_TOKEN)"]
-                           [:none      "Disable AI tooling"]])
+        ;; Prod never gets AI or the mock (`ai-template`, `payment-template`),
+        ;; so neither is offered for it.
+        ai-provider (when-not prod?
+                      (pick "AI provider" :ai-provider
+                            [[:ollama    "Local AI via Ollama (no API key, but needs Ollama installed + a pulled model)"]
+                             [:anthropic "Anthropic Claude (requires ANTHROPIC_API_KEY)"]
+                             [:openai    "OpenAI GPT (requires OPENAI_API_KEY)"]
+                             [:replicate "Hosted models via Replicate (requires REPLICATE_API_TOKEN)"]
+                             [:none      "Disable AI tooling"]]))
 
         payment (pick "Payment provider" :payment
-                      [[:none   "No payments"]
-                       [:mock   "Mock adapter (development/testing)"]
-                       [:stripe "Stripe (requires STRIPE_SECRET_KEY)"]
-                       [:mollie "Mollie (requires MOLLIE_API_KEY)"]])
+                      (remove #(and prod? (= :mock (first %)))
+                              [[:none   "No payments"]
+                               [:mock   "Mock adapter (development/testing)"]
+                               [:stripe "Stripe (requires STRIPE_SECRET_KEY)"]
+                               [:mollie "Mollie (requires MOLLIE_API_KEY)"]]))
 
         cache (pick "Cache" :cache
                     [[:none      "No caching"]
@@ -669,10 +678,7 @@
         ;; No never removes an existing admin, it only does not add one.
         admin-ui (if existing?
                    (= :yes (pick "Admin UI" :admin-ui [[:yes "Add the admin UI"] [:no "No admin UI"]]))
-                   (confirm "Enable admin UI?" true))
-
-        prod? (when (and existing? (not (.exists (io/file (root-dir) (conf-rel "prod")))))
-                (confirm "Create resources/conf/prod/config.edn?" false))]
+                   (confirm "Enable admin UI?" true))]
 
     {:project-name project-name
      :database     database
@@ -969,10 +975,13 @@
 
    In a new project every file is created, with the defaults for what was not
    answered. In an existing one only answers are written: no missing config is
-   created, except prod when asked for (`:prod?`). Prod is hand-maintained once
-   it exists, and so is an admin entity file, so both are kept (BOU-499)."
+   created. With `:prod?` the answers are prod's alone: prod is created, or
+   merged into as dev is, and dev and test are left as they are (BOU-577). An
+   admin entity file is hand-maintained, so it is kept (BOU-499)."
   [spec]
   (let [existing? (existing-project?)
+        prod-only? (and existing? (:prod? spec))
+        targets   (if prod-only? ["prod"] envs)
         full      (with-defaults spec)
         dev-text  (read-target (conf-rel "dev"))
         dev       (let [a (some-> dev-text read-edn first :active)] (when (map? a) a))
@@ -990,10 +999,10 @@
                       (not existing?) (build-config full env)
                       (and (prod? env) (:prod? spec))
                       (or (:text carried) (build-config prod-spec env))))
-        configs   (for [env envs]
+        configs   (for [env targets]
                     (cond-> (plan-file (conf-rel env)
                                        (create env)
-                                       (when-not (prod? env)
+                                       (when (or (not (prod? env)) prod-only?)
                                          #(merge-config %1 (build-config spec env)
                                                         {:switch-db? (not= "test" env) :env env
                                                          :spec spec :nl %2}))
@@ -1002,7 +1011,7 @@
                       (assoc :changes (for [k (:left-out carried)]
                                         (str "leave out " k ": dev's provider is a stand-in; configure a real one")))))
         redis?    (some (fn [{:keys [path status content]}]
-                          (and (= (conf-rel "prod") path) (= :new status)
+                          (and (= (conf-rel "prod") path) (#{:new :changed} status)
                                (str/includes? content "#env REDIS_HOST")))
                         configs)
         env-spec  (cond-> spec redis? (assoc :prod-redis? true))
@@ -1023,7 +1032,7 @@
      ;; The files a config written now `#include`s: dev's copy for a prod made
      ;; from dev, else the users entity setup ships.
      (distinct
-      (for [[env {:keys [content]}] (map vector envs configs)
+      (for [[env {:keys [content]}] (map vector targets configs)
             :when content
             inc   (distinct (map second (re-seq #"#include\s+\"([^\"]+)\"" content)))
             :let  [source (or (when (prod? env) (read-target (str "resources/conf/dev/" inc)))
@@ -1097,21 +1106,18 @@
           (when (and (.isDirectory d) (empty? (.list d)))
             (.delete d)))))))
 
-(def ^:dynamic *wagoe-cli*
-  "The command that runs the wagoe CLI, or nil when it is not installed. The
-   CLI owns the module catalogue AGENTS.md is rendered from, so setup asks it."
-  (when-let [w (fs/which "wagoe")] [(str w)]))
-
 (defn- sync-agents-md!
-  "Re-render AGENTS.md's module blocks after setup changed config. Returns
-   :synced, :no-cli, or nil when there is no AGENTS.md."
+  "Re-render AGENTS.md's module blocks after setup changed config, with the
+   renderer `wagoe add` uses. In-process, from the wagoe-cli this wagoe-tools
+   depends on: the `wagoe` on PATH can be another release, and an older one
+   rewrote the rest of AGENTS.md from its own template (BOU-577). Returns true
+   when AGENTS.md changed."
   []
-  (when (.exists (io/file (root-dir) "AGENTS.md"))
-    (if-let [cli *wagoe-cli*]
-      (let [{:keys [exit]} (apply shell {:dir (root-dir) :continue true :out :string :err :string}
-                                  (concat cli ["agents" "update" "--modules"]))]
-        (if (zero? exit) :synced :no-cli))
-      :no-cli)))
+  (let [f (io/file (root-dir) "AGENTS.md")]
+    (when (.exists f)
+      (let [before (slurp f)]
+        (cli-add/sync-agents-md! (root-dir))
+        (not= before (slurp f))))))
 
 (defn- env-vars
   "The variable names `text` assigns, in order."
@@ -1149,16 +1155,13 @@
           (when (and (:admin-ui spec) (nil? @admin-users-entity))
             (println (yellow "!") " Admin entity config missing from wagoe-tools;"
                      (cyan "#include \"admin/users.edn\"") "will not resolve."))
-          (let [agents (sync-agents-md!)]
-            (when (= :synced agents)
-              (println (green "✓") " Updated" (cyan "AGENTS.md") (dim "(module list)")))
-            (println)
-            (println (dim "Next steps:"))
-            (println (dim (str "  1. " (env-step))))
-            (println (dim "  2. Run: bb migrate up"))
-            (println (dim "  3. Run: bb doctor  (to verify your config)"))
-            (when (= :no-cli agents)
-              (println (dim "  4. Run: wagoe agents update  (AGENTS.md's module list predates this change)"))))
+          (when (sync-agents-md!)
+            (println (green "✓") " Updated" (cyan "AGENTS.md") (dim "(module list)")))
+          (println)
+          (println (dim "Next steps:"))
+          (println (dim (str "  1. " (env-step))))
+          (println (dim "  2. Run: bb migrate up"))
+          (println (dim "  3. Run: bb doctor  (to verify your config)"))
           (when-let [steps (ai-provider-prerequisites (:ai-provider spec))]
             (println)
             (println (yellow (str "Before " (name (:ai-provider spec)) " answers:")))
@@ -1310,9 +1313,19 @@
    :admin-ui     (some-> (:admin-ui opts) (not= "false"))
    :prod?        (= "true" (:prod opts))})
 
+(defn- prod-errors
+  "Answers `--prod` would drop without a word: prod never gets the mock
+   payment provider or the AI service (BOU-577)."
+  [spec]
+  (when (and (:prod? spec) (existing-project?))
+    (for [[k v] [[:payment :mock] [:ai-provider (:ai-provider spec)]]
+          :when (and (some? v) (not= :none v) (= v (get spec k)))]
+      (str "--" (name k) " " (name v) " is never written to prod."
+           " Run without --prod to set it for dev."))))
+
 (defn from-flags [opts]
   (let [spec   (from-flags-spec opts)
-        errors (spec-errors spec)]
+        errors (concat (spec-errors spec) (prod-errors spec))]
     (if (seq errors)
       ;; Before the templates, not inside them: a `case` fall-through reported
       ;; "No matching clause: :bogus" and named neither the flag nor the
@@ -1341,7 +1354,7 @@
   (println "  --cache CACHE          none, redis, memory")
   (println "  --email EMAIL          none, smtp")
   (println "  --admin-ui BOOL        true, false")
-  (println "  --prod true            Create resources/conf/prod/config.edn in an existing project")
+  (println "  --prod true            Apply the answers to prod only (created, or merged into); dev and test are left alone")
   (println)
   (println "Generated files:")
   (println "  resources/conf/dev/config.edn")
