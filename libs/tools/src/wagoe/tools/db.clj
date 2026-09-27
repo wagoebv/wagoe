@@ -13,7 +13,8 @@
             [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.string :as str]
-            [babashka.process :as process]))
+            [babashka.process :as process]
+            [wagoe.tools.project :as project]))
 
 ;; =============================================================================
 ;; Pure helpers
@@ -32,6 +33,18 @@
 
 (defn- seed-path []
   (str (root-dir) "/resources/seeds/dev.edn"))
+
+(defn seed-args
+  "The arguments `clojure -M:seed` gets after the path: `args`, and the
+   application's system-config when it has one, so the application's seed
+   hooks run — a seeded row with a workflow gets one (BOU-578)."
+  [root args]
+  (let [base (project/base-ns root)
+        ns   (str (str/replace base "_" "-") ".system-config")]
+    (cond-> (vec args)
+      (and (not (some #{"--system"} args))
+           (.isFile (io/file root "src" base "system_config.clj")))
+      (into ["--system" ns]))))
 
 (defn- parse-config-minimal
   "Parse config.edn with a minimal reader that replaces Aero tags with placeholders."
@@ -299,7 +312,7 @@
       ;; the same reason `bb migrate` shells out to `clojure -M:migrate`.
       (let [{:keys [exit]} (apply process/shell
                                  {:out :inherit :err :inherit :continue true}
-                                 "clojure" "-M:seed" (seed-path) args)]
+                                 "clojure" "-M:seed" (seed-path) (seed-args (root-dir) args))]
         (when-not (zero? exit)
           (System/exit exit))))))
 

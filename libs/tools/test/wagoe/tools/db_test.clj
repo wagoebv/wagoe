@@ -62,3 +62,14 @@
         [_ platform-dir] (re-find #"\(def project-migration-dir\s+\"(?:[^\"\\]|\\.)*\"\s+\"([^\"]+)\"\)" src)]
     (is (some? platform-dir) "the platform definition was not found")
     (is (= platform-dir db/project-migration-dir))))
+
+(deftest ^:unit seeding-goes-through-the-application
+  ;; BOU-578: its seed hooks start each seeded row's workflow.
+  (let [root (temp-project {"src/shop/main.clj" "(ns shop.main)"
+                            "src/shop/system_config.clj" "(ns shop.system-config)"})]
+    (is (= ["--system" "shop.system-config"] (db/seed-args root [])))
+    (is (= ["--force" "--system" "shop.system-config"] (db/seed-args root ["--force"])))
+    (is (= ["--system" "mine"] (db/seed-args root ["--system" "mine"]))
+        "one named on the command line wins"))
+  (testing "a project without a system-config seeds as before"
+    (is (= [] (db/seed-args (temp-project {}) [])))))

@@ -10,7 +10,9 @@
             [clojure.java.io :as io]
             [clojure.tools.logging :as log]
             [honey.sql :as sql]
-            [next.jdbc :as jdbc]))
+            [integrant.core :as ig]
+            [next.jdbc :as jdbc]
+            [wagoe.config :as config]))
 
 (def default-seed-path "resources/seeds/dev.edn")
 
@@ -44,6 +46,28 @@
     (jdbc/execute! tx stmt)
     (count rows)))
 
+(defn run-seed-hooks!
+  "Hand `inserted` — {table-name rows} — to the application's seed hooks: the
+   components of its system that derive from :wagoe/seed-hook. Only those, and
+   what they depend on, are started, and they are halted again. A generated
+   module's is how a seeded row with a workflow gets one (BOU-578).
+
+   `system-ns` is the application's system-config namespace: its `ig-config`,
+   and its `load-config` when it has one. Returns the number of hooks run."
+  [system-ns inserted]
+  (let [ig-config   (requiring-resolve (symbol system-ns "ig-config"))
+        load-config (or (requiring-resolve (symbol system-ns "load-config")) config/load-config)
+        config      (ig-config (load-config))
+        hook-keys   (keys (ig/find-derived config :wagoe/seed-hook))]
+    (if (empty? hook-keys)
+      0
+      (let [system (ig/init config hook-keys)]
+        (try
+          (doseq [[_ hook] (ig/find-derived system :wagoe/seed-hook)]
+            (hook inserted))
+          (count hook-keys)
+          (finally (ig/halt! system)))))))
+
 (defn run-seed!
   "Reads `path`, validates it, and inserts every row in one transaction.
 
@@ -69,9 +93,11 @@
                                       {:table table
                                        :rows  (insert-table! tx entry)})
                                     plan)]
-                   {:ok {:tables (count detail)
-                         :rows   (reduce + (map :rows detail))
-                         :detail detail}}))
+                   {:ok {:tables   (count detail)
+                         :rows     (reduce + (map :rows detail))
+                         :detail   detail
+                         ;; For the seed hooks, which run after the commit.
+                         :inserted (into {} (map (juxt :table :rows)) plan)}}))
                ;; log/debug, not log/error-with-exception: the common failures
                ;; here are user-facing and expected (missing table, bad column,
                ;; constraint violation), and logging the throwable dumps a full
