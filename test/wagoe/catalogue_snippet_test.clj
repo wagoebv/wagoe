@@ -151,3 +151,23 @@
           (let [system (boot-with active)]
             (try (is (some? system))
                  (finally (ig/halt! system)))))))))
+
+(defn- dashboard-port
+  "The port `wagoe add devtools` configures, with DASHBOARD_PORT set to `env`."
+  [env]
+  (with-redefs [aero/get-env (fn [s] (when (= "DASHBOARD_PORT" (str s)) env))]
+    (get-in (snippet-settings (dev-snippet (module "devtools"))) [:wagoe/dashboard :port])))
+
+(deftest ^:integration the-dashboard-port-comes-from-the-environment
+  ;; A literal port could not be moved off a busy 9999 without editing config
+  ;; (BOU-577).
+  (require 'wagoe.devtools.shell.dashboard.server)
+  (doseq [[env port] [[nil 9999] ["19877" 19877]]]
+    (testing (str "DASHBOARD_PORT=" env)
+      (let [p (dashboard-port env)]
+        (is (= port p))
+        (is (instance? Long p) "a string port does not bind")
+        (let [started (ig/init-key :wagoe/dashboard {:port p})]
+          (try
+            (is (some? (:server started)) "the dashboard boots")
+            (finally (ig/halt-key! :wagoe/dashboard started))))))))

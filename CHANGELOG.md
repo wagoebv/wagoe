@@ -70,6 +70,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **`wagoe add devtools` reads the dashboard port from `DASHBOARD_PORT`** (BOU-577), default 9999.
+  Existing projects can replace the literal port with `#long #or [#env DASHBOARD_PORT 9999]`.
 - **Scaffolded migrations lost their indexes on SQLite and failed on PostgreSQL and MySQL** (BOU-569).
   Add `--;;` to older ones; an existing SQLite database needs a new migration creating the missing indexes.
 - **`bb scaffold ai --help` answered "Unknown option"** (BOU-569). It prints the usage.
