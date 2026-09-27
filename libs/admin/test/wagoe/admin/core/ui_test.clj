@@ -1646,3 +1646,60 @@
     (is (str/includes? html "__offset.due-at"))
     (is (str/includes? html "-05:00"))
     (is (str/includes? html "__zone"))))
+
+(defn- elements
+  "Every hiccup element in `h`, as [tag attrs] with a tag-borne id folded in."
+  [h]
+  (for [n (tree-seq #(or (vector? %) (seq? %)) seq h)
+        :when (and (vector? n) (keyword? (first n)))
+        :let [attrs  (if (map? (second n)) (second n) {})
+              tag-id (second (re-find #"#([^.#]+)" (name (first n))))]]
+    [(first n) (cond-> attrs tag-id (assoc :id tag-id))]))
+
+(defn- described-field
+  "The control named `field-name` in `h`, and whether the element its
+   aria-describedby names exists."
+  [h field-name]
+  (let [attrs   (map second (elements h))
+        control (first (filter #(and (= field-name (:name %)) (not= "hidden" (:type %))) attrs))
+        ids     (set (keep :id attrs))]
+    {:aria-invalid  (:aria-invalid control)
+     :described-by  (:aria-describedby control)
+     :target-found? (contains? ids (:aria-describedby control))}))
+
+(deftest ^:unit field-errors-tied-to-their-field-test
+  ;; The error sat beneath the input with nothing linking the two, so a screen
+  ;; reader never read it with the field (BOU-398).
+  (doseq [widget [:text-input :email-input :select :textarea :checkbox :datetime-input]]
+    (testing (str widget " with errors")
+      (is (= {:aria-invalid "true" :described-by "due-at-error" :target-found? true}
+             (described-field (ui/render-field-widget :due-at nil {:widget widget :options []}
+                                                      ["is invalid"])
+                              "due-at"))))
+    (testing (str widget " without errors")
+      (is (= {:aria-invalid nil :described-by nil :target-found? false}
+             (described-field (ui/render-field-widget :due-at nil {:widget widget :options []} nil)
+                              "due-at")))))
+
+  (testing "inline edit: one error id per cell, since a table holds many"
+    (let [cell (ui/render-inline-edit-form-with-error :things 7 :title "" {:widget :text-input}
+                                                      ["is required"])
+          {:keys [described-by] :as field} (described-field cell "title")]
+      (is (= {:aria-invalid "true" :target-found? true}
+             (select-keys field [:aria-invalid :target-found?])))
+      (is (str/includes? (str described-by) "7"))))
+
+  (testing "inline edit error ids: distinct per record, and safe as an id"
+    (let [error-id (fn [record-id]
+                     (:described-by (described-field
+                                     (ui/render-inline-edit-form-with-error
+                                      :things record-id :title "" {:widget :text-input} ["is required"])
+                                     "title")))]
+      (is (not= (error-id 7) (error-id 8)))
+      (is (re-matches #"[A-Za-z0-9_-]+" (error-id "a b\"c/d")))))
+
+  (testing "inline edit of a rejected date"
+    (let [cell (ui/render-inline-edit-form-with-error :things 7 :due-at "next tuesday"
+                                                      {:type :instant :widget :datetime-input}
+                                                      ["must be a date and time"])]
+      (is (:target-found? (described-field cell "due-at"))))))

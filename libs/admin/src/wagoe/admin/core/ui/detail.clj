@@ -25,21 +25,8 @@
     "full-width"
     "half-width"))
 
-(defn render-field-widget
-  "Render input widget for field based on its configuration.
-
-   Args:
-     field-name: Keyword field name
-     value: Current field value
-     field-config: Field configuration map
-     errors: Optional collection of error messages for this field
-     display: Optional display map; a datetime is shown in its zone (BOU-523)
-
-   Returns:
-     Hiccup form field structure"
-  ([field-name value field-config errors]
-   (render-field-widget field-name value field-config errors nil))
-  ([field-name value field-config errors display]
+(defn- field-widget
+  [field-name value field-config errors display]
   (let [widget-type (:widget field-config :text-input)
         label (:label field-config (str/capitalize (name field-name)))
         required? (:required field-config false)
@@ -207,10 +194,26 @@
 
      (when help-text
        [:small.help-text help-text])
-     (when (seq errors)
-       [:div.field-errors
-        (for [error errors]
-          [:span.error error])])])))
+     (ui/field-errors (ui/field-error-id field-name) errors)]))
+
+(defn render-field-widget
+  "Render input widget for field based on its configuration.
+
+   Args:
+     field-name: Keyword field name
+     value: Current field value
+     field-config: Field configuration map
+     errors: Optional collection of error messages for this field
+     display: Optional display map; a datetime is shown in its zone (BOU-523)
+
+   Returns:
+     Hiccup form field structure"
+  ([field-name value field-config errors]
+   (render-field-widget field-name value field-config errors nil))
+  ([field-name value field-config errors display]
+   ;; Ties the input to its error container for screen readers (BOU-398).
+   (cond-> (field-widget field-name value field-config errors display)
+     (seq errors) (ui/describe-input field-name (ui/field-error-id field-name)))))
 
 ;; =============================================================================
 ;; Field Grouping Helpers

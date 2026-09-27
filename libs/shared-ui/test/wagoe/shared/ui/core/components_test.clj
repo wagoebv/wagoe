@@ -147,6 +147,77 @@
                                    (rest result))]
         (is (seq error-elements))))))
 
+(defn- elements
+  "Every hiccup element in `h`, as [tag attrs] with a tag-borne id folded in."
+  [h]
+  (for [n (tree-seq #(or (vector? %) (seq? %)) seq h)
+        :when (and (vector? n) (keyword? (first n)))
+        :let [attrs (if (map? (second n)) (second n) {})
+              tag-id (second (re-find #"#([^.#]+)" (name (first n))))]]
+    [(first n) (cond-> attrs tag-id (assoc :id tag-id))]))
+
+(defn- with-attr [h k]
+  (keep (fn [[_ attrs]] (when (contains? attrs k) attrs)) (elements h)))
+
+(deftest ^:unit form-field-describes-errors-test
+  (testing "the input points at its error container and is marked invalid"
+    (let [result  (components/form-field :email "Email"
+                                         (components/email-input :email "x")
+                                         ["Email format is invalid"])
+          [input] (with-attr result :aria-describedby)
+          ids     (set (keep (comp :id second) (elements result)))]
+      (is (= "email-error" (:aria-describedby input)))
+      (is (contains? ids "email-error"))
+      (is (= "true" (:aria-invalid input)))
+      (is (= "email" (:id input)))))
+
+  (testing "a checkbox's hidden companion is left alone"
+    (let [result (components/form-field :terms "Terms"
+                                        (components/checkbox :terms false)
+                                        ["Must be accepted"])]
+      (is (= [{:type "checkbox" :id "terms"}]
+             (map #(select-keys % [:type :id]) (with-attr result :aria-invalid))))))
+
+  (testing "no errors, no aria attributes and no error container"
+    (let [result (components/form-field :email "Email"
+                                        (components/email-input :email "x") nil)]
+      (is (empty? (with-attr result :aria-describedby)))
+      (is (empty? (with-attr result :aria-invalid)))
+      (is (not-any? #(= "email-error" (:id (second %))) (elements result))))))
+
+(deftest ^:unit form-field-error-wiring-edge-cases-test
+  (testing "an existing aria-describedby is kept, the error id appended"
+    (let [result  (components/form-field :email "Email"
+                                         (components/email-input :email "x" {:aria-describedby "email-hint"})
+                                         ["Invalid"])
+          [input] (with-attr result :aria-describedby)]
+      (is (= "email-hint email-error" (:aria-describedby input)))
+      (is (= "true" (:aria-invalid input)))))
+
+  (testing "the error id follows the control's own id"
+    (let [result  (components/form-field :email "Email"
+                                         [:input {:type "email" :name "email" :id "signup-email"}]
+                                         ["Invalid"])
+          [input] (with-attr result :aria-describedby)]
+      (is (= "signup-email-error" (:aria-describedby input)))
+      (is (some #(= "signup-email-error" (:id (second %))) (elements result)))))
+
+  (testing "a control submitted as name[] is matched"
+    (let [result (components/form-field :tags "Tags"
+                                        [:select {:name "tags[]" :id "tags" :multiple true}]
+                                        ["Pick one"])]
+      (is (= ["tags-error"] (map :aria-describedby (with-attr result :aria-describedby))))))
+
+  (testing "a :hidden keyword type counts as hidden"
+    (let [result (components/form-field :flag "Flag"
+                                        (list [:input {:type :hidden :name "flag" :value "false"}]
+                                              [:input {:type "checkbox" :name "flag" :id "flag"}])
+                                        ["Required"])]
+      (is (= ["checkbox"] (map :type (with-attr result :aria-invalid)))))))
+
+(deftest ^:unit validation-errors-announced-test
+  (is (= "alert" (:role (second (components/validation-errors ["Name is required"]))))))
+
 (deftest ^:unit button-test
   (testing "Basic button generation"
     (let [result (components/button "Click Me")]
