@@ -54,6 +54,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **`wagoe add` and `bb setup --prod true` left prod behind** (BOU-564). Both now bring every
   profile the project's modules; re-run `wagoe add <module>` for one prod lacks.
+- **`wagoe add payments` wrote the mock provider, which accepts any webhook as paid, into prod** (BOU-564).
+  Remove `{:provider :mock}` from your prod `config.edn`; stand-ins now stay in dev and test.
 - **A generated project ran every test twice, and `wagoe add events` needed Redis in dev** (BOU-564).
   Replace `tests.edn` with one suite, and set `:wagoe/events {:provider :memory}` in dev.
 - **A scaffolded API's 400 had empty `details`** (BOU-564). It now names the field; JSON keys are

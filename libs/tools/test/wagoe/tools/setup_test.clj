@@ -955,6 +955,11 @@
              (slurp (conf-file dir "dev")) ":active"
              (str "\n   :wagoe/ai-service {:provider :replicate :api-key #env REPLICATE_API_TOKEN}"
                   "\n   :wagoe/events\n   {:provider :memory}"
+                  "\n   :wagoe/payment-provider {:provider :mock}"
+                  "\n   :wagoe/cache {:provider :memory :default-ttl 300}"
+                  "\n   :wagoe/jobs {:provider :memory :workers {:count 1}}"
+                  "\n   :wagoe/realtime {:provider :memory}"
+                  "\n   :my/gateway {:provider :mock}"
                   "\n   :wagoe/dashboard {:port 9999}")))
       (let [dev-before  (slurp (conf-file dir "dev"))
             test-before (slurp (conf-file dir "test"))
@@ -967,7 +972,17 @@
         (is (env-ref? (get-in prod [:wagoe/sqlite :db])))
         (is (= {:enabled? true :base-path "/api/product"} (:wagoe/product prod))
             "a module integrated before prod existed")
-        (is (= :replicate (get-in prod [:wagoe/ai-service :provider])))
+        (is (not (contains? prod :wagoe/ai-service)) "no AI in prod, as ai-template has it")
+        (testing "no stand-in reaches prod (BOU-564 review)"
+          (let [text (slurp (conf-file dir "prod"))]
+            (doseq [bad [":mock" ":memory" ":in-memory"]]
+              (is (not (str/includes? text bad)) bad)))
+          (is (not (contains? prod :wagoe/payment-provider)) "the mock accepts any webhook as paid")
+          (is (= :redis (get-in prod [:wagoe/cache :provider])))
+          (is (= :db (get-in prod [:wagoe/jobs :provider])))
+          (is (= :redis (get-in prod [:wagoe/realtime :provider])))
+          (is (not (contains? prod :my/gateway)))
+          (is (str/includes? out ":my/gateway") "and says what it left out"))
         (is (= :redis (get-in prod [:wagoe/events :provider])) "one process in dev, several in prod")
         (is (env-ref? (get-in prod [:wagoe/events :host])))
         (is (str/includes? (slurp (conf-file dir "prod")) "\n  :wagoe/events\n  {:provider :redis")
@@ -979,8 +994,27 @@
         (testing ".env.example names the Redis variables prod's event bus reads"
           (let [env-ex (slurp (fs/file dir ".env.example"))]
             (is (str/starts-with? env-ex env-before) "only added to")
-            (doseq [v ["REDIS_HOST=" "REDIS_PORT=" "REDIS_PASSWORD="]]
-              (is (str/includes? env-ex v)))))))))
+            (doseq [v ["REDIS_HOST" "REDIS_PORT" "REDIS_PASSWORD"]]
+              (is (= 1 (count (re-seq (re-pattern (str "(?m)^" v "=")) env-ex))) v))))))))
+
+(deftest ^:unit an-explicit-answer-still-keeps-the-mock-out-of-prod
+  (with-project
+    (fn [dir]
+      (spit (conf-file dir "dev")
+            (config-edn/insert-into (slurp (conf-file dir "dev")) ":active"
+                                    "\n   :wagoe/events {:provider :memory}"))
+      (let [[exit out] (run-setup dir "" "--prod" "true" "--payment" "mock" "--cache" "redis")
+            text       (slurp (conf-file dir "prod"))
+            env-ex     (slurp (fs/file dir ".env.example"))]
+        (is (nil? exit) out)
+        (is (not (str/includes? text ":mock")))
+        (is (= :mock (get-in (conf dir "dev") [:active :wagoe/payment-provider :provider]))
+            "dev still gets what was asked")
+        (is (= 1 (count (re-seq #"(?m)^REDIS_HOST=" env-ex)))
+            "cache and event bus share the Redis variables")))))
+
+(deftest ^:unit a-fresh-prod-has-no-mock-payments
+  (is (not (str/includes? (setup/build-config (assoc full-spec :payment :mock) "prod") ":mock"))))
 
 (deftest ^:unit prod-gets-devs-admin-and-its-entity-files
   (with-project

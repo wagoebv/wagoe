@@ -271,11 +271,18 @@
         (is (str/includes? text "REDIS_PASSWORD="))
         (is (= 1 (count (re-seq #"(?m)^REDIS_PORT=" text)))))
       (testing "and nothing when no profile runs it on Redis"
-        (let [before (slurp env-ex)]
-          (doseq [f (reverse (file-seq (io/file tmp "resources/conf/prod")))] (.delete f))
-          (spit env-ex "X=1\n")
-          (add/patch-env-example! tmp module [["dev" :present] ["test" :present]])
-          (is (= "X=1\n" (slurp env-ex)))
-          (is (some? before))))
+        (spit env-ex "X=1\n")
+        (add/patch-env-example! tmp module [["dev" :present] ["test" :present]])
+        (is (= "X=1\n" (slurp env-ex))))
+      (finally
+        (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))
+
+(deftest ^:integration payments-never-puts-the-mock-in-prod
+  ;; The mock provider accepts any webhook as paid (BOU-564 review).
+  (let [tmp (with-profiles! "payments")]
+    (try
+      (add/patch-configs! tmp (cat/find-module "payments"))
+      (is (= :mock (get-in (active-of tmp "dev") [:wagoe/payment-provider :provider])))
+      (is (not (contains? (active-of tmp "prod") :wagoe/payment-provider)))
       (finally
         (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))
