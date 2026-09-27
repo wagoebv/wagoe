@@ -71,5 +71,9 @@
     (is (= ["--force" "--system" "shop.system-config"] (db/seed-args root ["--force"])))
     (is (= ["--system" "mine"] (db/seed-args root ["--system" "mine"]))
         "one named on the command line wins"))
+  (testing "a project named with a hyphen: the ns its file declares, not one derived from the directory"
+    (let [root (temp-project {"src/my_app/main.clj" "(ns my_app.main)"
+                              "src/my_app/system_config.clj" ";; mine\n(ns my_app.system-config\n  \"doc\")"})]
+      (is (= ["--system" "my_app.system-config"] (db/seed-args root [])))))
   (testing "a project without a system-config seeds as before"
     (is (= [] (db/seed-args (temp-project {}) [])))))

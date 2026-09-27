@@ -55,8 +55,15 @@
    `system-ns` is the application's system-config namespace: its `ig-config`,
    and its `load-config` when it has one. Returns the number of hooks run."
   [system-ns inserted]
-  (let [ig-config   (requiring-resolve (symbol system-ns "ig-config"))
-        load-config (or (requiring-resolve (symbol system-ns "load-config")) config/load-config)
+  (let [resolve!    (fn [sym]
+                      (try (requiring-resolve (symbol system-ns sym))
+                           (catch Exception e
+                             (throw (ex-info (str "Cannot load " system-ns ", named by --system: " (ex-message e))
+                                             {:type :validation-error :system system-ns} e)))))
+        ig-config   (or (resolve! "ig-config")
+                        (throw (ex-info (str system-ns ", named by --system, defines no ig-config")
+                                        {:type :validation-error :system system-ns})))
+        load-config (or (resolve! "load-config") config/load-config)
         config      (ig-config (load-config))
         hook-keys   (keys (ig/find-derived config :wagoe/seed-hook))]
     (if (empty? hook-keys)

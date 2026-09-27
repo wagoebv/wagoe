@@ -39,11 +39,12 @@
    application's system-config when it has one, so the application's seed
    hooks run — a seeded row with a workflow gets one (BOU-578)."
   [root args]
-  (let [base (project/base-ns root)
-        ns   (str (str/replace base "_" "-") ".system-config")]
+  (let [f  (io/file root "src" (project/base-ns root) "system_config.clj")
+        ;; What the file declares: `wagoe new my-app` writes my_app.*, and a
+        ;; name derived from the directory cannot tell which it is.
+        ns (when (.isFile f) (second (re-find #"\(ns\s+([^\s()]+)" (slurp f))))]
     (cond-> (vec args)
-      (and (not (some #{"--system"} args))
-           (.isFile (io/file root "src" base "system_config.clj")))
+      (and ns (not (some #{"--system"} args)))
       (into ["--system" ns]))))
 
 (defn- parse-config-minimal

@@ -2,7 +2,8 @@
   "`bb db:seed --system <app>.system-config` hands what it inserted to the
    application's seed hooks, so a seeded row with a workflow gets one
    (BOU-578). This namespace stands in for the application's system-config."
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [clojure.string :as str]
+            [clojure.test :refer [deftest is testing]]
             [integrant.core :as ig]
             [wagoe.platform.shell.database.cli-seed :as cli-seed]
             [wagoe.platform.shell.database.seed :as seed]))
@@ -38,3 +39,10 @@
          (cli-seed/parse-args [])))
   (is (= {:force? true :path "x.edn" :system "shop.system-config"}
          (cli-seed/parse-args ["x.edn" "--system" "shop.system-config" "--force"]))))
+
+(deftest ^:unit a-system-that-does-not-resolve-is-named
+  ;; BOU-578: a wrong --system failed with an NPE and an empty message.
+  (doseq [system-ns ["no.such.system-config" "clojure.string"]]
+    (let [e (try (seed/run-seed-hooks! system-ns {}) nil (catch Exception e e))]
+      (is (some? e) system-ns)
+      (is (str/includes? (str (ex-message e)) system-ns) (str (ex-message e))))))
