@@ -13,6 +13,7 @@
   (:require [cheshire.core :as json]
             [clojure.test :refer [deftest is testing use-fixtures]]
             [wagoe.platform.shell.http.reitit-router :as reitit]
+            [wagoe.user.ports :as user-ports]
             [wagoe.user.shell.auth :as auth-shell]
             [wagoe.user.shell.middleware :as user-middleware]
             [wagoe.workflow.ports :as ports]
@@ -36,6 +37,20 @@
 (def ^:dynamic *handler* nil)
 (def ^:dynamic *service* nil)
 
+(def ^:private session-token "a-valid-session")
+(def ^:private session-user-id (UUID/randomUUID))
+
+(def ^:private user-service
+  "Knows one session, for one admin."
+  #_{:clj-kondo/ignore [:missing-protocol-method]}
+  (reify user-ports/IUserService
+    (validate-session [_ token]
+      (when (= session-token token)
+        {:user-id session-user-id :session-token token}))
+    (get-user-by-id [_ id]
+      (when (= session-user-id id)
+        {:id id :email "session@example.com" :role :admin}))))
+
 (defn- with-served-api
   "Compile the workflow API routes through the platform router and put the
    authentication middleware outermost, where `:auth-middleware` puts it."
@@ -45,9 +60,9 @@
   (let [store    (service-test/create-memory-store)
         registry (registry/create-workflow-registry)
         svc      (service/create-workflow-service store registry)
-        handler  ((user-middleware/authenticate-if-present ::jwt-needs-no-service)
+        handler  ((user-middleware/authenticate-if-present user-service)
                   (reitit/compile-routes
-                   (sut/workflow-routes svc ::jwt-needs-no-service) {}))]
+                   (sut/workflow-routes svc) {}))]
     (binding [*handler* handler *service* svc]
       (f)))
   (registry/clear-registry!))
@@ -138,12 +153,22 @@
   ;; BOU-561: the web routes mounted auth, the API routes did not.
   (doseq [route (keys route-success)]
     (testing (name route)
-      (is (= 401 (:status (call-route route nil)))))))
+      (let [response (call-route route nil)]
+        (is (= 401 (:status response)))
+        (is (= {:error "unauthorized" :message "Authentication required"}
+               (select-keys (body-data response) [:error :message])))))))
 
 (deftest ^:unit every-api-route-serves-an-authenticated-caller
   (doseq [[route status] route-success]
     (testing (name route)
       (is (= status (:status (call-route route (admin-token))))))))
+
+(deftest ^:unit a-session-cookie-authenticates
+  (let [response (*handler* {:request-method :get
+                             :uri            (str "/workflow/instances/" (:id (new-instance)))
+                             :headers        {}
+                             :cookies        {"session-token" {:value session-token}}})]
+    (is (= 200 (:status response)))))
 
 (deftest ^:unit a-permissioned-transition-is-refused-for-a-caller-without-the-role
   ;; The counterpart, so the admin test cannot pass by handing everyone

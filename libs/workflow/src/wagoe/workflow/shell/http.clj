@@ -167,6 +167,8 @@
   "The `:id` every instance route carries."
   [:map [:id :string]])
 
+(def ^:private signed-in ['wagoe.user.shell.http-interceptors/require-authenticated])
+
 (defn workflow-routes
   "Reitit route data for the workflow API. Mounted under /api/v1.
 
@@ -175,41 +177,43 @@
    caller sent, and a POST was answered from an empty body rather than
    refused (BOU-478).
 
+   Every route requires a signed-in user. The global `authenticate-if-present`
+   sets `:user` from a bearer token or a session; the interceptor refuses the
+   request without one, with the same 401 the scaffolded APIs give.
+
    Args:
-     engine       - WorkflowService (IWorkflowEngine)
-     user-service - IUserService, for the authentication middleware"
-  [engine user-service]
-  (let [auth-mw (user-middleware/flexible-authentication-middleware user-service)]
-    [["/workflow/instances"
-      {:middleware [auth-mw]
-       :post {:handler (fn [req] (handle-start-workflow engine req))
-              :summary "Start a new workflow instance"
-              :parameters {:body [:map {:closed true}
-                                  [:workflowId :string]
-                                  [:entityType :string]
-                                  [:entityId :string]
-                                  ;; map-of, not :map: the metadata is the
-                                  ;; caller's own and has no schema here, and a
-                                  ;; closed :map would reject all of it.
-                                  [:metadata {:optional true} [:map-of :keyword :any]]]}}}]
-     ["/workflow/instances/:id"
-      {:middleware [auth-mw]
-       :get {:handler (fn [req] (handle-get-instance engine req))
-             :summary "Get current workflow state"
-             :parameters {:path instance-id-path}}}]
-     ["/workflow/instances/:id/audit"
-      {:middleware [auth-mw]
-       :get {:handler (fn [req] (handle-get-audit-log engine req))
-             :summary "Get workflow audit log"
-             :parameters {:path instance-id-path}}}]
-     ["/workflow/instances/:id/transition"
-      {:middleware [auth-mw]
-       :post {:handler (fn [req] (handle-transition engine req))
-              :summary "Execute a workflow transition"
-              :parameters {:path instance-id-path
-                           :body [:map {:closed true}
-                                  [:transition :string]
-                                  [:context {:optional true} [:map-of :keyword :any]]]}}}]]))
+     engine - WorkflowService (IWorkflowEngine)"
+  [engine]
+  [["/workflow/instances"
+    {:post {:handler (fn [req] (handle-start-workflow engine req))
+            :summary "Start a new workflow instance"
+            :interceptors signed-in
+            :parameters {:body [:map {:closed true}
+                                [:workflowId :string]
+                                [:entityType :string]
+                                [:entityId :string]
+                                ;; map-of, not :map: the metadata is the
+                                ;; caller's own and has no schema here, and a
+                                ;; closed :map would reject all of it.
+                                [:metadata {:optional true} [:map-of :keyword :any]]]}}}]
+   ["/workflow/instances/:id"
+    {:get {:handler (fn [req] (handle-get-instance engine req))
+           :summary "Get current workflow state"
+           :interceptors signed-in
+           :parameters {:path instance-id-path}}}]
+   ["/workflow/instances/:id/audit"
+    {:get {:handler (fn [req] (handle-get-audit-log engine req))
+           :summary "Get workflow audit log"
+           :interceptors signed-in
+           :parameters {:path instance-id-path}}}]
+   ["/workflow/instances/:id/transition"
+    {:post {:handler (fn [req] (handle-transition engine req))
+            :summary "Execute a workflow transition"
+            :interceptors signed-in
+            :parameters {:path instance-id-path
+                         :body [:map {:closed true}
+                                [:transition :string]
+                                [:context {:optional true} [:map-of :keyword :any]]]}}}]])
 
 ;; =============================================================================
 ;; Admin web UI helpers

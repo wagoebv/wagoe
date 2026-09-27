@@ -5,6 +5,7 @@
      Wrap public REPL functions with try/catch that calls handle-repl-error!
      The zero-arity (fix!) reads from last-exception*."
   (:require [integrant.repl.state :as state]
+            [wagoe.platform.system :as platform-system]
             [wagoe.devtools.core.error-classifier :as classifier]
             [wagoe.devtools.core.error-enricher :as enricher]
             [wagoe.devtools.core.error-formatter :as formatter]
@@ -13,12 +14,16 @@
 (defonce last-exception* (atom nil))
 
 (defn dashboard-port
-  "The port the dev dashboard serves on, else the one it is configured for,
-   else nil. Jetty may have moved it off a busy port, so the running system
-   wins over the config."
+  "The port the running dev dashboard serves on, or nil when none runs.
+
+   Read from both places a system lives: a REPL `(go)` fills
+   integrant.repl.state, a start through `wagoe.main` fills
+   `platform-system/running` (BOU-508). Not the config: Jetty may have moved
+   off a busy port, and a stopped dashboard has no page to link to."
   []
-  (or (get-in state/system [:wagoe/dashboard :port])
-      (get-in state/config [:wagoe/dashboard :port])))
+  (get-in (or state/system
+              (try (platform-system/running) (catch Exception _ nil)))
+          [:wagoe/dashboard :port]))
 
 (defn handle-repl-error!
   "Run the full error pipeline on an exception and print the result.

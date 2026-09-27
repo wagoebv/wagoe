@@ -94,8 +94,7 @@
   [_ {:keys [workflow-service user-service]}]
   (log/info "Initializing workflow routes")
   {:api    (workflow-http/workflow-routes
-            (:engine workflow-service)
-            user-service)
+            (:engine workflow-service))
    :web    (workflow-http/workflow-web-routes
             (:store workflow-service)
             (:registry workflow-service)

@@ -106,9 +106,9 @@
        {:status  302
         :headers {"Location" login-url}
         :body    ""})
-     ;; API request - return JSON error
+     ;; API request - return JSON error. No Content-Type: muuntaja encodes a
+     ;; map body only when none is set (BOU-561).
      {:status  401
-      :headers {"Content-Type" "application/json"}
       :body    {:type   "authentication-required"
                 :title  "Authentication Required"
                 :status 401
