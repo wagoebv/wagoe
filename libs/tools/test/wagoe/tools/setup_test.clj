@@ -970,7 +970,7 @@
         (is (= "shop-prod" (get-in prod [:wagoe/settings :name])) "the project's name, not my-app")
         (is (contains? prod :wagoe/sqlite) "dev's database")
         (is (env-ref? (get-in prod [:wagoe/sqlite :db])))
-        (is (= {:enabled? true :base-path "/api/product"} (:wagoe/product prod))
+        (is (= {:enabled? true} (:wagoe/product prod))
             "a module integrated before prod existed")
         (is (not (contains? prod :wagoe/ai-service)) "no AI in prod, as ai-template has it")
         (testing "no stand-in reaches prod (BOU-564 review)"
