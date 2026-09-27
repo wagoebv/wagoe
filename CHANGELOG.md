@@ -79,6 +79,8 @@ for what is public API, what is internal, and how deprecations are announced.
   in the same request and transaction, refuses fewer, and the admin gets `:min`.
 - **`bb scaffold subscriber --module-name m --event :admin/entity-created`** (BOU-578). Writes an event
   subscriber component, its handler and test, started when the event bus is on.
+- **`GET /api/v1/workflow/instances?entity-type=invoice&entity-id=<id>`** (BOU-581) finds an entity's
+  workflow instances, which answered 405.
 
 ### Fixed
 

@@ -199,11 +199,12 @@
 
   (list-instances [_ opts]
     (log/debug "Listing workflow instances" opts)
-    (let [{:keys [workflow-id entity-type current-state limit offset]
+    (let [{:keys [workflow-id entity-type entity-id current-state limit offset]
            :or {limit 50 offset 0}} opts
           conditions (cond-> []
                        workflow-id   (conj [:= :workflow_id (kw->str workflow-id)])
                        entity-type   (conj [:= :entity_type (kw->str entity-type)])
+                       entity-id     (conj [:= :entity_id (uuid->str entity-id)])
                        current-state (conj [:= :current_state (kw->str current-state)]))
           query (cond-> {:select   [:*]
                          :from     [:workflow_instances]

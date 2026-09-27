@@ -143,6 +143,7 @@ The component map returned by Integrant:
 | Method | Canonical Path | Description |
 |--------|----------------|-------------|
 | `POST` | `/api/v1/workflow/instances` | Start a new workflow instance |
+| `GET` | `/api/v1/workflow/instances?entity-type=&entity-id=` | An entity's instances |
 | `GET` | `/api/v1/workflow/instances/:id` | Current state + allowed transitions |
 | `GET` | `/api/v1/workflow/instances/:id/audit` | Full audit log |
 | `POST` | `/api/v1/workflow/instances/:id/transition` | Execute a transition |
