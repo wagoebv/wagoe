@@ -78,14 +78,15 @@
    Returns:
      Hiccup textarea element"
   [field-key value & [opts]]
-  (let [{:keys [rows cols placeholder class]
+  (let [{:keys [rows cols placeholder class required]
          :or {rows 4 cols 50}} opts]
     [:textarea (-> (merge {:id (name field-key)
                            :name (name field-key)
                            :rows rows
                            :cols cols}
                           (when placeholder {:placeholder placeholder})
-                          (when class {:class class}))
+                          (when class {:class class})
+                          (when required {:required true}))
                    (merge-class "form-control ui-input"))
      (or value "")]))
 
@@ -101,7 +102,7 @@
    Returns:
      Hiccup select element"
   [field-key options selected-value & [opts]]
-  (let [{:keys [class]} opts
+  (let [{:keys [class required]} opts
         option-pairs (if (map? options)
                        (seq options)
                        options)
@@ -109,7 +110,8 @@
         selected-str (if (keyword? selected-value) (name selected-value) (str selected-value))]
     [:select (-> (merge {:id (name field-key)
                          :name (name field-key)}
-                        (when class {:class class}))
+                        (when class {:class class})
+                        (when required {:required true}))
                  (merge-class "form-control ui-input"))
      (for [[value label] option-pairs]
        (let [;; Convert value to string for HTML attribute

@@ -642,6 +642,22 @@
    wagoe.admin.shell.service)."
   #{:id :created-at :updated-at})
 
+(defn for-create
+  "`entity-config` as a create sees it: a field is not required when the
+   database fills it (a column default) or the form does not show it
+   (:hide-fields). An edit still requires both: the row has them (BOU-570)."
+  [entity-config]
+  (let [hidden (set (:hide-fields entity-config))]
+    (update entity-config :fields
+            (fn [fields]
+              (reduce-kv (fn [acc field cfg]
+                           (assoc acc field
+                                  (cond-> cfg
+                                    (or (contains? hidden field) (some? (:default-value cfg)))
+                                    (assoc :required false))))
+                         {}
+                         fields)))))
+
 (defn- off-form-reason
   [field entity-config]
   (if (contains? (set (:readonly-fields entity-config)) field)

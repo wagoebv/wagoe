@@ -127,12 +127,12 @@
       (finally (.delete tmp)))))
 
 (deftest ^:integration generate-tests-applies-the-repairs
-  (testing "metadata is stamped from the path, not left to the model"
+  (testing "metadata is stamped by the code, not left to the model"
     ;; Kaocha selects suites on it; without it the namespace runs in no suite.
-    ;; A temp path has no /core/ segment, so :integration is the right type.
+    ;; The test touches no I/O, so it is a unit test wherever the source lives.
     (let [result (generate-from "(ns x-test)\n(deftest my-fn-test\n  (is (= 1 1)))")]
-      (is (= :integration (:test-type result)))
-      (is (str/includes? (:text result) "(deftest ^:integration my-fn-test"))))
+      (is (= #{:unit} (:test-tags result)))
+      (is (str/includes? (:text result) "(deftest ^:unit my-fn-test"))))
 
   (testing "a namespace used but not required is repaired"
     (let [result (generate-from
@@ -161,12 +161,68 @@
         (is (str/ends-with? (:test-path result)
                             "libs/demo/test/wagoe/demo/core/thing_test.clj")
             (str "got " (pr-str (:test-path result))))
-        ;; A core/ source is a unit test wherever it lives.
-        (is (= :unit (:test-type result))))))
+        (is (= #{:unit} (:test-tags result))))))
 
   (testing "a source path with no src segment reports no destination"
     ;; Better than inventing one: --write refuses and asks for -o.
     (is (nil? (:test-path (generate-from "(ns x-test)\n(deftest a-test (is true))"))))))
+
+;; BOU-572 -------------------------------------------------------------------
+
+(defn- scripted-service
+  "A service whose provider gives `answers` in turn, recording each call's
+   messages."
+  [answers]
+  (let [calls (atom [])]
+    [{:provider (mock-provider
+                 (fn [msgs _]
+                   (let [n (count (swap! calls conj msgs))]
+                     {:text (nth answers (min (dec n) (dec (count answers))))
+                      :tokens 1 :provider :mock :model "mock"}))
+                 (fn [_ _ _] nil))}
+     calls]))
+
+(defn- with-source
+  "Call `f` with the path of a throwaway source file holding `src`."
+  [src f]
+  (let [tmp (java.io.File/createTempFile "gen" ".clj")]
+    (try (spit tmp src) (f (.getPath tmp))
+         (finally (.delete tmp)))))
+
+(def ^:private ports-source
+  "(ns wagoe.demo.shell.thing (:require [wagoe.ai.ports :as ports]))
+(defn name-of [p] (ports/provider-name p))")
+
+(deftest ^:integration generate-tests-shows-the-real-api
+  (let [[svc calls] (scripted-service ["(ns t-test)\n(deftest a-test (is (= 1 1)))"])]
+    (with-source ports-source #(svc/generate-tests svc %))
+    (let [prompt (:content (second (first @calls)))]
+      (is (str/includes? prompt "protocol ports/IAIProvider"))
+      (is (str/includes? prompt "(complete-json [this messages schema opts])")))))
+
+(deftest ^:integration generate-tests-retries-once-on-a-failed-check
+  (testing "the errors go back to the model, and a fixed answer is kept"
+    (let [[svc calls] (scripted-service ["(ns t-test)\n(deftest a-test (is (= 1 (bad))))"
+                                         "(ns t-test)\n(deftest a-test (is (= 1 1)))"])
+          check  (fn [text] (when (str/includes? text "bad") ["[t-test] Unable to resolve symbol: bad"]))
+          result (with-source ports-source #(svc/generate-tests svc % {:check check}))]
+      (is (= 2 (count @calls)))
+      (is (str/includes? (:content (last (second @calls))) "Unable to resolve symbol: bad"))
+      (is (nil? (:check-errors result)))
+      (is (str/includes? (:text result) "(is (= 1 1))"))))
+
+  (testing "a second failure is returned with its errors, and nothing more is asked"
+    (let [[svc calls] (scripted-service ["(ns t-test)\n(deftest a-test (is (= 1 (bad))))"])
+          result (with-source ports-source
+                   #(svc/generate-tests svc % {:check (constantly ["still broken"])}))]
+      (is (= 2 (count @calls)))
+      (is (= ["still broken"] (:check-errors result)))
+      (is (string? (:text result)) "--force can still write it")))
+
+  (testing "without a check there is one call"
+    (let [[svc calls] (scripted-service ["(ns t-test)\n(deftest a-test (is (= 1 1)))"])]
+      (with-source ports-source #(svc/generate-tests svc %))
+      (is (= 1 (count @calls))))))
 
 ;; =============================================================================
 ;; sql-from-description tests

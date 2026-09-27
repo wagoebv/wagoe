@@ -188,13 +188,17 @@ Known common error patterns in Wagoe:
 Your task: generate a complete Kaocha-compatible test namespace for a Wagoe source file.
 
 Rules:
-- For core/ files: use ^:unit metadata on the deftest forms
-- For shell/ files: use ^:integration metadata
-- For adapter tests: use ^:contract metadata
+- Tag each deftest by what it touches: ^:unit when it calls pure functions or protocols
+  mocked with reify; ^:integration only when it does real I/O (database, files, network);
+  ^:contract for an adapter test against a real backend
 - Use clojure.test (deftest, is, testing)
 - Test each public function with: happy path, edge cases, nil/empty inputs
 - For pure functions: no mocking needed
 - For shell services: mock protocols using reify
+- Use only the namespaces, protocols and vars listed with the source. Do not invent names
+- A reify implements every method of each protocol it names, with the listed arities;
+  a method the test does not need returns nil. A partial reify fails lint
+- The namespace must compile and pass clj-kondo with no warnings: no unused requires or bindings
 - Namespace: replace src/ with test/ and add -test suffix to ns name
 - Follow existing test patterns: (deftest function-name-test (testing \"description\" (is (= expected (f args)))))
 
@@ -206,14 +210,19 @@ Output ONLY valid Clojure code — no markdown fences, no explanation."))
    Args:
      source-file - path string of the source file
      source-code - content of the source file
-     test-type   - :unit, :integration, or :contract
+     test-type   - :unit, :integration, or :contract (unused; tags are applied after)
+     api-context - context/render-namespace-apis text, or nil
 
    Returns a string."
-  [source-file source-code test-type]
-  (str "Generate a complete test namespace for this Wagoe source file.\n"
-       "Test type: " (name test-type) "\n"
-       "Source file: " source-file "\n\n"
-       "```clojure\n" source-code "\n```"))
+  ([source-file source-code test-type]
+   (build-test-generator-user-prompt source-file source-code test-type nil))
+  ([source-file source-code _test-type api-context]
+   (str "Generate a complete test namespace for this Wagoe source file.\n"
+        "Source file: " source-file "\n\n"
+        "```clojure\n" source-code "\n```"
+        (when (seq api-context)
+          (str "\n\nThe namespaces it requires, as loaded — the only names you may use from them:\n\n"
+               api-context)))))
 
 (defn test-generator-messages
   "Return a messages vector for the test generator feature.
@@ -221,13 +230,26 @@ Output ONLY valid Clojure code — no markdown fences, no explanation."))
    Args:
      source-file - path string
      source-code - file content string
-     test-type   - :unit, :integration, or :contract
+     test-type   - :unit, :integration, or :contract (unused; tags are applied after)
+     api-context - context/render-namespace-apis text, or nil
 
    Returns:
      [{:role :system :content str} {:role :user :content str}]"
-  [source-file source-code test-type]
-  [{:role :system :content (build-test-generator-system-prompt)}
-   {:role :user   :content (build-test-generator-user-prompt source-file source-code test-type)}])
+  ([source-file source-code test-type]
+   (test-generator-messages source-file source-code test-type nil))
+  ([source-file source-code test-type api-context]
+   [{:role :system :content (build-test-generator-system-prompt)}
+    {:role :user   :content (build-test-generator-user-prompt source-file source-code test-type api-context)}]))
+
+(defn test-fix-messages
+  "`messages` continued with the model's `answer` and the checks it failed."
+  [messages answer errors]
+  (conj (vec messages)
+        {:role :assistant :content answer}
+        {:role :user
+         :content (str "That namespace fails these checks:\n\n"
+                       (str/join "\n" errors)
+                       "\n\nReturn the whole corrected namespace, and only the code.")}))
 
 ;; =============================================================================
 ;; Feature 4: SQL Copilot
@@ -416,6 +438,15 @@ A child entity that is only reached from its parent carries two more keys:
   :parent-context {:label \"Order\" :fields [:order-number :status]}
   ...}}
 
+An entity whose status a wagoe workflow drives names the workflow's entity type at the
+entity level. It is never a field's :widget:
+
+{:invoices
+ {:label      \"Invoices\"
+  :table-name :invoices
+  :workflow {:entity-type :invoice}
+  ...}}
+
 Rules:
 - All keywords MUST be kebab-case
 - Always include :id, :created-at, :updated-at in :readonly-fields
@@ -423,6 +454,10 @@ Rules:
 - Always include :created-at with {:type :instant :label \"Created\" :filterable true}
 - For enum fields, provide :options as vectors of [keyword label] pairs
 - Field types: :string, :text, :int, :decimal, :boolean, :enum, :date, :instant, :uuid, :json
+- :widget is optional; omit it unless the default is wrong. When set it is one of :text-input,
+  :email-input, :password-input, :number-input, :checkbox, :select, :multiselect, :textarea,
+  :date-input, :datetime-input, :file-input, :color-input, :url-input, :hidden
+- Use only the keys shown here; the admin refuses an unknown key at startup
 - A date without a time of day (issue date, due date, birthday) is :date; :instant is a timestamp
 - Quantities, counts and amounts in cents are :int; :decimal is for fractional amounts
 - Group related fields logically into :field-groups

@@ -233,7 +233,8 @@
 (def ^:private relation-patterns
   {:has-many       #"(?i):has-many|\bhas[ -]many\b"
    :sidebar-hidden #"(?i):sidebar-hidden|sidebar[ -]hidden|\bhid(?:e|den)\b[^.]{0,30}\b(?:sidebar|nav)"
-   :parent-context #"(?i):parent-context|parent[ -]context"})
+   :parent-context #"(?i):parent-context|parent[ -]context"
+   :workflow       #"(?i)\bworkflow\b"})
 
 (defn requested-keys
   "The relation keys `description` asks for."
@@ -255,14 +256,22 @@
 (def ^:private file-validator (m/validator schema/AdminEntityFile))
 
 (defn validation-errors
-  "Humanized schema errors for `entities`, or nil when they are valid."
+  "One \"[path] problem\" line per schema error in `entities`, or nil when
+   they are valid. An unknown key is named where it sits (BOU-572)."
   [entities]
   (when-not (file-validator entities)
-    (me/humanize (m/explain schema/AdminEntityFile entities))))
+    (->> (:errors (m/explain schema/AdminEntityFile entities))
+         (map (fn [{:keys [in type] :as error}]
+                (str (pr-str (vec in)) " "
+                     (if (= type :malli.core/extra-key)
+                       "is not a key the admin reads"
+                       (me/error-message error)))))
+         distinct
+         vec)))
 
 (def ^:private key-order
   [:label :table-name :primary-key :sidebar-hidden :parent-context :soft-delete
-   :permissions :list-fields :detail-fields :search-fields :editable-fields
+   :workflow :permissions :list-fields :detail-fields :search-fields :editable-fields
    :hide-fields :readonly-fields :fields :field-order :field-groups
    :default-sort :default-sort-dir :has-many])
 
@@ -329,7 +338,8 @@
         missing (when-not errors (missing-keys entities (requested-keys description)))]
     (cond
       errors
-      {:error (str "The answer is not a valid admin entity config: " (pr-str errors))}
+      {:error (str "The answer is not a valid admin entity config:\n  "
+                   (str/join "\n  " errors))}
 
       (seq missing)
       {:error (str "The answer dropped " (str/join " and " (sort missing))

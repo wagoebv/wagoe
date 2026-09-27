@@ -11,6 +11,7 @@
             [wagoe.ai.core.parsing :as parsing]
             [wagoe.ai.core.prompts :as prompts]
             [wagoe.ai.ports :as ports]
+            [wagoe.ai.shell.test-check :as test-check]
             [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.tools.logging :as log]))
@@ -149,21 +150,54 @@
    stop when they are done."
   16384)
 
+(defn- api-context
+  "The public API of every namespace `source` requires, read from the
+   classpath, as prompt text."
+  [source]
+  (when-let [ns-form (test-check/read-ns-form source)]
+    (ctx/render-namespace-apis (ctx/ns-form-aliases ns-form)
+                               (map test-check/namespace-api (ctx/ns-form-requires ns-form)))))
+
+(defn- repaired-tests
+  "The model's answer with the repairs applied, or {:error ..} when it was cut
+   off."
+  [result test-type]
+  ;; The model does not reliably supply the metadata or the requires, so both
+  ;; are applied here. Kaocha selects suites on the metadata: a namespace
+  ;; without it runs in no suite at all. And the model writes `str/join` in
+  ;; the body and leaves clojure.string out, so the file dies at load.
+  (let [test-src (-> (:text result)
+                     parsing/parse-generated-tests
+                     (parsing/tag-tests test-type)
+                     parsing/ensure-standard-requires)]
+    (if (parsing/truncated? test-src)
+      ;; Reported rather than returned: the caller writes :text to a file,
+      ;; and a file that cannot be read is worse than no file.
+      {:error (str "The model's answer was cut off mid-form — "
+                   (count (str/split-lines (str test-src)))
+                   " lines, delimiters still open. "
+                   "Generate for a smaller source file, or raise :max-tokens.")
+       :provider (:provider result)
+       :model    (:model result)
+       :raw      test-src}
+      {:text test-src})))
+
+(defn- test-tags [test-src]
+  (into #{} (map (comp keyword second)) (re-seq #"\(deftest\s+\^:(unit|integration|contract)" test-src)))
+
 (defn generate-tests
   "Generate a test namespace for a source file.
 
-   Args:
-     service     - AIService map
-     source-path - path string to the source file
-     opts        - optional completion opts
+   The model is shown the real API of every namespace the source requires.
+   With `(:check opts)`, a fn of the generated text returning errors or nil,
+   a failing answer is sent back once with its errors (BOU-572).
 
    Returns:
-     {:text str :tokens int :provider kw :model str
-      :test-type kw :test-path str}
-     where :text is the generated test namespace source, :test-type the Kaocha
-     metadata applied, and :test-path where the file belongs (nil when the
-     source path follows no recognised layout),
-     or {:error str} on failure."
+     {:text str :tokens int :provider kw :model str :test-tags #{kw}
+      :test-path str :check-errors [str]}
+     where :test-path is where the file belongs (nil when the source path
+     follows no recognised layout) and :check-errors is present when the last
+     answer still failed :check, or {:error str} on failure."
   ([service source-path]
    (generate-tests service source-path {}))
   ([service source-path opts]
@@ -172,40 +206,34 @@
      (if-not source-code
        {:error (str "Cannot read source file: " source-path)}
        (let [test-type (ctx/determine-test-type source-path)
-             messages  (prompts/test-generator-messages source-path source-code test-type)
+             check     (:check opts)
              ;; A test namespace is several times the length of an ordinary
              ;; answer — one run against a 250-line source stopped mid-form at
              ;; 598 lines. The caller can still override.
-             result    (resolve-provider service messages
-                                         (update opts :max-tokens #(or % test-generator-max-tokens)))]
+             popts     (-> (dissoc opts :check)
+                           (update :max-tokens #(or % test-generator-max-tokens)))
+             attempt   (fn [messages]
+                         (let [result (resolve-provider service messages popts)]
+                           (if (:error result)
+                             result
+                             (let [repaired (repaired-tests result test-type)]
+                               (if (:error repaired)
+                                 repaired
+                                 (let [errors (when check (check (:text repaired)))]
+                                   (cond-> (merge result repaired)
+                                     (seq errors) (assoc :check-errors (vec errors)))))))))
+             messages  (prompts/test-generator-messages source-path source-code test-type
+                                                        (api-context source-code))
+             first-try (attempt messages)
+             result    (if (:check-errors first-try)
+                         (attempt (prompts/test-fix-messages messages (:text first-try)
+                                                             (:check-errors first-try)))
+                         first-try)]
          (if (:error result)
            result
-           ;; The prompt asks for the metadata and the model does not reliably
-           ;; supply it, so it is applied here from the type the path already
-           ;; determined rather than hoped for. Kaocha selects suites on it: a
-           ;; namespace without it runs in no suite at all.
-           (let [test-src (-> (:text result)
-                              parsing/parse-generated-tests
-                              (parsing/ensure-test-metadata test-type)
-                              ;; Same shape of failure: the model writes
-                              ;; `str/join` in the body and leaves
-                              ;; clojure.string out of the ns form, so the
-                              ;; file dies at load with "No such namespace".
-                              parsing/ensure-standard-requires)]
-             (if (parsing/truncated? test-src)
-               ;; Reported rather than returned: the caller writes :text to a
-               ;; file, and a file that cannot be read is worse than no file.
-               {:error (str "The model's answer was cut off mid-form — "
-                            (count (str/split-lines (str test-src)))
-                            " lines, delimiters still open. "
-                            "Generate for a smaller source file, or raise :max-tokens.")
-                :provider (:provider result)
-                :model    (:model result)
-                :raw      test-src}
-               (assoc result
-                      :text      test-src
-                      :test-type test-type
-                      :test-path (ctx/derive-test-path source-path))))))))))
+           (assoc result
+                  :test-tags (test-tags (:text result))
+                  :test-path (ctx/derive-test-path source-path))))))))
 
 ;; =============================================================================
 ;; Feature 4: SQL Copilot

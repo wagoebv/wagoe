@@ -75,32 +75,57 @@
 
 ;; The admin's own EntityConfig (wagoe.admin.schema) describes a merged config:
 ;; its FieldConfig requires :name and :widget, which introspection supplies and
-;; a file of overrides never carries. This is the file's shape. The ai library
-;; cannot depend on admin, so a root test pins the two together.
+;; a file of overrides never carries. This is the file's shape: the keys of the
+;; admin's EntityOverrides, closed at the same levels, with values typed where
+;; EntityConfig types them. The ai library cannot depend on admin, so a root
+;; test pins the two together.
 
 (def AdminFieldType
   "Field types the admin renders — wagoe.admin.schema/FieldType."
   [:enum :uuid :string :int :decimal :boolean :instant :date :enum :json :text :binary])
 
+(def AdminFieldWidget
+  "Widgets the admin renders — wagoe.admin.schema/FieldWidget."
+  [:enum :text-input :email-input :password-input :number-input :checkbox :select
+   :multiselect :textarea :date-input :datetime-input :file-input :color-input
+   :url-input :hidden])
+
 (def AdminFieldOverride
-  [:map
-   [:type       {:optional true} AdminFieldType]
-   [:label      {:optional true} :string]
-   [:width      {:optional true} [:int {:min 1}]]
-   [:filterable {:optional true} :boolean]
-   [:options    {:optional true} [:vector [:tuple :keyword :string]]]])
+  [:map {:closed true}
+   [:name          {:optional true} :keyword]
+   [:type          {:optional true} AdminFieldType]
+   [:widget        {:optional true} AdminFieldWidget]
+   [:label         {:optional true} :string]
+   [:required      {:optional true} :boolean]
+   [:readonly      {:optional true} :boolean]
+   [:hidden        {:optional true} :boolean]
+   [:searchable    {:optional true} :boolean]
+   [:sortable      {:optional true} :boolean]
+   [:filterable    {:optional true} :boolean]
+   [:primary-key   {:optional true} :any]
+   [:default-value {:optional true} :any]
+   [:options       {:optional true} [:vector [:tuple :keyword :string]]]
+   [:min           {:optional true} :int]
+   [:max           {:optional true} :int]
+   [:pattern       {:optional true} :string]
+   [:help-text     {:optional true} :string]
+   [:placeholder   {:optional true} :string]
+   [:width         {:optional true} [:int {:min 1}]]
+   [:rows          {:optional true} :any]])
 
 (def AdminHasMany
-  [:map
+  [:map {:closed true}
    [:entity      :keyword]
    [:table       :keyword]
    [:foreign-key :keyword]
    [:label       {:optional true} :string]
    [:fields      {:optional true} [:vector :keyword]]
-   [:editable    {:optional true} :boolean]])
+   [:editable    {:optional true} :boolean]
+   [:min         {:optional true} [:int {:min 0}]]
+   [:on-delete   {:optional true} [:enum :cascade :restrict]]])
 
 (def AdminEntityConfig
-  [:map
+  [:map {:closed true}
    [:label           :string]
    [:table-name      :keyword]
    [:primary-key     {:optional true} :keyword]
@@ -112,7 +137,7 @@
    [:readonly-fields {:optional true} [:set :keyword]]
    [:fields          {:optional true} [:map-of :keyword AdminFieldOverride]]
    [:field-order     {:optional true} [:vector :keyword]]
-   [:field-groups    {:optional true} [:vector [:map
+   [:field-groups    {:optional true} [:vector [:map {:closed true}
                                                 [:id :keyword]
                                                 [:label :string]
                                                 [:fields [:vector :keyword]]]]]
@@ -121,7 +146,8 @@
    [:icon            {:optional true} :string]
    [:description     {:optional true} :string]
    [:soft-delete     {:optional true} :boolean]
-   [:permissions     {:optional true} [:map
+   [:create-redirect-url {:optional true} :any]
+   [:permissions     {:optional true} [:map {:closed true}
                                        [:create {:optional true} :boolean]
                                        [:create-hint {:optional true} :string]]]
    [:ui              {:optional true} [:map {:closed true}
@@ -130,9 +156,20 @@
                                          [:other-label {:optional true} :string]]]]]
    [:has-many        {:optional true} [:vector AdminHasMany]]
    [:sidebar-hidden  {:optional true} :boolean]
-   [:parent-context  {:optional true} [:map
+   [:parent-context  {:optional true} [:map {:closed true}
                                        [:label :string]
-                                       [:fields [:vector :keyword]]]]])
+                                       [:fields [:vector :keyword]]]]
+   [:query-overrides {:optional true} [:map {:closed true}
+                                       [:from {:optional true} :any]
+                                       [:join {:optional true} :any]
+                                       [:select {:optional true} :any]
+                                       [:field-aliases {:optional true} :any]
+                                       [:soft-delete-table {:optional true} :any]]]
+   [:split-table-update {:optional true} [:map {:closed true}
+                                          [:secondary-table {:optional true} :any]
+                                          [:secondary-fields {:optional true} :any]]]
+   ;; The workflow is the entity's, not a field's: there is no :widget for it.
+   [:workflow        {:optional true} [:map {:closed true} [:entity-type :keyword]]]])
 
 (def AdminEntityFile
   "One or more entity configs keyed by entity name."

@@ -126,6 +126,8 @@
                  :task (i18n/-main "missing")}
   i18n:unused   {:doc "Report catalogue keys not referenced in any source file"
                  :task (i18n/-main "unused")}
+  check:lint {:doc "clj-kondo, as `bb check` runs it (bb check:lint)"
+              :task (check/lint)}
   check:fcis {:doc "FC/IS boundary enforcement — core namespaces must not import shell/IO/logging/DB (bb check:fcis)"
               :task (check-fcis/-main)}
   check:placeholder-tests {:doc "Detect placeholder (is true) assertions in test files (bb check:placeholder-tests)"

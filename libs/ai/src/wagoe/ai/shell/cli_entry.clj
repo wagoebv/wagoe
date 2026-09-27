@@ -19,6 +19,7 @@
             [wagoe.ai.shell.providers.openai :as openai]
             [wagoe.ai.shell.providers.replicate :as replicate-provider]
             [wagoe.ai.shell.service :as svc]
+            [wagoe.ai.shell.test-check :as test-check]
             [cheshire.core :as json]
             [clojure.java.io :as io]
             [clojure.string :as str]
@@ -349,8 +350,21 @@
 (def gen-tests-opts
   [["-o" "--output FILE" "Write to this file instead of stdout"]
    ["-w" "--write" "Write to the conventional test path for the source file"]
-   ["-f" "--force" "With --write, overwrite an existing test file"]
+   ["-f" "--force" "Overwrite an existing test file; write one that fails its checks"]
    ["-h" "--help"]])
+
+(defn gen-tests-outcome
+  "What to do with a generated test namespace: :refuse one that failed its
+   checks unless `force?`, else :write it to `dest` or :print it."
+  [{:keys [check-errors]} dest force?]
+  (cond
+    (and (seq check-errors) (not force?)) :refuse
+    dest                                  :write
+    :else                                 :print))
+
+(defn- print-check-errors [errors]
+  (doseq [e errors]
+    (println (str "  " e))))
 
 (defn cmd-gen-tests [args]
   (let [{:keys [options arguments]} (parse-or-exit! args gen-tests-opts "Usage: bb ai gen-tests <source-file> [-o <output> | --write]")
@@ -382,18 +396,40 @@
         (println (dim "Re-run with --force to overwrite, or choose another path with -o."))
         (System/exit 1))
 
-      (let [service (make-service-from-config)
-            result  (svc/generate-tests service source-path)]
-        (if (:error result)
-          (do (println (red (describe-failure result service))) (System/exit 1))
-          (if dest
-            (do (io/make-parents dest)
-                (spit dest (:text result))
-                (println (green (str "\u2713 Tests written to " dest)))
-                (println (dim (str "Metadata: ^:" (name (:test-type result))
-                                   " \u2014 run with: clojure -M:test --focus-meta :"
-                                   (name (:test-type result))))))
-            (println (:text result))))))))
+      ;; Linted as the file it will be, so kondo's config and namespace
+      ;; checks apply as they will in `bb check`.
+      (let [lint-as (or dest (ctx/derive-test-path source-path) "test/generated_test.clj")
+            check   (fn [text]
+                      (test-check/check-errors
+                       text {:root          "."
+                             :filename      lint-as
+                             :context-files (keep identity
+                                                  (cons source-path
+                                                        (map test-check/source-file
+                                                             (test-check/required-namespaces text))))}))
+            service (make-service-from-config)
+            result  (svc/generate-tests service source-path {:check check})]
+        (when (:error result)
+          (println (red (describe-failure result service)))
+          (System/exit 1))
+        (case (gen-tests-outcome result dest (:force options))
+          :refuse
+          (do (println (red "The generated namespace fails its checks, after one retry:"))
+              (print-check-errors (:check-errors result))
+              (println (dim "Nothing written. Re-run with --force to write it anyway."))
+              (System/exit 1))
+
+          :write
+          (do (io/make-parents dest)
+              (spit dest (:text result))
+              (when (seq (:check-errors result))
+                (println (yellow "Written with --force, although it fails these checks:"))
+                (print-check-errors (:check-errors result)))
+              (println (green (str "\u2713 Tests written to " dest)))
+              (println (dim (str "Tags: " (str/join " " (map #(str "^" %) (sort (:test-tags result))))))))
+
+          :print
+          (println (:text result)))))))
 
 ;; =============================================================================
 ;; Subcommand: sql

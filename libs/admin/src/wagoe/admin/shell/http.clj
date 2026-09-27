@@ -51,6 +51,11 @@
        :get {:handler (detail/new-entity-handler admin-service schema-provider config)
              :summary "Create form page"}}]
 
+     ["/:entity/new/rows/:child"
+      {:middleware [auth-middleware]
+       :get {:handler (detail/new-child-row-handler admin-service schema-provider config)
+             :summary "HTMX child row for a create form"}}]
+
      ["/:entity/table"
       {:middleware [auth-middleware]
        :get {:handler (list-handlers/entity-table-fragment-handler admin-service schema-provider config)
