@@ -74,6 +74,7 @@
 ;; --- detail: form widget, entity form, detail/new pages, related tables ---
 (def render-field-widget detail/render-field-widget)
 (def entity-form detail/entity-form)
+(def child-row detail/child-row)
 (def parent-context-banner detail/parent-context-banner)
 (def related-records-table detail/related-records-table)
 (def entity-detail-page detail/entity-detail-page)

@@ -779,3 +779,25 @@
       (is (not (str/includes? (:message (first errors)) "lists"))
           "does not claim the config lists it as read-only")
       (is (str/includes? (:message (first errors)) ":editable-fields")))))
+
+;; =============================================================================
+;; Required on create (BOU-570)
+;; =============================================================================
+
+(deftest ^:unit for-create-test
+  (let [auto   (introspection/parse-table-metadata
+                :invoices
+                [{:name "id" :type "UUID" :not-null true :primary-key true}
+                 {:name "number" :type "VARCHAR(20)" :not-null true}
+                 {:name "status" :type "VARCHAR(20)" :not-null true :default "'entered'"}
+                 {:name "owner" :type "VARCHAR(20)" :not-null true}])
+        config (introspection/build-entity-config auto {:hide-fields #{:owner}})
+        create (introspection/for-create config)]
+    (testing "every NOT NULL column is required as introspected"
+      (is (every? #(get-in config [:fields % :required]) [:number :status :owner])))
+    (testing "on create, a column with a default is not"
+      (is (false? (get-in create [:fields :status :required]))))
+    (testing "nor is a hidden field, which the form does not show"
+      (is (false? (get-in create [:fields :owner :required]))))
+    (testing "a column the create must supply still is"
+      (is (true? (get-in create [:fields :number :required]))))))

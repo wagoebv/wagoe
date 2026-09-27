@@ -4,6 +4,8 @@
 
    Pure Hiccup generators. Depends on `base` for URL and field helpers."
   (:require [wagoe.admin.core.ui.base :as base]
+            [wagoe.admin.core.forms :as forms]
+            [wagoe.admin.core.schema-introspection :as introspection]
             [wagoe.shared.ui.core.components :as ui]
             [wagoe.shared.ui.core.icons :as icons]
             [clojure.string :as str]))
@@ -279,6 +281,53 @@
             field-errors (get errors field-name)]
         (render-field-widget field-name field-value field-config field-errors display)))]])
 
+;; =============================================================================
+;; Child rows of a create form (BOU-570)
+;; =============================================================================
+
+(defn child-row
+  "One child row of a create form: the fields of `rel` (see
+   `forms/nested-relationships`) named for row `index`, and a remove button."
+  [rel index values errors & [display]]
+  (let [child-cfg (introspection/for-create (:entity-config rel))]
+    [:div.child-row {:class "child-row" :data-index (str index)}
+     [:div.form-fields {:class "form-fields"}
+      (for [field (:fields rel)]
+        (render-field-widget (keyword (forms/child-param (:entity rel) index field))
+                             (get values field)
+                             (get-in child-cfg [:fields field])
+                             (get errors field)
+                             display))]
+     [:button.button.secondary {:type "button" "hx-on:click" "this.closest('.child-row').remove()"}
+      (icons/icon :trash {:size 14})
+      [:t :admin/button-remove-row]]]))
+
+(defn- child-rows-section
+  "The rows of one has-many a parent is created with, and a button that adds
+   one through HTMX."
+  [entity-name {:keys [rel rows row-errors too-few too-many]} display]
+  (let [child   (name (:entity rel))
+        list-id (str "child-rows-" child)]
+    [:fieldset.child-rows {:class "child-rows form-section" :data-child child}
+     [:legend.form-section-title (:label rel) " "
+      [:span.form-meta-label [:t :admin/children-minimum {:n (:min rel)}]]]
+     (when too-few
+       [:div {:class "alert alert-error" :role "alert"}
+        [:t :admin/children-too-few {:label (:label too-few) :n (:min too-few) :count (:count too-few)}]])
+     (when too-many
+       [:div {:class "alert alert-error" :role "alert"}
+        [:t :admin/children-too-many {:label (:label too-many) :n (:max too-many) :count (:count too-many)}]])
+     [:div.child-rows-list {:id list-id}
+      (for [[index values] rows]
+        (child-row rel index values (get row-errors index) display))]
+     [:button.button.secondary {:type      "button"
+                                :class     "gap-2"
+                                :hx-get    (str "/web/admin/" (name entity-name) "/new/rows/" child)
+                                :hx-target (str "#" list-id)
+                                :hx-swap   "beforeend"}
+      (icons/icon :plus {:size 16})
+      [:t :admin/button-add-row {:entity (or (get-in rel [:entity-config :label]) (:label rel))}]]]))
+
 (defn entity-form
   "Render entity create/edit form.
 
@@ -296,8 +345,9 @@
    Notes:
      If :field-groups is configured, renders fields in grouped sections.
      Otherwise, renders flat list of editable fields."
-  [entity-name entity-config record errors _permissions & [cancel-url display prefill]]
-  (let [editable-fields (:editable-fields entity-config)
+  [entity-name entity-config record errors _permissions & [cancel-url display prefill nested]]
+  (let [entity-config (cond-> entity-config (nil? record) introspection/for-create)
+        editable-fields (:editable-fields entity-config)
         values (or record prefill)
         field-groups (compute-field-groups entity-config)
         primary-key (:primary-key entity-config :id)
@@ -390,7 +440,10 @@
             (let [field-config (get-in entity-config [:fields field-name])
                   field-value (get values field-name)
                   field-errors (get errors field-name)]
-              (render-field-widget field-name field-value field-config field-errors display)))])]
+              (render-field-widget field-name field-value field-config field-errors display)))])
+       (when-not is-edit?
+         (for [section nested]
+           (child-rows-section entity-name section display)))]
       [:div.form-actions {:class "form-actions justify-end border-t border-base-300 pt-4 mt-4"}
        [:button.button.primary {:class "gap-2" :type "submit"}
         (if is-edit? [:t :admin/button-update] [:t :admin/button-create])]
@@ -517,6 +570,23 @@
              entity-config
              (or field-options {})))
 
+(defn- error-summary
+  "Every error of a rejected form, by field label, above the form. A field
+   the form does not show says so: its error has nowhere else to appear
+   (BOU-570)."
+  [entity-config errors]
+  (when (seq errors)
+    (let [off-form (forms/off-form-errors entity-config errors)]
+      [:div.validation-errors {:role "alert"}
+       [:h4 [:t :admin/form-errors-heading]]
+       [:ul
+        (for [[field messages] errors
+              message (if (coll? messages) messages [messages])]
+          [:li
+           (or (get-in entity-config [:fields field :label]) (base/format-field-label field))
+           (when (contains? off-form field) (list " " [:t :admin/form-error-not-on-form]))
+           ": " (str message)])]])))
+
 (defn entity-detail-page
   "Entity detail/edit page.
 
@@ -528,7 +598,10 @@
      permissions: Permission flags
      opts: Optional map with :flash, :related-records, :display, :workflow,
            and :field-options {field [[value label] ...]}, which turns a
-           text input into a select (a foreign key's parent rows, BOU-563)
+           text input into a select (a foreign key's parent rows, BOU-563),
+           and on a create form :nested [{:rel :rows [[index values]]
+           :row-errors {index errors} :too-few {...}}], the child rows the
+           parent is created with (BOU-570)
 
    Returns:
      Hiccup page structure"
@@ -612,9 +685,9 @@
          (base/workflow-state-link workflow)])]
      (when-let [ctx (:parent-context opts)]
        (parent-context-banner ctx))
-     (when (seq errors)
-       (ui/validation-errors errors))
-     (entity-form entity-name entity-config record errors permissions list-url (:display opts) (:prefill opts))
+     (error-summary entity-config errors)
+     (entity-form entity-name entity-config record errors permissions list-url (:display opts) (:prefill opts)
+                  (:nested opts))
      (when-let [related-records (:related-records opts)]
        (for [[rel records] related-records]
          (related-records-table rel records (:display opts))))]))

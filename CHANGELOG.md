@@ -63,6 +63,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **An admin create required hidden and defaulted fields, and a 422 marked no field** (BOU-570).
+  Drop `:required false` workarounds; required textareas and selects now carry `required`.
 - **`bb ai gen-tests` wrote tests that did not compile, and `bb ai admin-entity` invented keys** (BOU-572).
   Both check before writing. Copy the new `.githooks/pre-commit`: it blocks on lint as `bb check` does.
 - **`bb setup` told you to copy `.env.example` over an existing `.env`** (BOU-573), replacing `JWT_SECRET`.
@@ -184,6 +186,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **An admin parent with a has-many `:min` is created with its first children** (BOU-570). One form,
+  one transaction; fewer than `:min` is refused. Add `:editable true` to the has-many entry.
 - **Workflow guards see the instance, and can load its entity** (BOU-571). Declare `:guards` and an
   `:entity-loader` on the workflow; old guards still get the context. Workflow config is just `{}`.
 - **The scaffolder writes admin config** (BOU-562). With the admin on, `generate` and `entity` add each

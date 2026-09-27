@@ -3,10 +3,10 @@
   (:require
    [wagoe.admin.ports :as ports]
    [wagoe.admin.core.ui :as admin-ui]
+   [wagoe.admin.core.forms :as forms]
    [wagoe.admin.core.permissions :as permissions]
    [wagoe.admin.shell.permissions :as shell-permissions]
    [wagoe.admin.shell.http.support :as support]
-   [wagoe.shared.ui.core.validation :as ui-validation]
    [clojure.tools.logging :as log]
    [ring.util.response :as ring-response]))
 
@@ -38,15 +38,116 @@
             [(:form-params request) (:body-params request) (:params request)])
       {}))
 
+(defn- log-rejected!
+  "Log a rejected form. At warn when an error is on a field the form does
+   not show: that is a config problem the user cannot fix (BOU-570)."
+  [entity-name entity-config errors]
+  (let [off-form (keys (forms/off-form-errors entity-config errors))]
+    (if (seq off-form)
+      (log/warn "admin form rejected on fields it does not show"
+                {:entity entity-name :fields (vec off-form) :errors errors})
+      (log/info "admin form rejected" {:entity entity-name :fields (vec (keys errors))}))
+    errors))
+
 (defn- rejected-create-opts
   "Page opts for a create form shown again after it failed. The values go in
    as :prefill, not as the record: a record makes it an edit form that PUTs to
    an id-less URL (BOU-533). return_to keeps a child create tied to its parent."
-  [admin-service config entity-configs entity-name request form-data]
+  [admin-service config entity-configs entity-name request form-data & [nested]]
   {:display       (support/display-options config request)
    :prefill       form-data
    :return-to     (support/safe-return-to request)
-   :field-options (support/foreign-key-options admin-service config entity-configs entity-name form-data)})
+   :field-options (support/foreign-key-options admin-service config entity-configs entity-name form-data)
+   :nested        (:sections nested)})
+
+;; =============================================================================
+;; Child rows a parent is created with (BOU-570)
+;; =============================================================================
+
+(defn- parse-child-row
+  "A filled child row as [data errors]: read with the child's config, and
+   validated as a new child whose foreign key the parent will set. Only the
+   row's own fields are read."
+  [admin-service rel zones index raw]
+  (let [entity  (:entity rel)
+        raw     (select-keys raw (map name (:fields rel)))
+        offsets (into {} (keep (fn [f]
+                                 (when-let [o (get (:offsets zones) (keyword (forms/child-param entity index f)))]
+                                   [(keyword f) o])))
+                      (keys raw))
+        [data parse-errors] (support/parse-form-params-checked raw (:entity-config rel) (assoc zones :offsets offsets))
+        result  (ports/validate-entity-data admin-service entity (assoc data (:fk rel) (random-uuid)))]
+    [data (merge (:errors result) parse-errors)]))
+
+(defn- pad-rows
+  "`rows`, with blank ones added up to `n`, so a form refused for too few
+   rows still has them to fill in."
+  [rows n]
+  (let [used (set (map first rows))
+        free (remove used (map str (range)))]
+    (into (vec rows) (map (fn [i] [i {}]) (take (- n (count rows)) free)))))
+
+(defn- parse-section
+  "One has-many's submitted rows, parsed. Two rows under one index are
+   refused on that row: merged, they would save a row nobody typed."
+  [admin-service rel child-params zones]
+  (let [filled (set (map first (forms/filled-rows rel child-params)))
+        parsed (vec (for [[index raw] (get child-params (:entity rel))]
+                      (cond
+                        (forms/duplicate-row? rel raw)
+                        {:index index :data {} :filled? true
+                         :errors {(first (:fields rel)) [[:t :admin/child-row-duplicate]]}}
+
+                        (filled index)
+                        (let [[data errors] (parse-child-row admin-service rel zones index raw)]
+                          {:index index :data data :errors errors :filled? true})
+
+                        :else {:index index :data {}})))]
+    {:rows           (map (juxt :index :data) parsed)
+     :row-errors     (into {} (keep #(when (seq (:errors %)) [(:index %) (:errors %)])) parsed)
+     :filled-indexes (mapv :index (filter :filled? parsed))
+     :children       (mapv :data (filter :filled? parsed))}))
+
+(defn- parse-nested
+  "The child rows submitted for `rels`: {:sections (for the form) :children
+   (for the service) :valid? bool}. A blank row is left out, not refused.
+   Past `forms/max-child-rows` nothing is parsed, and none is shown again."
+  [admin-service rels child-params zones]
+  (let [too-few  (forms/too-few rels child-params)
+        too-many (forms/too-many rels child-params)
+        sections (vec (for [rel rels
+                            :let [many    (get too-many (:entity rel))
+                                  section (if many
+                                            {:rows [] :row-errors {} :filled-indexes [] :children []}
+                                            (parse-section admin-service rel child-params zones))]]
+                        (-> section
+                            (update :rows pad-rows (:min rel))
+                            (assoc :rel rel
+                                   :too-few (when-not many (get too-few (:entity rel)))
+                                   :too-many many))))]
+    {:sections sections
+     :children (into {} (map (juxt (comp :entity :rel) :children)) sections)
+     :valid?   (every? #(and (empty? (:row-errors %)) (nil? (:too-few %)) (nil? (:too-many %)))
+                       sections)}))
+
+(defn- nested-refusal
+  "`nested` with a refusal from the service put where the form shows it: a
+   row the database refused, or a has-many given too few rows."
+  [nested e]
+  (let [{:keys [child errors too-few too-many]} (ex-data e)]
+    (update nested :sections
+            (fn [sections]
+              (mapv (fn [{:keys [rel filled-indexes] :as section}]
+                      (cond-> section
+                        (= (:entity child) (:entity rel))
+                        (assoc-in [:row-errors (get filled-indexes (:index child))] errors)
+
+                        (get too-few (:entity rel))
+                        (assoc :too-few (get too-few (:entity rel)))
+
+                        (get too-many (:entity rel))
+                        (assoc :too-many (get too-many (:entity rel)))))
+                    sections)))))
 
 (defn create-entity-handler
   "Handler for creating new entity.
@@ -73,10 +174,23 @@
                                                              user entity-name entity-config)
 
           [zones params] (support/form-zone-options config request (submitted-params request))
+          [params child-params] (forms/split-child-params params)
           [form-data parse-errors] (support/parse-form-params-checked params entity-config zones)
 
           ; Validate data
-          validation-result (ports/validate-entity-data admin-service entity-name form-data)]
+          validation-result (ports/validate-entity-data admin-service entity-name form-data)
+
+          ;; A parent with a :min has-many is created with its first
+          ;; children (BOU-570); without one, as it always was.
+          nested-rels (when-not (or disabled config-error)
+                        (support/nested-relationships schema-provider entity-config))
+          nested      (when (seq nested-rels)
+                        (parse-nested admin-service nested-rels child-params zones))
+          create!     (fn []
+                        (if nested
+                          (ports/create-entity-with-children admin-service entity-name form-data
+                                                             (:children nested))
+                          (ports/create-entity admin-service entity-name form-data)))]
 
       (cond
         disabled
@@ -85,15 +199,15 @@
         config-error
         config-error
 
-        (and (:valid? validation-result) (empty? parse-errors))
+        (and (:valid? validation-result) (empty? parse-errors) (:valid? nested true))
         ; Create entity and return list page
         (try
           (if-let [return-to (support/safe-return-to request)]
             ;; Created from a parent's has-many panel: go back there (BOU-491).
-            (do (ports/create-entity admin-service entity-name form-data)
+            (do (create!)
                 (-> (ring-response/response "")
                     (ring-response/header "HX-Redirect" return-to)))
-            (let [_created-entity (ports/create-entity admin-service entity-name form-data)
+            (let [_created-entity (create!)
 
                   ; Fetch list page data
                   entities (ports/list-available-entities schema-provider)
@@ -123,17 +237,21 @@
           (catch Exception e
             (let [;; A constraint the database enforced, reported on its field
                   ;; by the service (BOU-494).
-                  field-errors (when (= :validation-error (:type (ex-data e)))
-                                 (:errors (ex-data e)))
-                  _ (when-not field-errors
+                  refused? (= :validation-error (:type (ex-data e)))
+                  ;; A refused child row carries its errors on the row.
+                  field-errors (when refused?
+                                 (log-rejected! entity-name entity-config
+                                                (if (:child (ex-data e)) {} (:errors (ex-data e)))))
+                  _ (when-not refused?
                       (log/error e "Failed to create entity" {:entity entity-name}))
+                  nested (cond-> nested (and nested refused?) (nested-refusal e))
                   entities (ports/list-available-entities schema-provider)
                   entity-configs (into {} (map (fn [e] [e (ports/get-entity-config schema-provider e)])) entities)
                   permissions (permissions/get-entity-permissions user entity-name entity-config)]
               (cond->
                (support/html-response request
                                       (admin-ui/admin-layout
-                                       (admin-ui/entity-detail-page entity-name entity-config nil (or field-errors {}) permissions (rejected-create-opts admin-service config entity-configs entity-name request form-data))
+                                       (admin-ui/entity-detail-page entity-name entity-config nil (or field-errors {}) permissions (rejected-create-opts admin-service config entity-configs entity-name request form-data nested))
                                        {:user user
                                         :current-entity entity-name
                                         :entities entities
@@ -147,18 +265,21 @@
                                                 :message (or (client-safe-error-message e)
                                                              [:t :admin/flash-create-failed
                                                               {:label (:label entity-config)}])}}))
-                field-errors (assoc :status 422)))))
+                refused? (assoc :status 422)))))
 
         ; Validation errors - re-render form
         :else
         (let [entities (ports/list-available-entities schema-provider)
               entity-configs (into {} (map (fn [e] [e (ports/get-entity-config schema-provider e)])) entities)
               permissions (permissions/get-entity-permissions user entity-name entity-config)
-              errors (merge (ui-validation/explain->field-errors (:errors validation-result)) parse-errors)]
+              ;; {field [message]}, as the port returns it. Read as Malli
+              ;; explain data it came out empty: 422 with nothing marked.
+              errors (log-rejected! entity-name entity-config
+                                    (merge (:errors validation-result) parse-errors))]
 
           (-> (support/html-response request
                                      (admin-ui/admin-layout
-                                      (admin-ui/entity-detail-page entity-name entity-config nil errors permissions (rejected-create-opts admin-service config entity-configs entity-name request form-data))
+                                      (admin-ui/entity-detail-page entity-name entity-config nil errors permissions (rejected-create-opts admin-service config entity-configs entity-name request form-data nested))
                                       {:user user
                                        :current-entity entity-name
                                        :entities entities
@@ -236,7 +357,8 @@
 
         ; Validation errors - re-render form with flash inside page content
         (let [permissions (permissions/get-entity-permissions user entity-name entity-config)
-              errors      (merge (ui-validation/explain->field-errors (:errors validation-result)) parse-errors)
+              errors      (log-rejected! entity-name entity-config
+                                         (merge (:errors validation-result) parse-errors))
               ctx         (support/build-entity-detail-opts admin-service schema-provider config entity-name entity-config merged request)]
 
           (-> (support/html-response request

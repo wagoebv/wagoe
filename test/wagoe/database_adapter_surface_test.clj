@@ -291,6 +291,26 @@
                  (catch Exception _ nil))
             (close!)))))))
 
+(deftest ^:integration get-table-info-reports-a-column-default-on-every-engine
+  ;; The admin leaves a column with a default off the required fields of a
+  ;; create (BOU-570), so every engine has to say it has one.
+  (doseq [[label open] (live-backends)]
+    (testing label
+      (let [[{:keys [adapter datasource]} close!] (open)]
+        (try
+          (jdbc/execute! datasource ["DROP TABLE IF EXISTS default_probe"])
+          (jdbc/execute! datasource [(str "CREATE TABLE default_probe (id VARCHAR(64) PRIMARY KEY,"
+                                          " status VARCHAR(20) DEFAULT 'entered' NOT NULL,"
+                                          " plain VARCHAR(20) NOT NULL)")])
+          (let [by-name (into {} (map (juxt :name identity))
+                              (protocols/get-table-info adapter datasource :default_probe))]
+            (is (str/includes? (str (:default (by-name "status"))) "entered"))
+            (is (nil? (:default (by-name "plain")))))
+          (finally
+            (try (jdbc/execute! datasource ["DROP TABLE IF EXISTS default_probe"])
+                 (catch Exception _ nil))
+            (close!)))))))
+
 (deftest ^:integration column-names-come-back-lower-case-on-every-engine
   (testing "the port promises one shape, so a caller can compare without guessing"
     (doseq [[label open] (live-backends)]

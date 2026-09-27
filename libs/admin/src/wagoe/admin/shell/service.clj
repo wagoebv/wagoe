@@ -18,6 +18,8 @@
    [wagoe.core.utils.type-conversion :as type-conversion]
    [wagoe.core.utils.case-conversion :as case-conversion]
    [wagoe.admin.core.db-errors :as db-errors]
+   [wagoe.admin.core.schema-introspection :as introspection]
+   [wagoe.admin.core.forms :as forms]
    [wagoe.events.core.event :as event]
    [wagoe.events.ports :as events]
    [clojure.string :as str]
@@ -566,6 +568,85 @@
      (delete-records! db-ctx schema-provider workflows entity-name ids priors?))
    db-ctx))
 
+;; =============================================================================
+;; Creates
+;; =============================================================================
+
+(defn- insert-record!
+  "Insert `data` as a new row of `entity-config` on `conn` (a db-ctx or a
+   transaction) and return the row as read back."
+  [conn entity-config data]
+  (let [table-name    (:table-name entity-config)
+        primary-key   (:primary-key entity-config :id)
+        entity-fields (:fields entity-config)
+        ;; Only read-only fields are removed: :hide-fields are for display,
+        ;; and a request may still supply them. An empty field whose column
+        ;; has a default is left out, so the database fills it: an explicit
+        ;; NULL would not get the default (BOU-570).
+        sanitized     (into {}
+                            (remove (fn [[k v]]
+                                      (and (nil? v) (some? (get-in entity-fields [k :default-value])))))
+                            (apply dissoc data (:readonly-fields entity-config #{})))
+        now-str       (type-conversion/instant->string (Instant/now))
+        id-str        (type-conversion/uuid->string (UUID/randomUUID))
+        prepared      (cond-> (assoc sanitized :id id-str)
+                        (contains? entity-fields :created-at) (assoc :created-at now-str)
+                        (contains? entity-fields :updated-at) (assoc :updated-at now-str))
+        db-data       (case-conversion/kebab-case->snake-case-map (prepare-values-for-db prepared))]
+    ;; Without RETURNING, for H2.
+    (try
+      (db/execute-one! conn {:insert-into table-name :values [db-data]})
+      (catch Exception e
+        (throw (or (not-null-violation e) (foreign-key-violation e) e))))
+    (db/execute-one! conn {:select [:*] :from [table-name] :where [:= primary-key id-str]})))
+
+(defn- nested-relationships
+  "The has-many entries of `entity-config` created with it, as
+   `forms/nested-relationships` finds them."
+  [schema-provider entity-config]
+  (forms/nested-relationships entity-config
+                              (into {} (for [rel (:has-many entity-config)]
+                                         [(:entity rel) (child-config schema-provider rel)]))))
+
+(defn- assert-children-acceptable!
+  "Refuse children of an entity the parent does not create them for, and a
+   has-many given fewer rows than its :min. Checked before the operation, so
+   a refusal is not logged as a failed database operation."
+  [entity-name rels children]
+  (let [by-entity (into {} (map (juxt :entity identity)) rels)
+        unknown   (vec (remove by-entity (keys children)))
+        short     (into {} (for [rel  rels
+                                 :let [n (count (get children (:entity rel)))]
+                                 :when (< n (:min rel))]
+                             [(:entity rel) {:min (:min rel) :count n :label (:label rel)}]))]
+    (when (seq unknown)
+      (throw (ex-info (str "Not created with " (name entity-name) ": " (str/join ", " (map name unknown)))
+                      {:type :validation-error :errors {} :entities unknown})))
+    (when (seq short)
+      (throw (ex-info (str/join "; " (for [[_ {:keys [label min count]}] short]
+                                       (str label ": at least " min " required, " count " given")))
+                      {:type :validation-error :errors {} :too-few short})))
+    (when-let [many (not-empty (forms/too-many rels children))]
+      (throw (ex-info (str/join "; " (for [[_ {:keys [label max count]}] many]
+                                       (str label ": at most " max " allowed, " count " given")))
+                      {:type :validation-error :errors {} :too-many many})))
+    by-entity))
+
+(defn- insert-children!
+  "Insert each row of `children` on `tx` with `parent-id` as its foreign key.
+   A refused row says which it was."
+  [tx by-entity parent-id children]
+  (vec (for [[entity rows] children
+             [index row]   (map-indexed vector rows)
+             :let [{:keys [entity-config fk]} (by-entity entity)]]
+         {:entity entity
+          :record (try
+                    (insert-record! tx entity-config (assoc row fk parent-id))
+                    (catch clojure.lang.ExceptionInfo e
+                      (throw (ex-info (ex-message e)
+                                      (assoc (ex-data e) :child {:entity entity :index index})
+                                      e))))})))
+
 (defrecord AdminService [db-ctx schema-provider logger error-reporter config workflows]
   ports/IAdminService
 
@@ -684,47 +765,26 @@
      :admin-create-entity
      {:entity (name entity-name)}
      (fn [{:keys [_params]}]
-       (let [entity-config (ports/get-entity-config schema-provider entity-name)
-             table-name (:table-name entity-config)
-             primary-key (:primary-key entity-config :id)
-             readonly-fields (:readonly-fields entity-config #{})
-
-              ; Remove only readonly fields from input (not hide-fields!)
-              ; hide-fields are for display only, data can still be provided
-             sanitized-data (apply dissoc data readonly-fields)
-
-               ; Add generated ID and timestamps - only set columns that exist in the table
-             now-str (type-conversion/instant->string (Instant/now))
-             generated-id (UUID/randomUUID)
-             id-str (type-conversion/uuid->string generated-id)
-             entity-fields (:fields entity-config)
-             prepared-data (cond-> (assoc sanitized-data :id id-str)
-                             (contains? entity-fields :created-at) (assoc :created-at now-str)
-                             (contains? entity-fields :updated-at) (assoc :updated-at now-str))
-
-              ; Convert all typed values (UUID, Instant) to strings for database
-             db-ready-data (prepare-values-for-db prepared-data)
-
-              ; Convert kebab-case keys to snake_case for database
-             db-data (case-conversion/kebab-case->snake-case-map db-ready-data)
-
-              ; Insert without RETURNING (H2 compatibility)
-             insert-query {:insert-into table-name
-                           :values [db-data]}
-             _ (try
-                 (db/execute-one! db-ctx insert-query)
-                 (catch Exception e
-                   (throw (or (not-null-violation e) (foreign-key-violation e) e))))
-
-              ; Fetch the created record
-             select-query {:select [:*]
-                           :from [table-name]
-                           :where [:= primary-key id-str]}
-             db-result (db/execute-one! db-ctx select-query)]
-
-          ; Keys arrive kebab-case from the execution layer builder-fn
-         db-result))
+       (insert-record! db-ctx (ports/get-entity-config schema-provider entity-name) data))
      db-ctx))
+
+  (create-entity-with-children [_ entity-name data children]
+    (let [entity-config (ports/get-entity-config schema-provider entity-name)
+          by-entity     (assert-children-acceptable! entity-name
+                                                     (nested-relationships schema-provider entity-config)
+                                                     children)]
+      (persist-interceptors/execute-persistence-operation
+       :admin-create-entity-with-children
+       {:entity (name entity-name)}
+       (fn [{:keys [_params]}]
+         (db/with-transaction* db-ctx
+           (fn [tx]
+             (let [parent (insert-record! tx entity-config data)]
+               {:record   parent
+                :children (insert-children! tx by-entity
+                                            (get parent (:primary-key entity-config :id))
+                                            children)}))))
+       db-ctx)))
 
   (update-entity [_ entity-name id data]
     (persist-interceptors/execute-persistence-operation
@@ -901,6 +961,11 @@
     ; Week 1: Simple validation - check required fields present
     ; Week 2+: Full Malli schema validation
     (let [entity-config (ports/get-entity-config schema-provider entity-name)
+          ;; Without its primary key the record is one a create is about to
+          ;; write, and the database fills what it has a default for (BOU-570).
+          entity-config (cond-> entity-config
+                          (nil? (get data (:primary-key entity-config :id)))
+                          introspection/for-create)
           fields (:fields entity-config)
           readonly-fields (set (:readonly-fields entity-config))
           errors (reduce-kv
@@ -1051,6 +1116,15 @@
       (publish-lifecycle! publisher schema-provider :admin/entity-created
                           entity-name (:id record) record)
       record))
+
+  (create-entity-with-children [_ entity-name data children]
+    (let [{:keys [record] :as created} (ports/create-entity-with-children inner entity-name data children)]
+      (publish-lifecycle! publisher schema-provider :admin/entity-created
+                          entity-name (:id record) record)
+      (doseq [{child :entity child-record :record} (:children created)]
+        (publish-lifecycle! publisher schema-provider :admin/entity-created
+                            child (:id child-record) child-record))
+      created))
 
   (update-entity [_ entity-name id data]
     (let [prior  (ports/get-entity inner entity-name id)

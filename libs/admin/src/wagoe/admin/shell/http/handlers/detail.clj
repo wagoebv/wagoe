@@ -105,7 +105,10 @@
 
               ; Get permissions
                permissions (permissions/get-entity-permissions user entity-name entity-config)
-               prefill     (support/foreign-key-prefill entity-name entity-configs (:query-params request))]
+               prefill     (support/foreign-key-prefill entity-name entity-configs (:query-params request))
+               ;; :min blank rows of each has-many created with it (BOU-570).
+               nested      (mapv (fn [rel] {:rel rel :rows (mapv (fn [i] [(str i) {}]) (range (:min rel)))})
+                                 (support/nested-relationships schema-provider entity-config))]
            (support/html-response request
                                   (admin-ui/admin-layout
                                    (admin-ui/entity-detail-page entity-name entity-config nil {} permissions
@@ -113,6 +116,7 @@
                                                                 ;; A parent's "New" link (BOU-491).
                                                                  :return-to (support/safe-return-to request)
                                                                  :prefill   prefill
+                                                                 :nested    nested
                                                                  :field-options (support/foreign-key-options
                                                                                  admin-service config entity-configs
                                                                                  entity-name prefill)})
@@ -121,3 +125,32 @@
                                     :entities entities
                                     :entity-configs entity-configs
                                     :logo-url (:logo-url config)}))))))))
+
+(defn- row-index
+  "An index for an added child row: random, so replicas do not hand out the
+   same one, and at most nine digits, which the parser reads. A collision is
+   refused as a duplicate row."
+  []
+  (.nextLong (java.util.concurrent.ThreadLocalRandom/current) 1 1000000000))
+
+(defn new-child-row-handler
+  "GET /:entity/new/rows/:child — one blank child row for the create form of
+   `:entity`, which HTMX appends (BOU-570)."
+  [_admin-service schema-provider config]
+  (fn [request]
+    (let [user        (support/require-admin-user! request)
+          entity-name (support/get-entity-name request)
+          _           (when-not (ports/validate-entity-exists schema-provider entity-name)
+                        (throw (ex-info "Entity not allowed"
+                                        {:type :entity-not-allowed :entity-name entity-name})))
+          entity-config (ports/get-entity-config schema-provider entity-name)
+          _           (shell-permissions/assert-can-create-entity! user entity-name entity-config)
+          child       (keyword (get-in request [:path-params :child]))
+          rel         (some #(when (= child (:entity %)) %)
+                            (support/nested-relationships schema-provider entity-config))]
+      (when-not rel
+        (throw (ex-info "Not a has-many created with this entity"
+                        {:type :not-found :entity-name entity-name :child child})))
+      (support/html-response request
+                             (admin-ui/child-row rel (row-index)
+                                                 {} nil (support/display-options config request))))))

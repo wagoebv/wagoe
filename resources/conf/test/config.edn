@@ -74,9 +74,23 @@
    :base-path        "/web/admin"
    :require-role     :admin
    :entity-discovery {:mode      :allowlist
-                      :allowlist #{:users :tenants}}
+                      :allowlist #{:users :tenants :e2e-orders :e2e-order-lines}}
    :entities         #merge [#include "admin/users.edn"
-                             #include "admin/tenants.edn"]
+                             #include "admin/tenants.edn"
+                             ;; e2e fixture: an order is created with at least one
+                             ;; line (BOU-570). wagoe.test-support.shell.reset
+                             ;; creates the tables.
+                             {:e2e-orders      {:label       "E2E Orders"
+                                                :hide-fields #{:status}
+                                                :has-many    [{:entity      :e2e-order-lines
+                                                               :table       :e2e_order_lines
+                                                               :foreign-key :e2e-order-id
+                                                               :label       "Lines"
+                                                               :fields      [:description :qty]
+                                                               :editable    true
+                                                               :on-delete   :cascade
+                                                               :min         1}]}
+                              :e2e-order-lines {:label "Order line"}}]
    :pagination       {:default-page-size 20
                       :max-page-size     200}}
 
