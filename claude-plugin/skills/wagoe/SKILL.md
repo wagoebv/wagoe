@@ -41,11 +41,12 @@ An `enum` must name its values: `status:enum:values=draft,sent,paid`.
 1. NEVER hand-write a new module skeleton. Scaffold it first, then edit the
    generated code.
 2. After `bb scaffold generate`, run `bb scaffold integrate <module>`. It
-   writes nothing — it prints the Integrant registration you must add by hand.
+   writes the module's key into every `resources/conf/<profile>/config.edn`;
+   that is the whole registration. With the admin UI on, `generate` and
+   `entity` also write each entity's admin config.
    `deps.edn` and `tests.edn` need no changes; the generated paths cover them.
    Then run `clojure -M:migrate up` and the module's tests.
-   `bb scaffold field` likewise only writes the migration: add the field to
-   schema.clj and to both persistence transforms yourself.
+   `bb scaffold field` writes the migration and adds the field to schema.clj.
 3. Run `bb check` before committing — FC/IS violations (`core/` importing
    shell, doing I/O, or logging) fail CI.
 4. AI commands (`bb scaffold ai`, `bb ai *`, `bb setup ai`) need a provider:

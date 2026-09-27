@@ -138,7 +138,8 @@
       (spit (conf env) "{:active\n {:wagoe/settings {}}\n :inactive {}}\n"))
     (is (true? (quickstart/inject-sample-module-config (str root))))
     (doseq [env ["dev" "test" "prod"]]
-      (is (= :already-present (config-edn/key-status (slurp (conf env)) ":wagoe/tasks")) env))))
+      (is (= :already-present (config-edn/key-status (slurp (conf env)) ":wagoe/tasks")) env)
+      (is (not (str/includes? (slurp (conf env)) ":base-path")) "nothing reads it (BOU-562)"))))
 
 ;; =============================================================================
 ;; The closing banner (BOU-545)

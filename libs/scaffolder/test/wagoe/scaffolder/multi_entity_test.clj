@@ -14,6 +14,7 @@
             [next.jdbc :as jdbc]
             [reitit.core :as r]
             [wagoe.platform.shell.adapters.database.factory :as db-factory]
+            [wagoe.platform.shell.database.migrations :as migrations]
             [wagoe.platform.shell.http.reitit-router :as reitit-router]
             [wagoe.scaffolder.cli :as cli]
             [wagoe.scaffolder.ports :as ports]
@@ -75,6 +76,20 @@
       (jdbc/execute! ds [s]))
     ds))
 
+(defn- with-project-migrations
+  "Call `f` with migrations read from `dir`'s migrations/ alone. The generated
+   repository tests migrate from `migrations/` in the working directory, which
+   here is not the generated project. Copied under target/, because migratus
+   takes only a relative path."
+  [dir f]
+  (let [copy (str "target/migrations-" (System/nanoTime))]
+    (doseq [^java.io.File m (.listFiles (io/file dir "migrations"))]
+      (io/make-parents (io/file copy (.getName m)))
+      (io/copy m (io/file copy (.getName m))))
+    (with-redefs [migrations/discover-migration-dirs (constantly [copy])
+                  migrations/refuse-shadowed-migration-dirs! (constantly nil)]
+      (f))))
+
 (defn- load-and-test!
   "Load every generated source and test file under `dir`, then run the
    generated tests. Returns the clojure.test summary."
@@ -101,8 +116,9 @@
     (let [test-nss (for [[path src] files
                          :when (str/starts-with? path "test/")]
                      (symbol (second (re-find #"^\(ns (\S+)" src))))]
-      (binding [t/*test-out* (java.io.StringWriter.)]
-        (apply t/run-tests test-nss)))))
+      (with-project-migrations dir
+        #(binding [t/*test-out* (java.io.StringWriter.)]
+           (apply t/run-tests test-nss))))))
 
 ;; =============================================================================
 ;; bb scaffold entity
@@ -499,6 +515,47 @@
       (is (= "n/a" (:note item)) "a further entity")
       (is (= inv ((at "ports" 'get-invoice) invs (:id inv))) "what create returns is what get returns"))))
 
+(deftest ^:integration an-enum-field-round-trips
+  ;; HoneySQL renders a keyword value as a column name, so POST answered 500
+  ;; with `no such column: entered` (BOU-562).
+  (let [dir (temp-dir)
+        r   (ports/generate-module svc {:module-name "billing" :base-ns "bou562e"
+                                        :entities    [{:name "Invoice"
+                                                       :fields [{:name :number :type :string}
+                                                                {:name :status :type :enum
+                                                                 :enum-values [:entered :paid]}]}
+                                                      ;; A required column whose value the
+                                                      ;; test cannot compare still needs one.
+                                                      (update line-item :fields conj
+                                                              {:name :meta :type :json})]
+                                        :output-dir  (.getPath dir)})]
+    (is (:success r) (pr-str (:errors r)))
+    (let [{:keys [fail error]} (load-and-test! dir)]
+      (is (= 0 fail error)))
+    (testing "the generated repository tests create a row and read it back"
+      (doseq [repo-test ['bou562e.billing.shell.invoice-repository-test
+                         'bou562e.billing.shell.invoice-line-item-repository-test]]
+        (let [{:keys [pass fail error]} (with-project-migrations dir
+                                          #(binding [t/*test-out* (java.io.StringWriter.)]
+                                             (t/run-tests repo-test)))]
+          (is (<= 3 pass) (str repo-test))
+          (is (= 0 fail error) (str repo-test)))))
+    (testing "the API stores it and answers with it"
+      (let [ctx  (db-factory/db-context {:adapter :h2
+                                         :database-path (str "mem:bou562e" (System/nanoTime) ";DB_CLOSE_DELAY=-1")
+                                         :pool {:minimum-idle 1 :maximum-pool-size 2}})
+            _    (doseq [[path sql] (files-under dir)
+                         :when (str/ends-with? path ".up.sql")
+                         st (statements sql)]
+                   (jdbc/execute! (:datasource ctx) [st]))
+            at   (fn [n s] @(ns-resolve (symbol (str "bou562e.billing." n)) s))
+            svc  ((at "shell.service" 'create-service) ((at "shell.persistence" 'create-repository) ctx))
+            call (http-caller ((at "shell.http" 'api-routes) svc))
+            resp (call :post "/invoices" {:number "A-1" :status "entered"})]
+        (is (= 201 (:status resp)) (pr-str (:body resp)))
+        (is (= "entered" (get-in resp [:body :status])))
+        (is (= :entered (:status ((at "ports" 'get-invoice) svc (parse-uuid (get-in resp [:body :id]))))))))))
+
 (deftest ^:integration a-module-without-http-gets-no-entity-api
   (let [dir (temp-dir)
         r   (ports/generate-module svc {:module-name "billing" :base-ns "bou497nh"
@@ -845,6 +902,24 @@
       (is (warned? (add "InvoiceLineItem" {:name :due :type :date}) line-p)))
     (testing "a field that is not a date: no warning"
       (is (not (warned? (add "Invoice" {:name :sku :type :string}) first-p))))))
+
+(deftest ^:unit an-enum-field-added-later-names-the-set-to-extend
+  ;; generate writes enum-fields from the fields it knows; one added later is
+  ;; not in it, and would be stored as a keyword (BOU-562).
+  (let [dir  (invoice-module! (temp-dir) "bou562add")
+        p    (io/file dir "src/bou562add/billing/shell/persistence.clj")
+        r    (ports/add-field svc {:module-name "billing" :base-ns "bou562add" :entity "Invoice"
+                                   :field {:name :status :type :enum :enum-values [:a :b]}
+                                   :output-dir (.getPath dir) :dry-run true})]
+    (is (some #(and (str/includes? % ":status") (str/includes? % "enum-fields")
+                    (str/includes? % (.getPath p)))
+              (:next-steps r))
+        (pr-str (:next-steps r)))
+    (testing "a field that is not an enum needs nothing in persistence"
+      (is (not-any? #(str/includes? % "persistence")
+                    (:next-steps (ports/add-field svc {:module-name "billing" :base-ns "bou562add"
+                                                       :entity "Invoice" :field {:name :sku :type :string}
+                                                       :output-dir (.getPath dir) :dry-run true})))))))
 
 ;; =============================================================================
 ;; The generated web page requires a signed-in user too (BOU-539 review)

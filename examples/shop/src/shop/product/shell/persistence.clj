@@ -13,8 +13,17 @@
         (instance? LocalDate v) (str v)
         :else v))
 
+(def ^:private enum-fields
+  "Keywords in Clojure, strings in the database."
+  #{})
+
+(defn- ->row [entity]
+  (reduce (fn [m k] (cond-> m (keyword? (get m k)) (update k name))) entity enum-fields))
+
 (defn- ->entity [row]
-  (some-> row (update-vals date->iso)))
+  (some-> row
+          (update-vals date->iso)
+          (as-> r (reduce (fn [m k] (cond-> m (string? (get m k)) (update k keyword))) r enum-fields))))
 
 (defn- missing-reference?
   "Whether the database refused a reference to a row that does not exist:
@@ -41,7 +50,7 @@
 (defrecord DatabaseProductRepository [db-ctx]
   ports/IProductRepository
   (create [_this entity]
-    (write! db-ctx {:insert-into :products :values [entity]})
+    (write! db-ctx {:insert-into :products :values [(->row entity)]})
     (select-by-id db-ctx (:id entity)))
   (find-by-id [_this id]
     (select-by-id db-ctx id))
@@ -56,7 +65,7 @@
       (when (empty? changes)
         (throw (ex-info "Nothing to update" {:type :validation-error :id (:id entity)})))
       (write! db-ctx {:update :products
-                      :set (assoc changes :updated-at (Instant/now))
+                      :set (->row (assoc changes :updated-at (Instant/now)))
                       :where [:= :id (:id entity)]})
       (select-by-id db-ctx (:id entity))))
   (delete [_this id]

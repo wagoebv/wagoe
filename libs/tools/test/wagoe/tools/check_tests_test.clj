@@ -418,3 +418,44 @@
               "x.clj"
               "(deftest ^:wagoe/allow-placeholder stub (todo))(is true)")]
     (is (= 1 (count hits)) "the adjacent (is true) is a neighbour, not exempt content")))
+
+(deftest ^:unit a-testing-block-without-an-assertion-is-a-placeholder
+  ;; The scaffolder generated one: a `testing` holding only a comment, next to
+  ;; one that asserted, so the deftest passed the whole-test rule (BOU-562).
+  (testing "an empty testing block is reported at the block"
+    (is (= [3] (map :line (ct/scan-content-structural
+                           "x.clj"
+                           "(deftest ^:unit t\n  (testing \"a\" (is (pos? (f))))\n  (testing \"b\"\n    ;; todo\n    ))")))))
+  (testing "a testing block that only sets up is reported"
+    (is (= 1 (count (ct/scan-content-structural
+                     "x.clj" "(deftest t (is (pos? (f))) (testing \"b\" (setup!)))")))))
+  (testing "a testing block that asserts, directly or nested, is not"
+    (is (empty? (ct/scan-content-structural
+                 "x.clj" "(deftest t (testing \"a\" (let [x (f)] (testing \"b\" (is (pos? x))))))"))))
+  (testing "a testing block asserting through a helper defined in the file is not"
+    (is (empty? (ct/scan-content-structural
+                 "x.clj" "(defn- check [x] (is (pos? x)))\n(deftest t (is (pos? (g))) (testing \"a\" (check (f))))"))))
+  (testing "a testing block asserting through a let-bound helper is not"
+    (is (empty? (ct/scan-content-structural
+                 "x.clj" "(deftest t (let [check (fn [x] (is (pos? x)))] (testing \"a\" (check (f)))))"))))
+  (testing "an assert-*/expect-* helper from another namespace asserts"
+    (is (empty? (ct/scan-content-structural
+                 "x.clj" "(deftest t (is (pos? 1)) (testing \"a\" (h/assert-valid (f))) (testing \"b\" (h/expect-status 200 (f))))"))))
+  (testing "a same-named local fn that asserts nothing does not"
+    (is (= 1 (count (ct/scan-content-structural
+                     "x.clj" "(defn- assert-valid [x] x)\n(deftest t (is (pos? 1)) (testing \"a\" (assert-valid (f))))")))))
+  (testing "a helper asserting through another helper counts"
+    (is (empty? (ct/scan-content-structural
+                 "x.clj" (str "(defn- a [x] (is (pos? x)))\n(defn- b [x] (a x))\n(defn- c [x] (b x))\n"
+                              "(deftest t (is (pos? 1)) (testing \"a\" (c 1)))")))))
+  (testing "def + fn and defmacro helpers count"
+    (is (empty? (ct/scan-content-structural
+                 "x.clj" "(def check (fn [x] (is (pos? x))))\n(deftest t (is (pos? 1)) (testing \"a\" (check 1)))")))
+    (is (empty? (ct/scan-content-structural
+                 "x.clj" "(defmacro check [x] `(is ~x))\n(deftest t (is (pos? 1)) (testing \"a\" (check 1)))"))))
+  (testing "^:wagoe/allow-placeholder exempts one testing block"
+    (is (empty? (ct/scan-content-structural
+                 "x.clj" "(deftest t (is (pos? 1)) ^:wagoe/allow-placeholder (testing \"later\" (setup!)))"))))
+  (testing "a testing block asserting through a named helper is not"
+    (is (empty? (ct/scan-content-structural
+                 "x.clj" "(deftest t (testing \"a\" (snapshot-io/check-snapshot! :k (f))))")))))

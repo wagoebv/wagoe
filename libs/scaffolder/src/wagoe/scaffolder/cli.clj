@@ -414,7 +414,7 @@
   ;; The old "[:active :wagoe/settings :modules]" line named a path nothing
   ;; reads (BOU-309).
   ["Review the generated files"
-   "Print the config it needs: bb scaffold integrate <module>"])
+   "Write its config key: bb scaffold integrate <module>"])
 
 (defn- numbered [steps]
   (str/join "\n" (map-indexed #(format "  %d. %s" (inc %1) %2) steps)))
