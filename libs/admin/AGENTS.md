@@ -198,10 +198,15 @@ Example subscriber that starts a workflow: see "Lifecycle Events" in
 - **Hard delete is the default.** A `deleted_at` column no longer switches soft
   delete on; set `:soft-delete true`. `parse-table-metadata` always answers
   `:soft-delete false`.
-- **Children follow the parent** (`delete-tree!` in `shell/service.clj`), over
-  every `:has-many`, detected or configured, recursively, in one transaction.
-  Hard: children are deleted first, so no `ON DELETE CASCADE` is needed. Soft:
-  children with a `deleted_at` column get one; children without are left.
+- **Configured children follow the parent** (`delete-tree!` in
+  `shell/service.clj`), recursively, in one transaction. Hard: children are
+  deleted first, so no `ON DELETE CASCADE` is needed. Soft: children with a
+  `deleted_at` column get one; children without are left.
+- **Detected children restrict.** A has-many found only from a foreign key
+  (`:detected true`) refuses the delete while it has live rows: `:conflict`,
+  409, naming the child and the count. Users are such a child of tenants, and
+  a user can belong to several. `:on-delete :cascade | :restrict` on a has-many
+  entry overrides either default.
 - **`:min` on a has-many** refuses a delete or bulk delete that would leave a
   parent with fewer children: `:type :conflict`, and the delete handlers answer
   409 with an error toast. It is checked before the delete, outside its

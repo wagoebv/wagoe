@@ -49,8 +49,8 @@ for what is public API, what is internal, and how deprecations are announced.
   A script driving the wizard must pass flags: `bb setup --database sqlite`.
 - **`bb setup` in an existing project creates no missing config file** (BOU-404). Pass `--prod true`
   to have it write `resources/conf/prod/config.edn`.
-- **Admin hard-deletes unless `:soft-delete true`, and takes has-many children with it** (BOU-563).
-  A `deleted_at` column no longer switches soft delete on; set the key where you relied on that.
+- **Admin hard-deletes unless `:soft-delete true`; configured children follow, detected ones refuse** (BOU-563).
+  Set `:soft-delete true` where you relied on `deleted_at`, and `:on-delete` on a has-many to choose.
 - **An unknown or misplaced admin entity-config key stops startup** (BOU-563). The error names
   the path; move or remove the key.
 

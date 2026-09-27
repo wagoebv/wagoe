@@ -13,7 +13,8 @@
             [wagoe.platform.database :as db]
             [wagoe.platform.shell.adapters.database.factory :as db-factory]
             [wagoe.shared.ui.core.components :as ui-components]
-            [wagoe.tenant.shell.persistence :as tenant-persistence]))
+            [wagoe.tenant.shell.persistence :as tenant-persistence]
+            [wagoe.user.shell.persistence :as user-persistence]))
 
 (def ^:private admin-user
   {:id #uuid "00000000-0000-0000-0000-000000000001" :email "admin@example.com"
@@ -35,16 +36,19 @@
     (catch clojure.lang.ExceptionInfo e
       {:thrown (:type (ex-data e))})))
 
-(defn- with-admin [profile f]
-  (let [ctx (db-factory/db-context {:adapter       :h2
+(defn- with-admin [profile f & [allowlist]]
+  (let [allowlist (or allowlist #{:tenants})
+        ctx (db-factory/db-context {:adapter       :h2
                                     :database-path (str "mem:admin_tenants_" (name profile) ";DB_CLOSE_DELAY=-1")})]
     (try
       (tenant-persistence/initialize-tenant-schema! ctx)
+      (when (contains? allowlist :users)
+        (user-persistence/initialize-user-schema! ctx))
       (let [entities (-> (config/load-config {:profile profile})
                          (get-in [:active :wagoe/admin :entities])
-                         (select-keys [:tenants]))
+                         (select-keys allowlist))
             cfg      {:base-path        "/web/admin"
-                      :entity-discovery {:mode :allowlist :allowlist #{:tenants}}
+                      :entity-discovery {:mode :allowlist :allowlist allowlist}
                       :entities         entities}
             provider (schema-repo/create-schema-repository ctx cfg)
             svc      (service/create-admin-service ctx provider nil nil cfg)
@@ -91,3 +95,31 @@
                     (is (= 200 status))
                     (is (str/includes? (str body) "acme"))
                     (is (not (str/includes? (str body) "/web/admin/tenants/new")))))))))))))
+
+(deftest ^:integration deleting-a-tenant-its-users-reference-is-refused
+  ;; Users are a detected child of tenants, and a user can belong to more than
+  ;; one: a delete must not take them with it. Detected children restrict
+  ;; (BOU-563).
+  (doseq [profile [:dev :test]]
+    (testing (str profile)
+      (with-admin profile
+        (fn [ctx app]
+          (let [tenant (str (random-uuid))
+                user   (str (random-uuid))
+                now    (str (java.time.Instant/now))]
+            (db/execute-update! ctx {:insert-into :tenants
+                                     :values [{:id tenant :slug "acme" :name "Acme"
+                                               :schema-name "tenant_acme" :status "active" :created-at now}]})
+            (db/execute-update! ctx {:insert-into :auth_users
+                                     :values [{:id user :email "a@acme.test" :password-hash "x"
+                                               :active true :created-at now}]})
+            (db/execute-update! ctx {:insert-into :users
+                                     :values [{:id user :tenant-id tenant :name "Ada" :role "user"
+                                               :created-at now}]})
+            (let [resp (request! app :delete (str "/web/admin/tenants/" tenant))]
+              (is (= 409 (:status resp)))
+              (is (str/includes? (str (get-in resp [:headers "HX-Trigger"])) "1 Users")))
+            (is (nil? (:deleted-at (db/execute-one! ctx {:select [:deleted-at] :from [:tenants] :where [:= :id tenant]}))))
+            (is (nil? (:deleted-at (db/execute-one! ctx {:select [:deleted-at] :from [:auth_users] :where [:= :id user]}))))
+            (is (= tenant (str (:tenant-id (db/execute-one! ctx {:select [:tenant-id] :from [:users] :where [:= :id user]})))))))
+        #{:tenants :users}))))

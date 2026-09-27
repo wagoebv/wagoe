@@ -907,7 +907,10 @@
             :label       (:label cfg)
             ;; The key and the parent are already on the page.
             :fields      (vec (remove #{fk (:primary-key cfg :id)} (:list-fields cfg)))
-            :editable    false}))))
+            :editable    false
+            ;; A delete of the parent is refused while these exist, rather
+            ;; than taking rows nobody configured as children (BOU-563).
+            :detected    true}))))
 
 (defn with-inverse-relationships
   "`entity-config` with detected has-many merged into `:has-many` (the key

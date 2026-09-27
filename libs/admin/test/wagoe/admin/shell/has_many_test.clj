@@ -132,7 +132,7 @@
     (let [sp (schema-repo/create-schema-repository
               (:db @sys) (update-in config [:entities :hm-orders] dissoc :has-many))]
       (is (= [{:entity :hm-items :table :hm_items :foreign-key :hm-order-id
-               :label "Items" :fields [:sku] :editable false}]
+               :label "Items" :fields [:sku] :editable false :detected true}]
              (:has-many (ports/get-entity-config sp :hm-orders))))))
 
   (testing "the explicit entry wins over the detected one"

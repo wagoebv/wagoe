@@ -198,7 +198,8 @@ This is the full schema for a single entity config file. All keys are optional u
     :label       "Order Items"         ; Section heading
     :fields      [:product-name :quantity :total-cents]  ; Columns to show
     :editable    true                  ; false = read-only inline table
-    :min         1}]                   ; refuse to delete the last child
+    :min         1                     ; refuse to delete the last child
+    :on-delete   :cascade}]            ; default for a configured has-many; or :restrict
 
   ;; For has-many child entities: show parent info at top of child detail page.
   ;; (Set this on the CHILD entity, not the parent.)
@@ -318,7 +319,9 @@ When `:soft-delete true` is set on an entity:
 
 When `:soft-delete false` (the default), delete is permanent (`DELETE FROM …`). A `deleted_at` column does not change that; the config does.
 
-Children follow their parent, over every has-many, configured or detected, in one transaction. A hard delete removes them first, so the foreign key needs no `ON DELETE CASCADE`. A soft delete sets `deleted_at` on the children that have the column and leaves the others.
+Children of a configured has-many follow their parent, in one transaction. A hard delete removes them first, so the foreign key needs no `ON DELETE CASCADE`. A soft delete sets `deleted_at` on the children that have the column and leaves the others.
+
+A has-many that is only detected restricts instead: while it has rows, deleting the parent is refused with a 409 that names the child and how many there are. Nobody said those rows belong to the parent, and they may not (a user of several tenants). Set `:on-delete :cascade` or `:on-delete :restrict` on a has-many entry to choose.
 
 For entities using `:query-overrides`, set `:soft-delete-table` to tell the service which table to `UPDATE` on delete (defaults to the primary table in `:from`).
 

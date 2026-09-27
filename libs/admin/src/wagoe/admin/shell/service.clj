@@ -411,6 +411,31 @@
                        :parent-id   parent-id
                        :min         (:min rel)})))))
 
+(defn- on-delete
+  "What a delete of the parent does to these children. A configured has-many
+   cascades; a detected one restricts, since nobody said its rows belong to
+   the parent (users of a tenant). `:on-delete` overrides either."
+  [relationship]
+  (or (:on-delete relationship) (if (:detected relationship) :restrict :cascade)))
+
+(defn- assert-unrestricted!
+  "Refuse to delete `ids` of `entity-name` while a restricting has-many has
+   live children, naming the child and how many."
+  [db-ctx schema-provider entity-name ids]
+  (let [cfg (ports/get-entity-config schema-provider entity-name)]
+    (doseq [rel   (:has-many cfg)
+            :when (= :restrict (on-delete rel))
+            :let  [n (reduce + (for [id ids
+                                     :let [{:keys [query]} (related-query schema-provider (str id) rel)]]
+                                 (:total (db/execute-one! db-ctx (assoc query :select [[:%count.* :total]])) 0)))]
+            :when (pos? n)]
+      (throw (ex-info (str "Cannot delete " (:label cfg (name entity-name)) ": "
+                           n " " (:label rel (name (:entity rel))) " still refer to it")
+                      {:type        :conflict
+                       :entity-name entity-name
+                       :child       (:entity rel)
+                       :count       n})))))
+
 (defn- soft-deletable? [entity-config]
   (or (:soft-delete entity-config false) (contains? (:fields entity-config) :deleted-at)))
 
@@ -441,10 +466,11 @@
       (pos? (update! soft-delete-table (cond-> {:deleted-at now-str} has-active? (assoc :active false)))))))
 
 (defn- delete-tree!
-  "Delete `id` of `entity-name` and, first, its has-many children, which
-   follow the parent: removed with a hard delete, given a deleted_at with a
-   soft one. A child with no deleted_at column is left as it is by a soft
-   delete, since its parent row stays. Returns the [entity-name id] removed."
+  "Delete `id` of `entity-name` and, first, its cascading has-many children,
+   which follow the parent: removed with a hard delete, given a deleted_at with
+   a soft one. A restricting has-many with live children refuses it. A soft
+   delete leaves a child with no deleted_at column as it is, since its parent
+   row stays. Returns the [entity-name id] removed."
   [tx schema-provider entity-name id soft? now-str seen]
   (let [cfg    (ports/get-entity-config schema-provider entity-name)
         id-str (str id)]
@@ -452,6 +478,7 @@
       []
       (do
         (vswap! seen conj [entity-name id-str])
+        (assert-unrestricted! tx schema-provider entity-name [id-str])
         (let [children (doall
                         (mapcat (fn [rel]
                                   (let [{:keys [child-cfg query id-column]}
@@ -467,7 +494,7 @@
                                           [])
 
                                       :else [])))
-                                (:has-many cfg)))]
+                                (filter #(= :cascade (on-delete %)) (:has-many cfg))))]
           (if (delete-row! tx cfg id-str soft? now-str)
             (conj (vec children) [entity-name id-str])
             children))))))
@@ -814,6 +841,7 @@
     ;; refusal is not logged as a failed database operation.
     (check-minimums! db-ctx schema-provider entity-name
                      (live-records db-ctx schema-provider entity-name [id]))
+    (assert-unrestricted! db-ctx schema-provider entity-name [id])
     (persist-interceptors/execute-persistence-operation
      :admin-delete-entity
      {:entity (name entity-name) :id id}
@@ -867,6 +895,7 @@
   (bulk-delete-entities [_ entity-name ids]
     (check-minimums! db-ctx schema-provider entity-name
                      (live-records db-ctx schema-provider entity-name ids))
+    (assert-unrestricted! db-ctx schema-provider entity-name ids)
     (persist-interceptors/execute-persistence-operation
      :admin-bulk-delete-entities
      {:entity (name entity-name) :count (count ids)}

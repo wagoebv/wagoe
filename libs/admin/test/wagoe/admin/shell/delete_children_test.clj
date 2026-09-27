@@ -1,7 +1,8 @@
 (ns wagoe.admin.shell.delete-children-test
   "Deleting a record with has-many children (BOU-563): hard delete is the
-   default whatever the columns, children follow their parent, and a has-many
-   `:min` refuses to delete the last child."
+   default whatever the columns, configured children follow their parent,
+   detected children refuse the delete, `:on-delete` overrides either, and a
+   has-many `:min` refuses to delete the last child."
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest is testing use-fixtures]]
             [wagoe.admin.ports :as ports]
@@ -18,9 +19,11 @@
    :label "Lines" :fields [:description] :editable true})
 
 (defn- config [invoice-cfg & [lines-cfg]]
-  {:entity-discovery {:mode :allowlist :allowlist #{:dc-invoices :dc-lines}}
+  {:entity-discovery {:mode :allowlist :allowlist #{:dc-invoices :dc-lines :dc-notes}}
    :entities         {:dc-invoices (merge {:label "Invoices" :has-many [lines-rel]} invoice-cfg)
-                      :dc-lines    (merge {:label "Lines"} lines-cfg)}
+                      :dc-lines    (merge {:label "Lines"} lines-cfg)
+                      ;; No has-many names it: a child only by detection.
+                      :dc-notes    {:label "Notes"}}
    :pagination       {:default-page-size 20 :max-page-size 200}})
 
 (def ^:private ^:dynamic *db* nil)
@@ -37,14 +40,19 @@
                                                            dc_invoice_id UUID NOT NULL REFERENCES dc_invoices(id),
                                                            description VARCHAR(50) NOT NULL,
                                                            deleted_at TIMESTAMP)"})
+      (db/execute-update! ctx {:raw "CREATE TABLE dc_notes (id UUID PRIMARY KEY,
+                                                           dc_invoice_id UUID NOT NULL REFERENCES dc_invoices(id),
+                                                           body VARCHAR(50) NOT NULL)"})
       (try (binding [*db* ctx] (f))
            (finally
+             (db/execute-update! ctx {:raw "DROP TABLE dc_notes"})
              (db/execute-update! ctx {:raw "DROP TABLE dc_lines"})
              (db/execute-update! ctx {:raw "DROP TABLE dc_invoices"})
              (db-factory/close-db-context! ctx))))))
 
 (use-fixtures :each
   (fn [f]
+    (db/execute-update! *db* {:raw "DELETE FROM dc_notes"})
     (db/execute-update! *db* {:raw "DELETE FROM dc_lines"})
     (db/execute-update! *db* {:raw "DELETE FROM dc_invoices"})
     (f)))
@@ -128,3 +136,69 @@
     (is (= 409 (:status resp)))
     (is (str/includes? (get-in resp [:headers "HX-Trigger"]) "showToast"))
     (is (some? (row :dc_lines (first lines))))))
+
+(defn- note! [invoice-id]
+  (let [id (random-uuid)]
+    (db/execute-update! *db* {:raw (str "INSERT INTO dc_notes (id, dc_invoice_id, body) VALUES ('"
+                                        id "', '" invoice-id "', 'note')")})
+    id))
+
+(defn- refusal [f]
+  (try (f) nil (catch clojure.lang.ExceptionInfo e e)))
+
+(deftest ^:integration a-detected-child-blocks-the-delete
+  ;; A detected child may be shared (users of a tenant): one click must not
+  ;; take every row that references the parent.
+  (doseq [soft? [false true]]
+    (testing (if soft? "soft" "hard")
+      (let [{:keys [svc]} (svc (config {:soft-delete soft?} {:soft-delete soft?}))
+            {:keys [id lines]} (invoice!)
+            note (note! id)
+            e    (refusal #(ports/delete-entity svc :dc-invoices id))]
+        (is (= :conflict (:type (ex-data e))))
+        (is (str/includes? (ex-message e) "1 Notes"))
+        (testing "and nothing changes"
+          (is (nil? (:deleted-at (row :dc_invoices id))))
+          (is (every? #(nil? (:deleted-at (row :dc_lines %))) lines))
+          (is (some? (row :dc_notes note))))
+        (testing "bulk delete too"
+          (is (= :conflict (:type (ex-data (refusal #(ports/bulk-delete-entities svc :dc-invoices [id])))))))))))
+
+(deftest ^:integration a-parent-without-detected-children-still-deletes
+  (let [{:keys [svc]} (svc (config {}))
+        {:keys [id]} (invoice!)]
+    (is (true? (ports/delete-entity svc :dc-invoices id)))))
+
+(deftest ^:integration on-delete-overrides-either-default
+  (testing ":on-delete :cascade on the notes makes them follow"
+    (let [{:keys [svc]} (svc (config {:has-many [lines-rel
+                                                  {:entity :dc-notes :table :dc_notes :foreign-key :dc-invoice-id
+                                                   :label "Notes" :fields [:body] :on-delete :cascade}]}))
+          {:keys [id]} (invoice!)
+          note (note! id)]
+      (is (true? (ports/delete-entity svc :dc-invoices id)))
+      (is (nil? (row :dc_notes note)))))
+  (testing ":on-delete :restrict on the configured lines refuses"
+    (let [{:keys [svc]} (svc (config {:has-many [(assoc lines-rel :on-delete :restrict)]}))
+          {:keys [id lines]} (invoice!)
+          e (refusal #(ports/delete-entity svc :dc-invoices id))]
+      (is (= :conflict (:type (ex-data e))))
+      (is (str/includes? (ex-message e) "2 Lines"))
+      (is (every? some? (map #(row :dc_lines %) lines)))))
+  (testing "an unknown :on-delete fails at startup"
+    (is (thrown? clojure.lang.ExceptionInfo
+                 (schema-repo/create-schema-repository
+                  *db* (config {:has-many [(assoc lines-rel :on-delete :nullify)]}))))))
+
+(deftest ^:integration the-delete-handler-answers-a-detected-child-with-409
+  (let [cfg    (config {})
+        {:keys [sp svc]} (svc cfg)
+        {:keys [id]} (invoice!)
+        _      (note! id)
+        admin  {:id (random-uuid) :role :admin :active true}
+        resp   ((delete/delete-entity-handler svc sp cfg)
+                {:request-method :delete :user admin :session {:user admin} :headers {}
+                 :path-params {:entity "dc-invoices" :id (str id)}})]
+    (is (= 409 (:status resp)))
+    (is (str/includes? (get-in resp [:headers "HX-Trigger"]) "Notes"))
+    (is (some? (row :dc_invoices id)))))

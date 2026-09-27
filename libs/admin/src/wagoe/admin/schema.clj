@@ -302,7 +302,8 @@
 
 (def HasManyEntry
   (closed-map :entity :table :foreign-key :label :fields :editable
-              [:min [:int {:min 0}]]))
+              [:min [:int {:min 0}]]
+              [:on-delete [:enum :cascade :restrict]]))
 
 (def EntityOverrides
   (closed-map :label :description :icon :sidebar-hidden :table-name :primary-key
