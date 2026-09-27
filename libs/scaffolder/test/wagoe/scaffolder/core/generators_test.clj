@@ -214,7 +214,7 @@
       (is (str/includes? output "(defn- generate-product-id"))
       (is (str/includes? output "(UUID/randomUUID)"))
       (is (str/includes? output "(Instant/now)"))
-      (is (str/includes? output "(core/prepare-new-product data (generate-product-id) (current-time))")))
+      (is (str/includes? output "(core/prepare-new-product (apply dissoc data (keys children)) (generate-product-id) (current-time))")))
 
     (testing "contains factory function"
       (is (str/includes? output "create-service")))))

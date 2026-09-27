@@ -99,6 +99,9 @@
     ;; The parent entity, in this module: a required `<parent>_id` relation
     ;; column with a foreign key and an index (BOU-497).
     [:belongs-to {:optional true} [:re template/entity-name-pattern]]
+    ;; The fewest of this entity its parent may have. The parent's create
+    ;; then takes them in the same request (BOU-578).
+    [:min {:optional true} [:int {:min 1}]]
     [:workflow {:optional true} WorkflowSpec]
     [:description {:optional true} :string]]                ; Entity documentation
    [:fn {:error/fn (fn [{e :value} _]
@@ -106,6 +109,9 @@
                           (template/kebab->snake (template/pascal->kebab (:belongs-to e)))
                           "_id: drop the field " (name (template/belongs-to-clash e))))}
     (complement template/belongs-to-clash)]
+   [:fn {:error/fn (fn [{e :value} _]
+                     (str (:name e) " has a minimum but no parent: --min goes with --belongs-to"))}
+    (fn [{:keys [min belongs-to]}] (or (nil? min) (some? belongs-to)))]
    [:fn {:error/fn (fn [{e :value} _]
                      (str (:name e) "'s workflow makes the field " (name (get-in e [:workflow :field]))
                           ": drop the --field of that name"))}

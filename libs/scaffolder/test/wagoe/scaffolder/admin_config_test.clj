@@ -231,3 +231,14 @@
     (is (:success (ports/generate-module svc {:module-name "billing" :base-ns "bou562c"
                                               :entities entities :output-dir (.getPath dir)})))
     (is (not (.exists (io/file dir "resources/conf/dev/admin/invoices.edn"))))))
+
+(deftest ^:integration a-minimum-reaches-the-parent-s-has-many
+  ;; BOU-578: `--min 1` on the child; the admin enforces it (BOU-570).
+  (let [dir (project!)]
+    (is (:success (ports/generate-module svc {:module-name "billing" :base-ns "bou578a"
+                                              :entities [(first entities)] :output-dir (.getPath dir)})))
+    (is (:success (ports/add-entity svc {:module-name "billing" :base-ns "bou578a"
+                                         :entity (assoc (second entities) :min 1)
+                                         :output-dir (.getPath dir)})))
+    (is (= 1 (get-in (read-admin dir "dev") [:entities :invoices :has-many 0 :min])))
+    (is (empty? (admin-schema/entity-config-errors (read-admin dir "dev"))))))

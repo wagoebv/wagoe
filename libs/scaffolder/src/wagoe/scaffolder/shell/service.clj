@@ -255,6 +255,24 @@
         (conj (str "For the admin's " (str/join ", " (map :entity-plural wf))
                    " to get a workflow too, switch on the event bus: wagoe add events"))))))
 
+(defn- children-of-first
+  "`ctx` with every entity that belongs to the first one marked :child-of:
+   the first entity's create takes them (BOU-578)."
+  [ctx]
+  (let [first-kebab (:entity-kebab (first (:entities ctx)))]
+    (update ctx :entities
+            (fn [es] (mapv #(cond-> % (= first-kebab (:belongs-to %)) (assoc :child-of true)) es)))))
+
+(defn- minimum-problem
+  "Why a minimum cannot be kept, or nil: only the first entity's create takes
+   children, so a child of any other has no create that could."
+  [entities]
+  (let [first-name (template/pascal->kebab (:name (first entities)))]
+    (some #(when (and (:min %) (not= first-name (some-> (:belongs-to %) template/pascal->kebab)))
+             (str (:name %) " has --min, but " (:belongs-to %) " is not the module's first entity ("
+                  (:name (first entities)) "): only the first entity's create takes children."))
+          entities)))
+
 (def ^:private module-generation-request-validator (m/validator schema/ModuleGenerationRequest))
 (def ^:private module-generation-request-explainer (m/explainer schema/ModuleGenerationRequest))
 
@@ -285,12 +303,13 @@
           (throw (ex-info (str "Invalid module generation request: " (pr-str explanation))
                           {:type :validation-error
                            :errors explanation}))))
-      (when-let [problem (entities-problem (:entities request))]
+      (when-let [problem (or (entities-problem (:entities request))
+                             (minimum-problem (:entities request)))]
         (throw (ex-info (str "Invalid module generation request: " problem)
                         {:type :validation-error})))
 
       ;; Build template context
-      (let [ctx (template/build-module-context request)
+      (let [ctx (children-of-first (template/build-module-context request))
             module-name (:module-name ctx)
             ;; Directory name, not namespace segment — see template/ns->path.
             module-path (:module-path ctx)
@@ -325,9 +344,14 @@
             web? (get-in ctx [:interfaces :web] true)
 
             ;; Generate source file contents
-            schema-content (reduce #(generators/append-section %1 (generators/entity-schema-section %2))
-                                   (generators/generate-schema-file ctx)
-                                   more)
+            schema-content (reduce (fn [src child]
+                                     (let [r (generators/add-children-to-schema src (:entity-name entity) child)]
+                                       (or (:content r)
+                                           (throw (ex-info (:error r) {:type :validation-error})))))
+                                   (reduce #(generators/append-section %1 (generators/entity-schema-section %2))
+                                           (generators/generate-schema-file ctx)
+                                           more)
+                                   (filter :child-of more))
             ports-content (reduce #(generators/append-section %1 (generators/entity-ports-section %2))
                                   (generators/generate-ports-file ctx)
                                   more)
@@ -778,6 +802,18 @@
             entity      (template/build-entity-context (:entity request) module-name {:primary? false})
             ctx         (assoc ctx :entities [entity])
             module-root (format "src/%s/%s/" (:base-ns-path ctx) (:module-path ctx))
+            ;; The first entity is the one whose service is shell/service.clj;
+            ;; a further one has a service of its own. Only the first entity's
+            ;; create takes children (BOU-578).
+            parent-first? (and (:belongs-to entity)
+                               (not (.exists (resolve-path output-dir (str module-root "shell/"
+                                                                           (template/kebab->snake (:belongs-to entity))
+                                                                           "_service.clj")))))
+            _ (when (and (:min entity) (not parent-first?))
+                (throw (ex-info (str (:entity-name entity) " has --min, but "
+                                     (template/kebab->pascal (:belongs-to entity))
+                                     " is not the module's first entity: only the first entity's create takes children.")
+                                {:type :validation-error})))
             schema-file (require-existing-file!
                          (resolve-path output-dir (str module-root "schema.clj"))
                          (str "Cannot add an entity to " module-name ": its schema.clj is not there."))
@@ -789,11 +825,25 @@
                          (str "Cannot add an entity to " module-name ": its shell/module_wiring.clj is not there."))
             schema-src  (slurp schema-file)
             ports-src   (slurp ports-file)
-            wiring      (generators/add-entity-to-wiring (slurp wiring-file) ctx entity)
+            wiring-src  (slurp wiring-file)
+            wiring      (generators/add-entity-to-wiring wiring-src ctx (cond-> entity parent-first? (assoc :child-of true)))
             _ (when (:error wiring)
                 (throw (ex-info (str "Cannot wire " (:entity-name entity) " into "
                                      (.getPath wiring-file) ": " (:error wiring) ".")
                                 {:type :validation-error})))
+            ;; A wiring from before BOU-578 hands the first entity's service no
+            ;; children, so its create cannot take them.
+            nested?     (and parent-first? (str/includes? (:content wiring) "(keep :child)"))
+            _ (when (and (:min entity) (not nested?))
+                (throw (ex-info (str "Cannot keep a minimum: " (.getPath wiring-file) " builds the "
+                                     module-name " service without the entities that belong to it. Replace its :wagoe/"
+                                     module-name "-service and :wagoe/" module-name "-entities init-keys and ig-config"
+                                     " with what a new `bb scaffold generate` writes, then run this again.")
+                                {:type :validation-error})))
+            wiring      (if (and parent-first? (not nested?))
+                          (generators/add-entity-to-wiring wiring-src ctx entity)
+                          wiring)
+            entity      (cond-> entity nested? (assoc :child-of true))
             schema-add  (generators/entity-schema-section entity)
             ports-add   (generators/entity-ports-section entity)
             parent      (some-> (get-in request [:entity :belongs-to])
@@ -847,6 +897,13 @@
             _ (when (seq existing)
                 (throw (ex-info "refuse-overwrite"
                                 {:type ::refuse-overwrite :existing existing})))
+            schema-src  (if nested?
+                          (let [r (generators/add-children-to-schema schema-src parent entity)]
+                            (or (:content r)
+                                (throw (ex-info (str "Cannot let " parent " be created with its "
+                                                     (:entity-plural entity) ": " (:error r) ".")
+                                                {:type :validation-error}))))
+                          schema-src)
             edits       [{:file schema-file :content (generators/append-section schema-src schema-add)}
                          {:file ports-file :content (generators/append-section ports-src ports-add)}
                          {:file wiring-file :content (:content wiring)}]
@@ -873,7 +930,11 @@
             files       (into (into files (:kept admin-out))
                               (write-edits! (concat (:edits admin-edits) (filter :file parent-edits))
                                             dry-run))
-            warnings    (concat (:warnings admin-edits) (keep :warning parent-edits))
+            warnings    (cond-> (vec (concat (:warnings admin-edits) (keep :warning parent-edits)))
+                          (and parent-first? (not nested?))
+                          (conj (str parent "'s create does not take " (:entity-plural entity)
+                                     ": its module wiring predates that. Create them through /api/v1/"
+                                     (:entity-plural entity) ".")))
             service-ns  (str (:base-ns ctx) "." module-name "." (:service-ns entity))
             http?       (get-in ctx [:interfaces :http])
             uri         (str "/api/v1/" (:entity-plural entity))]

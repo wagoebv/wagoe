@@ -26,6 +26,13 @@
   [entity]
   (merge (template/repository-fns nil nil true) (:repo-fns entity)))
 
+(defn- count-fn
+  "The repository method that counts a child's rows under one parent, for a
+   child with a minimum (BOU-578), else nil."
+  [entity]
+  (when (and (:min entity) (:belongs-to entity))
+    (str "count-" (:entity-plural entity) "-by-" (:belongs-to entity))))
+
 (defn- shell-ns
   "The entity's `shell.*` namespace suffix for `k`, the first entity's when
    the context does not say."
@@ -175,7 +182,14 @@
           "    \"Update existing " e ".\")\n"
           "\n"
           "  (" delete " [this id]\n"
-          "    \"Delete " e " by ID.\"))\n")
+          "    \"Delete " e " by ID.\")"
+          (when (get entity :primary? true)
+            (str "\n\n  (transact [this f]\n"
+                 "    \"Call `f` in one database transaction, and return what it returns.\")"))
+          (when-let [c (count-fn entity)]
+            (str "\n\n  (" c " [this " (:belongs-to entity) "-id]\n"
+                 "    \"How many " (:entity-plural entity) " the " (:belongs-to entity) " has.\")"))
+          ")\n")
      :service
      (str "(defprotocol I" entity-name "Service\n"
           "  \"" entity-name " service interface for business operations.\"\n"
@@ -499,15 +513,52 @@ DROP TABLE IF EXISTS %s;
 ;; Service File Generator
 ;; =============================================================================
 
+(defn- keep-minimum-fn
+  "The service's guard for a child with a minimum: it refuses to leave the
+   parent with fewer (BOU-578)."
+  [entity]
+  (let [parent (:belongs-to entity)
+        plural (:entity-plural entity)
+        n      (:min entity)]
+    (str "(defn- keep-minimum!\n"
+         "  \"Refuse to leave the " parent " with fewer than " n " " plural ".\"\n"
+         "  [repository " parent "-id]\n"
+         "  (when (<= (ports/" (count-fn entity) " repository " parent "-id) " n ")\n"
+         "    (throw (ex-info \"Every " parent " keeps at least " n " of its " plural "\"\n"
+         "                    {:type :validation-error\n"
+         "                     :errors {:" plural " [\"every " parent " keeps at least " n "\"]}}))))\n"
+         "\n")))
+
+(defn- create-with-children-fn
+  "The first entity's create, with the children its request may carry."
+  [entity-lower]
+  (str "(defn- create-with-children\n"
+       "  \"Create `prepared` and each child `data` carries under a key of `children`,\n"
+       "   in one transaction: all of them or none. The " entity-lower " comes back with them.\"\n"
+       "  [repository children prepared data]\n"
+       "  (ports/transact repository\n"
+       "                  (fn []\n"
+       "                    (reduce-kv (fn [created k {:keys [foreign-key create]}]\n"
+       "                                 (cond-> created\n"
+       "                                   (contains? data k)\n"
+       "                                   (assoc k (mapv #(create (assoc % foreign-key (:id created))) (get data k)))))\n"
+       "                               (ports/create repository prepared)\n"
+       "                               children))))\n"
+       "\n"))
+
 (defn generate-service-file
   "Generate shell/service.clj file content.
-   
+
+   The first entity's service creates the entities that belong to it with it,
+   in one transaction: `children`, which the module wiring hands it, says
+   which (BOU-578).
+
    Args:
      ctx - Template context map
-     
+
    Returns:
      String content for service.clj file
-     
+
    Pure: true"
   ([ctx] (generate-service-file ctx (first (:entities ctx))))
   ([ctx entity]
@@ -517,7 +568,26 @@ DROP TABLE IF EXISTS %s;
          entity-lower (template/pascal->kebab entity-name)
          entity-kebab (str/replace entity-lower #"\s+" "-")
          wf (:workflow entity)
-         {:keys [find-by-id find-all create update delete]} (repo-fns entity)]
+         primary? (:primary? entity true)
+         minimum? (some? (count-fn entity))
+         parent-id (str ":" (:belongs-to entity) "-id")
+         fields (str "[repository" (when wf " workflow") (when primary? " children") "]")
+         {:keys [find-by-id find-all create update delete]} (repo-fns entity)
+         prepare (str "(core/prepare-new-" entity-lower " "
+                      (if primary? "(apply dissoc data (keys children))" "data")
+                      " (generate-" entity-lower "-id) (current-time))")
+         insert  (if primary?
+                   "(create-with-children repository children prepared data)"
+                   (str "(ports/" create " repository prepared)"))
+         ;; The guard a child with a minimum puts before an update that moves
+         ;; it to another parent, and before a delete.
+         guard-update (when minimum?
+                        (str "    (when-let [row (and (contains? data " parent-id ") (ports/" find-by-id " repository id))]\n"
+                             "      (when (not= (" parent-id " row) (" parent-id " data))\n"
+                             "        (keep-minimum! repository (" parent-id " row))))\n"))
+         guard-delete (when minimum?
+                        (str "    (when-let [row (ports/" find-by-id " repository id)]\n"
+                             "      (keep-minimum! repository (" parent-id " row)))\n"))]
      (str "(ns " base-ns "." module-name "." (shell-ns entity :service-ns) "\n"
           "  \"Service layer for " module-name " module.\"\n"
           "  (:require [" base-ns "." module-name ".ports :as ports]\n"
@@ -531,6 +601,8 @@ DROP TABLE IF EXISTS %s;
           "(defn- generate-" entity-lower "-id []\n"
           "  (UUID/randomUUID))\n"
           "\n"
+          (when primary? (create-with-children-fn entity-lower))
+          (when minimum? (keep-minimum-fn entity))
           (when wf
             (str "(defn- mirror-" (:field wf) "!\n"
                  "  \"Write the workflow's `state` to the " (:field wf) " column, and fail unless it\n"
@@ -543,7 +615,7 @@ DROP TABLE IF EXISTS %s;
                  "                      {:type :internal-error :id id :workflow state :column (:" (:field wf) " row)})))\n"
                  "    row))\n"
                  "\n"))
-          "(defrecord " entity-name "Service [repository" (when wf " workflow") "]\n"
+          "(defrecord " entity-name "Service " fields "\n"
           "  ports/I" entity-name "Service\n"
          ;; _this everywhere: none of these bodies use it, and an unused binding
          ;; is a clj-kondo warning — which fails `bb check` in the generated
@@ -555,8 +627,10 @@ DROP TABLE IF EXISTS %s;
          ;; port (BOU-478).
           "  (create-" entity-lower " [_this data]\n"
           (if wf
-            (str "    (let [prepared (core/prepare-new-" entity-lower " data (generate-" entity-lower "-id) (current-time))\n"
-                 "          created  (ports/" create " repository prepared)]\n"
+            (str "    (let [prepared " prepare "\n"
+                 "          created  " insert "]\n"
+                 ;; After the transaction: the workflow store writes on a
+                 ;; connection of its own, which SQLite would make wait on it.
                  "      (try\n"
                  "        (ports/start-" entity-lower "-workflow! workflow (:id created))\n"
                  "        (catch Exception e\n"
@@ -564,8 +638,8 @@ DROP TABLE IF EXISTS %s;
                  "          (ports/" delete " repository (:id created))\n"
                  "          (throw e)))\n"
                  "      created))\n")
-            (str "    (let [prepared (core/prepare-new-" entity-lower " data (generate-" entity-lower "-id) (current-time))]\n"
-                 "      (ports/" create " repository prepared)))\n"))
+            (str "    (let [prepared " prepare "]\n"
+                 "      " insert "))\n"))
           "  (get-" entity-lower " [_this id]\n"
           "    (ports/" find-by-id " repository id))\n"
          ;; find-all, not list-<plural>: the repository port has no
@@ -574,11 +648,13 @@ DROP TABLE IF EXISTS %s;
           "  (list-" (template/pluralize entity-lower) " [_this opts]\n"
           "    (ports/" find-all " repository opts))\n"
           "  (update-" entity-lower " [_this id data]\n"
+          guard-update
           (if wf
             (str "    ;; Only a transition moves " (:field wf) ".\n"
                  "    (ports/" update " repository (assoc (dissoc data :" (:field wf) ") :id id)))\n")
             (str "    (ports/" update " repository (assoc data :id id)))\n"))
           "  (delete-" entity-lower " [_this id]\n"
+          guard-delete
           (if wf
             (str "    ;; The row first: a delete the database refuses keeps its workflow.\n"
                  "    (let [deleted (ports/" delete " repository id)]\n"
@@ -594,13 +670,32 @@ DROP TABLE IF EXISTS %s;
                  "      (let [result (ports/transition-" entity-lower "-workflow! workflow id transition actor)]\n"
                  "        (if (:success? result)\n"
                  "          (assoc result :" entity-lower " (mirror-" (:field wf) "! repository id (get-in result [:instance :current-state])))\n"
-                 "          result)))))\n"
-                 "\n"
-                 "(defn create-service [repository workflow]\n"
+                 "          result)))))\n")
+            (str "    (ports/" delete " repository id)))\n"))
+          "\n"
+          (cond
+            (and primary? wf)
+            (str "(defn create-service\n"
+                 "  \"`children` is what a create may carry: {key {:foreign-key k :create f}},\n"
+                 "   one per entity that belongs to this one. The module wiring builds it.\"\n"
+                 "  ([repository workflow] (create-service repository workflow {}))\n"
+                 "  ([repository workflow children]\n"
+                 "   (->" entity-name "Service repository workflow children)))\n")
+
+            primary?
+            (str "(defn create-service\n"
+                 "  \"`children` is what a create may carry: {key {:foreign-key k :create f}},\n"
+                 "   one per entity that belongs to this one. The module wiring builds it.\"\n"
+                 "  ([repository] (create-service repository {}))\n"
+                 "  ([repository children]\n"
+                 "   (->" entity-name "Service repository children)))\n")
+
+            wf
+            (str "(defn create-service [repository workflow]\n"
                  "  (->" entity-name "Service repository workflow))\n")
-            (str "    (ports/" delete " repository id)))\n"
-                 "\n"
-                 "(defn create-service [repository]\n"
+
+            :else
+            (str "(defn create-service [repository]\n"
                  "  (->" entity-name "Service repository))\n"))))))
 
 ;; =============================================================================
@@ -719,7 +814,15 @@ DROP TABLE IF EXISTS %s;
           "                      :where [:= :id (:id entity)]})\n"
           "      (select-by-id db-ctx (:id entity))))\n"
           "  (" delete " [_this id]\n"
-          "    (db/execute-update! db-ctx {:delete-from :" table-name " :where [:= :id id]})))\n"
+          "    (db/execute-update! db-ctx {:delete-from :" table-name " :where [:= :id id]}))"
+          (when (:primary? entity true)
+            (str "\n  (transact [_this f]\n"
+                 "    (db/with-transaction [_ db-ctx] (f)))"))
+          (when-let [c (count-fn entity)]
+            (str "\n  (" c " [_this " (:belongs-to entity) "-id]\n"
+                 "    (:n (db/execute-one! db-ctx {:select [[:%count.* :n]] :from [:" table-name "]\n"
+                 "                                 :where [:= :" (:belongs-to entity) "-id " (:belongs-to entity) "-id]})))"))
+          ")\n"
           "\n"
           "(defn create-repository [db-ctx]\n"
           "  (->Database" entity-name "Repository db-ctx))\n"))))
@@ -843,7 +946,10 @@ DROP TABLE IF EXISTS %s;
           "                      (" find-by-id " [_ _id] nil)\n"
           "                      (" find-all " [_ _opts] [])\n"
           "                      (" update " [_ entity] entity)\n"
-          "                      (" delete " [_ _id] nil))\n"
+          "                      (" delete " [_ _id] nil)"
+          (when (:primary? entity true) "\n                      (transact [_ f] (f))")
+          (when-let [c (count-fn entity)] (str "\n                      (" c " [_ _id] 0)"))
+          ")\n"
           (if (:workflow entity)
             (str "          started (atom [])\n"
                  "          workflow (reify ports/I" entity-name "Workflow\n"
@@ -1436,11 +1542,13 @@ DROP TABLE IF EXISTS %s;
   [module-name entity]
   (let [e (:entity-kebab entity)]
     (str "(defmethod ig/init-key :wagoe/" module-name "-service\n"
-         "  [_ {:keys [repository workflow events]}]\n"
+         "  [_ {:keys [repository workflow events entities]}]\n"
          "  (log/info \"Initializing " module-name " service\")\n"
          "  ;; " (:entity-name entity) "'s " (get-in entity [:workflow :field])
          " is a workflow, registered here and started on every create.\n"
-         "  (service/create-service repository (" e "-workflow/install! workflow repository events)))\n"
+         "  ;; Its create takes the entities that belong to it (entity-wiring below).\n"
+         "  (service/create-service repository (" e "-workflow/install! workflow repository events)\n"
+         "                          (into {} (keep :child) (vals entities))))\n"
          "\n"
          "(defmethod ig/halt-key! :wagoe/" module-name "-service\n"
          "  [_ service]\n"
@@ -1617,6 +1725,20 @@ DROP TABLE IF EXISTS %s;
        "          (http/" module-name "-routes service (or config {}))\n"
        "          (vals entities)))"))
 
+(defn- service-init-form?
+  [module-name loc]
+  (= ['defmethod 'ig/init-key (keyword "wagoe" (str module-name "-service"))]
+     (form-head loc)))
+
+(defn- wiring-service-form
+  "The service init-key that hands the service the entities belonging to it."
+  [module-name]
+  (str "(defmethod ig/init-key :wagoe/" module-name "-service\n"
+       "  [_ {:keys [repository entities]}]\n"
+       "  (log/info \"Initializing " module-name " service\")\n"
+       "  ;; Its create takes the entities that belong to it (entity-wiring below).\n"
+       "  (service/create-service repository (into {} (keep :child) (vals entities))))"))
+
 (defn- wiring-seam-section
   [module-name]
   (let [k #(str ":wagoe/" module-name %)]
@@ -1626,20 +1748,23 @@ DROP TABLE IF EXISTS %s;
          ";; init-key above mounts their API routes with the module's.\n"
          "\n"
          "(defmulti entity-wiring\n"
-         "  \"{:repository f :service f :routes f :workflow f} for one further entity.\n"
-         "   :workflow, for an entity with one, installs it: (f workflow repository events).\"\n"
+         "  \"{:repository f :service f :routes f :workflow f :child-of m} for one further entity.\n"
+         "   :workflow, for an entity with one, installs it: (f workflow repository events).\n"
+         "   :child-of, for one that belongs to the first entity, says how its create makes it.\"\n"
          "  identity)\n"
          "\n"
          "(defmethod ig/init-key " (k "-entities") "\n"
          "  [_ {:keys [ctx workflow events]}]\n"
          "  (into {}\n"
          "        (for [entity (keys (methods entity-wiring))\n"
-         "              :let [{:keys [repository service routes] install :workflow} (entity-wiring entity)\n"
-         "                    repo (repository ctx)]]\n"
-         "          [entity {:service (if install\n"
-         "                              (service repo (install workflow repo events))\n"
-         "                              (service repo))\n"
-         "                   :routes  routes}])))\n"
+         "              :let [{:keys [repository service routes child-of] install :workflow} (entity-wiring entity)\n"
+         "                    repo (repository ctx)\n"
+         "                    svc  (if install (service repo (install workflow repo events)) (service repo))]]\n"
+         "          ;; :child is what the first entity's create needs to make this one.\n"
+         "          [entity (cond-> {:service svc :routes routes}\n"
+         "                    child-of (assoc :child [(:key child-of)\n"
+         "                                            {:foreign-key (:foreign-key child-of)\n"
+         "                                             :create      #((:create child-of) svc %)}]))])))\n"
          "\n"
          "(defmethod ig/halt-key! " (k "-entities") "\n"
          "  [_ entities]\n"
@@ -1668,7 +1793,9 @@ DROP TABLE IF EXISTS %s;
          "     {" (k "-repository") "\n"
          "      {:ctx (ig/ref :wagoe/db-context)}\n"
          "      " (k "-service") "\n"
-         "      (merge {:repository (ig/ref " (k "-repository") ")} workflow)\n"
+         "      (merge {:repository (ig/ref " (k "-repository") ")\n"
+         "              :entities   (ig/ref " (k "-entities") ")}\n"
+         "             workflow)\n"
          "      " (k "-entities") "\n"
          "      (merge {:ctx (ig/ref :wagoe/db-context)} workflow)\n"
          "      " (k "-routes") "\n"
@@ -1692,6 +1819,11 @@ DROP TABLE IF EXISTS %s;
            (str "\n   :routes     " e "-http/api-routes"))
          (when (:workflow entity)
            (str "\n   :workflow   " e "-workflow/install!"))
+         (when (:child-of entity)
+           (str "\n   ;; Created with its " (:belongs-to entity) " too: its create takes :" (:entity-plural entity) ".\n"
+                "   :child-of   {:key         :" (:entity-plural entity) "\n"
+                "                :foreign-key :" (:belongs-to entity) "-id\n"
+                "                :create      ports/create-" e "}"))
          "})\n")))
 
 (defn- entity-requires
@@ -1699,13 +1831,14 @@ DROP TABLE IF EXISTS %s;
   [ctx entity]
   (let [prefix (str (:base-ns ctx "wagoe") "." (:module-name ctx) ".")
         e      (:entity-kebab entity)]
-    (for [part (cond-> ["persistence" "service"]
-                 (http? ctx)        (conj "http")
-                 (:workflow entity) (conj "workflow"))]
-      [(symbol (str e "-" part))
-       (symbol (str prefix (if (#{"http" "workflow"} part)
-                             (str "shell." e "-" part)
-                             (shell-ns entity (keyword (str part "-ns"))))))])))
+    (cond-> (vec (for [part (cond-> ["persistence" "service"]
+                              (http? ctx)        (conj "http")
+                              (:workflow entity) (conj "workflow"))]
+                   [(symbol (str e "-" part))
+                    (symbol (str prefix (if (#{"http" "workflow"} part)
+                                          (str "shell." e "-" part)
+                                          (shell-ns entity (keyword (str part "-ns"))))))]))
+      (:child-of entity) (conj ['ports (symbol (str prefix "ports"))]))))
 
 (defn- require-aliases
   "alias -> namespace for the vector entries of the ns form's :require."
@@ -1754,9 +1887,12 @@ DROP TABLE IF EXISTS %s;
   "`source` with the seam described above, or an :error."
   [source ctx]
   (let [module-name (:module-name ctx)
-        loc      (some #(when (routes-init-form? module-name %) %) (top-level-forms source))
-        expected (some #(when (routes-init-form? module-name %) (z/sexpr %))
-                       (top-level-forms (module-wiring-base ctx)))]
+        base        (top-level-forms (module-wiring-base ctx))
+        form-of     (fn [pred forms] (some #(when (pred module-name %) %) forms))
+        loc         (form-of routes-init-form? (top-level-forms source))
+        expected    (z/sexpr (form-of routes-init-form? base))
+        svc         (form-of service-init-form? (top-level-forms source))
+        svc-wanted  (z/sexpr (form-of service-init-form? base))]
     (cond
       (contains? (defined-symbols source) 'ig-config)
       {:error "it already defines ig-config, so the module builds its own graph"}
@@ -1765,10 +1901,18 @@ DROP TABLE IF EXISTS %s;
       {:error (str "its :wagoe/" module-name "-routes init-key is not the one bb scaffold"
                    " generate wrote, and wiring an entity replaces it")}
 
+      (or (nil? svc) (not= svc-wanted (z/sexpr svc)))
+      {:error (str "its :wagoe/" module-name "-service init-key is not the one bb scaffold"
+                   " generate wrote, and wiring an entity replaces it")}
+
       :else
-      {:content (append-section
-                 (z/root-string (z/replace loc (z/node (z/of-string (wiring-routes-form module-name)))))
-                 (wiring-seam-section module-name))})))
+      (let [routes-done (z/root-string (z/replace loc (z/node (z/of-string (wiring-routes-form module-name)))))
+            ;; A workflow's service init already takes the entities.
+            svc-done    (if (str/includes? (z/string svc) "(keep :child)")
+                          routes-done
+                          (z/root-string (z/replace (form-of service-init-form? (top-level-forms routes-done))
+                                                    (z/node (z/of-string (wiring-service-form module-name))))))]
+        {:content (append-section svc-done (wiring-seam-section module-name))}))))
 
 (defn generate-module-wiring-file
   "Generate shell/module_wiring.clj file content.
@@ -2006,6 +2150,33 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s%s%s;%s"
                         (z/append-child* (entry-node entry))
                         z/root-string)})))
     {:status :unrecognised}))
+
+(defn children-entry
+  "The entry the first entity's Create request gets for `child`, an entity
+   that belongs to it: its children, each with the child's create fields but
+   the parent's id, which the create fills in. Required, with at least :min of
+   them, when the child has a minimum (BOU-578).
+
+   Pure: true"
+  [child]
+  (let [fk     (str (:belongs-to child) "-id")
+        fields (remove #(or (:workflow-state? %) (= fk (:field-name-kebab %))) (:fields child))
+        item   (str "[:map " (str/join " " (map #(str/trim (generate-field-schema %)) fields)) "]")]
+    (if-let [n (:min child)]
+      (str "[:" (:entity-plural child) " [:vector {:min " n "} " item "]]")
+      (str "[:" (:entity-plural child) " {:optional true} [:vector " item "]]"))))
+
+(defn add-children-to-schema
+  "`source` — a schema.clj — with `child`'s entry in `parent`'s Create
+   request. {:content s} or {:error reason}.
+
+   Pure: true"
+  [source parent child]
+  (let [r (insert-schema-entry source (str "Create" parent "Request") (children-entry child))]
+    (case (:status r)
+      :inserted {:content (:content r)}
+      :present  {:error (str "Create" parent "Request already has " (:entity-plural child))}
+      {:error (str "Create" parent "Request is not the [:map ...] bb scaffold generate wrote")})))
 
 (defn add-field-to-schema
   "Add `field` to the entity and request schemas in `source`.
@@ -2302,16 +2473,18 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s%s%s;%s"
    Pure: true"
   [child]
   (let [fk (keyword (str (:belongs-to child) "-id"))]
-    {:entity      (keyword (:entity-plural child))
-     :table       (keyword (:entity-table child))
-     :foreign-key fk
-     :label       (humanize (:entity-plural child))
-     :fields      (vec (take 4 (remove #(or (= fk %) (sensitive-field? %))
-                                       (map (comp keyword :field-name-kebab) (:fields child)))))
-     :editable    true
-     ;; As the migration's foreign key does: a child has no life without its
-     ;; parent. The admin restricts a delete unless told otherwise.
-     :on-delete   :cascade}))
+    (cond-> {:entity      (keyword (:entity-plural child))
+             :table       (keyword (:entity-table child))
+             :foreign-key fk
+             :label       (humanize (:entity-plural child))
+             :fields      (vec (take 4 (remove #(or (= fk %) (sensitive-field? %))
+                                               (map (comp keyword :field-name-kebab) (:fields child)))))
+             :editable    true
+             ;; As the migration's foreign key does: a child has no life without its
+             ;; parent. The admin restricts a delete unless told otherwise.
+             :on-delete   :cascade}
+      ;; The admin refuses fewer (BOU-570).
+      (:min child) (assoc :min (:min child)))))
 
 (defn admin-entity-file
   "resources/conf/<profile>/admin/<plural>.edn for `entity`.

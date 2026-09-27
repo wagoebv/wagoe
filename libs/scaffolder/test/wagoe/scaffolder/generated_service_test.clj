@@ -51,7 +51,10 @@
        entity)
      (delete [_ id]
        (swap! calls conj [:delete id])
-       true))")
+       true)
+     (transact [_ f]
+       (swap! calls conj [:transact])
+       (f)))")
 
 (defn- load-generated-module!
   "Load schema, ports, core and service for the generated module, plus a stub
@@ -92,7 +95,7 @@
         (is (= "new" (:label created)))
         (is (uuid? (:id created)) "the shell supplies the id")
         (is (inst? (:created-at created)))
-        (is (= [:create] (mapv first @calls)))))
+        (is (= [:transact :create] (mapv first @calls)) "in a transaction, for its children")))
 
     (testing "an update goes through, carrying the id"
       (reset! calls [])

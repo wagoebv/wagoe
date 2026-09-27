@@ -473,6 +473,10 @@
        (valid-entity-name? (:belongs-to entity-def))
        (assoc :belongs-to (pascal->kebab (:belongs-to entity-def)))
 
+       ;; The fewest its parent may have (BOU-578).
+       (:min entity-def)
+       (assoc :min (:min entity-def))
+
        ;; Its status as a workflow (BOU-569).
        (:workflow entity-def)
        (assoc :workflow {:field  (name (get-in entity-def [:workflow :field]))

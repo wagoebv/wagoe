@@ -130,3 +130,9 @@
       (is (str/includes? prompt ":workflow {:entity-type"))
       (is (str/includes? prompt ":textarea") "the widgets are listed")
       (is (not (str/includes? prompt ":widget :workflow"))))))
+
+(deftest ^:unit the-scaffolding-prompt-asks-for-a-minimum-of-children
+  ;; BOU-578: "at least one line item" is a min on the child.
+  (let [prompt (prompts/build-scaffolding-system-prompt)]
+    (is (str/includes? prompt "\"min\""))
+    (is (re-find #"at least one[^\n]*\"min\": 1" prompt))))

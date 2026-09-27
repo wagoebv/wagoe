@@ -75,6 +75,9 @@
     :update-fn conj]
    [nil "--belongs-to ENTITY" "The module's entity this one belongs to: a required <entity>_id foreign key"
     :validate [template/valid-entity-name? "Must be an entity name"]]
+   [nil "--min N" "With --belongs-to: the fewest the parent may have. Its create then takes them"
+    :parse-fn #(or (parse-long %) %)
+    :validate [pos-int? "Must be a whole number, 1 or more"]]
    [nil "--workflow SPEC" "The entity's status as a workflow: field:first>second>third, forward only"]
    [nil "--[no-]http" "Generate the entity's HTTP (REST API) routes (default: true)"
     :default true]
@@ -715,7 +718,10 @@
                  (not (:module-name opts)) (conj "Missing required option: --module-name")
                  (not (:entity opts))      (conj "Missing required option: --entity")
                  (and (empty? (:field opts)) (not (:belongs-to opts)))
-                 (conj "At least one --field (or --belongs-to) is required"))]
+                 (conj "At least one --field (or --belongs-to) is required")
+
+                 (and (:min opts) (not (:belongs-to opts)))
+                 (conj "--min needs --belongs-to: it is the fewest the parent may have"))]
     (if (seq errors)
       {:status 1 :errors errors}
       (let [[fields-valid? fields-or-errors] (parse-all-fields (:field opts))
@@ -733,6 +739,7 @@
                         {:module-name (:module-name opts)
                          :entity      (cond-> {:name (:entity opts) :fields fields-or-errors}
                                         (:belongs-to opts) (assoc :belongs-to (:belongs-to opts))
+                                        (:min opts)        (assoc :min (:min opts))
                                         workflow           (assoc :workflow workflow))
                          :interfaces  {:http (:http opts true)
                                        :public-api (boolean (:public-api opts))}
@@ -1037,7 +1044,12 @@ Required Options:
 Options:
   --belongs-to ENTITY  The module's entity this one belongs to. Adds a
                        required <entity>_id column with a foreign key
-                       (ON DELETE CASCADE) and an index
+                       (ON DELETE CASCADE) and an index. When that is the
+                       module's first entity, its create request takes these
+                       too: POST /invoices with \"invoice-line-items\": [...]
+  --min N              With --belongs-to the first entity: the fewest it may
+                       have. Its create refuses fewer, and the API refuses
+                       the delete that would leave fewer
   --workflow SPEC      The entity's status as a workflow, as for generate
   --no-http            No API routes for the entity: for a module generated
                        with --no-http
@@ -1054,6 +1066,7 @@ Example:
     --module-name billing \\
     --entity InvoiceLineItem \\
     --belongs-to invoice \\
+    --min 1 \\
     --field description:string:required \\
     --field quantity:int:required:default=1")
 
