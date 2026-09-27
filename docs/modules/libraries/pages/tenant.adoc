@@ -4,9 +4,9 @@
 Multi-tenancy with schema-per-tenant isolation on PostgreSQL.
 Provides tenant CRUD, schema provisioning, tenant resolution, and cross-library integration.
 
-NOTE: Requires PostgreSQL. On SQLite the application refuses to boot with
-`:wagoe/tenant` configured. H2 runs it for tests, with tenant rows but no
-per-tenant schemas.
+NOTE: Requires PostgreSQL. On SQLite or H2 the application refuses to boot with
+`:wagoe/tenant` configured. A test profile on H2 sets `:allow-h2? true` under
+`:wagoe/tenant` and runs it with tenant rows but no per-tenant schemas.
 
 == Key namespaces
 

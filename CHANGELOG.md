@@ -60,8 +60,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **`:wagoe/payment-provider` has no default provider, and `:mock` boots only in dev and test** (BOU-564).
   Set `:provider` explicitly; use `:stripe` or `:mollie` in every other profile.
-- **`:wagoe/tenant` refuses to boot on SQLite** (BOU-576); tenancy needs PostgreSQL. Switch to
-  `:wagoe/postgresql`, or remove `:wagoe/tenant`.
+- **`:wagoe/tenant` refuses to boot on SQLite, and on H2 without `:allow-h2? true`** (BOU-576).
+  Use `:wagoe/postgresql`; a test profile on H2 adds `:allow-h2? true` under `:wagoe/tenant`.
+- **Tenant slugs, schema names, memberships and invite tokens are unique in the database** (BOU-576).
+  Boot stops, naming the table, if rows already duplicate one; remove the duplicates first.
 
 ### Added
 
@@ -75,6 +77,8 @@ for what is public API, what is internal, and how deprecations are announced.
 - **The tenant API answered `400 {"error":null}` on success and 500 on not-found** (BOU-576).
   Each route answers with the tenant or a typed 400/404/409; a taken slug is now 409, not 400.
 - **Membership reads and updates answered 500** (BOU-576); their timestamps could not be encoded.
+- **A new tenant could take a deleted tenant's slug, and with it that tenant's schema and data** (BOU-576).
+  A slug is now never reused; upgrade if you delete tenants.
 - **Scaffolded migrations lost their indexes on SQLite and failed on PostgreSQL and MySQL** (BOU-569).
   Add `--;;` to older ones; an existing SQLite database needs a new migration creating the missing indexes.
 - **`bb scaffold ai --help` answered "Unknown option"** (BOU-569). It prints the usage.

@@ -861,7 +861,8 @@ java.time.temporal.ChronoUnit/DAYS
 
 **Supported databases**: PostgreSQL and SQLite, and H2 for tests. MySQL is not
 supported yet (BOU-574, after 1.0). Tenancy (`:wagoe/tenant`) needs PostgreSQL
-and refuses to boot on SQLite.
+and refuses to boot on SQLite, and on H2 unless `:wagoe/tenant` sets
+`:allow-h2? true` (the test profile does).
 
 **Current Setup (Development)**:
 - **Database**: PostgreSQL on `localhost:5432`, database `wagoe_dev` — `:wagoe/postgresql`

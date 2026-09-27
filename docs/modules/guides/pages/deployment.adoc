@@ -108,4 +108,5 @@ supported yet: it is planned after 1.0.
 |===
 
 PostgreSQL is required for multi-tenancy (`wagoe-tenant`) and full-text search (`wagoe-search`).
-On SQLite, an application with `:wagoe/tenant` in its config refuses to boot.
+On SQLite or H2, an application with `:wagoe/tenant` in its config refuses to boot;
+a test profile on H2 sets `:allow-h2? true` under `:wagoe/tenant`.
