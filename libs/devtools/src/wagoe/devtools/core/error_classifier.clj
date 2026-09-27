@@ -134,12 +134,16 @@
    or a map with :code nil for unclassified errors."
   [^Throwable exception]
   (when exception
-    (let [explicit (classify-explicit-code exception)
-          root     (root-cause exception)
-          result   (or explicit
-                       (classify-ex-data-pattern exception)
-                       (classify-ex-data-pattern root)
-                       (classify-message-pattern root)
-                       (classify-exception-type root)
-                       {:code nil :category nil :data {} :source :unclassified})]
-      (assoc result :exception exception))))
+    (let [root   (root-cause exception)
+          outer  (or (classify-explicit-code exception)
+                     (classify-ex-data-pattern exception))
+          inner  (or (classify-ex-data-pattern root)
+                     (classify-message-pattern root)
+                     (classify-exception-type root))
+          result (or outer inner
+                     {:code nil :category nil :data {} :source :unclassified})]
+      ;; :message is from the exception that was classified, so a wrapper such
+      ;; as Integrant's "Error on key ..." does not hide what went wrong.
+      (assoc result
+             :exception exception
+             :message   (ex-message (if outer exception root))))))

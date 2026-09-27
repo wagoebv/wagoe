@@ -3,7 +3,8 @@
 
    Uses in-memory doubles for IWorkflowStore and IWorkflowRegistry
    to exercise the full transition orchestration without a real DB."
-  (:require [clojure.test :refer [deftest testing is use-fixtures]]
+  (:require [clojure.java.io :as io]
+            [clojure.test :refer [deftest testing is use-fixtures]]
             [wagoe.workflow.ports :as ports]
             [wagoe.workflow.shell.registry :as registry]
             [wagoe.workflow.shell.service :as service])
@@ -314,6 +315,102 @@
         (is (= :approved (first @enter-calls))))
       (testing ":on-any-transition hook fires after every successful transition"
         (is (= 1 (count @any-calls)))))))
+
+;; =============================================================================
+;; The documented examples run (BOU-561)
+;; =============================================================================
+
+(def ^:private lib-dir
+  "libs/workflow, found from this file so the test runs from any directory."
+  (-> (io/resource "wagoe/workflow/shell/service_test.clj")
+      io/file .getParentFile .getParentFile .getParentFile .getParentFile .getParentFile))
+
+(def ^:private md-block #"(?s)```clojure\n(.*?)```")
+(def ^:private adoc-block #"(?s)\[source,clojure\]\n----\n(.*?)\n----")
+
+(defn- first-block-under
+  "The first code block after `heading` in the file at `path` (relative to
+   libs/workflow), or nil after failing an assertion that says what is missing."
+  [path heading block-re]
+  (let [f (io/file lib-dir path)]
+    (is (.exists f) (str path " not found under " lib-dir))
+    (when (.exists f)
+      (let [doc (slurp f)
+            i   (.indexOf ^String doc ^String heading)]
+        (is (not (neg? i))
+            (str "\"" heading "\" is missing from " path
+                 "; this test runs the example under it"))
+        (when-not (neg? i)
+          (second (re-find block-re (subs doc i))))))))
+
+(defn- bind-effects
+  "Evaluate a documented form with its side-effect symbols bound from `effects`."
+  [form effects]
+  ((eval `(fn [{:syms [~'notify-finance! ~'release-reservation! ~'sync-external!]}]
+            ~form))
+   effects))
+
+(defn- documented-definition
+  "The map a documented `defworkflow` block defines. Fails when the block's
+   require does not name a namespace with `defworkflow` in it."
+  [block effects]
+  (let [forms (read-string (str "[" block "]"))
+        req   (first (filter #(and (seq? %) (= 'require (first %))) forms))
+        dw    (first (filter #(and (seq? %) (= 'defworkflow (first %))) forms))]
+    (when req
+      (let [ns-sym (first (second (second req)))]
+        (is (some? (requiring-resolve (symbol (str ns-sym) "defworkflow")))
+            (str ns-sym " has no defworkflow"))))
+    (is (some? dw) "the example has no defworkflow form")
+    (some-> dw (nth 2) (bind-effects effects))))
+
+(deftest ^:unit the-documented-definitions-register
+  (doseq [[path heading re] [["AGENTS.md" "## Defining a Workflow" md-block]
+                             ["../../docs/modules/libraries/pages/workflow.adoc"
+                              "== Defining a workflow" adoc-block]]]
+    (testing path
+      (let [calls      (atom [])
+            record     (fn [k] (fn [& _] (swap! calls conj k)))
+            definition (some-> (first-block-under path heading re)
+                               (documented-definition
+                                {'notify-finance! (record :notify)
+                                 'sync-external!  (record :sync)}))]
+        (is (= (:id definition) (registry/register-workflow! definition)))
+        (let [svc      (service/create-workflow-service (create-memory-store) *registry* nil nil)
+              instance (ports/start-workflow! svc {:workflow-id (:id definition)
+                                                   :entity-type :order
+                                                   :entity-id   (UUID/randomUUID)})]
+          (is (:success? (ports/transition! svc {:instance-id (:id instance)
+                                                 :transition  :paid
+                                                 :actor-roles [:admin]})))
+          (is (= [:notify :sync] @calls)))))))
+
+(deftest ^:unit the-documented-hook-example-runs
+  ;; The docs showed (fn [instance]); the schema wants a vector of 3-arity fns,
+  ;; so the example failed to register.
+  (let [calls (atom [])
+        block (first-block-under "AGENTS.md" "## Lifecycle Hooks" md-block)
+        hooks (:hooks (bind-effects
+                       (read-string (str "{" block "}"))
+                       {'notify-finance!      (fn [inst] (swap! calls conj [:notify (:current-state inst)]))
+                        'release-reservation! (fn [inst] (swap! calls conj [:release (:current-state inst)]))
+                        'sync-external!       (fn [ae ctx] (swap! calls conj [:sync (:to-state ae) ctx]))}))]
+    (registry/register-workflow!
+     {:id            :documented-hooks
+      :initial-state :pending
+      :states        #{:pending :paid}
+      :transitions   [{:from :pending :to :paid}]
+      :hooks         hooks})
+    (let [svc      (service/create-workflow-service (create-memory-store) *registry* nil nil)
+          instance (ports/start-workflow! svc {:workflow-id :documented-hooks
+                                               :entity-type :order
+                                               :entity-id   (UUID/randomUUID)})]
+      (is (:success? (ports/transition! svc {:instance-id (:id instance)
+                                             :transition  :paid
+                                             :actor-roles []
+                                             :context     {:by "test"}})))
+      (is (= [[:release :paid] [:notify :paid] [:sync :paid {:by "test"}]]
+             @calls)))))
 
 ;; =============================================================================
 ;; process-auto-transitions!

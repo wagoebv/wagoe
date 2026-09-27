@@ -39,6 +39,8 @@ for what is public API, what is internal, and how deprecations are announced.
   Set `:level`/`:root-level` as wanted; copy `logback.xml`, `:provider :slf4j` and `:mcp` `:jvm-opts` from `wagoe new`.
 - **`register-user` throws `:validation-error` for a password-policy refusal** (BOU-552), not
   `:password-policy-violation`. Match on the new type; `:violations` is unchanged.
+- **The workflow API answers 401 without a session** (BOU-561); it was open. Send a session or
+  bearer token. The auth middleware's own 401 now has a JSON body; it had none.
 - **Scaffolded APIs and list pages require a signed-in user** (BOU-539). Pass `--public-api` to
   open them; for older modules, regenerate `shell/*http.clj` or add the guards by hand.
 - **Scaffolder `date` fields are a `DATE`, not a timestamp** (BOU-547). Use `datetime` for a timestamp;
@@ -63,6 +65,12 @@ for what is public API, what is internal, and how deprecations are announced.
   Replace `tests.edn` with one suite, and set `:wagoe/events {:provider :memory}` in dev.
 - **A scaffolded API's 400 had empty `details`** (BOU-564). It now names the field; JSON keys are
   kebab-case. Regenerate `shell/*http.clj` for older modules.
+- **`bb ai admin-entity` cut EDN off, printed empty errors, guessed types and dropped relations** (BOU-567).
+  It types from your migrations and writes new files to every profile (`--force` overwrites); Replicate defaults to `anthropic/claude-opus-4.6`.
+- **`bb create-admin` looped forever on one piped password** (BOU-565). Pipe the password once;
+  closed stdin and repeated bad input now exit 1, and schema logging no longer reaches stdout.
+- **A `WAG_ENV=prod` boot searched for a free port as if in development** (BOU-566). Prod now binds
+  the configured port or fails; the conflict warning only fires when the port changed.
 - **`bb setup` overwrote dev and test config and `.env.example`** (BOU-404, BOU-532). It now changes
   only what you answer, lists each change first, and refuses rather than write a lossy merge.
 - **`bb scaffold generate --audit` and `--pagination` are removed** (BOU-483). No generator read

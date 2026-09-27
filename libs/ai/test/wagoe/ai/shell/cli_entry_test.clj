@@ -247,7 +247,8 @@
     (testing "every subcommand prints its result through the translator"
       ;; Counted rather than pattern-matched per site: the formatter now takes
       ;; the whole result, so there is no `(:error …)` in the call to anchor on.
-      (let [sites (re-seq #"\(explain-provider-error result service\)" src)]
+      ;; `describe-failure` wraps `explain-provider-error` (BOU-567).
+      (let [sites (re-seq #"\(describe-failure result service\)" src)]
         (is (<= 7 (count sites))
             (str "expected every subcommand to translate; found " (count sites)))))))
 
@@ -265,3 +266,79 @@
     (testing "and the checked form is actually used"
       (is (<= 7 (count (re-seq #"\(parse-or-exit! args" src)))
           "expected every subcommand to parse through parse-or-exit!"))))
+
+(deftest ^:unit every-failure-names-provider-status-and-message
+  ;; BOU-567: a 429 and a cut-off answer both ended in
+  ;; "AI CLI exited with error: " and nothing after it.
+  (let [svc {:configured? true}]
+    (testing "a 429 names the provider, the status and the provider's own words"
+      (let [out (sut/describe-failure {:error    "Request was throttled. Resets in ~6s."
+                                       :status   429
+                                       :provider :replicate
+                                       :model    "anthropic/claude-opus-4.6"}
+                                      svc)]
+        (is (str/includes? out "replicate"))
+        (is (str/includes? out "HTTP 429"))
+        (is (str/includes? out "Request was throttled. Resets in ~6s."))))
+
+    (testing "a bare clj-http message is completed from the body"
+      (let [out (sut/describe-failure {:error    "clj-http: status 429"
+                                       :status   429
+                                       :body     "{\"error\":{\"message\":\"Too many requests\"}}"
+                                       :provider :anthropic}
+                                      svc)]
+        (is (str/includes? out "Too many requests"))))
+
+    (testing "an empty message still says something"
+      (let [out (sut/describe-failure {:error "" :provider :openai} svc)]
+        (is (str/includes? out "openai"))
+        (is (str/includes? out "no message"))))
+
+    (testing "a failure after the call has no status to name"
+      (is (not (str/includes? (sut/describe-failure {:error "cut off" :provider :mock} svc)
+                              "HTTP"))))))
+
+(deftest ^:unit admin-entity-goes-to-every-profile
+  ;; BOU-567: dev and test were hardcoded, so prod never got the file.
+  (let [root (.toFile (java.nio.file.Files/createTempDirectory
+                       "profiles" (make-array java.nio.file.attribute.FileAttribute 0)))]
+    (testing "a project with no profiles yet gets dev and test"
+      (is (= ["dev" "test"] (sut/profiles (.getPath root)))))
+    (doseq [p ["dev" "test" "prod"]]
+      (let [f (io/file root "resources" "conf" p "config.edn")]
+        (io/make-parents f)
+        (spit f "{}")))
+    (io/make-parents (io/file root "resources" "conf" "notes" "x"))
+    (testing "every profile with a config.edn, and nothing else"
+      (is (= ["dev" "prod" "test"] (sut/profiles (.getPath root)))))))
+
+(deftest ^:unit an-existing-admin-file-is-never-overwritten-unasked
+  ;; BOU-567 review: writing every profile also overwrote a hand-edited prod
+  ;; config, and --yes skipped the only prompt.
+  (let [root (.toFile (java.nio.file.Files/createTempDirectory
+                       "keep" (make-array java.nio.file.attribute.FileAttribute 0)))
+        prod (io/file root "resources" "conf" "prod" "admin" "invoices.edn")
+        hand "{:invoices {:label \"Hand edited\"}} ; keep me\n"]
+    (doseq [p ["dev" "test" "prod"]]
+      (let [f (io/file root "resources" "conf" p "config.edn")]
+        (io/make-parents f)
+        (spit f "{}")))
+    (io/make-parents prod)
+    (spit prod hand)
+    (let [targets (sut/admin-entity-targets (.getPath root)
+                                            [{:entity-name "invoices" :text "{:invoices {}}"}])]
+      (testing "every target is listed, and the existing one is marked"
+        (is (= 3 (count targets)))
+        (is (= [(.getPath prod)]
+               (map :path (filter :exists? targets)))))
+
+      (testing "without --force the existing file stays byte-identical"
+        (let [written (sut/write-admin-entities! targets false)]
+          (is (= hand (slurp prod)))
+          (is (= 2 (count (filter :written? written))))
+          (is (= "{:invoices {}}"
+                 (slurp (io/file root "resources" "conf" "dev" "admin" "invoices.edn"))))))
+
+      (testing "--force overwrites it"
+        (sut/write-admin-entities! targets true)
+        (is (= "{:invoices {}}" (slurp prod)))))))

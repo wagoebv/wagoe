@@ -312,7 +312,7 @@
            "  {:provider :no-op}\n")
       (str "  :wagoe/ai-service\n"
            "  {:provider :replicate\n"
-           "   :model    #or [#env AI_MODEL \"anthropic/claude-4.5-haiku\"]\n"
+           "   :model    #or [#env AI_MODEL \"anthropic/claude-opus-4.6\"]\n"
            "   :api-key  #env REPLICATE_API_TOKEN}\n"))))
 
 (defn- payment-template [provider env]
