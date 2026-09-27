@@ -103,10 +103,16 @@
                (entries data)))
         {:ok data})))
 
+(defn- keyword->text
+  "A keyword value as the string a column holds: `:delivered` is a workflow
+   state, and HoneySQL would read it as a column name."
+  [v]
+  (if (keyword? v) (subs (str v) 1) v))
+
 (defn row->columns
   "Converts one kebab-case row map into its snake_case persistence form."
   [row]
-  (cc/kebab-case->snake-case-map row))
+  (update-vals (cc/kebab-case->snake-case-map row) keyword->text))
 
 (defn table->name
   "Persistence name for a seed table key: :audit-logs -> \"audit_logs\"."

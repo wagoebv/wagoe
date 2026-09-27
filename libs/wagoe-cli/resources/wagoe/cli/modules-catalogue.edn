@@ -162,8 +162,10 @@
    :version             "1.0.0-rc-3"
    :category            :optional
    :tier                :stable
+   ;; Warned at `wagoe add` for each profile on anything else (BOU-576).
+   :databases           #{:postgresql}
    :config-snippet      "  :wagoe/tenant\n  {:strategy :schema-per-tenant}\n"
-   :test-config-snippet "  :wagoe/tenant\n  {:strategy :schema-per-tenant}\n"
+   :test-config-snippet "  :wagoe/tenant\n  {:strategy :schema-per-tenant :allow-h2? true}\n"
    :add-command         "wagoe add tenant"
    :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/tenant/AGENTS.md"}
 

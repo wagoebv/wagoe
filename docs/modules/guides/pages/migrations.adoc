@@ -31,9 +31,8 @@ YYYYMMDDHHMMSS-description.down.sql
 Examples from the codebase:
 
 ----
-20260301000000-performance-indexes.up.sql
-20260324000000-tenant-memberships.up.sql
-20260324001000-tenant-member-invites.up.sql
+20260311100000-search-tables.up.sql
+20260312000000-search-filters.up.sql
 ----
 
 Rules:

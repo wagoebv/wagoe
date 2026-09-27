@@ -211,6 +211,17 @@ CREATE INDEX IF NOT EXISTS idx_invoices_created_at ON invoices(created_at);")
                                             "" {} "invoices"))
                        "[:invoices :fields :status :widget]"))))
 
+(deftest ^:unit an-invented-key-is-told-the-keys-it-could-be
+  ;; BOU-578: :min-rows and :minimum were refused without naming :min.
+  (let [[error] (sut/validation-errors
+                 {:invoices {:label "I" :table-name :invoices
+                             :has-many [{:entity :lines :table :lines :foreign-key :invoice-id
+                                         :min-rows 1}]}})]
+    (is (str/starts-with? error "[:invoices :has-many 0 :min-rows]") error)
+    (is (re-find #":min(,|$)" error) error)
+    (is (str/includes? error ":foreign-key") "every key it could be")
+    (is (not (str/includes? error ":table-name")) "not the keys of another level")))
+
 (deftest ^:unit the-admins-real-keys-are-accepted
   (is (nil? (sut/validation-errors
              {:invoices {:label "Invoices" :table-name :invoices

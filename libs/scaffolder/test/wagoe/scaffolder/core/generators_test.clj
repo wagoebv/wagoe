@@ -214,7 +214,7 @@
       (is (str/includes? output "(defn- generate-product-id"))
       (is (str/includes? output "(UUID/randomUUID)"))
       (is (str/includes? output "(Instant/now)"))
-      (is (str/includes? output "(core/prepare-new-product data (generate-product-id) (current-time))")))
+      (is (str/includes? output "(core/prepare-new-product (apply dissoc data (keys children)) (generate-product-id) (current-time))")))
 
     (testing "contains factory function"
       (is (str/includes? output "create-service")))))
@@ -402,6 +402,14 @@
         (is (not (re-find #"\(\S+\s+\[this[\s\]]" output))
             (str label ": has a method binding `this` that its body never uses; "
                  "name it _this"))))))
+
+(deftest ^:unit the-transaction-is-one-clj-kondo-can-read
+  ;; BOU-578: a generated project's lint knows nothing of the macro's binding
+  ;; form, so `(db/with-transaction [_ db-ctx] …)` failed `bb check` with
+  ;; "Unresolved symbol: _".
+  (let [output (gen/generate-persistence-file base-ctx)]
+    (is (str/includes? output "(db/with-transaction* db-ctx (fn [_] (f)))"))
+    (is (not (str/includes? output "(db/with-transaction [")))))
 
 ;; =============================================================================
 ;; BOU-275: every target schema is checked, not the file as a whole

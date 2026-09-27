@@ -160,6 +160,17 @@
            (:workflow (first (:entities result)))))
     (is (nil? (:workflow (second (:entities result)))) "one state is no workflow")))
 
+(deftest ^:unit parse-module-spec-keeps-a-minimum-of-children
+  ;; BOU-578: "an invoice has at least one line item".
+  (let [spec   (fn [min] (str "{\"module-name\": \"invoice\", \"entities\": ["
+                              "{\"name\": \"Invoice\", \"fields\": []},"
+                              "{\"name\": \"InvoiceLineItem\", \"belongs-to\": \"Invoice\", \"min\": " min ","
+                              " \"fields\": []}]}"))
+        min-of #(:min (second (:entities (parsing/parse-module-spec (spec %)))))]
+    (is (= 1 (min-of "1")))
+    (is (nil? (min-of "0")))
+    (is (nil? (min-of "\"one\"")))))
+
 (deftest ^:unit parse-module-spec-still-takes-one-entity
   (let [result (parsing/parse-module-spec
                 "{\"module-name\": \"p\", \"entity\": \"P\", \"fields\": [{\"name\": \"x\", \"type\": \"string\"}]}")]

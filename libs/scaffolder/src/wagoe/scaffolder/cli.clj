@@ -75,6 +75,9 @@
     :update-fn conj]
    [nil "--belongs-to ENTITY" "The module's entity this one belongs to: a required <entity>_id foreign key"
     :validate [template/valid-entity-name? "Must be an entity name"]]
+   [nil "--min N" "With --belongs-to: the fewest the parent may have. Its create then takes them"
+    :parse-fn #(or (parse-long %) %)
+    :validate [pos-int? "Must be a whole number, 1 or more"]]
    [nil "--workflow SPEC" "The entity's status as a workflow: field:first>second>third, forward only"]
    [nil "--[no-]http" "Generate the entity's HTTP (REST API) routes (default: true)"
     :default true]
@@ -89,6 +92,21 @@
 ;; =============================================================================
 ;; Field Command Options (add field to existing entity)
 ;; =============================================================================
+
+(def subscriber-options
+  [[nil "--module-name NAME" "Module name (lowercase, kebab-case) (required)"
+    :validate [#(re-matches #"^[a-z][a-z0-9-]*$" %)
+               "Must be lowercase with hyphens only"]]
+   [nil "--event EVENT" "The event type it handles, e.g. :admin/entity-created (required)"]
+   [nil "--entity PLURAL" "Only events whose payload's :entity is this, e.g. invoices"
+    :validate [#(re-matches #"^[a-z][a-z0-9-]*$" %) "Must be lowercase with hyphens only"]]
+   [nil "--name NAME" "The subscriber's name (default: <entity>-<event name>)"
+    :validate [#(re-matches #"^[a-z][a-z0-9-]*$" %) "Must be lowercase with hyphens only"]]
+   [nil "--base-ns NS" "Base namespace + path for the module (default: the project's own)"]
+   [nil "--output-dir DIR" "Output directory (default: current directory)"
+    :default "."]
+   [nil "--dry-run" "Show what would be generated without creating files"
+    :default false]])
 
 (def field-options
   [[nil "--module-name NAME" "Module name (lowercase, kebab-case) (required)"
@@ -464,6 +482,7 @@
         heading  (case (:command result)
                    :field  (str "✓ Added field to " (:module-name result))
                    :entity (str "✓ Added entity " (:entity result) " to " (:module-name result))
+                   :subscriber (str "✓ Added a subscriber to " (:module-name result))
                    (str "✓ Successfully generated module: " (:module-name result)))
         steps    (or (seq (:next-steps result))
                      ;; Fallback only. Every command that knows its own
@@ -715,7 +734,10 @@
                  (not (:module-name opts)) (conj "Missing required option: --module-name")
                  (not (:entity opts))      (conj "Missing required option: --entity")
                  (and (empty? (:field opts)) (not (:belongs-to opts)))
-                 (conj "At least one --field (or --belongs-to) is required"))]
+                 (conj "At least one --field (or --belongs-to) is required")
+
+                 (and (:min opts) (not (:belongs-to opts)))
+                 (conj "--min needs --belongs-to: it is the fewest the parent may have"))]
     (if (seq errors)
       {:status 1 :errors errors}
       (let [[fields-valid? fields-or-errors] (parse-all-fields (:field opts))
@@ -733,6 +755,7 @@
                         {:module-name (:module-name opts)
                          :entity      (cond-> {:name (:entity opts) :fields fields-or-errors}
                                         (:belongs-to opts) (assoc :belongs-to (:belongs-to opts))
+                                        (:min opts)        (assoc :min (:min opts))
                                         workflow           (assoc :workflow workflow))
                          :interfaces  {:http (:http opts true)
                                        :public-api (boolean (:public-api opts))}
@@ -744,6 +767,35 @@
               (cond-> {:status 1 :errors (:errors result)}
                 (seq (:existing-files result))
                 (assoc :existing-files (:existing-files result))))))))))
+
+(defn parse-event
+  "`:admin/entity-created` or `admin/entity-created` as a keyword, or nil."
+  [s]
+  (let [s (str/replace-first (str s) #"^:" "")]
+    (when (re-matches #"^[a-z][a-z0-9.-]*/[a-z][a-z0-9-]*$" s)
+      (keyword s))))
+
+(defn execute-subscriber
+  "Execute subscriber command - add an event subscriber to a module."
+  [service opts]
+  (let [event  (parse-event (:event opts))
+        errors (cond-> []
+                 (not (:module-name opts)) (conj "Missing required option: --module-name")
+                 (not (:event opts))       (conj "Missing required option: --event (e.g. --event :admin/entity-created)")
+                 (and (:event opts) (nil? event))
+                 (conj (str "--event " (pr-str (:event opts)) " is not a qualified event type, e.g. :admin/entity-created")))]
+    (if (seq errors)
+      {:status 1 :errors errors}
+      (let [result (ports/add-subscriber service (cond-> {:module-name (:module-name opts)
+                                                          :event       event
+                                                          :output-dir  (:output-dir opts)
+                                                          :dry-run     (:dry-run opts)
+                                                          :base-ns     (:base-ns opts)}
+                                                   (:entity opts) (assoc :entity (:entity opts))
+                                                   (:name opts)   (assoc :name (:name opts))))]
+        (if (:success result)
+          {:status 0 :result result}
+          {:status 1 :errors (:errors result)})))))
 
 (defn execute-field
   "Execute field command - add a field to an existing entity."
@@ -849,6 +901,7 @@
     :field (execute-field service opts)
     :endpoint (execute-endpoint service opts)
     :adapter (execute-adapter service opts)
+    :subscriber (execute-subscriber service opts)
     (throw (ex-info (str "Unknown scaffolder command: " (name verb))
                     {:type :unknown-command
                      :message (str "Unknown command: " (name verb))}))))
@@ -860,7 +913,7 @@
 (def root-help
   "Wagoe CLI - Module Scaffolding
 
-Usage: wagoe scaffolder <command> [options]
+Usage: bb scaffold <command> [options]
 
 Commands:
   generate    Generate a new module with full FC/IS structure
@@ -868,6 +921,7 @@ Commands:
   field       Add a field to an existing entity (creates migration)
   endpoint    Add an endpoint to an existing module (shows instructions)
   adapter     Generate a new adapter implementation
+  subscriber  Add an event subscriber to an existing module
 
 The scaffolder works inside an existing project. To create a new one, use the
 Wagoe CLI:
@@ -879,32 +933,35 @@ Global Options:
   -h, --help           Show help
 
 Examples:
-  wagoe scaffolder generate --module-name product --entity Product \\
+  bb scaffold generate --module-name product --entity Product \\
     --field name:string:required \\
     --field sku:string:required:unique \\
     --field price:decimal:required
 
-  wagoe scaffolder entity --module-name billing --entity InvoiceLineItem \\
+  bb scaffold entity --module-name billing --entity InvoiceLineItem \\
     --belongs-to invoice --field description:string:required
 
-  wagoe scaffolder field --module-name product --entity Product \\
+  bb scaffold field --module-name product --entity Product \\
     --name description --type text
 
-  wagoe scaffolder endpoint --module-name product \\
+  bb scaffold endpoint --module-name product \\
     --path /products/export --method GET --handler-name export-products
 
-  wagoe scaffolder adapter --module-name notifications \\
+  bb scaffold adapter --module-name notifications \\
     --port INotificationSender --adapter-name slack
 
+  bb scaffold subscriber --module-name billing \\
+    --event :admin/entity-created --entity invoices
+
 For command-specific help:
-  wagoe scaffolder <command> --help")
+  bb scaffold <command> --help")
 
 ;; BOU-259: `scaffolder new` had its own project generator, separate from the
 ;; `wagoe new` templates. It drifted until it produced a project with no
 ;; com.wagoe deps and no entry point. The verb is kept only to say where to go —
 ;; an "unknown command" would strand anyone following the old docs.
 (def new-removed-help
-  "`wagoe scaffolder new` has been removed.
+  "`bb scaffold new` has been removed.
 
 Projects are created with the Wagoe CLI:
 
@@ -919,7 +976,7 @@ existing project.")
 (def generate-help
   "Generate Module Command
 
-Usage: wagoe scaffolder generate [options]
+Usage: bb scaffold generate [options]
 
 Generates a complete Wagoe module with Functional Core / Imperative Shell
 architecture including:
@@ -995,7 +1052,7 @@ Other Options:
 
 Examples:
   # Generate a product module
-  wagoe scaffolder generate \\
+  bb scaffold generate \\
     --module-name product \\
     --entity Product \\
     --field name:string:required \\
@@ -1005,7 +1062,7 @@ Examples:
     --field status:enum:values=draft,live,archived:required
 
   # Generate a customer module with email
-  wagoe scaffolder generate \\
+  bb scaffold generate \\
     --module-name customer \\
     --entity Customer \\
     --field name:string:required \\
@@ -1013,7 +1070,7 @@ Examples:
     --field phone:string
 
   # Dry run to preview files
-  wagoe scaffolder generate \\
+  bb scaffold generate \\
     --module-name billing \\
     --entity Invoice \\
     --field amount:decimal:required \\
@@ -1022,7 +1079,7 @@ Examples:
 (def entity-help
   "Add Entity Command
 
-Usage: wagoe scaffolder entity [options]
+Usage: bb scaffold entity [options]
 
 Adds an entity to an existing module: its own core, service and persistence
 namespaces, a create migration and tests, plus its defs appended to the
@@ -1037,7 +1094,12 @@ Required Options:
 Options:
   --belongs-to ENTITY  The module's entity this one belongs to. Adds a
                        required <entity>_id column with a foreign key
-                       (ON DELETE CASCADE) and an index
+                       (ON DELETE CASCADE) and an index. When that is the
+                       module's first entity, its create request takes these
+                       too: POST /invoices with \"invoice-line-items\": [...]
+  --min N              With --belongs-to the first entity: the fewest it may
+                       have. Its create refuses fewer, and the API refuses
+                       the delete that would leave fewer
   --workflow SPEC      The entity's status as a workflow, as for generate
   --no-http            No API routes for the entity: for a module generated
                        with --no-http
@@ -1050,17 +1112,46 @@ The entity is wired into shell/module_wiring.clj and served at
 /api/v1/<entities>. It gets no web page.
 
 Example:
-  wagoe scaffolder entity \\
+  bb scaffold entity \\
     --module-name billing \\
     --entity InvoiceLineItem \\
     --belongs-to invoice \\
+    --min 1 \\
     --field description:string:required \\
     --field quantity:int:required:default=1")
+
+(def subscriber-help
+  "Add Subscriber Command
+
+Usage: bb scaffold subscriber [options]
+
+Adds an event subscriber to an existing module: shell/<name>_subscriber.clj
+with an Integrant component that subscribes through the events port and a
+`handle` to fill in, and its test. The module's wiring requires it, and starts
+it when the event bus is on (wagoe add events).
+
+Required Options:
+  --module-name NAME   The existing module
+  --event EVENT        The event type it handles, e.g. :admin/entity-created.
+                       Its namespace is the topic: :admin
+
+Options:
+  --entity PLURAL      Only events whose payload's :entity is this, e.g.
+                       invoices. The admin's events carry one
+  --name NAME          The subscriber's name (default: <entity>-<event name>)
+  --output-dir DIR     Write somewhere other than the current directory
+  --dry-run            Show what would be generated without creating files
+
+Example:
+  bb scaffold subscriber \\
+    --module-name billing \\
+    --event :admin/entity-created \\
+    --entity invoices")
 
 (def field-help
   "Add Field Command
 
-Usage: wagoe scaffolder field [options]
+Usage: bb scaffold field [options]
 
 Adds a new field to an existing entity by generating:
   - An ALTER TABLE migration to add the column
@@ -1088,14 +1179,14 @@ Optional Flags:
 
 Examples:
   # Add a description field
-  wagoe scaffolder field \\
+  bb scaffold field \\
     --module-name product \\
     --entity Product \\
     --name description \\
     --type text
 
   # Add a required unique field
-  wagoe scaffolder field \\
+  bb scaffold field \\
     --module-name customer \\
     --entity Customer \\
     --name tax-id \\
@@ -1106,7 +1197,7 @@ Examples:
 (def endpoint-help
   "Add Endpoint Command
 
-Usage: wagoe scaffolder endpoint [options]
+Usage: bb scaffold endpoint [options]
 
 Generates instructions for adding a new endpoint to an existing module.
 You will need to manually add the code to the http.clj file.
@@ -1122,14 +1213,14 @@ Optional:
 
 Examples:
   # Add a custom export endpoint
-  wagoe scaffolder endpoint \\
+  bb scaffold endpoint \\
     --module-name product \\
     --path /products/export \\
     --method GET \\
     --handler-name export-products
 
   # Add a bulk delete endpoint
-  wagoe scaffolder endpoint \\
+  bb scaffold endpoint \\
     --module-name customer \\
     --path /customers/bulk-delete \\
     --method POST \\
@@ -1138,7 +1229,7 @@ Examples:
 (def adapter-help
   "Add Adapter Command
 
-Usage: wagoe scaffolder adapter [options]
+Usage: bb scaffold adapter [options]
 
 Generates a new adapter implementation for a port/protocol.
 Useful for adding alternative implementations (e.g., different storage backends,
@@ -1155,7 +1246,7 @@ Optional:
 
 Examples:
   # Generate a Slack notification adapter
-  wagoe scaffolder adapter \\
+  bb scaffold adapter \\
     --module-name notifications \\
     --port INotificationSender \\
     --adapter-name slack \\
@@ -1163,7 +1254,7 @@ Examples:
     --method send-bulk:user-ids,message
 
   # Generate an S3 storage adapter
-  wagoe scaffolder adapter \\
+  bb scaffold adapter \\
     --module-name storage \\
     --port IFileStorage \\
     --adapter-name s3 \\
@@ -1224,8 +1315,10 @@ Examples:
           (println new-removed-help)
           1)
 
-        ;; Global --help or no command
-        (or has-help-flag? (nil? verb))
+        ;; --help before any command, or no command. A --help after one is
+        ;; that command's: this branch took them all, so `entity --help`
+        ;; printed the root help (BOU-578).
+        (or (:help (:options parsed-for-verb)) (nil? verb))
         (do
           (println root-help)
           0)
@@ -1256,6 +1349,11 @@ Examples:
           (println adapter-help)
           0)
 
+        (and (= verb :subscriber) has-help-flag?)
+        (do
+          (println subscriber-help)
+          0)
+
         ;; Execute command
         :else
         (let [;; Get all args after the verb
@@ -1268,6 +1366,7 @@ Examples:
                             :field field-options
                             :endpoint endpoint-options
                             :adapter adapter-options
+                            :subscriber subscriber-options
                             nil)]
           (if-not cmd-options
             (do

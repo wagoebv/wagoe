@@ -38,6 +38,10 @@ will promise.
   build and run on 21, and every CI job that starts a JVM uses it.
   `bb check:jdk` holds those to one number, so a JDK written in one place and
   not another cannot ship.
+
+| Databases
+| PostgreSQL and SQLite, and H2 for tests. MySQL is not supported yet; it is
+  planned after 1.0. Multi-tenancy needs PostgreSQL.
 |===
 
 Lockstep versioning means you never have to work out which `wagoe-user` goes
@@ -201,7 +205,7 @@ rather than a commit message.
 * *One more, in `1.0.0-rc-3`:* `bb scaffold generate --cli` is gone. It named an
   interface the scaffolder has never had a generator for, so no value of the
   flag ever produced one; only a script that passes it is affected.
-* *Seventeen in `1.0.0-rc-4`:* each is under `### Breaking` in `CHANGELOG.md`
+* *Nineteen in `1.0.0-rc-4`:* each is under `### Breaking` in `CHANGELOG.md`
   with what to do about it.
 ** Every route requires a signed-in user unless it says `:public true`.
 ** `sortable-th` and `pagination` swap `outerHTML` by default.
@@ -222,8 +226,11 @@ rather than a commit message.
    unless `:on-delete :cascade`.
 ** An unknown admin entity-config key stops startup.
 ** `:wagoe/payment-provider` has no default, and `:mock` runs only in dev and test.
+** `:wagoe/tenant` refuses to boot on SQLite, and on H2 outside a test profile.
+** Tenant slugs, schema names, memberships and invite tokens are unique in the
+   database, so a boot stops on existing duplicates.
 +
-Nineteen additions to the three frozen at `rc-1`, so the list is twenty-two.
+Twenty-one additions to the three frozen at `rc-1`, so the list is twenty-four.
 `bb check:changelog` holds the rc-4 count to the `[Unreleased]` `### Breaking`
 entries, and the totals to the counts above.
 * Breaking changes that already shipped are in `CHANGELOG.md` under a

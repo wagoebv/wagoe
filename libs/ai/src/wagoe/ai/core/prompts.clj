@@ -55,7 +55,7 @@ Output ONLY valid JSON with this exact structure:
      \"fields\": [
        {\"name\": \"field-name\", \"type\": \"string|text|int|decimal|boolean|email|uuid|enum|date|datetime|json\", \"required\": true|false, \"unique\": false, \"enum-values\": [\"draft\", \"sent\"]}
      ]},
-    {\"name\": \"ChildName\", \"belongs-to\": \"PascalCaseName\", \"fields\": [...],
+    {\"name\": \"ChildName\", \"belongs-to\": \"PascalCaseName\", \"min\": 1, \"fields\": [...],
      \"workflow\": {\"field\": \"status\", \"states\": [\"first\", \"second\"]}}
   ],
   \"http\": true,
@@ -79,6 +79,7 @@ Rules:
 - every entity name MUST be PascalCase (e.g. Product, OrderItem, UserProfile)
 - one entry in entities per thing the description names; most modules have one
 - an entity that belongs to another (line items of an invoice, lines of an order) carries \"belongs-to\": the parent's name. The parent comes first. Do not add the parent's id as a field; belongs-to creates it
+- when the description says a parent has at least one of them (an invoice with at least one line item), the child carries \"min\": 1, or the number it names. Leave min out otherwise
 - field names MUST be kebab-case
 - valid field types: string, text, int, decimal, boolean, email, uuid, enum, date, datetime, json
 - date is a calendar day (a due date, a birthday); datetime is a moment in time (when something happened or is scheduled)

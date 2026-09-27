@@ -4,8 +4,7 @@
             [wagoe.platform.shell.persistence-interceptors :as persistence-interceptors]
             [wagoe.tenant.ports :as ports]
             [cheshire.core :as json]
-            [clojure.set])
-  (:import [java.sql Timestamp]))
+            [clojure.set]))
 
 (defn- parse-json-value [value]
   (cond
@@ -13,13 +12,6 @@
     (map? value) value
     (string? value) (json/parse-string value true)
     (= "org.postgresql.util.PGobject" (.getName (class value))) (some-> (.getValue value) (json/parse-string true))
-    :else value))
-
-(defn- ->instant [value]
-  (cond
-    (nil? value) nil
-    (instance? java.time.Instant value) value
-    (instance? Timestamp value) (.toInstant ^Timestamp value)
     :else value))
 
 (defn- invite-entity->db
@@ -57,11 +49,11 @@
         (update :role type-conversion/string->keyword)
         (update :status type-conversion/string->keyword)
         (update :accepted-by-user-id #(when % (type-conversion/string->uuid %)))
-        (update :expires-at ->instant)
-        (update :accepted-at ->instant)
-        (update :revoked-at ->instant)
-        (update :created-at ->instant)
-        (update :updated-at ->instant)
+        (update :expires-at type-conversion/string->instant)
+        (update :accepted-at type-conversion/string->instant)
+        (update :revoked-at type-conversion/string->instant)
+        (update :created-at type-conversion/string->instant)
+        (update :updated-at type-conversion/string->instant)
         (update :metadata parse-json-value))))
 
 (defn lock-pending-invite-by-token-hash

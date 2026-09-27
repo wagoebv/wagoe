@@ -66,11 +66,19 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **`:wagoe/payment-provider` has no default provider, and `:mock` boots only in dev and test** (BOU-564).
   Set `:provider` explicitly; use `:stripe` or `:mollie` in every other profile.
+- **`:wagoe/tenant` refuses to boot on SQLite, and on H2 without `:allow-h2? true`** (BOU-576).
+  Use `:wagoe/postgresql`; a test profile on H2 adds `:allow-h2? true` under `:wagoe/tenant`.
+- **Tenant slugs, schema names, memberships and invite tokens are unique in the database** (BOU-576).
+  Boot stops, naming the table, if rows already duplicate one; remove the duplicates first.
 
 ### Added
 
 - **`bb scaffold generate|entity --workflow status:entered>delivered>paid`** (BOU-569). The status
   becomes a workflow that API and admin rows both start, moved by `POST /<entities>/:id/transition`.
+- **`bb scaffold entity --belongs-to invoice --min 1`** (BOU-578). The invoice API creates its line items
+  in the same request and transaction, refuses fewer, and the admin gets `:min`.
+- **`bb scaffold subscriber --module-name m --event :admin/entity-created`** (BOU-578). Writes an event
+  subscriber component, its handler and test, started when the event bus is on.
 
 ### Fixed
 
@@ -78,6 +86,13 @@ for what is public API, what is internal, and how deprecations are announced.
   for a UUID id column on both; drop any string handling in subscribers.
 - **`migrate up` created tables for modules that were not switched on** (BOU-579). It now migrates
   only the modules in `:active`; tables it already created stay, and nothing re-runs.
+- **`migrate up` failed on a database that had never booted** (BOU-576). Nothing to do; an
+  applied database runs nothing new.
+- **The tenant API answered `400 {"error":null}` on success and 500 on not-found** (BOU-576).
+  Each route answers with the tenant or a typed 400/404/409; a taken slug is now 409, not 400.
+- **Membership reads and updates answered 500** (BOU-576); their timestamps could not be encoded.
+- **A new tenant could take a deleted tenant's slug, and with it that tenant's schema and data** (BOU-576).
+  A slug is now never reused; upgrade if you delete tenants.
 - **`bb setup` and `bb agents:update` ran the `wagoe` on PATH, which could be an older release** (BOU-577).
   Both now use the wagoe-cli wagoe-tools pins; copy `agents:update` from a new project's bb.edn, then run it.
 - **`wagoe add devtools` reads the dashboard port from `DASHBOARD_PORT`** (BOU-577), default 9999.
@@ -85,6 +100,11 @@ for what is public API, what is internal, and how deprecations are announced.
 - **Scaffolded migrations lost their indexes on SQLite and failed on PostgreSQL and MySQL** (BOU-569).
   Add `--;;` to older ones; an existing SQLite database needs a new migration creating the missing indexes.
 - **`bb scaffold ai --help` answered "Unknown option"** (BOU-569). It prints the usage.
+- **`bb db:seed` put a seeded delivered or paid row's workflow in its first state** (BOU-578). State it in
+  the seed row (`:status :delivered`); the instance starts there.
+- **`bb scaffold` help pointed at commands a project lacks, and `entity --help` printed the global help**
+  (BOU-578). Every `--help` now runs in a generated project; `scaffold ai --dry-run` no longer asks.
+- **`bb ai admin-entity` refused an unknown key without naming the valid ones** (BOU-578). It lists them.
 - **An admin create required hidden and defaulted fields, and a 422 marked no field** (BOU-570).
   Drop `:required false` workarounds; required textareas and selects now carry `required`.
 - **`bb ai gen-tests` wrote tests that did not compile, and `bb ai admin-entity` invented keys** (BOU-572).

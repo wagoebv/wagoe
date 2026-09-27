@@ -216,6 +216,34 @@
         :when (seq snippet)]
     [env snippet]))
 
+(def ^:private database-keys
+  [:wagoe/postgresql :wagoe/sqlite :wagoe/h2 :wagoe/mysql])
+
+(defn- active-database
+  "The database key in profile `env`'s :active map, or nil."
+  [dir env]
+  (try
+    (let [active (:active (edn/read-string {:default (fn [_ v] v)}
+                                           (slurp (io/file dir "resources/conf" env "config.edn"))))]
+      (first (filter #(contains? active %) database-keys)))
+    (catch Exception _ nil)))
+
+(defn database-warnings
+  "One line per profile `module` goes in whose active database it cannot boot
+   on, per the catalogue's :databases. H2 passes where the module's snippet
+   says `:allow-h2? true`, as tenant's test snippet does (BOU-576)."
+  [dir {:keys [databases] :as module}]
+  (when (seq databases)
+    (vec (for [[env snippet] (target-profiles dir module)
+               :let  [db (active-database dir env)]
+               :when (and db
+                          (not (contains? databases (keyword (name db))))
+                          (not (and (= :wagoe/h2 db) (str/includes? snippet ":allow-h2? true"))))]
+           (str env " runs on " db ", and " (:name module) " needs "
+                (str/join " or " (map #(str ":wagoe/" (name %)) (sort databases)))
+                ": the app will refuse to boot in " env " until resources/conf/" env
+                "/config.edn switches its :active database.")))))
+
 (defn patch-configs!
   "Patch every existing resources/conf/<profile>/config.edn. Returns
    [[env result]], result as `patch-config!` returns it. Only dev and test
@@ -381,6 +409,11 @@
 
             :else
             (do
+              ;; Before anything is written, so the boot refusal is no surprise.
+              (when-let [lines (seq (database-warnings dir module))]
+                (println (str "Warning: " module-name " runs on PostgreSQL only. Installing anyway."))
+                (doseq [line lines] (println (str "  " line)))
+                (println))
               (println (str "Adding " module-name "..."))
               ;; Every outcome says what happened to deps.edn. "added" over an
               ;; untouched file is how `wagoe add ai` looked while doing
@@ -399,9 +432,9 @@
               (let [results (patch-configs! dir module)]
                 (doseq [[env result] results]
                   (println (str "  " env ": " (case result
-                                                 :added     "added to config.edn"
-                                                 :present   "already in config.edn"
-                                                 :no-active "no :active map in config.edn, nothing written"))))
+                                                :added     "added to config.edn"
+                                                :present   "already in config.edn"
+                                                :no-active "no :active map in config.edn, nothing written"))))
                 (when-let [vs (patch-env-example! dir module results)]
                   (println (str "  .env.example: added " (str/join ", " vs)))))
               (sync-agents-md! dir)

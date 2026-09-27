@@ -460,3 +460,35 @@
   (testing "an entity without one gets no flag"
     (is (not-any? #{"--workflow"} (apply concat (scaffold/build-ai-commands
                                                  (#'scaffold/parse-ai-module-spec multi-entity-json)))))))
+
+;; =============================================================================
+;; BOU-578
+;; =============================================================================
+
+(deftest ^:unit a-dry-run-never-asks
+  ;; It asked "Generate this module?", and a dry run generates nothing.
+  (let [{:keys [calls exit out]} (with-in-str ""
+                                   (run-main ["invoices with line items" "--dry-run"]
+                                             workflow-json (constantly {:exit 0})))]
+    (is (nil? exit))
+    (is (not (str/includes? out "Generate this module?")) out)
+    (is (= 2 (count calls)) "the parse, then the dry generate")))
+
+(def ^:private min-json
+  (str/replace workflow-json "\"belongs-to\":\"Invoice\"" "\"belongs-to\":\"Invoice\",\"min\":1"))
+
+(deftest ^:unit the-summary-shows-the-workflow-and-the-minimum
+  (let [out (plain (:out (run-main ["invoices" "--dry-run"] min-json (constantly {:exit 0}))))]
+    (is (str/includes? out "Workflow:  status: entered > delivered > paid") out)
+    (is (str/includes? out "Workflow:  state: open > done") out)
+    (is (str/includes? out "belongs to Invoice, at least 1") out)))
+
+(deftest ^:unit a-minimum-in-the-spec-reaches-the-scaffolder
+  (let [[_ entity] (scaffold/build-ai-commands (#'scaffold/parse-ai-module-spec min-json))]
+    (is (= "1" (second (drop-while #(not= "--min" %) entity)))))
+  (testing "none, or one that is not a positive whole number, gives no flag"
+    (doseq [json [multi-entity-json
+                  (str/replace min-json "\"min\":1" "\"min\":0")
+                  (str/replace min-json "\"min\":1" "\"min\":\"one\"")]]
+      (is (not-any? #{"--min"} (apply concat (scaffold/build-ai-commands
+                                              (#'scaffold/parse-ai-module-spec json))))))))

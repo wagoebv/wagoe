@@ -1,1 +1,2 @@
-DROP TABLE IF EXISTS public.tenant_member_invites;
+--;; Runs no statement (BOU-576): the table belongs to boot, not to this
+--;; migration, so rolling it back must not drop it.

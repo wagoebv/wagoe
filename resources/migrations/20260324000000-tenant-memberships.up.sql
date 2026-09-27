@@ -1,18 +1,8 @@
-CREATE TABLE IF NOT EXISTS public.tenant_memberships (
-  id           VARCHAR(255)             NOT NULL PRIMARY KEY,
-  tenant_id    VARCHAR(255)             NOT NULL,
-  user_id      VARCHAR(255)             NOT NULL,
-  role         VARCHAR(255)             NOT NULL,
-  status       VARCHAR(255)             NOT NULL,
-  invited_at   TIMESTAMP WITH TIME ZONE NOT NULL,
-  accepted_at  TIMESTAMP WITH TIME ZONE,
-  created_at   TIMESTAMP WITH TIME ZONE NOT NULL,
-  updated_at   TIMESTAMP WITH TIME ZONE,
-  UNIQUE (tenant_id, user_id)
-);
+--;; Runs no statement (BOU-576): every line carries migratus's separator,
+--;; which it strips with the rest of the line.
 --;;
-CREATE INDEX IF NOT EXISTS idx_tenant_memberships_tenant_id ON public.tenant_memberships (tenant_id);
---;;
-CREATE INDEX IF NOT EXISTS idx_tenant_memberships_user_id   ON public.tenant_memberships (user_id);
---;;
-CREATE INDEX IF NOT EXISTS idx_tenant_memberships_status    ON public.tenant_memberships (status);
+--;; This created public.tenant_memberships in PostgreSQL-only SQL, so
+--;; `migrate up` failed on SQLite and H2, and on a fresh PostgreSQL it made a
+--;; table other than the one boot makes. The tenant library creates it at boot
+--;; from its Malli schema. The id stays because existing databases have it
+--;; applied.

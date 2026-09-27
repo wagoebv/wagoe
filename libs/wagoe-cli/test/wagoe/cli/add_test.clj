@@ -332,3 +332,48 @@
       (is (add/installed? tmp module true))
       (finally
         (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))
+
+(defn- project-on! [dir dbs]
+  (make-wagoe-project! dir)
+  (doseq [[env db] dbs]
+    (spit (io/file dir "resources/conf" env "config.edn")
+          (str "{:active {" db " {:db \"x\"}} :inactive {}}"))))
+
+(deftest ^:integration tenant-warns-for-each-profile-not-on-postgresql
+  ;; Tenancy refuses to boot outside PostgreSQL (BOU-576). Said at `wagoe add`,
+  ;; not first at the boot that fails.
+  (let [tmp    (str (System/getProperty "java.io.tmpdir") "/wagoe-add-db-" (System/currentTimeMillis))
+        tenant (cat/find-module "tenant")]
+    (try
+      (testing "a SQLite dev profile is named, with what to switch"
+        (project-on! tmp {"dev" ":wagoe/sqlite" "test" ":wagoe/h2"})
+        (let [lines (add/database-warnings tmp tenant)]
+          (is (= 1 (count lines)) (pr-str lines))
+          (is (str/includes? (first lines) "dev"))
+          (is (str/includes? (first lines) ":wagoe/sqlite"))
+          (is (str/includes? (first lines) ":wagoe/postgresql"))))
+      (testing "H2 in test is fine: the test snippet allows it"
+        (is (not-any? #(str/includes? % "test") (add/database-warnings tmp tenant))))
+      (testing "PostgreSQL everywhere says nothing"
+        (project-on! tmp {"dev" ":wagoe/postgresql" "test" ":wagoe/postgresql"})
+        (is (empty? (add/database-warnings tmp tenant))))
+      (testing "a module with no database requirement says nothing"
+        (project-on! tmp {"dev" ":wagoe/sqlite" "test" ":wagoe/h2"})
+        (is (empty? (add/database-warnings tmp (cat/find-module "email")))))
+      (finally
+        (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))
+
+(deftest ^:integration tenant-on-sqlite-still-installs-and-says-so-first
+  (let [tmp  (str (System/getProperty "java.io.tmpdir") "/wagoe-add-db-main-" (System/currentTimeMillis))
+        prev (System/getProperty "user.dir")]
+    (try
+      (project-on! tmp {"dev" ":wagoe/sqlite" "test" ":wagoe/h2"})
+      (System/setProperty "user.dir" tmp)
+      (let [out (with-out-str (add/-main ["tenant"]))]
+        (is (str/includes? out "PostgreSQL"))
+        (is (< (str/index-of out "PostgreSQL") (str/index-of out "tenant added"))
+            "the warning comes before the install is reported")
+        (is (str/includes? (slurp (io/file tmp "resources/conf/dev/config.edn")) ":wagoe/tenant")))
+      (finally
+        (System/setProperty "user.dir" prev)
+        (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))

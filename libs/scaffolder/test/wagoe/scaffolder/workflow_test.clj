@@ -317,6 +317,37 @@
             (is (= 200 (:status resp)) (pr-str resp))
             (is (= "delivered" (get-in resp [:body :status])))))))))
 
+(deftest ^:integration a-seeded-row-gets-its-workflow-in-the-state-it-holds
+  ;; BOU-578: `bb db:seed` inserts rows without the service, and a delivered
+  ;; or paid invoice got a workflow in `entered`.
+  (with-booted "s"
+    (fn [{:keys [call ctx store system]}]
+      (let [[a b c] (repeatedly 3 random-uuid)
+            state   #(:current-state (workflow/find-instance-by-entity store :invoice %))
+            seed    (:wagoe/billing-seed system)]
+        (is (isa? :wagoe/billing-seed :wagoe/seed-hook) "bb db:seed finds it by what it derives from")
+        (sql! ctx "INSERT INTO invoices (id, number, created_at) VALUES (?, 'A-1', CURRENT_TIMESTAMP)" a)
+        (sql! ctx "INSERT INTO invoices (id, number, status, created_at) VALUES (?, 'A-2', 'delivered', CURRENT_TIMESTAMP)" b)
+        (sql! ctx "INSERT INTO invoices (id, number, status, created_at) VALUES (?, 'A-3', 'paid', CURRENT_TIMESTAMP)" c)
+        ;; As bb db:seed hands it over: rows by table, ids as the file wrote them.
+        (seed {"invoices" [{:id a} {:id (str b)} {:id c}] "other_table" [{:id 1}]})
+        (is (= [:entered :delivered :paid] (map state [a b c])))
+        (is (= ["entered" "delivered" "paid"] (map #(column ctx %) [a b c])))
+        (testing "a second run changes nothing"
+          (seed {"invoices" [{:id a} {:id b}]})
+          (is (= [:entered :delivered] (map state [a b]))))
+        (testing "a seeded invoice moves on from where it was put"
+          (let [resp (call :post (str "/invoices/" b "/transition") {:transition "paid"})]
+            (is (= 200 (:status resp)) (pr-str resp))
+            (is (= "paid" (get-in resp [:body :status])))))
+        (testing "a status its workflow does not have is refused, by name"
+          (let [d (random-uuid)]
+            (sql! ctx "INSERT INTO invoices (id, number, status, created_at) VALUES (?, 'A-4', 'shipped', CURRENT_TIMESTAMP)" d)
+            (let [e (try (seed {"invoices" [{:id d}]}) nil (catch Exception e e))]
+              (is (some? e))
+              (is (str/includes? (ex-message e) "shipped") (ex-message e))
+              (is (nil? (state d))))))))))
+
 (deftest ^:integration a-refused-delete-keeps-the-workflow
   (with-booted "d"
     (fn [{:keys [call ctx store]}]

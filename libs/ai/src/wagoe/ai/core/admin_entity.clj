@@ -261,10 +261,13 @@
   [entities]
   (when-not (file-validator entities)
     (->> (:errors (m/explain schema/AdminEntityFile entities))
-         (map (fn [{:keys [in type] :as error}]
+         (map (fn [{:keys [in type schema] :as error}]
                 (str (pr-str (vec in)) " "
                      (if (= type :malli.core/extra-key)
-                       "is not a key the admin reads"
+                       ;; The keys it could have meant: :min-rows was refused
+                       ;; without a word about :min (BOU-578).
+                       (str "is not a key the admin reads here; it reads "
+                            (str/join ", " (map (comp pr-str first) (m/children schema))))
                        (me/error-message error)))))
          distinct
          vec)))

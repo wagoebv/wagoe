@@ -69,12 +69,15 @@
                            {:type :validation-error
                             :errors (create-tenant-request-explainer tenant-input)})))
 
-         (let [existing-slugs (set (map :slug (.find-all-tenants tenant-repository {:limit 10000})))
-               decision (tenant-core/create-tenant-decision (:slug tenant-input) existing-slugs)]
+         ;; Deleted tenants included: a deleted tenant's schema is kept, and
+         ;; the schema name derives from the slug (BOU-576).
+         (let [slug           (:slug tenant-input)
+               existing-slugs (if (.tenant-slug-exists? tenant-repository slug) #{slug} #{})
+               decision (tenant-core/create-tenant-decision slug existing-slugs)]
 
            (when-not (:valid? decision)
              (throw (ex-info (:error decision)
-                             {:type :validation-error
+                             {:type (or (:type decision) :validation-error)
                               :message (:error decision)})))
 
            (let [tenant-id (generate-tenant-id)

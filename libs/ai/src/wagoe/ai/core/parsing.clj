@@ -150,7 +150,7 @@
    The older singular shape — `entity` plus `fields` — is still read.
 
    Returns:
-     {:module-name :entities [{:name :fields :belongs-to? :workflow?}] :http :web :public-api}, plus
+     {:module-name :entities [{:name :fields :belongs-to? :min? :workflow?}] :http :web :public-api}, plus
      :entity and :fields for the first entity, or {:error str} on failure."
   [response-text]
   (let [parsed (parse-json-response response-text)]
@@ -171,9 +171,10 @@
           {:error "AI response fields must be an array"}
 
           :else
-          (let [entities (mapv (fn [{:keys [name fields belongs-to workflow]}]
+          (let [entities (mapv (fn [{:keys [name fields belongs-to workflow min]}]
                                  (cond-> {:name name :fields (mapv normalise-field fields)}
                                    (string? belongs-to) (assoc :belongs-to belongs-to)
+                                   (and (string? belongs-to) (pos-int? min)) (assoc :min min)
                                    (workflow? workflow) (assoc :workflow (select-keys workflow [:field :states]))))
                                entities)]
             {:module-name module-name

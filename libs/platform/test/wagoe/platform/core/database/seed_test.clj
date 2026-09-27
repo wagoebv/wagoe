@@ -42,6 +42,12 @@
     (is (= "audit_logs" (seed/table->name :audit-logs)))
     (is (= "tasks" (seed/table->name :tasks)))))
 
+(deftest ^:unit a-keyword-value-is-stored-as-its-name
+  ;; A workflow state is written :delivered, and HoneySQL reads a keyword
+  ;; value as a column name (BOU-578).
+  (is (= {:status "delivered" :kind "a/b" :n 1}
+         (seed/row->columns {:status :delivered :kind :a/b :n 1}))))
+
 (deftest ^:unit ordered-vector-form-is-accepted-and-kept-in-order
   (testing "a vector of [table rows] pairs validates"
     (let [data [[:users [{:email "a@b.c"}]]
