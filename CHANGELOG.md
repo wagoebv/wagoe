@@ -61,6 +61,18 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Creating a scaffolded entity with an enum field answered 500** (BOU-562). Regenerate
+  `shell/*persistence.clj`, or copy `enum-fields`, `->row` and `->entity` from a new module.
+- **Scaffolded repository tests asserted nothing about the database** (BOU-562). New ones
+  round-trip a row on H2; `check:placeholder-tests` now flags a `testing` with no assertion.
+- **`bb scaffold ai` named one description's module differently per run** (BOU-562). The module
+  is named after the first entity, and a dry run's parse is reused from `target/scaffold-ai/`.
+- **`bb scaffold integrate` left a `}` on its own line and wrote an unused `:base-path`** (BOU-562).
+  Delete `:base-path` from your `:wagoe/<module>` keys.
+- **The scaffolder's next steps named a test namespace that does not exist** (BOU-562). No action needed.
+- **`bb scaffold ai`'s summary ran a field's name into its type** (BOU-562). No action needed.
+- **The generated SKILL.md said `integrate` writes nothing** (BOU-562). Copy
+  `.claude/skills/wagoe/SKILL.md` from a new project into yours.
 - **`bb scaffold ai --dry-run` wrote every file** (BOU-490). It is dry now, and an unknown flag
   is refused instead of being sent to the model. Upgrade wagoe-tools.
 - **Field errors were not tied to their input for screen readers** (BOU-398). Inputs with errors now
@@ -134,6 +146,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **The scaffolder writes admin config** (BOU-562). With the admin on, `generate` and `entity` add
+  each entity's file, allowlist entry and `#include`; a `--belongs-to` child is editable from its parent.
 - **Admin writes publish lifecycle events** (BOU-492). With `:wagoe/events` on,
   subscribe to `:admin` for `:admin/entity-created`, `-updated` and `-deleted`.
 - **Modules with several entities** (BOU-497, BOU-514). `bb scaffold entity
