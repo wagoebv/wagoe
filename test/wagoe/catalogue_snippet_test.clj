@@ -44,6 +44,14 @@
                    "here \u2014 :wagoe.external/imap and /twilio have no documented "
                    "settings at all (BOU-427)")})
 
+(defn- dev-snippet
+  "What `wagoe add` writes into dev: the dev snippet where the entry has one,
+   else the snippet every profile gets. Prod may get less, or nothing — the
+   mock payment provider and the AI service stay in dev (BOU-564)."
+  [entry]
+  (let [dev (:dev-config-snippet entry)]
+    (if (seq (str/trim (or dev ""))) dev (:config-snippet entry))))
+
 (defn- module [name*]
   (first (filter #(= name* (:name %)) (:modules (catalogue)))))
 
@@ -91,12 +99,11 @@
 
    `wagoe add` injects `:config-snippet` into `:active`; an empty one writes
    nothing, so the library lands in deps.edn and the module is never switched
-   on. That is what reports and calendar did (BOU-427). These four are
+   on. That is what reports and calendar did (BOU-427). These three are
    deliberate — an entry that grows a snippet is removed from here."
   {"user"     "enabled in code: `wagoe new` writes #{:wagoe/user} as an extra-module"
    "external" "its SMTP settings are documented under the email entry; :wagoe.external/imap and /twilio are opt-in by hand"
-   "ui-style" "an asset bundle every service reads; nothing to configure"
-   "devtools" "dev-only, and its library ships in the :repl alias rather than :deps"})
+   "ui-style" "an asset bundle every service reads; nothing to configure"})
 
 (deftest ^:unit every-module-is-switched-on-by-what-wagoe-add-writes
   (let [by-lib (into {} (map (juxt :name identity)) (:modules (catalogue)))]
@@ -105,7 +112,7 @@
 
     (doseq [lib (sort (set (vals modules/framework-modules)))]
       (testing lib
-        (let [snippet (:config-snippet (get by-lib lib))]
+        (let [snippet (dev-snippet (get by-lib lib))]
           (if-let [why (get activated-another-way lib)]
             (is (empty? (str/trim (or snippet "")))
                 (str lib " has a snippet now — drop it from activated-another-way (" why ")"))
@@ -116,8 +123,8 @@
 (deftest ^:integration every-module-boots-from-its-documented-config
   ;; The promise is "switch on by editing config.edn alone". BOU-420 made the
   ;; library resolve; this asks whether the module then starts, from the config
-  ;; `wagoe add` writes — the snippet where there is one, `{:enabled? true}`
-  ;; where the catalogue says that is the whole of it.
+  ;; `wagoe add` writes into dev — the snippet where there is one,
+  ;; `{:enabled? true}` where the catalogue says that is the whole of it.
   ;;
   ;; It found two things that reading could not: push's APNs provider selected
   ;; :apns for a credentials map of unset #env values, throwing on a key file
@@ -132,7 +139,10 @@
     (doseq [[k lib] (sort-by val (apply dissoc modules/framework-modules
                                         (keys modules/dev-only-modules)))
             :let    [entry    (get by-lib lib)
-                     settings (snippet-settings (:config-snippet entry))
+                     ;; devtools' snippet is the dashboard, which refuses the
+                     ;; test profile; its other key boots on its own.
+                     settings (not-empty (apply dissoc (snippet-settings (dev-snippet entry))
+                                                (keys modules/dev-only-modules)))
                      active   (or settings {k {:enabled? true}})]]
       (testing (str k " from " (if settings "its snippet" "{:enabled? true}"))
         (if-let [why (get needs-more-than-config lib)]

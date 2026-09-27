@@ -99,6 +99,13 @@
                  :base-url "http://localhost:3001"})]
       (is (not (str/includes? text "Admin:"))))))
 
+(deftest ^:unit the-dashboard-shows-the-nrepl-port-it-is-given
+  (let [status #(sut/status-text {:system     (system-of fresh-project)
+                                  :base-url   "http://localhost:3001"
+                                  :nrepl-port %})]
+    (is (str/includes? (status 7899) "port 7899"))
+    (is (not (str/includes? (status nil) "nREPL")) "no port known, none claimed")))
+
 (deftest ^:unit nothing-running-has-no-dashboard
   ;; nil rather than an empty box: the caller prints "start it with (go)".
   (is (nil? (sut/status-text {:system nil :base-url "http://localhost:3000"}))))

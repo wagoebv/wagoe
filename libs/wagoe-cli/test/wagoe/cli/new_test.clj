@@ -503,3 +503,62 @@
           (is (not (excluded? path)) (str path " must stay in the uberjar"))))
       (finally
         (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))
+
+(defn- generated
+  "`f` of a freshly generated project dir, which is deleted afterwards."
+  [f]
+  (let [tmp (str (System/getProperty "java.io.tmpdir") "/wagoe-new-" (System/nanoTime))]
+    (try
+      (new/generate! tmp "test-proj" {})
+      (f tmp)
+      (finally
+        (doseq [x (reverse (file-seq (io/file tmp)))] (.delete x))))))
+
+(deftest ^:integration each-test-runs-in-one-suite
+  ;; Two suites over one path ran every test twice: `:kaocha/metadata {:focus
+  ;; ...}` filters nothing, and kaocha drops a :focus-meta no test carries
+  ;; (BOU-564).
+  (generated
+   (fn [dir]
+     (let [paths (->> (slurp (io/file dir "tests.edn"))
+                      (edn/read-string {:readers {'kaocha/v1 identity}})
+                      :tests
+                      (mapcat :test-paths))]
+       (is (seq paths))
+       (is (apply distinct? paths) (str "suites share a test path: " (pr-str paths)))))))
+
+(defn- generated-fn
+  "The `defn` named `sym` in the generated `rel` file, evaluated on its own."
+  [dir rel sym]
+  (let [forms (read-string (str "[" (slurp (io/file dir rel)) "]"))
+        form  (first (filter #(and (seq? %) (= 'defn (first %)) (= sym (second %))) forms))]
+    (is (some? form) (str sym " is not defined in " rel))
+    (binding [*ns* (create-ns (gensym "generated"))]
+      (refer-clojure)
+      (eval form))))
+
+(deftest ^:integration a-failed-start-names-the-root-cause
+  ;; -main printed Integrant's "Error on key :wagoe/http-server when building
+  ;; system" and a config-file hint, and the cause only with WAGOE_DEBUG=1.
+  (generated
+   (fn [dir]
+     (let [lines (generated-fn dir "src/test_proj/main.clj" 'failure-lines)
+           port  (ex-info "Error on key :wagoe/http-server when building system" {}
+                          (ex-info "Requested port not available" {:type :port-unavailable}))
+           text  (str/join "\n" (lines port))]
+       (is (str/includes? text "Requested port not available"))
+       (is (str/includes? text ":port-unavailable"))
+       (is (not (str/includes? text "expected resources")) "the config is not what is missing")
+       (testing "the config hint, when it is"
+         (is (str/includes? (str/join "\n" (lines (ex-info "Configuration file not found"
+                                                           {:path "conf/prod/config.edn"
+                                                            :available-profiles [:dev]})))
+                            "expected resources/conf/prod/config.edn")))))))
+
+(deftest ^:integration gitignore-covers-what-a-dev-run-writes
+  (generated
+   (fn [dir]
+     (let [lines (set (str/split-lines (slurp (io/file dir ".gitignore"))))]
+       ;; SQLite in WAL mode, and the file nREPL writes its port to.
+       (doseq [p ["*.db" "*.db-shm" "*.db-wal" ".nrepl-port"]]
+         (is (contains? lines p) (str p " is not ignored")))))))

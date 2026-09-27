@@ -182,3 +182,13 @@
           (is (not (contains? assembled primary))
               (str (:name m) " is wired now — remove it from known-unwired: "
                    (get known-unwired (:name m)))))))))
+
+(deftest ^:unit no-stand-in-reaches-prod
+  ;; :config-snippet is what every profile but dev and test gets. A mock payment
+  ;; provider there accepts any webhook as paid; an in-memory bus or queue
+  ;; splits across replicas; the AI service is a build-time tool (BOU-564).
+  (doseq [{:keys [name config-snippet]} (:modules (cat/load-catalogue))
+          :let [prod (str/replace config-snippet
+                                  #"(?s):wagoe/(metrics|error-reporting)\s*\{[^}]*\}" "")]]
+    (doseq [bad [":mock" ":memory" ":in-memory" ":no-op" ":wagoe/ai-service"]]
+      (is (not (str/includes? prod bad)) (str name "'s prod snippet has " bad)))))

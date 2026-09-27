@@ -3,7 +3,8 @@
             [clojure.edn]
             [clojure.java.io :as io]
             [clojure.string :as str]
-            [wagoe.cli.add :as add]))
+            [wagoe.cli.add :as add]
+            [wagoe.cli.catalogue :as cat]))
 
 (defn- make-wagoe-project! [dir]
   (io/make-parents (io/file dir "resources/conf/dev/config.edn"))
@@ -197,5 +198,91 @@
         (is (str/includes? (conf "dev") ":wagoe/dashboard"))
         (is (not (str/includes? (conf "test") ":wagoe/dashboard")))
         (is (not (str/includes? (conf "prod") ":wagoe/dashboard"))))
+      (finally
+        (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))
+
+;; BOU-564 -----------------------------------------------------------------------
+
+(defn- with-profiles!
+  "A wagoe project with dev, test and prod profiles. Returns the dir."
+  [label]
+  (let [tmp (str (System/getProperty "java.io.tmpdir") "/wagoe-add-" label "-" (System/nanoTime))]
+    (make-wagoe-project! tmp)
+    (io/make-parents (io/file tmp "resources/conf/prod/config.edn"))
+    (spit (io/file tmp "resources/conf/prod/config.edn") "{\n :active\n {\n }\n}")
+    tmp))
+
+(defn- active-of [dir env]
+  (:active (clojure.edn/read-string {:default (fn [_ v] v)}
+                                    (slurp (io/file dir "resources/conf" env "config.edn")))))
+
+(deftest ^:integration events-runs-in-memory-in-dev-and-on-redis-in-prod
+  (let [tmp (with-profiles! "events")]
+    (try
+      (add/patch-configs! tmp (cat/find-module "events"))
+      (is (= :memory (get-in (active-of tmp "dev") [:wagoe/events :provider])))
+      (is (= :memory (get-in (active-of tmp "test") [:wagoe/events :provider])))
+      (is (= :redis (get-in (active-of tmp "prod") [:wagoe/events :provider])))
+      (finally
+        (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))
+
+(deftest ^:integration a-module-missing-from-prod-is-not-installed
+  ;; `wagoe add` read only dev, so a module added before prod existed was
+  ;; "already installed" and prod never got it.
+  (let [tmp    (with-profiles! "prod-missing")
+        module (cat/find-module "jobs")]
+    (try
+      (doseq [env ["dev" "test"]]
+        (add/patch-config! tmp (str "resources/conf/" env "/config.edn") (:config-snippet module)))
+      (is (not (add/installed? tmp module true)))
+      (is (= [["dev" :present] ["prod" :added] ["test" :present]]
+             (add/patch-configs! tmp module)))
+      (is (contains? (active-of tmp "prod") :wagoe/jobs))
+      (is (add/installed? tmp module true))
+      (finally
+        (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))
+
+(deftest ^:integration devtools-enables-the-dashboard-in-dev-only
+  (let [tmp (with-profiles! "devtools")]
+    (try
+      (add/patch-configs! tmp (cat/find-module "devtools"))
+      (is (contains? (active-of tmp "dev") :wagoe/dashboard))
+      (is (not (contains? (active-of tmp "test") :wagoe/dashboard)))
+      (is (not (contains? (active-of tmp "prod") :wagoe/dashboard))
+          "the platform refuses the dashboard outside :dev")
+      (finally
+        (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))
+
+(deftest ^:integration events-in-prod-is-named-for-the-project-and-its-env-vars-listed
+  ;; The group was "my-app" in every project, and .env.example never named the
+  ;; Redis variables prod now needs.
+  (let [tmp    (with-profiles! "events-name")
+        module (cat/find-module "events")
+        env-ex (io/file tmp ".env.example")]
+    (try
+      (spit (io/file tmp "resources/conf/dev/config.edn")
+            "{\n :active\n {:wagoe/settings {:name \"shop-dev\"}\n }\n}")
+      (spit env-ex "# mine\nJWT_SECRET=keep-me\nREDIS_PORT=6380\n")
+      (add/patch-env-example! tmp module (add/patch-configs! tmp module))
+      (is (= "shop" (get-in (active-of tmp "prod") [:wagoe/events :group])))
+      (let [text (slurp env-ex)]
+        (is (str/starts-with? text "# mine\nJWT_SECRET=keep-me\nREDIS_PORT=6380\n") "only added to")
+        (is (str/includes? text "REDIS_HOST="))
+        (is (str/includes? text "REDIS_PASSWORD="))
+        (is (= 1 (count (re-seq #"(?m)^REDIS_PORT=" text)))))
+      (testing "and nothing when no profile runs it on Redis"
+        (spit env-ex "X=1\n")
+        (add/patch-env-example! tmp module [["dev" :present] ["test" :present]])
+        (is (= "X=1\n" (slurp env-ex))))
+      (finally
+        (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))
+
+(deftest ^:integration payments-never-puts-the-mock-in-prod
+  ;; The mock provider accepts any webhook as paid (BOU-564 review).
+  (let [tmp (with-profiles! "payments")]
+    (try
+      (add/patch-configs! tmp (cat/find-module "payments"))
+      (is (= :mock (get-in (active-of tmp "dev") [:wagoe/payment-provider :provider])))
+      (is (not (contains? (active-of tmp "prod") :wagoe/payment-provider)))
       (finally
         (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))

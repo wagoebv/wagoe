@@ -581,6 +581,13 @@
         (is (= 400 (:status (call :post "/invoices" {:number "A-3" :total "cheap"}))))
         (is (= 400 (:status (call :post "/invoices" {}))))
         (is (= 400 (:status (call :put (str "/invoices/" id) {})))))
+      (testing "and the 400 says which key, by its kebab-case name (BOU-564)"
+        ;; Unknown keys are dropped, so a camelCase body is missing its
+        ;; fields, and `details` was empty.
+        (is (contains? (get-in (call :post "/invoices" {:number "A-3" :totalAmount 1})
+                               [:body :details :errors])
+                       :total))
+        (is (seq (get-in (call :put (str "/invoices/" id) {:Number "x"}) [:body :details]))))
       (testing "an unknown id is a 404"
         (is (= 404 (:status (call :get (str "/invoices/" (java.util.UUID/randomUUID)) nil))))
         (is (= 404 (:status (call :put (str "/invoices/" (java.util.UUID/randomUUID)) {:number "x"}))))))))

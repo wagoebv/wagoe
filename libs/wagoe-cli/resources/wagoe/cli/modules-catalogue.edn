@@ -64,8 +64,13 @@
    :version             "1.0.0-rc-3"
    :category            :optional
    :tier                :incubating
-   :config-snippet      "  :wagoe/payment-provider\n  {:provider :mock}\n"
+   ;; The mock accepts any webhook as paid, so it stays in dev and test
+   ;; (BOU-564). Prod gets no provider until one is chosen.
+   :dev-config-snippet  "  :wagoe/payment-provider\n  {:provider :mock}\n"
+   :config-snippet      ""
    :test-config-snippet "  :wagoe/payment-provider\n  {:provider :mock}\n"
+   :post-install        ["Dev and test use the mock provider. Prod gets none: set"
+                         ":wagoe/payment-provider to :stripe or :mollie there."]
    :add-command         "wagoe add payments"
    :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/payments/AGENTS.md"}
 
@@ -86,7 +91,9 @@
    :version             "1.0.0-rc-3"
    :category            :optional
    :tier                :stable
-   :config-snippet      "  :wagoe/jobs\n  {:provider :memory :workers {:count 1}}\n"
+   ;; In memory a queue is per process; prod queues in its database.
+   :dev-config-snippet  "  :wagoe/jobs\n  {:provider :memory :workers {:count 1}}\n"
+   :config-snippet      "  :wagoe/jobs\n  {:provider :db :workers {:count 1}}\n"
    :test-config-snippet "  :wagoe/jobs\n  {:provider :memory :workers {:count 0}}\n"
    :add-command         "wagoe add jobs"
    :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/jobs/AGENTS.md"
@@ -100,7 +107,9 @@
    :version             "1.0.0-rc-3"
    :category            :optional
    :tier                :stable
-   :config-snippet      "  :wagoe.external/smtp\n  {:host #or [#env SMTP_HOST \"localhost\"] :port 1025 :tls? false :from \"no-reply@localhost\"}\n"
+   :dev-config-snippet  "  :wagoe.external/smtp\n  {:host #or [#env SMTP_HOST \"localhost\"] :port 1025 :tls? false :from \"no-reply@localhost\"}\n"
+   :config-snippet      "  :wagoe.external/smtp\n  {:host     #env SMTP_HOST\n   :port     #or [#long #or [#env SMTP_PORT 587] 587]\n   :username #env SMTP_USERNAME\n   :password #env SMTP_PASSWORD\n   :tls?     true\n   :from     #env SMTP_FROM}\n"
+   :prod-env-vars       ["SMTP_HOST" "SMTP_PORT" "SMTP_USERNAME" "SMTP_PASSWORD" "SMTP_FROM"]
    :test-config-snippet "  :wagoe.external/smtp\n  {:host \"localhost\" :port 1025 :tls? false :from \"test@localhost\"}\n"
    :add-command         "wagoe add email"
    :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/email/AGENTS.md"}
@@ -111,7 +120,9 @@
    :version             "1.0.0-rc-3"
    :category            :optional
    :tier                :stable
-   :config-snippet      "  :wagoe/cache\n  {:provider :memory :default-ttl 300}\n"
+   :dev-config-snippet  "  :wagoe/cache\n  {:provider :memory :default-ttl 300}\n"
+   :config-snippet      "  :wagoe/cache\n  {:provider    :redis\n   :host        #env REDIS_HOST\n   :port        #long #or [#env REDIS_PORT 6379]\n   :password    #env REDIS_PASSWORD\n   :default-ttl 300}\n"
+   :prod-env-vars       ["REDIS_HOST" "REDIS_PORT" "REDIS_PASSWORD"]
    :test-config-snippet "  :wagoe/cache\n  {:provider :memory :default-ttl 300}\n"
    :add-command         "wagoe add cache"
    :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/cache/AGENTS.md"}
@@ -133,7 +144,9 @@
    :version             "1.0.0-rc-3"
    :category            :optional
    :tier                :stable
-   :config-snippet      "  :wagoe/realtime\n  {:provider :memory}\n"
+   :dev-config-snippet  "  :wagoe/realtime\n  {:provider :memory}\n"
+   :config-snippet      "  :wagoe/realtime\n  {:provider :redis\n   :host     #env REDIS_HOST\n   :port     #long #or [#env REDIS_PORT 6379]\n   :password #env REDIS_PASSWORD}\n"
+   :prod-env-vars       ["REDIS_HOST" "REDIS_PORT" "REDIS_PASSWORD"]
    :test-config-snippet "  :wagoe/realtime\n  {:provider :memory}\n"
    :add-command         "wagoe add realtime"
    :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/realtime/AGENTS.md"}
@@ -155,7 +168,9 @@
    :version             "1.0.0-rc-3"
    :category            :optional
    :tier                :incubating
-   :config-snippet      "  :wagoe/ai-service\n  {:provider :ollama :model #or [#env AI_MODEL \"qwen2.5-coder:7b\"] :base-url #or [#env OLLAMA_URL \"http://localhost:11434\"]}\n"
+   ;; A build-time tool: dev only, as `bb setup` has it.
+   :dev-config-snippet  "  :wagoe/ai-service\n  {:provider :ollama :model #or [#env AI_MODEL \"qwen2.5-coder:7b\"] :base-url #or [#env OLLAMA_URL \"http://localhost:11434\"]}\n"
+   :config-snippet      ""
    :test-config-snippet "  :wagoe/ai-service\n  {:provider :no-op}\n"
    :add-command         "wagoe add ai"
    :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/ai/AGENTS.md"}
@@ -247,7 +262,11 @@
    :version             "1.0.0-rc-3"
    :category            :optional
    :tier                :stable
-   :config-snippet      "  :wagoe/events\n  {:provider :redis\n   :host     #env REDIS_HOST\n   :port     #long #or [#env REDIS_PORT 6379]\n   :password #env REDIS_PASSWORD\n   :group    \"my-app\"}\n"
+   ;; Dev runs in one process, so it needs no Redis; prod does (BOU-564).
+   :dev-config-snippet  "  :wagoe/events\n  {:provider :memory}\n"
+   :config-snippet      "  :wagoe/events\n  {:provider :redis\n   :host     #env REDIS_HOST\n   :port     #long #or [#env REDIS_PORT 6379]\n   :password #env REDIS_PASSWORD\n   :group    \"{{project-name}}\"}\n"
+   ;; What prod's Redis bus reads; `wagoe add` lists them in .env.example.
+   :prod-env-vars       ["REDIS_HOST" "REDIS_PORT" "REDIS_PASSWORD"]
    :test-config-snippet "  :wagoe/events\n  {:provider :memory}\n"
    :add-command         "wagoe add events"
    :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/events/AGENTS.md"}
@@ -309,7 +328,8 @@
    ;; it pulls a Jetty adapter and a dashboard, and none of it belongs in a
    ;; production uberjar. `wagoe new` already writes it into :repl.
    :scope               :dev
-   :config-snippet      ""
+   ;; Dev only: the platform refuses :wagoe/dashboard under any other profile.
+   :config-snippet      "  :wagoe/dashboard\n  {:port 9999}\n"
    :test-config-snippet ""
    :add-command         "wagoe add devtools"
    :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/devtools/AGENTS.md"

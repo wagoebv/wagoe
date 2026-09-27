@@ -11,6 +11,22 @@
             [integrant.core :as ig])
   (:gen-class))
 
+(defn failure-lines
+  "What a failed start prints: each cause's message and :type, outermost
+   first. Integrant's own message only names the key it was building, and the
+   cause is what says why. Where the config was expected, only when that is
+   what is missing."
+  [e]
+  (let [chain (take-while some? (iterate ex-cause e))
+        line  (fn [x] (str (ex-message x)
+                           (when-let [t (:type (ex-data x))] (str " (:type " t ")"))))]
+    (concat [(str "Failed to start {{project-name}}: " (line e))]
+            (map #(str "  caused by: " (line %)) (rest chain))
+            (when-let [path (some #(when (contains? (ex-data %) :available-profiles)
+                                     (:path (ex-data %)))
+                                  chain)]
+              [(str "  expected resources/" path)]))))
+
 (defn -main
   [& _args]
   (try
@@ -33,9 +49,8 @@
       ;; Message first, stack trace only at debug. A startup failure is usually
       ;; a configuration mistake — a missing conf/<env>/config.edn or an unset
       ;; JWT_SECRET — and a 40-line trace buries the one line that says which.
-      (log/error (str "Failed to start {{project-name}}: " (ex-message e)))
-      (when-let [env (System/getenv "WAG_ENV")]
-        (log/error (str "  WAG_ENV=" env " — expected resources/conf/" env "/config.edn")))
+      (doseq [line (failure-lines e)]
+        (log/error line))
       ;; Gated on an env var rather than the log level: a startup failure often
       ;; means the config — including the logging config — never loaded, so the
       ;; root logger is at its DEBUG default and `log/debug` would print the

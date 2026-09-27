@@ -1,10 +1,7 @@
 #kaocha/v1
  {:kaocha/source-paths ["src"]
 
-  :tests [{:id          :unit
-           :test-paths  ["test"]
-           :kaocha/metadata {:focus [:unit]}}
-
-          {:id          :integration
-           :test-paths  ["test"]
-           :kaocha/metadata {:focus [:integration]}}]}
+  ;; One suite: two over the same path run every test twice. Pick a tier on
+  ;; the command line instead: clojure -M:test --focus-meta :unit
+  :tests [{:id          :all
+           :test-paths  ["test"]}]}
