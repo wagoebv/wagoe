@@ -1,5 +1,6 @@
 (ns wagoe.tools.setup-test
   (:require [clojure.test :refer [deftest is testing]]
+            [wagoe.tools.config-edn :as config-edn]
             [wagoe.tools.integrate :as integrate]
             [wagoe.tools.setup :as setup]
             [babashka.fs :as fs]
@@ -701,6 +702,132 @@
                  "resources/conf/dev/admin/users.edn" "resources/conf/test/admin/users.edn"
                  "resources/conf/prod/admin/users.edn"}
                (set (keys (snapshot dir)))))
-        (is (= (setup/build-config (setup/from-flags-spec {:database "sqlite"}) "dev")
+        (is (= (setup/build-config (setup/with-defaults (setup/from-flags-spec {:database "sqlite"})) "dev")
                (slurp (fs/file dir "resources" "conf" "dev" "config.edn")))))
       (finally (fs/delete-tree dir)))))
+
+;; -----------------------------------------------------------------------------
+;; Only what was asked changes (review of #592)
+;; -----------------------------------------------------------------------------
+
+(defn- conf-file [dir env] (fs/file dir "resources" "conf" env "config.edn"))
+
+(defn- with-project
+  "Run `f` on a wagoe-new project dir, deleting it afterwards."
+  [f]
+  (let [dir (wagoe-new-project!)]
+    (try (f dir) (finally (fs/delete-tree dir)))))
+
+(deftest ^:unit an-unasked-database-is-left-alone
+  (with-project
+    (fn [dir]
+      (run-setup dir "" "--database" "postgresql")
+      (let [[exit _] (run-setup dir "" "--payment" "mock")
+            {:keys [active]} (conf dir "dev")]
+        (is (nil? exit))
+        (is (contains? active :wagoe/postgresql) "--payment is not --database sqlite")
+        (is (not (contains? active :wagoe/sqlite)))
+        (is (= :mock (get-in active [:wagoe/payment-provider :provider])))))))
+
+(deftest ^:unit a-test-profile-on-postgresql-survives
+  (with-project
+    (fn [dir]
+      (spit (conf-file dir "test") "{:active {:wagoe/postgresql {:host \"db\"}\n          :wagoe/product {:enabled? true}}}\n")
+      (run-setup dir "" "--database" "sqlite")
+      (let [{:keys [active]} (conf dir "test")]
+        (is (= {:host "db"} (:wagoe/postgresql active)))
+        (is (not (contains? active :wagoe/h2)))))))
+
+(deftest ^:unit enter-through-the-wizard-changes-nothing
+  (with-project
+    (fn [dir]
+      (spit (conf-file dir "dev")
+            (config-edn/insert-into (slurp (conf-file dir "dev")) ":active"
+                                    "\n   :wagoe/ai-service {:provider :anthropic}"))
+      (let [keep   #(select-keys (snapshot dir) ["resources/conf/dev/config.edn"
+                                                 "resources/conf/test/config.edn"
+                                                 ".env.example"])
+            before (keep)
+            [exit out] (run-setup dir "\n\n\n\n\n\n\ny\n")]
+        (is (nil? exit) out)
+        (is (= before (keep)) "a menu default is not an answer")))))
+
+(deftest ^:unit a-switched-database-migrates-on-start-outside-prod
+  (with-project
+    (fn [dir]
+      (run-setup dir "" "--database" "postgresql")
+      (is (true? (get-in (conf dir "dev") [:active :wagoe/postgresql :migrate-on-start?])))
+      (is (nil? (get-in (conf dir "prod") [:active :wagoe/postgresql :migrate-on-start?]))))))
+
+(deftest ^:unit a-moved-database-lands-in-inactive-not-a-trailing-comment
+  (with-project
+    (fn [dir]
+      (spit (conf-file dir "dev") "{:active {:wagoe/sqlite {:db \"x.db\"}}}\n;; end }\n")
+      (let [[exit out] (run-setup dir "" "--database" "postgresql")
+            text (slurp (conf-file dir "dev"))]
+        (is (nil? exit) out)
+        (is (= {:db "x.db"} (get-in (read-config text) [:inactive :wagoe/sqlite])))
+        (is (str/ends-with? text ";; end }\n"))))))
+
+(deftest ^:unit crlf-stays-crlf
+  (with-project
+    (fn [dir]
+      (spit (conf-file dir "dev") (str/replace (slurp (conf-file dir "dev")) "\n" "\r\n"))
+      (run-setup dir "" "--cache" "redis")
+      (let [text (slurp (conf-file dir "dev"))]
+        (is (str/includes? text ":wagoe/cache"))
+        (is (not (re-find #"[^\r]\n" text)))))))
+
+(def ^:private refused {:exit 1 :names-dev? true :unchanged? true})
+
+(defn- refusal
+  "How setup with `args` ended in `dir`, in the shape of `refused`."
+  [dir args]
+  (let [before     (snapshot dir)
+        [exit out] (apply run-setup dir "" args)]
+    {:exit       exit
+     :names-dev? (str/includes? out "resources/conf/dev/config.edn")
+     :unchanged? (= before (snapshot dir))}))
+
+(deftest ^:unit the-safety-net-refuses-a-lossy-or-unreadable-merge
+  (testing "a merge that drops a key"
+    (with-project
+      (fn [dir]
+        (with-redefs [setup/merge-config (fn [old _ _] {:text (str/replace old ":wagoe/product" ":wagoe/prodUCT")
+                                                        :changes [] :moved #{}})]
+          (is (= refused (refusal dir ["--cache" "redis"])))))))
+  (testing "a merge that does not read"
+    (with-project
+      (fn [dir]
+        (with-redefs [setup/merge-config (fn [old _ _] {:text (str old "}") :changes [] :moved #{}})]
+          (is (= refused (refusal dir ["--cache" "redis"])))))))
+  (testing "a config that does not read as EDN"
+    (with-project
+      (fn [dir]
+        (spit (conf-file dir "dev") "{:active {:a/k #\"re\"}}")
+        (is (= refused (refusal dir ["--cache" "redis"]))))))
+  (testing "an :active that is not a literal map"
+    (doseq [v ["#include \"active.edn\"" "#profile {:dev {}}" "#merge [{} {}]"]]
+      (with-project
+        (fn [dir]
+          (spit (conf-file dir "dev") (str "{:active " v "}"))
+          (is (= refused (refusal dir ["--cache" "redis"]))))))))
+
+(deftest ^:unit a-read-only-target-writes-nothing
+  (testing "read-only file"
+    (with-project
+      (fn [dir]
+        (.setWritable (conf-file dir "dev") false)
+        (is (= refused (refusal dir ["--cache" "redis"]))))))
+  (testing "read-only directory: the temp files go first, so nothing is renamed"
+    (with-project
+      (fn [dir]
+        (let [test-dir (fs/file dir "resources" "conf" "test")
+              before   (snapshot dir)]
+          (.setWritable test-dir false)
+          (try
+            (let [[exit out] (run-setup dir "" "--cache" "redis")]
+              (is (= 1 exit))
+              (is (str/includes? out "Nothing was written"))
+              (is (= before (snapshot dir))))
+            (finally (.setWritable test-dir true))))))))

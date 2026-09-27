@@ -155,3 +155,33 @@
     (is (str/starts-with? (subs text (:from (second es))) "  ;; about b")
         "the comment above a key belongs to it")
     (is (nil? (sut/entries "{:active {:a/key}}" ":active")) "a key without a value")))
+
+(deftest ^:unit entries-read-what-edn-allows-in-a-value
+  (testing "each reads as one value, so the next key is not swallowed"
+    (doseq [[label v] [["#_ discard"      "#_ :gone {:x 1}"]
+                       ["##Inf"           "##Inf"]
+                       ["##NaN in a vec"  "[##NaN 1]"]
+                       ["^meta"           "^{:tag x} {:y 2}"]
+                       ["^:kw meta"       "^:private sym"]
+                       ["\\newline"       "\\newline"]
+                       ["\\space"         "\\space"]]]
+      (let [text (str "{:active {:a/k " v " :b/k 1}}")]
+        (is (= [":a/k" ":b/k"] (map :key (sut/entries text ":active"))) label))))
+  (testing "a discarded key/value pair is not an entry"
+    (is (= [":b/k"] (map :key (sut/entries "{:active {#_ :a/k #_ 1 :b/k 1}}" ":active"))))))
+
+(deftest ^:unit section-is-a-root-key-matched-exactly
+  (let [nested "{:wagoe/flags {:active true :opts {:x 1}}\n :active {:a/k 1}}"]
+    (is (= [":a/k"] (map :key (sut/entries nested ":active")))
+        "a nested :active is not the section"))
+  (is (= [":a/k"] (map :key (sut/entries "{:active-profiles {:z 1} :active {:a/k 1}}" ":active"))))
+  (let [inner "{:active {:my/feature {:inactive {:x 1}}} :inactive {:b/k 2}}"]
+    (is (= [":b/k"] (map :key (sut/entries inner ":inactive")))
+        ":inactive inside :active is not the section"))
+  (is (nil? (sut/section "{:active {:a 1}} ;; end }" ":inactive")))
+  (is (= [0 15] (sut/root-map "{:active {:a 1}} ;; end }"))
+      "a brace in a trailing comment is not the root's"))
+
+(deftest ^:unit an-active-that-is-not-a-literal-map-has-no-section
+  (doseq [v ["#include \"active.edn\"" "#profile {:dev {:a 1}}" "#merge [{:a 1} {:b 2}]"]]
+    (is (nil? (sut/entries (str "{:active " v "}") ":active")) v)))

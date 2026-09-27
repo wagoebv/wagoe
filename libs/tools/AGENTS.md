@@ -117,7 +117,7 @@ Summary: 4 passed, 1 warning, 1 error
 
 Generates `config.edn` for dev and test environments plus a `.env.example` file. Three modes: interactive wizard, CLI flags, or AI-powered natural language.
 
-An existing dev/test config or `.env.example` is merged into, not replaced: keys setup does not write stay, a database it replaces moves to `:inactive`, and the summary lists every change before anything is written. An existing prod config is kept. The wizard exits 1 on a closed stdin; scripts pass flags.
+An existing dev/test config or `.env.example` gets only what was answered; every other key stays. A flag not given, or Enter on a wizard menu (which then offers "keep"), changes nothing. Answering a provider (AI, payments, cache, email) replaces its whole map, so edits inside it are lost; the summary says so before anything is written. A new dev database moves the old one to `:inactive`, replacing an entry of the same key there; the test profile's database is never moved. Setup refuses, writing nothing, when a file does not read as EDN, has no literal `:active` map, or the merge would lose a key. An existing prod config is kept. The wizard exits 1 on a closed stdin; scripts pass flags.
 
 ```bash
 # Interactive wizard — guided prompts for database, AI, payments, cache, etc.

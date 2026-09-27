@@ -48,8 +48,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
-- **`bb setup` overwrote dev and test config and `.env.example`** (BOU-404, BOU-532). It now merges,
-  keeping module keys and `:migrate-on-start?`, and lists each file it will change first.
+- **`bb setup` overwrote dev and test config and `.env.example`** (BOU-404, BOU-532). It now changes
+  only what you answer, lists each change first, and refuses rather than write a lossy merge.
 - **`/health/ready` showed database and cache exception messages** (BOU-558). The body now says
   `unreachable`; the reason is logged at WARN. Upgrade platform if readiness is public.
 - **MFA and storage upload APIs returned the raw exception message** (BOU-557). They now answer the
