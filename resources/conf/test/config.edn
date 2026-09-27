@@ -66,7 +66,9 @@
   ;; resolves a request's tenant. Was wired unconditionally in code until
   ;; BOU-326; now it is on because this says so.
   :wagoe/tenant
-  {:enabled? true}
+  {:enabled? true
+   ;; H2 has no per-tenant schemas; this profile runs tenancy on it anyway.
+   :allow-h2? true}
 
   ;; Admin interface configuration (enabled in tests to satisfy system wiring)
   :wagoe/admin

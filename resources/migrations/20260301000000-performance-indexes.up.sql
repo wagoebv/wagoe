@@ -1,5 +1,7 @@
-CREATE INDEX IF NOT EXISTS idx_users_tenant_id ON users (tenant_id);
+--;; Runs no statement (BOU-576): every line carries migratus's separator,
+--;; which it strips with the rest of the line.
 --;;
-CREATE INDEX IF NOT EXISTS idx_users_deleted_at ON users (deleted_at) WHERE deleted_at IS NOT NULL;
---;;
-CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON user_sessions (user_id);
+--;; This indexed users and user_sessions, which only boot creates, so
+--;; `migrate up` failed on a database that had never booted. The user library
+--;; creates both tables and their indexes at boot from its Malli schema. The
+--;; id stays because existing databases have it applied.

@@ -76,7 +76,8 @@
   (testing "rejects duplicate slug"
     (let [result (sut/create-tenant-decision "acme-corp" #{"acme-corp" "other-tenant"})]
       (is (false? (:valid? result)))
-      (is (= "Tenant slug already exists" (:error result))))))
+      (is (= "Tenant slug already exists" (:error result)))
+      (is (= :conflict (:type result))))))
 
 (deftest ^:unit update-tenant-decision-test
   (testing "accepts valid update for existing tenant"

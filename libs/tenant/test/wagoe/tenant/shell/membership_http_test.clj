@@ -1,149 +1,45 @@
 (ns wagoe.tenant.shell.membership-http-test
-  "Contract tests for membership HTTP endpoints."
-  (:require [wagoe.tenant.shell.membership-http :as sut]
+  "Contract tests for the membership HTTP endpoints, over the real service and
+   repository on H2 — a mock can drift from the service it stands in for, and
+   the tenant handlers' did (BOU-576)."
+  (:require [wagoe.platform.shell.adapters.database.factory :as factory]
+            [wagoe.tenant.shell.membership-http :as sut]
+            [wagoe.tenant.shell.membership-persistence :as membership-persistence]
+            [wagoe.tenant.shell.membership-service :as membership-service]
+            [wagoe.tenant.shell.persistence :as tenant-persistence]
             [wagoe.tenant.ports :as ports]
             [cheshire.core :as json]
             [clojure.test :refer [deftest is testing use-fixtures]])
-  (:import (java.time Instant)
-           (java.util UUID)))
+  (:import (java.util UUID)))
 
 ^{:kaocha.testable/meta {:contract true :tenant true}}
 
-;; =============================================================================
-;; Mock service
-;; =============================================================================
+(def tenant-id-1  #uuid "10000000-0000-0000-0000-000000000001")
+(def other-tenant #uuid "10000000-0000-0000-0000-000000000009")
+(def user-id-1    #uuid "20000000-0000-0000-0000-000000000001")
+(def active-user  #uuid "20000000-0000-0000-0000-000000000003")
+(def stranger     #uuid "20000000-0000-0000-0000-000000000009")
+(def tenant-admin #uuid "20000000-0000-0000-0000-000000000002")
 
-(def tenant-id-1 #uuid "10000000-0000-0000-0000-000000000001")
-(def user-id-1   #uuid "20000000-0000-0000-0000-000000000001")
-(def member-id-1 #uuid "30000000-0000-0000-0000-000000000001")
-(def member-id-2 #uuid "30000000-0000-0000-0000-000000000002")
-
-(def sample-invited
-  {:id          member-id-1
-   :tenant-id   tenant-id-1
-   :user-id     user-id-1
-   :role        :member
-   :status      :invited
-   :invited-at  (Instant/parse "2026-01-01T00:00:00Z")
-   :accepted-at nil
-   :created-at  (Instant/parse "2026-01-01T00:00:00Z")
-   :updated-at  nil})
-
-(def sample-active
-  (assoc sample-invited
-         :id          member-id-2
-         :status      :active
-         :accepted-at (Instant/parse "2026-01-02T00:00:00Z")
-         :updated-at  (Instant/parse "2026-01-02T00:00:00Z")))
-
-(defrecord MockMembershipService [memberships]
-  ports/ITenantMembershipService
-
-  (invite-user [_ tenant-id user-id role]
-    (let [existing (some #(and (= tenant-id (:tenant-id %))
-                               (= user-id (:user-id %)) %)
-                         (vals @memberships))]
-      (when existing
-        (throw (ex-info "Membership already exists for this user in tenant"
-                        {:type :conflict})))
-      (let [m {:id          (UUID/randomUUID)
-               :tenant-id   tenant-id
-               :user-id     user-id
-               :role        role
-               :status      :invited
-               :invited-at  (Instant/now)
-               :accepted-at nil
-               :created-at  (Instant/now)
-               :updated-at  nil}]
-        (swap! memberships assoc (:id m) m)
-        m)))
-
-  (bootstrap-open? [_ tenant-id]
-    (empty? (filter #(= tenant-id (:tenant-id %)) (vals @memberships))))
-
-  (bootstrap-first-member [_ tenant-id user-id role]
-    (when-not (.bootstrap-open? ^wagoe.tenant.ports.ITenantMembershipService _ tenant-id)
-      (throw (ex-info "Tenant already has members" {:type :conflict})))
-    (let [m {:id          (UUID/randomUUID)
-             :tenant-id   tenant-id
-             :user-id     user-id
-             :role        role
-             :status      :active
-             :invited-at  (Instant/now)
-             :accepted-at (Instant/now)
-             :created-at  (Instant/now)
-             :updated-at  nil}]
-      (swap! memberships assoc (:id m) m)
-      m))
-
-  (accept-invitation [_ membership-id]
-    (if-let [m (get @memberships membership-id)]
-      (if (= :invited (:status m))
-        (let [updated (assoc m :status :active
-                             :accepted-at (Instant/now)
-                             :updated-at  (Instant/now))]
-          (swap! memberships assoc membership-id updated)
-          updated)
-        (throw (ex-info "Membership is not in invited status"
-                        {:type :validation-error})))
-      (throw (ex-info "Membership not found" {:type :not-found}))))
-
-  (update-member-role [_ membership-id role]
-    (if-let [m (get @memberships membership-id)]
-      (let [updated (assoc m :role role :updated-at (Instant/now))]
-        (swap! memberships assoc membership-id updated)
-        updated)
-      (throw (ex-info "Membership not found" {:type :not-found}))))
-
-  (suspend-member [_ membership-id]
-    (if-let [m (get @memberships membership-id)]
-      (let [updated (assoc m :status :suspended :updated-at (Instant/now))]
-        (swap! memberships assoc membership-id updated)
-        updated)
-      (throw (ex-info "Membership not found" {:type :not-found}))))
-
-  (revoke-member [_ membership-id]
-    (if-let [m (get @memberships membership-id)]
-      (let [updated (assoc m :status :revoked :updated-at (Instant/now))]
-        (swap! memberships assoc membership-id updated)
-        updated)
-      (throw (ex-info "Membership not found" {:type :not-found}))))
-
-  (get-membership [_ membership-id]
-    (if-let [m (get @memberships membership-id)]
-      m
-      (throw (ex-info "Membership not found" {:type :not-found}))))
-
-  (get-active-membership [_ user-id tenant-id]
-    (->> (vals @memberships)
-         (filter #(and (= user-id (:user-id %))
-                       (= tenant-id (:tenant-id %))
-                       (= :active (:status %))))
-         first))
-
-  (list-tenant-members [_ tenant-id {:keys [limit offset]
-                                     :or   {limit 50 offset 0}}]
-    (->> (vals @memberships)
-         (filter #(= tenant-id (:tenant-id %)))
-         (drop offset)
-         (take limit)
-         vec)))
-
-(def ^:dynamic *mock-service* nil)
-
-(defn setup! []
-  (let [memberships (atom {member-id-1 sample-invited
-                           member-id-2 sample-active})]
-    (alter-var-root #'*mock-service* (constantly (->MockMembershipService memberships)))))
-
-(defn teardown! []
-  (alter-var-root #'*mock-service* (constantly nil)))
+(def ^:dynamic *service* nil)
+(def ^:dynamic *invited-id* nil)
+(def ^:dynamic *active-id* nil)
 
 (use-fixtures :each
   (fn [f]
-    (setup!)
-    (f)
-    (teardown!)))
+    (let [ctx (factory/db-context
+               (factory/h2-config (str "mem:membership_http_" (System/nanoTime) ";DB_CLOSE_DELAY=-1")))]
+      (try
+        (tenant-persistence/initialize-tenant-schema! ctx)
+        (let [service (membership-service/create-membership-service
+                       (membership-persistence/create-membership-repository ctx nil nil) nil nil nil)
+              invited (ports/invite-user service tenant-id-1 user-id-1 :member)
+              active  (ports/bootstrap-first-member service tenant-id-1 active-user :member)]
+          (binding [*service*    service
+                    *invited-id* (:id invited)
+                    *active-id*  (:id active)]
+            (f)))
+        (finally (factory/close-db-context! ctx))))))
 
 ;; =============================================================================
 ;; Helpers
@@ -162,6 +58,9 @@
     :params         {}
     :body-params    body}))
 
+(defn- in-tenant [id]
+  {:tenant-id (str tenant-id-1) :id (str id)})
+
 (defn- as-invitee [request]
   (assoc request :user {:id user-id-1}))
 
@@ -170,234 +69,152 @@
 ;; =============================================================================
 
 (deftest ^:contract invite-user-handler-test
-  (testing "201 on valid invite"
-    (let [handler  (sut/invite-user-handler *mock-service*)
-          request  (make-request :post
-                                 {:tenant-id (str tenant-id-1)}
-                                 {:userId (str (UUID/randomUUID)) :role "admin"})
-          response (handler request)
-          body     (parse-body response)]
-      (is (= 201 (:status response)))
-      (is (= "invited" (name (:status body))))))
-
-  (testing "400 for invalid tenant UUID"
-    (let [handler  (sut/invite-user-handler *mock-service*)
-          request  (make-request :post {:tenant-id "not-a-uuid"})
-          response (handler request)]
-      (is (= 400 (:status response)))))
-
-  (testing "400 for missing userId"
-    (let [handler  (sut/invite-user-handler *mock-service*)
-          request  (make-request :post
-                                 {:tenant-id (str tenant-id-1)}
-                                 {:role "member"})
-          response (handler request)]
-      (is (= 400 (:status response)))))
-
-  (testing "400 for invalid role"
-    (let [handler  (sut/invite-user-handler *mock-service*)
-          request  (make-request :post
-                                 {:tenant-id (str tenant-id-1)}
-                                 {:userId (str (UUID/randomUUID)) :role "superuser"})
-          response (handler request)]
-      (is (= 400 (:status response)))))
-
-  (testing "409 when membership already exists"
-    (let [handler  (sut/invite-user-handler *mock-service*)
-          request  (make-request :post
-                                 {:tenant-id (str tenant-id-1)}
-                                 {:userId (str user-id-1) :role "member"})
-          response (handler request)]
-      (is (= 409 (:status response))))))
+  (let [invite #((sut/invite-user-handler *service*)
+                 (make-request :post {:tenant-id %1} %2))]
+    (testing "201 with the invitation"
+      (let [user     (UUID/randomUUID)
+            response (invite (str tenant-id-1) {:userId (str user) :role "admin"})
+            body     (parse-body response)]
+        (is (= 201 (:status response)))
+        (is (= ["invited" (str user)] [(:status body) (:user-id body)]))))
+    (testing "400 for invalid tenant UUID"
+      (is (= 400 (:status (invite "not-a-uuid" {})))))
+    (testing "400 for missing userId"
+      (is (= 400 (:status (invite (str tenant-id-1) {:role "member"})))))
+    (testing "400 for invalid role"
+      (is (= 400 (:status (invite (str tenant-id-1) {:userId (str (UUID/randomUUID)) :role "superuser"})))))
+    (testing "409 when the user already has a membership, saying so"
+      (let [response (invite (str tenant-id-1) {:userId (str user-id-1) :role "member"})]
+        (is (= 409 (:status response)))
+        (is (re-find #"already exists" (:error (parse-body response))))))))
 
 ;; =============================================================================
 ;; list-members-handler
 ;; =============================================================================
 
 (deftest ^:contract list-members-handler-test
-  (testing "200 with list of members"
-    (let [handler  (sut/list-members-handler *mock-service*)
-          request  (make-request :get {:tenant-id (str tenant-id-1)})
-          response (handler request)
-          body     (parse-body response)]
-      (is (= 200 (:status response)))
-      (is (= 2 (count body)))))
-
-  (testing "400 for invalid tenant UUID"
-    (let [handler  (sut/list-members-handler *mock-service*)
-          request  (make-request :get {:tenant-id "bad-uuid"})
-          response (handler request)]
-      (is (= 400 (:status response))))))
+  (let [list-in #((sut/list-members-handler *service*) (make-request :get {:tenant-id %}))]
+    (testing "200 with the tenant's members"
+      (let [response (list-in (str tenant-id-1))]
+        (is (= 200 (:status response)))
+        (is (= #{(str *invited-id*) (str *active-id*)} (set (map :id (parse-body response)))))))
+    (testing "another tenant's list is empty"
+      (is (= [] (parse-body (list-in (str other-tenant))))))
+    (testing "400 for invalid tenant UUID"
+      (is (= 400 (:status (list-in "bad-uuid")))))))
 
 ;; =============================================================================
 ;; get-membership-handler
 ;; =============================================================================
 
 (deftest ^:contract get-membership-handler-test
-  (testing "200 for existing membership"
-    (let [handler  (sut/get-membership-handler *mock-service*)
-          request  (make-request :get {:tenant-id (str tenant-id-1)
-                                       :id        (str member-id-1)})
-          response (handler request)
-          body     (parse-body response)]
-      (is (= 200 (:status response)))
-      (is (= (str member-id-1) (str (:id body))))))
-
-  (testing "404 for non-existent membership"
-    (let [handler  (sut/get-membership-handler *mock-service*)
-          request  (make-request :get {:tenant-id (str tenant-id-1)
-                                       :id        (str (UUID/randomUUID))})
-          response (handler request)]
-      (is (= 404 (:status response)))))
-
-  (testing "400 for invalid membership UUID"
-    (let [handler  (sut/get-membership-handler *mock-service*)
-          request  (make-request :get {:tenant-id (str tenant-id-1)
-                                       :id        "not-a-uuid"})
-          response (handler request)]
-      (is (= 400 (:status response))))))
+  (let [get-m #((sut/get-membership-handler *service*) (make-request :get %))]
+    (testing "200 for existing membership"
+      (let [response (get-m (in-tenant *invited-id*))]
+        (is (= 200 (:status response)))
+        (is (= (str *invited-id*) (:id (parse-body response))))))
+    (testing "404 for non-existent membership"
+      (is (= 404 (:status (get-m (in-tenant (UUID/randomUUID)))))))
+    (testing "400 for invalid membership UUID"
+      (is (= 400 (:status (get-m (in-tenant "not-a-uuid"))))))))
 
 ;; =============================================================================
 ;; update-membership-handler
 ;; =============================================================================
 
 (deftest ^:contract update-membership-handler-test
-  (testing "200 when updating role"
-    (let [handler  (sut/update-membership-handler *mock-service*)
-          request  (make-request :put
-                                 {:tenant-id (str tenant-id-1)
-                                  :id        (str member-id-1)}
-                                 {:role "admin"})
-          response (handler request)
-          body     (parse-body response)]
-      (is (= 200 (:status response)))
-      (is (= "admin" (name (:role body))))))
-
-  (testing "200 when suspending via status"
-    (let [handler  (sut/update-membership-handler *mock-service*)
-          request  (make-request :put
-                                 {:tenant-id (str tenant-id-1)
-                                  :id        (str member-id-2)}
-                                 {:status "suspended"})
-          response (handler request)
-          body     (parse-body response)]
-      (is (= 200 (:status response)))
-      (is (= "suspended" (name (:status body))))))
-
-  (testing "400 for invalid role"
-    (let [handler  (sut/update-membership-handler *mock-service*)
-          request  (make-request :put
-                                 {:tenant-id (str tenant-id-1)
-                                  :id        (str member-id-1)}
-                                 {:role "owner"})
-          response (handler request)]
-      (is (= 400 (:status response))))))
+  (let [put #((sut/update-membership-handler *service*) (make-request :put (in-tenant %1) %2))]
+    (testing "200 when updating role"
+      (let [response (put *invited-id* {:role "admin"})]
+        (is (= 200 (:status response)))
+        (is (= "admin" (:role (parse-body response))))
+        (is (= :admin (:role (ports/get-membership *service* *invited-id*))))))
+    (testing "200 when suspending via status"
+      (let [response (put *active-id* {:status "suspended"})]
+        (is (= 200 (:status response)))
+        (is (= "suspended" (:status (parse-body response))))))
+    (testing "400 when suspending a revoked membership"
+      (ports/revoke-member *service* *invited-id*)
+      (let [response (put *invited-id* {:status "suspended"})]
+        (is (= 400 (:status response)))
+        (is (re-find #"revoked" (:error (parse-body response))))))
+    (testing "400 for invalid role"
+      (is (= 400 (:status (put *active-id* {:role "owner"})))))
+    (testing "404 for non-existent membership"
+      (is (= 404 (:status (put (UUID/randomUUID) {:role "admin"})))))))
 
 ;; =============================================================================
 ;; revoke-member-handler
 ;; =============================================================================
 
 (deftest ^:contract revoke-member-handler-test
-  (testing "200 on successful revoke"
-    (let [handler  (sut/revoke-member-handler *mock-service*)
-          request  (make-request :delete {:tenant-id (str tenant-id-1)
-                                          :id        (str member-id-1)})
-          response (handler request)
-          body     (parse-body response)]
-      (is (= 200 (:status response)))
-      (is (= "Membership revoked successfully" (:message body)))))
-
-  (testing "404 for non-existent membership"
-    (let [handler  (sut/revoke-member-handler *mock-service*)
-          request  (make-request :delete {:tenant-id (str tenant-id-1)
-                                          :id        (str (UUID/randomUUID))})
-          response (handler request)]
-      (is (= 404 (:status response))))))
+  (let [delete #((sut/revoke-member-handler *service*) (make-request :delete (in-tenant %)))]
+    (testing "200 on successful revoke"
+      (let [response (delete *invited-id*)]
+        (is (= 200 (:status response)))
+        (is (= "Membership revoked successfully" (:message (parse-body response))))
+        (is (= :revoked (:status (ports/get-membership *service* *invited-id*))))))
+    (testing "404 for non-existent membership"
+      (is (= 404 (:status (delete (UUID/randomUUID))))))))
 
 ;; =============================================================================
 ;; accept-invitation-handler
 ;; =============================================================================
 
 (deftest ^:contract accept-invitation-handler-test
-  (testing "200 on accepting an invitation"
-    (let [handler  (sut/accept-invitation-handler *mock-service*)
-          request  (as-invitee (make-request :post {:id (str member-id-1)}))
-          response (handler request)
-          body     (parse-body response)]
-      (is (= 200 (:status response)))
-      (is (= "active" (name (:status body))))))
-
-  (testing "400 when membership is not in :invited status"
-    (let [handler  (sut/accept-invitation-handler *mock-service*)
-          request  (as-invitee (make-request :post {:id (str member-id-2)}))
-          response (handler request)]
-      (is (= 400 (:status response)))))
-
-  (testing "404 for non-existent membership"
-    (let [handler  (sut/accept-invitation-handler *mock-service*)
-          request  (make-request :post {:id (str (UUID/randomUUID))})
-          response (handler request)]
-      (is (= 404 (:status response)))))
-
-  (testing "400 for invalid UUID"
-    (let [handler  (sut/accept-invitation-handler *mock-service*)
-          request  (make-request :post {:id "bad-uuid"})
-          response (handler request)]
-      (is (= 400 (:status response))))))
+  (let [accept #((sut/accept-invitation-handler *service*) %)]
+    (testing "200 on accepting an invitation"
+      (let [response (accept (as-invitee (make-request :post {:id (str *invited-id*)})))]
+        (is (= 200 (:status response)))
+        (is (= "active" (:status (parse-body response))))))
+    (testing "400 when membership is not in :invited status"
+      (let [response (accept (as-invitee (make-request :post {:id (str *invited-id*)})))]
+        (is (= 400 (:status response)))
+        (is (re-find #"invited" (:error (parse-body response))))))
+    (testing "404 for non-existent membership"
+      (is (= 404 (:status (accept (make-request :post {:id (str (UUID/randomUUID))}))))))
+    (testing "400 for invalid UUID"
+      (is (= 400 (:status (accept (make-request :post {:id "bad-uuid"}))))))))
 
 ;; =============================================================================
 ;; Routes structure
 ;; =============================================================================
 
 (deftest ^:contract membership-routes-test
-  (testing "returns a contribution with an :api key"
-    (let [routes (sut/membership-routes *mock-service*)]
-      (is (map? routes))
-      (is (contains? routes :api))
-      (is (= 3 (count (:api routes))))))
-
-  (testing "every route is Reitit data with real handlers"
-    ;; [path {method {:handler f}}] — ADR-037.
-    (doseq [route (:api (sut/membership-routes *mock-service*))]
-      (is (vector? route))
-      (is (string? (first route)))
-      (doseq [[_method config] (second route)]
-        (is (fn? (:handler config)))))))
+  (let [routes (sut/membership-routes *service*)]
+    (is (= 3 (count (:api routes))))
+    (testing "every route is Reitit data with real handlers"
+      ;; [path {method {:handler f}}] — ADR-037.
+      (doseq [[path data] (:api routes)]
+        (is (string? path))
+        (doseq [[_method config] data]
+          (is (fn? (:handler config))))))))
 
 ;; =============================================================================
 ;; Authorization (BOU-568)
 ;; =============================================================================
 
-(def other-tenant #uuid "10000000-0000-0000-0000-000000000009")
-(def stranger     #uuid "20000000-0000-0000-0000-000000000009")
-(def tenant-admin #uuid "20000000-0000-0000-0000-000000000002")
-
 (defn- through-route
   "`request` answered by the route at `path`/`method`, its middleware included."
   [path method request]
   (let [data     (some (fn [[p d]] (when (= p path) d))
-                       (:api (sut/membership-routes *mock-service*)))
+                       (:api (sut/membership-routes *service*)))
         endpoint (get data method)
         handler  (reduce (fn [h mw] (mw h))
                          (:handler endpoint)
                          (reverse (concat (:middleware data) (:middleware endpoint))))]
     (handler (assoc request :request-method method :uri (str "/api/v1" path)))))
 
-(defn- add-admin! []
-  (swap! (:memberships *mock-service*) assoc (UUID/randomUUID)
-         {:id (UUID/randomUUID) :tenant-id tenant-id-1 :user-id tenant-admin
-          :role :admin :status :active}))
-
 (deftest ^:contract ^:security only-the-invitee-accepts
-  (let [handler  (sut/accept-invitation-handler *mock-service*)
-        response (handler (assoc (make-request :post {:id (str member-id-1)})
+  (let [handler  (sut/accept-invitation-handler *service*)
+        response (handler (assoc (make-request :post {:id (str *invited-id*)})
                                  :user {:id stranger}))]
     (is (= 403 (:status response)))
-    (is (= :invited (:status (ports/get-membership *mock-service* member-id-1)))
+    (is (= :invited (:status (ports/get-membership *service* *invited-id*)))
         "and the invitation is still open")))
 
 (deftest ^:contract ^:security changing-memberships-takes-a-tenant-admin
-  (add-admin!)
+  (ports/bootstrap-first-member *service* tenant-id-1 tenant-admin :admin)
   (let [invite (fn [user]
                  (through-route "/tenants/:tenant-id/memberships" :post
                                 (assoc (make-request :post {:tenant-id (str tenant-id-1)}
@@ -406,7 +223,7 @@
     (testing "a signed-in stranger cannot invite"
       (is (= 403 (:status (invite {:id stranger :role :user})))))
     (testing "a plain member cannot invite"
-      (is (= 403 (:status (invite {:id user-id-1 :role :user})))))
+      (is (= 403 (:status (invite {:id active-user :role :user})))))
     (testing "the tenant's admin can"
       (is (= 201 (:status (invite {:id tenant-admin :role :user})))))
     (testing "and so can a global admin"
@@ -415,12 +232,10 @@
   (doseq [method [:put :delete]]
     (testing (str (name method) " by a plain member is refused")
       (let [response (through-route "/tenants/:tenant-id/memberships/:id" method
-                                    (assoc (make-request method {:tenant-id (str tenant-id-1)
-                                                                 :id        (str member-id-1)}
-                                                         {:role "admin"})
-                                           :user {:id user-id-1 :role :user}))]
+                                    (assoc (make-request method (in-tenant *invited-id*) {:role "admin"})
+                                           :user {:id active-user :role :user}))]
         (is (= 403 (:status response)))
-        (is (= :member (:role (ports/get-membership *mock-service* member-id-1))))))))
+        (is (= :member (:role (ports/get-membership *service* *invited-id*))))))))
 
 (deftest ^:contract ^:security reading-memberships-takes-a-member
   (let [list-as (fn [user]
@@ -428,16 +243,16 @@
                                  (assoc (make-request :get {:tenant-id (str tenant-id-1)})
                                         :user user)))]
     (is (= 403 (:status (list-as {:id stranger :role :user}))))
-    (is (= 200 (:status (list-as {:id user-id-1 :role :user}))))))
+    (is (= 403 (:status (list-as {:id user-id-1 :role :user})))
+        "an open invitation is not a membership yet")
+    (is (= 200 (:status (list-as {:id active-user :role :user}))))))
 
 (deftest ^:contract ^:security a-tenant-admin-cannot-reach-another-tenants-memberships
   ;; Naming your own tenant in the path must not open another tenant's rows.
-  (swap! (:memberships *mock-service*) assoc (UUID/randomUUID)
-         {:id (UUID/randomUUID) :tenant-id other-tenant :user-id tenant-admin
-          :role :admin :status :active})
+  (ports/bootstrap-first-member *service* other-tenant tenant-admin :admin)
   (let [response (through-route "/tenants/:tenant-id/memberships/:id" :delete
                                 (assoc (make-request :delete {:tenant-id (str other-tenant)
-                                                              :id        (str member-id-1)})
+                                                              :id        (str *invited-id*)})
                                        :user {:id tenant-admin :role :user}))]
     (is (= 404 (:status response)))
-    (is (= :invited (:status (ports/get-membership *mock-service* member-id-1))))))
+    (is (= :invited (:status (ports/get-membership *service* *invited-id*))))))

@@ -36,8 +36,9 @@
       (log/error e "Tenant migration fan-out failed on startup"))))
 
 (defmethod ig/init-key :wagoe/tenant-db-schema
-  [_ {:keys [ctx]}]
+  [_ {:keys [ctx allow-h2?]}]
   (log/info "Initializing tenant module database schema")
+  (provisioning/refuse-unsupported-database! ctx allow-h2?)
   (tenant-persistence/initialize-tenant-schema! ctx)
   (fan-out-tenant-migrations! ctx)
   (log/info "Tenant module database schema initialized")
@@ -218,11 +219,13 @@
 
 (defn ig-config
   "This module's Integrant entries, for `wagoe.platform.shell.system.config`."
-  [_settings {:keys [config validation-config]}]
+  [settings {:keys [config validation-config]}]
   (let [obs {:logger         (ig/ref :wagoe/logging)
              :error-reporter (ig/ref :wagoe/error-reporting)}]
     {:components
-     {:wagoe/tenant-db-schema      {:ctx (ig/ref :wagoe/db-context)}
+     {:wagoe/tenant-db-schema      (cond-> {:ctx (ig/ref :wagoe/db-context)}
+                                     ;; Only a test profile on H2 sets it.
+                                     (:allow-h2? settings) (assoc :allow-h2? true))
       :wagoe/tenant-repository     (merge obs {:ctx (ig/ref :wagoe/db-context)})
       :wagoe/membership-repository (merge obs {:ctx (ig/ref :wagoe/db-context)})
       :wagoe/invite-repository     (merge obs {:ctx (ig/ref :wagoe/db-context)})
