@@ -148,8 +148,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
-- **The scaffolder writes admin config** (BOU-562). With the admin on, `generate` and `entity` add
-  each entity's file, allowlist entry and `#include`; a `--belongs-to` child is editable from its parent.
+- **The scaffolder writes admin config** (BOU-562). With the admin on, `generate` and `entity` add each
+  entity's file (never over an existing one), allowlist entry and `#include`, with secret columns hidden.
 - **Admin writes publish lifecycle events** (BOU-492). With `:wagoe/events` on,
   subscribe to `:admin` for `:admin/entity-created`, `-updated` and `-deleted`.
 - **Modules with several entities** (BOU-497, BOU-514). `bb scaffold entity

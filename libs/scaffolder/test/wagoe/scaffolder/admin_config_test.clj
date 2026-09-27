@@ -138,6 +138,90 @@
                  (get-in admin [:entities :invoice-line-items :parent-context])))))
       (is (.isFile (io/file dir "resources/conf/prod/admin/invoice-line-items.edn"))))))
 
+(defn- entity-file [dir env plural]
+  (get (aero/read-config (io/file dir "resources/conf" env "admin" (str plural ".edn")))
+       (keyword plural)))
+
+(deftest ^:unit secret-columns-stay-hidden
+  ;; A manual :hide-fields used to replace the admin's own sensitive set, so a
+  ;; generated #{:deleted-at} showed and edited password hashes (BOU-562).
+  (let [dir (project!)
+        r   (ports/generate-module
+             svc {:module-name "accounts" :base-ns "bou562s" :output-dir (.getPath dir)
+                  :entities [{:name "Account" :fields [{:name :api-key :type :string}
+                                                       {:name :password-hash :type :string}
+                                                       {:name :name :type :string}]}
+                             {:name "Session" :belongs-to "account"
+                              :fields [{:name :refresh-token :type :string}
+                                       {:name :label :type :string}]}]})
+        account (entity-file dir "dev" "accounts")
+        session (entity-file dir "dev" "sessions")
+        secret? #{:api-key :password-hash :refresh-token}]
+    (is (:success r) (pr-str (:errors r)))
+    (is (= #{:deleted-at :api-key :password-hash} (:hide-fields account)))
+    (is (= #{:deleted-at :refresh-token} (:hide-fields session)))
+    (doseq [fields [(:list-fields account) (:search-fields account)
+                    (:list-fields session) (:search-fields session)
+                    (get-in account [:has-many 0 :fields])
+                    (get-in session [:parent-context :fields])]]
+      (is (not-any? secret? fields) (pr-str fields)))
+    (is (= [:name] (get-in session [:parent-context :fields])))))
+
+(deftest ^:unit an-existing-admin-file-is-never-overwritten
+  ;; --force regenerated every profile's file over the user's edits (BOU-562).
+  (let [dir  (project!)
+        gen  #(ports/generate-module svc (merge {:module-name "billing" :base-ns "bou562f"
+                                                 :entities [(first entities)] :output-dir (.getPath dir)}
+                                                %))
+        file (io/file dir "resources/conf/dev/admin/invoices.edn")]
+    (is (:success (gen {})))
+    (spit file "{:invoices {:label \"Mine\"}}\n")
+    (let [r (gen {:force true})]
+      (is (:success r) (pr-str (:errors r)))
+      (is (= "{:invoices {:label \"Mine\"}}\n" (slurp file)))
+      (is (some #(and (= :skip (:action %)) (str/ends-with? (:path %) "dev/admin/invoices.edn"))
+                (:files r))
+          "the report says it was left alone"))
+    (testing "without --force an existing admin file does not refuse the run"
+      (let [dir2 (project!)
+            f2   (io/file dir2 "resources/conf/dev/admin/invoices.edn")]
+        (spit f2 "{:invoices {:label \"Mine\"}}\n")
+        (is (:success (ports/generate-module svc {:module-name "billing" :base-ns "bou562f2"
+                                                  :entities [(first entities)]
+                                                  :output-dir (.getPath dir2)})))
+        (is (= "{:invoices {:label \"Mine\"}}\n" (slurp f2)))))))
+
+(defn- project-with-dev-config! [text]
+  (let [dir (project!)]
+    (spit (io/file dir "resources/conf/dev/config.edn") text)
+    dir))
+
+(deftest ^:unit a-profile-wrapped-admin-is-left-alone
+  ;; `:wagoe/admin #profile {...}` is not a map to edit; treating it as one
+  ;; wrote into the tag (BOU-562).
+  (let [text (str/replace admin-config "  :wagoe/admin\n  {"
+                          "  :wagoe/admin\n  #profile {:default {:enabled? false}}\n  :wagoe/unused\n  {")
+        dir  (project-with-dev-config! text)
+        r    (ports/generate-module svc {:module-name "billing" :base-ns "bou562p"
+                                         :entities [(first entities)] :output-dir (.getPath dir)})]
+    (is (:success r) (pr-str (:errors r)))
+    (is (= text (slurp (io/file dir "resources/conf/dev/config.edn"))))
+    (is (some? (read-admin dir "dev")) "still reads")))
+
+(deftest ^:unit a-discarded-entry-does-not-desync-the-edit
+  ;; `#_#_ :entities {...}` was read as a key/value pair, so the walk found the
+  ;; wrong :entities and wrote a second one (BOU-562).
+  (let [text (str/replace admin-config "   :entities         #merge"
+                          "   #_#_ :entities {:old {:label \"Old\"}}\n   :entities         #merge")
+        dir  (project-with-dev-config! text)
+        r    (ports/generate-module svc {:module-name "billing" :base-ns "bou562u"
+                                         :entities [(first entities)] :output-dir (.getPath dir)})
+        out  (slurp (io/file dir "resources/conf/dev/config.edn"))]
+    (is (:success r) (pr-str (:errors r)))
+    (is (= 2 (count (re-seq #":entities" out))) out)
+    (is (= #{:users :invoices} (set (keys (:entities (read-admin dir "dev"))))))
+    (is (= #{:users :invoices} (get-in (read-admin dir "dev") [:entity-discovery :allowlist])))))
+
 (deftest ^:unit no-admin-no-admin-config
   (let [dir (project!)]
     (doseq [env ["dev" "test"]]

@@ -186,13 +186,22 @@
   (str "resources/conf/" (.getName ^java.io.File dir) "/admin/" plural ".edn"))
 
 (defn- admin-files
-  "One admin entity file per profile for each [entity relations] pair."
+  "One admin entity file per profile for each [entity relations] pair, split
+   into {:new [...] :kept [...]}. One already there is kept, --force or not:
+   it is where the user's admin edits live, and it may be the framework's own
+   (users.edn, tenants.edn)."
   [output-dir entity+relations]
-  (vec (for [dir (profile-dirs output-dir)
-             [entity relations] entity+relations]
-         {:path    (admin-file-path dir (:entity-plural entity))
-          :content (generators/admin-entity-file entity relations)
-          :action  :create})))
+  (let [all (for [dir (profile-dirs output-dir)
+                  [entity relations] entity+relations]
+              {:path    (admin-file-path dir (:entity-plural entity))
+               :content (generators/admin-entity-file entity relations)
+               :action  :create})
+        exists? #(.exists ^java.io.File (resolve-path output-dir (:path %)))]
+    {:new  (vec (remove exists? all))
+     :kept (mapv #(assoc % :action :skip
+                         :path (.getPath (resolve-path output-dir (:path %)))
+                         :note "already exists — left as it is")
+                 (filter exists? all))}))
 
 (defn- admin-config-edits
   "{:edits [{:file :content :note}] :warnings [...]}: each profile's
@@ -383,16 +392,16 @@
 
             admin?  (admin-on? output-dir)
             by-name (into {} (map (juxt :entity-kebab identity)) (:entities ctx))
-            files   (cond-> files
-                      admin?
-                      (into (admin-files
-                             output-dir
-                             (for [e (:entities ctx)]
-                               [e {:children (filter #(= (:entity-kebab e) (:belongs-to %)) (:entities ctx))
-                                   :parent   (when-let [p (by-name (:belongs-to e))]
-                                               {:name   (:entity-name p)
-                                                :fields (generators/admin-display-fields
-                                                         (map (comp keyword :field-name-kebab) (:fields p)))})}]))))
+            admin-out (when admin?
+                        (admin-files
+                         output-dir
+                         (for [e (:entities ctx)]
+                           [e {:children (filter #(= (:entity-kebab e) (:belongs-to %)) (:entities ctx))
+                               :parent   (when-let [p (by-name (:belongs-to e))]
+                                           {:name   (:entity-name p)
+                                            :fields (generators/admin-display-fields
+                                                     (map (comp keyword :field-name-kebab) (:fields p)))})}])))
+            files   (into files (:new admin-out))
             admin-edits (when admin? (admin-config-edits output-dir (map :entity-plural (:entities ctx))))
 
             ;; Which of them are already on disk. Checked before anything is
@@ -433,7 +442,9 @@
                                      :action (if existed :overwrite :create)
                                      :path   (.getPath file))))
                           files))
-            files (into files (write-edits! (:edits admin-edits) dry-run?))]
+            files (-> files
+                      (into (:kept admin-out))
+                      (into (write-edits! (:edits admin-edits) dry-run?)))]
         {:success true
          :module-name module-name
          :files files
@@ -779,14 +790,15 @@
                                 {:type :validation-error})))
             admin?      (admin-on? output-dir)
             parent-plural (some-> parent template/pascal->kebab template/pluralize)
-            new-files   (cond-> (generators/entity-files ctx entity (get-next-migration-number output-dir))
-                          admin?
-                          (into (admin-files
-                                 output-dir
-                                 [[entity {:parent (when parent
-                                                     {:name   parent
-                                                      :fields (generators/admin-display-fields
-                                                               (generators/schema-field-names schema-src parent))})}]])))
+            admin-out   (when admin?
+                          (admin-files
+                           output-dir
+                           [[entity {:parent (when parent
+                                               {:name   parent
+                                                :fields (generators/admin-display-fields
+                                                         (generators/schema-field-names schema-src parent))})}]]))
+            new-files   (into (generators/entity-files ctx entity (get-next-migration-number output-dir))
+                              (:new admin-out))
             admin-edits (when admin? (admin-config-edits output-dir [(:entity-plural entity)]))
             ;; The parent's own admin file gets the editable panel; one
             ;; generated before admin config existed is left to the admin's
@@ -830,8 +842,9 @@
                                        {:path (.getPath ^java.io.File file) :content content
                                         :action :update :note "appended the entity"}))
                                 edits))
-            files       (into files (write-edits! (concat (:edits admin-edits) (filter :file parent-edits))
-                                                  dry-run))
+            files       (into (into files (:kept admin-out))
+                              (write-edits! (concat (:edits admin-edits) (filter :file parent-edits))
+                                            dry-run))
             warnings    (concat (:warnings admin-edits) (keep :warning parent-edits))
             service-ns  (str (:base-ns ctx) "." module-name "." (:service-ns entity))
             http?       (get-in ctx [:interfaces :http])

@@ -524,7 +524,10 @@
                                                        :fields [{:name :number :type :string}
                                                                 {:name :status :type :enum
                                                                  :enum-values [:entered :paid]}]}
-                                                      line-item]
+                                                      ;; A required column whose value the
+                                                      ;; test cannot compare still needs one.
+                                                      (update line-item :fields conj
+                                                              {:name :meta :type :json})]
                                         :output-dir  (.getPath dir)})]
     (is (:success r) (pr-str (:errors r)))
     (let [{:keys [fail error]} (load-and-test! dir)]

@@ -438,6 +438,24 @@
   (testing "a testing block asserting through a let-bound helper is not"
     (is (empty? (ct/scan-content-structural
                  "x.clj" "(deftest t (let [check (fn [x] (is (pos? x)))] (testing \"a\" (check (f)))))"))))
+  (testing "an assert-*/expect-* helper from another namespace asserts"
+    (is (empty? (ct/scan-content-structural
+                 "x.clj" "(deftest t (is (pos? 1)) (testing \"a\" (h/assert-valid (f))) (testing \"b\" (h/expect-status 200 (f))))"))))
+  (testing "a same-named local fn that asserts nothing does not"
+    (is (= 1 (count (ct/scan-content-structural
+                     "x.clj" "(defn- assert-valid [x] x)\n(deftest t (is (pos? 1)) (testing \"a\" (assert-valid (f))))")))))
+  (testing "a helper asserting through another helper counts"
+    (is (empty? (ct/scan-content-structural
+                 "x.clj" (str "(defn- a [x] (is (pos? x)))\n(defn- b [x] (a x))\n(defn- c [x] (b x))\n"
+                              "(deftest t (is (pos? 1)) (testing \"a\" (c 1)))")))))
+  (testing "def + fn and defmacro helpers count"
+    (is (empty? (ct/scan-content-structural
+                 "x.clj" "(def check (fn [x] (is (pos? x))))\n(deftest t (is (pos? 1)) (testing \"a\" (check 1)))")))
+    (is (empty? (ct/scan-content-structural
+                 "x.clj" "(defmacro check [x] `(is ~x))\n(deftest t (is (pos? 1)) (testing \"a\" (check 1)))"))))
+  (testing "^:wagoe/allow-placeholder exempts one testing block"
+    (is (empty? (ct/scan-content-structural
+                 "x.clj" "(deftest t (is (pos? 1)) ^:wagoe/allow-placeholder (testing \"later\" (setup!)))"))))
   (testing "a testing block asserting through a named helper is not"
     (is (empty? (ct/scan-content-structural
                  "x.clj" "(deftest t (testing \"a\" (snapshot-io/check-snapshot! :k (f))))")))))

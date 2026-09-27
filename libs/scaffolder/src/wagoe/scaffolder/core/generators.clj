@@ -816,8 +816,15 @@ DROP TABLE IF EXISTS %s;
          ;; driver's type and JSON has no portable column value, so those two
          ;; are left out of the comparison.
          compared  (keep #(when-let [v (sample-value %)] (str ":" (:field-name-kebab %) " " v)) fields)
-         instants  (for [f fields :when (= :inst (:field-type f))]
-                     (str " :" (:field-name-kebab f) " (Instant/now)"))]
+         opaque    (str/join " " (for [f fields :when (= :json (:field-type f))]
+                                   (str ":" (:field-name-kebab f))))
+         ;; Written but not compared: a NOT NULL column still needs a value.
+         instants  (concat
+                    (for [f fields :when (= :inst (:field-type f))]
+                      (str " :" (:field-name-kebab f) " (Instant/now)"))
+                    (for [f fields :when (and (nil? (sample-value f)) (not= :inst (:field-type f))
+                                              (:field-required f))]
+                      (str " :" (:field-name-kebab f) " \"{}\"")))]
      (str "(ns " base-ns "." module-name ".shell." entity-lower "-repository-test\n"
           "  (:require [clojure.test :refer [deftest testing is]]\n"
           "            [" base-ns "." module-name "." (shell-ns entity :persistence-ns) " :as persistence]\n"
@@ -854,7 +861,12 @@ DROP TABLE IF EXISTS %s;
           "              created (ports/" create " repo (assoc fields :id (UUID/randomUUID) :created-at (Instant/now)"
           (apply str instants) "))]\n"
           "          (is (= fields (select-keys created (keys fields))))\n"
-          "          (is (= created (ports/" find-by-id " repo (:id created)))))))))\n"))))
+          (if (seq opaque)
+            ;; A JSON column reads back as the driver's own type, which `=`
+            ;; compares by identity.
+            (str "          (is (= (dissoc created " opaque ")\n"
+                 "                 (dissoc (ports/" find-by-id " repo (:id created)) " opaque "))))))))\n")
+            (str "          (is (= created (ports/" find-by-id " repo (:id created)))))))))\n"))))))
 
 ;; =============================================================================
 ;; Further entities (BOU-497)
@@ -1870,14 +1882,27 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s%s%s;
   [x]
   (str/replace (pr-str x) ", " " "))
 
+(defn sensitive-field?
+  "Whether a column holds a secret the admin must not show: the admin's own
+   hidden names (`common-hidden-fields` in wagoe.admin.core.schema-introspection)
+   and any name with a word that says so.
+
+   Pure: true"
+  [k]
+  (boolean (or (#{:password-hash :password-encrypted :secret :token :api-key :private-key
+                  :salt :hash :search-vector :tsv :fts-vector} k)
+               (some #{"password" "hash" "secret" "token" "key" "salt"}
+                     (str/split (name k) #"-")))))
+
 (defn admin-display-fields
   "The fields that stand for an entity on another's page: its first two own
-   fields, not its keys.
+   fields, not its keys or secrets.
 
    Pure: true"
   [field-names]
   (vec (take 2 (remove #(or (#{:id :created-at :updated-at :deleted-at} %)
-                            (str/ends-with? (name %) "-id"))
+                            (str/ends-with? (name %) "-id")
+                            (sensitive-field? %))
                        field-names))))
 
 (defn schema-field-names
@@ -1902,7 +1927,8 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s%s%s;
      :table       (keyword (:entity-table child))
      :foreign-key fk
      :label       (humanize (:entity-plural child))
-     :fields      (vec (take 4 (remove #{fk} (map (comp keyword :field-name-kebab) (:fields child)))))
+     :fields      (vec (take 4 (remove #(or (= fk %) (sensitive-field? %))
+                                       (map (comp keyword :field-name-kebab) (:fields child)))))
      :editable    true
      ;; As the migration's foreign key does: a child has no life without its
      ;; parent. The admin restricts a delete unless told otherwise.
@@ -1919,9 +1945,12 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s%s%s;
    Pure: true"
   [entity {:keys [children parent]}]
   (let [fields  (:fields entity)
-        names   (mapv (comp keyword :field-name-kebab) fields)
-        search  (vec (for [f fields :when (#{:string :text :email} (:field-type f))]
-                       (keyword (:field-name-kebab f))))
+        secrets (filterv sensitive-field? (map (comp keyword :field-name-kebab) fields))
+        names   (into [] (comp (map (comp keyword :field-name-kebab)) (remove sensitive-field?)) fields)
+        search  (vec (for [f fields
+                           :let [k (keyword (:field-name-kebab f))]
+                           :when (and (#{:string :text :email} (:field-type f)) (not (sensitive-field? k)))]
+                       k))
         enums   (into {} (for [f fields :when (= :enum (:field-type f))]
                            [(keyword (:field-name-kebab f))
                             {:type    :enum
@@ -1934,7 +1963,9 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s%s%s;
                          (entry ":soft-delete" "false")
                          (entry ":list-fields" (pr-str (conj (vec (remove #{fk} names)) :created-at)))]
                   (seq search) (conj (entry ":search-fields" (pr-str search)))
-                  :always      (conj (entry ":hide-fields" "#{:deleted-at}")
+                  ;; Secrets listed, not left to the admin's detection: a
+                  ;; manual :hide-fields replaced the set it detects.
+                  :always      (conj (entry ":hide-fields" (str "#{" (str/join " " (map str (cons :deleted-at secrets))) "}"))
                                      (entry ":readonly-fields" "#{:id :created-at :updated-at}"))
                   (seq enums)  (conj (entry ":fields" (edn-str enums)))
                   (seq children)
@@ -1949,14 +1980,20 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s%s%s;
 (defn- key-of [loc]
   (try (z/sexpr loc) (catch Exception _ ::unreadable)))
 
+(defn- children
+  "Zippers at the forms inside `loc`, `#_` discards left out: a `#_#_ k v`
+   counted as a pair shifts every key after it onto a value."
+  [loc]
+  (->> (some-> loc z/down) (iterate z/right) (take-while some?)
+       (remove #(= :uneval (z/tag %)))))
+
 (defn- map-val
   "Zipper at the value of `k` in the map at `loc`, or nil. Walks key/value
    pairs: `z/get` also matches a value equal to `k`, and :allowlist is both."
   [loc k]
   (when (and loc (= :map (z/tag loc)))
-    (loop [kl (z/down loc)]
-      (when-let [vl (some-> kl z/right)]
-        (if (= k (key-of kl)) vl (recur (z/right vl)))))))
+    (some (fn [[kl vl]] (when (= k (key-of kl)) vl))
+          (partition 2 (children loc)))))
 
 (defn- column [loc] (dec (second (z/position loc))))
 
@@ -1964,7 +2001,7 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s%s%s;
   "`loc`'s collection with `node` appended: on a new line at the column of
    its first item when `newline?`, else after a space."
   [loc node newline?]
-  (if-let [first-child (z/down loc)]
+  (if-let [first-child (first (children loc))]
     (-> loc
         (z/append-child* (if newline? (n/newlines 1) (n/spaces 1)))
         (cond-> newline? (z/append-child* (n/spaces (column first-child))))
@@ -1975,7 +2012,7 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s%s%s;
   "The map at `loc` with `k v` added on a line of its own, the value in the
    column the first entry's value is in."
   [loc k v-src]
-  (let [first-key (z/down loc)
+  (let [first-key (first (children loc))
         col       (or (some-> first-key column) 1)
         val-col   (or (some-> first-key z/right column) 0)]
     (-> loc
@@ -1985,17 +2022,29 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s%s%s;
         (z/append-child* (n/spaces (max 1 (- val-col col (count (str k))))))
         (z/append-child* (z/node (z/of-string v-src))))))
 
-(defn- admin-loc [source]
-  (let [admin (-> (z/of-string source {:track-position? true}) (map-val :active) (map-val :wagoe/admin))]
-    (when (and admin (not (false? (some-> (map-val admin :enabled?) key-of))))
+(defn- admin-node
+  "Zipper at the value of :wagoe/admin under :active, whatever its shape."
+  [source]
+  (-> (z/of-string source {:track-position? true}) (map-val :active) (map-val :wagoe/admin)))
+
+(defn- admin-loc
+  "The :wagoe/admin map, when it is a literal map with the admin on. A
+   `#profile` or `#include` in its place is not something to edit."
+  [source]
+  (let [admin (admin-node source)]
+    (when (and admin (= :map (z/tag admin))
+               (not (false? (some-> (map-val admin :enabled?) key-of))))
       admin)))
 
 (defn admin-active?
-  "Whether the config.edn `source` switches the admin UI on.
+  "Whether the config.edn `source` switches the admin UI on. A :wagoe/admin
+   that is not a literal map counts: it cannot be read without Aero.
 
    Pure: true"
   [source]
-  (try (some? (admin-loc source)) (catch Exception _ false)))
+  (try (let [admin (admin-node source)]
+         (boolean (and admin (or (not= :map (z/tag admin)) (admin-loc source)))))
+       (catch Exception _ false)))
 
 (defn add-admin-entity
   "config.edn `source` with the entity `plural` in the admin's :allowlist and
@@ -2009,11 +2058,22 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s%s%s;
   (try
     (let [k       (keyword plural)
           include (str "#include \"admin/" plural ".edn\"")]
-      (if-not (admin-loc source)
+      (cond
+        (nil? (admin-node source))
         {:status :no-admin}
+
+        (not= :map (z/tag (admin-node source)))
+        {:status :unrecognised
+         :reason (str ":wagoe/admin is not a literal map, so add :" plural " to its :allowlist and "
+                      include " to its :entities yourself")}
+
+        (nil? (admin-loc source))
+        {:status :no-admin}
+
+        :else
         (let [allow   (some-> (admin-loc source) (map-val :entity-discovery) (map-val :allowlist))
               step1   (if (and allow (= :set (z/tag allow))
-                               (not (some #{k} (map key-of (take-while some? (iterate z/right (z/down allow)))))))
+                               (not (some #{k} (map key-of (children allow)))))
                         (z/root-string (append-item allow (n/keyword-node k) false))
                         source)
               admin   (admin-loc step1)
@@ -2028,7 +2088,7 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s%s%s;
                         (not (and merged (= :vector (z/tag merged))))
                         {:reason (str ":entities is not a #merge of #includes, so add " include " to it")}
 
-                        (some #(= include (z/string %)) (take-while some? (iterate z/right (z/down merged))))
+                        (some #(= include (z/string %)) (children merged))
                         {:content step1}
 
                         :else
@@ -2062,7 +2122,7 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s%s%s;
         {:status :unrecognised :reason "its :has-many is not a vector"}
 
         (some #(= (:entity entry) (:entity (try (z/sexpr %) (catch Exception _ nil))))
-              (take-while some? (iterate z/right (z/down hm))))
+              (children hm))
         {:status :present}
 
         :else
