@@ -120,6 +120,14 @@ bb scaffold entity \
 `generate-module` (API, MCP `scaffold-module`) takes several `:entities`; the
 first is generated as above and each further one as `entity` would add it.
 
+An entity that belongs to the module's first entity is created with it:
+`POST /api/v1/invoices {"number": "A-1", "invoice-line-items": [{...}]}`
+writes the invoice and its line items in one transaction. `--min 1` (`:min`,
+`"min"` in the AI spec) makes them required: fewer is a 400 naming
+`invoice-line-items`, the API refuses the delete or move that would leave
+fewer, and the admin's `:has-many` gets `:min`. Only the first entity's create
+takes children, so `--min` on a child of another is refused.
+
 ### `--workflow` — a status that moves through fixed steps
 
 ```bash
@@ -152,6 +160,23 @@ request, `"workflow"` in the `bb scaffold ai` spec):
   `:wagoe/workflow`, and `:wagoe/events`. The module will not boot without
   `wagoe add workflow`. An `entity --workflow` into a module whose wiring
   predates this is refused.
+
+Seeded rows: `bb db:seed` inserts rows raw, then runs the application's seed
+hooks, and each workflow entity's starts an instance in the state its row
+holds (`{:status :delivered}` in the seed file). A status the workflow does
+not have fails the seed, naming it.
+
+### `subscriber` — Handle an Event
+
+```bash
+bb scaffold subscriber --module-name billing \
+  --event :admin/entity-created --entity invoices
+```
+
+Writes `shell/<name>_subscriber.clj`: an Integrant component that subscribes
+through `wagoe.events.ports` to the event's namespace as its topic, `matches?`
+and a `handle` to fill in, plus a test. The module wiring requires it and its
+`ig-config` starts it, with `:wagoe/events`, when the event bus is on.
 
 ### `field` — Add a Field to an Existing Entity
 

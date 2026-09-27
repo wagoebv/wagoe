@@ -100,7 +100,24 @@
        Map with :success, :files (adapter file), :errors
        
       Example:
-        (add-adapter service {:module-name \"cache\" :port \"ICache\" ...})"))
+        (add-adapter service {:module-name \"cache\" :port \"ICache\" ...})")
+
+  (add-subscriber [this request]
+    "Add an event subscriber to an existing module (BOU-578).
+
+     Args:
+       request: Map with:
+                {:module-name \"billing\"
+                 :event :admin/entity-created
+                 :entity \"invoices\"   ; optional: the payload's :entity
+                 :dry-run false}
+
+     Writes an Integrant component that subscribes through the events port,
+     its `handle`, a test, and the require that wires it in; the module starts
+     it when the event bus is on.
+
+     Returns:
+       Map with :success, :files, :errors"))
 
 ;; BOU-259: `generate-project` used to live here. It was a second implementation
 ;; of the `wagoe new` project templates (libs/wagoe-cli/resources/wagoe/cli/

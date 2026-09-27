@@ -286,6 +286,9 @@
 (def ^:private field-definition-validator (m/validator schema/FieldDefinition))
 (def ^:private field-definition-explainer (m/explainer schema/FieldDefinition))
 
+(def ^:private add-subscriber-request-validator (m/validator schema/AddSubscriberRequest))
+(def ^:private add-subscriber-request-explainer (m/explainer schema/AddSubscriberRequest))
+
 (def ^:private add-entity-request-validator (m/validator schema/AddEntityRequest))
 (def ^:private add-entity-request-explainer (m/explainer schema/AddEntityRequest))
 
@@ -963,6 +966,71 @@
       (catch Exception e
         {:success false :module-name (:module-name request) :files []
          :errors [(str "Add entity failed: " (.getMessage e))]})))
+
+  (add-subscriber [_this request]
+    (try
+      (when-not (add-subscriber-request-validator request)
+        (throw (ex-info (str "Invalid subscriber: "
+                             (pr-str (me/humanize (add-subscriber-request-explainer request))))
+                        {:type :validation-error})))
+      (let [{:keys [module-name dry-run event entity]} request
+            output-dir  (or (:output-dir request) ".")
+            ctx         (template/build-module-context
+                         {:module-name module-name
+                          :base-ns     (or (:base-ns request) "wagoe")
+                          :entities    []})
+            sub         (generators/subscriber-context ctx event entity (:name request))
+            module-root (format "src/%s/%s/" (:base-ns-path ctx) (:module-path ctx))
+            wiring-file (require-existing-file!
+                         (resolve-path output-dir (str module-root "shell/module_wiring.clj"))
+                         (str "Cannot add a subscriber to " module-name ": its shell/module_wiring.clj is not there."))
+            wiring      (generators/add-subscriber-to-wiring (slurp wiring-file) ctx sub)
+            _ (when (:error wiring)
+                (throw (ex-info (str "Cannot wire the subscriber into " (.getPath wiring-file) ": "
+                                     (:error wiring) ".")
+                                {:type :validation-error})))
+            new-files   [{:path (str "src/" (:path sub) ".clj") :content (generators/generate-subscriber-file sub)}
+                         {:path (str "test/" (:path sub) "_test.clj") :content (generators/generate-subscriber-test-file sub)}]
+            existing    (->> new-files
+                             (map #(resolve-path output-dir (:path %)))
+                             (filter #(.exists ^java.io.File %))
+                             (mapv #(.getPath ^java.io.File %)))
+            _ (when (seq existing)
+                (throw (ex-info "refuse-overwrite" {:type ::refuse-overwrite :existing existing})))
+            files       (conj (mapv (fn [{:keys [path content]}]
+                                      (let [file (resolve-path output-dir path)]
+                                        (when-not dry-run
+                                          (.mkdirs (.getParentFile file))
+                                          (spit file content))
+                                        {:path (.getPath file) :content content
+                                         :action (if dry-run :skip :create)}))
+                                    new-files)
+                              (do (when-not dry-run (spit wiring-file (:content wiring)))
+                                  {:path (.getPath ^java.io.File wiring-file) :content (:content wiring)
+                                   :action (if dry-run :skip :update) :note "requires the subscriber"}))
+            configs     (keep #(let [f (profile-config %)] (when (.isFile f) (slurp f)))
+                              (when (.isDirectory (resolve-path output-dir "resources/conf"))
+                                (profile-dirs output-dir)))]
+        {:success     true
+         :module-name module-name
+         :command     :subscriber
+         :files       files
+         :next-steps  (cond-> []
+                        (not-any? #(generators/module-active? % :wagoe/events) configs)
+                        (conj "Switch the event bus on: wagoe add events. The subscriber starts only with it")
+                        :always
+                        (conj (str "Fill in handle in " (:ns sub))
+                              (str "Run its test: clojure -M:test --focus " (:ns sub) "-test")))
+         :warnings    (when dry-run ["Dry run - no files were written"])})
+      (catch clojure.lang.ExceptionInfo e
+        (if (= ::refuse-overwrite (:type (ex-data e)))
+          {:success false :module-name (:module-name request) :files []
+           :errors (into ["The subscriber already exists:"] (map #(str "  " %) (:existing (ex-data e))))}
+          {:success false :module-name (:module-name request) :files []
+           :errors [(str "Add subscriber failed: " (.getMessage e))]}))
+      (catch Exception e
+        {:success false :module-name (:module-name request) :files []
+         :errors [(str "Add subscriber failed: " (.getMessage e))]})))
 
   (add-endpoint [_this request]
     (try

@@ -93,6 +93,21 @@
 ;; Field Command Options (add field to existing entity)
 ;; =============================================================================
 
+(def subscriber-options
+  [[nil "--module-name NAME" "Module name (lowercase, kebab-case) (required)"
+    :validate [#(re-matches #"^[a-z][a-z0-9-]*$" %)
+               "Must be lowercase with hyphens only"]]
+   [nil "--event EVENT" "The event type it handles, e.g. :admin/entity-created (required)"]
+   [nil "--entity PLURAL" "Only events whose payload's :entity is this, e.g. invoices"
+    :validate [#(re-matches #"^[a-z][a-z0-9-]*$" %) "Must be lowercase with hyphens only"]]
+   [nil "--name NAME" "The subscriber's name (default: <entity>-<event name>)"
+    :validate [#(re-matches #"^[a-z][a-z0-9-]*$" %) "Must be lowercase with hyphens only"]]
+   [nil "--base-ns NS" "Base namespace + path for the module (default: the project's own)"]
+   [nil "--output-dir DIR" "Output directory (default: current directory)"
+    :default "."]
+   [nil "--dry-run" "Show what would be generated without creating files"
+    :default false]])
+
 (def field-options
   [[nil "--module-name NAME" "Module name (lowercase, kebab-case) (required)"
     :validate [#(re-matches #"^[a-z][a-z0-9-]*$" %)
@@ -467,6 +482,7 @@
         heading  (case (:command result)
                    :field  (str "✓ Added field to " (:module-name result))
                    :entity (str "✓ Added entity " (:entity result) " to " (:module-name result))
+                   :subscriber (str "✓ Added a subscriber to " (:module-name result))
                    (str "✓ Successfully generated module: " (:module-name result)))
         steps    (or (seq (:next-steps result))
                      ;; Fallback only. Every command that knows its own
@@ -752,6 +768,35 @@
                 (seq (:existing-files result))
                 (assoc :existing-files (:existing-files result))))))))))
 
+(defn parse-event
+  "`:admin/entity-created` or `admin/entity-created` as a keyword, or nil."
+  [s]
+  (let [s (str/replace-first (str s) #"^:" "")]
+    (when (re-matches #"^[a-z][a-z0-9.-]*/[a-z][a-z0-9-]*$" s)
+      (keyword s))))
+
+(defn execute-subscriber
+  "Execute subscriber command - add an event subscriber to a module."
+  [service opts]
+  (let [event  (parse-event (:event opts))
+        errors (cond-> []
+                 (not (:module-name opts)) (conj "Missing required option: --module-name")
+                 (not (:event opts))       (conj "Missing required option: --event (e.g. --event :admin/entity-created)")
+                 (and (:event opts) (nil? event))
+                 (conj (str "--event " (pr-str (:event opts)) " is not a qualified event type, e.g. :admin/entity-created")))]
+    (if (seq errors)
+      {:status 1 :errors errors}
+      (let [result (ports/add-subscriber service (cond-> {:module-name (:module-name opts)
+                                                          :event       event
+                                                          :output-dir  (:output-dir opts)
+                                                          :dry-run     (:dry-run opts)
+                                                          :base-ns     (:base-ns opts)}
+                                                   (:entity opts) (assoc :entity (:entity opts))
+                                                   (:name opts)   (assoc :name (:name opts))))]
+        (if (:success result)
+          {:status 0 :result result}
+          {:status 1 :errors (:errors result)})))))
+
 (defn execute-field
   "Execute field command - add a field to an existing entity."
   [service opts]
@@ -856,6 +901,7 @@
     :field (execute-field service opts)
     :endpoint (execute-endpoint service opts)
     :adapter (execute-adapter service opts)
+    :subscriber (execute-subscriber service opts)
     (throw (ex-info (str "Unknown scaffolder command: " (name verb))
                     {:type :unknown-command
                      :message (str "Unknown command: " (name verb))}))))
@@ -875,6 +921,7 @@ Commands:
   field       Add a field to an existing entity (creates migration)
   endpoint    Add an endpoint to an existing module (shows instructions)
   adapter     Generate a new adapter implementation
+  subscriber  Add an event subscriber to an existing module
 
 The scaffolder works inside an existing project. To create a new one, use the
 Wagoe CLI:
@@ -902,6 +949,9 @@ Examples:
 
   bb scaffold adapter --module-name notifications \\
     --port INotificationSender --adapter-name slack
+
+  bb scaffold subscriber --module-name billing \\
+    --event :admin/entity-created --entity invoices
 
 For command-specific help:
   bb scaffold <command> --help")
@@ -1069,6 +1119,34 @@ Example:
     --min 1 \\
     --field description:string:required \\
     --field quantity:int:required:default=1")
+
+(def subscriber-help
+  "Add Subscriber Command
+
+Usage: bb scaffold subscriber [options]
+
+Adds an event subscriber to an existing module: shell/<name>_subscriber.clj
+with an Integrant component that subscribes through the events port and a
+`handle` to fill in, and its test. The module's wiring requires it, and starts
+it when the event bus is on (wagoe add events).
+
+Required Options:
+  --module-name NAME   The existing module
+  --event EVENT        The event type it handles, e.g. :admin/entity-created.
+                       Its namespace is the topic: :admin
+
+Options:
+  --entity PLURAL      Only events whose payload's :entity is this, e.g.
+                       invoices. The admin's events carry one
+  --name NAME          The subscriber's name (default: <entity>-<event name>)
+  --output-dir DIR     Write somewhere other than the current directory
+  --dry-run            Show what would be generated without creating files
+
+Example:
+  bb scaffold subscriber \\
+    --module-name billing \\
+    --event :admin/entity-created \\
+    --entity invoices")
 
 (def field-help
   "Add Field Command
@@ -1271,6 +1349,11 @@ Examples:
           (println adapter-help)
           0)
 
+        (and (= verb :subscriber) has-help-flag?)
+        (do
+          (println subscriber-help)
+          0)
+
         ;; Execute command
         :else
         (let [;; Get all args after the verb
@@ -1283,6 +1366,7 @@ Examples:
                             :field field-options
                             :endpoint endpoint-options
                             :adapter adapter-options
+                            :subscriber subscriber-options
                             nil)]
           (if-not cmd-options
             (do

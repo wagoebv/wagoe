@@ -51,7 +51,8 @@
        :warnings ["Manual schema update required"]})
     (add-entity [_ _] {:success true :files []})
     (add-endpoint [_ _] {:success true :files []})
-    (add-adapter [_ _] {:success true :files []})))
+    (add-adapter [_ _] {:success true :files []})
+    (add-subscriber [_ _] {:success true :files []})))
 
 (def ^:private passing-runner (fn [_m] {:status :passed :passed 1 :failed 0}))
 
@@ -143,7 +144,8 @@
       {:success true :module-name (:module-name req) :files []})
     (add-entity [_ _] {:success true :files []})
     (add-endpoint [_ _] {:success true :files []})
-    (add-adapter [_ _] {:success true :files []})))
+    (add-adapter [_ _] {:success true :files []})
+    (add-subscriber [_ _] {:success true :files []})))
 
 (deftest ^:unit relation-metadata-survives-the-mcp-adapter
   ;; `field->scaffolder` allowlisted the keys it forwarded, and the relation
@@ -215,7 +217,8 @@
                (add-field [_ _] {:success true :files []})
                (add-entity [_ _] {:success true :files []})
                (add-endpoint [_ _] {:success true :files []})
-               (add-adapter [_ _] {:success true :files []}))]
+               (add-adapter [_ _] {:success true :files []})
+               (add-subscriber [_ _] {:success true :files []}))]
     (tools/run (deps svc) "scaffold-module"
                {:module "tmp" :entities [{:name "Thing" :fields [{:name "title" :type "string"}]}]
                 :interfaces {:public-api true} :preview true})

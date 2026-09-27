@@ -118,6 +118,18 @@
     (fn [{:keys [fields workflow]}]
       (not-any? #(= (:field workflow) (keyword (name (:name %)))) fields))]])
 
+(def AddSubscriberRequest
+  "Schema for adding an event subscriber to a module (BOU-578). The names go
+   into code, so they are kebab-case."
+  [:map {:title "Add Subscriber Request"}
+   [:module-name :string]
+   [:event [:and :qualified-keyword [:fn #(re-matches #"^[a-z][a-z0-9.-]*/[a-z][a-z0-9-]*$" (subs (str %) 1))]]]
+   [:entity {:optional true} [:maybe [:re #"^[a-z][a-z0-9-]*$"]]]
+   [:name {:optional true} [:maybe [:re #"^[a-z][a-z0-9-]*$"]]]
+   [:base-ns {:optional true} [:maybe :string]]
+   [:dry-run {:optional true} [:maybe :boolean]]
+   [:output-dir {:optional true} [:maybe :string]]])
+
 (def AddEntityRequest
   "Schema for adding an entity to an existing module (BOU-497)."
   [:map {:title "Add Entity Request"}

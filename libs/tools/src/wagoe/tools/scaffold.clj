@@ -11,6 +11,7 @@
 ;;   bb scaffold field               -- interactive wizard
 ;;   bb scaffold endpoint            -- interactive wizard
 ;;   bb scaffold adapter             -- interactive wizard
+;;   bb scaffold subscriber [args...] -- add an event subscriber to a module
 ;;   bb scaffold ai "<description>" [--yes] -- AI-assisted module generation
 
 (ns wagoe.tools.scaffold
@@ -836,6 +837,7 @@
        "  bb scaffold field               Interactive wizard for adding a field\n"
        "  bb scaffold endpoint            Interactive wizard for adding an endpoint\n"
        "  bb scaffold adapter             Interactive wizard for adding an adapter\n"
+       "  bb scaffold subscriber [args]   Add an event subscriber to a module (see below)\n"
        "  bb scaffold ai <description> [--yes]    AI-powered module generation from NL description\n"
        "      [--dry-run] [--fresh] [--output-dir DIR] [--base-ns NS] [--force] [--no-http] [--no-web] [--[no-]public-api]\n"
        "  bb scaffold integrate <module> [--base-ns NS]  Guide integration of a scaffolded module\n"
@@ -848,6 +850,7 @@
        "  bb scaffold generate --module-name foo --entity Foo --field bar:string\n"
        "  bb scaffold entity --module-name foo --entity FooLine --belongs-to foo --min 1 --field qty:int\n"
        "  bb scaffold field --module-name foo --entity Foo --name bar --type string\n"
+       "  bb scaffold subscriber --module-name foo --event :admin/entity-created --entity foos\n"
        "\n"
        "Field spec: name:type[:values=a,b,c][:required][:unique][:default=v]\n"
        "  --field status:enum:values=entered,paid:required:default=entered\n"
@@ -861,7 +864,7 @@
        "  or start Ollama locally\n"
        "\n"
        "Every option of a command:\n"
-       "  bb scaffold generate --help     (and entity, field, endpoint, adapter, ai)"))
+       "  bb scaffold generate --help     (and entity, field, endpoint, adapter, subscriber, ai)"))
 
 ;; =============================================================================
 ;; Main entry point
@@ -892,6 +895,9 @@
       (if (seq rest-args)
         (run-clojure! (into ["entity"] rest-args))
         (run-clojure! ["entity" "--help"]))
+
+      (= sub "subscriber")
+      (run-clojure! (into ["subscriber"] (or (seq rest-args) ["--help"])))
 
       (= sub "field")
       (if (seq rest-args)

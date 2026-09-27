@@ -24,7 +24,8 @@
       (add-entity [_ req] (scaffold/add-entity real (at req)))
       (add-field [_ req] (scaffold/add-field real (at req)))
       (add-endpoint [_ req] (scaffold/add-endpoint real (at req)))
-      (add-adapter [_ req] (scaffold/add-adapter real (at req))))))
+      (add-adapter [_ req] (scaffold/add-adapter real (at req)))
+      (add-subscriber [_ req] (scaffold/add-subscriber real (at req))))))
 
 (deftest ^:integration scaffold-module-generates-every-entity
   (let [dir (temp-dir)
