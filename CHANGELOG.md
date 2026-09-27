@@ -52,6 +52,12 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **`wagoe add` and `bb setup --prod true` left prod behind** (BOU-564). Both now bring every
+  profile the project's modules; re-run `wagoe add <module>` for one prod lacks.
+- **A generated project ran every test twice, and `wagoe add events` needed Redis in dev** (BOU-564).
+  Replace `tests.edn` with one suite, and set `:wagoe/events {:provider :memory}` in dev.
+- **A scaffolded API's 400 had empty `details`** (BOU-564). It now names the field; JSON keys are
+  kebab-case. Regenerate `shell/*http.clj` for older modules.
 - **`bb setup` overwrote dev and test config and `.env.example`** (BOU-404, BOU-532). It now changes
   only what you answer, lists each change first, and refuses rather than write a lossy merge.
 - **`bb scaffold generate --audit` and `--pagination` are removed** (BOU-483). No generator read

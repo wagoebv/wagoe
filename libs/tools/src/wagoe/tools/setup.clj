@@ -581,6 +581,21 @@
      :email       (if (contains? active :wagoe.external/smtp) :smtp :none)
      :admin-ui    (if (contains? active :wagoe/admin) :yes :no)}))
 
+(defn- project-name
+  "The name the existing config was written for: :wagoe/settings :name less
+   its profile suffix, or nil. Re-running setup offered my-app (BOU-564)."
+  [active]
+  (some-> (get-in active [:wagoe/settings :name])
+          (str/replace #"-(dev|development|test)$" "")
+          not-empty))
+
+(defn- project-spec
+  "What the existing config answers, as a spec, for a profile made from it."
+  [active]
+  (-> (current-choices active)
+      (update :admin-ui #(= :yes %))
+      (assoc :project-name (project-name active))))
+
 ;; =============================================================================
 ;; Interactive wizard
 ;; =============================================================================
@@ -603,7 +618,8 @@
                                                                 (some-> (get current k) name) ")")])))]
                       (when-not (= :keep answer) answer)))
         project-name (loop []
-                       (let [s (prompt "Project name (kebab-case)" "my-app")]
+                       (let [s (prompt "Project name (kebab-case)"
+                                       (or (when existing? (project-name (current-active))) "my-app"))]
                          (if (re-matches #"[a-z][a-z0-9-]*" s)
                            s
                            (do (println (red "  Must be kebab-case")) (recur)))))
@@ -779,6 +795,47 @@
      {:text existing :changes [] :moved #{} :touched #{}}
      (config-edn/entries generated ":active"))))
 
+;; =============================================================================
+;; A prod profile made in an existing project (BOU-564)
+;; =============================================================================
+;; Built from the answers alone, it lacked every module added before it and the
+;; AI config, and was named my-app.
+
+(def ^:private dev-only-keys
+  "Keys the platform refuses outside :dev, or that only make sense there."
+  #{":wagoe/dashboard" ":wagoe/dev-error-enricher"})
+
+(defn- prod-value
+  "A prod replacement for dev entry `e`, or nil to copy it. Dev runs the event
+   bus in memory; prod has more than one process."
+  [dev-text e spec]
+  (when (and (= ":wagoe/events" (:key e))
+             (= :memory (provider-of dev-text e nil)))
+    (str ":wagoe/events\n"
+         "  {:provider :redis\n"
+         "   :host     #env REDIS_HOST\n"
+         "   :port     #long #or [#env REDIS_PORT 6379]\n"
+         "   :password #env REDIS_PASSWORD\n"
+         "   :group    \"" (:project-name spec) "\"}\n")))
+
+(defn carry-over
+  "`prod-text` with every entry of `dev-text`'s :active it lacks. Dev-only
+   keys and databases stay behind: prod's database is its own template."
+  [prod-text dev-text spec]
+  (reduce (fn [text e]
+            (let [k (:key e)]
+              (if (or (entry text ":active" k) (dev-only-keys k) (database-keys k))
+                text
+                (add-entry text
+                           (or (prod-value dev-text e spec)
+                               ;; reindent moves a snippet from column 2 to
+                               ;; `col`; 4 - c brings one at column c to 2.
+                               (reindent (subs dev-text (:start e) (:end e))
+                                         (- 4 (column dev-text (:start e))) "\n"))
+                           "\n"))))
+          prod-text
+          (or (config-edn/entries dev-text ":active") [])))
+
 (defn- merge-loss
   "Why `merged` must not replace `old`, or nil. Both must read as one EDN map,
    and every root, :active and :inactive entry of `old` must read back `=` —
@@ -883,10 +940,22 @@
   [spec]
   (let [existing? (existing-project?)
         full      (with-defaults spec)
+        dev-text  (read-target (conf-rel "dev"))
+        dev       (let [a (some-> dev-text read-edn first :active)] (when (map? a) a))
+        ;; Unanswered means what dev has. Dev's admin is carried whole, with
+        ;; the entity files it includes, rather than regenerated.
+        prod-spec (cond-> (with-defaults (merge-with #(if (nil? %2) %1 %2)
+                                                     (project-spec dev) spec))
+                    (contains? dev :wagoe/admin) (assoc :admin-ui false))
+        create    (fn [env]
+                    (cond
+                      (not existing?) (build-config full env)
+                      (and (prod? env) (:prod? spec))
+                      (cond-> (build-config prod-spec env)
+                        dev-text (carry-over dev-text prod-spec))))
         configs   (for [env envs]
                     (plan-file (conf-rel env)
-                               (when (or (not existing?) (and (prod? env) (:prod? spec)))
-                                 (build-config full env))
+                               (create env)
                                (when-not (prod? env)
                                  #(merge-config %1 (build-config spec env)
                                                 {:switch-db? (not= "test" env) :env env
@@ -906,12 +975,16 @@
     (concat
      configs
      [env-ex]
-     ;; The file the admin key's `#include` names, wherever a config written
-     ;; now names it.
-     (when entity
-       (for [[env {:keys [content]}] (map vector envs configs)
-             :when (some-> content (str/includes? "admin/users.edn"))]
-         (plan-file (str "resources/conf/" env "/admin/users.edn") entity nil false))))))
+     ;; The files a config written now `#include`s: dev's copy for a prod made
+     ;; from dev, else the users entity setup ships.
+     (distinct
+      (for [[env {:keys [content]}] (map vector envs configs)
+            :when content
+            inc   (distinct (map second (re-seq #"#include\s+\"([^\"]+)\"" content)))
+            :let  [source (or (when (prod? env) (read-target (str "resources/conf/dev/" inc)))
+                              (when (= "admin/users.edn" inc) entity))]
+            :when source]
+        (plan-file (str "resources/conf/" env "/" inc) source nil false))))))
 
 (defn- stale
   "The paths of `items` whose file no longer holds the text it was planned

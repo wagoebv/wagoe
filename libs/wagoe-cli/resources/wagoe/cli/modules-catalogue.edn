@@ -247,6 +247,8 @@
    :version             "1.0.0-rc-3"
    :category            :optional
    :tier                :stable
+   ;; Dev runs in one process, so it needs no Redis; prod does (BOU-564).
+   :dev-config-snippet  "  :wagoe/events\n  {:provider :memory}\n"
    :config-snippet      "  :wagoe/events\n  {:provider :redis\n   :host     #env REDIS_HOST\n   :port     #long #or [#env REDIS_PORT 6379]\n   :password #env REDIS_PASSWORD\n   :group    \"my-app\"}\n"
    :test-config-snippet "  :wagoe/events\n  {:provider :memory}\n"
    :add-command         "wagoe add events"
@@ -309,7 +311,8 @@
    ;; it pulls a Jetty adapter and a dashboard, and none of it belongs in a
    ;; production uberjar. `wagoe new` already writes it into :repl.
    :scope               :dev
-   :config-snippet      ""
+   ;; Dev only: the platform refuses :wagoe/dashboard under any other profile.
+   :config-snippet      "  :wagoe/dashboard\n  {:port 9999}\n"
    :test-config-snippet ""
    :add-command         "wagoe add devtools"
    :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/devtools/AGENTS.md"

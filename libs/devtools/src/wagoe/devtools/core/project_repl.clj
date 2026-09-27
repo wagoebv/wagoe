@@ -136,7 +136,7 @@
    none. `:wagoe/admin-routes` carries the `:web-prefix` the router actually
    mounted, which is the question answered without guessing. Absent when the
    admin module is not running, and then the line is not printed (BOU-394)."
-  [{:keys [system base-url]}]
+  [{:keys [system base-url nrepl-port]}]
   (when system
     (guidance/format-startup-dashboard
      {:components (count system)
@@ -144,5 +144,5 @@
       :web-url    base-url
       :admin-url  (when-let [prefix (get-in system [:wagoe/admin-routes :web-prefix])]
                     (str base-url prefix))
-      :nrepl-port 7888
+      :nrepl-port nrepl-port
       :modules    (module-names system)})))

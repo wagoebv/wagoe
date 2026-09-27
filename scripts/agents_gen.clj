@@ -132,7 +132,8 @@
 
 (defn render-section [section knowledge modules {:keys [ns-token pitfall-surface]}]
   (case section
-    :naming   (render-naming (:naming knowledge))
+    :naming   (render-naming (filter #(contains? (:surfaces % #{pitfall-surface}) pitfall-surface)
+                                     (:naming knowledge)))
     :fc-is    (render-fc-is (:fc-is knowledge) ns-token)
     :pitfalls (render-pitfalls (:pitfalls knowledge) pitfall-surface ns-token)
     :modules  (render-modules (concat modules (:dev-modules knowledge)))))

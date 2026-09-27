@@ -134,40 +134,74 @@
 
 ;; ─── config.edn patching ─────────────────────────────────────────────────────
 
+(defn- config-key-of [snippet]
+  (second (re-find #":(\S+)" snippet)))
+
 (defn patch-config!
-  "Inject snippet into :active section of config file if config-key not present."
+  "Inject snippet into the :active map of a config file unless its key is there.
+   Returns :added, :present, or :no-active when there is no :active map to
+   write into."
   [dir relative-path snippet]
-  (when (seq snippet)
-    (let [f          (io/file dir relative-path)
-          content    (slurp f)
-          config-key (second (re-find #":(\S+)" snippet))]
-      (when-not (str/includes? content (str ":" config-key))
-        (let [active-idx (str/index-of content ":active")
-              open-idx   (when active-idx (str/index-of content "{" (+ active-idx 7)))]
-          (when open-idx
-            (let [close-idx (loop [i (inc open-idx) depth 1]
-                              (cond
-                                (>= i (count content)) nil
-                                (zero? depth)          (dec i)
-                                :else
-                                (let [c (nth content i)]
-                                  (recur (inc i) (case c \{ (inc depth) \} (dec depth) depth)))))]
-              (when close-idx
-                (spit f (str (subs content 0 close-idx)
-                             "\n" snippet
-                             (subs content close-idx)))))))))))
+  (let [f          (io/file dir relative-path)
+        content    (slurp f)
+        config-key (config-key-of snippet)]
+    (if (str/includes? content (str ":" config-key))
+      :present
+      (let [active-idx (str/index-of content ":active")
+            open-idx   (when active-idx (str/index-of content "{" (+ active-idx 7)))
+            close-idx  (when open-idx
+                         (loop [i (inc open-idx) depth 1]
+                           (cond
+                             (>= i (count content)) nil
+                             (zero? depth)          (dec i)
+                             :else
+                             (let [c (nth content i)]
+                               (recur (inc i) (case c \{ (inc depth) \} (dec depth) depth))))))]
+        (if close-idx
+          (do (spit f (str (subs content 0 close-idx)
+                           "\n" snippet
+                           (subs content close-idx)))
+              :added)
+          :no-active)))))
+
+(defn- snippet-for
+  "What `module` writes into profile `env`. Dev may differ from prod: events
+   runs in memory there, with no Redis to start (BOU-564)."
+  [{:keys [config-snippet dev-config-snippet test-config-snippet]} env]
+  (case env
+    "test" test-config-snippet
+    "dev"  (or dev-config-snippet config-snippet)
+    config-snippet))
+
+(defn- target-profiles
+  "The existing profiles `module` belongs in, sorted, each with its snippet. A
+   dev-scoped module goes in dev only; no profile is ever created."
+  [dir {:keys [scope] :as module}]
+  (for [env   (sort (.list (io/file dir "resources/conf")))
+        :when (and (.exists (io/file dir "resources/conf" env "config.edn"))
+                   (or (not= :dev scope) (= "dev" env)))
+        :let  [snippet (snippet-for module env)]
+        :when (seq snippet)]
+    [env snippet]))
 
 (defn patch-configs!
-  "Patch every existing resources/conf/<profile>/config.edn, never creating one:
-   test takes :test-config-snippet, the rest :config-snippet, and a dev-scoped
-   module stays in dev. Only dev and test were written, so a module was missing
-   under WAG_ENV=prod (BOU-529)."
-  [dir {:keys [scope config-snippet test-config-snippet]}]
-  (doseq [env (sort (.list (io/file dir "resources/conf")))
-          :when (and (.exists (io/file dir "resources/conf" env "config.edn"))
-                     (or (not= :dev scope) (= "dev" env)))]
-    (patch-config! dir (str "resources/conf/" env "/config.edn")
-                   (if (= "test" env) test-config-snippet config-snippet))))
+  "Patch every existing resources/conf/<profile>/config.edn. Returns
+   [[env result]], result as `patch-config!` returns it. Only dev and test
+   were written, so a module was missing under WAG_ENV=prod (BOU-529)."
+  [dir module]
+  (vec (for [[env snippet] (target-profiles dir module)]
+         [env (patch-config! dir (str "resources/conf/" env "/config.edn") snippet)])))
+
+(defn installed?
+  "Whether `module` needs nothing more: its dep is there and every profile it
+   belongs in has its key. Dev alone was checked, so a prod created later
+   never got a module added before it (BOU-564)."
+  [dir module dep-present?]
+  (and dep-present?
+       (every? (fn [[env snippet]]
+                 (str/includes? (slurp (io/file dir "resources/conf" env "config.edn"))
+                                (str ":" (config-key-of snippet))))
+               (target-profiles dir module))))
 
 ;; ─── AGENTS.md patching ──────────────────────────────────────────────────────
 
@@ -183,9 +217,13 @@
                               content "wagoe:available-modules"
                               #(str/replace % (templates/module-row-pattern name) ""))
                 install-line (str "- " name " — [docs](" docs-url ")\n")
-                with-install (str/replace without-row
-                                          "<!-- /wagoe:installed-modules -->"
-                                          (str install-line "<!-- /wagoe:installed-modules -->"))]
+                ;; Re-running add to reach a profile it missed must not list
+                ;; the module twice.
+                with-install (if (str/includes? without-row install-line)
+                               without-row
+                               (str/replace without-row
+                                            "<!-- /wagoe:installed-modules -->"
+                                            (str install-line "<!-- /wagoe:installed-modules -->")))]
             (spit f with-install)))))))
 
 ;; ─── Main ────────────────────────────────────────────────────────────────────
@@ -216,15 +254,12 @@
               existing     (dep-coords deps-content (:clojars module) (:scope module))
               dep-present? (boolean existing)
               existing-ver (:mvn/version existing)
-              snippet      (:config-snippet module)
               ;; A module is "installed" when its dep is present AND its config key is
-              ;; wired. Requiring dep-present? prevents false positives when two modules
-              ;; share a config key (e.g. email and external both use :wagoe.external/smtp).
-              wired?       (if (seq snippet)
-                             (let [config-key     (second (re-find #":(\S+)" snippet))
-                                   config-content (slurp (io/file dir "resources/conf/dev/config.edn"))]
-                               (and dep-present?
-                                    (str/includes? config-content (str ":" config-key))))
+              ;; in every profile it belongs in. Requiring dep-present? prevents false
+              ;; positives when two modules share a config key (e.g. email and external
+              ;; both use :wagoe.external/smtp).
+              wired?       (if (seq (target-profiles dir module))
+                             (installed? dir module dep-present?)
                              ;; No config snippet — check AGENTS.md installed section to avoid
                              ;; false positives from pre-installed deps (e.g. wagoe-external).
                              (let [agents-f (io/file dir "AGENTS.md")]
@@ -262,7 +297,11 @@
                   :unreadable         (do (println "  deps.edn: could not be read as EDN, so nothing was written.")
                                           (println by-hand))
                   (println (str "  deps.edn: unchanged — " (:clojars module) " is already there"))))
-              (patch-configs! dir module)
+              (doseq [[env result] (patch-configs! dir module)]
+                (println (str "  " env ": " (case result
+                                              :added     "added to config.edn"
+                                              :present   "already in config.edn"
+                                              :no-active "no :active map in config.edn, nothing written"))))
               (patch-agents-md! dir module)
               (println (str "\n" module-name " added"))
               ;; Said at install time, not left on a page the user reads later:

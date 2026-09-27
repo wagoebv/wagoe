@@ -49,6 +49,15 @@
     (is (str/includes? out "kebab"))
     (is (str/includes? out ":password-hash"))))
 
+(deftest a-generated-project-is-told-its-api-is-kebab-case
+  ;; Its scaffolded API reads and writes kebab-case JSON, and AGENTS.md said
+  ;; camelCase; a camelCase body is refused (BOU-564).
+  (let [naming #(gen/render-section :naming (gen/load-knowledge) [] {:pitfall-surface %})]
+    (is (re-find #"API/JSON boundary only \| kebab" (naming :downstream)))
+    (is (not (str/includes? (naming :downstream) "camel")))
+    ;; The framework's own user API is still camelCase.
+    (is (re-find #"API/JSON boundary only \| camel" (naming :framework)))))
+
 (def sample-pitfalls
   [{:id "P01" :title "kebab mixing" :surfaces #{:framework :downstream}
     :symptom "nil values" :cause "snake key" :fix "use kebab; convert at boundary {{ns}}"}
