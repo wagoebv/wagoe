@@ -68,6 +68,47 @@ Provides permission-based transitions, automatic audit trails, and optional side
                      :side-effects [:notify-cancellation]}]})
 ----
 
+== Guards
+
+A guard takes one map and returns truthy (allow) or falsy (reject).
+Declare it under `:guards` in the workflow definition.
+The map holds:
+
+* every key of the request's `:context`
+* `:workflow/instance`, the stored instance
+* `:workflow/entity`, a delay, when the workflow has an `:entity-loader`.
+Deref it to call `(entity-loader entity-type entity-id)`; it loads at most once per check.
+
+The workflow keys overwrite a caller's keys of the same name.
+This guard refuses to deliver an invoice with no lines:
+
+[source,clojure]
+----
+(def invoice-workflow
+  {:id            :invoice-workflow
+   :initial-state :draft
+   :states        #{:draft :delivered}
+   :transitions   [{:from :draft :to :delivered :name :deliver :guard :has-lines?}]
+   ;; count-invoice-lines is yours, e.g. SELECT count(*) FROM invoice_lines WHERE invoice_id = ?
+   :entity-loader (fn [_entity-type invoice-id]
+                    {:line-count (count-invoice-lines invoice-id)})
+   :guards        {:has-lines? (fn [{:workflow/keys [entity]}]
+                                 (pos? (:line-count @entity)))}})
+----
+
+Guards passed to `create-workflow-service` apply to every workflow; a workflow's own `:guards` win.
+
+== Configuration
+
+`wagoe add workflow` writes this under `:active`, and it is all the module needs:
+
+[source,edn]
+----
+{:wagoe/workflow {}}
+----
+
+The module wires its own database context and schema, and the job queue when `:wagoe/jobs` is enabled.
+
 == HTTP API
 
 [source,bash]

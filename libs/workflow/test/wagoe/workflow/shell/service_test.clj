@@ -454,3 +454,135 @@
       (let [result (ports/process-auto-transitions! auto-svc :ghost-workflow)]
         (is (= 0 (:processed result)))
         (is (= 0 (:attempted result)))))))
+
+;; =============================================================================
+;; What a guard sees (BOU-571)
+;; =============================================================================
+
+(def ^:private deliver-def
+  {:id            :deliver-workflow
+   :initial-state :draft
+   :states        #{:draft :delivered}
+   :transitions   [{:from :draft :to :delivered :name :deliver :guard :ok?}]})
+
+(defn- start-deliver!
+  "A service over `definition` with `guards` as its registry, and an instance of it."
+  [definition guards]
+  (registry/register-workflow! definition)
+  (let [svc (service/create-workflow-service (create-memory-store) *registry* nil guards)]
+    [svc (ports/start-workflow! svc {:workflow-id (:id definition)
+                                     :entity-type :invoice
+                                     :entity-id   (UUID/randomUUID)})]))
+
+(deftest ^:unit a-guard-sees-the-instance-and-the-context
+  (let [seen           (atom nil)
+        [svc instance] (start-deliver! deliver-def {:ok? (fn [in] (reset! seen in) true)})
+        forged         {:id (UUID/randomUUID)}]
+    (is (:success? (ports/transition! svc {:instance-id (:id instance)
+                                           :transition  :deliver
+                                           :context     {:by "test" :workflow/instance forged}})))
+    (testing "the caller's keys stay where one-argument guards read them"
+      (is (= "test" (:by @seen))))
+    (testing "the instance is the stored one, not what the caller sent"
+      (is (= (:id instance) (:id (:workflow/instance @seen))))
+      (is (= :draft (:current-state (:workflow/instance @seen)))))
+    (testing "no loader, no entity"
+      (is (not (contains? @seen :workflow/entity))))
+    (testing "the audit entry keeps the caller's context"
+      (is (= {:by "test" :workflow/instance forged}
+             (:context (first (ports/audit-log svc (:id instance)))))))))
+
+(deftest ^:unit a-guard-loads-the-entity-through-the-workflows-loader
+  (let [calls          (atom [])
+        lines          (atom 0)
+        definition     (assoc deliver-def
+                              :entity-loader (fn [entity-type entity-id]
+                                               (swap! calls conj [entity-type entity-id])
+                                               {:line-count @lines})
+                              :guards {:ok? (fn [{:workflow/keys [entity]}]
+                                              (pos? (:line-count @entity)))})
+        ;; The service's registry is what `wagoe add workflow` passes: empty.
+        [svc instance] (start-deliver! definition {})]
+    (testing "a guard on the definition is found, and refuses with no lines"
+      (is (= :guard-rejected
+             (get-in (ports/transition! svc {:instance-id (:id instance) :transition :deliver})
+                     [:error :type]))))
+    (testing "the loader got the instance's entity"
+      (is (= [[:invoice (:entity-id instance)]] @calls)))
+    (testing "available-transitions runs the same guard"
+      (is (false? (:enabled? (first (ports/available-transitions svc (:id instance) [] nil))))))
+    (reset! lines 2)
+    (is (:success? (ports/transition! svc {:instance-id (:id instance) :transition :deliver})))))
+
+(deftest ^:unit the-entity-is-loaded-only-when-a-guard-asks
+  (let [calls          (atom 0)
+        definition     (assoc deliver-def :entity-loader (fn [_ _] (swap! calls inc) {}))
+        [svc instance] (start-deliver! definition {:ok? (constantly true)})]
+    (is (:success? (ports/transition! svc {:instance-id (:id instance) :transition :deliver})))
+    (is (zero? @calls))))
+
+(defn- bind-symbols
+  "Evaluate `form` with each symbol in `bindings` bound to its value."
+  [form bindings]
+  ((eval `(fn [{:syms [~@(keys bindings)]}] ~form)) bindings))
+
+(defn- documented-guard-workflow
+  "The workflow the guard example under `heading` defines, with
+   `count-invoice-lines` bound to `count-fn`."
+  [path heading re count-fn]
+  (let [block (first-block-under path heading re)
+        forms (when block (read-string (str "[" block "]")))
+        d     (first (filter #(and (seq? %) (= 'def (first %))) forms))]
+    (is (some? d) (str "the guard example in " path " defines nothing"))
+    (some-> d (nth 2) (bind-symbols {'count-invoice-lines count-fn}))))
+
+(deftest ^:unit the-documented-guard-example-runs
+  (doseq [[path heading re] [["AGENTS.md" "## Guards" md-block]
+                             ["../../docs/modules/libraries/pages/workflow.adoc"
+                              "== Guards" adoc-block]]]
+    (testing path
+      (registry/clear-registry!)
+      (let [lines      (atom {})
+            definition (documented-guard-workflow path heading re
+                                                  (fn [id] (count (get @lines id))))
+            _          (registry/register-workflow! definition)
+            svc        (service/create-workflow-service (create-memory-store) *registry* nil {})
+            invoice-id (UUID/randomUUID)
+            instance   (ports/start-workflow! svc {:workflow-id (:id definition)
+                                                   :entity-type :invoice
+                                                   :entity-id   invoice-id})
+            deliver!   #(ports/transition! svc {:instance-id (:id instance)
+                                                :transition  :deliver
+                                                :actor-roles [:admin]})]
+        (testing "an invoice with no lines is not delivered"
+          (is (= :guard-rejected (get-in (deliver!) [:error :type]))))
+        (swap! lines assoc invoice-id [{:qty 1}])
+        (testing "one line is enough"
+          (is (:success? (deliver!))))))))
+
+;; =============================================================================
+;; The documented config is what `wagoe add workflow` writes (BOU-571)
+;; =============================================================================
+
+(defn- catalogue-config
+  "The `:wagoe/workflow` value `wagoe add workflow` writes, read from its catalogue."
+  []
+  (let [f     (io/file lib-dir "../wagoe-cli/resources/wagoe/cli/modules-catalogue.edn")
+        entry (->> (:modules (read-string (slurp f)))
+                   (filter #(= "workflow" (:name %)))
+                   first)]
+    (:wagoe/workflow (read-string (str "{" (:config-snippet entry) "}")))))
+
+(deftest ^:unit the-documented-config-is-what-wagoe-add-writes
+  (let [written (catalogue-config)
+        edn     #"(?s)```edn\n(.*?)```"]
+    (is (= {} written))
+    (doseq [[path heading re] [["AGENTS.md" "## Integrant Wiring" edn]
+                               ["README.md" "## Configuration" edn]
+                               ["../../docs/modules/libraries/pages/workflow.adoc"
+                                "== Configuration" #"(?s)\[source,edn\]\n----\n(.*?)\n----"]]]
+      (testing path
+        (is (= written
+               (some-> (first-block-under path heading re)
+                       read-string
+                       :wagoe/workflow)))))))

@@ -178,6 +178,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **Workflow guards see the instance, and can load its entity** (BOU-571). Declare `:guards` and an
+  `:entity-loader` on the workflow; old guards still get the context. Workflow config is just `{}`.
 - **The scaffolder writes admin config** (BOU-562). With the admin on, `generate` and `entity` add each
   entity's file (never over an existing one), allowlist entry and `#include`, with secret columns hidden.
 - **Admin writes publish lifecycle events** (BOU-492). With `:wagoe/events` on,

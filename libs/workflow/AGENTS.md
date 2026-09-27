@@ -114,7 +114,7 @@ you would rather not commit the imports, keep the rule local:
 | `:name` | keyword | no | Transition name (defaults to `:to`) |
 | `:label` | string | no | Human-readable display label |
 | `:required-permissions` | `[keyword]` | no | Actor needs at least one |
-| `:guard` | keyword | no | Key in guard-registry map |
+| `:guard` | keyword | no | Key in the workflow's `:guards` or the service's guard registry |
 | `:side-effects` | `[keyword]` | no | Job types enqueued after success |
 | `:auto?` | boolean | no | If `true`, eligible for `process-auto-transitions!` |
 
@@ -183,16 +183,41 @@ A test evaluates the example above, so keep it runnable.
 
 ## Guards
 
-Guards are plain functions registered at service creation time:
+A guard is a function of one map that returns truthy (allow) or falsy (reject).
+Put it under `:guards` in the workflow definition. The map holds:
+
+- every key of the request's `:context`, as before
+- `:workflow/instance`, the stored instance (`:entity-type`, `:entity-id`, `:current-state`, ...)
+- `:workflow/entity`, a delay, when the workflow has an `:entity-loader`.
+  Deref it to call `(entity-loader entity-type entity-id)`; it is loaded only when
+  a guard derefs it, and at most once per check.
+
+The workflow keys overwrite a caller's keys of the same name. This guard refuses
+to deliver an invoice with no lines:
 
 ```clojure
-(def guard-registry
-  {:payment-confirmed (fn [ctx] (= :confirmed (:payment-status ctx)))})
-
-(service/create-workflow-service store registry nil guard-registry)
+(def invoice-workflow
+  {:id            :invoice-workflow
+   :initial-state :draft
+   :states        #{:draft :delivered}
+   :transitions   [{:from :draft :to :delivered :name :deliver :guard :has-lines?}]
+   ;; count-invoice-lines is yours, e.g. SELECT count(*) FROM invoice_lines WHERE invoice_id = ?
+   :entity-loader (fn [_entity-type invoice-id]
+                    {:line-count (count-invoice-lines invoice-id)})
+   :guards        {:has-lines? (fn [{:workflow/keys [entity]}]
+                                 (pos? (:line-count @entity)))}})
 ```
 
-Guards receive the `:context` map from the transition request and return `true` (allow) or `false` (reject).
+Register it with `defworkflow` or `register-workflow!` like any other definition.
+A test runs this example, so keep it runnable.
+
+Guards can also be passed to the service for every workflow; a workflow's own
+`:guards` win over these:
+
+```clojure
+(service/create-workflow-service store registry nil
+                                 {:payment-confirmed (fn [ctx] (= :confirmed (:payment-status ctx)))})
+```
 
 ## Auto-Transitions
 
@@ -227,12 +252,15 @@ The `job-queue` dependency is optional. If nil, side effects are silently skippe
 
 ## Integrant Wiring
 
+`wagoe add workflow` writes this under `:active`, and it is all the config the
+module needs:
+
 ```edn
-;; resources/conf/dev/config.edn
-{:wagoe/workflow
- {:db-ctx    #ig/ref :wagoe/database-context
-  :job-queue #ig/ref :wagoe/job-queue}}  ; optional
+{:wagoe/workflow {}}
 ```
+
+The value is not read. The module wires its own database context and schema,
+and the job queue when `:wagoe/jobs` is enabled (`wagoe.workflow.shell.module-wiring/ig-config`).
 
 The component map returned is:
 ```clojure

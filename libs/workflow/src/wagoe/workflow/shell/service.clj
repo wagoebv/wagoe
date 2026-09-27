@@ -35,6 +35,25 @@
     :else        (str x)))
 
 ;; =============================================================================
+;; Guard input (BOU-571)
+;; =============================================================================
+
+(defn- guards-for
+  "The service's guards, with the workflow's own over them."
+  [guard-registry definition]
+  (merge guard-registry (:guards definition)))
+
+(defn- guard-input
+  "The caller's context plus `:workflow/instance` and, when the workflow has an
+   `:entity-loader`, `:workflow/entity` as a delay. Ours replace a caller's keys
+   of the same name, so a request cannot hand a guard a forged instance."
+  [definition instance context]
+  (let [loader (:entity-loader definition)]
+    (cond-> (assoc (or context {}) :workflow/instance instance)
+      loader (assoc :workflow/entity
+                    (delay (loader (:entity-type instance) (:entity-id instance)))))))
+
+;; =============================================================================
 ;; Lifecycle hook execution
 ;; =============================================================================
 
@@ -162,8 +181,8 @@
                      (:current-state instance)
                      transition
                      actor-roles
-                     guard-registry
-                     context)]
+                     (guards-for guard-registry definition)
+                     (guard-input definition instance context))]
 
           (if-not (:allowed? check)
             (do
@@ -226,7 +245,9 @@
         []
         (transitions/available-transitions-with-status
          definition (:current-state instance)
-         actor-roles guard-registry context))))
+         actor-roles
+         (guards-for guard-registry definition)
+         (guard-input definition instance context)))))
 
   (process-auto-transitions! [this workflow-id]
     (let [definition (ports/get-workflow registry workflow-id)]
