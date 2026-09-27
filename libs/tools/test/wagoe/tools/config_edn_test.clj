@@ -227,3 +227,13 @@
     (is (str/includes? out (str "   :wagoe/metrics\n   {:provider :no-op}\n\n"
                                 "   :wagoe/error-reporting\n   {:provider :no-op}}\n"))
         out)))
+
+(deftest ^:unit a-comment-after-the-last-entry-stays-on-its-line
+  ;; Inserting at the end of the value put the new entry between the value and
+  ;; its comment, so the comment described the new key (BOU-580).
+  (let [text (str "{:active\n {:wagoe/http {:port 3000}\n"
+                  "  :wagoe/logging {:level :debug} ;; :info in prod\n }\n\n :inactive\n {}}\n")
+        out  (sut/append-entry text ":active" "  :wagoe/new\n  {:x 1}\n")]
+    (is (str/includes? out (str "  :wagoe/logging {:level :debug} ;; :info in prod\n\n"
+                                "  :wagoe/new\n  {:x 1}\n }"))
+        out)))

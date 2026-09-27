@@ -248,7 +248,10 @@
           col  (if prev (column text (:start prev)) (inc (column text open)))
           body (str (apply str (repeat col \space)) (reindent (str/trim snippet) col nl))]
       (cond
-        prev       (str (subs text 0 (:end prev)) nl nl body (subs text (:end prev)))
+        ;; After a comment that ends the last entry's line, which describes it.
+        prev       (let [at (+ (:end prev)
+                               (count (re-find #"^[ \t,]*;[^\r\n]*" (subs text (:end prev)))))]
+                     (str (subs text 0 at) nl nl body (subs text at)))
         (some? es) (str (subs text 0 (inc open)) nl body (subs text (inc open)))
         ;; A map that cannot be read: just inside its closing brace.
         :else      (str (subs text 0 close) nl body (subs text close))))
