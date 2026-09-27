@@ -46,6 +46,19 @@
         (ports/delete repository (:id created))
         (throw e)))))
 
+(defn- with-children
+  "`rows` with their children under each key of `ks` that `children` can read,
+   one query per child entity for all the rows."
+  [children ks rows]
+  (reduce (fn [rows k]
+            (let [{:keys [foreign-key find]} (get children k)]
+              (if (and find (seq rows))
+                (let [by-parent (group-by (comp str foreign-key) (find (mapv :id rows)))]
+                  (mapv #(assoc % k (get by-parent (str (:id %)) [])) rows))
+                rows)))
+          (vec rows)
+          ks))
+
 (defrecord ProductService [repository children]
   ports/IProductService
   (create-product [_this data]
@@ -54,9 +67,13 @@
       (start-workflows! repository children created nil)
       created))
   (get-product [_this id]
-    (ports/find-by-id repository id))
+    (some->> (ports/find-by-id repository id)
+             vector
+             (with-children children (keys children))
+             first))
   (list-products [_this opts]
-    (ports/find-all repository opts))
+    ;; The children only when asked for: :include, a set of their keys.
+    (with-children children (:include opts) (ports/find-all repository opts)))
   (update-product [_this id data]
     (ports/update-entity repository (assoc data :id id)))
   (delete-product [_this id]

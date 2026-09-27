@@ -4,6 +4,7 @@
             [shop.product.schema :as schema]
             [malli.core :as m]
             [malli.error :as me]
+            [malli.swagger :as swagger]
             [malli.transform :as mt]
             [shop.product.shell.web-handlers :as web-handlers]))
 
@@ -52,6 +53,25 @@
     {:limit  (-> (n "limit" 20) (max 1) (min max-page))
      :offset (max 0 (n "offset" 0))}))
 
+;; For the swagger only: the platform coerces no response.
+(def ^:private shown
+  "The product as the API answers it."
+  (swagger/transform schema/Product))
+
+(def ^:private includable
+  "What ?include= may name: the children schema/Product shows."
+  (into (sorted-set) (keep (fn [[k _ s]] (when (= :vector (m/type s)) k))) (m/children schema/Product)))
+
+(defn- include-of
+  "The children ?include= names, comma-separated. One the product does not have
+   is a 400."
+  [request]
+  (let [named   (some->> (get-in request [:query-params "include"]) (re-seq #"[^,\s]+") (map keyword) set)
+        unknown (remove includable named)]
+    (if (seq unknown)
+      (invalid {:include (mapv #(str (name %) " is not a child of the product") unknown)})
+      named)))
+
 ;; Every route requires a signed-in user and answers 401 without one.
 ;; Generate with --public-api for routes open to anyone.
 (def ^:private signed-in ['wagoe.user.shell.http-interceptors/require-authenticated])
@@ -62,11 +82,17 @@
   [["/products"
     {:get  {:summary "List products, oldest first"
             :interceptors signed-in
-            :swagger {:parameters [{:name "limit" :in "query" :required false :type "integer"
-                                    :description "Default 20, at most 100"}
-                                   {:name "offset" :in "query" :required false :type "integer"}]}
+            :swagger {:parameters (cond-> [{:name "limit" :in "query" :required false :type "integer"
+                                            :description "Default 20, at most 100"}
+                                           {:name "offset" :in "query" :required false :type "integer"}]
+                                    (seq includable)
+                                    (conj {:name "include" :in "query" :required false :type "string"
+                                           :description (apply str "Children to embed, comma-separated: "
+                                                               (interpose ", " (map name includable)))}))
+                      :responses {200 {:description "A page of products"
+                                       :schema {:type "array" :items shown}}}}
             :handler (fn [request]
-                       {:status 200 :body (ports/list-products service (page-of request))})}
+                       {:status 200 :body (ports/list-products service (assoc (page-of request) :include (include-of request)))})}
      :post {:summary "Create a product"
             :interceptors signed-in
             :handler (fn [request]
@@ -76,8 +102,9 @@
                            (invalid (explain schema/CreateProductRequest data)))))}}]
    ["/products/:id"
     {:swagger {:parameters [{:name "id" :in "path" :required true :type "string"}]}
-     :get    {:summary "Get a product"
+     :get    {:summary "Get a product, with its children"
               :interceptors signed-in
+              :swagger {:responses {200 {:description "The product" :schema shown}}}
               :handler (fn [request]
                          (if-let [found (some->> (id-of request) (ports/get-product service))]
                            {:status 200 :body found}

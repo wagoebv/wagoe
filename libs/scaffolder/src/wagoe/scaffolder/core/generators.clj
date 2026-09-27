@@ -39,6 +39,13 @@
   [entity]
   (when (count-fn entity) (str "transact-" (:entity-plural entity))))
 
+(defn- find-by-parents-fn
+  "The repository method that reads a child's rows for several parents at
+   once, for a child created with its parent (BOU-581), else nil."
+  [entity]
+  (when (and (:child-of entity) (:belongs-to entity))
+    (str "find-" (:entity-plural entity) "-by-" (:belongs-to entity) "-ids")))
+
 (defn- shell-ns
   "The entity's `shell.*` namespace suffix for `k`, the first entity's when
    the context does not say."
@@ -99,7 +106,11 @@
                   field-schemas "\n"
                   "   [:created-at inst?]\n"
                   "   [:updated-at {:optional true} [:maybe inst?]]\n"
-                  "   [:deleted-at {:optional true} [:maybe inst?]]])\n")
+                  "   [:deleted-at {:optional true} [:maybe inst?]]"
+                  (when (:workflow entity)
+                    (str "\n   ;; On GET: the workflow instance, which the workflow API takes, and its state.\n"
+                         "   [:workflow {:optional true} [:map [:instance-id :uuid] [:state :keyword]]]"))
+                  "])\n")
      :requests (str "(def Create" entity-name "Request\n"
                     "  \"Schema for create " e " API requests.\"\n"
                     "  [:map {:title \"Create " entity-name " Request\"}\n"
@@ -199,6 +210,9 @@
                  "    \"How many " (:entity-plural entity) " the " (:belongs-to entity) " has. In a transaction, it\n"
                  "     holds the " (:belongs-to entity) "'s row until the end, so two deletes cannot both count\n"
                  "     the same children.\")"))
+          (when-let [f (find-by-parents-fn entity)]
+            (str "\n\n  (" f " [this " (:belongs-to entity) "-ids]\n"
+                 "    \"The " (:entity-plural entity) " of any of these " (:belongs-to entity) "s, in one query.\")"))
           ")\n")
      :service
      (str "(defprotocol I" entity-name "Service\n"
@@ -588,6 +602,34 @@ DROP TABLE IF EXISTS %s;
        "                               children))))\n"
        "\n"))
 
+(def ^:private with-children-fn
+  "The first entity's service: the children a GET shows (BOU-581)."
+  (str "(defn- with-children\n"
+       "  \"`rows` with their children under each key of `ks` that `children` can read,\n"
+       "   one query per child entity for all the rows.\"\n"
+       "  [children ks rows]\n"
+       "  (reduce (fn [rows k]\n"
+       "            (let [{:keys [foreign-key find]} (get children k)]\n"
+       "              (if (and find (seq rows))\n"
+       "                (let [by-parent (group-by (comp str foreign-key) (find (mapv :id rows)))]\n"
+       "                  (mapv #(assoc % k (get by-parent (str (:id %)) [])) rows))\n"
+       "                rows)))\n"
+       "          (vec rows)\n"
+       "          ks))\n"
+       "\n"))
+
+(defn- workflow-of-fn
+  "An entity with a workflow: the block its GET shows (BOU-581)."
+  [entity-lower]
+  (str "(defn- workflow-of\n"
+       "  \"The " entity-lower "'s workflow as its GET shows it: the instance, which the\n"
+       "   workflow API takes, and its state. Started if it has none, as a transition\n"
+       "   would.\"\n"
+       "  [workflow id]\n"
+       "  (let [instance (ports/start-" entity-lower "-workflow! workflow id)]\n"
+       "    {:instance-id (:id instance) :state (:current-state instance)}))\n"
+       "\n"))
+
 (defn generate-service-file
   "Generate shell/service.clj file content.
 
@@ -649,7 +691,8 @@ DROP TABLE IF EXISTS %s;
           "(defn- generate-" entity-lower "-id []\n"
           "  (UUID/randomUUID))\n"
           "\n"
-          (when primary? (str (create-with-children-fn entity-lower) (start-workflows-fn delete)))
+          (when primary? (str (create-with-children-fn entity-lower) (start-workflows-fn delete) with-children-fn))
+          (when wf (workflow-of-fn entity-lower))
           (when minimum? (keep-minimum-fn entity))
           (when wf
             (str "(defn- mirror-" (:field wf) "!\n"
@@ -699,12 +742,32 @@ DROP TABLE IF EXISTS %s;
             (str "    (let [prepared " prepare "]\n"
                  "      " insert "))\n"))
           "  (get-" entity-lower " [_this id]\n"
-          "    (ports/" find-by-id " repository id))\n"
+          (cond
+            (and primary? wf)
+            (str "    (when-let [row (ports/" find-by-id " repository id)]\n"
+                 "      (assoc (first (with-children children (keys children) [row]))\n"
+                 "             :workflow (workflow-of workflow id))))\n")
+
+            primary?
+            (str "    (some->> (ports/" find-by-id " repository id)\n"
+                 "             vector\n"
+                 "             (with-children children (keys children))\n"
+                 "             first))\n")
+
+            wf
+            (str "    (when-let [row (ports/" find-by-id " repository id)]\n"
+                 "      (assoc row :workflow (workflow-of workflow id))))\n")
+
+            :else
+            (str "    (ports/" find-by-id " repository id))\n"))
          ;; find-all, not list-<plural>: the repository port has no
          ;; list-<plural> method, so this called something that does not exist
          ;; and blew up at runtime the first time anyone listed anything.
           "  (list-" (template/pluralize entity-lower) " [_this opts]\n"
-          "    (ports/" find-all " repository opts))\n"
+          (if primary?
+            (str "    ;; The children only when asked for: :include, a set of their keys.\n"
+                 "    (with-children children (:include opts) (ports/" find-all " repository opts)))\n")
+            (str "    (ports/" find-all " repository opts))\n"))
           "  (update-" entity-lower " [_this id data]\n"
           (when wf (str "    ;; Only a transition moves " (:field wf) ".\n"))
           update-body "\n"
@@ -757,7 +820,12 @@ DROP TABLE IF EXISTS %s;
                  "  \"The row alone, as the " (:belongs-to entity) "'s create makes it inside its transaction."
                  (when wf "\n   Its workflow is started after the commit.") "\"\n"
                  "  [{:keys [repository]} data]\n"
-                 "  (ports/" create " repository " (str/replace prepare "(apply dissoc data (keys children))" "data") "))\n"))))))
+                 "  (ports/" create " repository " (str/replace prepare "(apply dissoc data (keys children))" "data") "))\n"
+                 "\n"
+                 "(defn find-rows\n"
+                 "  \"The rows of any of `" (:belongs-to entity) "-ids`, as the " (:belongs-to entity) "'s GET shows them.\"\n"
+                 "  [{:keys [repository]} " (:belongs-to entity) "-ids]\n"
+                 "  (ports/" (find-by-parents-fn entity) " repository " (:belongs-to entity) "-ids))\n"))))))
 
 ;; =============================================================================
 ;; Persistence File Generator
@@ -892,6 +960,15 @@ DROP TABLE IF EXISTS %s;
                    "    (db/execute-update! db-ctx {:update :" parent " :set {:id :id} :where [:= :id " p "-id]})\n"
                    "    (:n (db/execute-one! db-ctx {:select [[:%count.* :n]] :from [:" table-name "]\n"
                    "                                 :where [:= :" p "-id " p "-id]})))")))
+          (when-let [f (find-by-parents-fn entity)]
+            (let [p (:belongs-to entity)]
+              (str "\n  (" f " [_this " p "-ids]\n"
+                   "    (if (empty? " p "-ids)\n"
+                   "      []\n"
+                   "      (mapv ->entity (db/execute-query! db-ctx {:select [:*]\n"
+                   "                                                :from [:" table-name "]\n"
+                   "                                                :where [:in :" p "-id (vec " p "-ids)]\n"
+                   "                                                :order-by [[:created-at :asc] [:id :asc]]}))))")))
           ")\n"
           "\n"
           "(defn create-repository [db-ctx]\n"
@@ -1021,6 +1098,8 @@ DROP TABLE IF EXISTS %s;
           (when-let [c (count-fn entity)]
             (str "\n                      (" (transact-fn entity) " [_ f] (f))"
                  "\n                      (" c " [_ _id] 0)"))
+          (when-let [f (find-by-parents-fn entity)]
+            (str "\n                      (" f " [_ _ids] [])"))
           ")\n"
           (if (:workflow entity)
             (str "          started (atom [])\n"
@@ -1380,6 +1459,7 @@ DROP TABLE IF EXISTS %s;
    (str "[" base-ns "." module-name ".schema :as schema]")
    "[malli.core :as m]"
    "[malli.error :as me]"
+   "[malli.swagger :as swagger]"
    "[malli.transform :as mt]"])
 
 (defn- ns-form
@@ -1408,6 +1488,9 @@ DROP TABLE IF EXISTS %s;
   (let [entity-name (:entity-name entity)
         e (or (:entity-kebab entity) (template/pascal->kebab entity-name))
         plural (or (:entity-plural entity) (template/pluralize e))
+        ;; Only the first entity has children (BOU-578), so only its list
+        ;; takes ?include= (BOU-581).
+        primary? (:primary? entity true)
         guard (if public? "\n            :public true" "\n            :interceptors signed-in")
         guard-id (if public? "\n              :public true" "\n              :interceptors signed-in")]
     (str ";; JSON has no decimal type: Muuntaja reads 9.99 as a Double, and malli\n"
@@ -1455,6 +1538,26 @@ DROP TABLE IF EXISTS %s;
          "    {:limit  (-> (n \"limit\" 20) (max 1) (min max-page))\n"
          "     :offset (max 0 (n \"offset\" 0))}))\n"
          "\n"
+         ";; For the swagger only: the platform coerces no response.\n"
+         "(def ^:private shown\n"
+         "  \"The " e " as the API answers it.\"\n"
+         "  (swagger/transform schema/" entity-name "))\n"
+         "\n"
+         (when primary?
+           (str "(def ^:private includable\n"
+                "  \"What ?include= may name: the children schema/" entity-name " shows.\"\n"
+                "  (into (sorted-set) (keep (fn [[k _ s]] (when (= :vector (m/type s)) k))) (m/children schema/" entity-name ")))\n"
+                "\n"
+                "(defn- include-of\n"
+                "  \"The children ?include= names, comma-separated. One the " e " does not have\n"
+                "   is a 400.\"\n"
+                "  [request]\n"
+                "  (let [named   (some->> (get-in request [:query-params \"include\"]) (re-seq #\"[^,\\s]+\") (map keyword) set)\n"
+                "        unknown (remove includable named)]\n"
+                "    (if (seq unknown)\n"
+                "      (invalid {:include (mapv #(str (name %) \" is not a child of the " e "\") unknown)})\n"
+                "      named)))\n"
+                "\n"))
          (if public?
            ";; Public: these routes answer anyone, signed in or not (--public-api).\n"
            (str ";; Every route requires a signed-in user and answers 401 without one.\n"
@@ -1466,11 +1569,23 @@ DROP TABLE IF EXISTS %s;
          "  [service]\n"
          "  [[\"/" plural "\"\n"
          "    {:get  {:summary \"List " plural ", oldest first\"" guard "\n"
-         "            :swagger {:parameters [{:name \"limit\" :in \"query\" :required false :type \"integer\"\n"
-         "                                    :description \"Default 20, at most 100\"}\n"
-         "                                   {:name \"offset\" :in \"query\" :required false :type \"integer\"}]}\n"
+         (if primary?
+           (str "            :swagger {:parameters (cond-> [{:name \"limit\" :in \"query\" :required false :type \"integer\"\n"
+                "                                            :description \"Default 20, at most 100\"}\n"
+                "                                           {:name \"offset\" :in \"query\" :required false :type \"integer\"}]\n"
+                "                                    (seq includable)\n"
+                "                                    (conj {:name \"include\" :in \"query\" :required false :type \"string\"\n"
+                "                                           :description (apply str \"Children to embed, comma-separated: \"\n"
+                "                                                               (interpose \", \" (map name includable)))}))\n")
+           (str "            :swagger {:parameters [{:name \"limit\" :in \"query\" :required false :type \"integer\"\n"
+                "                                    :description \"Default 20, at most 100\"}\n"
+                "                                   {:name \"offset\" :in \"query\" :required false :type \"integer\"}]\n"))
+         "                      :responses {200 {:description \"A page of " plural "\"\n"
+         "                                       :schema {:type \"array\" :items shown}}}}\n"
          "            :handler (fn [request]\n"
-         "                       {:status 200 :body (ports/list-" e "s service (page-of request))})}\n"
+         (if primary?
+           (str "                       {:status 200 :body (ports/list-" e "s service (assoc (page-of request) :include (include-of request)))})}\n")
+           (str "                       {:status 200 :body (ports/list-" e "s service (page-of request))})}\n"))
          "     :post {:summary \"Create a " e "\"" guard "\n"
          "            :handler (fn [request]\n"
          "                       (let [data (decode-create (:body-params request))]\n"
@@ -1479,7 +1594,13 @@ DROP TABLE IF EXISTS %s;
          "                           (invalid (explain schema/Create" entity-name "Request data)))))}}]\n"
          "   [\"/" plural "/:id\"\n"
          "    {:swagger {:parameters [{:name \"id\" :in \"path\" :required true :type \"string\"}]}\n"
-         "     :get    {:summary \"Get a " e "\"" guard-id "\n"
+         "     :get    {:summary \"Get a " e
+         (cond
+           (and primary? (:workflow entity)) ", with its children and its workflow"
+           primary? ", with its children"
+           (:workflow entity) ", with its workflow")
+         "\"" guard-id "\n"
+         "              :swagger {:responses {200 {:description \"The " e "\" :schema shown}}}\n"
          "              :handler (fn [request]\n"
          "                         (if-let [found (some->> (id-of request) (ports/get-" e " service))]\n"
          "                           {:status 200 :body found}\n"
@@ -1850,7 +1971,8 @@ DROP TABLE IF EXISTS %s;
          "(defmulti entity-wiring\n"
          "  \"{:repository f :service f :routes f :workflow f :child-of m} for one further entity.\n"
          "   :workflow, for an entity with one, installs it: (f workflow repository events).\n"
-         "   :child-of, for one that belongs to the first entity, says how its create makes it.\"\n"
+         "   :child-of, for one that belongs to the first entity, says how its create makes it\n"
+         "   and its GET reads it.\"\n"
          "  identity)\n"
          "\n"
          "(defmethod ig/init-key " (k "-entities") "\n"
@@ -1860,11 +1982,14 @@ DROP TABLE IF EXISTS %s;
          "              :let [{:keys [repository service routes child-of] install :workflow} (entity-wiring entity)\n"
          "                    repo (repository ctx)\n"
          "                    svc  (if install (service repo (install workflow repo events)) (service repo))]]\n"
-         "          ;; :child is what the first entity's create needs to make this one.\n"
+         "          ;; :child is what the first entity's create needs to make this one,\n"
+         "          ;; and its GET to read them back.\n"
          "          [entity (cond-> {:service svc :routes routes}\n"
          "                    child-of (assoc :child [(:key child-of)\n"
          "                                            (cond-> {:foreign-key (:foreign-key child-of)\n"
          "                                                     :create      #((:create child-of) svc %)}\n"
+         "                                              (:find child-of)\n"
+         "                                              (assoc :find #((:find child-of) svc %))\n"
          "                                              (:start child-of)\n"
          "                                              (assoc :start  #((:start child-of) (:workflow svc) %)\n"
          "                                                     :remove #((:remove child-of) (:workflow svc) %)))]))])))\n"
@@ -1944,7 +2069,8 @@ DROP TABLE IF EXISTS %s;
            (str "\n   ;; Created with its " (:belongs-to entity) " too: its create takes :" (:entity-plural entity) ".\n"
                 "   :child-of   {:key         :" (:entity-plural entity) "\n"
                 "                :foreign-key :" (:belongs-to entity) "-id\n"
-                "                :create      " e "-service/create-row"
+                "                :create      " e "-service/create-row\n"
+                "                :find        " e "-service/find-rows"
                 (when (:workflow entity)
                   (str "\n                :start       ports/start-" e "-workflow!\n"
                        "                :remove      ports/remove-" e "-workflow!"))
@@ -2428,38 +2554,62 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s%s%s;%s"
       (str "[:" (:entity-plural child) " [:vector {:min " n " :max " max-children "} " item "]]")
       (str "[:" (:entity-plural child) " {:optional true} [:vector {:max " max-children "} " item "]]"))))
 
+(defn children-response-entry
+  "The entry the first entity's own schema gets for `child`: the rows its GET
+   shows, under the key its create takes them (BOU-581). Optional: a list has
+   them only when asked.
+
+   Pure: true"
+  [child]
+  (str "[:" (:entity-plural child) " {:optional true} [:vector [:map [:id :uuid] "
+       (str/join " " (map #(str/trim (generate-field-schema %)) (:fields child)))
+       " [:created-at inst?] [:updated-at {:optional true} [:maybe inst?]]]]]"))
+
 (defn add-children-to-schema
   "`source` — a schema.clj — with `child`'s entry in `parent`'s Create
-   request. {:content s} or {:error reason}.
+   request, and in `parent` itself when that is the [:map ...] generate wrote.
+   {:content s} or {:error reason}.
 
    Pure: true"
   [source parent child]
   (let [r (insert-schema-entry source (str "Create" parent "Request") (children-entry child))]
     (case (:status r)
-      :inserted {:content (:content r)}
+      :inserted (let [shown (insert-schema-entry (:content r) parent (children-response-entry child))]
+                  {:content (if (= :inserted (:status shown)) (:content shown) (:content r))})
       :present  {:error (str "Create" parent "Request already has " (:entity-plural child))}
       {:error (str "Create" parent "Request is not the [:map ...] bb scaffold generate wrote")})))
+
+(defn- children-item-zloc
+  "Zipper at the item `[:map …]` of the `:<plural>` entry in the def `nm` of
+   `source`, or nil."
+  [source nm plural]
+  (when-let [entry (some-> (schema-map-zloc source nm) (existing-entry (keyword plural)))]
+    (let [vector-form (some #(when (and (= :vector (z/tag %)) (= :vector (first (z/sexpr %)))) %)
+                            (take-while some? (iterate z/right (z/down entry))))]
+      (some #(when (and (= :vector (z/tag %)) (= :map (first (z/sexpr %)))) %)
+            (some->> vector-form z/down (iterate z/right) (take-while some?))))))
 
 (defn- children-map-zloc
   "Zipper at the item `[:map …]` of the `:<plural>` entry in a
    Create<Parent>Request of `source`, and the parent's name, or nil."
   [source plural]
-  (let [k (keyword plural)]
-    (some (fn [loc]
-            (let [[op nm] (form-head loc)]
-              (when-let [[_ parent] (and (= 'def op) (re-matches #"Create(\w+)Request" (str nm)))]
-                (when-let [entry (some-> (schema-map-zloc source (str nm)) (existing-entry k))]
-                  (let [vector-form (some #(when (and (= :vector (z/tag %)) (= :vector (first (z/sexpr %)))) %)
-                                          (take-while some? (iterate z/right (z/down entry))))
-                        item        (some #(when (and (= :vector (z/tag %)) (= :map (first (z/sexpr %)))) %)
-                                          (some->> vector-form z/down (iterate z/right) (take-while some?)))]
-                    (when item [item parent]))))))
-          (top-level-forms source))))
+  (some (fn [loc]
+          (let [[op nm] (form-head loc)]
+            (when-let [[_ parent] (and (= 'def op) (re-matches #"Create(\w+)Request" (str nm)))]
+              (when-let [item (children-item-zloc source (str nm) plural)]
+                [item parent]))))
+        (top-level-forms source)))
+
+(defn- append-to-item [item entry]
+  (-> item
+      (z/append-child* (n/spaces 1))
+      (z/append-child* (entry-node entry))
+      z/root-string))
 
 (defn add-field-to-children-entry
   "`source` — a schema.clj — with `field` in the create entry the parent's
    request has for the child `plural`, so a child created with its parent
-   takes it too (BOU-578).
+   takes it too (BOU-578), and in the rows the parent's GET shows (BOU-581).
 
    {:status :inserted :content s :parent \"Invoice\"}, {:status :present}, or
    {:status :none} when no parent's create takes the child.
@@ -2471,12 +2621,13 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s%s%s;%s"
           k     (entry-key-of entry)]
       (if (existing-entry item k)
         {:status :present :parent parent}
-        {:status  :inserted
-         :parent  parent
-         :content (-> item
-                      (z/append-child* (n/spaces 1))
-                      (z/append-child* (entry-node entry))
-                      z/root-string)}))
+        (let [created (append-to-item item entry)
+              shown   (children-item-zloc created parent plural)]
+          {:status  :inserted
+           :parent  parent
+           :content (if (and shown (not (existing-entry shown k)))
+                      (append-to-item shown entry)
+                      created)})))
     {:status :none}))
 
 (defn add-field-to-schema

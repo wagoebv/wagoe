@@ -133,6 +133,13 @@ the first entity's create takes children, so `--min` on a child of another is
 refused. `bb scaffold field` on such a child adds the field to the parent's
 create entry too, and to the admin panel's `:fields`.
 
+`GET /api/v1/invoices/:id` answers with the line items under the same key.
+The list leaves them out unless asked: `GET /api/v1/invoices?include=invoice-line-items,payments`
+reads each named child once for the page, and an unknown name is a 400.
+The parent's schema (`Invoice`) lists them, and the swagger shows it. A
+module generated before BOU-581 keeps its service and http files, and its
+GET stays as it was.
+
 ### `--workflow` — a status that moves through fixed steps
 
 ```bash
@@ -157,6 +164,9 @@ request, `"workflow"` in the `bb scaffold ai` spec):
   the next transition.
   `POST /api/v1/<entities>/:id/transition {"transition": "delivered"}` answers
   200 with the entity or 422 for a move the workflow does not make.
+- `GET /api/v1/<entities>/:id` includes `"workflow": {"instance-id": …, "state": …}`,
+  the id the workflow API takes. `GET /api/v1/workflow/instances?entity-type=invoice&entity-id=<id>`
+  finds it from the other side.
 - The admin writes rows without the service, so `install!` also subscribes to
   `:admin/entity-created` when the admin and events modules are on. The admin
   config gets `:workflow {:entity-type ...}` and the status in

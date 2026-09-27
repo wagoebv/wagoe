@@ -84,6 +84,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **A scaffolded GET left out the children POST created, and the workflow instance** (BOU-581). New
+  modules return both, and the list takes `?include=`; regenerate a module to get it.
 - **An admin event's `:id` was a string on SQLite and a UUID on PostgreSQL** (BOU-579). It is a UUID
   for a UUID id column on both; drop any string handling in subscribers.
 - **`migrate up` created tables for modules that were not switched on** (BOU-579). It now migrates

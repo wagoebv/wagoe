@@ -67,9 +67,12 @@
 (deftest ^:integration an-entity-added-to-an-old-module-leaves-it-booting
   (let [base "bou578o"
         dir  (old-module! base)
+        read #(slurp (io/file dir "src" base "billing/shell" %))
+        before (mapv read ["service.clj" "http.clj"])
         {:keys [status out]} (scaffold! dir base "entity" "--module-name" "billing" "--entity" "InvoiceLineItem"
                                         "--belongs-to" "invoice" "--field" "description:string:required")]
     (is (= 0 status) out)
+    (is (= before (mapv read ["service.clj" "http.clj"])) "its service and http files are left alone (BOU-581)")
     (is (str/includes? out "does not take invoice-line-items") "it says the create does not take them")
     (is (not (str/includes? (slurp (io/file dir "src" base "billing/schema.clj")) "[:invoice-line-items"))
         "and the create request does not offer them")
