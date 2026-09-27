@@ -284,6 +284,7 @@ Routes are defined in `shell/http.clj` as Reitit route data (no `/api` prefix) a
 | Method | Mounted path | Description |
 |--------|-------------|-------------|
 | `POST` | `/api/v1/workflow/instances` | Start a new workflow instance |
+| `GET` | `/api/v1/workflow/instances?entity-type=order&entity-id=<uuid>` | An entity's instances, one per workflow it is in; `[]` for none |
 | `GET` | `/api/v1/workflow/instances/:id` | Current state + `available-transitions` (id, to, label, enabled) |
 | `GET` | `/api/v1/workflow/instances/:id/audit` | Full audit log |
 | `POST` | `/api/v1/workflow/instances/:id/transition` | Execute a transition |
@@ -310,7 +311,8 @@ supports PostgreSQL, H2 and SQLite, not MySQL.
 5. **snake_case only at DB boundary** — all internal maps use kebab-case; `instance->db`/`db->instance` handle conversion.
 6. **Hooks are best-effort** — exceptions inside hook functions are caught and logged; they do NOT roll back the transition.
 7. **Auto-transitions bypass permissions** — they fire with `[:system]` roles; only mark transitions `:auto? true` when no user authorisation is required.
-8. **Route paths omit the `/api` prefix** — `workflow-routes` returns Reitit route data (`[["/path" {:get ...}]]`) at paths relative to the mount point. Writing `/api/workflow` there serves it at `/api/v1/api/workflow`; the platform adds `/api/v1` itself.
+8. **One instance per workflow and entity** — a unique index on `(workflow_id, entity_type, entity_id)`; `start-workflow!` for an entity that has one returns it, so two racing lazy starts end with one instance.
+9. **Route paths omit the `/api` prefix** — `workflow-routes` returns Reitit route data (`[["/path" {:get ...}]]`) at paths relative to the mount point. Writing `/api/workflow` there serves it at `/api/v1/api/workflow`; the platform adds `/api/v1` itself.
 
 ## Testing
 

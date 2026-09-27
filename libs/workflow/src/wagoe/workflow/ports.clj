@@ -77,6 +77,7 @@
        opts - map with optional keys:
                :workflow-id   - filter by workflow keyword
                :entity-type   - filter by entity type keyword
+               :entity-id     - filter by entity id (UUID)
                :current-state - filter by current state keyword
                :limit         - max results (default 50)
                :offset        - pagination offset (default 0)

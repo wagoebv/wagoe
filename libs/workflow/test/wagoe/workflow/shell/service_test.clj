@@ -46,12 +46,13 @@
     (filterv #(= instance-id (:instance-id %)) @audit-log))
 
   (list-instances [_ opts]
-    (let [{:keys [workflow-id entity-type current-state limit offset]
+    (let [{:keys [workflow-id entity-type entity-id current-state limit offset]
            :or {limit 50 offset 0}} opts
           all-instances (vals @instances)
           filtered (cond->> all-instances
                      workflow-id   (filter #(= workflow-id (:workflow-id %)))
                      entity-type   (filter #(= entity-type (:entity-type %)))
+                     entity-id     (filter #(= entity-id (:entity-id %)))
                      current-state (filter #(= current-state (:current-state %))))
           sorted (sort-by (comp str :updated-at) #(compare %2 %1) filtered)]
       (vec (take limit (drop offset sorted)))))

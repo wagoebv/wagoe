@@ -10,7 +10,7 @@
             [clojure.tools.logging :as log]
             [clojure.edn :as edn])
   (:import [java.util Date UUID]
-           [java.sql Timestamp]
+           [java.sql SQLException Timestamp]
            [java.time Instant OffsetDateTime]))
 
 ;; =============================================================================
@@ -123,17 +123,35 @@
     (:next.jdbc/update-count
      (jdbc/execute-one! connectable (sql/format {:delete-from :workflow_instances :where by-entity})))))
 
+(defn- unique-violation?
+  "SQLState 23505 (PostgreSQL, H2), MySQL's 1062, or SQLite's result code,
+   which it reports only in the message."
+  [^SQLException e]
+  (or (= "23505" (.getSQLState e))
+      (= 1062 (.getErrorCode e))
+      (boolean (re-find #"SQLITE_CONSTRAINT_UNIQUE|UNIQUE constraint failed" (str (ex-message e))))))
+
 (defrecord WorkflowStore [datasource]
   ports/IWorkflowStore
 
   (save-instance! [_ instance]
     (log/debug "Saving workflow instance" {:id (:id instance)})
     (let [row (instance->db instance)]
-      (jdbc/execute-one! datasource
-                         (sql/format {:insert-into :workflow_instances
-                                      :values      [row]})
-                         {:return-keys true
-                          :builder-fn  rs/as-unqualified-lower-maps}))
+      (try
+        (jdbc/execute-one! datasource
+                           (sql/format {:insert-into :workflow_instances
+                                        :values      [row]})
+                           {:return-keys true
+                            :builder-fn  rs/as-unqualified-lower-maps})
+        (catch SQLException e
+          (throw (if (unique-violation? e)
+                   (ex-info "The entity already has an instance of this workflow"
+                            {:type        :conflict
+                             :workflow-id (:workflow-id instance)
+                             :entity-type (:entity-type instance)
+                             :entity-id   (:entity-id instance)}
+                            e)
+                   e)))))
     instance)
 
   (find-instance [_ instance-id]
@@ -199,11 +217,12 @@
 
   (list-instances [_ opts]
     (log/debug "Listing workflow instances" opts)
-    (let [{:keys [workflow-id entity-type current-state limit offset]
+    (let [{:keys [workflow-id entity-type entity-id current-state limit offset]
            :or {limit 50 offset 0}} opts
           conditions (cond-> []
                        workflow-id   (conj [:= :workflow_id (kw->str workflow-id)])
                        entity-type   (conj [:= :entity_type (kw->str entity-type)])
+                       entity-id     (conj [:= :entity_id (uuid->str entity-id)])
                        current-state (conj [:= :current_state (kw->str current-state)]))
           query (cond-> {:select   [:*]
                          :from     [:workflow_instances]

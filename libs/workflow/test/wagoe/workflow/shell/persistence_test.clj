@@ -243,6 +243,13 @@
           result (ports/list-instances @test-store {:entity-type :order})]
       (is (every? #(= :order (:entity-type %)) result))))
 
+  (testing "filters by entity-id (BOU-581)"
+    (let [inst   (make-instance)
+          _      (ports/save-instance! @test-store inst)
+          result (ports/list-instances @test-store {:entity-type (:entity-type inst)
+                                                    :entity-id   (:entity-id inst)})]
+      (is (= [(:id inst)] (mapv :id result)))))
+
   (testing "filters by current-state"
     (let [inst (make-instance {:current-state :shipped})
           _    (ports/save-instance! @test-store inst)
@@ -277,7 +284,8 @@
 (deftest ^:integration the-admin-reads-and-removes-an-entitys-workflows
   (let [entity-id (UUID/randomUUID)
         inst      (make-instance {:entity-type :invoice :entity-id entity-id :current-state :delivered})
-        older     (make-instance {:entity-type :invoice :entity-id entity-id
+        ;; Another workflow: one entity has one instance of each (BOU-581).
+        older     (make-instance {:entity-type :invoice :entity-id entity-id :workflow-id :refund-workflow
                                   :created-at (.minusSeconds (Instant/now) 60)})
         port      (admin-adapter/create-entity-workflows @test-store)]
     (ports/save-instance! @test-store older)

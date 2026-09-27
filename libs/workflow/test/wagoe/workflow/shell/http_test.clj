@@ -12,6 +12,7 @@
    path answered `(name nil)`, a 500 for a request that is a 4xx."
   (:require [cheshire.core :as json]
             [clojure.java.io :as io]
+            [clojure.string :as str]
             [clojure.test :refer [deftest is testing use-fixtures]]
             [wagoe.platform.shell.http.reitit-router :as reitit]
             [wagoe.user.ports :as user-ports]
@@ -126,10 +127,13 @@
         (is (some? (get-in body [:audit-entry :actor-id])))))))
 
 (defn- get-uri
+  "GET `uri`, which may carry a query string."
   ([uri] (get-uri uri nil))
   ([uri token]
-   (*handler* (cond-> {:request-method :get :uri uri :headers {}}
-                token (assoc-in [:headers "authorization"] (str "Bearer " token))))))
+   (let [[path query] (str/split uri #"\?" 2)]
+     (*handler* (cond-> {:request-method :get :uri path :headers {}}
+                  query (assoc :query-string query)
+                  token (assoc-in [:headers "authorization"] (str "Bearer " token)))))))
 
 (def ^:private start-body
   {:workflow-id "invoice-workflow" :entity-type "invoice"})
@@ -143,13 +147,14 @@
                         (assoc start-body :entity-id (str (UUID/randomUUID)))
                         token)
       :get        (get-uri (str "/workflow/instances/" id) token)
+      :lookup     (get-uri (str "/workflow/instances?entity-type=invoice&entity-id=" (UUID/randomUUID)) token)
       :audit      (get-uri (str "/workflow/instances/" id "/audit") token)
       :transition (post (str "/workflow/instances/" id "/transition")
                         {:transition "delivered"}
                         token))))
 
 (def ^:private route-success
-  {:start 201 :get 200 :audit 200 :transition 200})
+  {:start 201 :get 200 :lookup 200 :audit 200 :transition 200})
 
 (deftest ^:unit every-api-route-refuses-an-anonymous-caller
   ;; BOU-561: the web routes mounted auth, the API routes did not.
@@ -235,6 +240,31 @@
     (is (= "validation-error" (:error (body-data response))))))
 
 ;; =============================================================================
+;; Finding an entity's instance (BOU-581)
+;; =============================================================================
+
+(deftest ^:unit an-entitys-instance-is-found-by-its-type-and-id
+  (let [instance (new-instance)
+        lookup   #(get-uri (str "/workflow/instances?" %) (admin-token))
+        response (lookup (str "entity-type=invoice&entity-id=" (:entity-id instance)))
+        body     (body-data response)]
+    (is (= 200 (:status response)))
+    (is (= [(str (:id instance))] (mapv :id body)) "the entity's instance, and no other")
+    (is (= {:workflow-id "invoice-workflow" :entity-type "invoice"
+            :entity-id (str (:entity-id instance)) :current-state "entered"}
+           (select-keys (first body) [:workflow-id :entity-type :entity-id :current-state])))
+    (testing "another type with the same id has none"
+      (is (= [] (body-data (lookup (str "entity-type=order&entity-id=" (:entity-id instance)))))))
+    (testing "an entity with none is an empty list, not a 404"
+      (is (= [] (body-data (lookup (str "entity-type=invoice&entity-id=" (UUID/randomUUID)))))))
+    (testing "both are required, and the id is a UUID"
+      (doseq [query ["entity-type=invoice" (str "entity-id=" (UUID/randomUUID))
+                     "entity-type=invoice&entity-id=nope"]]
+        (let [response (lookup query)]
+          (is (= 400 (:status response)) query)
+          (is (= "validation-error" (:error (body-data response))) query))))))
+
+;; =============================================================================
 ;; The JSON shape: kebab-case, as the scaffolded APIs answer (BOU-579)
 ;; =============================================================================
 
@@ -293,9 +323,18 @@
     (mapv #(json/parse-string (second %) true)
           (re-seq #"(?s)\[source,json\]\n----\n(.*?)\n----" from))))
 
+(defn- documented-lookup
+  "The lookup request under `== HTTP API` in the workflow docs, without /api/v1."
+  []
+  (let [doc (slurp (io/file (-> (io/resource "wagoe/workflow/shell/http_test.clj")
+                                io/file .getParentFile .getParentFile .getParentFile
+                                .getParentFile .getParentFile)
+                            "../../docs/modules/libraries/pages/workflow.adoc"))]
+    (second (re-find #"(?m)^GET /api/v1(/workflow/instances\?\S+)" doc))))
+
 (deftest ^:unit the-documented-bodies-are-the-apis
-  (let [[start rejected] (documented-json)]
-    (is (some? rejected) "the docs show a start body and a 422")
+  (let [[start rejected found] (documented-json)]
+    (is (some? found) "the docs show a start body, a 422 and a lookup")
     (registry/register-workflow! (assoc invoice-def :id (keyword (:workflow-id start))))
     (let [response (post "/workflow/instances" start (admin-token))
           instance (body-data response)]
@@ -305,6 +344,15 @@
                (body-data (post (str "/workflow/instances/" (:id instance) "/transition")
                                 {:transition "paid"}
                                 (admin-token))))))
+      (testing "the documented lookup finds the instance, in the documented shape"
+        (let [uri  (documented-lookup)
+              body (body-data (get-uri uri (admin-token)))
+              pick #(select-keys % [:workflow-id :entity-type :entity-id :current-state])]
+          (is (some? uri) "the docs show the lookup request")
+          (is (str/includes? (str uri) (:entity-id start)) "it looks up the entity started above")
+          (is (= [(:id instance)] (mapv :id body)))
+          (is (= (map (comp set keys) found) (map (comp set keys) body)))
+          (is (= (map pick found) (map pick body)))))
       (testing "a transition answers the instance and its audit entry"
         (is (= #{:instance :audit-entry}
                (set (keys (body-data (post (str "/workflow/instances/" (:id instance) "/transition")

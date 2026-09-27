@@ -679,6 +679,17 @@
                                     :when (= :updated (:status r))]
                                 {:file f :content (:content r)
                                  :note (str "added " (name (:name field)) " to the " entity-plural " panel")})))
+            ;; The tests generate wrote insert rows without the new column, so
+            ;; a required one failed them on their next run (BOU-581).
+            test-edits    (for [suffix ["repository" "workflow"]
+                                :let  [f (resolve-path output-dir
+                                                       (format "test/%s/%s/shell/%s_%s_test.clj" base-ns-path module-path
+                                                               (template/kebab->snake (template/pascal->kebab entity)) suffix))]
+                                :when (.isFile f)
+                                :let  [r (generators/add-field-to-generated-test (slurp f) field)]
+                                :when r]
+                            {:file f :content (:content r)
+                             :note (str "gave the " suffix " test's row a " (name (:name field)))})
             ;; Every arm consults `edit`, which is pure and is computed for a
             ;; dry run too. A dedicated dry-run arm short-circuited ahead of it
             ;; and promised "would add the field to the entity and request
@@ -777,7 +788,7 @@
               {:path (.getPath schema-file) :action :skip :manual? true
                :note (str (when dry-run "dry run — ") (problem-desc edit))
                :manual-note (remaining-note edit)})
-            all-files (into (conj (vec written) schema-entry) (write-edits! panel-edits dry-run))]
+            all-files (into (conj (vec written) schema-entry) (write-edits! (concat panel-edits test-edits) dry-run))]
 
         {:success true
          :module-name module-name

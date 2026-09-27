@@ -2,6 +2,7 @@
   "HTTP API routes and admin web UI handlers for workflow management.
 
    API Endpoints (canonical):
+     GET  /api/v1/workflow/instances?entity-type=&entity-id= — an entity's instances
      GET  /api/v1/workflow/instances/:id            — current state + metadata
      GET  /api/v1/workflow/instances/:id/audit      — full audit log
      POST /api/v1/workflow/instances                — start a new workflow instance
@@ -115,6 +116,19 @@
      :body   {:instance-id id-str
               :entries     (mapv audit-entry->response log-entries)}}))
 
+(defn handle-find-instances
+  "GET /api/v1/workflow/instances?entity-type=…&entity-id=…
+
+   The entity's instances, one per workflow it is in; [] for none. Without
+   their available transitions: GET /instances/:id has those."
+  [engine request]
+  (let [{:keys [entity-type entity-id]} (get-in request [:parameters :query])]
+    {:status 200
+     :body   (mapv #(dissoc (instance->response % nil) :available-transitions)
+                   (ports/list-instances (:store engine)
+                                         {:entity-type (keyword entity-type)
+                                          :entity-id   entity-id}))}))
+
 (defn handle-start-workflow
   "POST /api/v1/workflow/instances"
   [engine request]
@@ -184,7 +198,13 @@
      engine - WorkflowService (IWorkflowEngine)"
   [engine]
   [["/workflow/instances"
-    {:post {:handler (fn [req] (handle-start-workflow engine req))
+    {:get  {:handler (fn [req] (handle-find-instances engine req))
+            :summary "Find an entity's workflow instances"
+            :interceptors signed-in
+            :parameters {:query [:map
+                                 [:entity-type :string]
+                                 [:entity-id :uuid]]}}
+     :post {:handler (fn [req] (handle-start-workflow engine req))
             :summary "Start a new workflow instance"
             :interceptors signed-in
             :parameters {:body [:map {:closed true}

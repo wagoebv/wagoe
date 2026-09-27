@@ -117,6 +117,7 @@ The module wires its own database context and schema, and the job queue when `:w
 [source,bash]
 ----
 POST /api/v1/workflow/instances                # Start a workflow instance
+GET  /api/v1/workflow/instances?entity-type=&entity-id=  # Find an entity's instances
 POST /api/v1/workflow/instances/:id/transition # Perform a state transition
 GET  /api/v1/workflow/instances/:id            # Get current state
 GET  /api/v1/workflow/instances/:id/audit      # Get audit trail
@@ -143,6 +144,27 @@ One the workflow does not make from the current state answers 422:
 ----
 
 An unknown instance is a 404 and a malformed body a 400, in the platform's error shape.
+
+To find an entity's instance, look it up by the entity's type and id:
+
+[source,bash]
+----
+GET /api/v1/workflow/instances?entity-type=order&entity-id=5b1c9a52-6f0e-4d7a-9a57-2d9e3c1b8f40
+----
+
+It answers a list, one instance per workflow the entity is in, and `[]` for none.
+Both parameters are required. `GET /instances/:id` adds the available transitions.
+
+[source,json]
+----
+[{"id":            "0d4b7f3e-2a61-4c55-8f0e-9b7a1c2d3e4f",
+  "workflow-id":   "order-workflow",
+  "entity-type":   "order",
+  "entity-id":     "5b1c9a52-6f0e-4d7a-9a57-2d9e3c1b8f40",
+  "current-state": "entered",
+  "created-at":    "2026-09-27T12:00:00Z",
+  "updated-at":    "2026-09-27T12:00:00Z"}]
+----
 
 == Available transitions
 

@@ -183,7 +183,9 @@
     (is (str/includes? (get (files-under dir) "src/bou578f/billing/schema.clj")
                        "[:invoice-line-items [:vector {:min 1 :max 500} [:map [:description :string] [:quantity :int] [:unit-price :int]]]]")
         out)
-    (load-and-test! dir)
+    (let [{:keys [fail error]} (load-and-test! dir)]
+      (is (= 0 fail) "the tests generated before the field still pass (BOU-581)")
+      (is (= 0 error) "the tests generated before the field still pass (BOU-581)"))
     (let [db     (h2-migrated dir "bou578f")
           system (boot base db)
           call   (http-caller (:api (:wagoe/billing-routes system)))

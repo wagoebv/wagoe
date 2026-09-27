@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Breaking
 
+- **One workflow instance per workflow and entity** (BOU-581); a second start returns the first. `migrate up`
+  refuses a table that already has duplicates, naming them: keep one of each, then migrate.
 - **Routes now require login unless `:public true`** (BOU-568). Mark any route that
   must answer anonymous callers — a webhook, a public page — with `:public true`.
 - **`sortable-th` and `pagination` swap `outerHTML` by default** (BOU-386), so table refreshes stop nesting a
@@ -79,9 +81,15 @@ for what is public API, what is internal, and how deprecations are announced.
   in the same request and transaction, refuses fewer, and the admin gets `:min`.
 - **`bb scaffold subscriber --module-name m --event :admin/entity-created`** (BOU-578). Writes an event
   subscriber component, its handler and test, started when the event bus is on.
+- **`GET /api/v1/workflow/instances?entity-type=invoice&entity-id=<id>`** (BOU-581) finds an entity's
+  workflow instances, which answered 405.
 
 ### Fixed
 
+- **`bb scaffold field --required` failed the repository and workflow tests `generate` wrote** (BOU-581).
+  It now gives their rows a value; regenerate those tests, or add the field to them by hand.
+- **A scaffolded GET left out the children POST created, and the workflow instance** (BOU-581). New
+  modules return both, and the list takes `?include=`; regenerate a module to get it.
 - **CLI polish** (BOU-580): every `wagoe` command answers `--help`; config keys `bb setup`, `bb scaffold
   integrate` and `wagoe add` append follow the file's indentation; `bb ai` help lists Replicate's variables.
 - **The `(go)` box shows the dev dashboard URL** at the port it bound, and `bb ai admin-entity` names only
