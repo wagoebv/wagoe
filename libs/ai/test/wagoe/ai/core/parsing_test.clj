@@ -149,6 +149,17 @@
       (is (= "Invoice" (:entity result)))
       (is (= "number" (:name (first (:fields result))))))))
 
+(deftest ^:unit parse-module-spec-keeps-a-workflow
+  ;; BOU-569: a status that moves through fixed steps is a workflow.
+  (let [json   (str "{\"module-name\": \"invoice\", \"entities\": ["
+                    "{\"name\": \"Invoice\", \"fields\": [{\"name\": \"number\", \"type\": \"string\"}],"
+                    " \"workflow\": {\"field\": \"status\", \"states\": [\"entered\", \"delivered\", \"paid\"]}},"
+                    "{\"name\": \"Note\", \"fields\": [], \"workflow\": {\"field\": \"status\", \"states\": [\"only\"]}}]}")
+        result (parsing/parse-module-spec json)]
+    (is (= {:field "status" :states ["entered" "delivered" "paid"]}
+           (:workflow (first (:entities result)))))
+    (is (nil? (:workflow (second (:entities result)))) "one state is no workflow")))
+
 (deftest ^:unit parse-module-spec-still-takes-one-entity
   (let [result (parsing/parse-module-spec
                 "{\"module-name\": \"p\", \"entity\": \"P\", \"fields\": [{\"name\": \"x\", \"type\": \"string\"}]}")]

@@ -70,9 +70,24 @@
    [:fn {:error/message ":on-delete :set-null needs a nullable column, so the field cannot be :required"}
     (fn [{:keys [type on-delete required]}]
       (not (and (= :relation type) (= :set-null on-delete) required)))]
+   ;; MySQL indexes neither without a prefix length, and a unique prefix is
+   ;; not uniqueness (BOU-569).
+   [:fn {:error/message "a text or json field cannot be unique or indexed: MySQL cannot index either; use a string field"}
+    (fn [{:keys [type unique indexed]}]
+      (not (and (#{:text :json} type) (or unique indexed))))]
    ;; :default goes into DDL (BOU-494).
    [:fn {:error/message ":default must suit the field's type: a number for int/decimal, true/false for boolean, one of the values for enum, an offset timestamp for inst, YYYY-MM-DD for date, none for relation"}
     template/valid-default?]])
+
+(def WorkflowSpec
+  "An entity's status as a workflow: the field, and its states in order
+   (BOU-569). The names go into code and DDL, so they are kebab-case."
+  [:and
+   [:map
+    [:field [:and :keyword [:fn #(re-matches #"^[a-z][a-z0-9-]*$" (name %))]]]
+    [:states [:vector {:min 2} [:and :keyword [:fn #(re-matches #"^[a-z][a-z0-9-]*$" (name %))]]]]]
+   [:fn {:error/message "a workflow names each state once"}
+    (fn [{:keys [states]}] (apply distinct? states))]])
 
 (def EntityDefinition
   "Schema for an entity definition."
@@ -84,12 +99,18 @@
     ;; The parent entity, in this module: a required `<parent>_id` relation
     ;; column with a foreign key and an index (BOU-497).
     [:belongs-to {:optional true} [:re template/entity-name-pattern]]
+    [:workflow {:optional true} WorkflowSpec]
     [:description {:optional true} :string]]                ; Entity documentation
    [:fn {:error/fn (fn [{e :value} _]
                      (str (:name e) " belongs to " (:belongs-to e) ", which already gives it "
                           (template/kebab->snake (template/pascal->kebab (:belongs-to e)))
                           "_id: drop the field " (name (template/belongs-to-clash e))))}
-    (complement template/belongs-to-clash)]])
+    (complement template/belongs-to-clash)]
+   [:fn {:error/fn (fn [{e :value} _]
+                     (str (:name e) "'s workflow makes the field " (name (get-in e [:workflow :field]))
+                          ": drop the --field of that name"))}
+    (fn [{:keys [fields workflow]}]
+      (not-any? #(= (:field workflow) (keyword (name (:name %)))) fields))]])
 
 (def AddEntityRequest
   "Schema for adding an entity to an existing module (BOU-497)."

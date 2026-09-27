@@ -69,13 +69,16 @@
         e (template/pascal->kebab entity-name)
         fields (:fields entity)
         field-schemas (str/join "\n" (map generate-field-schema fields))
+        ;; A workflow's status is set by its transitions, never by a request.
+        requested (remove :workflow-state? fields)
+        request-schemas (str/join "\n" (map generate-field-schema requested))
         ;; Every field optional, whatever it is on the entity. An update
         ;; request is a partial: one required field in this schema means every
         ;; caller doing a partial update has to send it. The same
         ;; `field-schemas` string used to be interpolated into all three
         ;; schemas, so `--field name:string:required` made `name` mandatory on
         ;; update — against the convention in libs/scaffolder/AGENTS.md.
-        update-field-schemas (str/join "\n" (map #(generate-field-schema % true) fields))]
+        update-field-schemas (str/join "\n" (map #(generate-field-schema % true) requested))]
     {:entity (str "(def " entity-name "\n"
                   "  \"Schema for " entity-name " entity.\"\n"
                   "  [:map {:title \"" entity-name "\"}\n"
@@ -87,7 +90,7 @@
      :requests (str "(def Create" entity-name "Request\n"
                     "  \"Schema for create " e " API requests.\"\n"
                     "  [:map {:title \"Create " entity-name " Request\"}\n"
-                    field-schemas "])\n"
+                    request-schemas "])\n"
                     "\n"
                     "(def Update" entity-name "Request\n"
                     "  \"Schema for update " e " API requests.\"\n"
@@ -190,7 +193,28 @@
           "    \"Update " e ".\")\n"
           "\n"
           "  (delete-" e " [this id]\n"
-          "    \"Delete " e ".\"))\n")}))
+          "    \"Delete " e ".\")"
+          (if (:workflow entity)
+            (str "\n\n"
+                 "  (transition-" e " [this id transition actor]\n"
+                 "    \"Move the " e "'s " (get-in entity [:workflow :field]) " along its workflow. The result, with\n"
+                 "     the " e " as it is now on success; nil when there is no such " e ".\"))\n"
+                 "\n"
+                 "(defprotocol I" entity-name "Workflow\n"
+                 "  \"The " e "'s " (get-in entity [:workflow :field]) " workflow, as the service drives it.\"\n"
+                 "\n"
+                 "  (start-" e "-workflow! [this id]\n"
+                 "    \"Start the workflow of a new " e ", unless it has one.\")\n"
+                 "\n"
+                 "  (" e "-workflow-state [this id]\n"
+                 "    \"The state of the " e "'s workflow, started if it has none.\")\n"
+                 "\n"
+                 "  (remove-" e "-workflow! [this id]\n"
+                 "    \"Remove the workflow of a deleted " e ".\")\n"
+                 "\n"
+                 "  (transition-" e "-workflow! [this id transition actor]\n"
+                 "    \"Run `transition` as `actor`, starting the workflow if it has none.\"))\n")
+            ")\n"))}))
 
 (defn generate-ports-file
   "Generate ports.clj file content for the module's first entity.
@@ -360,16 +384,25 @@
                             "")]
     (format "  %s %s%s%s%s%s" field-name sql-type default-clause null-clause unique-clause references-clause)))
 
+(def statement-separator
+  "What migratus splits a migration on. Without it the file is one statement:
+   SQLite runs the first and drops the rest, and PostgreSQL's driver refuses
+   it (BOU-569)."
+  "\n--;;\n")
+
+(defn- index-sql [table column]
+  (format "CREATE INDEX IF NOT EXISTS idx_%s_%s ON %s(%s);" table column table column))
+
 (defn generate-migration-file
   "Generate migration SQL file content.
-   
+
    Args:
      ctx - Template context map
      migration-number - Migration sequence number (e.g., \"005\")
-   
+
    Returns:
      String content for migration SQL
-   
+
    Pure: true"
   ([ctx migration-number] (generate-migration-file ctx (first (:entities ctx)) migration-number))
   ([_ctx entity migration-number]
@@ -379,14 +412,10 @@
         ;; Every foreign key gets one: it is what a join reads, and what the
         ;; database scans on each cascading delete of the parent. An `indexed`
         ;; field gets one too (BOU-535).
-         relation-indexes (->> fields
-                               (filter #(or (:relation-table %) (:field-indexed %)))
-                               (map (fn [f]
-                                      (format "CREATE INDEX IF NOT EXISTS idx_%s_%s ON %s(%s);"
-                                              table-name (:field-name-snake f)
-                                              table-name (:field-name-snake f))))
-                               (str/join "\n"))]
-     (format "-- Migration %s: Create %s table
+         indexes (cons (index-sql table-name "created_at")
+                       (for [f fields :when (or (:relation-table f) (:field-indexed f))]
+                         (index-sql table-name (:field-name-snake f))))]
+     (str (format "-- Migration %s: Create %s table
 
 CREATE TABLE IF NOT EXISTS %s (
   id UUID PRIMARY KEY,
@@ -394,18 +423,14 @@ CREATE TABLE IF NOT EXISTS %s (
   created_at TIMESTAMP WITH TIME ZONE NOT NULL,
   updated_at TIMESTAMP WITH TIME ZONE,
   deleted_at TIMESTAMP WITH TIME ZONE
-);
-
--- Indexes
-CREATE INDEX IF NOT EXISTS idx_%s_created_at ON %s(created_at);
-%s"
-             migration-number
-             table-name
-             table-name
-             field-sqls
-             table-name
-             table-name
-             (if (str/blank? relation-indexes) "" (str relation-indexes "\n"))))))
+);"
+                  migration-number
+                  table-name
+                  table-name
+                  field-sqls)
+          statement-separator
+          (str/join statement-separator indexes)
+          "\n"))))
 
 (defn generate-migration-down-file
   "Generate the rollback SQL matching `generate-migration-file`.
@@ -491,6 +516,7 @@ DROP TABLE IF EXISTS %s;
          entity-name (:entity-name entity)
          entity-lower (template/pascal->kebab entity-name)
          entity-kebab (str/replace entity-lower #"\s+" "-")
+         wf (:workflow entity)
          {:keys [find-by-id find-all create update delete]} (repo-fns entity)]
      (str "(ns " base-ns "." module-name "." (shell-ns entity :service-ns) "\n"
           "  \"Service layer for " module-name " module.\"\n"
@@ -505,7 +531,19 @@ DROP TABLE IF EXISTS %s;
           "(defn- generate-" entity-lower "-id []\n"
           "  (UUID/randomUUID))\n"
           "\n"
-          "(defrecord " entity-name "Service [repository]\n"
+          (when wf
+            (str "(defn- mirror-" (:field wf) "!\n"
+                 "  \"Write the workflow's `state` to the " (:field wf) " column, and fail unless it\n"
+                 "   reads back: a transition whose column did not follow is an error, not\n"
+                 "   something to find later.\"\n"
+                 "  [repository id state]\n"
+                 "  (let [row (ports/" update " repository {:id id :" (:field wf) " state})]\n"
+                 "    (when (not= state (:" (:field wf) " row))\n"
+                 "      (throw (ex-info \"The " (:field wf) " column does not match the workflow\"\n"
+                 "                      {:type :internal-error :id id :workflow state :column (:" (:field wf) " row)})))\n"
+                 "    row))\n"
+                 "\n"))
+          "(defrecord " entity-name "Service [repository" (when wf " workflow") "]\n"
           "  ports/I" entity-name "Service\n"
          ;; _this everywhere: none of these bodies use it, and an unused binding
          ;; is a clj-kondo warning — which fails `bb check` in the generated
@@ -516,8 +554,18 @@ DROP TABLE IF EXISTS %s;
          ;; it is written against. The protocol function is the way through a
          ;; port (BOU-478).
           "  (create-" entity-lower " [_this data]\n"
-          "    (let [prepared (core/prepare-new-" entity-lower " data (generate-" entity-lower "-id) (current-time))]\n"
-          "      (ports/" create " repository prepared)))\n"
+          (if wf
+            (str "    (let [prepared (core/prepare-new-" entity-lower " data (generate-" entity-lower "-id) (current-time))\n"
+                 "          created  (ports/" create " repository prepared)]\n"
+                 "      (try\n"
+                 "        (ports/start-" entity-lower "-workflow! workflow (:id created))\n"
+                 "        (catch Exception e\n"
+                 "          ;; No row without its workflow.\n"
+                 "          (ports/" delete " repository (:id created))\n"
+                 "          (throw e)))\n"
+                 "      created))\n")
+            (str "    (let [prepared (core/prepare-new-" entity-lower " data (generate-" entity-lower "-id) (current-time))]\n"
+                 "      (ports/" create " repository prepared)))\n"))
           "  (get-" entity-lower " [_this id]\n"
           "    (ports/" find-by-id " repository id))\n"
          ;; find-all, not list-<plural>: the repository port has no
@@ -526,12 +574,34 @@ DROP TABLE IF EXISTS %s;
           "  (list-" (template/pluralize entity-lower) " [_this opts]\n"
           "    (ports/" find-all " repository opts))\n"
           "  (update-" entity-lower " [_this id data]\n"
-          "    (ports/" update " repository (assoc data :id id)))\n"
+          (if wf
+            (str "    ;; Only a transition moves " (:field wf) ".\n"
+                 "    (ports/" update " repository (assoc (dissoc data :" (:field wf) ") :id id)))\n")
+            (str "    (ports/" update " repository (assoc data :id id)))\n"))
           "  (delete-" entity-lower " [_this id]\n"
-          "    (ports/" delete " repository id)))\n"
-          "\n"
-          "(defn create-service [repository]\n"
-          "  (->" entity-name "Service repository))\n"))))
+          (if wf
+            (str "    ;; The row first: a delete the database refuses keeps its workflow.\n"
+                 "    (let [deleted (ports/" delete " repository id)]\n"
+                 "      (ports/remove-" entity-lower "-workflow! workflow id)\n"
+                 "      deleted))\n"
+                 "  (transition-" entity-lower " [_this id transition actor]\n"
+                 "    (when-let [row (ports/" find-by-id " repository id)]\n"
+                 "      ;; The workflow and the column are written apart, so a column an\n"
+                 "      ;; earlier write left behind is brought level before moving on.\n"
+                 "      (let [state (ports/" entity-lower "-workflow-state workflow id)]\n"
+                 "        (when (not= state (:" (:field wf) " row))\n"
+                 "          (mirror-" (:field wf) "! repository id state)))\n"
+                 "      (let [result (ports/transition-" entity-lower "-workflow! workflow id transition actor)]\n"
+                 "        (if (:success? result)\n"
+                 "          (assoc result :" entity-lower " (mirror-" (:field wf) "! repository id (get-in result [:instance :current-state])))\n"
+                 "          result)))))\n"
+                 "\n"
+                 "(defn create-service [repository workflow]\n"
+                 "  (->" entity-name "Service repository workflow))\n")
+            (str "    (ports/" delete " repository id)))\n"
+                 "\n"
+                 "(defn create-service [repository]\n"
+                 "  (->" entity-name "Service repository))\n"))))))
 
 ;; =============================================================================
 ;; Persistence File Generator
@@ -774,9 +844,20 @@ DROP TABLE IF EXISTS %s;
           "                      (" find-all " [_ _opts] [])\n"
           "                      (" update " [_ entity] entity)\n"
           "                      (" delete " [_ _id] nil))\n"
-          "          svc (service/create-service mock-repo)\n"
-          "          result (ports/create-" entity-lower " svc {:name \"Test\"})]\n"
-          "      (is (some? result)))))\n"))))
+          (if (:workflow entity)
+            (str "          started (atom [])\n"
+                 "          workflow (reify ports/I" entity-name "Workflow\n"
+                 "                     (start-" entity-lower "-workflow! [_ id] (swap! started conj id))\n"
+                 "                     (" entity-lower "-workflow-state [_ _id] nil)\n"
+                 "                     (remove-" entity-lower "-workflow! [_ _id] nil)\n"
+                 "                     (transition-" entity-lower "-workflow! [_ _id _transition _actor] nil))\n"
+                 "          svc (service/create-service mock-repo workflow)\n"
+                 "          result (ports/create-" entity-lower " svc {:name \"Test\"})]\n"
+                 "      (is (some? result))\n"
+                 "      (is (= [(:id result)] @started) \"its workflow is started\"))))\n")
+            (str "          svc (service/create-service mock-repo)\n"
+                 "          result (ports/create-" entity-lower " svc {:name \"Test\"})]\n"
+                 "      (is (some? result)))))\n"))))))
 
 (defn- sample-value
   "A literal the field's column accepts and reads back unchanged, as source
@@ -867,6 +948,190 @@ DROP TABLE IF EXISTS %s;
             (str "          (is (= (dissoc created " opaque ")\n"
                  "                 (dissoc (ports/" find-by-id " repo (:id created)) " opaque "))))))))\n")
             (str "          (is (= created (ports/" find-by-id " repo (:id created)))))))))\n"))))))
+
+;; =============================================================================
+;; Workflow (BOU-569)
+;; =============================================================================
+;;
+;; `--workflow status:entered>delivered>paid` makes the status a workflow: a
+;; definition that moves one state forward at a time, registered through the
+;; workflow module's registry port by the module's wiring. The service starts an
+;; instance on every create; the admin creates rows without the service, so its
+;; `:admin/entity-created` events start theirs. A hook writes each new state to
+;; the status column, which no request may set.
+
+(defn- state-label [s]
+  (str/capitalize (str/replace s "-" " ")))
+
+(defn generate-workflow-file
+  "shell/<entity>_workflow.clj: the definition, its registration and the
+   adapter the service drives it through.
+
+   Pure: true"
+  [ctx entity]
+  (let [base-ns (:base-ns ctx "wagoe")
+        module-name (:module-name ctx)
+        e (:entity-kebab entity)
+        entity-name (:entity-name entity)
+        {:keys [field states]} (:workflow entity)
+        {:keys [update]} (repo-fns entity)
+        kw #(str ":" %)]
+    (str "(ns " base-ns "." module-name ".shell." e "-workflow\n"
+         "  \"" entity-name " " field " as a workflow: " (str/join " -> " states) ", forward only.\n"
+         "   The " field " column mirrors the workflow's state, and a transition is the\n"
+         "   only thing that moves it.\"\n"
+         "  (:require [" base-ns "." module-name ".ports :as ports]\n"
+         "            [wagoe.events.ports :as events]\n"
+         "            [wagoe.workflow.ports :as workflow]))\n"
+         "\n"
+         "(def definition\n"
+         "  {:id            :" e "-workflow\n"
+         "   :description   \"" entity-name " " field ", forward only\"\n"
+         "   :initial-state " (kw (first states)) "\n"
+         "   :states        #{" (str/join " " (map kw states)) "}\n"
+         "   :state-config  {" (str/join "\n                   "
+                                         (for [st states] (str (kw st) " {:label \"" (state-label st) "\"}"))) "}\n"
+         "   :transitions   [" (str/join "\n                   "
+                                         (for [[from to] (partition 2 1 states)]
+                                           (str "{:from " (kw from) " :to " (kw to) " :label \"" (state-label to) "\"}"))) "]})\n"
+         "\n"
+         "(def ^:private entity-type :" e ")\n"
+         "\n"
+         "(defn- ->uuid [id] (cond-> id (string? id) parse-uuid))\n"
+         "\n"
+         "(defn- instance-of [store id]\n"
+         "  (workflow/find-instance-by-entity store entity-type (->uuid id)))\n"
+         "\n"
+         "(defrecord " entity-name "Workflow [engine store bus subscription]\n"
+         "  ports/I" entity-name "Workflow\n"
+         "  (start-" e "-workflow! [_ id]\n"
+         "    ;; Once: an admin event may be delivered twice.\n"
+         "    (or (instance-of store id)\n"
+         "        (workflow/start-workflow! engine {:workflow-id (:id definition)\n"
+         "                                          :entity-type entity-type\n"
+         "                                          :entity-id   (->uuid id)})))\n"
+         "  (remove-" e "-workflow! [_ id]\n"
+         "    (when-let [instance (instance-of store id)]\n"
+         "      (workflow/delete-instance! store (:id instance))))\n"
+         "  (" e "-workflow-state [this id]\n"
+         "    (:current-state (ports/start-" e "-workflow! this id)))\n"
+         "  (transition-" e "-workflow! [this id transition actor]\n"
+         "    ;; Started here too: a row the admin wrote while the event bus was down\n"
+         "    ;; has none yet.\n"
+         "    (let [instance (ports/start-" e "-workflow! this id)]\n"
+         "      (workflow/transition! engine {:instance-id (:id instance)\n"
+         "                                    :transition  transition\n"
+         "                                    :actor-id    (:id actor)\n"
+         "                                    :actor-roles (filterv some? [(some-> (:role actor) keyword)])})))\n"
+         "\n"
+         "  java.lang.AutoCloseable\n"
+         "  (close [_]\n"
+         "    (when subscription (events/unsubscribe! bus subscription))))\n"
+         "\n"
+         "(defn- mirror-" field "\n"
+         "  \"The hook that writes each new state to the " field " column when a\n"
+         "   transition comes from outside the service: the workflow API or the admin.\n"
+         "   The service writes it itself, and repairs what a failed hook left.\"\n"
+         "  [repository]\n"
+         "  (fn [instance _audit-entry _context]\n"
+         "    (ports/" update " repository {:id (:entity-id instance) :" field " (:current-state instance)})))\n"
+         "\n"
+         "(defn install!\n"
+         "  \"Register the workflow through the workflow module's registry port, with\n"
+         "   the hook that mirrors its state, and return what the service drives it\n"
+         "   through. With `bus`, every " e " the admin creates gets one too: the\n"
+         "   admin writes rows without the service. `component` is :wagoe/workflow.\"\n"
+         "  [{:keys [registry engine store] :as component} repository bus]\n"
+         "  (when-not component\n"
+         "    (throw (ex-info \"" entity-name " has a workflow and the workflow module is off: run `wagoe add workflow`\"\n"
+         "                    {:type :configuration-error})))\n"
+         "  (workflow/register-workflow! registry (assoc definition :hooks {:on-any-transition [(mirror-" field " repository)]}))\n"
+         "  (let [adapter (->" entity-name "Workflow engine store bus nil)]\n"
+         "    (cond-> adapter\n"
+         "      bus (assoc :subscription\n"
+         "                 (events/subscribe! bus :admin\n"
+         "                                    (fn [{:keys [type payload]}]\n"
+         "                                      (when (and (= :admin/entity-created type)\n"
+         "                                                 (= :" (:entity-plural entity) " (:entity payload)))\n"
+         "                                        (ports/start-" e "-workflow! adapter (:id payload)))))))))\n")))
+
+(defn generate-workflow-test-file
+  "test/.../shell/<entity>_workflow_test.clj: the transitions, and the status
+   following them through the service on H2.
+
+   Pure: true"
+  [ctx entity]
+  (let [base-ns (:base-ns ctx "wagoe")
+        module-name (:module-name ctx)
+        e (:entity-kebab entity)
+        {:keys [field states]} (:workflow entity)
+        kw #(str ":" %)
+        fields (remove :workflow-state? (:fields entity))
+        relation? (some :relation-table fields)
+        data (concat
+              (keep #(when-let [v (sample-value %)] (str ":" (:field-name-kebab %) " " v)) fields)
+              (for [f fields :when (= :inst (:field-type f))]
+                (str ":" (:field-name-kebab f) " (Instant/now)"))
+              (for [f fields :when (and (nil? (sample-value f)) (not= :inst (:field-type f)) (:field-required f))]
+                (str ":" (:field-name-kebab f) " \"{}\"")))
+        [first-state second-state third-state] states]
+    (str "(ns " base-ns "." module-name ".shell." e "-workflow-test\n"
+         "  (:require [clojure.test :refer [deftest testing is]]\n"
+         "            [integrant.core :as ig]\n"
+         "            [" base-ns "." module-name "." (shell-ns entity :persistence-ns) " :as persistence]\n"
+         "            [" base-ns "." module-name "." (shell-ns entity :service-ns) " :as service]\n"
+         "            [" base-ns "." module-name ".ports :as ports]\n"
+         "            [" base-ns "." module-name ".shell." e "-workflow :as " e "-workflow]\n"
+         (when relation? "            [wagoe.platform.database :as db]\n")
+         "            [wagoe.platform.shell.adapters.database.factory :as db-factory]\n"
+         "            [wagoe.platform.shell.database.migrations :as migrations]\n"
+         "            [wagoe.workflow.core.transitions :as transitions]\n"
+         "            [wagoe.workflow.shell.module-wiring])\n"
+         (if (some #(str/includes? % "Instant/") data)
+           "  (:import [java.time Instant]\n           [java.util UUID]))\n"
+           "  (:import [java.util UUID]))\n")
+         "\n"
+         "(defn- allowed? [from to]\n"
+         "  (:allowed? (transitions/can-transition? " e "-workflow/definition from to nil nil nil)))\n"
+         "\n"
+         "(deftest ^:unit the-" field "-only-moves-forward\n"
+         (str/join (for [[from to] (partition 2 1 states)]
+                     (str "  (is (allowed? " (kw from) " " (kw to) "))\n")))
+         (when third-state
+           (str "  (is (not (allowed? " (kw first-state) " " (kw third-state) ")) \"no skipping\")\n"))
+         "  (is (not (allowed? " (kw second-state) " " (kw first-state) ")) \"no going back\"))\n"
+         "\n"
+         "(defn- with-service\n"
+         "  \"Call `f` with the " e " service on a fresh H2 database, its workflow installed.\"\n"
+         "  [f]\n"
+         "  (let [ctx (db-factory/db-context {:adapter :h2\n"
+         "                                    :database-path (str \"mem:\" (UUID/randomUUID))\n"
+         "                                    :pool {:minimum-idle 1 :maximum-pool-size 2}})]\n"
+         "    (try\n"
+         "      (migrations/migrate-datasource! (:datasource ctx))\n"
+         (when relation?
+           (str "      ;; The rows it refers to are not what this tests.\n"
+                "      (db/execute-ddl! ctx \"SET REFERENTIAL_INTEGRITY FALSE\")\n"))
+         "      (ig/init-key :wagoe/workflow-db-schema {:ctx ctx})\n"
+         "      (let [component  (ig/init-key :wagoe/workflow {:db-ctx ctx :db-schema {} :guard-registry {}})\n"
+         "            repository (persistence/create-repository ctx)]\n"
+         "        (f (service/create-service repository (" e "-workflow/install! component repository nil))))\n"
+         "      (finally (db-factory/close-db-context! ctx)))))\n"
+         "\n"
+         "(deftest ^:integration the-" field "-follows-the-workflow\n"
+         "  (with-service\n"
+         "    (fn [svc]\n"
+         "      (let [created (ports/create-" e " svc {" (str/join "\n                                    " data) "})\n"
+         "            move    #(ports/transition-" e " svc (:id created) % {:role :user})]\n"
+         "        (is (= " (kw first-state) " (:" field " created)))\n"
+         "        (testing \"a move the workflow does not make is refused, and the " field " stays\"\n"
+         "          (is (false? (:success? (move " (kw first-state) "))))\n"
+         "          (is (= " (kw first-state) " (:" field " (ports/get-" e " svc (:id created))))))\n"
+         "        (testing \"each step forward moves the " field " with it\"\n"
+         (str/join "\n" (for [st (rest states)]
+                          (str "          (is (= " (kw st) " (:" field " (:" e " (move " (kw st) ")))))")))
+         ;; Closes the testing, let, fn, with-service and deftest.
+         ")))))\n")))
 
 ;; =============================================================================
 ;; Further entities (BOU-497)
@@ -1036,7 +1301,27 @@ DROP TABLE IF EXISTS %s;
          "              :handler (fn [request]\n"
          "                         (if-let [id (id-of request)]\n"
          "                           (do (ports/delete-" e " service id) {:status 204})\n"
-         "                           (not-found)))}}]])\n")))
+         "                           (not-found)))}}]"
+         (when-let [wf (:workflow entity)]
+           (str "\n"
+                "   ;; The one way to change " (:field wf) ": a body of {\"transition\": \"<state>\"}.\n"
+                "   [\"/" plural "/:id/transition\"\n"
+                "    {:swagger {:parameters [{:name \"id\" :in \"path\" :required true :type \"string\"}]}\n"
+                "     :post {:summary \"Move a " e "'s " (:field wf) " along its workflow\"" guard "\n"
+                "            :handler (fn [request]\n"
+                "                       (let [id         (id-of request)\n"
+                "                             transition (some-> (get-in request [:body-params :transition]) keyword)]\n"
+                "                         (cond\n"
+                "                           (nil? id)         (not-found)\n"
+                "                           (nil? transition) (invalid {:transition [\"missing\"]})\n"
+                "                           :else\n"
+                "                           (let [result (ports/transition-" e " service id transition (:user request))]\n"
+                "                             (cond\n"
+                "                               (nil? result)      (not-found)\n"
+                "                               (:success? result) {:status 200 :body (:" e " result)}\n"
+                "                               ;; Not a move the workflow makes from where it is.\n"
+                "                               :else              {:status 422 :body {:error (:error result)}})))))}}]"))
+         "])\n")))
 
 (defn generate-entity-http-file
   "shell/<entity>_http.clj for a further entity: its CRUD API routes.
@@ -1133,26 +1418,46 @@ DROP TABLE IF EXISTS %s;
       {:path (tst (str "core." e "-test")) :content (generate-core-test-file ctx entity)}
       {:path (tst (str "shell." e "-repository-test")) :content (generate-persistence-test-file ctx entity)}
       {:path (tst (:service-test-ns entity)) :content (generate-service-test-file ctx entity)}]
+
       (http? ctx)
-      (conj {:path (src (str "shell." e "-http")) :content (generate-entity-http-file ctx entity)}))))
+      (conj {:path (src (str "shell." e "-http")) :content (generate-entity-http-file ctx entity)})
+
+      (:workflow entity)
+      (conj {:path (src (str "shell." e "-workflow")) :content (generate-workflow-file ctx entity)}
+            {:path (tst (str "shell." e "-workflow-test")) :content (generate-workflow-test-file ctx entity)}))))
 
 ;; =============================================================================
 ;; Incremental Generators - Add Field
 ;; =============================================================================
 
-(defn generate-module-wiring-file
-  "Generate shell/module_wiring.clj file content.
+(defn- workflow-service-wiring
+  "The service's init and halt for a first entity with a workflow: it is
+   installed with the service, and its admin subscription closed with it."
+  [module-name entity]
+  (let [e (:entity-kebab entity)]
+    (str "(defmethod ig/init-key :wagoe/" module-name "-service\n"
+         "  [_ {:keys [repository workflow events]}]\n"
+         "  (log/info \"Initializing " module-name " service\")\n"
+         "  ;; " (:entity-name entity) "'s " (get-in entity [:workflow :field])
+         " is a workflow, registered here and started on every create.\n"
+         "  (service/create-service repository (" e "-workflow/install! workflow repository events)))\n"
+         "\n"
+         "(defmethod ig/halt-key! :wagoe/" module-name "-service\n"
+         "  [_ service]\n"
+         "  (.close ^java.lang.AutoCloseable (:workflow service))\n"
+         "  (log/info \"" module-name " service halted\"))")))
 
-   The scaffolder emitted every other file a module needs and not this one, so
-   `bb scaffold integrate` always reported that the module had no wiring yet and
-   the user hand-wrote the Integrant keys the framework says never to hand-write
-   (BOU-309).
+(defn- module-wiring-base
+  "shell/module_wiring.clj for the module's first entity, before any further
+   entity is wired in.
 
    Pure: true"
   [ctx]
   (let [base-ns     (:base-ns ctx "wagoe")
-        module-name (:module-name ctx)]
-    (format "(ns %s.%s.shell.module-wiring
+        module-name (:module-name ctx)
+        entity      (first (:entities ctx))
+        workflow?   (and (:primary? entity) (:workflow entity))]
+    (cond-> (format "(ns %s.%s.shell.module-wiring
   \"Integrant wiring for the %s module.
 
    Generated by `bb scaffold`. `bb scaffold integrate` writes the config key
@@ -1237,21 +1542,35 @@ DROP TABLE IF EXISTS %s;
             ;; them and emitted "Integrant wiring for the Widget module" for
             ;; module `inventory`; the fixture used module `product` with entity
             ;; `Product`, so every substring assertion passed either way.
-            base-ns module-name                              ; 1-2   ns
-            module-name                                      ; 3     docstring
-            module-name module-name module-name module-name  ; 4-7   component list
-            base-ns module-name                              ; 8-9   require http
-            base-ns module-name                              ; 10-11 require persistence
-            base-ns module-name                              ; 12-13 require service
-            module-name module-name                          ; 14-15 repository init
-            module-name module-name                          ; 16-17 repository halt
-            module-name module-name                          ; 18-19 service init
-            module-name module-name                          ; 20-21 service halt
-            module-name module-name module-name              ; 22-24 routes init + fn
-            module-name module-name                          ; 25-26 routes halt
-            module-name                                      ; 27    discovery note
-            module-name module-name module-name              ; 28-30 module init
-            module-name module-name)))
+                    base-ns module-name                              ; 1-2   ns
+                    module-name                                      ; 3     docstring
+                    module-name module-name module-name module-name  ; 4-7   component list
+                    base-ns module-name                              ; 8-9   require http
+                    base-ns module-name                              ; 10-11 require persistence
+                    base-ns module-name                              ; 12-13 require service
+                    module-name module-name                          ; 14-15 repository init
+                    module-name module-name                          ; 16-17 repository halt
+                    module-name module-name                          ; 18-19 service init
+                    module-name module-name                          ; 20-21 service halt
+                    module-name module-name module-name              ; 22-24 routes init + fn
+                    module-name module-name                          ; 25-26 routes halt
+                    module-name                                      ; 27    discovery note
+                    module-name module-name module-name              ; 28-30 module init
+                    module-name module-name)
+      workflow?
+      (-> (str/replace (str "            [" base-ns "." module-name ".shell.service :as service]\n")
+                       (str "            [" base-ns "." module-name ".shell.service :as service]\n"
+                            "            [" base-ns "." module-name ".shell." (:entity-kebab entity)
+                            "-workflow :as " (:entity-kebab entity) "-workflow]\n"))
+          (str/replace (str "(defmethod ig/init-key :wagoe/" module-name "-service\n"
+                            "  [_ {:keys [repository]}]\n"
+                            "  (log/info \"Initializing " module-name " service\")\n"
+                            "  (service/create-service repository))\n"
+                            "\n"
+                            "(defmethod ig/halt-key! :wagoe/" module-name "-service\n"
+                            "  [_ _service]\n"
+                            "  (log/info \"" module-name " service halted\"))")
+                       (workflow-service-wiring module-name entity))))))
 
 ;; =============================================================================
 ;; Wiring a further entity (BOU-497)
@@ -1307,35 +1626,59 @@ DROP TABLE IF EXISTS %s;
          ";; init-key above mounts their API routes with the module's.\n"
          "\n"
          "(defmulti entity-wiring\n"
-         "  \"{:repository f :service f :routes f} for one further entity.\"\n"
+         "  \"{:repository f :service f :routes f :workflow f} for one further entity.\n"
+         "   :workflow, for an entity with one, installs it: (f workflow repository events).\"\n"
          "  identity)\n"
          "\n"
          "(defmethod ig/init-key " (k "-entities") "\n"
-         "  [_ {:keys [ctx]}]\n"
+         "  [_ {:keys [ctx workflow events]}]\n"
          "  (into {}\n"
          "        (for [entity (keys (methods entity-wiring))\n"
-         "              :let [{:keys [repository service routes]} (entity-wiring entity)]]\n"
-         "          [entity {:service (service (repository ctx)) :routes routes}])))\n"
+         "              :let [{:keys [repository service routes] install :workflow} (entity-wiring entity)\n"
+         "                    repo (repository ctx)]]\n"
+         "          [entity {:service (if install\n"
+         "                              (service repo (install workflow repo events))\n"
+         "                              (service repo))\n"
+         "                   :routes  routes}])))\n"
+         "\n"
+         "(defmethod ig/halt-key! " (k "-entities") "\n"
+         "  [_ entities]\n"
+         "  (doseq [{:keys [service]} (vals entities)\n"
+         "          :let [workflow (:workflow service)]\n"
+         "          :when (instance? java.lang.AutoCloseable workflow)]\n"
+         "    (.close ^java.lang.AutoCloseable workflow)))\n"
+         "\n"
+         "(defn- switched-on?\n"
+         "  \"Whether the loaded config's :active switches module `k` on.\"\n"
+         "  [config k]\n"
+         "  (let [v (get-in config [:active k])]\n"
+         "    (and (some? v) (not (false? (:enabled? v))))))\n"
          "\n"
          "(defn ig-config\n"
          "  \"This module's Integrant graph: the four keys platform discovery would\n"
-         "   build, plus " (k "-entities") ".\"\n"
-         "  [settings _opts]\n"
-         "  {:components\n"
-         "   {" (k "-repository") "\n"
-         "    {:ctx (ig/ref :wagoe/db-context)}\n"
-         "    " (k "-service") "\n"
-         "    {:repository (ig/ref " (k "-repository") ")}\n"
-         "    " (k "-entities") "\n"
-         "    {:ctx (ig/ref :wagoe/db-context)}\n"
-         "    " (k "-routes") "\n"
-         "    {:service  (ig/ref " (k "-service") ")\n"
-         "     :entities (ig/ref " (k "-entities") ")\n"
-         "     :config   settings}\n"
-         "    " (k "") "\n"
-         "    {:enabled? true\n"
-         "     :service  (ig/ref " (k "-service") ")\n"
-         "     :routes   (ig/ref " (k "-routes") ")}}})\n")))
+         "   build, plus " (k "-entities") ". With the workflow module on, the services\n"
+         "   get it, and the event bus the admin publishes to when both are on.\"\n"
+         "  [settings {:keys [config]}]\n"
+         "  (let [workflow (when (switched-on? config :wagoe/workflow)\n"
+         "                   {:workflow (ig/ref :wagoe/workflow)\n"
+         "                    :events   (when (and (switched-on? config :wagoe/events)\n"
+         "                                         (switched-on? config :wagoe/admin))\n"
+         "                                (ig/ref :wagoe/events))})]\n"
+         "    {:components\n"
+         "     {" (k "-repository") "\n"
+         "      {:ctx (ig/ref :wagoe/db-context)}\n"
+         "      " (k "-service") "\n"
+         "      (merge {:repository (ig/ref " (k "-repository") ")} workflow)\n"
+         "      " (k "-entities") "\n"
+         "      (merge {:ctx (ig/ref :wagoe/db-context)} workflow)\n"
+         "      " (k "-routes") "\n"
+         "      {:service  (ig/ref " (k "-service") ")\n"
+         "       :entities (ig/ref " (k "-entities") ")\n"
+         "       :config   settings}\n"
+         "      " (k "") "\n"
+         "      {:enabled? true\n"
+         "       :service  (ig/ref " (k "-service") ")\n"
+         "       :routes   (ig/ref " (k "-routes") ")}}}))\n")))
 
 (defn- entity-wiring-section
   [ctx entity]
@@ -1345,19 +1688,23 @@ DROP TABLE IF EXISTS %s;
          "  [_]\n"
          "  {:repository " e "-persistence/create-repository\n"
          "   :service    " e "-service/create-service"
-         (if (http? ctx)
-           (str "\n   :routes     " e "-http/api-routes})\n")
-           "})\n"))))
+         (when (http? ctx)
+           (str "\n   :routes     " e "-http/api-routes"))
+         (when (:workflow entity)
+           (str "\n   :workflow   " e "-workflow/install!"))
+         "})\n")))
 
 (defn- entity-requires
   "[alias namespace] pairs the entity's wiring section needs."
   [ctx entity]
   (let [prefix (str (:base-ns ctx "wagoe") "." (:module-name ctx) ".")
         e      (:entity-kebab entity)]
-    (for [part (cond-> ["persistence" "service"] (http? ctx) (conj "http"))]
+    (for [part (cond-> ["persistence" "service"]
+                 (http? ctx)        (conj "http")
+                 (:workflow entity) (conj "workflow"))]
       [(symbol (str e "-" part))
-       (symbol (str prefix (if (= "http" part)
-                             (str "shell." e "-http")
+       (symbol (str prefix (if (#{"http" "workflow"} part)
+                             (str "shell." e "-" part)
                              (shell-ns entity (keyword (str part "-ns"))))))])))
 
 (defn- require-aliases
@@ -1403,6 +1750,43 @@ DROP TABLE IF EXISTS %s;
   (set (keep #(let [[op m d] (form-head %)] (when (and (= 'defmethod op) (= multi m)) d))
              (top-level-forms source))))
 
+(defn- install-seam
+  "`source` with the seam described above, or an :error."
+  [source ctx]
+  (let [module-name (:module-name ctx)
+        loc      (some #(when (routes-init-form? module-name %) %) (top-level-forms source))
+        expected (some #(when (routes-init-form? module-name %) (z/sexpr %))
+                       (top-level-forms (module-wiring-base ctx)))]
+    (cond
+      (contains? (defined-symbols source) 'ig-config)
+      {:error "it already defines ig-config, so the module builds its own graph"}
+
+      (or (nil? loc) (not= expected (z/sexpr loc)))
+      {:error (str "its :wagoe/" module-name "-routes init-key is not the one bb scaffold"
+                   " generate wrote, and wiring an entity replaces it")}
+
+      :else
+      {:content (append-section
+                 (z/root-string (z/replace loc (z/node (z/of-string (wiring-routes-form module-name)))))
+                 (wiring-seam-section module-name))})))
+
+(defn generate-module-wiring-file
+  "Generate shell/module_wiring.clj file content.
+
+   The scaffolder emitted every other file a module needs and not this one, so
+   `bb scaffold integrate` always reported that the module had no wiring yet and
+   the user hand-wrote the Integrant keys the framework says never to hand-write
+   (BOU-309). A first entity with a workflow gets the seam's `ig-config` at
+   once: it is what hands the service the workflow module.
+
+   Pure: true"
+  [ctx]
+  (let [base   (module-wiring-base ctx)
+        entity (first (:entities ctx))]
+    (if (and (:primary? entity) (:workflow entity))
+      (:content (install-seam base ctx))
+      base)))
+
 (defn add-entity-to-wiring
   "`source` — a module_wiring.clj — with `entity` wired in.
 
@@ -1414,29 +1798,20 @@ DROP TABLE IF EXISTS %s;
   [source ctx entity]
   (try
     (let [module-name (:module-name ctx)
-          defined     (defined-symbols source)
-          seam?       (contains? defined 'entity-wiring)
+          seam?       (contains? (defined-symbols source) 'entity-wiring)
           k           (keyword (:entity-kebab entity))
-          installed
-          (if seam?
-            {:content source}
-            (let [loc      (some #(when (routes-init-form? module-name %) %) (top-level-forms source))
-                  expected (some #(when (routes-init-form? module-name %) (z/sexpr %))
-                                 (top-level-forms (generate-module-wiring-file ctx)))]
-              (cond
-                (contains? defined 'ig-config)
-                {:error "it already defines ig-config, so the module builds its own graph"}
-
-                (or (nil? loc) (not= expected (z/sexpr loc)))
-                {:error (str "its :wagoe/" module-name "-routes init-key is not the one bb scaffold"
-                             " generate wrote, and wiring an entity replaces it")}
-
-                :else
-                {:content (append-section
-                           (z/root-string (z/replace loc (z/node (z/of-string (wiring-routes-form module-name)))))
-                           (wiring-seam-section module-name))})))]
+          installed   (if seam? {:content source} (install-seam source ctx))]
       (cond
         (:error installed) installed
+
+        ;; A seam from before BOU-569 builds each entity's service with one
+        ;; argument, so a workflow wired into it would fail at boot.
+        (and (:workflow entity)
+             (not (contains? (defmethod-dispatches (:content installed) 'ig/halt-key!)
+                             (keyword "wagoe" (str module-name "-entities")))))
+        {:error (str "it wires entities as it did before workflows. Replace its :wagoe/"
+                     module-name "-entities init-key and ig-config with what a new `bb scaffold"
+                     " generate` writes, then run this again")}
 
         (contains? (defmethod-dispatches (:content installed) 'entity-wiring) k)
         {:error (str "it already wires " k)}
@@ -1482,14 +1857,12 @@ DROP TABLE IF EXISTS %s;
                                          (:on-delete field-ctx)
                                          "CASCADE"))
                             "")
-        index-sql (if (or relation-table (:field-indexed field-ctx))
-                    (format "\nCREATE INDEX IF NOT EXISTS idx_%s_%s ON %s(%s);\n"
-                            table-name field-name table-name field-name)
-                    "")]
+        index (if (or relation-table (:field-indexed field-ctx))
+                (str statement-separator (index-sql table-name field-name) "\n")
+                "\n")]
     (format "-- Migration %s: Add %s to %s table
 
-ALTER TABLE %s ADD COLUMN %s %s%s%s%s%s;
-%s"
+ALTER TABLE %s ADD COLUMN %s %s%s%s%s%s;%s"
             migration-number
             field-name
             table-name
@@ -1500,7 +1873,7 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s%s%s;
             not-null
             unique-clause
             references-clause
-            index-sql)))
+            index)))
 
 (defn schema-field-entry
   "The Malli entry line for `field`, without indentation.
@@ -1963,6 +2336,8 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s%s%s;
                              :widget  :select
                              :options (mapv #(vector % (humanize %)) (rest (:malli-type f)))}]))
         fk      (when (:belongs-to entity) (keyword (str (:belongs-to entity) "-id")))
+        ;; A workflow's status is shown, and moved only by its transitions.
+        wf      (:workflow entity)
         entry   (fn [k v] (format "%-16s %s" k v))
         entries (cond-> [(entry ":label" (pr-str (humanize (:entity-plural entity))))
                          (entry ":table-name" (str ":" (:entity-plural entity)))
@@ -1972,7 +2347,9 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s%s%s;
                   ;; Secrets listed, not left to the admin's detection: a
                   ;; manual :hide-fields replaced the set it detects.
                   :always      (conj (entry ":hide-fields" (str "#{" (str/join " " (map str (cons :deleted-at secrets))) "}"))
-                                     (entry ":readonly-fields" "#{:id :created-at :updated-at}"))
+                                     (entry ":readonly-fields" (str "#{:id :created-at :updated-at"
+                                                                    (when wf (str " :" (:field wf))) "}")))
+                  wf           (conj (entry ":workflow" (str "{:entity-type :" (:entity-kebab entity) "}")))
                   (seq enums)  (conj (entry ":fields" (edn-str enums)))
                   (seq children)
                   (conj (entry ":has-many" (str "[" (str/join (str "\n" (apply str (repeat 20 " ")))
@@ -2050,6 +2427,14 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s%s%s;
   [source]
   (try (let [admin (admin-node source)]
          (boolean (and admin (or (not= :map (z/tag admin)) (admin-loc source)))))
+       (catch Exception _ false)))
+
+(defn module-active?
+  "Whether the config.edn `source` names module `k` under :active.
+
+   Pure: true"
+  [source k]
+  (try (some? (-> (z/of-string source) (map-val :active) (map-val k)))
        (catch Exception _ false)))
 
 (defn add-admin-entity

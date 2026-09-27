@@ -61,8 +61,16 @@ for what is public API, what is internal, and how deprecations are announced.
 - **`:wagoe/payment-provider` has no default provider, and `:mock` boots only in dev and test** (BOU-564).
   Set `:provider` explicitly; use `:stripe` or `:mollie` in every other profile.
 
+### Added
+
+- **`bb scaffold generate|entity --workflow status:entered>delivered>paid`** (BOU-569). The status
+  becomes a workflow that API and admin rows both start, moved by `POST /<entities>/:id/transition`.
+
 ### Fixed
 
+- **Scaffolded migrations lost their indexes on SQLite and failed on PostgreSQL and MySQL** (BOU-569).
+  Add `--;;` to older ones; an existing SQLite database needs a new migration creating the missing indexes.
+- **`bb scaffold ai --help` answered "Unknown option"** (BOU-569). It prints the usage.
 - **An admin create required hidden and defaulted fields, and a 422 marked no field** (BOU-570).
   Drop `:required false` workarounds; required textareas and selects now carry `required`.
 - **`bb ai gen-tests` wrote tests that did not compile, and `bb ai admin-entity` invented keys** (BOU-572).

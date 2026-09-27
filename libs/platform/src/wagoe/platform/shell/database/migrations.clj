@@ -19,6 +19,7 @@
             ;; ".sql" missed EDN migrations, which migratus reads just as
             ;; happily — `get-all-supported-extensions` returns ["sql" "edn"].
             [migratus.migrations :as migratus-migrations]
+            [wagoe.platform.core.database.migration-sql :as migration-sql]
             [wagoe.platform.shell.adapters.database.config :as db-config]
             [clojure.edn :as edn]
             [clojure.java.io :as io]
@@ -322,6 +323,25 @@
                      " to a separate classpath resource.")))
     migration-dirs))
 
+(defn mysql?
+  "Whether `datasource` is MySQL or MariaDB, from the driver's own answer."
+  [datasource]
+  (with-open [c (.getConnection ^javax.sql.DataSource datasource)]
+    (boolean (re-find #"(?i)mysql|mariadb" (.getDatabaseProductName (.getMetaData c))))))
+
+(defn migratus-config
+  "The migratus config for running the migrations in `migration-dir` (one
+   directory or several) against `datasource`. On MySQL each statement is
+   rewritten from the dialect the scaffolder writes (BOU-569)."
+  [datasource migration-dir]
+  (cond-> {:store                :database
+           :migration-dir        migration-dir
+           :init-script          nil
+           :init-in-transaction? false
+           :migration-table-name "schema_migrations"
+           :db                   {:datasource datasource}}
+    (mysql? datasource) (assoc :modify-sql-fn migration-sql/for-mysql)))
+
 (defn create-migratus-config
   "Creates Migratus configuration from database config.
 
@@ -331,12 +351,7 @@
   Returns:
      Migratus configuration map"
   [db-config]
-  {:store                :database
-   :migration-dir        (discover-migration-dirs)
-   :init-script          nil  ; No init script needed
-   :init-in-transaction? false
-   :migration-table-name "schema_migrations"
-   :db                   {:datasource (:datasource db-config)}})
+  (migratus-config (:datasource db-config) (discover-migration-dirs)))
 
 (defn create-config
   "Narrow a read config to one suitable for *creating* a migration.
@@ -470,12 +485,7 @@
   (refuse-shadowed-migration-dirs!)
   (log/info "Running database migrations on the application's own datasource")
   (try
-    (migratus/migrate {:store                :database
-                       :migration-dir        (discover-migration-dirs)
-                       :init-script          nil
-                       :init-in-transaction? false
-                       :migration-table-name "schema_migrations"
-                       :db                   {:datasource datasource}})
+    (migratus/migrate (migratus-config datasource (discover-migration-dirs)))
     (log/info "Database migrations completed successfully")
     (catch Exception e
       (rethrow-config-conflict! e)

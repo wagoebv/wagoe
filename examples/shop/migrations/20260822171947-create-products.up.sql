@@ -1,4 +1,4 @@
--- Migration 20260919100909: Create products table
+-- Migration 20260927134726: Create products table
 
 CREATE TABLE IF NOT EXISTS products (
   id UUID PRIMARY KEY,
@@ -9,6 +9,5 @@ CREATE TABLE IF NOT EXISTS products (
   updated_at TIMESTAMP WITH TIME ZONE,
   deleted_at TIMESTAMP WITH TIME ZONE
 );
-
--- Indexes
+--;;
 CREATE INDEX IF NOT EXISTS idx_products_created_at ON products(created_at);

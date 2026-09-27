@@ -957,6 +957,22 @@ jobs:
     runs-on: ubuntu-latest
     needs: warm-deps
 
+    # migration_dialects_test runs the generated migrations on MySQL too, and
+    # fails without it rather than passing on three databases (BOU-569).
+    services:
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: probe
+          MYSQL_DATABASE: audience
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -uroot -pprobe --silent"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 30
+
     steps:
       - uses: actions/checkout@v6
 

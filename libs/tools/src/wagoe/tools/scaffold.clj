@@ -145,19 +145,27 @@
                                (when required "required")
                                (when unique "unique")])))
 
-(defn build-generate-args [{:keys [module entity fields http web public-api]}]
+(defn workflow->spec
+  "{:field \"status\" :states [\"entered\" \"paid\"]} as --workflow takes it."
+  [{:keys [field states]}]
+  (str field ":" (str/join ">" states)))
+
+(defn build-generate-args [{:keys [module entity fields http web public-api workflow]}]
   (let [base       ["generate" "--module-name" module "--entity" entity]
         field-args (mapcat #(vector "--field" (field->spec %)) fields)
         no-http    (when-not http ["--no-http"])
         no-web     (when-not web  ["--no-web"])]
-    (vec (concat base field-args no-http no-web (when public-api ["--public-api"])))))
+    (vec (concat base field-args
+                 (when workflow ["--workflow" (workflow->spec workflow)])
+                 no-http no-web (when public-api ["--public-api"])))))
 
 (defn build-entity-args
   "`bb scaffold entity` arguments for an entity added to `module`."
-  [module {:keys [name belongs-to fields http public-api] :or {http true}}]
+  [module {:keys [name belongs-to fields http public-api workflow] :or {http true}}]
   (vec (concat ["entity" "--module-name" module "--entity" name]
                (when belongs-to ["--belongs-to" belongs-to])
                (mapcat #(vector "--field" (field->spec %)) fields)
+               (when workflow ["--workflow" (workflow->spec workflow)])
                (when-not http ["--no-http"])
                (when public-api ["--public-api"]))))
 
@@ -177,12 +185,13 @@
   ([spec] (build-ai-commands spec {}))
   ([spec {:keys [dry-run force output-dir base-ns] :as flags}]
    (let [{:keys [module entities http web public-api]} (apply-ai-flags spec flags)
-         [{:keys [name fields]} & more] entities
+         [{:keys [name fields workflow]} & more] entities
          shared (cond-> []
                   output-dir (into ["--output-dir" output-dir])
                   base-ns    (into ["--base-ns" base-ns])
                   dry-run    (conj "--dry-run"))]
      (into [(cond-> (into (build-generate-args {:module module :entity name :fields fields
+                                                :workflow workflow
                                                 :http http :web web :public-api public-api})
                           shared)
               force (conj "--force"))]
@@ -201,7 +210,23 @@
    [nil "--base-ns NS" "Base namespace for the module"]
    [nil "--[no-]http" "Generate the REST API (overrides the description)"]
    [nil "--[no-]web" "Generate the web UI (overrides the description)"]
-   [nil "--[no-]public-api" "API routes open to anyone (overrides the description)"]])
+   [nil "--[no-]public-api" "API routes open to anyone (overrides the description)"]
+   ["-h" "--help" "Show this help"]])
+
+(defn ai-help
+  "What `bb scaffold ai --help` prints."
+  []
+  (str "Usage: bb scaffold ai <description> [options]\n"
+       "\n"
+       "Parses the description with the AI provider and runs `bb scaffold generate`,\n"
+       "then `bb scaffold entity` for each further entity. A status that moves through\n"
+       "fixed steps becomes a workflow (--workflow), a child entity --belongs-to its parent.\n"
+       "\n"
+       "Options:\n"
+       (:summary (cli/parse-opts [] ai-option-specs)) "\n"
+       "\n"
+       "Example:\n"
+       "  bb scaffold ai \"invoices with a number, and a status entered, delivered, paid\" --dry-run"))
 
 ;; =============================================================================
 ;; Run Clojure scaffolder
@@ -637,6 +662,14 @@
 ;; AI-powered NL scaffolding
 ;; =============================================================================
 
+(defn- valid-workflow?
+  "Whether the model's workflow is one --workflow can say."
+  [{:keys [field states]}]
+  (and (string? field) (valid-kebab? field)
+       (sequential? states) (>= (count states) 2)
+       (every? #(and (string? %) (valid-kebab? %)) states)
+       (apply distinct? states)))
+
 (defn- parse-ai-module-spec
   "Read the JSON module spec `bb ai scaffold-parse` writes to stdout.
 
@@ -650,6 +683,7 @@
           ;; `:entity` and `:fields` is one entity.
           entities (if (seq (:entities data))
                      (mapv (fn [e] (cond-> {:name (:name e) :fields (vec (:fields e))}
+                                     (valid-workflow? (:workflow e)) (assoc :workflow (:workflow e))
                                      ;; A model writes "invoice" as often as "Invoice".
                                      (:belongs-to e) (assoc :belongs-to
                                                             (cond-> (:belongs-to e)
@@ -813,6 +847,9 @@
        "  --field status:enum:values=entered,paid:required:default=entered\n"
        "  default= is the column DEFAULT; a required enum without one takes its first value\n"
        "\n"
+       "A status that only moves forward, as a workflow (generate and entity):\n"
+       "  --workflow status:entered>delivered>paid\n"
+       "\n"
        "The wizard delegates to:\n"
        "  clojure -M -m wagoe.scaffolder.shell.cli-entry <command> [opts]\n"
        "\n"
@@ -873,6 +910,9 @@
       (let [{:keys [options arguments errors]} (cli/parse-opts rest-args ai-option-specs)
             description (str/join " " arguments)]
         (cond
+          (:help options)
+          (println (ai-help))
+
           (seq errors)
           (do (run! #(println (red %)) (distinct errors))
               (println "  Quote the description, or put -- before one that starts with -:")
@@ -880,7 +920,7 @@
               (*exit!* 1))
 
           (seq description)
-          (wizard-ai description (boolean (:yes options)) (dissoc options :yes))
+          (wizard-ai description (boolean (:yes options)) (dissoc options :yes :help))
 
           :else
           (do (println (red "Please provide a module description."))

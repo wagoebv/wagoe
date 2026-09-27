@@ -120,6 +120,39 @@ bb scaffold entity \
 `generate-module` (API, MCP `scaffold-module`) takes several `:entities`; the
 first is generated as above and each further one as `entity` would add it.
 
+### `--workflow` — a status that moves through fixed steps
+
+```bash
+bb scaffold generate --module-name invoice --entity Invoice \
+  --field number:string:required --workflow status:entered>delivered>paid
+```
+
+On `generate` and `entity` (`:workflow {:field :status :states [...]}` in the
+request, `"workflow"` in the `bb scaffold ai` spec):
+
+- `status` becomes a required enum column defaulting to the first state, left
+  out of both request schemas, so no API call or admin form sets it.
+- `shell/<entity>_workflow.clj` holds the definition, each state moving only
+  to the next, and `install!`, which registers it through the workflow
+  registry port with an `:on-any-transition` hook for transitions made outside
+  the service (the workflow API, the admin).
+- The service starts an instance on create, and deletes the row it created
+  when that fails; it deletes the row before the instance. A transition starts
+  a missing instance, writes the new state to the column and fails the request
+  unless it reads back. The two writes are not one transaction (the workflow
+  store has its own connections), so a column left behind is brought level at
+  the next transition.
+  `POST /api/v1/<entities>/:id/transition {"transition": "delivered"}` answers
+  200 with the entity or 422 for a move the workflow does not make.
+- The admin writes rows without the service, so `install!` also subscribes to
+  `:admin/entity-created` when the admin and events modules are on. The admin
+  config gets `:workflow {:entity-type ...}` and the status in
+  `:readonly-fields`.
+- The module wiring gets `ig-config` at once: it hands the service
+  `:wagoe/workflow`, and `:wagoe/events`. The module will not boot without
+  `wagoe add workflow`. An `entity --workflow` into a module whose wiring
+  predates this is refused.
+
 ### `field` — Add a Field to an Existing Entity
 
 ```bash
@@ -405,6 +438,7 @@ Configure the provider via environment variables: `ANTHROPIC_API_KEY`, `OPENAI_A
 | `--module-name` | — | Module name in lowercase kebab-case (required) |
 | `--entity` | — | Entity name in PascalCase (required) |
 | `--field` | — | Repeatable: `name:type[:values=a,b,c][:references=entity][:on-delete=x][:required|:optional][:unique][:indexed][:default=v]` |
+| `--workflow` | — | `field:first>second>...`: the status as a forward-only workflow |
 | `--[no-]http` | true | Generate the HTTP (REST API) routes |
 | `--[no-]web` | true | Generate the Web UI: `core/ui.clj`, `shell/web_handlers.clj`, and the module's `:web` route contribution |
 | `--public-api` | false | API routes and web page open to anyone; by default they require a signed-in user |
