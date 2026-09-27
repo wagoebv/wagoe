@@ -1122,19 +1122,50 @@
   (with-new-project
     (fn [dir]
       (is (not (str/includes? (installed-block dir) "- payments (")))
-      (let [[exit out] (binding [setup/*wagoe-cli* (cli-command)]
-                         (run-setup dir "" "--payment" "mock"))]
+      (let [[exit out] (run-setup dir "" "--payment" "mock")]
         (is (nil? exit) out)
         (is (str/includes? (installed-block dir) "- payments (") out)
         (is (str/includes? (slurp (fs/file dir "AGENTS.md")) "<!-- gen:pitfalls -->")
             "the rest of AGENTS.md is left as it was")))))
 
-(deftest ^:integration setup-without-the-cli-says-to-refresh-agents-md
+(def ^:private module-block-re
+  #"(?s)(<!-- (wagoe:(?:available|installed)-modules) -->).*?(<!-- /\2 -->)")
+
+(defn- outside-module-blocks [text]
+  (str/replace text module-block-re "$1$3"))
+
+(defn- module-blocks [text]
+  (mapv first (re-seq module-block-re text)))
+
+(defn- cli-rendered-blocks
+  "The module blocks the CLI renders for `dir` as it is now."
+  [dir]
+  (require 'wagoe.cli.add)
+  (let [render (resolve 'wagoe.cli.add/render-module-blocks)
+        states (resolve 'wagoe.cli.add/module-states)]
+    (module-blocks (render (slurp (fs/file dir "AGENTS.md")) (states (str dir))))))
+
+(deftest ^:integration setup-and-add-agree-on-agents-md
+  ;; Setup ran whichever `wagoe` was on PATH. An older one ignored --modules and
+  ;; re-rendered AGENTS.md from its own template: camelCase API naming, no
+  ;; :public pitfall, a module table add then flipped back (BOU-577).
   (with-new-project
     (fn [dir]
-      (let [before     (slurp (fs/file dir "AGENTS.md"))
-            [exit out] (binding [setup/*wagoe-cli* nil]
-                         (run-setup dir "" "--payment" "mock"))]
-        (is (nil? exit) out)
-        (is (= before (slurp (fs/file dir "AGENTS.md"))))
-        (is (str/includes? (next-steps out) "wagoe agents update"))))))
+      (let [agents   #(slurp (fs/file dir "AGENTS.md"))
+            outside  (outside-module-blocks (agents))
+            step     (fn [label]
+                       (testing label
+                         (is (= outside (outside-module-blocks (agents)))
+                             "nothing outside the module blocks changes")
+                         (is (= (cli-rendered-blocks dir) (module-blocks (agents)))
+                             "the blocks are what the CLI renders")))]
+        (let [[exit out] (run-setup dir "" "--payment" "mock")]
+          (is (nil? exit) out)
+          (is (str/includes? (installed-block dir) "- payments (") out))
+        (step "setup")
+        (apply process/shell {:dir (str dir) :out :string :err :string}
+               (concat (cli-command) ["add" "jobs"]))
+        (step "add")
+        (let [[exit out] (run-setup dir "" "--cache" "memory")]
+          (is (nil? exit) out)
+          (step "setup again"))))))

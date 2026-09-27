@@ -70,6 +70,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **`bb setup` rewrote AGENTS.md with an older CLI's template** (BOU-577). It now re-renders only the
+  module blocks, with the wagoe-cli its wagoe-tools ships; run `wagoe agents update` to repair a file.
 - **`wagoe add devtools` reads the dashboard port from `DASHBOARD_PORT`** (BOU-577), default 9999.
   Existing projects can replace the literal port with `#long #or [#env DASHBOARD_PORT 9999]`.
 - **Scaffolded migrations lost their indexes on SQLite and failed on PostgreSQL and MySQL** (BOU-569).
