@@ -43,6 +43,8 @@ for what is public API, what is internal, and how deprecations are announced.
   regenerate an older module's `shell/*persistence.clj` before adding a `date` field to it.
 - **Scaffolder field specs refuse an unknown modifier, and `required` with `optional`** (BOU-535).
   Fix any script that passes one; `indexed` now writes an index and `optional` is honoured.
+- **`bb scaffold generate --audit` and `--pagination` are removed** (BOU-483). No generator read
+  them. Drop them from any script that passes them.
 
 ### Fixed
 

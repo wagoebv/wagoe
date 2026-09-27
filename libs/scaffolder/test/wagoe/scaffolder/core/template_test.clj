@@ -68,14 +68,12 @@
     (let [request {:module-name "customer"
                    :entities [{:name "Customer"
                                :fields [{:name :email :type :email}]}]
-                   :interfaces {:http true}
-                   :features {:audit true}}
+                   :interfaces {:http true}}
           ctx (template/build-module-context request)]
       (is (= "customer" (:module-name ctx)))
       (is (= "Customer" (:module-pascal ctx)))
       (is (= 1 (count (:entities ctx))))
-      (is (true? (get-in ctx [:interfaces :http])))
-      (is (true? (get-in ctx [:features :audit]))))))
+      (is (true? (get-in ctx [:interfaces :http]))))))
 
 (deftest ^:unit a-date-schema-refuses-a-day-the-month-lacks
   ;; The regex took 2026-02-31, which the DATE column then refused: a 500.

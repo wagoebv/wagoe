@@ -408,8 +408,6 @@ Configure the provider via environment variables: `ANTHROPIC_API_KEY`, `OPENAI_A
 | `--[no-]http` | true | Generate the HTTP (REST API) routes |
 | `--[no-]web` | true | Generate the Web UI: `core/ui.clj`, `shell/web_handlers.clj`, and the module's `:web` route contribution |
 | `--public-api` | false | API routes and web page open to anyone; by default they require a signed-in user |
-| `--audit` | true | Include audit logging |
-| `--pagination` | true | Include pagination support |
 | `--output-dir` | `.` | Output directory |
 | `--force` | false | Overwrite existing files |
 | `--dry-run` | false | Preview without writing |
