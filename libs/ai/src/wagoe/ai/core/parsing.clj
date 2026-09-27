@@ -131,6 +131,12 @@
                                     (get f :values
                                          (get f "values"))))))))
 
+(defn- workflow?
+  "Whether `w` names a field and at least two distinct states, in order."
+  [{:keys [field states] :as w}]
+  (and (map? w) (string? field) (sequential? states) (>= (count states) 2)
+       (every? string? states) (apply distinct? states)))
+
 (defn parse-module-spec
   "Parse an AI-generated module specification JSON into a normalised map.
 
@@ -144,7 +150,7 @@
    The older singular shape — `entity` plus `fields` — is still read.
 
    Returns:
-     {:module-name :entities [{:name :fields :belongs-to?}] :http :web :public-api}, plus
+     {:module-name :entities [{:name :fields :belongs-to? :workflow?}] :http :web :public-api}, plus
      :entity and :fields for the first entity, or {:error str} on failure."
   [response-text]
   (let [parsed (parse-json-response response-text)]
@@ -165,9 +171,10 @@
           {:error "AI response fields must be an array"}
 
           :else
-          (let [entities (mapv (fn [{:keys [name fields belongs-to]}]
+          (let [entities (mapv (fn [{:keys [name fields belongs-to workflow]}]
                                  (cond-> {:name name :fields (mapv normalise-field fields)}
-                                   (string? belongs-to) (assoc :belongs-to belongs-to)))
+                                   (string? belongs-to) (assoc :belongs-to belongs-to)
+                                   (workflow? workflow) (assoc :workflow (select-keys workflow [:field :states]))))
                                entities)]
             {:module-name module-name
              :entity      (:name (first entities))

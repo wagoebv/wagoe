@@ -55,7 +55,8 @@ Output ONLY valid JSON with this exact structure:
      \"fields\": [
        {\"name\": \"field-name\", \"type\": \"string|text|int|decimal|boolean|email|uuid|enum|date|datetime|json\", \"required\": true|false, \"unique\": false, \"enum-values\": [\"draft\", \"sent\"]}
      ]},
-    {\"name\": \"ChildName\", \"belongs-to\": \"PascalCaseName\", \"fields\": [...]}
+    {\"name\": \"ChildName\", \"belongs-to\": \"PascalCaseName\", \"fields\": [...],
+     \"workflow\": {\"field\": \"status\", \"states\": [\"first\", \"second\"]}}
   ],
   \"http\": true,
   \"web\": true,
@@ -82,6 +83,7 @@ Rules:
 - valid field types: string, text, int, decimal, boolean, email, uuid, enum, date, datetime, json
 - date is a calendar day (a due date, a birthday); datetime is a moment in time (when something happened or is scheduled)
 - an \"enum\" field MUST also carry \"enum-values\": a non-empty array of kebab-case strings
+- a status the description walks through in order (an invoice entered, then delivered, then paid) is a \"workflow\" on its entity, not an enum field: {\"field\": \"status\", \"states\": [\"entered\", \"delivered\", \"paid\"]}, states in order, kebab-case, at least two. Leave workflow out otherwise
 - default required=true, unique=false unless stated otherwise
 - default http=true, web=true unless stated otherwise
 - default public-api=false: the API requires a signed-in user. Set it true only when the description says the API is public or open to anyone

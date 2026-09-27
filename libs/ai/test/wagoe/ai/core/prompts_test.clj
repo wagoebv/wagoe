@@ -18,6 +18,12 @@
     (is (str/includes? prompt "\"belongs-to\""))
     (is (str/includes? prompt "InvoiceLineItem"))))
 
+(deftest ^:unit the-scaffolding-prompt-asks-for-a-workflow
+  ;; BOU-569: an invoice status that moves entered -> delivered -> paid.
+  (let [prompt (prompts/build-scaffolding-system-prompt)]
+    (is (str/includes? prompt "\"workflow\""))
+    (is (str/includes? prompt "\"states\""))))
+
 (deftest ^:unit the-scaffolding-prompt-names-the-module-after-its-first-entity
   ;; `bb scaffold ai` names the module after the first entity; an example that
   ;; says otherwise teaches the model a name nobody uses (BOU-562).

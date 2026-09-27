@@ -432,3 +432,31 @@
                                                         [{:name "total-in-cents" :type "int" :required true}]
                                                         true true)))]
     (is (re-find #"total-in-cents\s+int" out) out)))
+
+(deftest ^:unit help-prints-the-usage
+  ;; BOU-569: `bb scaffold ai --help` answered "Unknown option".
+  (doseq [flag ["--help" "-h"]]
+    (let [{:keys [calls exit out]} (run-main [flag] spec-json (constantly {:exit 0}))]
+      (is (empty? calls) "nothing is parsed or generated")
+      (is (nil? exit))
+      (is (str/includes? out "bb scaffold ai") out)
+      (is (str/includes? out "--dry-run") "it lists the flags"))))
+
+(def ^:private workflow-json
+  (str "{\"module-name\":\"invoice\","
+       "\"entities\":[{\"name\":\"Invoice\","
+       "\"fields\":[{\"name\":\"number\",\"type\":\"string\",\"required\":true}],"
+       "\"workflow\":{\"field\":\"status\",\"states\":[\"entered\",\"delivered\",\"paid\"]}},"
+       "{\"name\":\"InvoiceLineItem\",\"belongs-to\":\"Invoice\","
+       "\"fields\":[{\"name\":\"quantity\",\"type\":\"int\",\"required\":true}],"
+       "\"workflow\":{\"field\":\"state\",\"states\":[\"open\",\"done\"]}}],"
+       "\"http\":true,\"web\":true}"))
+
+(deftest ^:unit a-workflow-in-the-spec-reaches-the-scaffolder
+  (let [[generate entity] (scaffold/build-ai-commands (#'scaffold/parse-ai-module-spec workflow-json))
+        after (fn [cmd flag] (second (drop-while #(not= flag %) cmd)))]
+    (is (= "status:entered>delivered>paid" (after generate "--workflow")))
+    (is (= "state:open>done" (after entity "--workflow"))))
+  (testing "an entity without one gets no flag"
+    (is (not-any? #{"--workflow"} (apply concat (scaffold/build-ai-commands
+                                                 (#'scaffold/parse-ai-module-spec multi-entity-json)))))))
