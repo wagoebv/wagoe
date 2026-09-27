@@ -1,5 +1,6 @@
 (ns wagoe.tools.help-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [babashka.fs :as fs]
+            [clojure.test :refer [deftest is testing]]
             [clojure.java.io :as io]
             [clojure.string :as str]
             [wagoe.tools.check]
@@ -146,8 +147,23 @@
       (is (not-any? :fix results))))
 
   (testing "the message still says where each would go, so it teaches"
-    (is (re-find #"resources/migrations/" (:msg (first (#'help/check-migrations)))))
-    (is (re-find #"resources/seeds/dev\.edn" (:msg (first (#'help/check-seeds)))))))
+    (is (re-find #"resources/seeds/dev\.edn" (:msg (first (#'help/check-seeds))))))
+
+  (testing "and names migrations/, the directory the migrator reads (BOU-489)"
+    (let [empty-project (str (fs/create-temp-dir))
+          msg           (:msg (first (#'help/check-migrations empty-project)))]
+      (is (re-find #"migrations/" msg))
+      (is (not (re-find #"resources/migrations" msg)) msg))))
+
+(deftest ^:unit check-migrations-refuses-the-split-the-migrator-refuses
+  (let [root (fs/create-temp-dir)]
+    (doseq [dir ["migrations" "resources/migrations"]]
+      (fs/create-dirs (fs/path root dir)))
+    (spit (str (fs/path root "migrations/20260101000000-a.up.sql")) "SELECT 1;")
+    (spit (str (fs/path root "resources/migrations/20260102000000-b.up.sql")) "SELECT 1;")
+    (let [[result] (#'help/check-migrations (str root))]
+      (is (= :error (:level result)) (pr-str result))
+      (is (:fix result)))))
 
 (deftest ^:unit guide-next-is-silent-on-a-healthy-project
   ;; The ticket's own done criterion: "there is one answer, and it contains no
