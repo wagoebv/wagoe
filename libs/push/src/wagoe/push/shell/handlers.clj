@@ -11,7 +11,7 @@
 
 (defn register-device-handler
   [{:keys [device-store]} request]
-  (let [user-id (get-in request [:identity :user-id])
+  (let [user-id (get-in request [:user :id])
         body    (:body-params request)]
     (if-not (schema/valid-device-info? body)
       (resp/bad-request {:errors (device-info-explainer body)})
@@ -21,14 +21,14 @@
 
 (defn unregister-device-handler
   [{:keys [device-store]} request]
-  (let [user-id (get-in request [:identity :user-id])
+  (let [user-id (get-in request [:user :id])
         token   (get-in request [:path-params :token])]
     (ports/unregister-device! device-store user-id token)
     {:status 204 :headers {} :body nil}))
 
 (defn list-devices-handler
   [{:keys [device-store]} request]
-  (let [user-id (get-in request [:identity :user-id])
+  (let [user-id (get-in request [:user :id])
         devices (ports/get-user-devices device-store user-id)]
     (resp/response {:devices devices})))
 
@@ -65,10 +65,15 @@
         stats    (ports/get-push-stats analytics-store notif-id {})]
     (resp/response (analytics/calculate-rates stats))))
 
-(defn push-routes [deps]
+(defn push-routes
+  "Every route but the callback requires a signed-in user, which the platform
+   enforces. The callback is public: a device posts it, and the HMAC in its body
+   is the credential (BOU-568)."
+  [deps]
   ["/api/push"
-   ["/devices"      {:post   (partial register-device-handler deps)
-                     :get    (partial list-devices-handler deps)}]
-   ["/devices/:token" {:delete (partial unregister-device-handler deps)}]
-   ["/callback"      {:post   (partial analytics-callback-handler deps)}]
-   ["/stats/:notification-id" {:get (partial push-stats-handler deps)}]])
+   ["/devices"      {:post   {:handler (partial register-device-handler deps)}
+                     :get    {:handler (partial list-devices-handler deps)}}]
+   ["/devices/:token" {:delete {:handler (partial unregister-device-handler deps)}}]
+   ["/callback"      {:post   {:handler (partial analytics-callback-handler deps)
+                               :public  true}}]
+   ["/stats/:notification-id" {:get {:handler (partial push-stats-handler deps)}}]])

@@ -442,7 +442,7 @@
                                                  :parameters {:body [:map {:closed true}
                                                                      [:role [:enum "admin" "superuser" "internal-auditor"]]
                                                                      [:age [:int {:min 18 :max 120}]]]}}}]]
-                                        {})
+                                       {})
         raw-for (fn [body-params]
                   (let [resp (handler {:request-method :post :uri "/users" :headers {}
                                        :body-params body-params})]
@@ -993,3 +993,61 @@
           "immutable is for content-hashed filenames, which these are not")
       (is (not (re-find #"(?i)add_header\s+Cache-Control" directives))
           "the app owns Cache-Control for its own assets"))))
+
+;; =============================================================================
+;; Default-deny (BOU-568)
+;; =============================================================================
+
+(defn- guarded-handler
+  "Routes compiled the way `:wagoe/http-handler` compiles them: with an
+   authentication slot. `authenticate` sets `:user` when the request says so."
+  [& [app-middleware]]
+  (let [authenticate (fn [h] (fn [req] (h (cond-> req (:signed-in req) (assoc :user {:id 1})))))]
+    (reitit/compile-routes
+     [["/api/v1/things"
+       {:post {:handler    (fn [_] {:status 201 :body {:ok true}})
+               :parameters {:body [:map [:name :string]]}}}]
+      ["/api/v1/open" {:public true
+                       :get    {:handler (fn [_] {:status 200 :body {:ok true}})}}]
+      ["/api/v1/mixed" {:get  {:handler (fn [_] {:status 200 :body {}}) :public true}
+                        :post {:handler (fn [_] {:status 200 :body {}})}}]
+      ["/web/page" {:get {:handler (fn [_] {:status 200 :body "page"})}}]]
+     {:swagger-enabled false
+      :authentication  {:middleware [authenticate]}
+      :middleware      (or app-middleware [])})))
+
+(deftest ^:unit ^:security a-route-without-public-refuses-anonymous-callers
+  (let [handler (guarded-handler)]
+    (testing "an API route answers 401, in the shape require-authenticated uses, encoded"
+      (let [resp (handler {:request-method :post :uri "/api/v1/things"
+                           :headers {"accept" "application/json" "x-correlation-id" "c-1"}
+                           :body-params {:name "x"}})]
+        (is (= 401 (:status resp)))
+        (is (= {:error "unauthorized" :message "Authentication required" :correlation-id "c-1"}
+               (json/parse-string (slurp (:body resp)) true)))
+        (is (= "c-1" (get-in resp [:headers "X-Correlation-ID"])))))
+    (testing "before the body is checked: an anonymous caller is not told what a valid one looks like"
+      (is (= 401 (:status (handler {:request-method :post :uri "/api/v1/things"
+                                    :body-params {}})))))
+    (testing "a web page sends the browser to the login form"
+      (let [resp (handler {:request-method :get :uri "/web/page"})]
+        (is (= 302 (:status resp)))
+        (is (= "/web/login?return-to=%2Fweb%2Fpage" (get-in resp [:headers "Location"])))))
+    (testing "a signed-in caller gets through"
+      (is (= 201 (:status (handler {:request-method :post :uri "/api/v1/things"
+                                    :signed-in true :body-params {:name "x"}})))))))
+
+(deftest ^:unit ^:security public-true-opens-a-route-at-either-level
+  (let [handler (guarded-handler)]
+    (is (= 200 (:status (handler {:request-method :get :uri "/api/v1/open"}))) "on the path")
+    (is (= 200 (:status (handler {:request-method :get :uri "/api/v1/mixed"}))) "on the method")
+    (is (= 401 (:status (handler {:request-method :post :uri "/api/v1/mixed"})))
+        "and only on that method")))
+
+(deftest ^:unit authentication-runs-before-the-applications-middleware
+  ;; Tenant membership enrichment is application middleware and reads
+  ;; [:user :id]; authentication has to have run by then (BOU-373).
+  (let [seen    (atom nil)
+        handler (guarded-handler [(fn [h] (fn [req] (reset! seen (:user req)) (h req)))])]
+    (handler {:request-method :get :uri "/api/v1/open" :signed-in true})
+    (is (= {:id 1} @seen))))

@@ -147,6 +147,9 @@ Call `ports/index-document!` from your module's service layer or event handler:
 
 ## HTTP Endpoints
 
+Searching takes a signed-in user; indexing, removing and the web UI take the
+admin role (BOU-568).
+
 ### API Endpoints (mounted at `/api/v1/search/...`)
 
 | Method | Path                                        | Action            |

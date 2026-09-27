@@ -488,6 +488,29 @@
         (is (vector? route))
         (is (string? (first route)))
         (is (map? (second route)))
-        (doseq [[_method config] (second route)]
+        (doseq [[_method config] (dissoc (second route) :middleware)]
           (is (contains? config :handler))
           (is (fn? (:handler config))))))))
+
+(deftest ^:contract ^:security tenant-routes-require-the-admin-role
+  ;; The platform refuses anyone not signed in; a signed-in user who is not an
+  ;; admin must not manage tenants either (BOU-568).
+  (let [routes  (:api (tenant-http/tenant-routes *mock-tenant-service* nil {}))
+        call    (fn [path method user]
+                  (let [data    (some (fn [[p d]] (when (= p path) d)) routes)
+                        handler (reduce (fn [h mw] (mw h))
+                                        (get-in data [method :handler])
+                                        (reverse (:middleware data)))]
+                    (handler {:request-method method
+                              :uri            (str "/api/v1" path)
+                              :path-params    {:id (str (:id sample-tenant-1))}
+                              :params         {}
+                              :user           user})))]
+    (doseq [[path method] [["/tenants" :get] ["/tenants" :post]
+                           ["/tenants/:id" :get] ["/tenants/:id" :put] ["/tenants/:id" :delete]
+                           ["/tenants/:id/suspend" :post] ["/tenants/:id/activate" :post]
+                           ["/tenants/:id/provision" :post]]]
+      (testing (str (name method) " " path)
+        (is (= 403 (:status (call path method {:id (UUID/randomUUID) :role :user}))))))
+    (testing "an admin gets through"
+      (is (= 200 (:status (call "/tenants" :get {:id (UUID/randomUUID) :role :admin})))))))

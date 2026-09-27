@@ -209,7 +209,8 @@ adapter (`store-file`, `retrieve-file`, `file-exists?`, `delete-file`,
 `(http-handlers/storage-routes svc {:base-path "/storage"})` returns the
 the module's **`:api` contribution** — a vector of Reitit route data. Paths
 carry NO `/api` prefix (versioning adds `/api/v1`). Mount via the module route
-mechanism (`:wagoe/storage-routes`):
+mechanism (`:wagoe/storage-routes`). Every endpoint requires a signed-in user,
+which the platform enforces (BOU-568):
 
 | Method | Path | Handler |
 |--------|------|---------|

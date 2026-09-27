@@ -143,13 +143,16 @@ Use `bootstrap-open?` before calling the membership service:
 ### HTTP routes (membership)
 
 ```
-POST   /tenants/:tenant-id/memberships          ; Invite user (admin only)
-GET    /tenants/:tenant-id/memberships          ; List members (admin only)
-GET    /tenants/:tenant-id/memberships/:id      ; Get membership (admin only)
-PUT    /tenants/:tenant-id/memberships/:id      ; Update role/status (admin only)
-DELETE /tenants/:tenant-id/memberships/:id      ; Revoke membership (admin only)
-POST   /memberships/:id/accept                  ; Accept invitation (authenticated user)
+POST   /tenants/:tenant-id/memberships          ; Invite user (tenant admin)
+GET    /tenants/:tenant-id/memberships          ; List members (tenant member)
+GET    /tenants/:tenant-id/memberships/:id      ; Get membership (tenant member)
+PUT    /tenants/:tenant-id/memberships/:id      ; Update role/status (tenant admin)
+DELETE /tenants/:tenant-id/memberships/:id      ; Revoke membership (tenant admin)
+POST   /memberships/:id/accept                  ; Accept invitation (the invitee only)
 ```
+
+A global admin passes every tenant check. The `/tenants` routes themselves
+(create, update, suspend, provision) take the global admin role (BOU-568).
 
 ---
 

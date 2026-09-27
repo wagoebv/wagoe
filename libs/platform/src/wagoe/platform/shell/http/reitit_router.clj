@@ -25,6 +25,7 @@
             [ring.util.codec :as codec]
             [ring.util.io :as ring-io]
             [ring.util.request :as ring-request]
+            [wagoe.platform.core.http.access :as access]
             [wagoe.platform.shell.http.interceptors :as http-interceptors])
   (:import [java.io ByteArrayInputStream ByteArrayOutputStream]
            [java.security MessageDigest]
@@ -241,28 +242,52 @@
          (log-error e request "Unhandled exception at the HTTP boundary")
          (server-error-response))}))))
 
+(def ^:private require-authentication
+  "Refuses a request without a `:user`, unless the endpoint is `:public true`.
+
+   Compiled per endpoint from its merged route data, so `:public` may sit on
+   the method, the path or a parent route (BOU-568)."
+  {:name    ::require-authentication
+   :compile (fn [data _opts]
+              (when-not (access/public? data)
+                (fn [handler]
+                  (fn [request]
+                    (if (:user request)
+                      (handler request)
+                      (access/unauthorized-response
+                       "Authentication required" request
+                       (access/correlation-id request (str (random-uuid)))))))))})
+
 (defn- create-default-middleware
   "Create default middleware stack for Reitit router.
+
+  `:authentication` in `config`, when present, is `{:middleware [..]}`: what
+  sets `:user`, followed by the default-deny guard. Both run before the body
+  is decoded and coerced, so an anonymous caller is told 401 rather than
+  what was wrong with a body it may not send.
 
   Returns:
     Vector of middleware for Reitit router"
   [config]
-  [;; Query params & form params
-   parameters/parameters-middleware
-   ;; Content negotiation
-   muuntaja/format-negotiate-middleware
-   ;; Encoding response body
-   muuntaja/format-response-middleware
-   ;; Exception handling — after response formatting so its bodies are
-   ;; negotiated, before request decoding and coercion so their failures are
-   ;; caught rather than thrown past everything.
-   (create-exception-middleware config)
-   ;; Decoding request body
-   muuntaja/format-request-middleware
-   ;; Coercing request parameters
-   coercion/coerce-request-middleware
-   ;; Coercing response bodies
-   coercion/coerce-response-middleware])
+  (let [authentication (:authentication config)]
+    (-> [;; Query params & form params
+         parameters/parameters-middleware
+         ;; Content negotiation
+         muuntaja/format-negotiate-middleware
+         ;; Encoding response body
+         muuntaja/format-response-middleware
+         ;; Exception handling — after response formatting so its bodies are
+         ;; negotiated, before request decoding and coercion so their failures are
+         ;; caught rather than thrown past everything.
+         (create-exception-middleware config)]
+        (into (:middleware authentication))
+        (into (when authentication [require-authentication]))
+        (into [;; Decoding request body
+               muuntaja/format-request-middleware
+               ;; Coercing request parameters
+               coercion/coerce-request-middleware
+               ;; Coercing response bodies
+               coercion/coerce-response-middleware]))))
 
 ;; =============================================================================
 ;; Route conflicts
@@ -443,11 +468,13 @@
   [swagger-data]
   [["/swagger.json"
     {:get {:no-doc true
+           :public true
            :swagger swagger-data
            :handler (swagger/create-swagger-handler)}}]
 
    ["/api-docs/*"
     {:get {:no-doc true
+           :public true
            :handler (swagger-ui/create-swagger-ui-handler
                      {:url "/swagger.json"
                       :config {:validatorUrl nil}})}}]])

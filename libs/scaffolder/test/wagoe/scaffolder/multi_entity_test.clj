@@ -759,6 +759,11 @@
           (is (str/includes? (get (files-under dir) "src/bou539pub/billing/shell/http.clj") "public")))
         (testing "entity --public-api"
           (is (= 200 (:status ((http-caller lines :user nil) :get "/invoice-line-items" nil)))))
+        (testing "every endpoint says :public true, or the platform refuses it (BOU-568)"
+          (doseq [[path data] (concat invoices lines)
+                  method      [:get :post :put :delete]
+                  :when       (contains? data method)]
+            (is (true? (get-in data [method :public])) (str method " " path))))
         (testing "the module's other entity keeps its guard"
           (let [first-entity (:api (@(ns-resolve 'bou539pub2.billing.shell.http 'billing-routes) nil {}))]
             (is (= 401 (:status ((http-caller first-entity :user nil) :get "/invoices" nil))))))))
@@ -863,6 +868,7 @@
             web  (:web ((at "shell.http" 'billing-routes) svc {}))]
         (if public?
           (testing "--public-api opens the page too"
+            (is (true? (get-in (first web) [1 :get :public])))
             (let [resp ((web-caller web :user nil) "/web/invoices")]
               (is (= 200 (:status resp)))
               (is (str/includes? (:body resp) "INV-77"))))

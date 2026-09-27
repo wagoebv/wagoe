@@ -223,6 +223,22 @@ that attaches the security stack, interceptors, coercion and Swagger.
 
 Health checks and `/swagger.json` are mounted for you.
 
+### Authentication is the default
+
+Every route requires a signed-in user (`:user` on the request) unless its
+route data says `:public true`. An anonymous caller gets a 401, or a redirect
+to `/web/login` for a `/web` page, before the body is decoded (BOU-568).
+`:public` may sit on the method or on the path:
+
+```clojure
+["/webhooks/stripe" {:post {:handler stripe-webhook :public true}}]  ; one method
+["/status"          {:public true :get {:handler status}}]           ; the whole path
+```
+
+Mark a route public only when something else is its credential: a login form,
+a signed webhook, a token in the path. Roles are still the module's to check;
+`wagoe.platform.core.http.access` has `admin?` and the 403 shape.
+
 ### Per-Route Interceptors
 
 ```clojure

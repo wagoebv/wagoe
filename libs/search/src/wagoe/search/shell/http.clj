@@ -10,8 +10,12 @@
    Admin Web UI (mounted under /web/admin):
      GET    /search                        — list all indices
      GET    /search/:index-id              — index detail + live search form
-     POST   /search/:index-id/search       — HTMX search results fragment"
+     POST   /search/:index-id/search       — HTMX search results fragment
+
+   Searching takes a signed-in user; indexing, removing and the admin pages
+   take the admin role (BOU-568)."
   (:require [wagoe.i18n.shell.middleware :as i18n-middleware]
+            [wagoe.platform.core.http.access :as access]
             [wagoe.i18n.shell.render :as i18n]
             [wagoe.search.ports :as ports]
             [wagoe.search.core.ui :as search-ui]
@@ -21,6 +25,15 @@
 ;; =============================================================================
 ;; Helpers
 ;; =============================================================================
+
+(defn- require-admin
+  "Admin role or 403; the platform has already refused anyone not signed in."
+  [handler]
+  (fn [request]
+    (if (access/admin? request)
+      (handler request)
+      (access/forbidden-response "Admin role required" request
+                                 (access/correlation-id request (str (random-uuid)))))))
 
 (defn- parse-uuid-param
   [s param-name]
@@ -198,11 +211,13 @@
      engine - SearchService (ISearchEngine)"
   [engine]
   [["/search/documents"
-    {:post {:handler (fn [req] (handle-index-document engine req))
-            :summary "Index a search document"}}]
+    {:post {:handler    (fn [req] (handle-index-document engine req))
+            :middleware [require-admin]
+            :summary    "Index a search document"}}]
    ["/search/documents/:entity-type/:entity-id"
-    {:delete {:handler (fn [req] (handle-remove-document engine req))
-              :summary "Remove a search document"}}]
+    {:delete {:handler    (fn [req] (handle-remove-document engine req))
+              :middleware [require-admin]
+              :summary    "Remove a search document"}}]
    ;; After /search/documents: reitit matches literal segments before
    ;; parameters, but declaring the specific ones first says so to a reader.
    ["/search/:index-id"
@@ -222,11 +237,14 @@
      engine - SearchService (ISearchEngine)"
   [engine]
   [["/search"
-    {:get {:handler (fn [req] (handle-list-indices-web engine req))
+    {:middleware [require-admin]
+     :get {:handler (fn [req] (handle-list-indices-web engine req))
            :summary "Search indices admin page"}}]
    ["/search/:index-id"
-    {:get {:handler (fn [req] (handle-get-index-web engine req))
+    {:middleware [require-admin]
+     :get {:handler (fn [req] (handle-get-index-web engine req))
            :summary "Search index detail page"}}]
    ["/search/:index-id/search"
-    {:post {:handler (fn [req] (handle-search-fragment engine req))
+    {:middleware [require-admin]
+     :post {:handler (fn [req] (handle-search-fragment engine req))
             :summary "HTMX search results fragment"}}]])

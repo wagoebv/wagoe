@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Breaking
 
+- **Routes now require login unless `:public true`** (BOU-568). Mark any route that
+  must answer anonymous callers — a webhook, a public page — with `:public true`.
 - **`sortable-th` and `pagination` swap `outerHTML` by default** (BOU-386), so table refreshes stop nesting a
   duplicate container. If your handler returns only the target's contents, pass `:hx-swap "innerHTML"`.
 - **Workflow's tables ship as a migration, timestamps as `TIMESTAMP WITH TIME ZONE`** (BOU-502).

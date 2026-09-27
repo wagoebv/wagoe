@@ -592,24 +592,22 @@
         "the app's middleware is appended to the framework's pipeline, not substituted for it")
     (is (pos? (count framework)) "and that pipeline is not empty")))
 
-(deftest ^:unit authentication-middleware-runs-outermost
+(deftest ^:unit authentication-middleware-gets-its-own-slot
   ;; :auth-middleware is its own injection point rather than part of
-  ;; :extra-middleware, for the reason i18n is: position in the pipeline is
-  ;; platform's decision, not a consequence of which module sorted first.
-  ;;
-  ;; It has to be outermost. Tenant membership enrichment arrives via
-  ;; :extra-middleware and reads [:user :id], so anything that sets :user must
-  ;; already have run — before BOU-373 nothing did, and :tenant-membership was
-  ;; nil on every request (BOU-373).
+  ;; :extra-middleware: position in the pipeline is platform's decision, not a
+  ;; consequence of which module sorted first. The router runs it, and the
+  ;; default-deny guard, ahead of every other middleware in the app's stack —
+  ;; tenant membership enrichment reads [:user :id] (BOU-373, BOU-568).
   (let [auth   (fn [h] h)
         tenant (fn [h] h)
-        stack  (vec (:middleware (router-config-from
-                                  {:auth-middleware  [auth]
-                                   :extra-middleware [tenant]})))]
-    (is (= auth (first stack)) "authentication is the outermost middleware")
-    (is (< (.indexOf ^java.util.List stack auth)
-           (.indexOf ^java.util.List stack tenant))
-        "and runs before the tenant middleware that depends on it")))
+        cfg    (router-config-from {:auth-middleware  [auth]
+                                    :extra-middleware [tenant]})]
+    (is (= [auth] (get-in cfg [:authentication :middleware])))
+    (is (some #{tenant} (:middleware cfg)))
+    (is (not-any? #{auth} (:middleware cfg)) "and it is not run twice"))
+
+  (testing "with no authentication wired, the guard is still installed"
+    (is (= [] (get-in (router-config-from {}) [:authentication :middleware])))))
 
 (defmethod ig/init-key ::probe [_ v] (assoc v :started true))
 (defmethod ig/halt-key! ::probe [_ _] nil)

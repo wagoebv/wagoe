@@ -7,8 +7,13 @@
    - Getting a membership (GET /api/tenants/:tenant-id/memberships/:id)
    - Updating a membership role/status (PUT /api/tenants/:tenant-id/memberships/:id)
    - Revoking a membership (DELETE /api/tenants/:tenant-id/memberships/:id)
-   - Accepting an invitation (POST /api/memberships/:id/accept)"
-  (:require [wagoe.tenant.ports :as membership-ports]
+   - Accepting an invitation (POST /api/memberships/:id/accept)
+
+   Reading a tenant's memberships takes an active membership of that tenant;
+   changing them takes its admin role. A global admin may do both. Only the
+   invitee may accept an invitation (BOU-568)."
+  (:require [wagoe.platform.core.http.access :as access]
+            [wagoe.tenant.ports :as membership-ports]
             [cheshire.core :as json]
             [clojure.tools.logging :as log]))
 
@@ -35,6 +40,37 @@
     (java.util.UUID/fromString s)
     (catch IllegalArgumentException _
       nil)))
+
+(defn- require-tenant-role
+  "Middleware: the caller is a global admin, or an active member of the path's
+   tenant whose role is in `roles` (any role when `roles` is nil).
+
+   An unparseable tenant id passes through, and the handler answers 400."
+  [membership-service roles]
+  (fn [handler]
+    (fn [request]
+      (let [tenant-id (some-> (get-in request [:path-params :tenant-id]) parse-uuid-safe)
+            user-id   (get-in request [:user :id])
+            member    (when (and tenant-id user-id)
+                        (membership-ports/get-active-membership
+                         membership-service user-id tenant-id))]
+        (if (or (nil? tenant-id)
+                (access/admin? request)
+                (and member (or (nil? roles) (contains? roles (:role member)))))
+          (handler request)
+          (access/forbidden-response
+           (if roles "Tenant admin role required" "Tenant membership required")
+           request (access/correlation-id request (str (random-uuid)))))))))
+
+(defn- membership-in-tenant
+  "The membership `membership-id`, or a :not-found throw when it belongs to a
+   tenant other than `tenant-id` — otherwise an admin of one tenant could act
+   on another's memberships by naming their own tenant in the path."
+  [membership-service tenant-id membership-id]
+  (let [membership (membership-ports/get-membership membership-service membership-id)]
+    (if (= tenant-id (:tenant-id membership))
+      membership
+      (throw (ex-info "Membership not found" {:type :not-found})))))
 
 ;; =============================================================================
 ;; Handlers
@@ -114,8 +150,7 @@
           (error-response 400 "Invalid membership ID format")
 
           :else
-          (let [membership (membership-ports/get-membership membership-service membership-id)]
-            (json-response 200 membership))))
+          (json-response 200 (membership-in-tenant membership-service tenant-id membership-id))))
       (catch clojure.lang.ExceptionInfo e
         (let [{:keys [type]} (ex-data e)]
           (if (= type :not-found)
@@ -157,7 +192,8 @@
               (error-response 400 "Invalid status — must be suspended or revoked")
 
               :else
-              (let [result
+              (let [_ (membership-in-tenant membership-service tenant-id membership-id)
+                    result
                     (cond
                       role   (membership-ports/update-member-role membership-service membership-id role)
                       status (case status
@@ -195,6 +231,7 @@
 
           :else
           (do
+            (membership-in-tenant membership-service tenant-id membership-id)
             (membership-ports/revoke-member membership-service membership-id)
             (json-response 200 {:message "Membership revoked successfully"}))))
       (catch clojure.lang.ExceptionInfo e
@@ -217,8 +254,10 @@
             membership-id     (parse-uuid-safe membership-id-str)]
         (if-not membership-id
           (error-response 400 "Invalid membership ID format")
-          (let [membership (membership-ports/accept-invitation membership-service membership-id)]
-            (json-response 200 membership))))
+          (let [invited (membership-ports/get-membership membership-service membership-id)]
+            (if (= (get-in request [:user :id]) (:user-id invited))
+              (json-response 200 (membership-ports/accept-invitation membership-service membership-id))
+              (error-response 403 "Only the invited user may accept this invitation")))))
       (catch clojure.lang.ExceptionInfo e
         (let [{:keys [type]} (ex-data e)]
           (case type
@@ -239,42 +278,49 @@
   "Membership's contribution to the route table: Reitit route data under
    :api, at paths relative to /api/v1."
   [membership-service]
-  {:api
-   [["/tenants/:tenant-id/memberships"
-     {:post {:handler     (invite-user-handler membership-service)
-             :summary     "Invite user to tenant"
-             :tags        ["memberships"]
-             :responses   {201 {:description "Membership created"}
-                           400 {:description "Validation error"}
-                           409 {:description "Membership already exists"}}}
-      :get  {:handler     (list-members-handler membership-service)
-             :summary     "List tenant members"
-             :tags        ["memberships"]
-             :responses   {200 {:description "List of memberships"}
-                           400 {:description "Bad request"}}}}]
+  (let [member (require-tenant-role membership-service nil)
+        admin  (require-tenant-role membership-service #{:admin})]
+    {:api
+     [["/tenants/:tenant-id/memberships"
+       {:post {:handler     (invite-user-handler membership-service)
+               :middleware  [admin]
+               :summary     "Invite user to tenant"
+               :tags        ["memberships"]
+               :responses   {201 {:description "Membership created"}
+                             400 {:description "Validation error"}
+                             409 {:description "Membership already exists"}}}
+        :get  {:handler     (list-members-handler membership-service)
+               :middleware  [member]
+               :summary     "List tenant members"
+               :tags        ["memberships"]
+               :responses   {200 {:description "List of memberships"}
+                             400 {:description "Bad request"}}}}]
 
-    ["/tenants/:tenant-id/memberships/:id"
-     {:get    {:handler   (get-membership-handler membership-service)
-               :summary   "Get membership by ID"
-               :tags      ["memberships"]
-               :responses {200 {:description "Membership details"}
-                           404 {:description "Membership not found"}}}
-      :put    {:handler   (update-membership-handler membership-service)
-               :summary   "Update membership role or status"
-               :tags      ["memberships"]
-               :responses {200 {:description "Membership updated"}
-                           400 {:description "Validation error"}
-                           404 {:description "Membership not found"}}}
-      :delete {:handler   (revoke-member-handler membership-service)
-               :summary   "Revoke membership"
-               :tags      ["memberships"]
-               :responses {200 {:description "Membership revoked"}
-                           404 {:description "Membership not found"}}}}]
+      ["/tenants/:tenant-id/memberships/:id"
+       {:get    {:handler   (get-membership-handler membership-service)
+                 :middleware [member]
+                 :summary   "Get membership by ID"
+                 :tags      ["memberships"]
+                 :responses {200 {:description "Membership details"}
+                             404 {:description "Membership not found"}}}
+        :put    {:handler   (update-membership-handler membership-service)
+                 :middleware [admin]
+                 :summary   "Update membership role or status"
+                 :tags      ["memberships"]
+                 :responses {200 {:description "Membership updated"}
+                             400 {:description "Validation error"}
+                             404 {:description "Membership not found"}}}
+        :delete {:handler   (revoke-member-handler membership-service)
+                 :middleware [admin]
+                 :summary   "Revoke membership"
+                 :tags      ["memberships"]
+                 :responses {200 {:description "Membership revoked"}
+                             404 {:description "Membership not found"}}}}]
 
-    ["/memberships/:id/accept"
-     {:post {:handler   (accept-invitation-handler membership-service)
-             :summary   "Accept membership invitation"
-             :tags      ["memberships"]
-             :responses {200 {:description "Invitation accepted"}
-                         400 {:description "Invitation already accepted or invalid status"}
-                         404 {:description "Membership not found"}}}}]]})
+      ["/memberships/:id/accept"
+       {:post {:handler   (accept-invitation-handler membership-service)
+               :summary   "Accept membership invitation"
+               :tags      ["memberships"]
+               :responses {200 {:description "Invitation accepted"}
+                           400 {:description "Invitation already accepted or invalid status"}
+                           404 {:description "Membership not found"}}}}]]}))

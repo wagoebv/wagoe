@@ -9,6 +9,7 @@
   (:require [wagoe.user.ports :as ports]
             [wagoe.user.shell.auth :as auth-shell]
             [wagoe.core.utils.type-conversion :as type-conv]
+            [wagoe.platform.core.http.access :as access]
             [clojure.string :as str]
             [clojure.tools.logging :as log]))
 
@@ -84,68 +85,20 @@
    (some-> (get-in request [:cookies "session-token" :value]) decode-token)))
 
 (defn create-unauthorized-response
-  "Creates standardized 401 Unauthorized response.
-   
-   For web UI requests (path starts with /web), redirects to login page.
-   For API requests, returns JSON error response.
-   
-   Args:
-     message: Error message string
-     reason: Keyword reason code
-     request: Optional request map to determine response type
-     
-   Returns:
-     Ring response map"
-  ([message reason]
-   (create-unauthorized-response message reason nil))
-  ([message reason request]
-   (if (and request (str/starts-with? (get request :uri "") "/web"))
-     ;; Web UI request - redirect to login with return-to parameter
-     (let [return-to (:uri request)
-           login-url (str "/web/login?return-to=" (java.net.URLEncoder/encode return-to "UTF-8"))]
-       {:status  302
-        :headers {"Location" login-url}
-        :body    ""})
-     ;; API request - return JSON error
-     {:status  401
-      :headers {"Content-Type" "application/json"}
-      :body    {:type   "authentication-required"
-                :title  "Authentication Required"
-                :status 401
-                :detail message
-                :reason reason}})))
+  "401 for an API request; a /web request is redirected to the login page.
+   The shape is platform's, shared with its default-deny guard (BOU-568).
+   `_reason` is no longer sent: one 401 shape framework-wide."
+  ([message reason] (create-unauthorized-response message reason nil))
+  ([message _reason request]
+   (access/unauthorized-response message request
+                                 (access/correlation-id request (str (random-uuid))))))
 
 (defn create-forbidden-response
-  "Creates standardized 403 Forbidden response.
-   
-   For web UI requests (path starts with /web), redirects to login page.
-   For API requests, returns JSON error response.
-   
-   Args:
-     message: Error message string
-     reason: Keyword reason code
-     request: Optional request map to determine response type
-     
-   Returns:
-     Ring response map"
-  ([message reason]
-   (create-forbidden-response message reason nil))
-  ([message reason request]
-   (if (and request (str/starts-with? (get request :uri "") "/web"))
-     ;; Web UI request - redirect to login with return-to parameter (forbidden = not logged in or insufficient perms)
-     (let [return-to (:uri request)
-           login-url (str "/web/login?return-to=" (java.net.URLEncoder/encode return-to "UTF-8"))]
-       {:status  302
-        :headers {"Location" login-url}
-        :body    ""})
-     ;; API request - return JSON error
-     {:status  403
-      :headers {"Content-Type" "application/json"}
-      :body    {:type   "access-forbidden"
-                :title  "Access Forbidden"
-                :status 403
-                :detail message
-                :reason reason}})))
+  "403 for an API request; a /web request is redirected to the login page."
+  ([message reason] (create-forbidden-response message reason nil))
+  ([message _reason request]
+   (access/forbidden-response message request
+                              (access/correlation-id request (str (random-uuid))))))
 
 ;; =============================================================================
 ;; JWT Authentication Middleware
