@@ -4,12 +4,21 @@
    Usage from user.clj:
      Wrap public REPL functions with try/catch that calls handle-repl-error!
      The zero-arity (fix!) reads from last-exception*."
-  (:require [wagoe.devtools.core.error-classifier :as classifier]
+  (:require [integrant.repl.state :as state]
+            [wagoe.devtools.core.error-classifier :as classifier]
             [wagoe.devtools.core.error-enricher :as enricher]
             [wagoe.devtools.core.error-formatter :as formatter]
             [wagoe.devtools.shell.dashboard.pages.errors :as dashboard-errors]))
 
 (defonce last-exception* (atom nil))
+
+(defn dashboard-port
+  "The port the dev dashboard serves on, else the one it is configured for,
+   else nil. Jetty may have moved it off a busy port, so the running system
+   wins over the config."
+  []
+  (or (get-in state/system [:wagoe/dashboard :port])
+      (get-in state/config [:wagoe/dashboard :port])))
 
 (defn handle-repl-error!
   "Run the full error pipeline on an exception and print the result.
@@ -26,7 +35,7 @@
      (reset! last-exception* exception)
      (let [classified (classifier/classify exception)]
        (if (:code classified)
-         (let [enriched  (enricher/enrich classified)
+         (let [enriched  (enricher/enrich classified {:dashboard-port (dashboard-port)})
                formatted (formatter/format-enriched-error enriched {:guidance-level guidance-level})]
            (dashboard-errors/record-error!
             {:code         (:code enriched)

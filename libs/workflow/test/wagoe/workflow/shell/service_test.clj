@@ -315,6 +315,44 @@
       (testing ":on-any-transition hook fires after every successful transition"
         (is (= 1 (count @any-calls)))))))
 
+(defn- documented-hooks
+  "The `:hooks` example under \"Lifecycle Hooks\" in the library's AGENTS.md,
+   evaluated with its three side effects bound to `notify!`, `release!` and
+   `sync!`."
+  [notify! release! sync!]
+  (let [doc   (slurp "libs/workflow/AGENTS.md")
+        after (subs doc (.indexOf ^String doc "## Lifecycle Hooks"))
+        block (second (re-find #"(?s)```clojure\n(.*?)```" after))
+        form  (read-string (str "{" block "}"))]
+    ((eval `(fn [~'notify-finance! ~'release-reservation! ~'sync-external!]
+              ~form))
+     notify! release! sync!)))
+
+(deftest ^:unit the-documented-hook-example-runs
+  ;; BOU-561: the docs showed (fn [instance]); the schema wants a vector of
+  ;; 3-arity fns, so the example failed to register.
+  (let [calls (atom [])
+        hooks (:hooks (documented-hooks
+                       (fn [inst] (swap! calls conj [:notify (:current-state inst)]))
+                       (fn [inst] (swap! calls conj [:release (:current-state inst)]))
+                       (fn [ae ctx] (swap! calls conj [:sync (:to-state ae) ctx]))))]
+    (registry/register-workflow!
+     {:id            :documented-hooks
+      :initial-state :pending
+      :states        #{:pending :paid}
+      :transitions   [{:from :pending :to :paid}]
+      :hooks         hooks})
+    (let [svc      (service/create-workflow-service (create-memory-store) *registry* nil nil)
+          instance (ports/start-workflow! svc {:workflow-id :documented-hooks
+                                               :entity-type :order
+                                               :entity-id   (UUID/randomUUID)})]
+      (is (:success? (ports/transition! svc {:instance-id (:id instance)
+                                             :transition  :paid
+                                             :actor-roles []
+                                             :context     {:by "test"}})))
+      (is (= [[:release :paid] [:notify :paid] [:sync :paid {:by "test"}]]
+             @calls)))))
+
 ;; =============================================================================
 ;; process-auto-transitions!
 ;; =============================================================================

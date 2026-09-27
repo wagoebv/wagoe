@@ -39,6 +39,8 @@ for what is public API, what is internal, and how deprecations are announced.
   Set `:level`/`:root-level` as wanted; copy `logback.xml`, `:provider :slf4j` and `:mcp` `:jvm-opts` from `wagoe new`.
 - **`register-user` throws `:validation-error` for a password-policy refusal** (BOU-552), not
   `:password-policy-violation`. Match on the new type; `:violations` is unchanged.
+- **The workflow API answers 401 without a session** (BOU-561); it was open. Send a session or
+  bearer token; a direct `workflow-routes` caller now passes the user service as a second argument.
 - **Scaffolded APIs and list pages require a signed-in user** (BOU-539). Pass `--public-api` to
   open them; for older modules, regenerate `shell/*http.clj` or add the guards by hand.
 - **Scaffolder `date` fields are a `DATE`, not a timestamp** (BOU-547). Use `datetime` for a timestamp;

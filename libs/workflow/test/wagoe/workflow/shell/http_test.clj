@@ -46,7 +46,8 @@
         registry (registry/create-workflow-registry)
         svc      (service/create-workflow-service store registry)
         handler  ((user-middleware/authenticate-if-present ::jwt-needs-no-service)
-                  (reitit/compile-routes (sut/workflow-routes svc) {}))]
+                  (reitit/compile-routes
+                   (sut/workflow-routes svc ::jwt-needs-no-service) {}))]
     (binding [*handler* handler *service* svc]
       (f)))
   (registry/clear-registry!))
@@ -107,12 +108,51 @@
         (is (= ["admin"] (get-in body [:auditEntry :actorRoles])))
         (is (some? (get-in body [:auditEntry :actorId])))))))
 
-(deftest ^:unit a-permissioned-transition-is-refused-for-an-anonymous-caller
-  ;; The counterpart, so the test above cannot pass by handing everyone
+(defn- get-uri
+  ([uri] (get-uri uri nil))
+  ([uri token]
+   (*handler* (cond-> {:request-method :get :uri uri :headers {}}
+                token (assoc-in [:headers "authorization"] (str "Bearer " token))))))
+
+(def ^:private start-body
+  {:workflowId "invoice-workflow" :entityType "invoice"})
+
+(defn- call-route
+  "Each API route, called with `token` (nil for none)."
+  [route token]
+  (let [id (:id (new-instance))]
+    (case route
+      :start      (post "/workflow/instances"
+                        (assoc start-body :entityId (str (UUID/randomUUID)))
+                        token)
+      :get        (get-uri (str "/workflow/instances/" id) token)
+      :audit      (get-uri (str "/workflow/instances/" id "/audit") token)
+      :transition (post (str "/workflow/instances/" id "/transition")
+                        {:transition "delivered"}
+                        token))))
+
+(def ^:private route-success
+  {:start 201 :get 200 :audit 200 :transition 200})
+
+(deftest ^:unit every-api-route-refuses-an-anonymous-caller
+  ;; BOU-561: the web routes mounted auth, the API routes did not.
+  (doseq [route (keys route-success)]
+    (testing (name route)
+      (is (= 401 (:status (call-route route nil)))))))
+
+(deftest ^:unit every-api-route-serves-an-authenticated-caller
+  (doseq [[route status] route-success]
+    (testing (name route)
+      (is (= status (:status (call-route route (admin-token))))))))
+
+(deftest ^:unit a-permissioned-transition-is-refused-for-a-caller-without-the-role
+  ;; The counterpart, so the admin test cannot pass by handing everyone
   ;; every role.
-  (let [instance (new-instance)
-        response (post (str "/workflow/instances/" (:id instance) "/transition")
-                       {:transition "delivered"})]
+  (let [token    (auth-shell/create-jwt-token
+                  {:id (UUID/randomUUID) :email "u@example.com" :role :user} 1)
+        response (post (str "/workflow/instances/" (:id (new-instance)) "/transition")
+                       {:transition "delivered"}
+                       token)]
     (is (= 422 (:status response)))
     (is (= "insufficient-permissions" (get-in (body-data response) [:error :type])))))
 
