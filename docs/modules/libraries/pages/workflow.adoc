@@ -65,8 +65,52 @@ Provides permission-based transitions, automatic audit trails, and optional side
                      :label "Confirm Delivery"}
                     {:from :pending :to :cancelled
                      :auto?        true
-                     :side-effects [:notify-cancellation]}]})
+                     :side-effects [:notify-cancellation]}]
+   :guards         {:payment-confirmed (fn [{:keys [payment-status]}]
+                                         (= :confirmed payment-status))}})
 ----
+
+== Guards
+
+A guard takes one map and returns truthy (allow) or falsy (reject).
+Declare it under `:guards` in the workflow definition.
+The map holds:
+
+* every key of the request's `:context`
+* `:workflow/instance`, the stored instance
+* `:workflow/entity`, a delay, when the workflow has an `:entity-loader`.
+Deref it to call `(entity-loader entity-type entity-id)`; it loads at most once per check.
+
+A caller's own `:workflow/*` context keys are dropped, so a request cannot forge either.
+A loader that throws fails the transition with an `:internal-error`; `available-transitions` shows the guarded transitions as unavailable and logs it.
+This guard refuses to deliver an invoice with no lines:
+
+[source,clojure]
+----
+(def invoice-workflow
+  {:id            :invoice-workflow
+   :initial-state :draft
+   :states        #{:draft :delivered}
+   :transitions   [{:from :draft :to :delivered :name :deliver :guard :has-lines?}]
+   ;; count-invoice-lines is yours, e.g. SELECT count(*) FROM invoice_lines WHERE invoice_id = ?
+   :entity-loader (fn [_entity-type invoice-id]
+                    {:line-count (count-invoice-lines invoice-id)})
+   :guards        {:has-lines? (fn [{:workflow/keys [entity]}]
+                                 (pos? (:line-count @entity)))}})
+----
+
+Guards passed to `create-workflow-service` apply to every workflow; a workflow's own `:guards` win.
+
+== Configuration
+
+`wagoe add workflow` writes this under `:active`, and it is all the module needs:
+
+[source,edn]
+----
+{:wagoe/workflow {}}
+----
+
+The module wires its own database context and schema, and the job queue when `:wagoe/jobs` is enabled.
 
 == HTTP API
 
@@ -82,14 +126,25 @@ Every route requires authentication (session or bearer token) and answers 401 wi
 
 == Available transitions
 
+`available-transitions` takes the instance id, the actor's roles and the guard context.
+Each transition out of the current state comes back with `:enabled?`, and a `:reason` when it is false.
+
 [source,clojure]
 ----
-(require '[wagoe.workflow.core.transitions :as transitions])
+(require '[wagoe.workflow.ports :as ports])
 
-;; Returns all transitions with :enabled? flag
-(transitions/available-transitions-with-status order-workflow :paid user-permissions)
-;=> [{:from :paid :to :shipped :label "Ship Order" :enabled? true}
-;    {:from :paid :to :cancelled :label "Cancel" :enabled? false :reason "Missing permission"}]
+(def instance
+  (ports/start-workflow! engine {:workflow-id :order-workflow
+                                 :entity-type :order
+                                 :entity-id   order-uuid}))
+
+(ports/available-transitions engine (:id instance) [:admin] {})
+;; => [{:id :paid :to :paid :label "Mark as Paid" :enabled? true}
+;;     {:id :cancelled :to :cancelled :enabled? true}]
+
+(ports/available-transitions engine (:id instance) [:viewer] {})
+;; => [{:id :paid :to :paid :label "Mark as Paid" :enabled? false :reason :insufficient-permissions}
+;;     {:id :cancelled :to :cancelled :enabled? true}]
 ----
 
 == Testing
