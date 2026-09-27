@@ -125,11 +125,14 @@
         ;; Validate input
         (if-let [errors (tenant-input-explainer tenant-input)]
           (validation-error-response errors)
-          ;; Create tenant
-          (let [result (tenant-ports/create-new-tenant tenant-service tenant-input)]
-            (if (:success? result)
-              (json-response 201 (:tenant result))
-              (error-response 400 (:error result))))))
+          ;; The service returns the tenant or throws a typed error.
+          (json-response 201 (tenant-ports/create-new-tenant tenant-service tenant-input))))
+      (catch clojure.lang.ExceptionInfo e
+        (case (:type (ex-data e))
+          :validation-error (error-response 400 (ex-message e))
+          :not-supported    (error-response 501 (ex-message e))
+          (do (log/error e "Failed to create tenant")
+              (error-response 500 "Internal server error"))))
       (catch Exception e
         (log/error e "Failed to create tenant")
         (error-response 500 "Internal server error")))))

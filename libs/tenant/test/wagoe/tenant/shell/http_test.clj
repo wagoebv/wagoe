@@ -13,7 +13,10 @@
    - JSON request/response handling
    - Validation errors
    - Error responses (400, 404, 500, 501)"
-  (:require [wagoe.tenant.shell.http :as tenant-http]
+  (:require [wagoe.platform.shell.adapters.database.factory :as factory]
+            [wagoe.tenant.shell.http :as tenant-http]
+            [wagoe.tenant.shell.persistence :as tenant-persistence]
+            [wagoe.tenant.shell.service :as tenant-service]
             [wagoe.tenant.ports :as tenant-ports]
             [cheshire.core :as json]
             [clojure.string :as str]
@@ -84,7 +87,7 @@
                             :created-at (java.time.Instant/now)
                             :updated-at (java.time.Instant/now))]
       (swap! tenants conj new-tenant)
-      {:success? true :tenant new-tenant}))
+      new-tenant))
 
   (update-existing-tenant [_ tenant-id update-data]
     (if-let [tenant (->> @tenants
@@ -514,3 +517,26 @@
         (is (= 403 (:status (call path method {:id (UUID/randomUUID) :role :user}))))))
     (testing "an admin gets through"
       (is (= 200 (:status (call "/tenants" :get {:id (UUID/randomUUID) :role :admin})))))))
+
+(deftest ^:integration create-tenant-answers-with-what-the-service-did
+  ;; Against the real service, which returns the tenant or throws — never the
+  ;; {:success? ...} map the mock above returns — so every create answered
+  ;; 400 with a null error while the row was written (BOU-576).
+  (let [ctx (factory/db-context
+             (factory/h2-config (str "mem:tenant_http_" (System/nanoTime) ";DB_CLOSE_DELAY=-1")))]
+    (try
+      (tenant-persistence/initialize-tenant-schema! ctx)
+      (let [service (tenant-service/create-tenant-service
+                     (tenant-persistence/create-tenant-repository ctx nil nil) {} nil nil nil)
+            create  (tenant-http/create-tenant-handler service)
+            post    #(create (make-request :post "/api/v1/tenants" {} {:name "Acme" :slug %}))]
+        (testing "a new slug is created"
+          (let [response (post "acme")]
+            (is (= 201 (:status response)))
+            (is (= "acme" (:slug (parse-json-body response))))))
+        (testing "a taken slug is refused, and says why"
+          (let [response (post "acme")]
+            (is (= 400 (:status response)))
+            (is (string? (:error (parse-json-body response))))
+            (is (= 1 (count (tenant-ports/list-tenants service {})))))))
+      (finally (factory/close-db-context! ctx)))))

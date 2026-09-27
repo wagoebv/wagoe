@@ -38,6 +38,7 @@
 (defmethod ig/init-key :wagoe/tenant-db-schema
   [_ {:keys [ctx]}]
   (log/info "Initializing tenant module database schema")
+  (provisioning/refuse-unsupported-database! ctx)
   (tenant-persistence/initialize-tenant-schema! ctx)
   (fan-out-tenant-migrations! ctx)
   (log/info "Tenant module database schema initialized")

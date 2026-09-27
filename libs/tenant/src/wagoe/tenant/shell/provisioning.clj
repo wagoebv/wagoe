@@ -153,6 +153,23 @@
     (or (= :postgresql dialect)
         (= "org.postgresql.Driver" driver))))
 
+(def ^:private engine-names
+  {:sqlite "SQLite" :mysql "MySQL"})
+
+(defn refuse-unsupported-database!
+  "Throw unless tenancy can run on `ctx`: PostgreSQL, or H2, which the test
+   profile uses with tenant rows but no per-tenant schemas. Anywhere else a
+   tenant could be created but never provisioned or selected (BOU-576)."
+  [ctx]
+  (let [dialect (protocols/dialect (:adapter ctx))]
+    (when-not (or (postgresql-context? ctx) (= :ansi dialect))
+      (let [engine (get engine-names dialect (some-> dialect name))]
+        (throw (ex-info (str "Tenancy needs PostgreSQL, which gives each tenant its own"
+                             " schema; this database is " engine ". Use :wagoe/postgresql,"
+                             " or remove :wagoe/tenant from the config.")
+                        {:type    :not-supported
+                         :dialect dialect}))))))
+
 (defn- create-schema!
   "Create PostgreSQL schema if it doesn't exist.
    

@@ -323,18 +323,18 @@ The four tenant-aware HTTP interceptors live in `wagoe.user.shell.http-intercept
 
 ## Database Tables
 
-`tenants` has no migration. `:wagoe/tenant-db-schema` creates it at boot from
-the Malli schema `wagoe.tenant.schema/Tenant`, which is its one source; change
-the table there. The admin cannot create tenants (`schema_name` is derived at
+None of the three tables has a migration. `:wagoe/tenant-db-schema` creates
+them at boot from the Malli schemas in `wagoe.tenant.schema`, which are their
+one source; change a table there. The two ADR-016 migrations that also created
+the membership tables run no statement since BOU-576. The admin cannot create tenants (`schema_name` is derived at
 provisioning), so the shipped admin config sets `:permissions {:create false}`;
 use `POST /api/v1/tenants` (BOU-534).
 
 ```sql
--- Created at boot from wagoe.tenant.schema/Tenant
+-- Created at boot from wagoe.tenant.schema
 tenants (id, slug, name, schema_name, status, settings JSONB,
          created_at, updated_at, deleted_at)
 
--- ADR-016 migrations
 tenant_memberships (id, tenant_id, user_id, role, status,
                     invited_at, accepted_at, created_at, updated_at)
                    UNIQUE(tenant_id, user_id)
@@ -345,17 +345,12 @@ tenant_member_invites (id, tenant_id, email, role, status,
                        metadata JSONB, created_at, updated_at)
 ```
 
-Run migrations:
-```bash
-clojure -M:migrate up
-```
-
 ---
 
 ## Gotchas
 
-1. **PostgreSQL only** for production — provisioning throws on other databases
-2. **H2 (tests)** skips provisioning with warning — schema isolation can't be tested in H2
+1. **PostgreSQL only** — `:wagoe/tenant-db-schema` refuses to boot on SQLite (and MySQL) with `:type :not-supported` (BOU-576)
+2. **H2 (tests)** boots, and skips provisioning with a warning — schema isolation can't be tested in H2
 3. **Soft deletes** — `:deleted-at` set on tenant; schema NOT auto-dropped; call `deprovision-tenant!` separately
 4. **Settings are JSONB** — nested map stored as JSON, parsed via Cheshire
 5. **Case conversion** — kebab↔snake at persistence boundary, kebab↔camelCase at HTTP boundary
