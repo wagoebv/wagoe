@@ -186,6 +186,7 @@ bb scaffold endpoint                 # Interactive add-endpoint wizard
 bb scaffold adapter                  # Interactive add-adapter wizard
 bb scaffold ai "<description>"       # AI-powered module from NL description
 bb scaffold ai "<description>" --yes # Non-interactive (skip confirmation)
+bb scaffold ai "<description>" --dry-run  # Preview; also --output-dir, --base-ns, --force, --no-http, --no-web, --public-api
 bb scaffold integrate <module>       # Wire scaffolded module into project (see below)
 
 # Non-interactive passthrough (pass args directly to scaffolder CLI):

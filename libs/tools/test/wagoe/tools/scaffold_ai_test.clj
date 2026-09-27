@@ -249,3 +249,68 @@
   ;; `date` is a calendar day since BOU-547; without `datetime` no timestamp.
   (is (some #{"date"} scaffold/field-types))
   (is (some #{"datetime"} scaffold/field-types)))
+
+(defn- run-main
+  "`bb scaffold ai <args>` with the parse stubbed to answer `spec`. Scaffolder
+   calls go to `scaffolder`, which is the real shell in the promise test."
+  [args spec scaffolder]
+  (let [calls (atom [])
+        exit  (atom nil)
+        out   (with-out-str
+                (binding [scaffold/*exit!* #(reset! exit %)]
+                  (with-redefs [process/shell
+                                (fn [opts & cmd]
+                                  (swap! calls conj (vec cmd))
+                                  (if (some #{"scaffold-parse"} cmd)
+                                    {:exit 0 :out spec}
+                                    (apply scaffolder opts cmd)))]
+                    (apply scaffold/-main "ai" args))))]
+    {:calls @calls :out out :exit @exit}))
+
+(deftest ^:unit dry-run-is-a-flag-not-part-of-the-description
+  ;; BOU-490: `--dry-run` was joined into the description and every file written.
+  (let [{:keys [calls exit]} (run-main ["invoices with line items" "--yes" "--dry-run"]
+                                       multi-entity-json (constantly {:exit 0}))
+        [parse & scaffolder] calls]
+    (is (nil? exit))
+    (testing "the model sees the description only"
+      (is (= "invoices with line items" (last parse))))
+    (testing "every scaffolder command that runs is dry"
+      (is (seq scaffolder))
+      (is (every? #(some #{"--dry-run"} %) scaffolder)))))
+
+(deftest ^:unit every-planned-command-carries-the-shared-flags
+  (let [spec (#'scaffold/parse-ai-module-spec multi-entity-json)
+        [generate entity] (scaffold/build-ai-commands
+                           spec {:dry-run true :output-dir "/tmp/x" :base-ns "shop" :force true})
+        after (fn [cmd flag] (second (drop-while #(not= flag %) cmd)))]
+    (doseq [cmd [generate entity]]
+      (is (some #{"--dry-run"} cmd))
+      (is (= "/tmp/x" (after cmd "--output-dir")))
+      (is (= "shop" (after cmd "--base-ns"))))
+    (is (some #{"--force"} generate))
+    (is (not-any? #{"--force"} entity) "`entity` has no --force")))
+
+(deftest ^:unit a-flag-overrides-the-spec
+  (let [spec (#'scaffold/parse-ai-module-spec multi-entity-json)
+        cmds (scaffold/build-ai-commands spec {:http false :public-api true})]
+    (is (every? #(some #{"--no-http"} %) cmds))
+    (is (every? #(some #{"--public-api"} %) cmds))
+    (is (some #{"--no-web"} (first (scaffold/build-ai-commands spec {:web false}))))))
+
+(deftest ^:unit an-unknown-flag-is-refused-not-sent-to-the-model
+  (let [{:keys [calls exit out]} (run-main ["product module" "--dryrun"]
+                                           spec-json (constantly {:exit 0}))]
+    (is (empty? calls))
+    (is (= 1 exit))
+    (is (str/includes? out "--dryrun"))))
+
+(deftest ^:integration a-dry-run-writes-nothing
+  ;; The promise, against the real scaffolder.
+  (let [dir (str (fs/create-temp-dir))
+        {:keys [calls exit out]} (binding [*err* (java.io.StringWriter.)]
+                                   (run-main ["product module" "-y" "--dry-run" "--output-dir" dir]
+                                             spec-json process/shell))]
+    (is (= 2 (count calls)))
+    (is (nil? exit) out)
+    (is (empty? (fs/list-dir dir)) "a dry run must not write files")))
