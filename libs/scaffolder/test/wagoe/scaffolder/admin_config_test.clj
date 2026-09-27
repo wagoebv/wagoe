@@ -110,6 +110,8 @@
             repo   (schema-repo/create-schema-repository ctx admin)
             config #(admin-ports/get-entity-config repo %)]
         (try
+          (is (empty? (admin-schema/entity-config-errors admin))
+              "every generated key is one the admin's closed schema knows")
           (doseq [e [:invoices :invoice-line-items]]
             (is (:valid? (admin-schema/validate-entity-config (config e))) (str e)))
           (is (= [{:entity :invoice-line-items :table :invoice_line_items :foreign-key :invoice-id
