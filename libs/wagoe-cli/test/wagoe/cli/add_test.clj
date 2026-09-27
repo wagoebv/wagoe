@@ -172,6 +172,55 @@
       (finally
         (doseq [x (reverse (file-seq (io/file tmp)))] (.delete x))))))
 
+(defn- with-config
+  "Call `f` with [dir path file] for a project whose dev config is `text`."
+  [text f]
+  (let [tmp  (str (System/getProperty "java.io.tmpdir") "/wagoe-add-cfg-" (System/nanoTime))
+        path "resources/conf/dev/config.edn"
+        file (io/file tmp path)]
+    (try
+      (io/make-parents file)
+      (spit file text)
+      (f tmp path file)
+      (finally
+        (doseq [x (reverse (file-seq (io/file tmp)))] (.delete x))))))
+
+(defn- active-keys-of [text]
+  (set (keys (:active (clojure.edn/read-string {:default (fn [_ v] v)} text)))))
+
+(deftest ^:integration the-snippet-lands-under-the-root-active-key
+  ;; A search for ":active" found it in a comment and in `:active?`, wrote the
+  ;; key into another map, and wrote it again on the next run (BOU-580).
+  (doseq [text ["{;; the :active map {is below}\n :profile {:x 1}\n :active\n {:wagoe/a 1}\n\n :inactive\n {}}\n"
+                "{:features {:active? true :x 1}\n :active\n {:wagoe/a 1}\n\n :inactive\n {}}\n"
+                "{:note \":active {\"\n :active\n {:wagoe/a 1}\n\n :inactive\n {}}\n"]]
+    (with-config text
+      (fn [dir path f]
+        (is (= :added (add/patch-config! dir path "  :wagoe/jobs\n  {:workers 1}\n")) text)
+        (let [once (slurp f)]
+          (is (contains? (active-keys-of once) :wagoe/jobs) once)
+          (is (= :present (add/patch-config! dir path "  :wagoe/jobs\n  {:workers 1}\n")))
+          (is (= once (slurp f)) "a second run changes no byte"))))))
+
+(deftest ^:integration a-write-that-misses-active-is-refused
+  (with-config "{:active\n {:wagoe/a 1}\n\n :inactive\n {:wagoe/b 2}}\n"
+    (fn [dir path f]
+      ;; Point the insertion at :inactive: the result must be checked, not trusted.
+      (with-redefs-fn {#'add/active-section #(#'add/section-of % ":inactive")}
+        (fn []
+          (is (= :not-written (add/patch-config! dir path "  :wagoe/jobs\n  {:workers 1}\n")))
+          (is (not (str/includes? (slurp f) ":wagoe/jobs"))))))))
+
+(deftest ^:integration a-crlf-config-stays-crlf
+  (with-config (str/replace (templates/render (templates/read-template "dev-config.edn.tmpl")
+                                              {:project-name "shop"})
+                            "\n" "\r\n")
+    (fn [dir path f]
+      (is (= :added (add/patch-config! dir path "  :wagoe/metrics\n  {:provider :no-op}\n\n  :wagoe/x\n  {}\n")))
+      (let [out (slurp f)]
+        (is (contains? (active-keys-of out) :wagoe/metrics))
+        (is (not (re-find #"[^\r]\n" out)) "no bare LF")))))
+
 (deftest ^:integration email-writes-smtp-to-test-config-test
   (let [tmp (str (System/getProperty "java.io.tmpdir") "/wagoe-add-email-" (System/currentTimeMillis))]
     (try
