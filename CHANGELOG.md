@@ -50,6 +50,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **Field errors were not tied to their input for screen readers** (BOU-398). Inputs with errors now
   carry `aria-invalid` and `aria-describedby`; hand-built fields can use `ui/describe-input` and `ui/field-errors`.
+- **`bb db:status`, `bb guide next` and devtools looked for migrations in `resources/migrations/`** (BOU-489).
+  They now use `migrations/`, the directory the migrator reads, and report a split between the two.
 - **`/health/ready` showed database and cache exception messages** (BOU-558). The body now says
   `unreachable`; the reason is logged at WARN. Upgrade platform if readiness is public.
 - **MFA and storage upload APIs returned the raw exception message** (BOU-557). They now answer the
@@ -92,6 +94,8 @@ for what is public API, what is internal, and how deprecations are announced.
   `explain` prints the error's own BND code and `Fix:` text first.
 - **install.sh could not recover from a failed sdkman download** (BOU-525). A
   retry now clears the partial install; an existing sdkman is detected.
+- **install.sh failed when GitHub's API rate limit was used up** (BOU-559). It
+  now finds the latest release without the API; no action needed.
 - **MCP verify never ran a generated project's tests** (BOU-520). It now focuses
   the module's test namespaces; a module with none reports `no-tests`.
 - **A refused inline edit lost the offset of a repeated local time** (BOU-523).

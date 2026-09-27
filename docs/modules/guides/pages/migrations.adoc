@@ -48,8 +48,8 @@ Rules:
 |===
 | Location | Purpose
 
-| `resources/migrations/`
-| Application-level migrations (main schema)
+| `migrations/`
+| Application-level migrations (main schema). Keep them all here: a `resources/migrations/` directory takes precedence and the migrator refuses the split.
 
 | `libs/<library>/resources/wagoe/<library>/migrations/`
 | Library-contributed migrations (auto-discovered)
@@ -177,7 +177,7 @@ The key principle: **schema changes and code changes deploy separately**. The da
 
 When using `wagoe-tenant` (schema-per-tenant), migrations run in two scopes:
 
-. **Shared schema** (`public`) — tenant registry, shared tables. Use `resources/migrations/` as normal.
+. **Shared schema** (`public`) — tenant registry, shared tables. Use `migrations/` as normal.
 . **Per-tenant schema** — tenant-specific tables. The tenant library applies these automatically during provisioning.
 
 For per-tenant migrations, prefix table names with the schema:

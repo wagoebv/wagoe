@@ -190,7 +190,9 @@ echo
 #
 # A curl shim answers that one URL the way a throttled GitHub does — 403 with
 # x-ratelimit-remaining: 0 — and delegates every other call to the real curl,
-# so the installer still reaches the lookup normally.
+# so the installer still reaches the lookup normally. It also fails the
+# releases page the installer asks first, because the API is only its fallback
+# since BOU-559.
 echo "[3/$CASES] a rate-limited release lookup is not blamed on the network"
 
 if docker run --rm \
@@ -233,6 +235,10 @@ for arg in "\$@"; do
       [ -n "\$BODY" ] && printf "%s" "{\"message\":\"API rate limit exceeded\"}" > "\$BODY"
       printf "403"
       exit 0
+      ;;
+    https://github.com/wagoebv/wagoe/releases/latest)
+      echo "curl: (7) Failed to connect" >&2
+      exit 7
       ;;
   esac
 done
